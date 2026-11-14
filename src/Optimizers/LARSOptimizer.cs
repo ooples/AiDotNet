@@ -301,30 +301,9 @@ public partial class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             }
             else
             {
-                // Compute parameter norm ||w||
-                T paramNorm = VectorHelper.L2Norm(layerParams);
-
-                // Compute gradient norm ||g||
-                T gradNorm = VectorHelper.L2Norm(layerGrad);
-
                 // LARS scaling: trust_coeff * ||w|| / (||g|| + weight_decay * ||w|| + epsilon)
-                T denominator = NumOps.Add(gradNorm,
-                    NumOps.Add(NumOps.Multiply(weightDecay, paramNorm), epsilon));
-
-                T larsRatio = NumOps.Divide(NumOps.Multiply(trustCoeff, paramNorm), denominator);
-
-                // Only apply LARS if both norms are non-zero
-                bool paramNormZero = NumOps.LessThan(paramNorm, epsilon);
-                bool gradNormZero = NumOps.LessThan(gradNorm, epsilon);
-
-                if (paramNormZero || gradNormZero)
-                {
-                    localLr = baseLr;
-                }
-                else
-                {
-                    localLr = NumOps.Multiply(baseLr, larsRatio);
-                }
+                localLr = LarsLocalLearningRate(baseLr, VectorHelper.L2Norm(layerParams), VectorHelper.L2Norm(layerGrad),
+                    weightDecay, trustCoeff, epsilon);
             }
 
             // Compute update with weight decay: update = g + weight_decay * w
@@ -436,48 +415,33 @@ public partial class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         T epsilon = NumOps.FromDouble(_options.Epsilon);
         T baseLr = NumOps.FromDouble(effectiveLr);
 
-        // Compute norms
-        T paramNorm = VectorHelper.L2Norm(parameters);
-        T gradNorm = VectorHelper.L2Norm(gradient);
+        // LARS scaling, applied only if the norms are non-trivial
+        T localLr = LarsLocalLearningRate(baseLr, VectorHelper.L2Norm(parameters), VectorHelper.L2Norm(gradient),
+            weightDecay, trustCoeff, epsilon);
 
-        // LARS scaling
-        T denominator = NumOps.Add(gradNorm,
-            NumOps.Add(NumOps.Multiply(weightDecay, paramNorm), epsilon));
-        T larsRatio = NumOps.Divide(NumOps.Multiply(trustCoeff, paramNorm), denominator);
+        // update = g + wd * w ; velocity = momentum * velocity + localLr * update ; w -= velocity
+        var engine = Engine;
+        var p = parameters.AsTensor();
+        var velocityState = _velocity.AsTensor();
+        var updateWithDecay = engine.TensorAdd(gradient.AsTensor(), engine.TensorMultiplyScalar(p, weightDecay));
+        var velocity = engine.TensorAddScaled(velocityState, updateWithDecay, momentum, localLr);
+        engine.TensorCopy(velocity, velocityState);
+        return engine.TensorSubtract(p, velocity).AsVector();
+    }
 
-        // Apply LARS only if norms are non-trivial
-        T localLr;
-        bool paramNormZero = NumOps.LessThan(paramNorm, epsilon);
-        bool gradNormZero = NumOps.LessThan(gradNorm, epsilon);
-
-        if (paramNormZero || gradNormZero)
+    /// <summary>
+    /// LARS layer-wise rate baseLr * trust_coeff * ||w|| / (||g|| + weight_decay * ||w|| + epsilon), or baseLr when
+    /// either norm is below epsilon. One scalar per layer or parameter tensor.
+    /// </summary>
+    private T LarsLocalLearningRate(T baseLr, T paramNorm, T gradNorm, T weightDecay, T trustCoeff, T epsilon)
+    {
+        if (NumOps.LessThan(paramNorm, epsilon) || NumOps.LessThan(gradNorm, epsilon))
         {
-            localLr = baseLr;
-        }
-        else
-        {
-            localLr = NumOps.Multiply(baseLr, larsRatio);
-        }
-
-        var updatedParameters = new Vector<T>(parameters.Length, skipZeroInit: true);
-        var parameterSpan = parameters.AsSpan();
-        var gradientSpan = gradient.AsSpan();
-        var velocitySpan = _velocity.AsWritableSpan();
-        var updatedSpan = updatedParameters.AsWritableSpan();
-
-        for (int i = 0; i < updatedSpan.Length; i++)
-        {
-            T updateWithDecay = NumOps.Add(
-                gradientSpan[i],
-                NumOps.Multiply(weightDecay, parameterSpan[i]));
-            T velocity = NumOps.Add(
-                NumOps.Multiply(momentum, velocitySpan[i]),
-                NumOps.Multiply(localLr, updateWithDecay));
-            velocitySpan[i] = velocity;
-            updatedSpan[i] = NumOps.Subtract(parameterSpan[i], velocity);
+            return baseLr;
         }
 
-        return updatedParameters;
+        T denominator = NumOps.Add(gradNorm, NumOps.Add(NumOps.Multiply(weightDecay, paramNorm), epsilon));
+        return NumOps.Multiply(baseLr, NumOps.Divide(NumOps.Multiply(trustCoeff, paramNorm), denominator));
     }
 
     // Per-parameter LARS velocity for tape-based training
@@ -502,6 +466,7 @@ public partial class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         // showed maxDiff ~3e-2 at step 1), so the GPU-resident path is NOT wired
         // for LARS — it would silently change training dynamics. Reconcile the
         // kernel with this formula before enabling. CPU path only for now.
+        double baseLrValue = NumOps.ToDouble(baseLr);
         foreach (var param in context.Parameters)
         {
             // True sparse fast path: ‖p‖₂ via full-param read; ‖g‖₂² over touched values
@@ -511,7 +476,7 @@ public partial class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                 if (!_tapeVelocity.TryGetValue(param, out var velSp)) { velSp = new Tensor<T>(param._shape); _tapeVelocity[param] = velSp; }
                 if (SparseEmbeddingOptimizerHelpers.TryApplyLarsSparse(
                         param, velSp,
-                        NumOps.ToDouble(baseLr),
+                        baseLrValue,
                         _options.Momentum, _options.WeightDecay, _options.TrustCoefficient,
                         _options.Epsilon))
                 {
@@ -525,21 +490,8 @@ public partial class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             if (!_tapeVelocity.TryGetValue(param, out var vel)) { vel = new Tensor<T>(param._shape); _tapeVelocity[param] = vel; }
 
             // LARS scaling: localLr = baseLr * trustCoeff * ||param|| / (||grad|| + weightDecay * ||param|| + eps)
-            var paramNorm = Engine.TensorNorm(param);
-            var gradNorm = Engine.TensorNorm(grad);
-            T pNorm = paramNorm.Length > 0 ? paramNorm[0] : NumOps.Zero;
-            T gNorm = gradNorm.Length > 0 ? gradNorm[0] : NumOps.Zero;
-
-            T localLr;
-            if (NumOps.LessThan(pNorm, epsilon) || NumOps.LessThan(gNorm, epsilon))
-            {
-                localLr = baseLr;
-            }
-            else
-            {
-                T denom = NumOps.Add(gNorm, NumOps.Add(NumOps.Multiply(weightDecay, pNorm), epsilon));
-                localLr = NumOps.Multiply(baseLr, NumOps.Divide(NumOps.Multiply(trustCoeff, pNorm), denom));
-            }
+            T localLr = LarsLocalLearningRate(baseLr, TensorL2Norm(param), TensorL2Norm(grad),
+                weightDecay, trustCoeff, epsilon);
 
             // grad_with_decay = grad + weightDecay * param
             var gradWithDecay = Engine.TensorAdd(grad, Engine.TensorMultiplyScalar(param, weightDecay));
@@ -570,33 +522,15 @@ public partial class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         _t++;
 
         // Flatten matrix to vector
-        var paramVec = new Vector<T>(totalSize);
-        var gradVec = new Vector<T>(totalSize);
-        int idx = 0;
-        for (int i = 0; i < parameters.Rows; i++)
-        {
-            for (int j = 0; j < parameters.Columns; j++)
-            {
-                paramVec[idx] = parameters[i, j];
-                gradVec[idx] = gradient[i, j];
-                idx++;
-            }
-        }
+        var paramVec = parameters.ToRowVector();
+        var gradVec = gradient.ToRowVector();
 
         // Apply LARS update
         var updatedVec = UpdateParametersLARS(paramVec, gradVec, GetWarmupLearningRate());
 
         // Unflatten vector back to matrix
         var updatedMatrix = new Matrix<T>(parameters.Rows, parameters.Columns);
-        idx = 0;
-        for (int i = 0; i < parameters.Rows; i++)
-        {
-            for (int j = 0; j < parameters.Columns; j++)
-            {
-                updatedMatrix[i, j] = updatedVec[idx];
-                idx++;
-            }
-        }
+        updatedVec.AsSpan().CopyTo(updatedMatrix.AsWritableSpan());
 
         return updatedMatrix;
     }
@@ -606,12 +540,7 @@ public partial class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// </summary>
     private Vector<T> ExtractLayerVector(Vector<T> fullVector, int start, int length)
     {
-        var layer = new Vector<T>(length);
-        for (int i = 0; i < length; i++)
-        {
-            layer[i] = fullVector[start + i];
-        }
-        return layer;
+        return Vector<T>.FromSpan(fullVector.AsSpan().Slice(start, length));
     }
 
     /// <summary>
@@ -619,10 +548,7 @@ public partial class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// </summary>
     private void UpdateLayerVector(Vector<T> fullVector, Vector<T> layerVector, int start, int length)
     {
-        for (int i = 0; i < length; i++)
-        {
-            fullVector[start + i] = layerVector[i];
-        }
+        layerVector.AsSpan().Slice(0, length).CopyTo(fullVector.AsWritableSpan().Slice(start, length));
     }
 
     /// <summary>

@@ -145,17 +145,7 @@ public partial class RandomSubspaceDetector<T> : AnomalyDetectorBase<T>
 
     private Matrix<T> ExtractSubspace(Matrix<T> X, int[] featureIndices)
     {
-        var subspace = new Matrix<T>(X.Rows, featureIndices.Length);
-
-        for (int i = 0; i < X.Rows; i++)
-        {
-            for (int j = 0; j < featureIndices.Length; j++)
-            {
-                subspace[i, j] = X[i, featureIndices[j]];
-            }
-        }
-
-        return subspace;
+        return AnomalyTensorOps.SelectColumns(AnomalyTensorOps.ToTensor(X), featureIndices).ToMatrix();
     }
 
     /// <inheritdoc/>
@@ -186,19 +176,8 @@ public partial class RandomSubspaceDetector<T> : AnomalyDetectorBase<T>
         }
 
         // Combine scores (average)
-        var combinedScores = new Vector<T>(X.Rows);
         T nEst = NumOps.FromDouble(_nEstimators);
-
-        for (int i = 0; i < X.Rows; i++)
-        {
-            T avg = NumOps.Zero;
-            for (int e = 0; e < _nEstimators; e++)
-            {
-                avg = NumOps.Add(avg, allScores[e][i]);
-            }
-            combinedScores[i] = NumOps.Divide(avg, nEst);
-        }
-
-        return combinedScores;
+        var stacked = Engine.TensorStack(allScores.Select(s => s.AsTensor()).ToArray(), 0);
+        return Engine.TensorDivideScalar(Engine.ReduceSum(stacked, new[] { 0 }, false), nEst).ToVector();
     }
 }

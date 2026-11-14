@@ -748,17 +748,7 @@ public partial class NHiTSFinance<T> : ForecastingModelBase<T>
     {
         var metrics = new Dictionary<string, T>();
 
-        T mse = NumOps.Zero;
-        T mae = NumOps.Zero;
-        int count = 0;
-
-        for (int i = 0; i < predictions.Length && i < actuals.Length; i++)
-        {
-            var diff = NumOps.Subtract(predictions[i], actuals[i]);
-            mse = NumOps.Add(mse, NumOps.Multiply(diff, diff));
-            mae = NumOps.Add(mae, NumOps.Abs(diff));
-            count++;
-        }
+        var (mse, mae, count) = SumSquaredAndAbsoluteError(predictions, actuals);
 
         if (count > 0)
         {
@@ -912,10 +902,7 @@ public partial class NHiTSFinance<T> : ForecastingModelBase<T>
             throw new InvalidOperationException("ONNX session is not initialized.");
 
         var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++)
-        {
-            inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
-        }
+        NumOps.ToFloatSpan(input.Data.Span.Slice(0, input.Length), inputData.AsSpan(0, input.Length));
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputMeta = OnnxSession.InputMetadata;
@@ -931,10 +918,7 @@ public partial class NHiTSFinance<T> : ForecastingModelBase<T>
 
         var outputShape = outputTensor.Dimensions.ToArray();
         var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++)
-        {
-            outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-        }
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span.Slice(0, (int)outputTensor.Length), outputData.AsSpan(0, (int)outputTensor.Length));
 
         return new Tensor<T>(outputShape, new Vector<T>(outputData));
     }
@@ -963,6 +947,18 @@ public partial class NHiTSFinance<T> : ForecastingModelBase<T>
         int batchSize = input.Shape[0];
         int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length / batchSize;
         int pooledLen = Math.Max(1, seqLen / kernelSize);
+
+        if (batchSize > 0 && seqLen >= kernelSize && batchSize * seqLen <= input.Length)
+        {
+            // Every window is full here: the mean of each kernelSize run along the sequence (detached).
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var rows = Engine.Reshape(
+                Engine.TensorNarrow(Engine.Reshape(input.Contiguous(), new[] { input.Length }), 0, 0, batchSize * seqLen).Contiguous(),
+                new[] { batchSize, seqLen });
+            var windows = Engine.Reshape(
+                Engine.TensorNarrow(rows, 1, 0, pooledLen * kernelSize).Contiguous(), new[] { batchSize, pooledLen, kernelSize });
+            return Engine.TensorDivideScalar(Engine.ReduceSum(windows, new[] { 2 }, false), NumOps.FromDouble(kernelSize));
+        }
 
         var pooled = new Tensor<T>(new[] { batchSize, pooledLen });
 
@@ -1013,6 +1009,35 @@ public partial class NHiTSFinance<T> : ForecastingModelBase<T>
         if (coeffLen == targetLength)
             return coeffs;
 
+        if (coeffLen > 0 && targetLength > 0 && batchSize > 0 && coeffs.Length >= batchSize * coeffLen)
+        {
+            // Linear interpolation at pos = t / targetLength * coeffLen between floor(pos) and the next
+            // (clamped) coefficient, for every batch row at once.
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var lower = new int[targetLength];
+            var upper = new int[targetLength];
+            for (int t = 0; t < targetLength; t++)
+            {
+                lower[t] = (int)((double)t / targetLength * coeffLen);
+                upper[t] = Math.Min(lower[t] + 1, coeffLen - 1);
+            }
+
+            var rows = Engine.Reshape(
+                Engine.TensorNarrow(Engine.Reshape(coeffs.Contiguous(), new[] { coeffs.Length }), 0, 0, batchSize * coeffLen),
+                new[] { batchSize, coeffLen });
+            var lowerIndex = new Tensor<int>(new[] { targetLength }, new Vector<int>(lower));
+            var position = Engine.TensorMultiplyScalar(
+                Engine.TensorDivideScalar(Engine.TensorArange<T>(0, targetLength, 1), NumOps.FromDouble(targetLength)),
+                NumOps.FromDouble(coeffLen));
+            var frac = Engine.TensorSubtract(position, lowerIndex.Cast<T>());
+            var shape = new[] { batchSize, targetLength };
+            var fracGrid = Engine.TensorBroadcastTo(Engine.Reshape(frac, new[] { 1, targetLength }), shape);
+            var keepGrid = Engine.TensorSubtract(Engine.TensorFullLike(fracGrid, NumOps.One), fracGrid);
+            var val0 = Engine.TensorIndexSelect(rows, lowerIndex, 1);
+            var val1 = Engine.TensorIndexSelect(rows, new Tensor<int>(new[] { targetLength }, new Vector<int>(upper)), 1);
+            return Engine.TensorAdd(Engine.TensorMultiply(val0, keepGrid), Engine.TensorMultiply(val1, fracGrid));
+        }
+
         var result = new Tensor<T>(new[] { batchSize, targetLength });
 
         for (int b = 0; b < batchSize; b++)
@@ -1056,13 +1081,18 @@ public partial class NHiTSFinance<T> : ForecastingModelBase<T>
     {
         if (a.Length != b.Length)
         {
+            // Subtract over the shared prefix, keep a's tail; a detached result shaped like a, as before.
             int minLen = Math.Min(a.Length, b.Length);
-            var result = new Tensor<T>(a._shape);
-            for (int i = 0; i < minLen; i++)
-                result[i] = NumOps.Subtract(a[i], b[i]);
-            for (int i = minLen; i < a.Length; i++)
-                result[i] = a[i];
-            return result;
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            if (minLen == 0)
+                return a.Clone();
+            var aFlat = Engine.Reshape(a.Contiguous(), new[] { a.Length });
+            var bFlat = Engine.Reshape(b.Contiguous(), new[] { b.Length });
+            var head = Engine.TensorSubtract(Engine.TensorNarrow(aFlat, 0, 0, minLen), Engine.TensorNarrow(bFlat, 0, 0, minLen));
+            var combined = minLen == a.Length
+                ? head
+                : Engine.TensorConcatenate(new[] { head, Engine.TensorNarrow(aFlat, 0, minLen, a.Length - minLen) }, 0);
+            return Engine.Reshape(combined, a._shape);
         }
 
         // Equal element count but possibly different ranks (e.g. [1, 8, 1] vs [1, 8])
@@ -1086,13 +1116,18 @@ public partial class NHiTSFinance<T> : ForecastingModelBase<T>
     {
         if (a.Length != b.Length)
         {
+            // Add over the shared prefix, keep a's tail; a detached result shaped like a, as before.
             int minLen = Math.Min(a.Length, b.Length);
-            var result = new Tensor<T>(a._shape);
-            for (int i = 0; i < minLen; i++)
-                result[i] = NumOps.Add(a[i], b[i]);
-            for (int i = minLen; i < a.Length; i++)
-                result[i] = a[i];
-            return result;
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            if (minLen == 0)
+                return a.Clone();
+            var aFlat = Engine.Reshape(a.Contiguous(), new[] { a.Length });
+            var bFlat = Engine.Reshape(b.Contiguous(), new[] { b.Length });
+            var head = Engine.TensorAdd(Engine.TensorNarrow(aFlat, 0, 0, minLen), Engine.TensorNarrow(bFlat, 0, 0, minLen));
+            var summed = minLen == a.Length
+                ? head
+                : Engine.TensorConcatenate(new[] { head, Engine.TensorNarrow(aFlat, 0, minLen, a.Length - minLen) }, 0);
+            return Engine.Reshape(summed, a._shape);
         }
 
         if (!a._shape.SequenceEqual(b._shape))
@@ -1153,6 +1188,29 @@ public partial class NHiTSFinance<T> : ForecastingModelBase<T>
             return new Tensor<T>(new[] { 1, totalSteps });
 
         int batchSize = predictions[0].Shape[0];
+        if (batchSize > 0 && totalSteps > 0 && predictions.TrueForAll(p => (p.Shape.Length > 1 ? p.Shape[1] : p.Length / batchSize) * batchSize <= p.Length))
+        {
+            // Row b takes the leading steps of each prediction's row b (rows are (p.Shape.Length > 1 ? p.Shape[1] : p.Length / batchSize) long), then zeros (detached).
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var parts = new List<Tensor<T>>();
+            int filled = 0;
+            foreach (var p in predictions)
+            {
+                int rowLength = (p.Shape.Length > 1 ? p.Shape[1] : p.Length / batchSize);
+                int take = Math.Min(rowLength, totalSteps - filled);
+                if (take <= 0)
+                    continue;
+                var rows = Engine.Reshape(
+                    Engine.TensorNarrow(Engine.Reshape(p.Contiguous(), new[] { p.Length }), 0, 0, batchSize * rowLength).Contiguous(),
+                    new[] { batchSize, rowLength });
+                parts.Add(Engine.TensorSlice(rows, new[] { 0, 0 }, new[] { batchSize, take }));
+                filled += take;
+            }
+            if (filled < totalSteps)
+                parts.Add(new Tensor<T>(new[] { batchSize, totalSteps - filled }));
+            return parts.Count == 1 ? parts[0].Contiguous() : Engine.TensorConcatenate(parts.ToArray(), 1);
+        }
+
         var result = new Tensor<T>(new[] { batchSize, totalSteps });
         int currentStep = 0;
 

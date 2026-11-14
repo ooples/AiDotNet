@@ -374,6 +374,7 @@ public partial class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         // forward makes the line search's final trial free rather than an extra call.
         T carriedObjective = NumOps.Zero;
         Vector<T>? carriedGradient = null;
+        T fallbackStep = NumOps.FromDouble(_options.LineSearchFallbackStep);
 
         for (int iteration = 0; iteration < maxIterations; iteration++)
         {
@@ -401,7 +402,7 @@ public partial class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             EnsureFiniteEvaluation(objective, gradient, iteration, "L-BFGS");
             Observe(current, objective);
 
-            if (!NumOps.GreaterThan(InfinityNorm(gradient), tolerance))
+            if (GradientWithinTolerance(gradient, tolerance))
             {
                 break;
             }
@@ -417,24 +418,16 @@ public partial class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
                     skipDamping: previousStepSatisfiedWolfe);
             }
 
-            var direction = CalculateDirection(gradient);
-            var directionalDerivative = gradient.DotProduct(direction);
+            var (direction, directionalDerivative) = EnsureDescentDirection(gradient, CalculateDirection(gradient));
 
             // The curvature guard in UpdateLBFGSMemory makes an ascent direction unlikely, but a
             // memory built from an ill-conditioned surface can still produce one. Fall back to
             // steepest descent rather than line-searching uphill, which would fail every trial and
             // waste the whole iteration.
-            if (!NumOps.LessThan(directionalDerivative, NumOps.Zero))
-            {
-                direction = (Vector<T>)Engine.Multiply(gradient, NumOps.Negate(NumOps.One));
-                directionalDerivative = NumOps.Negate(gradient.DotProduct(gradient));
-            }
-
-            var problem = new LineSearchProblem(
-                current, direction, objective,
+            var problem = CreateLineSearchProblem(
+                current, direction, objective, directionalDerivative,
                 objectiveAndGradient, projection, parameterCount,
-                _options.ArmijoConstant, _options.WolfeCurvatureConstant,
-                NumOps.ToDouble(objective), NumOps.ToDouble(directionalDerivative));
+                _options.ArmijoConstant, _options.WolfeCurvatureConstant);
 
             LineSearchOutcome? outcome = _options.UseStrongWolfeLineSearch
                 ? StrongWolfeLineSearch(problem, Observe)
@@ -450,8 +443,7 @@ public partial class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
                     projection,
                     (Vector<T>)Engine.Add(
                         current,
-                        (Vector<T>)Engine.Multiply(
-                            direction, NumOps.FromDouble(_options.LineSearchFallbackStep))),
+                        (Vector<T>)Engine.Multiply(direction, fallbackStep)),
                     parameterCount);
 
                 var (fallbackObjective, fallbackGradient) = objectiveAndGradient(fallbackPoint);
@@ -487,64 +479,58 @@ public partial class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             return CreateNegativeGradient(gradient);
         }
 
-        var q = new Vector<T>(gradient);
+        var engine = Engine;
+        var q = gradient;
         if (_twoLoopAlphas.Length < _s.Count)
         {
             _twoLoopAlphas = new T[_s.Count];
         }
 
-        // First loop (backward)
+        // First loop (backward): q -= alpha_i * y_i
         for (int i = _s.Count - 1; i >= 0; i--)
         {
-            _twoLoopAlphas[i] = NumOps.Divide(_s[i].DotProduct(q), _y[i].DotProduct(_s[i]));
-            var qSpan = q.AsWritableSpan();
-            var ySpan = _y[i].AsSpan();
-            T alpha = _twoLoopAlphas[i];
-            for (int j = 0; j < qSpan.Length; j++)
-            {
-                qSpan[j] = NumOps.Subtract(qSpan[j], NumOps.Multiply(alpha, ySpan[j]));
-            }
+            T alpha = FirstLoopCoefficient(i, q);
+            q = (Vector<T>)engine.Subtract(q, engine.Multiply(_y[i], alpha));
         }
 
-        var gamma = NumOps.Divide(_s[_s.Count - 1].DotProduct(_y[_s.Count - 1]), _y[_s.Count - 1].DotProduct(_y[_s.Count - 1]));
-        // Vectorized: z = gamma * q
-        var z = q;
-        var zSpan = z.AsWritableSpan();
-        for (int j = 0; j < zSpan.Length; j++)
-        {
-            zSpan[j] = NumOps.Multiply(zSpan[j], gamma);
-        }
+        // z = gamma * q, with gamma = s'y / y'y from the newest pair
+        int newest = _s.Count - 1;
+        var z = (Vector<T>)engine.Multiply(q, CurvatureRatio(_s[newest], _y[newest], _y[newest], _y[newest]));
 
-        // Second loop (forward)
+        // Second loop (forward): z += (alpha_i - beta_i) * s_i
         for (int i = 0; i < _s.Count; i++)
         {
-            var beta = NumOps.Divide(_y[i].DotProduct(z), _y[i].DotProduct(_s[i]));
-            var alphaMinusBeta = NumOps.Subtract(_twoLoopAlphas[i], beta);
-            var sSpan = _s[i].AsSpan();
-            for (int j = 0; j < zSpan.Length; j++)
-            {
-                zSpan[j] = NumOps.Add(zSpan[j], NumOps.Multiply(alphaMinusBeta, sSpan[j]));
-            }
+            z = (Vector<T>)engine.Add(z, engine.Multiply(_s[i], SecondLoopCoefficient(i, z)));
         }
 
-        // Vectorized negation
-        for (int j = 0; j < zSpan.Length; j++)
-        {
-            zSpan[j] = NumOps.Negate(zSpan[j]);
-        }
-        return z;
+        return (Vector<T>)engine.Negate(z);
     }
+
+    /// <summary>
+    /// Returns (a'b) / (c'd), the scalar ratio of two inner products used throughout the two-loop recursion.
+    /// </summary>
+    private T CurvatureRatio(Vector<T> a, Vector<T> b, Vector<T> c, Vector<T> d)
+        => NumOps.Divide(a.DotProduct(b), c.DotProduct(d));
+
+    /// <summary>
+    /// Computes and records alpha_i = (s_i'q) / (y_i's_i) for the backward pass.
+    /// </summary>
+    private T FirstLoopCoefficient(int index, Vector<T> q)
+    {
+        T alpha = CurvatureRatio(_s[index], q, _y[index], _s[index]);
+        _twoLoopAlphas[index] = alpha;
+        return alpha;
+    }
+
+    /// <summary>
+    /// Returns alpha_i - beta_i with beta_i = (y_i'z) / (y_i's_i) for the forward pass.
+    /// </summary>
+    private T SecondLoopCoefficient(int index, Vector<T> z)
+        => NumOps.Subtract(_twoLoopAlphas[index], CurvatureRatio(_y[index], z, _y[index], _s[index]));
 
     private Vector<T> CreateNegativeGradient(Vector<T> gradient)
     {
-        var direction = new Vector<T>(gradient.Length, skipZeroInit: true);
-        var gradientSpan = gradient.AsSpan();
-        var directionSpan = direction.AsWritableSpan();
-        for (int i = 0; i < directionSpan.Length; i++)
-        {
-            directionSpan[i] = NumOps.Negate(gradientSpan[i]);
-        }
-        return direction;
+        return (Vector<T>)Engine.Negate(gradient);
     }
 
     /// <summary>
@@ -778,17 +764,10 @@ public partial class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         {
             // Only add to memory if curvature condition is satisfied (s^T y > 0)
             // L-BFGS requires positive curvature to maintain positive-definite Hessian approximation
-            T sDotY = NumOps.Zero;
-            var currentParameterSpan = parameters.AsSpan();
-            var currentGradientSpan = gradient.AsSpan();
-            var previousParameterSpan = _lbfgsPreviousParameters.AsSpan();
-            var previousGradientSpan = _lbfgsPreviousGradient.AsSpan();
-            for (int i = 0; i < currentParameterSpan.Length; i++)
-            {
-                T sValue = NumOps.Subtract(currentParameterSpan[i], previousParameterSpan[i]);
-                T yValue = NumOps.Subtract(currentGradientSpan[i], previousGradientSpan[i]);
-                sDotY = NumOps.Add(sDotY, NumOps.Multiply(sValue, yValue));
-            }
+            var engine = Engine;
+            var step = (Vector<T>)engine.Subtract(parameters, _lbfgsPreviousParameters);
+            var gradientChange = (Vector<T>)engine.Subtract(gradient, _lbfgsPreviousGradient);
+            T sDotY = engine.DotProduct(step, gradientChange);
 
             if (NumOps.GreaterThan(sDotY, NumOps.FromDouble(1e-10)))
             {
@@ -807,13 +786,8 @@ public partial class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
                     y = new Vector<T>(parameters.Length, skipZeroInit: true);
                 }
 
-                var sSpan = s.AsWritableSpan();
-                var ySpan = y.AsWritableSpan();
-                for (int i = 0; i < sSpan.Length; i++)
-                {
-                    sSpan[i] = NumOps.Subtract(currentParameterSpan[i], previousParameterSpan[i]);
-                    ySpan[i] = NumOps.Subtract(currentGradientSpan[i], previousGradientSpan[i]);
-                }
+                step.AsSpan().CopyTo(s.AsWritableSpan());
+                gradientChange.AsSpan().CopyTo(y.AsWritableSpan());
 
                 _s.Add(s);
                 _y.Add(y);
@@ -823,15 +797,9 @@ public partial class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         // Calculate the L-BFGS search direction using two-loop recursion
         var direction = CalculateDirection(gradient);
 
-        // Transform the direction allocation into the returned parameter vector.
-        var directionSpan = direction.AsWritableSpan();
+        // parameters + learningRate * direction
+        direction = (Vector<T>)Engine.Add(parameters, Engine.Multiply(direction, CurrentLearningRate));
         var parameterSpan = parameters.AsSpan();
-        for (int i = 0; i < directionSpan.Length; i++)
-        {
-            directionSpan[i] = NumOps.Add(
-                parameterSpan[i],
-                NumOps.Multiply(directionSpan[i], CurrentLearningRate));
-        }
 
         // Store current parameters and gradient for next iteration
         if (_lbfgsPreviousParameters is null || _lbfgsPreviousParameters.Length != parameters.Length)

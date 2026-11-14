@@ -341,10 +341,9 @@ public abstract class ForecastingModelBase<T> : FinancialModelBase<T>, IForecast
     private static Vector<T> ToVectorOffTape(Tensor<T> stats, int count)
     {
         var v = new Vector<T>(count);
-        for (int i = 0; i < count && i < stats.Length; i++)
-        {
-            v[i] = stats.Data.Span[i];
-        }
+        int copied = Math.Min(count, stats.Length);
+        if (copied > 0)
+            stats.Data.Span.Slice(0, copied).CopyTo(v.AsWritableSpan());
 
         return v;
     }
@@ -480,4 +479,87 @@ public abstract class ForecastingModelBase<T> : FinancialModelBase<T>, IForecast
         return activations;
     }
 
+    /// <summary>
+    /// [1, horizon, Q] quantiles of the first horizon values of every sample: level q reads sorted
+    /// position min((int)(q * n), n - 1). False (leaving the element-wise path) when a sample is
+    /// shorter than the horizon, a level maps below zero, or a value is NaN (its sort order differs).
+    /// Shared by the Monte Carlo quantile forecasters.
+    /// </summary>
+    private protected bool TrySortedSampleQuantiles(List<Tensor<T>> samples, double[] quantiles, int horizon, out Tensor<T> result)
+    {
+        result = new Tensor<T>(new[] { 1, horizon, quantiles.Length });
+        int n = samples.Count;
+        if (n == 0 || horizon <= 0 || quantiles.Length == 0 || !samples.TrueForAll(s => s.Length >= horizon))
+            return false;
+        var picks = new int[quantiles.Length];
+        for (int q = 0; q < quantiles.Length; q++)
+        {
+            picks[q] = Math.Min((int)(quantiles[q] * n), n - 1);
+            if (picks[q] < 0)
+                return false;
+        }
+
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var rows = new Tensor<T>[n];
+        for (int s = 0; s < n; s++)
+            rows[s] = Engine.TensorNarrow(Engine.Reshape(samples[s].Contiguous(), new[] { samples[s].Length }), 0, 0, horizon);
+        var grid = Engine.TensorStack(rows, 0);
+        if (Engine.TensorCountNonzero(Engine.TensorIsNan(grid)) > 0)
+            return false;
+        var sorted = Engine.TensorSort(grid, 0, false).Values;
+        var chosen = Engine.TensorIndexSelect(sorted, new Tensor<int>(new[] { picks.Length }, new Vector<int>(picks)), 0);
+        result = Engine.Reshape(Engine.TensorTranspose(chosen).Contiguous(), new[] { 1, horizon, quantiles.Length });
+        return true;
+    }
+
+    /// <summary>Requires a numNodes x numNodes adjacency matrix when one is given (shared by the graph models).</summary>
+    private protected static void RequireAdjacencyNodeCount(Tensor<T>? adjacency, int numNodes, string paramName)
+    {
+        if (adjacency is null) return;
+        int rows = adjacency.Rank > 0 ? adjacency.Shape[0] : 0;
+        int columns = adjacency.Rank > 1 ? adjacency.Shape[1] : 0;
+        if (adjacency.Rank != 2 || rows != numNodes || columns != numNodes)
+        {
+            throw new ArgumentException(
+                $"The adjacency matrix is {rows} x {columns}, but the model has {numNodes} " +
+                $"nodes (NumNodes). Pass a {numNodes} x {numNodes} matrix, or set NumNodes to the node count of the graph.",
+                paramName);
+        }
+    }
+
+    /// <summary>
+    /// The graph models' default adjacency when none is given: weight 1 on the diagonal, exp(-|i - j| / range)
+    /// for nodes within range = max(1, n / 10) of each other, 0 elsewhere; optionally divided by each row's sum.
+    /// </summary>
+    private protected Tensor<T> ProximityAdjacency(int numNodes, bool rowNormalize)
+    {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        int range = Math.Max(1, numNodes / 10);
+        var distance = new int[numNodes * numNodes];
+        var near = new int[numNodes * numNodes];
+        for (int i = 0; i < numNodes; i++)
+        {
+            for (int j = 0; j < numNodes; j++)
+            {
+                int d = Math.Abs(i - j);
+                distance[i * numNodes + j] = d;
+                near[i * numNodes + j] = d <= range ? 1 : 0;
+            }
+        }
+
+        var square = new[] { numNodes, numNodes };
+        var distances = new Tensor<int>(square, new Vector<int>(distance)).Cast<T>();
+        var weights = Engine.TensorExp(Engine.TensorDivideScalar(Engine.TensorNegate(distances), NumOps.FromDouble(range)));
+        var connected = Engine.TensorWhere(
+            new Tensor<int>(square, new Vector<int>(near)).Cast<T>(), weights, Engine.TensorZerosLike(weights));
+        // The diagonal is set to exactly 1: a vectorized exp need not return exactly 1 for exp(0).
+        var adjacency = Engine.TensorWhere(
+            Engine.TensorEquals(distances, NumOps.Zero), Engine.TensorFullLike(weights, NumOps.One), connected);
+        if (!rowNormalize || numNodes == 0)
+            return adjacency;
+
+        // Every row holds its diagonal 1, so each row sum is positive.
+        return Engine.TensorDivide(
+            adjacency, Engine.TensorBroadcastTo(Engine.ReduceSum(adjacency, new[] { 1 }, true), square));
+    }
 }

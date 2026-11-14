@@ -46,6 +46,7 @@ public abstract class SegmentationModelOptions : ModelHyperparameterOptions
     [AiDotNet.Attributes.OptionBehaviourExempt("Medical SAM 2 segments one prompted structure at a time (Zhu et al. 2024); its constructor requires NumClasses=1.", ModelType = typeof(AiDotNet.ComputerVision.Segmentation.Medical.MedicalSAM2<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("SAM 2.1 segments one prompted object at a time (Ravi et al. 2024, section 4); its constructor requires NumClasses=1.", ModelType = typeof(AiDotNet.ComputerVision.Segmentation.Foundation.SAM21<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("EfficientTAM segments one prompted object per mask (Xiong et al. 2024, following SAM 2); its constructor requires NumClasses=1.", ModelType = typeof(AiDotNet.ComputerVision.Segmentation.Video.EfficientTAM<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("SAM predicts class-agnostic masks for a prompt (Kirillov et al. 2023, section 3); its constructor requires NumClasses=1.", ModelType = typeof(AiDotNet.ComputerVision.Segmentation.Foundation.SAM<>))]
     public int NumClasses { get; set; }
 
     /// <summary>

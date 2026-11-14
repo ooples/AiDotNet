@@ -138,7 +138,11 @@ internal partial class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<
     {
         ThrowIfDisposed();
         var probs = GetEmotionProbabilities(audio);
-        var sorted = probs.OrderByDescending(p => NumOps.ToDouble(p.Value)).ToList();
+        var entries = probs.ToList();
+        var sorted = (entries.Count == 0
+                ? Array.Empty<int>()
+                : AudioEngineOps.StableDescendingOrder(Engine, new Tensor<T>(entries.Select(p => p.Value).ToArray(), [entries.Count])))
+            .Select(i => entries[i]).ToList();
         string primary = sorted[0].Key;
         T confidence = sorted[0].Value;
         string? secondary = sorted.Count > 1 && NumOps.GreaterThan(sorted[1].Value, NumOps.FromDouble(0.1)) ? sorted[1].Key : null;
@@ -168,8 +172,9 @@ internal partial class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<
 
         var probs = new Dictionary<string, T>();
         int numClasses = Math.Min(_options.NumClasses, Math.Min(_options.EmotionLabels.Length, probsTensor.Length));
+        T[] values = AudioEngineOps.Head(Engine, probsTensor, numClasses);
         for (int i = 0; i < numClasses; i++)
-            probs[_options.EmotionLabels[i]] = probsTensor[i];
+            probs[_options.EmotionLabels[i]] = values[i];
 
         return probs;
     }
@@ -191,8 +196,7 @@ internal partial class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<
 
         for (int start = 0; start + windowSamples <= audio.Length; start += hopSamples)
         {
-            var chunk = new Tensor<T>([windowSamples]);
-            for (int i = 0; i < windowSamples; i++) chunk[i] = audio[start + i];
+            var chunk = Engine.TensorSlice(AudioEngineOps.Flatten(Engine, audio), [start], [windowSamples]);
             var result = RecognizeEmotion(chunk);
             results.Add(new TimedEmotionResult<T>
             {
@@ -220,12 +224,19 @@ internal partial class WavLMSER<T> : AudioClassifierBase<T>, IEmotionRecognizer<
     private static double GetProbValue(IReadOnlyDictionary<string, T> probs, string key, INumericOperations<T> numOps)
     {
         // Case-insensitive lookup to handle different label conventions
+        // Find the first matching key, then convert that single probability.
+        T value = numOps.Zero;
+        bool found = false;
         foreach (var kvp in probs)
         {
             if (string.Equals(kvp.Key, key, StringComparison.OrdinalIgnoreCase))
-                return numOps.ToDouble(kvp.Value);
+            {
+                value = kvp.Value;
+                found = true;
+                break;
+            }
         }
-        return 0.0;
+        return found ? numOps.ToDouble(value) : 0.0;
     }
 
     private T ComputeArousalFromProbs(IReadOnlyDictionary<string, T> probs)

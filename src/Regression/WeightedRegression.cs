@@ -193,16 +193,13 @@ public class WeightedRegression<T> : RegressionBase<T>
         var regularizedXTWx = xTWx.Add(Regularization.Regularize(xTWx));
 
         // Add scale-aware ridge for numerical stability (prevents singularity with collinear features)
-        double diagMean = 0;
-        for (int i = 0; i < regularizedXTWx.Rows; i++)
-            diagMean += Math.Abs(NumOps.ToDouble(regularizedXTWx[i, i]));
-        diagMean = regularizedXTWx.Rows > 0 ? diagMean / regularizedXTWx.Rows : 1.0;
-        var stabilityRidge = NumOps.FromDouble(
-            Math.Max(MinimumStabilityRidge, diagMean * StabilityRidgeScale));
-        for (int i = 0; i < regularizedXTWx.Rows; i++)
-        {
-            regularizedXTWx[i, i] = NumOps.Add(regularizedXTWx[i, i], stabilityRidge);
-        }
+        T diagMean = regularizedXTWx.Rows > 0
+            ? Engine.Mean(Engine.Abs(regularizedXTWx.Diagonal()))
+            : NumOps.One;
+        T minimumRidge = NumOps.FromDouble(MinimumStabilityRidge);
+        T scaledRidge = NumOps.Multiply(diagMean, NumOps.FromDouble(StabilityRidgeScale));
+        var stabilityRidge = NumOps.GreaterThan(scaledRidge, minimumRidge) ? scaledRidge : minimumRidge;
+        regularizedXTWx = RegressionEngineOps2.AddDiagonal(regularizedXTWx, stabilityRidge);
 
         var xTWy = expandedX.Transpose().Multiply(weightMatrix).Multiply(y);
 
@@ -283,19 +280,6 @@ public class WeightedRegression<T> : RegressionBase<T>
     /// </remarks>
     private Matrix<T> ExpandFeatures(Matrix<T> x)
     {
-        var expandedX = new Matrix<T>(x.Rows, x.Columns * _order);
-
-        for (int i = 0; i < x.Rows; i++)
-        {
-            for (int j = 0; j < x.Columns; j++)
-            {
-                for (int k = 0; k < _order; k++)
-                {
-                    expandedX[i, j * _order + k] = NumOps.Power(x[i, j], NumOps.FromDouble(k + 1));
-                }
-            }
-        }
-
-        return expandedX;
+        return RegressionEngineOps2.PolynomialExpand(x, _order);
     }
 }

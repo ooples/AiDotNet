@@ -63,20 +63,18 @@ public class MMPCAlgorithm<T> : ConstraintBasedBase<T>
         }
 
         // Build symmetric adjacency and orient using constraint tests
-        var W = new Matrix<T>(d, d);
+        var edgeMask = new bool[d * d];
         for (int i = 0; i < d; i++)
         {
             for (int j = i + 1; j < d; j++)
             {
-                if (pcSets[i].Contains(j) || pcSets[j].Contains(i))
-                {
-                    double weight = Math.Abs(ComputeCorrelation(data, i, j));
-                    T weightT = NumOps.FromDouble(weight);
-                    W[i, j] = weightT;
-                    W[j, i] = weightT;
-                }
+                bool linked = pcSets[i].Contains(j) || pcSets[j].Contains(i);
+                edgeMask[i * d + j] = linked;
+                edgeMask[j * d + i] = linked;
             }
         }
+
+        var W = ApplyEdgeMask(edgeMask, ComputeAbsoluteCorrelationMatrix(data));
 
         return W;
     }

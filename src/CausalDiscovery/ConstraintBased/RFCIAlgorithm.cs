@@ -255,29 +255,13 @@ public class RFCIAlgorithm<T> : ConstraintBasedBase<T>
         ApplyMeekRules(adj, oriented, bidirected, d);
 
         // Build weighted adjacency matrix
-        var W = new Matrix<T>(d, d);
+        // Bidirected (latent confounder), oriented i → j and unoriented edges keep |corr|;
+        // an edge oriented j → i is skipped.
+        var edgeMask = new bool[d * d];
         for (int i = 0; i < d; i++)
-        {
             for (int j = 0; j < d; j++)
-            {
-                if (!adj[i, j]) continue;
-
-                if (bidirected[i, j])
-                {
-                    // Latent confounder: represent as bidirected (both directions)
-                    double weight = Math.Abs(ComputePartialCorr(data, i, j, []));
-                    W[i, j] = NumOps.FromDouble(weight);
-                }
-                else if (oriented[i, j])
-                {
-                    W[i, j] = NumOps.FromDouble(Math.Abs(ComputePartialCorr(data, i, j, [])));
-                }
-                else if (!oriented[j, i])
-                {
-                    W[i, j] = NumOps.FromDouble(Math.Abs(ComputePartialCorr(data, i, j, [])));
-                }
-            }
-        }
+                edgeMask[i * d + j] = adj[i, j] && (bidirected[i, j] || oriented[i, j] || !oriented[j, i]);
+        var W = ApplyEdgeMask(edgeMask, ComputeAbsoluteCorrelationMatrix(data));
 
         return W;
     }

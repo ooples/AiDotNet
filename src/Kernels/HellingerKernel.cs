@@ -33,11 +33,6 @@ namespace AiDotNet.Kernels;
 public class HellingerKernel<T> : IKernelFunction<T>
 {
     /// <summary>
-    /// Operations for performing numeric calculations with type T.
-    /// </summary>
-    private readonly INumericOperations<T> _numOps;
-
-    /// <summary>
     /// Initializes a new instance of the Hellinger kernel.
     /// </summary>
     /// <remarks>
@@ -57,7 +52,6 @@ public class HellingerKernel<T> : IKernelFunction<T>
     /// </remarks>
     public HellingerKernel()
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
     }
 
     /// <summary>
@@ -96,13 +90,7 @@ public class HellingerKernel<T> : IKernelFunction<T>
     /// </remarks>
     public T Calculate(Vector<T> x1, Vector<T> x2)
     {
-        T sum = _numOps.Zero;
-        for (int i = 0; i < x1.Length; i++)
-        {
-            var sqrtProduct = _numOps.Sqrt(_numOps.Multiply(x1[i], x2[i]));
-            sum = _numOps.Add(sum, sqrtProduct);
-        }
-
-        return sum;
+        var engine = AiDotNetEngine.Current;
+        return engine.Sum(engine.Sqrt(engine.Multiply(x1, x2)));
     }
 }

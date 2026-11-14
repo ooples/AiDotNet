@@ -219,14 +219,7 @@ public partial class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, T
     private Matrix<T> InitializePheromones(int dimensions)
     {
         var pheromones = new Matrix<T>(dimensions, dimensions);
-        for (int i = 0; i < dimensions; i++)
-        {
-            for (int j = 0; j < dimensions; j++)
-            {
-                pheromones[i, j] = NumOps.One;
-            }
-        }
-
+        pheromones.AsWritableSpan().Fill(NumOps.One);
         return pheromones;
     }
 
@@ -259,12 +252,7 @@ public partial class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, T
             int next = SelectNextFeature(current, pheromones, xTrain, visited);
             if (next == -1) break; // No more unvisited features
 
-            var coefficient = NumOps.Multiply(
-                _currentPheromoneIntensity,
-                InputHelper<T, TInput>.GetElement(xTrain, current, next)
-            );
-
-            parameters[next] = coefficient;
+            AssignPathCoefficient(parameters, xTrain, current, next);
 
             visited[next] = true;
             current = next;
@@ -290,24 +278,21 @@ public partial class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, T
     private int SelectNextFeature(int current, Matrix<T> pheromones, TInput xTrain, bool[] visited)
     {
         int dimensions = InputHelper<T, TInput>.GetInputSize(xTrain);
-        var probabilities = new Vector<T>(dimensions);
-        T total = NumOps.Zero;
+        var engine = Engine;
 
-        for (int i = 0; i < dimensions; i++)
-        {
-            if (!visited[i])
-            {
-                T pheromone = pheromones[current, i];
-                T element = InputHelper<T, TInput>.GetElement(xTrain, current, i);
-                T heuristic = NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, NumOps.Abs(element)));
-                T probability = NumOps.Multiply(
-                    NumOps.Power(pheromone, NumOps.FromDouble(1 - Convert.ToDouble(_currentPheromoneEvaporationRate))),
-                    NumOps.Power(heuristic, NumOps.FromDouble(_antColonyOptions.Beta))
-                );
-                probabilities[i] = probability;
-                total = NumOps.Add(total, probability);
-            }
-        }
+        // Attractiveness of every edge out of `current`: pheromone^(1 - evaporation) * heuristic^beta, with the
+        // heuristic 1 / (1 + |x_current,i|), and zero for features already visited.
+        var row = Vector<T>.FromList(Enumerable.Range(0, dimensions)
+            .Select(i => InputHelper<T, TInput>.GetElement(xTrain, current, i))
+            .ToList()).AsTensor();
+        var heuristic = engine.TensorReciprocal(engine.TensorAddScalar(engine.TensorAbs(row), NumOps.One));
+        var pheromoneRow = pheromones.GetRow(current).AsTensor();
+        var attractiveness = engine.TensorMultiply(
+            engine.TensorPower(pheromoneRow, NumOps.FromDouble(1 - Convert.ToDouble(_currentPheromoneEvaporationRate))),
+            engine.TensorPower(heuristic, NumOps.FromDouble(_antColonyOptions.Beta)));
+        var zeros = new Tensor<T>(new[] { dimensions });
+        var probabilities = engine.TensorWhere(visited, zeros, attractiveness);
+        T total = engine.TensorSum(probabilities);
 
         // If all features are visited or total probability is zero, return -1
         if (NumOps.Equals(total, NumOps.Zero))
@@ -315,21 +300,29 @@ public partial class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, T
             return -1;
         }
 
+        // Roulette wheel: the first unvisited feature whose running total reaches the draw.
         T random = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble()), total);
-        T sum = NumOps.Zero;
-        for (int i = 0; i < dimensions; i++)
+        var running = engine.TensorCumSum(probabilities, 0);
+        var reached = engine.TensorWhere(
+            visited,
+            zeros,
+            engine.TensorAddScalar(engine.TensorNegate(engine.TensorLessThan(running, random)), NumOps.One));
+        if (NumOps.Equals(engine.TensorMaxValue(reached), NumOps.Zero))
         {
-            if (!visited[i])
-            {
-                sum = NumOps.Add(sum, probabilities[i]);
-                if (NumOps.GreaterThanOrEquals(sum, random))
-                {
-                    return i;
-                }
-            }
+            return -1; // This should only happen if there are no unvisited features
         }
 
-        return -1; // This should only happen if there are no unvisited features
+        return engine.TensorArgMax(reached, 0).AsSpan()[0];
+    }
+
+    /// <summary>
+    /// Sets the coefficient of the feature the ant just moved to: pheromone intensity times x_current,next.
+    /// </summary>
+    private void AssignPathCoefficient(Vector<T> parameters, TInput xTrain, int current, int next)
+    {
+        parameters[next] = NumOps.Multiply(
+            _currentPheromoneIntensity,
+            InputHelper<T, TInput>.GetElement(xTrain, current, next));
     }
 
     /// <summary>
@@ -348,42 +341,38 @@ public partial class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, T
 
         // Evaporation: Apply (1 - evaporationRate) to each element in-place
         var evaporationFactor = NumOps.Subtract(NumOps.One, _currentPheromoneEvaporationRate);
-        for (int i = 0; i < pheromones.Rows; i++)
-        {
-            for (int j = 0; j < pheromones.Columns; j++)
-            {
-                pheromones[i, j] = NumOps.Multiply(pheromones[i, j], evaporationFactor);
-            }
-        }
+        var engine = Engine;
+        var evaporated = engine.MatrixMultiplyScalar(pheromones, evaporationFactor);
 
-        // Deposit - partially vectorized
-        // Use pheromone matrix dimensions (features), not parameter count (which includes intercept)
+        // Deposit: solution k adds deposit_k * |w_k,i| to every edge i -> j (i != j) among its first
+        // min(features, parameters) coordinates. The pheromone matrix covers features only, not the intercept.
         int pheromoneSize = pheromones.Rows;
+        var increment = new Tensor<T>(new[] { pheromoneSize, pheromones.Columns });
         for (int k = 0; k < solutions.Count; k++)
         {
-            var model = solutions[k];
-            var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
-            var deposit = NumOps.Divide(_currentPheromoneIntensity, NumOps.Add(NumOps.One, FitnessList[k]));
-
-            // Vectorized absolute value of parameters
-            var absParams = (Vector<T>)Engine.Abs(parameters);
-
-            // Only iterate up to pheromone matrix size, not parameter length
-            // Parameters may include intercept which is not a feature
+            var parameters = InterfaceGuard.Parameterizable(solutions[k]).GetParameters();
             int paramLimit = Math.Min(pheromoneSize, parameters.Length);
-            for (int i = 0; i < paramLimit; i++)
-            {
-                var depositScaled = NumOps.Multiply(deposit, absParams[i]);
-                for (int j = 0; j < paramLimit; j++)
-                {
-                    if (i != j)
-                    {
-                        pheromones[i, j] = NumOps.Add(pheromones[i, j], depositScaled);
-                    }
-                }
-            }
+            var scaled = (Vector<T>)engine.Multiply(engine.Abs(parameters), DepositAmount(FitnessList[k]));
+
+            var source = new Vector<T>(pheromoneSize);
+            scaled.AsSpan().Slice(0, paramLimit).CopyTo(source.AsWritableSpan());
+            var target = new Vector<T>(pheromones.Columns);
+            target.AsWritableSpan().Slice(0, Math.Min(paramLimit, pheromones.Columns)).Fill(NumOps.One);
+
+            increment = engine.TensorAdd(increment, engine.TensorOuter(source.AsTensor(), target.AsTensor()));
         }
+
+        // No self-edges: take the diagonal back off.
+        var deposits = new Matrix<T>(pheromoneSize, pheromones.Columns);
+        increment.AsSpan().CopyTo(deposits.AsWritableSpan());
+        deposits = engine.MatrixSubtract(deposits, Matrix<T>.CreateDiagonal(deposits.Diagonal()));
+
+        engine.MatrixAdd(evaporated, deposits).AsSpan().CopyTo(pheromones.AsWritableSpan());
     }
+
+    /// <summary>The pheromone deposited by a solution: intensity / (1 + fitness).</summary>
+    private T DepositAmount(T fitness)
+        => NumOps.Divide(_currentPheromoneIntensity, NumOps.Add(NumOps.One, fitness));
 
 
     /// <summary>
@@ -523,7 +512,7 @@ public partial class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, T
                 }
             }
 
-            if (ArchiveSpread(archive, n) < stop) break;
+            if (PopulationMeanAbsoluteDeviation(archive.ConvertAll(entry => entry.Point), n) < stop) break;
         }
 
         return search.BestPoint;
@@ -545,23 +534,5 @@ public partial class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, T
     }
 
     /// <summary>The mean absolute deviation of the archive, coordinate by coordinate.</summary>
-    private double ArchiveSpread(List<(Vector<T> Point, double Value)> archive, int n)
-    {
-        double total = 0.0;
-
-        for (int i = 0; i < n; i++)
-        {
-            double mean = 0.0;
-            foreach (var entry in archive) mean += Convert.ToDouble(entry.Point[i]);
-            mean /= archive.Count;
-
-            foreach (var entry in archive)
-            {
-                total += Math.Abs(Convert.ToDouble(entry.Point[i]) - mean);
-            }
-        }
-
-        return total / (archive.Count * n);
-    }
 
 }

@@ -175,20 +175,18 @@ public class ExactSearchAlgorithm<T> : ScoreBasedBase<T>
 
         // Build adjacency matrix with multivariate OLS-estimated edge weights
         // Each child is regressed against ALL of its selected parents jointly
-        var W = new Matrix<T>(d, d);
+        var positions = new List<int>();
+        var weights = new List<Tensor<T>>();
         for (int v = 0; v < d; v++)
         {
             var parents = optimalParents[v].ToList();
             if (parents.Count == 0) continue;
 
-            var coefficients = EstimateMultivariateOLS(data, n, parents, v);
-            for (int p = 0; p < parents.Count; p++)
-            {
-                W[parents[p], v] = NumOps.FromDouble(coefficients[p]);
-            }
+            positions.AddRange(parents.Select(parent => parent * d + v));
+            weights.Add(EstimateMultivariateOLS(data, parents, v));
         }
 
-        return W;
+        return CausalTensorHelpers.FromTensorValues(d, d, positions, weights);
     }
 
     /// <summary>
@@ -219,54 +217,15 @@ public class ExactSearchAlgorithm<T> : ScoreBasedBase<T>
     /// Multivariate OLS: regress child on all parents jointly.
     /// Returns coefficient vector (one per parent).
     /// </summary>
-    private double[] EstimateMultivariateOLS(Matrix<T> data, int n, List<int> parents, int child)
+    private Tensor<T> EstimateMultivariateOLS(Matrix<T> data, List<int> parents, int child)
     {
         int p = parents.Count;
-        if (p == 0) return [];
+        if (p == 0) return new Tensor<T>(new[] { 0 });
 
-        // Compute means
-        var means = new double[p + 1];
-        for (int i = 0; i < n; i++)
-        {
-            for (int k = 0; k < p; k++)
-                means[k] += NumOps.ToDouble(data[i, parents[k]]);
-            means[p] += NumOps.ToDouble(data[i, child]);
-        }
-        for (int k = 0; k <= p; k++)
-            means[k] /= n;
-
-        // Build X'X and X'y (normal equations)
-        var XtX = new double[p, p];
-        var Xty = new double[p];
-
-        for (int i = 0; i < n; i++)
-        {
-            var dx = new double[p];
-            for (int k = 0; k < p; k++)
-                dx[k] = NumOps.ToDouble(data[i, parents[k]]) - means[k];
-            double dy = NumOps.ToDouble(data[i, child]) - means[p];
-
-            for (int a = 0; a < p; a++)
-            {
-                Xty[a] += dx[a] * dy;
-                for (int b = a; b < p; b++)
-                {
-                    XtX[a, b] += dx[a] * dx[b];
-                }
-            }
-        }
-
-        // Symmetrize and add ridge
-        for (int a = 0; a < p; a++)
-        {
-            XtX[a, a] += 1e-10;
-            for (int b = a + 1; b < p; b++)
-                XtX[b, a] = XtX[a, b];
-        }
-
-        // Solve via Cholesky-like approach (small p, so direct Gaussian elimination)
-        var coeffs = SolveSmallSystem(XtX, Xty, p);
-        return coeffs;
+        // Centered normal equations X'X beta = X'y with ridge 1e-10, solved by elimination with partial
+        // pivoting (all-zero coefficients when singular).
+        var (beta, _) = FitCenteredRegression(Tensor<T>.FromMatrix(data), child, parents.ToArray());
+        return beta;
     }
 
     // SolveSmallSystem is inherited from CausalDiscoveryBase<T>

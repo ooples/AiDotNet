@@ -567,17 +567,7 @@ public partial class TimeGPT<T> : ForecastingModelBase<T>
     {
         var metrics = new Dictionary<string, T>();
 
-        T mse = NumOps.Zero;
-        T mae = NumOps.Zero;
-        int count = 0;
-
-        for (int i = 0; i < predictions.Length && i < actuals.Length; i++)
-        {
-            var diff = NumOps.Subtract(predictions[i], actuals[i]);
-            mse = NumOps.Add(mse, NumOps.Multiply(diff, diff));
-            mae = NumOps.Add(mae, NumOps.Abs(diff));
-            count++;
-        }
+        var (mse, mae, count) = SumSquaredAndAbsoluteError(predictions, actuals);
 
         if (count > 0)
         {
@@ -619,11 +609,8 @@ public partial class TimeGPT<T> : ForecastingModelBase<T>
 
         var meanT = new Tensor<T>(new[] { batch, 1 });
         var stdT = new Tensor<T>(new[] { batch, 1 });
-        for (int b = 0; b < batch; b++)
-        {
-            meanT.Data.Span[b] = _revinMean[b];
-            stdT.Data.Span[b] = _revinStd[b];
-        }
+        _revinMean.AsSpan().Slice(0, batch).CopyTo(meanT.Data.Span);
+        _revinStd.AsSpan().Slice(0, batch).CopyTo(stdT.Data.Span);
 
         bool reshaped = forecast.Rank != 2;
         var work = reshaped ? Engine.Reshape(forecast, new[] { batch, forecast.Length / batch }) : forecast;
@@ -756,10 +743,7 @@ public partial class TimeGPT<T> : ForecastingModelBase<T>
         }
 
         var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++)
-        {
-            inputData[i] = Convert.ToSingle(NumOps.ToDouble(input.Data.Span[i]));
-        }
+        NumOps.ToFloatSpan(input.Data.Span.Slice(0, input.Length), inputData.AsSpan(0, input.Length));
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputMeta = OnnxSession.InputMetadata;
@@ -775,10 +759,7 @@ public partial class TimeGPT<T> : ForecastingModelBase<T>
 
         var outputShape = outputTensor.Dimensions.ToArray();
         var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++)
-        {
-            outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-        }
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span.Slice(0, (int)outputTensor.Length), outputData.AsSpan(0, (int)outputTensor.Length));
 
         return new Tensor<T>(outputShape, new Vector<T>(outputData));
     }
@@ -908,6 +889,9 @@ public partial class TimeGPT<T> : ForecastingModelBase<T>
         }
 
         // Compute quantiles
+        if (TrySortedSampleQuantiles(samples, quantiles, _forecastHorizon, out var sortedQuantiles))
+            return sortedQuantiles;
+
         var result = new Tensor<T>(new[] { 1, _forecastHorizon, quantiles.Length });
 
         for (int t = 0; t < _forecastHorizon; t++)
@@ -1057,14 +1041,13 @@ public partial class TimeGPT<T> : ForecastingModelBase<T>
             {
                 for (int t = 0; t < stepsToCopy; t++)
                 {
-                    for (int f = 0; f < numFeatures; f++)
+                    // One feature row; indices grow with f, so the in-bounds part is a prefix.
+                    int srcIdx = b * predSteps * numFeatures + t * numFeatures;
+                    int dstIdx = b * totalSteps * numFeatures + (currentStep + t) * numFeatures;
+                    int rowCount = Math.Min(numFeatures, Math.Min(pred.Length - srcIdx, result.Length - dstIdx));
+                    if (rowCount > 0)
                     {
-                        int srcIdx = b * predSteps * numFeatures + t * numFeatures + f;
-                        int dstIdx = b * totalSteps * numFeatures + (currentStep + t) * numFeatures + f;
-                        if (srcIdx < pred.Length && dstIdx < result.Length)
-                        {
-                            result.Data.Span[dstIdx] = pred.Data.Span[srcIdx];
-                        }
+                        pred.Data.Span.Slice(srcIdx, rowCount).CopyTo(result.Data.Span.Slice(dstIdx, rowCount));
                     }
                 }
             }

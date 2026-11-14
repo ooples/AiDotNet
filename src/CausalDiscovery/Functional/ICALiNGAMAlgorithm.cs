@@ -52,6 +52,17 @@ namespace AiDotNet.CausalDiscovery.Functional;
 [ResearchPaper("A Linear Non-Gaussian Acyclic Model for Causal Discovery", "https://jmlr.org/papers/v7/shimizu06a.html", Year = 2006, Authors = "Shohei Shimizu, Patrik O. Hoyer, Aapo Hyvarinen, Antti Kerminen")]
 public class ICALiNGAMAlgorithm<T> : FunctionalBase<T>
 {
+    /// <summary>
+    /// Magnitude below which a diagonal entry of the row-assigned unmixing matrix makes the assignment
+    /// degenerate (the empty graph is returned).
+    /// </summary>
+    private const double AssignmentDiagonalFloor = 1e-12;
+
+    /// <summary>
+    /// Lower bound on the covariance eigenvalues used to scale the whitening transform.
+    /// </summary>
+    private const double WhiteningEigenvalueFloor = 1e-12;
+
     /// <inheritdoc/>
     public override string Name => "ICA-LiNGAM";
 
@@ -109,21 +120,15 @@ public class ICALiNGAMAlgorithm<T> : FunctionalBase<T>
         // LiNGAM steps 3-4: normalize each assigned row to make the diagonal one,
         // then recover the structural coefficient matrix B = I - W'. B[target, source]
         // is converted to the repository's adjacency convention [source, target] below.
-        var B = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-        {
-            T diagonal = unmixing[rowForColumn[i], i];
-            if (Math.Abs(NumOps.ToDouble(diagonal)) < 1e-12)
-                return new Matrix<T>(d, d);
+        var assigned = Engine.TensorIndexSelect(Tensor<T>.FromMatrix(unmixing),
+            new Tensor<int>(rowForColumn, new[] { d }), 0);
+        var diagonal = Engine.TensorDiagonal(assigned);
+        if (CausalTensorHelpers.AnyBelow(Engine.TensorAbs(diagonal), NumOps.FromDouble(AssignmentDiagonalFloor)))
+            return new Matrix<T>(d, d);
 
-            for (int j = 0; j < d; j++)
-            {
-                T normalized = NumOps.Divide(unmixing[rowForColumn[i], j], diagonal);
-                B[i, j] = NumOps.Subtract(
-                    i == j ? NumOps.One : NumOps.Zero,
-                    normalized);
-            }
-        }
+        var normalized = Engine.TensorDivide(assigned,
+            Engine.TensorBroadcastTo(diagonal.Reshape(new[] { d, 1 }), new[] { d, d }));
+        var B = Engine.TensorSubtract(Engine.TensorEye<T>(d), normalized).ToMatrix();
 
         // LiNGAM step 5 / Algorithms B-C: prune the smallest estimates until B can
         // be simultaneously row/column-permuted to strict lower triangular form.
@@ -132,151 +137,96 @@ public class ICALiNGAMAlgorithm<T> : FunctionalBase<T>
         // Keep only coefficients allowed by the recovered order. This is the paper's
         // DAG projection, not an arbitrary tie-break: later variables may depend on
         // earlier variables, never the reverse.
-        var result = new Matrix<T>(d, d);
+        var allowed = new List<int>();
         for (int targetPosition = 1; targetPosition < d; targetPosition++)
-        {
-            int target = order[targetPosition];
             for (int sourcePosition = 0; sourcePosition < targetPosition; sourcePosition++)
-            {
-                int source = order[sourcePosition];
-                T val = B[target, source];
-                double valD = NumOps.ToDouble(val);
-                if (Math.Abs(valD) >= _threshold)
-                    result[source, target] = val;
-            }
-        }
+                allowed.Add(order[sourcePosition] * d + order[targetPosition]);
 
-        return result;
+        // result[source, target] = B[target, source] where allowed and |B| >= threshold.
+        var projected = Tensor<T>.FromMatrix(
+            CausalTensorHelpers.KeepPositions(Engine.TensorTranspose(Tensor<T>.FromMatrix(B)), allowed));
+        var keep = Engine.TensorGreaterEqual(Engine.TensorAbs(projected),
+            Engine.TensorFullLike(projected, NumOps.FromDouble(_threshold)));
+        return Engine.TensorWhere(keep, projected, Engine.TensorZerosLike(projected)).ToMatrix();
     }
 
     private Matrix<T> CenterData(Matrix<T> data, int n, int d)
     {
-        var centered = new Matrix<T>(n, d);
-        T nT = NumOps.FromDouble(n);
-        for (int j = 0; j < d; j++)
-        {
-            T mean = NumOps.Zero;
-            for (int i = 0; i < n; i++) mean = NumOps.Add(mean, data[i, j]);
-            mean = NumOps.Divide(mean, nT);
-            for (int i = 0; i < n; i++) centered[i, j] = NumOps.Subtract(data[i, j], mean);
-        }
-        return centered;
+        return CenterColumns(Tensor<T>.FromMatrix(data)).ToMatrix();
     }
 
     private (Matrix<T> Whitened, Matrix<T> WhiteningMatrix) WhitenData(Matrix<T> centered, int n, int d)
     {
-        var covariance = new Matrix<T>(d, d);
-        T invN = NumOps.FromDouble(1.0 / n);
-        for (int row = 0; row < d; row++)
-        {
-            for (int col = 0; col < d; col++)
-            {
-                T sum = NumOps.Zero;
-                for (int sample = 0; sample < n; sample++)
-                    sum = NumOps.Add(sum, NumOps.Multiply(centered[sample, row], centered[sample, col]));
-                covariance[row, col] = NumOps.Multiply(sum, invN);
-            }
-        }
+        // Covariance (1/n) X'X, mirrored from its upper triangle so it is exactly symmetric.
+        var x = Tensor<T>.FromMatrix(centered);
+        var gram = Engine.TensorMatMul(Engine.TensorTranspose(x), x);
+        gram = Engine.TensorAdd(Engine.TensorTriu(gram, 0), Engine.TensorTranspose(Engine.TensorTriu(gram, 1)));
+        var covariance = Engine.TensorMultiplyScalar(gram, NumOps.FromDouble(1.0 / n)).ToMatrix();
 
+        // whitening[component, feature] = V[feature, component] / sqrt(max(lambda_component, WhiteningEigenvalueFloor)).
         var eigen = new EigenDecomposition<T>(covariance, EigenAlgorithmType.Jacobi);
-        var whitening = new Matrix<T>(d, d);
-        for (int component = 0; component < d; component++)
-        {
-            double eigenvalue = NumOps.ToDouble(eigen.EigenValues[component]);
-            double inverseRoot = 1.0 / Math.Sqrt(Math.Max(eigenvalue, 1e-12));
-            T scale = NumOps.FromDouble(inverseRoot);
-            for (int feature = 0; feature < d; feature++)
-                whitening[component, feature] = NumOps.Multiply(eigen.EigenVectors[feature, component], scale);
-        }
+        var eigenvalues = Engine.TensorMax(eigen.EigenValues.AsTensor(), NumOps.FromDouble(WhiteningEigenvalueFloor));
+        var scale = Engine.TensorReciprocal(Engine.TensorSqrt(eigenvalues)).Reshape(new[] { d, 1 });
+        var whitening = Engine.TensorMultiply(Engine.TensorTranspose(Tensor<T>.FromMatrix(eigen.EigenVectors)),
+            Engine.TensorBroadcastTo(scale, new[] { d, d }));
 
-        var whitened = new Matrix<T>(n, d);
-        for (int sample = 0; sample < n; sample++)
-        {
-            for (int component = 0; component < d; component++)
-            {
-                T sum = NumOps.Zero;
-                for (int feature = 0; feature < d; feature++)
-                    sum = NumOps.Add(sum, NumOps.Multiply(centered[sample, feature], whitening[component, feature]));
-                whitened[sample, component] = sum;
-            }
-        }
-
-        return (whitened, whitening);
+        var whitened = Engine.TensorMatMul(x, Engine.TensorTranspose(whitening));
+        return (whitened.ToMatrix(), whitening.ToMatrix());
     }
 
     private Matrix<T> FastICA(Matrix<T> data, int n, int d)
     {
         const int DefaultSeed = 42;
         var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(DefaultSeed);
-        var W = new Matrix<T>(d, d);
+        var x = Tensor<T>.FromMatrix(data);
+        var xt = Engine.TensorTranspose(x);
+        T nT = NumOps.FromDouble(n);
+        T half = NumOps.FromDouble(0.5);
+        T tolerance = NumOps.FromDouble(1e-6);
 
-        // Initialize W as identity + small random perturbation
-        for (int i = 0; i < d; i++)
-        {
-            W[i, i] = NumOps.One;
-            for (int j = 0; j < d; j++)
-                W[i, j] = NumOps.Add(W[i, j], NumOps.FromDouble(0.01 * (rng.NextDouble() - 0.5)));
-        }
+        // The identity + 0.01 * (u - 0.5) start is overwritten row by row below; it is still drawn so
+        // the seeded stream feeding the per-component starts is unchanged.
+        _ = Tensor<T>.CreateRandom(rng, d, d);
 
         // Deflation-based FastICA
+        var components = new Tensor<T>[d];
         for (int p = 0; p < d; p++)
         {
-            var w = new Vector<T>(d);
-            for (int j = 0; j < d; j++) w[j] = NumOps.FromDouble(rng.NextDouble() - 0.5);
-            VectorHelper.NormalizeInPlace(w);
+            var start = Engine.TensorSubtractScalar(Tensor<T>.CreateRandom(rng, d), half).ToVector();
+            VectorHelper.NormalizeInPlace(start);
+            var w = start.AsTensor();
 
             for (int iter = 0; iter < 200; iter++)
             {
-                var wNew = new Vector<T>(d);
-
                 // E{X * g(w^T X)} - E{g'(w^T X)} * w, using g(u) = tanh(u)
-                T meanGPrime = NumOps.Zero;
-                T nT = NumOps.FromDouble(n);
-                for (int i = 0; i < n; i++)
-                {
-                    T u = NumOps.Zero;
-                    for (int j = 0; j < d; j++)
-                        u = NumOps.Add(u, NumOps.Multiply(w[j], data[i, j]));
-
-                    double uD = NumOps.ToDouble(u);
-                    T g = NumOps.FromDouble(Math.Tanh(uD));
-                    T gPrime = NumOps.Subtract(NumOps.One, NumOps.Multiply(g, g));
-                    meanGPrime = NumOps.Add(meanGPrime, gPrime);
-
-                    for (int j = 0; j < d; j++)
-                        wNew[j] = NumOps.Add(wNew[j], NumOps.Multiply(data[i, j], g));
-                }
-
-                meanGPrime = NumOps.Divide(meanGPrime, nT);
-                for (int j = 0; j < d; j++)
-                    wNew[j] = NumOps.Subtract(
-                        NumOps.Divide(wNew[j], nT),
-                        NumOps.Multiply(meanGPrime, w[j]));
+                var g = Engine.TensorTanh(Engine.TensorMatMul(x, w.Reshape(new[] { d, 1 })));
+                T meanGPrime = Engine.TensorMean(Engine.TensorSubtract(Engine.TensorOnesLike(g), Engine.TensorSquare(g)));
+                var wNew = Engine.TensorSubtract(
+                    Engine.TensorDivideScalar(Engine.TensorMatMul(xt, g).Reshape(new[] { d }), nT),
+                    Engine.TensorMultiplyScalar(w, meanGPrime));
 
                 // Orthogonalize against previous components
                 for (int k = 0; k < p; k++)
                 {
-                    T dot = NumOps.Zero;
-                    for (int j = 0; j < d; j++)
-                        dot = NumOps.Add(dot, NumOps.Multiply(wNew[j], W[k, j]));
-                    for (int j = 0; j < d; j++)
-                        wNew[j] = NumOps.Subtract(wNew[j], NumOps.Multiply(dot, W[k, j]));
+                    T dot = Engine.TensorSum(Engine.TensorMultiply(wNew, components[k]));
+                    wNew = Engine.TensorSubtract(wNew, Engine.TensorMultiplyScalar(components[k], dot));
                 }
 
-                VectorHelper.NormalizeInPlace(wNew);
+                var normalized = wNew.ToVector();
+                VectorHelper.NormalizeInPlace(normalized);
+                wNew = normalized.AsTensor();
 
                 // Check convergence
-                double diff = 0;
-                for (int j = 0; j < d; j++)
-                    diff += Math.Abs(Math.Abs(NumOps.ToDouble(wNew[j])) - Math.Abs(NumOps.ToDouble(w[j])));
+                var diff = Engine.ReduceSum(Engine.TensorAbs(
+                    Engine.TensorSubtract(Engine.TensorAbs(wNew), Engine.TensorAbs(w))), new[] { 0 }, true);
                 w = wNew;
-                if (diff < 1e-6) break;
+                if (CausalTensorHelpers.AnyBelow(diff, tolerance)) break;
             }
 
-            for (int j = 0; j < d; j++) W[p, j] = w[j];
+            components[p] = w;
         }
 
-        return W;
+        return Engine.TensorStack(components, 0).ToMatrix();
     }
 
     private int[] FindRowPermutation(Matrix<T> unmixing, int d)

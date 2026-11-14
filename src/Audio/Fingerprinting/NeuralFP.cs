@@ -153,18 +153,8 @@ internal partial class NeuralFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprin
         var features = PreprocessAudio(audio);
         Tensor<T> embedding = IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(features) : Predict(features);
 
-        // L2 normalize the embedding
-        double norm = 0;
-        for (int i = 0; i < embedding.Length; i++)
-        {
-            double v = NumOps.ToDouble(embedding[i]);
-            norm += v * v;
-        }
-        norm = Math.Sqrt(norm);
-
-        var data = new T[embedding.Length];
-        for (int i = 0; i < embedding.Length; i++)
-            data[i] = norm > 0 ? NumOps.FromDouble(NumOps.ToDouble(embedding[i]) / norm) : embedding[i];
+        // L2 normalize the embedding (unchanged when its norm is not positive)
+        var data = AudioEngineOps.L2NormalizedData(Engine, embedding);
 
         return new AudioFingerprint<T>
         {
@@ -179,8 +169,7 @@ internal partial class NeuralFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprin
     /// <inheritdoc />
     public AudioFingerprint<T> Fingerprint(Vector<T> audio)
     {
-        var tensor = new Tensor<T>([audio.Length]);
-        for (int i = 0; i < audio.Length; i++) tensor[i] = audio[i];
+        var tensor = new Tensor<T>([audio.Length], audio);
         return Fingerprint(tensor);
     }
 
@@ -207,19 +196,11 @@ internal partial class NeuralFP<T> : AudioNeuralNetworkBase<T>, IAudioFingerprin
         if (queryFrames <= 0 || refFrames <= 0) return matches;
 
         double threshold = _options.MatchThreshold;
-        for (int rStart = 0; rStart <= refFrames - Math.Min(queryFrames, minMatchLength); rStart++)
+        var scores = AudioEngineOps.SlidingCosineScores(Engine, query.Data, reference.Data, embDim, minMatchLength);
+        for (int rStart = 0; rStart < scores.Length; rStart++)
         {
             int matchLen = Math.Min(queryFrames, refFrames - rStart);
-            double sim = 0, normQ = 0, normR = 0;
-            for (int f = 0; f < matchLen; f++)
-                for (int d = 0; d < embDim && (f * embDim + d) < query.Data.Length && ((rStart + f) * embDim + d) < reference.Data.Length; d++)
-                {
-                    double q = NumOps.ToDouble(query.Data[f * embDim + d]);
-                    double r = NumOps.ToDouble(reference.Data[(rStart + f) * embDim + d]);
-                    sim += q * r; normQ += q * q; normR += r * r;
-                }
-            double denom = Math.Sqrt(normQ) * Math.Sqrt(normR);
-            double cosSim = denom > 1e-8 ? sim / denom : 0;
+            double cosSim = scores[rStart];
             if (cosSim >= threshold && matchLen >= minMatchLength)
             {
                 double timePerFrame = query.Duration / Math.Max(1, queryFrames);

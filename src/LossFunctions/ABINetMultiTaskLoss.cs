@@ -91,10 +91,7 @@ public sealed class ABINetMultiTaskLoss<T> : LossFunctionBase<T>
     {
         if (weight == 1.0) return loss;
 
-        var scalar = new Tensor<T>(loss.Shape.ToArray());
-        var value = NumOps.FromDouble(weight);
-        for (int i = 0; i < scalar.Length; i++) scalar[i] = value;
-        return Engine.TensorMultiply(loss, scalar);
+        return Engine.TensorMultiplyScalar(loss, NumOps.FromDouble(weight));
     }
 
     private static int SplitLength(Tensor<T> tensor, string name)
@@ -201,15 +198,9 @@ public sealed class ABINetMultiTaskLoss<T> : LossFunctionBase<T>
         }
 
         int block = value.Length / 3;
-        var vision = new Vector<T>(block);
-        var language = new Vector<T>(block);
-        var fusion = new Vector<T>(block);
-        for (int i = 0; i < block; i++)
-        {
-            vision[i] = value[i];
-            language[i] = value[block + i];
-            fusion[i] = value[(2 * block) + i];
-        }
+        var vision = value.GetSubVector(0, block);
+        var language = value.GetSubVector(block, block);
+        var fusion = value.GetSubVector(2 * block, block);
 
         return (vision, language, fusion);
     }

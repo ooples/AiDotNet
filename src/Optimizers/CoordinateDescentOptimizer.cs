@@ -240,16 +240,41 @@ public partial class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBa
     /// </remarks>
     private IFullModel<T, TInput, TOutput> UpdateSolution(IFullModel<T, TInput, TOutput> currentSolution, OptimizationInputData<T, TInput, TOutput> inputData)
     {
-        var newCoefficients = InterfaceGuard.Parameterizable(currentSolution).GetParameters().Clone();
-
-        for (int i = 0; i < newCoefficients.Length; i++)
+        // Coordinate descent is a Gauss-Seidel sweep (Wright, "Coordinate descent algorithms", 2015): each
+        // partial derivative is taken at the solution with the earlier coordinates already moved. Taking every
+        // derivative at the starting point instead is a full gradient step, which diverges on coupled
+        // objectives (f(x, y) = (x + y)^2 with learning rate 0.75) where the sequential sweep converges.
+        var coefficients = InterfaceGuard.Parameterizable(currentSolution).GetParameters().Clone();
+        var solution = currentSolution;
+        for (int index = 0; index < coefficients.Length; index++)
         {
-            var gradient = CalculatePartialDerivative(currentSolution, inputData, i);
-            var update = CalculateUpdate(gradient, i);
-            newCoefficients[i] = NumOps.Add(newCoefficients[i], update);
+            T derivative = CalculatePartialDerivative(solution, inputData, index);
+            ApplySingleCoordinateUpdate(coefficients, index, derivative);
+            solution = InterfaceGuard.Parameterizable(solution).WithParameters(coefficients.Clone());
         }
 
-        return InterfaceGuard.Parameterizable(currentSolution).WithParameters(newCoefficients);
+        return solution;
+    }
+
+    /// <summary>
+    /// Moves one coordinate: update = lr[i] * derivative + momentum[i] * previousUpdate[i], recorded as that
+    /// coordinate's previous update, and coefficients[i] -= update. One-element engine ops; the other
+    /// coordinates and their momentum state are untouched.
+    /// </summary>
+    private void ApplySingleCoordinateUpdate(Vector<T> coefficients, int index, T derivative)
+    {
+        var start = new[] { index };
+        var length = new[] { 1 };
+        var learningRate = Engine.TensorSlice(_learningRates.AsTensor(), start, length);
+        var momentum = Engine.TensorSlice(_momentums.AsTensor(), start, length);
+        var previous = Engine.TensorSlice(_previousUpdate.AsTensor(), start, length);
+        var update = Engine.TensorAdd(
+            Engine.TensorMultiplyScalar(learningRate, derivative),
+            Engine.TensorMultiply(momentum, previous));
+        var moved = Engine.TensorSubtract(Engine.TensorSlice(coefficients.AsTensor(), start, length), update);
+
+        update.AsSpan().CopyTo(_previousUpdate.AsWritableSpan().Slice(index, 1));
+        moved.AsSpan().CopyTo(coefficients.AsWritableSpan().Slice(index, 1));
     }
 
     /// <summary>
@@ -285,25 +310,26 @@ public partial class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBa
     }
 
     /// <summary>
-    /// Calculates the update for a specific coordinate based on its gradient and momentum.
+    /// Applies every coordinate's update, update = lr * gradient + momentum * previousUpdate, as whole-vector engine
+    /// ops, records it as the previous update, and returns parameters - update.
     /// </summary>
-    /// <param name="gradient">The calculated gradient for the coordinate.</param>
-    /// <param name="index">The index of the coordinate.</param>
-    /// <returns>The calculated update value.</returns>
+    /// <param name="parameters">The current coordinates.</param>
+    /// <param name="gradient">The per-coordinate gradient.</param>
+    /// <returns>The updated coordinates.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> This method determines how much to change a specific variable. It considers both
     /// the current gradient (which suggests the best direction to move) and momentum (which helps maintain consistent movement).
     /// </para>
     /// </remarks>
-    private T CalculateUpdate(T gradient, int index)
+    private Vector<T> ApplyCoordinateUpdates(Vector<T> parameters, Vector<T> gradient)
     {
-        var update = NumOps.Add(
-            NumOps.Multiply(_learningRates[index], gradient),
-            NumOps.Multiply(_momentums[index], _previousUpdate[index])
-        );
-        _previousUpdate[index] = update;
+        var update = (Vector<T>)Engine.Add(
+            Engine.Multiply(_learningRates, gradient),
+            Engine.Multiply(_momentums, _previousUpdate));
+        update.AsSpan().CopyTo(_previousUpdate.AsWritableSpan());
 
-        return NumOps.Negate(update);
+        // parameters + (-update)
+        return (Vector<T>)Engine.Subtract(parameters, update);
     }
 
     /// <summary>
@@ -369,8 +395,8 @@ public partial class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBa
         var maxMom = NumOps.FromDouble(_options.MaxMomentum);
 
         // Clamp all learning rates and momentums at once using Transform
-        _learningRates = _learningRates.Transform(lr => MathHelper.Clamp(lr, minLr, maxLr));
-        _momentums = _momentums.Transform(mom => MathHelper.Clamp(mom, minMom, maxMom));
+        _learningRates = (Vector<T>)Engine.Clamp(_learningRates, minLr, maxLr);
+        _momentums = (Vector<T>)Engine.Clamp(_momentums, minMom, maxMom);
     }
 
 
@@ -455,13 +481,6 @@ public partial class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBa
             _previousUpdate = Vector<T>.CreateDefault(n, NumOps.Zero);
         }
 
-        var updated = parameters.Clone();
-        for (int i = 0; i < n; i++)
-        {
-            var update = CalculateUpdate(gradient[i], i);
-            updated[i] = NumOps.Add(updated[i], update);
-        }
-
-        return updated;
+        return ApplyCoordinateUpdates(parameters, gradient);
     }
 }

@@ -105,28 +105,25 @@ public class TransferEntropyAlgorithm<T> : InfoTheoreticBase<T>
     {
         int effectiveN = n - _maxLag;
 
+        var x = Tensor<T>.FromMatrix(data);
+        var targetColumn = Engine.TensorSlice(x, new[] { 0, target }, new[] { n, 1 });
+        var sourceColumn = Engine.TensorSlice(x, new[] { 0, source }, new[] { n, 1 });
+
         // Build target future vector: Y[t]
-        var yFuture = new Vector<T>(effectiveN);
-        for (int t = 0; t < effectiveN; t++)
-            yFuture[t] = data[t + _maxLag, target];
+        var yFuture = Engine.TensorSlice(targetColumn, new[] { _maxLag, 0 }, new[] { effectiveN, 1 });
 
-        // Build restricted design matrix: Y_past only (lags 1..L of target)
-        var yPast = new Matrix<T>(effectiveN, _maxLag);
-        for (int t = 0; t < effectiveN; t++)
-            for (int lag = 1; lag <= _maxLag; lag++)
-                yPast[t, lag - 1] = data[t + _maxLag - lag, target];
-
+        // Build restricted design matrix: Y_past only (lags 1..L of target), column lag - 1 = Y[t - lag]
         // Build unrestricted design matrix: Y_past + X_past
         int fullDim = 2 * _maxLag;
-        var fullPast = new Matrix<T>(effectiveN, fullDim);
-        for (int t = 0; t < effectiveN; t++)
+        var targetLags = new Tensor<T>[_maxLag];
+        var sourceLags = new Tensor<T>[_maxLag];
+        for (int lag = 1; lag <= _maxLag; lag++)
         {
-            for (int lag = 1; lag <= _maxLag; lag++)
-            {
-                fullPast[t, lag - 1] = data[t + _maxLag - lag, target];
-                fullPast[t, _maxLag + lag - 1] = data[t + _maxLag - lag, source];
-            }
+            targetLags[lag - 1] = Engine.TensorSlice(targetColumn, new[] { _maxLag - lag, 0 }, new[] { effectiveN, 1 });
+            sourceLags[lag - 1] = Engine.TensorSlice(sourceColumn, new[] { _maxLag - lag, 0 }, new[] { effectiveN, 1 });
         }
+        var yPast = Engine.TensorConcatenate(targetLags, 1);
+        var fullPast = Engine.TensorConcatenate(new[] { yPast, Engine.TensorConcatenate(sourceLags, 1) }, 1);
 
         // Compute residual variance for restricted model (Y_past only)
         double rssRestricted = ComputeOLSResidualVariance(yPast, yFuture, effectiveN, _maxLag);
@@ -162,66 +159,29 @@ public class TransferEntropyAlgorithm<T> : InfoTheoreticBase<T>
         return Math.Max(te, 0);
     }
 
-    private double ComputeOLSResidualVariance(Matrix<T> X, Vector<T> y, int n, int p)
+    private double ComputeOLSResidualVariance(Tensor<T> X, Tensor<T> y, int n, int p)
     {
         if (p == 0 || n <= p)
         {
             // Just compute variance of y
-            T mean = NumOps.Zero;
-            T nT = NumOps.FromDouble(n);
-            for (int t = 0; t < n; t++)
-                mean = NumOps.Add(mean, y[t]);
-            mean = NumOps.Divide(mean, nT);
-
-            var centered = new Vector<T>(n);
-            for (int t = 0; t < n; t++)
-                centered[t] = NumOps.Subtract(y[t], mean);
-
-            return NumOps.ToDouble(Engine.DotProduct(centered, centered)) / n;
+            var centered = Engine.TensorSubtractScalar(y, Engine.TensorMean(y));
+            return NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(centered))) / n;
         }
 
-        // Build normal equations: X'X * beta = X'y
-        var XtX = new Matrix<T>(p, p);
-        var Xty = new Vector<T>(p);
-
-        // Use Engine.DotProduct for column-wise computation
-        for (int a = 0; a < p; a++)
-        {
-            var colA = new Vector<T>(n);
-            for (int t = 0; t < n; t++) colA[t] = X[t, a];
-
-            Xty[a] = Engine.DotProduct(colA, y);
-
-            for (int b = a; b < p; b++)
-            {
-                var colB = new Vector<T>(n);
-                for (int t = 0; t < n; t++) colB[t] = X[t, b];
-
-                T dot = Engine.DotProduct(colA, colB);
-                XtX[a, b] = dot;
-                XtX[b, a] = dot;
-            }
-        }
+        // Build normal equations: X'X * beta = X'y (X'X mirrored so it is exactly symmetric)
+        var Xt = Engine.TensorTranspose(X);
+        var XtX = CausalTensorHelpers.Symmetrize(Engine.TensorMatMul(Xt, X));
 
         // Ridge regularization for stability
-        T ridge = NumOps.FromDouble(1e-10);
-        for (int a = 0; a < p; a++)
-            XtX[a, a] = NumOps.Add(XtX[a, a], ridge);
+        XtX = Engine.TensorAdd(XtX, Engine.TensorMultiplyScalar(Engine.TensorEye<T>(p), NumOps.FromDouble(1e-10)));
+        var Xty = Engine.TensorMatMul(Xt, y).Reshape(new[] { p }).ToVector();
 
         // Solve for beta
-        var beta = MatrixSolutionHelper.SolveLinearSystem<T>(XtX, Xty, MatrixDecompositionType.Lu);
+        var beta = MatrixSolutionHelper.SolveLinearSystem<T>(XtX.ToMatrix(), Xty, MatrixDecompositionType.Lu);
 
-        // Compute residuals and their variance using Engine.DotProduct
-        var residuals = new Vector<T>(n);
-        for (int t = 0; t < n; t++)
-        {
-            T pred = NumOps.Zero;
-            for (int c = 0; c < p; c++)
-                pred = NumOps.Add(pred, NumOps.Multiply(X[t, c], beta[c]));
-            residuals[t] = NumOps.Subtract(y[t], pred);
-        }
-
-        return NumOps.ToDouble(Engine.DotProduct(residuals, residuals)) / n;
+        // Compute residuals and their variance
+        var residuals = Engine.TensorSubtract(y, Engine.TensorMatMul(X, beta.AsTensor().Reshape(new[] { p, 1 })));
+        return NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(residuals))) / n;
     }
 
     /// <summary>
@@ -233,26 +193,23 @@ public class TransferEntropyAlgorithm<T> : InfoTheoreticBase<T>
         int effectiveN = n - 1;
         if (effectiveN < 3) return 0;
 
-        double sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0, sumY2 = 0;
-        for (int t = 1; t < n; t++)
-        {
-            double x = NumOps.ToDouble(data[t - 1, source]);
-            double y = NumOps.ToDouble(data[t, target]);
-            sumX += x; sumY += y;
-            sumXY += x * y;
-            sumX2 += x * x;
-            sumY2 += y * y;
-        }
+        // x = source[t - 1], y = target[t] for t = 1..n-1, with raw-moment covariance and variances
+        var values = Tensor<T>.FromMatrix(data);
+        var x = Engine.TensorSlice(Engine.TensorSliceAxis(values, 1, source), new[] { 0 }, new[] { effectiveN });
+        var y = Engine.TensorSlice(Engine.TensorSliceAxis(values, 1, target), new[] { 1 }, new[] { effectiveN });
+        T nT = NumOps.FromDouble(effectiveN);
+        T meanX = NumOps.Divide(Engine.TensorSum(x), nT);
+        T meanY = NumOps.Divide(Engine.TensorSum(y), nT);
+        T covXY = NumOps.Subtract(NumOps.Divide(Engine.TensorSum(Engine.TensorMultiply(x, y)), nT), NumOps.Multiply(meanX, meanY));
+        T varX = NumOps.Subtract(NumOps.Divide(Engine.TensorSum(Engine.TensorSquare(x)), nT), NumOps.Multiply(meanX, meanX));
+        T varY = NumOps.Subtract(NumOps.Divide(Engine.TensorSum(Engine.TensorSquare(y)), nT), NumOps.Multiply(meanY, meanY));
 
-        double meanX = sumX / effectiveN;
-        double meanY = sumY / effectiveN;
-        double covXY = sumXY / effectiveN - meanX * meanY;
-        double varX = sumX2 / effectiveN - meanX * meanX;
-        double varY = sumY2 / effectiveN - meanY * meanY;
+        T tiny = NumOps.FromDouble(1e-15);
+        if (NumOps.LessThan(varX, tiny) || NumOps.LessThan(varY, tiny)) return 0;
 
-        if (varX < 1e-15 || varY < 1e-15) return 0;
-
-        double r = Math.Abs(covXY / Math.Sqrt(varX * varY));
-        return r > _threshold ? -0.5 * Math.Log(1 - r * r + 1e-15) : 0;
+        T r = NumOps.Abs(NumOps.Divide(covXY, NumOps.Sqrt(NumOps.Multiply(varX, varY))));
+        if (!NumOps.GreaterThan(r, NumOps.FromDouble(_threshold))) return 0;
+        return NumOps.ToDouble(NumOps.Multiply(NumOps.FromDouble(-0.5),
+            NumOps.Log(NumOps.Add(NumOps.Subtract(NumOps.One, NumOps.Multiply(r, r)), tiny))));
     }
 }

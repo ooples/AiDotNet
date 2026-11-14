@@ -29,20 +29,35 @@ public class MultiTaskEvaluationHarness<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    private static IEngine Engine => AiDotNetEngine.Current;
+
+    private static T NaN => NumOps.FromDouble(double.NaN);
+
+    /// <summary>The first <paramref name="count"/> elements of <paramref name="tensor"/> in row-major order, as a rank-1 tensor.</summary>
+    private static Tensor<T> FlatPrefix(Tensor<T> tensor, int count)
+    {
+        var flat = Engine.Reshape(tensor, new[] { tensor.Length });
+        return count == tensor.Length ? flat : Engine.TensorSlice(flat, new[] { 0 }, new[] { count });
+    }
+
+    /// <summary>The sum of per-series scalars (zero when there are none).</summary>
+    private static T SumOf(List<T> values)
+        => values.Count == 0 ? NumOps.Zero : Engine.TensorSum(new Tensor<T>(new[] { values.Count }, new Vector<T>(values.ToArray())));
+
     /// <summary>
     /// Evaluates a foundation model's forecasting performance.
     /// </summary>
     /// <param name="model">The model to evaluate.</param>
     /// <param name="testPairs">List of (context, target) tensor pairs.</param>
     /// <returns>Dictionary of metric names to values.</returns>
-    public Dictionary<string, double> EvaluateForecasting(
+    public Dictionary<string, T> EvaluateForecasting(
         ITimeSeriesFoundationModel<T> model,
         IReadOnlyList<(Tensor<T> Context, Tensor<T> Target)> testPairs)
     {
         Guard.NotNull(model);
         Guard.NotNull(testPairs);
 
-        double totalMse = 0, totalMae = 0;
+        T totalMse = NumOps.Zero, totalMae = NumOps.Zero;
         int totalPoints = 0;
 
         foreach (var (context, target) in testPairs)
@@ -50,31 +65,29 @@ public class MultiTaskEvaluationHarness<T>
             var prediction = model.Forecast(context, null);
             int evalLen = Math.Min(prediction.Length, target.Length);
 
-            for (int i = 0; i < evalLen; i++)
-            {
-                double pred = NumOps.ToDouble(prediction[i]);
-                double actual = NumOps.ToDouble(target[i]);
-                double diff = pred - actual;
+            if (evalLen <= 0)
+                continue;
 
-                totalMse += diff * diff;
-                totalMae += Math.Abs(diff);
-                totalPoints++;
-            }
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var diff = Engine.TensorSubtract(FlatPrefix(prediction, evalLen), FlatPrefix(target, evalLen));
+            totalMse = NumOps.Add(totalMse, Engine.TensorSumOfSquares(diff));
+            totalMae = NumOps.Add(totalMae, Engine.TensorSum(Engine.TensorAbs(diff)));
+            totalPoints += evalLen;
         }
 
         if (totalPoints == 0)
-            return new Dictionary<string, double> { ["MSE"] = double.NaN, ["MAE"] = double.NaN };
+            return new Dictionary<string, T> { ["MSE"] = NaN, ["MAE"] = NaN };
 
-        double mse = totalMse / totalPoints;
-        double mae = totalMae / totalPoints;
+        T mse = NumOps.Divide(totalMse, NumOps.FromDouble(totalPoints));
+        T mae = NumOps.Divide(totalMae, NumOps.FromDouble(totalPoints));
 
-        return new Dictionary<string, double>
+        return new Dictionary<string, T>
         {
             ["MSE"] = mse,
             ["MAE"] = mae,
-            ["RMSE"] = Math.Sqrt(mse),
-            ["NumSamples"] = testPairs.Count,
-            ["NumPoints"] = totalPoints
+            ["RMSE"] = NumOps.Sqrt(mse),
+            ["NumSamples"] = NumOps.FromDouble(testPairs.Count),
+            ["NumPoints"] = NumOps.FromDouble(totalPoints)
         };
     }
 
@@ -86,7 +99,7 @@ public class MultiTaskEvaluationHarness<T>
     /// <param name="groundTruthLabels">Binary labels (1 = anomaly, 0 = normal) per series per timestep.</param>
     /// <param name="threshold">Anomaly score threshold (if null, uses model default).</param>
     /// <returns>Dictionary of metric names to values.</returns>
-    public Dictionary<string, double> EvaluateAnomalyDetection(
+    public Dictionary<string, T> EvaluateAnomalyDetection(
         ITimeSeriesFoundationModel<T> model,
         IReadOnlyList<Tensor<T>> testSeries,
         IReadOnlyList<Tensor<T>> groundTruthLabels,
@@ -98,12 +111,12 @@ public class MultiTaskEvaluationHarness<T>
 
         if (!model.SupportedTasks.Contains(TimeSeriesFoundationModelTask.AnomalyDetection))
         {
-            return new Dictionary<string, double>
+            return new Dictionary<string, T>
             {
-                ["Supported"] = 0,
-                ["Precision"] = double.NaN,
-                ["Recall"] = double.NaN,
-                ["F1"] = double.NaN
+                ["Supported"] = NumOps.Zero,
+                ["Precision"] = NaN,
+                ["Recall"] = NaN,
+                ["F1"] = NaN
             };
         }
 
@@ -112,7 +125,12 @@ public class MultiTaskEvaluationHarness<T>
                 $"testSeries count ({testSeries.Count}) must match groundTruthLabels count ({groundTruthLabels.Count}).",
                 nameof(groundTruthLabels));
 
-        int tp = 0, fp = 0, fn = 0;
+        // Per-series counts, summed once after the loop.
+        var tpCounts = new List<T>();
+        var predictedCounts = new List<T>();
+        var actualCounts = new List<T>();
+        T binarizationThreshold = NumOps.FromDouble(threshold ?? 0.5);
+        T labelThreshold = NumOps.FromDouble(0.5);
 
         for (int s = 0; s < testSeries.Count; s++)
         {
@@ -121,29 +139,34 @@ public class MultiTaskEvaluationHarness<T>
             var labels = groundTruthLabels[s];
 
             // For binarization: use the explicit threshold if provided,
-            // otherwise use 0.5 to binarize the model's returned scores
-            double binarizationThreshold = threshold ?? 0.5;
-
+            // otherwise use 0.5 to binarize the model's returned scores (hoisted above the loop).
             int evalLen = Math.Min(scores.Length, labels.Length);
 
-            for (int i = 0; i < evalLen; i++)
-            {
-                bool predicted = NumOps.ToDouble(scores[i]) > binarizationThreshold;
-                bool actual = NumOps.GreaterThan(labels[i], NumOps.FromDouble(0.5));
+            if (evalLen <= 0)
+                continue;
 
-                if (predicted && actual) tp++;
-                else if (predicted && !actual) fp++;
-                else if (!predicted && actual) fn++;
-            }
+            // 1 where the score clears the threshold / the label is an anomaly, else 0.
+            var predicted = Engine.TensorGreaterThan(FlatPrefix(scores, evalLen), binarizationThreshold);
+            var actual = Engine.TensorGreaterThan(FlatPrefix(labels, evalLen), labelThreshold);
+            tpCounts.Add(Engine.TensorSum(Engine.TensorMultiply(predicted, actual)));
+            predictedCounts.Add(Engine.TensorSum(predicted));
+            actualCounts.Add(Engine.TensorSum(actual));
         }
 
-        double precision = tp + fp > 0 ? (double)tp / (tp + fp) : 0;
-        double recall = tp + fn > 0 ? (double)tp / (tp + fn) : 0;
-        double f1 = precision + recall > 0 ? 2 * precision * recall / (precision + recall) : 0;
+        T tp = SumOf(tpCounts), predictedPositives = SumOf(predictedCounts), actualPositives = SumOf(actualCounts);
 
-        return new Dictionary<string, double>
+        T fp = NumOps.Subtract(predictedPositives, tp);
+        T fn = NumOps.Subtract(actualPositives, tp);
+        T precision = NumOps.GreaterThan(predictedPositives, NumOps.Zero) ? NumOps.Divide(tp, predictedPositives) : NumOps.Zero;
+        T recall = NumOps.GreaterThan(actualPositives, NumOps.Zero) ? NumOps.Divide(tp, actualPositives) : NumOps.Zero;
+        T precisionPlusRecall = NumOps.Add(precision, recall);
+        T f1 = NumOps.GreaterThan(precisionPlusRecall, NumOps.Zero)
+            ? NumOps.Divide(NumOps.Multiply(NumOps.FromDouble(2), NumOps.Multiply(precision, recall)), precisionPlusRecall)
+            : NumOps.Zero;
+
+        return new Dictionary<string, T>
         {
-            ["Supported"] = 1,
+            ["Supported"] = NumOps.One,
             ["Precision"] = precision,
             ["Recall"] = recall,
             ["F1"] = f1,
@@ -161,7 +184,7 @@ public class MultiTaskEvaluationHarness<T>
     /// <param name="trueLabels">Ground truth class labels (0-indexed).</param>
     /// <param name="numClasses">Number of output classes.</param>
     /// <returns>Dictionary of metric names to values.</returns>
-    public Dictionary<string, double> EvaluateClassification(
+    public Dictionary<string, T> EvaluateClassification(
         ITimeSeriesFoundationModel<T> model,
         IReadOnlyList<Tensor<T>> testSeries,
         IReadOnlyList<int> trueLabels,
@@ -173,10 +196,10 @@ public class MultiTaskEvaluationHarness<T>
 
         if (!model.SupportedTasks.Contains(TimeSeriesFoundationModelTask.Classification))
         {
-            return new Dictionary<string, double>
+            return new Dictionary<string, T>
             {
-                ["Supported"] = 0,
-                ["Accuracy"] = double.NaN
+                ["Supported"] = NumOps.Zero,
+                ["Accuracy"] = NaN
             };
         }
 
@@ -187,32 +210,25 @@ public class MultiTaskEvaluationHarness<T>
         {
             var logits = model.Classify(testSeries[s], numClasses);
 
-            // Find argmax
+            // Find argmax (first maximum among the first numClasses logits)
             int predictedClass = 0;
-            double maxLogit = double.MinValue;
-            for (int c = 0; c < logits.Length && c < numClasses; c++)
-            {
-                double logit = NumOps.ToDouble(logits[c]);
-                if (logit > maxLogit)
-                {
-                    maxLogit = logit;
-                    predictedClass = c;
-                }
-            }
+            int classCount = Math.Min(logits.Length, numClasses);
+            if (classCount > 0)
+                predictedClass = Engine.TensorArgMax(FlatPrefix(logits, classCount), 0).AsSpan()[0];
 
             if (predictedClass == trueLabels[s])
                 correct++;
             total++;
         }
 
-        double accuracy = total > 0 ? (double)correct / total : 0;
+        T accuracy = total > 0 ? NumOps.Divide(NumOps.FromDouble(correct), NumOps.FromDouble(total)) : NumOps.Zero;
 
-        return new Dictionary<string, double>
+        return new Dictionary<string, T>
         {
-            ["Supported"] = 1,
+            ["Supported"] = NumOps.One,
             ["Accuracy"] = accuracy,
-            ["Correct"] = correct,
-            ["Total"] = total
+            ["Correct"] = NumOps.FromDouble(correct),
+            ["Total"] = NumOps.FromDouble(total)
         };
     }
 
@@ -223,7 +239,7 @@ public class MultiTaskEvaluationHarness<T>
     /// <param name="completeSeries">Complete (no missing values) time series for evaluation.</param>
     /// <param name="masks">Binary masks indicating which values to "remove" and impute (0 = masked).</param>
     /// <returns>Dictionary of metric names to values.</returns>
-    public Dictionary<string, double> EvaluateImputation(
+    public Dictionary<string, T> EvaluateImputation(
         ITimeSeriesFoundationModel<T> model,
         IReadOnlyList<Tensor<T>> completeSeries,
         IReadOnlyList<Tensor<T>> masks)
@@ -234,15 +250,15 @@ public class MultiTaskEvaluationHarness<T>
 
         if (!model.SupportedTasks.Contains(TimeSeriesFoundationModelTask.Imputation))
         {
-            return new Dictionary<string, double>
+            return new Dictionary<string, T>
             {
-                ["Supported"] = 0,
-                ["MSE"] = double.NaN
+                ["Supported"] = NumOps.Zero,
+                ["MSE"] = NaN
             };
         }
 
-        double totalMse = 0;
-        int totalMasked = 0;
+        T totalMse = NumOps.Zero;
+        T totalMasked = NumOps.Zero;
 
         if (completeSeries.Count != masks.Count)
             throw new ArgumentException(
@@ -260,35 +276,34 @@ public class MultiTaskEvaluationHarness<T>
                     nameof(masks));
 
             // Create masked input (zero out masked positions)
-            var maskedInput = new Tensor<T>(original._shape);
-            for (int i = 0; i < original.Length; i++)
-            {
-                double m = NumOps.ToDouble(mask[i]);
-                maskedInput.Data.Span[i] = m > 0.5 ? original[i] : NumOps.Zero;
-            }
+            var flatOriginal = FlatPrefix(original, original.Length);
+            var keep = Engine.TensorGreaterThan(FlatPrefix(mask, mask.Length), NumOps.FromDouble(0.5));
+            var maskedInput = Engine.Reshape(
+                Engine.TensorWhere(keep, flatOriginal, Engine.TensorZerosLike(flatOriginal)),
+                (int[])original._shape.Clone());
 
             var imputed = model.Impute(maskedInput, mask);
 
             // Evaluate only on masked positions
             int evalLen = Math.Min(imputed.Length, original.Length);
-            for (int i = 0; i < evalLen; i++)
+            if (evalLen > 0)
             {
-                if (NumOps.LessThan(mask[i], NumOps.FromDouble(0.5))) // This was masked
-                {
-                    double diff = NumOps.ToDouble(imputed[i]) - NumOps.ToDouble(original[i]);
-                    totalMse += diff * diff;
-                    totalMasked++;
-                }
+                // Squared error at the positions that were masked (mask < 0.5); the rest contribute nothing.
+                var wasMasked = Engine.TensorLessThan(FlatPrefix(mask, evalLen), NumOps.FromDouble(0.5));
+                var diff = Engine.TensorSubtract(FlatPrefix(imputed, evalLen), FlatPrefix(original, evalLen));
+                var squared = Engine.TensorMultiply(diff, diff);
+                totalMse = NumOps.Add(totalMse, Engine.TensorSum(Engine.TensorWhere(wasMasked, squared, Engine.TensorZerosLike(squared))));
+                totalMasked = NumOps.Add(totalMasked, Engine.TensorSum(wasMasked));
             }
         }
 
-        double mse = totalMasked > 0 ? totalMse / totalMasked : double.NaN;
+        T mse = NumOps.GreaterThan(totalMasked, NumOps.Zero) ? NumOps.Divide(totalMse, totalMasked) : NaN;
 
-        return new Dictionary<string, double>
+        return new Dictionary<string, T>
         {
-            ["Supported"] = 1,
+            ["Supported"] = NumOps.One,
             ["MSE"] = mse,
-            ["RMSE"] = Math.Sqrt(mse),
+            ["RMSE"] = NumOps.Sqrt(mse),
             ["NumMaskedPoints"] = totalMasked
         };
     }
@@ -307,7 +322,7 @@ public class MultiTaskEvaluationHarness<T>
     /// data will be skipped. The model's SupportedTasks will also be checked — you'll get
     /// a "Supported: 0" indicator for tasks the model doesn't handle.
     /// </remarks>
-    public Dictionary<string, Dictionary<string, double>> RunFullEvaluation(
+    public Dictionary<string, Dictionary<string, T>> RunFullEvaluation(
         ITimeSeriesFoundationModel<T> model,
         IReadOnlyList<(Tensor<T> Context, Tensor<T> Target)>? forecastingData = null,
         (IReadOnlyList<Tensor<T>> Series, IReadOnlyList<Tensor<T>> Labels, double? Threshold)? anomalyData = null,
@@ -316,14 +331,14 @@ public class MultiTaskEvaluationHarness<T>
     {
         Guard.NotNull(model);
 
-        var results = new Dictionary<string, Dictionary<string, double>>();
+        var results = new Dictionary<string, Dictionary<string, T>>();
 
         // Model info
-        results["ModelInfo"] = new Dictionary<string, double>
+        results["ModelInfo"] = new Dictionary<string, T>
         {
-            ["SupportedTaskCount"] = model.SupportedTasks.Count,
-            ["MaxContextLength"] = model.MaxContextLength,
-            ["MaxPredictionHorizon"] = model.MaxPredictionHorizon
+            ["SupportedTaskCount"] = NumOps.FromDouble(model.SupportedTasks.Count),
+            ["MaxContextLength"] = NumOps.FromDouble(model.MaxContextLength),
+            ["MaxPredictionHorizon"] = NumOps.FromDouble(model.MaxPredictionHorizon)
         };
 
         // Forecasting

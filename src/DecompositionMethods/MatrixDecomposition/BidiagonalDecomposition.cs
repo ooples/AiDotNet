@@ -159,56 +159,45 @@ public class BidiagonalDecomposition<T> : MatrixDecompositionBase<T>
         V = Matrix<T>.CreateIdentity(n);
 
         int minDim = Math.Min(m, n);
+        T tiny = NumOps.FromDouble(1e-14);
+        T two = NumOps.FromDouble(2);
 
         for (int k = 0; k < minDim; k++)
         {
-            // Column reflector: zero elements below the diagonal in column k
+            // Left reflection: zero B[k+1:, k]
             if (k < m - 1)
             {
-                // Compute Householder vector for column
                 Vector<T> x = B.GetColumnSegment(k, k, m - k);
                 Vector<T> v = HouseholderVector(x);
 
-                // Only apply transformation if v is non-zero
-                T vNorm = v.Norm();
-                if (NumOps.GreaterThan(vNorm, NumOps.FromDouble(1e-14)))
+                if (AnyAbove(Tensor<T>.FromScalar(v.Norm()), tiny))
                 {
-                    // Apply Householder reflection to B
-                    Matrix<T> P = Matrix<T>.CreateIdentity(m - k).Subtract(v.OuterProduct(v).Multiply(NumOps.FromDouble(2)));
+                    Matrix<T> P = Matrix<T>.CreateIdentity(m - k).Subtract(v.OuterProduct(v).Multiply(two));
                     Matrix<T> subB = B.GetSubMatrix(k, k, m - k, n - k);
                     B.SetSubMatrix(k, k, P.Multiply(subB));
 
-                    // Update U
                     Matrix<T> subU = U.GetSubMatrix(0, k, m, m - k);
                     U.SetSubMatrix(0, k, subU.Multiply(P.Transpose()));
                 }
             }
 
-            // Row reflector: zero elements to the right of the superdiagonal in row k
-            // For upper bidiagonal, we want B[k, k+2:n] = 0
+            // Right reflection: zero B[k, k+2:]
             if (k < n - 2)
             {
-                // Compute Householder vector for row (elements after superdiagonal)
                 Vector<T> x = B.GetRowSegment(k, k + 1, n - k - 1);
                 Vector<T> v = HouseholderVector(x);
 
-                // Only apply transformation if v is non-zero
-                T vNorm = v.Norm();
-                if (NumOps.GreaterThan(vNorm, NumOps.FromDouble(1e-14)))
+                if (AnyAbove(Tensor<T>.FromScalar(v.Norm()), tiny))
                 {
-                    // Apply Householder reflection to B from the right: B := B * P
-                    Matrix<T> P = Matrix<T>.CreateIdentity(n - k - 1).Subtract(v.OuterProduct(v).Multiply(NumOps.FromDouble(2)));
+                    Matrix<T> P = Matrix<T>.CreateIdentity(n - k - 1).Subtract(v.OuterProduct(v).Multiply(two));
                     Matrix<T> subB = B.GetSubMatrix(k, k + 1, m - k, n - k - 1);
                     B.SetSubMatrix(k, k + 1, subB.Multiply(P));
 
-                    // Update V: V := V * P (right multiply on columns)
-                    // For A = U * B * V^T, when B := B * P, we need V := V * P
                     Matrix<T> subV = V.GetSubMatrix(0, k + 1, n, n - k - 1);
                     V.SetSubMatrix(0, k + 1, subV.Multiply(P));
                 }
             }
         }
-
     }
 
     /// <summary>
@@ -259,36 +248,58 @@ public class BidiagonalDecomposition<T> : MatrixDecompositionBase<T>
         U = new Matrix<T>(m, m);
         V = new Matrix<T>(n, n);
 
-        Vector<T> u = new Vector<T>(m);
-        Vector<T> v = new Vector<T>(n);
-
-        // Initialize with random unit vector
+        // Random unit starting vector from a secure source.
         var rand = RandomHelper.CreateSecureRandom();
-        for (int i = 0; i < n; i++)
-        {
-            v[i] = NumOps.FromDouble(rand.NextDouble());
-        }
-        // VECTORIZED: Normalize using Engine division
+        Vector<T> v = Matrix<T>.CreateRandom(rand, n, 1).GetColumn(0);
         v = (Vector<T>)Engine.Divide(v, v.Norm());
 
-        for (int j = 0; j < Math.Min(m, n); j++)
+        Matrix<T> At = A.Transpose();
+        Vector<T> previousU = new Vector<T>(m);
+        T previousBeta = NumOps.Zero;
+        int steps = Math.Min(m, n);
+        if (steps > 0)
         {
-            u = A.Multiply(v).Subtract(B.GetColumn(j - 1).Multiply(B[j - 1, j]));
-            T alpha = u.Norm();
-            // VECTORIZED: Normalize using Engine division
-            u = (Vector<T>)Engine.Divide(u, alpha);
-
-            v = A.Transpose().Multiply(u).Subtract(B.GetRow(j).Multiply(alpha));
-            T beta = v.Norm();
-            // VECTORIZED: Normalize using Engine division
-            v = (Vector<T>)Engine.Divide(v, beta);
-
-            B[j, j] = alpha;
-            if (j < n - 1) B[j, j + 1] = beta;
-
-            U.SetColumn(j, u);
-            if (j < n) V.SetColumn(j, v);
+            V.SetColumn(0, v);
         }
+
+        for (int j = 0; j < steps; j++)
+        {
+            // Golub-Kahan-Lanczos step (Golub & Van Loan, Alg. 10.4.1):
+            //   u_j = A v_j - beta_(j-1) u_(j-1),  alpha_j = ||u_j||
+            //   v_(j+1) = A^T u_j - alpha_j v_j,   beta_j = ||v_(j+1)||
+            // with full reorthogonalisation against the vectors already accepted.
+            Vector<T> u = A.Multiply(v).Subtract(previousU.Multiply(previousBeta));
+            if (j > 0)
+            {
+                Matrix<T> acceptedU = U.GetSubMatrix(0, 0, m, j);
+                u = u.Subtract(acceptedU.Multiply(acceptedU.Transpose().Multiply(u)));
+            }
+
+            T alpha = u.Norm();
+            u = (Vector<T>)Engine.Divide(u, alpha);
+            B.SetSubMatrix(j, j, ScalarBlock(alpha));
+            U.SetColumn(j, u);
+
+            if (j < n - 1)
+            {
+                Vector<T> next = At.Multiply(u).Subtract(v.Multiply(alpha));
+                Matrix<T> acceptedV = V.GetSubMatrix(0, 0, n, j + 1);
+                next = next.Subtract(acceptedV.Multiply(acceptedV.Transpose().Multiply(next)));
+                T beta = next.Norm();
+                v = (Vector<T>)Engine.Divide(next, beta);
+                B.SetSubMatrix(j, j + 1, ScalarBlock(beta));
+                V.SetColumn(j + 1, v);
+                previousBeta = beta;
+            }
+
+            previousU = u;
+        }
+    }
+
+    /// <summary>A 1 x 1 matrix holding <paramref name="value"/>, for writing one entry of B with SetSubMatrix.</summary>
+    private static Matrix<T> ScalarBlock(T value)
+    {
+        return Tensor<T>.FromScalar(value).Reshape(new[] { 1, 1 }).ToMatrix();
     }
 
     /// <summary>
@@ -337,16 +348,16 @@ public class BidiagonalDecomposition<T> : MatrixDecompositionBase<T>
     public override Matrix<T> Invert()
     {
         int n = A.Columns;
-        Matrix<T> inverse = new Matrix<T>(n, n);
+        if (A.Rows != n)
+            throw new ArgumentException($"Matrix must be square to be inverted. Got {A.Rows}x{A.Columns} matrix.");
 
-        for (int i = 0; i < n; i++)
+        if (n == 0)
         {
-            Vector<T> ei = new Vector<T>(n);
-            ei[i] = NumOps.One;
-            inverse.SetColumn(i, Solve(ei));
+            return new Matrix<T>(0, 0);
         }
 
-        return inverse;
+        // A^{-1} = V B^{-1} U^T: one upper-bidiagonal solve for every column of U^T.
+        return V.Multiply(SolveTriangularSystem(UpperBidiagonalBand(), U.Transpose(), upper: true));
     }
 
     /// <summary>
@@ -476,17 +487,22 @@ public class BidiagonalDecomposition<T> : MatrixDecompositionBase<T>
     private Vector<T> SolveBidiagonal(Vector<T> y)
     {
         int n = B.Columns;
-        Vector<T> x = new(n);
-
-        for (int i = n - 1; i >= 0; i--)
+        if (n == 0)
         {
-            T sum = y[i];
-            if (i < n - 1)
-                sum = NumOps.Subtract(sum, NumOps.Multiply(B[i, i + 1], x[i + 1]));
-            x[i] = NumOps.Divide(sum, B[i, i]);
+            return new Vector<T>(0);
         }
 
-        return x;
+        // Back substitution on the diagonal and superdiagonal of B, as one engine solve.
+        var rhs = y.Length == n ? y : y.GetSubVector(0, n);
+        return SolveTriangularSystem(UpperBidiagonalBand(), rhs, upper: true);
+    }
+
+    /// <summary>The leading n x n diagonal and superdiagonal of B (everything else zeroed).</summary>
+    private Matrix<T> UpperBidiagonalBand()
+    {
+        int n = B.Columns;
+        var square = Engine.TensorSlice(Tensor<T>.FromMatrix(B), new[] { 0, 0 }, new[] { n, n });
+        return Engine.TensorTriu(Engine.TensorTril(square, 1), 0).ToMatrix();
     }
 
     /// <summary>

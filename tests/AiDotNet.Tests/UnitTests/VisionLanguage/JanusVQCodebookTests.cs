@@ -24,6 +24,22 @@ public class JanusVQCodebookTests
     }
 
     [Fact(Timeout = 30000)]
+    public async Task Constructor_SameDimensions_ProducesIdenticalEmbeddings()
+    {
+        await Task.Yield();
+        var first = new JanusVQCodebook<double>(codebookSize: 16, embeddingDim: 4);
+        var second = new JanusVQCodebook<double>(codebookSize: 16, embeddingDim: 4);
+
+        for (int id = 0; id < 16; id++)
+        {
+            var a = first.Lookup(id);
+            var b = second.Lookup(id);
+            for (int d = 0; d < 4; d++)
+                Assert.Equal(a[d], b[d]);
+        }
+    }
+
+    [Fact(Timeout = 30000)]
     public async Task Quantize_OnLookupOutput_RoundTripsToSameId()
     {
         await Task.Yield();
@@ -76,7 +92,7 @@ public class JanusVQCodebookTests
     {
         await Task.Yield();
         var codebook = new JanusVQCodebook<double>(codebookSize: 16, embeddingDim: 4);
-        var customBook = new double[16, 4];
+        var customBook = new Tensor<double>([16, 4]);
         for (int id = 0; id < 16; id++)
             for (int d = 0; d < 4; d++)
                 customBook[id, d] = id * 100.0 + d;
@@ -95,7 +111,7 @@ public class JanusVQCodebookTests
     {
         await Task.Yield();
         var codebook = new JanusVQCodebook<double>(codebookSize: 16, embeddingDim: 4);
-        var wrongShape = new double[16, 8];
+        var wrongShape = new Tensor<double>([16, 8]);
 
         Assert.Throws<ArgumentException>(() => codebook.LoadCodebook(wrongShape));
     }

@@ -7,6 +7,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -230,14 +231,17 @@ public partial class NoisyDenseLayer<T> : LayerBase<T>, IShapeContract
             for (int j = 0; j < _outputSize; j++)
             {
                 _muWeights[i, j] = NumOps.FromDouble((_rng.NextDouble() * 2.0 - 1.0) * range);
-                _sigmaWeights[i, j] = NumOps.FromDouble(_sigmaInit);
             }
         }
         for (int j = 0; j < _outputSize; j++)
         {
             _muBiases[j] = NumOps.FromDouble((_rng.NextDouble() * 2.0 - 1.0) * range);
-            _sigmaBiases[j] = NumOps.FromDouble(_sigmaInit);
         }
+
+        // σ draws nothing from the RNG, so filling it after the μ draws is equivalent.
+        T sigma = NumOps.FromDouble(_sigmaInit);
+        _sigmaWeights.Fill(sigma);
+        _sigmaBiases.Fill(sigma);
     }
 
     /// <inheritdoc/>
@@ -445,25 +449,34 @@ public partial class NoisyDenseLayer<T> : LayerBase<T>, IShapeContract
         // backward pass), but a non-null gradient buffer with the wrong
         // length signals a real wiring bug — silently returning would stall
         // training without surfacing the cause.
-        if (ParameterGradients is null) return;
-        if (ParameterGradients.Length != ParameterCount)
+        var gradients = ParameterGradients;
+        if (gradients is null) return;
+        if (gradients.Length != ParameterCount)
             throw new InvalidOperationException(
                 $"NoisyDenseLayer.UpdateParameters: gradient buffer length " +
-                $"{ParameterGradients.Length} does not match ParameterCount {ParameterCount}.");
+                $"{gradients.Length} does not match ParameterCount {ParameterCount}.");
 
-        int idx = 0;
-        for (int i = 0; i < _muWeights.Length; i++)
-            _muWeights[i] = NumOps.Subtract(_muWeights[i],
-                NumOps.Multiply(learningRate, ParameterGradients[idx++]));
-        for (int i = 0; i < _sigmaWeights.Length; i++)
-            _sigmaWeights[i] = NumOps.Subtract(_sigmaWeights[i],
-                NumOps.Multiply(learningRate, ParameterGradients[idx++]));
-        for (int j = 0; j < _muBiases.Length; j++)
-            _muBiases[j] = NumOps.Subtract(_muBiases[j],
-                NumOps.Multiply(learningRate, ParameterGradients[idx++]));
-        for (int j = 0; j < _sigmaBiases.Length; j++)
-            _sigmaBiases[j] = NumOps.Subtract(_sigmaBiases[j],
-                NumOps.Multiply(learningRate, ParameterGradients[idx++]));
+        // Gradient layout: μ_w, σ_w, μ_b, σ_b. Each parameter -= learningRate * gradient, in place.
+        int offset = 0;
+        using (new NoGradScope<T>())
+        {
+            offset = SubtractScaledGradient(_muWeights, gradients, offset, learningRate);
+            offset = SubtractScaledGradient(_sigmaWeights, gradients, offset, learningRate);
+            offset = SubtractScaledGradient(_muBiases, gradients, offset, learningRate);
+            SubtractScaledGradient(_sigmaBiases, gradients, offset, learningRate);
+        }
+    }
+
+    /// <summary>
+    /// Applies <c>parameter -= learningRate * gradients[offset .. offset + parameter.Length)</c> in place
+    /// and returns the offset just past the consumed gradient entries.
+    /// </summary>
+    private int SubtractScaledGradient(Tensor<T> parameter, Vector<T> gradients, int offset, T learningRate)
+    {
+        var gradient = Tensor<T>.FromVector(gradients.SubVector(offset, parameter.Length), parameter._shape);
+        Engine.TensorCopy(
+            Engine.TensorSubtract(parameter, Engine.TensorMultiplyScalar(gradient, learningRate)), parameter);
+        return offset + parameter.Length;
     }
 
     /// <inheritdoc/>

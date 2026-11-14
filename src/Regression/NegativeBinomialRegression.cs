@@ -167,19 +167,14 @@ public partial class NegativeBinomialRegression<T> : RegressionBase<T>
         // Shift y to be positive (NB requires positive targets)
         // Use a local copy to avoid modifying the caller's vector
         _yShift = NumOps.Zero;
-        double minY = double.MaxValue;
-        for (int i = 0; i < y.Length; i++)
+        if (y.Length > 0)
         {
-            double yi = NumOps.ToDouble(y[i]);
-            if (yi < minY) minY = yi;
-        }
-        if (minY <= 0)
-        {
-            _yShift = NumOps.FromDouble(Math.Abs(minY) + 1.0);
-            var yShifted = new Vector<T>(y.Length);
-            for (int i = 0; i < y.Length; i++)
-                yShifted[i] = NumOps.FromDouble(NumOps.ToDouble(y[i]) + NumOps.ToDouble(_yShift));
-            y = yShifted;
+            T minY = Engine.TensorMinValue(Tensor<T>.FromVector(y));
+            if (NumOps.LessThanOrEquals(minY, NumOps.Zero))
+            {
+                _yShift = NumOps.Add(NumOps.Abs(minY), NumOps.One);
+                y = Engine.Add(y, Engine.Fill(y.Length, _yShift));
+            }
         }
 
         // This method previously fitted ORDINARY LEAST SQUARES and returned immediately. The
@@ -191,10 +186,9 @@ public partial class NegativeBinomialRegression<T> : RegressionBase<T>
         InitializeCoefficients(X.Columns);
 
         // Initialize intercept to log(mean(y)) for better convergence
-        double meanY = 0;
-        for (int i = 0; i < y.Length; i++) meanY += NumOps.ToDouble(y[i]);
-        meanY /= y.Length;
-        Intercept = NumOps.FromDouble(Math.Log(Math.Max(meanY, 1e-10)));
+        T meanY = NumOps.Divide(Engine.Sum(y), NumOps.FromDouble(y.Length));
+        T meanFloor = NumOps.FromDouble(1e-10);
+        Intercept = NumOps.Log(NumOps.IsNaN(meanY) || NumOps.GreaterThan(meanY, meanFloor) ? meanY : meanFloor);
 
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
         {
@@ -202,12 +196,7 @@ public partial class NegativeBinomialRegression<T> : RegressionBase<T>
 
             // Calculate linear predictors and means (clamp to prevent exp overflow)
             var linearPredictors = X.Multiply(Coefficients).Add(Intercept);
-            var means = linearPredictors.Transform(v =>
-            {
-                double d = NumOps.ToDouble(v);
-                d = Math.Max(-20.0, Math.Min(20.0, d));
-                return NumOps.FromDouble(Math.Exp(d));
-            });
+            var means = Engine.Exp(Engine.Clamp(linearPredictors, NumOps.FromDouble(-20.0), NumOps.FromDouble(20.0)));
 
             // Calculate weights and working response
             var weights = CalculateWeights(means);
@@ -217,7 +206,7 @@ public partial class NegativeBinomialRegression<T> : RegressionBase<T>
             var xWithIntercept = X.AddColumn(Vector<T>.CreateDefault(X.Rows, NumOps.One));
 
             // Weighted least squares: solve (X^T * W * X) * coefficients = X^T * W * z
-            var sqrtWeights = weights.Transform(NumOps.Sqrt);
+            var sqrtWeights = Engine.Sqrt(weights);
             var weightedX = sqrtWeights.CreateDiagonal().Multiply(xWithIntercept);
             var weightedZ = workingResponse.PointwiseMultiply(sqrtWeights);
 
@@ -228,10 +217,7 @@ public partial class NegativeBinomialRegression<T> : RegressionBase<T>
             var minRegularization = 1e-10;
             var userStrength = Regularization?.GetOptions().Strength ?? 0.0;
             var effectiveStrength = NumOps.FromDouble(Math.Max(minRegularization, userStrength));
-            for (int i = 0; i < xTwx.Rows; i++)
-            {
-                xTwx[i, i] = NumOps.Add(xTwx[i, i], effectiveStrength);
-            }
+            xTwx = Engine.MatrixAdd(xTwx, Matrix<T>.CreateDiagonal(Engine.Fill(xTwx.Rows, effectiveStrength)));
 
             var newCoefficients = MatrixSolutionHelper.SolveLinearSystem(xTwx, xTwz, _options.DecompositionType);
 
@@ -242,8 +228,7 @@ public partial class NegativeBinomialRegression<T> : RegressionBase<T>
             }
 
             // Extract coefficients and intercept (intercept is in last column)
-            Coefficients = newCoefficients.Slice(0, X.Columns);
-            Intercept = newCoefficients[X.Columns];
+            UnpackCoefficients(newCoefficients, X.Columns);
 
             // Check for convergence
             if (NumOps.LessThan(Coefficients.Subtract(oldCoefficients).Norm(), NumOps.FromDouble(_options.Tolerance)))
@@ -272,6 +257,15 @@ public partial class NegativeBinomialRegression<T> : RegressionBase<T>
     /// These values will be adjusted during training to find the optimal prediction formula.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Splits the augmented IRLS solution [coefficients..., intercept] into Coefficients and Intercept.
+    /// </summary>
+    private void UnpackCoefficients(Vector<T> augmented, int featureCount)
+    {
+        Coefficients = augmented.Slice(0, featureCount);
+        Intercept = augmented[featureCount];
+    }
+
     private void InitializeCoefficients(int featureCount)
     {
         Coefficients = new Vector<T>(featureCount);
@@ -309,8 +303,7 @@ public partial class NegativeBinomialRegression<T> : RegressionBase<T>
         // Subtract shift if data was shifted during training
         if (NumOps.GreaterThan(_yShift, NumOps.Zero))
         {
-            for (int i = 0; i < predictions.Length; i++)
-                predictions[i] = NumOps.Subtract(predictions[i], _yShift);
+            predictions = Engine.Subtract(predictions, Engine.Fill(predictions.Length, _yShift));
         }
         return predictions;
     }

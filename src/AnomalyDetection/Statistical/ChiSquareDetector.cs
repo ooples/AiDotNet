@@ -104,35 +104,13 @@ public partial class ChiSquareDetector<T> : AnomalyDetectorBase<T>
         int p = _nFeatures;
 
         // Calculate mean
-        _mean = new Vector<T>(p);
-        for (int j = 0; j < p; j++)
-        {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                sum = NumOps.Add(sum, X[i, j]);
-            }
-            _mean[j] = NumOps.Divide(sum, NumOps.FromDouble(n));
-        }
+        var engine = Engine;
+        var data = AnomalyTensorOps.ToTensor(X);
+        var mean = engine.ReduceMean(data, new[] { 0 }, false);
+        _mean = mean.ToVector();
 
-        // Calculate covariance matrix
-        var covariance = new Matrix<T>(p, p);
-        for (int j1 = 0; j1 < p; j1++)
-        {
-            for (int j2 = j1; j2 < p; j2++)
-            {
-                T sum = NumOps.Zero;
-                for (int i = 0; i < n; i++)
-                {
-                    T diff1 = NumOps.Subtract(X[i, j1], _mean[j1]);
-                    T diff2 = NumOps.Subtract(X[i, j2], _mean[j2]);
-                    sum = NumOps.Add(sum, NumOps.Multiply(diff1, diff2));
-                }
-                T cov = NumOps.Divide(sum, NumOps.FromDouble(n - 1));
-                covariance[j1, j2] = cov;
-                covariance[j2, j1] = cov; // Symmetric
-            }
-        }
+        // Calculate (sample) covariance matrix
+        var covariance = AnomalyTensorOps.Covariance(AnomalyTensorOps.SubtractRow(data, mean), NumOps.FromDouble(n - 1));
 
         // Compute inverse of covariance matrix (with regularization for stability)
         _covarianceInverse = ComputeInverse(covariance);
@@ -174,36 +152,9 @@ public partial class ChiSquareDetector<T> : AnomalyDetectorBase<T>
             throw new InvalidOperationException("Model not properly fitted.");
         }
 
-        var scores = new Vector<T>(X.Rows);
-        int p = _nFeatures;
-
-        for (int i = 0; i < X.Rows; i++)
-        {
-            // Compute Mahalanobis distance squared
-            // D^2 = (x - mean)' * Cov^(-1) * (x - mean)
-            var diff = new Vector<T>(p);
-            for (int j = 0; j < p; j++)
-            {
-                diff[j] = NumOps.Subtract(X[i, j], mean[j]);
-            }
-
-            // temp = Cov^(-1) * diff
-            var temp = new Vector<T>(p);
-            for (int j = 0; j < p; j++)
-            {
-                T sum = NumOps.Zero;
-                for (int k = 0; k < p; k++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(covarianceInverse[j, k], diff[k]));
-                }
-                temp[j] = sum;
-            }
-
-            // D^2 = diff' * temp
-            scores[i] = Engine.DotProduct(diff, temp);
-        }
-
-        return scores;
+        // Mahalanobis distance squared: D^2 = (x - mean)' * Cov^(-1) * (x - mean)
+        var centered = AnomalyTensorOps.SubtractRow(AnomalyTensorOps.ToTensor(X), mean.AsTensor());
+        return AnomalyTensorOps.MahalanobisSquared(centered, AnomalyTensorOps.ToTensor(covarianceInverse)).ToVector();
     }
 
     /// <inheritdoc/>
@@ -216,105 +167,16 @@ public partial class ChiSquareDetector<T> : AnomalyDetectorBase<T>
         EnsureFitted();
 
         var scores = ScoreAnomalies(X);
-        var predictions = new Vector<T>(scores.Length);
-        T criticalT = _chiSquareCritical;
-
-        for (int i = 0; i < scores.Length; i++)
-        {
-            // Points with D^2 > chi-square critical are anomalies (-1), otherwise inliers (1)
-            predictions[i] = NumOps.GreaterThan(scores[i], criticalT)
-                ? NumOps.FromDouble(-1)
-                : NumOps.FromDouble(1);
-        }
-
-        return predictions;
+        // Points with D^2 > chi-square critical are anomalies (-1), otherwise inliers (1)
+        return AnomalyTensorOps.LabelsFromThreshold(scores, _chiSquareCritical);
     }
 
-    private Matrix<T> ComputeInverse(Matrix<T> matrix)
+    private Matrix<T> ComputeInverse(Tensor<T> matrix)
     {
-        int n = matrix.Rows;
-        var result = new Matrix<T>(n, n);
-        var augmented = new Matrix<T>(n, 2 * n);
-
-        // Create augmented matrix [A | I]
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                augmented[i, j] = matrix[i, j];
-                augmented[i, j + n] = i == j ? NumOps.FromDouble(1) : NumOps.Zero;
-            }
-        }
-
-        // Add small regularization for numerical stability
-        T epsilon = NumOps.FromDouble(1e-6);
-        for (int i = 0; i < n; i++)
-        {
-            augmented[i, i] = NumOps.Add(augmented[i, i], epsilon);
-        }
-
-        // Gauss-Jordan elimination
-        for (int col = 0; col < n; col++)
-        {
-            // Find pivot
-            int maxRow = col;
-            for (int row = col + 1; row < n; row++)
-            {
-                if (NumOps.GreaterThan(NumOps.Abs(augmented[row, col]), NumOps.Abs(augmented[maxRow, col])))
-                {
-                    maxRow = row;
-                }
-            }
-
-            // Swap rows
-            if (maxRow != col)
-            {
-                for (int j = 0; j < 2 * n; j++)
-                {
-                    T temp = augmented[col, j];
-                    augmented[col, j] = augmented[maxRow, j];
-                    augmented[maxRow, j] = temp;
-                }
-            }
-
-            // Scale pivot row
-            T pivot = augmented[col, col];
-            if (NumOps.Equals(pivot, NumOps.Zero))
-            {
-                // Matrix is singular, use pseudo-inverse approximation
-                pivot = epsilon;
-            }
-
-            for (int j = 0; j < 2 * n; j++)
-            {
-                augmented[col, j] = NumOps.Divide(augmented[col, j], pivot);
-            }
-
-            // Eliminate column
-            for (int row = 0; row < n; row++)
-            {
-                if (row != col)
-                {
-                    T factor = augmented[row, col];
-                    for (int j = 0; j < 2 * n; j++)
-                    {
-                        augmented[row, j] = NumOps.Subtract(augmented[row, j],
-                            NumOps.Multiply(factor, augmented[col, j]));
-                    }
-                }
-            }
-        }
-
-        // Extract inverse
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                result[i, j] = augmented[i, j + n];
-            }
-        }
-
-        return result;
+        // Small ridge on the diagonal for numerical stability, then an LU (partial pivoting) inverse
+        int n = matrix.Shape[0];
+        var regularized = Engine.TensorAdd(matrix, AnomalyTensorOps.ScaledIdentity(n, NumOps.FromDouble(1e-6)));
+        return LinalgDispatch<T>.Inv(regularized).ToMatrix();
     }
 
     private double GetChiSquareCritical(int df, double p)

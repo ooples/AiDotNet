@@ -58,11 +58,7 @@ public class MeanBiasErrorLoss<T> : LossFunctionBase<T>
         ValidateVectorLengths(predicted, actual);
 
         // MBE = mean(actual - predicted)
-        T sum = NumOps.Zero;
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            sum = NumOps.Add(sum, NumOps.Subtract(actual[i], predicted[i]));
-        }
+        T sum = Engine.Sum(Engine.Subtract(actual, predicted));
 
         return NumOps.Divide(sum, NumOps.FromDouble(predicted.Length));
     }

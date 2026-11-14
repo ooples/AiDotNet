@@ -25,9 +25,6 @@ namespace AiDotNet.Kernels;
 /// The formula for the Spline kernel for each dimension is:
 /// k(x, y) = 1 + x*y + x*y*min(x,y) - (x+y)/2*min(x,y)² + min(x,y)³/3
 /// 
-/// For simplicity, this implementation uses the form:
-/// k(x, y) = 1 + x*y*min(x,y) + 0.5*min(x,y)³
-/// 
 /// The overall kernel value is the product of these values across all dimensions.
 /// </para>
 /// <para>
@@ -91,16 +88,9 @@ public class SplineKernel<T> : IKernelFunction<T>
     /// </para>
     /// <para>
     /// The calculation works by:
-    /// 1. Starting with a result of 1
-    /// 2. For each dimension (feature) in the vectors:
-    ///    a. Finding the minimum value between the two vectors at that dimension
-    ///    b. Calculating the product of the two values at that dimension
-    ///    c. Multiplying the minimum by the product
-    ///    d. Calculating the cube of the minimum value
-    ///    e. Multiplying the cube by 0.5
-    ///    f. Adding 1, the minimum-product, and the half-cube together
-    ///    g. Multiplying the running result by this sum
-    /// 3. Returning the final product
+    /// 1. For each dimension (feature), with m = min(x, y):
+    ///    1 + x*y + x*y*m - (x + y)/2 * m² + m³/3
+    /// 2. Multiplying these per-dimension values together
     /// </para>
     /// <para>
     /// The result is a similarity measure where higher values indicate greater similarity.
@@ -112,21 +102,17 @@ public class SplineKernel<T> : IKernelFunction<T>
     /// </remarks>
     public T Calculate(Vector<T> x1, Vector<T> x2)
     {
-        T result = _numOps.One;
-        for (int i = 0; i < x1.Length; i++)
-        {
-            T min = MathHelper.Min(x1[i], x2[i]);
-            T product = _numOps.Multiply(x1[i], x2[i]);
-            T minProduct = _numOps.Multiply(min, product);
-            T minCubed = _numOps.Power(min, _numOps.FromDouble(3));
-            T halfMinCubed = _numOps.Multiply(_numOps.FromDouble(0.5), minCubed);
+        // Vapnik's spline kernel (Vapnik 1998; Souza's kernel survey):
+        // prod_i [1 + x_i y_i + x_i y_i m_i - (x_i + y_i) / 2 * m_i^2 + m_i^3 / 3], m_i = min(x_i, y_i).
+        var engine = AiDotNetEngine.Current;
+        var min = engine.Min(x1, x2);
+        var minSquared = engine.Multiply(min, min);
+        var product = engine.Multiply(x1, x2);
+        var productTimesMin = engine.Multiply(product, min);
+        var halfSumTimesMinSquared = engine.Multiply(engine.Multiply(engine.Add(x1, x2), minSquared), _numOps.FromDouble(0.5));
+        var minCubedOverThree = engine.Divide(engine.Multiply(minSquared, min), _numOps.FromDouble(3));
 
-            T innerSum = _numOps.Add(_numOps.One, minProduct);
-            innerSum = _numOps.Add(innerSum, halfMinCubed);
-
-            result = _numOps.Multiply(result, innerSum);
-        }
-
-        return result;
+        var inner = engine.Add(engine.Add(product, productTimesMin), engine.Subtract(minCubedOverThree, halfSumTimesMinSquared));
+        return engine.Product(engine.Add(inner, Vector<T>.CreateDefault(x1.Length, _numOps.One)));
     }
 }

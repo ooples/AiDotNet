@@ -109,13 +109,11 @@ public class ANOVAKernel<T> : IKernelFunction<T>
     /// </remarks>
     public T Calculate(Vector<T> x1, Vector<T> x2)
     {
-        T result = _numOps.Zero;
-        for (int i = 0; i < x1.Length; i++)
-        {
-            T term = _numOps.Exp(_numOps.Negate(_numOps.Divide(_numOps.Square(_numOps.Subtract(x1[i], x2[i])), _numOps.Multiply(_numOps.FromDouble(2), _numOps.Square(_sigma)))));
-            result = _numOps.Add(result, _numOps.Power(term, _numOps.FromDouble(_degree)));
-        }
+        var engine = AiDotNetEngine.Current;
+        var diff = engine.Subtract(x1, x2);
+        var scaled = engine.Divide(engine.Multiply(diff, diff), _numOps.Multiply(_numOps.FromDouble(2), _numOps.Square(_sigma)));
+        var terms = engine.Power(engine.Exp(engine.Negate(scaled)), _numOps.FromDouble(_degree));
 
-        return result;
+        return engine.Sum(terms);
     }
 }

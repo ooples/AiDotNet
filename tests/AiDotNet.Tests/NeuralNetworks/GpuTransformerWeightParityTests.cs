@@ -59,7 +59,6 @@ public sealed class GpuTransformerWeightParityTests
     private static float[] Train2Steps()
     {
         var (tx, ty) = MakeData(64, 1);
-        NeuralNetworkArchitecture<float>.DefaultRandomSeedOverride = 42;
         var arch = new TransformerArchitecture<float>(
             InputType.TwoDimensional, NeuralNetworkTaskType.SequenceClassification,
             numEncoderLayers: 2, numDecoderLayers: 0, numHeads: 4, modelDimension: 48, feedForwardDimension: 96,
@@ -90,9 +89,9 @@ public sealed class GpuTransformerWeightParityTests
         catch { return; } // no DirectGpu backend on this host — skip
 
         var savedEngine = AiDotNetEngine.Current;
-        // Train2Steps pins the process-wide seed fallback; put it back afterwards. Left at 42 it made every later
-        // default-seeded model in the process initialize identically (the Issue1191 transformer trials collapsed
-        // to one repeated init and failed only when run after this class).
+        // Train2Steps seeds its architecture explicitly and no longer writes the process-wide seed fallback: even
+        // restored afterwards, a write is visible to every test class running in parallel (left at 42 it collapsed
+        // the Issue1191 transformer trials to one init). Keep the restore as a guard against a future write.
         int? savedSeedOverride = NeuralNetworkArchitecture<float>.DefaultRandomSeedOverride;
         float[] gpuW, cpuW;
         try

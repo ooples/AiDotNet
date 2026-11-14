@@ -47,6 +47,7 @@ public class KeyDetector<T> : MusicAnalysisBase<T>
     private readonly KeyDetectorOptions _options;
     private readonly double[,] _majorProfiles;
     private readonly double[,] _minorProfiles;
+    private Tensor<T>? _keyProfileTensor;
 
     private static readonly string[] NoteNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
@@ -91,7 +92,7 @@ public class KeyDetector<T> : MusicAnalysisBase<T>
     /// </summary>
     /// <param name="audio">Audio samples as a tensor.</param>
     /// <returns>Key detection result.</returns>
-    public KeyDetectionResult Detect(Tensor<T> audio)
+    public KeyDetectionResult<T> Detect(Tensor<T> audio)
     {
         // Extract chroma features
         var chroma = _chromaExtractor.Extract(audio);
@@ -111,13 +112,9 @@ public class KeyDetector<T> : MusicAnalysisBase<T>
     /// </summary>
     /// <param name="audio">Audio samples as a vector.</param>
     /// <returns>Key detection result.</returns>
-    public KeyDetectionResult Detect(Vector<T> audio)
+    public KeyDetectionResult<T> Detect(Vector<T> audio)
     {
-        var tensor = new Tensor<T>([audio.Length]);
-        for (int i = 0; i < audio.Length; i++)
-        {
-            tensor[i] = audio[i];
-        }
+        var tensor = new Tensor<T>([audio.Length], audio);
         return Detect(tensor);
     }
 
@@ -126,7 +123,7 @@ public class KeyDetector<T> : MusicAnalysisBase<T>
     /// </summary>
     /// <param name="audio">Audio samples as a tensor.</param>
     /// <returns>List of all key results, ordered by likelihood.</returns>
-    public List<KeyDetectionResult> DetectAll(Tensor<T> audio)
+    public List<KeyDetectionResult<T>> DetectAll(Tensor<T> audio)
     {
         var chroma = _chromaExtractor.Extract(audio);
         var avgChroma = ComputeAverageChroma(chroma);
@@ -154,78 +151,76 @@ public class KeyDetector<T> : MusicAnalysisBase<T>
         return rotated;
     }
 
-    private double[] ComputeAverageChroma(Tensor<T> chroma)
+    private Tensor<T> ComputeAverageChroma(Tensor<T> chroma)
     {
         int numFrames = chroma.Shape[0];
-        var avgChroma = new double[12];
+        if (numFrames == 0)
+            return new Tensor<T>([12]);
 
-        for (int f = 0; f < numFrames; f++)
-        {
-            for (int c = 0; c < 12; c++)
-            {
-                avgChroma[c] += NumOps.ToDouble(chroma[f, c]);
-            }
-        }
-
-        // Normalize
-        double sum = avgChroma.Sum();
-        if (sum > 0)
-        {
-            for (int c = 0; c < 12; c++)
-            {
-                avgChroma[c] /= sum;
-            }
-        }
+        // Sum over frames, then normalize to a distribution when the total is positive
+        var avgChroma = Engine.ReduceSum(Engine.TensorSlice(chroma, [0, 0], [numFrames, 12]), [0], keepDims: false);
+        T sum = Engine.TensorSum(avgChroma);
+        if (NumOps.GreaterThan(sum, NumOps.Zero))
+            avgChroma = Engine.TensorDivideScalar(avgChroma, sum);
 
         return avgChroma;
     }
 
-    private List<KeyDetectionResult> MatchKeyProfiles(double[] chroma)
+    private List<KeyDetectionResult<T>> MatchKeyProfiles(Tensor<T> chroma)
     {
-        var results = new List<KeyDetectionResult>();
+        // Pearson correlation of the chroma with all 24 key profiles (12 major, then 12 minor):
+        // (n * sum(xy) - sum(x) sum(y)) / sqrt((n * sum(x^2) - sum(x)^2) * (n * sum(y^2) - sum(y)^2)),
+        // 0 when that denominator is below 1e-10
+        var profiles = KeyProfileTensor();
+        int keys = profiles.Shape[0];
+        T n = NumOps.FromDouble(12);
+        T sumX = Engine.TensorSum(chroma);
+        T sumX2 = Engine.TensorSum(Engine.TensorSquare(chroma));
+        var sumY = Engine.ReduceSum(profiles, [1], keepDims: false);
+        var sumY2 = Engine.ReduceSum(Engine.TensorSquare(profiles), [1], keepDims: false);
+        var sumXY = Engine.Reshape(Engine.TensorMatMul(profiles, Engine.Reshape(chroma, [12, 1])), [keys]);
 
-        // Match against all major keys
+        var numerator = Engine.TensorSubtract(Engine.TensorMultiplyScalar(sumXY, n), Engine.TensorMultiplyScalar(sumY, sumX));
+        T chromaSpread = NumOps.Subtract(NumOps.Multiply(n, sumX2), NumOps.Multiply(sumX, sumX));
+        var profileSpread = Engine.TensorSubtract(Engine.TensorMultiplyScalar(sumY2, n), Engine.TensorSquare(sumY));
+        var denominator = Engine.TensorSqrt(Engine.TensorMultiplyScalar(profileSpread, chromaSpread));
+        var correlationTensor = Engine.TensorWhere(
+            Engine.TensorLessThan(denominator, NumOps.FromDouble(1e-10)),
+            new Tensor<T>([keys]),
+            Engine.TensorDivide(numerator, denominator));
+
+        // Confidence: the correlation normalized to 0-1
+        T[] correlations = correlationTensor.ToArray();
+        T[] confidences = Engine.TensorDivideScalar(Engine.TensorAddScalar(correlationTensor, NumOps.One), NumOps.FromDouble(2)).ToArray();
+
+        var results = new List<KeyDetectionResult<T>>();
+
+        // Major keys
         for (int key = 0; key < 12; key++)
         {
-            var profile = new double[12];
-            for (int i = 0; i < 12; i++)
-            {
-                profile[i] = _majorProfiles[key, i];
-            }
-
-            double correlation = PearsonCorrelation(chroma, profile);
-
-            results.Add(new KeyDetectionResult
+            results.Add(new KeyDetectionResult<T>
             {
                 KeyIndex = key,
                 Name = $"{NoteNames[key]} major",
                 RootNote = NoteNames[key],
                 Mode = KeyMode.Major,
-                Correlation = correlation,
-                Confidence = (correlation + 1) / 2, // Normalize to 0-1
+                Correlation = correlations[key],
+                Confidence = confidences[key],
                 RelativeKey = $"{NoteNames[(key + 9) % 12]} minor"
             });
         }
 
-        // Match against all minor keys
+        // Minor keys
         for (int key = 0; key < 12; key++)
         {
-            var profile = new double[12];
-            for (int i = 0; i < 12; i++)
-            {
-                profile[i] = _minorProfiles[key, i];
-            }
-
-            double correlation = PearsonCorrelation(chroma, profile);
-
-            results.Add(new KeyDetectionResult
+            results.Add(new KeyDetectionResult<T>
             {
                 KeyIndex = key,
                 Name = $"{NoteNames[key]} minor",
                 RootNote = NoteNames[key],
                 Mode = KeyMode.Minor,
-                Correlation = correlation,
-                Confidence = (correlation + 1) / 2,
+                Correlation = correlations[12 + key],
+                Confidence = confidences[12 + key],
                 RelativeKey = $"{NoteNames[(key + 3) % 12]} major"
             });
         }
@@ -233,24 +228,25 @@ public class KeyDetector<T> : MusicAnalysisBase<T>
         return results;
     }
 
-    private static double PearsonCorrelation(double[] x, double[] y)
+    /// <summary>
+    /// The 24 rotated key profiles (12 major, then 12 minor) as a <c>[24, 12]</c> tensor, converted from
+    /// the fixed Krumhansl-Kessler tables to T once, in bulk.
+    /// </summary>
+    private Tensor<T> KeyProfileTensor()
     {
-        double sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0, sumY2 = 0;
-        int n = x.Length;
-
-        for (int i = 0; i < n; i++)
+        if (_keyProfileTensor is null)
         {
-            sumX += x[i];
-            sumY += y[i];
-            sumXY += x[i] * y[i];
-            sumX2 += x[i] * x[i];
-            sumY2 += y[i] * y[i];
+            var values = new double[24 * 12];
+            for (int key = 0; key < 12; key++)
+            {
+                for (int i = 0; i < 12; i++)
+                {
+                    values[key * 12 + i] = _majorProfiles[key, i];
+                    values[(12 + key) * 12 + i] = _minorProfiles[key, i];
+                }
+            }
+            _keyProfileTensor = new Tensor<double>(values, [24, 12]).Cast<T>();
         }
-
-        double numerator = n * sumXY - sumX * sumY;
-        double denominator = Math.Sqrt((n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY));
-
-        if (denominator < 1e-10) return 0;
-        return numerator / denominator;
+        return _keyProfileTensor;
     }
 }

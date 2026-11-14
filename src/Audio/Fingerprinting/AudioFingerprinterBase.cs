@@ -85,11 +85,7 @@ public abstract class AudioFingerprinterBase<T> : IAudioFingerprinter<T>
     public virtual AudioFingerprint<T> Fingerprint(Vector<T> audio)
     {
         // Convert vector to tensor and delegate to main implementation
-        var tensor = new Tensor<T>([audio.Length]);
-        for (int i = 0; i < audio.Length; i++)
-        {
-            tensor[i] = audio[i];
-        }
+        var tensor = new Tensor<T>([audio.Length], audio);
         return Fingerprint(tensor);
     }
 
@@ -232,20 +228,26 @@ public abstract class AudioFingerprinterBase<T> : IAudioFingerprinter<T>
         int numHashes = rows;
         uint[] hashes = new uint[numHashes];
 
-        for (int i = 0; i < rows; i++)
-        {
-            uint hash = 0;
-            for (int j = 0; j < Math.Min(cols, 32); j++)
-            {
-                if (NumOps.GreaterThan(features[i, j], threshold))
-                {
-                    hash |= (1u << j);
-                }
-            }
-            hashes[i] = hash;
-        }
+        // Bit j of hash i is set when features[i, j] > threshold (first 32 columns)
+        int bits = Math.Min(cols, 32);
+        if (rows == 0 || bits <= 0)
+            return hashes;
+
+        var values = new Tensor<T>(features.Cast<T>().ToArray(), [rows, cols]);
+        var above = Engine.TensorGreaterThan(Engine.TensorSlice(values, [0, 0], [rows, bits]), threshold);
+        OrBits(hashes, Engine.TensorNonzero(above).ToArray());
 
         return hashes;
+    }
+
+    /// <summary>
+    /// Sets bit <c>coords[2k + 1]</c> of <c>hashes[coords[2k]]</c> for each <c>(row, bit)</c> pair of a
+    /// rank-2 <c>TensorNonzero</c> result.
+    /// </summary>
+    private static void OrBits(uint[] hashes, int[] coords)
+    {
+        for (int k = 0; k + 1 < coords.Length; k += 2)
+            hashes[coords[k]] |= 1u << coords[k + 1];
     }
 
     /// <summary>

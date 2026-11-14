@@ -180,78 +180,28 @@ public partial class SUODDetector<T> : AnomalyDetectorBase<T>
         }
 
         // Combine using robust average (trimmed mean)
-        var combinedScores = new Vector<T>(X.Rows);
+        var engine = Engine;
+        var (sorted, _) = engine.TensorSort(engine.TensorStack(allScores.Select(s => s.AsTensor()).ToArray(), 0), 0, false);
 
-        for (int i = 0; i < X.Rows; i++)
-        {
-            var pointScores = allScores.Select(s => s[i]).OrderBy(v => NumOps.ToDouble(v)).ToArray();
-
-            // Trimmed mean (exclude highest and lowest if we have enough detectors)
-            T combined;
-            if (pointScores.Length > 2)
-            {
-                combined = NumOps.Zero;
-                int count = pointScores.Length - 2;
-                for (int j = 1; j <= count; j++)
-                {
-                    combined = NumOps.Add(combined, pointScores[j]);
-                }
-                combined = NumOps.Divide(combined, NumOps.FromDouble(count));
-            }
-            else
-            {
-                combined = NumOps.Zero;
-                for (int j = 0; j < pointScores.Length; j++)
-                {
-                    combined = NumOps.Add(combined, pointScores[j]);
-                }
-                combined = NumOps.Divide(combined, NumOps.FromDouble(pointScores.Length));
-            }
-
-            combinedScores[i] = combined;
-        }
-
-        return combinedScores;
+        // Trimmed mean (exclude highest and lowest if we have enough detectors)
+        int detectors = allScores.Count;
+        var kept = detectors > 2
+            ? engine.TensorSlice(sorted, new[] { 1, 0 }, new[] { detectors - 2, X.Rows })
+            : sorted;
+        int count = detectors > 2 ? detectors - 2 : detectors;
+        return engine.TensorDivideScalar(engine.ReduceSum(kept, new[] { 0 }, false), NumOps.FromDouble(count)).ToVector();
     }
 
     private void AddTrainingRange(Vector<T> scores)
     {
-        T min = NumOps.MaxValue;
-        T max = NumOps.MinValue;
-        for (int i = 0; i < scores.Length; i++)
-        {
-            if (NumOps.LessThan(scores[i], min)) min = scores[i];
-            if (NumOps.GreaterThan(scores[i], max)) max = scores[i];
-        }
-        (_trainingScoreRanges ?? throw new InvalidOperationException("Training ranges have not been initialized."))
-            .Add((min, max));
+        var ranges = _trainingScoreRanges ?? throw new InvalidOperationException("Training ranges have not been initialized.");
+        ranges.Add(AnomalyTensorOps.MinMaxIgnoringNaN(scores));
     }
 
     private Vector<T> NormalizeScores(Vector<T> scores, T trainMin, T trainMax)
     {
-        var result = new Vector<T>(scores.Length);
-
-        // Min-max normalization
-        T range = NumOps.Subtract(trainMax, trainMin);
-        T eps = NumOps.FromDouble(1e-10);
-        T half = NumOps.FromDouble(0.5);
-
-        for (int i = 0; i < scores.Length; i++)
-        {
-            if (NumOps.GreaterThan(range, eps))
-            {
-                T normalized = NumOps.Divide(NumOps.Subtract(scores[i], trainMin), range);
-                if (NumOps.LessThan(normalized, NumOps.Zero)) normalized = NumOps.Zero;
-                if (NumOps.GreaterThan(normalized, NumOps.One)) normalized = NumOps.One;
-                result[i] = normalized;
-            }
-            else
-            {
-                result[i] = half;
-            }
-        }
-
-        return result;
+        // Min-max normalization, clamped to [0, 1] (0.5 everywhere for a constant training range)
+        return AnomalyTensorOps.NormalizeToTrainingRange(scores, trainMin, trainMax);
     }
 
     private Matrix<T> CreateRandomProjectionMatrix(int originalDimensions)
@@ -277,23 +227,7 @@ public partial class SUODDetector<T> : AnomalyDetectorBase<T>
 
     private Matrix<T> ApplyProjection(Matrix<T> X)
     {
-        int n = X.Rows;
-        int d = _nProjectedFeatures;
-        var projected = new Matrix<T>(n, d);
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                T sum = NumOps.Zero;
-                for (int k = 0; k < X.Columns; k++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(X[i, k], (_projectionMatrix ?? throw new InvalidOperationException("_projectionMatrix has not been initialized."))[k, j]));
-                }
-                projected[i, j] = sum;
-            }
-        }
-
-        return projected;
+        var projection = _projectionMatrix ?? throw new InvalidOperationException("_projectionMatrix has not been initialized.");
+        return Engine.TensorMatMul(AnomalyTensorOps.ToTensor(X), AnomalyTensorOps.ToTensor(projection)).ToMatrix();
     }
 }

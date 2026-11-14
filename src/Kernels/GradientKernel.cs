@@ -224,12 +224,7 @@ public class GradientKernel<T> : IKernelFunction<T>
     /// </summary>
     private Vector<T> ExtractInput(Vector<T> extended)
     {
-        var result = new Vector<T>(extended.Length - 1);
-        for (int i = 0; i < result.Length; i++)
-        {
-            result[i] = extended[i];
-        }
-        return result;
+        return extended.GetSubVector(0, extended.Length - 1);
     }
 
     /// <summary>
@@ -462,13 +457,7 @@ public class GradientKernel<T> : IKernelFunction<T>
     /// </remarks>
     public Vector<T> CreateValueObservation(Vector<T> input)
     {
-        var extended = new Vector<T>(input.Length + 1);
-        for (int i = 0; i < input.Length; i++)
-        {
-            extended[i] = input[i];
-        }
-        extended[input.Length] = _numOps.FromDouble(-1);
-        return extended;
+        return Vector<T>.Concatenate(input, Vector<T>.CreateDefault(1, _numOps.FromDouble(-1)));
     }
 
     /// <summary>
@@ -488,12 +477,6 @@ public class GradientKernel<T> : IKernelFunction<T>
         if (gradientDim < 0 || gradientDim >= _inputDim)
             throw new ArgumentOutOfRangeException(nameof(gradientDim));
 
-        var extended = new Vector<T>(input.Length + 1);
-        for (int i = 0; i < input.Length; i++)
-        {
-            extended[i] = input[i];
-        }
-        extended[input.Length] = _numOps.FromDouble(gradientDim);
-        return extended;
+        return Vector<T>.Concatenate(input, Vector<T>.CreateDefault(1, _numOps.FromDouble(gradientDim)));
     }
 }

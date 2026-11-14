@@ -113,4 +113,56 @@ public static class CreditRules
     public static ICreditRule<T> DirectDifferenceTargetPropagation<T>(
         int? seed = null, double inverseLearningRate = 0.05, double weightDecay = 0.0)
         => new DirectDifferenceTargetPropagationCreditRule<T>(seed, inverseLearningRate, weightDecay);
+
+    /// <summary>
+    /// <b>Tied-Readout Local Error</b>: zero-extra-parameter sequence local credit assignment routing hidden layers
+    /// through the network's shared readout (with optional readout parameter detachment, layer stride, and depth weighting).
+    /// </summary>
+    public static ICreditRule<T> TiedReadoutLocalError<T>(
+        int readoutLayerCount = 2,
+        double localWeight = 1.0,
+        bool detachReadoutOnHiddenLayers = false,
+        int layerStride = 1,
+        bool useDepthProgressiveWeight = false)
+        => new TiedReadoutLocalErrorCreditRule<T>(
+            readoutLayerCount, localWeight, detachReadoutOnHiddenLayers, layerStride, useDepthProgressiveWeight);
+
+    /// <summary>
+    /// <b>Sampled Tied-Readout Local Error</b>: zero-extra-parameter sequence local credit assignment evaluating
+    /// intermediate hidden layers against a sampled <c>U ≪ V</c> candidate subset of the shared readout.
+    /// </summary>
+    public static ICreditRule<T> SampledTiedReadoutLocalError<T>(
+        int readoutLayerCount = 2,
+        int maxCandidates = 1024,
+        double localWeight = 1.0,
+        bool detachReadoutOnHiddenLayers = true,
+        int layerStride = 1,
+        bool useDepthProgressiveWeight = false,
+        int? seed = null)
+        => new SampledTiedReadoutLocalErrorCreditRule<T>(
+            readoutLayerCount, maxCandidates, localWeight, detachReadoutOnHiddenLayers, layerStride, useDepthProgressiveWeight, seed);
+
+    /// <summary>
+    /// <b>Blockwise Anchor Local Error</b>: zero-extra-parameter decoupled block-local sequence credit assignment that
+    /// detaches activations only at <paramref name="anchorStride"/> block boundaries and optionally executes blocks
+    /// sequentially with <c>O(anchorStride)</c> activation memory and zero forward recomputation.
+    /// </summary>
+    public static ICreditRule<T> BlockwiseAnchorLocalError<T>(
+        int readoutLayerCount = 2,
+        int anchorStride = 4,
+        int maxCandidates = 1024,
+        double localWeight = 1.0,
+        bool detachReadoutOnHiddenBlocks = true,
+        bool useDepthProgressiveWeight = true,
+        bool streamBlocksSequentially = true,
+        int? seed = null)
+        => new BlockwiseAnchorLocalErrorCreditRule<T>(
+            readoutLayerCount,
+            anchorStride,
+            maxCandidates,
+            localWeight,
+            detachReadoutOnHiddenBlocks,
+            useDepthProgressiveWeight,
+            streamBlocksSequentially,
+            seed);
 }

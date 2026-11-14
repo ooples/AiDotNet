@@ -411,9 +411,7 @@ public partial class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimi
         T epsilon = NumOps.FromDouble(_options.Epsilon);
 
         // Update accumulated squared gradients: accSqGrad = rho * accSqGrad + (1 - rho) * gradient^2
-        // ONE FUSED IN-PLACE PASS -- same rewrite as the rest of the family. Replaces 14 Engine
-        // calls that each RETURNED a fresh full-length vector, plus a CreateDefault broadcasting the
-        // scalar epsilon into a full-length constant vector reused for both RMS terms.
+        // Whole-vector engine ops with scalar operands (no broadcast constant vectors).
         //
         // Per-element operand and association order preserved exactly (Zeiler 2012), including the
         // detail the original comment flags: the accumulated-squared-updates term uses the UNSCALED
@@ -423,35 +421,29 @@ public partial class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimi
         //   upd       = (sqrt(accSqUpd + eps) / sqrt(accSqGrad + eps)) * g
         //   accSqUpd  = rho*accSqUpd + (1-rho)*upd*upd        [UNSCALED upd]
         //   out       = p - upd*lr
-        var updatedParams = new Vector<T>(parameters.Length, skipZeroInit: true);
-        var pSpan = parameters.AsSpan();
-        var gSpan = gradient.AsSpan();
-        var accGSpan = _accumulatedSquaredGradients.AsWritableSpan();
-        var accUSpan = _accumulatedSquaredUpdates.AsWritableSpan();
-        var outSpan = updatedParams.AsWritableSpan();
-        T learningRate = CurrentLearningRate;
+        var engine = Engine;
+        var g = gradient.AsTensor();
+        var accGState = _accumulatedSquaredGradients.AsTensor();
+        var accUState = _accumulatedSquaredUpdates.AsTensor();
 
-        for (int i = 0; i < pSpan.Length; i++)
-        {
-            T g = gSpan[i];
+        var accG = engine.TensorAdd(
+            engine.TensorMultiplyScalar(accGState, rho),
+            engine.TensorMultiplyScalar(engine.TensorMultiply(g, g), oneMinusRho));
+        engine.TensorCopy(accG, accGState);
 
-            T accG = NumOps.Add(
-                NumOps.Multiply(accGSpan[i], rho),
-                NumOps.Multiply(NumOps.Multiply(g, g), oneMinusRho));
-            accGSpan[i] = accG;
+        var rmsUpdate = engine.TensorSqrt(engine.TensorAddScalar(accUState, epsilon));
+        var rmsGrad = engine.TensorSqrt(engine.TensorAddScalar(accG, epsilon));
+        var updateUnscaled = engine.TensorMultiply(engine.TensorDivide(rmsUpdate, rmsGrad), g);
 
-            T rmsUpdate = NumOps.Sqrt(NumOps.Add(accUSpan[i], epsilon));
-            T rmsGrad = NumOps.Sqrt(NumOps.Add(accG, epsilon));
-            T updateUnscaled = NumOps.Multiply(NumOps.Divide(rmsUpdate, rmsGrad), g);
+        engine.TensorCopy(
+            engine.TensorAdd(
+                engine.TensorMultiplyScalar(accUState, rho),
+                engine.TensorMultiplyScalar(engine.TensorMultiply(updateUnscaled, updateUnscaled), oneMinusRho)),
+            accUState);
 
-            accUSpan[i] = NumOps.Add(
-                NumOps.Multiply(accUSpan[i], rho),
-                NumOps.Multiply(NumOps.Multiply(updateUnscaled, updateUnscaled), oneMinusRho));
-
-            outSpan[i] = NumOps.Subtract(pSpan[i], NumOps.Multiply(updateUnscaled, learningRate));
-        }
-
-        return updatedParams;
+        return engine.TensorSubtract(
+            parameters.AsTensor(),
+            engine.TensorMultiplyScalar(updateUnscaled, CurrentLearningRate)).AsVector();
     }
 
     // Per-parameter AdaDelta state for tape-based training
@@ -470,6 +462,8 @@ public partial class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimi
         bool gpuAdam = typeof(T) == typeof(float)
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
 
+        double learningRateValue = NumOps.ToDouble(CurrentLearningRate);
+        bool unitLearningRate = NumOps.Equals(CurrentLearningRate, NumOps.One);
         foreach (var param in context.Parameters)
         {
             // Once state exists, zero-gradient rows must decay both accumulators too.
@@ -480,7 +474,7 @@ public partial class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimi
                 if (!_tapeAccSqUpd.TryGetValue(param, out var auSp)) { auSp = new Tensor<T>(param._shape); _tapeAccSqUpd[param] = auSp; }
                 if (SparseEmbeddingOptimizerHelpers.TryApplyAdaDeltaSparse(
                         param, agSp, auSp,
-                        lr: NumOps.ToDouble(CurrentLearningRate),
+                        lr: learningRateValue,
                         _options.Rho, _options.Epsilon, weightDecay: 0.0))
                 {
                     continue;
@@ -494,7 +488,7 @@ public partial class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimi
             if (!_tapeAccSqUpd.TryGetValue(param, out var accSqUpd)) { accSqUpd = CreateOptimizerStateTensor(param._shape, gpuAdam); _tapeAccSqUpd[param] = accSqUpd; }
 
             // The fused kernel applies an unscaled update (learning rate one).
-            if (gpuAdam && NumOps.Equals(CurrentLearningRate, NumOps.One) && param.Length == grad.Length
+            if (gpuAdam && unitLearningRate && param.Length == grad.Length
                 && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryAdadeltaStep((Tensor<float>)(object)param, (Tensor<float>)(object)grad, (Tensor<float>)(object)accSqGrad, (Tensor<float>)(object)accSqUpd,
                     (float)_options.Rho, (float)_options.Epsilon, 0f))
                 continue;

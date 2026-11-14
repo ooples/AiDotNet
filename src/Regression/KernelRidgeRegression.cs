@@ -181,13 +181,9 @@ public partial class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
         int n = X.Rows;
 
         // Center y for translation equivariance (predictions get _yMean added back)
-        _yMean = NumOps.Zero;
-        for (int i = 0; i < n; i++)
-            _yMean = NumOps.Add(_yMean, y[i]);
-        _yMean = NumOps.Divide(_yMean, NumOps.FromDouble(n));
-        var yCentered = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-            yCentered[i] = NumOps.Subtract(y[i], _yMean);
+        var engine = Engine;
+        _yMean = NumOps.Divide(engine.Sum(y), NumOps.FromDouble(n));
+        var yCentered = engine.Subtract(y, engine.Fill(n, _yMean));
 
         // Auto-tune Gamma if using the default value and RBF/Laplacian kernel.
         // The default Gamma=1.0 is too large for features with range >> 1, causing
@@ -195,58 +191,33 @@ public partial class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
         // following the scikit-learn "scale" convention.
         if (Options.KernelType is KernelType.RBF or KernelType.Laplacian && Math.Abs(Options.Gamma - 1.0) < 1e-12)
         {
-            double totalVariance = 0;
-            for (int j = 0; j < X.Columns; j++)
-            {
-                double mean = 0;
-                for (int i = 0; i < n; i++)
-                    mean += Convert.ToDouble(X[i, j]);
-                mean /= n;
+            // Sum over features of the population variance of each column (two-pass: mean, then deviations)
+            var xTensor = Tensor<T>.FromMatrix(X);
+            var columnMeans = engine.ReduceMean(xTensor, new[] { 0 }, keepDims: true);
+            var deviations = engine.TensorSubtract(xTensor, engine.TensorBroadcastTo(columnMeans, new[] { n, X.Columns }));
+            var columnVariances = engine.TensorDivideScalar(
+                engine.ReduceSum(engine.TensorSquare(deviations), new[] { 0 }, keepDims: false), NumOps.FromDouble(n));
+            T totalVariance = engine.TensorSum(columnVariances);
 
-                double variance = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    double diff = Convert.ToDouble(X[i, j]) - mean;
-                    variance += diff * diff;
-                }
-                variance /= n;
-                totalVariance += variance;
-            }
-
-            if (totalVariance > 1e-10)
+            if (NumOps.GreaterThan(totalVariance, NumOps.FromDouble(1e-10)))
             {
-                Options.Gamma = 1.0 / totalVariance;
+                // Gamma is a double-valued option, so the scalar result is converted once here.
+                Options.Gamma = 1.0 / NumOps.ToDouble(totalVariance);
             }
         }
-
-        _gramMatrix = new Matrix<T>(n, n);
 
         // Compute the Gram matrix
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i; j < n; j++)
-            {
-                T value = KernelFunction(X.GetRow(i), X.GetRow(j));
-                _gramMatrix[i, j] = value;
-                _gramMatrix[j, i] = value;
-            }
-        }
+        _gramMatrix = KernelMatrix(X, X);
 
         // Add ridge penalty to the diagonal (LambdaKRR is the primary regularization for KRR)
-        for (int i = 0; i < n; i++)
-        {
-            _gramMatrix[i, i] = NumOps.Add(_gramMatrix[i, i], NumOps.FromDouble(Options.LambdaKRR));
-        }
+        _gramMatrix = engine.MatrixAdd(_gramMatrix, Matrix<T>.CreateDiagonal(engine.Fill(n, NumOps.FromDouble(Options.LambdaKRR))));
 
         // Add additional regularization strength if specified
         var regularizationStrength = Regularization?.GetOptions().Strength ?? 0.0;
         if (regularizationStrength > 0)
         {
             T regTerm = NumOps.FromDouble(regularizationStrength);
-            for (int i = 0; i < n; i++)
-            {
-                _gramMatrix[i, i] = NumOps.Add(_gramMatrix[i, i], regTerm);
-            }
+            _gramMatrix = engine.MatrixAdd(_gramMatrix, Matrix<T>.CreateDiagonal(engine.Fill(n, regTerm)));
         }
 
         // Solve (K + λI)a = y_centered
@@ -257,17 +228,10 @@ public partial class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
         Alphas = _dualCoefficients;
 
         // Compute OLS coefficients on original (uncentered) data for extrapolation
-        var xWithBias = new Matrix<T>(n, X.Columns + 1);
-        for (int i = 0; i < n; i++)
-        {
-            xWithBias[i, 0] = NumOps.One; // bias
-            for (int j = 0; j < X.Columns; j++)
-                xWithBias[i, j + 1] = X[i, j];
-        }
+        var xWithBias = X.AddConstantColumn(NumOps.One); // bias first
         var xbTxb = xWithBias.Transpose().Multiply(xWithBias);
         var xbTy = xWithBias.Transpose().Multiply(y); // use original y, not centered
-        for (int i = 0; i < xbTxb.Rows; i++)
-            xbTxb[i, i] = NumOps.Add(xbTxb[i, i], NumOps.FromDouble(1e-10));
+        xbTxb = engine.MatrixAdd(xbTxb, Matrix<T>.CreateDiagonal(engine.Fill(xbTxb.Rows, NumOps.FromDouble(1e-10))));
         var olsSolution = MatrixSolutionHelper.SolveLinearSystem(xbTxb, xbTy, Options.DecompositionType);
         _linearIntercept = olsSolution[0];
         _linearCoefficients = olsSolution.Slice(1, X.Columns);
@@ -305,16 +269,23 @@ public partial class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     protected override T PredictSingle(Vector<T> input)
     {
-        // Kernel prediction (centered)
+        // Kernel prediction (centered), with every kernel value computed at once
+        var engine = Engine;
         T kernelPred = NumOps.Zero;
-        double maxK = 0;
-        for (int i = 0; i < SupportVectors.Rows; i++)
+        T maxK = NumOps.Zero;
+        if (SupportVectors.Rows > 0)
         {
-            Vector<T> supportVector = SupportVectors.GetRow(i);
-            T k = KernelFunction(input, supportVector);
-            double kd = NumOps.ToDouble(k);
-            if (kd > maxK) maxK = kd;
-            kernelPred = NumOps.Add(kernelPred, NumOps.Multiply(Alphas[i], k));
+            var queryRow = new Tensor<T>(new[] { 1, input.Length }, input).ToMatrix();
+            var kernelValues = KernelMatrix(queryRow, SupportVectors).GetRow(0);
+            var alphas = Alphas.Length == kernelValues.Length ? Alphas : Alphas.GetSubVector(0, kernelValues.Length);
+            kernelPred = engine.DotProduct(alphas, kernelValues);
+
+            // Largest kernel value, floored at 0 (NaN values never raise it)
+            var kernelTensor = Tensor<T>.FromVector(kernelValues);
+            var floored = engine.TensorWhere(
+                engine.TensorIsNan(kernelTensor), Tensor<T>.FromVector(engine.FillZero<T>(kernelValues.Length)), kernelTensor);
+            T largest = engine.TensorMaxValue(floored);
+            maxK = NumOps.GreaterThan(largest, NumOps.Zero) ? largest : NumOps.Zero;
         }
 
         // OLS linear prediction using Engine.DotProduct
@@ -322,22 +293,19 @@ public partial class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
         if (_linearCoefficients is not null)
         {
             int len = Math.Min(input.Length, _linearCoefficients.Length);
-            var inputSlice = new Vector<T>(len);
-            var coefSlice = new Vector<T>(len);
-            for (int j = 0; j < len; j++)
+            if (len > 0)
             {
-                inputSlice[j] = input[j];
-                coefSlice[j] = _linearCoefficients[j];
+                linearPred = NumOps.Add(linearPred,
+                    engine.DotProduct(input.GetSubVector(0, len), _linearCoefficients.GetSubVector(0, len)));
             }
-            linearPred = NumOps.Add(linearPred, Engine.DotProduct(inputSlice, coefSlice));
         }
 
         // Blend: maxK near 1.0 means interpolation (use kernel+yMean), near 0 means extrapolation (use OLS)
-        double kernelWeight = Math.Min(1.0, maxK);
+        T kernelWeight = NumOps.LessThan(maxK, NumOps.One) ? maxK : NumOps.One;
         T kernelResult = NumOps.Add(_yMean, kernelPred);
         T blended = NumOps.Add(
-            NumOps.Multiply(NumOps.FromDouble(kernelWeight), kernelResult),
-            NumOps.Multiply(NumOps.FromDouble(1.0 - kernelWeight), linearPred));
+            NumOps.Multiply(kernelWeight, kernelResult),
+            NumOps.Multiply(NumOps.Subtract(NumOps.One, kernelWeight), linearPred));
 
         return blended;
     }

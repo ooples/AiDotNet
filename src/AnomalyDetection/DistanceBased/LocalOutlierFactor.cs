@@ -120,18 +120,13 @@ public partial class LocalOutlierFactor<T> : AnomalyDetectorBase<T>
         int k = _numNeighbors;
 
         // Find k-nearest neighbors and k-distances for each point
-        _neighborIndices = new int[n][];
-        _kDistances = new Vector<T>[n];
-
-        for (int i = 0; i < n; i++)
-        {
-            var (neighbors, distances) = FindKNearestNeighbors(X, i, k);
-            _neighborIndices[i] = neighbors;
-            _kDistances[i] = distances;
-        }
+        var data = AnomalyTensorOps.ToTensor(X);
+        var distances = AnomalyTensorOps.NearestNeighbors(data, data, k, true, out var neighbors);
+        _neighborIndices = AnomalyTensorOps.ToJagged(neighbors);
+        _kDistances = AnomalyTensorOps.RowVectors(distances);
 
         // Compute Local Reachability Density (LRD) for each training point
-        _lrd = ComputeLRD(X, _neighborIndices, _kDistances);
+        _lrd = ComputeLRD(distances, neighbors, Engine.TensorSliceAxis(distances, 1, k - 1)).ToVector();
 
         // Calculate LOF scores for training data to set threshold
         var trainingScores = ScoreAnomaliesInternal(X, true);
@@ -151,186 +146,55 @@ public partial class LocalOutlierFactor<T> : AnomalyDetectorBase<T>
     {
         ValidateInput(X);
 
-        int n = X.Rows;
-        var scores = new Vector<T>(n);
-
-        for (int i = 0; i < n; i++)
-        {
-            // Use precomputed values for training data, otherwise compute for new point
-            T lofScore = isTrainingData
-                ? ComputeLOFScore(i)
-                : ComputeLOFScoreForNewPoint(X.GetRow(i));
-
-            // LOF > 1 indicates anomaly, higher = more anomalous
-            scores[i] = lofScore;
-        }
-
-        return scores;
-    }
-
-    private (int[] neighbors, Vector<T> distances) FindKNearestNeighbors(Matrix<T> X, int pointIndex, int k)
-    {
-        var point = X.GetRow(pointIndex);
-        var distancesWithIndices = new List<(T distance, int index)>();
-
-        for (int j = 0; j < X.Rows; j++)
-        {
-            if (j != pointIndex)
-            {
-                T dist = StatisticsHelper<T>.EuclideanDistance(point, X.GetRow(j));
-                distancesWithIndices.Add((dist, j));
-            }
-        }
-
-        // Sort by distance
-        distancesWithIndices.Sort((a, b) => NumOps.LessThan(a.distance, b.distance) ? -1 :
-            (NumOps.GreaterThan(a.distance, b.distance) ? 1 : 0));
-
-        // Take k nearest
-        var neighbors = new int[k];
-        var distances = new Vector<T>(k);
-
-        for (int i = 0; i < k; i++)
-        {
-            neighbors[i] = distancesWithIndices[i].index;
-            distances[i] = distancesWithIndices[i].distance;
-        }
-
-        return (neighbors, distances);
-    }
-
-    private (int[] neighbors, Vector<T> distances) FindKNearestNeighborsInTraining(Vector<T> point, int k)
-    {
-        var trainingData = _trainingData;
-        if (trainingData == null)
-        {
-            throw new InvalidOperationException("Model not properly fitted.");
-        }
-
-        var distancesWithIndices = new List<(T distance, int index)>();
-
-        for (int j = 0; j < trainingData.Rows; j++)
-        {
-            T dist = StatisticsHelper<T>.EuclideanDistance(point, trainingData.GetRow(j));
-            distancesWithIndices.Add((dist, j));
-        }
-
-        // Sort by distance
-        distancesWithIndices.Sort((a, b) => NumOps.LessThan(a.distance, b.distance) ? -1 :
-            (NumOps.GreaterThan(a.distance, b.distance) ? 1 : 0));
-
-        // Take k nearest
-        var neighbors = new int[k];
-        var distances = new Vector<T>(k);
-
-        for (int i = 0; i < k; i++)
-        {
-            neighbors[i] = distancesWithIndices[i].index;
-            distances[i] = distancesWithIndices[i].distance;
-        }
-
-        return (neighbors, distances);
-    }
-
-    private Vector<T> ComputeLRD(Matrix<T> X, int[][] neighborIndices, Vector<T>[] kDistances)
-    {
-        int n = X.Rows;
-        var lrd = new Vector<T>(n);
-
-        for (int i = 0; i < n; i++)
-        {
-            T reachabilitySum = NumOps.Zero;
-
-            for (int j = 0; j < _numNeighbors; j++)
-            {
-                int neighborIdx = neighborIndices[i][j];
-                T kDistNeighbor = kDistances[neighborIdx][_numNeighbors - 1]; // k-distance of neighbor
-                T distToNeighbor = kDistances[i][j]; // distance to this neighbor
-
-                // Reachability distance = max(k-distance(neighbor), distance(point, neighbor))
-                T reachDist = NumOps.GreaterThan(kDistNeighbor, distToNeighbor) ? kDistNeighbor : distToNeighbor;
-                reachabilitySum = NumOps.Add(reachabilitySum, reachDist);
-            }
-
-            // LRD = k / sum of reachability distances
-            // If all neighbors are at distance 0, assign high LRD
-            lrd[i] = NumOps.GreaterThan(reachabilitySum, NumOps.Zero)
-                ? NumOps.Divide(NumOps.FromDouble(_numNeighbors), reachabilitySum)
-                : NumOps.MaxValue;
-        }
-
-        return lrd;
-    }
-
-    private T ComputeLOFScore(int pointIndex)
-    {
+        var kDistances = _kDistances;
         var neighborIndices = _neighborIndices;
         var lrd = _lrd;
-        if (neighborIndices == null || lrd == null)
+        var trainingData = _trainingData;
+        if (kDistances == null || neighborIndices == null || lrd == null || trainingData == null)
         {
             throw new InvalidOperationException("Model not properly fitted.");
         }
 
-        T lofSum = NumOps.Zero;
-        var neighbors = neighborIndices[pointIndex];
-        T pointLrd = lrd[pointIndex];
+        var engine = Engine;
+        int k = _numNeighbors;
+        var lrdTensor = lrd.AsTensor();
 
-        for (int j = 0; j < _numNeighbors; j++)
+        // Use precomputed neighbourhoods for training data, otherwise find them in the training data
+        Tensor<T> pointLrd;
+        Tensor<int> neighbors;
+        if (isTrainingData)
         {
-            int neighborIdx = neighbors[j];
-            T neighborLrd = lrd[neighborIdx];
-
-            // LOF contribution from this neighbor
-            lofSum = NumOps.GreaterThan(pointLrd, NumOps.Zero)
-                ? NumOps.Add(lofSum, NumOps.Divide(neighborLrd, pointLrd))
-                : lofSum;
+            neighbors = AnomalyTensorOps.FromJagged(neighborIndices, k);
+            pointLrd = lrdTensor;
+        }
+        else
+        {
+            var distances = AnomalyTensorOps.NearestNeighbors(
+                AnomalyTensorOps.ToTensor(X), AnomalyTensorOps.ToTensor(trainingData), k, false, out neighbors);
+            var trainingKDistances = engine.TensorSliceAxis(AnomalyTensorOps.StackRows(kDistances), 1, k - 1);
+            pointLrd = ComputeLRD(distances, neighbors, trainingKDistances);
         }
 
-        // LOF = average of ratios
-        return NumOps.Divide(lofSum, NumOps.FromDouble(_numNeighbors));
+        // LOF = average of lrd(neighbor) / lrd(point); the ratios count only when lrd(point) > 0.
+        // LOF > 1 indicates anomaly, higher = more anomalous
+        var ratios = AnomalyTensorOps.DivideColumn(AnomalyTensorOps.GatherByIndex(lrdTensor, neighbors), pointLrd);
+        var lofSum = engine.TensorWhere(
+            engine.TensorGreaterThan(pointLrd, NumOps.Zero),
+            engine.ReduceSum(ratios, new[] { 1 }, false),
+            Tensor<T>.CreateZeros(new[] { X.Rows }));
+        return engine.TensorDivideScalar(lofSum, NumOps.FromDouble(k)).ToVector();
     }
 
-    private T ComputeLOFScoreForNewPoint(Vector<T> point)
+    // Local reachability density of points from their k neighbour distances ([m, k]) and indices:
+    // k / sum_j max(k-distance(neighbor_j), d(point, neighbor_j)), or MaxValue when that sum is 0.
+    private Tensor<T> ComputeLRD(Tensor<T> distances, Tensor<int> neighbors, Tensor<T> referenceKDistances)
     {
-        var kDistances = _kDistances;
-        var lrd = _lrd;
-        if (kDistances == null || lrd == null)
-        {
-            throw new InvalidOperationException("Model not properly fitted.");
-        }
-
-        // Find k-nearest neighbors in training data
-        var (neighbors, distances) = FindKNearestNeighborsInTraining(point, _numNeighbors);
-
-        // Compute reachability distances and LRD for the new point
-        T reachabilitySum = NumOps.Zero;
-
-        for (int j = 0; j < _numNeighbors; j++)
-        {
-            int neighborIdx = neighbors[j];
-            T kDistNeighbor = kDistances[neighborIdx][_numNeighbors - 1];
-            T distToNeighbor = distances[j];
-
-            T reachDist = NumOps.GreaterThan(kDistNeighbor, distToNeighbor) ? kDistNeighbor : distToNeighbor;
-            reachabilitySum = NumOps.Add(reachabilitySum, reachDist);
-        }
-
-        T pointLrd = NumOps.GreaterThan(reachabilitySum, NumOps.Zero)
-            ? NumOps.Divide(NumOps.FromDouble(_numNeighbors), reachabilitySum)
-            : NumOps.MaxValue;
-
-        // Compute LOF
-        T lofSum = NumOps.Zero;
-        for (int j = 0; j < _numNeighbors; j++)
-        {
-            int neighborIdx = neighbors[j];
-            T neighborLrd = lrd[neighborIdx];
-
-            lofSum = NumOps.GreaterThan(pointLrd, NumOps.Zero)
-                ? NumOps.Add(lofSum, NumOps.Divide(neighborLrd, pointLrd))
-                : lofSum;
-        }
-
-        return NumOps.Divide(lofSum, NumOps.FromDouble(_numNeighbors));
+        var engine = Engine;
+        int m = distances.Shape[0];
+        var reachDist = engine.TensorMax(AnomalyTensorOps.GatherByIndex(referenceKDistances, neighbors), distances);
+        var reachabilitySum = engine.ReduceSum(reachDist, new[] { 1 }, false);
+        var lrd = engine.TensorDivide(
+            engine.Fill(m, NumOps.FromDouble(_numNeighbors)).AsTensor(), reachabilitySum);
+        return engine.TensorWhere(engine.TensorGreaterThan(reachabilitySum, NumOps.Zero), lrd, engine.Fill(m, NumOps.MaxValue).AsTensor());
     }
 }

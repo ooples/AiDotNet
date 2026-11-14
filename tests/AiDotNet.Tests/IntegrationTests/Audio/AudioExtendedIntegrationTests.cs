@@ -638,6 +638,32 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(LocalizationAlgorithm.MUSIC, options.Algorithm);
     }
 
+    /// <summary>
+    /// GCC-PHAT reference: when channel 2 is channel 1 delayed by d samples, the cross-correlation
+    /// sum_n x1[n + k] x2[n] peaks at lag k = -d, so the TDOA (t1 - t2) is -d / sampleRate. The
+    /// inverse FFT puts zero lag at index 0; it must be rotated to the center index before reading it.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task SoundLocalizer_EstimateTdoa_RecoversKnownDelay()
+    {
+        await Task.Yield();
+        const int length = 1024;
+        const int delay = 5;
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(17);
+        var first = new double[length];
+        for (int i = 0; i < length; i++)
+            first[i] = rng.NextDouble() * 2.0 - 1.0;
+        var second = new double[length];
+        Array.Copy(first, 0, second, delay, length - delay);
+
+        var localizer = new SoundLocalizer<double>(new double[,] { { 0, 0, 0 }, { 0.1, 0, 0 } });
+        double tdoa = localizer.EstimateTdoa(
+            new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(first, [length]),
+            new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(second, [length]));
+
+        Assert.Equal(-delay / 16000.0, tdoa, 12);
+    }
+
     #endregion
 
     #region ChordSegment
@@ -645,7 +671,7 @@ public class AudioExtendedIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ChordSegment_DefaultValues()
     {
-        var segment = new ChordSegment();
+        var segment = new AiDotNet.Audio.MusicAnalysis.ChordSegment<double>();
         Assert.Equal(string.Empty, segment.Name);
         Assert.Equal(0.0, segment.StartTime, Tolerance);
         Assert.Equal(0.0, segment.EndTime, Tolerance);
@@ -655,7 +681,7 @@ public class AudioExtendedIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ChordSegment_Duration_Computed()
     {
-        var segment = new ChordSegment
+        var segment = new AiDotNet.Audio.MusicAnalysis.ChordSegment<double>
         {
             Name = "Am",
             StartTime = 1.0,
@@ -668,56 +694,8 @@ public class AudioExtendedIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ChordSegment_ZeroDuration()
     {
-        var segment = new ChordSegment { StartTime = 2.0, EndTime = 2.0 };
+        var segment = new AiDotNet.Audio.MusicAnalysis.ChordSegment<double> { StartTime = 2.0, EndTime = 2.0 };
         Assert.Equal(0.0, segment.Duration, Tolerance);
-    }
-
-    #endregion
-
-    #region BeatTrackingResult
-
-    [Fact(Timeout = 120000)]
-    public async Task BeatTrackingResult_DefaultValues()
-    {
-        var result = new BeatTrackingResult();
-        Assert.Equal(0.0, result.Tempo, Tolerance);
-        Assert.NotNull(result.BeatTimes);
-        Assert.Empty(result.BeatTimes);
-        Assert.Equal(0.0, result.ConfidenceScore, Tolerance);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task BeatTrackingResult_AverageBeatInterval_120BPM()
-    {
-        var result = new BeatTrackingResult { Tempo = 120.0 };
-        Assert.Equal(0.5, result.AverageBeatInterval, Tolerance); // 60/120 = 0.5s
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task BeatTrackingResult_AverageBeatInterval_60BPM()
-    {
-        var result = new BeatTrackingResult { Tempo = 60.0 };
-        Assert.Equal(1.0, result.AverageBeatInterval, Tolerance); // 60/60 = 1s
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task BeatTrackingResult_AverageBeatInterval_ZeroTempo()
-    {
-        var result = new BeatTrackingResult { Tempo = 0.0 };
-        Assert.Equal(0.0, result.AverageBeatInterval, Tolerance);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task BeatTrackingResult_WithBeatTimes()
-    {
-        var result = new BeatTrackingResult
-        {
-            Tempo = 120.0,
-            BeatTimes = [0.0, 0.5, 1.0, 1.5, 2.0],
-            ConfidenceScore = 0.95
-        };
-        Assert.Equal(5, result.BeatTimes.Count);
-        Assert.Equal(0.95, result.ConfidenceScore, Tolerance);
     }
 
     #endregion
@@ -727,7 +705,7 @@ public class AudioExtendedIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task KeyDetectionResult_DefaultValues()
     {
-        var result = new KeyDetectionResult();
+        var result = new AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<double>();
         Assert.Equal(0, result.KeyIndex);
         Assert.Equal(string.Empty, result.Name);
         Assert.Equal(string.Empty, result.RootNote);
@@ -740,7 +718,7 @@ public class AudioExtendedIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task KeyDetectionResult_SetProperties()
     {
-        var result = new KeyDetectionResult
+        var result = new AiDotNet.Audio.MusicAnalysis.KeyDetectionResult<double>
         {
             KeyIndex = 9,
             Name = "A minor",

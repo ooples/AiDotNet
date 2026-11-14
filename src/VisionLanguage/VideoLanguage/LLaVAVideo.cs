@@ -171,29 +171,7 @@ public partial class LLaVAVideo<T> : VisionLanguageModelBase<T>, IVideoLanguageM
 
         // Step 3: Instruction-conditioned visual-text cross-attention
         // 2-layer MLP cross-modal connector (Linear -> GELU -> Linear)
-        var projected = new double[visLen];
-        for (int v = 0; v < visLen; v++)
-        {
-            double x = NumOps.ToDouble(encoderOut[v]);
-            double h = x * 0.8;
-            double gelu =
-                h * 0.5 * (1.0 + Math.Tanh(Math.Sqrt(2.0 / Math.PI) * (h + 0.044715 * h * h * h)));
-            projected[v] = gelu * 0.7 + x * 0.15;
-        }
-        var decoderInput = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            double visVal = projected[d % visLen];
-            double textEmb = 0;
-            if (promptTokens is not null && promptLen > 0)
-            {
-                double tokVal = NumOps.ToDouble(promptTokens[d % promptLen]) / _options.VocabSize;
-                double gate = 1.0 / (1.0 + Math.Exp(-tokVal * 5.0));
-                visVal *= (0.5 + gate);
-                textEmb = tokVal * 0.3;
-            }
-            decoderInput[d] = NumOps.FromDouble(visVal + textEmb);
-        }
+        var decoderInput = GatedConnectorInput(encoderOut, promptTokens, dim, _options.VocabSize);
 
         // Step 4: LLM decoder
         var output = decoderInput;
@@ -227,69 +205,39 @@ public partial class LLaVAVideo<T> : VisionLanguageModelBase<T>, IVideoLanguageM
 
         // Step 2: Compute inter-frame similarity for importance weighting
         // Frames that differ from their neighbors are more informative (scene changes, actions)
-        var frameWeights = new double[count];
-        for (int f = 0; f < count; f++)
+        var engine = Engine;
+        var stacked = StackLeading(frameFeatures, count, dim);
+        Tensor<T> frameWeights;
+        if (count == 1)
         {
-            double dissimilarity = 0;
-            int neighborCount = 0;
-
-            // Compare with previous frame
-            if (f > 0)
-            {
-                double sim = 0;
-                for (int d = 0; d < dim; d++)
-                {
-                    double diff =
-                        NumOps.ToDouble(frameFeatures[f][d])
-                        - NumOps.ToDouble(frameFeatures[f - 1][d]);
-                    sim += diff * diff;
-                }
-                dissimilarity += Math.Sqrt(sim / dim);
-                neighborCount++;
-            }
-
-            // Compare with next frame
-            if (f < count - 1)
-            {
-                double sim = 0;
-                for (int d = 0; d < dim; d++)
-                {
-                    double diff =
-                        NumOps.ToDouble(frameFeatures[f][d])
-                        - NumOps.ToDouble(frameFeatures[f + 1][d]);
-                    sim += diff * diff;
-                }
-                dissimilarity += Math.Sqrt(sim / dim);
-                neighborCount++;
-            }
-
-            // Higher dissimilarity = more important frame (scene boundaries, actions)
-            frameWeights[f] = neighborCount > 0 ? dissimilarity / neighborCount : 1.0;
+            frameWeights = Tensor<T>.CreateDefault([1], NumOps.One);
+        }
+        else
+        {
+            // rms[f] = sqrt(mean_d (x[f] - x[f + 1])^2) between consecutive frames.
+            var diff = engine.TensorSubtract(
+                engine.TensorSlice(stacked, [0, 0], [count - 1, dim]), engine.TensorSlice(stacked, [1, 0], [count - 1, dim]));
+            var rms = engine.TensorSqrt(engine.TensorMultiplyScalar(
+                engine.ReduceSum(engine.TensorMultiply(diff, diff), [1], false), NumOps.FromDouble(1.0 / dim)));
+            // Each frame averages its distance to the previous and the next frame.
+            var zero = new Tensor<T>([1]);
+            var one = Tensor<T>.CreateDefault([1], NumOps.One);
+            var ones = Tensor<T>.CreateDefault([count - 1], NumOps.One);
+            var dissimilarity = engine.TensorAdd(
+                engine.TensorConcatenate([zero, rms], 0), engine.TensorConcatenate([rms, zero], 0));
+            var neighborCount = engine.TensorAdd(
+                engine.TensorConcatenate([zero, ones], 0), engine.TensorConcatenate([ones, zero], 0));
+            frameWeights = engine.TensorDivide(dissimilarity, neighborCount);
         }
 
-        // Softmax normalization of weights
-        double maxWeight = double.MinValue;
-        for (int f = 0; f < count; f++)
-            if (frameWeights[f] > maxWeight)
-                maxWeight = frameWeights[f];
-        double weightSum = 0;
-        for (int f = 0; f < count; f++)
-        {
-            frameWeights[f] = Math.Exp(frameWeights[f] - maxWeight);
-            weightSum += frameWeights[f];
-        }
-        for (int f = 0; f < count; f++)
-            frameWeights[f] /= weightSum;
+        // Softmax normalization of weights (NaN weights are skipped when finding the max).
+        var negInf = Tensor<T>.CreateDefault([count], NumOps.FromDouble(double.NegativeInfinity));
+        T maxWeight = engine.TensorMaxValue(engine.TensorWhere(engine.TensorIsNan(frameWeights), negInf, frameWeights));
+        frameWeights = engine.TensorExp(engine.TensorSubtractScalar(frameWeights, maxWeight));
+        frameWeights = engine.TensorDivideScalar(frameWeights, engine.TensorSum(frameWeights));
 
         // Step 3: Weighted temporal pooling
-        var pooled = new Tensor<T>([dim]);
-        for (int d = 0; d < dim; d++)
-        {
-            double sum = 0;
-            for (int f = 0; f < count; f++)
-                sum += NumOps.ToDouble(frameFeatures[f][d]) * frameWeights[f];
-            pooled[d] = NumOps.FromDouble(sum);
-        }
+        var pooled = engine.TensorMatMul(frameWeights.Reshape([1, count]), stacked).Reshape([dim]);
 
         // Step 4: Decode through LLM layers
         var output = pooled;
@@ -358,10 +306,7 @@ public partial class LLaVAVideo<T> : VisionLanguageModelBase<T>, IVideoLanguageM
             throw new InvalidOperationException("Tokenizer not initialized.");
         var encoding = _tokenizer.Encode(text);
         int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
-        var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++)
-            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
-        return tokens;
+        return TokenIdsToTensor(encoding.TokenIds, seqLen);
     }
 
     /// <inheritdoc />

@@ -551,17 +551,7 @@ public partial class ETSformer<T> : ForecastingModelBase<T>
     {
         var metrics = new Dictionary<string, T>();
 
-        T mse = NumOps.Zero;
-        T mae = NumOps.Zero;
-        int count = 0;
-
-        for (int i = 0; i < predictions.Length && i < actuals.Length; i++)
-        {
-            var diff = NumOps.Subtract(predictions[i], actuals[i]);
-            mse = NumOps.Add(mse, NumOps.Multiply(diff, diff));
-            mae = NumOps.Add(mae, NumOps.Abs(diff));
-            count++;
-        }
+        var (mse, mae, count) = SumSquaredAndAbsoluteError(predictions, actuals);
 
         if (count > 0)
         {
@@ -588,46 +578,22 @@ public partial class ETSformer<T> : ForecastingModelBase<T>
         int seqLen = input.Shape[1];
         int features = input.Shape[2];
 
-        _instanceMean = new Tensor<T>(new[] { batchSize, 1, features });
-        _instanceStd = new Tensor<T>(new[] { batchSize, 1, features });
-        var normalized = new Tensor<T>(input._shape);
-
         var epsilon = NumOps.FromDouble(1e-5);
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
 
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int f = 0; f < features; f++)
-            {
-                // Calculate mean
-                T sum = NumOps.Zero;
-                for (int t = 0; t < seqLen; t++)
-                {
-                    sum = NumOps.Add(sum, input[b, t, f]);
-                }
-                T mean = NumOps.Divide(sum, NumOps.FromDouble(seqLen));
-                _instanceMean[b, 0, f] = mean;
+        // Per (batch, feature) statistics over time: mean, then sqrt(population variance + eps).
+        T count = NumOps.FromDouble(seqLen);
+        var shape = new[] { batchSize, seqLen, features };
+        var x = Engine.Reshape(input.Contiguous(), shape);
+        var mean = Engine.TensorDivideScalar(Engine.ReduceSum(x, new[] { 1 }, true), count);
+        var centered = Engine.TensorSubtract(x, Engine.TensorBroadcastTo(mean, shape));
+        var variance = Engine.TensorDivideScalar(
+            Engine.ReduceSum(Engine.TensorMultiply(centered, centered), new[] { 1 }, true), count);
+        var std = Engine.TensorSqrt(Engine.TensorAddScalar(variance, epsilon));
+        _instanceMean = mean;
+        _instanceStd = std;
 
-                // Calculate std
-                T sumSq = NumOps.Zero;
-                for (int t = 0; t < seqLen; t++)
-                {
-                    T diff = NumOps.Subtract(input[b, t, f], mean);
-                    sumSq = NumOps.Add(sumSq, NumOps.Multiply(diff, diff));
-                }
-                T variance = NumOps.Divide(sumSq, NumOps.FromDouble(seqLen));
-                T std = NumOps.Sqrt(NumOps.Add(variance, epsilon));
-                _instanceStd[b, 0, f] = std;
-
-                // Normalize
-                for (int t = 0; t < seqLen; t++)
-                {
-                    T centered = NumOps.Subtract(input[b, t, f], mean);
-                    normalized[b, t, f] = NumOps.Divide(centered, std);
-                }
-            }
-        }
-
-        return normalized;
+        return Engine.Reshape(Engine.TensorDivide(centered, Engine.TensorBroadcastTo(std, shape)), input._shape);
     }
 
     /// <inheritdoc/>
@@ -806,6 +772,23 @@ public partial class ETSformer<T> : ForecastingModelBase<T>
 
         var newInput = new Tensor<T>(input._shape);
 
+        int keepLen = seqLen - stepsUsed;
+        if (input.Rank == 3 && stepsUsed >= 0 && keepLen >= 0 && batchSize > 0 && features > 0
+            && prediction.Rank == 3 && prediction.Shape[0] >= batchSize && prediction.Shape[1] >= stepsUsed
+            && prediction.Shape[2] >= features)
+        {
+            // Window = the last keepLen input steps followed by the first stepsUsed predictions (detached).
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var parts = new List<Tensor<T>>(2);
+            if (keepLen > 0)
+                parts.Add(Engine.TensorSlice(input, new[] { 0, stepsUsed, 0 }, new[] { batchSize, keepLen, features }));
+            if (stepsUsed > 0)
+                parts.Add(Engine.TensorSlice(prediction, new[] { 0, 0, 0 }, new[] { batchSize, stepsUsed, features }));
+            if (parts.Count == 0)
+                return newInput;
+            return parts.Count == 1 ? parts[0].Contiguous() : Engine.TensorConcatenate(parts.ToArray(), 1);
+        }
+
         for (int b = 0; b < batchSize; b++)
         {
             // Shift old data
@@ -847,6 +830,26 @@ public partial class ETSformer<T> : ForecastingModelBase<T>
             return new Tensor<T>(new[] { 1, steps, _numFeatures });
 
         int batchSize = predictions[0].Shape[0];
+        if (batchSize > 0 && _numFeatures > 0 && steps > 0
+            && predictions.TrueForAll(p => p.Rank == 3 && p.Shape[0] >= batchSize && p.Shape[2] >= _numFeatures))
+        {
+            // The leading steps of each prediction in order, zero-padded to the requested length (detached).
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var parts = new List<Tensor<T>>();
+            int filled = 0;
+            foreach (var pred in predictions)
+            {
+                int take = Math.Min(pred.Shape[1], steps - filled);
+                if (take <= 0)
+                    continue;
+                parts.Add(Engine.TensorSlice(pred, new[] { 0, 0, 0 }, new[] { batchSize, take, _numFeatures }));
+                filled += take;
+            }
+            if (filled < steps)
+                parts.Add(new Tensor<T>(new[] { batchSize, steps - filled, _numFeatures }));
+            return parts.Count == 1 ? parts[0].Contiguous() : Engine.TensorConcatenate(parts.ToArray(), 1);
+        }
+
         var result = new Tensor<T>(new[] { batchSize, steps, _numFeatures });
 
         int currentStep = 0;
@@ -884,10 +887,7 @@ public partial class ETSformer<T> : ForecastingModelBase<T>
     private float[] ConvertToFloatArray(Tensor<T> tensor)
     {
         var result = new float[tensor.Length];
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            result[i] = (float)NumOps.ToDouble(tensor.Data.Span[i]);
-        }
+        NumOps.ToFloatSpan(tensor.Data.Span.Slice(0, tensor.Length), result.AsSpan(0, tensor.Length));
         return result;
     }
 

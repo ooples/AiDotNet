@@ -190,7 +190,7 @@ public class FunctionalCausalDiscoveryTests
         await Task.Yield();
         int n = 600;
         var data = BuildLingamData(n, seed: 12345, candidateIsRoot: true);
-        double ratio = RCDAlgorithm<double>.ConfoundingRatio(data, n, candidate: 0, remaining: new[] { 0, 1, 2 });
+        double ratio = RCDAlgorithm<double>.ConfoundingRatio(new Matrix<double>(data), candidate: 0, remaining: new[] { 0, 1, 2 });
         Assert.True(ratio < 0.05,
             $"A clean root's confounding ratio must stay well under the 0.05 cutoff so the stop does " +
             $"not fire on identifiable data; got {ratio:F4}.");
@@ -202,7 +202,7 @@ public class FunctionalCausalDiscoveryTests
         await Task.Yield();
         int n = 600;
         var data = BuildLingamData(n, seed: 12345, candidateIsRoot: false);
-        double ratio = RCDAlgorithm<double>.ConfoundingRatio(data, n, candidate: 0, remaining: new[] { 0, 1, 2 });
+        double ratio = RCDAlgorithm<double>.ConfoundingRatio(new Matrix<double>(data), candidate: 0, remaining: new[] { 0, 1, 2 });
         Assert.True(ratio > 0.05,
             $"A candidate that is actually an effect must score above the 0.05 cutoff so the " +
             $"confounding stop fires (it was dead code before this calibration); got {ratio:F4}.");
@@ -284,7 +284,7 @@ public class FunctionalCausalDiscoveryTests
         double maxRatio = 0.0;
         for (int c = 0; c < 3; c++)
         {
-            double ratio = RCDAlgorithm<double>.ConfoundingRatio(data, n, candidate: c, remaining: new[] { 0, 1, 2 });
+            double ratio = RCDAlgorithm<double>.ConfoundingRatio(new Matrix<double>(data), candidate: c, remaining: new[] { 0, 1, 2 });
             if (ratio > cutoff) aboveCutoff++;
             if (ratio > maxRatio) maxRatio = ratio;
         }

@@ -415,7 +415,7 @@ public class ObjectDetectionMetrics<T> where T : struct
         // is a stable sort, so equal-confidence predictions keep their original order and the curve
         // is reproducible run to run.
         var ranked = new List<(int ImageIndex, BoundingBox<T> Box)>();
-        var scores = new List<double>();
+        var scores = new List<T>();
         for (int i = 0; i < predictions.Count; i++)
         {
             var image = predictions[i];
@@ -429,12 +429,13 @@ public class ObjectDetectionMetrics<T> where T : struct
                 if (detection is not null && detection.ClassId == classIndex && detection.Box is not null)
                 {
                     ranked.Add((i, detection.Box));
-                    scores.Add(_numOps.ToDouble(detection.Confidence));
+                    scores.Add(detection.Confidence);
                 }
             }
         }
 
-        var order = Enumerable.Range(0, ranked.Count).OrderByDescending(i => scores[i]).ToArray();
+        var confidenceComparer = Comparer<T>.Create(_numOps.Compare);
+        var order = Enumerable.Range(0, ranked.Count).OrderByDescending(i => scores[i], confidenceComparer).ToArray();
 
         return new PreparedClass(truthByImage, truthOffsets, ranked, order, groundTruthCount, maxTruthPerImage);
     }

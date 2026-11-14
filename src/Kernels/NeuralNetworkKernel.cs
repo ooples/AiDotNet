@@ -157,43 +157,38 @@ public class NeuralNetworkKernel<T> : IKernelFunction<T>
         if (x1.Length != x2.Length)
             throw new ArgumentException("Vectors must have the same length.");
 
-        // Compute norms squared with bias term
-        double norm1Sq = _biasVariance;
-        double norm2Sq = _biasVariance;
-        double dotProduct = _biasVariance;
+        // Compute norms squared with bias term: sigma_b^2 + sigma_w^2 * <x, y>
+        var engine = AiDotNetEngine.Current;
+        T biasVariance = _numOps.FromDouble(_biasVariance);
+        T weightVariance = _numOps.FromDouble(_weightVariance);
+        T norm1Sq = _numOps.Add(biasVariance, _numOps.Multiply(weightVariance, engine.DotProduct(x1, x1)));
+        T norm2Sq = _numOps.Add(biasVariance, _numOps.Multiply(weightVariance, engine.DotProduct(x2, x2)));
+        T dotProduct = _numOps.Add(biasVariance, _numOps.Multiply(weightVariance, engine.DotProduct(x1, x2)));
 
-        for (int i = 0; i < x1.Length; i++)
-        {
-            double v1 = _numOps.ToDouble(x1[i]);
-            double v2 = _numOps.ToDouble(x2[i]);
-
-            norm1Sq += _weightVariance * v1 * v1;
-            norm2Sq += _weightVariance * v2 * v2;
-            dotProduct += _weightVariance * v1 * v2;
-        }
-
-        double norm1 = Math.Sqrt(norm1Sq);
-        double norm2 = Math.Sqrt(norm2Sq);
+        T norm1 = _numOps.Sqrt(norm1Sq);
+        T norm2 = _numOps.Sqrt(norm2Sq);
 
         // Handle degenerate cases
-        if (norm1 < 1e-10 || norm2 < 1e-10)
+        T degenerateNorm = _numOps.FromDouble(1e-10);
+        if (_numOps.LessThan(norm1, degenerateNorm) || _numOps.LessThan(norm2, degenerateNorm))
         {
-            return _numOps.FromDouble(0.0);
+            return _numOps.Zero;
         }
 
         // Compute cosine of angle
-        double cosTheta = dotProduct / (norm1 * norm2);
+        T cosTheta = _numOps.Divide(dotProduct, _numOps.Multiply(norm1, norm2));
         // Clamp to valid range for arccos
-        cosTheta = Math.Max(-1.0, Math.Min(1.0, cosTheta));
+        cosTheta = MathHelper.Clamp(cosTheta, _numOps.FromDouble(-1.0), _numOps.One);
 
         // Compute arc-cosine kernel function
-        double theta = Math.Acos(cosTheta);
-        double jn = ComputeArcCosineFunction(theta, cosTheta);
+        T theta = MathHelper.ArcCos(cosTheta);
+        T jn = ComputeArcCosineFunction(theta, cosTheta);
 
         // Final kernel value
-        double result = (1.0 / Math.PI) * Math.Pow(norm1, _order) * Math.Pow(norm2, _order) * jn;
+        T order = _numOps.FromDouble(_order);
+        T scale = _numOps.Divide(_numOps.Multiply(_numOps.Power(norm1, order), _numOps.Power(norm2, order)), MathHelper.Pi<T>());
 
-        return _numOps.FromDouble(result);
+        return _numOps.Multiply(scale, jn);
     }
 
     /// <summary>
@@ -217,12 +212,20 @@ public class NeuralNetworkKernel<T> : IKernelFunction<T>
     ///   Corresponds to ReQU activation
     /// </para>
     /// </remarks>
-    private double ComputeArcCosineFunction(double theta, double cosTheta)
+    private T ComputeArcCosineFunction(T theta, T cosTheta)
     {
-        double sinTheta = Math.Sin(theta);
-        double piMinusTheta = Math.PI - theta;
+        return ArcCosineJ(_order, theta, cosTheta, _numOps);
+    }
 
-        switch (_order)
+    /// <summary>
+    /// The arc-cosine angular function J_n(theta) of Cho &amp; Saul (2009) for n = 0, 1, 2.
+    /// </summary>
+    internal static T ArcCosineJ(int order, T theta, T cosTheta, INumericOperations<T> numOps)
+    {
+        T sinTheta = MathHelper.Sin(theta);
+        T piMinusTheta = numOps.Subtract(MathHelper.Pi<T>(), theta);
+
+        switch (order)
         {
             case 0:
                 // J_0(θ) = π - θ
@@ -230,14 +233,16 @@ public class NeuralNetworkKernel<T> : IKernelFunction<T>
 
             case 1:
                 // J_1(θ) = sin(θ) + (π - θ)cos(θ)
-                return sinTheta + piMinusTheta * cosTheta;
+                return numOps.Add(sinTheta, numOps.Multiply(piMinusTheta, cosTheta));
 
             case 2:
                 // J_2(θ) = 3sin(θ)cos(θ) + (π - θ)(1 + 2cos²(θ))
-                return 3 * sinTheta * cosTheta + piMinusTheta * (1 + 2 * cosTheta * cosTheta);
+                T threeSinCos = numOps.Multiply(numOps.FromDouble(3), numOps.Multiply(sinTheta, cosTheta));
+                T onePlusTwoCosSquared = numOps.Add(numOps.One, numOps.Multiply(numOps.FromDouble(2), numOps.Multiply(cosTheta, cosTheta)));
+                return numOps.Add(threeSinCos, numOps.Multiply(piMinusTheta, onePlusTwoCosSquared));
 
             default:
-                throw new InvalidOperationException($"Order {_order} not supported.");
+                throw new InvalidOperationException($"Order {order} not supported.");
         }
     }
 
@@ -350,70 +355,70 @@ public class DeepNeuralNetworkKernel<T> : IKernelFunction<T>
         if (x1.Length != x2.Length)
             throw new ArgumentException("Vectors must have the same length.");
 
-        // Initialize with input norms
-        double K11 = _biasVariance;  // K(x1, x1)
-        double K22 = _biasVariance;  // K(x2, x2)
-        double K12 = _biasVariance;  // K(x1, x2)
+        // Initialize with input norms: sigma_b^2 + sigma_w^2 * <x, y>
+        var engine = AiDotNetEngine.Current;
+        T biasVariance = _numOps.FromDouble(_biasVariance);
+        T weightVariance = _numOps.FromDouble(_weightVariance);
+        T K11 = _numOps.Add(biasVariance, _numOps.Multiply(weightVariance, engine.DotProduct(x1, x1)));  // K(x1, x1)
+        T K22 = _numOps.Add(biasVariance, _numOps.Multiply(weightVariance, engine.DotProduct(x2, x2)));  // K(x2, x2)
+        T K12 = _numOps.Add(biasVariance, _numOps.Multiply(weightVariance, engine.DotProduct(x1, x2)));  // K(x1, x2)
 
-        for (int i = 0; i < x1.Length; i++)
-        {
-            double v1 = _numOps.ToDouble(x1[i]);
-            double v2 = _numOps.ToDouble(x2[i]);
-
-            K11 += _weightVariance * v1 * v1;
-            K22 += _weightVariance * v2 * v2;
-            K12 += _weightVariance * v1 * v2;
-        }
-
-        // Apply layers
+        // Apply layers; each layer is one step of the Cho & Saul (2009) recursion on (K11, K22, K12).
         for (int layer = 0; layer < _numLayers; layer++)
         {
-            double norm1 = Math.Sqrt(K11);
-            double norm2 = Math.Sqrt(K22);
-
-            if (norm1 < 1e-10 || norm2 < 1e-10)
+            if (!TryApplyLayer(ref K11, ref K22, ref K12, biasVariance, weightVariance))
             {
-                return _numOps.FromDouble(0.0);
+                return _numOps.Zero;
             }
-
-            double cosTheta = K12 / (norm1 * norm2);
-            cosTheta = Math.Max(-1.0, Math.Min(1.0, cosTheta));
-            double theta = Math.Acos(cosTheta);
-
-            double jn = ComputeJ(theta, cosTheta);
-            double scaleFactor = (1.0 / Math.PI) * Math.Pow(norm1, _order) * Math.Pow(norm2, _order);
-
-            // Update for next layer
-            // Self-kernels: K_n^(l)(x,x) = σ_b² + (σ_w² / π) * K^(l-1)(x,x)^n * J_n(0, 1)
-            // Fixed: removed extra scaleFactor and norm terms - K11^n = (norm1^2)^n = norm1^(2n)
-            double j0 = ComputeJ(0, 1.0); // J_n at θ=0 for self-kernel
-            double newK11 = _biasVariance + _weightVariance * j0 / Math.PI * Math.Pow(K11, _order);
-            double newK22 = _biasVariance + _weightVariance * j0 / Math.PI * Math.Pow(K22, _order);
-            // Cross-kernel: K_n^(l)(x,y) = σ_b² + (σ_w² / π) * ||x||^n * ||y||^n * J_n(θ)
-            double newK12 = _biasVariance + _weightVariance * scaleFactor * jn;
-
-            K11 = newK11;
-            K22 = newK22;
-            K12 = newK12;
         }
 
-        return _numOps.FromDouble(K12);
+        return K12;
+    }
+
+    /// <summary>
+    /// Advances (K11, K22, K12) by one arc-cosine layer. Returns false when a norm degenerates to zero.
+    /// </summary>
+    private bool TryApplyLayer(ref T K11, ref T K22, ref T K12, T biasVariance, T weightVariance)
+    {
+        T order = _numOps.FromDouble(_order);
+        T degenerateNorm = _numOps.FromDouble(1e-10);
+        T weightOverPi = _numOps.Divide(weightVariance, MathHelper.Pi<T>());
+
+        T norm1 = _numOps.Sqrt(K11);
+        T norm2 = _numOps.Sqrt(K22);
+
+        if (_numOps.LessThan(norm1, degenerateNorm) || _numOps.LessThan(norm2, degenerateNorm))
+        {
+            return false;
+        }
+
+        T cosTheta = _numOps.Divide(K12, _numOps.Multiply(norm1, norm2));
+        cosTheta = MathHelper.Clamp(cosTheta, _numOps.FromDouble(-1.0), _numOps.One);
+        T theta = MathHelper.ArcCos(cosTheta);
+
+        T jn = ComputeJ(theta, cosTheta);
+        T scaleFactor = _numOps.Divide(_numOps.Multiply(_numOps.Power(norm1, order), _numOps.Power(norm2, order)), MathHelper.Pi<T>());
+
+        // Update for next layer
+        // Self-kernels: K_n^(l)(x,x) = σ_b² + (σ_w² / π) * K^(l-1)(x,x)^n * J_n(0, 1)
+        // Fixed: removed extra scaleFactor and norm terms - K11^n = (norm1^2)^n = norm1^(2n)
+        T j0 = ComputeJ(_numOps.Zero, _numOps.One); // J_n at θ=0 for self-kernel
+        T newK11 = _numOps.Add(biasVariance, _numOps.Multiply(_numOps.Multiply(weightOverPi, j0), _numOps.Power(K11, order)));
+        T newK22 = _numOps.Add(biasVariance, _numOps.Multiply(_numOps.Multiply(weightOverPi, j0), _numOps.Power(K22, order)));
+        // Cross-kernel: K_n^(l)(x,y) = σ_b² + (σ_w² / π) * ||x||^n * ||y||^n * J_n(θ)
+        T newK12 = _numOps.Add(biasVariance, _numOps.Multiply(weightVariance, _numOps.Multiply(scaleFactor, jn)));
+
+        K11 = newK11;
+        K22 = newK22;
+        K12 = newK12;
+        return true;
     }
 
     /// <summary>
     /// Computes the arc-cosine function J_n(θ).
     /// </summary>
-    private double ComputeJ(double theta, double cosTheta)
+    private T ComputeJ(T theta, T cosTheta)
     {
-        double sinTheta = Math.Sin(theta);
-        double piMinusTheta = Math.PI - theta;
-
-        return _order switch
-        {
-            0 => piMinusTheta,
-            1 => sinTheta + piMinusTheta * cosTheta,
-            2 => 3 * sinTheta * cosTheta + piMinusTheta * (1 + 2 * cosTheta * cosTheta),
-            _ => throw new InvalidOperationException($"Order {_order} not supported.")
-        };
+        return NeuralNetworkKernel<T>.ArcCosineJ(_order, theta, cosTheta, _numOps);
     }
 }

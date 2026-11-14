@@ -100,24 +100,17 @@ public partial class DixonQTestDetector<T> : AnomalyDetectorBase<T>
 
         _nFeatures = X.Columns;
         _nSamples = X.Rows;
-        _minValues = new Vector<T>(_nFeatures);
-        _maxValues = new Vector<T>(_nFeatures);
-        _ranges = new Vector<T>(_nFeatures);
-        _secondMin = new Vector<T>(_nFeatures);
-        _secondMax = new Vector<T>(_nFeatures);
 
-        for (int j = 0; j < _nFeatures; j++)
-        {
-            var column = X.GetColumn(j);
-            var sorted = column.ToArray();
-            Array.Sort(sorted, (a, b) => NumOps.LessThan(a, b) ? -1 : (NumOps.GreaterThan(a, b) ? 1 : 0));
-
-            _minValues[j] = sorted[0];
-            _maxValues[j] = sorted[sorted.Length - 1];
-            _secondMin[j] = sorted[1];
-            _secondMax[j] = sorted[sorted.Length - 2];
-            _ranges[j] = NumOps.Subtract(_maxValues[j], _minValues[j]);
-        }
+        // Smallest, second smallest, second largest and largest value of each feature
+        var engine = Engine;
+        var (sorted, _) = engine.TensorSort(AnomalyTensorOps.ToTensor(X), 0, false);
+        var minValues = engine.TensorSliceAxis(sorted, 0, 0);
+        var maxValues = engine.TensorSliceAxis(sorted, 0, X.Rows - 1);
+        _minValues = minValues.ToVector();
+        _maxValues = maxValues.ToVector();
+        _secondMin = engine.TensorSliceAxis(sorted, 0, 1).ToVector();
+        _secondMax = engine.TensorSliceAxis(sorted, 0, X.Rows - 2).ToVector();
+        _ranges = engine.TensorSubtract(maxValues, minValues).ToVector();
 
         // Calculate scores for training data to set threshold
         var trainingScores = ScoreAnomaliesInternal(X);
@@ -148,64 +141,11 @@ public partial class DixonQTestDetector<T> : AnomalyDetectorBase<T>
         var secondMin = _secondMin ?? throw new InvalidOperationException("_secondMin has not been initialized.");
         var secondMax = _secondMax ?? throw new InvalidOperationException("_secondMax has not been initialized.");
 
-        var scores = new Vector<T>(X.Rows);
-
-        for (int i = 0; i < X.Rows; i++)
-        {
-            T maxQStatistic = NumOps.Zero;
-
-            for (int j = 0; j < X.Columns; j++)
-            {
-                // Skip features with zero range
-                if (NumOps.Equals(ranges[j], NumOps.Zero))
-                {
-                    continue;
-                }
-
-                // Classic Dixon's Q test:
-                // For minimum: Q = (x2 - x1) / (xn - x1)
-                // For maximum: Q = (xn - x(n-1)) / (xn - x1)
-                // For general points, compute how "extreme" they are using the same logic:
-                // If closer to min: Q = (x - min) / range compared to (x2 - min) / range
-                // If closer to max: Q = (max - x) / range compared to (max - x(n-1)) / range
-
-                T value = X[i, j];
-
-                T qStatistic;
-
-                // Dixon's Q measures how extreme a point is by comparing the gap
-                // between the suspect value and its nearest neighbor to the total range.
-                // For the max: Q = (max - secondMax) / range
-                // For the min: Q = (secondMin - min) / range
-                // General: points near/beyond extremes get high Q scores.
-
-                if (!NumOps.LessThan(value, secondMax[j]))
-                {
-                    // Point is at or beyond the high end of the distribution
-                    qStatistic = NumOps.Divide(NumOps.Subtract(value, secondMax[j]), ranges[j]);
-                }
-                else if (!NumOps.GreaterThan(value, secondMin[j]))
-                {
-                    // Point is at or beyond the low end of the distribution
-                    qStatistic = NumOps.Divide(NumOps.Subtract(secondMin[j], value), ranges[j]);
-                }
-                else
-                {
-                    // Point is in the interior (between secondMin and secondMax)
-                    // Not an outlier by Dixon's Q test
-                    qStatistic = NumOps.Zero;
-                }
-
-                if (NumOps.GreaterThan(qStatistic, maxQStatistic))
-                {
-                    maxQStatistic = qStatistic;
-                }
-            }
-
-            scores[i] = maxQStatistic;
-        }
-
-        return scores;
+        // Dixon's Q measures how extreme a point is by comparing the gap between the suspect value and
+        // its nearest neighbour to the total range: at or above the high end Q = (x - secondMax) / range,
+        // at or below the low end Q = (secondMin - x) / range, 0 in the interior. Zero-range features are
+        // skipped and the point's score is the largest Q across features.
+        return AnomalyTensorOps.MaxOutsideBand(X, secondMin.AsTensor(), secondMax.AsTensor(), ranges.AsTensor());
     }
 
     /// <inheritdoc/>
@@ -217,19 +157,10 @@ public partial class DixonQTestDetector<T> : AnomalyDetectorBase<T>
         EnsureFitted();
 
         var scores = ScoreAnomalies(X);
-        var predictions = new Vector<T>(scores.Length);
         double qCritical = GetQCritical(_nSamples);
-        T criticalT = NumOps.FromDouble(qCritical);
 
-        for (int i = 0; i < scores.Length; i++)
-        {
-            // Points with Q > Q critical are anomalies (-1), otherwise inliers (1)
-            predictions[i] = NumOps.GreaterThan(scores[i], criticalT)
-                ? NumOps.FromDouble(-1)
-                : NumOps.FromDouble(1);
-        }
-
-        return predictions;
+        // Points with Q > Q critical are anomalies (-1), otherwise inliers (1)
+        return AnomalyTensorOps.LabelsFromThreshold(scores, NumOps.FromDouble(qCritical));
     }
 
     /// <summary>

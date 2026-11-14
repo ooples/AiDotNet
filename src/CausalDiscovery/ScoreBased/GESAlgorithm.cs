@@ -152,23 +152,6 @@ public class GESAlgorithm<T> : ScoreBasedBase<T>
 
     private double ComputeRegCoef(Matrix<T> data, int from, int to)
     {
-        int n = data.Rows;
-        double meanX = 0, meanY = 0;
-        for (int i = 0; i < n; i++)
-        {
-            meanX += NumOps.ToDouble(data[i, from]);
-            meanY += NumOps.ToDouble(data[i, to]);
-        }
-        meanX /= n; meanY /= n;
-
-        double sxy = 0, sxx = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double dx = NumOps.ToDouble(data[i, from]) - meanX;
-            sxy += dx * (NumOps.ToDouble(data[i, to]) - meanY);
-            sxx += dx * dx;
-        }
-
-        return sxx > 1e-10 ? sxy / sxx : 0;
+        return NumOps.ToDouble(CausalTensorHelpers.RegressionSlope(data, from, to));
     }
 }

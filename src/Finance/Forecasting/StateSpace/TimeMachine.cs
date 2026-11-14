@@ -588,16 +588,7 @@ public partial class TimeMachine<T> : ForecastingModelBase<T>
         var metrics = new Dictionary<string, T>();
 
         // Calculate MSE
-        T mse = NumOps.Zero;
-        T mae = NumOps.Zero;
-        int count = Math.Min(predictions.Data.Length, actuals.Data.Length);
-
-        for (int i = 0; i < count; i++)
-        {
-            T diff = NumOps.Subtract(predictions.Data.Span[i], actuals.Data.Span[i]);
-            mse = NumOps.Add(mse, NumOps.Multiply(diff, diff));
-            mae = NumOps.Add(mae, NumOps.Abs(diff));
-        }
+        var (mse, mae, count) = SumSquaredAndAbsoluteError(predictions, actuals);
 
         mse = NumOps.Divide(mse, NumOps.FromDouble(count));
         mae = NumOps.Divide(mae, NumOps.FromDouble(count));
@@ -669,11 +660,8 @@ public partial class TimeMachine<T> : ForecastingModelBase<T>
 
             var channelMean = new Tensor<T>(new[] { rows, 1 });
             var channelStd = new Tensor<T>(new[] { rows, 1 });
-            for (int row = 0; row < rows; row++)
-            {
-                channelMean.Data.Span[row] = _revinMean[row];
-                channelStd.Data.Span[row] = _revinStd[row];
-            }
+            _revinMean.AsSpan().Slice(0, rows).CopyTo(channelMean.Data.Span);
+            _revinStd.AsSpan().Slice(0, rows).CopyTo(channelStd.Data.Span);
 
             var channelMajor = Engine.TensorPermute(forecast, new[] { 0, 2, 1 });
             var flat = Engine.Reshape(channelMajor, new[] { rows, horizon });
@@ -1035,10 +1023,7 @@ public partial class TimeMachine<T> : ForecastingModelBase<T>
 
         var flatInput = FlattenInput(input);
         var inputData = new float[flatInput.Data.Length];
-        for (int i = 0; i < flatInput.Data.Length; i++)
-        {
-            inputData[i] = Convert.ToSingle(flatInput.Data.Span[i]);
-        }
+        NumOps.ToFloatSpan(flatInput.Data.Span.Slice(0, flatInput.Data.Length), inputData.AsSpan(0, flatInput.Data.Length));
 
         var inputTensor = new OnnxTensors.DenseTensor<float>(
             inputData,
@@ -1053,10 +1038,7 @@ public partial class TimeMachine<T> : ForecastingModelBase<T>
         var outputTensor = results[0].AsTensor<float>();
 
         var output = new Tensor<T>(new[] { _forecastHorizon });
-        for (int i = 0; i < _forecastHorizon; i++)
-        {
-            output.Data.Span[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-        }
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span.Slice(0, _forecastHorizon), output.Data.Span.Slice(0, _forecastHorizon));
 
         return output;
     }
@@ -1084,10 +1066,7 @@ public partial class TimeMachine<T> : ForecastingModelBase<T>
         }
 
         var flattened = new Tensor<T>(new[] { totalSize });
-        for (int i = 0; i < totalSize; i++)
-        {
-            flattened.Data.Span[i] = input.Data.Span[i];
-        }
+        input.Data.Span.Slice(0, totalSize).CopyTo(flattened.Data.Span);
 
         return flattened;
     }
@@ -1119,6 +1098,31 @@ public partial class TimeMachine<T> : ForecastingModelBase<T>
         int lowerIdx = (int)(samples.Count * alpha / 2);
         int upperIdx = samples.Count - 1 - lowerIdx;
 
+        if (horizonLength > 0 && lowerIdx >= 0 && upperIdx >= 0 && lowerIdx < samples.Count && upperIdx < samples.Count)
+        {
+            // Stack the samples, average them, and read the sorted rows at the two interval indices.
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var rows = new Tensor<T>[samples.Count];
+            for (int s = 0; s < samples.Count; s++)
+                rows[s] = Engine.TensorNarrow(Engine.Reshape(samples[s].Contiguous(), new[] { samples[s].Length }), 0, 0, horizonLength);
+            var grid = Engine.TensorStack(rows, 0);
+            if (Engine.TensorCountNonzero(Engine.TensorIsNan(grid)) == 0)
+            {
+                // Any infinite mean (a T sum that overflowed, e.g. float samples near 1e38) takes the reference
+                // path, which accumulates in double: it keeps a finite mean finite and an infinite one infinite.
+                var meanForecast = Engine.TensorDivideScalar(Engine.ReduceSum(grid, new[] { 0 }, false), NumOps.FromDouble(samples.Count));
+                if (Engine.TensorCountNonzero(Engine.TensorIsInf(meanForecast)) == 0)
+                {
+                    var sorted = Engine.TensorSort(grid, 0, false).Values;
+                    return (
+                        meanForecast,
+                        Engine.Reshape(Engine.TensorNarrow(sorted, 0, lowerIdx, 1).Contiguous(), new[] { horizonLength }),
+                        Engine.Reshape(Engine.TensorNarrow(sorted, 0, upperIdx, 1).Contiguous(), new[] { horizonLength }));
+                }
+            }
+        }
+
+        // NaN samples (sorted first by the double ordering) or out-of-range indices: the reference path.
         for (int t = 0; t < horizonLength; t++)
         {
             var values = new List<double>();

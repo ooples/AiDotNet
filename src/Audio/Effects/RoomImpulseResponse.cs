@@ -244,14 +244,13 @@ public partial class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioE
     {
         ThrowIfDisposed();
         _streamingBuffer ??= [];
-        for (int i = 0; i < audioChunk.Length; i++) _streamingBuffer.Add(audioChunk[i]);
+        _streamingBuffer.AddRange(audioChunk.ToArray());
 
         int frameSize = _options.RIRLength;
         if (_streamingBuffer.Count < frameSize)
             return new Tensor<T>([0]);
 
-        var frame = new Tensor<T>([frameSize]);
-        for (int i = 0; i < frameSize; i++) frame[i] = _streamingBuffer[i];
+        var frame = new Tensor<T>(_streamingBuffer.GetRange(0, frameSize).ToArray(), [frameSize]);
         _streamingBuffer.RemoveRange(0, frameSize / 2);
         return Enhance(frame);
     }
@@ -267,12 +266,7 @@ public partial class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioE
     public void EstimateNoiseProfile(Tensor<T> noiseOnlyAudio)
     {
         // Compute mean energy as a simple noise floor estimate
-        T sum = NumOps.Zero;
-        for (int i = 0; i < noiseOnlyAudio.Length; i++)
-        {
-            T val = noiseOnlyAudio[i];
-            sum = NumOps.Add(sum, NumOps.Multiply(val, val));
-        }
+        T sum = noiseOnlyAudio.Length == 0 ? NumOps.Zero : AudioEngineOps.SumOfSquares(Engine, noiseOnlyAudio);
         _noiseFloor = NumOps.ToDouble(sum) / Math.Max(1, noiseOnlyAudio.Length);
     }
 
@@ -472,16 +466,16 @@ public partial class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioE
         int perItem = 1;
         for (int d = 1; d < input.Rank; d++) perItem *= input.Shape[d];
 
-        var stacked = new Tensor<T>([batch, _options.RIRLength]);
-        var item = new Tensor<T>([perItem]);
+        // Each item is a narrow view of the batch and the responses are stacked with engine ops, so a
+        // batched training step stays on the gradient tape (the element copies used to detach it).
+        var rows = Engine.Reshape(input, [batch, perItem]);
+        var responses = new Tensor<T>[batch];
         for (int b = 0; b < batch; b++)
         {
-            int itemOffset = b * perItem;
-            for (int n = 0; n < perItem; n++) item[n] = input[itemOffset + n];
-            var response = FiNSForwardSingle(item);
-            for (int n = 0; n < _options.RIRLength; n++) stacked[b, n] = response[n];
+            var item = Engine.Reshape(Engine.TensorNarrow(rows, 0, b, 1), [perItem]);
+            responses[b] = FiNSForwardSingle(item);
         }
-        return stacked;
+        return Engine.TensorStack(responses, 0);
     }
 
     /// <summary>Runs the FiNS graph for a single recording, returning a response of RIRLength.</summary>
@@ -766,24 +760,25 @@ public partial class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioE
 
     private Tensor<T> ApplyDereverberation(Tensor<T> audio, Tensor<T> estimatedRIR)
     {
-        // Simplified spectral dereverberation using estimated RIR
-        var output = new Tensor<T>([audio.Length]);
+        // Simplified spectral dereverberation using estimated RIR:
+        //   out[i] = clip(x[i] - strength * sum_{1 <= j < min(R, i)} rir[j] * x[i - j], -1, 1).
+        // The reverb term is a causal convolution of the RIR without its direct tap (j >= 1) with the
+        // signal without its first sample (j < i never reaches x[0]); it runs as one Conv1D over a
+        // left zero-padded signal with the flipped kernel.
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        int n = audio.Length, r = estimatedRIR.Length;
         double strength = EnhancementStrength;
-        for (int i = 0; i < audio.Length; i++)
+        var x = AudioEngineOps.Flatten(Engine, audio);
+        var dereverbed = x;
+        if (n > 1 && r > 1)
         {
-            double clean = NumOps.ToDouble(audio[i]);
-            // Subtract estimated reverb contribution
-            double reverbContrib = 0;
-            for (int j = 1; j < Math.Min(estimatedRIR.Length, i); j++)
-            {
-                double rirVal = NumOps.ToDouble(estimatedRIR[j]);
-                double audioVal = NumOps.ToDouble(audio[i - j]);
-                reverbContrib += rirVal * audioVal;
-            }
-            double dereverbed = clean - strength * reverbContrib;
-            output[i] = NumOps.FromDouble(Math.Max(-1.0, Math.Min(1.0, dereverbed)));
+            var signal = Engine.Concat([new Tensor<T>([r]), Engine.TensorSlice(x, [1], [n - 1])], 0);   // r-1 pad + x'[0] = 0
+            var tail = Engine.Concat([new Tensor<T>([1]), Engine.TensorSlice(AudioEngineOps.Flatten(Engine, estimatedRIR), [1], [r - 1])], 0);
+            var kernel = Engine.Reshape(Engine.TensorFlip(tail, [0]), [1, 1, r]);
+            var reverb = Engine.Reshape(Engine.Conv1D(Engine.Reshape(signal, [1, 1, n + r - 1]), kernel), [n]);
+            dereverbed = Engine.TensorSubtract(x, Engine.TensorMultiplyScalar(reverb, NumOps.FromDouble(strength)));
         }
-        return output;
+        return Engine.TensorClamp(dereverbed, NumOps.FromDouble(-1.0), NumOps.FromDouble(1.0));
     }
 
     #endregion

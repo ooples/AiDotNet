@@ -219,74 +219,59 @@ public partial class SEEDX<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<
 
         // Step 2: SEED de-tokenization to multi-granularity conditioning
         // 2a: Semantic conditioning (global composition)
+        var engine = Engine;
         int numSemantic = 32;
-        var semanticCond = new double[numSemantic];
-        for (int s = 0; s < numSemantic; s++)
-        {
-            double val = 0;
-            for (int h = 0; h < Math.Min(hiddenDim, 64); h++)
-                val +=
-                    NumOps.ToDouble(textHidden[h % hiddenDim]) * Math.Cos((s + 1.0) * (h + 1) * 0.01);
-            semanticCond[s] = val / 64.0;
-        }
+        // semanticCond[s] = sum_{h < min(hiddenDim, 64)} hidden[h] * cos((s + 1) * (h + 1) * 0.01) / 64
+        var semanticCond = WaveProjection(textHidden, numSemantic, Math.Min(hiddenDim, 64), 0.01, useCosine: true, divisor: 64.0);
 
         // 2b: Detail conditioning (local texture/color)
         int numDetail = 64;
-        var detailCond = new double[numDetail];
-        for (int d = 0; d < numDetail; d++)
-        {
-            double val = 0;
-            for (int h = 0; h < Math.Min(hiddenDim, 32); h++)
-                val +=
-                    NumOps.ToDouble(textHidden[h % hiddenDim])
-                    * Math.Sin((d + 1.0) * (h + 1) * 0.015);
-            detailCond[d] = val / 32.0;
-        }
+        // detailCond[d] = sum_{h < min(hiddenDim, 32)} hidden[h] * sin((d + 1) * (h + 1) * 0.015) / 32
+        var detailCond = WaveProjection(textHidden, numDetail, Math.Min(hiddenDim, 32), 0.015, useCosine: false, divisor: 32.0);
 
         // Step 3: SDXL-style diffusion generation conditioned on SEED tokens
-        var latent = new double[outPixels];
-        // Initialize from noise
-        for (int i = 0; i < outPixels; i++)
-            latent[i] = Math.Sin(i * 0.37 + 0.5) * 0.7;
+        // Initialize from the deterministic pattern sin(0.37 i + 0.5) * 0.7
+        var latent = engine.TensorMultiplyScalar(
+            engine.TensorSin(engine.TensorAddScalar(
+                engine.TensorMultiplyScalar(engine.TensorArange<T>(0, outPixels, 1), NumOps.FromDouble(0.37)),
+                NumOps.FromDouble(0.5))),
+            NumOps.FromDouble(0.7));
+
+        // Multi-granularity fusion: semantic for structure, detail for texture (step independent).
+        var fusedCond = engine.TensorAdd(
+            engine.TensorMultiplyScalar(CyclicTake(semanticCond, dim), NumOps.FromDouble(0.6)),
+            engine.TensorMultiplyScalar(CyclicTake(detailCond, dim), NumOps.FromDouble(0.4)));
 
         int numDiffSteps = 30;
+        // Per-step schedule: t = 1 - step / numDiffSteps, alpha = cos(t pi / 2), sigma = sin(t pi / 2).
+        var halfPiT = engine.TensorMultiplyScalar(
+            engine.ScalarMinusTensor(NumOps.One, engine.TensorDivideScalar(
+                engine.TensorArange<T>(0, numDiffSteps, 1), NumOps.FromDouble(numDiffSteps))),
+            NumOps.FromDouble(Math.PI / 2.0));
+        var alphas = engine.TensorCos(halfPiT);
+        var sigmas = engine.TensorSin(halfPiT);
+        var condScales = engine.TensorMultiplyScalar(sigmas, NumOps.FromDouble(0.2));
+        var safeAlphas = engine.TensorMax(alphas, NumOps.FromDouble(1e-8));
+
         for (int step = 0; step < numDiffSteps; step++)
         {
-            double t = 1.0 - (double)step / numDiffSteps;
-            double alpha = Math.Cos(t * Math.PI / 2.0);
-            double sigma = Math.Sin(t * Math.PI / 2.0);
 
-            // Build conditioning signal from multi-granularity tokens
-            var stepInput = new Tensor<T>([dim]);
-            for (int d = 0; d < dim; d++)
-            {
-                int latIdx = d % outPixels;
-                double noisy = latent[latIdx];
-                double semCond = semanticCond[d % numSemantic];
-                double detCond = detailCond[d % numDetail];
-                // Multi-granularity fusion: semantic for structure, detail for texture
-                double cond = semCond * 0.6 + detCond * 0.4;
-                stepInput[d] = NumOps.FromDouble(noisy * alpha + cond * sigma * 0.2);
-            }
+            // stepInput[d] = latent[d % outPixels] * alpha + cond[d] * sigma * 0.2
+            var stepInput = engine.TensorAdd(
+                engine.TensorMultiply(CyclicTake(latent, dim), Pick(alphas, step)),
+                engine.TensorMultiply(fusedCond, Pick(condScales, step)));
 
             var noisePred = stepInput;
             for (int i = _encoderLayerEnd; i < Layers.Count; i++)
                 noisePred = Layers[i].Forward(noisePred);
 
-            int predDim = noisePred.Length;
-            for (int i = 0; i < outPixels; i++)
-            {
-                double pred = NumOps.ToDouble(noisePred[i % predDim]);
-                latent[i] = (latent[i] - sigma * pred) / Math.Max(alpha, 1e-8);
-            }
+            // latent = (latent - sigma * pred[i % predDim]) / max(alpha, 1e-8)
+            latent = engine.TensorDivide(
+                engine.TensorSubtract(latent, engine.TensorMultiply(CyclicTake(noisePred, outPixels), Pick(sigmas, step))),
+                engine.TensorBroadcastTo(Pick(safeAlphas, step), [outPixels]));
         }
 
-        var result = new Tensor<T>([outPixels]);
-        for (int i = 0; i < outPixels; i++)
-        {
-            double v = 1.0 / (1.0 + Math.Exp(-latent[i]));
-            result[i] = NumOps.FromDouble(v);
-        }
+        var result = engine.TensorSigmoid(latent);
         return result;
     }
 
@@ -333,10 +318,7 @@ public partial class SEEDX<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<
             throw new InvalidOperationException("Tokenizer not initialized.");
         var encoding = _tokenizer.Encode(text);
         int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
-        var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++)
-            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
-        return tokens;
+        return TokenIdsToTensor(encoding.TokenIds, seqLen);
     }
 
     /// <inheritdoc />

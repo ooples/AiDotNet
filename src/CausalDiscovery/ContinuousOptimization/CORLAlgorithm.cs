@@ -106,6 +106,9 @@ public class CORLAlgorithm<T> : ContinuousOptimizationBase<T>
         // Compute sample covariance using base class utility
         var S = ComputeCovarianceMatrix(data);
 
+        // One tensor copy of the data shared by every candidate regression.
+        var source = Tensor<T>.FromMatrix(data);
+
         // Initialize position scores: scores[i,j] = preference for variable i at position j
         var scores = new Matrix<T>(d, d);
         var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(_seed);
@@ -122,7 +125,7 @@ public class CORLAlgorithm<T> : ContinuousOptimizationBase<T>
 
             // Compute the DAG from this ordering and get BIC reward
             // Use the same maxParents and threshold as BuildDAGFromOrdering
-            double reward = ComputeOrderingReward(data, ordering, d, n, S);
+            double reward = ComputeOrderingReward(source, ordering, d, n, S);
 
             // Update baseline (running average)
             validEpisodes++;
@@ -137,44 +140,11 @@ public class CORLAlgorithm<T> : ContinuousOptimizationBase<T>
 
             // REINFORCE gradient matching the masked sampling in SampleOrdering:
             // At each position, only available (not-yet-chosen) variables participate in softmax.
-            T advantage = NumOps.FromDouble(reward - baselineReward);
-            T lr = NumOps.FromDouble(_learningRate);
-            var availableSet = new HashSet<int>(Enumerable.Range(0, d));
-            for (int pos = 0; pos < d; pos++)
-            {
-                int chosenVar = ordering[pos];
-                var available = availableSet.ToList();
-
-                // Compute softmax only over available variables (matching SampleOrdering)
-                double maxLogit = double.NegativeInfinity;
-                foreach (int v in available)
-                    maxLogit = Math.Max(maxLogit, NumOps.ToDouble(scores[v, pos]));
-                double sumExp = 0;
-                var probs = new Dictionary<int, double>();
-                foreach (int v in available)
-                {
-                    double p = Math.Exp(NumOps.ToDouble(scores[v, pos]) - maxLogit);
-                    probs[v] = p;
-                    sumExp += p;
-                }
-                foreach (int v in available)
-                    probs[v] /= sumExp;
-
-                // REINFORCE: update = lr * advantage * grad_log_pi
-                // grad_log_pi[chosen] = 1 - p(chosen), grad_log_pi[other] = -p(other)
-                foreach (int v in available)
-                {
-                    double gradLogPi = (v == chosenVar) ? (1.0 - probs[v]) : (-probs[v]);
-                    T update = NumOps.Multiply(lr, NumOps.Multiply(advantage, NumOps.FromDouble(gradLogPi)));
-                    scores[v, pos] = NumOps.Add(scores[v, pos], update);
-                }
-
-                availableSet.Remove(chosenVar);
-            }
+            ApplyReinforceUpdate(scores, ordering, d, reward - baselineReward);
         }
 
         // Build the DAG from the best ordering using the SAME criteria used in scoring
-        return BuildDAGFromOrdering(data, bestOrdering, d, n, S);
+        return BuildDAGFromOrdering(source, bestOrdering, d, n, S);
     }
 
     /// <summary>
@@ -188,34 +158,9 @@ public class CORLAlgorithm<T> : ContinuousOptimizationBase<T>
         for (int pos = 0; pos < d; pos++)
         {
             // Softmax over available variables for this position
-            var logits = new double[available.Count];
-            double maxLogit = double.NegativeInfinity;
-            for (int i = 0; i < available.Count; i++)
-            {
-                logits[i] = NumOps.ToDouble(scores[available[i], pos]);
-                maxLogit = Math.Max(maxLogit, logits[i]);
-            }
-
-            double sumExp = 0;
-            for (int i = 0; i < available.Count; i++)
-            {
-                logits[i] = Math.Exp(logits[i] - maxLogit);
-                sumExp += logits[i];
-            }
-
-            // Sample from softmax
-            double u = rng.NextDouble() * sumExp;
-            double cumSum = 0;
-            int chosen = 0;
-            for (int i = 0; i < available.Count; i++)
-            {
-                cumSum += logits[i];
-                if (cumSum >= u)
-                {
-                    chosen = i;
-                    break;
-                }
-            }
+            var logits = Engine.TensorIndexSelect(Engine.GetColumn(scores, pos).AsTensor(),
+                new Tensor<int>(available.ToArray(), new[] { available.Count }), 0);
+            int chosen = SampleSoftmaxIndex(logits, rng);
 
             ordering[pos] = available[chosen];
             available.RemoveAt(chosen);
@@ -225,16 +170,70 @@ public class CORLAlgorithm<T> : ContinuousOptimizationBase<T>
     }
 
     /// <summary>
+    /// Draws an index with probability proportional to exp(logit - max logit): the first index whose
+    /// cumulative weight reaches u * total, u uniform in [0, 1); index 0 when none does.
+    /// </summary>
+    private int SampleSoftmaxIndex(Tensor<T> logits, Random rng)
+    {
+        int count = logits.Length;
+        T maxLogit = Engine.TensorMaxValue(logits);
+        var weights = Engine.TensorExp(Engine.TensorSubtract(logits, Engine.TensorFullLike(logits, maxLogit)));
+        var cumulative = Engine.TensorCumSum(weights, 0);
+        T sumExp = Engine.TensorSum(Engine.TensorSlice(cumulative, new[] { count - 1 }, new[] { 1 }));
+
+        // Sample from softmax
+        T u = NumOps.Multiply(NumOps.FromDouble(rng.NextDouble()), sumExp);
+        int chosen = Engine.TensorCountNonzero(Engine.TensorLessThan(cumulative, Engine.TensorFullLike(cumulative, u)));
+        return chosen < count ? chosen : 0;
+    }
+
+    /// <summary>
+    /// REINFORCE update of the position scores for one sampled ordering:
+    /// scores[v, pos] += lr * advantage * grad_log_pi(v) over the variables still available at pos,
+    /// with grad_log_pi[chosen] = 1 - p(chosen) and grad_log_pi[other] = -p(other).
+    /// </summary>
+    private void ApplyReinforceUpdate(Matrix<T> scores, int[] ordering, int d, double advantageValue)
+    {
+        T advantage = NumOps.FromDouble(advantageValue);
+        T lr = NumOps.FromDouble(_learningRate);
+        var availableSet = new HashSet<int>(Enumerable.Range(0, d));
+        for (int pos = 0; pos < d; pos++)
+        {
+            int chosenVar = ordering[pos];
+            var available = availableSet.OrderBy(v => v).ToArray();
+            var availableIndex = new Tensor<int>(available, new[] { available.Length });
+            var column = Engine.GetColumn(scores, pos).AsTensor();
+
+            // Compute softmax only over available variables (matching SampleOrdering)
+            var logits = Engine.TensorIndexSelect(column, availableIndex, 0);
+            T maxLogit = Engine.TensorMaxValue(logits);
+            var expLogits = Engine.TensorExp(Engine.TensorSubtract(logits, Engine.TensorFullLike(logits, maxLogit)));
+            var probs = Engine.TensorDivideScalar(expLogits, Engine.TensorSum(expLogits));
+
+            var isChosen = new bool[available.Length];
+            isChosen[Array.IndexOf(available, chosenVar)] = true;
+            var gradLogPi = Engine.TensorSubtract(
+                Engine.TensorWhere(isChosen, Engine.TensorOnesLike(probs), Engine.TensorZerosLike(probs)), probs);
+            var update = Engine.TensorMultiplyScalar(Engine.TensorMultiplyScalar(gradLogPi, advantage), lr);
+
+            var updated = Engine.TensorIndexAdd(column, 0, availableIndex, update);
+            Engine.SetColumn(scores, pos, updated.ToVector());
+
+            availableSet.Remove(chosenVar);
+        }
+    }
+
+    /// <summary>
     /// Selects parents for a target from predecessors in the ordering using BIC-based forward selection.
     /// </summary>
-    private List<int> SelectParentsBIC(Matrix<T> data, int target, int[] ordering, int idx, int n)
+    private List<int> SelectParentsBIC(Tensor<T> source, int target, int[] ordering, int idx, int n)
     {
         var parents = new List<int>();
         var candidates = new List<int>();
         for (int predIdx = 0; predIdx < idx; predIdx++)
             candidates.Add(ordering[predIdx]);
 
-        double bestBIC = ComputeBICForParents(data, target, parents, n);
+        double bestBIC = ComputeBICForParents(source, target, parents, n);
 
         // Greedy forward selection up to _maxParents
         while (parents.Count < _maxParents && candidates.Count > 0)
@@ -245,7 +244,7 @@ public class CORLAlgorithm<T> : ContinuousOptimizationBase<T>
             foreach (int c in candidates)
             {
                 var trial = new List<int>(parents) { c };
-                double trialBIC = ComputeBICForParents(data, target, trial, n);
+                double trialBIC = ComputeBICForParents(source, target, trial, n);
                 if (trialBIC > bestCandidateBIC)
                 {
                     bestCandidateBIC = trialBIC;
@@ -265,9 +264,9 @@ public class CORLAlgorithm<T> : ContinuousOptimizationBase<T>
     /// <summary>
     /// Computes BIC score for a target with given parents using multivariate OLS.
     /// </summary>
-    private double ComputeBICForParents(Matrix<T> data, int target, List<int> parents, int n)
+    private double ComputeBICForParents(Tensor<T> source, int target, List<int> parents, int n)
     {
-        double rss = ComputeRSS(data, target, parents, n);
+        double rss = ComputeRSS(source, target, parents, n);
         int k = parents.Count + 1; // +1 for intercept
         return -n * Math.Log(rss / n + 1e-10) - k * Math.Log(n);
     }
@@ -276,14 +275,14 @@ public class CORLAlgorithm<T> : ContinuousOptimizationBase<T>
     /// Computes the total BIC reward for a given ordering.
     /// Uses the same parent selection as BuildDAGFromOrdering.
     /// </summary>
-    private double ComputeOrderingReward(Matrix<T> data, int[] ordering, int d, int n, Matrix<T> S)
+    private double ComputeOrderingReward(Tensor<T> source, int[] ordering, int d, int n, Matrix<T> S)
     {
         double totalBIC = 0;
         for (int idx = 0; idx < d; idx++)
         {
             int target = ordering[idx];
-            var parents = SelectParentsBIC(data, target, ordering, idx, n);
-            double rss = ComputeRSS(data, target, parents, n);
+            var parents = SelectParentsBIC(source, target, ordering, idx, n);
+            double rss = ComputeRSS(source, target, parents, n);
             double bic = -n * Math.Log(rss / n + 1e-10) - (parents.Count + 1) * Math.Log(n);
             totalBIC += bic;
         }
@@ -293,136 +292,44 @@ public class CORLAlgorithm<T> : ContinuousOptimizationBase<T>
     /// <summary>
     /// Computes residual sum of squares for target given parents via multivariate OLS.
     /// </summary>
-    private double ComputeRSS(Matrix<T> data, int target, List<int> parents, int n)
+    private double ComputeRSS(Tensor<T> source, int target, List<int> parents, int n)
     {
-        // Compute target mean
-        double meanT = 0;
-        for (int i = 0; i < n; i++)
-            meanT += NumOps.ToDouble(data[i, target]);
-        meanT /= n;
-
         if (parents.Count == 0)
         {
-            double rss = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double e = NumOps.ToDouble(data[i, target]) - meanT;
-                rss += e * e;
-            }
-            return rss;
+            // Residuals around the target mean
+            var y = Engine.TensorSliceAxis(source, 1, target);
+            var centered = Engine.TensorSubtract(y, Engine.TensorFullLike(y, Engine.TensorMean(y)));
+            return NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(centered)));
         }
 
-        int p = parents.Count;
-
-        // Compute parent means
-        var parentMeans = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++)
-                parentMeans[j] += NumOps.ToDouble(data[i, parents[j]]);
-            parentMeans[j] /= n;
-        }
-
-        // Build normal equations X'X and X'y for multivariate OLS
-        var XtX = new double[p, p];
-        var Xty = new double[p];
-
-        for (int i = 0; i < n; i++)
-        {
-            double dy = NumOps.ToDouble(data[i, target]) - meanT;
-            var dx = new double[p];
-            for (int j = 0; j < p; j++)
-                dx[j] = NumOps.ToDouble(data[i, parents[j]]) - parentMeans[j];
-
-            for (int a = 0; a < p; a++)
-            {
-                Xty[a] += dx[a] * dy;
-                for (int b = a; b < p; b++)
-                    XtX[a, b] += dx[a] * dx[b];
-            }
-        }
-
-        // Symmetrize and add ridge
-        for (int a = 0; a < p; a++)
-        {
-            XtX[a, a] += 1e-10;
-            for (int b = a + 1; b < p; b++)
-                XtX[b, a] = XtX[a, b];
-        }
-
-        // Solve for beta via Gaussian elimination
-        var beta = SolveSmallSystem(XtX, Xty, p);
-
-        // Compute RSS
-        double totalRss = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double pred = meanT;
-            for (int j = 0; j < p; j++)
-                pred += beta[j] * (NumOps.ToDouble(data[i, parents[j]]) - parentMeans[j]);
-            double e = NumOps.ToDouble(data[i, target]) - pred;
-            totalRss += e * e;
-        }
-
-        return totalRss;
+        // Multivariate OLS on the centered parents, solved by Gaussian elimination
+        var (_, residual) = FitCenteredRegression(source, target, parents.ToArray());
+        return NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(residual)));
     }
 
     /// <summary>
     /// Builds the final DAG from the best ordering using the same parent selection as scoring.
     /// </summary>
-    private Matrix<T> BuildDAGFromOrdering(Matrix<T> data, int[] ordering, int d, int n, Matrix<T> S)
+    private Matrix<T> BuildDAGFromOrdering(Tensor<T> source, int[] ordering, int d, int n, Matrix<T> S)
     {
         var W = new Matrix<T>(d, d);
+        T threshold = NumOps.FromDouble(WThreshold);
 
         for (int idx = 1; idx < d; idx++)
         {
             int target = ordering[idx];
-            var parents = SelectParentsBIC(data, target, ordering, idx, n);
+            var parents = SelectParentsBIC(source, target, ordering, idx, n);
 
             if (parents.Count == 0) continue;
 
-            int p = parents.Count;
-
-            // Compute multivariate OLS coefficients
-            var parentMeans = new double[p];
-            double meanT = 0;
-            for (int i = 0; i < n; i++)
-            {
-                meanT += NumOps.ToDouble(data[i, target]);
-                for (int j = 0; j < p; j++)
-                    parentMeans[j] += NumOps.ToDouble(data[i, parents[j]]);
-            }
-            meanT /= n;
-            for (int j = 0; j < p; j++) parentMeans[j] /= n;
-
-            var XtX = new double[p, p];
-            var Xty = new double[p];
-            for (int i = 0; i < n; i++)
-            {
-                double dy = NumOps.ToDouble(data[i, target]) - meanT;
-                var dx = new double[p];
-                for (int j = 0; j < p; j++)
-                    dx[j] = NumOps.ToDouble(data[i, parents[j]]) - parentMeans[j];
-                for (int a = 0; a < p; a++)
-                {
-                    Xty[a] += dx[a] * dy;
-                    for (int b = a; b < p; b++)
-                        XtX[a, b] += dx[a] * dx[b];
-                }
-            }
-            for (int a = 0; a < p; a++)
-            {
-                XtX[a, a] += 1e-10;
-                for (int b = a + 1; b < p; b++)
-                    XtX[b, a] = XtX[a, b];
-            }
-
-            var beta = SolveSmallSystem(XtX, Xty, p);
-            for (int j = 0; j < p; j++)
-            {
-                if (Math.Abs(beta[j]) >= WThreshold)
-                    W[parents[j], target] = NumOps.FromDouble(beta[j]);
-            }
+            // Multivariate OLS coefficients; those reaching WThreshold become the edge weights into target.
+            var (beta, _) = FitCenteredRegression(source, target, parents.ToArray());
+            var kept = Engine.TensorWhere(
+                Engine.TensorGreaterEqual(Engine.TensorAbs(beta), Engine.TensorFullLike(beta, threshold)),
+                beta, Engine.TensorZerosLike(beta));
+            var column = Engine.TensorScatter(new Tensor<T>(new[] { d }),
+                new Tensor<int>(parents.ToArray(), new[] { parents.Count }), kept, 0);
+            Engine.SetColumn(W, target, column.ToVector());
         }
 
         return W;

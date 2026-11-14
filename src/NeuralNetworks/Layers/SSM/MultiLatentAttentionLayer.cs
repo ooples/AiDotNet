@@ -342,11 +342,12 @@ public partial class MultiLatentAttentionLayer<T> : LayerBase<T>, IShapeContract
         var kh = SplitHeads(k, batchSize, seqLen);
         var vh = SplitHeads(v, batchSize, seqLen);
 
-        var attended = Engine.ScaledDotProductAttention(
+        var attended = Engine.FlashAttention(
             qh, kh, vh,
-            BuildCausalMask(batchSize, _numHeads, seqLen),
             scale: 1.0 / Math.Sqrt(_headDimension),
-            out var attentionWeights);
+            isCausal: true,
+            out _,
+            attentionBias: null);
 
         return MergeHeads(attended, batchSize, seqLen);
     }

@@ -372,6 +372,26 @@ public static class DeserializationHelper
                 TryGetDouble(additionalParams, "LocalizationMargin") ?? 0.01)
                 ?? throw new MissingLayerCtorException("Cannot construct SVTRThinPlateSplineLayer.");
         }
+        else if (genericDef == typeof(ObliviousDecisionTreeLayer<>))
+        {
+            // Reached only when the generated factory declined, which it does when a [LayerState] key is
+            // absent. A checkpoint written before the choice functions existed carries no
+            // "choiceFunction" key and was trained with softmax feature choice and sigmoid splits, so it
+            // is rebuilt with those and master's optional-argument defaults. With the key present, the
+            // generated factory could only have declined over a missing architectural key: a damaged file.
+            var state = new AiDotNet.Serialization.LayerStateBag(additionalParams, layerType);
+            if (state.Has("choiceFunction"))
+            {
+                throw new InvalidOperationException(
+                    "ObliviousDecisionTreeLayer metadata names a choiceFunction but lacks depth, outputDim or initScale.");
+            }
+
+            instance = new ObliviousDecisionTreeLayer<T>(
+                state.Int32("depth", 6),
+                state.Int32("outputDim", 1),
+                state.Double("initScale", 0.01),
+                ObliviousTreeChoiceFunction.SoftmaxSigmoid);
+        }
         else if (genericDef == typeof(PatchGANDiscriminator<>))
         {
             instance = new PatchGANDiscriminator<T>(
@@ -2554,7 +2574,26 @@ public static class DeserializationHelper
                 experts.Add(new DenseLayer<T>(outputSize, new IdentityActivation<T>() as IActivationFunction<T>));
 
             var router = new DenseLayer<T>(numExperts, new SoftmaxActivation<T>() as IActivationFunction<T>);
-            instance = new MixtureOfExpertsLayer<T>(experts, router, inputShape, outputShape, topK);
+            // Files written before the option existed carry no W_noise weights: restore them with the
+            // router-logit noise they were trained with. A key that is present but holds an
+            // unparseable or undefined value is a damaged file: reject it rather than silently
+            // rebuilding a different parameter layout.
+            var gatingNoise = MixtureOfExpertsGatingNoise.SoftplusOfRouterLogits;
+            if (additionalParams is not null && additionalParams.ContainsKey("GatingNoise"))
+            {
+                string? rawNoise = TryGetString(additionalParams, "GatingNoise");
+                if (rawNoise is null
+                    || !Enum.TryParse<MixtureOfExpertsGatingNoise>(rawNoise, out var parsedNoise)
+                    || !Enum.IsDefined(typeof(MixtureOfExpertsGatingNoise), parsedNoise))
+                {
+                    throw new InvalidOperationException(
+                        $"MixtureOfExpertsLayer has invalid GatingNoise metadata '{rawNoise}'.");
+                }
+
+                gatingNoise = parsedNoise;
+            }
+            instance = new MixtureOfExpertsLayer<T>(experts, router, inputShape, outputShape, topK,
+                gatingNoise: gatingNoise);
         }
         else if (genericDef == typeof(ReservoirLayer<>))
         {

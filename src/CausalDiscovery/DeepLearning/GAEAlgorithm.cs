@@ -87,30 +87,28 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
 
         var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         T scale = NumOps.FromDouble(Math.Sqrt(2.0 / d));
-        var cov = ComputeCovarianceMatrix(data);
-        T eps = NumOps.FromDouble(1e-10);
+        var cov = Tensor<T>.FromMatrix(ComputeCovarianceMatrix(data));
+        var x = Tensor<T>.FromMatrix(data);
+        var xT = Engine.TensorTranspose(x);
+        var shape = new[] { d, embDim };
 
         // Separate source/target embeddings to break symmetry:
         // P[i,j] = sigmoid(Zs_i . Zt_j) != P[j,i] = sigmoid(Zs_j . Zt_i)
-        var ZsMu = new Matrix<T>(d, embDim);
-        var ZtMu = new Matrix<T>(d, embDim);
-        var ZsLogVar = new Matrix<T>(d, embDim);
-        var ZtLogVar = new Matrix<T>(d, embDim);
-        for (int i = 0; i < d; i++)
-            for (int k = 0; k < embDim; k++)
-            {
-                ZsMu[i, k] = NumOps.Multiply(scale, NumOps.FromDouble(rng.NextDouble() - 0.5));
-                ZtMu[i, k] = NumOps.Multiply(scale, NumOps.FromDouble(rng.NextDouble() - 0.5));
-                ZsLogVar[i, k] = NumOps.FromDouble(InitialLogVariance);
-                ZtLogVar[i, k] = NumOps.FromDouble(InitialLogVariance);
-            }
+        // Means are scale * (U[0,1) - 0.5), drawn per (i, k) as the pair (Zs, Zt).
+        var initial = Engine.TensorMultiplyScalar(
+            Engine.TensorSubtractScalar(Tensor<T>.CreateRandom(rng, d, embDim, 2), NumOps.FromDouble(0.5)), scale);
+        var ZsMu = Engine.TensorSliceAxis(initial, 2, 0);
+        var ZtMu = Engine.TensorSliceAxis(initial, 2, 1);
+        var ZsLogVar = Engine.TensorFullLike(ZsMu, NumOps.FromDouble(InitialLogVariance));
+        var ZtLogVar = Engine.TensorFullLike(ZtMu, NumOps.FromDouble(InitialLogVariance));
 
         // KL warm-up schedule to prevent posterior collapse
         int warmUpEpochs = UseKlWarmUp ? Math.Max(1, effectiveEpochs / 4) : 0;
 
         T lr = NumOps.FromDouble(effectiveLr);
-        T alpha = NumOps.Zero;
-        T rho = NumOps.FromDouble(0.01); // Start small so reconstruction dominates early
+        // Augmented-Lagrangian state as [1] tensors
+        var alpha = new Tensor<T>(new[] { 1 });
+        var rho = Engine.TensorFullLike(alpha, NumOps.FromDouble(0.01)); // Start small so reconstruction dominates early
         // λ_sparsity must stay well below the reconstruction-loss magnitude.
         // With 300 epochs of sign-based ℓ₁ gradient, λ=0.01 integrates to ~3.0
         // in logit space — strong enough to crush every P[i,j] from the 0.5
@@ -120,169 +118,109 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
         // budget around 0.15 in logit space — small enough that true edges
         // survive but unrelated pairs still get pushed toward 0.
         T lambda1 = NumOps.FromDouble(0.0005);
-        double prevHVal = double.MaxValue;
+        var prevHVal = Engine.TensorFullLike(alpha, NumOps.MaxValue);
         int acyclicityWarmup = effectiveEpochs / 3; // No acyclicity penalty for first 1/3
-        Matrix<T> lastP = new Matrix<T>(d, d); // Save last edge probability matrix
+        var lastP = new Tensor<T>(new[] { d, d }); // Save last edge probability matrix
+
+        var offDiagonal = OffDiagonalMask(d);
+        var zerosDd = new Tensor<T>(new[] { d, d });
+        T invN = NumOps.FromDouble(1.0 / n);
+        T dT = NumOps.FromDouble(d);
+        T two = NumOps.FromDouble(2);
+        T half = NumOps.FromDouble(0.5);
+        T ten = NumOps.FromDouble(10);
+        T quarter = NumOps.FromDouble(0.25);
+        T logVarLow = NumOps.FromDouble(-10);
+        T logVarHigh = NumOps.FromDouble(10);
+        T rhoMax = NumOps.FromDouble(MaxPenaltyValue);
+        T notNaNBound = NumOps.FromDouble(-1.0);
+        T klStart = NumOps.FromDouble(DefaultKlWeight);
+        T klSpan = NumOps.FromDouble(MaxKlWeight - DefaultKlWeight);
+        T klWarmUpLength = NumOps.FromDouble(warmUpEpochs);
+        var klMax = Engine.TensorFullLike(alpha, NumOps.FromDouble(MaxKlWeight));
+        var epochNumber = new Tensor<T>(new[] { 1 }); // holds the current epoch index
+        var unit = Engine.TensorOnesLike(epochNumber);
 
         for (int epoch = 0; epoch < effectiveEpochs; epoch++)
         {
             // KL weight schedule: ramp from DefaultKlWeight to MaxKlWeight over warmUpEpochs
-            double klWeight = UseKlWarmUp && warmUpEpochs > 0 && epoch < warmUpEpochs
-                ? DefaultKlWeight + (MaxKlWeight - DefaultKlWeight) * epoch / warmUpEpochs
-                : MaxKlWeight;
+            var klWeight = UseKlWarmUp && warmUpEpochs > 0 && epoch < warmUpEpochs
+                ? Engine.TensorAddScalar(Engine.TensorDivideScalar(Engine.TensorMultiplyScalar(epochNumber, klSpan), klWarmUpLength), klStart)
+                : klMax;
+            epochNumber = Engine.TensorAdd(epochNumber, unit);
+            var klW = Engine.TensorBroadcastTo(klWeight.Reshape(new[] { 1, 1 }), shape);
 
             // Precompute bounded std values for numerical stability
-            var stdSArr = new double[d, embDim];
-            var stdTArr = new double[d, embDim];
-            for (int i = 0; i < d; i++)
-                for (int k = 0; k < embDim; k++)
-                {
-                    double logVarS = Math.Max(-10, Math.Min(10, NumOps.ToDouble(ZsLogVar[i, k])));
-                    double logVarT = Math.Max(-10, Math.Min(10, NumOps.ToDouble(ZtLogVar[i, k])));
-                    stdSArr[i, k] = Math.Exp(0.5 * logVarS);
-                    stdTArr[i, k] = Math.Exp(0.5 * logVarT);
-                }
+            var stdS = Engine.TensorExp(Engine.TensorMultiplyScalar(Engine.TensorMin(Engine.TensorMax(ZsLogVar, logVarLow), logVarHigh), half));
+            var stdT = Engine.TensorExp(Engine.TensorMultiplyScalar(Engine.TensorMin(Engine.TensorMax(ZtLogVar, logVarLow), logVarHigh), half));
 
-            // Sample embeddings via reparameterization: z = mu + sigma * epsilon
-            var Zs = new Matrix<T>(d, embDim);
-            var Zt = new Matrix<T>(d, embDim);
-            var epsilonS = new Matrix<T>(d, embDim);
-            var epsilonT = new Matrix<T>(d, embDim);
-            for (int i = 0; i < d; i++)
-                for (int k = 0; k < embDim; k++)
-                {
-                    T stdS = NumOps.FromDouble(stdSArr[i, k]);
-                    epsilonS[i, k] = NumOps.FromDouble(SampleStandardNormal(rng));
-                    Zs[i, k] = NumOps.Add(ZsMu[i, k], NumOps.Multiply(stdS, epsilonS[i, k]));
-                    T stdT = NumOps.FromDouble(stdTArr[i, k]);
-                    epsilonT[i, k] = NumOps.FromDouble(SampleStandardNormal(rng));
-                    Zt[i, k] = NumOps.Add(ZtMu[i, k], NumOps.Multiply(stdT, epsilonT[i, k]));
-                }
+            // Sample embeddings via reparameterization: z = mu + sigma * epsilon (per (i, k): epsilon_s, then epsilon_t)
+            var epsilon = StandardNormals(rng, d, embDim);
+            var epsilonS = Engine.TensorSliceAxis(epsilon, 2, 0);
+            var epsilonT = Engine.TensorSliceAxis(epsilon, 2, 1);
+            var Zs = Engine.TensorAdd(ZsMu, Engine.TensorMultiply(stdS, epsilonS));
+            var Zt = Engine.TensorAdd(ZtMu, Engine.TensorMultiply(stdT, epsilonT));
 
-            // Compute edge probabilities: P[i,j] = sigmoid(Zs_i . Zt_j)
-            var P = new Matrix<T>(d, d);
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                {
-                    if (i == j) continue;
-                    T dot = NumOps.Zero;
-                    for (int k = 0; k < embDim; k++)
-                        dot = NumOps.Add(dot, NumOps.Multiply(Zs[i, k], Zt[j, k]));
-                    double sv = NumOps.ToDouble(dot);
-                    P[i, j] = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
-                }
+            // Compute edge probabilities: P[i,j] = sigmoid(Zs_i . Zt_j), P[i,i] = 0
+            var logits = Engine.TensorMatMul(Zs, Engine.TensorTranspose(Zt));
+            var P = Engine.TensorWhere(offDiagonal, ClampedSigmoid(logits, 1.0), zerosDd);
 
             // Save last P for final edge detection
-            for (int i2 = 0; i2 < d; i2++)
-                for (int j2 = 0; j2 < d; j2++)
-                    lastP[i2, j2] = P[i2, j2];
+            lastP = P;
 
             // NOTEARS acyclicity: h(P) = tr(exp(P∘P)) - d
-            var PSq = new Matrix<T>(d, d);
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                    PSq[i, j] = NumOps.Multiply(P[i, j], P[i, j]);
-            var expPSq = MatrixExponentialTaylor(PSq, d);
-            T hVal = NumOps.Zero;
-            for (int i = 0; i < d; i++)
-                hVal = NumOps.Add(hVal, expPSq[i, i]);
-            hVal = NumOps.Subtract(hVal, NumOps.FromDouble(d));
+            var expPSq = Tensor<T>.FromMatrix(MatrixExponentialTaylor(Engine.TensorMultiply(P, P).ToMatrix(), d));
+            var hVal = Engine.TensorSubtractScalar(Engine.ReduceSum(Engine.TensorDiagonal(expPSq), new[] { 0 }, true), dT);
 
-            // Reconstruction: X_hat[s,j] = sum_i X[s,i] * P[i,j]
-            var gradP = new Matrix<T>(d, d);
-            T invN = NumOps.FromDouble(1.0 / n);
-
-            for (int j = 0; j < d; j++)
-            {
-                for (int s = 0; s < n; s++)
-                {
-                    T xhat = NumOps.Zero;
-                    for (int i = 0; i < d; i++)
-                        xhat = NumOps.Add(xhat, NumOps.Multiply(data[s, i], P[i, j]));
-
-                    T residual = NumOps.Multiply(NumOps.Subtract(xhat, data[s, j]), invN);
-                    for (int i = 0; i < d; i++)
-                        if (i != j)
-                            gradP[i, j] = NumOps.Add(gradP[i, j],
-                                NumOps.Multiply(residual, data[s, i]));
-                }
-            }
+            // Reconstruction: X_hat[s,j] = sum_i X[s,i] * P[i,j]; gradP[i,j] = sum_s residual[s,j] X[s,i] (i != j)
+            var residual = Engine.TensorMultiplyScalar(Engine.TensorSubtract(Engine.TensorMatMul(x, P), x), invN);
+            var gradP = Engine.TensorWhere(offDiagonal, Engine.TensorMatMul(xT, residual), zerosDd);
 
             // Gradient: dP/dZ via chain rule through sigmoid and dot product
-            var gradZsMu = new Matrix<T>(d, embDim);
-            var gradZtMu = new Matrix<T>(d, embDim);
-            var gradZsLogVar = new Matrix<T>(d, embDim);
-            var gradZtLogVar = new Matrix<T>(d, embDim);
+            // sign(P) is undefined for NaN (Math.Sign throws), so a diverged P fails loudly.
+            if (Engine.TensorCountNonzero(Engine.TensorMultiply(offDiagonal,
+                    Engine.TensorSubtract(Engine.TensorOnesLike(P), Engine.TensorGreaterThan(Engine.TensorAbs(P), notNaNBound)))) > 0)
+                throw new ArithmeticException("Function does not accept floating point Not-a-Number values.");
+            var sigD = Engine.TensorMultiply(P, Engine.TensorSubtract(Engine.TensorOnesLike(P), P));
 
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                {
-                    if (i == j) continue;
-                    T pij = P[i, j];
-                    T sigD = NumOps.Multiply(pij, NumOps.Subtract(NumOps.One, pij));
+            // Add sparsity and acyclicity gradients
+            var sparsityGrad = Engine.TensorMultiplyScalar(Engine.TensorSign(P), lambda1);
+            var penalty = sparsityGrad;
+            if (epoch >= acyclicityWarmup)
+            {
+                // Acyclicity gradient: (alpha + rho*h) * [exp(P∘P)^T ∘ 2P][i,j]
+                // Skip during warmup so reconstruction can find edges first
+                var multiplier = Engine.TensorAdd(alpha, Engine.TensorMultiply(rho, hVal)).Reshape(new[] { 1, 1 });
+                var acycGrad = Engine.TensorMultiply(Engine.TensorBroadcastTo(multiplier, new[] { d, d }),
+                    Engine.TensorMultiply(Engine.TensorTranspose(expPSq), Engine.TensorMultiplyScalar(P, two)));
+                penalty = Engine.TensorAdd(sparsityGrad, acycGrad);
+            }
+            var gradScale = Engine.TensorWhere(offDiagonal,
+                Engine.TensorMultiply(Engine.TensorAdd(gradP, penalty), sigD), zerosDd);
 
-                    // Add sparsity and acyclicity gradients
-                    T sparsityGrad = NumOps.Multiply(lambda1,
-                        NumOps.FromDouble(Math.Sign(NumOps.ToDouble(pij))));
-                    // Acyclicity gradient: (alpha + rho*h) * [exp(P∘P)^T ∘ 2P][i,j]
-                    // Skip during warmup so reconstruction can find edges first
-                    T acycGrad = epoch < acyclicityWarmup ? NumOps.Zero : NumOps.Multiply(
-                        NumOps.Add(alpha, NumOps.Multiply(rho, hVal)),
-                        NumOps.Multiply(expPSq[j, i], NumOps.Multiply(NumOps.FromDouble(2), pij)));
-                    T totalGradP = NumOps.Add(gradP[i, j], NumOps.Add(sparsityGrad, acycGrad));
-                    T gradScale = NumOps.Multiply(totalGradP, sigD);
+            // d(Zs_i . Zt_j)/dZs_i = Zt_j, d(Zs_i . Zt_j)/dZt_j = Zs_i
+            var gradZsMu = Engine.TensorMatMul(gradScale, Zt);
+            var gradZtMu = Engine.TensorMatMul(Engine.TensorTranspose(gradScale), Zs);
 
-                    // d(Zs_i . Zt_j)/dZs_i = Zt_j, d(Zs_i . Zt_j)/dZt_j = Zs_i
-                    for (int k = 0; k < embDim; k++)
-                    {
-                        gradZsMu[i, k] = NumOps.Add(gradZsMu[i, k],
-                            NumOps.Multiply(gradScale, Zt[j, k]));
-                        gradZtMu[j, k] = NumOps.Add(gradZtMu[j, k],
-                            NumOps.Multiply(gradScale, Zs[i, k]));
-
-                        // Log-variance gradient via reparameterization:
-                        // dL/d(logvar_s) = dL/dz_s * epsilon_s * 0.5 * exp(0.5*logvar_s)
-                        // Chain rule: ∂L/∂logvar_s = gradScale * z_t[j,k] * ε_s[i,k] * 0.5 * std_s
-                        // Use the SAME clamped std as forward pass for consistency
-                        T stdS = NumOps.FromDouble(stdSArr[i, k]);
-                        gradZsLogVar[i, k] = NumOps.Add(gradZsLogVar[i, k],
-                            NumOps.Multiply(gradScale, NumOps.Multiply(Zt[j, k],
-                            NumOps.Multiply(epsilonS[i, k],
-                            NumOps.Multiply(NumOps.FromDouble(0.5), stdS)))));
-                        T stdT = NumOps.FromDouble(stdTArr[j, k]);
-                        gradZtLogVar[j, k] = NumOps.Add(gradZtLogVar[j, k],
-                            NumOps.Multiply(gradScale, NumOps.Multiply(Zs[i, k],
-                            NumOps.Multiply(epsilonT[j, k],
-                            NumOps.Multiply(NumOps.FromDouble(0.5), stdT)))));
-                    }
-                }
+            // Log-variance gradient via reparameterization:
+            // dL/d(logvar_s) = dL/dz_s * epsilon_s * 0.5 * exp(0.5*logvar_s)
+            // Use the SAME clamped std as forward pass for consistency
+            var gradZsLogVar = Engine.TensorMultiply(gradZsMu, Engine.TensorMultiply(epsilonS, Engine.TensorMultiplyScalar(stdS, half)));
+            var gradZtLogVar = Engine.TensorMultiply(gradZtMu, Engine.TensorMultiply(epsilonT, Engine.TensorMultiplyScalar(stdT, half)));
 
             // KL divergence gradient: d/dmu = klWeight * mu, d/d(logvar) = klWeight * 0.5 * (exp(logvar) - 1)
-            T klW = NumOps.FromDouble(klWeight);
-            for (int i = 0; i < d; i++)
-                for (int k = 0; k < embDim; k++)
-                {
-                    gradZsMu[i, k] = NumOps.Add(gradZsMu[i, k],
-                        NumOps.Multiply(klW, ZsMu[i, k]));
-                    gradZtMu[i, k] = NumOps.Add(gradZtMu[i, k],
-                        NumOps.Multiply(klW, ZtMu[i, k]));
-                    gradZsLogVar[i, k] = NumOps.Add(gradZsLogVar[i, k],
-                        NumOps.Multiply(klW, NumOps.FromDouble(
-                            0.5 * (Math.Exp(NumOps.ToDouble(ZsLogVar[i, k])) - 1.0))));
-                    gradZtLogVar[i, k] = NumOps.Add(gradZtLogVar[i, k],
-                        NumOps.Multiply(klW, NumOps.FromDouble(
-                            0.5 * (Math.Exp(NumOps.ToDouble(ZtLogVar[i, k])) - 1.0))));
-                }
+            gradZsMu = Engine.TensorAdd(gradZsMu, Engine.TensorMultiply(klW, ZsMu));
+            gradZtMu = Engine.TensorAdd(gradZtMu, Engine.TensorMultiply(klW, ZtMu));
+            gradZsLogVar = Engine.TensorAdd(gradZsLogVar, Engine.TensorMultiply(klW,
+                Engine.TensorMultiplyScalar(Engine.TensorSubtractScalar(Engine.TensorExp(ZsLogVar), NumOps.One), half)));
+            gradZtLogVar = Engine.TensorAdd(gradZtLogVar, Engine.TensorMultiply(klW,
+                Engine.TensorMultiplyScalar(Engine.TensorSubtractScalar(Engine.TensorExp(ZtLogVar), NumOps.One), half)));
 
             // Apply gradients to all parameters
-            for (int i = 0; i < d; i++)
-                for (int k = 0; k < embDim; k++)
-                {
-                    ZsMu[i, k] = NumOps.Subtract(ZsMu[i, k], NumOps.Multiply(lr, gradZsMu[i, k]));
-                    ZtMu[i, k] = NumOps.Subtract(ZtMu[i, k], NumOps.Multiply(lr, gradZtMu[i, k]));
-                    ZsLogVar[i, k] = NumOps.Subtract(ZsLogVar[i, k], NumOps.Multiply(lr, gradZsLogVar[i, k]));
-                    ZtLogVar[i, k] = NumOps.Subtract(ZtLogVar[i, k], NumOps.Multiply(lr, gradZtLogVar[i, k]));
-                }
+            ZsMu = Engine.TensorSubtract(ZsMu, Engine.TensorMultiplyScalar(gradZsMu, lr));
+            ZtMu = Engine.TensorSubtract(ZtMu, Engine.TensorMultiplyScalar(gradZtMu, lr));
+            ZsLogVar = Engine.TensorSubtract(ZsLogVar, Engine.TensorMultiplyScalar(gradZsLogVar, lr));
+            ZtLogVar = Engine.TensorSubtract(ZtLogVar, Engine.TensorMultiplyScalar(gradZtLogVar, lr));
 
             // Update augmented Lagrangian only after warmup.
             // NotEARS (Zheng et al. 2018) uses alpha += rho * h(P) and bumps
@@ -298,66 +236,63 @@ public class GAEAlgorithm<T> : DeepCausalBase<T>
             // threshold.
             if (epoch >= acyclicityWarmup)
             {
-                T rhoMax = NumOps.FromDouble(MaxPenaltyValue);
-                T newAlpha = NumOps.Add(alpha, NumOps.Multiply(rho, hVal));
-                alpha = NumOps.GreaterThan(newAlpha, rhoMax) ? rhoMax : newAlpha;
-                double hValDouble = NumOps.ToDouble(hVal);
-                if (hValDouble > 0.25 * Math.Max(1.0, prevHVal))
+                var newAlpha = Engine.TensorAdd(alpha, Engine.TensorMultiply(rho, hVal));
+                alpha = Engine.TensorWhere(Engine.TensorGreaterThan(newAlpha, rhoMax), Engine.TensorFullLike(newAlpha, rhoMax), newAlpha);
+                var plateau = Engine.TensorMultiplyScalar(Engine.TensorMax(prevHVal, NumOps.One), quarter);
+                if (Engine.TensorCountNonzero(Engine.TensorGreaterThan(hVal, plateau)) > 0)
                 {
-                    T newRho = NumOps.Multiply(rho, NumOps.FromDouble(10));
-                    rho = NumOps.GreaterThan(newRho, rhoMax) ? rhoMax : newRho;
+                    var newRho = Engine.TensorMultiplyScalar(rho, ten);
+                    rho = Engine.TensorWhere(Engine.TensorGreaterThan(newRho, rhoMax), Engine.TensorFullLike(newRho, rhoMax), newRho);
                 }
-                prevHVal = hValDouble;
+                prevHVal = hVal;
             }
         }
 
         // Final output: use trained P matrix for structure, covariance for weights.
         // The learned P matrix is the PRIMARY signal — only add edges where
         // P[i,j] exceeds a threshold. Covariance provides the edge weight.
-        var result = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-            {
-                if (i == j) continue;
-                double pij = NumOps.ToDouble(lastP[i, j]);
-                double pji = NumOps.ToDouble(lastP[j, i]);
+        // Only add edge if learned probability exceeds 0.3.
+        // Direction: edge i→j only if P[i,j] > P[j,i]
+        // For ties (|P[i,j] - P[j,i]| < 1e-10), only keep the (i,j) pair where i < j to avoid 2-cycles.
+        var ones = Engine.TensorOnesLike(lastP);
+        var lastPT = Engine.TensorTranspose(lastP);
+        var probable = Engine.TensorSubtract(ones, Engine.TensorLessThan(lastP, NumOps.FromDouble(0.3)));
+        var dominant = Engine.TensorSubtract(ones, Engine.TensorLessThan(lastP, lastPT));
+        var lowerTriangle = Engine.TensorTranspose(Engine.TensorTriu(ones, 1));
+        var tieBreak = Engine.TensorSubtract(ones, Engine.TensorMultiply(lowerTriangle,
+            Engine.TensorLessThan(Engine.TensorAbs(Engine.TensorSubtract(lastP, lastPT)), NumOps.FromDouble(1e-10))));
 
-                // Only add edge if learned probability exceeds threshold
-                if (pij < 0.3) continue;
+        // Edge weight = correlation coefficient cov(i,j) / sqrt(var(i) * var(j)).
+        // Using the raw regression slope cov/var(i) inflates edges whose
+        // source has small variance, so an indirect/mediated edge with a
+        // small-variance source can dominate the direct edge with a
+        // larger-variance source. The correlation coefficient is
+        // symmetric in (i, j) and bounded in [-1, 1], preserving the
+        // relative ordering of true vs. mediated edges.
+        var variance = Engine.TensorDiagonal(cov);
+        var varianceOk = Engine.TensorSubtract(Engine.TensorOnesLike(variance), Engine.TensorLessThan(variance, NumOps.FromDouble(1e-10)));
+        var bothVariancesOk = Engine.TensorOuter(varianceOk, varianceOk);
+        var weight = Engine.TensorDivide(cov, Engine.TensorSqrt(Engine.TensorOuter(variance, variance)));
+        var strongEnough = Engine.TensorSubtract(ones, Engine.TensorLessThan(Engine.TensorAbs(weight), NumOps.FromDouble(EdgeThreshold)));
 
-                // Direction: edge i→j only if P[i,j] > P[j,i]
-                // For ties, only process the (i,j) pair where i < j to avoid 2-cycles.
-                if (pij < pji) continue;
-                if (Math.Abs(pij - pji) < 1e-10 && i > j) continue;
-
-                // Edge weight = correlation coefficient cov(i,j) / sqrt(var(i) * var(j)).
-                // Using the raw regression slope cov/var(i) inflates edges whose
-                // source has small variance, so an indirect/mediated edge with a
-                // small-variance source can dominate the direct edge with a
-                // larger-variance source. The correlation coefficient is
-                // symmetric in (i, j) and bounded in [-1, 1], preserving the
-                // relative ordering of true vs. mediated edges.
-                double varI = NumOps.ToDouble(cov[i, i]);
-                double varJ = NumOps.ToDouble(cov[j, j]);
-                if (varI < 1e-10 || varJ < 1e-10) continue;
-                double covIJ = NumOps.ToDouble(cov[i, j]);
-                double weight = covIJ / Math.Sqrt(varI * varJ);
-                if (Math.Abs(weight) < EdgeThreshold) continue;
-
-                result[i, j] = NumOps.FromDouble(weight);
-            }
-
-        return result;
+        var keep = Engine.TensorMultiply(Engine.TensorMultiply(Engine.TensorMultiply(offDiagonal, probable),
+            Engine.TensorMultiply(dominant, tieBreak)), Engine.TensorMultiply(bothVariancesOk, strongEnough));
+        return Engine.TensorWhere(keep, weight, zerosDd).ToMatrix();
     }
 
     /// <summary>
-    /// Samples from a standard normal distribution N(0,1) using Box-Muller transform.
+    /// Standard normals by the Box-Muller transform, two per (i, k) drawn in row-major order: each uses
+    /// u1 then u2 from <paramref name="rng"/> as sqrt(-2 ln(1 - u1)) * cos(2π u2) (1 - u1 ∈ (0, 1] avoids log(0)).
+    /// Returns [rows, cols, 2].
     /// </summary>
-    private static double SampleStandardNormal(Random rng)
+    private Tensor<T> StandardNormals(Random rng, int rows, int cols)
     {
-        double u1 = 1.0 - rng.NextDouble(); // (0,1] to avoid log(0)
-        double u2 = rng.NextDouble();
-        return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+        var uniforms = Tensor<T>.CreateRandom(rng, rows, cols, 2, 2);
+        var u1 = Engine.TensorSliceAxis(uniforms, 3, 0);
+        var u2 = Engine.TensorSliceAxis(uniforms, 3, 1);
+        var radius = Engine.TensorSqrt(Engine.TensorMultiplyScalar(
+            Engine.TensorLog(Engine.TensorSubtract(Engine.TensorOnesLike(u1), u1)), NumOps.FromDouble(-2.0)));
+        return Engine.TensorMultiply(radius, Engine.TensorCos(Engine.TensorMultiplyScalar(u2, NumOps.FromDouble(2.0 * Math.PI))));
     }
 
 }

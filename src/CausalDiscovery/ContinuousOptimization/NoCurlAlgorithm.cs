@@ -86,60 +86,66 @@ public class NoCurlAlgorithm<T> : ContinuousOptimizationBase<T>
 
             for (int pos = 0; pos < d - 1; pos++)
             {
-                // Compute loss with current ordering
-                T currentLoss = ComputeOrderingLoss(X, S, ordering, d, n);
-
-                // Try swapping positions pos and pos+1
-                (ordering[pos], ordering[pos + 1]) = (ordering[pos + 1], ordering[pos]);
-
-                T swappedLoss = ComputeOrderingLoss(X, S, ordering, d, n);
-
-                if (NumOps.ToDouble(swappedLoss) < NumOps.ToDouble(currentLoss))
+                if (TrySwapAdjacent(X, S, ordering, pos, d, n))
                 {
                     improved = true; // Keep the swap
-                }
-                else
-                {
-                    // Revert
-                    (ordering[pos], ordering[pos + 1]) = (ordering[pos + 1], ordering[pos]);
                 }
             }
 
             if (!improved) break;
         }
 
-        // Build final W from optimal ordering with OLS weights and L1 thresholding
-        var W = new Matrix<T>(d, d);
-        T lambdaT = NumOps.FromDouble(Lambda1);
+        // Build final W from optimal ordering with OLS weights and L1 thresholding:
+        // every parent earlier in the ordering gets w = S[parent, target] / S[parent, parent].
+        var position = new int[d];
+        for (int idx = 0; idx < d; idx++)
+            position[ordering[idx]] = idx;
+        var precedes = new bool[d * d];
+        for (int parent = 0; parent < d; parent++)
+            for (int target = 0; target < d; target++)
+                precedes[parent * d + target] = position[parent] < position[target];
 
-        for (int idx = 1; idx < d; idx++)
-        {
-            int target = ordering[idx];
+        var covariance = Tensor<T>.FromMatrix(S);
+        var ones = Engine.TensorOnesLike(covariance);
+        var parentVariance = Engine.TensorBroadcastTo(Engine.TensorDiagonal(covariance).Reshape(new[] { d, 1 }), new[] { d, d });
+        var usableParent = Engine.TensorSubtract(ones,
+            Engine.TensorLessThan(parentVariance, Engine.TensorFullLike(covariance, NumOps.FromDouble(1e-10))));
+        var rawWeight = Engine.TensorDivide(covariance, Engine.TensorWhere(usableParent, parentVariance, ones));
+        var absWeight = Engine.TensorAbs(rawWeight);
 
-            for (int predIdx = 0; predIdx < idx; predIdx++)
-            {
-                int parent = ordering[predIdx];
+        // L1 soft thresholding, kept when |w| > lambda1 and the shrunk weight reaches WThreshold.
+        var thresholded = Engine.TensorMultiply(Engine.TensorSign(rawWeight),
+            Engine.TensorSubtract(absWeight, Engine.TensorFullLike(absWeight, NumOps.FromDouble(Lambda1))));
+        var keep = Engine.TensorMultiply(usableParent, Engine.TensorMultiply(
+            Engine.TensorGreaterThan(absWeight, Engine.TensorFullLike(absWeight, NumOps.FromDouble(Lambda1))),
+            Engine.TensorGreaterEqual(Engine.TensorAbs(thresholded), Engine.TensorFullLike(absWeight, NumOps.FromDouble(WThreshold)))));
+        var zeros = Engine.TensorZerosLike(covariance);
+        var W = Engine.TensorWhere(precedes, Engine.TensorWhere(keep, thresholded, zeros), zeros);
 
-                // OLS weight: w = S[parent, target] / S[parent, parent]
-                T sParent = S[parent, parent];
-                if (NumOps.ToDouble(sParent) < 1e-10) continue;
+        return W.ToMatrix();
+    }
 
-                T rawWeight = NumOps.Divide(S[parent, target], sParent);
-                T absWeight = NumOps.FromDouble(Math.Abs(NumOps.ToDouble(rawWeight)));
+    /// <summary>
+    /// Swaps ordering positions <paramref name="pos"/> and <paramref name="pos"/> + 1 and keeps the
+    /// swap only when it strictly lowers the ordering loss.
+    /// </summary>
+    /// <returns><c>true</c> when the swap was kept.</returns>
+    private bool TrySwapAdjacent(Matrix<T> X, Matrix<T> S, int[] ordering, int pos, int d, int n)
+    {
+        // Compute loss with current ordering
+        T currentLoss = ComputeOrderingLoss(X, S, ordering, d, n);
 
-                // L1 soft thresholding
-                if (NumOps.ToDouble(absWeight) > Lambda1)
-                {
-                    T sign = NumOps.FromDouble(Math.Sign(NumOps.ToDouble(rawWeight)));
-                    T thresholded = NumOps.Multiply(sign, NumOps.Subtract(absWeight, lambdaT));
+        // Try swapping positions pos and pos+1
+        (ordering[pos], ordering[pos + 1]) = (ordering[pos + 1], ordering[pos]);
 
-                    if (Math.Abs(NumOps.ToDouble(thresholded)) >= WThreshold)
-                        W[parent, target] = thresholded;
-                }
-            }
-        }
+        T swappedLoss = ComputeOrderingLoss(X, S, ordering, d, n);
 
-        return W;
+        if (NumOps.ToDouble(swappedLoss) < NumOps.ToDouble(currentLoss))
+            return true;
+
+        // Revert
+        (ordering[pos], ordering[pos + 1]) = (ordering[pos + 1], ordering[pos]);
+        return false;
     }
 
     /// <summary>
@@ -147,29 +153,11 @@ public class NoCurlAlgorithm<T> : ContinuousOptimizationBase<T>
     /// </summary>
     private int[] InitializeOrdering(Matrix<T> data, int d, int n)
     {
-        var variances = new double[d];
-        for (int column = 0; column < d; column++)
-        {
-            double mean = 0;
-            for (int row = 0; row < n; row++) mean += NumOps.ToDouble(data[row, column]);
-            mean /= n;
+        var centered = CenterColumns(Tensor<T>.FromMatrix(data));
+        var variances = Engine.ReduceMean(Engine.TensorSquare(centered), new[] { 0 }, false);
 
-            double variance = 0;
-            for (int row = 0; row < n; row++)
-            {
-                double centered = NumOps.ToDouble(data[row, column]) - mean;
-                variance += centered * centered;
-            }
-            variances[column] = variance / n;
-        }
-
-        var ordering = Enumerable.Range(0, d).ToArray();
-        Array.Sort(ordering, (a, b) =>
-        {
-            int byVariance = variances[a].CompareTo(variances[b]);
-            return byVariance != 0 ? byVariance : a.CompareTo(b);
-        });
-        return ordering;
+        // Ascending variance; the stable sort breaks ties by column index.
+        return CausalTensorHelpers.StableArgsort(variances, descending: false);
     }
 
     /// <summary>
@@ -178,40 +166,25 @@ public class NoCurlAlgorithm<T> : ContinuousOptimizationBase<T>
     /// </summary>
     private T ComputeOrderingLoss(Matrix<T> X, Matrix<T> S, int[] ordering, int d, int n)
     {
-        T totalLoss = NumOps.Zero;
-        T nT = NumOps.FromDouble(n);
+        // Reorder S so that row/column k is the k-th variable of the ordering.
+        var order = new Tensor<int>((int[])ordering.Clone(), new[] { d });
+        var ordered = Engine.TensorIndexSelect(Engine.TensorIndexSelect(Tensor<T>.FromMatrix(S), order, 0), order, 1);
+        var ones = Engine.TensorOnesLike(ordered);
 
-        for (int idx = 0; idx < d; idx++)
-        {
-            int target = ordering[idx];
-            T targetVar = S[target, target];
+        // Variance reduction from parent: spt^2 / spp, for parents with spp >= 1e-10 only.
+        var parentVariance = Engine.TensorBroadcastTo(Engine.TensorDiagonal(ordered).Reshape(new[] { d, 1 }), new[] { d, d });
+        var usableParent = Engine.TensorSubtract(ones,
+            Engine.TensorLessThan(parentVariance, Engine.TensorFullLike(ordered, NumOps.FromDouble(1e-10))));
+        var reduction = Engine.TensorDivide(Engine.TensorSquare(ordered),
+            Engine.TensorWhere(usableParent, parentVariance, ones));
 
-            if (idx == 0)
-            {
-                // No parents — residual variance = marginal variance
-                totalLoss = NumOps.Add(totalLoss, targetVar);
-                continue;
-            }
+        // Single best parent (greedy) among the earlier variables; a reduction must beat 0 to count.
+        var candidate = Engine.TensorMultiply(Engine.TensorMultiply(usableParent, Engine.TensorTriu(ones, 1)),
+            Engine.TensorGreaterThan(reduction, Engine.TensorZerosLike(ordered)));
+        var bestReduction = Engine.ReduceMax(
+            Engine.TensorWhere(candidate, reduction, Engine.TensorZerosLike(ordered)), new[] { 0 }, false);
 
-            // Single best parent (greedy): the one with highest |S[parent, target]| / S[parent, parent]
-            T bestReduction = NumOps.Zero;
-            for (int predIdx = 0; predIdx < idx; predIdx++)
-            {
-                int parent = ordering[predIdx];
-                T spp = S[parent, parent];
-                if (NumOps.ToDouble(spp) < 1e-10) continue;
-
-                T spt = S[parent, target];
-                // Variance reduction from parent: spt^2 / spp
-                T reduction = NumOps.Divide(NumOps.Multiply(spt, spt), spp);
-                if (NumOps.ToDouble(reduction) > NumOps.ToDouble(bestReduction))
-                    bestReduction = reduction;
-            }
-
-            T residualVar = NumOps.Subtract(targetVar, bestReduction);
-            totalLoss = NumOps.Add(totalLoss, residualVar);
-        }
-
-        return totalLoss;
+        // Loss = sum over targets of (marginal variance - best reduction); the first has no parents.
+        return Engine.TensorSum(Engine.TensorSubtract(Engine.TensorDiagonal(ordered), bestReduction));
     }
 }

@@ -220,7 +220,7 @@ public partial class SignatureInformedTransformer<T> : PortfolioOptimizerBase<T>
     /// </summary>
     /// <param name="weights">The allocation held over the horizon.</param>
     /// <param name="realizedReturns">Realized returns, shaped <c>[steps, assets]</c>.</param>
-    public double PortfolioCVaR(Vector<T> weights, Tensor<T> realizedReturns)
+    public T PortfolioCVaR(Vector<T> weights, Tensor<T> realizedReturns)
     {
         Guard.NotNull(weights);
         Guard.NotNull(realizedReturns);
@@ -237,14 +237,11 @@ public partial class SignatureInformedTransformer<T> : PortfolioOptimizerBase<T>
                 $"realizedReturns has {assets} assets but weights has {weights.Length}.",
                 nameof(realizedReturns));
 
-        var losses = new double[steps];
-        for (int k = 0; k < steps; k++)
-        {
-            var stepReturns = new Vector<T>(assets);
-            for (int a = 0; a < assets; a++) stepReturns[a] = realizedReturns[(k * assets) + a];
-            losses[k] = Objective.Loss(weights, stepReturns);
-        }
+        // Loss per step is -(w^T r_k): the negated panel-times-weights product.
+        var engine = AiDotNetEngine.Current;
+        var column = engine.Reshape(Tensor<T>.FromVector(weights), new[] { assets, 1 });
+        var losses = engine.TensorNegate(engine.Reshape(engine.TensorMatMul(realizedReturns, column), new[] { steps }));
 
-        return Objective.ConditionalValueAtRisk(losses);
+        return Objective.ConditionalValueAtRisk(losses.ToVector());
     }
 }

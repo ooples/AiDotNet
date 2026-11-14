@@ -60,25 +60,91 @@ public interface ILocalObjectiveCreditRule<T> : ICreditRule<T>
     void ApplyAuxiliaryGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> gradients);
 }
 
+/// <summary>
+/// Internal marker for local-objective credit rules whose <see cref="ILocalObjectiveCreditRule{T}.BuildOutputObjective"/>
+/// does not read the materialized <c>[rows, vocabulary]</c> prediction tensor when <c>UsesOutputPrediction</c> is false,
+/// allowing <c>LocalObjectiveGradientComputer</c> to fuse the terminal output objective as well.
+/// </summary>
+internal interface IOutputPredictionOptionalRule
+{
+    bool UsesOutputPrediction { get; }
+}
+
+internal enum BatchedLocalReadoutMode
+{
+    None = 0,
+    FullVocabulary = 1,
+    SampledVocabulary = 2
+}
+
+/// <summary>
+/// Internal fast-path contract allowing <c>LocalObjectiveGradientComputer</c> to depth-stack all selected intermediate
+/// hidden states <c>[h_k0; ...; h_k(m-1)]</c> along axis 0 and evaluate the shared pre-head normalization + fused
+/// readout cross-entropy in a single batched GEMM instead of <c>m</c> separate memory-bound GEMMs.
+/// </summary>
+internal interface IBatchedLocalReadoutRule
+{
+    BatchedLocalReadoutMode BatchedReadoutMode { get; }
+    bool DetachReadoutOnHiddenLayers { get; }
+    int LayerStride { get; }
+    bool UseDepthProgressiveWeight { get; }
+    double BaseLocalWeight { get; }
+    int SampledMaxCandidates { get; }
+    int AdvanceAndGetStepSeed(object stepToken);
+    bool IsSelectedIntermediateHidden(int hiddenIndex, int hiddenLayerCount);
+}
+
+/// <summary>
+/// Internal contract allowing a block-local credit rule to insert <c>StopGradient</c> boundaries only at configured
+/// block boundaries rather than before every trainable hidden layer.
+/// </summary>
+internal interface ILocalBoundaryCreditRule
+{
+    bool ShouldDetachBeforeHiddenLayer(int hiddenIndex, int hiddenLayerCount);
+}
+
+/// <summary>
+/// Internal contract allowing a block-decoupled local credit rule to execute one isolated <c>GradientTape</c> and
+/// <c>TensorScope</c> per block sequentially so peak activation memory scales as <c>O(AnchorStride)</c> instead of
+/// <c>O(L)</c>, with zero forward recomputation.
+/// </summary>
+internal interface ISequentialBlockLocalCreditRule : ILocalBoundaryCreditRule
+{
+    bool StreamBlocksSequentially { get; }
+}
+
 /// <summary>State shared by every local objective of one training step.</summary>
 /// <typeparam name="T">The numeric data type.</typeparam>
 public sealed class LocalObjectiveStep<T>
 {
     internal LocalObjectiveStep(Tensor<T> input, Tensor<T> target, IEngine engine,
         Func<Tensor<T>, Tensor<T>> readout, Func<Tensor<T>, Tensor<T>, Tensor<T>> loss, int hiddenLayerCount,
-        Func<Tensor<T>, Tensor<T>, Tensor<T>>? readoutLoss = null)
+        Func<Tensor<T>, Tensor<T>, Tensor<T>>? readoutLoss = null,
+        Func<Tensor<T>, Tensor<T>, Tensor<T>>? readoutLossDetached = null,
+        Func<Tensor<T>, Tensor<T>, int, bool, int, Tensor<T>?>? trySampledReadoutLoss = null)
     {
         Input = input; Target = target; Engine = engine; Readout = readout; Loss = loss; HiddenLayerCount = hiddenLayerCount;
         ReadoutLoss = readoutLoss ?? ((h, t) => loss(readout(h), t));
+        ReadoutLossDetached = readoutLossDetached ?? ReadoutLoss;
+        TrySampledReadoutLoss = trySampledReadoutLoss;
     }
 
     /// <summary>
     /// The scalar task loss of a hidden state through the shared readout, <c>Loss(Readout(h), target)</c>. When the
-    /// readout is a single layer implementing <see cref="IFusedReadoutLossLayer{T}"/> (a language-model head fused with
-    /// its cross-entropy) the readout output is never materialised on the tape; otherwise this is exactly
+    /// readout terminates in an <see cref="IFusedReadoutLossLayer{T}"/> (a language-model head fused with its
+    /// cross-entropy) the readout output is never materialised on the tape; otherwise this is exactly
     /// <c>Loss(Readout(h), target)</c>. Local-objective rules should prefer it over composing the two.
     /// </summary>
     public Func<Tensor<T>, Tensor<T>, Tensor<T>> ReadoutLoss { get; }
+
+    /// <summary>
+    /// Evaluates the scalar task loss of a hidden state through the shared readout while detaching the shared readout's
+    /// own trainable parameters so only the hidden state <c>h</c> receives gradient. Prevents <c>L - 1</c> intermediate
+    /// hidden layers from corrupting the terminal readout weights during deep local-credit training.
+    /// </summary>
+    public Func<Tensor<T>, Tensor<T>, Tensor<T>> ReadoutLossDetached { get; }
+
+    internal Func<Tensor<T>, Tensor<T>, int, bool, int, Tensor<T>?>? TrySampledReadoutLoss { get; }
 
     /// <summary>The step's network input (for a language model: token ids). Not tape-tracked.</summary>
     public Tensor<T> Input { get; }

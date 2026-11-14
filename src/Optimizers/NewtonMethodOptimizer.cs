@@ -266,10 +266,11 @@ public partial class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOp
 
         for (int i = 0; i < n; i++)
         {
-            for (int j = 0; j < n; j++)
-            {
-                hessian[i, j] = CalculateSecondPartialDerivative(model, inputData, i, j);
-            }
+            int row = i;
+            var values = Vector<T>.FromList(Enumerable.Range(0, n)
+                .Select(column => CalculateSecondPartialDerivative(model, inputData, row, column))
+                .ToList());
+            values.AsSpan().CopyTo(hessian.GetRowSpan(i));
         }
 
         return hessian;
@@ -521,18 +522,18 @@ public partial class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOp
         // CG iterations (max 10 or until convergence)
         T rDotR = ComputeDotProduct(r, r);
         int maxIter = Math.Min(10, context.Parameters.Count * 2);
+        T convergenceThreshold = NumOps.FromDouble(1e-10);
 
         for (int iter = 0; iter < maxIter; iter++)
         {
-            if (NumOps.LessThan(rDotR, NumOps.FromDouble(1e-10)))
+            if (IsBelow(rDotR, convergenceThreshold))
                 break;
 
             // Compute H*p via tape HVP
             var hp = context.HessianVectorProduct(p);
 
             // alpha = r'r / p'Hp
-            T pHp = ComputeDotProduct(p, hp);
-            if (NumOps.LessThanOrEquals(pHp, NumOps.Zero))
+            if (!TryCurvatureRatio(rDotR, ComputeDotProduct(p, hp), out T alpha))
             {
                 // Non-positive curvature (Nocedal & Wright, Algorithm 7.1): on the first iteration the direction is
                 // still the steepest-descent direction -g, so take it; later, keep the iterate built so far.
@@ -545,8 +546,6 @@ public partial class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOp
                 break;
             }
 
-            T alpha = NumOps.Divide(rDotR, pHp);
-
             // d = d + alpha * p
             // r = r - alpha * Hp
             foreach (var param in parameters)
@@ -558,7 +557,7 @@ public partial class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOp
             }
 
             T newRDotR = ComputeDotProduct(r, r);
-            T beta = NumOps.Divide(newRDotR, rDotR);
+            T beta = FletcherReevesBeta(newRDotR, rDotR);
             rDotR = newRDotR;
 
             // p = r + beta * p
@@ -588,18 +587,33 @@ public partial class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOp
     /// </summary>
     private T ComputeDotProduct(Dictionary<Tensor<T>, Tensor<T>> a, Dictionary<Tensor<T>, Tensor<T>> b)
     {
-        T result = NumOps.Zero;
-        foreach (var (key, aVal) in a)
+        // One engine reduction per shared tensor, then one sum over the per-tensor partials.
+        var partials = a
+            .Where(entry => b.ContainsKey(entry.Key))
+            .Select(entry => Engine.TensorSum(Engine.TensorMultiply(entry.Value, b[entry.Key])))
+            .ToList();
+        return partials.Count == 0 ? NumOps.Zero : Engine.Sum(Vector<T>.FromList(partials));
+    }
+
+    /// <summary>True when <paramref name="value"/> is strictly below <paramref name="threshold"/>.</summary>
+    private bool IsBelow(T value, T threshold) => NumOps.LessThan(value, threshold);
+
+    /// <summary>The CG direction update coefficient beta = r'r(new) / r'r(old).</summary>
+    private T FletcherReevesBeta(T newRDotR, T rDotR) => NumOps.Divide(newRDotR, rDotR);
+
+    /// <summary>
+    /// ratio = numerator / denominator; returns false (ratio = 0) when the denominator is not positive, the
+    /// non-positive curvature case of Newton-CG.
+    /// </summary>
+    private bool TryCurvatureRatio(T numerator, T denominator, out T ratio)
+    {
+        if (NumOps.LessThanOrEquals(denominator, NumOps.Zero))
         {
-            if (b.TryGetValue(key, out var bVal))
-            {
-                var product = Engine.TensorMultiply(aVal, bVal);
-                var allAxes = Enumerable.Range(0, product.Shape.Length).ToArray();
-                var sum = Engine.ReduceSum(product, allAxes, keepDims: false);
-                if (sum.Length > 0)
-                    result = NumOps.Add(result, sum[0]);
-            }
+            ratio = NumOps.Zero;
+            return false;
         }
-        return result;
+
+        ratio = NumOps.Divide(numerator, denominator);
+        return true;
     }
 }

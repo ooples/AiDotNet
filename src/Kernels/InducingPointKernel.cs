@@ -129,15 +129,7 @@ public class InducingPointKernel<T> : IKernelFunction<T>
     /// <returns>Matrix of inducing point locations.</returns>
     public Matrix<T> GetInducingPoints()
     {
-        var copy = new Matrix<T>(_inducingPoints.Rows, _inducingPoints.Columns);
-        for (int i = 0; i < _inducingPoints.Rows; i++)
-        {
-            for (int j = 0; j < _inducingPoints.Columns; j++)
-            {
-                copy[i, j] = _inducingPoints[i, j];
-            }
-        }
-        return copy;
+        return _inducingPoints.Clone();
     }
 
     /// <summary>
@@ -173,32 +165,17 @@ public class InducingPointKernel<T> : IKernelFunction<T>
     public void PrecomputeMatrices()
     {
         int m = _numInducingPoints;
-        _Kzz = new Matrix<T>(m, m);
+        var engine = AiDotNetEngine.Current;
 
-        // Compute k(Z, Z)
-        for (int i = 0; i < m; i++)
-        {
-            var zi = GetRow(_inducingPoints, i);
-            for (int j = i; j < m; j++)
-            {
-                var zj = GetRow(_inducingPoints, j);
-                T kval = _baseKernel.Calculate(zi, zj);
+        // Compute k(Z, Z) + jitter * I
+        var inducingRows = Enumerable.Range(0, m).Select(i => _inducingPoints.GetRow(i)).ToArray();
+        var gram = KernelVectorOps<T>.SymmetricGram(_baseKernel, inducingRows);
+        _Kzz = engine.MatrixAdd(gram, engine.MatrixMultiplyScalar(Matrix<T>.CreateIdentity(m), _numOps.FromDouble(_jitter)));
 
-                if (i == j)
-                {
-                    double kd = _numOps.ToDouble(kval) + _jitter;
-                    _Kzz[i, j] = _numOps.FromDouble(kd);
-                }
-                else
-                {
-                    _Kzz[i, j] = kval;
-                    _Kzz[j, i] = kval;
-                }
-            }
-        }
-
-        // Compute Cholesky decomposition
-        _Lzz = CholeskyDecomposition(_Kzz);
+        // Compute Cholesky decomposition; fall back to the clamped factorisation when K_zz is not
+        // numerically positive definite.
+        var (factor, info) = LinalgDispatch<T>.CholeskyEx(Tensor<T>.FromMatrix(_Kzz));
+        _Lzz = info.GetFlatIndexValue(0) == 0 ? factor.ToMatrix() : CholeskyDecomposition(_Kzz);
         _matricesValid = true;
     }
 
@@ -231,28 +208,16 @@ public class InducingPointKernel<T> : IKernelFunction<T>
         }
 
         // Compute k(x1, Z) and k(x2, Z)
-        var kx1z = new Vector<T>(_numInducingPoints);
-        var kx2z = new Vector<T>(_numInducingPoints);
-
-        for (int i = 0; i < _numInducingPoints; i++)
-        {
-            var zi = GetRow(_inducingPoints, i);
-            kx1z[i] = _baseKernel.Calculate(x1, zi);
-            kx2z[i] = _baseKernel.Calculate(x2, zi);
-        }
+        var inducingRows = Enumerable.Range(0, _numInducingPoints).Select(i => _inducingPoints.GetRow(i)).ToArray();
+        var kx1z = new Vector<T>(inducingRows.Select(zi => _baseKernel.Calculate(x1, zi)));
+        var kx2z = new Vector<T>(inducingRows.Select(zi => _baseKernel.Calculate(x2, zi)));
 
         // Solve L * v1 = k(x1, Z) for v1
         var v1 = SolveLowerTriangular(_Lzz, kx1z);
         var v2 = SolveLowerTriangular(_Lzz, kx2z);
 
         // Q(x1, x2) = v1^T * v2
-        double result = 0;
-        for (int i = 0; i < _numInducingPoints; i++)
-        {
-            result += _numOps.ToDouble(v1[i]) * _numOps.ToDouble(v2[i]);
-        }
-
-        return _numOps.FromDouble(result);
+        return AiDotNetEngine.Current.DotProduct(v1, v2);
     }
 
     /// <summary>
@@ -269,19 +234,13 @@ public class InducingPointKernel<T> : IKernelFunction<T>
     public Matrix<T> ComputeCrossCovariance(Matrix<T> X)
     {
         int n = X.Rows;
-        var Kxz = new Matrix<T>(n, _numInducingPoints);
+        if (n == 0)
+            return new Matrix<T>(0, _numInducingPoints);
 
-        for (int i = 0; i < n; i++)
-        {
-            var xi = GetRow(X, i);
-            for (int j = 0; j < _numInducingPoints; j++)
-            {
-                var zj = GetRow(_inducingPoints, j);
-                Kxz[i, j] = _baseKernel.Calculate(xi, zj);
-            }
-        }
-
-        return Kxz;
+        var inducingRows = Enumerable.Range(0, _numInducingPoints).Select(j => _inducingPoints.GetRow(j)).ToArray();
+        return new Matrix<T>(Enumerable.Range(0, n)
+            .Select(i => X.GetRow(i))
+            .Select(xi => inducingRows.Select(zj => _baseKernel.Calculate(xi, zj))));
     }
 
     /// <summary>
@@ -362,47 +321,35 @@ public class InducingPointKernel<T> : IKernelFunction<T>
     /// - Optimizing inducing point locations during training
     /// </para>
     /// </remarks>
-    public double EstimateApproximationError(Matrix<T> X)
+    public T EstimateApproximationError(Matrix<T> X)
     {
         int n = Math.Min(X.Rows, 100); // Sample at most 100 points
-        double totalError = 0;
-        int count = 0;
+        int count = (int)Math.Min((long)n * n, 500);
+        if (count == 0)
+            return _numOps.Zero;
 
+        // Draw the random pairs first (same stream order as one pair per trial).
         var rand = RandomHelper.CreateSecureRandom();
-
-        for (int trial = 0; trial < n * n && count < 500; trial++)
+        var pairs = new (int I, int J)[count];
+        for (int trial = 0; trial < count; trial++)
         {
             int i = rand.Next(X.Rows);
             int j = rand.Next(X.Rows);
-
-            var xi = GetRow(X, i);
-            var xj = GetRow(X, j);
-
-            double exact = _numOps.ToDouble(_baseKernel.Calculate(xi, xj));
-            double approx = _numOps.ToDouble(Calculate(xi, xj));
-
-            double error = Math.Abs(exact - approx) / Math.Max(Math.Abs(exact), 1e-10);
-            totalError += error;
-            count++;
+            pairs[trial] = (i, j);
         }
 
-        return count > 0 ? totalError / count : 0;
+        var exact = new Vector<T>(pairs.Select(p => _baseKernel.Calculate(X.GetRow(p.I), X.GetRow(p.J))));
+        var approx = new Vector<T>(pairs.Select(p => Calculate(X.GetRow(p.I), X.GetRow(p.J))));
+
+        // Mean relative error |exact - approx| / max(|exact|, 1e-10)
+        var engine = AiDotNetEngine.Current;
+        var exactTensor = exact.AsTensor();
+        var denominator = engine.TensorClampMin(engine.TensorAbs(exactTensor), _numOps.FromDouble(1e-10));
+        var errors = engine.TensorDivide(engine.TensorAbs(engine.TensorSubtract(exactTensor, approx.AsTensor())), denominator);
+        return engine.TensorMean(errors);
     }
 
     #region Helper Methods
-
-    /// <summary>
-    /// Extracts a row from a matrix.
-    /// </summary>
-    private Vector<T> GetRow(Matrix<T> matrix, int row)
-    {
-        var result = new Vector<T>(matrix.Columns);
-        for (int j = 0; j < matrix.Columns; j++)
-        {
-            result[j] = matrix[row, j];
-        }
-        return result;
-    }
 
     /// <summary>
     /// Cholesky decomposition.
@@ -443,18 +390,8 @@ public class InducingPointKernel<T> : IKernelFunction<T>
     private Vector<T> SolveLowerTriangular(Matrix<T> L, Vector<T> b)
     {
         int n = b.Length;
-        var x = new Vector<T>(n);
-
-        for (int i = 0; i < n; i++)
-        {
-            double sum = 0;
-            for (int j = 0; j < i; j++)
-            {
-                sum += _numOps.ToDouble(L[i, j]) * _numOps.ToDouble(x[j]);
-            }
-            x[i] = _numOps.FromDouble((_numOps.ToDouble(b[i]) - sum) / _numOps.ToDouble(L[i, i]));
-        }
-        return x;
+        var solution = LinalgDispatch<T>.SolveTriangular(Tensor<T>.FromMatrix(L), b.AsTensor().Reshape(new[] { n, 1 }), upper: false);
+        return solution.Reshape(new[] { n }).ToVector();
     }
 
     #endregion

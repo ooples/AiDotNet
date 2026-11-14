@@ -19,6 +19,7 @@ on:
       - 'website/supabase/migrations/*playground_stripe*.sql'
       - 'tests/AiDotNet.Playground.Functions.Tests/**'
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'src/AiDotNet.Playground.Functions/**'
       - 'src/AiDotNet.Playground.Execution/**'
@@ -50,6 +51,7 @@ permissions:
 
 jobs:
   build:
+    if: ${{ github.event.pull_request.draft != true }}
     name: Build and Verify
     runs-on: ubuntu-latest
     # The execution project references src/AiDotNet.csproj, so this build compiles the library's

@@ -423,11 +423,7 @@ public partial class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimize
         T beta2 = NumOps.FromDouble(_options.Beta2);
 
         // Update biased first moment estimate: m = beta1 * m + (1 - beta1) * gradient
-        // ONE FUSED IN-PLACE PASS -- same rewrite as the rest of the family, same reason: each
-        // Engine call returned a fresh full-length vector and CreateDefault broadcast the scalar
-        // epsilon into a full-length constant vector. Measured elsewhere in the family at
-        // 2,000,000 double parameters: hundreds of MB and hundreds of ms per step, down to
-        // 15.26 MB and single/low-double-digit ms.
+        // Whole-vector engine ops with scalar operands (no broadcast constant vectors).
         //
         // Per-element operand and association order preserved exactly (Kingma & Ba 2015 sec. 7.1,
         // the infinity-norm variant): u is a running MAX, not an exponential average of squares.
@@ -435,30 +431,20 @@ public partial class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimize
         T alpha = NumOps.Divide(CurrentLearningRate, NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t)));
         T epsilon = NumOps.FromDouble(1e-8);
 
-        var updatedParams = new Vector<T>(parameters.Length, skipZeroInit: true);
-        var pSpan = parameters.AsSpan();
-        var gSpan = gradient.AsSpan();
-        var mSpan = _m.AsWritableSpan();
-        var uSpan = _u.AsWritableSpan();
-        var outSpan = updatedParams.AsWritableSpan();
+        var engine = Engine;
+        var g = gradient.AsTensor();
+        var mState = _m.AsTensor();
+        var uState = _u.AsTensor();
 
-        for (int i = 0; i < pSpan.Length; i++)
-        {
-            T g = gSpan[i];
+        var m = engine.TensorAddScaled(mState, g, beta1, oneMinusBeta1);
+        var u = engine.TensorMax(engine.TensorMultiplyScalar(uState, beta2), engine.TensorAbs(g));
+        engine.TensorCopy(m, mState);
+        engine.TensorCopy(u, uState);
 
-            T m = NumOps.Add(NumOps.Multiply(mSpan[i], beta1), NumOps.Multiply(g, oneMinusBeta1));
-            mSpan[i] = m;
-
-            T uScaled = NumOps.Multiply(uSpan[i], beta2);
-            T absG = NumOps.Abs(g);
-            T u = NumOps.GreaterThan(uScaled, absG) ? uScaled : absG;
-            uSpan[i] = u;
-
-            T update = NumOps.Divide(NumOps.Multiply(m, alpha), NumOps.Add(u, epsilon));
-            outSpan[i] = NumOps.Subtract(pSpan[i], update);
-        }
-
-        return updatedParams;
+        var update = engine.TensorDivide(
+            engine.TensorMultiplyScalar(m, alpha),
+            engine.TensorAddScalar(u, epsilon));
+        return engine.TensorSubtract(parameters.AsTensor(), update).AsVector();
     }
 
     // Per-parameter AdaMax state for tape-based training
@@ -483,6 +469,7 @@ public partial class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimize
         bool gpuAdam = typeof(T) == typeof(float)
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
 
+        double learningRateValue = NumOps.ToDouble(CurrentLearningRate);
         foreach (var param in context.Parameters)
         {
             // True sparse scatter Adamax: per-row update of m + u + param.
@@ -494,7 +481,7 @@ public partial class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimize
                 double bc1 = 1.0 - Math.Pow(_options.Beta1, _tapeStep);
                 if (SparseEmbeddingOptimizerHelpers.TryApplyAdamaxSparse(
                         param, mSp, uSp,
-                        NumOps.ToDouble(CurrentLearningRate),
+                        learningRateValue,
                         _options.Beta1, _options.Beta2, bc1, eps: 1e-8, weightDecay: 0.0))
                 {
                     continue;
@@ -509,7 +496,7 @@ public partial class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimize
 
             if (gpuAdam && param.Length == grad.Length
                 && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryAdamaxStep((Tensor<float>)(object)param, (Tensor<float>)(object)grad, (Tensor<float>)(object)m, (Tensor<float>)(object)u,
-                    (float)NumOps.ToDouble(CurrentLearningRate), (float)_options.Beta1, (float)_options.Beta2, 1e-8f, 0f, _tapeStep))
+                    (float)learningRateValue, (float)_options.Beta1, (float)_options.Beta2, 1e-8f, 0f, _tapeStep))
                 continue;
 
             // m = beta1 * m + (1 - beta1) * grad

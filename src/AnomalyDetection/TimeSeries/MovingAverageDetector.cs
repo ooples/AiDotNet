@@ -116,45 +116,25 @@ public class MovingAverageDetector<T> : AnomalyDetectorBase<T>
         }
 
         int n = X.Rows;
-        var scores = new Vector<T>(n);
+        var engine = Engine;
 
-        // Extract values
-        var values = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            values[i] = NumOps.ToDouble(X[i, 0]);
-        }
+        // Row i of the window matrix holds the trailing window ending at i (zero-padded at the start of
+        // the series); the mask marks the real entries, so the per-row counts are min(i + 1, windowSize).
+        int window = Math.Min(_windowSize, n);
+        var series = X.GetColumn(0).AsTensor();
+        var windows = AnomalyTensorOps.TrailingWindows(series, window, out var mask);
+        var counts = engine.ReduceSum(mask, new[] { 1 }, false);
 
-        // Compute moving average and std for each point
-        for (int i = 0; i < n; i++)
-        {
-            int start = Math.Max(0, i - _windowSize + 1);
-            int windowLen = i - start + 1;
+        // Local mean and (population) standard deviation of each window, two-pass as before.
+        var localMean = engine.TensorDivide(engine.ReduceSum(windows, new[] { 1 }, false), counts);
+        var centered = engine.TensorMultiply(
+            engine.TensorSubtract(windows, AnomalyTensorOps.BroadcastColumn(localMean, window)), mask);
+        var localStd = engine.TensorSqrt(engine.TensorDivide(
+            engine.ReduceSum(engine.TensorSquare(centered), new[] { 1 }, false), counts));
+        localStd = engine.TensorMax(localStd, NumOps.FromDouble(1e-10));
 
-            // Compute local mean
-            double sum = 0;
-            for (int j = start; j <= i; j++)
-            {
-                sum += values[j];
-            }
-            double localMean = sum / windowLen;
-
-            // Compute local std
-            double sqSum = 0;
-            for (int j = start; j <= i; j++)
-            {
-                sqSum += Math.Pow(values[j] - localMean, 2);
-            }
-            double localStd = Math.Sqrt(sqSum / windowLen);
-            if (localStd < 1e-10) localStd = 1e-10;
-
-            // Compute score
-            double deviation = Math.Abs(values[i] - localMean);
-            double score = deviation / localStd;
-
-            scores[i] = NumOps.FromDouble(score);
-        }
-
-        return scores;
+        // Score: |x - local mean| / local std.
+        var deviation = engine.TensorAbs(engine.TensorSubtract(series, localMean));
+        return engine.TensorDivide(deviation, localStd).ToVector();
     }
 }

@@ -100,10 +100,9 @@ public class CompositeLoss<T> : LossFunctionBase<T>
     /// <inheritdoc/>
     public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
     {
-        T total = NumOps.Zero;
-        for (int i = 0; i < _losses.Length; i++)
-            total = NumOps.Add(total, NumOps.Multiply(_weights[i], _losses[i].CalculateLoss(predicted, actual)));
-        return total;
+        // Σ wᵢ·Lᵢ as one engine dot product over the per-term losses.
+        var termLosses = _losses.Select(loss => loss.CalculateLoss(predicted, actual)).ToArray();
+        return Engine.DotProduct(Vector<T>.Wrap(_weights), Vector<T>.Wrap(termLosses));
     }
 
 

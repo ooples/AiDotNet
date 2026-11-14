@@ -53,6 +53,8 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 [ResearchPaper("Paraformer: Fast and Accurate Parallel Transformer for Non-autoregressive End-to-End Speech Recognition", "https://arxiv.org/abs/2206.08317", Year = 2022, Authors = "Gao et al.")]
 [PaperOptimizer(OptimizerKind.Adam, LearningRate = 5e-4, WarmupSteps = 30000, Schedule = LearningRateSchedulerType.Noam, MaxGradientNorm = 5,
                 Source = "FunASR's AISHELL-1 Paraformer recipe (paraformer_conformer_12e_6d_2048_256.yaml): Adam at 5e-4, warmuplr with 30000 warmup steps, grad_clip 5.")]
+[AiDotNet.Attributes.PreprocessesInput("ConformerAsrNetwork converts the waveform to log-mel features and feeds them to the first convolution as a [B, 1, frames, bins] image, so Layers[0] never sees the raw samples.")]
+[AiDotNet.Attributes.StackInputLayout(AiDotNet.Enums.TensorAxis.Batch, AiDotNet.Enums.TensorAxis.Channels, AiDotNet.Enums.TensorAxis.Height, AiDotNet.Enums.TensorAxis.Width)]
 public partial class Paraformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITrainingObjectiveProvider<T>
 {
     /// <inheritdoc />

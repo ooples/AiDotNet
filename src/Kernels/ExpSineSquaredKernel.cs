@@ -144,22 +144,18 @@ public class ExpSineSquaredKernel<T> : IKernelFunction<T>
             throw new ArgumentException("Vectors must have the same length.");
 
         // Calculate the Euclidean distance between points
-        T squaredDistance = _numOps.Zero;
-        for (int i = 0; i < x1.Length; i++)
-        {
-            T diff = _numOps.Subtract(x1[i], x2[i]);
-            squaredDistance = _numOps.Add(squaredDistance, _numOps.Multiply(diff, diff));
-        }
-
-        double distance = Math.Sqrt(_numOps.ToDouble(squaredDistance));
+        var engine = AiDotNetEngine.Current;
+        var diff = engine.Subtract(x1, x2);
+        T distance = _numOps.Sqrt(engine.DotProduct(diff, diff));
 
         // Compute sin(π * d / period)
-        double sineArg = Math.PI * distance / _period;
-        double sineValue = Math.Sin(sineArg);
+        T sineArg = _numOps.Divide(_numOps.Multiply(_numOps.FromDouble(Math.PI), distance), _numOps.FromDouble(_period));
+        T sineValue = MathHelper.Sin(sineArg);
 
         // Compute exp(-2 * sin²(...) / lengthScale²)
-        double exponent = -2.0 * sineValue * sineValue / (_lengthScale * _lengthScale);
+        T exponent = _numOps.Divide(_numOps.Multiply(_numOps.FromDouble(-2.0), _numOps.Multiply(sineValue, sineValue)),
+            _numOps.FromDouble(_lengthScale * _lengthScale));
 
-        return _numOps.FromDouble(Math.Exp(exponent));
+        return _numOps.Exp(exponent);
     }
 }

@@ -565,12 +565,30 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
                     "attnLogitSoftcap is not supported together with ALiBi positional bias; " +
                     "the soft-cap applies only to the standard scaled dot-product attention path.");
             }
-            var (ctx, attentionWeights) = _alibiLayer != null
-                ? ComputeALiBiAttention(queries, expandedKeys, expandedValues, seqLen, batchSize)
-                : ComputeStandardAttentionWithWeights(queries, expandedKeys, expandedValues);
-
-            _lastAttentionWeights = cacheBwd ? attentionWeights : null;
-            context = ctx;
+            if (_alibiLayer != null)
+            {
+                var (ctx, attentionWeights) = ComputeALiBiAttention(queries, expandedKeys, expandedValues, seqLen, batchSize);
+                _lastAttentionWeights = cacheBwd ? attentionWeights : null;
+                context = ctx;
+            }
+            else if (!cacheBwd && _attnLogitSoftcap <= 0.0)
+            {
+                _lastAttentionWeights = null;
+                context = Engine.FlashAttention(
+                    queries,
+                    expandedKeys,
+                    expandedValues,
+                    scale: 1.0 / Math.Sqrt(_headDimension),
+                    isCausal: _useCausalMask,
+                    out _,
+                    attentionBias: null);
+            }
+            else
+            {
+                var (ctx, attentionWeights) = ComputeStandardAttentionWithWeights(queries, expandedKeys, expandedValues);
+                _lastAttentionWeights = cacheBwd ? attentionWeights : null;
+                context = ctx;
+            }
         }
 
         // Reshape back: [batch, numHeads, seq, headDim] -> [batch, seq, embDim]

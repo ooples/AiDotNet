@@ -81,17 +81,8 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
             throw new ArgumentException($"Target length ({target.Length}) must match data row count ({n}).", nameof(target));
         if (featureNames != null && featureNames.Length != d)
             throw new ArgumentException($"Feature names length ({featureNames.Length}) must match data column count ({d}).", nameof(featureNames));
-        var combined = new Matrix<T>(n, d + 1);
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                combined[i, j] = data[i, j];
-            }
-
-            combined[i, d] = target[i];
-        }
+        var combined = Engine.TensorConcatenate(
+            new[] { Tensor<T>.FromMatrix(data), Tensor<T>.FromVector(target).Reshape(new[] { n, 1 }) }, 1).ToMatrix();
 
         string[] names = featureNames ?? GenerateDefaultNames(d);
         string[] allNames = [.. names, "target"];
@@ -150,35 +141,47 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
     /// </remarks>
     protected Matrix<T> StandardizeColumns(Matrix<T> data)
     {
-        int n = data.Rows;
-        int d = data.Columns;
-        var result = new Matrix<T>(n, d);
+        var x = Tensor<T>.FromMatrix(data);
+        var centered = CenterColumns(x);
+        var standardDeviation = Engine.TensorSqrt(
+            Engine.ReduceMean(Engine.TensorSquare(centered), new[] { 0 }, true));
 
-        for (int j = 0; j < d; j++)
-        {
-            double mean = 0;
-            for (int i = 0; i < n; i++) mean += NumOps.ToDouble(data[i, j]);
-            mean /= n;
+        // Constant columns are written as zeros: their scale factor is 0 instead of 1/std.
+        var isConstant = Engine.TensorLessThan(standardDeviation, NumOps.FromDouble(ConstantColumnStdDevTolerance));
+        var safeDeviation = Engine.TensorWhere(isConstant, Engine.TensorOnesLike(standardDeviation), standardDeviation);
+        var scale = Engine.TensorWhere(isConstant, Engine.TensorZerosLike(standardDeviation),
+            Engine.TensorReciprocal(safeDeviation));
 
-            double variance = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double deviation = NumOps.ToDouble(data[i, j]) - mean;
-                variance += deviation * deviation;
-            }
+        return Engine.TensorMultiply(centered, Engine.TensorBroadcastTo(scale, centered.Shape.ToArray())).ToMatrix();
+    }
 
-            double standardDeviation = Math.Sqrt(variance / n);
-            if (standardDeviation < ConstantColumnStdDevTolerance)
-            {
-                for (int i = 0; i < n; i++) result[i, j] = NumOps.Zero;
-                continue;
-            }
+    /// <summary>
+    /// A [d x d] tensor of ones with a zero diagonal.
+    /// </summary>
+    private protected Tensor<T> OffDiagonalMask(int d)
+    {
+        var identity = Engine.TensorEye<T>(d);
+        return Engine.TensorSubtract(Engine.TensorOnesLike(identity), identity);
+    }
 
-            for (int i = 0; i < n; i++)
-                result[i, j] = NumOps.FromDouble((NumOps.ToDouble(data[i, j]) - mean) / standardDeviation);
-        }
+    /// <summary>
+    /// sigmoid(x / tau), saturated to exactly 1 above 20 and 0 below -20.
+    /// </summary>
+    private protected Tensor<T> ClampedSigmoid(Tensor<T> logits, double tau)
+    {
+        var x = Engine.TensorDivideScalar(logits, NumOps.FromDouble(tau));
+        var sigmoid = Engine.TensorSigmoid(x);
+        sigmoid = Engine.TensorWhere(Engine.TensorGreaterThan(x, NumOps.FromDouble(20)), Engine.TensorOnesLike(x), sigmoid);
+        return Engine.TensorWhere(Engine.TensorLessThan(x, NumOps.FromDouble(-20)), Engine.TensorZerosLike(x), sigmoid);
+    }
 
-        return result;
+    /// <summary>
+    /// Subtracts each column's mean from an [n x d] tensor.
+    /// </summary>
+    private protected Tensor<T> CenterColumns(Tensor<T> x)
+    {
+        var mean = Engine.ReduceMean(x, new[] { 0 }, true);
+        return Engine.TensorSubtract(x, Engine.TensorBroadcastTo(mean, x.Shape.ToArray()));
     }
 
     /// <summary>
@@ -189,44 +192,14 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
     protected Matrix<T> ComputeCovarianceMatrix(Matrix<T> data)
     {
         int n = data.Rows;
-        int d = data.Columns;
-
-        // Compute column means
-        var means = new T[d];
-        for (int j = 0; j < d; j++)
-        {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                sum = NumOps.Add(sum, data[i, j]);
-            }
-
-            means[j] = NumOps.Divide(sum, NumOps.FromDouble(n));
-        }
 
         // Compute covariance: (1/n) * (X - mean)^T * (X - mean)
-        var cov = new Matrix<T>(d, d);
+        var centered = CenterColumns(Tensor<T>.FromMatrix(data));
         T nInv = NumOps.Divide(NumOps.One, NumOps.FromDouble(n));
+        var gram = Engine.TensorMatMul(Engine.TensorTranspose(centered), centered);
 
-        for (int j1 = 0; j1 < d; j1++)
-        {
-            for (int j2 = j1; j2 < d; j2++)
-            {
-                T sum = NumOps.Zero;
-                for (int i = 0; i < n; i++)
-                {
-                    T diff1 = NumOps.Subtract(data[i, j1], means[j1]);
-                    T diff2 = NumOps.Subtract(data[i, j2], means[j2]);
-                    sum = NumOps.Add(sum, NumOps.Multiply(diff1, diff2));
-                }
-
-                T covVal = NumOps.Multiply(sum, nInv);
-                cov[j1, j2] = covVal;
-                cov[j2, j1] = covVal; // Symmetric
-            }
-        }
-
-        return cov;
+        // Mirror the upper triangle so the result is exactly symmetric.
+        return Engine.TensorMultiplyScalar(CausalTensorHelpers.Symmetrize(gram), nInv).ToMatrix();
     }
 
     /// <summary>
@@ -247,16 +220,7 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
 
         // Build the submatrix for [i, j, condSet] and compute via matrix inversion
         int[] indices = [i, j, .. conditioningSet];
-        int size = indices.Length;
-        var subMatrix = new Matrix<T>(size, size);
-
-        for (int r = 0; r < size; r++)
-        {
-            for (int c = 0; c < size; c++)
-            {
-                subMatrix[r, c] = correlationMatrix[indices[r], indices[c]];
-            }
-        }
+        var subMatrix = SelectSubmatrix(correlationMatrix, indices);
 
         // Invert the submatrix
         var precision = InvertSmallMatrix(subMatrix);
@@ -349,63 +313,48 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
     protected double ComputeResidualVariance(Matrix<T> data, int target, int[] predictors)
     {
         int n = data.Rows;
-        int p = predictors.Length;
-        int dim = p + 1; // +1 for intercept
 
-        // Build design matrix and target vector using Matrix<T>/Vector<T>
-        var X = new Matrix<T>(n, dim);
-        var y = new Vector<T>(n);
+        // Least squares on [1 | data[:, predictors]] with ridge 1e-4; residual variance rss / n.
+        var residual = CausalTensorHelpers.InterceptOlsResidual(Tensor<T>.FromMatrix(data), target, predictors, 1e-4);
+        T rss = Engine.TensorSum(Engine.TensorSquare(residual));
+        return NumOps.ToDouble(rss) / n;
+    }
 
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = data[i, target];
-            X[i, 0] = NumOps.One; // intercept
-            for (int j = 0; j < p; j++)
-            {
-                X[i, j + 1] = data[i, predictors[j]];
-            }
-        }
+    /// <summary>
+    /// Absolute Pearson correlation of every pair of columns, as
+    /// a per-pair Pearson correlation does: an entry is 0 when either
+    /// column's centered sum of squares is not above 1e-10.
+    /// </summary>
+    /// <returns>A symmetric [d x d] matrix of |corr(i, j)|.</returns>
+    private protected Matrix<T> ComputeAbsoluteCorrelationMatrix(Matrix<T> data)
+    {
+        var centered = CenterColumns(Tensor<T>.FromMatrix(data));
+        var gram = CausalTensorHelpers.Symmetrize(Engine.TensorMatMul(Engine.TensorTranspose(centered), centered));
 
-        // Normal equations: XtX * beta = Xty
-        var XtX = new Matrix<T>(dim, dim);
-        var Xty = new Vector<T>(dim);
+        var sumSquares = Engine.TensorDiagonal(gram);
+        var valid = Engine.TensorGreaterThan(sumSquares, NumOps.FromDouble(1e-10));
+        var validPair = Engine.TensorOuter(valid, valid);
+        var rootSumSquares = Engine.TensorSqrt(sumSquares);
+        var denom = Engine.TensorOuter(rootSumSquares, rootSumSquares);
+        var safeDenom = Engine.TensorWhere(validPair, denom, Engine.TensorOnesLike(denom));
+        var correlation = Engine.TensorAbs(Engine.TensorDivide(gram, safeDenom));
+        return Engine.TensorWhere(validPair, correlation, Engine.TensorZerosLike(correlation)).ToMatrix();
+    }
 
-        for (int i = 0; i < dim; i++)
-        {
-            for (int j = i; j < dim; j++)
-            {
-                T sum = NumOps.Zero;
-                for (int k = 0; k < n; k++)
-                    sum = NumOps.Add(sum, NumOps.Multiply(X[k, i], X[k, j]));
-                XtX[i, j] = sum;
-                XtX[j, i] = sum; // Symmetric
-            }
+    /// <summary>
+    /// Gathers the given columns of an [n x d] tensor into an [n x k] tensor.
+    /// </summary>
+    private protected Tensor<T> SelectColumns(Tensor<T> source, int[] columns)
+        => CausalTensorHelpers.SelectColumns(source, columns);
 
-            T sumY = NumOps.Zero;
-            for (int k = 0; k < n; k++)
-                sumY = NumOps.Add(sumY, NumOps.Multiply(X[k, i], y[k]));
-            Xty[i] = sumY;
-        }
-
-        // Ridge regularization
-        T ridge = NumOps.FromDouble(1e-4);
-        for (int i = 0; i < dim; i++)
-            XtX[i, i] = NumOps.Add(XtX[i, i], ridge);
-
-        var beta = MatrixSolutionHelper.SolveLinearSystem<T>(XtX, Xty, MatrixDecompositionType.Lu);
-
-        // Compute residual variance
-        double rss = 0;
-        for (int i = 0; i < n; i++)
-        {
-            T pred = NumOps.Zero;
-            for (int j = 0; j < dim; j++)
-                pred = NumOps.Add(pred, NumOps.Multiply(beta[j], X[i, j]));
-            double residual = NumOps.ToDouble(NumOps.Subtract(y[i], pred));
-            rss += residual * residual;
-        }
-
-        return rss / n;
+    /// <summary>
+    /// Gathers the rows and columns <paramref name="indices"/> of a matrix into a square submatrix.
+    /// </summary>
+    private protected Matrix<T> SelectSubmatrix(Matrix<T> matrix, int[] indices)
+    {
+        var index = new Tensor<int>((int[])indices.Clone(), new[] { indices.Length });
+        var rows = Engine.TensorIndexSelect(Tensor<T>.FromMatrix(matrix), index, 0);
+        return Engine.TensorIndexSelect(rows, index, 1).ToMatrix();
     }
 
     /// <summary>
@@ -413,23 +362,8 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
     /// </summary>
     protected double ComputeVariance(Matrix<T> data, int column)
     {
-        int n = data.Rows;
-        double mean = 0;
-        for (int i = 0; i < n; i++)
-        {
-            mean += NumOps.ToDouble(data[i, column]);
-        }
-
-        mean /= n;
-
-        double variance = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double diff = NumOps.ToDouble(data[i, column]) - mean;
-            variance += diff * diff;
-        }
-
-        return variance / n;
+        var centered = CenterColumns(SelectColumns(Tensor<T>.FromMatrix(data), new[] { column }));
+        return NumOps.ToDouble(Engine.TensorMean(Engine.TensorSquare(centered)));
     }
 
     /// <summary>
@@ -437,22 +371,11 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
     /// </summary>
     protected Matrix<T> CovarianceToCorrelation(Matrix<T> covariance)
     {
-        int d = covariance.Rows;
-        var correlation = new Matrix<T>(d, d);
-
-        for (int i = 0; i < d; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                double covIJ = NumOps.ToDouble(covariance[i, j]);
-                double varI = NumOps.ToDouble(covariance[i, i]);
-                double varJ = NumOps.ToDouble(covariance[j, j]);
-                double denom = Math.Sqrt(Math.Max(varI * varJ, 1e-30));
-                correlation[i, j] = NumOps.FromDouble(covIJ / denom);
-            }
-        }
-
-        return correlation;
+        var cov = Tensor<T>.FromMatrix(covariance);
+        var variances = Engine.TensorDiagonal(cov);
+        var varianceProducts = Engine.TensorOuter(variances, variances);
+        var denom = Engine.TensorSqrt(Engine.TensorMax(varianceProducts, NumOps.FromDouble(1e-30)));
+        return Engine.TensorDivide(cov, denom).ToMatrix();
     }
 
     /// <summary>
@@ -460,21 +383,10 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
     /// </summary>
     protected Matrix<T> ThresholdMatrix(Matrix<T> matrix, double threshold)
     {
-        int d = matrix.Rows;
-        var result = new Matrix<T>(d, d);
-
-        for (int i = 0; i < d; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                double val = NumOps.ToDouble(matrix[i, j]);
-                result[i, j] = Math.Abs(val) >= threshold
-                    ? matrix[i, j]
-                    : NumOps.Zero;
-            }
-        }
-
-        return result;
+        var values = Tensor<T>.FromMatrix(matrix);
+        var keep = Engine.TensorGreaterEqual(Engine.TensorAbs(values),
+            Engine.TensorFullLike(values, NumOps.FromDouble(threshold)));
+        return Engine.TensorWhere(keep, values, Engine.TensorZerosLike(values)).ToMatrix();
     }
 
     /// <summary>
@@ -539,24 +451,7 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
                 $"A.Columns ({a.Columns}) must equal B.Rows ({b.Rows}).");
         }
 
-        int m = a.Rows;
-        int k = a.Columns;
-        int n = b.Columns;
-        var result = new Matrix<T>(m, n);
-
-        // Use Engine.MatrixVectorMultiply for each column of B
-        for (int j = 0; j < n; j++)
-        {
-            var colB = new Vector<T>(k);
-            for (int r = 0; r < k; r++)
-                colB[r] = b[r, j];
-
-            var colResult = Engine.MatrixVectorMultiply(a, colB);
-            for (int r = 0; r < m; r++)
-                result[r, j] = colResult[r];
-        }
-
-        return result;
+        return Engine.MatrixMultiply(a, b);
     }
 
     /// <summary>
@@ -564,14 +459,8 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
     /// </summary>
     protected T RowDotProduct(Matrix<T> a, int rowA, Matrix<T> b, int rowB, int length)
     {
-        var va = new Vector<T>(length);
-        var vb = new Vector<T>(length);
-        for (int k = 0; k < length; k++)
-        {
-            va[k] = a[rowA, k];
-            vb[k] = b[rowB, k];
-        }
-
+        var va = Engine.GetRow(a, rowA).GetSubVector(0, length);
+        var vb = Engine.GetRow(b, rowB).GetSubVector(0, length);
         return Engine.DotProduct(va, vb);
     }
 
@@ -604,10 +493,7 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
     /// </summary>
     protected Vector<T> GetRow(Matrix<T> matrix, int row)
     {
-        var v = new Vector<T>(matrix.Columns);
-        for (int j = 0; j < matrix.Columns; j++)
-            v[j] = matrix[row, j];
-        return v;
+        return Engine.GetRow(matrix, row);
     }
 
     /// <summary>
@@ -615,10 +501,7 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
     /// </summary>
     protected Vector<T> GetColumn(Matrix<T> matrix, int col)
     {
-        var v = new Vector<T>(matrix.Rows);
-        for (int i = 0; i < matrix.Rows; i++)
-            v[i] = matrix[i, col];
-        return v;
+        return Engine.GetColumn(matrix, col);
     }
 
     /// <summary>
@@ -645,31 +528,24 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
     /// <returns>The matrix exponential approximation.</returns>
     protected Matrix<T> MatrixExponentialTaylor(Matrix<T> M, int d, int terms = 10)
     {
-        var result = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            result[i, i] = NumOps.One;
-        var power = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            power[i, i] = NumOps.One;
-        T runningFactorial = NumOps.One;
+        var m = Tensor<T>.FromMatrix(M);
+        var result = Engine.TensorEye<T>(d);
+        var power = Engine.TensorEye<T>(d);
+
+        // runningFactorial holds k! as a [1, 1] tensor, broadcast over the power matrix.
+        var one = Engine.TensorOnesLike(Engine.TensorSlice(result, new[] { 0, 0 }, new[] { 1, 1 }));
+        var counter = Engine.TensorZerosLike(one);
+        var runningFactorial = one;
         for (int k = 1; k <= terms; k++)
         {
-            var next = new Matrix<T>(d, d);
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int l = 0; l < d; l++)
-                        sum = NumOps.Add(sum, NumOps.Multiply(power[i, l], M[l, j]));
-                    next[i, j] = sum;
-                }
-            power = next;
-            runningFactorial = NumOps.Multiply(runningFactorial, NumOps.FromDouble(k));
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                    result[i, j] = NumOps.Add(result[i, j], NumOps.Divide(power[i, j], runningFactorial));
+            power = Engine.TensorMatMul(power, m);
+            counter = Engine.TensorAdd(counter, one);
+            runningFactorial = Engine.TensorMultiply(runningFactorial, counter);
+            result = Engine.TensorAdd(result,
+                Engine.TensorDivide(power, Engine.TensorBroadcastTo(runningFactorial, new[] { d, d })));
         }
-        return result;
+
+        return result.ToMatrix();
     }
 
     /// <summary>
@@ -724,82 +600,164 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
     }
 
     /// <summary>
-    /// Inverts a small matrix using Gauss-Jordan elimination. Returns null if singular.
+    /// Solves a small linear system Ax = b with partial pivoting, returning the zero vector
+    /// when any pivot magnitude is at most 1e-15 (the contract of
+    /// <see cref="SolveSmallSystem(double[,], double[], int)"/>), for data held in tensors.
     /// </summary>
-    private Matrix<T>? InvertSmallMatrix(Matrix<T> matrix)
+    /// <param name="A">Coefficient matrix [p x p].</param>
+    /// <param name="b">Right-hand side [p].</param>
+    /// <returns>Solution [p].</returns>
+    private protected Tensor<T> SolveSmallSystem(Tensor<T> A, Tensor<T> b)
     {
-        int n = matrix.Rows;
-        var augmented = new Matrix<T>(n, 2 * n);
+        int p = b.Length;
+        var (_, _, u) = LinalgDispatch<T>.LU(A);
+        var smallPivots = Engine.TensorLessEqual(Engine.TensorAbs(Engine.TensorDiagonal(u)),
+            Engine.TensorFullLike(Engine.TensorDiagonal(u), NumOps.FromDouble(1e-15)));
+        if (Engine.TensorCountNonzero(smallPivots) > 0)
+            return new Tensor<T>(new[] { p }); // Singular — zero coefficients (caller handles)
 
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                augmented[i, j] = matrix[i, j];
-            }
-
-            augmented[i, i + n] = NumOps.One;
-        }
-
-        for (int col = 0; col < n; col++)
-        {
-            // Partial pivoting
-            int maxRow = col;
-            for (int row = col + 1; row < n; row++)
-            {
-                if (Math.Abs(NumOps.ToDouble(augmented[row, col])) >
-                    Math.Abs(NumOps.ToDouble(augmented[maxRow, col])))
-                {
-                    maxRow = row;
-                }
-            }
-
-            if (NumOps.LessThan(NumOps.Abs(augmented[maxRow, col]), NumOps.FromDouble(1e-12)))
-            {
-                return null; // Singular
-            }
-
-            // Swap rows
-            if (maxRow != col)
-            {
-                for (int j = 0; j < 2 * n; j++)
-                {
-                    (augmented[col, j], augmented[maxRow, j]) = (augmented[maxRow, j], augmented[col, j]);
-                }
-            }
-
-            // Scale pivot row
-            T pivot = augmented[col, col];
-            for (int j = 0; j < 2 * n; j++)
-            {
-                augmented[col, j] = NumOps.Divide(augmented[col, j], pivot);
-            }
-
-            // Eliminate other rows
-            for (int row = 0; row < n; row++)
-            {
-                if (row != col)
-                {
-                    T factor = augmented[row, col];
-                    for (int j = 0; j < 2 * n; j++)
-                    {
-                        augmented[row, j] = NumOps.Subtract(augmented[row, j],
-                            NumOps.Multiply(factor, augmented[col, j]));
-                    }
-                }
-            }
-        }
-
-        var result = new Matrix<T>(n, n);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                result[i, j] = augmented[i, j + n];
-            }
-        }
-
-        return result;
+        var (solution, _) = LinalgDispatch<T>.SolveEx(A, b.Reshape(new[] { p, 1 }));
+        return solution.Reshape(new[] { p });
     }
 
+    /// <summary>
+    /// Ordinary least squares of column <paramref name="target"/> on the centered
+    /// <paramref name="predictors"/> columns with a 1e-10 ridge, as the causal discovery
+    /// regressions use: y ≈ mean(y) + (X - mean(X)) β.
+    /// </summary>
+    /// <returns>The coefficients β [p] and the residuals y - prediction [n].</returns>
+    private protected (Tensor<T> Beta, Tensor<T> Residual) FitCenteredRegression(
+        Tensor<T> data, int target, int[] predictors)
+    {
+        int n = data.Shape[0];
+        int p = predictors.Length;
+        var y = Engine.TensorSliceAxis(data, 1, target);
+        T meanY = Engine.TensorMean(y);
+        var centeredX = CenterColumns(SelectColumns(data, predictors));
+        var centeredY = Engine.TensorSubtract(y, Engine.TensorFullLike(y, meanY)).Reshape(new[] { n, 1 });
+
+        // Normal equations X'X β = X'y, symmetric with ridge on the diagonal.
+        var gram = Engine.TensorMatMul(Engine.TensorTranspose(centeredX), centeredX);
+        gram = CausalTensorHelpers.Symmetrize(gram);
+        gram = Engine.TensorAdd(gram, Engine.TensorMultiplyScalar(Engine.TensorEye<T>(p), NumOps.FromDouble(1e-10)));
+        var xty = Engine.TensorMatMul(Engine.TensorTranspose(centeredX), centeredY).Reshape(new[] { p });
+
+        var beta = SolveSmallSystem(gram, xty);
+        var prediction = Engine.TensorAddScalar(
+            Engine.TensorMatMul(centeredX, beta.Reshape(new[] { p, 1 })).Reshape(new[] { n }), meanY);
+        return (beta, Engine.TensorSubtract(y, prediction));
+    }
+
+    /// <summary>
+    /// log|det(A)| from a partial-pivoting LU factorization, or negative infinity when any pivot
+    /// magnitude is below 1e-15 (the matrix is treated as singular).
+    /// </summary>
+    private protected double LogAbsDeterminant(Tensor<T> matrix)
+    {
+        var (_, _, u) = LinalgDispatch<T>.LU(matrix);
+        var pivots = Engine.TensorAbs(Engine.TensorDiagonal(u));
+        if (Engine.TensorCountNonzero(Engine.TensorLessThan(pivots, NumOps.FromDouble(1e-15))) > 0)
+            return double.NegativeInfinity; // Singular
+
+        return NumOps.ToDouble(Engine.TensorSum(Engine.TensorLog(pivots)));
+    }
+
+    /// <summary>
+    /// Inverts a small matrix through partial-pivoting LU. Returns null when a pivot magnitude is below 1e-12.
+    /// </summary>
+    private protected Matrix<T>? InvertSmallMatrix(Matrix<T> matrix)
+    {
+        // Partial-pivoting LU: its U diagonal holds exactly the pivots Gauss-Jordan elimination
+        // with partial pivoting would divide by, so the singularity test is unchanged.
+        var a = Tensor<T>.FromMatrix(matrix);
+        var (_, _, u) = LinalgDispatch<T>.LU(a);
+        var smallPivots = Engine.TensorLessThan(Engine.TensorAbs(Engine.TensorDiagonal(u)), NumOps.FromDouble(1e-12));
+        if (NumOps.GreaterThan(Engine.TensorSum(smallPivots), NumOps.Zero))
+        {
+            return null; // Singular
+        }
+
+        return LinalgDispatch<T>.Inv(a).ToMatrix();
+    }
+
+    /// <summary>
+    /// Greedy acyclic projection: keeps off-diagonal non-zero edges strongest |weight| first
+    /// (row-major order among ties), skipping any edge that would close a directed cycle.
+    /// </summary>
+    private protected Matrix<T> ProjectToAcyclic(Matrix<T> weights)
+    {
+        return ProjectToAcyclic(weights, Engine.TensorAbs(Tensor<T>.FromMatrix(weights)));
+    }
+
+    /// <summary>
+    /// Greedy acyclic projection ranked by <paramref name="priority"/> [d x d] (descending, row-major
+    /// order among ties) instead of |weight|; candidates are still the off-diagonal non-zero weights.
+    /// </summary>
+    private protected Matrix<T> ProjectToAcyclic(Matrix<T> weights, Tensor<T> priority)
+    {
+        int d = weights.Rows;
+        var flat = Tensor<T>.FromMatrix(weights).Reshape(new[] { d * d });
+        var magnitude = Engine.TensorAbs(flat);
+        var rank = priority.Reshape(new[] { d * d });
+
+        // Candidate edges: off-diagonal entries with a non-zero magnitude, in row-major (from, to) order.
+        var candidate = Engine.TensorMultiply(
+            Engine.TensorGreaterThan(magnitude, NumOps.Zero), OffDiagonalMask(d).Reshape(new[] { d * d }));
+        int[] positions = Engine.TensorNonzero(candidate).ToArray();
+        var dag = new Tensor<T>(new[] { d * d });
+        if (positions.Length == 0)
+            return dag.Reshape(new[] { d, d }).ToMatrix();
+
+        // Strongest first; the stable sort keeps (from, to) order among equal magnitudes.
+        var positionIndex = new Tensor<int>(positions, new[] { positions.Length });
+        int[] order = CausalTensorHelpers.StableArgsort(Engine.TensorIndexSelect(rank, positionIndex, 0), descending: true);
+
+        var reachable = new bool[d, d];
+        var kept = new List<int>();
+        foreach (int sortedIndex in order)
+        {
+            int position = positions[sortedIndex];
+            int from = position / d, to = position % d;
+
+            // Adding from -> to creates a cycle exactly when to already reaches from.
+            if (!HasDirectedPath(reachable, to, from))
+            {
+                reachable[from, to] = true;
+                kept.Add(position);
+            }
+        }
+
+        if (kept.Count == 0)
+            return dag.Reshape(new[] { d, d }).ToMatrix();
+
+        var keptIndex = new Tensor<int>(kept.ToArray(), new[] { kept.Count });
+        dag = Engine.TensorScatter(dag, keptIndex, Engine.TensorIndexSelect(flat, keptIndex, 0), 0);
+        return dag.Reshape(new[] { d, d }).ToMatrix();
+    }
+
+    private static bool HasDirectedPath(bool[,] graph, int start, int target)
+    {
+        if (start == target) return true;
+
+        int d = graph.GetLength(0);
+        var visited = new bool[d];
+        var pending = new Stack<int>();
+        pending.Push(start);
+
+        while (pending.Count > 0)
+        {
+            int node = pending.Pop();
+            if (node == target) return true;
+            if (visited[node]) continue;
+            visited[node] = true;
+
+            for (int next = 0; next < d; next++)
+            {
+                if (!visited[next] && graph[node, next])
+                    pending.Push(next);
+            }
+        }
+
+        return false;
+    }
 }

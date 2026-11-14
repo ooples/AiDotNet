@@ -125,8 +125,14 @@ public class SAMOptions : SegmentationModelOptions
     /// Throws when a value on this instance cannot produce a working model.
     /// </summary>
     /// <exception cref="ArgumentException">
-    /// Thrown when <see cref="SegmentationModelOptions.NumClasses"/> is not positive, or when
-    /// <see cref="SegmentationModelOptions.DropRate"/> is not a fraction in [0, 1).
+    /// Thrown when <see cref="SegmentationModelOptions.NumClasses"/> is not 1 (SAM predicts class-agnostic masks
+    /// for a prompt, Kirillov et al. 2023), or when <see cref="SegmentationModelOptions.DropRate"/> is not a fraction
+    /// in [0, 1).
     /// </exception>
-    public void Validate() => ValidateSegmentationCore();
+    public void Validate()
+    {
+        if (NumClasses != 1)
+            throw new ArgumentException("SAM predicts class-agnostic masks for a prompt: NumClasses must be 1.", nameof(NumClasses));
+        ValidateSegmentationCore();
+    }
 }

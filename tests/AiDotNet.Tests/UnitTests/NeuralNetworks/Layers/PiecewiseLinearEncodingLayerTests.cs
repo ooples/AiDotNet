@@ -15,6 +15,19 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers;
 /// </summary>
 public class PiecewiseLinearEncodingLayerTests
 {
+    [Fact]
+    public void FitBoundaries_LargeSampleBinProductDoesNotOverflowInt32()
+    {
+        const int samples = 600000, bins = 4096;
+        var layer = new PiecewiseLinearEncodingLayer<double>(numFeatures: 1, numBins: bins);
+        var data = new Tensor<double>(Enumerable.Range(0, samples).Select(value => (double)value).ToArray(),
+            new[] { samples, 1 });
+        layer.FitBoundaries(data);
+        var edges = layer.GetParameters();
+        foreach (int bin in new[] { 0, 1, bins / 2, bins - 1, bins })
+            Assert.Equal((double)bin * (samples - 1) / bins, edges[bin], 8);
+    }
+
     // Default edges for 4 bins: -2, -1, 0, 1, 2 (each bin has width 1).
     private static PiecewiseLinearEncodingLayer<double> Layer() => new(numFeatures: 1, numBins: 4);
 

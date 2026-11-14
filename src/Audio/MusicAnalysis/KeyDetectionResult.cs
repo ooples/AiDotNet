@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Helpers;
+
 namespace AiDotNet.Audio.MusicAnalysis;
 
 /// <summary>
@@ -6,7 +8,8 @@ namespace AiDotNet.Audio.MusicAnalysis;
 /// <remarks>
 /// <para><b>For Beginners:</b> KeyDetectionResult provides AI safety functionality. Default values follow the original paper settings.</para>
 /// </remarks>
-public class KeyDetectionResult
+/// <typeparam name="T">The numeric type of the model that produced the result.</typeparam>
+public class KeyDetectionResult<T>
 {
     /// <summary>
     /// Gets or sets the key index (0 = C, 1 = C#, etc.).
@@ -31,12 +34,12 @@ public class KeyDetectionResult
     /// <summary>
     /// Gets or sets the Pearson correlation with the key profile (-1 to 1).
     /// </summary>
-    public double Correlation { get; set; }
+    public T Correlation { get; set; } = MathHelper.GetNumericOperations<T>().Zero;
 
     /// <summary>
     /// Gets or sets the confidence score (0-1).
     /// </summary>
-    public double Confidence { get; set; }
+    public T Confidence { get; set; } = MathHelper.GetNumericOperations<T>().Zero;
 
     /// <summary>
     /// Gets or sets the relative major/minor key.

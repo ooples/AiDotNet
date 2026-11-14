@@ -162,5 +162,45 @@ namespace AiDotNet.Tests.Audio.Features
             }
             Assert.True(anyDifferent, "MFCCs should differ for different frequencies");
         }
+
+        [Fact(Timeout = 60000)]
+        public async Task MfccExtractor_EnergyWithoutCoefficients_RejectedAtConstruction()
+        {
+            await Task.Yield();
+            var options = new MfccOptions { IncludeEnergy = true, NumCoefficients = 0 };
+            Assert.Throws<ArgumentException>(() => new MfccExtractor<float>(options));
+        }
+
+        [Fact(Timeout = 60000)]
+        public async Task MfccExtractor_NegativeCoefficients_RejectedAtConstruction()
+        {
+            await Task.Yield();
+            var options = new MfccOptions { NumCoefficients = -1 };
+            Assert.Throws<ArgumentOutOfRangeException>(() => new MfccExtractor<float>(options));
+        }
+
+        [Fact(Timeout = 60000)]
+        public async Task CreateHammingWindow_MatchesNumPyReference()
+        {
+            await Task.Yield();
+            var probe = new HammingProbe();
+            // numpy.hamming(1) == [1.0]; the 0/0 of the closed formula is not the window.
+            Assert.Equal(new[] { 1.0 }, probe.Window(1));
+            Assert.Empty(probe.Window(0));
+            // numpy.hamming(5) == [0.08, 0.54, 1.0, 0.54, 0.08]
+            var five = probe.Window(5);
+            double[] expected = { 0.08, 0.54, 1.0, 0.54, 0.08 };
+            Assert.Equal(expected.Length, five.Length);
+            for (int i = 0; i < expected.Length; i++)
+                Assert.Equal(expected[i], five[i], 12);
+        }
+
+        private sealed class HammingProbe : AudioFeatureExtractorBase<double>
+        {
+            public override string Name => "HammingProbe";
+            public override int FeatureDimension => 0;
+            public override Tensor<double> Extract(Tensor<double> audio) => audio;
+            public double[] Window(int length) => CreateHammingWindow(length);
+        }
     }
 }

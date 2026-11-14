@@ -69,23 +69,21 @@ public class OrdinalRegressionLoss<T> : LossFunctionBase<T>
     {
         ValidateVectorLengths(predicted, actual);
 
-        T loss = NumOps.Zero;
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            // For each threshold (numClasses - 1 thresholds)
-            for (int j = 0; j < _numClasses - 1; j++)
-            {
-                // Binary indicator: 1 if actual > j, 0 otherwise
-                T indicator = NumOps.GreaterThan(actual[i], NumOps.FromDouble(j)) ?
-                    NumOps.One : NumOps.Zero;
+        // One row per sample, one column per threshold j = 0..numClasses-2.
+        int n = predicted.Length;
+        int thresholdCount = _numClasses - 1;
+        var gridShape = new[] { n, thresholdCount };
+        var thresholds = Engine.TensorBroadcastTo(Engine.TensorArange<T>(0, thresholdCount, 1), gridShape);
+        var actualGrid = Engine.TensorBroadcastTo(Engine.Reshape(actual.AsTensor(), new[] { n, 1 }), gridShape);
+        var predictedGrid = Engine.TensorBroadcastTo(Engine.Reshape(predicted.AsTensor(), new[] { n, 1 }), gridShape);
 
-                // Binary logistic loss for each threshold: log(1 + exp(-indicator * predicted))
-                T expTerm = NumOps.Exp(NumOps.Negate(NumOps.Multiply(indicator, predicted[i])));
-                T logTerm = NumOps.Log(NumOps.Add(NumOps.One, expTerm));
+        // Binary indicator: 1 if actual > j, 0 otherwise
+        var indicator = Engine.TensorGreaterThan(actualGrid, thresholds);
 
-                loss = NumOps.Add(loss, logTerm);
-            }
-        }
+        // Binary logistic loss for each threshold: log(1 + exp(-indicator * predicted))
+        var expTerm = Engine.TensorExp(Engine.TensorNegate(Engine.TensorMultiply(indicator, predictedGrid)));
+        var logTerm = Engine.TensorLog(Engine.TensorAddScalar(expTerm, NumOps.One));
+        T loss = Engine.TensorSum(logTerm);
 
         return loss;
     }

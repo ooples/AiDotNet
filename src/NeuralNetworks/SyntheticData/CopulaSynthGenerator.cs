@@ -54,8 +54,8 @@ public class CopulaSynthGenerator<T> : SyntheticTabularGeneratorBase<T>
     // empirical quantile grid. For the probability-integral transform to be
     // rank-preserving (and therefore correlation-preserving), the forward CDF
     // and the inverse CDF MUST share one plotting-position grid — see
-    // EmpiricalCDF / InverseEmpiricalCDF.
-    private double[][] _sortedValues = Array.Empty<double[]>();
+    // EmpiricalCdf / InverseEmpiricalCdf.
+    private List<Tensor<T>> _sortedValues = new();
 
     // Per-feature column type, captured at fit time. Categorical and Discrete
     // columns must NOT be linearly interpolated on the inverse transform —
@@ -63,8 +63,9 @@ public class CopulaSynthGenerator<T> : SyntheticTabularGeneratorBase<T>
     // failure mode). Continuous columns interpolate normally.
     private ColumnDataType[] _columnTypes = Array.Empty<ColumnDataType>();
 
-    // Gaussian copula: correlation matrix (Cholesky-decomposed for sampling)
-    private double[,]? _choleskyCorr;
+    // Gaussian copula: a factor F of the correlation matrix (F F^T = R; its Cholesky factor when R is positive
+    // definite), used for sampling
+    private Tensor<T>? _choleskyCorr;
 
     private int _numFeatures;
 
@@ -93,36 +94,36 @@ public class CopulaSynthGenerator<T> : SyntheticTabularGeneratorBase<T>
             _columnTypes[j] = j < columns.Count ? columns[j].DataType : ColumnDataType.Continuous;
         }
 
+        var engine = AiDotNetEngine.Current;
+        var x = Tensor<T>.FromMatrix(data);
+        T lowU = NumOps.FromDouble(1e-6);
+        T highU = NumOps.FromDouble(1.0 - 1e-6);
+
         // Step 1: Store sorted values per feature for empirical CDF/quantile
-        _sortedValues = new double[_numFeatures][];
+        // Step 2: Transform to standard normal via empirical CDF → inverse normal CDF (clamped to avoid infinities)
+        _sortedValues = new List<Tensor<T>>(_numFeatures);
+        var normalColumns = new Tensor<T>[_numFeatures];
         for (int j = 0; j < _numFeatures; j++)
         {
-            var vals = new double[n];
-            for (int i = 0; i < n; i++)
-                vals[i] = NumOps.ToDouble(data[i, j]);
-            Array.Sort(vals);
-            _sortedValues[j] = vals;
+            var column = engine.TensorSlice(x, [0, j], [n, 1]).Reshape([n]);
+            var sorted = engine.TensorSort(column, 0, false).Values;
+            _sortedValues.Add(sorted);
+            var u = engine.TensorClamp(EmpiricalCdf(sorted, column), lowU, highU);
+            normalColumns[j] = SyntheticTensorOps<T>.StandardNormalQuantile(u).Reshape([n, 1]);
         }
 
-        // Step 2: Transform to standard normal via empirical CDF → inverse normal CDF
-        var normalData = new double[n, _numFeatures];
-        for (int j = 0; j < _numFeatures; j++)
+        if (_numFeatures == 0)
         {
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                double u = EmpiricalCDF(j, val);
-                // Clamp to avoid infinities at boundaries
-                u = Math.Min(Math.Max(u, 1e-6), 1.0 - 1e-6);
-                normalData[i, j] = InverseNormalCDF(u);
-            }
+            _choleskyCorr = new Tensor<T>([0, 0]);
+            return;
         }
 
         // Step 3: Compute correlation matrix on normal-transformed data
-        var corrMatrix = ComputeCorrelation(normalData, n, _numFeatures);
+        var normalData = _numFeatures == 1 ? normalColumns[0] : engine.TensorConcatenate(normalColumns, 1);
+        var corrMatrix = ComputeCorrelation(normalData, n);
 
-        // Step 4: Cholesky decomposition for sampling
-        _choleskyCorr = CholeskyDecompose(corrMatrix, _numFeatures);
+        // Step 4: factor the correlation matrix for sampling
+        _choleskyCorr = SamplingFactor(corrMatrix);
     }
 
     /// <inheritdoc />
@@ -130,290 +131,173 @@ public class CopulaSynthGenerator<T> : SyntheticTabularGeneratorBase<T>
     {
         if (_choleskyCorr is null)
             throw new InvalidOperationException("Generator is not fitted.");
+        if (numSamples <= 0 || _numFeatures == 0)
+            return new Matrix<T>(Math.Max(0, numSamples), _numFeatures);
 
-        var result = new Matrix<T>(numSamples, _numFeatures);
+        var engine = AiDotNetEngine.Current;
 
-        for (int i = 0; i < numSamples; i++)
+        // Sample standard normal vectors, row by row in the base sampler's order
+        var draws = new T[numSamples * _numFeatures];
+        for (int k = 0; k < draws.Length; k++)
+            draws[k] = SampleStandardNormal();
+        var z = new Tensor<T>(draws, [numSamples, _numFeatures]);
+
+        // Multiply by the factor to get correlated normals: x_i = F z_i
+        var correlated = engine.TensorMatMul(z, engine.TensorTranspose(_choleskyCorr));
+
+        // Transform: standard normal → uniform → original scale via quantile function
+        var u = engine.TensorClamp(SyntheticTensorOps<T>.StandardNormalCdf(correlated),
+            NumOps.FromDouble(1e-6), NumOps.FromDouble(1.0 - 1e-6));
+        var columns = new Tensor<T>[_numFeatures];
+        for (int j = 0; j < _numFeatures; j++)
         {
-            // Sample standard normal vector
-            var z = new double[_numFeatures];
-            for (int j = 0; j < _numFeatures; j++)
-                z[j] = NumOps.ToDouble(SampleStandardNormal());
-
-            // Multiply by Cholesky factor to get correlated normals
-            var correlated = new double[_numFeatures];
-            for (int j = 0; j < _numFeatures; j++)
-            {
-                double sum = 0;
-                for (int k = 0; k <= j; k++)
-                    sum += _choleskyCorr[j, k] * z[k];
-                correlated[j] = sum;
-            }
-
-            // Transform: standard normal → uniform → original scale via quantile function
-            for (int j = 0; j < _numFeatures; j++)
-            {
-                double u = NormalCDF(correlated[j]);
-                u = Math.Min(Math.Max(u, 1e-6), 1.0 - 1e-6);
-                double val = InverseEmpiricalCDF(j, u);
-                result[i, j] = NumOps.FromDouble(val);
-            }
+            var uj = engine.TensorSlice(u, [0, j], [numSamples, 1]).Reshape([numSamples]);
+            columns[j] = InverseEmpiricalCdf(j, uj).Reshape([numSamples, 1]);
         }
 
-        return result;
+        var result = _numFeatures == 1 ? columns[0] : engine.TensorConcatenate(columns, 1);
+        return result.ToMatrix();
     }
 
     /// <summary>
     /// Forward empirical CDF for the probability-integral transform. The i-th
     /// order statistic (0-based) is mapped to the Hazen plotting position
-    /// <c>(i + 0.5) / n</c>. This is the inverse of <see cref="InverseEmpiricalCDF"/>
+    /// <c>(i + 0.5) / n</c>. This is the inverse of <see cref="InverseEmpiricalCdf"/>
     /// on the SAME grid — the two MUST agree, or the round-trip
     /// value→u→normal→…→normal→u→value stops being rank-preserving and the fitted
     /// correlation bleeds off (the 0.82–0.93 degradation). Hazen positions sit
     /// strictly inside (0, 1), so no boundary clamping is needed and the tails
     /// are not squashed.
     /// </summary>
-    private double EmpiricalCDF(int featureIndex, double value)
+    internal static Tensor<T> EmpiricalCdf(Tensor<T> sorted, Tensor<T> values)
     {
-        var sorted = _sortedValues[featureIndex];
+        var engine = AiDotNetEngine.Current;
         int n = sorted.Length;
-        if (n == 0) return 0.5;
-        if (n == 1) return 0.5;
+        if (n <= 1)
+        {
+            var middle = new Tensor<T>(values._shape);
+            middle.Fill(NumOps.FromDouble(0.5));
+            return middle;
+        }
 
-        // Rank = number of values strictly less than `value`, plus half the ties
-        // (mid-rank), so equal values map to a single shared plotting position and
-        // the transform stays monotone. Implemented via the two bisection bounds.
-        int lower = LowerBound(sorted, value); // first index >= value
-        int upper = UpperBound(sorted, value); // first index > value
-        double rank = (lower + upper) / 2.0;    // mid-rank of the tie block
-        return (rank + 0.5) / n;
+        // A value's tie block occupies the 0-based sorted indices lower .. upper - 1 (the two bisection bounds), so
+        // its mid-rank is (lower + upper - 1) / 2 and its Hazen position (midRank + 0.5) / n = (lower + upper) / (2n).
+        // Equal values share one plotting position and the transform stays monotone; a unique value at index i
+        // maps to (i + 0.5) / n, which InverseEmpiricalCdf maps back to sorted[i].
+        var lower = engine.TensorSearchSorted(sorted, values, right: false).Cast<T>(); // first index >= value
+        var upper = engine.TensorSearchSorted(sorted, values, right: true).Cast<T>();  // first index > value
+        return engine.TensorMultiplyScalar(engine.TensorAdd(lower, upper), NumOps.FromDouble(0.5 / n));
     }
 
     /// <summary>
     /// Inverse empirical CDF (quantile function) on the Hazen grid that
-    /// <see cref="EmpiricalCDF"/> uses: plotting position <c>(i + 0.5)/n</c> maps
+    /// <see cref="EmpiricalCdf"/> uses: plotting position <c>(i + 0.5)/n</c> maps
     /// back to <c>sorted[i]</c>. For Continuous columns we interpolate linearly
     /// between adjacent order statistics; for Categorical and Discrete columns we
     /// snap to the nearest order statistic (no interpolation) so the output is
     /// always a value that actually occurred — fixing the float-into-categorical
     /// leak (e.g. Education ∈ {0,1,2,3} can never come back as 1.7).
     /// </summary>
-    private double InverseEmpiricalCDF(int featureIndex, double u)
+    private Tensor<T> InverseEmpiricalCdf(int featureIndex, Tensor<T> u)
     {
+        var engine = AiDotNetEngine.Current;
         var sorted = _sortedValues[featureIndex];
         int n = sorted.Length;
-        if (n == 0) return 0;
-        if (n == 1) return sorted[0];
+        int m = u.Length;
+        if (n == 0) return new Tensor<T>([m]);
+        var first = engine.TensorTile(engine.TensorSlice(sorted, [0], [1]), [m]);
+        if (n == 1) return first;
+        var last = engine.TensorTile(engine.TensorSlice(sorted, [n - 1], [1]), [m]);
 
         bool snap = _columnTypes.Length > featureIndex
             && _columnTypes[featureIndex] != ColumnDataType.Continuous;
+        T zero = NumOps.Zero;
+        T one = NumOps.One;
+        T lastIndex = NumOps.FromDouble(n - 1);
 
         // Position on the Hazen grid: u = (pos + 0.5)/n  ⇒  pos = u*n - 0.5.
-        double pos = u * n - 0.5;
-        if (pos <= 0) return sorted[0];
-        if (pos >= n - 1) return sorted[n - 1];
+        var pos = engine.TensorSubtractScalar(engine.TensorMultiplyScalar(u, NumOps.FromDouble(n)), NumOps.FromDouble(0.5));
+        var inside = engine.TensorClamp(engine.TensorNanToNum(pos, 0.0), zero, lastIndex);
+        var lo = engine.TensorMin(engine.TensorFloor(inside), NumOps.FromDouble(n - 2));
+        var frac = engine.TensorSubtract(inside, lo);
+        var below = engine.TensorGather(sorted, lo.Cast<int>(), 0);
+        var above = engine.TensorGather(sorted, engine.TensorAddScalar(lo, one).Cast<int>(), 0);
 
-        int lo = (int)Math.Floor(pos);
-        int hi = lo + 1;
-        double frac = pos - lo;
-
+        Tensor<T> interior;
         if (snap)
         {
             // Discrete / categorical: pick the nearer order statistic. Never blend.
-            return frac < 0.5 ? sorted[lo] : sorted[hi];
+            var nearerBelow = engine.TensorGreaterThan(engine.ScalarMinusTensor(NumOps.FromDouble(0.5), frac), zero);
+            interior = engine.TensorWhere(nearerBelow, below, above);
         }
-        return sorted[lo] * (1 - frac) + sorted[hi] * frac;
-    }
-
-    /// <summary>First index i with sorted[i] &gt;= value (lower bound).</summary>
-    private static int LowerBound(double[] sorted, double value)
-    {
-        int lo = 0, hi = sorted.Length;
-        while (lo < hi)
+        else
         {
-            int mid = lo + ((hi - lo) >> 1);
-            if (sorted[mid] < value) lo = mid + 1; else hi = mid;
+            interior = engine.TensorAdd(
+                engine.TensorMultiply(below, engine.ScalarMinusTensor(one, frac)), engine.TensorMultiply(above, frac));
         }
-        return lo;
-    }
 
-    /// <summary>First index i with sorted[i] &gt; value (upper bound).</summary>
-    private static int UpperBound(double[] sorted, double value)
-    {
-        int lo = 0, hi = sorted.Length;
-        while (lo < hi)
-        {
-            int mid = lo + ((hi - lo) >> 1);
-            if (sorted[mid] <= value) lo = mid + 1; else hi = mid;
-        }
-        return lo;
+        // pos <= 0 is the first order statistic and pos >= n - 1 the last.
+        var afterFirst = engine.TensorGreaterThan(pos, zero);
+        var beforeLast = engine.TensorGreaterThan(engine.ScalarMinusTensor(lastIndex, pos), zero);
+        return engine.TensorWhere(afterFirst, engine.TensorWhere(beforeLast, interior, last), first);
     }
 
     /// <summary>
     /// Computes the correlation matrix from normal-transformed data.
     /// </summary>
-    private static double[,] ComputeCorrelation(double[,] data, int n, int d)
+    internal static Tensor<T> ComputeCorrelation(Tensor<T> data, int n)
     {
-        var means = new double[d];
-        var stds = new double[d];
-        var corr = new double[d, d];
+        var engine = AiDotNetEngine.Current;
+        int d = data.Shape[1];
 
-        // Compute means
-        for (int j = 0; j < d; j++)
+        // One row has no sample covariance (its n - 1 denominator is zero): the features are taken as uncorrelated.
+        if (n <= 1)
         {
-            double sum = 0;
-            for (int i = 0; i < n; i++) sum += data[i, j];
-            means[j] = sum / n;
+            return engine.TensorEye<T>(d);
         }
 
-        // Compute standard deviations
-        for (int j = 0; j < d; j++)
-        {
-            double sumSq = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double diff = data[i, j] - means[j];
-                sumSq += diff * diff;
-            }
-            stds[j] = n > 1 ? Math.Sqrt(sumSq / (n - 1)) : 1.0;
-            if (stds[j] < 1e-10) stds[j] = 1e-10;
-        }
+        // Sample covariance (n - 1 denominator) and standard deviations, floored at 1e-10.
+        var mean = engine.ReduceMean(data, [0], keepDims: true);
+        var centered = engine.TensorSubtract(data, engine.TensorTile(mean, [n, 1]));
+        var cov = engine.TensorDivideScalar(
+            engine.TensorMatMul(engine.TensorTranspose(centered), centered), NumOps.FromDouble(n - 1));
+        var identity = engine.TensorEye<T>(d);
+        var stds = engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(cov, identity), [1], keepDims: false));
+        var floor = NumOps.FromDouble(1e-10);
+        var floorTensor = new Tensor<T>([d]);
+        floorTensor.Fill(floor);
+        stds = engine.TensorWhere(engine.TensorGreaterThan(floorTensor, stds), floorTensor, stds);
 
-        // Compute correlation
-        for (int j1 = 0; j1 < d; j1++)
-        {
-            corr[j1, j1] = 1.0;
-            for (int j2 = j1 + 1; j2 < d; j2++)
-            {
-                double cov = 0;
-                for (int i = 0; i < n; i++)
-                    cov += (data[i, j1] - means[j1]) * (data[i, j2] - means[j2]);
-                cov /= (n - 1);
-                double r = cov / (stds[j1] * stds[j2]);
-                r = Math.Min(Math.Max(r, -0.999), 0.999);
-                corr[j1, j2] = r;
-                corr[j2, j1] = r;
-            }
-        }
-
-        return corr;
+        // r = cov / (s_i s_j), clamped to [-0.999, 0.999] (NaN stays NaN), with a unit diagonal.
+        var r = engine.TensorDivide(cov, engine.TensorMatMul(stds.Reshape([d, 1]), stds.Reshape([1, d])));
+        var lowR = new Tensor<T>([d, d]);
+        lowR.Fill(NumOps.FromDouble(-0.999));
+        var highR = new Tensor<T>([d, d]);
+        highR.Fill(NumOps.FromDouble(0.999));
+        r = engine.TensorWhere(engine.TensorGreaterThan(lowR, r), lowR, r);
+        r = engine.TensorWhere(engine.TensorGreaterThan(r, highR), highR, r);
+        return engine.TensorWhere(identity, identity, r);
     }
 
     /// <summary>
-    /// Performs Cholesky decomposition: A = L * L^T, returns L.
-    /// Falls back to identity if decomposition fails (non-positive-definite).
+    /// A sampling factor F of the correlation matrix R (F F^T = R): its Cholesky factor L when R is positive
+    /// definite, otherwise the eigendecomposition factor of R's positive part.
     /// </summary>
-    private static double[,] CholeskyDecompose(double[,] matrix, int d)
+    private static Tensor<T> SamplingFactor(Tensor<T> correlation)
     {
-        var L = new double[d, d];
-
-        for (int i = 0; i < d; i++)
+        var (factor, info) = LinalgDispatch<T>.CholeskyEx(correlation);
+        if (info.ToArray().All(code => code == 0))
         {
-            for (int j = 0; j <= i; j++)
-            {
-                double sum = 0;
-                for (int k = 0; k < j; k++)
-                    sum += L[i, k] * L[j, k];
-
-                if (i == j)
-                {
-                    double val = matrix[i, i] - sum;
-                    if (val <= 0) val = 1e-6; // Ensure positive definiteness
-                    L[i, j] = Math.Sqrt(val);
-                }
-                else
-                {
-                    double denom = L[j, j];
-                    if (Math.Abs(denom) < 1e-10) denom = 1e-10;
-                    L[i, j] = (matrix[i, j] - sum) / denom;
-                }
-            }
+            return factor;
         }
 
-        return L;
+        // Not positive definite (e.g. fewer rows than columns): F = V sqrt(max(Lambda, 0)) from the symmetric
+        // eigendecomposition still satisfies F F^T = R on its positive part.
+        var engine = AiDotNetEngine.Current;
+        int d = correlation.Shape[0];
+        var (values, vectors) = LinalgDispatch<T>.Eigh(correlation);
+        var scale = engine.TensorSqrt(engine.TensorMax(values, NumOps.Zero));
+        return engine.TensorMultiply(vectors, engine.TensorTile(scale.Reshape([1, d]), [d, 1]));
     }
 
-    /// <summary>
-    /// Standard normal CDF using the error function approximation.
-    /// </summary>
-    private static double NormalCDF(double x)
-    {
-        return 0.5 * (1.0 + Erf(x / Math.Sqrt(2.0)));
-    }
-
-    /// <summary>
-    /// Inverse standard normal CDF using rational approximation (Beasley-Springer-Moro).
-    /// </summary>
-    private static double InverseNormalCDF(double p)
-    {
-        if (p <= 0) return -10.0;
-        if (p >= 1) return 10.0;
-
-        double q = p - 0.5;
-        double r;
-        if (Math.Abs(q) <= 0.425)
-        {
-            r = 0.180625 - q * q;
-            return q * (((((((2.5090809287301226727e3 * r + 3.3430575583588128105e4) * r +
-                6.7265770927008700853e4) * r + 4.5921953931549871457e4) * r +
-                1.3731693765509461125e4) * r + 1.9715909503065514427e3) * r +
-                1.3314166764078226174e2) * r + 3.3871328727963666080e0) /
-                (((((((5.2264952788528545610e3 * r + 2.8729085735721942674e4) * r +
-                3.9307895800092710610e4) * r + 2.1213794301586595867e4) * r +
-                5.3941960214247511077e3) * r + 6.8718700749205790830e2) * r +
-                4.2313330701600911252e1) * r + 1.0);
-        }
-        else
-        {
-            r = q < 0 ? p : 1 - p;
-            r = Math.Sqrt(-Math.Log(r));
-
-            double result;
-            if (r <= 5.0)
-            {
-                r -= 1.6;
-                result = (((((((7.7454501427834140764e-4 * r + 2.2723844989269184187e-2) * r +
-                    7.2235882094086552433e-1) * r + 1.3045513272014416523e1) * r +
-                    6.7726035681048076932e1) * r + 1.0831971006903470000e2) * r +
-                    1.1725700325035845468e2) * r + 1.1986131097775042662e2) /
-                    (((((((1.0507500716444169339e-4 * r + 1.0532057034436329024e-2) * r +
-                    1.6882755560235047313e-1) * r + 7.1753246312516124959e-1) * r +
-                    1.0563096406028367585e1) * r + 4.0984797509990525498e1) * r +
-                    6.0191721792796699071e1) * r + 4.8180017248005942159e1);
-            }
-            else
-            {
-                r -= 5.0;
-                result = (((((((2.0103102997076720227e-7 * r + 2.7623188653471891095e-5) * r +
-                    1.2425092002673407267e-3) * r + 2.6520252785698296534e-2) * r +
-                    2.9694239383093398677e-1) * r + 1.7832908668613600000e0) * r +
-                    5.1908257258867402690e0) * r + 6.0511655467684700000e0) /
-                    (((((((2.0442819666417094592e-7 * r + 1.4215117665672720000e-5) * r +
-                    1.8463183175054972690e-4) * r + 7.8686960064460000000e-3) * r +
-                    1.4862913816091900000e-1) * r + 6.8085697098073400000e-1) * r +
-                    1.6780028166927800000e0) * r + 1.0);
-            }
-
-            if (q < 0) result = -result;
-            return result;
-        }
-    }
-
-    /// <summary>
-    /// Error function approximation using Horner form.
-    /// </summary>
-    private static double Erf(double x)
-    {
-        double sign = x >= 0 ? 1.0 : -1.0;
-        x = Math.Abs(x);
-        const double a1 = 0.254829592;
-        const double a2 = -0.284496736;
-        const double a3 = 1.421413741;
-        const double a4 = -1.453152027;
-        const double a5 = 1.061405429;
-        const double p = 0.3275911;
-        double t = 1.0 / (1.0 + p * x);
-        double y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.Exp(-x * x);
-        return sign * y;
-    }
 }

@@ -5,6 +5,7 @@ on:
   # every deploy and checked nightly by the Docs Wiki workflow, so a src/** trigger here only
   # held a runner for ~12 minutes on every source PR.
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'website/**'
       - 'tools/WikiGenerator/**'
@@ -20,7 +21,7 @@ concurrency:
 
 jobs:
   build:
-    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
+    if: ${{ (github.event.pull_request.draft != true) && (!startsWith(github.head_ref, 'release-please--')) }}
     name: Build & Validate
     runs-on: ubuntu-latest
     defaults:

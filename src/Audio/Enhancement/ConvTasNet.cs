@@ -299,13 +299,9 @@ public partial class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
             var invStrength = _numOps.FromDouble(1.0 - EnhancementStrength);
 
             // Blend enhanced with original would require original signal
-            // For now, just scale the output
-            var result = new T[modelOutput.Length];
-            for (int i = 0; i < modelOutput.Length; i++)
-            {
-                result[i] = _numOps.Multiply(modelOutput.Data.Span[i], strengthT);
-            }
-            return new Tensor<T>(result, modelOutput._shape);
+            // For now, just scale the output (a fresh, detached tensor as before)
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            return Engine.TensorMultiplyScalar(modelOutput, strengthT);
         }
         return modelOutput;
     }

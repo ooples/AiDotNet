@@ -136,17 +136,12 @@ public class IAMBAlgorithm<T> : ConstraintBasedBase<T>
         ApplyMeekRules(adj, oriented, d);
 
         // Build weighted adjacency matrix
-        var W = new Matrix<T>(d, d);
+        // Include edge if oriented i->j or undirected (skip if oriented j->i)
+        var edgeMask = new bool[d * d];
         for (int i = 0; i < d; i++)
-        {
             for (int j = 0; j < d; j++)
-            {
-                if (!adj[i, j]) continue;
-                // Include edge if oriented i->j or undirected (skip if oriented j->i)
-                if (!oriented[j, i])
-                    W[i, j] = NumOps.FromDouble(Math.Abs(ComputePartialCorr(data, i, j, [])));
-            }
-        }
+                edgeMask[i * d + j] = adj[i, j] && !oriented[j, i];
+        var W = ApplyEdgeMask(edgeMask, ComputeAbsoluteCorrelationMatrix(data));
 
         return W;
     }

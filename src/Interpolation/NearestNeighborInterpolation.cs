@@ -85,19 +85,9 @@ public class NearestNeighborInterpolation<T> : IInterpolation<T>
     /// </remarks>
     private int FindNearestIndex(T x)
     {
-        int nearestIndex = 0;
-        T minDistance = _numOps.Abs(_numOps.Subtract(x, _x[0]));
-
-        for (int i = 1; i < _x.Length; i++)
-        {
-            T distance = _numOps.Abs(_numOps.Subtract(x, _x[i]));
-            if (_numOps.LessThan(distance, minDistance))
-            {
-                minDistance = distance;
-                nearestIndex = i;
-            }
-        }
-
-        return nearestIndex;
+        // |x - x[i]| for every known point; the arg-min keeps the first of any equally near points
+        var engine = AiDotNetEngine.Current;
+        Tensor<T> distances = engine.TensorAbs(engine.ScalarMinusTensor(x, _x.AsTensor()));
+        return engine.TensorArgMin(distances, 0)[0];
     }
 }

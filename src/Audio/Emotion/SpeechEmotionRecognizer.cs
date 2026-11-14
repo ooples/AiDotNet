@@ -473,36 +473,16 @@ public partial class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmoti
     /// </summary>
     private Tensor<T> NormalizeMelSpectrogram(Tensor<T> melSpec)
     {
-        var inputVector = melSpec.ToVector();
-        int length = inputVector.Length;
-
-        // Compute mean
-        T sum = NumOps.Zero;
-        for (int i = 0; i < length; i++)
-        {
-            sum = NumOps.Add(sum, inputVector[i]);
-        }
-        T mean = NumOps.Divide(sum, NumOps.FromDouble(length));
-
-        // Compute variance
-        T varSum = NumOps.Zero;
-        for (int i = 0; i < length; i++)
-        {
-            T diff = NumOps.Subtract(inputVector[i], mean);
-            varSum = NumOps.Add(varSum, NumOps.Multiply(diff, diff));
-        }
-        T variance = NumOps.Divide(varSum, NumOps.FromDouble(length));
+        // Global z-score: (x - mean) / sqrt(population variance + 1e-8), on a detached copy as before.
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        int length = melSpec.Length;
+        var flat = AudioEngineOps.Flatten(Engine, melSpec);
+        T mean = NumOps.Divide(Engine.TensorSum(flat), NumOps.FromDouble(length));
+        var deviation = Engine.TensorSubtractScalar(flat, mean);
+        T variance = NumOps.Divide(Engine.TensorSum(Engine.TensorSquare(deviation)), NumOps.FromDouble(length));
         T stdDev = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-8)));
 
-        // Normalize - create result vector, fill it, then create tensor from it
-        var resultVector = new Vector<T>(length);
-        for (int i = 0; i < length; i++)
-        {
-            resultVector[i] = NumOps.Divide(NumOps.Subtract(inputVector[i], mean), stdDev);
-        }
-
-        // Create tensor from the normalized vector with the original shape
-        return Tensor<T>.FromVector(resultVector, melSpec._shape);
+        return Engine.Reshape(Engine.TensorDivideScalar(deviation, stdDev), melSpec.Shape.ToArray());
     }
 
     /// <inheritdoc/>
@@ -603,15 +583,22 @@ public partial class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmoti
         }
         var (emotion, confidence) = GetPrediction(probDict);
 
-        // Get secondary emotion
+        // Get secondary emotion: the first label other than the primary holding the largest
+        // probability above zero. A leading zero stands for "none"; the primary is masked to zero.
         string? secondaryEmotion = null;
         T secondaryConfidence = NumOps.Zero;
-        foreach (var (label, prob) in probabilities)
+        var entries = probabilities.ToList();
+        if (entries.Count > 0)
         {
-            if (label != emotion && NumOps.GreaterThan(prob, secondaryConfidence))
+            T zero = NumOps.Zero;
+            var candidates = new Tensor<T>(
+                new[] { zero }.Concat(entries.Select(e => e.Key != emotion ? e.Value : zero)).ToArray(),
+                [entries.Count + 1]);
+            int best = AudioEngineOps.FirstArgMaxSequential(Engine, candidates);
+            if (best > 0)
             {
-                secondaryEmotion = label;
-                secondaryConfidence = prob;
+                secondaryEmotion = entries[best - 1].Key;
+                secondaryConfidence = entries[best - 1].Value;
             }
         }
 
@@ -664,18 +651,14 @@ public partial class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmoti
         int windowSamples = windowSizeMs * SampleRate / 1000;
         int hopSamples = hopSizeMs * SampleRate / 1000;
 
-        var audioVector = audio.ToVector();
-        int totalSamples = audioVector.Length;
+        var flatAudio = AudioEngineOps.Flatten(Engine, audio);
+        int totalSamples = flatAudio.Length;
 
         for (int startSample = 0; startSample + windowSamples <= totalSamples; startSample += hopSamples)
         {
-            // Extract window
-            var windowTensor = new Tensor<T>([windowSamples]);
-            var windowVector = windowTensor.ToVector();
-            for (int i = 0; i < windowSamples; i++)
-            {
-                windowVector[i] = audioVector[startSample + i];
-            }
+            // Extract window. (This used to fill a ToVector() copy, which left the window tensor all
+            // zeros, so every window was scored as silence.)
+            var windowTensor = Engine.TensorSlice(flatAudio, [startSample], [windowSamples]);
 
             // Recognize emotion for this window
             var result = RecognizeEmotion(windowTensor);
@@ -731,16 +714,24 @@ public partial class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmoti
             { "surprised", 0.7 }
         };
 
-        double arousal = 0;
-        foreach (var (emotion, prob) in probs)
-        {
-            if (arousalWeights.TryGetValue(emotion.ToLowerInvariant(), out double weight))
-            {
-                arousal += NumOps.ToDouble(prob) * weight;
-            }
-        }
+        double arousal = WeightedProbabilitySum(probs, arousalWeights);
 
         return NumOps.FromDouble(Math.Max(-1.0, Math.Min(1.0, arousal)));
+    }
+
+    /// <summary>
+    /// <c>sum_e p(e) * w(e)</c> over the emotions that have a weight (case-insensitive label match),
+    /// as one tensor dot product; the fixed weight table is converted to T once.
+    /// </summary>
+    private double WeightedProbabilitySum(IReadOnlyDictionary<string, T> probs, Dictionary<string, double> weights)
+    {
+        var entries = probs.ToList();
+        if (entries.Count == 0) return 0;
+        var p = new Tensor<T>(entries.Select(e => e.Value).ToArray(), [entries.Count]);
+        var w = new Tensor<double>(
+            entries.Select(e => weights.TryGetValue(e.Key.ToLowerInvariant(), out double weight) ? weight : 0.0).ToArray(),
+            [entries.Count]).Cast<T>();
+        return NumOps.ToDouble(Engine.TensorSum(Engine.TensorMultiply(p, w)));
     }
 
     /// <summary>
@@ -760,14 +751,7 @@ public partial class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmoti
             { "surprised", 0.3 }
         };
 
-        double valence = 0;
-        foreach (var (emotion, prob) in probs)
-        {
-            if (valenceWeights.TryGetValue(emotion.ToLowerInvariant(), out double weight))
-            {
-                valence += NumOps.ToDouble(prob) * weight;
-            }
-        }
+        double valence = WeightedProbabilitySum(probs, valenceWeights);
 
         return NumOps.FromDouble(Math.Max(-1.0, Math.Min(1.0, valence)));
     }
@@ -824,16 +808,12 @@ public partial class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmoti
         // [0, 0, 0, 0] for EVERY input. That made all input-sensitivity invariants compare zeros to
         // zeros — DifferentInputs saw L2 = 0 and read it as a collapsed network, while the network
         // itself was healthy (measured L2 = 8.9e-1 between two probes at the output layer).
-        var result = new Tensor<T>([_emotionLabels.Length]);
-        for (int i = 0; i < _emotionLabels.Length; i++)
-        {
-            if (probabilities.TryGetValue(_emotionLabels[i], out var prob))
-            {
-                result[i] = prob;
-            }
-        }
+        T zero = NumOps.Zero;
+        T[] values = _emotionLabels
+            .Select(label => probabilities.TryGetValue(label, out var prob) ? prob : zero)
+            .ToArray();
 
-        return result;
+        return new Tensor<T>(values, [_emotionLabels.Length]);
     }
 
     /// <inheritdoc/>

@@ -170,7 +170,7 @@ public partial class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
             UpdateBestSolution(currentStepData, ref bestStepData);
 
             // Update our current best model if this solution is better
-            if (NumOps.GreaterThan(currentStepData.FitnessScore, bestStepData.FitnessScore))
+            if (IsFitter(currentStepData.FitnessScore, bestStepData.FitnessScore))
             {
                 currentBestModel = currentSolution;
             }
@@ -214,11 +214,7 @@ public partial class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
             var sample = GenerateMultivariateNormalSample(dimensions);
             var scaledSample = (Vector<T>)Engine.Multiply(sample, _sigma);
             var individual = (Vector<T>)Engine.Add(_mean, scaledSample);
-
-            for (int j = 0; j < dimensions; j++)
-            {
-                population[i, j] = individual[j];
-            }
+            individual.AsSpan().Slice(0, dimensions).CopyTo(population.GetRowSpan(i));
         }
 
         return population;
@@ -234,6 +230,17 @@ public partial class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
     /// statistical distribution, which is key to how CMA-ES explores the solution space.
     /// </para>
     /// </remarks>
+    /// <summary>True when <paramref name="candidate"/> is a strictly higher fitness than <paramref name="best"/>.</summary>
+    private bool IsFitter(T candidate, T best) => NumOps.GreaterThan(candidate, best);
+
+    /// <summary>Orders fitness values best (highest) first.</summary>
+    private int CompareFitnessDescending(T left, T right)
+    {
+        if (NumOps.GreaterThan(left, right)) return -1;
+        if (NumOps.LessThan(left, right)) return 1;
+        return 0;
+    }
+
     private Vector<T> GenerateMultivariateNormalSample(int dimensions)
     {
         // Generate a vector of standard normal samples
@@ -247,10 +254,7 @@ public partial class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
         {
             // If the matrix is not positive definite, add a small value to the diagonal
             var epsilon = NumOps.FromDouble(1e-6);
-            for (int i = 0; i < dimensions; i++)
-            {
-                _C[i, i] = NumOps.Add(_C[i, i], epsilon);
-            }
+            _C = Engine.MatrixAdd(_C, Engine.MatrixMultiplyScalar(Matrix<T>.CreateIdentity(dimensions), epsilon));
         }
 
         // Perform Cholesky decomposition of the covariance matrix
@@ -300,7 +304,7 @@ public partial class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
             fitnessValues[i] = stepData.FitnessScore;
 
             // Keep track of the best model in this population
-            if (bestModel == null || NumOps.GreaterThan(stepData.FitnessScore, bestFitness))
+            if (bestModel == null || IsFitter(stepData.FitnessScore, bestFitness))
             {
                 bestModel = solution;
                 bestFitness = stepData.FitnessScore;
@@ -336,29 +340,16 @@ public partial class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
         }
 
         // Sort descending by fitness (best first)
-        indexedFitness.Sort((a, b) =>
-        {
-            if (NumOps.GreaterThan(a.fitness, b.fitness)) return -1;
-            if (NumOps.LessThan(a.fitness, b.fitness)) return 1;
-            return 0;
-        });
+        indexedFitness.Sort((a, b) => CompareFitnessDescending(a.fitness, b.fitness));
         var selectedPopulation = new Matrix<T>(mu, dimensions);
         for (int i = 0; i < mu; i++)
         {
-            int sourceIndex = indexedFitness[i].index;
-            for (int j = 0; j < dimensions; j++)
-            {
-                selectedPopulation[i, j] = population[sourceIndex, j];
-            }
+            population.GetRowSpan(indexedFitness[i].index).Slice(0, dimensions).CopyTo(selectedPopulation.GetRowSpan(i));
         }
 
         // Calculate weights - vectorized
         // Create vector of indices [0, 1, 2, ..., mu-1]
-        var indices = new Vector<T>(mu);
-        for (int i = 0; i < mu; i++)
-        {
-            indices[i] = NumOps.FromDouble(i);
-        }
+        var indices = Engine.TensorArange<T>(0, mu).AsVector();
 
         // weights[i] = (mu + 0.5) - log(mu + 0.5 + i)
         var muPlusHalf = Engine.Fill<T>(mu, NumOps.FromDouble(mu + 0.5));
@@ -372,11 +363,7 @@ public partial class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
 
         // Calculate effective mu - vectorized
         // muEff = 1 / sum(weights^2)
-        var weightsSquared = new Vector<T>(weights.Length);
-        for (int i = 0; i < weights.Length; i++)
-        {
-            weightsSquared[i] = NumOps.Square(weights[i]);
-        }
+        var weightsSquared = (Vector<T>)Engine.Multiply(weights, weights);
         T sumSquaredWeights = Engine.Sum(weightsSquared);
         T muEff = NumOps.Divide(NumOps.One, sumSquaredWeights);
 

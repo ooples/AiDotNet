@@ -48,6 +48,12 @@ namespace AiDotNet.CausalDiscovery.TimeSeries;
 [ResearchPaper("On Causal Discovery from Time Series Data using FCI", "https://doi.org/10.1007/978-3-642-15114-9_12", Year = 2010, Authors = "Doris Entner, Patrik O. Hoyer")]
 public class TSFCIAlgorithm<T> : TimeSeriesCausalBase<T>
 {
+    /// <summary>
+    /// Maximum number of entries of one [d, k-block, d] partial-correlation workspace in the conditional
+    /// independence test; the conditioning variables are processed in blocks of this size.
+    /// </summary>
+    private const int MaxConditioningBlockElements = 1 << 22;
+
     /// <inheritdoc/>
     public override string Name => "tsFCI";
 
@@ -77,232 +83,171 @@ public class TSFCIAlgorithm<T> : TimeSeriesCausalBase<T>
 
         var cov = ComputeCovarianceMatrix(data);
         T threshold = NumOps.FromDouble(_correlationThreshold);
+        var x = Tensor<T>.FromMatrix(data);
+        var offDiagonal = OffDiagonalMask(d);
+
+        // Lag-0 correlations C0[i, k] = corr(x_i(t), x_k(t)), the conditioning leg of every partial correlation
+        var corr0 = LaggedStatistics(x, 0).Corr;
 
         // Phase 1: Build lagged covariance structure
         // For each pair (i,j) and lag l, compute lagged correlation
         // skeleton[i,j] = max over lags of |lagged_corr(i→j)|
-        var skeleton = new Matrix<T>(d, d);
-        // The ARGMAX is kept alongside the max. Phase 1 already scans every lag for every ordered
-        // pair; discarding which lag won meant Phase 2 and the orientation step each rebuilt the same
-        // argmax from scratch. ComputeLaggedCorrelation is O(n) per call, so that tripled the
-        // dominant cost -- and left three loops that had to stay in step, where an edit to one would
-        // silently desynchronize the lag used for the independence test from the lag used for the
-        // edge weight.
-        var bestLagOf = new int[d, d];
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-            {
-                if (i == j) continue;
-                T maxCorr = NumOps.Zero;
-                int argMaxLag = 1;
-                for (int lag = 1; lag <= MaxLag; lag++)
-                {
-                    T lagCorr = ComputeLaggedCorrelation(data, i, j, lag, n);
-                    T absCorr = NumOps.Abs(lagCorr);
-                    if (NumOps.GreaterThan(absCorr, maxCorr))
-                    {
-                        maxCorr = absCorr;
-                        argMaxLag = lag;
-                    }
-                }
-                skeleton[i, j] = maxCorr;
-                bestLagOf[i, j] = argMaxLag;
-            }
-
-        // Phase 2: Conditional independence tests — remove edges where
-        // correlation disappears when conditioning on other lagged variables
-        var result = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-            {
-                if (i == j) continue;
-                if (!NumOps.GreaterThan(skeleton[i, j], threshold)) continue;
-
-                int bestLag = bestLagOf[i, j];
-
-                // Test if i→j survives conditioning on each other variable's lags.
-                // Each candidate conditioning variable k that produces a CONCLUSIVE
-                // partial correlation below the threshold counts as evidence
-                // against the i→j edge. An INCONCLUSIVE result (near-singular
-                // partial-corr denominator — happens when the conditioning
-                // variable is collinear with both i and j, as on deterministic
-                // test fixtures) is skipped rather than treated as "no
-                // association", because FCI's conditional-independence rule
-                // requires a VALID test, not a vacuous one (Spirtes et al. 2000
-                // §3 "Causal Inference Algorithms" — Entner & Hoyer 2010 inherit
-                // the same convention).
-                bool survives = true;
-                for (int k = 0; k < d; k++)
-                {
-                    if (k == i || k == j) continue;
-                    T partialCorr = ComputePartialLaggedCorrelation(data, i, j, k, bestLag, n);
-                    double pcVal = NumOps.ToDouble(partialCorr);
-                    if (double.IsNaN(pcVal))
-                        continue; // inconclusive — try next conditioning variable
-                    if (!NumOps.GreaterThan(NumOps.Abs(partialCorr), threshold))
-                    {
-                        survives = false;
-                        break;
-                    }
-                }
-
-                if (survives)
-                {
-                    // Temporal orientation: determine direction using best lag
-                    // Both maxima and the winning lag come straight from Phase 1: bestItoJ is
-                    // skeleton[i, j], bestJtoI is skeleton[j, i], and the argmax is bestLagOf[i, j].
-                    T bestItoJ = skeleton[i, j];
-                    T bestJtoI = skeleton[j, i];
-                    int bestLagItoJ = bestLagOf[i, j];
-
-                    // Direction with stronger lagged correlation wins.
-                    // When equal (deterministic data), use asymmetric cov ratio.
-                    bool iToJ = NumOps.GreaterThan(bestItoJ, bestJtoI);
-                    if (!iToJ && !NumOps.GreaterThan(bestJtoI, bestItoJ))
-                    {
-                        // Equal correlations — use covariance ratio for direction
-                        double varId = NumOps.ToDouble(cov[i, i]);
-                        double varJd = NumOps.ToDouble(cov[j, j]);
-                        double covIJd = NumOps.ToDouble(cov[i, j]);
-                        if (varId > 1e-10 && varJd > 1e-10)
-                            // Strict > with i < j tie-break to avoid creating both directions
-                            iToJ = Math.Abs(covIJd / varId) > Math.Abs(covIJd / varJd) ||
-                                (Math.Abs(covIJd / varId) == Math.Abs(covIJd / varJd) && i < j);
-                    }
-
-                    if (iToJ)
-                    {
-                        // Weight the edge with the LAGGED regression coefficient at the lag that
-                        // actually carried the association. Every phase above reasons about lagged
-                        // structure, but the weight was previously the CONTEMPORANEOUS ratio
-                        // cov[i,j]/cov[i,i], which measures a different relationship entirely. On the
-                        // fork X1 <- X0 -> X3 that inverted the ranking: the same-time correlation
-                        // between the two children of X0 is strong (reported 1.1449 — impossible for
-                        // a correlation, because a covariance ratio is unbounded) while the true
-                        // X0->X1 edge, whose effect only appears one step later, was damped to 0.4877.
-                        // The lagged coefficient recovers the generating SEM's own coefficients.
-                        result[i, j] = ComputeLaggedRegressionCoefficient(data, i, j, bestLagItoJ, n);
-                    }
-                }
-            }
-
-        return result;
-    }
-
-    private T ComputeLaggedCorrelation(Matrix<T> data, int source, int target, int lag, int n)
-    {
-        int effectiveN = n - lag;
-        if (effectiveN < 3) return NumOps.Zero;
-
-        // Build vectors for Engine-accelerated correlation
-        var sourceVec = new Vector<T>(effectiveN);
-        var targetVec = new Vector<T>(effectiveN);
-        for (int t = 0; t < effectiveN; t++)
+        // The ARGMAX is kept alongside the max: the lag that wins for (i, j) is the lag at which the
+        // Phase 2 independence test runs and at which the edge weight (lagged regression coefficient)
+        // is read, so both are carried along with the running max instead of being recomputed.
+        // A later lag only wins when it is strictly larger, so the earliest maximizing lag is kept
+        // (lag 1 when every lagged correlation is 0).
+        var first = LaggedStatistics(x, 1);
+        var maxCorr = Engine.TensorZerosLike(first.Corr);
+        var bestCoef = first.Coef;
+        var bestSurvives = Survives(corr0, first.Corr, threshold);
+        for (int lag = 1; lag <= MaxLag; lag++)
         {
-            sourceVec[t] = data[t, source];
-            targetVec[t] = data[t + lag, target];
+            var stats = lag == 1 ? first : LaggedStatistics(x, lag);
+            var absCorr = Engine.TensorAbs(stats.Corr);
+            var update = Engine.TensorGreaterThan(absCorr, maxCorr);
+            maxCorr = Engine.TensorWhere(update, absCorr, maxCorr);
+            bestCoef = Engine.TensorWhere(update, stats.Coef, bestCoef);
+            bestSurvives = Engine.TensorWhere(update, lag == 1 ? bestSurvives : Survives(corr0, stats.Corr, threshold), bestSurvives);
         }
+        var skeleton = Engine.TensorMultiply(maxCorr, offDiagonal);
 
-        // Compute means
-        T sumS = NumOps.Zero, sumT = NumOps.Zero;
-        T nT = NumOps.FromDouble(effectiveN);
-        for (int t = 0; t < effectiveN; t++)
-        {
-            sumS = NumOps.Add(sumS, sourceVec[t]);
-            sumT = NumOps.Add(sumT, targetVec[t]);
-        }
-        T meanS = NumOps.Divide(sumS, nT);
-        T meanT = NumOps.Divide(sumT, nT);
+        // Phase 2: Conditional independence tests — keep edges above threshold whose correlation does not
+        // disappear when conditioning on another variable (see Survives).
+        var candidate = Engine.TensorMultiply(Engine.TensorMultiply(offDiagonal,
+            Engine.TensorGreaterThan(skeleton, threshold)), bestSurvives);
 
-        // Center and use Engine.DotProduct
-        var centS = new Vector<T>(effectiveN);
-        var centT = new Vector<T>(effectiveN);
-        for (int t = 0; t < effectiveN; t++)
-        {
-            centS[t] = NumOps.Subtract(sourceVec[t], meanS);
-            centT[t] = NumOps.Subtract(targetVec[t], meanT);
-        }
+        // Temporal orientation: the direction with the stronger lagged correlation wins.
+        // When equal (deterministic data), use the asymmetric covariance ratio |cov_ij / var_i| vs
+        // |cov_ij / var_j|, strict > with an i < j tie-break to avoid creating both directions.
+        var skeletonT = Engine.TensorTranspose(skeleton);
+        var stronger = Engine.TensorGreaterThan(skeleton, skeletonT);
+        var weaker = Engine.TensorGreaterThan(skeletonT, skeleton);
+        var ones = Engine.TensorOnesLike(skeleton);
+        var tie = Engine.TensorMultiply(Engine.TensorSubtract(ones, stronger), Engine.TensorSubtract(ones, weaker));
 
-        T covST = Engine.DotProduct(centS, centT);
-        T varS = Engine.DotProduct(centS, centS);
-        T varT = Engine.DotProduct(centT, centT);
+        var covariance = Tensor<T>.FromMatrix(cov);
+        var variance = Engine.TensorDiagonal(covariance);
+        var shape = new[] { d, d };
+        var varianceRows = Engine.TensorBroadcastTo(variance.Reshape(new[] { d, 1 }), shape);
+        var varianceCols = Engine.TensorBroadcastTo(variance.Reshape(new[] { 1, d }), shape);
+        T varianceFloor = NumOps.FromDouble(1e-10);
+        var varianceOk = Engine.TensorMultiply(Engine.TensorGreaterThan(varianceRows, varianceFloor),
+            Engine.TensorGreaterThan(varianceCols, varianceFloor));
+        // Zero variances are replaced by 1 before dividing; those ratios are masked by varianceOk.
+        var safeVarianceRows = Engine.TensorWhere(Engine.TensorGreaterThan(varianceRows, varianceFloor), varianceRows, ones);
+        var safeVarianceCols = Engine.TensorWhere(Engine.TensorGreaterThan(varianceCols, varianceFloor), varianceCols, ones);
+        var ratioI = Engine.TensorAbs(Engine.TensorDivide(covariance, safeVarianceRows));
+        var ratioJ = Engine.TensorAbs(Engine.TensorDivide(covariance, safeVarianceCols));
+        var ratioWins = Engine.TensorAdd(Engine.TensorGreaterThan(ratioI, ratioJ),
+            Engine.TensorMultiply(Engine.TensorEquals(ratioI, ratioJ), Engine.TensorTriu(ones, 1)));
+        var iToJ = Engine.TensorAdd(stronger, Engine.TensorMultiply(tie, Engine.TensorMultiply(varianceOk, ratioWins)));
 
-        double dVarS = NumOps.ToDouble(varS);
-        double dVarT = NumOps.ToDouble(varT);
-        double denom = Math.Sqrt(Math.Max(dVarS, 1e-15) * Math.Max(dVarT, 1e-15));
-        return NumOps.FromDouble(NumOps.ToDouble(covST) / denom);
+        // Weight the edge with the LAGGED regression coefficient at the lag that actually carried the
+        // association. Every phase above reasons about lagged structure; the contemporaneous ratio
+        // cov[i,j]/cov[i,i] measures a different relationship (on the fork X1 <- X0 -> X3 it ranked the
+        // two children of X0 above the true X0->X1 edge). The lagged coefficient recovers the generating
+        // SEM's own coefficients.
+        var edge = Engine.TensorMultiply(candidate, iToJ);
+        return Engine.TensorWhere(edge, bestCoef, Engine.TensorZerosLike(bestCoef)).ToMatrix();
     }
 
     /// <summary>
-    /// Least-squares coefficient of regressing <paramref name="target"/> at time t+lag on
-    /// <paramref name="source"/> at time t — cov(x_src(t), x_tgt(t+lag)) / var(x_src(t)). For a linear
-    /// SEM this is the structural coefficient on that lagged edge, so edge weights come back on the
-    /// same scale as the data-generating process and stay comparable across edges.
+    /// Lagged correlations Corr[i, j] = corr(x_i(t), x_j(t + lag)) and lagged regression coefficients
+    /// Coef[i, j] = cov(x_i(t), x_j(t + lag)) / var(x_i(t)) over t = 0..n-lag-1, for every ordered pair.
+    /// The correlation floors each sum of squares at 1e-15; the coefficient is 0 when the source series
+    /// has no variation (sum of squares below 1e-10) since it carries no information about the target,
+    /// and both are 0 when fewer than 3 aligned samples exist. For a linear SEM the coefficient is the
+    /// structural coefficient on that lagged edge, so edge weights stay on the data-generating scale.
     /// </summary>
-    private T ComputeLaggedRegressionCoefficient(Matrix<T> data, int source, int target, int lag, int n)
+    private (Tensor<T> Corr, Tensor<T> Coef) LaggedStatistics(Tensor<T> x, int lag)
     {
+        int n = x.Shape[0];
+        int d = x.Shape[1];
         int effectiveN = n - lag;
-        if (effectiveN < 3) return NumOps.Zero;
+        if (effectiveN < 3)
+            return (new Tensor<T>(new[] { d, d }), new Tensor<T>(new[] { d, d }));
 
-        T sumS = NumOps.Zero, sumT = NumOps.Zero;
-        for (int t = 0; t < effectiveN; t++)
-        {
-            sumS = NumOps.Add(sumS, data[t, source]);
-            sumT = NumOps.Add(sumT, data[t + lag, target]);
-        }
+        var source = CenterColumns(Engine.TensorSlice(x, new[] { 0, 0 }, new[] { effectiveN, d }));
+        var target = CenterColumns(Engine.TensorSlice(x, new[] { lag, 0 }, new[] { effectiveN, d }));
+        var cross = Engine.TensorMatMul(Engine.TensorTranspose(source), target);
+        var sourceSs = Engine.ReduceSum(Engine.TensorMultiply(source, source), new[] { 0 }, false);
+        var targetSs = Engine.ReduceSum(Engine.TensorMultiply(target, target), new[] { 0 }, false);
 
-        T nT = NumOps.FromDouble(effectiveN);
-        T meanS = NumOps.Divide(sumS, nT);
-        T meanT = NumOps.Divide(sumT, nT);
+        T floor = NumOps.FromDouble(1e-15);
+        // The square roots are taken before the outer product so finite sums of squares cannot overflow T.
+        var denom = Engine.TensorOuter(Engine.TensorSqrt(Engine.TensorMax(sourceSs, floor)),
+            Engine.TensorSqrt(Engine.TensorMax(targetSs, floor)));
+        var corr = Engine.TensorDivide(cross, denom);
 
-        var centS = new Vector<T>(effectiveN);
-        var centT = new Vector<T>(effectiveN);
-        for (int t = 0; t < effectiveN; t++)
-        {
-            centS[t] = NumOps.Subtract(data[t, source], meanS);
-            centT[t] = NumOps.Subtract(data[t + lag, target], meanT);
-        }
-
-        double covST = NumOps.ToDouble(Engine.DotProduct(centS, centT));
-        double varS = NumOps.ToDouble(Engine.DotProduct(centS, centS));
-        // A source series with no variation carries no information about the target, so the edge
-        // gets zero weight rather than an arbitrarily large ratio.
-        if (varS < 1e-10) return NumOps.Zero;
-        return NumOps.FromDouble(covST / varS);
+        var shape = new[] { d, d };
+        var sourceSsRows = Engine.TensorBroadcastTo(sourceSs.Reshape(new[] { d, 1 }), shape);
+        var noVariation = Engine.TensorLessThan(sourceSsRows, NumOps.FromDouble(1e-10));
+        var safeSourceSs = Engine.TensorWhere(noVariation, Engine.TensorOnesLike(cross), sourceSsRows);
+        var coef = Engine.TensorWhere(noVariation, Engine.TensorZerosLike(cross), Engine.TensorDivide(cross, safeSourceSs));
+        return (corr, coef);
     }
 
-    private T ComputePartialLaggedCorrelation(
-        Matrix<T> data, int i, int j, int condVar, int lag, int n)
+    /// <summary>
+    /// For every ordered pair (i, j): 1 when the lagged association i(t) -> j(t + lag) survives conditioning,
+    /// i.e. no conditioning variable k (k ≠ i, j) gives a CONCLUSIVE partial correlation
+    /// (r_ij − r_ik r_kj) / sqrt((1 − r_ik²)(1 − r_kj²)) with |value| ≤ threshold. Here r_ij and r_kj are the
+    /// lagged correlations at this lag and r_ik the lag-0 correlation, so the test is X_i(t) -> X_j(t+lag)
+    /// conditioned on X_k(t) (all three aligned; correlating at the same positive lag would condition on
+    /// X_k(t+lag) and let common-cause paths such as X1 &lt;- X0 -&gt; X3 survive).
+    /// A partial correlation is INCONCLUSIVE when (1 − r_ik²)(1 − r_kj²) &lt; 1e-10 (k collinear with both
+    /// endpoints, as on deterministic fixtures) or NaN; it is skipped rather than treated as "no
+    /// association", because FCI's conditional-independence rule requires a VALID test, not a vacuous one
+    /// (Spirtes et al. 2000 §3; Entner &amp; Hoyer 2010 inherit the same convention).
+    /// </summary>
+    private Tensor<T> Survives(Tensor<T> corr0, Tensor<T> corrLag, T threshold)
     {
-        // Test X_i(t) -> X_j(t+lag) while conditioning on X_k(t).
-        // The old implementation correlated all three pairs at the same
-        // positive lag, which conditioned on X_k(t+lag) and compared
-        // X_j(t) with X_k(t+lag). Those are not the three aligned variables
-        // in the partial-correlation identity and allowed common-cause paths
-        // such as X1 <- X0 -> X3 to survive.
-        T rij = ComputeLaggedCorrelation(data, i, j, lag, n);
-        T rik = ComputeLaggedCorrelation(data, i, condVar, 0, n);
-        T rjk = ComputeLaggedCorrelation(data, condVar, j, lag, n);
+        int d = corrLag.Shape[0];
+        var pairOnes = Engine.TensorOnesLike(corrLag);
 
-        T numerator = NumOps.Subtract(rij, NumOps.Multiply(rik, rjk));
-        double dRik = NumOps.ToDouble(rik);
-        double dRjk = NumOps.ToDouble(rjk);
-        double denomSq = (1 - dRik * dRik) * (1 - dRjk * dRjk);
+        // Only a pair whose lagged correlation exceeds the threshold can become an edge, so the
+        // survival flag of every other pair is never read; with no such pair there is nothing to test.
+        if (!CausalTensorHelpers.AnyAbove(Engine.TensorAbs(corrLag), threshold))
+            return pairOnes;
 
-        if (denomSq < 1e-10)
+        var offDiagonal = Engine.TensorSubtract(pairOnes, Engine.TensorEye<T>(d));
+        T conclusiveFloor = NumOps.FromDouble(1e-10);
+
+        // Conditioning variables k are processed in blocks so the [i, k, j] workspace stays bounded.
+        int blockK = Math.Max(1, Math.Min(d, MaxConditioningBlockElements / Math.Max(1, d * d)));
+        var removers = Engine.TensorZerosLike(corrLag);
+        for (int k0 = 0; k0 < d; k0 += blockK)
         {
-            // Both conditioning correlations are near 1.0 — the conditioning
-            // variable is collinear with both endpoints, so the partial
-            // correlation is mathematically undefined. Return NaN as a
-            // "test inconclusive" sentinel; callers MUST recognise the NaN
-            // and skip this conditioning set rather than interpreting the
-            // result as "no association" (the latter would let collinear
-            // conditioning variables silently remove every edge in highly-
-            // correlated systems — a known FCI pathology on deterministic
-            // data; see Spirtes et al. 2000 §3 — "vacuous independence").
-            return NumOps.FromDouble(double.NaN);
+            int kb = Math.Min(blockK, d - k0);
+            var cube = new[] { d, kb, d }; // [i, k, j]
+            var rij = Engine.TensorBroadcastTo(corrLag.Reshape(new[] { d, 1, d }), cube);
+            var rik = Engine.TensorBroadcastTo(
+                Engine.TensorSlice(corr0, new[] { 0, k0 }, new[] { d, kb }).Reshape(new[] { d, kb, 1 }), cube);
+            var rkj = Engine.TensorBroadcastTo(
+                Engine.TensorSlice(corrLag, new[] { k0, 0 }, new[] { kb, d }).Reshape(new[] { 1, kb, d }), cube);
+
+            var numerator = Engine.TensorSubtract(rij, Engine.TensorMultiply(rik, rkj));
+            var ones = Engine.TensorOnesLike(rij);
+            var denomSq = Engine.TensorMultiply(
+                Engine.TensorSubtract(ones, Engine.TensorMultiply(rik, rik)),
+                Engine.TensorSubtract(ones, Engine.TensorMultiply(rkj, rkj)));
+            var conclusive = Engine.TensorSubtract(ones, Engine.TensorLessThan(denomSq, conclusiveFloor));
+
+            // Inconclusive denominators are replaced by 1 before dividing (they are masked by conclusive).
+            var safeDenomSq = Engine.TensorWhere(conclusive, denomSq, ones);
+            var absPartial = Engine.TensorAbs(Engine.TensorDivide(numerator, Engine.TensorSqrt(safeDenomSq)));
+
+            // |partial| <= threshold; both comparisons are false for NaN, so a NaN partial never removes an edge
+            var independent = Engine.TensorAdd(Engine.TensorLessThan(absPartial, threshold), Engine.TensorEquals(absPartial, threshold));
+
+            var notI = Engine.TensorBroadcastTo(
+                Engine.TensorSlice(offDiagonal, new[] { 0, k0 }, new[] { d, kb }).Reshape(new[] { d, kb, 1 }), cube);
+            var notJ = Engine.TensorBroadcastTo(
+                Engine.TensorSlice(offDiagonal, new[] { k0, 0 }, new[] { kb, d }).Reshape(new[] { 1, kb, d }), cube);
+            var removes = Engine.TensorMultiply(Engine.TensorMultiply(independent, conclusive), Engine.TensorMultiply(notI, notJ));
+            removers = Engine.TensorAdd(removers, Engine.ReduceSum(removes, new[] { 1 }, false));
         }
 
-        return NumOps.FromDouble(NumOps.ToDouble(numerator) / Math.Sqrt(denomSq));
+        return Engine.TensorSubtract(pairOnes, Engine.TensorGreaterThan(removers, NumOps.Zero));
     }
 }

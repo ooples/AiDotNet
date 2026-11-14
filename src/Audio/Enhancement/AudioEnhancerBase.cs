@@ -207,13 +207,7 @@ public abstract class AudioEnhancerBase<T> : IAudioEnhancer<T>
     /// </summary>
     protected T[] CreateHannWindow(int size)
     {
-        var window = new T[size];
-        for (int i = 0; i < size; i++)
-        {
-            var value = 0.5 * (1 - Math.Cos(2 * Math.PI * i / (size - 1)));
-            window[i] = NumOps.FromDouble(value);
-        }
-        return window;
+        return AudioEngineOps.SymmetricHannWindow<T>(AiDotNetEngine.Current, size).ToArray();
     }
 
     /// <summary>
@@ -221,19 +215,19 @@ public abstract class AudioEnhancerBase<T> : IAudioEnhancer<T>
     /// </summary>
     protected T[] ProcessOverlapAdd(T[] input)
     {
+        var engine = AiDotNetEngine.Current;
         int numFrames = (input.Length - _fftSize) / _hopSize + 1;
-        var output = new T[input.Length];
+        var signal = new Tensor<T>(input, [input.Length]);
+        var window = new Tensor<T>(_window, [_window.Length]);
+        var synthesized = new List<Tensor<T>>();
+        var starts = new List<int>();
 
         for (int frame = 0; frame < numFrames; frame++)
         {
             int start = frame * _hopSize;
 
-            // Extract and window frame
-            var frameData = new T[_fftSize];
-            for (int i = 0; i < _fftSize && start + i < input.Length; i++)
-            {
-                frameData[i] = NumOps.Multiply(input[start + i], _window[i]);
-            }
+            // Extract and window frame (zero beyond the end of the input)
+            var frameData = WindowedFrame(engine, signal, window, start);
 
             // Compute FFT (simplified - real implementation would use FFT library)
             var (magnitudes, phases) = ComputeFFT(frameData);
@@ -244,15 +238,25 @@ public abstract class AudioEnhancerBase<T> : IAudioEnhancer<T>
             // Inverse FFT
             var enhanced = ComputeIFFT(enhancedMagnitudes, phases);
 
-            // Window and overlap-add
-            for (int i = 0; i < _fftSize && start + i < output.Length; i++)
-            {
-                var windowed = NumOps.Multiply(enhanced[i], _window[i]);
-                output[start + i] = NumOps.Add(output[start + i], windowed);
-            }
+            // Window for overlap-add
+            synthesized.Add(engine.TensorMultiply(AudioEngineOps.FitLength(engine, new Tensor<T>(enhanced, [enhanced.Length]), _fftSize), window));
+            starts.Add(start);
         }
 
-        return output;
+        return AudioEngineOps.OverlapAdd(engine, synthesized, starts, input.Length).ToArray();
+    }
+
+    /// <summary>
+    /// The <see cref="_fftSize"/>-sample frame at <paramref name="start"/> multiplied by the analysis
+    /// window; samples past the end of the signal are zero.
+    /// </summary>
+    private T[] WindowedFrame(IEngine engine, Tensor<T> signal, Tensor<T> window, int start)
+    {
+        int available = Math.Max(0, Math.Min(_fftSize, signal.Length - start));
+        var samples = available > 0
+            ? AudioEngineOps.FitLength(engine, engine.TensorSlice(signal, [start], [available]), _fftSize)
+            : new Tensor<T>([_fftSize]);
+        return engine.TensorMultiply(samples, window).ToArray();
     }
 
     /// <summary>
@@ -276,24 +280,21 @@ public abstract class AudioEnhancerBase<T> : IAudioEnhancer<T>
 
             if (_bufferPosition >= _hopSize)
             {
-                // Process frame
-                var frameData = new T[_fftSize];
-                for (int j = 0; j < _fftSize; j++)
-                {
-                    int idx = (j + _bufferPosition - _hopSize) % _fftSize;
-                    frameData[j] = NumOps.Multiply(inputBuf[idx], _window[j]);
-                }
+                // Process frame. _bufferPosition == _hopSize here, so the frame reads the input buffer
+                // in order: frame[j] = inputBuf[j] * window[j].
+                var engine = AiDotNetEngine.Current;
+                var window = new Tensor<T>(_window, [_window.Length]);
+                var frameData = engine.TensorMultiply(new Tensor<T>(inputBuf, [inputBuf.Length]), window).ToArray();
 
                 var (magnitudes, phases) = ComputeFFT(frameData);
                 var enhancedMagnitudes = ProcessSpectralFrame(magnitudes, phases);
                 var enhanced = ComputeIFFT(enhancedMagnitudes, phases);
 
                 // Overlap-add to output buffer
-                for (int j = 0; j < _fftSize; j++)
-                {
-                    var windowed = NumOps.Multiply(enhanced[j], _window[j]);
-                    outputBuf[j] = NumOps.Add(outputBuf[j], windowed);
-                }
+                engine.TensorAdd(
+                    new Tensor<T>(outputBuf, [outputBuf.Length]),
+                    engine.TensorMultiply(AudioEngineOps.FitLength(engine, new Tensor<T>(enhanced, [enhanced.Length]), _fftSize), window))
+                    .CopyTo(outputBuf.AsSpan());
 
                 // Output hop samples
                 for (int j = 0; j < _hopSize && outputPos < output.Length; j++)
@@ -317,35 +318,22 @@ public abstract class AudioEnhancerBase<T> : IAudioEnhancer<T>
     /// </summary>
     protected T[] EstimateNoiseSpectrum(T[] noiseAudio)
     {
+        var engine = AiDotNetEngine.Current;
         int numFrames = (noiseAudio.Length - _fftSize) / _hopSize + 1;
-        var avgMagnitudes = new T[_fftSize / 2 + 1];
+        int bins = _fftSize / 2 + 1;
+        var signal = new Tensor<T>(noiseAudio, [noiseAudio.Length]);
+        var window = new Tensor<T>(_window, [_window.Length]);
+        var sumMagnitudes = new Tensor<T>([bins]);
 
         for (int frame = 0; frame < numFrames; frame++)
         {
-            int start = frame * _hopSize;
-            var frameData = new T[_fftSize];
-
-            for (int i = 0; i < _fftSize && start + i < noiseAudio.Length; i++)
-            {
-                frameData[i] = NumOps.Multiply(noiseAudio[start + i], _window[i]);
-            }
-
-            var (magnitudes, _) = ComputeFFT(frameData);
-
-            for (int i = 0; i < avgMagnitudes.Length; i++)
-            {
-                avgMagnitudes[i] = NumOps.Add(avgMagnitudes[i], magnitudes[i]);
-            }
+            var (magnitudes, _) = ComputeFFT(WindowedFrame(engine, signal, window, frame * _hopSize));
+            var head = new Tensor<T>(magnitudes, [magnitudes.Length]);
+            sumMagnitudes = engine.TensorAdd(sumMagnitudes, head.Length == bins ? head : engine.TensorSlice(head, [0], [bins]));
         }
 
         // Average
-        var divisor = NumOps.FromDouble(numFrames);
-        for (int i = 0; i < avgMagnitudes.Length; i++)
-        {
-            avgMagnitudes[i] = NumOps.Divide(avgMagnitudes[i], divisor);
-        }
-
-        return avgMagnitudes;
+        return engine.TensorDivideScalar(sumMagnitudes, NumOps.FromDouble(numFrames)).ToArray();
     }
 
     /// <summary>
@@ -353,30 +341,10 @@ public abstract class AudioEnhancerBase<T> : IAudioEnhancer<T>
     /// </summary>
     protected virtual (T[] Magnitudes, T[] Phases) ComputeFFT(T[] frame)
     {
-        // Convert frame to double array for FFT
-        var frameData = new double[_fftSize];
-        for (int i = 0; i < Math.Min(frame.Length, _fftSize); i++)
-        {
-            frameData[i] = NumOps.ToDouble(frame[i]);
-        }
-
-        // Compute FFT using FftSharp (proper O(N log N) algorithm)
-        Complex[] spectrum = FftSharp.FFT.Forward(frameData);
-
-        // Extract magnitude and phase for positive frequencies (N/2+1 bins)
-        int numBins = _fftSize / 2 + 1;
-        var magnitudes = new T[numBins];
-        var phases = new T[numBins];
-
-        for (int k = 0; k < numBins; k++)
-        {
-            double real = spectrum[k].Real;
-            double imag = spectrum[k].Imaginary;
-            magnitudes[k] = NumOps.FromDouble(Math.Sqrt(real * real + imag * imag));
-            phases[k] = NumOps.FromDouble(Math.Atan2(imag, real));
-        }
-
-        return (magnitudes, phases);
+        // O(N log N) complex FFT of the (zero-padded) frame; magnitude and phase of the positive
+        // frequencies (N/2+1 bins).
+        var (magnitudes, phases) = AudioEngineOps.HalfSpectrum(AiDotNetEngine.Current, new Tensor<T>(frame, [frame.Length]), _fftSize);
+        return (magnitudes.ToArray(), phases.ToArray());
     }
 
     /// <summary>
@@ -384,36 +352,14 @@ public abstract class AudioEnhancerBase<T> : IAudioEnhancer<T>
     /// </summary>
     protected virtual T[] ComputeIFFT(T[] magnitudes, T[] phases)
     {
-        // Reconstruct full complex spectrum from magnitude/phase
-        // magnitudes/phases contain N/2+1 positive frequency bins
-        var spectrum = new Complex[_fftSize];
-
-        // Fill positive frequencies
-        for (int k = 0; k < magnitudes.Length; k++)
-        {
-            double mag = NumOps.ToDouble(magnitudes[k]);
-            double phase = NumOps.ToDouble(phases[k]);
-            spectrum[k] = Complex.FromPolarCoordinates(mag, phase);
-        }
-
-        // Fill negative frequencies with conjugate symmetry
-        // For real signals: X[N-k] = conj(X[k])
-        for (int k = 1; k < magnitudes.Length - 1; k++)
-        {
-            spectrum[_fftSize - k] = Complex.Conjugate(spectrum[k]);
-        }
-
-        // Compute inverse FFT using FftSharp (modifies spectrum in-place)
-        FftSharp.FFT.Inverse(spectrum);
-
-        // Extract real part
-        var output = new T[_fftSize];
-        for (int n = 0; n < _fftSize; n++)
-        {
-            output[n] = NumOps.FromDouble(spectrum[n].Real);
-        }
-
-        return output;
+        // Reconstruct full complex spectrum from magnitude/phase (N/2+1 positive frequency bins,
+        // negative frequencies by conjugate symmetry X[N-k] = conj(X[k])), then the real part of the
+        // 1/N-normalised inverse FFT.
+        var engine = AiDotNetEngine.Current;
+        var phaseTensor = new Tensor<T>(phases, [phases.Length]);
+        if (phases.Length != magnitudes.Length)
+            phaseTensor = AudioEngineOps.FitLength(engine, phaseTensor, magnitudes.Length);
+        return AudioEngineOps.InverseHalfSpectrum(engine, new Tensor<T>(magnitudes, [magnitudes.Length]), phaseTensor, _fftSize).ToArray();
     }
 
     #endregion

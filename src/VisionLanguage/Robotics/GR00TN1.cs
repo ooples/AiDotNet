@@ -257,11 +257,8 @@ public partial class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAct
             hidden = Layers[i].Forward(hidden);
 
         // Action-head output is the velocity at the same shape as the noisy action.
-        var velocity = new Tensor<T>([noisyAction.Length]);
-        int copyLen = Math.Min(velocity.Length, hidden.Length);
-        for (int d = 0; d < copyLen; d++)
-            velocity[d] = hidden[d];
-        return velocity;
+        // Extra outputs are dropped and missing ones read as 0; the result never aliases the layer output.
+        return FitLength(hidden, noisyAction.Length).Clone();
     }
 
     /// <summary>
@@ -388,15 +385,19 @@ public partial class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAct
     {
         // Standard transformer sinusoidal embedding for the continuous flow-matching time variable
         // (Vaswani et al. 2017, adapted for continuous t per Lipman et al. 2023 eq. 5).
-        var embed = new Tensor<T>([dim]);
+        if (dim <= 0)
+            return new Tensor<T>([dim]);
+        var engine = Engine;
         double scaledT = t * 1000.0;
-        for (int d = 0; d < dim; d++)
-        {
-            double freq = 1.0 / Math.Pow(10000.0, (double)(d - d % 2) / dim);   // 2*(d/2): the sin/cos pair index
-            double val = (d % 2 == 0) ? Math.Sin(scaledT * freq) : Math.Cos(scaledT * freq);
-            embed[d] = NumOps.FromDouble(val);
-        }
-        return embed;
+        // freq_d = 10000^(-2 floor(d / 2) / dim) (2 floor(d / 2): the sin/cos pair index); sine on even d, cosine on odd.
+        var index = engine.TensorArange<T>(0, dim, 1);
+        var pairIndex = engine.TensorMultiplyScalar(
+            engine.TensorFloor(engine.TensorMultiplyScalar(index, NumOps.FromDouble(0.5))), NumOps.FromDouble(2.0));
+        var freq = engine.TensorExp(engine.TensorMultiplyScalar(pairIndex, NumOps.FromDouble(-Math.Log(10000.0) / dim)));
+        var phase = engine.TensorMultiplyScalar(freq, NumOps.FromDouble(scaledT));
+        var even = engine.TensorEquals(
+            engine.TensorRemainder(index, Tensor<T>.CreateDefault([dim], NumOps.FromDouble(2))), NumOps.Zero);
+        return engine.TensorWhere(even, engine.TensorSin(phase), engine.TensorCos(phase));
     }
 
     private Tensor<T> TokenizeText(string text)
@@ -405,10 +406,7 @@ public partial class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAct
             throw new InvalidOperationException("Tokenizer not initialized.");
         var encoding = _tokenizer.Encode(text);
         int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
-        var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++)
-            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
-        return tokens;
+        return TokenIdsToTensor(encoding.TokenIds, seqLen);
     }
 
     /// <inheritdoc />

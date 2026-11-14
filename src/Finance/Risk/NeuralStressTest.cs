@@ -181,13 +181,8 @@ public partial class NeuralStressTest<T> : RiskModelBase<T>
     {
         var scenarios = Predict(input);
         // Average loss across scenarios
-        T sum = NumOps.Zero;
-        var vec = scenarios.ToVector();
-        for (int i = 0; i < vec.Length; i++)
-        {
-            sum = NumOps.Add(sum, NumOps.Abs(vec[i]));
-        }
-        return NumOps.Divide(sum, NumOps.FromDouble(vec.Length));
+        T sum = scenarios.Length == 0 ? NumOps.Zero : Engine.TensorSum(Engine.TensorAbs(scenarios));
+        return NumOps.Divide(sum, NumOps.FromDouble(scenarios.Length));
     }
 
     /// <summary>

@@ -98,128 +98,75 @@ public partial class SOSDetector<T> : AnomalyDetectorBase<T>
     private Vector<T> ComputeBindingProbabilities(Matrix<T> data)
     {
         int n = data.Rows;
+        var engine = Engine;
 
-        // Compute squared distances using Engine vectorization
-        var sqDistances = new Matrix<T>(n, n);
-        for (int i = 0; i < n; i++)
-        {
-            var pointI = new Vector<T>(data.GetRowReadOnlySpan(i).ToArray());
-            for (int j = i + 1; j < n; j++)
-            {
-                var pointJ = new Vector<T>(data.GetRowReadOnlySpan(j).ToArray());
-                var diff = Engine.Subtract(pointI, pointJ);
-                T distSq = Engine.DotProduct(diff, diff);
-                sqDistances[i, j] = distSq;
-                sqDistances[j, i] = distSq;
-            }
-        }
+        // Squared distances; the diagonal never takes part (affinities a_ii stay 0)
+        var sqDistances = AnomalyTensorOps.PairwiseSquaredDistances(AnomalyTensorOps.ToTensor(data), AnomalyTensorOps.ToTensor(data));
+        var offDiagonal = engine.ScalarMinusTensor(NumOps.One, engine.TensorEye<T>(n));
 
-        // Compute affinities with binary search for sigma (perplexity-based)
-        var affinities = new Matrix<T>(n, n);
+        // Binary search, for every point at once, for the sigma that gives the target perplexity
         T targetEntropy = NumOps.Log(NumOps.FromDouble(_perplexity));
         T eps10 = NumOps.FromDouble(1e-10);
         T eps5 = NumOps.FromDouble(1e-5);
         T two = NumOps.FromDouble(2);
+        T sigmaMaxInit = NumOps.FromDouble(1e20);
+        var zeros = Tensor<T>.CreateZeros(new[] { n });
+        var ones = Tensor<T>.CreateOnes(new[] { n });
+        var sigmaMin = engine.TensorAddScalar(zeros, NumOps.FromDouble(1e-20));
+        var sigmaMax = engine.TensorAddScalar(zeros, sigmaMaxInit);
+        var sigma = ones;
+        var evaluatedSigma = ones;
+        var active = ones;
 
-        for (int i = 0; i < n; i++)
+        for (int iter = 0; iter < 50; iter++)
         {
-            // Binary search for sigma that gives target perplexity
-            T sigmaMin = NumOps.FromDouble(1e-20);
-            T sigmaMax = NumOps.FromDouble(1e20);
-            T sigma = NumOps.One;
-            T sigmaMaxInit = sigmaMax;
+            // Affinities and entropy with the current sigma (rows that converged keep their last sigma)
+            evaluatedSigma = engine.TensorWhere(active, sigma, evaluatedSigma);
+            var affinities = Affinities(sqDistances, offDiagonal, sigma);
+            var sumAff = engine.ReduceSum(affinities, new[] { 1 }, false);
+            var normalizable = engine.TensorGreaterThan(sumAff, eps10);
+            var p = AnomalyTensorOps.DivideColumn(affinities, engine.TensorWhere(normalizable, sumAff, ones));
+            var significant = engine.TensorGreaterThan(p, eps10);
+            var pLogP = engine.TensorMultiply(significant,
+                engine.TensorMultiply(p, engine.TensorLog(engine.TensorWhere(significant, p, engine.TensorAddScalar(engine.TensorMultiplyScalar(p, NumOps.Zero), NumOps.One)))));
+            var entropy = engine.TensorWhere(normalizable,
+                engine.TensorNegate(engine.ReduceSum(pLogP, new[] { 1 }, false)), zeros);
 
-            for (int iter = 0; iter < 50; iter++)
-            {
-                // Compute affinities with current sigma
-                T sumAff = NumOps.Zero;
-                T twoSigmaSq = NumOps.Multiply(two, NumOps.Multiply(sigma, sigma));
-                for (int j = 0; j < n; j++)
-                {
-                    if (i != j)
-                    {
-                        affinities[i, j] = NumOps.Exp(NumOps.Negate(NumOps.Divide(sqDistances[i, j], twoSigmaSq)));
-                        sumAff = NumOps.Add(sumAff, affinities[i, j]);
-                    }
-                }
-
-                // Normalize and compute entropy
-                T entropy = NumOps.Zero;
-                if (NumOps.GreaterThan(sumAff, eps10))
-                {
-                    for (int j = 0; j < n; j++)
-                    {
-                        if (i != j)
-                        {
-                            T p = NumOps.Divide(affinities[i, j], sumAff);
-                            if (NumOps.GreaterThan(p, eps10))
-                            {
-                                entropy = NumOps.Subtract(entropy, NumOps.Multiply(p, NumOps.Log(p)));
-                            }
-                        }
-                    }
-                }
-
-                // Binary search update
-                if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(entropy, targetEntropy)), eps5)) break;
-
-                if (NumOps.LessThan(entropy, targetEntropy))
-                {
-                    sigmaMin = sigma;
-                    sigma = NumOps.Equals(sigmaMax, sigmaMaxInit)
-                        ? NumOps.Multiply(sigma, two)
-                        : NumOps.Divide(NumOps.Add(sigma, sigmaMax), two);
-                }
-                else
-                {
-                    sigmaMax = sigma;
-                    sigma = NumOps.Divide(NumOps.Add(sigma, sigmaMin), two);
-                }
-            }
-
-            // Normalize affinities
-            T sum = NumOps.Zero;
-            for (int j = 0; j < n; j++)
-            {
-                if (i != j)
-                {
-                    sum = NumOps.Add(sum, affinities[i, j]);
-                }
-            }
-
-            if (NumOps.GreaterThan(sum, eps10))
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    if (i != j)
-                    {
-                        affinities[i, j] = NumOps.Divide(affinities[i, j], sum);
-                    }
-                }
-            }
+            // Converged rows stop; the others move their bracket
+            var converged = engine.TensorLessThan(engine.TensorAbs(engine.TensorSubtractScalar(entropy, targetEntropy)), eps5);
+            active = engine.TensorMultiply(active, engine.ScalarMinusTensor(NumOps.One, converged));
+            var raise = engine.TensorMultiply(active, engine.TensorLessThan(entropy, targetEntropy));
+            var lower = engine.TensorSubtract(active, raise);
+            var unbounded = engine.TensorEquals(sigmaMax, engine.TensorAddScalar(zeros, sigmaMaxInit));
+            var raised = engine.TensorWhere(unbounded,
+                engine.TensorMultiplyScalar(sigma, two),
+                engine.TensorDivideScalar(engine.TensorAdd(sigma, sigmaMax), two));
+            var lowered = engine.TensorDivideScalar(engine.TensorAdd(sigma, sigmaMin), two);
+            sigmaMin = engine.TensorWhere(raise, sigma, sigmaMin);
+            sigmaMax = engine.TensorWhere(lower, sigma, sigmaMax);
+            sigma = engine.TensorWhere(raise, raised, engine.TensorWhere(lower, lowered, sigma));
         }
 
-        // Compute binding probability for each point
-        // p_j = product over i of (1 - a_ij)
-        // = probability that j is NOT selected by ANY point
-        var bindingProbs = new Vector<T>(n);
+        // Affinities of the last evaluated sigma, normalized per row when their sum exceeds 1e-10
+        var finalAffinities = Affinities(sqDistances, offDiagonal, evaluatedSigma);
+        var sum = engine.ReduceSum(finalAffinities, new[] { 1 }, false);
+        var normalize = engine.TensorGreaterThan(sum, eps10);
+        finalAffinities = AnomalyTensorOps.DivideColumn(finalAffinities, engine.TensorWhere(normalize, sum, ones));
 
-        for (int j = 0; j < n; j++)
-        {
-            T logProd = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                if (i != j)
-                {
-                    logProd = NumOps.Add(logProd,
-                        NumOps.Log(NumOps.Add(NumOps.Subtract(NumOps.One, affinities[i, j]), eps10)));
-                }
-            }
-            // Outlier score = probability of NOT being selected
-            bindingProbs[j] = NumOps.Exp(logProd);
-        }
+        // Binding probability p_j = product over i != j of (1 - a_ij): the probability that j is NOT
+        // selected by ANY point (outlier score), computed in log space
+        var logTerms = engine.TensorMultiply(offDiagonal,
+            engine.TensorLog(engine.TensorAddScalar(engine.ScalarMinusTensor(NumOps.One, finalAffinities), eps10)));
+        return engine.TensorExp(engine.ReduceSum(logTerms, new[] { 0 }, false)).ToVector();
+    }
 
-        return bindingProbs;
+    // a_ij = exp(-d_ij^2 / (2 sigma_i^2)) off the diagonal, 0 on it.
+    private Tensor<T> Affinities(Tensor<T> sqDistances, Tensor<T> offDiagonal, Tensor<T> sigma)
+    {
+        var engine = Engine;
+        var twoSigmaSq = engine.TensorMultiplyScalar(engine.TensorMultiply(sigma, sigma), NumOps.FromDouble(2));
+        var affinities = engine.TensorExp(engine.TensorNegate(AnomalyTensorOps.DivideColumn(sqDistances, twoSigmaSq)));
+        return engine.TensorMultiply(affinities, offDiagonal);
     }
 
     /// <inheritdoc/>
@@ -242,7 +189,6 @@ public partial class SOSDetector<T> : AnomalyDetectorBase<T>
         // For scoring, we need to include the new points in the affinity computation
         int nTrain = trainingData.Rows;
         int nTest = X.Rows;
-        int nTotal = nTrain + nTest;
         int d = X.Columns;
 
         if (trainingData.Columns != d)
@@ -250,34 +196,11 @@ public partial class SOSDetector<T> : AnomalyDetectorBase<T>
             throw new ArgumentException($"Training data has {trainingData.Columns} features but test data has {d}.", nameof(X));
         }
 
-        // Combine training and test data into a single Matrix<T>
-        var allData = new Matrix<T>(nTotal, d);
-        for (int i = 0; i < nTrain; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                allData[i, j] = trainingData[i, j];
-            }
-        }
-
-        for (int i = 0; i < nTest; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                allData[nTrain + i, j] = X[i, j];
-            }
-        }
-
-        // Compute binding probabilities for all data
-        var allBindingProbs = ComputeBindingProbabilities(allData);
-
-        // Extract scores for test points
-        var scores = new Vector<T>(nTest);
-        for (int i = 0; i < nTest; i++)
-        {
-            scores[i] = allBindingProbs[nTrain + i];
-        }
-
-        return scores;
+        // Combine training and test data, compute binding probabilities for all of it and keep the test points
+        var engine = Engine;
+        var allData = engine.TensorConcatenate(
+            new[] { AnomalyTensorOps.ToTensor(trainingData), AnomalyTensorOps.ToTensor(X) }, 0);
+        var allBindingProbs = ComputeBindingProbabilities(allData.ToMatrix());
+        return engine.TensorSlice(allBindingProbs.AsTensor(), new[] { nTrain }, new[] { nTest }).ToVector();
     }
 }

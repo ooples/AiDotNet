@@ -797,12 +797,7 @@ public partial class NonStationaryTransformer<T> : ForecastingModelBase<T>
         var mse = _lossFunction.CalculateLoss(predictions.ToVector(), testLabels.ToVector());
 
         // Calculate MAE
-        T mae = NumOps.Zero;
-        for (int i = 0; i < predictions.Length && i < testLabels.Length; i++)
-        {
-            var diff = NumOps.Subtract(predictions.Data.Span[i], testLabels.Data.Span[i]);
-            mae = NumOps.Add(mae, NumOps.Abs(diff));
-        }
+        var (_, mae, _) = SumSquaredAndAbsoluteError(predictions, testLabels);
         mae = NumOps.Divide(mae, NumOps.FromDouble(predictions.Length));
 
         return new Dictionary<string, T>
@@ -993,37 +988,20 @@ public partial class NonStationaryTransformer<T> : ForecastingModelBase<T>
 
         if (normalize)
         {
-            // Compute mean and std for this instance
-            T sum = NumOps.Zero;
-            for (int i = 0; i < input.Length; i++)
-            {
-                sum = NumOps.Add(sum, input.Data.Span[i]);
-            }
-            var mean = NumOps.Divide(sum, NumOps.FromDouble(input.Length));
-
-            T varSum = NumOps.Zero;
-            for (int i = 0; i < input.Length; i++)
-            {
-                var diff = NumOps.Subtract(input.Data.Span[i], mean);
-                varSum = NumOps.Add(varSum, NumOps.Multiply(diff, diff));
-            }
+            // Compute mean and std for this instance (population std plus eps), then normalize.
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var flat = Engine.Reshape(input.Contiguous(), new[] { input.Length });
+            var mean = NumOps.Divide(input.Length > 0 ? Engine.TensorSum(flat) : NumOps.Zero, NumOps.FromDouble(input.Length));
+            var centered = Engine.TensorSubtractScalar(flat, mean);
+            T varSum = input.Length > 0 ? Engine.TensorSumOfSquares(centered) : NumOps.Zero;
             var std = NumOps.Sqrt(NumOps.Divide(varSum, NumOps.FromDouble(input.Length)));
             std = NumOps.Add(std, eps); // Prevent division by zero
 
             // Store for de-normalization
-            _instanceMean = new Tensor<T>(new[] { 1 });
-            _instanceMean.Data.Span[0] = mean;
-            _instanceStd = new Tensor<T>(new[] { 1 });
-            _instanceStd.Data.Span[0] = std;
+            _instanceMean = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { mean }));
+            _instanceStd = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { std }));
 
-            // Normalize
-            for (int i = 0; i < input.Length; i++)
-            {
-                var normalized = NumOps.Divide(
-                    NumOps.Subtract(input.Data.Span[i], mean),
-                    std);
-                result.Data.Span[i] = normalized;
-            }
+            result = Engine.Reshape(Engine.TensorDivideScalar(centered, std), input._shape);
         }
         else
         {
@@ -1112,10 +1090,7 @@ public partial class NonStationaryTransformer<T> : ForecastingModelBase<T>
     private float[] ConvertToFloatArray(Tensor<T> tensor)
     {
         var result = new float[tensor.Length];
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            result[i] = (float)NumOps.ToDouble(tensor.Data.Span[i]);
-        }
+        NumOps.ToFloatSpan(tensor.Data.Span.Slice(0, tensor.Length), result.AsSpan(0, tensor.Length));
         return result;
     }
 

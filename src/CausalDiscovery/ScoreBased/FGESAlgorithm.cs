@@ -124,12 +124,7 @@ public class FGESAlgorithm<T> : ScoreBasedBase<T>
             }
         }
 
-        var W = new Matrix<T>(d, d);
-        for (int to = 0; to < d; to++)
-            foreach (int from in parentSets[to])
-                W[from, to] = NumOps.FromDouble(Math.Max(1e-10, ComputeAbsCorrelation(data, from, to)));
-
-        return W;
+        return CorrelationWeightedAdjacency(data, parentSets, 1e-10);
     }
 
     private double GetCachedBIC(Matrix<T> data, int target, HashSet<int> parents,

@@ -197,26 +197,12 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
     /// <returns>Vector containing the mean of each column.</returns>
     private Vector<T> ComputeColumnMean(Matrix<T> X)
     {
-        int n = X.Columns;
-        int m = X.Rows;
-        Vector<T> mean = new Vector<T>(n);
-        T invM = NumOps.FromDouble(1.0 / m);
-
-        // VECTORIZED: Use GetColumn to extract column and compute sum via dot product
-        for (int j = 0; j < n; j++)
+        if (X.Rows == 0)
         {
-            Vector<T> col = X.GetColumn(j);
-            // Use dot product with ones vector to compute sum
-            Vector<T> ones = new Vector<T>(m);
-            for (int i = 0; i < m; i++)
-            {
-                ones[i] = NumOps.One;
-            }
-            T sum = col.DotProduct(ones);
-            mean[j] = NumOps.Multiply(sum, invM);
+            return new Vector<T>(X.Columns);
         }
 
-        return mean;
+        return Engine.ReduceMean(Tensor<T>.FromMatrix(X), new[] { 0 }, keepDims: false).ToVector();
     }
 
     /// <summary>
@@ -229,17 +215,8 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
     {
         int m = X.Rows;
         int n = X.Columns;
-        Matrix<T> centered = new Matrix<T>(m, n);
-
-        for (int i = 0; i < m; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                centered[i, j] = NumOps.Subtract(X[i, j], mean[j]);
-            }
-        }
-
-        return centered;
+        var rowMean = Engine.TensorBroadcastTo(Tensor<T>.FromVector(mean, new[] { 1, n }), new[] { m, n });
+        return Engine.TensorSubtract(Tensor<T>.FromMatrix(X), rowMean).ToMatrix();
     }
 
     /// <summary>
@@ -263,61 +240,35 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
     {
         int m = X.Rows;
 
-        // Compute covariance matrix C = (1/m) * X^T * X
+        // Covariance C = X^T X / m
         Matrix<T> XT = X.Transpose();
-        Matrix<T> C = XT.Multiply(X);
-        T scale = NumOps.FromDouble(1.0 / m);
+        Matrix<T> C = Engine.MatrixMultiplyScalar(XT.Multiply(X), NumOps.FromDouble(1.0 / m));
 
-        // VECTORIZED: Scale entire matrix using Engine operations row by row
-        for (int i = 0; i < C.Rows; i++)
-        {
-            Vector<T> row = C.GetRow(i);
-            Vector<T> scaledRow = (Vector<T>)Engine.Multiply(row, scale);
-            for (int j = 0; j < C.Columns; j++)
-            {
-                C[i, j] = scaledRow[j];
-            }
-        }
-
-        // Compute eigenvalue decomposition of covariance matrix
         var eigen = new EigenDecomposition<T>(C);
+        int d = C.Rows;
 
-        // Select top numComponents eigenvectors and eigenvalues
-        Matrix<T> E = new Matrix<T>(numComponents, C.Rows);
-        Vector<T> D = new Vector<T>(numComponents);
+        // Leading numComponents eigenpairs: D (values) and E (eigenvectors as rows).
+        var eigenvalues = Tensor<T>.FromVector(eigen.EigenValues);
+        var D = Engine.TensorSlice(eigenvalues, new[] { 0 }, new[] { numComponents });
+        var E = Engine.TensorTranspose(Engine.TensorSlice(
+            Tensor<T>.FromMatrix(eigen.EigenVectors), new[] { 0, 0 }, new[] { d, numComponents }));
 
-        for (int i = 0; i < numComponents; i++)
+        // Whitening needs strictly positive eigenvalues; report the first one that is not.
+        var nonPositive = Engine.TensorSubtract(Engine.TensorOnesLike(D), Engine.TensorGreaterThan(D, NumOps.Zero));
+        if (Engine.TensorCountNonzero(nonPositive) > 0)
         {
-            D[i] = eigen.EigenValues[i];
-            for (int j = 0; j < C.Rows; j++)
-            {
-                E[i, j] = eigen.EigenVectors[j, i];
-            }
+            int i = Engine.TensorArgMax(nonPositive, 0)[0];
+            throw new InvalidOperationException(
+                $"Eigenvalue at index {i} is non-positive ({D[i]}). " +
+                "ICA whitening requires positive definite covariance matrix. " +
+                "This may indicate ill-conditioned or degenerate data.");
         }
 
-        // Compute whitening matrix K = D^(-1/2) * E
-        Matrix<T> K = new Matrix<T>(numComponents, C.Rows);
-        for (int i = 0; i < numComponents; i++)
-        {
-            // Validate eigenvalue is positive before taking square root
-            if (NumOps.LessThanOrEquals(D[i], NumOps.Zero))
-            {
-                throw new InvalidOperationException(
-                    $"Eigenvalue at index {i} is non-positive ({D[i]}). " +
-                    "ICA whitening requires positive definite covariance matrix. " +
-                    "This may indicate ill-conditioned or degenerate data.");
-            }
+        // K = diag(1 / sqrt(D)) * E
+        var invSqrt = Engine.TensorReciprocal(Engine.TensorSqrt(D));
+        Matrix<T> K = Engine.TensorMatMul(Engine.TensorDiagEmbed(invSqrt), E).ToMatrix();
 
-            T invSqrtEigenvalue = NumOps.Divide(NumOps.One, NumOps.Sqrt(D[i]));
-            for (int j = 0; j < C.Rows; j++)
-            {
-                K[i, j] = NumOps.Multiply(E[i, j], invSqrtEigenvalue);
-            }
-        }
-
-        // Whiten the data: XWhitened = K * X^T
         Matrix<T> XWhitened = K.Multiply(XT).Transpose();
-
         return (XWhitened, K);
     }
 
@@ -333,135 +284,65 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
     {
         int m = X.Rows;
         int n = X.Columns;
-        Matrix<T> W = new Matrix<T>(numComponents, n);
 
-        // Initialize W with random values
+        // Random initialization in [-1, 1) from a secure source, then orthonormalize the rows.
         var random = RandomHelper.CreateSecureRandom();
-        for (int i = 0; i < numComponents; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                W[i, j] = NumOps.FromDouble(random.NextDouble() * 2 - 1);
-            }
-        }
-
-        // Orthogonalize initial W
-        W = GramSchmidtOrthogonalization(W);
+        var uniform = Tensor<T>.FromMatrix(Matrix<T>.CreateRandom(random, numComponents, n));
+        var initial = Engine.TensorSubtractScalar(Engine.TensorMultiplyScalar(uniform, NumOps.FromDouble(2)), NumOps.One);
+        Matrix<T> W = GramSchmidtOrthogonalization(initial.ToMatrix());
 
         T toleranceT = NumOps.FromDouble(tolerance);
+        T invM = NumOps.FromDouble(1.0 / m);
+        T one = NumOps.One;
+        var x = Tensor<T>.FromMatrix(X);
+        var xT = Engine.TensorTranspose(x);
 
-        // Iterate to find each independent component
         for (int component = 0; component < numComponents; component++)
         {
-            Vector<T> w = W.GetRow(component);
+            var w = Tensor<T>.FromVector(W.GetRow(component), new[] { n, 1 });
 
             for (int iteration = 0; iteration < maxIterations; iteration++)
             {
-                Vector<T> wOld = w.Clone();
+                var wOld = w;
 
-                // Compute w = E{x * g(w^T * x)} - E{g'(w^T * x)} * w
-                // where g(u) = tanh(u) is the non-linearity function
-                Vector<T> wNew = new Vector<T>(n);
-                T invM = NumOps.FromDouble(1.0 / m);
+                // g(u) = tanh(u) and its derivative 1 - tanh(u)^2 for u = X w (one value per sample)
+                var g = Engine.TensorTanh(Engine.TensorMatMul(x, w));
+                var gPrime = Engine.TensorSubtract(Engine.TensorOnesLike(g), Engine.TensorSquare(g));
 
-                // VECTORIZED: Precompute g and g' values for all samples
-                var gValues = new T[m];
-                var gPrimeValues = new T[m];
+                // w+ = mean(x g(w^T x)) - mean(g'(w^T x)) w
+                var expectation = Engine.TensorMultiplyScalar(Engine.TensorMatMul(xT, g), invM);
+                T meanGPrime = Engine.TensorMean(gPrime);
+                w = Engine.TensorSubtract(expectation, Engine.TensorMultiplyScalar(w, meanGPrime));
 
-                for (int i = 0; i < m; i++)
+                // Deflation: remove the projections onto the components found so far.
+                if (component > 0)
                 {
-                    Vector<T> x = X.GetRow(i);
-                    T wtx = w.DotProduct(x);
-
-                    // g(u) = tanh(u)
-                    gValues[i] = Tanh(wtx);
-                    // g'(u) = 1 - tanh²(u)
-                    gPrimeValues[i] = NumOps.Subtract(NumOps.One, NumOps.Multiply(gValues[i], gValues[i]));
+                    var previous = Engine.TensorSlice(Tensor<T>.FromMatrix(W), new[] { 0, 0 }, new[] { component, n });
+                    var projections = Engine.TensorMatMul(previous, w);
+                    w = Engine.TensorSubtract(w, Engine.TensorMatMul(Engine.TensorTranspose(previous), projections));
                 }
 
-                var gVec = new Vector<T>(gValues);
-                var gPrimeVec = new Vector<T>(gPrimeValues);
-
-                // VECTORIZED: Use dot product for sum computations
-                for (int j = 0; j < n; j++)
+                // Normalize (a zero vector is left as is).
+                var norm = Engine.TensorNorm(w);
+                if (Engine.TensorCountNonzero(norm) > 0)
                 {
-                    // Extract column j from X
-                    Vector<T> xCol = X.GetColumn(j);
-
-                    // sum1 = Σ(x[i,j] * g[i]) - use dot product
-                    T sum1 = xCol.DotProduct(gVec);
-
-                    // sum2 = Σ(g'[i]) - use dot product with ones vector
-                    Vector<T> ones = new Vector<T>(m);
-                    for (int k = 0; k < m; k++)
-                    {
-                        ones[k] = NumOps.One;
-                    }
-                    T sum2 = gPrimeVec.DotProduct(ones);
-
-                    T avg1 = NumOps.Multiply(sum1, invM);
-                    T avg2 = NumOps.Multiply(sum2, invM);
-                    wNew[j] = NumOps.Subtract(avg1, NumOps.Multiply(avg2, w[j]));
+                    w = Engine.TensorDivideScalar(w, Engine.TensorSum(norm));
                 }
 
-                w = wNew;
-
-                // Orthogonalize against previous components
-                for (int j = 0; j < component; j++)
-                {
-                    Vector<T> wj = W.GetRow(j);
-                    T projection = w.DotProduct(wj);
-                    // VECTORIZED: Subtract projection using Engine operations
-                    var proj = (Vector<T>)Engine.Multiply(wj, projection);
-                    w = (Vector<T>)Engine.Subtract(w, proj);
-                }
-
-                // Normalize w
-                T norm = w.Norm();
-                if (!NumOps.Equals(norm, NumOps.Zero))
-                {
-                    // VECTORIZED: Normalize using Engine division
-                    w = (Vector<T>)Engine.Divide(w, norm);
-                }
-
-                // Check for convergence
-                T distance = NumOps.Abs(NumOps.Subtract(NumOps.Abs(w.DotProduct(wOld)), NumOps.One));
-                if (NumOps.LessThan(distance, toleranceT))
+                // Converged when |w . wOld| is within tolerance of 1. TensorVecDot takes rank-1 operands.
+                var alignment = Tensor<T>.FromScalar(
+                    Engine.TensorVecDot(w.Reshape(new[] { n }), wOld.Reshape(new[] { n })));
+                var distance = Engine.TensorAbs(Engine.TensorSubtractScalar(Engine.TensorAbs(alignment), one));
+                if (AnyBelow(distance, toleranceT))
                 {
                     break;
                 }
             }
 
-            // Store the component
-            for (int j = 0; j < n; j++)
-            {
-                W[component, j] = w[j];
-            }
+            W.SetRow(component, w.Reshape(new[] { n }).ToVector());
         }
 
         return W;
-    }
-
-    /// <summary>
-    /// Computes the hyperbolic tangent (tanh) function using only INumericOperations.
-    /// </summary>
-    /// <param name="x">Input value.</param>
-    /// <returns>tanh(x) = (e^x - e^-x) / (e^x + e^-x).</returns>
-    /// <remarks>
-    /// This implementation uses only INumericOperations primitives to ensure compatibility
-    /// with any numeric type, avoiding Convert.ToDouble which would fail for custom types.
-    /// </remarks>
-    private T Tanh(T x)
-    {
-        // tanh(x) = (e^x - e^-x) / (e^x + e^-x)
-        T expX = NumOps.Exp(x);
-        T negX = NumOps.Negate(x);
-        T expNegX = NumOps.Exp(negX);
-
-        T numerator = NumOps.Subtract(expX, expNegX);
-        T denominator = NumOps.Add(expX, expNegX);
-
-        return NumOps.Divide(numerator, denominator);
     }
 
     /// <summary>
@@ -471,39 +352,10 @@ public class IcaDecomposition<T> : MatrixDecompositionBase<T>
     /// <returns>Orthogonalized matrix.</returns>
     private Matrix<T> GramSchmidtOrthogonalization(Matrix<T> matrix)
     {
-        int rows = matrix.Rows;
-        int cols = matrix.Columns;
-        Matrix<T> result = new Matrix<T>(rows, cols);
-
-        for (int i = 0; i < rows; i++)
-        {
-            Vector<T> v = matrix.GetRow(i);
-
-            // Subtract projections onto previous vectors
-            for (int j = 0; j < i; j++)
-            {
-                Vector<T> u = result.GetRow(j);
-                T projection = v.DotProduct(u);
-                // VECTORIZED: Subtract projection using Engine operations
-                var proj = (Vector<T>)Engine.Multiply(u, projection);
-                v = (Vector<T>)Engine.Subtract(v, proj);
-            }
-
-            // Normalize
-            T norm = v.Norm();
-            if (!NumOps.Equals(norm, NumOps.Zero))
-            {
-                // VECTORIZED: Normalize using Engine division
-                v = (Vector<T>)Engine.Divide(v, norm);
-            }
-
-            for (int k = 0; k < cols; k++)
-            {
-                result[i, k] = v[k];
-            }
-        }
-
-        return result;
+        // Orthonormalizing the rows of M is the thin QR of M^T: the rows of Q^T, with R[i,i] >= 0
+        // matching the Gram-Schmidt normalization by a positive norm.
+        var (q, _) = ComputePositiveDiagonalQr(matrix.Transpose());
+        return q.Transpose();
     }
 
     /// <summary>

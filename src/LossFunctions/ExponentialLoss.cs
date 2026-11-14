@@ -49,13 +49,9 @@ public class ExponentialLoss<T> : LossFunctionBase<T>
     {
         ValidateVectorLengths(predicted, actual);
 
-        T loss = NumOps.Zero;
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            // exp(-y * f(x))
-            T exponent = NumOps.Negate(NumOps.Multiply(actual[i], predicted[i]));
-            loss = NumOps.Add(loss, NumOps.Exp(exponent));
-        }
+        // exp(-y * f(x))
+        var exponent = Engine.TensorNegate(Engine.TensorMultiply(actual.AsTensor(), predicted.AsTensor()));
+        T loss = Engine.TensorSum(Engine.TensorExp(exponent));
 
         return NumOps.Divide(loss, NumOps.FromDouble(predicted.Length));
     }

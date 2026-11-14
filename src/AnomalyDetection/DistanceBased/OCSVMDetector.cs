@@ -133,35 +133,20 @@ public partial class OCSVMDetector<T> : AnomalyDetectorBase<T>
         // the exact update itself — so it neither converged to the optimum nor respected the
         // equality constraint, since clipping each multiplier independently after the step breaks
         // the sum.
-        var K = new Matrix<T>(n, n);
-        for (int i = 0; i < n; i++)
-        {
-            var pointI = new Vector<T>(data.GetRowReadOnlySpan(i).ToArray());
-            for (int j = i; j < n; j++)
-            {
-                var pointJ = new Vector<T>(data.GetRowReadOnlySpan(j).ToArray());
-                T kval = RBFKernel(pointI, pointJ, gamma);
-                K[i, j] = kval;
-                K[j, i] = kval;
-            }
-        }
+        var engine = Engine;
+        var points = AnomalyTensorOps.ToTensor(data);
+        var kernel = RBFKernel(points, points, gamma);
+        var K = kernel.ToMatrix();
 
         T maxAlpha = NumOps.Divide(NumOps.One, NumOps.FromDouble(_nu * n));
 
-        var labels = new Vector<T>(n);
-        var linear = new Vector<T>(n);          // one-class has no linear term
-        var upperBounds = new Vector<T>(n);
-        var initialAlphas = new Vector<T>(n);
-
         // Spread the unit mass evenly, capped at the per-multiplier bound, so the start is feasible.
-        double cap = NumOps.ToDouble(maxAlpha);
-        double even = Math.Min(cap, 1.0 / n);
-        for (int i = 0; i < n; i++)
-        {
-            labels[i] = NumOps.One;
-            upperBounds[i] = maxAlpha;
-            initialAlphas[i] = NumOps.FromDouble(even);
-        }
+        T evenShare = NumOps.Divide(NumOps.One, NumOps.FromDouble(n));
+        T even = NumOps.LessThan(maxAlpha, evenShare) ? maxAlpha : evenShare;
+        var labels = engine.Fill(n, NumOps.One);
+        var linear = new Vector<T>(n);          // one-class has no linear term
+        var upperBounds = engine.Fill(n, maxAlpha);
+        var initialAlphas = engine.Fill(n, even);
 
         var solver = new AiDotNet.Solvers.QuadraticProgramming.SequentialMinimalOptimizationSolver<T>(
             new AiDotNet.Models.Options.SequentialMinimalOptimizationOptions
@@ -176,56 +161,32 @@ public partial class OCSVMDetector<T> : AnomalyDetectorBase<T>
         T eps8 = NumOps.FromDouble(1e-8);
 
         // Extract support vectors
-        var svIndices = new List<int>();
-        for (int i = 0; i < n; i++)
-        {
-            if (NumOps.GreaterThan(alphas[i], eps8))
-            {
-                svIndices.Add(i);
-            }
-        }
+        var svIndices = AnomalyTensorOps.NonzeroIndices(engine.TensorGreaterThan(alphas.AsTensor(), eps8));
+        var supportAlphas = AnomalyTensorOps.SelectElements(alphas, svIndices);
+        _alphas = supportAlphas;
+        _supportVectors = AnomalyTensorOps.SelectRows(points, svIndices).ToMatrix();
 
-        int svCount = svIndices.Count;
-        int d = data.Columns;
-        _supportVectors = new Matrix<T>(svCount, d);
-        _alphas = new Vector<T>(svCount);
-        for (int si = 0; si < svCount; si++)
-        {
-            _alphas[si] = alphas[svIndices[si]];
-            for (int j = 0; j < d; j++)
-            {
-                _supportVectors[si, j] = data[svIndices[si], j];
-            }
-        }
-
-        // Compute rho (threshold)
-        _rho = NumOps.Zero;
-        int count = 0;
-        T upperBound = NumOps.Subtract(maxAlpha, eps8);
-        for (int i = 0; i < svCount; i++)
-        {
-            if (NumOps.GreaterThan(_alphas[i], eps8) && NumOps.LessThan(_alphas[i], upperBound))
-            {
-                T f = NumOps.Zero;
-                for (int j = 0; j < svCount; j++)
-                {
-                    var svI = new Vector<T>(_supportVectors.GetRowReadOnlySpan(i).ToArray());
-                    var svJ = new Vector<T>(_supportVectors.GetRowReadOnlySpan(j).ToArray());
-                    f = NumOps.Add(f, NumOps.Multiply(_alphas[j], RBFKernel(svJ, svI, gamma)));
-                }
-                _rho = NumOps.Add(_rho, f);
-                count++;
-            }
-        }
-
-        if (count > 0) _rho = NumOps.Divide(_rho, NumOps.FromDouble(count));
+        // Compute rho (threshold): the mean decision value sum_j alpha_j K(sv_j, sv_i) over the free
+        // support vectors (eps8 < alpha_i < maxAlpha - eps8)
+        int svCount = svIndices.Length;
+        var svKernel = AnomalyTensorOps.SelectColumns(AnomalyTensorOps.SelectRows(kernel, svIndices), svIndices);
+        var decision = engine.Reshape(
+            engine.TensorMatMul(svKernel, engine.Reshape(supportAlphas.AsTensor(), new[] { svCount, 1 })), new[] { svCount });
+        var free = engine.TensorMultiply(
+            engine.TensorGreaterThan(supportAlphas.AsTensor(), eps8),
+            engine.TensorLessThan(supportAlphas.AsTensor(), NumOps.Subtract(maxAlpha, eps8)));
+        T count = engine.TensorSum(free);
+        _rho = NumOps.GreaterThan(count, NumOps.Zero)
+            ? NumOps.Divide(engine.TensorSum(engine.TensorMultiply(free, decision)), count)
+            : NumOps.Zero;
     }
 
-    private T RBFKernel(Vector<T> a, Vector<T> b, T gamma)
+    // RBF kernel exp(-gamma * ||a_i - b_j||^2) between the rows of a and b.
+    private Tensor<T> RBFKernel(Tensor<T> a, Tensor<T> b, T gamma)
     {
-        var diff = Engine.Subtract(a, b);
-        T sqDist = Engine.DotProduct(diff, diff);
-        return NumOps.Exp(NumOps.Negate(NumOps.Multiply(gamma, sqDist)));
+        var engine = Engine;
+        return engine.TensorExp(engine.TensorNegate(
+            engine.TensorMultiplyScalar(AnomalyTensorOps.PairwiseSquaredDistances(a, b), gamma)));
     }
 
     /// <inheritdoc/>
@@ -250,26 +211,14 @@ public partial class OCSVMDetector<T> : AnomalyDetectorBase<T>
         T effectiveGamma = _gamma > 0
             ? NumOps.FromDouble(_gamma)
             : NumOps.Divide(NumOps.One, NumOps.FromDouble(X.Columns));
-        var scores = new Vector<T>(X.Rows);
+        var engine = Engine;
+        int svCount = supportVectors.Rows;
 
-        for (int i = 0; i < X.Rows; i++)
-        {
-            var point = new Vector<T>(X.GetRowReadOnlySpan(i).ToArray());
-
-            // Decision function: sum(alpha_i * K(x_i, x)) - rho
-            T f = NumOps.Zero;
-            for (int k = 0; k < supportVectors.Rows; k++)
-            {
-                var sv = new Vector<T>(supportVectors.GetRowReadOnlySpan(k).ToArray());
-                f = NumOps.Add(f, NumOps.Multiply(alphas[k], RBFKernel(sv, point, effectiveGamma)));
-            }
-            f = NumOps.Subtract(f, _rho);
-
-            // Higher (more positive) = more normal
-            // We want higher score = more anomalous, so negate
-            scores[i] = NumOps.Negate(f);
-        }
-
-        return scores;
+        // Decision function: sum(alpha_k * K(sv_k, x)) - rho; higher (more positive) = more normal, so
+        // it is negated to make higher = more anomalous
+        var kernel = RBFKernel(AnomalyTensorOps.ToTensor(X), AnomalyTensorOps.ToTensor(supportVectors), effectiveGamma);
+        var decision = engine.Reshape(
+            engine.TensorMatMul(kernel, engine.Reshape(alphas.AsTensor(), new[] { svCount, 1 })), new[] { X.Rows });
+        return engine.TensorNegate(engine.TensorSubtractScalar(decision, _rho)).ToVector();
     }
 }

@@ -500,9 +500,9 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     public Tensor<T> EncodeText(int[] tokenIds)
     {
         Guard.NotNull(tokenIds);
-        var tokenTensor = new Tensor<T>([1, tokenIds.Length]);
-        for (int i = 0; i < tokenIds.Length; i++)
-            tokenTensor[0, i] = NumOps.FromDouble(tokenIds[i]);
+        var tokenTensor = tokenIds.Length == 0
+            ? new Tensor<T>([1, 0])
+            : new Tensor<int>(tokenIds, [1, tokenIds.Length]).Cast<T>();
         return EncodeText(tokenTensor);
     }
 
@@ -526,7 +526,7 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
         Guard.NotNull(captions);
         Guard.NotNull(tokenizer);
         int length = _options.MaxTextLength;
-        var ids = new Tensor<T>(new[] { captions.Count, length });
+        var ids = new int[captions.Count * Math.Max(0, length)];
         var encoding = new AiDotNet.Tokenization.Models.EncodingOptions
         {
             AddSpecialTokens = true,
@@ -538,9 +538,11 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
         {
             var tokens = tokenizer.Encode(captions[c] ?? string.Empty, encoding).TokenIds;
             for (int i = 0; i < length; i++)
-                ids[c, i] = NumOps.FromDouble(i < tokens.Count ? tokens[i] : _options.TextPaddingTokenId);
+                ids[c * length + i] = i < tokens.Count ? tokens[i] : _options.TextPaddingTokenId;
         }
-        return ids;
+        if (ids.Length == 0)
+            return new Tensor<T>(new[] { captions.Count, length });
+        return new Tensor<int>(ids, new[] { captions.Count, length }).Cast<T>();
     }
 
     /// <summary>
@@ -556,9 +558,9 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     private int[] TokenIdsOf(string label, ITokenizer tokenizer)
     {
         var ids = Tokenize(new[] { label }, tokenizer);
-        var result = new int[ids.Shape[1]];
-        for (int i = 0; i < result.Length; i++) result[i] = (int)Math.Round(NumOps.ToDouble(ids[0, i]));
-        return result;
+        int length = ids.Shape[1];
+        if (length == 0) return new int[0];
+        return Engine.TensorRound(Engine.TensorSlice(ids, [0, 0], [1, length])).Cast<int>().ToArray();
     }
 
     /// <summary>
@@ -609,9 +611,7 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
                 nameof(audio));
 
         var embedding = EncodeAudio(audio);
-        var flat = embedding.ToVector();
-        var data = new T[flat.Length];
-        for (int i = 0; i < flat.Length; i++) data[i] = flat[i];
+        var data = embedding.ToArray();
         return new AudioFingerprint<T>
         {
             Data = data,
@@ -955,13 +955,12 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     Tensor<T> ITrainingObjectiveProvider<T>.ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget)
     {
         Guard.NotNull(proposedTarget);
-        var ids = new Tensor<T>(proposedTarget._shape);
-        for (int i = 0; i < ids.Length; i++)
-        {
-            double id = Math.Round(Math.Abs(NumOps.ToDouble(proposedTarget.GetFlat(i))));
-            ids.SetFlat(i, NumOps.FromDouble(Math.Min(id, _options.VocabSize - 1)));
-        }
-        return ids;
+        // min(round(|x|), VocabSize - 1) with banker's rounding; NaN stays NaN (a fresh tensor)
+        using var noGrad = new NoGradScope<T>();
+        var id = Engine.TensorRound(Engine.TensorAbs(proposedTarget));
+        T cap = NumOps.FromDouble(_options.VocabSize - 1);
+        return Engine.TensorWhere(
+            Engine.TensorGreaterThan(id, cap), Tensor<T>.CreateDefault(id.Shape.ToArray(), cap), id);
     }
 
     /// <inheritdoc />
@@ -991,13 +990,12 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
         // We need the diagonal entry of log_softmax. Easiest: compute
         // log_softmax row by row using engine ops, then sum along the
         // diagonal via a one-hot-style multiply.
-        var rowMaxes = new Tensor<T>(new[] { batchSize, 1 });
-        for (int i = 0; i < batchSize; i++)
+        // The row max is a constant shift (log_softmax is invariant to it), taken off the tape as before.
+        Tensor<T> rowMaxes;
+        using (new NoGradScope<T>())
         {
-            T m = logits[i, 0];
-            for (int j = 1; j < batchSize; j++)
-                if (NumOps.GreaterThan(logits[i, j], m)) m = logits[i, j];
-            rowMaxes[i, 0] = m;
+            rowMaxes = Engine.ReduceMax(
+                Engine.TensorSlice(logits, new[] { 0, 0 }, new[] { batchSize, batchSize }), new[] { 1 }, keepDims: true);
         }
         var rowMaxTiled = Engine.TensorTile(rowMaxes, new[] { 1, batchSize });
         var shifted = Engine.TensorSubtract<T>(logits, rowMaxTiled);
@@ -1008,8 +1006,7 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
         var logSoftmax = Engine.TensorSubtract<T>(shifted, logRowSumTiled);
 
         // Diagonal mask: 1 at (i, i), 0 elsewhere.
-        var diagMask = new Tensor<T>(new[] { batchSize, batchSize });
-        for (int i = 0; i < batchSize; i++) diagMask[i, i] = NumOps.One;
+        var diagMask = Engine.TensorEye<T>(batchSize);
         var picked = Engine.TensorMultiply<T>(logSoftmax, diagMask);
         // Sum all entries; only the diagonal survives.
         var sumAxes = new[] { 0, 1 };
@@ -1051,10 +1048,10 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     private double ComputeCosineSimilarity(Tensor<T> a, Tensor<T> b)
     {
         int len = Math.Min(a.Length, b.Length);
-        double dot = 0.0;
-        for (int i = 0; i < len; i++)
-            dot += Convert.ToDouble(a[i]) * Convert.ToDouble(b[i]);
-        return dot;
+        if (len == 0) return 0.0;
+        var x = AudioEngineOps.FitLength(Engine, a, len);
+        var y = AudioEngineOps.FitLength(Engine, b, len);
+        return NumOps.ToDouble(Engine.TensorSum(Engine.TensorMultiply(x, y)));
     }
 
     private void ThrowIfDisposed()

@@ -412,14 +412,26 @@ internal sealed partial class FedformerNetwork<T> : LayerBase<T>, IShapeContract
         var s = x.Shape;
         int batch = s[0], length = s[1], channels = s[2], kernel = _movingAverage;
         int front = kernel - 1 - (kernel - 1) / 2;
-        var average = new Tensor<T>(new[] { length, length });
         var share = Ops.FromDouble(1.0 / kernel);
-        for (int t = 0; t < length; t++)
-            for (int j = 0; j < kernel; j++)
-            {
-                int source = Math.Min(length - 1, Math.Max(0, t - front + j));
-                average[t, source] = Ops.Add(average[t, source], share);
-            }
+        Tensor<T> average;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            // Each window position adds one share to its (clamped) source column.
+            var rowIndex = new int[length * kernel];
+            var columnIndex = new int[length * kernel];
+            for (int t = 0, n = 0; t < length; t++)
+                for (int j = 0; j < kernel; j++, n++)
+                {
+                    rowIndex[n] = t;
+                    columnIndex[n] = Math.Min(length - 1, Math.Max(0, t - front + j));
+                }
+            var shares = Engine.TensorFullLike(new Tensor<T>(new[] { length * kernel }), share);
+            average = Engine.TensorIndexPut(
+                new Tensor<T>(new[] { length, length }),
+                new[] { new Tensor<int>(new[] { rowIndex.Length }, new Vector<int>(rowIndex)), new Tensor<int>(new[] { columnIndex.Length }, new Vector<int>(columnIndex)) },
+                shares,
+                true);
+        }
         var timeMajor = Engine.Reshape(Engine.TensorPermute(x, new[] { 1, 0, 2 }), new[] { length, batch * channels });
         var trend = Engine.TensorPermute(
             Engine.Reshape(Engine.TensorMatMul(average, timeMajor), new[] { length, batch, channels }), new[] { 1, 0, 2 });
@@ -589,17 +601,28 @@ internal sealed partial class FedformerNetwork<T> : LayerBase<T>, IShapeContract
             var series = Engine.Reshape(
                 Engine.TensorPermute(Engine.Reshape(projected, new[] { batch, length, Heads, e }), new[] { 0, 2, 3, 1 }),
                 new[] { batch * _d, length });
-            var cos = new Tensor<T>(new[] { length, m });
-            var negSin = new Tensor<T>(new[] { length, m });
-            for (int t = 0; t < length; t++)
-                for (int k = 0; k < m; k++)
-                {
-                    double angle = 2.0 * Math.PI * modes[k] * t / length;
-                    cos[t, k] = Ops.FromDouble(Math.Cos(angle));
-                    negSin[t, k] = Ops.FromDouble(-Math.Sin(angle));
-                }
+            Tensor<T> cos, negSin;
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+            {
+                // angle[t, k] = 2 pi (modes[k] t mod L) / L: the integer phase is reduced first so the table stays
+                // accurate in low precision.
+                var angle = PhaseAngles(length, m, (t, k) => modes[k] * t, length);
+                cos = Engine.TensorCos(angle);
+                negSin = Engine.TensorNegate(Engine.TensorSin(angle));
+            }
             var shape = new[] { batch, Heads, e, m };
             return (Engine.Reshape(Engine.TensorMatMul(series, cos), shape), Engine.Reshape(Engine.TensorMatMul(series, negSin), shape));
+        }
+
+        // 2 pi (phase(r, c) mod period) / period for an [rows, columns] grid of integer phases.
+        private Tensor<T> PhaseAngles(int rows, int columns, Func<int, int, int> phase, int period)
+        {
+            var reduced = new int[rows * columns];
+            for (int r = 0, n = 0; r < rows; r++)
+                for (int c = 0; c < columns; c++, n++)
+                    reduced[n] = (int)((long)phase(r, c) % period);
+            var turns = new Tensor<int>(new[] { rows, columns }, new Vector<int>(reduced)).Cast<T>();
+            return Engine.TensorDivideScalar(Engine.TensorMultiplyScalar(turns, Ops.FromDouble(2.0 * Math.PI)), Ops.FromDouble(period));
         }
 
         // Y[b, h, o, m] = sum_i X[b, h, i, m] W[h, i, o, m], complex, for X given as [B, H, E, M] parts.
@@ -626,21 +649,24 @@ internal sealed partial class FedformerNetwork<T> : LayerBase<T>, IShapeContract
         private Tensor<T> InverseSpectrum(Tensor<T> real, Tensor<T> imaginary, int[] bins, int length, int batch, double scale)
         {
             int m = bins.Length;
-            var cos = new Tensor<T>(new[] { m, length });
-            var negSin = new Tensor<T>(new[] { m, length });
-            for (int k = 0; k < m; k++)
+            Tensor<T> cos, negSin;
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             {
-                int bin = bins[k];
                 // irfft counts each interior bin twice (its conjugate mirror) and drops the imaginary part of bins
-                // 0 and n / 2.
-                bool edge = bin == 0 || 2 * bin == length;
-                double weight = (edge ? 1.0 : 2.0) * scale / length;
-                for (int t = 0; t < length; t++)
-                {
-                    double angle = 2.0 * Math.PI * bin * t / length;
-                    cos[k, t] = Ops.FromDouble(weight * Math.Cos(angle));
-                    negSin[k, t] = Ops.FromDouble(edge ? 0.0 : -weight * Math.Sin(angle));
-                }
+                // 0 and n / 2: row k is weight_k cos(angle) and, off the edges, -weight_k sin(angle).
+                var edgeFlags = new int[m];
+                for (int k = 0; k < m; k++)
+                    edgeFlags[k] = bins[k] == 0 || 2 * bins[k] == length ? 1 : 0;
+                var edge = new Tensor<int>(new[] { m, 1 }, new Vector<int>(edgeFlags)).Cast<T>();
+                var interiorWeight = Engine.TensorFullLike(edge, Ops.FromDouble(2.0 * scale / length));
+                var weightColumn = Engine.TensorWhere(edge, Engine.TensorFullLike(edge, Ops.FromDouble(1.0 * scale / length)), interiorWeight);
+                var sinWeightColumn = Engine.TensorWhere(edge, Engine.TensorZerosLike(edge), Engine.TensorNegate(interiorWeight));
+                var shape = new[] { m, length };
+                var angle = PhaseAngles(m, length, (k, t) => bins[k] * t, length);
+                cos = Engine.TensorMultiply(
+                    Engine.TensorBroadcastTo(weightColumn, shape), Engine.TensorCos(angle));
+                negSin = Engine.TensorMultiply(
+                    Engine.TensorBroadcastTo(sinWeightColumn, shape), Engine.TensorSin(angle));
             }
             int rows = batch * _d;
             var series = Engine.TensorAdd(

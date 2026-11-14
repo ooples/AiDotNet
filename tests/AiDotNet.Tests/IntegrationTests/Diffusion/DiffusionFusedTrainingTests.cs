@@ -31,8 +31,14 @@ public class DiffusionFusedTrainingTests
             var unet = new UNetNoisePredictor<double>(inputChannels: 4, outputChannels: 4, baseChannels: 8,
                 channelMultipliers: [1, 2], numResBlocks: 1, attentionResolutions: [1], contextDim: 0, numHeads: 2,
                 inputHeight: 8, seed: 42);
+            // Latent-space training never runs the VAE, but GetParameters reads it: the default is the full Stable
+            // Diffusion 1.5 autoencoder, whose parameter vector ran a heavy shard out of its managed heap cap. The
+            // compact VAE the other latent-diffusion tests use keeps the comparison on the same trained weights.
+            var vae = new AiDotNet.Diffusion.VAE.StandardVAE<double>(
+                inputChannels: 3, latentChannels: 4, baseChannels: 8, channelMultipliers: [1, 2, 4, 4],
+                numResBlocksPerLevel: 1, seed: 42);
             // The model's seed argument seeds only the weights; the timestep and noise draws follow Options.Seed.
-            var model = new StableDiffusion15Model<double>(unet: unet, seed: 42,
+            var model = new StableDiffusion15Model<double>(unet: unet, vae: vae, seed: 42,
                 options: new AiDotNet.Models.Options.DiffusionModelOptions<double>
                 {
                     TrainTimesteps = 1000, BetaStart = 0.00085, BetaEnd = 0.012,

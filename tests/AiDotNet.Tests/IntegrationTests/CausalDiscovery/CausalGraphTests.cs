@@ -284,6 +284,24 @@ public class CausalGraphTests
         Assert.Equal(2, dist.TargetVariableIndex);
     }
 
+    [Fact]
+    public void CausalGraph_InterventionalFallback_FloatLargeMeanKeepsUnitSlope()
+    {
+        // A cyclic graph uses the regression fallback. Observations x = [10000, 10001], y = [0, 1]
+        // give the exact fit y = x - 10000, so do(x = 10002) yields samples of 2. In float,
+        // sum(x^2) - n mean(x)^2 cancels to the 1e-10 guard and inflates the slope; the
+        // centered moments keep it at 1.
+        var adj = new Matrix<float>(new float[,] { { 0f, 1f }, { 1f, 0f } });
+        var graph = new CausalGraph<float>(adj, ["X", "Y"]);
+        var data = new Matrix<float>(new float[,] { { 10000f, 0f }, { 10001f, 1f } });
+
+        var dist = graph.ComputeInterventionalDistribution(0, 10002f, 1, data);
+
+        Assert.Equal(2, dist.SampleCount);
+        foreach (double sample in dist.Samples)
+            Assert.Equal(2.0, sample, 2);
+    }
+
     #endregion
 
     #region CausalDiscoverySelector Tests
@@ -366,6 +384,26 @@ public class CausalGraphTests
     {
         var adj = CreateSmallAdjacency();
         Assert.Throws<ArgumentException>(() => new CausalGraph<double>(adj, ["A", "A", "B"]));
+    }
+
+    #endregion
+
+    #region Correlation Helper Tests
+
+    [Fact]
+    public void PearsonCorrelation_FloatLargeFiniteMoments_DoesNotOverflow()
+    {
+        // Two identical float columns alternating -1e10 / 1e10 have correlation exactly 1. Each centered sum
+        // of squares is 4e20 (finite in float) but their product 1.6e41 is not, so the denominator must be
+        // sqrt(sxx) * sqrt(syy) = 4e20 rather than sqrt(sxx * syy).
+        var data = new Matrix<float>(new float[,]
+        {
+            { -1e10f, -1e10f }, { 1e10f, 1e10f }, { -1e10f, -1e10f }, { 1e10f, 1e10f },
+        });
+
+        float correlation = CausalTensorHelpers.PearsonCorrelation(data, 0, 1);
+
+        Assert.Equal(1.0, correlation, 5);
     }
 
     #endregion

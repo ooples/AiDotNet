@@ -44,17 +44,8 @@ public class RowShuffle<T> : TabularAugmenterBase<T>
         ShuffleArray(indices, context.Random);
 
         // Create result with shuffled rows
-        var result = new Matrix<T>(rows, cols);
-        for (int i = 0; i < rows; i++)
-        {
-            int srcIdx = indices[i];
-            for (int c = 0; c < cols; c++)
-            {
-                result[i, c] = data[srcIdx, c];
-            }
-        }
-
-        return result;
+        var order = new Tensor<int>(indices, [rows]);
+        return Engine.TensorIndexSelect(Tensor<T>.FromMatrix(data), order, 0).ToMatrix();
     }
 
     /// <summary>
@@ -87,18 +78,10 @@ public class RowShuffle<T> : TabularAugmenterBase<T>
         ShuffleArray(indices, context.Random);
 
         // Create results with shuffled rows
-        var shuffledData = new Matrix<T>(rows, cols);
-        var shuffledLabels = new Vector<T>(rows);
-
-        for (int i = 0; i < rows; i++)
-        {
-            int srcIdx = indices[i];
-            for (int c = 0; c < cols; c++)
-            {
-                shuffledData[i, c] = data[srcIdx, c];
-            }
-            shuffledLabels[i] = labels[srcIdx];
-        }
+        var engine = Engine;
+        var order = new Tensor<int>(indices, [rows]);
+        var shuffledData = engine.TensorIndexSelect(Tensor<T>.FromMatrix(data), order, 0).ToMatrix();
+        var shuffledLabels = engine.TensorIndexSelect(labels.AsTensor(), order, 0).ToVector();
 
         return (shuffledData, shuffledLabels);
     }

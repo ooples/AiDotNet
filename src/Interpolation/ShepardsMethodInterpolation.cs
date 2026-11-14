@@ -81,6 +81,8 @@ public partial class ShepardsMethodInterpolation<T> : I2DInterpolation<T>
     {
         if (x.Length != y.Length || x.Length != z.Length)
             throw new ArgumentException("Input vectors must have the same length.");
+        if (x.Length == 0)
+            throw new ArgumentException("At least one data point is required for interpolation.", nameof(x));
 
         _x = x;
         _y = y;
@@ -115,34 +117,29 @@ public partial class ShepardsMethodInterpolation<T> : I2DInterpolation<T>
     /// </remarks>
     public T Interpolate(T x, T y)
     {
-        T numerator = _numOps.Zero;
-        T denominator = _numOps.Zero;
+        Vector<T> distances = CalculateDistances(x, y);
 
-        for (int i = 0; i < _x.Length; i++)
+        // Return the exact value if the point coincides with a known point
+        int coincident = InterpolationSearch.IndexOfFirstEqual(distances, _numOps.Zero);
+        if (coincident >= 0)
         {
-            T distance = CalculateDistance(x, y, _x[i], _y[i]);
-
-            if (_numOps.Equals(distance, _numOps.Zero))
-            {
-                return _z[i]; // Return exact value if the point coincides with a known point
-            }
-
-            T weight = _numOps.Power(MathHelper.Reciprocal(distance), _power);
-            numerator = _numOps.Add(numerator, _numOps.Multiply(weight, _z[i]));
-            denominator = _numOps.Add(denominator, weight);
+            return _z[coincident];
         }
+
+        var engine = AiDotNetEngine.Current;
+        Tensor<T> weights = engine.TensorPower(engine.TensorReciprocal(distances.AsTensor()), _power);
+        T numerator = engine.TensorSum(engine.TensorMultiply(weights, _z.AsTensor()));
+        T denominator = engine.TensorSum(weights);
 
         return _numOps.Divide(numerator, denominator);
     }
 
     /// <summary>
-    /// Calculates the Euclidean distance between two points in 2D space.
+    /// Calculates the Euclidean distance from a query point to every known point in 2D space.
     /// </summary>
-    /// <param name="x1">The x-coordinate of the first point.</param>
-    /// <param name="y1">The y-coordinate of the first point.</param>
-    /// <param name="x2">The x-coordinate of the second point.</param>
-    /// <param name="y2">The y-coordinate of the second point.</param>
-    /// <returns>The distance between the two points.</returns>
+    /// <param name="x">The x-coordinate of the query point.</param>
+    /// <param name="y">The y-coordinate of the query point.</param>
+    /// <returns>The distance from the query point to every known point.</returns>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This method calculates the straight-line distance between two points
@@ -154,11 +151,12 @@ public partial class ShepardsMethodInterpolation<T> : I2DInterpolation<T>
     /// have more influence than points that are farther away.
     /// </para>
     /// </remarks>
-    private T CalculateDistance(T x1, T y1, T x2, T y2)
+    private Vector<T> CalculateDistances(T x, T y)
     {
-        T dx = _numOps.Subtract(x1, x2);
-        T dy = _numOps.Subtract(y1, y2);
+        var engine = AiDotNetEngine.Current;
+        Tensor<T> dx = engine.ScalarMinusTensor(x, _x.AsTensor());
+        Tensor<T> dy = engine.ScalarMinusTensor(y, _y.AsTensor());
 
-        return _numOps.Sqrt(_numOps.Add(_numOps.Multiply(dx, dx), _numOps.Multiply(dy, dy)));
+        return engine.TensorSqrt(engine.TensorAdd(engine.TensorMultiply(dx, dx), engine.TensorMultiply(dy, dy))).ToVector();
     }
 }

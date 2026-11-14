@@ -195,7 +195,7 @@ public partial class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
             (mus, phis) = ComputePredictions(x);
             T logLik = ComputeLogLikelihood(y, mus, phis);
 
-            if (NumOps.LessThan(NumOps.Abs(NumOps.Subtract(logLik, prevLogLik)), tolerance))
+            if (HasConverged(logLik, prevLogLik, tolerance))
             {
                 break;
             }
@@ -223,18 +223,16 @@ public partial class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     public async Task<IParametricDistribution<T>[]> PredictDistributionsAsync(Matrix<T> input)
     {
         var (mus, phis) = await Task.Run(() => ComputePredictions(input));
-        var distributions = new IParametricDistribution<T>[input.Rows];
-
-        for (int i = 0; i < input.Rows; i++)
+        if (input.Rows == 0)
         {
-            // Convert (μ, φ) to (α, β) parameterization
-            T alpha = NumOps.Multiply(mus[i], phis[i]);
-            T beta = NumOps.Multiply(NumOps.Subtract(NumOps.One, mus[i]), phis[i]);
-
-            distributions[i] = new BetaDistribution<T>(alpha, beta);
+            return new IParametricDistribution<T>[0];
         }
 
-        return distributions;
+        // Convert (mu, phi) to (alpha, beta) parameterization
+        var alphas = Engine.Multiply(mus, phis);
+        var betas = Engine.Multiply(Engine.Subtract(Engine.Fill(mus.Length, NumOps.One), mus), phis);
+
+        return alphas.Zip(betas, (alpha, beta) => (IParametricDistribution<T>)new BetaDistribution<T>(alpha, beta)).ToArray();
     }
 
     /// <summary>
@@ -246,18 +244,13 @@ public partial class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     public async Task<(Vector<T> Lower, Vector<T> Upper)> PredictIntervalAsync(Matrix<T> input, double confidenceLevel = 0.95)
     {
         var distributions = await PredictDistributionsAsync(input);
-        var lower = new Vector<T>(input.Rows);
-        var upper = new Vector<T>(input.Rows);
 
         double alpha = 1 - confidenceLevel;
         T alphaLower = NumOps.FromDouble(alpha / 2);
         T alphaUpper = NumOps.FromDouble(1 - alpha / 2);
 
-        for (int i = 0; i < input.Rows; i++)
-        {
-            lower[i] = distributions[i].InverseCdf(alphaLower);
-            upper[i] = distributions[i].InverseCdf(alphaUpper);
-        }
+        var lower = new Vector<T>(distributions.Select(distribution => distribution.InverseCdf(alphaLower)));
+        var upper = new Vector<T>(distributions.Select(distribution => distribution.InverseCdf(alphaUpper)));
 
         return (lower, upper);
     }
@@ -268,12 +261,8 @@ public partial class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     private void InitializeParameters(Vector<T> y)
     {
         // Initialize mean intercept using empirical logit
-        T sumLogit = NumOps.Zero;
-        for (int i = 0; i < y.Length; i++)
-        {
-            T yi = y[i];
-            sumLogit = NumOps.Add(sumLogit, NumOps.Log(NumOps.Divide(yi, NumOps.Subtract(NumOps.One, yi))));
-        }
+        var oneMinusY = Engine.Subtract(Engine.Fill(y.Length, NumOps.One), y);
+        T sumLogit = y.Length > 0 ? Engine.Sum(Engine.Log(Engine.Divide(y, oneMinusY))) : NumOps.Zero;
         _meanIntercept = NumOps.Divide(sumLogit, NumOps.FromDouble(y.Length));
 
         // Initialize mean coefficients to zero
@@ -292,45 +281,56 @@ public partial class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     private (Vector<T> mus, Vector<T> phis) ComputePredictions(Matrix<T> x)
     {
         int n = x.Rows;
-        var mus = new Vector<T>(n);
-        var phis = new Vector<T>(n);
         T minPhi = NumOps.FromDouble(0.1);
 
-        for (int i = 0; i < n; i++)
-        {
-            // Linear predictor for mean using Engine.DotProduct
-            T etaMu = _meanIntercept;
-            if (_meanCoefficients != null)
-            {
-                var xRow = new Vector<T>(_numFeatures);
-                for (int j = 0; j < _numFeatures; j++) xRow[j] = x[i, j];
-                etaMu = NumOps.Add(etaMu, Engine.DotProduct(new Vector<T>(_meanCoefficients), xRow));
-            }
+        // Linear predictor for mean
+        var etaMu = LinearPredictor(x, _meanCoefficients, _meanIntercept);
 
-            // Apply link function inverse and clamp away from beta distribution endpoints
-            double muRaw = InverseLinkFunction(NumOps.ToDouble(etaMu));
-            double muClamped = Math.Max(MuFloor, Math.Min(MuCeiling, muRaw));
-            mus[i] = NumOps.FromDouble(muClamped);
+        // Apply link function inverse and clamp away from beta distribution endpoints
+        var mus = ClampMu(InverseLinkFunction(etaMu));
 
-            // Linear predictor for precision using Engine.DotProduct
-            T etaPhi = _precisionIntercept;
-            if (_options.ModelVariablePrecision && _precisionCoefficients != null)
-            {
-                var xRow2 = new Vector<T>(_numFeatures);
-                for (int j = 0; j < _numFeatures; j++) xRow2[j] = x[i, j];
-                etaPhi = NumOps.Add(etaPhi, Engine.DotProduct(new Vector<T>(_precisionCoefficients), xRow2));
-            }
+        // Linear predictor for precision
+        var etaPhi = LinearPredictor(x, _options.ModelVariablePrecision ? _precisionCoefficients : null, _precisionIntercept);
 
-            // Precision uses log link
-            T phi = NumOps.Exp(etaPhi);
-            if (NumOps.LessThan(phi, minPhi))
-            {
-                phi = minPhi;
-            }
-            phis[i] = phi;
-        }
+        // Precision uses log link, floored at 0.1 (NaN is left as is)
+        var phi = Tensor<T>.FromVector(Engine.Exp(etaPhi));
+        var phis = Engine.TensorWhere(
+            Engine.TensorLessThan(phi, minPhi), Tensor<T>.FromVector(Engine.Fill(n, minPhi)), phi).ToVector();
 
         return (mus, phis);
+    }
+
+    /// <summary>
+    /// intercept + x[:, :numFeatures] * coefficients for every row (just the intercept when there are
+    /// no coefficients).
+    /// </summary>
+    private Vector<T> LinearPredictor(Matrix<T> x, Vector<T>? coefficients, T intercept)
+    {
+        int n = x.Rows;
+        var eta = Engine.Fill(n, intercept);
+        if (coefficients is null || n == 0 || _numFeatures == 0)
+        {
+            return eta;
+        }
+
+        var design = x.Columns == _numFeatures ? x : x.GetSubMatrix(0, 0, n, _numFeatures);
+        return Engine.Add(eta, Engine.MatrixVectorMultiply(design, coefficients.GetSubVector(0, _numFeatures)));
+    }
+
+    /// <summary>
+    /// Clamps every mean into [MuFloor, MuCeiling].
+    /// </summary>
+    private Vector<T> ClampMu(Vector<T> mu)
+    {
+        return Engine.Clamp(mu, NumOps.FromDouble(MuFloor), NumOps.FromDouble(MuCeiling));
+    }
+
+    /// <summary>
+    /// Whether the log-likelihood changed by less than the tolerance.
+    /// </summary>
+    private bool HasConverged(T logLik, T prevLogLik, T tolerance)
+    {
+        return NumOps.LessThan(NumOps.Abs(NumOps.Subtract(logLik, prevLogLik)), tolerance);
     }
 
     /// <summary>
@@ -340,55 +340,44 @@ public partial class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     {
         int n = x.Rows;
 
-        // Working weights and adjusted dependent variable
-        var weights = new Vector<T>(n);
-        var z = new Vector<T>(n);
+        // Working weights and adjusted dependent variable.
+        //
+        // LinkFunctionDerivative returns g'(mu) = d(eta)/d(mu) -- for the logit that is
+        // 1/(mu(1-mu)), NOT mu(1-mu). The local was named `dmu`, and both formulas below used it as
+        // though it were d(mu)/d(eta), which inverted the role of the link derivative in each.
+        //
+        // Fisher scoring for a GLM with variance function V(mu) uses
+        //
+        //     w = 1 / (V(mu) * g'(mu)^2)          z = eta + (y - mu) * g'(mu)
+        //
+        // and for the Beta mean model V(mu) = mu(1-mu) (Ferrari & Cribari-Neto 2004). The precision
+        // phi scales every weight equally, so it does not change the weighted least-squares solution.
+        //
+        // What was here instead:
+        //
+        //     w = phi * V / g'^2   which for the logit is phi * V^3, not phi * V
+        //     z = eta + (y - mu) * g' / V          an extra factor of 1/V
+        //
+        // The working response was the fatal one. At mu = 0.1, V is 0.09, so every Fisher step
+        // overshot by more than tenfold; the coefficients ran away and the fitted mean saturated at
+        // 0 or 1 for every observation. That went unnoticed because a target outside [0,1] was
+        // silently diverted to ordinary least squares, and one inside it was first min-max rescaled,
+        // so no test ever asked this path for a prediction it could check.
+        var gPrime = LinkFunctionDerivative(mus);
+        var v = Engine.Multiply(mus, Engine.Subtract(Engine.Fill(n, NumOps.One), mus));
+        var variance = Engine.Multiply(v, Engine.Multiply(gPrime, gPrime));
+        var weights = Engine.Divide(phis, variance);
 
-        for (int i = 0; i < n; i++)
-        {
-            T mu = mus[i];
-            T phi = phis[i];
-            double muD = NumOps.ToDouble(mu);
-
-            // LinkFunctionDerivative returns g'(mu) = d(eta)/d(mu) -- for the logit that is
-            // 1/(mu(1-mu)), NOT mu(1-mu). The local was named `dmu`, and both formulas below used it as
-            // though it were d(mu)/d(eta), which inverted the role of the link derivative in each.
-            //
-            // Fisher scoring for a GLM with variance function V(mu) uses
-            //
-            //     w = 1 / (V(mu) * g'(mu)^2)          z = eta + (y - mu) * g'(mu)
-            //
-            // and for the Beta mean model V(mu) = mu(1-mu) (Ferrari & Cribari-Neto 2004). The precision
-            // phi scales every weight equally, so it does not change the weighted least-squares solution.
-            //
-            // What was here instead:
-            //
-            //     w = phi * V / g'^2   which for the logit is phi * V^3, not phi * V
-            //     z = eta + (y - mu) * g' / V          an extra factor of 1/V
-            //
-            // The working response was the fatal one. At mu = 0.1, V is 0.09, so every Fisher step
-            // overshot by more than tenfold; the coefficients ran away and the fitted mean saturated at
-            // 0 or 1 for every observation. That went unnoticed because a target outside [0,1] was
-            // silently diverted to ordinary least squares, and one inside it was first min-max rescaled,
-            // so no test ever asked this path for a prediction it could check.
-            double gPrime = LinkFunctionDerivative(muD);
-            T gPrimeT = NumOps.FromDouble(gPrime);
-
-            T v = NumOps.Multiply(mu, NumOps.Subtract(NumOps.One, mu));
-            T variance = NumOps.Multiply(v, NumOps.Multiply(gPrimeT, gPrimeT));
-            weights[i] = NumOps.Divide(phi, variance);
-
-            // Working response
-            double eta = LinkFunction(muD);
-            T residual = NumOps.Subtract(y[i], mu);
-            z[i] = NumOps.Add(NumOps.FromDouble(eta), NumOps.Multiply(residual, gPrimeT));
-        }
+        // Working response
+        var eta = LinkFunction(mus);
+        var z = Engine.Add(eta, Engine.Multiply(Engine.Subtract(y, mus), gPrime));
 
         // Weighted least squares
         if (_meanCoefficients is null)
         {
             throw new InvalidOperationException("Mean coefficients not initialized.");
         }
+
         UpdateCoefficientsWLS(x, z, weights, ref _meanCoefficients, ref _meanIntercept);
     }
 
@@ -398,31 +387,27 @@ public partial class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     private void UpdatePrecisionModel(Matrix<T> x, Vector<T> y, Vector<T> mus, Vector<T> phis)
     {
         int n = x.Rows;
-        var weights = new Vector<T>(n);
-        var z = new Vector<T>(n);
+        var ones = Engine.Fill(n, NumOps.One);
+        var oneMinusMu = Engine.Subtract(ones, mus);
+        var alphas = Engine.Multiply(mus, phis);
+        var betas = Engine.Multiply(oneMinusMu, phis);
 
-        for (int i = 0; i < n; i++)
-        {
-            // Boundary conversion for special functions (Digamma, Trigamma)
-            double muD = NumOps.ToDouble(mus[i]);
-            double phiD = NumOps.ToDouble(phis[i]);
-            double yiD = NumOps.ToDouble(y[i]);
+        // Score for phi: d log L / d log(phi)
+        var ystar = Engine.Log(Engine.Divide(y, Engine.Subtract(ones, y)));
+        var mustar = Engine.Subtract(Digamma(alphas), Digamma(betas));
+        var score = Engine.Multiply(mus, Engine.Subtract(ystar, mustar));
 
-            // Score for phi: d log L / d log(phi)
-            double ystar = Math.Log(yiD / (1 - yiD));
-            double mustar = Digamma(muD * phiD) - Digamma((1 - muD) * phiD);
-            double score = muD * (ystar - mustar);
+        // Fisher information for log(phi), floored at MinFisherValue (NaN is left as is)
+        var trigammaTerm = Engine.Add(
+            Engine.Multiply(Engine.Multiply(mus, mus), Trigamma(alphas)),
+            Engine.Multiply(Engine.Multiply(oneMinusMu, oneMinusMu), Trigamma(betas)));
+        var fisher = Tensor<T>.FromVector(Engine.Multiply(Engine.Multiply(phis, phis), trigammaTerm));
+        T minFisher = NumOps.FromDouble(MinFisherValue);
+        var fisherInfo = Engine.TensorWhere(
+            Engine.TensorLessThan(fisher, minFisher), Tensor<T>.FromVector(Engine.Fill(n, minFisher)), fisher).ToVector();
 
-            // Fisher information for log(phi)
-            double trigammaTerm = muD * muD * Trigamma(muD * phiD) + (1 - muD) * (1 - muD) * Trigamma((1 - muD) * phiD);
-            double fisherInfo = phiD * phiD * trigammaTerm;
-            fisherInfo = Math.Max(fisherInfo, MinFisherValue);
-
-            T fisherInfoT = NumOps.FromDouble(fisherInfo);
-            weights[i] = fisherInfoT;
-            T logPhi = NumOps.Log(phis[i]);
-            z[i] = NumOps.Add(logPhi, NumOps.Divide(NumOps.FromDouble(score), fisherInfoT));
-        }
+        var weights = fisherInfo;
+        var z = Engine.Add(Engine.Log(phis), Engine.Divide(score, fisherInfo));
 
         if (_precisionCoefficients != null)
         {
@@ -438,41 +423,20 @@ public partial class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
         int n = x.Rows;
         int p = _numFeatures;
 
-        // X'WX and X'Wz
-        var xtwx = new Matrix<T>(p + 1, p + 1);
-        var xtwz = new Vector<T>(p + 1);
+        // X'WX and X'Wz, with the intercept column first
+        var design = (x.Columns == p ? x : x.GetSubMatrix(0, 0, n, p)).AddConstantColumn(NumOps.One);
+        var weightColumn = Engine.TensorBroadcastTo(new Tensor<T>(new[] { n, 1 }, weights), new[] { n, p + 1 });
+        var weightedDesign = Engine.TensorMultiply(Tensor<T>.FromMatrix(design), weightColumn).ToMatrix();
+        var designTranspose = Engine.MatrixTranspose(design);
+        var xtwx = Engine.MatrixMultiply(designTranspose, weightedDesign);
+        var xtwz = Engine.MatrixVectorMultiply(designTranspose, Engine.Multiply(weights, z));
 
-        for (int i = 0; i < n; i++)
-        {
-            T w = weights[i];
-
-            xtwx[0, 0] = NumOps.Add(xtwx[0, 0], w);
-            xtwz[0] = NumOps.Add(xtwz[0], NumOps.Multiply(w, z[i]));
-
-            for (int j = 0; j < p; j++)
-            {
-                T wxij = NumOps.Multiply(w, x[i, j]);
-                xtwx[0, j + 1] = NumOps.Add(xtwx[0, j + 1], wxij);
-                xtwx[j + 1, 0] = NumOps.Add(xtwx[j + 1, 0], wxij);
-                xtwz[j + 1] = NumOps.Add(xtwz[j + 1], NumOps.Multiply(wxij, z[i]));
-
-                for (int k = 0; k <= j; k++)
-                {
-                    T val = NumOps.Add(xtwx[j + 1, k + 1], NumOps.Multiply(wxij, x[i, k]));
-                    xtwx[j + 1, k + 1] = val;
-                    if (k < j) xtwx[k + 1, j + 1] = val;
-                }
-            }
-        }
-
-        // Regularization
+        // Regularization (not on the intercept)
         if (_options.UseRegularization)
         {
             T lambda = NumOps.FromDouble(_options.RegularizationStrength);
-            for (int j = 1; j <= p; j++)
-            {
-                xtwx[j, j] = NumOps.Add(xtwx[j, j], lambda);
-            }
+            var penalty = Vector<T>.Concatenate(new[] { Engine.FillZero<T>(1), Engine.Fill(p, lambda) });
+            xtwx = Engine.MatrixAdd(xtwx, Matrix<T>.CreateDiagonal(penalty));
         }
 
         // Solve
@@ -481,16 +445,14 @@ public partial class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
         // Update with learning rate
         T lr = NumOps.FromDouble(_options.LearningRate);
         T oneMinusLr = NumOps.Subtract(NumOps.One, lr);
+
         intercept = NumOps.Add(
             NumOps.Multiply(oneMinusLr, intercept),
             NumOps.Multiply(lr, solution[0]));
 
-        for (int j = 0; j < p; j++)
-        {
-            coefficients[j] = NumOps.Add(
-                NumOps.Multiply(oneMinusLr, coefficients[j]),
-                NumOps.Multiply(lr, solution[j + 1]));
-        }
+        coefficients = Engine.Add(
+            Engine.Multiply(coefficients, oneMinusLr),
+            Engine.Multiply(solution.GetSubVector(1, p), lr));
     }
 
     /// <summary>
@@ -498,218 +460,279 @@ public partial class BetaRegression<T> : AsyncDecisionTreeRegressionBase<T>
     /// </summary>
     private T ComputeLogLikelihood(Vector<T> y, Vector<T> mus, Vector<T> phis)
     {
-        T ll = NumOps.Zero;
-        for (int i = 0; i < y.Length; i++)
+        if (y.Length == 0)
         {
-            T mu = mus[i];
-            T phi = phis[i];
-            T alpha = NumOps.Multiply(mu, phi);
-            T beta = NumOps.Multiply(NumOps.Subtract(NumOps.One, mu), phi);
-
-            // Log Beta PDF — LogGamma stays double (numerical recipe)
-            double lgPhi = LogGamma(NumOps.ToDouble(phi));
-            double lgAlpha = LogGamma(NumOps.ToDouble(alpha));
-            double lgBeta = LogGamma(NumOps.ToDouble(beta));
-
-            T logPdf = NumOps.FromDouble(lgPhi - lgAlpha - lgBeta);
-            T logYi = NumOps.Log(y[i]);
-            T logOneMinusYi = NumOps.Log(NumOps.Subtract(NumOps.One, y[i]));
-
-            logPdf = NumOps.Add(logPdf, NumOps.Multiply(NumOps.Subtract(alpha, NumOps.One), logYi));
-            logPdf = NumOps.Add(logPdf, NumOps.Multiply(NumOps.Subtract(beta, NumOps.One), logOneMinusYi));
-
-            ll = NumOps.Add(ll, logPdf);
+            return NumOps.Zero;
         }
-        return ll;
+
+        var ones = Engine.Fill(y.Length, NumOps.One);
+        var alphas = Engine.Multiply(mus, phis);
+        var betas = Engine.Multiply(Engine.Subtract(ones, mus), phis);
+
+        // Log Beta PDF: lgamma(phi) - lgamma(alpha) - lgamma(beta) + (alpha - 1) log y + (beta - 1) log(1 - y)
+        var logPdf = Engine.Subtract(Engine.Subtract(LogGamma(phis), LogGamma(alphas)), LogGamma(betas));
+        logPdf = Engine.Add(logPdf, Engine.Multiply(Engine.Subtract(alphas, ones), Engine.Log(y)));
+        logPdf = Engine.Add(logPdf, Engine.Multiply(Engine.Subtract(betas, ones), Engine.Log(Engine.Subtract(ones, y))));
+
+        return Engine.Sum(logPdf);
     }
 
     /// <summary>
     /// Applies the link function.
     /// </summary>
-    private double LinkFunction(double mu)
+    private Vector<T> LinkFunction(Vector<T> mu)
     {
-        mu = Math.Max(MuFloor, Math.Min(MuCeiling, mu));
-
+        mu = ClampMu(mu);
+        var ones = Engine.Fill(mu.Length, NumOps.One);
         return _options.LinkFunction switch
         {
-            BetaLinkFunction.Logit => Math.Log(mu / (1 - mu)),
+            BetaLinkFunction.Logit => Engine.Log(Engine.Divide(mu, Engine.Subtract(ones, mu))),
             BetaLinkFunction.Probit => InverseStandardNormalCdf(mu),
-            BetaLinkFunction.CLogLog => Math.Log(-Math.Log(1 - mu)),
-            BetaLinkFunction.Log => Math.Log(mu),
-            _ => Math.Log(mu / (1 - mu))
+            BetaLinkFunction.CLogLog => Engine.Log(Engine.Multiply(Engine.Log(Engine.Subtract(ones, mu)), NumOps.Negate(NumOps.One))),
+            BetaLinkFunction.Log => Engine.Log(mu),
+            _ => Engine.Log(Engine.Divide(mu, Engine.Subtract(ones, mu)))
         };
     }
 
     /// <summary>
     /// Applies the inverse link function.
     /// </summary>
-    private double InverseLinkFunction(double eta)
+    private Vector<T> InverseLinkFunction(Vector<T> eta)
     {
+        var ones = Engine.Fill(eta.Length, NumOps.One);
+        T minusOne = NumOps.Negate(NumOps.One);
         return _options.LinkFunction switch
         {
-            BetaLinkFunction.Logit => 1 / (1 + Math.Exp(-eta)),
+            BetaLinkFunction.Logit => Engine.Reciprocal(Engine.Add(ones, Engine.Exp(Engine.Multiply(eta, minusOne)))),
             BetaLinkFunction.Probit => StandardNormalCdf(eta),
-            BetaLinkFunction.CLogLog => 1 - Math.Exp(-Math.Exp(eta)),
-            BetaLinkFunction.Log => Math.Exp(eta),
-            _ => 1 / (1 + Math.Exp(-eta))
+            BetaLinkFunction.CLogLog => Engine.Subtract(ones, Engine.Exp(Engine.Multiply(Engine.Exp(eta), minusOne))),
+            BetaLinkFunction.Log => Engine.Exp(eta),
+            _ => Engine.Reciprocal(Engine.Add(ones, Engine.Exp(Engine.Multiply(eta, minusOne))))
         };
     }
 
     /// <summary>
     /// Computes the derivative of the link function.
     /// </summary>
-    private double LinkFunctionDerivative(double mu)
+    private Vector<T> LinkFunctionDerivative(Vector<T> mu)
     {
-        mu = Math.Max(MuFloor, Math.Min(MuCeiling, mu));
-
+        mu = ClampMu(mu);
+        var oneMinusMu = Engine.Subtract(Engine.Fill(mu.Length, NumOps.One), mu);
         return _options.LinkFunction switch
         {
-            BetaLinkFunction.Logit => 1 / (mu * (1 - mu)),
-            BetaLinkFunction.Probit => 1 / StandardNormalPdf(InverseStandardNormalCdf(mu)),
-            BetaLinkFunction.CLogLog => 1 / ((1 - mu) * Math.Log(1 - mu)),
-            BetaLinkFunction.Log => 1 / mu,
-            _ => 1 / (mu * (1 - mu))
+            BetaLinkFunction.Logit => Engine.Reciprocal(Engine.Multiply(mu, oneMinusMu)),
+            BetaLinkFunction.Probit => Engine.Reciprocal(StandardNormalPdf(InverseStandardNormalCdf(mu))),
+            BetaLinkFunction.CLogLog => Engine.Reciprocal(Engine.Multiply(oneMinusMu, Engine.Log(oneMinusMu))),
+            BetaLinkFunction.Log => Engine.Reciprocal(mu),
+            _ => Engine.Reciprocal(Engine.Multiply(mu, oneMinusMu))
         };
     }
 
-    private static double StandardNormalCdf(double z)
+    private Vector<T> StandardNormalCdf(Vector<T> z)
     {
-        return 0.5 * (1 + Erf(z / Math.Sqrt(2)));
+        // 0.5 * (1 + erf(z / sqrt(2)))
+        var erf = Erf(Engine.Divide(z, NumOps.FromDouble(Math.Sqrt(2))));
+        return Engine.Multiply(Engine.Add(Engine.Fill(z.Length, NumOps.One), erf), NumOps.FromDouble(0.5));
     }
 
-    private static double StandardNormalPdf(double z)
+    private Vector<T> StandardNormalPdf(Vector<T> z)
     {
-        return Math.Exp(-0.5 * z * z) / Math.Sqrt(2 * Math.PI);
+        // exp(-0.5 * z * z) / sqrt(2 pi)
+        var exponent = Engine.Multiply(Engine.Multiply(z, NumOps.FromDouble(-0.5)), z);
+        return Engine.Divide(Engine.Exp(exponent), NumOps.FromDouble(Math.Sqrt(2 * Math.PI)));
     }
 
-    private static double InverseStandardNormalCdf(double p)
+    private Vector<T> InverseStandardNormalCdf(Vector<T> p)
     {
-        // Rational approximation
-        if (p <= 0) return double.NegativeInfinity;
-        if (p >= 1) return double.PositiveInfinity;
+        // Rational approximation (Abramowitz & Stegun 26.2.23); -inf at p <= 0, +inf at p >= 1
+        int n = p.Length;
+        var ones = Engine.Fill(n, NumOps.One);
+        var pTensor = Tensor<T>.FromVector(p);
+        var lowerTail = Engine.TensorLessThan(pTensor, NumOps.FromDouble(0.5));
+        var tail = Engine.TensorWhere(lowerTail, pTensor, Tensor<T>.FromVector(Engine.Subtract(ones, p))).ToVector();
+        var t = Engine.Sqrt(Engine.Multiply(Engine.Log(tail), NumOps.FromDouble(-2)));
 
-        double t = Math.Sqrt(-2 * Math.Log(p < 0.5 ? p : 1 - p));
-        double c0 = 2.515517, c1 = 0.802853, c2 = 0.010328;
-        double d1 = 1.432788, d2 = 0.189269, d3 = 0.001308;
-        double result = t - (c0 + c1 * t + c2 * t * t) / (1 + d1 * t + d2 * t * t + d3 * t * t * t);
-        return p < 0.5 ? -result : result;
+        T c0 = NumOps.FromDouble(2.515517), c1 = NumOps.FromDouble(0.802853), c2 = NumOps.FromDouble(0.010328);
+        T d1 = NumOps.FromDouble(1.432788), d2 = NumOps.FromDouble(0.189269), d3 = NumOps.FromDouble(0.001308);
+
+        // c0 + c1 t + c2 t t
+        var numerator = Engine.Add(
+            Engine.Add(Engine.Fill(n, c0), Engine.Multiply(t, c1)),
+            Engine.Multiply(Engine.Multiply(t, c2), t));
+
+        // 1 + d1 t + d2 t t + d3 t t t
+        var denominator = Engine.Add(
+            Engine.Add(Engine.Add(ones, Engine.Multiply(t, d1)), Engine.Multiply(Engine.Multiply(t, d2), t)),
+            Engine.Multiply(Engine.Multiply(Engine.Multiply(t, d3), t), t));
+
+        var result = Tensor<T>.FromVector(Engine.Subtract(t, Engine.Divide(numerator, denominator)));
+        var signed = Engine.TensorWhere(lowerTail, Engine.TensorNegate(result), result);
+
+        // Saturate outside (0, 1)
+        var negativeInfinity = Tensor<T>.FromVector(Engine.Fill(n, NumOps.FromDouble(double.NegativeInfinity)));
+        var positiveInfinity = Tensor<T>.FromVector(Engine.Fill(n, NumOps.FromDouble(double.PositiveInfinity)));
+        signed = Engine.TensorWhere(
+            Engine.TensorGreaterEqual(pTensor, Tensor<T>.FromVector(ones)), positiveInfinity, signed);
+        signed = Engine.TensorWhere(
+            Engine.TensorLessEqual(pTensor, Tensor<T>.FromVector(Engine.FillZero<T>(n))), negativeInfinity, signed);
+        return signed.ToVector();
     }
 
-    private static double Erf(double x)
+    private Vector<T> Erf(Vector<T> x)
     {
-        double sign = x < 0 ? -1.0 : 1.0;
-        x = Math.Abs(x);
-        double t = 1.0 / (1.0 + 0.3275911 * x);
-        double y = 1.0 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.Exp(-x * x);
-        return sign * y;
+        // Abramowitz & Stegun 7.1.26
+        int n = x.Length;
+        var xTensor = Tensor<T>.FromVector(x);
+        var negative = Engine.TensorLessThan(xTensor, NumOps.Zero);
+        var ax = Engine.Abs(x);
+        var t = Engine.Reciprocal(Engine.Add(Engine.Fill(n, NumOps.One), Engine.Multiply(ax, NumOps.FromDouble(0.3275911))));
+
+        // ((((1.061405429 t - 1.453152027) t + 1.421413741) t - 0.284496736) t + 0.254829592) t exp(-x x)
+        var poly = Engine.Subtract(Engine.Multiply(t, NumOps.FromDouble(1.061405429)), Engine.Fill(n, NumOps.FromDouble(1.453152027)));
+        poly = Engine.Add(Engine.Multiply(poly, t), Engine.Fill(n, NumOps.FromDouble(1.421413741)));
+        poly = Engine.Subtract(Engine.Multiply(poly, t), Engine.Fill(n, NumOps.FromDouble(0.284496736)));
+        poly = Engine.Add(Engine.Multiply(poly, t), Engine.Fill(n, NumOps.FromDouble(0.254829592)));
+        var tail = Engine.Multiply(Engine.Multiply(poly, t), Engine.Exp(Engine.Multiply(Engine.Multiply(ax, ax), NumOps.Negate(NumOps.One))));
+        var y = Tensor<T>.FromVector(Engine.Subtract(Engine.Fill(n, NumOps.One), tail));
+
+        return Engine.TensorWhere(negative, Engine.TensorNegate(y), y).ToVector();
     }
 
-    private static double LogGamma(double x)
+    private Vector<T> LogGamma(Vector<T> x)
     {
-        if (x <= 0) return double.PositiveInfinity;
-        double[] c = { 76.18009172947146, -86.50532032941677, 24.01409824083091,
-                       -1.231739572450155, 0.1208650973866179e-2, -0.5395239384953e-5 };
-        double y = x;
-        double tmp = x + 5.5;
-        tmp -= (x + 0.5) * Math.Log(tmp);
-        double ser = 1.000000000190015;
-        for (int j = 0; j < 6; j++) ser += c[j] / ++y;
-        return -tmp + Math.Log(2.5066282746310005 * ser / x);
-    }
-
-    private static double Digamma(double x)
-    {
-        if (x <= 0) return double.NaN;
-        double result = 0;
-        while (x < 6)
+        // Lanczos approximation (Numerical Recipes gammln); +inf for x <= 0
+        int n = x.Length;
+        // Literal Lanczos coefficients, converted to T once before the recurrence.
+        T[] c =
         {
-            result -= 1 / x;
-            x += 1;
+            NumOps.FromDouble(76.18009172947146), NumOps.FromDouble(-86.50532032941677),
+            NumOps.FromDouble(24.01409824083091), NumOps.FromDouble(-1.231739572450155),
+            NumOps.FromDouble(0.1208650973866179e-2), NumOps.FromDouble(-0.5395239384953e-5)
+        };
+
+        var y = x;
+        var tmp = Engine.Add(x, Engine.Fill(n, NumOps.FromDouble(5.5)));
+        tmp = Engine.Subtract(tmp, Engine.Multiply(Engine.Add(x, Engine.Fill(n, NumOps.FromDouble(0.5))), Engine.Log(tmp)));
+
+        var ones = Engine.Fill(n, NumOps.One);
+        var ser = Engine.Fill(n, NumOps.FromDouble(1.000000000190015));
+        foreach (T coefficient in c)
+        {
+            y = Engine.Add(y, ones);
+            ser = Engine.Add(ser, Engine.Divide(Engine.Fill(n, coefficient), y));
         }
-        result += Math.Log(x) - 1 / (2 * x) - 1 / (12 * x * x) + 1 / (120 * x * x * x * x);
-        return result;
+
+        var result = Tensor<T>.FromVector(Engine.Add(
+            Engine.Multiply(tmp, NumOps.Negate(NumOps.One)),
+            Engine.Log(Engine.Divide(Engine.Multiply(ser, NumOps.FromDouble(2.5066282746310005)), x))));
+
+        return Engine.TensorWhere(
+            RegressionEngineOps.LessOrEqualMask(x, NumOps.Zero),
+            Tensor<T>.FromVector(Engine.Fill(n, NumOps.FromDouble(double.PositiveInfinity))),
+            result).ToVector();
     }
 
-    private static double Trigamma(double x)
+    private Vector<T> Digamma(Vector<T> x)
     {
-        if (x <= 0) return double.NaN;
-        double result = 0;
-        while (x < 6)
+        // Recurrence up to x >= 6, then the asymptotic series; NaN for x <= 0
+        int n = x.Length;
+        var (shifted, correction) = ShiftToSix(x, square: false);
+        var result = Engine.Multiply(correction, NumOps.Negate(NumOps.One));
+
+        // log x - 1/(2x) - 1/(12 x x) + 1/(120 x x x x)
+        var series = Engine.Subtract(Engine.Log(shifted), Engine.Reciprocal(Engine.Multiply(shifted, NumOps.FromDouble(2))));
+        series = Engine.Subtract(series, Engine.Reciprocal(Engine.Multiply(Engine.Multiply(shifted, NumOps.FromDouble(12)), shifted)));
+        series = Engine.Add(series, Engine.Reciprocal(
+            Engine.Multiply(Engine.Multiply(Engine.Multiply(Engine.Multiply(shifted, NumOps.FromDouble(120)), shifted), shifted), shifted)));
+        result = Engine.Add(result, series);
+
+        return Engine.TensorWhere(
+            RegressionEngineOps.LessOrEqualMask(x, NumOps.Zero),
+            Tensor<T>.FromVector(Engine.Fill(n, NumOps.FromDouble(double.NaN))),
+            Tensor<T>.FromVector(result)).ToVector();
+    }
+
+    /// <summary>
+    /// Applies the recurrence x -> x + 1 while x &lt; 6 (at most six steps for x &gt; 0), returning
+    /// the shifted argument and the accumulated sum of 1/x (or 1/x^2 when <paramref name="square"/>).
+    /// </summary>
+    private (Vector<T> Shifted, Vector<T> Correction) ShiftToSix(Vector<T> x, bool square)
+    {
+        int n = x.Length;
+        var ones = Engine.Fill(n, NumOps.One);
+        var zeros = Tensor<T>.FromVector(Engine.FillZero<T>(n));
+        var correction = Engine.FillZero<T>(n);
+        var current = x;
+        T six = NumOps.FromDouble(6);
+        for (int step = 0; step < 6; step++)
         {
-            result += 1 / (x * x);
-            x += 1;
+            var active = Engine.TensorLessThan(Tensor<T>.FromVector(current), six);
+            var term = Engine.Reciprocal(square ? Engine.Multiply(current, current) : current);
+            correction = Engine.Add(correction, Engine.TensorWhere(active, Tensor<T>.FromVector(term), zeros).ToVector());
+            current = Engine.TensorWhere(
+                active, Tensor<T>.FromVector(Engine.Add(current, ones)), Tensor<T>.FromVector(current)).ToVector();
         }
-        result += 1 / x + 1 / (2 * x * x) + 1 / (6 * x * x * x);
-        return result;
+
+        return (current, correction);
+    }
+
+    private Vector<T> Trigamma(Vector<T> x)
+    {
+        // Recurrence up to x >= 6, then the asymptotic series; NaN for x <= 0
+        int n = x.Length;
+        var (shifted, result) = ShiftToSix(x, square: true);
+
+        // 1/x + 1/(2 x x) + 1/(6 x x x)
+        var series = Engine.Add(
+            Engine.Reciprocal(shifted),
+            Engine.Reciprocal(Engine.Multiply(Engine.Multiply(shifted, NumOps.FromDouble(2)), shifted)));
+        series = Engine.Add(series, Engine.Reciprocal(
+            Engine.Multiply(Engine.Multiply(Engine.Multiply(shifted, NumOps.FromDouble(6)), shifted), shifted)));
+        result = Engine.Add(result, series);
+
+        return Engine.TensorWhere(
+            RegressionEngineOps.LessOrEqualMask(x, NumOps.Zero),
+            Tensor<T>.FromVector(Engine.Fill(n, NumOps.FromDouble(double.NaN))),
+            Tensor<T>.FromVector(result)).ToVector();
     }
 
     private Vector<T> SolveSystem(Matrix<T> a, Vector<T> b, int n)
     {
-        var aug = new Matrix<T>(n, n + 1);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++) aug[i, j] = a[i, j];
-            aug[i, n] = b[i];
-        }
+        // Augmented [A | b]
+        var aug = Engine.TensorConcatenate(
+            new[]
+            {
+                Tensor<T>.FromMatrix(a.GetSubMatrix(0, 0, n, n)),
+                new Tensor<T>(new[] { n, 1 }, b.GetSubVector(0, n))
+            }, 1).ToMatrix();
 
         T pivotThreshold = NumOps.FromDouble(PivotThreshold);
 
+        // Gauss-Jordan elimination with partial pivoting
         for (int col = 0; col < n; col++)
         {
-            // Partial pivoting
-            int maxRow = col;
-            for (int row = col + 1; row < n; row++)
-            {
-                if (NumOps.GreaterThan(NumOps.Abs(aug[row, col]), NumOps.Abs(aug[maxRow, col])))
-                    maxRow = row;
-            }
-
-            for (int j = 0; j <= n; j++)
-                (aug[col, j], aug[maxRow, j]) = (aug[maxRow, j], aug[col, j]);
-
-            T pivot = aug[col, col];
-            if (NumOps.LessThan(NumOps.Abs(pivot), pivotThreshold))
-                pivot = pivotThreshold;
-            for (int j = 0; j <= n; j++) aug[col, j] = NumOps.Divide(aug[col, j], pivot);
-
-            for (int row = 0; row < n; row++)
-            {
-                if (row != col)
-                {
-                    T factor = aug[row, col];
-                    for (int j = 0; j <= n; j++)
-                        aug[row, j] = NumOps.Subtract(aug[row, j], NumOps.Multiply(factor, aug[col, j]));
-                }
-            }
+            aug = RegressionEngineOps.GaussJordanStep(aug, col, n, pivotThreshold);
         }
 
-        var sol = new Vector<T>(n);
-        for (int i = 0; i < n; i++) sol[i] = aug[i, n];
-        return sol;
+        return aug.GetColumn(n);
     }
 
     /// <inheritdoc/>
     protected override Task CalculateFeatureImportancesAsync(int featureCount)
     {
         var importances = new Vector<T>(_numFeatures);
-
-        for (int f = 0; f < _numFeatures; f++)
+        foreach (var coefficients in new[] { _meanCoefficients, _precisionCoefficients })
         {
-            T imp = NumOps.Zero;
-            if (_meanCoefficients != null)
-                imp = NumOps.Add(imp, NumOps.Abs(_meanCoefficients[f]));
-            if (_precisionCoefficients != null)
-                imp = NumOps.Add(imp, NumOps.Abs(_precisionCoefficients[f]));
-            importances[f] = imp;
+            if (coefficients != null && _numFeatures > 0)
+            {
+                importances = Engine.Add(importances, Engine.Abs(coefficients.GetSubVector(0, _numFeatures)));
+            }
         }
 
-        T sum = NumOps.Zero;
-        for (int f = 0; f < _numFeatures; f++)
-            sum = NumOps.Add(sum, importances[f]);
+        T sum = _numFeatures > 0 ? Engine.Sum(importances) : NumOps.Zero;
         if (NumOps.GreaterThan(sum, NumOps.Zero))
         {
-            for (int f = 0; f < _numFeatures; f++)
-                importances[f] = NumOps.Divide(importances[f], sum);
+            importances = Engine.Divide(importances, sum);
         }
 
         FeatureImportances = importances;

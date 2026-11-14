@@ -160,8 +160,7 @@ public partial class GammaRegression<T> : RegressionBase<T>
         var xWithOls = x.AddConstantColumn(NumOps.One);
         var xTxOls = xWithOls.Transpose().Multiply(xWithOls);
         var xTyOls = xWithOls.Transpose().Multiply(y);
-        for (int i = 0; i < xTxOls.Rows; i++)
-            xTxOls[i, i] = NumOps.Add(xTxOls[i, i], NumOps.FromDouble(1e-10));
+        xTxOls = Engine.MatrixAdd(xTxOls, Matrix<T>.CreateDiagonal(Engine.Fill(xTxOls.Rows, NumOps.FromDouble(1e-10))));
         var olsSolution = xTxOls.Inverse().Multiply(xTyOls);
         Intercept = olsSolution[0];
         Coefficients = olsSolution.Slice(1, x.Columns);
@@ -186,17 +185,16 @@ public partial class GammaRegression<T> : RegressionBase<T>
     private bool ValidateGammaData(Vector<T> y)
     {
         // Coerce non-positive values to positive (Gamma distribution requires y > 0)
-        double minVal = double.MaxValue;
-        for (int i = 0; i < y.Length; i++)
+        if (y.Length == 0)
         {
-            double v = NumOps.ToDouble(y[i]);
-            if (v < minVal) minVal = v;
+            return false;
         }
-        if (minVal <= 0)
+
+        T minVal = Engine.TensorMinValue(Tensor<T>.FromVector(y));
+        if (NumOps.LessThanOrEquals(minVal, NumOps.Zero))
         {
-            double shift = Math.Abs(minVal) + 0.1;
-            for (int i = 0; i < y.Length; i++)
-                y[i] = NumOps.FromDouble(NumOps.ToDouble(y[i]) + shift);
+            T shift = NumOps.Add(NumOps.Abs(minVal), NumOps.FromDouble(0.1));
+            Engine.Add(y, Engine.Fill(y.Length, shift)).AsSpan().CopyTo(y.AsWritableSpan());
             return true;
         }
         return false;
@@ -225,10 +223,10 @@ public partial class GammaRegression<T> : RegressionBase<T>
     {
         return _options.LinkFunction switch
         {
-            GammaLinkFunction.Log => eta.Transform(NumOps.Exp),
-            GammaLinkFunction.Inverse => eta.Transform(v => NumOps.Divide(NumOps.One, v)),
+            GammaLinkFunction.Log => Engine.Exp(eta),
+            GammaLinkFunction.Inverse => Engine.Reciprocal(eta),
             GammaLinkFunction.Identity => eta.Clone(),
-            _ => eta.Transform(NumOps.Exp)
+            _ => Engine.Exp(eta)
         };
     }
 
@@ -255,10 +253,10 @@ public partial class GammaRegression<T> : RegressionBase<T>
     {
         return _options.LinkFunction switch
         {
-            GammaLinkFunction.Log => mu.Transform(v => NumOps.FromDouble(Math.Log(NumOps.ToDouble(v)))),
-            GammaLinkFunction.Inverse => mu.Transform(v => NumOps.Divide(NumOps.One, v)),
+            GammaLinkFunction.Log => Engine.Log(mu),
+            GammaLinkFunction.Inverse => Engine.Reciprocal(mu),
             GammaLinkFunction.Identity => mu.Clone(),
-            _ => mu.Transform(v => NumOps.FromDouble(Math.Log(NumOps.ToDouble(v))))
+            _ => Engine.Log(mu)
         };
     }
 
@@ -281,21 +279,10 @@ public partial class GammaRegression<T> : RegressionBase<T>
     /// </remarks>
     private Vector<T> ClampMu(Vector<T> mu)
     {
-        var result = new Vector<T>(mu.Length);
         T minValue = NumOps.FromDouble(MuFloor);
         T maxValue = NumOps.FromDouble(MuCeiling);
 
-        for (int i = 0; i < mu.Length; i++)
-        {
-            T value = mu[i];
-            if (NumOps.LessThan(value, minValue))
-                value = minValue;
-            else if (NumOps.GreaterThan(value, maxValue))
-                value = maxValue;
-            result[i] = value;
-        }
-
-        return result;
+        return Engine.Clamp(mu, minValue, maxValue);
     }
 
     /// <summary>
@@ -323,24 +310,16 @@ public partial class GammaRegression<T> : RegressionBase<T>
     /// </remarks>
     private Matrix<T> ComputeWeights(Vector<T> mu)
     {
-        var weights = new Vector<T>(mu.Length);
-
-        for (int i = 0; i < mu.Length; i++)
+        var weights = _options.LinkFunction switch
         {
-            T muVal = mu[i];
-            T muSquared = NumOps.Multiply(muVal, muVal);
-            T weight = _options.LinkFunction switch
-            {
-                // W = 1 / (V(μ) × (g'(μ))²) = 1 / (μ² × (1/μ)²) = 1
-                GammaLinkFunction.Log => NumOps.One,
-                // W = 1 / (V(μ) × (g'(μ))²) = 1 / (μ² × (1/μ²)²) = μ²
-                GammaLinkFunction.Inverse => muSquared,
-                // W = 1 / (V(μ) × (g'(μ))²) = 1 / (μ² × 1) = 1/μ²
-                GammaLinkFunction.Identity => NumOps.Divide(NumOps.One, muSquared),
-                _ => NumOps.One
-            };
-            weights[i] = weight;
-        }
+            // W = 1 / (V(μ) × (g'(μ))²) = 1 / (μ² × (1/μ)²) = 1
+            GammaLinkFunction.Log => Engine.Fill(mu.Length, NumOps.One),
+            // W = 1 / (V(μ) × (g'(μ))²) = 1 / (μ² × (1/μ²)²) = μ²
+            GammaLinkFunction.Inverse => Engine.Multiply(mu, mu),
+            // W = 1 / (V(μ) × (g'(μ))²) = 1 / (μ² × 1) = 1/μ²
+            GammaLinkFunction.Identity => Engine.Reciprocal(Engine.Multiply(mu, mu)),
+            _ => Engine.Fill(mu.Length, NumOps.One)
+        };
 
         return Matrix<T>.CreateDiagonal(weights);
     }
@@ -371,30 +350,18 @@ public partial class GammaRegression<T> : RegressionBase<T>
     /// </remarks>
     private Vector<T> ComputeWorkingResponse(Vector<T> eta, Vector<T> y, Vector<T> mu)
     {
-        var z = new Vector<T>(eta.Length);
+        var diff = Engine.Subtract(y, mu);
 
-        for (int i = 0; i < eta.Length; i++)
+        return _options.LinkFunction switch
         {
-            T etaVal = eta[i];
-            T muVal = mu[i];
-            T diff = NumOps.Subtract(y[i], muVal);
-            T muSquared = NumOps.Multiply(muVal, muVal);
-
-            T zVal = _options.LinkFunction switch
-            {
-                // g'(μ) = 1/μ, so z = η + (y - μ)/μ
-                GammaLinkFunction.Log => NumOps.Add(etaVal, NumOps.Divide(diff, muVal)),
-                // g'(μ) = -1/μ², so z = η - (y - μ)/μ²
-                GammaLinkFunction.Inverse => NumOps.Subtract(etaVal, NumOps.Divide(diff, muSquared)),
-                // g'(μ) = 1, so z = η + (y - μ) = y
-                GammaLinkFunction.Identity => y[i],
-                _ => NumOps.Add(etaVal, NumOps.Divide(diff, muVal))
-            };
-
-            z[i] = zVal;
-        }
-
-        return z;
+            // g'(μ) = 1/μ, so z = η + (y - μ)/μ
+            GammaLinkFunction.Log => Engine.Add(eta, Engine.Divide(diff, mu)),
+            // g'(μ) = -1/μ², so z = η - (y - μ)/μ²
+            GammaLinkFunction.Inverse => Engine.Subtract(eta, Engine.Divide(diff, Engine.Multiply(mu, mu))),
+            // g'(μ) = 1, so z = η + (y - μ) = y
+            GammaLinkFunction.Identity => y.Clone(),
+            _ => Engine.Add(eta, Engine.Divide(diff, mu))
+        };
     }
 
     /// <summary>
@@ -445,13 +412,8 @@ public partial class GammaRegression<T> : RegressionBase<T>
         int n = y.Length;
         int p = Coefficients.Length + 1; // coefficients + intercept
 
-        T sumPearsonResidualsSq = NumOps.Zero;
-        for (int i = 0; i < n; i++)
-        {
-            T muVal = predictions[i];
-            T pearsonResidual = NumOps.Divide(NumOps.Subtract(y[i], muVal), muVal);
-            sumPearsonResidualsSq = NumOps.Add(sumPearsonResidualsSq, NumOps.Multiply(pearsonResidual, pearsonResidual));
-        }
+        var pearsonResiduals = Engine.Divide(Engine.Subtract(y, predictions), predictions);
+        T sumPearsonResidualsSq = Engine.DotProduct(pearsonResiduals, pearsonResiduals);
 
         // Estimate dispersion as sum of squared Pearson residuals divided by degrees of freedom
         _dispersion = NumOps.Divide(sumPearsonResidualsSq, NumOps.FromDouble(Math.Max(1, n - p)));
@@ -478,8 +440,6 @@ public partial class GammaRegression<T> : RegressionBase<T>
     {
         // Use base linear prediction: X * Coefficients + Intercept
         var predictions = x.Multiply(Coefficients);
-        for (int i = 0; i < predictions.Length; i++)
-            predictions[i] = NumOps.Add(predictions[i], Intercept);
-        return predictions;
+        return Engine.Add(predictions, Engine.Fill(predictions.Length, Intercept));
     }
 }

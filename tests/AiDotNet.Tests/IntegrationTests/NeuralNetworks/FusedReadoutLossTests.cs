@@ -129,7 +129,7 @@ public class FusedReadoutLossTests
         var fused = Grad(fuse: true, new TiedReadoutLocalErrorCreditRule<double>(readoutLayerCount: 1), x, ids, init, out int callsOn);
 
         Assert.Equal(0, callsOff);
-        Assert.Equal(3, callsOn); // 4 hidden layers; the last is trained by the output loss, so 3 local readout losses
+        Assert.Equal(4, callsOn); // 4 hidden layers: 1 terminal fused output loss + 3 local readout losses
         Assert.Equal(decomposed.Length, fused.Length);
         double maxAbs = 0, maxDiff = 0;
         for (int i = 0; i < fused.Length; i++)
@@ -150,7 +150,7 @@ public class FusedReadoutLossTests
             teacherLogits: null, readoutLayerCount: 1, hiddenWeight: 0.0, kdAlpha: 0.0, seed: 1, localTaskWeight: 0.5);
         var decomposed = Grad(fuse: false, Rule(), x, ids, init, out _);
         var fused = Grad(fuse: true, Rule(), x, ids, init, out int calls);
-        Assert.Equal(3, calls);
+        Assert.Equal(4, calls); // 1 terminal fused output loss + 3 local task readout losses
         double maxDiff = 0;
         for (int i = 0; i < fused.Length; i++) maxDiff = Math.Max(maxDiff, Math.Abs(decomposed[i] - fused[i]));
         Assert.True(maxDiff <= 1e-9, $"fused vs decomposed gradient max diff {maxDiff:E3}");
@@ -250,7 +250,7 @@ public class FusedReadoutLossTests
         var decomposed = decomposedNet.ComputeGradients(x, ids, new CrossEntropyWithLogitsLoss<double>());
         long decomposedCalls = DenseLayer<double>.FusedReadoutLossCount - before - fusedCalls;
 
-        Assert.Equal(3, fusedCalls);     // 4 hidden layers; the last is trained by the output loss
+        Assert.Equal(2, fusedCalls);     // 1 terminal fused readout + 1 depth-stacked batched readout over the 3 pre-terminal hidden layers
         Assert.Equal(0, decomposedCalls);
 
         Assert.Equal(decomposed.Length, fused.Length);
@@ -308,5 +308,155 @@ public class FusedReadoutLossTests
         Assert.Equal(0, calls);
         double diff = MaxDiff(plain, custom);
         Assert.True(diff <= 1e-9, $"overridden-forward step vs plain decomposed step: max parameter diff {diff:E3}");
+    }
+
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+    private sealed class AuxPassthroughLayer : LayerBase<double>, IAuxiliaryLossLayer<double>, IShapeContract
+    {
+        public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => inputRank == 2
+            ? new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                new OutputAxisContract(TensorAxis.Features, AxisRelation.Same(TensorAxis.Features)),
+            }
+            : null;
+
+        public AuxPassthroughLayer(int width) : base(new[] { width }, new[] { width }) { }
+        public override bool SupportsTraining => false;
+        public override void ResetState() { }
+        public bool UseAuxiliaryLoss => true;
+        public double AuxiliaryLossWeight { get; set; } = 0.5;
+        public double ComputeAuxiliaryLoss() => 1.25;
+        public Dictionary<string, string> GetDiagnostics() => new();
+        public Dictionary<string, string> GetAuxiliaryLossDiagnostics() => GetDiagnostics();
+        protected override Tensor<double> ForwardTraced(Tensor<double> input) => input;
+    }
+
+    private sealed class NonBaseSquaredLoss : ILossFunction<double>
+    {
+        public double CalculateLoss(Vector<double> predicted, Vector<double> actual)
+        {
+            double acc = 0;
+            for (int i = 0; i < predicted.Length; i++)
+            {
+                double d = predicted[i] - actual[i];
+                acc += d * d;
+            }
+            return acc / predicted.Length;
+        }
+
+        public Tensor<double> ComputeTapeLoss(Tensor<double> predicted, Tensor<double> target)
+        {
+            var eng = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+            var diff = eng.TensorSubtract(predicted, target);
+            var sq = eng.TensorMultiply(diff, diff);
+            return eng.ReduceMean(sq, Enumerable.Range(0, sq.Rank).ToArray(), keepDims: false);
+        }
+
+        public (double Loss, Tensor<double> Gradient) CalculateLossAndGradientGpu(Tensor<double> predicted, Tensor<double> actual)
+            => throw new NotSupportedException();
+    }
+
+    private sealed class AuxTapeNeuralNetwork : NeuralNetwork<double>
+    {
+        private readonly double _auxTerm;
+
+        public AuxTapeNeuralNetwork(NeuralNetworkArchitecture<double> architecture, double auxTerm)
+            : base(architecture)
+        {
+            _auxTerm = auxTerm;
+        }
+
+        protected override Tensor<double>? ConsumeAuxiliaryTapeLoss()
+        {
+            var t = new Tensor<double>(new[] { 1 });
+            t.SetFlat(0, _auxTerm);
+            return t;
+        }
+    }
+
+    [Fact]
+    public void NonBaseLoss_WithAuxiliaryLossLayer_MatchesEvaluateTrainingObjective()
+    {
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(21);
+        var x = new Tensor<double>(new[] { 4, Dim });
+        var target = new Tensor<double>(new[] { 4, Vocab });
+        for (int i = 0; i < x.Length; i++) x.SetFlat(i, rng.NextDouble() * 2 - 1);
+        for (int i = 0; i < target.Length; i++) target.SetFlat(i, rng.NextDouble() * 2 - 1);
+
+        var layers = new List<ILayer<double>>
+        {
+            new FullyConnectedLayer<double>(Dim, Width, new TanhActivation<double>()),
+            new AuxPassthroughLayer(Width),
+            new DenseLayer<double>(Vocab, (IActivationFunction<double>?)null),
+        };
+        var arch = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            complexity: NetworkComplexity.Simple,
+            inputSize: Dim,
+            outputSize: Vocab,
+            layers: layers) { RandomSeed = 22 };
+        const double auxTerm = 0.75;
+        var net = new AuxTapeNeuralNetwork(arch, auxTerm);
+        var pred = net.Predict(x);
+
+        var customLoss = new NonBaseSquaredLoss();
+        double rawExpected = customLoss.ComputeTapeLoss(pred, target).GetFlat(0);
+        var baseMse = new MeanSquaredErrorLoss<double>();
+
+        net.SetTrainingMode(true);
+        double builtWithBase = net.BuildTrainingObjective(x, target, baseMse).GetFlat(0);
+        double rawMse = baseMse.ComputeTapeLoss(pred, target).GetFlat(0);
+        Assert.Equal(rawMse + auxTerm, builtWithBase, 12);
+
+        double built = net.BuildTrainingObjective(x, target, customLoss).GetFlat(0);
+        double evaluated = net.EvaluateTrainingObjective(x, target, customLoss);
+        Assert.Equal(rawExpected, built, 12);
+        Assert.Equal(evaluated, built, 12);
+    }
+
+    [Fact]
+    public void DenseHead_FusedTraining_RetiresCachedQ8Weights()
+    {
+        const int inF = 32, outF = 4;
+        var head = new DenseLayer<float>(outF, (IActivationFunction<float>?)null);
+        var x = new Tensor<float>(new[] { 1, inF });
+        for (int i = 0; i < inF; i++) x.SetFlat(i, 1.0f);
+        head.Forward(x);
+
+        // Install a deliberately all-zero Q8 weight snapshot while _weights is non-zero.
+        var qs = new sbyte[inF * outF];
+        var scales = new float[outF * (inF / 32)];
+        head.SetQuantizedWeightsQ8_0(qs, scales, inF, outF);
+        Assert.True(head.HasCachedQ8Weights);
+
+        var ids = new Tensor<float>(new[] { 1 });
+        ids.SetFlat(0, 0f);
+        var ce = new CrossEntropyWithLogitsLoss<float>();
+
+        using (var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<float>())
+        {
+            var loss = head.TryComputeFusedLoss(x, ids, ce);
+            Assert.NotNull(loss);
+        }
+        Assert.False(head.HasCachedQ8Weights);
+
+        // Mutate the underlying weight span directly without bumping Tensor.Version (matching in-place CPU Adam).
+        var w = head.GetTrainableParameters()[0];
+        var wSpan = w.Data.Span;
+        for (int i = 0; i < wSpan.Length; i++) wSpan[i] = 0.25f;
+        if (head.GetTrainableParameters().Count > 1)
+        {
+            var bSpan = head.GetTrainableParameters()[1].Data.Span;
+            for (int i = 0; i < bSpan.Length; i++) bSpan[i] = 0f;
+        }
+
+        head.SetTrainingMode(false);
+        var y = head.Forward(x);
+        // Each logit should be 32 * 0.25 = 8.0f (stale Q8 weights would have produced 0.0f).
+        for (int o = 0; o < outF; o++)
+            Assert.Equal(8.0f, y.GetFlat(o), 4);
     }
 }

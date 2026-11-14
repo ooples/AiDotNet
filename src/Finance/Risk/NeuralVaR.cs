@@ -280,22 +280,15 @@ public partial class NeuralVaR<T> : RiskModelBase<T>
             // the computed descent direction must improve the objective; retaining
             // a smaller improving update is preferable to turning the call into a
             // no-op by restoring the old iterate outright.
+            var direction = Engine.Subtract(candidateParameters, parametersBefore);
+            var half = NumOps.FromDouble(0.5);
+            var step = direction;
             for (double scale = 0.5; scale >= 1.0 / 65536.0; scale *= 0.5)
             {
-                var trialParameters = new Vector<T>(parametersBefore.Length);
-                T trialScale = NumOps.FromDouble(scale);
-                for (int i = 0; i < trialParameters.Length; i++)
-                {
-                    T direction = NumOps.Subtract(candidateParameters[i], parametersBefore[i]);
-                    trialParameters[i] = NumOps.Add(
-                        parametersBefore[i],
-                        NumOps.Multiply(direction, trialScale));
-                }
-
-                UpdateParameters(trialParameters);
-                double trialLoss = NumOps.ToDouble(
-                    _lossFunction.CalculateLoss(Predict(input).ToVector(), target.ToVector()));
-                if (!double.IsNaN(trialLoss) && !double.IsInfinity(trialLoss) && trialLoss < lossBefore)
+                // before + direction * scale, with the step halved each round.
+                step = Engine.Multiply(step, half);
+                UpdateParameters(Engine.Add(parametersBefore, step));
+                if (ImprovesOn(_lossFunction.CalculateLoss(Predict(input).ToVector(), target.ToVector()), lossBefore))
                 {
                     accepted = true;
                     break;
@@ -307,6 +300,13 @@ public partial class NeuralVaR<T> : RiskModelBase<T>
         }
 
         return true;
+    }
+
+    /// <summary>True when a trial loss is finite and strictly below the loss before the step.</summary>
+    private bool ImprovesOn(T trialLoss, double lossBefore)
+    {
+        double trial = NumOps.ToDouble(trialLoss);
+        return !double.IsNaN(trial) && !double.IsInfinity(trial) && trial < lossBefore;
     }
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks

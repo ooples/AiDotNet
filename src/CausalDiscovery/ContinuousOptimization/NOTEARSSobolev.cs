@@ -52,6 +52,12 @@ namespace AiDotNet.CausalDiscovery.ContinuousOptimization;
 [ResearchPaper("Learning Sparse Nonparametric DAGs", "https://proceedings.mlr.press/v108/zheng20a.html", Year = 2020, Authors = "Xun Zheng, Chen Dan, Bryon Aragam, Pradeep Ravikumar, Eric Xing")]
 public class NOTEARSSobolev<T> : ContinuousOptimizationBase<T>
 {
+    /// <summary>
+    /// Maximum number of entries of one [rows, d, h] activation or [d, rows, d] Jacobian block in the
+    /// gradient pass; samples are processed in blocks of at most this many entries.
+    /// </summary>
+    private const int MaxSampleBlockElements = 1 << 22;
+
     private const double DEFAULT_RHO_MAX = 1e+16;
     private const double DEFAULT_RHO_INIT = 1.0;
     private const double RHO_MULTIPLY_FACTOR = 10.0;
@@ -81,17 +87,20 @@ public class NOTEARSSobolev<T> : ContinuousOptimizationBase<T>
     /// </remarks>
     private const int DefaultRandomSeed = 42;
     // MLP parameters per variable:
-    // W1[j] is [d x h], b1[j] is [h], W2[j] is [h], b2[j] is scalar
-    private Matrix<T>[] _W1 = [];
-    private Matrix<T>[] _b1 = [];
-    private Matrix<T>[] _W2 = [];
-    private T[] _b2 = [];
+    // One MLP per output variable j: _W1 [j, i, k] (input i to hidden k), _b1 [j, k], _W2 [j, k], _b2 [j].
+    private Tensor<T> _W1 = new Tensor<T>(new[] { 1 });
+    private Tensor<T> _b1 = new Tensor<T>(new[] { 1 });
+    private Tensor<T> _W2 = new Tensor<T>(new[] { 1 });
+    private Tensor<T> _b2 = new Tensor<T>(new[] { 1 });
+
+    // 1 where input i may feed MLP j (i != j), broadcast over hidden units: [j, i, k].
+    private Tensor<T> _inputMask = new Tensor<T>(new[] { 1 });
 
     // Adam state
-    private Matrix<T>[] _mW1 = [], _vW1 = [];
-    private Matrix<T>[] _mb1 = [], _vb1 = [];
-    private Matrix<T>[] _mW2 = [], _vW2 = [];
-    private T[] _mb2 = [], _vb2 = [];
+    private Tensor<T> _mW1 = new Tensor<T>(new[] { 1 }), _vW1 = new Tensor<T>(new[] { 1 });
+    private Tensor<T> _mb1 = new Tensor<T>(new[] { 1 }), _vb1 = new Tensor<T>(new[] { 1 });
+    private Tensor<T> _mW2 = new Tensor<T>(new[] { 1 }), _vW2 = new Tensor<T>(new[] { 1 });
+    private Tensor<T> _mb2 = new Tensor<T>(new[] { 1 }), _vb2 = new Tensor<T>(new[] { 1 });
 
     /// <inheritdoc/>
     public override string Name => "NOTEARS Sobolev";
@@ -148,16 +157,14 @@ public class NOTEARSSobolev<T> : ContinuousOptimizationBase<T>
                 var (_, gradW1, gradB1, gradW2, gradB2) =
                     ComputeAugLagGradientWithSobolev(data, n, d, h, alpha, rho);
 
-                AdamUpdate(gradW1, gradB1, gradW2, gradB2, d, h, adamStep);
+                AdamUpdate(gradW1, gradB1, gradW2, gradB2, adamStep);
 
                 // Zero diagonal (no self-loops)
-                for (int j = 0; j < d; j++)
-                    for (int k = 0; k < h; k++)
-                        _W1[j][j, k] = NumOps.Zero;
+                ZeroSelfInputs();
 
                 if (inner % 100 == 0 && inner > 0)
                 {
-                    double gradNorm = ComputeGradientNorm(gradW1, gradB1, gradW2, gradB2, d, h);
+                    double gradNorm = ComputeGradientNorm(gradW1, gradB1, gradW2, gradB2);
                     if (gradNorm < INNER_TOLERANCE) break;
                 }
             }
@@ -181,11 +188,9 @@ public class NOTEARSSobolev<T> : ContinuousOptimizationBase<T>
         var result = ThresholdAndClean(W, WThreshold);
 
         // Fallback if all edges removed
-        bool hasEdges = false;
-        for (int i = 0; i < d && !hasEdges; i++)
-            for (int j = 0; j < d && !hasEdges; j++)
-                if (i != j && NumOps.GreaterThan(NumOps.Abs(result[i, j]), NumOps.Zero))
-                    hasEdges = true;
+        var offDiagonalMagnitude = Engine.TensorMultiply(
+            Engine.TensorAbs(Tensor<T>.FromMatrix(result)), OffDiagonalMask(d));
+        bool hasEdges = Engine.TensorCountNonzero(Engine.TensorGreaterThan(offDiagonalMagnitude, NumOps.Zero)) > 0;
 
         var candidate = hasEdges ? result : FallbackCorrelationGraph(data);
         return EnforceAcyclic(candidate);
@@ -196,62 +201,62 @@ public class NOTEARSSobolev<T> : ContinuousOptimizationBase<T>
         var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(_seed);
         double scale = Math.Sqrt(2.0 / d);
 
-        _W1 = new Matrix<T>[d];
-        _b1 = new Matrix<T>[d];
-        _W2 = new Matrix<T>[d];
-        _b2 = new T[d];
+        // Draw order of the reference initialization: for each output variable j, the (d-1)*h
+        // first-layer weights (inputs i != j, hidden k inner) and then its h second-layer weights.
+        var draws = Tensor<T>.CreateRandom(rng, d, d * h);
+        var uniform = Engine.TensorSubtract(
+            Engine.TensorMultiplyScalar(draws, NumOps.FromDouble(scale)),
+            Engine.TensorFullLike(draws, NumOps.FromDouble(scale / 2.0)));
 
-        _mW1 = new Matrix<T>[d]; _vW1 = new Matrix<T>[d];
-        _mb1 = new Matrix<T>[d]; _vb1 = new Matrix<T>[d];
-        _mW2 = new Matrix<T>[d]; _vW2 = new Matrix<T>[d];
-        _mb2 = new T[d]; _vb2 = new T[d];
-
+        // W1[j, i, k] = draw[j, slot(i) * h + k] where slot skips input j; self inputs stay zero.
+        var w1Source = new int[d * d * h];
         for (int j = 0; j < d; j++)
-        {
-            _W1[j] = new Matrix<T>(d, h);
-            _b1[j] = new Matrix<T>(1, h);
-            _W2[j] = new Matrix<T>(1, h);
-            _b2[j] = NumOps.Zero;
-
-            _mW1[j] = new Matrix<T>(d, h); _vW1[j] = new Matrix<T>(d, h);
-            _mb1[j] = new Matrix<T>(1, h); _vb1[j] = new Matrix<T>(1, h);
-            _mW2[j] = new Matrix<T>(1, h); _vW2[j] = new Matrix<T>(1, h);
-            _mb2[j] = NumOps.Zero; _vb2[j] = NumOps.Zero;
-
             for (int i = 0; i < d; i++)
-            {
-                if (i == j) continue;
                 for (int k = 0; k < h; k++)
-                    _W1[j][i, k] = NumOps.FromDouble(rng.NextDouble() * scale - scale / 2.0);
-            }
+                    w1Source[(j * d + i) * h + k] = j * d * h + (i == j ? 0 : ((i < j ? i : i - 1) * h + k));
 
-            for (int k = 0; k < h; k++)
-                _W2[j][0, k] = NumOps.FromDouble(rng.NextDouble() * scale - scale / 2.0);
-        }
+        _inputMask = Engine.TensorBroadcastTo(OffDiagonalMask(d).Reshape(new[] { d, d, 1 }), new[] { d, d, h });
+        var w1 = Engine.TensorIndexSelect(uniform.Reshape(new[] { d * d * h }),
+            new Tensor<int>(w1Source, new[] { d * d * h }), 0).Reshape(new[] { d, d, h });
+        _W1 = Engine.TensorWhere(_inputMask, w1, Engine.TensorZerosLike(w1));
+        _W2 = Engine.TensorSlice(uniform, new[] { 0, (d - 1) * h }, new[] { d, h });
+        _b1 = new Tensor<T>(new[] { d, h });
+        _b2 = new Tensor<T>(new[] { d });
+
+        _mW1 = new Tensor<T>(new[] { d, d, h }); _vW1 = new Tensor<T>(new[] { d, d, h });
+        _mb1 = new Tensor<T>(new[] { d, h }); _vb1 = new Tensor<T>(new[] { d, h });
+        _mW2 = new Tensor<T>(new[] { d, h }); _vW2 = new Tensor<T>(new[] { d, h });
+        _mb2 = new Tensor<T>(new[] { d }); _vb2 = new Tensor<T>(new[] { d });
+    }
+
+    /// <summary>Sets the first-layer weights from input j into MLP j to zero.</summary>
+    private void ZeroSelfInputs()
+    {
+        _W1 = Engine.TensorWhere(_inputMask, _W1, Engine.TensorZerosLike(_W1));
     }
 
     /// <summary>
-    /// Forward pass: output = W2[j]^T * sigmoid(W1[j]^T * x + b1[j]) + b2[j].
-    /// The caller supplies a reusable hidden buffer because this method runs once
-    /// per sample, variable, and optimizer step.
+    /// Forward pass of every per-variable MLP on every sample:
+    /// output = W2[j]^T * sigmoid(W1[j]^T * x + b1[j]) + b2[j], with the sigmoid saturated to
+    /// exactly 1 above 20 and 0 below -20.
     /// </summary>
-    private T ForwardMLP(Matrix<T> data, int sample, int j, int d, int h, T[] hidden)
+    /// <returns>Predictions [n, d] and hidden activations [n, d, h].</returns>
+    private (Tensor<T> Output, Tensor<T> Hidden) ForwardMLP(Tensor<T> x, int n, int d, int h)
     {
-        for (int k = 0; k < h; k++)
-        {
-            T sum = _b1[j][0, k];
-            for (int i = 0; i < d; i++)
-                sum = NumOps.Add(sum, NumOps.Multiply(data[sample, i], _W1[j][i, k]));
+        var weightsByInput = Engine.Reshape(Engine.TensorPermute(_W1, new[] { 1, 0, 2 }), new[] { d, d * h });
+        var pre = Engine.TensorMatMul(x, weightsByInput).Reshape(new[] { n, d, h });
+        pre = Engine.TensorAdd(pre, Engine.TensorBroadcastTo(_b1.Reshape(new[] { 1, d, h }), new[] { n, d, h }));
 
-            double sv = NumOps.ToDouble(sum);
-            double sigVal = sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv));
-            hidden[k] = NumOps.FromDouble(sigVal);
-        }
+        var hidden = Engine.TensorSigmoid(pre);
+        hidden = Engine.TensorWhere(Engine.TensorGreaterThan(pre, NumOps.FromDouble(20)), Engine.TensorOnesLike(pre), hidden);
+        hidden = Engine.TensorWhere(Engine.TensorLessThan(pre, NumOps.FromDouble(-20)), Engine.TensorZerosLike(pre), hidden);
 
-        T output = _b2[j];
-        for (int k = 0; k < h; k++)
-            output = NumOps.Add(output, NumOps.Multiply(hidden[k], _W2[j][0, k]));
-        return output;
+        var weighted = Engine.TensorMultiply(hidden,
+            Engine.TensorBroadcastTo(_W2.Reshape(new[] { 1, d, h }), new[] { n, d, h }));
+        var output = Engine.TensorAdd(Engine.ReduceSum(weighted, new[] { 2 }, false),
+            Engine.TensorBroadcastTo(_b2.Reshape(new[] { 1, d }), new[] { n, d }));
+
+        return (output, hidden);
     }
 
     /// <summary>
@@ -259,23 +264,9 @@ public class NOTEARSSobolev<T> : ContinuousOptimizationBase<T>
     /// </summary>
     private Matrix<T> ExtractAdjacencyMatrix(int d)
     {
-        int h = _b1[0].Columns;
-        var A = new Matrix<T>(d, d);
-        for (int j = 0; j < d; j++)
-        {
-            for (int i = 0; i < d; i++)
-            {
-                if (i == j) continue;
-                T norm = NumOps.Zero;
-                for (int k = 0; k < h; k++)
-                {
-                    T w = _W1[j][i, k];
-                    norm = NumOps.Add(norm, NumOps.Multiply(w, w));
-                }
-                A[i, j] = NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(norm)));
-            }
-        }
-        return A;
+        var norms = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorSquare(_W1), new[] { 2 }, false)); // [j, i]
+        var A = Engine.TensorTranspose(norms);
+        return Engine.TensorWhere(OffDiagonalMask(d), A, Engine.TensorZerosLike(A)).ToMatrix();
     }
 
     private double ComputeAcyclicityFromMLP(int d)
@@ -290,237 +281,142 @@ public class NOTEARSSobolev<T> : ContinuousOptimizationBase<T>
     /// The Sobolev penalty penalizes ||df_j/dx||^2 averaged over samples.
     /// Jacobian: df_j/dx_i = sum_k W2[j][k] * sigmoid'(z_k) * W1[j][i,k]
     /// </summary>
-    private (double loss, Matrix<T>[] gW1, Matrix<T>[] gB1, Matrix<T>[] gW2, T[] gB2)
+    private (double loss, Tensor<T> gW1, Tensor<T> gB1, Tensor<T> gW2, Tensor<T> gB2)
         ComputeAugLagGradientWithSobolev(Matrix<T> data, int n, int d, int h, double alpha, double rho)
     {
-        var gW1 = new Matrix<T>[d];
-        var gB1 = new Matrix<T>[d];
-        var gW2 = new Matrix<T>[d];
-        var gB2 = new T[d];
-        for (int j = 0; j < d; j++)
-        {
-            gW1[j] = new Matrix<T>(d, h);
-            gB1[j] = new Matrix<T>(1, h);
-            gW2[j] = new Matrix<T>(1, h);
-            gB2[j] = NumOps.Zero;
-        }
-
-        double totalLoss = 0;
-        double totalSobolev = 0;
+        var x = Tensor<T>.FromMatrix(data);
         T invN = NumOps.FromDouble(1.0 / n);
-        var hidden = new T[h];
+        T sobolevScale = NumOps.FromDouble(2.0 * _sobolevWeight / n);
+        var w1Transposed = Engine.Reshape(Engine.TensorPermute(_W1, new[] { 0, 2, 1 }), new[] { d, h, d });
+        var selfInputMask = OffDiagonalMask(d).Reshape(new[] { d, 1, d });
 
-        for (int sample = 0; sample < n; sample++)
+        // Data term, Sobolev penalty and their gradients, summed over samples. The samples are processed in
+        // blocks so the [rows, d, h] activations and the [d, rows, d] Jacobian stay bounded
+        // (MaxSampleBlockElements) for large n; every normalization still uses the full sample count.
+        var squaredError = new Tensor<T>(new[] { d });
+        var sobolevSquares = new Tensor<T>(new[] { d, d });
+        var gB2 = new Tensor<T>(new[] { d });
+        var gW2 = new Tensor<T>(new[] { d, h });
+        var gB1 = new Tensor<T>(new[] { d, h });
+        var gradByInput = new Tensor<T>(new[] { d, d * h });
+        var sobGradW1 = new Tensor<T>(new[] { d, d, h });
+        int blockRows = Math.Max(1, Math.Min(n, MaxSampleBlockElements / Math.Max(1, d * Math.Max(d, h))));
+        for (int b0 = 0; b0 < n; b0 += blockRows)
         {
-            for (int j = 0; j < d; j++)
-            {
-                T pred = ForwardMLP(data, sample, j, d, h, hidden);
-                T residual = NumOps.Subtract(pred, data[sample, j]);
-                double residualD = NumOps.ToDouble(residual);
-                totalLoss += residualD * residualD;
+            int rows = Math.Min(blockRows, n - b0);
+            var unitShape = new[] { rows, d, h };
+            var xb = Engine.TensorSlice(x, new[] { b0, 0 }, new[] { rows, d });
+            var (pred, hidden) = ForwardMLP(xb, rows, d, h);
+            var residual = Engine.TensorSubtract(pred, xb);
+            squaredError = Engine.TensorAdd(squaredError, Engine.ReduceSum(Engine.TensorSquare(residual), new[] { 0 }, false));
 
-                // Data gradient: dL/d(pred) = residual / n
-                T dOutput = NumOps.Multiply(residual, invN);
+            // Data gradient: dL/d(pred) = residual / n
+            var dOutput = Engine.TensorMultiplyScalar(residual, invN);
+            gB2 = Engine.TensorAdd(gB2, Engine.ReduceSum(dOutput, new[] { 0 }, false));
+            var dOutputPerUnit = Engine.TensorBroadcastTo(dOutput.Reshape(new[] { rows, d, 1 }), unitShape);
 
-                // Gradient for b2
-                gB2[j] = NumOps.Add(gB2[j], dOutput);
+            // dL/dW2[k] = dOutput * hidden[k]
+            gW2 = Engine.TensorAdd(gW2, Engine.ReduceSum(Engine.TensorMultiply(dOutputPerUnit, hidden), new[] { 0 }, false));
 
-                // Gradient for W2, b1, W1 (backprop)
-                for (int k = 0; k < h; k++)
-                {
-                    T hk = hidden[k];
-                    // dL/dW2[k] = dOutput * hidden[k]
-                    gW2[j][0, k] = NumOps.Add(gW2[j][0, k], NumOps.Multiply(dOutput, hk));
+            // sigmoid'(z) = h(1-h); dHidden = dOutput * (W2 * sigmoid'(z))
+            var sigDeriv = Engine.TensorMultiply(hidden, Engine.ScalarMinusTensor(NumOps.One, hidden));
+            var w2PerSample = Engine.TensorBroadcastTo(_W2.Reshape(new[] { 1, d, h }), unitShape);
+            var w2SigDeriv = Engine.TensorMultiply(w2PerSample, sigDeriv); // [s, j, k]
+            var dHidden = Engine.TensorMultiply(dOutputPerUnit, w2SigDeriv);
+            gB1 = Engine.TensorAdd(gB1, Engine.ReduceSum(dHidden, new[] { 0 }, false));
 
-                    // sigmoid'(z) = h(1-h)
-                    T sigDeriv = NumOps.Multiply(hk, NumOps.Subtract(NumOps.One, hk));
-                    T dHidden = NumOps.Multiply(dOutput, NumOps.Multiply(_W2[j][0, k], sigDeriv));
+            // gW1[j, i, k] += sum_s dHidden[s, j, k] * x[s, i]
+            gradByInput = Engine.TensorAdd(gradByInput,
+                Engine.TensorMatMul(Engine.TensorTranspose(xb), dHidden.Reshape(new[] { rows, d * h })));
 
-                    gB1[j][0, k] = NumOps.Add(gB1[j][0, k], dHidden);
-                    for (int i = 0; i < d; i++)
-                        gW1[j][i, k] = NumOps.Add(gW1[j][i, k],
-                            NumOps.Multiply(dHidden, data[sample, i]));
-                }
+            // Sobolev penalty: penalize ||df_j/dx||^2 with df_j/dx_i = sum_k W2[j][k] * sigmoid'(z_k) * W1[j][i,k],
+            // for i != j. Batched over j: q[j, s, k] = W2[j, k] * sigmoid'(z[s, j, k]).
+            var q = Engine.Reshape(Engine.TensorPermute(w2SigDeriv, new[] { 1, 0, 2 }), new[] { d, rows, h });
+            var jacobian = Engine.TensorMatMul(q, w1Transposed); // [j, s, i]
+            var selfInput = Engine.TensorBroadcastTo(selfInputMask, new[] { d, rows, d });
+            jacobian = Engine.TensorWhere(selfInput, jacobian, Engine.TensorZerosLike(jacobian));
+            sobolevSquares = Engine.TensorAdd(sobolevSquares,
+                Engine.ReduceSum(Engine.TensorSquare(jacobian), new[] { 1 }, false));
 
-                // Sobolev penalty: penalize ||df_j/dx||^2
-                // df_j/dx_i = sum_k W2[j][k] * sigmoid'(z_k) * W1[j][i,k]
-                for (int i = 0; i < d; i++)
-                {
-                    if (i == j) continue;
-                    T jacobian_ij = NumOps.Zero;
-                    for (int k = 0; k < h; k++)
-                    {
-                        T hk2 = hidden[k];
-                        T sigD = NumOps.Multiply(hk2, NumOps.Subtract(NumOps.One, hk2));
-                        jacobian_ij = NumOps.Add(jacobian_ij,
-                            NumOps.Multiply(_W2[j][0, k],
-                            NumOps.Multiply(sigD, _W1[j][i, k])));
-                    }
+            // Gradient of Sobolev penalty: sobCoeff = (2 * weight / n) * J
+            var sobCoeff = Engine.TensorMultiplyScalar(jacobian, sobolevScale); // [j, s, i]
 
-                    double jVal = NumOps.ToDouble(jacobian_ij);
-                    totalSobolev += jVal * jVal;
+            // d(J^2)/dW1[j][i,k] = 2*J * W2[k] * sig'(z_k), summed over samples
+            sobGradW1 = Engine.TensorAdd(sobGradW1, Engine.TensorMatMul(
+                Engine.Reshape(Engine.TensorPermute(sobCoeff, new[] { 0, 2, 1 }), new[] { d, d, rows }), q)); // [j, i, k]
 
-                    // Gradient of Sobolev penalty w.r.t. W1[j][i,k] and W2[j][k]
-                    T sobCoeff = NumOps.Multiply(NumOps.FromDouble(2.0 * _sobolevWeight / n), jacobian_ij);
-
-                    for (int k = 0; k < h; k++)
-                    {
-                        T hk3 = hidden[k];
-                        T sigD = NumOps.Multiply(hk3, NumOps.Subtract(NumOps.One, hk3));
-
-                        // d(J^2)/dW1[j][i,k] = 2*J * W2[k] * sig'(z_k)
-                        T sobGradW1 = NumOps.Multiply(sobCoeff,
-                            NumOps.Multiply(_W2[j][0, k], sigD));
-                        gW1[j][i, k] = NumOps.Add(gW1[j][i, k], sobGradW1);
-
-                        // d(J^2)/dW2[k] = 2*J * sig'(z_k) * W1[j][i,k]
-                        T sobGradW2 = NumOps.Multiply(sobCoeff,
-                            NumOps.Multiply(sigD, _W1[j][i, k]));
-                        gW2[j][0, k] = NumOps.Add(gW2[j][0, k], sobGradW2);
-                    }
-                }
-            }
+            // d(J^2)/dW2[k] = 2*J * sig'(z_k) * W1[j][i,k], summed over inputs and samples
+            var coeffTimesW1 = Engine.TensorMatMul(sobCoeff, _W1); // [j, s, k]
+            var sigDerivByVariable = Engine.Reshape(Engine.TensorPermute(sigDeriv, new[] { 1, 0, 2 }), new[] { d, rows, h });
+            gW2 = Engine.TensorAdd(gW2,
+                Engine.ReduceSum(Engine.TensorMultiply(coeffTimesW1, sigDerivByVariable), new[] { 1 }, false));
         }
+
+        var gW1 = Engine.TensorAdd(
+            Engine.Reshape(Engine.TensorPermute(gradByInput.Reshape(new[] { d, d, h }), new[] { 1, 0, 2 }), new[] { d, d, h }),
+            sobGradW1);
+        double totalLoss = NumOps.ToDouble(Engine.TensorSum(squaredError));
+        double totalSobolev = NumOps.ToDouble(Engine.TensorSum(sobolevSquares));
 
         totalLoss *= 0.5 / n;
 
-        // Acyclicity gradient
+        // Acyclicity gradient: dh/dW1[j][i,k] = augFactor * hGrad[i,j] * W1[j][i,k] / A[i,j],
+        // plus the L1 penalty, for i != j with A[i, j] >= 1e-12.
         var A = ExtractAdjacencyMatrix(d);
         var (hVal, hGrad) = ComputeNOTEARSConstraint(A);
         double augFactor = alpha + rho * hVal;
 
-        for (int j = 0; j < d; j++)
-        {
-            for (int i = 0; i < d; i++)
-            {
-                if (i == j) continue;
-                double aij = NumOps.ToDouble(A[i, j]);
-                if (aij < 1e-12) continue;
-
-                double dhda = augFactor * NumOps.ToDouble(hGrad[i, j]);
-                for (int k = 0; k < h; k++)
-                {
-                    double w1val = NumOps.ToDouble(_W1[j][i, k]);
-                    double grad = dhda * w1val / aij;
-                    // L1 penalty
-                    grad += Lambda1 * Math.Sign(w1val);
-                    gW1[j][i, k] = NumOps.Add(gW1[j][i, k], NumOps.FromDouble(grad));
-                }
-            }
-        }
+        var adjacency = Engine.TensorTranspose(Tensor<T>.FromMatrix(A)); // [j, i]
+        var dhda = Engine.TensorMultiplyScalar(Engine.TensorTranspose(Tensor<T>.FromMatrix(hGrad)), NumOps.FromDouble(augFactor));
+        var ones = Engine.TensorOnesLike(adjacency);
+        var usable = Engine.TensorMultiply(OffDiagonalMask(d),
+            Engine.TensorSubtract(ones, Engine.TensorLessThan(adjacency, NumOps.FromDouble(1e-12))));
+        var shape = new[] { d, d, h };
+        var usablePerUnit = Engine.TensorBroadcastTo(usable.Reshape(new[] { d, d, 1 }), shape);
+        var safeAdjacency = Engine.TensorWhere(usable, adjacency, ones);
+        var constraintGrad = Engine.TensorDivide(
+            Engine.TensorMultiply(Engine.TensorBroadcastTo(dhda.Reshape(new[] { d, d, 1 }), shape), _W1),
+            Engine.TensorBroadcastTo(safeAdjacency.Reshape(new[] { d, d, 1 }), shape));
+        var extra = Engine.TensorAdd(constraintGrad,
+            Engine.TensorMultiplyScalar(Engine.TensorSign(_W1), NumOps.FromDouble(Lambda1)));
+        gW1 = Engine.TensorAdd(gW1, Engine.TensorWhere(usablePerUnit, extra, Engine.TensorZerosLike(extra)));
 
         return (totalLoss + _sobolevWeight * totalSobolev / n, gW1, gB1, gW2, gB2);
     }
 
-    private void AdamUpdate(Matrix<T>[] gW1, Matrix<T>[] gB1, Matrix<T>[] gW2, T[] gB2,
-        int d, int h, int step)
+    private void AdamUpdate(Tensor<T> gW1, Tensor<T> gB1, Tensor<T> gW2, Tensor<T> gB2, int step)
     {
-        T bc1 = NumOps.FromDouble(1 - Math.Pow(ADAM_BETA1, step));
-        T bc2 = NumOps.FromDouble(1 - Math.Pow(ADAM_BETA2, step));
-        T beta1T = NumOps.FromDouble(ADAM_BETA1);
-        T beta2T = NumOps.FromDouble(ADAM_BETA2);
-        T oneMinusBeta1 = NumOps.FromDouble(1 - ADAM_BETA1);
-        T oneMinusBeta2 = NumOps.FromDouble(1 - ADAM_BETA2);
-        T lrT = NumOps.FromDouble(LEARNING_RATE);
-        T eps = NumOps.FromDouble(1e-8);
+        double bc1 = 1 - Math.Pow(ADAM_BETA1, step);
+        double bc2 = 1 - Math.Pow(ADAM_BETA2, step);
 
-        for (int j = 0; j < d; j++)
-        {
-            // W1 update
-            for (int i = 0; i < d; i++)
-            {
-                for (int k = 0; k < h; k++)
-                {
-                    T g = gW1[j][i, k];
-                    T m = NumOps.Add(NumOps.Multiply(beta1T, _mW1[j][i, k]),
-                                     NumOps.Multiply(oneMinusBeta1, g));
-                    T v = NumOps.Add(NumOps.Multiply(beta2T, _vW1[j][i, k]),
-                                     NumOps.Multiply(oneMinusBeta2, NumOps.Multiply(g, g)));
-                    _mW1[j][i, k] = m;
-                    _vW1[j][i, k] = v;
-                    T mHat = NumOps.Divide(m, bc1);
-                    T vHat = NumOps.Divide(v, bc2);
-                    _W1[j][i, k] = NumOps.Subtract(_W1[j][i, k],
-                        NumOps.Multiply(lrT, NumOps.Divide(mHat,
-                        NumOps.Add(NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(vHat))), eps))));
-                }
-            }
-
-            // b1 update
-            for (int k = 0; k < h; k++)
-            {
-                T g = gB1[j][0, k];
-                T m = NumOps.Add(NumOps.Multiply(beta1T, _mb1[j][0, k]),
-                                 NumOps.Multiply(oneMinusBeta1, g));
-                T v = NumOps.Add(NumOps.Multiply(beta2T, _vb1[j][0, k]),
-                                 NumOps.Multiply(oneMinusBeta2, NumOps.Multiply(g, g)));
-                _mb1[j][0, k] = m;
-                _vb1[j][0, k] = v;
-                T mHat = NumOps.Divide(m, bc1);
-                T vHat = NumOps.Divide(v, bc2);
-                _b1[j][0, k] = NumOps.Subtract(_b1[j][0, k],
-                    NumOps.Multiply(lrT, NumOps.Divide(mHat,
-                    NumOps.Add(NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(vHat))), eps))));
-            }
-
-            // W2 update
-            for (int k = 0; k < h; k++)
-            {
-                T g = gW2[j][0, k];
-                T m = NumOps.Add(NumOps.Multiply(beta1T, _mW2[j][0, k]),
-                                 NumOps.Multiply(oneMinusBeta1, g));
-                T v = NumOps.Add(NumOps.Multiply(beta2T, _vW2[j][0, k]),
-                                 NumOps.Multiply(oneMinusBeta2, NumOps.Multiply(g, g)));
-                _mW2[j][0, k] = m;
-                _vW2[j][0, k] = v;
-                T mHat = NumOps.Divide(m, bc1);
-                T vHat = NumOps.Divide(v, bc2);
-                _W2[j][0, k] = NumOps.Subtract(_W2[j][0, k],
-                    NumOps.Multiply(lrT, NumOps.Divide(mHat,
-                    NumOps.Add(NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(vHat))), eps))));
-            }
-
-            // b2 update
-            {
-                T g = gB2[j];
-                T m = NumOps.Add(NumOps.Multiply(beta1T, _mb2[j]),
-                                 NumOps.Multiply(oneMinusBeta1, g));
-                T v = NumOps.Add(NumOps.Multiply(beta2T, _vb2[j]),
-                                 NumOps.Multiply(oneMinusBeta2, NumOps.Multiply(g, g)));
-                _mb2[j] = m;
-                _vb2[j] = v;
-                T mHat = NumOps.Divide(m, bc1);
-                T vHat = NumOps.Divide(v, bc2);
-                _b2[j] = NumOps.Subtract(_b2[j],
-                    NumOps.Multiply(lrT, NumOps.Divide(mHat,
-                    NumOps.Add(NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(vHat))), eps))));
-            }
-        }
+        (_W1, _mW1, _vW1) = SobolevAdamStep(_W1, gW1, _mW1, _vW1, bc1, bc2);
+        (_b1, _mb1, _vb1) = SobolevAdamStep(_b1, gB1, _mb1, _vb1, bc1, bc2);
+        (_W2, _mW2, _vW2) = SobolevAdamStep(_W2, gW2, _mW2, _vW2, bc1, bc2);
+        (_b2, _mb2, _vb2) = SobolevAdamStep(_b2, gB2, _mb2, _vb2, bc1, bc2);
     }
 
-    private double ComputeGradientNorm(Matrix<T>[] gW1, Matrix<T>[] gB1, Matrix<T>[] gW2, T[] gB2,
-        int d, int h)
+    /// <summary>
+    /// p - lr * (mHat / (sqrt(vHat) + eps)) with m = b1*m + (1-b1)*g and v = b2*v + (1-b2)*g².
+    /// </summary>
+    private (Tensor<T> Parameter, Tensor<T> M, Tensor<T> V) SobolevAdamStep(
+        Tensor<T> parameter, Tensor<T> g, Tensor<T> m, Tensor<T> v, double bc1, double bc2)
     {
-        double norm = 0;
-        for (int j = 0; j < d; j++)
-        {
-            for (int i = 0; i < d; i++)
-                for (int k = 0; k < h; k++)
-                {
-                    double g = NumOps.ToDouble(gW1[j][i, k]);
-                    norm += g * g;
-                }
-            for (int k = 0; k < h; k++)
-            {
-                double g1 = NumOps.ToDouble(gB1[j][0, k]);
-                norm += g1 * g1;
-                double g2 = NumOps.ToDouble(gW2[j][0, k]);
-                norm += g2 * g2;
-            }
-            double gb = NumOps.ToDouble(gB2[j]);
-            norm += gb * gb;
-        }
+        var newM = Engine.TensorAdd(Engine.TensorMultiplyScalar(m, NumOps.FromDouble(ADAM_BETA1)),
+            Engine.TensorMultiplyScalar(g, NumOps.FromDouble(1 - ADAM_BETA1)));
+        var newV = Engine.TensorAdd(Engine.TensorMultiplyScalar(v, NumOps.FromDouble(ADAM_BETA2)),
+            Engine.TensorMultiplyScalar(Engine.TensorMultiply(g, g), NumOps.FromDouble(1 - ADAM_BETA2)));
+        var mHat = Engine.TensorDivideScalar(newM, NumOps.FromDouble(bc1));
+        var vHat = Engine.TensorDivideScalar(newV, NumOps.FromDouble(bc2));
+        var ratio = Engine.TensorDivide(mHat, Engine.TensorAddScalar(Engine.TensorSqrt(vHat), NumOps.FromDouble(1e-8)));
+        return (Engine.TensorSubtract(parameter, Engine.TensorMultiplyScalar(ratio, NumOps.FromDouble(LEARNING_RATE))),
+            newM, newV);
+    }
 
-        return Math.Sqrt(norm);
+    private double ComputeGradientNorm(Tensor<T> gW1, Tensor<T> gB1, Tensor<T> gW2, Tensor<T> gB2)
+    {
+        T sumOfSquares = NumOps.Add(
+            NumOps.Add(Engine.TensorSum(Engine.TensorSquare(gW1)), Engine.TensorSum(Engine.TensorSquare(gB1))),
+            NumOps.Add(Engine.TensorSum(Engine.TensorSquare(gW2)), Engine.TensorSum(Engine.TensorSquare(gB2))));
+        return Math.Sqrt(NumOps.ToDouble(sumOfSquares));
     }
 }

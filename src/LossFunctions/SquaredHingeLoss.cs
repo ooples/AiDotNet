@@ -48,19 +48,12 @@ public class SquaredHingeLoss<T> : LossFunctionBase<T>
     {
         ValidateVectorLengths(predicted, actual);
 
-        T loss = NumOps.Zero;
-        for (int i = 0; i < predicted.Length; i++)
-        {
-            // Calculate margin: 1 - y*f(x)
-            T margin = NumOps.Subtract(
-                NumOps.One,
-                NumOps.Multiply(actual[i], predicted[i])
-            );
+        // Calculate margin: 1 - y*f(x)
+        var margin = Engine.ScalarMinusTensor(NumOps.One, Engine.TensorMultiply(actual.AsTensor(), predicted.AsTensor()));
 
-            // Apply squared hinge: max(0, margin)²
-            T hingeLoss = MathHelper.Max(NumOps.Zero, margin);
-            loss = NumOps.Add(loss, NumOps.Power(hingeLoss, NumOps.FromDouble(2)));
-        }
+        // Apply squared hinge: max(0, margin)²
+        var hingeLoss = Engine.TensorMax(margin, NumOps.Zero);
+        T loss = Engine.TensorSum(Engine.TensorMultiply(hingeLoss, hingeLoss));
 
         return NumOps.Divide(loss, NumOps.FromDouble(predicted.Length));
     }

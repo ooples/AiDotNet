@@ -2,6 +2,7 @@ using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -982,27 +983,14 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             return _lastTransformationLoss;
         }
 
-        T sumSq = NumOps.Zero;
-        for (int b = 0; b < batchSize; b++)
+        // Identity affine: diag(1,1) on the rotation block, zero translation.
+        // Sum over the batch of the squared deviation of every parameter from its identity value.
+        T sumSq;
+        using (new NoGradScope<T>())
         {
-            // Identity affine: diag(1,1) on the rotation block, zero translation.
-            // For each parameter, sum of squared deviation from its identity value.
-            T d00 = NumOps.Subtract(theta[b, 0, 0], NumOps.One);
-            T d01 = theta[b, 0, 1];
-            T d02 = theta[b, 0, 2];
-            T d10 = theta[b, 1, 0];
-            T d11 = NumOps.Subtract(theta[b, 1, 1], NumOps.One);
-            T d12 = theta[b, 1, 2];
-
-            T sample =
-                NumOps.Add(NumOps.Multiply(d00, d00),
-                NumOps.Add(NumOps.Multiply(d01, d01),
-                NumOps.Add(NumOps.Multiply(d02, d02),
-                NumOps.Add(NumOps.Multiply(d10, d10),
-                NumOps.Add(NumOps.Multiply(d11, d11),
-                          NumOps.Multiply(d12, d12))))));
-
-            sumSq = NumOps.Add(sumSq, sample);
+            var identity = Engine.Reshape(Engine.TensorNarrow(Engine.TensorEye<T>(3), 0, 0, 2), new[] { 1, 2, 3 });
+            var deviation = Engine.TensorSubtract(theta, identity);
+            sumSq = Engine.TensorSum(Engine.TensorMultiply(deviation, deviation));
         }
 
         T meanSq = NumOps.Divide(sumSq, NumOps.FromDouble(batchSize));

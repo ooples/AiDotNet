@@ -67,6 +67,9 @@ public class PCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
         int effectiveN = n - MaxLag;
         if (effectiveN < 2 * d) return new Matrix<T>(d, d);
 
+        // One tensor copy of the data shared by every partial-correlation test.
+        var x = Tensor<T>.FromMatrix(data);
+
         // Step 1: PC condition selection — find candidate parents for each variable.
         // Uses the PC algorithm's iterative conditioning set size expansion:
         // test with conditioning set size 0, then 1, then 2, etc.
@@ -98,7 +101,7 @@ public class PCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
                     var condSet = new HashSet<(int var, int lag)>(otherParents.Take(condSize));
 
                     double partCorr = ComputeLaggedPartialCorrelation(
-                        data, j, pVar, pLag, condSet, effectiveN);
+                        x, j, pVar, pLag, condSet, effectiveN);
 
                     double pValue = FisherZTestPValue(partCorr, effectiveN, condSet.Count);
 
@@ -132,7 +135,7 @@ public class PCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
                     mciCondSet.Add(parent);
 
                 double partCorr = ComputeLaggedPartialCorrelation(
-                    data, j, pVar, pLag, mciCondSet, effectiveN);
+                    x, j, pVar, pLag, mciCondSet, effectiveN);
 
                 double pValue = FisherZTestPValue(partCorr, effectiveN, mciCondSet.Count);
 
@@ -150,11 +153,8 @@ public class PCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
         // Fallback: With deterministic or near-deterministic data, conditioning on
         // correlated parents makes all partial correlations zero, removing all edges.
         // In this case, use unconditional lagged cross-correlation to detect relationships.
-        bool hasEdges = false;
-        for (int i = 0; i < d && !hasEdges; i++)
-            for (int j = 0; j < d && !hasEdges; j++)
-                if (i != j && NumOps.GreaterThan(NumOps.Abs(W[i, j]), NumOps.Zero))
-                    hasEdges = true;
+        bool hasEdges = CausalTensorHelpers.AnyAbove(
+            Engine.TensorMultiply(Engine.TensorAbs(Tensor<T>.FromMatrix(W)), OffDiagonalMask(d)), NumOps.Zero);
 
         if (!hasEdges)
         {
@@ -169,23 +169,13 @@ public class PCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
                     for (int lag = 1; lag <= MaxLag; lag++)
                     {
                         // Build source(t-lag) and target(t) vectors
-                        var src = new Vector<T>(effectiveN);
-                        var tgt = new Vector<T>(effectiveN);
-                        for (int t = 0; t < effectiveN; t++)
-                        {
-                            src[t] = data[offset + t - lag, i];
-                            tgt[t] = data[offset + t, j];
-                        }
-                        double corr = Math.Abs(PearsonCorrelation(src, tgt, effectiveN));
+                        double corr = Math.Abs(SeriesCorrelation(
+                            LaggedSeries(x, i, lag, offset, effectiveN), LaggedSeries(x, j, 0, offset, effectiveN)));
                         if (corr > maxCorr) { maxCorr = corr; bestSource = i; bestTarget = j; }
 
                         // Also check reverse direction
-                        for (int t = 0; t < effectiveN; t++)
-                        {
-                            src[t] = data[offset + t - lag, j];
-                            tgt[t] = data[offset + t, i];
-                        }
-                        corr = Math.Abs(PearsonCorrelation(src, tgt, effectiveN));
+                        corr = Math.Abs(SeriesCorrelation(
+                            LaggedSeries(x, j, lag, offset, effectiveN), LaggedSeries(x, i, 0, offset, effectiveN)));
                         if (corr > maxCorr) { maxCorr = corr; bestSource = j; bestTarget = i; }
                     }
 
@@ -202,114 +192,32 @@ public class PCMCIAlgorithm<T> : TimeSeriesCausalBase<T>
     /// Computes partial correlation between target(t) and source(t-lag) conditioned on a set of
     /// lagged parent variables, using OLS residualization.
     /// </summary>
-    private double ComputeLaggedPartialCorrelation(Matrix<T> data,
+    private double ComputeLaggedPartialCorrelation(Tensor<T> x,
         int target, int source, int lag, HashSet<(int var, int lag)> condSet, int effectiveN)
     {
-        int n = data.Rows;
+        int n = x.Shape[0];
         int offset = n - effectiveN;
 
         // Build target and source vectors
-        var targetVals = new Vector<T>(effectiveN);
-        var sourceVals = new Vector<T>(effectiveN);
-
-        for (int t = 0; t < effectiveN; t++)
-        {
-            targetVals[t] = data[offset + t, target];
-            int sourceIdx = offset + t - lag;
-            // offset = MaxLag, lag <= MaxLag, so sourceIdx >= 0 always holds
-            sourceVals[t] = data[sourceIdx, source];
-        }
+        // offset = MaxLag, lag <= MaxLag, so the source rows offset + t - lag are always >= 0
+        var targetVals = LaggedSeries(x, target, 0, offset, effectiveN);
+        var sourceVals = LaggedSeries(x, source, lag, offset, effectiveN);
 
         if (condSet.Count == 0)
         {
             // No conditioning: compute simple Pearson correlation
-            return PearsonCorrelation(sourceVals, targetVals, effectiveN);
+            return SeriesCorrelation(sourceVals, targetVals);
         }
 
-        // Build conditioning matrix (each column is a lagged conditioning variable)
-        int numCond = condSet.Count;
-        var condMatrix = new Matrix<T>(effectiveN, numCond);
-        int col = 0;
-        foreach (var (cVar, cLag) in condSet)
-        {
-            for (int t = 0; t < effectiveN; t++)
-            {
-                int tIdx = offset + t - cLag;
-                condMatrix[t, col] = (tIdx >= 0 && tIdx < n) ? data[tIdx, cVar] : NumOps.Zero;
-            }
-            col++;
-        }
+        // Build conditioning matrix (each column is a lagged conditioning variable; rows outside the data are 0)
+        var condColumns = condSet.Select(c => LaggedSeries(x, c.var, c.lag, offset, effectiveN).Reshape(new[] { effectiveN, 1 }));
+        var condMatrix = Engine.TensorConcatenate(condColumns.ToArray(), 1);
 
         // Residualize both target and source on conditioning set via OLS
-        var residTarget = OLSResiduals(condMatrix, targetVals, effectiveN, numCond);
-        var residSource = OLSResiduals(condMatrix, sourceVals, effectiveN, numCond);
+        var residTarget = OlsResidualSeries(condMatrix, targetVals, false, 1e-10, MatrixDecompositionType.Lu);
+        var residSource = OlsResidualSeries(condMatrix, sourceVals, false, 1e-10, MatrixDecompositionType.Lu);
 
-        return PearsonCorrelation(residSource, residTarget, effectiveN);
-    }
-
-    /// <summary>
-    /// Computes OLS residuals: y - Z * (Z'Z)^{-1} Z'y using the normal equations.
-    /// </summary>
-    private Vector<T> OLSResiduals(Matrix<T> Z, Vector<T> y, int n, int p)
-    {
-        // Build normal equations: ZtZ * beta = Zty
-        var ZtZ = new Matrix<T>(p, p);
-        var Zty = new Vector<T>(p);
-
-        for (int i = 0; i < p; i++)
-        {
-            for (int j = i; j < p; j++)
-            {
-                T sum = NumOps.Zero;
-                for (int t = 0; t < n; t++)
-                    sum = NumOps.Add(sum, NumOps.Multiply(Z[t, i], Z[t, j]));
-                ZtZ[i, j] = sum;
-                ZtZ[j, i] = sum;
-            }
-
-            T sumZy = NumOps.Zero;
-            for (int t = 0; t < n; t++)
-                sumZy = NumOps.Add(sumZy, NumOps.Multiply(Z[t, i], y[t]));
-            Zty[i] = sumZy;
-        }
-
-        // Ridge for stability
-        T ridge = NumOps.FromDouble(1e-10);
-        for (int i = 0; i < p; i++)
-            ZtZ[i, i] = NumOps.Add(ZtZ[i, i], ridge);
-
-        var beta = MatrixSolutionHelper.SolveLinearSystem<T>(ZtZ, Zty, MatrixDecompositionType.Lu);
-
-        // Compute residuals: y - Z * beta
-        var residuals = new Vector<T>(n);
-        for (int t = 0; t < n; t++)
-        {
-            T pred = NumOps.Zero;
-            for (int j = 0; j < p; j++)
-                pred = NumOps.Add(pred, NumOps.Multiply(Z[t, j], beta[j]));
-            residuals[t] = NumOps.Subtract(y[t], pred);
-        }
-
-        return residuals;
-    }
-
-    /// <summary>
-    /// Computes Pearson correlation between two vectors.
-    /// </summary>
-    private double PearsonCorrelation(Vector<T> x, Vector<T> y, int n)
-    {
-        double mx = 0, my = 0;
-        for (int i = 0; i < n; i++) { mx += NumOps.ToDouble(x[i]); my += NumOps.ToDouble(y[i]); }
-        mx /= n; my /= n;
-
-        double sxy = 0, sxx = 0, syy = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double dx = NumOps.ToDouble(x[i]) - mx, dy = NumOps.ToDouble(y[i]) - my;
-            sxy += dx * dy; sxx += dx * dx; syy += dy * dy;
-        }
-
-        return (sxx > 1e-10 && syy > 1e-10) ? sxy / Math.Sqrt(sxx * syy) : 0;
+        return SeriesCorrelation(residSource, residTarget);
     }
 
     /// <summary>

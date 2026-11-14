@@ -275,6 +275,33 @@ public class BidiagonalDecompositionIntegrationTests
         }
     }
 
+    [Theory]
+    [InlineData(4, 4)]
+    [InlineData(5, 3)]
+    [InlineData(3, 5)]
+    public void BidiagonalDecomposition_Lanczos_Reconstruction(int rows, int cols)
+    {
+        // Golub-Kahan-Lanczos must start with beta_0 = 0 (no previous vector at j = 0) and
+        // use the previous Lanczos vectors in the recurrence, so A = U*B*V^T holds.
+        var A = CreateTestMatrix(rows, cols, seed: 7);
+
+        var bidiag = new BidiagonalDecomposition<double>(A, BidiagonalAlgorithmType.Lanczos);
+
+        var reconstructed = bidiag.U.Multiply(bidiag.B).Multiply(bidiag.V.Transpose());
+        double maxDiff = MaxAbsDiff(A, reconstructed);
+        Assert.True(maxDiff < LooseTolerance, $"Lanczos: A should equal U*B*V^T. Max difference: {maxDiff}");
+        Assert.True(IsBidiagonal(bidiag.B, Tolerance), "Lanczos: B should be upper bidiagonal");
+    }
+
+    [Fact]
+    public void BidiagonalDecomposition_Invert_NonSquare_ReportsSquareRequirement()
+    {
+        var bidiag = new BidiagonalDecomposition<double>(CreateTestMatrix(3, 2));
+
+        var ex = Assert.Throws<ArgumentException>(() => bidiag.Invert());
+        Assert.Contains("square", ex.Message);
+    }
+
     #endregion
 
     #region Rectangular Matrix Tests

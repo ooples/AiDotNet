@@ -149,12 +149,7 @@ public partial class BandSplitRNNEnhancer<T> : AudioNeuralNetworkBase<T>, IAudio
         // Apply spectral subtraction if noise profile is available
         if (_noiseProfile is not null)
         {
-            int len = Math.Min(features.Length, _noiseProfile.Length);
-            for (int i = 0; i < len; i++)
-            {
-                double val = NumOps.ToDouble(features[i]) - NumOps.ToDouble(_noiseProfile[i]) * 0.5;
-                features[i] = NumOps.FromDouble(Math.Max(0, val));
-            }
+            features = AudioEngineOps.SubtractScaledNoiseFloorPrefix(Engine, features, _noiseProfile, 0.5);
         }
         var enhanced = IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(features) : Predict(features);
         var result = PostprocessOutput(enhanced);
@@ -174,8 +169,7 @@ public partial class BandSplitRNNEnhancer<T> : AudioNeuralNetworkBase<T>, IAudio
             }
             else
             {
-                for (int i = 0; i < result.Length && i < noisyAudio.Length; i++)
-                    result[i] = NumOps.Add(NumOps.Multiply(s, result[i]), NumOps.Multiply(inv, noisyAudio[i]));
+                result = AudioEngineOps.BlendPrefix(Engine, result, noisyAudio, s, inv);
             }
         }
         return result;
