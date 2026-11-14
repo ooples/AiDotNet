@@ -393,6 +393,39 @@ public partial class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>
     }
 
     /// <summary>
+    /// Each sample's confidence, its largest class probability floored at zero, or zero for every sample when
+    /// the matrix has no class columns.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// The base classifier returned no matrix, or one whose row count is not <paramref name="sampleCount"/>: the
+    /// confidences would otherwise be paired with the wrong samples (or index past them) when pseudo-labels are
+    /// selected.
+    /// </exception>
+    internal static Vector<T> ConfidenceFromProbabilities(Matrix<T>? probabilityMatrix, int sampleCount)
+    {
+        if (probabilityMatrix is null)
+        {
+            throw new InvalidOperationException("The base classifier returned no probability matrix.");
+        }
+
+        if (probabilityMatrix.Rows != sampleCount)
+        {
+            throw new InvalidOperationException(
+                $"The base classifier returned probabilities for {probabilityMatrix.Rows} samples, expected {sampleCount}.");
+        }
+
+        if (probabilityMatrix.Columns == 0)
+        {
+            return new Vector<T>(sampleCount);
+        }
+
+        var engine = AiDotNetEngine.Current;
+        var probabilities = Tensor<T>.FromMatrix(probabilityMatrix);
+        return engine.TensorClampMin(
+            engine.ReduceMax(probabilities, new[] { 1 }, keepDims: false), MathHelper.GetNumericOperations<T>().Zero).ToVector();
+    }
+
+    /// <summary>
     /// Gets confidence scores for predictions.
     /// </summary>
     private Vector<T> GetConfidenceScores(Matrix<T> X, Vector<T> predictions)
@@ -402,14 +435,7 @@ public partial class SelfTrainingClassifier<T> : SemiSupervisedClassifierBase<T>
         // Try to get probabilities from the base classifier if it supports it
         if (_baseClassifier is IProbabilisticClassifier<T> probabilisticClassifier)
         {
-            // For each sample, confidence is the max probability (floored at zero).
-            var probabilities = Tensor<T>.FromMatrix(probabilisticClassifier.PredictProbabilities(X));
-            if (probabilities.Shape[1] == 0)
-            {
-                return new Vector<T>(X.Rows);
-            }
-
-            return engine.TensorClampMin(engine.ReduceMax(probabilities, new[] { 1 }, keepDims: false), NumOps.Zero).ToVector();
+            return ConfidenceFromProbabilities(probabilisticClassifier.PredictProbabilities(X), X.Rows);
         }
 
         // If no probabilities available, use a default confidence of 1.0 for all predictions

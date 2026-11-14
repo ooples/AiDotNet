@@ -264,19 +264,16 @@ public partial class NnUNet<T> : Common.MedicalSegmentationBase<T>
         if (volume.Rank <= 3)
             return SegmentSlice(volume);
         int inChannels = volume.Shape[0], depth = volume.Shape[1], h = volume.Shape[2], w = volume.Shape[3];
-        var sliceLabels = new List<Tensor<T>>(depth);
-        var sliceProbs = new List<Tensor<T>>(depth);
+        // Each slice's [H, W] labels and [numClasses, H, W] probabilities are copied into their depth slot as they
+        // are produced; the probability volume has one plane per output class (not per input channel).
+        var assembled = depth > 0 ? new Common.SliceVolumeAssembler<T>(depth) : null;
         var structAccum = new Dictionary<int, (double area, double confSum)>();
         for (int d = 0; d < depth; d++)
         {
             var slice = Engine.Reshape(
                 Engine.TensorSlice(volume, new[] { 0, d, 0, 0 }, new[] { inChannels, 1, h, w }), new[] { inChannels, h, w });
             var result = SegmentSlice(slice);
-            // Stack each slice's [H, W] labels and [numClasses, H, W] probabilities along a new depth axis.
-            // The probability volume has one plane per output class (not per input channel).
-            sliceLabels.Add(Engine.Reshape(result.Labels, new[] { 1, result.Labels.Shape[0], result.Labels.Shape[1] }));
-            var p = result.Probabilities;
-            sliceProbs.Add(Engine.Reshape(p, new[] { p.Shape[0], 1, p.Shape[1], p.Shape[2] }));
+            assembled?.Add(d, result.Labels, result.Probabilities);
             foreach (var s in result.Structures)
             {
                 if (structAccum.TryGetValue(s.ClassId, out var existing))
@@ -288,11 +285,9 @@ public partial class NnUNet<T> : Common.MedicalSegmentationBase<T>
         var structures = new List<SegmentedStructure>();
         foreach (var kvp in structAccum)
             structures.Add(new SegmentedStructure { ClassId = kvp.Key, Name = $"Class_{kvp.Key}", VolumeOrArea = kvp.Value.area, MeanConfidence = kvp.Value.confSum / kvp.Value.area });
-        if (depth == 0)
+        if (assembled is null)
             return new MedicalSegmentationResult<T> { Labels = new Tensor<T>([0, h, w]), Probabilities = new Tensor<T>([_numClasses, 0, h, w]), Structures = structures };
-        var volLabels = Engine.TensorConcatenate(sliceLabels.ToArray(), 0);
-        var volProbs = Engine.TensorConcatenate(sliceProbs.ToArray(), 1);
-        return new MedicalSegmentationResult<T> { Labels = volLabels, Probabilities = volProbs, Structures = structures };
+        return new MedicalSegmentationResult<T> { Labels = assembled.Labels, Probabilities = assembled.Probabilities, Structures = structures };
     }
     /// <inheritdoc/>
     public override MedicalSegmentationResult<T> SegmentFewShot(

@@ -139,6 +139,29 @@ public class ConcertoObjectiveReferenceTests
     }
 
     [Fact]
+    public void CrossModalLoss_NaNObservedDepth_RejectsThePoint()
+    {
+        // Pixel (0, 0) has no depth reading (NaN), so points 0 and 2 have no verified depth match and are not
+        // visible; patch 1 (point 1, cos 1) is the only matched patch. Testing "not (error >= tolerance)" accepted
+        // the NaN pixel and pooled points 0 and 2 into patch 0.
+        var unit = UnitCameraView();
+        var view = new ConcertoPairedView<double>
+        {
+            Extrinsics = unit.Extrinsics,
+            Intrinsics = unit.Intrinsics,
+            DepthMap = T(new[] { 2, 2 }, double.NaN, 1, 1, 1),
+            PatchGridSize = unit.PatchGridSize,
+            ImagePatchFeatures = unit.ImagePatchFeatures,
+        };
+        var features = T(new[] { 5, 2 }, 1, 0, 0, 1, 1, 2, 5, 5, 7, 7);
+        var views = new List<ConcertoPairedView<double>> { view };
+
+        Assert.Equal(0.0, ConcertoCrossModalObjective<double>.ComputeLoss(features, Coordinates(), views, 0.5), Tolerance);
+        var tape = ConcertoCrossModalObjective<double>.ComputeTapeLoss(features, Coordinates(), views, 0.5);
+        Assert.Equal(0.0, tape.ToArray()[0], Tolerance);
+    }
+
+    [Fact]
     public void CrossModalLoss_NoVisiblePoint_IsZero()
     {
         var features = T(new[] { 1, 2 }, 1, 0);
@@ -317,6 +340,41 @@ public class ConcertoObjectiveReferenceTests
         for (int i = 0; i < losses.Length; i++) losses[i] = (Half)10f;
 
         Assert.Equal(10.0, (double)(float)Concerto<Half>.MeanOfLosses(losses), 0.02);
+    }
+
+    [Fact]
+    public void PretrainEpochLoss_Half_LargeLossesAverageInDouble()
+    {
+        // 10000 samples at loss 30000: the mean is 30000. Pre-scaled by 1 / sqrt(count) each loss was still 300 and
+        // the Half sum (3e6) overflowed to infinity.
+        var losses = new Half[10000];
+        for (int i = 0; i < losses.Length; i++) losses[i] = (Half)30000f;
+
+        Assert.Equal(30000.0, (double)(float)Concerto<Half>.MeanOfLosses(losses));
+    }
+
+    [Fact]
+    public void IntraModalLoss_Half_LargePerPointLossAveragesInDouble()
+    {
+        // 10000 points whose teacher picks prototype 0 while the student prefers prototype 1 by 700 nats (logits
+        // 0 and 70 at temperature 0.1): H = 700 per point. Pre-scaled by 1 / sqrt(10000) the Half sum was still
+        // 70000 and overflowed; the mean is 700.
+        const int points = 10000;
+        var studentValues = new Half[points * 2];
+        var teacherValues = new Half[points * 2];
+        for (int p = 0; p < points; p++)
+        {
+            studentValues[2 * p] = (Half)0f;
+            studentValues[2 * p + 1] = (Half)70f;
+            teacherValues[2 * p] = (Half)1f;
+            teacherValues[2 * p + 1] = (Half)0f;
+        }
+
+        Half loss = ConcertoIntraModalObjective<Half>.ComputeLoss(
+            new Tensor<Half>(new[] { points, 2 }, new Vector<Half>(studentValues)),
+            new Tensor<Half>(new[] { points, 2 }, new Vector<Half>(teacherValues)));
+
+        Assert.Equal(700.0, (double)(float)loss, 1.0);
     }
 
     [Fact]

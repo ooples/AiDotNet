@@ -24,6 +24,9 @@ public sealed class EGarchModel<T> : ClassicalVolatilityModelBase<T>
     /// <summary>arch's cap on ln σ² (ln of the largest double, less 0.1).</summary>
     private const double LogVarianceMax = 709.682712;
 
+    /// <summary>ln(1e-18): the floor <see cref="NextVariance"/> puts on the previous variance.</summary>
+    private const double LogVarianceMin = -41.446531673892821;
+
     /// <inheritdoc/>
     public override string ModelName => "EGARCH(1,1)";
 
@@ -85,6 +88,11 @@ public sealed class EGarchModel<T> : ClassicalVolatilityModelBase<T>
     /// recurrence, so the path is the fixed point of that map, each sweep a whole-tensor evaluation.
     /// The recursion is causal, so sweep k fixes the first k entries exactly and at most n + 1 sweeps are
     /// needed; in practice the map is a contraction and it settles in a few.</para>
+    /// <para>As in <see cref="NextVariance"/>, the previous variance enters each step floored at 1e-18, in both
+    /// the standardized shock and the β term. The floor keeps z = ε·exp(−ln σ²/2) finite: without it a very
+    /// negative ln σ² (or a −∞ backcast from an all-zero residual series) overflowed exp, and 0·∞ made the path
+    /// NaN. The β-term floor is carried in the drive as β·(max(ln σ²_(t-1), ln 1e-18) − ln σ²_(t-1)), which is
+    /// zero whenever the floor is inactive, so the fixed point is the floored causal recursion.</para>
     /// </remarks>
     protected override Tensor<T> VariancePath(Tensor<T> residuals, T backcast, Vector<T> p)
     {
@@ -94,6 +102,8 @@ public sealed class EGarchModel<T> : ClassicalVolatilityModelBase<T>
         T gamma = p[2];
         T beta = p[3];
         T cap = NumOps.FromDouble(LogVarianceMax);
+        T floor = NumOps.FromDouble(LogVarianceMin);
+        T start = NumOps.GreaterThan(backcast, floor) ? backcast : floor;
         T minusHalf = NumOps.FromDouble(-0.5);
         T centre = NumOps.Multiply(alpha, NumOps.FromDouble(ExpAbsZ));
         int n = residuals.Length;
@@ -101,18 +111,22 @@ public sealed class EGarchModel<T> : ClassicalVolatilityModelBase<T>
         // Sweep 0: no shocks. drive_0 = ω always (no pre-sample shock); drive_t = ω + shock_(t-1).
         var omegaDrive = new Tensor<T>(new[] { n });
         engine.TensorFill(omegaDrive, omega);
-        var logVariance = engine.TensorClampMax(LinearRecurrence(omegaDrive, beta, backcast), cap);
+        var logVariance = engine.TensorClampMax(LinearRecurrence(omegaDrive, beta, start), cap);
         for (int sweep = 0; sweep <= n; sweep++)
         {
-            var z = engine.TensorMultiply(residuals, engine.TensorExp(engine.TensorMultiplyScalar(logVariance, minusHalf)));
+            var floored = engine.TensorClampMin(logVariance, floor);
+            var z = engine.TensorMultiply(residuals, engine.TensorExp(engine.TensorMultiplyScalar(floored, minusHalf)));
             var shock = engine.TensorSubtractScalar(engine.TensorAdd(
                 engine.TensorMultiplyScalar(engine.TensorAbs(z), alpha), engine.TensorMultiplyScalar(z, gamma)), centre);
-            var drive = engine.TensorAddScalar(Lagged(shock, NumOps.Zero), omega);
-            var next = engine.TensorClampMax(LinearRecurrence(drive, beta, backcast), cap);
-            bool settled = HasSettled(logVariance, next);
+            var lift = engine.TensorMultiplyScalar(engine.TensorSubtract(floored, logVariance), beta);
+            var drive = engine.TensorAddScalar(Lagged(engine.TensorAdd(shock, lift), NumOps.Zero), omega);
+            var next = engine.TensorClampMax(LinearRecurrence(drive, beta, start), cap);
+            bool settled = HasSettled(logVariance, next, out bool nonFinite);
             logVariance = next;
-            if (settled)
+            if (settled || nonFinite)
             {
+                // A NaN path never settles and further sweeps cannot repair it; it is returned as is, so the
+                // likelihood rejects these parameters.
                 break;
             }
         }
@@ -121,13 +135,15 @@ public sealed class EGarchModel<T> : ClassicalVolatilityModelBase<T>
     }
 
     /// <summary>True once a sweep changes no entry by more than 1e-13 relative to the path's scale.</summary>
-    private bool HasSettled(Tensor<T> previous, Tensor<T> next)
+    /// <remarks>A NaN change is not convergence: it is reported through <paramref name="nonFinite"/>.</remarks>
+    private bool HasSettled(Tensor<T> previous, Tensor<T> next, out bool nonFinite)
     {
         var engine = AiDotNetEngine.Current;
         T change = engine.TensorMaxValue(engine.TensorAbs(engine.TensorSubtract(next, previous)));
         T scale = engine.TensorMaxValue(engine.TensorAbs(next));
         T tolerance = NumOps.Multiply(NumOps.FromDouble(1e-13), Garch11Model<T>.Floor(scale, 1.0));
-        return NumOps.LessThanOrEquals(change, tolerance) || NumOps.IsNaN(change);
+        nonFinite = NumOps.IsNaN(change);
+        return !nonFinite && NumOps.LessThanOrEquals(change, tolerance);
     }
 
     /// <inheritdoc/>

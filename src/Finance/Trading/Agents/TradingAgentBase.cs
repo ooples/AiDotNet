@@ -740,11 +740,16 @@ public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBa
     /// <para>
     /// This is the log-probability of the behaviour policy an agent with a deterministic actor head plus
     /// Gaussian exploration actually follows, which is exactly the <c>log pi(a|s)</c> the SAC soft value
-    /// target needs. Computed in <typeparamref name="T"/> with engine operations; only the constant normalizer
-    /// <c>n/2 * log(2 pi)</c> is formed in double.
+    /// target needs. Computed with engine operations in double and rounded to <typeparamref name="T"/> once: in
+    /// Half <c>exp(logStd)</c> underflows to zero below about -17.3 (inside SAC's [-20, 2] log-std range), and
+    /// dividing by it gave NaN or infinity where the density is finite (about 19.08 at logStd = -20).
     /// </para>
     /// </remarks>
     protected T GaussianLogProbability(Vector<T> action, Vector<T> mean, Vector<T> logStds)
+        => GaussianLogDensity(action, mean, logStds);
+
+    /// <summary>The computation behind <see cref="GaussianLogProbability"/>, which holds no agent state.</summary>
+    internal static T GaussianLogDensity(Vector<T> action, Vector<T> mean, Vector<T> logStds)
     {
         if (action is null) throw new ArgumentNullException(nameof(action));
         if (mean is null) throw new ArgumentNullException(nameof(mean));
@@ -752,12 +757,13 @@ public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBa
 
         // sum_i -0.5 * z_i^2 - logStd_i - 0.5 * log(2 pi), z = (a - mu) / exp(logStd).
         var engine = AiDotNetEngine.Current;
-        var logStd = Tensor<T>.FromVector(logStds);
-        var z = engine.TensorDivide(
-            engine.TensorSubtract(Tensor<T>.FromVector(action), Tensor<T>.FromVector(mean)), engine.TensorExp(logStd));
-        T quadratic = NumOps.Multiply(NumOps.FromDouble(-0.5), engine.TensorSumOfSquares(z));
-        T normalizer = NumOps.FromDouble(0.5 * Math.Log(2.0 * Math.PI) * action.Length);
-        return NumOps.Subtract(NumOps.Subtract(quadratic, engine.TensorSum(logStd)), normalizer);
+        var logStd = Tensor<T>.FromVector(logStds).Cast<double>();
+        var z = engine.TensorMultiply(
+            engine.TensorSubtract(Tensor<T>.FromVector(action).Cast<double>(), Tensor<T>.FromVector(mean).Cast<double>()),
+            engine.TensorExp(engine.TensorNegate(logStd)));
+        double quadratic = -0.5 * engine.TensorSum(engine.TensorMultiply(z, z));
+        double normalizer = 0.5 * Math.Log(2.0 * Math.PI) * action.Length;
+        return MathHelper.GetNumericOperations<T>().FromDouble(quadratic - engine.TensorSum(logStd) - normalizer);
     }
 
     /// <summary>

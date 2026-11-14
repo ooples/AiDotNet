@@ -159,6 +159,31 @@ public class TrackingReferenceTests
         Assert.Equal(1, track.TrackId);
     }
 
+    [Fact]
+    public void ByteTrack_RemovedTrackIds_AreDroppedOnceTheTrackLeavesTheLists()
+    {
+        // MaxAge 2: the track is lost from frame 2 (end frame 1) and removed at frame 4, when 4 - 1 > 2. As in
+        // byte_tracker.py it stays in the lost list for that frame and is subtracted in frame 5. After that its id
+        // can never be seen again, so it must not be kept: the set used to grow with every removal until Reset.
+        var tracker = new ByteTrack<double>(new TrackingOptions<double> { MaxAge = 2 });
+        var removedIds = typeof(ByteTrack<double>).GetField("_removedTrackIds",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("_removedTrackIds not found.");
+
+        Assert.Single(tracker.Update(new List<Detection<double>> { Det(0, 0, 10, 10, 0.9) }).Tracks);
+        for (int frame = 2; frame <= 4; frame++)
+        {
+            tracker.Update(new List<Detection<double>>());
+        }
+
+        Assert.Single((HashSet<int>)(removedIds.GetValue(tracker) ?? throw new InvalidOperationException()));
+
+        tracker.Update(new List<Detection<double>>());
+        tracker.Update(new List<Detection<double>>());
+
+        Assert.Empty((HashSet<int>)(removedIds.GetValue(tracker) ?? throw new InvalidOperationException()));
+    }
+
     // ---------------- SORT ----------------
 
     [Fact]

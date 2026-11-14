@@ -193,23 +193,28 @@ public class SORT<T> : ObjectTrackerBase<T>
 /// R = diag(1, 1, 10, 10), P0 = diag(10, 10, 10, 10, 1e4, 1e4, 1e4) and
 /// Q = diag(1, 1, 1, 1, 0.01, 0.01, 1e-4). The update is filterpy's, with the Joseph-form covariance
 /// <c>(I - KH) P (I - KH)^T + K R K^T</c>.</para>
+/// <para>The filter state and covariance are held in double whatever <typeparamref name="T"/> is; boxes are
+/// converted on the way in and rounded to <typeparamref name="T"/> once on the way out. The state carries the
+/// box AREA s = w * h, which passes Half's 65504 for any box larger than about 256 x 256 (and the covariance
+/// starts at 1e4 and grows with s), so a Half state turned an ordinary 300 x 300 box into an infinite area and
+/// a NaN box. filterpy's reference filter runs in float64.</para>
 /// </remarks>
 internal sealed class KalmanTrack<T>
 {
     private static readonly INumericOperations<T> NumOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
     private readonly IEngine _engine = AiDotNetEngine.Current;
     private readonly int _trackId;
-    private readonly Tensor<T> _f;
-    private readonly Tensor<T> _fT;
-    private readonly Tensor<T> _h;
-    private readonly Tensor<T> _hT;
-    private readonly Tensor<T> _q;
-    private readonly Tensor<T> _r;
-    private readonly Tensor<T> _identity;
+    private readonly Tensor<double> _f;
+    private readonly Tensor<double> _fT;
+    private readonly Tensor<double> _h;
+    private readonly Tensor<double> _hT;
+    private readonly Tensor<double> _q;
+    private readonly Tensor<double> _r;
+    private readonly Tensor<double> _identity;
     private int _classId;
     private T _confidence;
-    private Tensor<T> _state;
-    private Tensor<T> _covariance;
+    private Tensor<double> _state;
+    private Tensor<double> _covariance;
 
     public int TimeSinceUpdate { get; private set; }
     public int Hits { get; private set; }
@@ -222,31 +227,25 @@ internal sealed class KalmanTrack<T>
         _classId = detection.ClassId;
         _confidence = detection.Confidence;
 
-        T one = NumOps.One;
-        T ten = NumOps.FromDouble(10.0);
-        T big = NumOps.FromDouble(1e4);
-        T small = NumOps.FromDouble(0.01);
-        T tiny = NumOps.FromDouble(1e-4);
-
-        _identity = _engine.TensorEye<T>(7);
-        var shift = _engine.TensorSetSlice(new Tensor<T>(new[] { 7, 7 }), _engine.TensorEye<T>(3), new[] { 0, 4 });
+        _identity = _engine.TensorEye<double>(7);
+        var shift = _engine.TensorSetSlice(new Tensor<double>(new[] { 7, 7 }), _engine.TensorEye<double>(3), new[] { 0, 4 });
         _f = _engine.TensorAdd(_identity, shift);
         _fT = _engine.TensorTranspose(_f);
         _h = _engine.TensorSlice(_identity, new[] { 0, 0 }, new[] { 4, 7 });
         _hT = _engine.TensorTranspose(_h);
-        _r = _engine.TensorDiag(new Tensor<T>(new[] { one, one, ten, ten }, new[] { 4 }));
-        _q = _engine.TensorDiag(new Tensor<T>(new[] { one, one, one, one, small, small, tiny }, new[] { 7 }));
-        _covariance = _engine.TensorDiag(new Tensor<T>(new[] { ten, ten, ten, ten, big, big, big }, new[] { 7 }));
-        _state = _engine.TensorConcatenate(new[] { BoxToMeasurement(detection.Box), new Tensor<T>(new[] { 3, 1 }) }, 0);
+        _r = _engine.TensorDiag(new Tensor<double>(new[] { 1.0, 1.0, 10.0, 10.0 }, new[] { 4 }));
+        _q = _engine.TensorDiag(new Tensor<double>(new[] { 1.0, 1.0, 1.0, 1.0, 0.01, 0.01, 1e-4 }, new[] { 7 }));
+        _covariance = _engine.TensorDiag(new Tensor<double>(new[] { 10.0, 10.0, 10.0, 10.0, 1e4, 1e4, 1e4 }, new[] { 7 }));
+        _state = _engine.TensorConcatenate(new[] { BoxToMeasurement(detection.Box), new Tensor<double>(new[] { 3, 1 }) }, 0);
     }
 
     /// <summary>Advances the state one frame (<c>KalmanBoxTracker.predict</c>).</summary>
     public void Predict()
     {
         // Keep the predicted area non-negative: drop the area velocity when it would make s <= 0.
-        if (NumOps.LessThanOrEquals(NumOps.Add(_state[6, 0], _state[2, 0]), NumOps.Zero))
+        if (_state[6, 0] + _state[2, 0] <= 0.0)
         {
-            _state[6, 0] = NumOps.Zero;
+            _state[6, 0] = 0.0;
         }
 
         _state = _engine.TensorMatMul(_f, _state);
@@ -281,7 +280,7 @@ internal sealed class KalmanTrack<T>
         var innovation = _engine.TensorSubtract(measurement, _engine.TensorMatMul(_h, _state));
         var pht = _engine.TensorMatMul(_covariance, _hT);
         var s = _engine.TensorAdd(_engine.TensorMatMul(_h, pht), _r);
-        var gain = _engine.TensorMatMul(pht, LinalgDispatch<T>.Inv(s));
+        var gain = _engine.TensorMatMul(pht, LinalgDispatch<double>.Inv(s));
 
         _state = _engine.TensorAdd(_state, _engine.TensorMatMul(gain, innovation));
         var iKh = _engine.TensorSubtract(_identity, _engine.TensorMatMul(gain, _h));
@@ -290,17 +289,16 @@ internal sealed class KalmanTrack<T>
             _engine.TensorMatMul(_engine.TensorMatMul(gain, _r), _engine.TensorTranspose(gain)));
     }
 
-    /// <summary>The current state as an (x1, y1, x2, y2) box (<c>convert_x_to_bbox</c>).</summary>
+    /// <summary>The current state as an (x1, y1, x2, y2) box (<c>convert_x_to_bbox</c>), rounded to T once.</summary>
     public BoundingBox<T> GetPredictedBox()
     {
-        T half = NumOps.FromDouble(0.5);
-        T w = NumOps.Sqrt(NumOps.Multiply(_state[2, 0], _state[3, 0]));
-        T h = NumOps.Divide(_state[2, 0], w);
-        T halfW = NumOps.Multiply(w, half);
-        T halfH = NumOps.Multiply(h, half);
+        double w = Math.Sqrt(_state[2, 0] * _state[3, 0]);
+        double h = _state[2, 0] / w;
+        double cx = _state[0, 0];
+        double cy = _state[1, 0];
         return new BoundingBox<T>(
-            NumOps.Subtract(_state[0, 0], halfW), NumOps.Subtract(_state[1, 0], halfH),
-            NumOps.Add(_state[0, 0], halfW), NumOps.Add(_state[1, 0], halfH),
+            NumOps.FromDouble(cx - (w * 0.5)), NumOps.FromDouble(cy - (h * 0.5)),
+            NumOps.FromDouble(cx + (w * 0.5)), NumOps.FromDouble(cy + (h * 0.5)),
             BoundingBoxFormat.XYXY);
     }
 
@@ -308,8 +306,8 @@ internal sealed class KalmanTrack<T>
     {
         return new Track<T>(_trackId, GetPredictedBox(), _classId, _confidence)
         {
-            VelocityX = _state[4, 0],
-            VelocityY = _state[5, 0],
+            VelocityX = NumOps.FromDouble(_state[4, 0]),
+            VelocityY = NumOps.FromDouble(_state[5, 0]),
             TimeSinceUpdate = TimeSinceUpdate,
             Age = Age,
             Hits = Hits,
@@ -317,16 +315,15 @@ internal sealed class KalmanTrack<T>
         };
     }
 
-    /// <summary>(x1, y1, x2, y2) to the <c>[4, 1]</c> measurement (u, v, s, r) (<c>convert_bbox_to_z</c>);
-    /// a zero-height box gets aspect ratio 1 instead of a division by zero.</summary>
-    private static Tensor<T> BoxToMeasurement(BoundingBox<T> box)
+    /// <summary>(x1, y1, x2, y2) to the <c>[4, 1]</c> measurement (u, v, s, r) in double
+    /// (<c>convert_bbox_to_z</c>); a zero-height box gets aspect ratio 1 instead of a division by zero.</summary>
+    private static Tensor<double> BoxToMeasurement(BoundingBox<T> box)
     {
-        T half = NumOps.FromDouble(0.5);
-        T w = NumOps.Subtract(box.X2, box.X1);
-        T h = NumOps.Subtract(box.Y2, box.Y1);
-        T cx = NumOps.Add(box.X1, NumOps.Multiply(w, half));
-        T cy = NumOps.Add(box.Y1, NumOps.Multiply(h, half));
-        T r = NumOps.GreaterThan(h, NumOps.Zero) ? NumOps.Divide(w, h) : NumOps.One;
-        return new Tensor<T>(new[] { cx, cy, NumOps.Multiply(w, h), r }, new[] { 4, 1 });
+        double x1 = NumOps.ToDouble(box.X1);
+        double y1 = NumOps.ToDouble(box.Y1);
+        double w = NumOps.ToDouble(box.X2) - x1;
+        double h = NumOps.ToDouble(box.Y2) - y1;
+        double r = h > 0.0 ? w / h : 1.0;
+        return new Tensor<double>(new[] { x1 + (w * 0.5), y1 + (h * 0.5), w * h, r }, new[] { 4, 1 });
     }
 }

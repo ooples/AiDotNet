@@ -51,6 +51,10 @@ internal static class TrackingAssociation<T>
     }
 
     /// <summary>Pairwise IoU <c>[N, M]</c> between two (x1, y1, x2, y2) box tensors.</summary>
+    /// <remarks>
+    /// The areas and the intersection are formed in double and only the IoU, a value in [0, 1], is rounded to
+    /// T: in Half the area of any box larger than about 256 x 256 passes 65504, and inf / inf made the IoU NaN.
+    /// </remarks>
     internal static Tensor<T> IouMatrix(Tensor<T> boxesA, Tensor<T> boxesB)
     {
         int n = boxesA.Shape[0];
@@ -58,7 +62,7 @@ internal static class TrackingAssociation<T>
         if (n == 0 || m == 0)
             return new Tensor<T>(new[] { n, m });
 
-        return AiDotNetEngine.Current.BoxIou(boxesA, boxesB);
+        return AiDotNetEngine.Current.BoxIou(boxesA.Cast<double>(), boxesB.Cast<double>()).Cast<T>();
     }
 
     /// <summary>

@@ -1,4 +1,5 @@
 using AiDotNet.Augmentation.Image;
+using AiDotNet.ComputerVision.Detection.ObjectDetection;
 using AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;
 using AiDotNet.ComputerVision.Tracking;
 using AiDotNet.ComputerVision.Visualization;
@@ -86,5 +87,56 @@ public class TrackingElementTypeTests
 
         Assert.Equal(count - 1, ids[0, 0]);
         Assert.Equal(-1, ids[0, 1]);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task Sort_Half_BoxAreaPastHalfMaxKeepsTheTrackedBox()
+    {
+        await Task.CompletedTask;
+
+        // A 300 x 300 box has area 90000, past Half's 65504. Held in a Half Kalman state the area was infinite, the
+        // predicted box NaN, the track dropped and the box re-created as track 2. With the filter state in double
+        // the same detection twice keeps track 1 at (0, 0, 300, 300).
+        var tracker = new SORT<Half>(new TrackingOptions<Half> { MinHits = 1 });
+        Detection<Half> Box() => new(
+            new BoundingBox<Half>((Half)0, (Half)0, (Half)300, (Half)300, BoundingBoxFormat.XYXY), 0, (Half)0.9);
+
+        tracker.Update(new List<Detection<Half>> { Box() });
+        var track = Assert.Single(tracker.Update(new List<Detection<Half>> { Box() }).Tracks);
+
+        Assert.Equal(1, track.TrackId);
+        Assert.Equal(0.0, (double)track.Box.X1, 0.5);
+        Assert.Equal(0.0, (double)track.Box.Y1, 0.5);
+        Assert.Equal(300.0, (double)track.Box.X2, 0.5);
+        Assert.Equal(300.0, (double)track.Box.Y2, 0.5);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task IouMatrix_Half_LargeBoxesGiveAFiniteIou()
+    {
+        await Task.CompletedTask;
+
+        // Boxes of 300 x 300 overlapping by half: IoU = 45000 / 135000 = 1/3. The Half areas were infinite and the
+        // IoU NaN.
+        var a = new Tensor<Half>(new[] { (Half)0, (Half)0, (Half)300, (Half)300 }, new[] { 1, 4 });
+        var b = new Tensor<Half>(new[] { (Half)150, (Half)0, (Half)450, (Half)300 }, new[] { 1, 4 });
+
+        var iou = TrackingAssociation<Half>.IouMatrix(a, b);
+
+        Assert.Equal((double)(Half)(1.0 / 3.0), (double)iou[0, 0]);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task DeepSortNormalizeRows_ZeroDescriptorStaysZero()
+    {
+        await Task.CompletedTask;
+
+        // A black crop gives a zero descriptor: 0 / 0 made its cosine costs NaN and the assignment solver threw.
+        // The zero row stays zero (cosine distance 1 to anything); other rows are unit length.
+        var rows = new Tensor<float>(new[] { 0f, 0f, 3f, 4f }, new[] { 2, 2 });
+
+        var normalized = DeepSORT<float>.NormalizeRows(rows);
+
+        Assert.Equal(new[] { 0f, 0f, 0.6f, 0.8f }, normalized.ToArray());
     }
 }

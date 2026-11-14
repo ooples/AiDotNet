@@ -205,9 +205,16 @@ public abstract class ClassicalVolatilityModelBase<T> :
     }
 
     /// <summary>Negative Gaussian log-likelihood of the return series under the conditional-variance path.</summary>
+    /// <remarks>
+    /// The likelihood is accumulated in double and rounded to <typeparamref name="T"/> once. In Half the constant
+    /// term alone, 0.5 * log(2 pi) * n, passes 65504 at n of about 36000, and the log-determinant and quadratic sums
+    /// overflow the same way, which rejected likelihoods whose total is finite. The rejection penalty is 1e12, or
+    /// the largest finite <typeparamref name="T"/> when that is smaller (1e12 is infinite in Half).
+    /// </remarks>
     internal T NegLogLikelihood(Vector<T> natural, Tensor<T> returns)
     {
-        T invalid = NumOps.FromDouble(1e12);
+        double invalidValue = Math.Min(1e12, NumOps.ToDouble(NumOps.MaxValue));
+        T invalid = NumOps.FromDouble(invalidValue);
         var residuals = AiDotNetEngine.Current.TensorSubtractScalar(returns, natural[0]);
         var volatility = VolatilityParameters(natural);
         var sigma2 = VariancePath(residuals, StartingBackcast(returns), volatility);
@@ -220,11 +227,16 @@ public abstract class ClassicalVolatilityModelBase<T> :
         }
 
         // 0.5 * sum(log 2π + log σ² + e² / σ²)
-        T logDet = engine.TensorSum(engine.TensorLog(sigma2));
-        T quadratic = engine.TensorSum(engine.TensorDivide(engine.TensorSquare(residuals), sigma2));
-        T constant = NumOps.FromDouble(1.8378770664093453 * residuals.Length);
-        T nll = NumOps.Multiply(NumOps.FromDouble(0.5), NumOps.Add(constant, NumOps.Add(logDet, quadratic)));
-        return NumOps.IsNaN(nll) || NumOps.IsInfinity(nll) ? invalid : nll;
+        var wideResiduals = residuals.Cast<double>();
+        var wideVariance = sigma2.Cast<double>();
+        double logDet = engine.TensorSum(engine.TensorLog(wideVariance));
+        double quadratic = engine.TensorSum(engine.TensorDivide(
+            engine.TensorMultiply(wideResiduals, wideResiduals), wideVariance));
+        double constant = 1.8378770664093453 * residuals.Length;
+        double nll = 0.5 * (constant + logDet + quadratic);
+        return double.IsNaN(nll) || double.IsInfinity(nll) || Math.Abs(nll) >= invalidValue
+            ? invalid
+            : NumOps.FromDouble(nll);
     }
 
     /// <summary>One-step-ahead conditional VARIANCE forecast given the observed return history.</summary>
@@ -264,7 +276,8 @@ public abstract class ClassicalVolatilityModelBase<T> :
         int steps = Math.Max(1, horizon);
 
         // Multi-step variance mean-reverts toward the unconditional variance:
-        // v_h = uncond + (v_1 - uncond) * persistence^h.
+        // v_h = uncond + (v_1 - uncond) * persistence^h, evaluated as v_1 + (1 - persistence^h) * (uncond - v_1) so
+        // the first horizon is v_1 exactly: subtracting and re-adding a large uncond rounded v_1 away in float.
         var persistence = new Tensor<T>(new[] { steps });
         engine.TensorFill(persistence, MeanReversionSpeed(volatility));
         var decay = engine.TensorConcatenate(new[]
@@ -272,7 +285,8 @@ public abstract class ClassicalVolatilityModelBase<T> :
             new Tensor<T>(new[] { NumOps.One }, new[] { 1 }),
             engine.TensorSlice(engine.TensorCumProd(persistence, 0), new[] { 0 }, new[] { steps - 1 })
         }, 0);
-        var variance = engine.TensorAddScalar(engine.TensorMultiplyScalar(decay, NumOps.Subtract(var1, uncond)), uncond);
+        var variance = engine.TensorAddScalar(
+            engine.TensorMultiplyScalar(engine.ScalarMinusTensor(NumOps.One, decay), NumOps.Subtract(uncond, var1)), var1);
         return engine.TensorSqrt(engine.TensorClampMin(variance, NumOps.Zero));
     }
 
@@ -379,9 +393,22 @@ public abstract class ClassicalVolatilityModelBase<T> :
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// A stored vector must hold exactly <see cref="ParameterCount"/> values (mu first) or none (an unfitted
+    /// model). Any other length is rejected: checkpoints written before the constant mean was added store only the
+    /// volatility parameters (for GARCH(1,1) <c>[omega, alpha, beta]</c>), and reading them in the current layout
+    /// would take omega as mu and index past the end of the vector.
+    /// </remarks>
     public void Deserialize(byte[] data)
     {
         var p = SerializationHelper<T>.DeserializeVector(data);
+        if (p.Length != 0 && p.Length != ParameterCount)
+        {
+            throw new InvalidOperationException(
+                $"{ModelName} stores {ParameterCount} parameters (mu first), but the data holds {p.Length}. " +
+                "Checkpoints saved before the constant mean was added cannot be loaded; refit the model.");
+        }
+
         Parameters = p.Length > 0 ? p : null;
         if (Parameters is not null) FittedUnconditionalVariance = UnconditionalVariance(VolatilityParameters(Parameters));
     }

@@ -73,14 +73,18 @@ public static class StockformerMultiTaskLoss<T>
 
         // A NaN error is NOT skipped. The mask exists to drop missing LABELS, and an entry with a label
         // keeps its error: NaN there means the PREDICTION diverged, and the loss must report it.
-        var error = engine.TensorAbs(engine.TensorSubtract(Tensor<T>.FromVector(predictions), label));
+        // The errors and their sum are formed in double and only the mean is rounded to T, as master accumulated:
+        // in Half 128 errors of 1000 sum to 128000, past 65504, and no division afterwards recovers the mean.
+        var error = engine.TensorAbs(engine.TensorSubtract(
+            Tensor<T>.FromVector(predictions).Cast<double>(), label.Cast<double>()));
         // The valid entries are counted in int: a 0/1 sum in Half stops growing at 2048.
         int count = (int)engine.TensorCountNonzero(valid);
-        T sumAbsolute = engine.TensorSum(engine.TensorWhere(valid, error, zeros));
+        double sumAbsolute = engine.TensorSum(
+            engine.TensorWhere(valid.Cast<double>(), error, engine.TensorFullLike(error, 0.0)));
 
         // Every entry masked out. The reference's mask/mean(mask) would be 0/0 here; returning zero
         // keeps the objective finite rather than propagating NaN into the summed loss.
-        return count == 0 ? Ops.Zero : Ops.Divide(sumAbsolute, Ops.FromDouble(count));
+        return count == 0 ? Ops.Zero : Ops.FromDouble(sumAbsolute / count);
     }
 
     /// <summary>
@@ -125,13 +129,17 @@ public static class StockformerMultiTaskLoss<T>
 
         // -log softmax(target) = logsumexp(row) - logit(target), averaged over samples. The target logit is
         // gathered by int class index: comparing class ids in T merges neighbouring classes once they pass what T
-        // represents exactly (in Half 2049 rounds to 2048).
+        // represents exactly (in Half 2049 rounds to 2048). Both terms stay shifted by the row maximum,
+        // log(sum(exp(row - max))) - (logit(target) - max): restoring the offset first loses the increment to
+        // rounding (float logits [1e8, 1e8] gave 0 instead of log 2). The per-sample losses are averaged in double.
         var shape = new[] { samples, numClasses };
         var rows = engine.Reshape(Tensor<T>.FromVector(logits), shape);
-        var logSumExp = engine.TensorLogSumExp(rows, 1, keepDims: false);
+        var rowMax = engine.ReduceMax(rows, new[] { 1 }, keepDims: true, out _);
+        var shifted = engine.TensorSubtract(rows, engine.TensorBroadcastTo(rowMax, shape));
+        var logSumExp = engine.TensorLogSumExp(shifted, 1, keepDims: false);
         var classIndex = engine.Reshape(target.Cast<int>(), new[] { samples, 1 });
-        var picked = engine.Reshape(engine.TensorTakeAlongDim(rows, classIndex, 1), new[] { samples });
-        return Ops.Divide(engine.TensorSum(engine.TensorSubtract(logSumExp, picked)), Ops.FromDouble(samples));
+        var picked = engine.Reshape(engine.TensorTakeAlongDim(shifted, classIndex, 1), new[] { samples });
+        return Ops.FromDouble(engine.TensorSum(engine.TensorSubtract(logSumExp, picked).Cast<double>()) / samples);
     }
 
     /// <summary>

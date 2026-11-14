@@ -340,24 +340,22 @@ public partial class Concerto<T> : Common.SemanticSegmentationBase<T>
     #region Private Methods
 
     /// <summary>
-    /// The mean of <paramref name="losses"/>. Each loss is scaled by <c>1 / sqrt(count)</c> before the sum and the
-    /// sum by <c>1 / sqrt(count)</c> after it, so the total stays near <c>sqrt(count)</c> times the mean.
+    /// The mean of <paramref name="losses"/>, accumulated in double for a narrow <typeparamref name="T"/> and
+    /// rounded to <typeparamref name="T"/> once (<see cref="ConcertoWideAccumulation{T}.MeanOverRows"/>).
     /// </summary>
     /// <remarks>
-    /// Summing first overflows a narrow <typeparamref name="T"/> such as Half once the losses add up past 65504
-    /// (6554 samples at a loss of 10). Scaling each loss by the full <c>1 / count</c> first instead pushes small
-    /// losses into Half's subnormal range: 10000 losses of 0.001 become 1e-7 each, a step of 6e-8, and the mean
-    /// comes out about 19% high.
+    /// Summing in Half overflows once the losses add up past 65504 (6554 samples at a loss of 10). Pre-scaling by
+    /// <c>1 / sqrt(count)</c> only moves that limit (10000 losses of 30000 still sum to 3e6 after scaling by 0.01),
+    /// and scaling by the full <c>1 / count</c> pushes small losses into Half's subnormal range (10000 losses of
+    /// 0.001 become 1e-7 each and the mean comes out about 19% high).
     /// </remarks>
     internal static T MeanOfLosses(T[] losses)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
         if (losses.Length == 0) return numOps.Zero;
-        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
-        T scale = numOps.FromDouble(1.0 / Math.Sqrt(losses.Length));
-        var scaled = engine.TensorMultiplyScalar(
-            new Tensor<T>(new[] { losses.Length }, new Vector<T>(losses)), scale);
-        return numOps.Multiply(engine.TensorSum(scaled), scale);
+        var mean = ConcertoWideAccumulation<T>.MeanOverRows(
+            new Tensor<T>(new[] { losses.Length }, new Vector<T>(losses)));
+        return mean.ToArray()[0];
     }
 
     /// <summary>

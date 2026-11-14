@@ -208,6 +208,18 @@ public class ByteTrack<T> : ObjectTrackerBase<T>
 
         RemoveDuplicateTracks();
 
+        // A removed id only matters while its track can still be in the lost list (it stays there for the frame
+        // it was removed in, as in byte_tracker.py, and is dropped by the next frame's subtraction). Track ids are
+        // never reused and tracks only enter the lists as new ids, so an id in neither list can never be seen
+        // again: keeping only the live ones gives the reference's subtraction results with a bounded set instead
+        // of one that grows with every removal until Reset.
+        if (_removedTrackIds.Count > 0)
+        {
+            var live = new HashSet<int>(_trackedTracks.Select(t => t.TrackId));
+            live.UnionWith(_lostTracks.Select(t => t.TrackId));
+            _removedTrackIds.IntersectWith(live);
+        }
+
         Tracks.Clear();
         foreach (var track in _trackedTracks)
         {
