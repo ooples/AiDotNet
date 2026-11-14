@@ -4136,7 +4136,6 @@
 8	ADNELEM001|AiDotNet.MetaLearning.Algorithms.MPTSAlgorithm<T, TInput, TOutput>.MetaTrain(AiDotNet.Data.Structures.TaskBatch<T, TInput, TOutput>)
 1	ADNELEM001|AiDotNet.MetaLearning.Algorithms.MPTSAlgorithm<T, TInput, TOutput>.MPTSAlgorithm(AiDotNet.MetaLearning.Options.MPTSOptions<T, TInput, TOutput>)
 5	ADNELEM001|AiDotNet.MetaLearning.Algorithms.NeuralProcessBase<T, TInput, TOutput>.AggregateRepresentations(System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Vector<T>>)
-4	ADNELEM001|AiDotNet.MetaLearning.Algorithms.NeuralProcessBase<T, TInput, TOutput>.BuildContextRepresentations(AiDotNet.Tensors.LinearAlgebra.Vector<T>?, AiDotNet.Tensors.LinearAlgebra.Vector<T>?)
 2	ADNELEM001|AiDotNet.MetaLearning.Algorithms.NeuralProcessBase<T, TInput, TOutput>.ComputeModScale(AiDotNet.Tensors.LinearAlgebra.Vector<T>)
 5	ADNELEM001|AiDotNet.MetaLearning.Algorithms.NeuralProcessBase<T, TInput, TOutput>.DecodeTarget(AiDotNet.Tensors.LinearAlgebra.Vector<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>)
 5	ADNELEM001|AiDotNet.MetaLearning.Algorithms.NeuralProcessBase<T, TInput, TOutput>.EncodeContextPair(AiDotNet.Tensors.LinearAlgebra.Vector<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>)

@@ -23004,3 +23004,4 @@ override AiDotNet.MetaLearning.Algorithms.NTMAlgorithm<T, TInput, TOutput>.Regis
 override AiDotNet.MetaLearning.Algorithms.NTMAlgorithm<T, TInput, TOutput>.Save(string! filePath) -> void
 override AiDotNet.MetaLearning.Algorithms.NTMAlgorithm<T, TInput, TOutput>.Load(string! filePath) -> void
 override AiDotNet.MetaLearning.Algorithms.NTMAlgorithm<T, TInput, TOutput>.RegisterState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
+AiDotNet.MetaLearning.Algorithms.NeuralProcessBase<T, TInput, TOutput>.BuildContextRepresentations(AiDotNet.Tensors.LinearAlgebra.Vector<T>? supportFeatures, AiDotNet.Tensors.LinearAlgebra.Vector<T>? supportLabels, int exampleCount) -> System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Vector<T>!>!

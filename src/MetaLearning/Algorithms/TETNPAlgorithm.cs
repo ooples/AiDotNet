@@ -90,7 +90,7 @@ public partial class TETNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, T
             var supportLabels = ConvertToVector(task.SupportOutput);
 
             // 1. Encode context pairs into per-example representations
-            var contextReps = BuildContextRepresentations(supportFeatures, supportLabels);
+            var contextReps = BuildContextRepresentations(supportFeatures, supportLabels, SupportRows(task.SupportInput));
 
             // 2. Refine representations with relative-position self-attention
             var refinedReps = ApplyRelativeSelfAttention(contextReps, task.SupportInput);
@@ -119,7 +119,7 @@ public partial class TETNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, T
         var supportFeatures = ConvertToVector(MetaModel.Predict(task.SupportInput));
         var supportLabels = ConvertToVector(task.SupportOutput);
 
-        var contextReps = BuildContextRepresentations(supportFeatures, supportLabels);
+        var contextReps = BuildContextRepresentations(supportFeatures, supportLabels, SupportRows(task.SupportInput));
         var refinedReps = ApplyRelativeSelfAttention(contextReps, task.SupportInput);
         var aggRep = AggregateRepresentations(refinedReps);
 
@@ -143,7 +143,6 @@ public partial class TETNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, T
 
         int dim = RepresentationDim;
         int heads = Math.Min(_numHeads, dim);
-        int headDim = Math.Max(1, dim / _numHeads);
         int relDim = 1 + 2 * _numBands;
 
         var stacked = new Tensor<T>[n];
@@ -169,23 +168,26 @@ public partial class TETNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, T
             _relPosParams.GetSubVector(0, _numHeads * relDim), new[] { _numHeads, relDim }));
         var relative = Engine.TensorMatMul(encoding, weights);    // [n*n, numHeads]
 
-        var scale = NumOps.FromDouble(1.0 / Math.Sqrt(headDim + relDim));
-        var headOutputs = new Tensor<T>[heads + 1];
-        int used = 0;
+        // Every dimension belongs to a head: head h covers [h dim / heads, (h + 1) dim / heads), so a dimension
+        // the heads do not divide evenly is spread over them instead of the trailing ones being left unattended.
+        // Head widths are dim / heads or one more, so the two 1 / sqrt(width + relDim) scales are formed once.
+        int narrow = dim / heads;
+        var narrowScale = NumOps.FromDouble(1.0 / Math.Sqrt(narrow + relDim));
+        var wideScale = NumOps.FromDouble(1.0 / Math.Sqrt(narrow + 1 + relDim));
+        var headOutputs = new Tensor<T>[heads];
         for (int h = 0; h < heads; h++)
         {
-            int width = Math.Min(headDim, dim - h * headDim);
-            if (width <= 0) break;
-            var rh = Engine.TensorSlice(r, new[] { 0, h * headDim }, new[] { n, width });
+            int start = h * dim / heads;
+            int width = (h + 1) * dim / heads - start;
+            var scale = width == narrow ? narrowScale : wideScale;
+            var rh = Engine.TensorSlice(r, new[] { 0, start }, new[] { n, width });
             var content = Engine.TensorMatMul(rh, Engine.TensorTranspose(rh));
             var rel = Engine.TensorSlice(relative, new[] { 0, h }, new[] { n * n, 1 }).Reshape(new[] { n, n });
             var attention = Engine.TensorSoftmax(Engine.TensorMultiplyScalar(Engine.TensorAdd(content, rel), scale), 1);
-            headOutputs[used++] = Engine.TensorMatMul(attention, rh);
+            headOutputs[h] = Engine.TensorMatMul(attention, rh);
         }
 
-        int covered = Math.Min(dim, used * headDim);
-        if (covered < dim) headOutputs[used++] = new Tensor<T>(new[] { n, dim - covered });
-        var attended = Engine.TensorConcatenate(headOutputs.Take(used).ToArray(), 1);
+        var attended = Engine.TensorConcatenate(headOutputs, 1);
         var output = Engine.TensorAdd(r, Engine.TensorMultiplyScalar(attended, NumOps.FromDouble(0.5)));
 
         var refined = new List<Vector<T>>(n);
@@ -193,6 +195,12 @@ public partial class TETNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, T
             refined.Add(Engine.TensorSlice(output, new[] { i, 0 }, new[] { 1, dim }).ToVector());
         return refined;
     }
+
+    /// <summary>
+    /// The number of support examples: the input's rows. Counting labels instead split a multi-output episode into
+    /// one representation per output, which no longer matched the inputs, so the attention was skipped.
+    /// </summary>
+    private static int SupportRows(TInput supportInput) => InputHelper<T, TInput>.GetBatchSize(supportInput);
 
     /// <summary>The position of each support example: the mean of its input features. Null if counts disagree.</summary>
     private Tensor<T>? InputPositions(TInput supportInput, int n)
@@ -262,7 +270,8 @@ public partial class TETNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, T
             {
                 InterfaceGuard.Parameterizable(MetaModel).SetParameters(ip);
                 var contextReps = BuildContextRepresentations(
-                    ConvertToVector(MetaModel.Predict(t.SupportInput)), ConvertToVector(t.SupportOutput));
+                    ConvertToVector(MetaModel.Predict(t.SupportInput)), ConvertToVector(t.SupportOutput),
+                    SupportRows(t.SupportInput));
                 var refinedReps = ApplyRelativeSelfAttention(contextReps, t.SupportInput);
                 ModulateParameters(ip, ComputeModScale(AggregateRepresentations(refinedReps)));
 
