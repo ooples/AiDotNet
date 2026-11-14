@@ -296,8 +296,12 @@ public partial class GraFPrintGraphBlockLayer<T> : LayerBase<T>, ILayerSerializa
             Tensor<T> mask;
             using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             {
-                var oneHot = engine.TensorOneHot<T>(
-                    new Tensor<int>(selectedNeighbors, [nodeCount, channels]), effectiveK);   // [N, C, K]
+                // TensorOneHot flattens its indices: a [N, C] index tensor comes back as [N*C, K], not
+                // [N, C, K], so one-hot the flat winners and restore the node and channel axes explicitly.
+                var oneHot = engine.Reshape(
+                    engine.TensorOneHot<T>(
+                        new Tensor<int>(selectedNeighbors, [nodeCount * channels]), effectiveK),
+                    [nodeCount, channels, effectiveK]);                                        // [N, C, K]
                 mask = engine.TensorPermute(oneHot, [0, 2, 1]).Clone();                        // [N, K, C]
             }
 
