@@ -382,8 +382,20 @@ public partial class AiModelResult<T, TInput, TOutput>
         var numOps = MathHelper.GetNumericOperations<T>();
         int count = vectors.Count;
         int length = vectors[0].Length;
-        var stacked = StackPredictions(vectors);
-        var mean = ResultEngine.Reshape(Tensor<T>.FromVector(ComputeMean(vectors)), new[] { 1, length });
+        var rawPredictions = StackPredictions(vectors);
+
+        // The predictions and their mean are divided by the largest prediction magnitude before they are
+        // subtracted: x - mean itself overflows for predictions of opposite sign near the top of the range
+        // (-60000 against a mean of 20000 in Half), which made the scale infinite and the result NaN.
+        T inputScale = ResultEngine.TensorMaxValue(ResultEngine.TensorAbs(rawPredictions));
+        if (!numOps.GreaterThan(inputScale, numOps.Zero) || numOps.IsInfinity(inputScale))
+        {
+            inputScale = numOps.One;
+        }
+
+        var stacked = ResultEngine.TensorDivideScalar(rawPredictions, inputScale);
+        var mean = ResultEngine.Reshape(
+            ResultEngine.TensorDivideScalar(Tensor<T>.FromVector(ComputeMean(vectors)), inputScale), new[] { 1, length });
         var deviations = ResultEngine.TensorSubtract(stacked, ResultEngine.TensorBroadcastTo(mean, new[] { count, length }));
 
         // The deviations are divided by their largest magnitude before squaring so the squares cannot overflow,
@@ -397,7 +409,7 @@ public partial class AiModelResult<T, TInput, TOutput>
         var squares = ResultEngine.TensorSquare(ResultEngine.TensorDivideScalar(deviations, scale));
         var rowMeans = ResultEngine.ReduceSum(ResultEngine.TensorDivideScalar(squares, numOps.FromDouble(length)), new[] { 1 }, false);
         T meanSquare = ResultEngine.TensorSum(ResultEngine.TensorDivideScalar(rowMeans, numOps.FromDouble(count)));
-        return numOps.ToDouble(scale) * Math.Sqrt(numOps.ToDouble(meanSquare));
+        return numOps.ToDouble(inputScale) * numOps.ToDouble(scale) * Math.Sqrt(numOps.ToDouble(meanSquare));
     }
 
     /// <summary>
