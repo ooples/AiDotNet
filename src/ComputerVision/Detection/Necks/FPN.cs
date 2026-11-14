@@ -319,9 +319,6 @@ public class FPN<T> : NeckBase<T>
                     $"dst=[{string.Join(",", dst._shape)}].");
             }
         }
-        for (int i = 0; i < src.Length; i++)
-        {
-            dst[i] = src[i];
-        }
+        src.AsSpan().CopyTo(dst.AsWritableSpan());
     }
 }

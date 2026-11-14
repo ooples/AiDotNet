@@ -363,23 +363,7 @@ public partial class DocumentReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         int cropW = Math.Max(1, x2 - x1);
         int cropH = Math.Max(1, y2 - y1);
 
-        var crop = new Tensor<T>(new[] { batch, channels, cropH, cropW });
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < cropH; h++)
-                {
-                    for (int w = 0; w < cropW; w++)
-                    {
-                        crop[b, c, h, w] = image[b, c, y1 + h, x1 + w];
-                    }
-                }
-            }
-        }
-
-        return crop;
+        return Engine.TensorSlice(image, new[] { 0, 0, y1, x1 }, new[] { batch, channels, cropH, cropW });
     }
 
     /// <summary>

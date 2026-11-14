@@ -115,21 +115,18 @@ internal abstract class CvParameterModule<T> : IParameterSource<T>, IParameterCh
     {
         var result = new Vector<T>(checked((int)ParameterCount));
         int offset = 0;
+        var destination = result.AsWritableSpan();
         foreach (var tensor in OwnParameterTensors())
         {
-            for (int i = 0; i < tensor.Length; i++)
-            {
-                result[offset++] = tensor[i];
-            }
+            tensor.AsSpan().CopyTo(destination.Slice(offset, tensor.Length));
+            offset += tensor.Length;
         }
 
         foreach (var child in Children())
         {
             var values = child.GetParameters();
-            for (int i = 0; i < values.Length; i++)
-            {
-                result[offset++] = values[i];
-            }
+            values.AsSpan().CopyTo(destination.Slice(offset, values.Length));
+            offset += values.Length;
         }
 
         return result;
@@ -155,20 +152,15 @@ internal abstract class CvParameterModule<T> : IParameterSource<T>, IParameterCh
         foreach (var tensor in OwnParameterTensors())
         {
             // Written through, never replaced: the forward pass keeps reading this instance.
-            for (int i = 0; i < tensor.Length; i++)
-            {
-                tensor[i] = parameters[offset++];
-            }
+            parameters.AsSpan().Slice(offset, tensor.Length).CopyTo(tensor.AsWritableSpan());
+            offset += tensor.Length;
         }
 
         foreach (var child in Children())
         {
             int count = checked((int)child.ParameterCount);
-            var slice = new Vector<T>(count);
-            for (int i = 0; i < count; i++)
-            {
-                slice[i] = parameters[offset++];
-            }
+            var slice = new Vector<T>(parameters.AsSpan().Slice(offset, count).ToArray());
+            offset += count;
 
             child.SetParameters(slice);
         }

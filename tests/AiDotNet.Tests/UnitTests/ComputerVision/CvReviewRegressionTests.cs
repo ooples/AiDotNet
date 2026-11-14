@@ -1,7 +1,11 @@
+using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision;
+using AiDotNet.ComputerVision.Detection.Losses;
 using AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN;
 using AiDotNet.ComputerVision.Detection.TextDetection;
 using AiDotNet.ComputerVision.OCR;
+using AiDotNet.ComputerVision.Segmentation.Common;
+using AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Metrics;
@@ -44,6 +48,185 @@ public sealed class CvReviewRegressionTests
         var fromNegative = align.Forward(features, rois, spatialScale: 1.0, batchIndices: new[] { -1 });
 
         Assert.Equal(fromFirst.ToArray(), fromNegative.ToArray());
+    }
+
+    [Fact]
+    public void MultiHeadAttention_HalfCausal_BlocksKeysPastIndex2048()
+    {
+        // The causal mask compared index ramps held in T; half precision rounds 2049 to 2048, so query 2048 could
+        // see key 2049. With zero queries and keys the weights are uniform over the visible keys, and only key 2049
+        // carries a value, so query 2048 must read exactly zero.
+        const int length = 2050;
+        var zeros = new Tensor<Half>(new[] { 1, length, 1 });
+        var values = new Tensor<Half>(new[] { 1, length, 1 });
+        values[0, length - 1, 0] = (Half)1;
+
+        var attended = CvTensorOps<Half>.MultiHeadAttention(zeros, zeros, values, 1, 1.0, causal: true);
+
+        Assert.Equal(0.0, (double)attended[0, 2048, 0]);
+        Assert.Equal(1.0 / length, (double)attended[0, length - 1, 0], 4);
+    }
+
+    [Fact]
+    public void ResizeBilinearAsymmetric_Half_MatchesDoubleReference()
+    {
+        // The interpolation weights were formed from a position ramp scaled in T, which half precision rounds to a
+        // quarter or half pixel at these widths. The alternating 0/1 row makes every output equal to one weight.
+        const int source = 1000, target = 999;
+        var row = new Tensor<Half>(new[] { 1, 1, 1, source });
+        for (int x = 0; x < source; x++) row[0, 0, 0, x] = (Half)(x % 2);
+
+        var resized = CvTensorOps<Half>.ResizeBilinearAsymmetric(row, 1, target);
+
+        for (int i = 0; i < target; i++)
+        {
+            double position = (double)i * source / target;
+            int lo = (int)Math.Floor(position);
+            int hi = Math.Min(lo + 1, source - 1);
+            double frac = position - lo;
+            double expected = ((1 - frac) * (lo % 2)) + (frac * (hi % 2));
+            double actual = (double)resized[0, 0, 0, i];
+            Assert.True(Math.Abs(expected - actual) < 2e-3, $"output {i}: expected {expected}, got {actual}");
+        }
+    }
+
+    [Fact]
+    public void BoxLosses_HalfPixelBoxes_MatchDoublePrecision()
+    {
+        // A 300 x 300 pixel box has an area of 90 000, past half precision's 65 504: the areas became infinite and
+        // the losses NaN. The double losses are the reference.
+        double[] predicted = { 100, 100, 400, 400, 20, 30, 260, 310 };
+        double[] actual = { 150, 120, 500, 450, 0, 0, 250, 300 };
+
+        AssertHalfMatchesDouble(new GIoULoss<Half>(), new GIoULoss<double>(), predicted, actual);
+        AssertHalfMatchesDouble(new DIoULoss<Half>(), new DIoULoss<double>(), predicted, actual);
+        AssertHalfMatchesDouble(new CIoULoss<Half>(), new CIoULoss<double>(), predicted, actual);
+    }
+
+    [Fact]
+    public void GIoULoss_HalfManyBoxes_MeanDoesNotOverflow()
+    {
+        // 140 000 boxes with loss 0.5 sum to 70 000, past half precision's 65 504: the mean came out infinite.
+        const int boxes = 140_000;
+        var predicted = new Vector<Half>(boxes * 4);
+        var actual = new Vector<Half>(boxes * 4);
+        for (int i = 0; i < boxes; i++)
+        {
+            predicted[(4 * i) + 2] = (Half)2;
+            predicted[(4 * i) + 3] = (Half)1;
+            actual[(4 * i) + 2] = (Half)1;
+            actual[(4 * i) + 3] = (Half)1;
+        }
+
+        double loss = (double)new GIoULoss<Half>().CalculateLoss(predicted, actual);
+
+        Assert.Equal(0.5, loss, 2);
+    }
+
+    [Fact]
+    public void InstanceMask_HalfAreaAndIoU_CountExactlyPast2048()
+    {
+        // The 0/1 masks were summed in T, and half precision rounds 3001 to 3000.
+        var full = new Tensor<Half>(new[] { 1, 3001 });
+        var partial = new Tensor<Half>(new[] { 1, 3001 });
+        for (int x = 0; x < 3001; x++)
+        {
+            full[0, x] = (Half)1;
+            if (x < 3000) partial[0, x] = (Half)1;
+        }
+
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        var box = new BoundingBox<Half>((Half)0, (Half)0, (Half)1, (Half)1, BoundingBoxFormat.XYXY);
+        var fullMask = new InstanceMask<Half>(box, full, 0, (Half)1);
+        var partialMask = new InstanceMask<Half>(box, partial, 0, (Half)1);
+
+        Assert.Equal(3001, fullMask.GetMaskArea(ops));
+        Assert.Equal(3000.0 / 3001.0, fullMask.ComputeMaskIoU(partialMask, ops), 12);
+    }
+
+    [Fact]
+    public void SmoothL1Sum_HalfLargeResidual_IsFiniteAndLinear()
+    {
+        // Masking both branches squared every residual; 300^2 overflows half precision, and 0 * infinity gave NaN.
+        var predicted = new Tensor<Half>(new[] { 2 }, new Vector<Half>(new[] { (Half)300, (Half)0.5 }));
+        var target = new Tensor<Half>(new[] { 2 });
+
+        double sum = (double)TwoStageDetectionLoss<Half>.SmoothL1Sum(predicted, target).ToArray()[0];
+
+        Assert.Equal(299.625, sum, 0.25);
+    }
+
+    [Fact]
+    public void PixelAffinity_HalfLargeFeatures_IsExactCosine()
+    {
+        // 16 channels of 64 have a squared norm of 65 536, past half precision's 65 504: the norms were infinite and
+        // the similarity NaN.
+        var a = new Tensor<Half>(new[] { 16, 1, 1 });
+        var same = new Tensor<Half>(new[] { 16, 1, 1 });
+        var opposite = new Tensor<Half>(new[] { 16, 1, 1 });
+        for (int c = 0; c < 16; c++)
+        {
+            a[c, 0, 0] = (Half)64;
+            same[c, 0, 0] = (Half)64;
+            opposite[c, 0, 0] = (Half)(-64);
+        }
+
+        Assert.Equal(1.0, (double)SegmentationTensorOps.PixelAffinity(a, same)[0, 0], 3);
+        Assert.Equal(-1.0, (double)SegmentationTensorOps.PixelAffinity(a, opposite)[0, 0], 3);
+    }
+
+    [Fact]
+    public void ChannelMean_HalfLargeChannelSum_StaysFinite()
+    {
+        // 256 channels of 256 sum to 65 536, past half precision's 65 504: the engine's mean accumulated in T and
+        // returned infinity although the mean itself is 256.
+        var features = new Tensor<Half>(new[] { 256, 1, 1 });
+        for (int c = 0; c < 256; c++) features[c, 0, 0] = (Half)256;
+
+        double mean = (double)SegmentationTensorOps.ChannelMean(features)[0, 0];
+
+        Assert.Equal(256.0, mean);
+    }
+
+    [Fact]
+    public void GaussianMask_HalfWiderThan2048_UsesExactPixelCoordinates()
+    {
+        // The column ramp was held in T: half precision rounds column 2049 to 2048 and 2051 to 2052, so with the
+        // centre on column 2050 both read a distance of 2 instead of 1.
+        const double sigma = 1.0;
+        var mask = SegmentationTensorOps.GaussianMask<Half>(1, 2052, 2050, 0, sigma);
+
+        double oneAway = Math.Exp(-0.5);
+        Assert.Equal(oneAway, (double)mask[0, 2049], 3);
+        Assert.Equal(1.0, (double)mask[0, 2050], 3);
+        Assert.Equal(oneAway, (double)mask[0, 2051], 3);
+    }
+
+    [Fact]
+    public void ToOnnxFloat_StridedView_ReadsLogicalOrder()
+    {
+        // The ONNX input was read through the writable Data accessor, which throws on a strided view; the models
+        // batch their input with a reshape that accepts one.
+        var owner = new Tensor<double>(new[] { 2, 3 }, new Vector<double>(new double[] { 1, 2, 3, 4, 5, 6 }));
+        var view = owner.Transpose(new[] { 1, 0 });
+        Assert.False(view.IsContiguous);
+
+        var onnx = CvTensorOps<double>.ToOnnxFloat(view);
+
+        Assert.Equal(new[] { 3, 2 }, onnx.Dimensions.ToArray());
+        Assert.Equal(new float[] { 1, 4, 2, 5, 3, 6 }, onnx.Buffer.ToArray());
+    }
+
+    private static void AssertHalfMatchesDouble(
+        LossFunctionBase<Half> halfLoss, LossFunctionBase<double> doubleLoss, double[] predicted, double[] actual)
+    {
+        double expected = doubleLoss.CalculateLoss(new Vector<double>(predicted), new Vector<double>(actual));
+        double got = (double)halfLoss.CalculateLoss(
+            new Vector<Half>(predicted.Select(v => (Half)v).ToArray()),
+            new Vector<Half>(actual.Select(v => (Half)v).ToArray()));
+
+        Assert.False(double.IsNaN(got), $"{halfLoss.GetType().Name} returned NaN");
+        Assert.True(Math.Abs(expected - got) < 1e-2, $"{halfLoss.GetType().Name}: expected {expected}, got {got}");
     }
 
     [Fact]

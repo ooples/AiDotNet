@@ -284,27 +284,19 @@ public sealed class TwoStageDetectionLoss<T>
 
     /// <summary>Sum of smooth-L1 (Girshick 2015, Eq. 3): 0.5 x^2 where |x| &lt; 1, otherwise |x| - 0.5.</summary>
     /// <remarks>
-    /// The branch is chosen per element from detached values and applied as a constant mask, so the derivative is
-    /// x inside the quadratic region and sign(x) outside, using only differentiable elementwise operations.
+    /// Written branch-free as <c>0.5 m^2 + |x| - m</c> with <c>m = min(|x|, 1)</c>: that is <c>0.5 x^2</c> inside the
+    /// quadratic region and <c>|x| - 0.5</c> outside, with derivative x inside and sign(x) outside. Nothing squares a
+    /// value larger than 1, so a far-off box in half precision cannot overflow <c>x^2</c> to infinity and turn a
+    /// 0-weighted branch into NaN, as masking the two branches did.
     /// </remarks>
-    private static Tensor<T> SmoothL1Sum(Tensor<T> predicted, Tensor<T> target)
+    internal static Tensor<T> SmoothL1Sum(Tensor<T> predicted, Tensor<T> target)
     {
         var engine = AiDotNetEngine.Current;
-        var difference = engine.TensorSubtract(predicted, target);
-        var values = difference.ToArray();
-        var quadraticMask = new T[values.Length];
-        var linearMask = new T[values.Length];
-        for (int i = 0; i < values.Length; i++)
-        {
-            bool quadratic = Math.Abs(NumOps.ToDouble(values[i])) < 1;
-            quadraticMask[i] = quadratic ? NumOps.One : NumOps.Zero;
-            linearMask[i] = quadratic ? NumOps.Zero : NumOps.One;
-        }
-        var shape = difference.Shape.ToArray();
-        var quadraticPart = engine.TensorMultiply(new Tensor<T>(quadraticMask, shape),
-            engine.TensorMultiplyScalar(engine.TensorMultiply(difference, difference), NumOps.FromDouble(0.5)));
-        var linearPart = engine.TensorMultiply(new Tensor<T>(linearMask, shape),
-            engine.TensorAddScalar(engine.TensorAbs(difference), NumOps.FromDouble(-0.5)));
+        var magnitude = engine.TensorAbs(engine.TensorSubtract(predicted, target));
+        var quadraticExtent = engine.TensorClamp(magnitude, NumOps.Zero, NumOps.One);
+        var quadraticPart = engine.TensorMultiplyScalar(
+            engine.TensorMultiply(quadraticExtent, quadraticExtent), NumOps.FromDouble(0.5));
+        var linearPart = engine.TensorSubtract(magnitude, quadraticExtent);
         return engine.ReduceSum(engine.TensorAdd(quadraticPart, linearPart), null);
     }
 

@@ -519,60 +519,14 @@ public partial class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     }
 
     private Tensor<T> Rotate90(Tensor<T> input)
-    {
-        // 90° clockwise.
-        int batch = input.Shape[0];
-        int channels = input.Shape[1];
-        int height = input.Shape[2];
-        int width = input.Shape[3];
-
-        var output = new Tensor<T>(new[] { batch, channels, width, height });
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        output[b, c, w, height - 1 - h] = input[b, c, h, w];
-                    }
-                }
-            }
-        }
-
-        return output;
-    }
+        // 90 degrees clockwise: output[b, c, w, height - 1 - h] = input[b, c, h, w], i.e. swap H and W, then
+        // reverse the new width axis.
+        => Engine.TensorFlip(Engine.TensorPermute(input, new[] { 0, 1, 3, 2 }), new[] { 3 });
 
     private Tensor<T> Rotate270(Tensor<T> input)
-    {
-        // 90° counter-clockwise (== 270° clockwise). Mirrors Rotate90 with
-        // the destination indices flipped along the width axis so a
-        // negative-rotation detector reading still ends up upright.
-        int batch = input.Shape[0];
-        int channels = input.Shape[1];
-        int height = input.Shape[2];
-        int width = input.Shape[3];
-
-        var output = new Tensor<T>(new[] { batch, channels, width, height });
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        output[b, c, width - 1 - w, h] = input[b, c, h, w];
-                    }
-                }
-            }
-        }
-
-        return output;
-    }
+        // 90 degrees counter-clockwise (== 270 clockwise): output[b, c, width - 1 - w, h] = input[b, c, h, w],
+        // i.e. swap H and W, then reverse the new height axis.
+        => Engine.TensorFlip(Engine.TensorPermute(input, new[] { 0, 1, 3, 2 }), new[] { 2 });
 
     private List<RecognizedText<T>> SortByReadingOrder(List<RecognizedText<T>> texts)
     {

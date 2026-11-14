@@ -1,3 +1,4 @@
+using AiDotNet.Interfaces;
 using AiDotNet.Helpers;
 
 namespace AiDotNet.ComputerVision.Segmentation.Common;
@@ -18,14 +19,10 @@ public static class SegmentationTensorOps
 
         if (tensor.Rank == 4)
         {
-            // [B, C, H, W] -> [C, H, W]
+            // [B, C, H, W] -> [C, H, W]: batch 0 as a new tensor.
             int c = tensor.Shape[1], h = tensor.Shape[2], w = tensor.Shape[3];
-            var result = new Tensor<T>([c, h, w]);
-            for (int ch = 0; ch < c; ch++)
-                for (int row = 0; row < h; row++)
-                    for (int col = 0; col < w; col++)
-                        result[ch, row, col] = tensor[0, ch, row, col];
-            return result;
+            var engine = AiDotNetEngine.Current;
+            return engine.Reshape(engine.TensorSlice(tensor, [0, 0, 0, 0], [1, c, h, w]), [c, h, w]);
         }
         return tensor;
     }
@@ -49,11 +46,8 @@ public static class SegmentationTensorOps
 
         int height = classMap.Shape[1];
         int width = classMap.Shape[2];
-        var result = new Tensor<T>([height, width]);
-        for (int row = 0; row < height; row++)
-            for (int col = 0; col < width; col++)
-                result[row, col] = classMap[0, row, col];
-        return result;
+        var engine = AiDotNetEngine.Current;
+        return engine.Reshape(engine.TensorSlice(classMap, [0, 0, 0], [1, height, width]), [height, width]);
     }
 
     /// <summary>
@@ -68,139 +62,22 @@ public static class SegmentationTensorOps
         if (logits.Rank < 3 || logits.Rank > 4)
             throw new ArgumentException("Logits must be rank 3 [C, H, W] or rank 4 [B, C, H, W].", nameof(logits));
 
-        var numOps = MathHelper.GetNumericOperations<T>();
-
-        if (logits.Rank == 3)
-        {
-            int c = logits.Shape[0], h = logits.Shape[1], w = logits.Shape[2];
-            var result = new Tensor<T>([h, w]);
-            for (int row = 0; row < h; row++)
-            {
-                for (int col = 0; col < w; col++)
-                {
-                    int bestClass = 0;
-                    T bestVal = logits[0, row, col];
-                    for (int cls = 1; cls < c; cls++)
-                    {
-                        T val = logits[cls, row, col];
-                        if (numOps.GreaterThan(val, bestVal))
-                        {
-                            bestVal = val;
-                            bestClass = cls;
-                        }
-                    }
-                    result[row, col] = numOps.FromDouble(bestClass);
-                }
-            }
-            return result;
-        }
-        else
-        {
-            int b = logits.Shape[0], c = logits.Shape[1], h = logits.Shape[2], w = logits.Shape[3];
-            var result = new Tensor<T>([b, h, w]);
-            for (int batch = 0; batch < b; batch++)
-            {
-                for (int row = 0; row < h; row++)
-                {
-                    for (int col = 0; col < w; col++)
-                    {
-                        int bestClass = 0;
-                        T bestVal = logits[batch, 0, row, col];
-                        for (int cls = 1; cls < c; cls++)
-                        {
-                            T val = logits[batch, cls, row, col];
-                            if (numOps.GreaterThan(val, bestVal))
-                            {
-                                bestVal = val;
-                                bestClass = cls;
-                            }
-                        }
-                        result[batch, row, col] = numOps.FromDouble(bestClass);
-                    }
-                }
-            }
-            return result;
-        }
+        // First maximum wins (a strictly greater value replaces the best, NaN never does), and the
+        // index is returned as a value of T, exactly as the per-pixel scan did.
+        int classAxis = logits.Rank - 3;
+        int numClasses = logits.Shape[classAxis];
+        var classIndices = AiDotNetEngine.Current.TensorArgMax(logits, classAxis);
+        return CvTensorOps<T>.IndicesAsValues(classIndices, numClasses);
     }
 
-    /// <summary>
-    /// Computes softmax along the class dimension, producing per-pixel probabilities.
-    /// </summary>
-    /// <typeparam name="T">The numeric type.</typeparam>
-    /// <param name="logits">Logits tensor [C, H, W] or [B, C, H, W].</param>
-    /// <returns>Probability map [C, H, W] or [B, C, H, W] with values in [0, 1].</returns>
     public static Tensor<T> SoftmaxAlongClassDim<T>(Tensor<T> logits)
     {
         if (logits is null) throw new ArgumentNullException(nameof(logits));
         if (logits.Rank < 3 || logits.Rank > 4)
             throw new ArgumentException("Logits must be rank 3 [C, H, W] or rank 4 [B, C, H, W].", nameof(logits));
 
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var result = new Tensor<T>(logits._shape);
-
-        if (logits.Rank == 3)
-        {
-            int c = logits.Shape[0], h = logits.Shape[1], w = logits.Shape[2];
-            for (int row = 0; row < h; row++)
-            {
-                for (int col = 0; col < w; col++)
-                {
-                    T maxVal = logits[0, row, col];
-                    for (int cls = 1; cls < c; cls++)
-                    {
-                        T val = logits[cls, row, col];
-                        if (numOps.GreaterThan(val, maxVal)) maxVal = val;
-                    }
-
-                    T sumExp = numOps.Zero;
-                    for (int cls = 0; cls < c; cls++)
-                    {
-                        T expVal = numOps.Exp(numOps.Subtract(logits[cls, row, col], maxVal));
-                        result[cls, row, col] = expVal;
-                        sumExp = numOps.Add(sumExp, expVal);
-                    }
-
-                    for (int cls = 0; cls < c; cls++)
-                    {
-                        result[cls, row, col] = numOps.Divide(result[cls, row, col], sumExp);
-                    }
-                }
-            }
-        }
-        else
-        {
-            int b = logits.Shape[0], c = logits.Shape[1], h = logits.Shape[2], w = logits.Shape[3];
-            for (int batch = 0; batch < b; batch++)
-            {
-                for (int row = 0; row < h; row++)
-                {
-                    for (int col = 0; col < w; col++)
-                    {
-                        T maxVal = logits[batch, 0, row, col];
-                        for (int cls = 1; cls < c; cls++)
-                        {
-                            T val = logits[batch, cls, row, col];
-                            if (numOps.GreaterThan(val, maxVal)) maxVal = val;
-                        }
-
-                        T sumExp = numOps.Zero;
-                        for (int cls = 0; cls < c; cls++)
-                        {
-                            T expVal = numOps.Exp(numOps.Subtract(logits[batch, cls, row, col], maxVal));
-                            result[batch, cls, row, col] = expVal;
-                            sumExp = numOps.Add(sumExp, expVal);
-                        }
-
-                        for (int cls = 0; cls < c; cls++)
-                        {
-                            result[batch, cls, row, col] = numOps.Divide(result[batch, cls, row, col], sumExp);
-                        }
-                    }
-                }
-            }
-        }
-
-        return result;
+        // Max-subtracted softmax over the class axis.
+        return AiDotNetEngine.Current.Softmax(logits, logits.Rank - 3);
     }
 
     /// <summary>
@@ -272,12 +149,7 @@ public static class SegmentationTensorOps
     {
         if (values is null) throw new ArgumentNullException(nameof(values));
         var numOps = MathHelper.GetNumericOperations<T>();
-        var result = new Tensor<T>(values._shape);
-        var one = numOps.FromDouble(1.0);
-        var zero = numOps.Zero;
-        for (int i = 0; i < values.Length; i++)
-            result[i] = numOps.ToDouble(values[i]) > threshold ? one : zero;
-        return result;
+        return AiDotNetEngine.Current.TensorGreaterThan(values, numOps.FromDouble(threshold));
     }
 
     /// <summary>
@@ -286,14 +158,7 @@ public static class SegmentationTensorOps
     public static Tensor<T> Sigmoid<T>(Tensor<T> input)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var result = new Tensor<T>(input._shape);
-        for (int i = 0; i < input.Length; i++)
-        {
-            double x = numOps.ToDouble(input[i]);
-            result[i] = numOps.FromDouble(1.0 / (1.0 + Math.Exp(-x)));
-        }
-        return result;
+        return AiDotNetEngine.Current.Sigmoid(input);
     }
 
     /// <summary>
@@ -306,18 +171,17 @@ public static class SegmentationTensorOps
         if (width <= 0) throw new ArgumentOutOfRangeException(nameof(width), "Must be positive.");
         if (sigma <= 0) throw new ArgumentOutOfRangeException(nameof(sigma), "Must be positive.");
 
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var result = new Tensor<T>([height, width]);
-        double invTwoSigmaSq = 1.0 / (2.0 * sigma * sigma);
-        for (int row = 0; row < height; row++)
-        {
-            for (int col = 0; col < width; col++)
-            {
-                double dx = col - cx, dy = row - cy;
-                result[row, col] = numOps.FromDouble(Math.Exp(-(dx * dx + dy * dy) * invTwoSigmaSq));
-            }
-        }
-        return result;
+        var engine = AiDotNetEngine.Current;
+
+        // exp(-(dx^2 + dy^2) / (2 sigma^2)) with dx a column ramp and dy a row ramp, broadcast to [H, W]. The
+        // pixel coordinates are evaluated in double and the finished mask is converted to T once: a coordinate
+        // ramp held in T loses whole pixels in half precision past 2048 (2049 rounds to 2048).
+        var dx = engine.TensorSubtractScalar(engine.TensorArange<double>(0, width, 1), cx);
+        var dy = engine.TensorSubtractScalar(engine.TensorArange<double>(0, height, 1), cy);
+        var dx2 = engine.TensorBroadcastTo(engine.Reshape(engine.TensorSquare(dx), [1, width]), [height, width]);
+        var dy2 = engine.TensorBroadcastTo(engine.Reshape(engine.TensorSquare(dy), [height, 1]), [height, width]);
+        var scaled = engine.TensorMultiplyScalar(engine.TensorAdd(dx2, dy2), -1.0 / (2.0 * sigma * sigma));
+        return engine.TensorExp(scaled).Cast<T>();
     }
 
     /// <summary>
@@ -328,15 +192,13 @@ public static class SegmentationTensorOps
         if (height <= 0) throw new ArgumentOutOfRangeException(nameof(height), "height must be positive.");
         if (width <= 0) throw new ArgumentOutOfRangeException(nameof(width), "width must be positive.");
 
-        var numOps = MathHelper.GetNumericOperations<T>();
         var result = new Tensor<T>([height, width]);
-        var one = numOps.FromDouble(1.0);
         int clampX1 = Math.Max(0, x1), clampY1 = Math.Max(0, y1);
         int clampX2 = Math.Min(width, x2), clampY2 = Math.Min(height, y2);
-        for (int row = clampY1; row < clampY2; row++)
-            for (int col = clampX1; col < clampX2; col++)
-                result[row, col] = one;
-        return result;
+        if (clampX2 <= clampX1 || clampY2 <= clampY1) return result;
+
+        var inside = CvTensorOps<T>.Fill([clampY2 - clampY1, clampX2 - clampX1], 1.0);
+        return AiDotNetEngine.Current.TensorSetSlice(result, inside, [clampY1, clampX1]);
     }
 
     /// <summary>
@@ -431,58 +293,44 @@ public static class SegmentationTensorOps
         if (features2.Rank != features1.Rank)
             throw new ArgumentException("features2 must have the same rank as features1.", nameof(features2));
 
+        var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
+        var a = EnsureUnbatched(features1);
+        var b = EnsureUnbatched(features2);
+        int c = a.Shape[0], h = a.Shape[1], w = a.Shape[2];
+        // Only the first C channels and the top-left H x W of features2 pair with features1.
+        if (b.Shape[0] != c || b.Shape[1] != h || b.Shape[2] != w)
+            b = engine.TensorSlice(b, [0, 0, 0], [c, h, w]);
 
-        if (features1.Rank == 4)
-        {
-            int c = features1.Shape[1], h = features1.Shape[2], w = features1.Shape[3];
-            var result = new Tensor<T>([h, w]);
+        // Cosine similarity is scale-invariant, so each pixel's channel vector is first divided by its largest
+        // magnitude: the squared norms then stay at most C, where raw squares overflow half precision (65504) for
+        // features as small as 64 over 16 channels and the ratio became NaN.
+        var (unitA, scaleA) = ScaleByChannelMax(a, h, w);
+        var (unitB, scaleB) = ScaleByChannelMax(b, h, w);
 
-            for (int row = 0; row < h; row++)
-            {
-                for (int col = 0; col < w; col++)
-                {
-                    double dot = 0, norm1 = 0, norm2 = 0;
-                    for (int ch = 0; ch < c; ch++)
-                    {
-                        double v1 = numOps.ToDouble(features1[0, ch, row, col]);
-                        double v2 = numOps.ToDouble(features2[0, ch, row, col]);
-                        dot += v1 * v2;
-                        norm1 += v1 * v1;
-                        norm2 += v2 * v2;
-                    }
-                    double denom = Math.Sqrt(norm1) * Math.Sqrt(norm2);
-                    result[row, col] = numOps.FromDouble(denom > 1e-8 ? dot / denom : 0.0);
-                }
-            }
+        // dot / (|a| |b|) over the channel axis, 0 where the norm product |a| |b| is at most 1e-8.
+        var dot = engine.ReduceSum(engine.TensorMultiply(unitA, unitB), [0], keepDims: false);
+        var norm1 = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(unitA), [0], keepDims: false));
+        var norm2 = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(unitB), [0], keepDims: false));
+        var denom = engine.TensorMultiply(norm1, norm2);
+        var originalDenom = engine.TensorMultiply(engine.TensorMultiply(denom, scaleA), scaleB);
+        var valid = engine.TensorGreaterThan(originalDenom, numOps.FromDouble(1e-8));
+        var safeDenom = engine.TensorWhere(valid, denom, CvTensorOps<T>.Fill([h, w], 1.0));
+        return engine.TensorWhere(valid, engine.TensorDivide(dot, safeDenom), new Tensor<T>([h, w]));
+    }
 
-            return result;
-        }
-        else
-        {
-            int c = features1.Shape[0], h = features1.Shape[1], w = features1.Shape[2];
-            var result = new Tensor<T>([h, w]);
-
-            for (int row = 0; row < h; row++)
-            {
-                for (int col = 0; col < w; col++)
-                {
-                    double dot = 0, norm1 = 0, norm2 = 0;
-                    for (int ch = 0; ch < c; ch++)
-                    {
-                        double v1 = numOps.ToDouble(features1[ch, row, col]);
-                        double v2 = numOps.ToDouble(features2[ch, row, col]);
-                        dot += v1 * v2;
-                        norm1 += v1 * v1;
-                        norm2 += v2 * v2;
-                    }
-                    double denom = Math.Sqrt(norm1) * Math.Sqrt(norm2);
-                    result[row, col] = numOps.FromDouble(denom > 1e-8 ? dot / denom : 0.0);
-                }
-            }
-
-            return result;
-        }
+    /// <summary>
+    /// <paramref name="features"/> <c>[C, H, W]</c> divided per pixel by its largest channel magnitude (1 where that
+    /// is 0), and that magnitude <c>[H, W]</c> (0 for an all-zero pixel).
+    /// </summary>
+    private static (Tensor<T> Scaled, Tensor<T> Scale) ScaleByChannelMax<T>(Tensor<T> features, int h, int w)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var largest = engine.ReduceMax(engine.TensorAbs(features), [0], keepDims: true);
+        var safe = engine.TensorWhere(engine.TensorGreaterThan(largest, numOps.Zero), largest, CvTensorOps<T>.Fill([1, h, w], 1.0));
+        var scaled = engine.TensorDivide(features, engine.TensorBroadcastTo(safe, features.Shape.ToArray()));
+        return (scaled, engine.Reshape(largest, [h, w]));
     }
 
     /// <summary>
@@ -500,24 +348,50 @@ public static class SegmentationTensorOps
         if (affinity.Rank != 2)
             throw new ArgumentException("affinity must be rank 2 [H, W].", nameof(affinity));
 
-        var numOps = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
         int n = refMasks.Shape[0], h = refMasks.Shape[1], w = refMasks.Shape[2];
         int aH = affinity.Shape[0], aW = affinity.Shape[1];
-        var result = new Tensor<T>([n, h, w]);
 
-        for (int obj = 0; obj < n; obj++)
-            for (int row = 0; row < h; row++)
-            {
-                int aRow = aH == h ? row : (int)((long)row * aH / h);
-                for (int col = 0; col < w; col++)
-                {
-                    int aCol = aW == w ? col : (int)((long)col * aW / w);
-                    result[obj, row, col] = numOps.FromDouble(
-                        numOps.ToDouble(refMasks[obj, row, col]) *
-                        numOps.ToDouble(affinity[aRow, aCol]));
-                }
-            }
+        // Nearest-neighbour source row/column for every target row/column (integer index maps).
+        var rowIndex = new int[h];
+        for (int row = 0; row < h; row++)
+            rowIndex[row] = aH == h ? row : (int)((long)row * aH / h);
+        var colIndex = new int[w];
+        for (int col = 0; col < w; col++)
+            colIndex[col] = aW == w ? col : (int)((long)col * aW / w);
 
-        return result;
+        var sampled = CvTensorOps<T>.Select(CvTensorOps<T>.Select(affinity, rowIndex, 0), colIndex, 1);
+        return engine.TensorMultiply(refMasks, engine.TensorBroadcastTo(engine.Reshape(sampled, [1, h, w]), [n, h, w]));
     }
+
+    /// <summary>
+    /// The per-pixel channel mean of a <c>[C, H, W]</c> embedding, <c>[H, W]</c>: the base score map the
+    /// promptable models gate with their prompt.
+    /// </summary>
+    /// <remarks>
+    /// Each channel is divided by C before the sum: the engine's mean accumulates in T, and a half-precision running
+    /// sum passes 65504 (and becomes infinite) for 256 channels near 300, where the mean itself is in range.
+    /// </remarks>
+    internal static Tensor<T> ChannelMean<T>(Tensor<T> features)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var share = engine.TensorDivideScalar(features, numOps.FromDouble(features.Shape[0]));
+        return engine.ReduceSum(share, [0], keepDims: false);
+    }
+
+    /// <summary>
+    /// Scales every channel of a <c>[C, H, W]</c> feature map by the top-left <c>[H, W]</c> of
+    /// <paramref name="spatialMask"/>.
+    /// </summary>
+    internal static Tensor<T> ModulateBySpatialMask<T>(Tensor<T> features, Tensor<T> spatialMask, int h, int w)
+    {
+        var engine = AiDotNetEngine.Current;
+        var gate = spatialMask.Shape[0] == h && spatialMask.Shape[1] == w
+            ? spatialMask
+            : engine.TensorSlice(spatialMask, [0, 0], [h, w]);
+        int numC = features.Shape[0];
+        return engine.TensorMultiply(features, engine.TensorBroadcastTo(engine.Reshape(gate, [1, h, w]), [numC, h, w]));
+    }
+
 }

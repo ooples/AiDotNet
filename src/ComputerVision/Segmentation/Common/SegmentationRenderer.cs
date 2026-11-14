@@ -431,21 +431,11 @@ public static class SegmentationRenderer
         if (channels != 1 && channels != 3)
             throw new ArgumentException($"Image must have 1 or 3 channels; got {channels}.", nameof(image));
 
-        var rgb = new Tensor<T>([3, height, width]);
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                for (int c = 0; c < 3; c++)
-                {
-                    rgb[c, y, x] = unbatched.Rank == 2
-                        ? unbatched[y, x]
-                        : unbatched[channels == 1 ? 0 : c, y, x];
-                }
-            }
-        }
-
-        return rgb;
+        // A fresh [3, H, W] copy: grey inputs repeat their one plane three times.
+        var engine = AiDotNetEngine.Current;
+        if (channels == 1)
+            return engine.TensorTile(engine.Reshape(unbatched, new[] { 1, height, width }), new[] { 3, 1, 1 });
+        return new Tensor<T>(unbatched.ToArray(), new[] { 3, height, width });
     }
 
     /// <summary>
@@ -470,11 +460,7 @@ public static class SegmentationRenderer
                     $"Mask [{unbatched.Shape[0]},{unbatched.Shape[1]}] does not match image [{height},{width}].",
                     nameof(masks));
 
-            var single = new Tensor<T>([1, height, width]);
-            for (int y = 0; y < height; y++)
-                for (int x = 0; x < width; x++)
-                    single[0, y, x] = unbatched[y, x];
-            return single;
+            return AiDotNetEngine.Current.Reshape(unbatched, new[] { 1, height, width });
         }
 
         if (unbatched.Rank != 3)
@@ -517,12 +503,8 @@ public static class SegmentationRenderer
 
         int height = masks.Shape[1];
         int width = masks.Shape[2];
-        var filtered = new Tensor<T>([keep.Count, height, width]);
-        for (int k = 0; k < keep.Count; k++)
-            for (int y = 0; y < height; y++)
-                for (int x = 0; x < width; x++)
-                    filtered[k, y, x] = masks[keep[k], y, x];
-        return filtered;
+        if (keep.Count == 0) return new Tensor<T>([0, height, width]);
+        return CvTensorOps<T>.Select(masks, keep.ToArray(), 0);
     }
 
     /// <summary>

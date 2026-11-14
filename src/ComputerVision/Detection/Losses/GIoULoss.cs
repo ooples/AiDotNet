@@ -48,26 +48,11 @@ public class GIoULoss<T> : LossFunctionBase<T>
         }
 
         int numBoxes = predicted.Length / 4;
-        double totalLoss = 0;
+        if (numBoxes == 0) return NumOps.Zero;
 
-        for (int i = 0; i < numBoxes; i++)
-        {
-            int offset = i * 4;
-            var predBox = new BoundingBox<T>(
-                predicted[offset], predicted[offset + 1],
-                predicted[offset + 2], predicted[offset + 3],
-                BoundingBoxFormat.XYXY);
-
-            var targetBox = new BoundingBox<T>(
-                actual[offset], actual[offset + 1],
-                actual[offset + 2], actual[offset + 3],
-                BoundingBoxFormat.XYXY);
-
-            double giou = _nms.ComputeGIoU(predBox, targetBox);
-            totalLoss += 1.0 - giou;
-        }
-
-        return NumOps.FromDouble(numBoxes > 0 ? totalLoss / numBoxes : 0);
+        var predictedBoxes = new Tensor<T>(new[] { numBoxes, 4 }, predicted);
+        var targetBoxes = new Tensor<T>(new[] { numBoxes, 4 }, actual);
+        return MeanLoss(predictedBoxes, targetBoxes);
     }
 
     /// <summary>
@@ -85,30 +70,19 @@ public class GIoULoss<T> : LossFunctionBase<T>
 
         int batch = predicted.Shape[0];
         int numBoxes = predicted.Shape[1];
-        double totalLoss = 0;
-        int count = 0;
+        if (batch * numBoxes == 0) return NumOps.Zero;
 
-        for (int b = 0; b < batch; b++)
-        {
-            for (int i = 0; i < numBoxes; i++)
-            {
-                var predBox = new BoundingBox<T>(
-                    predicted[b, i, 0], predicted[b, i, 1],
-                    predicted[b, i, 2], predicted[b, i, 3],
-                    BoundingBoxFormat.XYXY);
+        // Box (b, i) of each tensor is its first four coordinates at [b, i, ..].
+        var predictedBoxes = BoxOverlap<T>.AsRows(Engine.TensorSlice(predicted, new[] { 0, 0, 0 }, new[] { batch, numBoxes, predicted.Shape[2] }));
+        var targetBoxes = BoxOverlap<T>.AsRows(Engine.TensorSlice(targets, new[] { 0, 0, 0 }, new[] { batch, numBoxes, targets.Shape[2] }));
+        return MeanLoss(predictedBoxes, targetBoxes);
+    }
 
-                var targetBox = new BoundingBox<T>(
-                    targets[b, i, 0], targets[b, i, 1],
-                    targets[b, i, 2], targets[b, i, 3],
-                    BoundingBoxFormat.XYXY);
-
-                double giou = _nms.ComputeGIoU(predBox, targetBox);
-                totalLoss += 1.0 - giou;
-                count++;
-            }
-        }
-
-        return NumOps.FromDouble(count > 0 ? totalLoss / count : 0);
+    /// <summary>The mean of <c>1 - GIoU</c> over the rows of two <c>[N, 4]</c> XYXY box sets.</summary>
+    private T MeanLoss(Tensor<T> predictedBoxes, Tensor<T> targetBoxes)
+    {
+        var perBox = Engine.ScalarMinusTensor(NumOps.One, BoxOverlap<T>.GIoU(predictedBoxes, targetBoxes));
+        return CvTensorOps<T>.Mean(perBox);
     }
 
     /// <summary>

@@ -299,3 +299,152 @@ public class NMS<T>
         return ciou;
     }
 }
+
+/// <summary>
+/// Row-wise overlap measures between two sets of XYXY boxes <c>[N, 4]</c>, as engine ops, with exactly the
+/// conventions of <see cref="NMS{T}.ComputeIoU"/>, <see cref="NMS{T}.ComputeGIoU"/>,
+/// <see cref="NMS{T}.ComputeDIoU"/> and <see cref="NMS{T}.ComputeCIoU"/> on XYXY boxes.
+/// </summary>
+/// <typeparam name="T">The numeric type.</typeparam>
+internal static class BoxOverlap<T>
+{
+    private static IEngine Engine => AiDotNetEngine.Current;
+
+    private static INumericOperations<T> NumOps => MathHelper.GetNumericOperations<T>();
+
+    private readonly struct Corners
+    {
+        public Corners(Tensor<T> boxes)
+        {
+            int n = boxes.Shape[0];
+            Tensor<T> Column(int index)
+                => Engine.Reshape(Engine.TensorSlice(boxes, new[] { 0, index }, new[] { n, 1 }), new[] { n });
+            X1 = Column(0); Y1 = Column(1); X2 = Column(2); Y2 = Column(3);
+        }
+
+        public Tensor<T> X1 { get; }
+        public Tensor<T> Y1 { get; }
+        public Tensor<T> X2 { get; }
+        public Tensor<T> Y2 { get; }
+    }
+
+    /// <summary>Rows of a flat run of <c>4N</c> coordinates (or the first four columns of <c>[..., k]</c>) as <c>[N, 4]</c>.</summary>
+    public static Tensor<T> AsRows(Tensor<T> boxes)
+    {
+        int last = boxes.Shape[boxes.Rank - 1];
+        if (boxes.Rank == 1)
+            return Engine.Reshape(boxes, new[] { boxes.Length / 4, 4 });
+        int rows = boxes.Length / last;
+        var flat = Engine.Reshape(boxes, new[] { rows, last });
+        return last == 4 ? flat : Engine.TensorSlice(flat, new[] { 0, 0 }, new[] { rows, 4 });
+    }
+
+    /// <summary>
+    /// IoU per row: 0 when the intersection or the union is not positive; areas clamp negative extents to zero.
+    /// </summary>
+    public static Tensor<T> IoU(Tensor<T> a, Tensor<T> b)
+    {
+        var (ca, cb) = ScaledCorners(a, b);
+        return IoUParts(ca, cb).IoU;
+    }
+
+    /// <summary>GIoU per row: <c>IoU - (C - U) / C</c>, or IoU itself when the enclosing area C is not positive.</summary>
+    public static Tensor<T> GIoU(Tensor<T> a, Tensor<T> b)
+    {
+        var (ca, cb) = ScaledCorners(a, b);
+        var (iou, union) = IoUParts(ca, cb);
+        var enclosing = Engine.TensorMultiply(
+            Engine.TensorSubtract(Engine.TensorMax(ca.X2, cb.X2), Engine.TensorMin(ca.X1, cb.X1)),
+            Engine.TensorSubtract(Engine.TensorMax(ca.Y2, cb.Y2), Engine.TensorMin(ca.Y1, cb.Y1)));
+        var penalty = Ratio(Engine.TensorSubtract(enclosing, union), enclosing);
+        return Engine.TensorSubtract(iou, penalty);
+    }
+
+    /// <summary>DIoU per row: <c>IoU - d^2 / c^2</c> (centre distance over enclosing diagonal), or IoU when c^2 is not positive.</summary>
+    public static Tensor<T> DIoU(Tensor<T> a, Tensor<T> b)
+    {
+        var (ca, cb) = ScaledCorners(a, b);
+        return DIoU(ca, cb, IoUParts(ca, cb).IoU);
+    }
+
+    /// <summary>
+    /// CIoU per row: <c>DIoU - alpha v</c> with <c>v = 4 / pi^2 (atan(w1 / h1) - atan(w2 / h2))^2</c> and
+    /// <c>alpha = v / (1 - IoU + v + 1e-7)</c>; DIoU itself when either height is not positive.
+    /// </summary>
+    public static Tensor<T> CIoU(Tensor<T> a, Tensor<T> b)
+    {
+        var (ca, cb) = ScaledCorners(a, b);
+        var iou = IoUParts(ca, cb).IoU;
+        var diou = DIoU(ca, cb, iou);
+
+        var w1 = Engine.TensorSubtract(ca.X2, ca.X1);
+        var h1 = Engine.TensorSubtract(ca.Y2, ca.Y1);
+        var w2 = Engine.TensorSubtract(cb.X2, cb.X1);
+        var h2 = Engine.TensorSubtract(cb.Y2, cb.Y1);
+        var bothPositive = Engine.TensorMultiply(Engine.TensorGreaterThan(h1, NumOps.Zero), Engine.TensorGreaterThan(h2, NumOps.Zero));
+        var ones = Engine.TensorOnesLike(h1);
+        var safeH1 = Engine.TensorWhere(bothPositive, h1, ones);
+        var safeH2 = Engine.TensorWhere(bothPositive, h2, ones);
+        var angle = Engine.TensorSubtract(Engine.TensorAtan(Engine.TensorDivide(w1, safeH1)), Engine.TensorAtan(Engine.TensorDivide(w2, safeH2)));
+        var v = Engine.TensorMultiplyScalar(Engine.TensorSquare(angle), NumOps.FromDouble(4.0 / (Math.PI * Math.PI)));
+        var alpha = Engine.TensorDivide(v, Engine.TensorAddScalar(
+            Engine.TensorAdd(Engine.ScalarMinusTensor(NumOps.One, iou), v), NumOps.FromDouble(1e-7)));
+        var ciou = Engine.TensorSubtract(diou, Engine.TensorMultiply(alpha, v));
+        return Engine.TensorWhere(bothPositive, ciou, diou);
+    }
+
+    /// <summary>
+    /// The corners of both box sets, each row pair divided by its largest absolute coordinate.
+    /// </summary>
+    /// <remarks>
+    /// Every measure here is a ratio of areas or of squared lengths, or an angle, so it is unchanged by scaling a row
+    /// pair. Scaling to <c>[-1, 1]</c> keeps the areas and squared diagonals finite in half precision, where pixel
+    /// boxes overflow 65504 (a 256 x 256 box already does) and the overflowing ratios became NaN.
+    /// </remarks>
+    private static (Corners A, Corners B) ScaledCorners(Tensor<T> a, Tensor<T> b)
+    {
+        int n = a.Shape[0];
+        var largest = Engine.ReduceMax(Engine.TensorAbs(Engine.TensorConcatenate(new[] { a, b }, 1)), new[] { 1 }, keepDims: true);
+        var safe = Engine.TensorWhere(Engine.TensorGreaterThan(largest, NumOps.Zero), largest, Engine.TensorOnesLike(largest));
+        var divisor = Engine.TensorBroadcastTo(safe, new[] { n, 4 });
+        return (new Corners(Engine.TensorDivide(a, divisor)), new Corners(Engine.TensorDivide(b, divisor)));
+    }
+
+    private static Tensor<T> DIoU(Corners ca, Corners cb, Tensor<T> iou)
+    {
+        var two = NumOps.FromDouble(2);
+        var cx1 = Engine.TensorAdd(ca.X1, Engine.TensorDivideScalar(Engine.TensorSubtract(ca.X2, ca.X1), two));
+        var cy1 = Engine.TensorAdd(ca.Y1, Engine.TensorDivideScalar(Engine.TensorSubtract(ca.Y2, ca.Y1), two));
+        var cx2 = Engine.TensorAdd(cb.X1, Engine.TensorDivideScalar(Engine.TensorSubtract(cb.X2, cb.X1), two));
+        var cy2 = Engine.TensorAdd(cb.Y1, Engine.TensorDivideScalar(Engine.TensorSubtract(cb.Y2, cb.Y1), two));
+        var centerDistSq = Engine.TensorAdd(
+            Engine.TensorSquare(Engine.TensorSubtract(cx1, cx2)), Engine.TensorSquare(Engine.TensorSubtract(cy1, cy2)));
+        var diagonalSq = Engine.TensorAdd(
+            Engine.TensorSquare(Engine.TensorSubtract(Engine.TensorMax(ca.X2, cb.X2), Engine.TensorMin(ca.X1, cb.X1))),
+            Engine.TensorSquare(Engine.TensorSubtract(Engine.TensorMax(ca.Y2, cb.Y2), Engine.TensorMin(ca.Y1, cb.Y1))));
+        return Engine.TensorSubtract(iou, Ratio(centerDistSq, diagonalSq));
+    }
+
+    private static (Tensor<T> IoU, Tensor<T> Union) IoUParts(Corners a, Corners b)
+    {
+        var interW = Engine.TensorMax(Engine.TensorSubtract(Engine.TensorMin(a.X2, b.X2), Engine.TensorMax(a.X1, b.X1)), NumOps.Zero);
+        var interH = Engine.TensorMax(Engine.TensorSubtract(Engine.TensorMin(a.Y2, b.Y2), Engine.TensorMax(a.Y1, b.Y1)), NumOps.Zero);
+        var intersection = Engine.TensorMultiply(interW, interH);
+        var areaA = Engine.TensorMultiply(
+            Engine.TensorMax(Engine.TensorSubtract(a.X2, a.X1), NumOps.Zero), Engine.TensorMax(Engine.TensorSubtract(a.Y2, a.Y1), NumOps.Zero));
+        var areaB = Engine.TensorMultiply(
+            Engine.TensorMax(Engine.TensorSubtract(b.X2, b.X1), NumOps.Zero), Engine.TensorMax(Engine.TensorSubtract(b.Y2, b.Y1), NumOps.Zero));
+        var union = Engine.TensorSubtract(Engine.TensorAdd(areaA, areaB), intersection);
+        var overlapping = Engine.TensorGreaterThan(intersection, NumOps.Zero);
+        var iou = Engine.TensorMultiply(overlapping, Ratio(intersection, union));
+        return (iou, union);
+    }
+
+    /// <summary><c>numerator / denominator</c> where the denominator is positive, else zero.</summary>
+    private static Tensor<T> Ratio(Tensor<T> numerator, Tensor<T> denominator)
+    {
+        var positive = Engine.TensorGreaterThan(denominator, NumOps.Zero);
+        var safe = Engine.TensorWhere(positive, denominator, Engine.TensorOnesLike(denominator));
+        return Engine.TensorMultiply(positive, Engine.TensorDivide(numerator, safe));
+    }
+}

@@ -70,7 +70,6 @@ internal static class FpnRoIPooler<T>
                 nameof(strides));
         }
 
-        var ops = MathHelper.GetNumericOperations<T>();
         var assignment = AssignLevels(boxes, strides);
 
         var parts = new List<Tensor<T>>();
@@ -91,14 +90,7 @@ internal static class FpnRoIPooler<T>
                 continue;
             }
 
-            var subset = new Tensor<T>(new[] { members.Count, 4 });
-            for (int m = 0; m < members.Count; m++)
-            {
-                for (int c = 0; c < 4; c++)
-                {
-                    subset[m, c] = ops.FromDouble(ops.ToDouble(boxes[members[m], c]));
-                }
-            }
+            var subset = CvTensorOps<T>.Select(boxes, members.ToArray(), 0);
 
             parts.Add(align.Forward(levels[level], subset, 1.0 / strides[level]));
             order.AddRange(members);

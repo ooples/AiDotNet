@@ -230,25 +230,26 @@ internal static class CvTensorOps<T>
 
         if (causal)
         {
-            // Additive mask: a large negative score gives the masked key an attention weight that
-            // underflows to exactly zero after the softmax, matching a loop that skips j > i.
-            var mask = new Tensor<T>(new[] { 1, 1, lq, lk });
-            var blocked = NumOps.FromDouble(-1e30);
-            for (int i = 0; i < lq; i++)
-            {
-                for (int j = i + 1; j < lk; j++)
-                {
-                    mask[(i * lk) + j] = blocked;
-                }
-            }
-
-            scores = Engine.TensorAdd(scores, Engine.TensorBroadcastTo(mask, Dims(scores)));
+            scores = Engine.TensorAdd(scores, Engine.TensorBroadcastTo(CausalMask(lq, lk), Dims(scores)));
         }
 
         var weights = Engine.Softmax(scores, -1);
         var attended = Engine.TensorMatMul(weights, v); // [N, H, Lq, hd]
         return Engine.Reshape(Engine.TensorPermute(attended, new[] { 0, 2, 1, 3 }), new[] { n, lq, d });
     }
+
+    /// <summary>
+    /// The additive causal mask <c>[1, 1, Lq, Lk]</c>: a large negative score where key <c>j &gt; i</c> for query
+    /// <c>i</c>, else zero. The large negative gives a blocked key an attention weight that underflows to exactly
+    /// zero after the softmax, matching a loop that skips <c>j &gt; i</c>.
+    /// </summary>
+    /// <remarks>
+    /// The upper triangle above the diagonal is selected by integer position (<c>triu</c> with diagonal 1), never by
+    /// comparing index ramps held in <typeparamref name="T"/>: half precision cannot hold every index above 2048, so
+    /// such a comparison unblocks future keys in long sequences.
+    /// </remarks>
+    internal static Tensor<T> CausalMask(int lq, int lk)
+        => Engine.Reshape(Engine.TensorTriu(Fill(new[] { lq, lk }, NumOps.FromDouble(-1e30)), 1), new[] { 1, 1, lq, lk });
 
     private static Tensor<T> SplitHeads(Tensor<T> x, int numHeads, int headDim)
     {
@@ -565,6 +566,53 @@ internal static class CvTensorOps<T>
     }
 
     /// <summary>
+    /// RoIAlign: pools each region of interest into an <c>outputSize x outputSize</c> grid by averaging
+    /// <c>samplingRatio^2</c> bilinear samples per bin, over an NCHW feature map - torchvision's <c>roi_align</c>
+    /// with <c>aligned = false</c>, as its <c>MultiScaleRoIAlign</c> runs it for Faster, Mask and Cascade R-CNN.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The boxes are constants: as in torchvision, the gradient flows into the features, not the box coordinates.
+    /// A RoI is at least one feature cell on each side, a sample outside <c>[-1, size]</c> contributes zero but still
+    /// counts in its bin's average, and coordinates in <c>(-1, 0]</c> clamp to the first cell.
+    /// </para>
+    /// <para>
+    /// The engine kernel builds each RoI's bilinear taps once and gathers them per channel. This used to be composed
+    /// from GridSample, a batched product and two permutes, which the tape held as four RoI-sized intermediates (about
+    /// 850 MB over five FasterRCNN training steps), and it averaged only the in-bounds samples, unlike torchvision.
+    /// </para>
+    /// </remarks>
+    /// <param name="features">Feature map <c>[N, C, H, W]</c>.</param>
+    /// <param name="boxes">Per-RoI <c>(x1, y1, x2, y2)</c> in image coordinates, length <c>4 * R</c>.</param>
+    /// <param name="batchIndices">Per-RoI image index into <paramref name="features"/>, length <c>R</c>.</param>
+    /// <param name="spatialScale">Image-to-feature-map scale.</param>
+    /// <param name="outputSize">Pooled grid side.</param>
+    /// <param name="samplingRatio">Samples per bin side; 0 or less picks <c>ceil(roi size / outputSize)</c> per RoI.</param>
+    /// <returns>Pooled features <c>[R, C, outputSize, outputSize]</c>.</returns>
+    public static Tensor<T> RoIAlign(
+        Tensor<T> features, Tensor<T> boxes, int[] batchIndices, double spatialScale, int outputSize, int samplingRatio)
+    {
+        int rois = batchIndices.Length;
+        if (rois == 0)
+        {
+            return new Tensor<T>(new[] { 0, features.Shape[1], outputSize, outputSize });
+        }
+
+        // The engine's rows are (batch index, x1, y1, x2, y2): the first 4 * R box values, row-major.
+        var flatBoxes = Engine.Reshape(boxes, new[] { boxes.Length });
+        var boxRows = Engine.Reshape(Engine.TensorSlice(flatBoxes, new[] { 0 }, new[] { 4 * rois }), new[] { rois, 4 });
+        int maxIndex = 0;
+        foreach (int index in batchIndices)
+        {
+            maxIndex = Math.Max(maxIndex, index);
+        }
+
+        var indexColumn = Engine.Reshape(IndicesAsValues(batchIndices, maxIndex + 1), new[] { rois, 1 });
+        var boxTensor = Engine.Concat(new[] { indexColumn, boxRows }, 1);
+        return Engine.RoIAlign(features, boxTensor, outputSize, outputSize, (float)spatialScale, samplingRatio, aligned: false);
+    }
+
+    /// <summary>
     /// Gathers slices of <paramref name="x"/> along <paramref name="axis"/> at the given indices.
     /// </summary>
     public static Tensor<T> Select(Tensor<T> x, int[] indices, int axis)
@@ -582,30 +630,32 @@ internal static class CvTensorOps<T>
         return result;
     }
 
-    private static (int[] Lo, int[] Hi, T[] WeightLo, T[] WeightHi) BilinearTaps(int src, int dst)
+    private static (int[] Lo, int[] Hi, Tensor<T> WeightLo, Tensor<T> WeightHi) BilinearTaps(int src, int dst)
     {
+        // The source position i * src / dst splits exactly, in integers, into the tap lo = floor(i * src / dst) and
+        // the remainder r = i * src - lo * dst, so frac = r / dst. Only that final division happens in T: forming
+        // the position itself in T (a ramp scaled by src / dst) loses whole pixels in half precision.
         var lo = new int[dst];
         var hi = new int[dst];
-        var wLo = new T[dst];
-        var wHi = new T[dst];
+        var remainder = new int[dst];
         for (int i = 0; i < dst; i++)
         {
-            double s = (double)i / dst * src;
-            int i0 = (int)Math.Floor(s);
+            long scaled = (long)i * src;
+            int i0 = (int)(scaled / dst);
             lo[i] = i0;
             hi[i] = Math.Min(i0 + 1, src - 1);
-            double frac = s - i0;
-            wHi[i] = NumOps.FromDouble(frac);
-            wLo[i] = NumOps.FromDouble(1.0 - frac);
+            remainder[i] = (int)(scaled - ((long)i0 * dst));
         }
 
+        var wHi = Engine.TensorDivideScalar(IndicesAsValues(remainder, dst), NumOps.FromDouble(dst));
+        var wLo = Engine.ScalarMinusTensor(NumOps.One, wHi);
         return (lo, hi, wLo, wHi);
     }
 
     /// <summary>
     /// Expands a per-position weight vector along <paramref name="axis"/> to the full target shape.
     /// </summary>
-    private static Tensor<T> Broadcast(T[] weights, int[] dims, int axis)
+    private static Tensor<T> Broadcast(Tensor<T> weights, int[] dims, int axis)
     {
         var viewShape = new int[dims.Length];
         for (int d = 0; d < dims.Length; d++)
@@ -613,9 +663,83 @@ internal static class CvTensorOps<T>
             viewShape[d] = d == axis ? weights.Length : 1;
         }
 
-        var view = new Tensor<T>(viewShape, new Vector<T>(weights));
-        return Engine.TensorBroadcastTo(view, dims);
+        return Engine.TensorBroadcastTo(Engine.Reshape(weights, viewShape), dims);
     }
+
+    /// <summary>
+    /// The integers in <paramref name="indices"/> as values of type <typeparamref name="T"/>: a gather
+    /// from the ramp <c>0 .. count-1</c>, so every value is exact. Each index must lie in <c>[0, count)</c>.
+    /// </summary>
+    public static Tensor<T> IndicesAsValues(int[] indices, int count)
+        => IndicesAsValues(new Tensor<int>(new[] { indices.Length }, new Vector<int>(indices)), count);
+
+    /// <inheritdoc cref="IndicesAsValues(int[], int)"/>
+    public static Tensor<T> IndicesAsValues(Tensor<int> indices, int count)
+        => Engine.TensorGather(Engine.TensorArange<T>(0, Math.Max(count, 1), 1), indices, 0);
+
+    /// <summary>
+    /// The mean of every element of <paramref name="values"/> (zero when empty), with each element divided by
+    /// <c>sqrt(n)</c> before the sum and the sum divided by <c>sqrt(n)</c> again.
+    /// </summary>
+    /// <remarks>
+    /// Summing first overflows half precision once the total passes 65504 (for example 40 000 box losses near 2), and
+    /// dividing every element by <c>n</c> first drops small terms into subnormals. The square-root split keeps both
+    /// the terms and the partial sums in range.
+    /// </remarks>
+    public static T Mean(Tensor<T> values)
+    {
+        if (values.Length == 0)
+        {
+            return NumOps.Zero;
+        }
+
+        var root = NumOps.FromDouble(Math.Sqrt(values.Length));
+        return NumOps.Divide(Engine.TensorSum(Engine.TensorDivideScalar(values, root)), root);
+    }
+
+    /// <summary>A new tensor of the given shape with every element set to <paramref name="value"/>.</summary>
+    public static Tensor<T> Fill(int[] shape, T value)
+    {
+        var result = new Tensor<T>(shape);
+        Engine.TensorFill(result, value);
+        return result;
+    }
+
+    /// <summary>A new tensor of the given shape with every element set to <paramref name="value"/>.</summary>
+    public static Tensor<T> Fill(int[] shape, double value) => Fill(shape, NumOps.FromDouble(value));
+
+    /// <summary>
+    /// Copies <paramref name="input"/> into a new ONNX Runtime <c>float</c> tensor of the same shape, converting
+    /// the whole buffer in one bulk call.
+    /// </summary>
+    /// <remarks>
+    /// Reads the logical, row-major values: a strided view (the models batch their input with a reshape that
+    /// accepts one) is made contiguous first. The read goes through the read-only span, so a shared copy-on-write
+    /// input is not privatized just to be read, as the writable <c>Data</c> accessor would.
+    /// </remarks>
+    public static Microsoft.ML.OnnxRuntime.Tensors.DenseTensor<float> ToOnnxFloat(Tensor<T> input)
+    {
+        var source = input.IsContiguous ? input : input.Contiguous();
+        var data = new float[source.Length];
+        NumOps.ToFloatSpan(source.AsSpan(), data);
+        return new Microsoft.ML.OnnxRuntime.Tensors.DenseTensor<float>(data, source.Shape.ToArray());
+    }
+
+    /// <summary>
+    /// Copies an ONNX Runtime <c>float</c> output into a new tensor of <typeparamref name="T"/> with the same
+    /// dimensions, converting the whole buffer in one bulk call.
+    /// </summary>
+    public static Tensor<T> FromOnnxFloat(Microsoft.ML.OnnxRuntime.Tensors.Tensor<float> output)
+    {
+        var dense = output.ToDenseTensor();
+        var data = new T[dense.Length];
+        NumOps.FromFloatSpan(dense.Buffer.Span, data);
+        return new Tensor<T>(dense.Dimensions.ToArray(), new Vector<T>(data));
+    }
+
+    /// <summary>A rank-2 <c>[rows.Count, columns]</c> tensor from per-row value arrays (no arithmetic).</summary>
+    public static Tensor<T> FromRows(IReadOnlyList<T[]> rows, int columns)
+        => new Tensor<T>(new[] { rows.Count, columns }, new Vector<T>(rows.SelectMany(r => r).ToArray()));
 
     private static int[] Dims(Tensor<T> t)
     {

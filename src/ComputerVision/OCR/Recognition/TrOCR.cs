@@ -1304,14 +1304,8 @@ internal class TrOCRLayerNorm<T> : CvParameterModule<T>
         _eps = eps;
 
         // Initialize gamma to 1 and beta to 0 (standard initialization)
-        _gamma = new Tensor<T>(new[] { hiddenDim });
-        _beta = new Tensor<T>(new[] { hiddenDim });
-
-        for (int i = 0; i < hiddenDim; i++)
-        {
-            _gamma[i] = _numOps.FromDouble(1.0);
-            _beta[i] = _numOps.FromDouble(0.0);
-        }
+        _gamma = CvTensorOps<T>.Fill(new[] { hiddenDim }, 1.0);
+        _beta = CvTensorOps<T>.Fill(new[] { hiddenDim }, 0.0);
     }
 
     public Tensor<T> Forward(Tensor<T> x) => CvTensorOps<T>.LayerNormLastAxis(x, _gamma, _beta, _eps);

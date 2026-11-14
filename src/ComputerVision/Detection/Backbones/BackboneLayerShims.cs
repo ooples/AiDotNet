@@ -189,8 +189,7 @@ internal class Conv2D<T> : IParameterSource<T>, IParameterChunkSource<T>, IParam
                     "input depth is still the lazy sentinel.");
             var p = _layer.GetParameters();
             int weightLen = _outChannels * _inChannels * _kernelSize * _kernelSize;
-            var arr = new T[weightLen];
-            for (int i = 0; i < weightLen; i++) arr[i] = p[i];
+            var arr = p.AsSpan().Slice(0, weightLen).ToArray();
             return new Tensor<T>(new[] { _outChannels, _inChannels, _kernelSize, _kernelSize }, new Vector<T>(arr));
         }
     }
@@ -204,8 +203,7 @@ internal class Conv2D<T> : IParameterSource<T>, IParameterChunkSource<T>, IParam
                     "Conv2D bias is unavailable until the layer's first Forward().");
             var p = _layer.GetParameters();
             int weightLen = _outChannels * _inChannels * _kernelSize * _kernelSize;
-            var arr = new T[_outChannels];
-            for (int i = 0; i < _outChannels; i++) arr[i] = p[weightLen + i];
+            var arr = p.AsSpan().Slice(weightLen, _outChannels).ToArray();
             return new Tensor<T>(new[] { _outChannels }, new Vector<T>(arr));
         }
     }
@@ -364,8 +362,7 @@ internal class Dense<T> : IParameterSource<T>, IParameterChunkSource<T>, IParame
                     "Dense weights are unavailable until the layer's first Forward().");
             var p = _layer.GetParameters();
             int wlen = _inDim * _outDim;
-            var arr = new T[wlen];
-            for (int i = 0; i < wlen; i++) arr[i] = p[i];
+            var arr = p.AsSpan().Slice(0, wlen).ToArray();
             // Match DenseLayer's underlying weight shape [inputSize, outputSize]
             // (see DenseLayer.cs:434 — TensorAllocator.Rent<T>([inputSize, outputSize])).
             // Returning [_outDim, _inDim] without transposing the flat data
@@ -384,8 +381,7 @@ internal class Dense<T> : IParameterSource<T>, IParameterChunkSource<T>, IParame
                     "Dense bias is unavailable until the layer's first Forward().");
             var p = _layer.GetParameters();
             int wlen = _inDim * _outDim;
-            var arr = new T[_outDim];
-            for (int i = 0; i < _outDim; i++) arr[i] = p[wlen + i];
+            var arr = p.AsSpan().Slice(wlen, _outDim).ToArray();
             return new Tensor<T>(new[] { _outDim }, new Vector<T>(arr));
         }
     }
