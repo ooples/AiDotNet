@@ -113,7 +113,7 @@ internal static class GroundingDetections<T>
     }
 
     /// <summary>Each row's largest magnitude as <c>[n, 1]</c>, or 1 for an all-zero row.</summary>
-    private static Tensor<T> RowScale(IEngine engine, Tensor<T> matrix)
+    internal static Tensor<T> RowScale(IEngine engine, Tensor<T> matrix)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
         int rows = matrix.Shape[0];

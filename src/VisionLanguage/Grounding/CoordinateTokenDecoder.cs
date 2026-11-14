@@ -140,10 +140,11 @@ internal sealed class CoordinateTokenDecoder<T> : GroundingHeadModule<T>
         if (imageTokens is null) throw new ArgumentNullException(nameof(imageTokens));
         if (languageModel is null) throw new ArgumentNullException(nameof(languageModel));
         var prefix = Engine.TensorConcatenate(new[] { AsRows(Engine, imageTokens), EmbedText(tokenIds) }, 0);
+        // A box is at most boxLength tokens; each box after the first adds a ";" and the answer ends with EndToken.
         int boxLength = 4 * _longestSpelling + 5;
         var (tokens, probabilities) = DecodeGreedy(prefix, languageModel, _head,
             token => Rows(_coordinateEmbedding, OneHot(new[] { token }, Vocabulary)),
-            written => Allowed(written, maxBoxes), EndToken, boxLength * Math.Max(0, maxBoxes) + 1);
+            written => Allowed(written, maxBoxes), EndToken, (boxLength + 1) * Math.Max(0, maxBoxes));
 
         // Whole boxes only: '[' four values ']', scored by the probability of every character from '[' to ']'.
         var coordinates = new List<int>();

@@ -80,7 +80,12 @@ internal sealed class OwlDetectionHead<T> : GroundingHeadModule<T>
     {
         if (tokenIds is null || tokenIds.Count == 0) throw new ArgumentException("The query has no tokens.", nameof(tokenIds));
         int length = Math.Min(tokenIds.Count, Configuration.MaxTextLength);
-        var ids = tokenIds.Take(length).ToList();
+        // The tokenizer appends the end-of-text token, and the last position is the one pooled; a query longer than
+        // MaxTextLength keeps it in place of its last content token, as CLIP's truncation does, rather than pooling a
+        // content token.
+        var ids = tokenIds.Count > length
+            ? tokenIds.Take(length - 1).Append(tokenIds[tokenIds.Count - 1]).ToList()
+            : tokenIds.ToList();
         var x = Engine.TensorAdd(Rows(_tokenEmbedding, OneHot(ids, Configuration.VocabSize)),
             Rows(_positionEmbedding, OneHot(Enumerable.Range(0, length).ToList(), Configuration.MaxTextLength)));
         foreach (var block in _textBlocks) x = Run(block, x, null);
@@ -162,11 +167,15 @@ internal sealed class OwlDetectionHead<T> : GroundingHeadModule<T>
         return new OwlPrediction<T>(boxes, logits, objectness);
     }
 
-    // x / (||x|| + 1e-6) per row, the norm overflow-safe.
+    // x / (||x|| + 1e-6) per row, formed as (x / s) / (||x / s|| + 1e-6 / s) with s the row's largest magnitude: the
+    // norm of a finite Half row such as [60000, 60000] is past 65504, so dividing by it gave [0, 0].
     private Tensor<T> Normalized(Tensor<T> rows)
     {
         int n = rows.Shape[0], d = rows.Shape[1];
-        var norms = Engine.TensorAddScalar(GroundingDetections<T>.RowNorm(Engine, rows), NumOps.FromDouble(NormEpsilon)).Reshape(new[] { n, 1 });
-        return Engine.TensorDivide(rows, Engine.TensorBroadcastTo(norms, new[] { n, d }));
+        var scale = GroundingDetections<T>.RowScale(Engine, rows);
+        var scaled = Engine.TensorDivide(rows, Engine.TensorBroadcastTo(scale, new[] { n, d }));
+        var scaledNorm = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(scaled, scaled), new[] { 1 }, false)).Reshape(new[] { n, 1 });
+        var norms = Engine.TensorAdd(scaledNorm, Engine.TensorMultiplyScalar(Engine.TensorReciprocal(scale), NumOps.FromDouble(NormEpsilon)));
+        return Engine.TensorDivide(scaled, Engine.TensorBroadcastTo(norms, new[] { n, d }));
     }
 }

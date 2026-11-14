@@ -144,9 +144,11 @@ internal sealed class GromaRegionGrounder<T> : GroundingHeadModule<T>
             var used = Engine.ReduceSum(OneHot(written, vocabulary), new[] { 0 }, true);
             return Engine.TensorMultiply(permitted, Engine.TensorEquals(used, NumOps.Zero));
         }
+        // At most maxRegions steps: every step that does not end the answer refers to one more region, so a further
+        // step could only add a region past the limit; an earlier end token still stops decoding.
         var (tokens, probabilities) = DecodeGreedy(prefix, languageModel, _head,
             token => Engine.TensorSlice(regions, new[] { token, 0 }, new[] { 1, regions.Shape[1] }),
-            Allowed, End, Math.Min(Math.Max(0, maxRegions), k) + 1);
+            Allowed, End, Math.Min(Math.Max(0, maxRegions), k));
         var referred = tokens.Where(t => t < k).ToList();
         if (referred.Count == 0) return (new Tensor<T>(new[] { 0, 4 }), new Tensor<T>(new[] { 0 }));
         var index = new Tensor<int>(new[] { referred.Count }, Vector<int>.FromList(referred));
