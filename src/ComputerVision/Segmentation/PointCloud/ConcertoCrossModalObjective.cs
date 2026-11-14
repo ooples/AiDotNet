@@ -84,14 +84,14 @@ public static class ConcertoCrossModalObjective<T>
         var px = engine.TensorFloor(engine.TensorWhere(insideU, u, zeros)).Cast<int>();
         var py = engine.TensorFloor(engine.TensorWhere(insideV, v, zeros)).Cast<int>();
 
-        // Depth-based visibility verification -- the step that rejects occluded points. A point is
-        // dropped only when |d_camera - d_depthMap| >= tolerance.
+        // Depth-based visibility verification -- the step that rejects occluded points. A point is kept
+        // only when |d_camera - d_depthMap| < tolerance: a positive match, so a NaN depth reading (no
+        // measurement) rejects the point instead of passing a negated ">=" test.
         var pixelIndex = engine.TensorAdd(engine.TensorMultiplyScalar(py, depthWidth), px);
         var observedDepth = engine.TensorIndexSelect(
             engine.Reshape(view.DepthMap, new[] { depthHeight * depthWidth }), pixelIndex, 0).Cast<double>();
         var depthError = engine.TensorAbs(engine.TensorSubtract(cz, observedDepth));
-        var depthAgrees = engine.ScalarMinusTensor(1.0,
-            engine.TensorGreaterEqual(depthError, engine.TensorFullLike(depthError, depthToleranceMeters)));
+        var depthAgrees = engine.TensorLessThan(depthError, depthToleranceMeters);
 
         // Every factor is a 0/1 comparison result, so the product is an exact 0/1 visibility flag.
         var visible = engine.TensorMultiply(engine.TensorMultiply(inFront, insideU),

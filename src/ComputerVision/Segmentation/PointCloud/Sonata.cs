@@ -45,6 +45,7 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 /// <item><b>Downstream.</b> Linear probe, decoder probe or full fine-tuning on the pretrained encoder. The
 /// current class trains its 3-convolution segmentation head end to end instead.</item>
 /// </list>
+/// </remarks>
 /// <example>
 /// <code>
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(

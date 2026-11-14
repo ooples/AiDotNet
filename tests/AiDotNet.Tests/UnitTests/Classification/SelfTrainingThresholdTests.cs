@@ -35,4 +35,29 @@ public class SelfTrainingThresholdTests
 
         Assert.Equal(new[] { 1f, 1f, 0f }, eligible.ToArray());
     }
+
+    [Fact(Timeout = 60000)]
+    public async Task ConfidenceFromProbabilities_RowCountMismatch_Throws()
+    {
+        await Task.CompletedTask;
+
+        // Two probability rows for three samples: reducing them gave two confidences, which the pseudo-label
+        // selection then paired with the wrong samples.
+        var probabilities = new Matrix<double>(new double[,] { { 0.2, 0.8 }, { 0.6, 0.4 } });
+
+        Assert.Throws<InvalidOperationException>(() => SelfTrainingClassifier<double>.ConfidenceFromProbabilities(probabilities, 3));
+        Assert.Throws<InvalidOperationException>(() => SelfTrainingClassifier<double>.ConfidenceFromProbabilities(null, 3));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ConfidenceFromProbabilities_IsTheRowMaximumFlooredAtZero()
+    {
+        await Task.CompletedTask;
+        var probabilities = new Matrix<double>(new double[,] { { 0.2, 0.8 }, { 0.6, 0.4 }, { -0.5, -0.1 } });
+
+        var confidence = SelfTrainingClassifier<double>.ConfidenceFromProbabilities(probabilities, 3);
+
+        Assert.Equal(new[] { 0.8, 0.6, 0.0 }, confidence.ToArray());
+        Assert.Equal(new double[2], SelfTrainingClassifier<double>.ConfidenceFromProbabilities(new Matrix<double>(2, 0), 2).ToArray());
+    }
 }

@@ -42,9 +42,12 @@ internal static class SegmentationStructureStatistics
 
         // Pixel/voxel count of every class (exact, in int), and the probability each pixel/voxel gave its own class.
         int[] areas = engine.TensorBinCount(classIndex, numClasses).ToArray();
-        var probabilityByPixel = engine.TensorPermute(
-            engine.Reshape(probabilities, new[] { numClasses, spatial }), new[] { 1, 0 });
-        var assignedProbability = engine.TensorGatherClassValues(probabilityByPixel, classIds);
+        // Gathered straight from the class-first storage at class * spatial + position, so no transposed copy of
+        // the whole probability volume is materialized to read one value per pixel/voxel.
+        var flatIndex = engine.TensorAdd(
+            engine.TensorMultiplyScalar(classIndex, spatial), engine.TensorArange<int>(0, spatial, 1));
+        var assignedProbability = engine.TensorTake(
+            engine.Reshape(probabilities, new[] { numClasses * spatial }), flatIndex);
 
         IEnumerable<int> classOrder = Enumerable.Range(0, numClasses);
         if (firstOccurrenceOrder)
