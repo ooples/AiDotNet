@@ -8899,7 +8899,18 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             WarmupLazyLayersForInput(input);
         }
 
-        BeginStreamingGradientRetention();
+        // The loss-scale overflow check and global-norm clipping both need every unscaled gradient before the first
+        // update, so this step holds one full gradient set. That is within streaming's memory bound only for a model
+        // whose gradients MaxRetainedGradientScalars allows retaining; for a larger one it is refused here, before
+        // any weight changes, rather than allocating the model-sized gradient set streaming exists to avoid.
+        if (ParameterCount > MaxRetainedGradientScalars)
+        {
+            throw new NotSupportedException(
+                $"Mixed-precision streaming training holds one full gradient set ({ParameterCount} scalars), above " +
+                $"{GetType().Name}'s MaxRetainedGradientScalars ({MaxRetainedGradientScalars}). Disable mixed precision for " +
+                "streaming training, or override MaxRetainedGradientScalars if the model can afford the gradient set.");
+        }
+
         var loss = LossFunction as LossFunctions.LossFunctionBase<T>
             ?? throw new InvalidOperationException(
                 "LossFunction must derive from LossFunctionBase<T> for tape-based training.");
@@ -8968,11 +8979,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             bool hasOverflow = UnscaleAndCheckMixedPrecisionGradients(mpCtx, sources, grads);
             RestoreMixedPrecisionMasterWeights(mpSnapshots, mpTargets, ref mpRestored);
 
+            // The step already holds the gradient set, so it is published directly rather than copied again.
             if (hasOverflow)
             {
-                foreach (var kvp in grads)
-                    RetainStreamingGradient(kvp.Key, kvp.Value);
-                EndStreamingGradientRetention();
                 PublishParameterGradients(grads);
                 return;
             }
@@ -8987,9 +8996,6 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     ? g => ApplyGradientClipping(g, maxGradNorm, CollectLayerOwnedTrainableTensorsForClipping(sources))
                     : null);
 
-            foreach (var kvp in grads)
-                RetainStreamingGradient(kvp.Key, kvp.Value);
-            EndStreamingGradientRetention();
             PublishParameterGradients(grads);
 
             var ctx = new TapeStepContext<T>(sources, grads, lossValue);
