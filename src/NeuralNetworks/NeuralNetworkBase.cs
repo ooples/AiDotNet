@@ -8079,6 +8079,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// The accumulated step's objective at the current parameters: each micro-batch's loss weighted by its share of the
     /// valid tokens, which is how the step's reported mean loss is formed.
     /// </summary>
+    [AiDotNet.Attributes.ScalarKernel("One scalar weight per micro-batch; the loop runs over micro-batches, not tensor elements.")]
     private Tensor<T> TokenWeightedAccumulatedObjective(
         IReadOnlyList<(Tensor<T> Input, Tensor<T> Target)> microBatches,
         LossFunctions.LossFunctionBase<T> loss)
