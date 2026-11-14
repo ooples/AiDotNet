@@ -240,7 +240,6 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
             // Act & Assert - All valid aggregation methods should work
             Assert.NotNull(new MultiVectorRetriever<double>(store, 3, MultiVectorAggregation.Max));
             Assert.NotNull(new MultiVectorRetriever<double>(store, 3, MultiVectorAggregation.Mean));
-            Assert.NotNull(new MultiVectorRetriever<double>(store, 3, MultiVectorAggregation.Mean));
             Assert.NotNull(new MultiVectorRetriever<double>(store, 3, MultiVectorAggregation.Weighted));
         }
 
@@ -395,22 +394,6 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration
         public async Task Retrieve_MeanAggregation_UsesAverageScore()
         {
             // Arrange - Document with vectors scoring 0.9, 0.6, 0.3 -> mean = 0.6
-            var store = CreateMultiVectorStore(3,
-                ("doc1", "test content", new[] { 0.9, 0.6, 0.3 }));
-            var retriever = new MultiVectorRetriever<double>(store, 3, MultiVectorAggregation.Mean, new StubQueryEmbedder());
-
-            // Act
-            var results = retriever.Retrieve("test").ToList();
-
-            // Assert
-            Assert.Single(results);
-            Assert.Equal(0.6, results[0].RelevanceScore, 3);
-        }
-
-        [Fact(Timeout = 60000)]
-        public async Task Retrieve_AverageAggregation_SameAsMean()
-        {
-            // Arrange
             var store = CreateMultiVectorStore(3,
                 ("doc1", "test content", new[] { 0.9, 0.6, 0.3 }));
             var retriever = new MultiVectorRetriever<double>(store, 3, MultiVectorAggregation.Mean, new StubQueryEmbedder());
