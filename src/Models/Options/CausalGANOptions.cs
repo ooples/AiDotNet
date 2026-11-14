@@ -39,7 +39,6 @@ public class CausalGANOptions<T> : SyntheticDataGeneratorOptions<T>
     /// Gets or sets the weight for the DAG acyclicity penalty (NOTEARS constraint).
     /// </summary>
     /// <value>DAG penalty weight, defaulting to 0.5.</value>
-    [AiDotNet.Attributes.OptionBehaviourExempt("The weight scales the NOTEARS acyclicity gradient 2 (W o W)^T o W, which is cubic in the adjacency; from the near-empty initial adjacency (|W| <= 0.005) at the adjacency rate of 0.01 x LearningRate, a test-scale fit moves each entry by about 1e-13, three orders below single-precision resolution, so the weight acts only once training has grown the graph.")]
     public double DAGPenaltyWeight { get; set; } = 0.5;
 
     /// <summary>
