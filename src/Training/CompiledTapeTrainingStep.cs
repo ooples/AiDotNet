@@ -1341,7 +1341,10 @@ public static class CompiledTapeTrainingStep<T>
             // sees the same RNG state the eager path would.
             // A closure objective is more than a forward (its own draws, a nested tape): its caller sized the lazy layers
             // already (NeuralNetworkBase.TrainCustomTapeStep), so it is not run an extra time here.
-            if (_cachedParameters is null && !closureObjective)
+            // With no layers the parameters are exactly the caller's extras (DDPM's U-Net), collected before this step,
+            // so a sizing forward cannot change them; it only left a batch of eval-mode scratch (1.1 GB on DDPM at
+            // batch 64) on the device for the model's life.
+            if (_cachedParameters is null && !closureObjective && layers.Count > 0)
             {
                 // TryStepWithFusedOptimizer is the training entry — every layer
                 // is in training mode here by precondition (NeuralNetworkBase
