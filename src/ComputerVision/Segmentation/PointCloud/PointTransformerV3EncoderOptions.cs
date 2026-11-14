@@ -160,8 +160,9 @@ public abstract class PointTransformerV3EncoderOptions : SegmentationModelOption
             }
         }
 
-        if (!(MlpRatio > 0)) throw new ArgumentException("MlpRatio must be positive.");
-        if (DropPathRate < 0 || DropPathRate >= 1) throw new ArgumentException("DropPathRate must be in [0, 1).");
+        // Written so NaN fails: every comparison with NaN is false.
+        if (!(MlpRatio > 0) || double.IsInfinity(MlpRatio)) throw new ArgumentException("MlpRatio must be positive and finite.");
+        if (!(DropPathRate >= 0 && DropPathRate < 1)) throw new ArgumentException("DropPathRate must be in [0, 1).");
         if (SerializationCurves.Count == 0) throw new ArgumentException("SerializationCurves needs at least one curve.");
         if (SerializationCurves.Any(curve => curve is null)) throw new ArgumentException("SerializationCurves must not contain null.");
         ValidateSegmentationCore();

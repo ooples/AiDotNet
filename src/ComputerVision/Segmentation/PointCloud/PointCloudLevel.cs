@@ -65,16 +65,17 @@ internal sealed class PointCloudLevel<T>
     /// Equivalent to spconv's <c>SubMConv3d</c> rulebook: outputs exist only at occupied voxels and
     /// each gathers the occupied voxels inside its kernel. Pointcept shares one rulebook per stage
     /// (<c>indice_key</c>); the cache here does the same. When several points share a voxel the
-    /// lowest-index one represents it, as the input is expected to be grid-sampled already.
+    /// lowest-index one represents it, as the input is expected to be grid-sampled already. Voxels are
+    /// keyed by the full (batch, x, y, z) tuple, so no batch index or coordinate is truncated.
     /// </remarks>
     internal int[] NeighbourTable(int kernelSize)
     {
         if (_neighbourTables.TryGetValue(kernelSize, out var cached)) return cached;
         int radius = kernelSize / 2;
         int volume = kernelSize * kernelSize * kernelSize;
-        var occupied = new Dictionary<long, int>(Count);
+        var occupied = new Dictionary<(int Batch, int X, int Y, int Z), int>(Count);
         for (int i = Count - 1; i >= 0; i--)
-            occupied[VoxelKey(Batch[i], Grid[i * 3], Grid[i * 3 + 1], Grid[i * 3 + 2])] = i;
+            occupied[(Batch[i], Grid[i * 3], Grid[i * 3 + 1], Grid[i * 3 + 2])] = i;
 
         var table = new int[Count * volume];
         for (int i = 0; i < Count; i++)
@@ -88,8 +89,7 @@ internal sealed class PointCloudLevel<T>
                     {
                         int x = Grid[i * 3] + dx, y = Grid[i * 3 + 1] + dy, z = Grid[i * 3 + 2] + dz;
                         table[i * volume + o] = x >= 0 && y >= 0 && z >= 0
-                            && x <= 0xFFFF && y <= 0xFFFF && z <= 0xFFFF
-                            && occupied.TryGetValue(VoxelKey(Batch[i], x, y, z), out int neighbour)
+                            && occupied.TryGetValue((Batch[i], x, y, z), out int neighbour)
                             ? neighbour
                             : Count;
                     }
@@ -111,7 +111,4 @@ internal sealed class PointCloudLevel<T>
         _patchPlans[key] = plan;
         return plan;
     }
-
-    private static long VoxelKey(int batch, int x, int y, int z)
-        => ((long)batch << 48) | ((long)(x & 0xFFFF) << 32) | ((long)(y & 0xFFFF) << 16) | (long)(z & 0xFFFF);
 }

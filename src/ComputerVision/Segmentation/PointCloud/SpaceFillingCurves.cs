@@ -10,7 +10,8 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 /// A model stores its serialization orders by <see cref="ISpaceFillingCurve.Name"/> so that saving,
 /// loading and cloning rebuild the same curves. The four orders of the PTv3 paper are always
 /// available; a custom <see cref="ISpaceFillingCurve"/> must be registered before a model that uses
-/// it is loaded. Configuring a model with a custom curve registers it automatically.
+/// it is saved, cloned or loaded. A registered name always resolves to one algorithm: registering
+/// a curve of a different type under a taken name, including a built-in one, throws.
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> This is the list of curve types the library knows how to rebuild from a
@@ -63,15 +64,23 @@ public static class SpaceFillingCurves
     };
 
     /// <summary>Registers a curve so models referring to its name can be rebuilt.</summary>
-    /// <param name="curve">The curve; replaces any curve already registered under the same name.</param>
+    /// <param name="curve">The curve. Registering it again, or another instance of the same type, is a no-op
+    /// that keeps the first instance.</param>
+    /// <exception cref="ArgumentException">The name is empty or multi-line, or a curve of a different type is
+    /// already registered under it, so the name would stop identifying one algorithm.</exception>
     public static void Register(ISpaceFillingCurve curve)
     {
         if (curve is null) throw new ArgumentNullException(nameof(curve));
-        if (string.IsNullOrWhiteSpace(curve.Name))
+        string name = curve.Name;
+        if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("A space-filling curve needs a non-empty Name.", nameof(curve));
-        if (curve.Name.IndexOf('\n') >= 0 || curve.Name.IndexOf('\r') >= 0)
+        if (name.IndexOf('\n') >= 0 || name.IndexOf('\r') >= 0)
             throw new ArgumentException("A space-filling curve Name must be a single line.", nameof(curve));
-        Registered[curve.Name] = curve;
+        var registered = Registered.GetOrAdd(name, curve);
+        if (!ReferenceEquals(registered, curve) && registered.GetType() != curve.GetType())
+            throw new ArgumentException(
+                $"A different space-filling curve ({registered.GetType().FullName}) is already registered as '{name}'; "
+                + "choose another Name.", nameof(curve));
     }
 
     /// <summary>Whether <paramref name="curve"/> is registered, so a saved model can rebuild it by name.</summary>

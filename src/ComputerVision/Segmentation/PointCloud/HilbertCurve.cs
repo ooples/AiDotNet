@@ -18,7 +18,7 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 /// better than the Z-order curve at keeping neighbours together, at a slightly higher cost.
 /// </para>
 /// </remarks>
-public sealed class HilbertCurve : ISpaceFillingCurve
+internal sealed class HilbertCurve : ISpaceFillingCurve
 {
     private const int Dimensions = 3;
 

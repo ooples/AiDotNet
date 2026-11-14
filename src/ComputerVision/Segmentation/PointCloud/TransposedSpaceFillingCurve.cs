@@ -14,7 +14,7 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 /// it produces cut space differently from the original curve.
 /// </para>
 /// </remarks>
-public sealed class TransposedSpaceFillingCurve : ISpaceFillingCurve
+internal sealed class TransposedSpaceFillingCurve : ISpaceFillingCurve
 {
     private readonly ISpaceFillingCurve _inner;
 

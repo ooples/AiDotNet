@@ -14,7 +14,7 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 /// nearby points close together.
 /// </para>
 /// </remarks>
-public sealed class ZOrderCurve : ISpaceFillingCurve
+internal sealed class ZOrderCurve : ISpaceFillingCurve
 {
     /// <summary>The name Pointcept uses for this order: <c>z</c>.</summary>
     public string Name => "z";

@@ -12,7 +12,9 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 /// this is exactly ordinary multi-head attention, because attention is permutation-equivariant.
 /// </para>
 /// <para>
-/// Every patch of the same length is one batched matrix multiply; the gathers and scatters are
+/// Every patch of the same length is one call to the engine's tape-aware FlashAttention, which
+/// tiles the softmax and never materialises the <c>[patches * heads, K, K]</c> score and probability
+/// tensors (Pointcept likewise defaults to <c>enable_flash=True</c>). The gathers and scatters are
 /// <see cref="int"/> index tensors, so the whole layer is engine operations on <c>T</c> and
 /// differentiable end to end.
 /// </para>
@@ -47,7 +49,7 @@ internal sealed class SerializedPatchAttention<T>
     {
         var engine = _ctx.Engine;
         int c = Channels, h = NumHeads, d = c / h;
-        var scale = _ctx.NumOps.FromDouble(1.0 / Math.Sqrt(d));
+        double scale = 1.0 / Math.Sqrt(d);
         var qkv = Qkv.Forward(x);
         var plan = level.PatchPlan(orderIndex, PatchSize);
 
@@ -62,17 +64,12 @@ internal sealed class SerializedPatchAttention<T>
             Tensor<T> Heads(int part)
             {
                 var slice = engine.TensorSlice(patches, new[] { 0, 0, part * c }, new[] { p, l, c });
-                var split = engine.Reshape(slice, new[] { p, l, h, d });
-                return engine.Reshape(engine.TensorPermute(split, new[] { 0, 2, 1, 3 }), new[] { p * h, l, d });
+                return engine.TensorPermute(engine.Reshape(slice, new[] { p, l, h, d }), new[] { 0, 2, 1, 3 });
             }
 
-            var q = engine.TensorMultiplyScalar(Heads(0), scale);
-            var k = Heads(1);
-            var v = Heads(2);
-            var scores = engine.TensorBatchMatMul(q, engine.TensorPermute(k, new[] { 0, 2, 1 }));
-            var attention = engine.TensorSoftmax(scores, -1);
-            var mixed = engine.TensorBatchMatMul(attention, v);
-            var merged = engine.TensorPermute(engine.Reshape(mixed, new[] { p, h, l, d }), new[] { 0, 2, 1, 3 });
+            // [p, h, l, d]: memory linear in the patch length instead of quadratic.
+            var mixed = engine.FlashAttention(Heads(0), Heads(1), Heads(2), scale, isCausal: false, out _, attentionBias: null);
+            var merged = engine.TensorPermute(mixed, new[] { 0, 2, 1, 3 });
             outputs[g] = engine.Reshape(merged, new[] { p * l, c });
         }
 

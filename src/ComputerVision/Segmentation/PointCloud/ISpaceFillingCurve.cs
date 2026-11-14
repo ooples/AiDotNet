@@ -11,8 +11,9 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 /// space-filling curve are close in space, so a patch of the sorted list is a spatial neighbourhood.
 /// </para>
 /// <para>
-/// The paper uses four orders (<see cref="ZOrderCurve"/>, <see cref="HilbertCurve"/> and the
-/// x/y-transposed variant of each, built with <see cref="TransposedSpaceFillingCurve"/>) and cycles
+/// The paper uses four orders (<see cref="SpaceFillingCurves.ZOrder"/>, <see cref="SpaceFillingCurves.Hilbert"/>
+/// and their x/y-transposed variants <see cref="SpaceFillingCurves.ZOrderTransposed"/> and
+/// <see cref="SpaceFillingCurves.HilbertTransposed"/>) and cycles
 /// through them block by block. Implement this interface to add another curve; register it with
 /// <see cref="SpaceFillingCurves.Register"/> so a saved or cloned model can rebuild it by
 /// <see cref="Name"/>.

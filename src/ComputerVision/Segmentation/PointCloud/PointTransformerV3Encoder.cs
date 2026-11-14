@@ -134,15 +134,17 @@ public sealed partial class PointTransformerV3Encoder<T> : LayerBase<T>, IShapeC
         _inputChannels = inputChannels;
         _coordinatesAsFeatures = coordinatesAsFeatures;
         _gridSize = gridSize;
-        _strides = strides ?? new[] { 2, 2, 2, 2 };
-        _encoderDepths = encoderDepths ?? new[] { 2, 2, 2, 6, 2 };
-        _encoderChannels = encoderChannels ?? DefaultEncoderChannels;
-        _encoderNumHeads = encoderNumHeads ?? new[] { 2, 4, 8, 16, 32 };
-        _encoderPatchSizes = encoderPatchSizes ?? Repeat(1024, _encoderDepths.Length);
-        _decoderDepths = decoderDepths ?? new[] { 2, 2, 2, 2 };
-        _decoderChannels = decoderChannels ?? DefaultDecoderChannels;
-        _decoderNumHeads = decoderNumHeads ?? new[] { 4, 4, 8, 16 };
-        _decoderPatchSizes = decoderPatchSizes ?? Repeat(1024, _decoderDepths.Length);
+        // Every array is copied: the layer owns its configuration, so a caller editing the array it
+        // passed (or reusing options for another model) cannot desynchronise the built network.
+        _strides = Copy(strides) ?? new[] { 2, 2, 2, 2 };
+        _encoderDepths = Copy(encoderDepths) ?? new[] { 2, 2, 2, 6, 2 };
+        _encoderChannels = Copy(encoderChannels) ?? Copy(DefaultEncoderChannels);
+        _encoderNumHeads = Copy(encoderNumHeads) ?? new[] { 2, 4, 8, 16, 32 };
+        _encoderPatchSizes = Copy(encoderPatchSizes) ?? Repeat(1024, _encoderDepths.Length);
+        _decoderDepths = Copy(decoderDepths) ?? new[] { 2, 2, 2, 2 };
+        _decoderChannels = Copy(decoderChannels) ?? Copy(DefaultDecoderChannels);
+        _decoderNumHeads = Copy(decoderNumHeads) ?? new[] { 4, 4, 8, 16 };
+        _decoderPatchSizes = Copy(decoderPatchSizes) ?? Repeat(1024, _decoderDepths.Length);
         _mlpRatio = mlpRatio;
         _dropPathRate = dropPathRate;
         _enableConditionalPositionalEncoding = enableConditionalPositionalEncoding;
@@ -315,14 +317,15 @@ public sealed partial class PointTransformerV3Encoder<T> : LayerBase<T>, IShapeC
 
         int total = clouds * points;
         var flat = Engine.Reshape(input, new[] { total, width });
-        var values = new float[total * width];
-        NumOps.ToFloatSpan(flat.ToArray(), values);
+        // Geometry is read straight into double: routing it through float would merge voxels of a
+        // double-precision cloud far from the origin (float has a 0.125 m step at 2^20 m).
+        var values = flat.ToArray();
         var coordinates = new double[total * 3];
         for (int i = 0; i < total; i++)
         {
-            coordinates[i * 3] = values[i * width];
-            coordinates[i * 3 + 1] = values[i * width + 1];
-            coordinates[i * 3 + 2] = values[i * width + 2];
+            coordinates[i * 3] = NumOps.ToDouble(values[i * width]);
+            coordinates[i * 3 + 1] = NumOps.ToDouble(values[i * width + 1]);
+            coordinates[i * 3 + 2] = NumOps.ToDouble(values[i * width + 2]);
         }
 
         var features = _coordinatesAsFeatures
@@ -473,8 +476,8 @@ public sealed partial class PointTransformerV3Encoder<T> : LayerBase<T>, IShapeC
             && (_decoderDepths.Length != stages - 1 || _decoderChannels.Length != stages - 1
                 || _decoderNumHeads.Length != stages - 1 || _decoderPatchSizes.Length != stages - 1))
             throw new ArgumentException("Decoder depths, channels, heads and patch sizes need one entry per stage but the last.");
-        if (!(_mlpRatio > 0)) throw new ArgumentException("The MLP ratio must be positive.");
-        if (_dropPathRate < 0 || _dropPathRate >= 1) throw new ArgumentException("The drop-path rate must be in [0, 1).");
+        if (!(_mlpRatio > 0) || double.IsInfinity(_mlpRatio)) throw new ArgumentException("The MLP ratio must be positive and finite.");
+        if (!(_dropPathRate >= 0 && _dropPathRate < 1)) throw new ArgumentException("The drop-path rate must be in [0, 1).");
         if (_maskToken && _revision != PointTransformerV3Revision.M2Sonata)
             throw new ArgumentException("The mask token belongs to the Sonata (m2) embedding.");
     }
@@ -491,6 +494,8 @@ public sealed partial class PointTransformerV3Encoder<T> : LayerBase<T>, IShapeC
         for (int i = 0; i < n; i++) total += values[i];
         return total;
     }
+
+    private static int[]? Copy(int[]? values) => values is null ? null : (int[])values.Clone();
 
     private static int[] Repeat(int value, int count)
     {
