@@ -145,17 +145,6 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
     /// </summary>
     private int[]? _originalInputShape;
 
-    /// <summary>
-    /// Cached attention coefficients from forward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastAttentionCoefficients;
-
-    /// <summary>
-    /// Cached pre-softmax attention scores for gradient computation.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastPreSoftmaxScores;
 
 
 
@@ -416,10 +405,6 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
                 output.SetSlice(b, biasedOutput);
             }
 
-            // Store cached values for backward pass
-            _lastPreSoftmaxScores = null;
-            _lastAttentionCoefficients = null;
-
             activatedOutput = ApplyActivation(output);
 
             // Reshape output to match original input rank
@@ -465,11 +450,6 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         var adjacency = _adjacencyMatrix;
         bool adjacency2D = (adjacency ?? throw new InvalidOperationException("adjacency is null where it is required.")).Shape.Length == 2;
         T maskNegInf = NumOps.FromDouble(-1e9);
-
-        // These per-forward scratch caches are unused on the on-tape path (autodiff owns the
-        // backward). Null them so ResetState / arena recycling see no stale references.
-        _lastPreSoftmaxScores = null;
-        _lastAttentionCoefficients = null;
 
         // The additive attention mask depends only on the batch element (adjacency[b]), not the
         // head, so build it once per batch element instead of recomputing the identical O(numNodes^2)
@@ -645,115 +625,6 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         return AiDotNet.Training.CompiledStepRandom<T>.InvertedDropoutMask([numNodes, numNodes], _random, dropoutRate);
     }
 
-    private void ComputeAttentionScores(int b, int h, int numNodes, Tensor<T> selfScores, Tensor<T> neighborScores)
-    {
-        // This method is only called from Forward after _adjacencyMatrix, _lastPreSoftmaxScores, and _lastAttentionCoefficients are validated
-        if (_adjacencyMatrix == null || _lastPreSoftmaxScores == null || _lastAttentionCoefficients == null)
-        {
-            throw new InvalidOperationException("Adjacency matrix and score tensors must be set before computing attention scores.");
-        }
-        var adjacencyMatrix = _adjacencyMatrix;
-
-        // Handle 2D or 3D adjacency matrix
-        bool adj2D = adjacencyMatrix.Shape.Length == 2;
-
-        // Raw-array flat indexing. The 4-D tensor indexer [b, h, i, j] resolves to the params-int[]
-        // overload, which HEAP-ALLOCATES an int[4] on every access (plus a virtual call + stride
-        // resolution). Across the three O(numNodes^2) passes per (b, h) that was on the order of
-        // millions of int[4] allocations per forward. Work on the backing arrays with computed flat
-        // offsets instead — identical math, no per-element allocation or dispatch.
-        var pre = _lastPreSoftmaxScores.GetCpuData();        // [batch, numHeads, numNodes, numNodes]
-        var coeff = _lastAttentionCoefficients.GetCpuData(); // same shape
-        var adj = adjacencyMatrix.GetCpuData();
-        var self = selfScores.GetCpuData();
-        var neigh = neighborScores.GetCpuData();
-        T zero = NumOps.Zero;
-        T minVal = NumOps.MinValue;
-
-        // Base offset of the [i, j] block for this (b, h) slice in the [batch, numHeads, N, N] tensor.
-        int bhBase = ((b * _numHeads) + h) * numNodes * numNodes;
-        // Adjacency: 2D is shared across the batch (base 0); 3D is offset by b.
-        int adjBase = adj2D ? 0 : b * numNodes * numNodes;
-
-        // Compute attention scores with LeakyReLU and softmax.
-        var maxScores = new T[numNodes];
-
-        // First pass: compute raw scores and find the per-node max for numerical stability.
-        for (int i = 0; i < numNodes; i++)
-        {
-            int rowBase = bhBase + i * numNodes;
-            int adjRow = adjBase + i * numNodes;
-            T selfI = self[i];
-            T maxI = minVal;
-            for (int j = 0; j < numNodes; j++)
-            {
-                if (NumOps.Equals(adj[adjRow + j], zero))
-                {
-                    pre[rowBase + j] = minVal;
-                    continue;
-                }
-
-                // e_ij = LeakyReLU(a_1^T * Wh_i + a_2^T * Wh_j)
-                T score = LeakyReLU(NumOps.Add(selfI, neigh[j]));
-                pre[rowBase + j] = score;
-                if (NumOps.GreaterThan(score, maxI))
-                {
-                    maxI = score;
-                }
-            }
-            maxScores[i] = maxI;
-        }
-
-        // Second pass: softmax over neighbors per node.
-        for (int i = 0; i < numNodes; i++)
-        {
-            int rowBase = bhBase + i * numNodes;
-            int adjRow = adjBase + i * numNodes;
-            T maxI = maxScores[i];
-            T sumExp = zero;
-
-            // exp(score - max) for numerical stability.
-            for (int j = 0; j < numNodes; j++)
-            {
-                if (!NumOps.Equals(adj[adjRow + j], zero))
-                {
-                    T expVal = NumOps.Exp(NumOps.Subtract(pre[rowBase + j], maxI));
-                    coeff[rowBase + j] = expVal;
-                    sumExp = NumOps.Add(sumExp, expVal);
-                }
-            }
-
-            // Normalize and apply dropout.
-            for (int j = 0; j < numNodes; j++)
-            {
-                if (!NumOps.Equals(adj[adjRow + j], zero))
-                {
-                    T c = NumOps.Divide(coeff[rowBase + j], sumExp);
-
-                    if (_dropoutRate > 0.0 && IsTrainingMode && _random.NextDouble() < _dropoutRate)
-                    {
-                        c = zero;
-                    }
-                    else if (_dropoutRate > 0.0 && IsTrainingMode)
-                    {
-                        c = NumOps.Multiply(c, NumOps.FromDouble(1.0 / (1.0 - _dropoutRate)));
-                    }
-
-                    coeff[rowBase + j] = c;
-                }
-                else
-                {
-                    coeff[rowBase + j] = zero;
-                }
-            }
-        }
-    }
-
-    private T LeakyReLU(T x)
-    {
-        return NumOps.GreaterThan(x, NumOps.Zero) ? x : NumOps.Multiply(_alpha, x);
-    }
-
     /// <summary>
     /// Sets a 2D slice in a 4D tensor at position [batchIdx, headIdx, :, :] using direct memory copy.
     /// </summary>
@@ -862,8 +733,6 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
     /// <inheritdoc/>
     public override void ResetState()
     {
-        _lastAttentionCoefficients = null;
-        _lastPreSoftmaxScores = null;
         _weightsGradient = null;
         _attentionWeightsGradient = null;
         _biasGradient = null;

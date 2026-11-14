@@ -14624,7 +14624,6 @@
 2	ADNELEM002|AiDotNet.NeuralNetworks.Layers.GraFPrintGraphBlockLayer<T>.BackwardMaxRelative(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>[], AiDotNet.Tensors.LinearAlgebra.Tensor<T>, object[], AiDotNet.Tensors.Engines.IEngine, System.Collections.Generic.Dictionary<AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>>)
 5	ADNELEM002|AiDotNet.NeuralNetworks.Layers.GraFPrintGraphBlockLayer<T>.NormalizeNodesForKnn(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, int, int)
 1	ADNELEM002|AiDotNet.NeuralNetworks.Layers.GraphAttentionLayer<T>.BuildAttentionMask(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, bool, int, int, T)
-11	ADNELEM002|AiDotNet.NeuralNetworks.Layers.GraphAttentionLayer<T>.ComputeAttentionScores(int, int, int, AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
 1	ADNELEM002|AiDotNet.NeuralNetworks.Layers.GraphAttentionLayer<T>.ForwardTraced(AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
 1	ADNELEM002|AiDotNet.NeuralNetworks.Layers.GraphConvolutionalLayer<T>.InitializeParameters()
 2	ADNELEM002|AiDotNet.NeuralNetworks.Layers.GroupedConv1DLayer<T>.GroupedConv1DLayer(int, int, int, int, int, int)
