@@ -11,6 +11,8 @@ using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.TextToSpeech.CodecBased;
+using AiDotNet.TextToSpeech.VoiceCloning;
 using AiDotNet.Training;
 using Xunit;
 
@@ -133,6 +135,56 @@ public class CompiledStepRedrawTests
                 for (int i = 0; i < input.Length; i++) input[i] = level + spread * input[i];
                 return (input, Random(data, batch, outputs));
             });
+    }
+
+    /// <summary>
+    /// MetaVoice's GPT drops its speaker conditioning for a whole step with probability SpeakerDropout and applies
+    /// dropout to its embeddings, attention and feed-forward outputs. The speaker drop used to be a host branch that
+    /// left the traced step's choice in the graph, and the dropout masks host-filled constants.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task MetaVoice_dropout_and_speaker_drop_are_redrawn_on_every_compiled_step()
+    {
+        await Task.Yield();
+        const int time = 4, dimension = 8, speakerDimension = 3;
+        MetaVoiceGpt<double> Build() => new(AiDotNetEngine.Current, new MetaVoiceGptConfiguration
+        {
+            Dimension = dimension, Layers = 2, Heads = 2, Context = 8, InputVocabularies = new[] { 10 },
+            SwiGluMultiple = 4, SpeakerDimension = speakerDimension, SpeakerDropout = 0.5, Dropout = 0.3,
+        }, seed: 41);
+        var fused = Build();
+        var eager = Build();
+        var tokens = new[] { new[] { 1, 4, 7, 2 } };
+
+        var eagerLosses = TrainSideBySide(
+            fused.Layers, x => fused.Forward(tokens, x, training: true).Hidden,
+            eager.Layers, x => eager.Forward(tokens, x, training: true).Hidden,
+            data => (Random(data, 1, speakerDimension), Random(data, time, dimension)));
+        Assert.True(eagerLosses.Distinct().Count() == eagerLosses.Count, "the eager steps should differ.");
+    }
+
+    /// <summary>The inverted dropout T5's encoder and decoder apply between their sublayers.</summary>
+    [Fact(Timeout = 120000)]
+    public async Task T5_dropout_is_redrawn_on_every_compiled_step()
+    {
+        await Task.Yield();
+        const int batch = 4, features = 6, outputs = 5;
+        DenseLayer<double> Build() => new(outputs);
+        var fused = Build();
+        var eager = Build();
+        var warm = new Tensor<double>(new[] { batch, features });
+        fused.Forward(warm);
+        eager.Forward(warm);
+        eager.SetParameters(fused.GetParameters());
+        var engine = AiDotNetEngine.Current;
+        var fusedRandom = RandomHelper.CreateSeededRandom(13);
+        var eagerRandom = RandomHelper.CreateSeededRandom(13);
+
+        var eagerLosses = TrainSideBySide(
+            new[] { fused }, x => T5Seq2Seq<double>.Dropout(engine, fused.Forward(x), 0.4, fusedRandom),
+            new[] { eager }, x => T5Seq2Seq<double>.Dropout(engine, eager.Forward(x), 0.4, eagerRandom),
+            data => (Random(data, batch, features), Random(data, batch, outputs)));
+        Assert.True(eagerLosses.Distinct().Count() == eagerLosses.Count, "the eager steps should differ.");
     }
 
     /// <summary>The eager losses, after requiring the fused arm to engage and to follow them step for step.</summary>
