@@ -314,6 +314,47 @@ public class GroundingHeadPaperTests
                 Assert.Equal(GroundingDinoLoss<double>.GeneralizedIoU(a[i], b[j]), giou[i, j], 1e-12);
     }
 
+    [Fact]
+    public void SetLoss_HalfIdenticalTinyBoxes_HaveGIoUOne()
+    {
+        // Corners (2^-14, 2^-14, 2^-13, 2^-13): the area 2^-26 rounds to zero in Half, so the GIoU was 0/0 = NaN.
+        var loss = new GroundingSetLoss<Half>(Engine);
+        double c = 1.5 * Math.Pow(2, -14), w = Math.Pow(2, -14);
+        var box = new Tensor<Half>(new[] { (Half)c, (Half)c, (Half)w, (Half)w }, new[] { 1, 4 });
+
+        var giou = loss.PairwiseGeneralizedIoU(box, box);
+
+        Assert.Equal(1.0, (double)giou[0, 0], 3);
+    }
+
+    [Fact]
+    public void SetLoss_HalfManyFocalTerms_NormalizesBeforeTheSum()
+    {
+        // 300 x 200 negative focal terms of about 1.24 at logit 2 sum to about 74 000, past Half's 65504; divided by
+        // the two boxes first, the class loss is about 37 000 and representable.
+        const int queries = 300, classes = 200;
+        var labels = new double[2 * classes];
+        labels[0] = 1;
+        labels[classes + 1] = 1;
+        double[] targets = { 0.3, 0.3, 0.2, 0.2, 0.7, 0.6, 0.3, 0.4 };
+        var boxes = new double[queries * 4];
+        for (int i = 0; i < queries; i++)
+        {
+            boxes[4 * i] = 0.5; boxes[(4 * i) + 1] = 0.5; boxes[(4 * i) + 2] = 0.2; boxes[(4 * i) + 3] = 0.2;
+        }
+
+        var logits = Enumerable.Repeat(2.0, queries * classes).ToArray();
+        static Tensor<Half> H(int rows, int columns, double[] values)
+            => new Tensor<Half>(values.Select(v => (Half)v).ToArray(), new[] { rows, columns });
+        double expected = new GroundingSetLoss<double>(Engine).Compute(
+            Matrix(queries, 4, boxes), Matrix(queries, classes, logits), Matrix(2, 4, targets), Matrix(2, classes, labels)).Classification[0];
+        double got = (double)new GroundingSetLoss<Half>(Engine).Compute(
+            H(queries, 4, boxes), H(queries, classes, logits), H(2, 4, targets), H(2, classes, labels)).Classification[0];
+
+        Assert.True(expected > 30000 && expected < 65504, $"reference class loss {expected}");
+        Assert.True(Math.Abs(got - expected) < 1e-2 * expected, $"Half class loss {got}, double {expected}");
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

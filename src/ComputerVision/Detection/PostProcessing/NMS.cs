@@ -322,6 +322,11 @@ internal static class BoxOverlap<T>
             X1 = Column(0); Y1 = Column(1); X2 = Column(2); Y2 = Column(3);
         }
 
+        public Corners(Tensor<T> x1, Tensor<T> y1, Tensor<T> x2, Tensor<T> y2)
+        {
+            X1 = x1; Y1 = y1; X2 = x2; Y2 = y2;
+        }
+
         public Tensor<T> X1 { get; }
         public Tensor<T> Y1 { get; }
         public Tensor<T> X2 { get; }
@@ -344,14 +349,14 @@ internal static class BoxOverlap<T>
     /// </summary>
     public static Tensor<T> IoU(Tensor<T> a, Tensor<T> b)
     {
-        var (ca, cb) = ScaledCorners(a, b);
+        var (ca, cb) = ScaledCorners(a, b, perAxis: true);
         return IoUParts(ca, cb).IoU;
     }
 
     /// <summary>GIoU per row: <c>IoU - (C - U) / C</c>, or IoU itself when the enclosing area C is not positive.</summary>
     public static Tensor<T> GIoU(Tensor<T> a, Tensor<T> b)
     {
-        var (ca, cb) = ScaledCorners(a, b);
+        var (ca, cb) = ScaledCorners(a, b, perAxis: true);
         var (iou, union) = IoUParts(ca, cb);
         var enclosing = Engine.TensorMultiply(
             Engine.TensorSubtract(Engine.TensorMax(ca.X2, cb.X2), Engine.TensorMin(ca.X1, cb.X1)),
@@ -363,8 +368,8 @@ internal static class BoxOverlap<T>
     /// <summary>DIoU per row: <c>IoU - d^2 / c^2</c> (centre distance over enclosing diagonal), or IoU when c^2 is not positive.</summary>
     public static Tensor<T> DIoU(Tensor<T> a, Tensor<T> b)
     {
-        var (ca, cb) = ScaledCorners(a, b);
-        return DIoU(ca, cb, IoUParts(ca, cb).IoU);
+        var (ca, cb) = ScaledCorners(a, b, perAxis: false);
+        return DIoU(ca, cb, IoU(a, b));
     }
 
     /// <summary>
@@ -373,8 +378,8 @@ internal static class BoxOverlap<T>
     /// </summary>
     public static Tensor<T> CIoU(Tensor<T> a, Tensor<T> b)
     {
-        var (ca, cb) = ScaledCorners(a, b);
-        var iou = IoUParts(ca, cb).IoU;
+        var (ca, cb) = ScaledCorners(a, b, perAxis: false);
+        var iou = IoU(a, b);
         var diou = DIoU(ca, cb, iou);
 
         var w1 = Engine.TensorSubtract(ca.X2, ca.X1);
@@ -394,21 +399,45 @@ internal static class BoxOverlap<T>
     }
 
     /// <summary>
-    /// The corners of both box sets, each row pair divided by its largest absolute coordinate.
+    /// The corners of both box sets, each row pair moved so its smallest x and y are zero, then divided by its x and y
+    /// spans (<paramref name="perAxis"/>) or by the larger of the two.
     /// </summary>
     /// <remarks>
-    /// Every measure here is a ratio of areas or of squared lengths, or an angle, so it is unchanged by scaling a row
-    /// pair. Scaling to <c>[-1, 1]</c> keeps the areas and squared diagonals finite in half precision, where pixel
-    /// boxes overflow 65504 (a 256 x 256 box already does) and the overflowing ratios became NaN.
+    /// IoU and GIoU are ratios of areas, unchanged by translating a row pair and by scaling each axis; DIoU's squared
+    /// distances and CIoU's aspect angles are unchanged by translation and uniform scaling only. Mapping the pair into
+    /// <c>[0, 1]</c> keeps the areas and squared diagonals finite in half precision, where pixel boxes overflow 65504
+    /// (a 256 x 256 box already does) and the ratios became NaN. Translating first keeps them from underflowing:
+    /// divided only by its largest coordinate, the box <c>[60000, 0, 60032, 1]</c> had an area of about 8e-9, which
+    /// Half stores as zero, so identical boxes scored an IoU of 0. Scaling each axis by its own span keeps a thin box
+    /// such as <c>[4092, 0, 4096, 0.0625]</c> at area 1 for IoU and GIoU.
     /// </remarks>
-    private static (Corners A, Corners B) ScaledCorners(Tensor<T> a, Tensor<T> b)
+    private static (Corners A, Corners B) ScaledCorners(Tensor<T> a, Tensor<T> b, bool perAxis)
     {
-        int n = a.Shape[0];
-        var largest = Engine.ReduceMax(Engine.TensorAbs(Engine.TensorConcatenate(new[] { a, b }, 1)), new[] { 1 }, keepDims: true);
-        var safe = Engine.TensorWhere(Engine.TensorGreaterThan(largest, NumOps.Zero), largest, Engine.TensorOnesLike(largest));
-        var divisor = Engine.TensorBroadcastTo(safe, new[] { n, 4 });
-        return (new Corners(Engine.TensorDivide(a, divisor)), new Corners(Engine.TensorDivide(b, divisor)));
+        Corners ra = new Corners(a), rb = new Corners(b);
+        var originX = Engine.TensorMin(Engine.TensorMin(ra.X1, ra.X2), Engine.TensorMin(rb.X1, rb.X2));
+        var originY = Engine.TensorMin(Engine.TensorMin(ra.Y1, ra.Y2), Engine.TensorMin(rb.Y1, rb.Y2));
+        var spanX = Engine.TensorSubtract(Engine.TensorMax(Engine.TensorMax(ra.X1, ra.X2), Engine.TensorMax(rb.X1, rb.X2)), originX);
+        var spanY = Engine.TensorSubtract(Engine.TensorMax(Engine.TensorMax(ra.Y1, ra.Y2), Engine.TensorMax(rb.Y1, rb.Y2)), originY);
+        Tensor<T> scaleX, scaleY;
+        if (perAxis)
+        {
+            scaleX = Safe(spanX);
+            scaleY = Safe(spanY);
+        }
+        else
+        {
+            scaleX = Safe(Engine.TensorMax(spanX, spanY));
+            scaleY = scaleX;
+        }
+
+        Tensor<T> X(Tensor<T> x) => Engine.TensorDivide(Engine.TensorSubtract(x, originX), scaleX);
+        Tensor<T> Y(Tensor<T> y) => Engine.TensorDivide(Engine.TensorSubtract(y, originY), scaleY);
+        return (new Corners(X(ra.X1), Y(ra.Y1), X(ra.X2), Y(ra.Y2)), new Corners(X(rb.X1), Y(rb.Y1), X(rb.X2), Y(rb.Y2)));
     }
+
+    /// <summary>The span itself where it is positive, else one, so a zero-extent pair divides by one.</summary>
+    private static Tensor<T> Safe(Tensor<T> span)
+        => Engine.TensorWhere(Engine.TensorGreaterThan(span, NumOps.Zero), span, Engine.TensorOnesLike(span));
 
     private static Tensor<T> DIoU(Corners ca, Corners cb, Tensor<T> iou)
     {

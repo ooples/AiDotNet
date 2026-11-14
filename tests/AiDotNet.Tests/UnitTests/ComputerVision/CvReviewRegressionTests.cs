@@ -103,6 +103,18 @@ public sealed class CvReviewRegressionTests
         AssertHalfMatchesDouble(new CIoULoss<Half>(), new CIoULoss<double>(), predicted, actual);
     }
 
+    [Theory]
+    [InlineData(60000, 0, 60032, 1)]      // Divided only by 60032 the area was about 8e-9, which Half stores as 0.
+    [InlineData(4092, 0, 4096, 0.0625)]   // Divided only by 4096 the area was 2^-26, which Half stores as 0.
+    public void BoxLosses_HalfIdenticalBoxesFarFromOriginOrThin_HaveZeroLoss(double x1, double y1, double x2, double y2)
+    {
+        double[] box = { x1, y1, x2, y2 };
+        var halfBox = new Vector<Half>(box.Select(v => (Half)v).ToArray());
+        Assert.Equal(0.0, (double)new GIoULoss<Half>().CalculateLoss(halfBox, halfBox), 3);
+        Assert.Equal(0.0, (double)new DIoULoss<Half>().CalculateLoss(halfBox, halfBox), 3);
+        Assert.Equal(0.0, (double)new CIoULoss<Half>().CalculateLoss(halfBox, halfBox), 3);
+    }
+
     [Fact]
     public void GIoULoss_HalfManyBoxes_MeanDoesNotOverflow()
     {
@@ -173,6 +185,17 @@ public sealed class CvReviewRegressionTests
 
         Assert.Equal(1.0, (double)SegmentationTensorOps.PixelAffinity(a, same)[0, 0], 3);
         Assert.Equal(-1.0, (double)SegmentationTensorOps.PixelAffinity(a, opposite)[0, 0], 3);
+    }
+
+    [Fact]
+    public void PixelAffinity_HalfSmallFeatures_IsExactCosine()
+    {
+        // Every value 2^-13: the unscaled norm product 2^-26 rounds to zero in Half, so the pixel was rejected as
+        // having no norm and scored 0.
+        var a = new Tensor<Half>(new[] { 1, 1, 1 });
+        a[0, 0, 0] = (Half)Math.Pow(2, -13);
+
+        Assert.Equal(1.0, (double)SegmentationTensorOps.PixelAffinity(a, a)[0, 0], 3);
     }
 
     [Fact]

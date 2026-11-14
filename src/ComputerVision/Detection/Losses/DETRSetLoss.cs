@@ -287,12 +287,16 @@ public class DETRSetLoss<T> : LossFunctionBase<T>
             var ones = CvTensorOps<T>.Fill(new[] { entries.Count }, NumOps.One);
             positive = Engine.TensorScatter(positive, entryIndex, ones, 0);
 
-            // VariFocal's soft target is the IoU of the matched prediction with its object; otherwise 1.
+            // VariFocal's soft target is the IoU of the matched prediction with its object; otherwise 1. The target is a
+            // constant of the loss, so the corners and the IoU are formed in double and only the IoU is rounded to T:
+            // in Half the corners of a 0.0002-wide box at 0.5 all round to 0.5, which made the IoU of identical boxes 0
+            // and gave the matched object no classification weight.
             var matchedValues = ones;
             if (_options.ClassificationLoss == SetPredictionClassificationLoss.VariFocal)
             {
                 var predictedBoxes = CvTensorOps<T>.Select(new Tensor<T>(boxData, new[] { boxData.Length / 4, 4 }), matchedQueries.ToArray(), 0);
-                matchedValues = BoxOverlap<T>.IoU(CornersOf(predictedBoxes), CornersOf(TargetRows(matchedTargets)));
+                matchedValues = BoxOverlap<double>.IoU(
+                    CornersOf(predictedBoxes.Cast<double>()), CornersOf(TargetRows(matchedTargets).Cast<double>())).Cast<T>();
             }
 
             soft = Engine.TensorScatter(soft, entryIndex, matchedValues, 0);
@@ -467,10 +471,12 @@ public class DETRSetLoss<T> : LossFunctionBase<T>
     private Tensor<T> ToCorners(Tensor<T> boxes) => CornersOf(boxes);
 
     /// <summary>cxcywh rows <c>[N, 4]</c> as corners <c>(cx - w/2, cy - h/2, cx + w/2, cy + h/2)</c>.</summary>
-    private static Tensor<T> CornersOf(Tensor<T> boxes)
+    private static Tensor<T> CornersOf(Tensor<T> boxes) => CornersOf<T>(boxes);
+
+    private static Tensor<TBox> CornersOf<TBox>(Tensor<TBox> boxes)
     {
         var engine = AiDotNetEngine.Current;
-        var ops = MathHelper.GetNumericOperations<T>();
+        var ops = MathHelper.GetNumericOperations<TBox>();
         int count = boxes.Shape[0];
         var centers = engine.TensorSlice(boxes, new[] { 0, 0 }, new[] { count, 2 });
         var halfExtents = engine.TensorDivideScalar(

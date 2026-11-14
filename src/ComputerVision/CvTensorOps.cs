@@ -684,13 +684,21 @@ internal static class CvTensorOps<T>
     /// <remarks>
     /// Summing first overflows half precision once the total passes 65504 (for example 40 000 box losses near 2), and
     /// dividing every element by <c>n</c> first drops small terms into subnormals. The square-root split keeps both
-    /// the terms and the partial sums in range.
+    /// the terms and the partial sums in range for wide types; Half sums in float instead.
     /// </remarks>
     public static T Mean(Tensor<T> values)
     {
         if (values.Length == 0)
         {
             return NumOps.Zero;
+        }
+
+        if (typeof(T) == typeof(Half))
+        {
+            // The split alone is not enough in 16 bits: 16384 values of 1024 scale to 8 each, and their sum of 131072
+            // is still past Half's 65504 although the mean is 1024. Sum in float and divide in double, rounding the
+            // mean to T once.
+            return NumOps.FromDouble(Engine.TensorSum(values.Cast<float>()) / (double)values.Length);
         }
 
         var root = NumOps.FromDouble(Math.Sqrt(values.Length));
