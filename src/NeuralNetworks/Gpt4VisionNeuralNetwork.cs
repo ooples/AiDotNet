@@ -1465,7 +1465,7 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
 
     private Tensor<T> NormalizeTensor(Tensor<T> tensor)
     {
-        var wide = tensor.Cast<double>();
+        var wide = tensor.Contiguous().Cast<double>();
         double first = wide[0, 0];
         double min = first, max = first;
 

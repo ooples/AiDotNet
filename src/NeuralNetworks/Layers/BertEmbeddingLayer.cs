@@ -195,7 +195,7 @@ public partial class BertEmbeddingLayer<T> : LayerBase<T>, IShapeContract
             {
                 // create_position_ids_from_input_ids: count the non-padding tokens of each row.
                 // A token is padding when its id rounds (half to even) to the padding id; NaN never does.
-                var ids = Engine.Reshape(inputIds, new[] { rows, sequenceLength }).Cast<double>();
+                var ids = Engine.Reshape(inputIds, new[] { rows, sequenceLength }).Contiguous().Cast<double>();
                 double pad = _paddingTokenId;
                 var isPadding = Engine.TensorEquals(Engine.TensorRound(ids), pad);
                 var ones = new Tensor<double>(new[] { rows, sequenceLength });

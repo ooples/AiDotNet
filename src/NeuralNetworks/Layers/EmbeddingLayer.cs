@@ -688,7 +688,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             var flat = Engine.Reshape(input, new[] { input.Length });
             var ones = new Tensor<T>(flat._shape);
             ones.Fill(NumOps.One);
-            var nonFinite = Engine.TensorWhere(Engine.TensorIsFinite(flat.Cast<double>()), new Tensor<T>(flat._shape), ones);
+            var nonFinite = Engine.TensorWhere(Engine.TensorIsFinite(flat.Contiguous().Cast<double>()), new Tensor<T>(flat._shape), ones);
             var truncated = Engine.TensorTrunc(flat);
             var fractional = Engine.TensorGreaterThan(Engine.TensorAbs(Engine.TensorSubtract(flat, truncated)), NumOps.FromDouble(1e-6));
             var negative = Engine.TensorLessThan(truncated, NumOps.Zero);

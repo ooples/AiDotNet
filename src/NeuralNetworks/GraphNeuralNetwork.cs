@@ -654,7 +654,7 @@ public partial class GraphNeuralNetwork<T> : GraphModelLayoutBase<T>, IAuxiliary
                     const int MaxEdgeFeatureElements = 262144;
                     int width = _lastNodeRepresentations.Length / numNodes;
                     int blockSize = Math.Max(1, MaxEdgeFeatureElements / Math.Max(1, width));
-                    var nodes = Engine.Reshape(_lastNodeRepresentations, [numNodes, width]).Cast<double>();
+                    var nodes = Engine.Reshape(_lastNodeRepresentations, [numNodes, width]).Contiguous().Cast<double>();
                     var flatAdjacency = Engine.Reshape(adjacency, [numNodes * numNodes]);
                     for (int start = 0; start < edgeCount;)
                     {

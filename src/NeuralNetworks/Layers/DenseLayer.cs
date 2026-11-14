@@ -1874,9 +1874,9 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
         // AiDotNet stores weights as [inputSize, outputSize] — same layout as B,
         // so no transpose is needed.
         // ONNX initializers are float: bulk casts of the [inputSize, outputSize] weights and the bias.
-        var weightsFlat = _weights.Cast<float>().ToVector().ToArray();
+        var weightsFlat = _weights.Contiguous().Cast<float>().ToVector().ToArray();
         var biasFlat = UseBias
-            ? _biases.Cast<float>().ToVector().GetSubVector(0, outputSize).ToArray()
+            ? _biases.Contiguous().Cast<float>().ToVector().GetSubVector(0, outputSize).ToArray()
             : new float[outputSize];
 
         var weightsName = builder.AddFloatInitializer(

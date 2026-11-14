@@ -183,7 +183,7 @@ public partial class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMulti
             throw new ArgumentNullException(nameof(input));
 
         // The ONNX image encoder takes float pixels, so convert the tensor once in bulk.
-        var embedding = EncodeImagePixels(input.Cast<float>().ToVector().ToArray());
+        var embedding = EncodeImagePixels(input.Contiguous().Cast<float>().ToVector().ToArray());
         return new AiDotNet.Tensors.LinearAlgebra.Tensor<T>(
             new[] { 1, _embeddingDimension },
             embedding.GetSubVector(0, _embeddingDimension));

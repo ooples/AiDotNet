@@ -539,7 +539,7 @@ public partial class DeepBeliefNetwork<T> : VectorModelLayoutBase<T>
         var zeros = new Tensor<T>(new[] { input.Length });
         var ones = new Tensor<T>(new[] { input.Length });
         ones.Fill(NumOps.One);
-        var nonFinite = Engine.TensorWhere(Engine.TensorIsFinite(flatInput.Cast<double>()), zeros, ones);
+        var nonFinite = Engine.TensorWhere(Engine.TensorIsFinite(flatInput.Contiguous().Cast<double>()), zeros, ones);
         if (NumOps.GreaterThan(Engine.TensorMaxValue(nonFinite), NumOps.Zero))
         {
             // ArgMax returns the first flagged index, the one the scan reported.
@@ -565,7 +565,7 @@ public partial class DeepBeliefNetwork<T> : VectorModelLayoutBase<T>
 
         double inverseRange = 1.0 / range;
         return Engine.TensorMultiplyScalar(
-            Engine.TensorSubtractScalar(input.Cast<double>(), minimum), inverseRange).Cast<T>();
+            Engine.TensorSubtractScalar(input.Contiguous().Cast<double>(), minimum), inverseRange).Cast<T>();
     }
 
     /// <summary>

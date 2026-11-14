@@ -1089,7 +1089,7 @@ public partial class LSTMNeuralNetwork<T> : SequenceModelLayoutBase<T>
                         Enumerable.Range(0, outputFeatures).Select(outF =>
                             (double)(((outF + 1L) * hiddenFeatures) / outputFeatures
                                 - ((long)outF * hiddenFeatures) / outputFeatures)).ToArray(), [1, outputFeatures]);
-                    var hiddenRows = FlatRows(hiddenGradient, rows, hiddenFeatures).Cast<double>();
+                    var hiddenRows = FlatRows(hiddenGradient, rows, hiddenFeatures).Contiguous().Cast<double>();
                     var sums = Engine.TensorScatterAdd(new Tensor<double>([rows, outputFeatures]),
                         new Tensor<int>(bucketOfHidden, [hiddenFeatures]), hiddenRows, axis: 1);
                     Engine.TensorDivide(sums, Engine.TensorBroadcastTo(counts, [rows, outputFeatures])).Cast<T>()
@@ -1146,7 +1146,7 @@ public partial class LSTMNeuralNetwork<T> : SequenceModelLayoutBase<T>
     {
         // Every |x - 0| below 1e-8 (MathHelper.AlmostEqual's default); NaN is not.
         if (tensor.Length == 0) return true;
-        var nearZero = Engine.TensorLessThan(Engine.TensorAbs(tensor.Cast<double>()), 1e-8);
+        var nearZero = Engine.TensorLessThan(Engine.TensorAbs(tensor.Contiguous().Cast<double>()), 1e-8);
         return Engine.TensorMinValue(nearZero) == 1.0;
     }
 
