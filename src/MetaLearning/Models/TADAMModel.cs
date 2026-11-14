@@ -1,3 +1,4 @@
+using System.Linq;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -84,186 +85,43 @@ public partial class TADAMModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mo
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// One score row per example, <c>[rows, NumClasses]</c>: <c>softmax_k(-||s (q - c_k)||^2 / temperature)</c> over the
+    /// stored prototypes, with <c>s</c> the task's per-dimension scale when one is supplied for every feature. A class
+    /// with no prototype gets probability 0 (it used to be scored at distance 0, the most probable of all).
+    /// </remarks>
     public TOutput Predict(TInput input)
     {
-        // One score row per example. This used to flatten the WHOLE batch into a single vector and score
-        // that one "example" against the prototypes, so a query set of any size came back as one row of
-        // class probabilities - the task asks for one row per query example.
-        var rows = ClassifierOutputs<T>.AsRows(_featureEncoder.Predict(input));
+        var rows = PrototypeMetric<T>.Normalized(
+            ClassifierOutputs<T>.AsRows(_featureEncoder.Predict(input)), _options.NormalizeEmbeddings);
         int count = rows.Shape[0], width = rows.Shape[1];
-        var scores = new Tensor<T>(new[] { count, _options.NumClasses });
 
-        for (int r = 0; r < count; r++)
+        var slots = _prototypes.Keys.Where(k => k >= 0 && k < _options.NumClasses).OrderBy(k => k).ToArray();
+        if (slots.Length == 0)
+            return ClassifierOutputs<T>.ToOutput<TOutput>(new Tensor<T>(new[] { count, _options.NumClasses }));
+
+        var prototypes = Engine.TensorConcatenate(
+            slots.Select(k => _prototypes[k].Reshape(new[] { 1, width })).ToArray(), 0);
+
+        // Metric scaling multiplies every query-prototype difference by s, i.e. compares s q with s c_k.
+        if (_metricScale.Length == width)
         {
-            var queryEmbedding = new Vector<T>(width);
-            for (int i = 0; i < width; i++) queryEmbedding[i] = rows[r * width + i];
-
-            // Optionally normalize the embedding
-            if (_options.NormalizeEmbeddings)
-            {
-                queryEmbedding = VectorHelper.Normalize(queryEmbedding);
-            }
-
-            // Scaled distances to each prototype, as logits (negative distance over temperature), softmaxed.
-            var probabilities = ApplySoftmax(ComputeLogits(ComputeScaledDistances(queryEmbedding)));
-            for (int c = 0; c < _options.NumClasses && c < probabilities.Length; c++)
-            {
-                scores[r * _options.NumClasses + c] = probabilities[c];
-            }
+            var scale = Tensor<T>.FromVector(_metricScale, new[] { 1, width });
+            rows = Engine.TensorMultiply(rows, scale);
+            prototypes = Engine.TensorMultiply(prototypes, scale);
         }
 
-        return ClassifierOutputs<T>.ToOutput<TOutput>(scores);
-    }
+        // Logit = -distance / temperature (negative because closer = higher probability); a non-positive temperature
+        // would divide by zero, so it falls back to 1.
+        double temperature = NumOps.ToDouble(_temperature);
+        var logits = PrototypeMetric<T>.Logits(
+            rows, prototypes, ProtoNetsDistanceFunction.Euclidean, 1.0, null, null, slots,
+            temperature < 1e-10 ? 1.0 : temperature);
+        var probabilities = Engine.TensorSoftmax(logits, 1);
 
-    /// <summary>
-    /// Computes scaled distances from the query to each class prototype.
-    /// </summary>
-    private Vector<T> ComputeScaledDistances(Vector<T> query)
-    {
-        var distances = new Vector<T>(_options.NumClasses);
-
-        foreach (var kvp in _prototypes)
-        {
-            int classIdx = kvp.Key;
-            var prototype = kvp.Value;
-
-            if (classIdx >= 0 && classIdx < _options.NumClasses)
-            {
-                T distance = ComputeScaledDistance(query, prototype);
-                distances[classIdx] = distance;
-            }
-        }
-
-        return distances;
-    }
-
-    /// <summary>
-    /// Computes the scaled Euclidean distance between query and prototype.
-    /// </summary>
-    private T ComputeScaledDistance(Vector<T> query, Tensor<T> prototype)
-    {
-        T distanceSum = NumOps.Zero;
-        int dim = Math.Min(query.Length, prototype.Length);
-
-        for (int i = 0; i < dim; i++)
-        {
-            T diff = NumOps.Subtract(query[i], prototype.GetFlat(i));
-            T scaledDiff = diff;
-
-            // Apply metric scaling if available
-            if (_options.UseMetricScaling && i < _metricScale.Length)
-            {
-                scaledDiff = NumOps.Multiply(diff, _metricScale[i]);
-            }
-
-            distanceSum = NumOps.Add(distanceSum, NumOps.Multiply(scaledDiff, scaledDiff));
-        }
-
-        return distanceSum;
-    }
-
-    /// <summary>
-    /// Converts distances to logits using temperature scaling.
-    /// </summary>
-    private Vector<T> ComputeLogits(Vector<T> distances)
-    {
-        var logits = new Vector<T>(distances.Length);
-        double temp = NumOps.ToDouble(_temperature);
-        if (temp < 1e-10)
-        {
-            temp = 1.0; // Avoid division by zero
-        }
-
-        for (int i = 0; i < distances.Length; i++)
-        {
-            // Logit = -distance / temperature (negative because closer = higher probability)
-            double distValue = NumOps.ToDouble(distances[i]);
-            logits[i] = NumOps.FromDouble(-distValue / temp);
-        }
-
-        return logits;
-    }
-
-    /// <summary>
-    /// Applies softmax to convert logits to probabilities.
-    /// </summary>
-    private Vector<T> ApplySoftmax(Vector<T> logits)
-    {
-        var probabilities = new Vector<T>(logits.Length);
-
-        // Find max for numerical stability
-        T maxLogit = logits[0];
-        for (int i = 1; i < logits.Length; i++)
-        {
-            if (NumOps.GreaterThan(logits[i], maxLogit))
-            {
-                maxLogit = logits[i];
-            }
-        }
-
-        // Compute exp(logit - max) and sum
-        T sum = NumOps.Zero;
-        for (int i = 0; i < logits.Length; i++)
-        {
-            double expValue = Math.Exp(NumOps.ToDouble(logits[i]) - NumOps.ToDouble(maxLogit));
-            probabilities[i] = NumOps.FromDouble(expValue);
-            sum = NumOps.Add(sum, probabilities[i]);
-        }
-
-        // Normalize
-        if (NumOps.GreaterThan(sum, NumOps.Zero))
-        {
-            for (int i = 0; i < probabilities.Length; i++)
-            {
-                probabilities[i] = NumOps.Divide(probabilities[i], sum);
-            }
-        }
-
-        return probabilities;
-    }
-
-    /// <summary>
-    /// Converts probability vector to the expected output type.
-    /// </summary>
-    private TOutput ConvertToOutput(Vector<T> probabilities)
-    {
-        if (typeof(TOutput) == typeof(Vector<T>))
-        {
-            return (TOutput)(object)probabilities;
-        }
-
-        if (typeof(TOutput) == typeof(Tensor<T>))
-        {
-            return (TOutput)(object)ConversionsHelper.VectorToTensor(probabilities, new int[] { probabilities.Length });
-        }
-
-        // Fallback: return the argmax as a scalar
-        int predictedClass = 0;
-        T maxProb = probabilities[0];
-        for (int i = 1; i < probabilities.Length; i++)
-        {
-            if (NumOps.GreaterThan(probabilities[i], maxProb))
-            {
-                maxProb = probabilities[i];
-                predictedClass = i;
-            }
-        }
-
-        var result = new Vector<T>(1);
-        result[0] = NumOps.FromDouble(predictedClass);
-        if (result is TOutput output)
-        {
-            return output;
-        }
-
-        if (probabilities is TOutput prob)
-        {
-            return prob;
-        }
-
-        throw new InvalidOperationException(
-            $"Cannot convert prediction result to output type {typeof(TOutput).Name}. " +
-            $"Supported types are Vector<T> and Tensor<T>.");
+        // Spread the present classes' columns over all NumClasses columns.
+        var placement = Engine.TensorOneHot<T>(new Tensor<int>(slots, new[] { slots.Length }), _options.NumClasses);
+        return ClassifierOutputs<T>.ToOutput<TOutput>(Engine.TensorMatMul(probabilities, placement));
     }
 
     /// <inheritdoc/>

@@ -5,12 +5,11 @@ using AiDotNet.Validation;
 namespace AiDotNet.MetaLearning.Options;
 
 /// <summary>
-/// Configuration options for the MetaTask (Meta-learned Task Augmentation) algorithm.
+/// Configuration options for the MetaTask algorithm, an implementation of MetaMix (Chen et al., ICPR 2020).
 /// </summary>
 /// <remarks>
-/// MetaTask generates synthetic tasks by interpolating gradients between pairs of real tasks
-/// using Beta-distributed mixing coefficients. The synthetic tasks augment the task distribution,
-/// improving generalization of the meta-learned initialization.
+/// MetaMix keeps the MAML inner loop on the support set and replaces each episode's query set by
+/// virtual examples mixed from random pairs of examples with a Beta-distributed coefficient.
 /// </remarks>
 public class MetaTaskOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<T>
 {
@@ -58,23 +57,23 @@ public class MetaTaskOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOpt
     public IEpisodicDataLoader<T, TInput, TOutput>? DataLoader { get; set; }
 
     /// <summary>
-    /// Alpha parameter for Beta(α,α) distribution used to sample interpolation coefficients.
-    /// Higher values concentrate mixing around λ=0.5; lower values allow extreme mixing.
-    /// Default: 2.0.
+    /// Alpha parameter of the symmetric Beta(α, α) distribution that draws the mixup coefficient λ
+    /// (MetaMix Eq. 4-5). The paper's experiments use α = 1, i.e. λ uniform on [0, 1]; values of 1 and
+    /// above performed alike, values below 1 slightly worse. Default: 1.0.
     /// </summary>
-    public double InterpolationAlpha { get; set; } = 2.0;
+    public double InterpolationAlpha { get; set; } = 1.0;
 
     /// <summary>
-    /// Number of synthetic (interpolated) tasks generated per meta-batch.
-    /// These are added to the real tasks in the meta-objective. Default: 2.
+    /// Number Z of virtual (mixed) examples generated per episode (MetaMix Algorithm 1, line 14).
+    /// 0 means one per query example, which keeps the outer batch size of MAML. Default: 0.
     /// </summary>
-    public int NumSyntheticTasks { get; set; } = 2;
+    public int NumMixedPairs { get; set; } = 0;
 
     /// <summary>
-    /// Weight on the synthetic task losses relative to real task losses.
-    /// L_meta = L_real + SyntheticWeight * L_synthetic. Default: 0.5.
+    /// Which set the two mixed examples are drawn from. The paper's MetaMix mixes pairs from the query
+    /// set only (its ablation, Table III, found that best). Default: <see cref="MetaMixSource.Query"/>.
     /// </summary>
-    public double SyntheticWeight { get; set; } = 0.5;
+    public MetaMixSource MixSource { get; set; } = MetaMixSource.Query;
 
     /// <summary>Creates options for meta-learning <paramref name="metaModel"/>, with the default settings.</summary>
     /// <param name="metaModel">The model whose parameters are meta-learned.</param>
@@ -84,7 +83,7 @@ public class MetaTaskOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOpt
     /// <inheritdoc/>
     public bool IsValid() =>
         MetaModel != null && OuterLearningRate > 0 && MetaBatchSize > 0 &&
-        InterpolationAlpha > 0 && NumSyntheticTasks > 0 && SyntheticWeight >= 0;
+        InterpolationAlpha > 0 && NumMixedPairs >= 0;
     /// <inheritdoc/>
     public IMetaLearnerOptions<T> Clone() => new MetaTaskOptions<T, TInput, TOutput>(MetaModel)
     {
@@ -94,7 +93,18 @@ public class MetaTaskOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOpt
         GradientClipThreshold = GradientClipThreshold, RandomSeed = RandomSeed, EvaluationTasks = EvaluationTasks,
         EvaluationFrequency = EvaluationFrequency, EnableCheckpointing = EnableCheckpointing,
         CheckpointFrequency = CheckpointFrequency, UseFirstOrder = UseFirstOrder,
-        InterpolationAlpha = InterpolationAlpha, NumSyntheticTasks = NumSyntheticTasks,
-        SyntheticWeight = SyntheticWeight
+        InterpolationAlpha = InterpolationAlpha, NumMixedPairs = NumMixedPairs, MixSource = MixSource
     };
+}
+
+/// <summary>
+/// Selects the sets MetaMix draws its example pairs from.
+/// </summary>
+public enum MetaMixSource
+{
+    /// <summary>Both examples of a pair come from the query set (the paper's MetaMix).</summary>
+    Query,
+
+    /// <summary>The first example comes from the support set and the second from the query set.</summary>
+    SupportAndQuery,
 }
