@@ -263,6 +263,31 @@ public sealed class ModelStateRegistryTests
         Assert.Equal(scalar, restoredScalar);
     }
 
+    [Fact]
+    public void TensorView_IsWrittenInLogicalOrder()
+    {
+        // A transposed view shares the [[1, 2, 3], [4, 5, 6]] storage; its logical order is 1, 4, 2, 5, 3, 6.
+        // The payload converted the backing storage, so the restored tensor came back as 1, 2, 3, 4, 5, 6.
+        var source = new Tensor<double>(new[] { 2, 3 }, new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 }));
+        var view = source.Transpose(new[] { 1, 0 });
+        var writing = new ModelStateRegistry<double>();
+        writing.Declare("t", () => (Tensor<double>?)view, (Tensor<double>? _) => { });
+        var stream = Write(writing);
+
+        stream.Position = 0;
+        Tensor<double>? restored = null;
+        var reading = new ModelStateRegistry<double>();
+        reading.Declare("t", () => restored, (Tensor<double>? value) => restored = value);
+        using (var reader = new BinaryReader(stream, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            reading.ReadAll(reader);
+        }
+
+        Assert.NotNull(restored);
+        Assert.Equal(new[] { 3, 2 }, restored?.Shape.ToArray());
+        Assert.Equal(new[] { 1.0, 4.0, 2.0, 5.0, 3.0, 6.0 }, restored?.ToArray());
+    }
+
     private static MemoryStream Write(ModelStateRegistry<double> registry)
     {
         var stream = new MemoryStream();
