@@ -145,7 +145,7 @@ public class BetaLikelihood<T>
 
         var engine = AiDotNetEngine.Current;
         var (logY, logOneMinusY) = ClampedLogs(y);
-        var (_, alpha, beta) = BetaParameters(f);
+        var (_, _, alpha, beta) = BetaParameters(f);
 
         // Log Beta PDF: log Γ(α+β) - log Γ(α) - log Γ(β) + (α-1)log(y) + (β-1)log(1-y)
         var logNormalizer = engine.TensorSubtract(
@@ -181,13 +181,13 @@ public class BetaLikelihood<T>
 
         var engine = AiDotNetEngine.Current;
         var (logY, logOneMinusY) = ClampedLogs(y);
-        var (mu, alpha, beta) = BetaParameters(f);
+        var (mu, oneMinusMu, alpha, beta) = BetaParameters(f);
 
         // ∂log p / ∂μ
         var dLogP_dMu = DLogPDMu(alpha, beta, logY, logOneMinusY);
 
         // ∂μ / ∂f = μ(1-μ)
-        var dMu_dF = engine.TensorMultiply(mu, engine.ScalarMinusTensor(_numOps.One, mu));
+        var dMu_dF = engine.TensorMultiply(mu, oneMinusMu);
 
         return engine.TensorMultiply(dLogP_dMu, dMu_dF).ToVector();
     }
@@ -213,11 +213,11 @@ public class BetaLikelihood<T>
 
         var engine = AiDotNetEngine.Current;
         var (logY, logOneMinusY) = ClampedLogs(y);
-        var (mu, alpha, beta) = BetaParameters(f);
+        var (mu, oneMinusMu, alpha, beta) = BetaParameters(f);
         T one = _numOps.One;
 
         // Derivatives of sigmoid: μ = sigmoid(f)
-        var dMu_dF = engine.TensorMultiply(mu, engine.ScalarMinusTensor(one, mu)); // ∂μ/∂f
+        var dMu_dF = engine.TensorMultiply(mu, oneMinusMu); // ∂μ/∂f
         var d2Mu_dF2 = engine.TensorMultiply(                                       // ∂²μ/∂f²
             dMu_dF,
             engine.ScalarMinusTensor(one, engine.TensorMultiplyScalar(mu, _numOps.FromDouble(2))));
@@ -338,26 +338,41 @@ public class BetaLikelihood<T>
     /// <summary>
     /// log(y) and log(1 - y) with y clamped to [Epsilon, 1 - Epsilon].
     /// </summary>
+    /// <remarks>
+    /// y and 1 - y are clamped separately: 1 - Epsilon rounds to exactly 1 in single (and half) precision,
+    /// so clamping y alone would leave log(1 - y) = log(0) for y = 1.
+    /// </remarks>
     private (Tensor<T> LogY, Tensor<T> LogOneMinusY) ClampedLogs(Vector<T> y)
     {
         var engine = AiDotNetEngine.Current;
-        var clamped = engine.TensorClamp(
-            Tensor<T>.FromVector(y), _numOps.FromDouble(Epsilon), _numOps.FromDouble(1 - Epsilon));
-        return (engine.TensorLog(clamped), engine.TensorLog(engine.ScalarMinusTensor(_numOps.One, clamped)));
+        T low = _numOps.FromDouble(Epsilon);
+        T high = _numOps.FromDouble(1 - Epsilon);
+        var values = Tensor<T>.FromVector(y);
+        var clamped = engine.TensorClamp(values, low, high);
+        var clampedComplement = engine.TensorClamp(engine.ScalarMinusTensor(_numOps.One, values), low, high);
+        return (engine.TensorLog(clamped), engine.TensorLog(clampedComplement));
     }
 
     /// <summary>
-    /// μ = sigmoid(f) and the Beta parameters α = μ̃ν, β = (1 - μ̃)ν with μ̃ = clamp(μ, Epsilon, 1 - Epsilon).
+    /// μ = sigmoid(f), 1 - μ = sigmoid(-f), and the Beta parameters α = μ̃ν, β = (1 - μ̃)ν with
+    /// μ̃ = clamp(μ, Epsilon, 1 - Epsilon).
     /// </summary>
-    private (Tensor<T> Mu, Tensor<T> Alpha, Tensor<T> Beta) BetaParameters(Vector<T> f)
+    /// <remarks>
+    /// 1 - μ is taken as sigmoid(-f) rather than 1 - sigmoid(f): the latter cancels to exactly 0 once
+    /// sigmoid(f) rounds to 1 (f ≳ 17 in single precision), which made β = 0 and the log-likelihood -∞.
+    /// </remarks>
+    private (Tensor<T> Mu, Tensor<T> OneMinusMu, Tensor<T> Alpha, Tensor<T> Beta) BetaParameters(Vector<T> f)
     {
         var engine = AiDotNetEngine.Current;
-        var mu = engine.TensorSigmoid(Tensor<T>.FromVector(f));
-        var clampedMu = engine.TensorClamp(mu, _numOps.FromDouble(Epsilon), _numOps.FromDouble(1 - Epsilon));
+        var latent = Tensor<T>.FromVector(f);
+        var mu = engine.TensorSigmoid(latent);
+        var oneMinusMu = engine.TensorSigmoid(engine.TensorNegate(latent));
+        T low = _numOps.FromDouble(Epsilon);
+        T high = _numOps.FromDouble(1 - Epsilon);
         T precision = _numOps.FromDouble(_precision);
-        var alpha = engine.TensorMultiplyScalar(clampedMu, precision);
-        var beta = engine.TensorMultiplyScalar(engine.ScalarMinusTensor(_numOps.One, clampedMu), precision);
-        return (mu, alpha, beta);
+        var alpha = engine.TensorMultiplyScalar(engine.TensorClamp(mu, low, high), precision);
+        var beta = engine.TensorMultiplyScalar(engine.TensorClamp(oneMinusMu, low, high), precision);
+        return (mu, oneMinusMu, alpha, beta);
     }
 
     /// <summary>

@@ -387,7 +387,26 @@ public class LinearMean<T> : IMeanFunction<T>
         var Xty = engine.TensorMatMul(XbiasT, Tensor<T>.FromVector(y).Reshape(new[] { n, 1 }));
 
         // Partial-pivoting LU solve of the regularized normal equations
-        var w = LinalgDispatch<T>.Solve(XtX, Xty).Reshape(new[] { d + 1 }).ToVector();
+        var solution = LinalgDispatch<T>.Solve(XtX, Xty);
+
+        // The absolute 1e-6 ridge is rounded away when the Gram diagonal is large relative to the precision
+        // of T (single precision with features of magnitude ~100), so collinear columns leave an exactly
+        // singular system and the LU solve returns NaN. Retry with a ridge relative to the diagonal.
+        if (d > 0 && !GaussianProcessEngineOps.AllFinite(solution))
+        {
+            // Ridge of 1e-5, 1e-4, 1e-3, 1e-2 times the largest diagonal entry, until the solve is finite
+            T maxDiagonal = engine.TensorMaxValue(engine.TensorDiagonal(XtX));
+            T ten = numOps.FromDouble(10);
+            var ridge = engine.TensorMultiplyScalar(
+                engine.TensorEye<T>(d + 1), numOps.Multiply(maxDiagonal, numOps.FromDouble(1e-5)));
+            for (int attempt = 0; attempt < 4 && !GaussianProcessEngineOps.AllFinite(solution); attempt++)
+            {
+                solution = LinalgDispatch<T>.Solve(engine.TensorAdd(XtX, ridge), Xty);
+                ridge = engine.TensorMultiplyScalar(ridge, ten);
+            }
+        }
+
+        var w = solution.Reshape(new[] { d + 1 }).ToVector();
 
         // Extract weights and bias
         if (d == 0)
