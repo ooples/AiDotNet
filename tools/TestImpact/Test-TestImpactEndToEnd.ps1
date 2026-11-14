@@ -879,6 +879,144 @@ finally {
         -ThrowOnUnsafePath:($null -eq $fixtureFailure)
 }
 
+# Precise fallbacks through real commits and the real selector. Every member of the fixture type is executed
+# by its own shard, so a selection wider than the changed member names the extra shard. One commit edits a
+# comment, an unexecuted line of an executed method, a method no shard executes, and adds a source file.
+$preciseFixture = Join-Path $tempRoot ("aidotnet-impact-e2e-precise-" + [guid]::NewGuid().ToString('N'))
+$preciseFailure = $null
+$savedPreciseSwitch = $env:TEST_IMPACT_PRECISE_FALLBACKS
+try {
+    New-Item -ItemType Directory -Path (Join-Path $preciseFixture 'src/Area'), (Join-Path $preciseFixture 'src/Fresh') -Force | Out-Null
+    Push-Location $preciseFixture
+    try {
+        $env:TEST_IMPACT_PRECISE_FALLBACKS = ''
+        Invoke-Git init --quiet
+        Invoke-Git config user.email 'ci-impact-fixture@example.invalid'
+        Invoke-Git config user.name 'CI impact fixture'
+        Invoke-Git config commit.gpgSign false
+        Invoke-Git config core.autocrlf false
+        $preciseHooks = Join-Path $preciseFixture 'disabled-hooks'
+        New-Item -ItemType Directory -Path $preciseHooks -Force | Out-Null
+        Invoke-Git config core.hooksPath $preciseHooks
+        $hub = [string[]] @(
+            'namespace Fixture',
+            '{',
+            '    public class Hub',
+            '    {',
+            '        private int _count;',
+            '',
+            '        // Adds the count.',
+            '        public int Run(int x)',
+            '        {',
+            '            if (x < 0) { return -1; }',
+            '            return x + _count;',
+            '        }',
+            '',
+            '        public int Other(int x)',
+            '        {',
+            '            return x;',
+            '        }',
+            '',
+            '        public int Unused(int x)',
+            '        {',
+            '            return x - 1;',
+            '        }',
+            '    }',
+            '}')
+        # With a byte-order mark, as most of the repository's sources have: read through the console's code page
+        # it would be a syntax error on line 1, and every case below would fall back to the file-wide rule.
+        $writeSource = { param([string] $Path, [string[]] $Lines) [IO.File]::WriteAllText((Join-Path $preciseFixture $Path), (($Lines -join "`n") + "`n"), [System.Text.UTF8Encoding]::new($true)) }
+        & $writeSource 'src/Area/Hub.cs' $hub
+        & $writeSource 'src/Fresh/Old.cs' @('namespace Fixture { public class Old { public int Get() { return 1; } } }')
+        Invoke-Git add src
+        Invoke-Git commit --quiet -m precise-baseline
+        $preciseMapSha = ((Invoke-Git rev-parse HEAD) | Out-String).Trim()
+        [ordered]@{
+            schemaVersion = 1; sha = $preciseMapSha; generatedUtc = '2026-11-14T00:00:00Z'
+            knownShards = @('Alpha', 'Beta', 'Gamma'); alwaysRun = @('Always')
+            files = [ordered]@{
+                'src/Area/Hub.cs' = @([ordered]@{ s = 0; r = @(11, 11) }, [ordered]@{ s = 1; r = @(16, 16) })
+                'src/Fresh/Old.cs' = @([ordered]@{ s = 2; r = @(1, 1) })
+            }
+        } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath precise-map.json -Encoding utf8
+        $preciseShards = @('Alpha', 'Beta', 'Gamma', 'Always')
+
+        $edited = [string[]] $hub.Clone()
+        $edited[6] = '        // Adds the running count.'
+        $edited[9] = '            if (x < 1) { return -1; }'
+        $edited[20] = '            return x - 2;'
+        & $writeSource 'src/Area/Hub.cs' $edited
+        & $writeSource 'src/Fresh/Brand.cs' @('namespace Fixture { public class Brand { } }')
+        Invoke-Git add src
+        Invoke-Git commit --quiet -m precise-change
+        & $selector -MapFile precise-map.json -BaseSha $preciseMapSha -ExpectedShards $preciseShards -OutFile precise-selection.json 6>$null
+        Assert-True ($LASTEXITCODE -eq 0) "precise fallbacks: the selector exited $LASTEXITCODE"
+        $precise = Get-Content precise-selection.json -Raw | ConvertFrom-Json
+        Assert-True (-not [bool] $precise.escalate -and (@($precise.shards | Sort-Object) -join ',') -ceq 'Alpha,Always,Gamma') `
+            "precise fallbacks: a comment, an unexecuted line of Run, an unexecuted method and a new file selected '$(@($precise.shards | Sort-Object) -join ',')', not Run's shard, the new file's directory owner and the always-run shard"
+        Assert-True (@($precise.untested).Count -eq 1 -and [string] $precise.untested[0].member -ceq 'Hub.Unused' -and
+            [string] $precise.untested[0].path -ceq 'src/Area/Hub.cs' -and [string] $precise.untested[0].lines -ceq '21-21') `
+            'precise fallbacks: the changed method no shard executes was not reported as untested'
+        Assert-True ((@($precise.newTypePaths) -join ',') -ceq 'src/Fresh/Brand.cs') `
+            'precise fallbacks: the added source file was not emitted in newTypePaths'
+        Assert-True ([string] $precise.preciseFallbacks -ceq 'on') "precise fallbacks: the selection recorded '$($precise.preciseFallbacks)'"
+        $preciseSummary = Join-Path $preciseFixture 'precise-summary.md'
+        & (Join-Path $PSScriptRoot 'Write-SelectionReport.ps1') -SelectionFile precise-selection.json -TotalShards 4 -SummaryFile $preciseSummary
+        Assert-True ($LASTEXITCODE -eq 0 -and (Get-Content -LiteralPath $preciseSummary -Raw) -match 'Untested code changed \(1\)') `
+            'precise fallbacks: the selection report did not render the untested member'
+
+        # The kill switch restores the file-wide rule on the same commit, with nothing reported as untested.
+        $env:TEST_IMPACT_PRECISE_FALLBACKS = 'off'
+        & $selector -MapFile precise-map.json -BaseSha $preciseMapSha -ExpectedShards $preciseShards -OutFile precise-off-selection.json 6>$null
+        $preciseOff = Get-Content precise-off-selection.json -Raw | ConvertFrom-Json
+        Assert-True (-not [bool] $preciseOff.escalate -and (@($preciseOff.shards | Sort-Object) -join ',') -ceq 'Alpha,Always,Beta,Gamma' -and
+            @($preciseOff.untested).Count -eq 0 -and [string] $preciseOff.preciseFallbacks -like 'off*') `
+            "precise fallbacks: the kill switch selected '$(@($preciseOff.shards | Sort-Object) -join ',')' instead of every shard executing the file"
+        $env:TEST_IMPACT_PRECISE_FALLBACKS = ''
+
+        # A change validated against a tree newer than the map: the base branch added two lines above the
+        # type, so the member's lines are carried back to the map's numbering before they select.
+        Invoke-Git checkout --quiet --detach $preciseMapSha
+        & $writeSource 'src/Area/Hub.cs' (@('// added on the base branch', '// after the map was built') + $hub)
+        Invoke-Git add src
+        Invoke-Git commit --quiet -m precise-base-moved
+        $preciseBaseTree = ((Invoke-Git rev-parse 'HEAD^{tree}') | Out-String).Trim()
+        $moved = [string[]] $hub.Clone()
+        $moved[9] = '            if (x < 1) { return -1; }'
+        & $writeSource 'src/Area/Hub.cs' (@('// added on the base branch', '// after the map was built') + $moved)
+        Invoke-Git add src
+        Invoke-Git commit --quiet -m precise-change-on-moved-base
+        & $selector -MapFile precise-map.json -DeltaFromTree $preciseBaseTree -ExpectedShards $preciseShards -OutFile precise-moved-selection.json 6>$null
+        $preciseMoved = Get-Content precise-moved-selection.json -Raw | ConvertFrom-Json
+        Assert-True (-not [bool] $preciseMoved.escalate -and (@($preciseMoved.shards | Sort-Object) -join ',') -ceq 'Alpha,Always') `
+            "precise fallbacks: behind a moved base the unexecuted line of Run selected '$(@($preciseMoved.shards | Sort-Object) -join ',')'"
+
+        # A declaration selects the type's shards: here both of Hub's, and not the other file's.
+        $field = [string[]] $moved.Clone()
+        $field[4] = '        private long _count;'
+        & $writeSource 'src/Area/Hub.cs' (@('// added on the base branch', '// after the map was built') + $field)
+        Invoke-Git add src
+        Invoke-Git commit --quiet -m precise-field-change
+        & $selector -MapFile precise-map.json -DeltaFromTree $preciseBaseTree -ExpectedShards $preciseShards -OutFile precise-field-selection.json 6>$null
+        $preciseField = Get-Content precise-field-selection.json -Raw | ConvertFrom-Json
+        Assert-True (-not [bool] $preciseField.escalate -and (@($preciseField.shards | Sort-Object) -join ',') -ceq 'Alpha,Always,Beta') `
+            "precise fallbacks: a changed field selected '$(@($preciseField.shards | Sort-Object) -join ',')', not the shards executing its type"
+        Write-Host 'Precise fallbacks: comment selected nothing; unexecuted line selected its member; untested member reported; new file emitted; kill switch restored the file rule.'
+    }
+    finally {
+        Pop-Location
+    }
+}
+catch {
+    $preciseFailure = $_
+    throw
+}
+finally {
+    $env:TEST_IMPACT_PRECISE_FALLBACKS = $savedPreciseSwitch
+    Remove-ReviewFixtureDirectory -LiteralPath $preciseFixture -ExpectedLeafPrefix 'aidotnet-impact-e2e-' `
+        -ThrowOnUnsafePath:($null -eq $preciseFailure)
+}
+
 if ($failures.Count -gt 0) {
     Write-Host 'Test-impact end-to-end proof FAILED:'
     foreach ($failure in $failures) { Write-Host "  - $failure" }

@@ -582,6 +582,11 @@ $selectorLineageText = Get-Content -LiteralPath 'tools/TestImpact/Select-Shards.
 Assert-Contract ($selectorLineageText.Contains('& git merge-base --is-ancestor $MapSha HEAD') -and
         $selectorLineageText.Contains('$BaseSha = Resolve-MapLineageBase -LineageRef $MapLineageRef -MapSha $mapSha')) `
     'the selector accepts a map from another branch without requiring the checkout to contain its commit'
+# The precise fallbacks can be turned off from the repository settings: the select step hands the selector
+# the repository variable, and the selector reads exactly that name.
+Assert-Contract ($selectStep.Contains('TEST_IMPACT_PRECISE_FALLBACKS: ${{ vars.TEST_IMPACT_PRECISE_FALLBACKS }}') -and
+        $selectorLineageText.Contains('return ([string] $env:TEST_IMPACT_PRECISE_FALLBACKS) -notmatch')) `
+    'the precise-fallback kill switch does not reach the selector, so turning it off needs a revert'
 Assert-Contract (-not $selectStep.Contains('-DeltaFromTree')) `
     'the select step computes its own master delta - a second, unaudited reuse mechanism'
 Assert-Contract ($selectStep.Contains('foreach ($name in $importShards) { [void] $running.Add($name) }')) `
