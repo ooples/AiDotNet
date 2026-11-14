@@ -220,12 +220,12 @@ public partial class MegaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         var phones = _options.Language == MegaTtsLanguage.English ? NatSpeechFrontEnd.EnglishPhonesOf(text) : NatSpeechFrontEnd.ChinesePhonesOf(text);
         var ids = NatSpeechFrontEnd.Encode(phones, _vocabulary).Take(_options.MaxTextLength).ToArray();
         if (ids.Length == 0) throw new ArgumentException("The text has no phonemes.", nameof(text));
-        return new Tensor<T>(new[] { ids.Length }, new Vector<T>(ids.Select(i => NumOps.FromDouble(i)).ToArray()));
+        return IdTensor(ids);
     }
 
     internal int[] Ids(Tensor<T> tokens, string name)
     {
-        var ids = tokens.ToArray().Select(v => (int)Math.Round(NumOps.ToDouble(v))).ToArray();
+        var ids = RoundedIds(tokens);
         if (ids.Length == 0) throw new ArgumentException("There are no phonemes.", name);
         if (ids.Any(i => i < 0 || i >= _vocabulary.Length))
             throw new ArgumentOutOfRangeException(name, $"Phone ids lie in [0, {_vocabulary.Length}).");
@@ -310,9 +310,10 @@ public partial class MegaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         var content = Content(phones);
         var codes = SampleProsody(promptCodes, promptContent, content, timbre, random);
         var prosody = Network.ProsodyStates(Network.Quantizer.Lookup(Matrix(codes)));
-        var predicted = Network.PredictDurations(content, prosody, phones).ToArray();
         // NATSpeech's LengthRegulator: torch.round (half to even), padding tokens kept at zero.
-        var frames = predicted.Select((d, i) => phones[i] == 0 ? 0 : (int)Math.Round(NumOps.ToDouble(d), MidpointRounding.ToEven)).ToArray();
+        var frames = RoundedIds(Network.PredictDurations(content, prosody, phones));
+        for (int i = 0; i < frames.Length; i++)
+            if (phones[i] == 0) frames[i] = 0;
         var map = MegaTts3Aligner<T>.LengthRegulate(frames);
         if (map.Length == 0) return new Tensor<T>(new[] { 0, _options.MelChannels });
         return Network.DecodeMel(content, prosody, timbre, map);
@@ -332,8 +333,7 @@ public partial class MegaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
             int n = previous.Count;
             var context = Engine.TensorSlice(all, new[] { 0, 0, 0 }, new[] { 1, n, h });
             var logits = Network.ProsodyLogits(previous.ToArray(), context, timbre);
-            var last = new double[_options.Codes];
-            for (int c = 0; c < last.Length; c++) last[c] = NumOps.ToDouble(logits[n - 1, c]);
+            var last = Engine.Reshape(Engine.TensorSlice(logits, new[] { n - 1, 0 }, new[] { 1, _options.Codes }), new[] { _options.Codes });
             result[i] = TopK(last, _options.TopK, random);
             previous.Add(result[i]);
         }
@@ -341,18 +341,15 @@ public partial class MegaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     }
 
     // Top-k random sampling (Fan et al. 2018): the k largest logits, softmax, one draw.
-    private static int TopK(double[] logits, int k, Random random)
+    internal static int TopK(Tensor<T> logits, int k, Random random)
     {
-        var top = Enumerable.Range(0, logits.Length).OrderByDescending(i => logits[i]).ThenBy(i => i).Take(k).ToArray();
-        double max = logits[top[0]];
-        var weights = top.Select(i => Math.Exp(logits[i] - max)).ToArray();
-        double u = random.NextDouble() * weights.Sum();
-        for (int j = 0; j < top.Length; j++)
-        {
-            u -= weights[j];
-            if (u < 0) return top[j];
-        }
-        return top[top.Length - 1];
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        // The k largest, ties by ascending id (OrderByDescending(...).ThenBy(i)).
+        var top = TtsSampling<T>.StableOrder(logits, descending: true).Take(k).ToArray();
+        var topLogits = engine.TensorIndexSelect(engine.Reshape(logits, new[] { logits.Length }), new Tensor<int>(top, new[] { top.Length }), 0);
+        var weights = engine.TensorExp(engine.TensorAddScalar(topLogits, ops.Negate(engine.TensorMaxValue(topLogits))));
+        return top[TtsSampling<T>.DrawPosition(weights, random.NextDouble(), inclusive: false)];
     }
 
     internal Tensor<T> Content(int[] phones) => Network.Content.Forward(Matrix(phones));

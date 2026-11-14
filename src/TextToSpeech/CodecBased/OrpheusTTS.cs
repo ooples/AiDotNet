@@ -222,10 +222,10 @@ public partial class OrpheusTTS<T> : TtsModelBase<T>, ICodecTts<T>
         ThrowIfDisposed();
         if (!HasPaperLayers) throw NotNative();
         var frames = OrpheusTokens.Frames(Codec.Encode(Doubles(audio)));
-        var tokens = new Tensor<T>(new[] { frames.Count, OrpheusTokens.CodesPerFrame });
-        for (int f = 0; f < frames.Count; f++)
-            for (int s = 0; s < OrpheusTokens.CodesPerFrame; s++) tokens[f, s] = Ops.FromDouble(frames[f][s]);
-        return tokens;
+        int width = OrpheusTokens.CodesPerFrame;
+        var flat = new int[frames.Count * width];
+        for (int f = 0; f < frames.Count; f++) Array.Copy(frames[f], 0, flat, f * width, width);
+        return new Tensor<int>(flat, new[] { frames.Count, width }).Cast<T>();
     }
 
     /// <inheritdoc />
@@ -241,9 +241,15 @@ public partial class OrpheusTTS<T> : TtsModelBase<T>, ICodecTts<T>
     {
         if (tokens.Rank != 2 || tokens.Shape[1] != OrpheusTokens.CodesPerFrame)
             throw new ArgumentException($"Orpheus's frames are [frames, {OrpheusTokens.CodesPerFrame}].", nameof(tokens));
+        int width = OrpheusTokens.CodesPerFrame;
+        var flat = RoundedIds(tokens);
         var frames = new List<int[]>();
         for (int f = 0; f < tokens.Shape[0]; f++)
-            frames.Add(Enumerable.Range(0, OrpheusTokens.CodesPerFrame).Select(s => (int)Math.Round(Ops.ToDouble(tokens[f, s]))).ToArray());
+        {
+            var frame = new int[width];
+            Array.Copy(flat, f * width, frame, 0, width);
+            frames.Add(frame);
+        }
         return frames;
     }
 
@@ -262,11 +268,11 @@ public partial class OrpheusTTS<T> : TtsModelBase<T>, ICodecTts<T>
         if (!HasPaperLayers) return base.PreprocessText(text);
         var ids = Tokenizer.Encode(text);
         if (ids.Length == 0) throw new ArgumentException("The text has no tokens.", nameof(text));
-        return new Tensor<T>(new[] { ids.Length }, new Vector<T>(ids.Select(i => NumOps.FromDouble(i)).ToArray()));
+        return IdTensor(ids);
     }
 
     private string TextOf(Tensor<T> ids) =>
-        Tokenizer.Decode(ids.ToArray().Select(v => (int)Math.Round(NumOps.ToDouble(v))), skipSpecial: true);
+        Tokenizer.Decode(RoundedIds(ids), skipSpecial: true);
 
     /// <inheritdoc />
     /// <remarks>The package's generation: the prompt of the text (after the voice's name), sampled until the end of speech
@@ -290,7 +296,8 @@ public partial class OrpheusTTS<T> : TtsModelBase<T>, ICodecTts<T>
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
         if (!HasPaperLayers) return base.PredictCore(input);
         if (input.Length == 0) throw new ArgumentException("There is no text.", nameof(input));
-        if (input.ToArray().Any(v => NumOps.ToDouble(v) < 0 || NumOps.ToDouble(v) >= _options.VocabSize))
+        if (NumOps.LessThan(Engine.TensorMinValue(input), NumOps.Zero)
+            || NumOps.GreaterThanOrEquals(Engine.TensorMaxValue(input), NumOps.FromDouble(_options.VocabSize)))
             throw new ArgumentOutOfRangeException(nameof(input), $"Token ids lie in [0, {_options.VocabSize}).");
         return Wave(AudioOf(Generate(OrpheusTokens.Prompt(Tokenizer, TextOf(input), _options.Voice))));
     }
@@ -319,17 +326,15 @@ public partial class OrpheusTTS<T> : TtsModelBase<T>, ICodecTts<T>
             var logits = lm.Forward(lm.Embed(Row(prompt)), null, null, cache, lastLogitsOnly: true).Logits!;
             while (generated.Count < o.MaxNewTokens)
             {
-                var values = logits.ToArray();
-                var scores = new double[values.Length];
-                for (int i = 0; i < scores.Length; i++) scores[i] = NumOps.ToDouble(values[i]);
-                if (o.ConstrainToAudioTokens) OrpheusTokens.MaskToSlot(scores, generated.Count % OrpheusTokens.CodesPerFrame);
+                var scores = Engine.Reshape(logits, new[] { logits.Length });
+                if (o.ConstrainToAudioTokens) scores = OrpheusTokens.MaskToSlot(scores, generated.Count % OrpheusTokens.CodesPerFrame);
                 int next;
                 if (o.Temperature > 0)
-                    next = OuteTTSSampler.Sample(OuteTTSSampler.Process(scores, ids, o.RepetitionPenalty, int.MaxValue, o.Temperature, 0, o.TopP, 0), random);
+                    next = OuteTTSSampler<T>.Sample(OuteTTSSampler<T>.Process(scores, ids, o.RepetitionPenalty, int.MaxValue, o.Temperature, 0, o.TopP, 0), random);
                 else
                 {
-                    var processed = OuteTTSSampler.Process(scores, ids, o.RepetitionPenalty, int.MaxValue, 1.0, 0, 1.0, 0);
-                    next = Array.IndexOf(processed, processed.Max());
+                    var processed = OuteTTSSampler<T>.Process(scores, ids, o.RepetitionPenalty, int.MaxValue, 1.0, 0, 1.0, 0);
+                    next = OuteTTSSampler<T>.Greedy(processed);
                 }
                 if (next == OrpheusTokens.EndOfSpeech || next == OrpheusTokens.EndOfText) break;
                 ids.Add(next);
@@ -649,10 +654,10 @@ internal static class OrpheusTokens
 
     /// <summary>Removes every token but the codes of <paramref name="slot"/> (and, at a frame boundary, the end of
     /// speech).</summary>
-    public static void MaskToSlot(double[] scores, int slot)
+    public static Tensor<T> MaskToSlot<T>(Tensor<T> scores, int slot)
     {
         int first = AudioStart + slot * CodebookSize;
-        for (int i = 0; i < scores.Length; i++)
-            if ((i < first || i >= first + CodebookSize) && !(slot == 0 && i == EndOfSpeech)) scores[i] = double.NegativeInfinity;
+        return TtsSampling<T>.Forbid(scores,
+            Enumerable.Range(0, scores.Length).Where(i => (i < first || i >= first + CodebookSize) && !(slot == 0 && i == EndOfSpeech)));
     }
 }

@@ -206,9 +206,7 @@ public partial class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITraining
     protected override Tensor<T> PreprocessText(string text)
     {
         var ids = FrontEnd.ClassicTtsText.Characters(text, _options.TextSymbols, _options.VocabSize, _options.MaxTextLength);
-        var tokens = new Tensor<T>(new[] { ids.Length });
-        for (int i = 0; i < ids.Length; i++) tokens[i] = NumOps.FromDouble(ids[i]);
-        return tokens;
+        return IdTensor(ids);
     }
 
     /// <summary>
@@ -229,13 +227,11 @@ public partial class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITraining
     private int[] PredictDurations(Tensor<T> tokens)
     {
         var logDuration = RunDurationPredictor(tokens);
-        var durations = new int[logDuration.Length];
+        // round(exp(log d) - 1), floored at zero; TensorRound rounds half to even as Math.Round does.
+        var frames = Engine.TensorMax(Engine.TensorRound(Engine.TensorAddScalar(Engine.TensorExp(logDuration), NumOps.Negate(NumOps.One))), NumOps.Zero);
+        var durations = frames.Cast<int>().ToArray();
         int total = 0;
-        for (int i = 0; i < durations.Length; i++)
-        {
-            durations[i] = (int)Math.Max(0, Math.Round(Math.Exp(NumOps.ToDouble(logDuration[i])) - 1.0));
-            total += durations[i];
-        }
+        for (int i = 0; i < durations.Length; i++) total += durations[i];
         if (total == 0)
             for (int i = 0; i < durations.Length; i++) durations[i] = 1;
         return durations;
@@ -272,14 +268,7 @@ public partial class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITraining
         return Engine.TensorMultiplyScalar(Engine.TensorAddScalar(sum, log2pi), NumOps.FromDouble(-0.5));
     }
 
-    private int[] ViterbiDurations(Tensor<T> logLikelihood)
-    {
-        int characters = logLikelihood.Shape[0], frames = logLikelihood.Shape[1];
-        var scores = new double[characters, frames];
-        for (int s = 0; s < characters; s++)
-            for (int t = 0; t < frames; t++) scores[s, t] = NumOps.ToDouble(logLikelihood[s, t]);
-        return MonotonicAlignment.MaximumPath(scores);
-    }
+    private int[] ViterbiDurations(Tensor<T> logLikelihood) => MonotonicDurations(logLikelihood);
 
     /// <inheritdoc />
     protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expected)
@@ -341,8 +330,7 @@ public partial class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITraining
                 int[] durations;
                 using (new NoGradScope<T>())
                     durations = ViterbiDurations(GaussianLogLikelihood(characterHidden, melFrames));
-                var target = new Tensor<T>(new[] { durations.Length });
-                for (int i = 0; i < durations.Length; i++) target[i] = NumOps.FromDouble(Math.Log(durations[i] + 1.0));
+                var target = Engine.TensorLog1p(IdTensor(durations));
                 return MeanSquaredError(RunDurationPredictor(tokens), target);
             }
         }

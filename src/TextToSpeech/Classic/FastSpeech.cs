@@ -123,9 +123,7 @@ public partial class FastSpeech<T> : VarianceAdaptorTtsModelBase<T>, IAcousticMo
     protected override Tensor<T> PreprocessText(string text)
     {
         var ids = FrontEnd.ClassicTtsText.Phonemes(text, false, _options.TextSymbols, _options.VocabSize, _options.MaxTextLength);
-        var tokens = new Tensor<T>(new[] { ids.Length });
-        for (int i = 0; i < ids.Length; i++) tokens[i] = NumOps.FromDouble(ids[i]);
-        return tokens;
+        return IdTensor(ids);
     }
 
     /// <summary>Generates a mel spectrogram from text (FastSpeech is an acoustic model; pair it with a vocoder).</summary>

@@ -283,12 +283,13 @@ public partial class CSM<T> : TtsModelBase<T>, ICodecTts<T>
     private Tensor<T> Rows(BiasFreeLinearLayer<T> table, int width, IReadOnlyList<int> indices)
     {
         int count = table.Weights.Length / width;
-        var index = new Tensor<int>(new[] { indices.Count });
-        for (int i = 0; i < indices.Count; i++)
+        var ids = new int[indices.Count];
+        for (int i = 0; i < ids.Length; i++)
         {
             if (indices[i] < 0 || indices[i] >= count) throw new ArgumentOutOfRangeException(nameof(indices), indices[i], $"Ids lie in [0, {count}).");
-            index[i] = indices[i];
+            ids[i] = indices[i];
         }
+        var index = new Tensor<int>(ids, new[] { ids.Length });
         return Engine.TensorIndexSelect(Engine.Reshape(LlamaNetwork<T>.Paged(table.Weights), new[] { count, width }), index, 0);
     }
 

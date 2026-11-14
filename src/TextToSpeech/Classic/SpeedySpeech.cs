@@ -218,27 +218,36 @@ public partial class SpeedySpeech<T> : TtsModelBase<T>, IAcousticModel<T>
     private Tensor<T> Expand(Tensor<T> encodings, int[] durations)
     {
         var expanded = LengthRegulator.Expand(encodings, durations);
-        int frames = expanded.Shape[0], channels = expanded.Shape[1];
-        var positions = new Tensor<T>(new[] { frames, channels });
+        return Engine.TensorAdd(expanded, PhonemePositions(durations, expanded.Shape[1]));
+    }
+
+    /// <summary>
+    /// The positional encoding <c>[sum(durations), channels]</c> that restarts at every phoneme: frame p of a phoneme has
+    /// sin(p / 10000^(2i/channels)) in channel 2i and the cosine in 2i + 1 (an odd last channel stays 0). It is a constant
+    /// of the durations, formed in double and rounded to T once; forming the angles in T moves the sines by more than T's
+    /// own rounding.
+    /// </summary>
+    internal static Tensor<T> PhonemePositions(int[] durations, int channels)
+    {
+        Validation.Guard.NotNull(durations);
+        int frames = durations.Sum();
+        var table = new double[frames * channels];
         int frame = 0;
         foreach (int d in durations)
             for (int p = 0; p < d; p++, frame++)
                 for (int i = 0; i < channels / 2; i++)
                 {
                     double angle = p / Math.Pow(10000.0, 2.0 * i / channels);
-                    positions[frame, 2 * i] = NumOps.FromDouble(Math.Sin(angle));
-                    positions[frame, 2 * i + 1] = NumOps.FromDouble(Math.Cos(angle));
+                    table[frame * channels + 2 * i] = Math.Sin(angle);
+                    table[frame * channels + 2 * i + 1] = Math.Cos(angle);
                 }
-        return Engine.TensorAdd(expanded, positions);
+        return new Tensor<double>(table, new[] { frames, channels }).Cast<T>();
     }
 
     /// <summary>Inference durations: <c>exp</c> of the prediction, at least one frame, rounded.</summary>
     private int[] InferenceDurations(Tensor<T> logDurations)
     {
-        var durations = new int[logDurations.Length];
-        for (int i = 0; i < durations.Length; i++)
-            durations[i] = (int)Math.Round(Math.Max(1.0, Math.Exp(NumOps.ToDouble(logDurations[i]))));
-        return durations;
+        return RoundedIds(Engine.TensorMax(Engine.TensorExp(logDurations), NumOps.One));
     }
 
     /// <inheritdoc />
@@ -266,17 +275,8 @@ public partial class SpeedySpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         int batch = input.Shape[0], tokens = input.Shape[1];
         var outputs = new List<Tensor<T>>(batch);
         for (int b = 0; b < batch; b++)
-        {
-            var row = new Tensor<T>(new[] { tokens });
-            for (int i = 0; i < tokens; i++) row[i] = input[b, i];
-            outputs.Add(SynthesizeOne(row));
-        }
-        int longest = outputs.Max(o => o.Shape[0]);
-        var result = new Tensor<T>(new[] { batch, longest, _options.MelChannels });
-        for (int b = 0; b < batch; b++)
-            for (int f = 0; f < outputs[b].Shape[0]; f++)
-                for (int m = 0; m < _options.MelChannels; m++) result[b, f, m] = outputs[b][f, m];
-        return result;
+            outputs.Add(SynthesizeOne(BatchRow(input, b)));
+        return PadAndStack(outputs, _options.MelChannels);
     }
 
     private Tensor<T> SynthesizeOne(Tensor<T> tokens)
@@ -341,11 +341,9 @@ public partial class SpeedySpeech<T> : TtsModelBase<T>, IAcousticModel<T>
             throw new ArgumentException(
                 $"The durations sum to {durations.Sum()} frames but the mel spectrogram has {mel.Shape[0]}.", nameof(sample));
 
-        var standardized = new Tensor<T>(mel._shape);
-        for (int i = 0; i < mel.Length; i++)
-            standardized[i] = NumOps.FromDouble((NumOps.ToDouble(mel[i]) - _options.MelMean) / _options.MelStd);
-        var logDurationTarget = new Tensor<T>(new[] { durations.Length });
-        for (int i = 0; i < durations.Length; i++) logDurationTarget[i] = NumOps.FromDouble(Math.Log(Math.Max(1, durations[i])));
+        var standardized = Engine.TensorDivideScalar(Engine.TensorAddScalar(mel, NumOps.FromDouble(-_options.MelMean)),
+            NumOps.FromDouble(_options.MelStd));
+        var logDurationTarget = Engine.TensorLog(Engine.TensorMax(IdTensor(durations), NumOps.One));
 
         Tensor<T> Objective(Tensor<T> tokens, Tensor<T> target)
         {
@@ -369,9 +367,8 @@ public partial class SpeedySpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         var abs = Engine.TensorAbs(diff);
         var quadratic = Engine.TensorMultiplyScalar(Engine.TensorMultiply(diff, diff), NumOps.FromDouble(0.5));
         var linear = Engine.TensorAddScalar(abs, NumOps.FromDouble(-0.5));
-        var mask = new Tensor<T>(diff._shape);
-        for (int i = 0; i < diff.Length; i++)
-            mask[i] = Math.Abs(NumOps.ToDouble(diff[i])) < 1.0 ? NumOps.One : NumOps.Zero;
+        Tensor<T> mask;
+        using (new NoGradScope<T>()) mask = Engine.TensorLessThan(abs, NumOps.One);
         var inverse = Engine.TensorAddScalar(Engine.TensorNegate(mask), NumOps.One);
         return Engine.TensorAdd(Engine.TensorMultiply(mask, quadratic), Engine.TensorMultiply(inverse, linear));
     }

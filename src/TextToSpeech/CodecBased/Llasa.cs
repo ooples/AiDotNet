@@ -237,9 +237,7 @@ public partial class Llasa<T> : TtsModelBase<T>, ICodecTts<T>
         ThrowIfDisposed();
         if (!HasPaperLayers) throw NotNative();
         var codes = Codec.Encode(Doubles(audio));
-        var tokens = new Tensor<T>(new[] { codes.Length, 1 });
-        for (int f = 0; f < codes.Length; f++) tokens[f, 0] = Ops.FromDouble(codes[f]);
-        return tokens;
+        return new Tensor<int>((int[])codes.Clone(), new[] { codes.Length, 1 }).Cast<T>();
     }
 
     /// <inheritdoc />
@@ -255,10 +253,9 @@ public partial class Llasa<T> : TtsModelBase<T>, ICodecTts<T>
     private static int[] CodesOf(Tensor<T> tokens)
     {
         if (tokens.Rank != 2 || tokens.Shape[1] != 1) throw new ArgumentException("Llasa's codes are [frames, 1].", nameof(tokens));
-        var codes = new int[tokens.Shape[0]];
+        var codes = AiDotNetEngine.Current.TensorRound(tokens).Cast<int>().ToArray();
         for (int f = 0; f < codes.Length; f++)
         {
-            codes[f] = (int)Math.Round(Ops.ToDouble(tokens[f, 0]));
             if (codes[f] < 0 || codes[f] >= LlasaTokens.CodebookSize)
                 throw new ArgumentException($"Codes lie in [0, {LlasaTokens.CodebookSize}).", nameof(tokens));
         }
@@ -274,11 +271,11 @@ public partial class Llasa<T> : TtsModelBase<T>, ICodecTts<T>
         if (!HasPaperLayers) return base.PreprocessText(text);
         var ids = Tokenizer.Encode(text);
         if (ids.Length == 0) throw new ArgumentException("The text has no tokens.", nameof(text));
-        return new Tensor<T>(new[] { ids.Length }, new Vector<T>(ids.Select(i => NumOps.FromDouble(i)).ToArray()));
+        return IdTensor(ids);
     }
 
     private string TextOf(Tensor<T> ids) =>
-        Tokenizer.Decode(ids.ToArray().Select(v => (int)Math.Round(NumOps.ToDouble(v))), skipSpecial: true);
+        Tokenizer.Decode(RoundedIds(ids), skipSpecial: true);
 
     /// <inheritdoc />
     /// <remarks>The model card's generation: the chat prompt of the text, sampled until the end of speech or
@@ -325,7 +322,8 @@ public partial class Llasa<T> : TtsModelBase<T>, ICodecTts<T>
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
         if (!HasPaperLayers) return base.PredictCore(input);
         if (input.Length == 0) throw new ArgumentException("There is no text.", nameof(input));
-        if (input.ToArray().Any(v => NumOps.ToDouble(v) < 0 || NumOps.ToDouble(v) >= _options.VocabSize))
+        if (NumOps.LessThan(Engine.TensorMinValue(input), NumOps.Zero)
+            || NumOps.GreaterThanOrEquals(Engine.TensorMaxValue(input), NumOps.FromDouble(_options.VocabSize)))
             throw new ArgumentOutOfRangeException(nameof(input), $"Token ids lie in [0, {_options.VocabSize}).");
         return Synthesize(TextOf(input));
     }
@@ -354,15 +352,13 @@ public partial class Llasa<T> : TtsModelBase<T>, ICodecTts<T>
             var logits = lm.Forward(lm.Embed(Row(prompt)), null, null, cache, lastLogitsOnly: true).Logits!;
             while (ids.Count < o.MaxLength)
             {
-                var values = logits.ToArray();
-                var scores = new double[values.Length];
-                for (int i = 0; i < scores.Length; i++) scores[i] = NumOps.ToDouble(values[i]);
-                if (o.ConstrainToSpeechTokens) LlasaTokens.MaskToSpeech(scores);
+                var scores = Engine.Reshape(logits, new[] { logits.Length });
+                if (o.ConstrainToSpeechTokens) scores = LlasaTokens.MaskToSpeech(scores);
                 int next;
                 if (o.Temperature > 0)
-                    next = OuteTTSSampler.Sample(OuteTTSSampler.Process(scores, ids, 1.0, 0, o.Temperature, 0, o.TopP, 0), random);
+                    next = OuteTTSSampler<T>.Sample(OuteTTSSampler<T>.Process(scores, ids, 1.0, 0, o.Temperature, 0, o.TopP, 0), random);
                 else
-                    next = Array.IndexOf(scores, scores.Max());
+                    next = OuteTTSSampler<T>.Greedy(scores);
                 if (next == LlasaTokens.SpeechGenerationEnd) break;
                 ids.Add(next);
                 generated.Add(next);
@@ -659,9 +655,6 @@ internal static class LlasaTokens
         tokens.Where(t => t >= FirstSpeechToken && t < FirstSpeechToken + CodebookSize).Select(t => t - FirstSpeechToken).ToList();
 
     /// <summary>Removes every token but the speech tokens and the end of speech.</summary>
-    public static void MaskToSpeech(double[] scores)
-    {
-        for (int i = 0; i < scores.Length; i++)
-            if ((i < FirstSpeechToken || i >= FirstSpeechToken + CodebookSize) && i != SpeechGenerationEnd) scores[i] = double.NegativeInfinity;
-    }
+    public static Tensor<T> MaskToSpeech<T>(Tensor<T> scores) => TtsSampling<T>.Forbid(scores,
+        Enumerable.Range(0, scores.Length).Where(i => (i < FirstSpeechToken || i >= FirstSpeechToken + CodebookSize) && i != SpeechGenerationEnd));
 }

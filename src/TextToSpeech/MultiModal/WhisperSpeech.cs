@@ -192,10 +192,10 @@ public partial class WhisperSpeech<T> : TtsModelBase<T>, ICodecTts<T>
         ThrowIfDisposed();
         if (audio is null) throw new ArgumentNullException(nameof(audio));
         var codes = Core.AcousticTokens(audio);
-        var tokens = new Tensor<T>(new[] { codes.Length, codes[0].Length });
-        for (int q = 0; q < codes.Length; q++)
-            for (int f = 0; f < codes[q].Length; f++) tokens[q, f] = Ops.FromDouble(codes[q][f]);
-        return tokens;
+        int frames = codes[0].Length;
+        var flat = new int[codes.Length * frames];
+        for (int q = 0; q < codes.Length; q++) Array.Copy(codes[q], 0, flat, q * frames, codes[q].Length);
+        return new Tensor<int>(flat, new[] { codes.Length, frames }).Cast<T>();
     }
 
     /// <inheritdoc />
@@ -205,8 +205,14 @@ public partial class WhisperSpeech<T> : TtsModelBase<T>, ICodecTts<T>
         ThrowIfDisposed();
         if (tokens is null) throw new ArgumentNullException(nameof(tokens));
         if (tokens.Rank != 2) throw new ArgumentException("Expected codes [quantizers, frames].", nameof(tokens));
-        var codes = Enumerable.Range(0, tokens.Shape[0])
-            .Select(q => Enumerable.Range(0, tokens.Shape[1]).Select(f => (int)Math.Round(Ops.ToDouble(tokens[q, f]))).ToArray()).ToArray();
+        int quantizers = tokens.Shape[0], frames = tokens.Shape[1];
+        var flat = RoundedIds(tokens);
+        var codes = new int[quantizers][];
+        for (int q = 0; q < quantizers; q++)
+        {
+            codes[q] = new int[frames];
+            Array.Copy(flat, q * frames, codes[q], 0, frames);
+        }
         using var _ = Inference();
         return Core.Vocode(codes);
     }
@@ -249,10 +255,11 @@ public partial class WhisperSpeech<T> : TtsModelBase<T>, ICodecTts<T>
     // The text of UTF-8 byte ids (invalid sequences decode to U+FFFD, as Python's errors="replace").
     private string TextOf(Tensor<T> input)
     {
-        var bytes = new byte[input.Length];
+        var ids = RoundedIds(input);
+        var bytes = new byte[ids.Length];
         for (int i = 0; i < bytes.Length; i++)
         {
-            int b = (int)Math.Round(Ops.ToDouble(input.GetFlat(i)));
+            int b = ids[i];
             if (b < 0 || b > 255) throw new ArgumentOutOfRangeException(nameof(input), "Text ids are UTF-8 bytes in [0, 256).");
             bytes[i] = (byte)b;
         }

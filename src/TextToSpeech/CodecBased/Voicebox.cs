@@ -69,7 +69,7 @@ public partial class Voicebox<T> : TtsModelBase<T>, AiDotNet.TextToSpeech.Interf
         ValidateOptions(_options);
         Options = _options;
         InitializePhoneFrontend();
-        _trainingRandom = new Random(_options.SamplingSeed);
+        _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         ConfigureBaseProperties();
         if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath));
         if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
@@ -89,7 +89,7 @@ public partial class Voicebox<T> : TtsModelBase<T>, AiDotNet.TextToSpeech.Interf
         Options = _options;
         InitializePhoneFrontend();
         _useNativeMode = true;
-        _trainingRandom = new Random(_options.SamplingSeed);
+        _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         _optimizer = optimizer
             ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this, learningRateOverride: _options.LearningRate)
             ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
@@ -193,7 +193,7 @@ public partial class Voicebox<T> : TtsModelBase<T>, AiDotNet.TextToSpeech.Interf
         {
             using var _ = new NoGradScope<T>();
             return SynthesizePhones(VoiceboxOps<T>.ToIds(phones, _options.PhoneVocabularySize), Voice,
-                new Random(_options.SamplingSeed));
+                AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed));
         }
         finally { SetTrainingMode(wasTraining); }
     }
@@ -213,17 +213,12 @@ public partial class Voicebox<T> : TtsModelBase<T>, AiDotNet.TextToSpeech.Interf
         int frames = normalizedMel.Shape[0];
         if (framePhoneIds.Count != frames || mask.Count != frames)
             throw new ArgumentException("The mel, frame-level phones, and infill mask must have the same length.");
-        var context = new Tensor<T>(normalizedMel.Shape.ToArray());
-        for (int f = 0; f < frames; f++)
-            if (!mask[f])
-                for (int m = 0; m < _options.MelChannels; m++) context[f, m] = normalizedMel[f, m];
+        var infilled = RowMask(mask, _options.MelChannels);
+        var context = Engine.TensorWhere(infilled, new Tensor<T>(normalizedMel.Shape.ToArray()), normalizedMel);
         Tensor<T> generated;
-        using (new NoGradScope<T>()) generated = Integrate(context, framePhoneIds, new Random(_options.SamplingSeed));
-        var result = new Tensor<T>(normalizedMel.Shape.ToArray());
-        for (int f = 0; f < frames; f++)
-            for (int m = 0; m < _options.MelChannels; m++)
-                result[f, m] = mask[f] ? generated[f, m] : normalizedMel[f, m];
-        return result;
+        using (new NoGradScope<T>())
+            generated = Integrate(context, framePhoneIds, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed));
+        return Engine.TensorWhere(infilled, generated, normalizedMel);
     }
 
     /// <inheritdoc />
@@ -261,7 +256,7 @@ public partial class Voicebox<T> : TtsModelBase<T>, AiDotNet.TextToSpeech.Interf
         {
             using var _ = new NoGradScope<T>();
             return SynthesizePhones(VoiceboxOps<T>.ToIds(input, _options.PhoneVocabularySize), Voice,
-                new Random(_options.SamplingSeed));
+                AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed));
         }
         var current = input;
         foreach (var layer in Layers) current = layer.Forward(current);
@@ -296,7 +291,7 @@ public partial class Voicebox<T> : TtsModelBase<T>, AiDotNet.TextToSpeech.Interf
         try
         {
             using var _ = new NoGradScope<T>();
-            return BuildObjective(sample, new Random(_options.SamplingSeed + 1))[0];
+            return BuildObjective(sample, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed + 1))[0];
         }
         finally { SetTrainingMode(wasTraining); }
     }
@@ -373,9 +368,8 @@ public partial class Voicebox<T> : TtsModelBase<T>, AiDotNet.TextToSpeech.Interf
         var context = new Tensor<T>(new[] { totalFrames, _options.MelChannels });
         if (reference is not null)
         {
-            var normalized = Normalize(reference);
-            for (int f = 0; f < referenceFrames; f++)
-                for (int m = 0; m < _options.MelChannels; m++) context[f, m] = normalized[f, m];
+            var normalized = Engine.TensorSlice(Normalize(reference), new[] { 0, 0 }, new[] { referenceFrames, _options.MelChannels });
+            context = Engine.TensorConcatenate(new[] { normalized, new Tensor<T>(new[] { targetFrames, _options.MelChannels }) }, 0);
         }
         var generated = Integrate(context, framePhones, random);
         var target = Engine.TensorSlice(generated,
@@ -385,17 +379,20 @@ public partial class Voicebox<T> : TtsModelBase<T>, AiDotNet.TextToSpeech.Interf
 
     private int[] InferDurations(IReadOnlyList<int> phones, IReadOnlyList<int> contextDurations, int targetStart)
     {
-        var transformed = new Tensor<T>(new[] { phones.Count, 1 });
-        for (int i = 0; i < phones.Count; i++)
-            transformed[i, 0] = NumOps.FromDouble(Math.Log(1.0 + contextDurations[i]));
+        var transformed = Engine.TensorLog(Engine.TensorAddScalar(
+            Engine.Reshape(IdTensor(contextDurations.ToArray()), new[] { phones.Count, 1 }), NumOps.One));
         var prediction = _durationModel!.Forward(phones, transformed);
         var durations = contextDurations.ToArray();
         double maximum = Math.Log(1.0 + _options.MaximumPhoneDuration);
+        // round(exp(clamp(v, 0, log(1 + max))) - 1), with a non-finite prediction read as 0.
+        var logFrames = Engine.TensorClamp(
+            Engine.TensorNanToNum(Engine.Reshape(Engine.TensorSlice(prediction, new[] { 0, 0 }, new[] { phones.Count, 1 }), new[] { phones.Count }),
+                nan: 0.0, posinf: 0.0, neginf: 0.0),
+            NumOps.Zero, NumOps.FromDouble(maximum));
+        var predicted = RoundedIds(Engine.TensorAddScalar(Engine.TensorExp(logFrames), NumOps.FromDouble(-1.0)));
         for (int i = targetStart; i < durations.Length; i++)
         {
-            double value = NumOps.ToDouble(prediction[i, 0]);
-            if (double.IsNaN(value) || double.IsInfinity(value)) value = 0;
-            int duration = (int)Math.Round(Math.Exp(MathPolyfill.Clamp(value, 0, maximum)) - 1.0);
+            int duration = predicted[i];
             durations[i] = phones[i] == Tokenizer.SilenceId ? Math.Max(0, duration) : Math.Max(1, duration);
         }
         return durations;
@@ -406,14 +403,14 @@ public partial class Voicebox<T> : TtsModelBase<T>, AiDotNet.TextToSpeech.Interf
         int frames = context.Shape[0];
         var state = Gaussian(new[] { frames, _options.MelChannels }, random);
         double dt = 1.0 / _options.OdeSteps;
+        T halfStep = NumOps.FromDouble(0.5 * dt), fullStep = NumOps.FromDouble(dt);
         for (int step = 0; step < _options.OdeSteps; step++)
         {
             double t = step * dt;
             var first = GuidedVelocity(state, context, framePhones, t);
-            var midpoint = Engine.TensorAdd(state,
-                Engine.TensorMultiplyScalar(first, NumOps.FromDouble(0.5 * dt)));
+            var midpoint = Engine.TensorAdd(state, Engine.TensorMultiplyScalar(first, halfStep));
             var second = GuidedVelocity(midpoint, context, framePhones, t + 0.5 * dt);
-            state = Engine.TensorAdd(state, Engine.TensorMultiplyScalar(second, NumOps.FromDouble(dt)));
+            state = Engine.TensorAdd(state, Engine.TensorMultiplyScalar(second, fullStep));
         }
         return state;
     }
@@ -445,10 +442,7 @@ public partial class Voicebox<T> : TtsModelBase<T>, AiDotNet.TextToSpeech.Interf
         int frames = target.Shape[0];
 
         bool[] audioMask = AudioMask(durations, random);
-        var context = new Tensor<T>(target.Shape.ToArray());
-        for (int f = 0; f < frames; f++)
-            if (!audioMask[f])
-                for (int m = 0; m < _options.MelChannels; m++) context[f, m] = target[f, m];
+        var context = Engine.TensorWhere(RowMask(audioMask, target.Shape[1]), new Tensor<T>(target.Shape.ToArray()), target);
         var prior = Gaussian(target.Shape.ToArray(), random);
         double time = random.NextDouble();
         var (path, velocityTarget) = VoiceboxObjectives<T>.Flow(Engine, target, prior, time, _options.SigmaMinimum);
@@ -532,10 +526,8 @@ public partial class Voicebox<T> : TtsModelBase<T>, AiDotNet.TextToSpeech.Interf
 
     private Tensor<T> MaskedMeanAbsolute(Tensor<T> difference, IReadOnlyList<bool> maskValues)
     {
-        var mask = new Tensor<T>(new[] { maskValues.Count, 1 });
-        int count = 0;
-        for (int i = 0; i < maskValues.Count; i++)
-            if (maskValues[i]) { mask[i, 0] = NumOps.One; count++; }
+        var mask = RowMask(maskValues, 1);
+        int count = maskValues.Count(set => set);
         return Engine.TensorMultiplyScalar(
             Engine.ReduceSum(Engine.TensorMultiply(Engine.TensorAbs(difference), mask), new[] { 0, 1 }, false),
             NumOps.FromDouble(1.0 / Math.Max(1, count)));

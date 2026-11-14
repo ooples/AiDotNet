@@ -252,7 +252,7 @@ public partial class NaturalSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>
         if (text is null) throw new ArgumentNullException(nameof(text));
         _phonemizer ??= new EspeakPhonemizer(_options.EspeakLanguage, ";:,.!?¡¿—…\"«»“”", withStress: true);
         string cleaned = EnglishCleaners(text);
-        string phonemes = Regex.Replace(_phonemizer.Phonemize(cleaned, "", " "), @"\s+", " ");
+        string phonemes = Regex.Replace(_phonemizer.Phonemize(cleaned, "", " "), @"\s+", " ", RegexOptions.None, RegexTimeout);
         var ids = phonemes.Where(SymbolIds.ContainsKey).Select(c => SymbolIds[c]).ToList();
         if (_options.AddBlank)
         {
@@ -263,12 +263,15 @@ public partial class NaturalSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>
         return ids.ToArray();
     }
 
+    // Declared before Abbreviations: static initializers run in textual order.
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+
     private static readonly (Regex Pattern, string Replacement)[] Abbreviations = new[]
     {
         ("mrs", "misess"), ("mr", "mister"), ("dr", "doctor"), ("st", "saint"), ("co", "company"), ("jr", "junior"), ("maj", "major"),
         ("gen", "general"), ("drs", "doctors"), ("rev", "reverend"), ("lt", "lieutenant"), ("hon", "honorable"), ("sgt", "sergeant"),
         ("capt", "captain"), ("esq", "esquire"), ("ltd", "limited"), ("col", "colonel"), ("ft", "fort"),
-    }.Select(a => (new Regex($@"\b{a.Item1}\.", RegexOptions.IgnoreCase), a.Item2)).ToArray();
+    }.Select(a => (new Regex($@"\b{a.Item1}\.", RegexOptions.IgnoreCase, RegexTimeout), a.Item2)).ToArray();
 
     // english_cleaners2 before phonemization; unidecode's transliteration is approximated by dropping diacritics.
     private static string EnglishCleaners(string text)
@@ -279,14 +282,14 @@ public partial class NaturalSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>
             if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) != System.Globalization.UnicodeCategory.NonSpacingMark && c < 128) ascii.Append(c);
         text = ascii.ToString().ToLowerInvariant();
         foreach (var (pattern, replacement) in Abbreviations) text = pattern.Replace(text, replacement);
-        return Regex.Replace(text, @"\s+", " ");
+        return Regex.Replace(text, @"\s+", " ", RegexOptions.None, RegexTimeout);
     }
 
     /// <inheritdoc />
     protected override Tensor<T> PreprocessText(string text)
     {
         if (!HasPaperLayers) return base.PreprocessText(text);
-        return Wave(TextToPhonemes(text).Select(i => (double)i).ToArray());
+        return IdTensor(TextToPhonemes(text));
     }
 
     private static double[] Doubles(Tensor<T> audio) => audio.ToArray().Select(v => Ops.ToDouble(v)).ToArray();
@@ -296,10 +299,9 @@ public partial class NaturalSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>
 
     private int[] PhonemeIds(Tensor<T> input, string name)
     {
-        var ids = new int[input.Length];
+        var ids = RoundedIds(input);
         for (int i = 0; i < ids.Length; i++)
         {
-            ids[i] = (int)Math.Round(Ops.ToDouble(input.GetFlat(i)));
             if (ids[i] < 0 || ids[i] >= _options.VocabSize) throw new ArgumentOutOfRangeException(name, $"Phoneme ids lie in [0, {_options.VocabSize}).");
         }
         if (ids.Length == 0) throw new ArgumentException("There are no phonemes.", name);

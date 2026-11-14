@@ -80,12 +80,12 @@ public partial class KaniTTS2<T> : KaniTTSBase<T>
 
     /// <summary>The speaker embedding synthesis speaks with (<see cref="KaniTTS2Options.SpeakerEmbeddingDim"/> values, such
     /// as <see cref="EmbedSpeaker"/> returns); null to use the voice's reference recording, or no speaker.</summary>
-    public double[]? SpeakerEmbedding { get; set; }
+    public Tensor<T>? SpeakerEmbedding { get; set; }
 
     /// <summary>Speaker embeddings by training sample <see cref="TtsTrainingSample{T}.SpeakerId"/> — the release trains
     /// each sample on its speaker's averaged embedding (<see cref="AverageSpeakerEmbedding"/>). A sample whose speaker has
     /// none uses its <see cref="TtsTrainingSample{T}.SpeakerReference"/> recording, or no speaker.</summary>
-    public IDictionary<int, double[]> TrainingSpeakerEmbeddings { get; } = new Dictionary<int, double[]>();
+    public IDictionary<int, Tensor<T>> TrainingSpeakerEmbeddings { get; } = new Dictionary<int, Tensor<T>>();
 
     internal KaniSpeakerEmbedder<T> Embedder => _embedder ?? throw NotNative();
 
@@ -112,7 +112,7 @@ public partial class KaniTTS2<T> : KaniTTSBase<T>
     /// The speaker embedding of a recording at the model's sample rate (kani_tts's <c>SpeakerEmbedder.embed_audio</c>:
     /// resampled to 16 kHz by torchaudio's resampler, at most 30 seconds, through the WavLM-Large embedder).
     /// </summary>
-    public double[] EmbedSpeaker(Tensor<T> recording)
+    public Tensor<T> EmbedSpeaker(Tensor<T> recording)
     {
         if (!HasPaperLayers) throw NotNative();
         Validation.Guard.NotNull(recording);
@@ -120,23 +120,24 @@ public partial class KaniTTS2<T> : KaniTTSBase<T>
         var audio = Engine.Reshape(recording, new[] { recording.Length });
         var audio16k = KaniOptions.SampleRate == 16000 ? audio
             : new TorchaudioResample<T>(Engine, KaniOptions.SampleRate, 16000).Forward(audio);
-        return Embedder.Embed(audio16k).ToArray().Select(v => NumOps.ToDouble(v)).ToArray();
+        var embedding = Embedder.Embed(audio16k);
+        return Engine.Reshape(embedding, new[] { embedding.Length }).Clone();
     }
 
     /// <summary>The release's per-speaker embedding (kanitts-2-dataset-pipeline's regrouping): the plain mean of the
     /// speaker's recordings' embeddings.</summary>
-    public double[] AverageSpeakerEmbedding(IEnumerable<Tensor<T>> recordings)
+    public Tensor<T> AverageSpeakerEmbedding(IEnumerable<Tensor<T>> recordings)
     {
-        var embeddings = recordings.Select(EmbedSpeaker).ToList();
-        if (embeddings.Count == 0) throw new ArgumentException("There are no recordings.", nameof(recordings));
-        return Enumerable.Range(0, embeddings[0].Length).Select(i => embeddings.Average(e => e[i])).ToArray();
+        var embeddings = recordings.Select(EmbedSpeaker).ToArray();
+        if (embeddings.Length == 0) throw new ArgumentException("There are no recordings.", nameof(recordings));
+        return Engine.ReduceMean(Engine.TensorStack(embeddings, 0), new[] { 0 }, keepDims: false);
     }
 
-    private Tensor<T> AsSpeaker(double[] embedding)
+    private Tensor<T> AsSpeaker(Tensor<T> embedding)
     {
         if (embedding.Length != Options2.SpeakerEmbeddingDim)
             throw new ArgumentException($"A speaker embedding has {Options2.SpeakerEmbeddingDim} values.", nameof(embedding));
-        return new Tensor<T>(new[] { 1, embedding.Length }, new Vector<T>(embedding.Select(v => NumOps.FromDouble(v)).ToArray()));
+        return Engine.Reshape(embedding, new[] { 1, embedding.Length });
     }
 
     private string? Tag(int? languageId)

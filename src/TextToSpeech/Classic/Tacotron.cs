@@ -296,9 +296,7 @@ public partial class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
         var outputs = new Tensor<T>[batch];
         for (int b = 0; b < batch; b++)
         {
-            var row = new Tensor<T>(new[] { characters });
-            for (int i = 0; i < characters; i++) row[i] = input[b, i];
-            outputs[b] = Engine.Reshape(Decode(Encode(row), _options.MaxDecoderSteps, null),
+            outputs[b] = Engine.Reshape(Decode(Encode(BatchRow(input, b)), _options.MaxDecoderSteps, null),
                 new[] { 1, _options.MaxDecoderSteps * _options.OutputsPerStep, _options.MelChannels });
         }
         return batch == 1 ? outputs[0] : Engine.TensorConcatenate(outputs, 0);
@@ -322,11 +320,8 @@ public partial class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
     public Tensor<T> SynthesizeWaveform(string text)
     {
         var logMagnitude = PredictLinearSpectrogram(text);
-        int frames = logMagnitude.Shape[0], bins = logMagnitude.Shape[1];
-        var magnitude = new Tensor<T>(new[] { frames, bins });
-        for (int f = 0; f < frames; f++)
-            for (int k = 0; k < bins; k++)
-                magnitude[f, k] = NumOps.FromDouble(Math.Pow(Math.Exp(NumOps.ToDouble(logMagnitude[f, k])), _options.GriffinLimPower));
+        // exp(log |S|)^p = exp(p · log |S|).
+        var magnitude = Engine.TensorExp(Engine.TensorMultiplyScalar(logMagnitude, NumOps.FromDouble(_options.GriffinLimPower)));
         var griffinLim = new AiDotNet.Diffusion.Audio.GriffinLim<T>(_options.FftSize, _options.HopSize,
             new CenteredHannWindow(_options.WindowSize), _options.GriffinLimIterations, momentum: 0.0, seed: 0);
         var waveform = griffinLim.Reconstruct(magnitude);
@@ -343,19 +338,21 @@ public partial class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
 
     /// <summary>A periodic Hann window of the analysis length, centred and zero-padded to the FFT size, as
     /// <see cref="TacotronSpectrogram"/> analyses with.</summary>
-    private sealed class CenteredHannWindow : IWindowFunction<T>
+    internal sealed class CenteredHannWindow : IWindowFunction<T>
     {
         private readonly int _length;
         public CenteredHannWindow(int length) => _length = length;
 
+        /// <remarks>The window is a constant of its sizes, formed in double and rounded to T once: 0.5 − 0.5 cos(2πi/N)
+        /// formed in T cancels near i = 0 (in float, 1 − cos(2π/1024) keeps about two significant digits).</remarks>
         public Vector<T> Create(int windowSize)
         {
-            var ops = MathHelper.GetNumericOperations<T>();
-            var window = new Vector<T>(windowSize);
             int length = Math.Min(_length, windowSize), offset = (windowSize - length) / 2;
+            var window = new double[Math.Max(0, windowSize)];
+            // 0.5 − 0.5 cos(2π i / length), centred in the FFT frame with zeros either side.
             for (int i = 0; i < length; i++)
-                window[offset + i] = ops.FromDouble(0.5 - 0.5 * Math.Cos(2 * Math.PI * i / length));
-            return window;
+                window[offset + i] = 0.5 - 0.5 * Math.Cos(2 * Math.PI * i / length);
+            return new Tensor<double>(window, new[] { window.Length }).Cast<T>().ToVector();
         }
 
         public WindowFunctionType GetWindowFunctionType() => WindowFunctionType.Hanning;
@@ -432,10 +429,7 @@ public partial class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
     private Tensor<T> PadFrames(Tensor<T> x, int frames)
     {
         if (x.Shape[0] == frames) return x;
-        var padded = new Tensor<T>(new[] { frames, x.Shape[1] });
-        for (int f = 0; f < x.Shape[0]; f++)
-            for (int c = 0; c < x.Shape[1]; c++) padded[f, c] = x[f, c];
-        return padded;
+        return Engine.TensorConcatenate(new[] { x, new Tensor<T>(new[] { frames - x.Shape[0], x.Shape[1] }) }, 0);
     }
 
     private Tensor<T> MeanAbsolute(Tensor<T> prediction, Tensor<T> target)

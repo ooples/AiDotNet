@@ -253,7 +253,7 @@ public partial class StyleTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
         try
         {
             using var _ = new NoGradScope<T>();
-            var random = new Random(0);
+            var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(0);
             int frames = 80, tokens = 2;
             var mel = new Tensor<T>(new[] { o.MelChannels, frames });
             var ids = new[] { 0, 0 };
@@ -308,17 +308,14 @@ public partial class StyleTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
 
     private Tensor<T> ToTensor(IReadOnlyList<int> ids)
     {
-        var tensor = new Tensor<T>(new[] { ids.Count });
-        for (int i = 0; i < ids.Count; i++) tensor[i] = NumOps.FromDouble(ids[i]);
-        return tensor;
+        return IdTensor(ids);
     }
 
     private int[] ToIds(Tensor<T> tensor, string name)
     {
-        var ids = new int[tensor.Length];
+        var ids = RoundedIds(tensor);
         for (int i = 0; i < ids.Length; i++)
         {
-            ids[i] = (int)Math.Round(NumOps.ToDouble(tensor[i]));
             if (ids[i] < 0 || ids[i] >= _options.VocabSize)
                 throw new ArgumentOutOfRangeException(name, $"{GetType().Name}'s symbol ids lie in [0, {_options.VocabSize}).");
         }
@@ -363,26 +360,17 @@ public partial class StyleTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
 
     private Tensor<T> AlignmentOf(int[] durations)
     {
-        int total = durations.Sum();
-        var alignment = new Tensor<T>(new[] { durations.Length, total });
-        int frame = 0;
-        for (int i = 0; i < durations.Length; i++)
-            for (int f = 0; f < durations[i]; f++) alignment[i, frame++] = NumOps.One;
-        return alignment;
+        return DurationAlignment(durations);
     }
 
     /// <summary>The frames of each phoneme from the duration head's logits <c>[L, bins]</c>: the rounded (half to even)
     /// sum of the bins' sigmoids, at least 1.</summary>
     internal int[] FramesOf(Tensor<T> logits)
     {
-        int length = logits.Shape[0], bins = logits.Shape[1];
-        var frames = new int[length];
+        int length = logits.Shape[0];
+        var frames = RoundedIds(Engine.ReduceSum(Engine.Sigmoid(logits), new[] { 1 }, keepDims: false));
         for (int i = 0; i < length; i++)
-        {
-            double sum = 0;
-            for (int b = 0; b < bins; b++) sum += 1.0 / (1.0 + Math.Exp(-NumOps.ToDouble(logits[i, b])));
-            frames[i] = Math.Max(1, (int)Math.Round(sum, MidpointRounding.ToEven));
-        }
+            frames[i] = Math.Max(1, frames[i]);
         frames[length - 1] += _options.FinalPhonemeExtraFrames;
         return frames;
     }

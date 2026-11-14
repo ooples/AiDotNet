@@ -335,17 +335,15 @@ public partial class LlamaOmni<T> : TtsModelBase<T>
         }
     }
 
-    private double[] Row(Tensor<T> logits)
+    private Tensor<T> Row(Tensor<T> logits)
     {
-        var values = new double[_options.VocabSize];
-        int offset = logits.Length - values.Length;
-        for (int i = 0; i < values.Length; i++) values[i] = Ops.ToDouble(logits.GetFlat(offset + i));
-        return values;
+        int vocabulary = _options.VocabSize;
+        return Engine.TensorSlice(Engine.Reshape(logits, new[] { logits.Length }), new[] { logits.Length - vocabulary }, new[] { vocabulary });
     }
 
-    private int Choose(double[] logits) => _options.Temperature <= 0
-        ? NucleusSampling.Greedy(logits)
-        : NucleusSampling.Sample(logits, _options.Temperature, _options.TopP, null,
+    private int Choose(Tensor<T> logits) => _options.Temperature <= 0
+        ? NucleusSampling<T>.Greedy(logits)
+        : NucleusSampling<T>.Sample(logits, _options.Temperature, _options.TopP, null,
             _samplingRandom ?? throw new InvalidOperationException("Sampling happens inside an inference call."));
 
     /// <summary>
@@ -460,10 +458,9 @@ public partial class LlamaOmni<T> : TtsModelBase<T>
 
     private int[] TokenIds(Tensor<T> tensor, string name)
     {
-        var ids = new int[tensor.Length];
+        var ids = RoundedIds(tensor);
         for (int i = 0; i < ids.Length; i++)
         {
-            ids[i] = (int)Math.Round(Ops.ToDouble(tensor.GetFlat(i)));
             if (ids[i] < 0 || ids[i] >= _options.VocabSize) throw new ArgumentOutOfRangeException(name, $"Token ids lie in [0, {_options.VocabSize}).");
         }
         return ids;

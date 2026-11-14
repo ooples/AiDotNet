@@ -58,7 +58,7 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
         _options = options ?? new VoiceCraftOptions();
         ValidateOptions(_options);
         Options = _options;
-        _trainingRandom = new Random(_options.SamplingSeed);
+        _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         ConfigureBaseProperties();
         if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath));
         if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
@@ -77,7 +77,7 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
         ValidateOptions(_options);
         Options = _options;
         _useNativeMode = true;
-        _trainingRandom = new Random(_options.SamplingSeed);
+        _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         if (optimizer is not null) _optimizer = optimizer;
         else if (_options.UseScaledAdam)
         {
@@ -252,11 +252,10 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
     {
         int[,] codes = TensorToCodes(tokens);
         var rows = DelayRows(codes, trimTail: false);
-        var result = new Tensor<T>(new[] { rows.Count, _options.NumCodebooks });
-        for (int r = 0; r < rows.Count; r++)
-            for (int q = 0; q < _options.NumCodebooks; q++)
-                result[r, q] = NumOps.FromDouble(rows[r][q]);
-        return result;
+        int nq = _options.NumCodebooks;
+        var flat = new int[rows.Count * nq];
+        for (int r = 0; r < rows.Count; r++) Array.Copy(rows[r], 0, flat, r * nq, nq);
+        return new Tensor<int>(flat, new[] { rows.Count, nq }).Cast<T>();
     }
 
     protected override Tensor<T> PreprocessText(string text) => TokenizeText(text);
@@ -365,17 +364,17 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
         var layout = BuildTrainingLayout(codes);
         var logits = _network!.Forward(text, layout.Rows, layout.Masks);
         Tensor<T>? total = null;
+        var codebookWeights = new Tensor<double>(_options.CodebookLossWeights, new[] { _options.CodebookLossWeights.Length }).Cast<T>().ToArray();
         for (int q = 0; q < _options.NumCodebooks; q++)
         {
             var positions = Enumerable.Range(0, layout.Labels[q].Length)
                 .Where(i => layout.Labels[q][i] >= 0).ToArray();
             if (positions.Length == 0) continue;
-            var indices = new Tensor<int>(new[] { positions.Length });
-            for (int i = 0; i < positions.Length; i++) indices[i] = positions[i];
+            var indices = new Tensor<int>(positions, new[] { positions.Length });
             var selected = Engine.TensorIndexSelect(logits[q], indices, 0);
             var labels = positions.Select(i => layout.Labels[q][i]).ToArray();
             var loss = UniAudioOps<T>.CrossEntropy(Engine, selected, labels);
-            loss = Engine.TensorMultiplyScalar(loss, NumOps.FromDouble(_options.CodebookLossWeights[q]));
+            loss = Engine.TensorMultiplyScalar(loss, codebookWeights[q]);
             total = total is null ? loss : Engine.TensorAdd(total, loss);
         }
         return total ?? new Tensor<T>(new[] { 1 });
@@ -458,7 +457,7 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
         {
             var generated = _network!.Generate(phones, prefix, masks,
                 endOfUtterance ? Math.Min(_options.MinimumGeneratedFrames, maximum) : 0, maximum,
-                new Random(_options.SamplingSeed + candidate), endOfUtterance);
+                AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed + candidate), endOfUtterance);
             if (shortest is null || generated.GetLength(1) < shortest.GetLength(1)) shortest = generated;
         }
         return shortest!;
@@ -524,11 +523,7 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
 
     private Tensor<T> CodesToTensor(int[,] codes)
     {
-        int frames = codes.GetLength(1);
-        var result = new Tensor<T>(new[] { frames, _options.NumCodebooks });
-        for (int frame = 0; frame < frames; frame++)
-            for (int q = 0; q < _options.NumCodebooks; q++) result[frame, q] = NumOps.FromDouble(codes[q, frame]);
-        return result;
+        return FrameMajorCodes(codes, _options.NumCodebooks);
     }
 
     private int[,] TensorToCodes(Tensor<T> tokens)
@@ -541,13 +536,13 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
                 : tokens.Rank == 1 && tokens.Length % _options.NumCodebooks == 0
                     ? new int[_options.NumCodebooks, frames = tokens.Length / _options.NumCodebooks]
                     : throw new ArgumentException($"VoiceCraft codes must be [frames, {_options.NumCodebooks}], [{_options.NumCodebooks}, frames], or flattened frame-major.", nameof(tokens));
+        var rounded = RoundedIds(tokens);
+        bool frameMajor = tokens.Rank == 1 || tokens.Shape[1] == _options.NumCodebooks;
         for (int frame = 0; frame < frames; frame++)
             for (int q = 0; q < _options.NumCodebooks; q++)
             {
-                double value = tokens.Rank == 1 ? NumOps.ToDouble(tokens[frame * _options.NumCodebooks + q])
-                    : tokens.Shape[1] == _options.NumCodebooks ? NumOps.ToDouble(tokens[frame, q])
-                    : NumOps.ToDouble(tokens[q, frame]);
-                codes[q, frame] = MathPolyfill.Clamp((int)Math.Round(value), 0, _options.CodebookSize - 1);
+                int value = frameMajor ? rounded[frame * _options.NumCodebooks + q] : rounded[q * frames + frame];
+                codes[q, frame] = MathPolyfill.Clamp(value, 0, _options.CodebookSize - 1);
             }
         return codes;
     }

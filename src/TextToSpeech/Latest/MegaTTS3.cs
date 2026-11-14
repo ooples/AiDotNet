@@ -232,13 +232,13 @@ public partial class MegaTTS3<T> : TtsModelBase<T>, IEndToEndTts<T>
         if (!HasPaperLayers) return base.PreprocessText(text);
         var ids = Tokenizer.Encode(text);
         if (ids.Length == 0) throw new ArgumentException("The text has no tokens.", nameof(text));
-        return new Tensor<T>(new[] { ids.Length }, new Vector<T>(ids.Select(i => NumOps.FromDouble(i)).ToArray()));
+        return IdTensor(ids);
     }
 
     private ByteLevelBpeTokenizer Tokenizer => G2p.Tokenizer
         ?? throw new InvalidOperationException("The g2p tokenizer comes with the checkpoint: call LoadReferenceWeights first, or set G2pTokenizerJson.");
 
-    private string TextOf(Tensor<T> ids) => Tokenizer.Decode(ids.ToArray().Select(v => (int)Math.Round(NumOps.ToDouble(v))));
+    private string TextOf(Tensor<T> ids) => Tokenizer.Decode(RoundedIds(ids));
 
     // ---------------------------------------------------------------- synthesis
 
@@ -263,7 +263,8 @@ public partial class MegaTTS3<T> : TtsModelBase<T>, IEndToEndTts<T>
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
         if (!HasPaperLayers) return base.PredictCore(input);
         if (input.Length == 0) throw new ArgumentException("There is no text.", nameof(input));
-        if (input.ToArray().Any(v => NumOps.ToDouble(v) < 0 || NumOps.ToDouble(v) >= _options.G2pVocabSize))
+        if (NumOps.LessThan(Engine.TensorMinValue(input), NumOps.Zero)
+            || NumOps.GreaterThanOrEquals(Engine.TensorMaxValue(input), NumOps.FromDouble(_options.G2pVocabSize)))
             throw new ArgumentOutOfRangeException(nameof(input), $"Token ids lie in [0, {_options.G2pVocabSize}).");
         return Wave(SynthesizeText(TextOf(input)));
     }
@@ -426,13 +427,17 @@ public partial class MegaTTS3<T> : TtsModelBase<T>, IEndToEndTts<T>
         }
         int target = frames / VaeStride, promptFrames = prompt.Latent.Shape[1];
         if (target < promptFrames) throw new InvalidOperationException("The target is shorter than the prompt.");
-        var latent = new Tensor<T>(new[] { 3, target, o.LatentChannels });
-        var mask = new Tensor<T>(new[] { 3, target, 1 });
-        for (int f = 0; f < promptFrames; f++)
-        {
-            for (int c = 0; c < o.LatentChannels; c++) latent[0, f, c] = prompt.Latent[0, f, c];
-            for (int r = 0; r < 3; r++) mask[r, f, 0] = NumOps.One;
-        }
+        // Row 0 (with the prompt) starts with the prompt latent; rows 1 and 2 are zero. The mask is 1 on the prompt's
+        // frames in every row.
+        int channels = o.LatentChannels, rest = target - promptFrames;
+        if (promptFrames == 0)
+            return (phRows, toneRows, mapRows, new Tensor<T>(new[] { 3, target, channels }), new Tensor<T>(new[] { 3, target, 1 }));
+        Tensor<T> FollowedByZeros(Tensor<T> head, int rows, int width) => rest == 0 ? head
+            : Engine.TensorConcatenate(new[] { head, new Tensor<T>(new[] { rows, rest, width }) }, 1);
+        var promptRow = FollowedByZeros(
+            Engine.TensorSlice(prompt.Latent, new[] { 0, 0, 0 }, new[] { 1, promptFrames, channels }), 1, channels);
+        var latent = Engine.TensorConcatenate(new[] { promptRow, new Tensor<T>(new[] { 2, target, channels }) }, 0);
+        var mask = FollowedByZeros(Tensor<T>.CreateDefault(new[] { 3, promptFrames, 1 }, NumOps.One), 3, 1);
         return (phRows, toneRows, mapRows, latent, mask);
     }
 

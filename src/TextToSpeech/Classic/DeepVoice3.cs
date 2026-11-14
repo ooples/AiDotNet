@@ -246,16 +246,25 @@ public partial class DeepVoice3<T> : TtsModelBase<T>, IAcousticModel<T>
     /// Sinusoidal positional encoding at rate ω (§3.6): channel k of position i is sin(ω i / 10000^(k/d)) for even k and
     /// cos for odd k, scaled by the position weight. Positions start at 1.
     /// </summary>
-    private Tensor<T> PositionalEncoding(int length, int dimension, double rate)
+    private Tensor<T> PositionalEncoding(int length, int dimension, double rate) =>
+        PositionalEncoding(length, dimension, rate, _options.PositionWeight);
+
+    /// <summary>
+    /// The table of <see cref="PositionalEncoding(int, int, double)"/> scaled by <paramref name="weight"/>,
+    /// <c>[length, dimension]</c>. It is a constant of the shapes, formed in double and rounded to T once (as the
+    /// reference's numpy table is): its angles reach ω · length, where forming them in T moves the sine by far more than
+    /// T's own rounding (float's 1-ulp error in 10000^(−k/d) is 6e-5 at an angle of 1,000).
+    /// </summary>
+    internal static Tensor<T> PositionalEncoding(int length, int dimension, double rate, double weight)
     {
-        var encoding = new Tensor<T>(new[] { length, dimension });
+        var table = new double[length * dimension];
         for (int i = 0; i < length; i++)
             for (int k = 0; k < dimension; k++)
             {
                 double angle = rate * (i + 1) / Math.Pow(10000.0, (k - k % 2) / (double)dimension);
-                encoding[i, k] = NumOps.FromDouble(_options.PositionWeight * (k % 2 == 0 ? Math.Sin(angle) : Math.Cos(angle)));
+                table[i * dimension + k] = weight * (k % 2 == 0 ? Math.Sin(angle) : Math.Cos(angle));
             }
-        return encoding;
+        return new Tensor<double>(table, new[] { length, dimension }).Cast<T>();
     }
 
     /// <summary>
@@ -275,13 +284,14 @@ public partial class DeepVoice3<T> : TtsModelBase<T>, IAcousticModel<T>
             x = Engine.ReLU(Apply(_prenet[i], x));
         }
         var queryPositions = PositionalEncoding(steps, x.Shape[1], _options.QueryPositionRate);
+        T residualScale = NumOps.FromDouble(Math.Sqrt(0.5));
         for (int l = 0; l < _decoderBlocks.Count; l++)
         {
             var residual = x;
             x = _decoderBlocks[l].Forward(x);
             x = _attention[l].Forward(Engine.TensorAdd(x, queryPositions), keysWithPositions, values,
                 windows is null ? null : windows[l]);
-            x = Engine.TensorMultiplyScalar(Engine.TensorAdd(x, residual), NumOps.FromDouble(Math.Sqrt(0.5)));
+            x = Engine.TensorMultiplyScalar(Engine.TensorAdd(x, residual), residualScale);
         }
         var mel = Apply(_melProjection!, Dropout(x));
         var done = Engine.Reshape(Apply(_doneProjection!, mel), new[] { steps });
@@ -322,17 +332,8 @@ public partial class DeepVoice3<T> : TtsModelBase<T>, IAcousticModel<T>
         int batch = input.Shape[0], characters = input.Shape[1];
         var outputs = new List<Tensor<T>>(batch);
         for (int b = 0; b < batch; b++)
-        {
-            var row = new Tensor<T>(new[] { characters });
-            for (int i = 0; i < characters; i++) row[i] = input[b, i];
-            outputs.Add(SynthesizeOne(row).Mel);
-        }
-        int longest = outputs.Max(o => o.Shape[0]);
-        var result = new Tensor<T>(new[] { batch, longest, _options.MelChannels });
-        for (int b = 0; b < batch; b++)
-            for (int f = 0; f < outputs[b].Shape[0]; f++)
-                for (int m = 0; m < _options.MelChannels; m++) result[b, f, m] = outputs[b][f, m];
-        return result;
+            outputs.Add(SynthesizeOne(BatchRow(input, b)).Mel);
+        return PadAndStack(outputs, _options.MelChannels);
     }
 
     /// <summary>Predicts the log-magnitude linear spectrogram for text, the converter's output.</summary>
@@ -348,24 +349,23 @@ public partial class DeepVoice3<T> : TtsModelBase<T>, IAcousticModel<T>
         using var _ = new NoGradScope<T>();
         var (keys, values) = Encode(tokens);
         int group = _options.MelChannels * _options.OutputsPerStep;
-        var fed = new List<double[]> { new double[group] };
+        // Each step reads the previous groups (zeros first); a copy of the newest predicted group is appended.
+        var fed = new List<Tensor<T>> { new Tensor<T>(new[] { 1, group }) };
         var windows = new int[_decoderBlocks.Count];
         Tensor<T>? lastMel = null, lastHidden = null;
+        T zero = NumOps.Zero;
         for (int step = 0; step < _options.MaxDecoderSteps; step++)
         {
-            var inputs = new Tensor<T>(new[] { fed.Count, group });
-            for (int s = 0; s < fed.Count; s++)
-                for (int c = 0; c < group; c++) inputs[s, c] = NumOps.FromDouble(fed[s][c]);
+            var inputs = fed.Count == 1 ? fed[0] : Engine.TensorConcatenate(fed.ToArray(), 0);
             var (mel, done, hidden) = Decode(inputs, keys, values, windows);
             for (int l = 0; l < _attention.Count; l++) windows[l] = _attention[l].LastAttended;
             lastMel = mel;
             lastHidden = hidden;
             int last = fed.Count - 1;
-            var frame = new double[group];
-            for (int c = 0; c < group; c++) frame[c] = NumOps.ToDouble(mel[last, c]);
-            fed.Add(frame);
-            double doneProbability = 1.0 / (1.0 + Math.Exp(-NumOps.ToDouble(done[last])));
-            if (doneProbability > 0.5 && step + 1 >= _options.MinDecoderSteps) break;
+            fed.Add(Engine.TensorSlice(mel, new[] { last, 0 }, new[] { 1, group }).Clone());
+            // σ(logit) > 0.5 exactly when the logit is positive.
+            bool isDone = Engine.TensorGreaterThan(Engine.TensorSlice(done, new[] { last }, new[] { 1 }), zero).Cast<int>().ToArray()[0] != 0;
+            if (isDone && step + 1 >= _options.MinDecoderSteps) break;
         }
         int steps = lastMel!.Shape[0];
         var melFrames = Engine.Reshape(lastMel, new[] { steps * _options.OutputsPerStep, _options.MelChannels });
@@ -428,12 +428,14 @@ public partial class DeepVoice3<T> : TtsModelBase<T>, IAcousticModel<T>
         int steps = (frames + r - 1) / r;
 
         // Ground truth grouped into r-frame rows, zero-padded at the end.
-        var groups = new Tensor<T>(new[] { steps, r * mel });
-        for (int f = 0; f < frames; f++)
-            for (int c = 0; c < mel; c++) groups[f / r, (f % r) * mel + c] = targets.Mel[f, c];
-        var paddedLinear = new Tensor<T>(new[] { steps * r, bins });
-        for (int f = 0; f < frames; f++)
-            for (int k = 0; k < bins; k++) paddedLinear[f, k] = linear[f, k];
+        Tensor<T> PadFrames(Tensor<T> rows, int columns)
+        {
+            var kept = Engine.TensorSlice(rows, new[] { 0, 0 }, new[] { frames, columns });
+            return steps * r == frames ? kept
+                : Engine.TensorConcatenate(new[] { kept, new Tensor<T>(new[] { steps * r - frames, columns }) }, 0);
+        }
+        var groups = Engine.Reshape(PadFrames(targets.Mel, mel), new[] { steps, r * mel });
+        var paddedLinear = PadFrames(linear, bins);
         var doneTarget = new Tensor<T>(new[] { steps });
         doneTarget[steps - 1] = NumOps.One;
 
@@ -511,17 +513,18 @@ public partial class DeepVoice3<T> : TtsModelBase<T>, IAcousticModel<T>
             if (window.HasValue)
             {
                 // Only the newest query is constrained: positions outside [last - 1, last + 3) get a large negative logit.
-                var mask = new Tensor<T>(new[] { queries, inputs });
                 int from = Math.Max(0, window.Value - 1), to = Math.Min(inputs, window.Value + 3);
-                for (int j = 0; j < inputs; j++)
-                    if (j < from || j >= to) mask[queries - 1, j] = numOps.FromDouble(-1e9);
+                var inside = new int[inputs];
+                for (int j = from; j < to; j++) inside[j] = 1;
+                var newest = engine.TensorWhere(new Tensor<int>(inside, new[] { 1, inputs }).Cast<T>(),
+                    new Tensor<T>(new[] { 1, inputs }), Tensor<T>.CreateDefault(new[] { 1, inputs }, numOps.FromDouble(-1e9)));
+                var mask = queries == 1 ? newest
+                    : engine.TensorConcatenate(new[] { new Tensor<T>(new[] { queries - 1, inputs }), newest }, 0);
                 scores = engine.TensorAdd(scores, mask);
             }
             var weights = engine.TensorSoftmax(scores, axis: 1);
-            int best = 0;
-            for (int j = 1; j < inputs; j++)
-                if (numOps.ToDouble(weights[queries - 1, j]) > numOps.ToDouble(weights[queries - 1, best])) best = j;
-            LastAttended = best;
+            // The first position with the highest weight at the newest query.
+            LastAttended = _owner.FirstArgMax(engine.TensorSlice(weights, new[] { queries - 1, 0 }, new[] { 1, inputs }));
             var context = engine.TensorMultiplyScalar(engine.TensorMatMul(_owner.Dropout(weights), v),
                 numOps.FromDouble(Math.Sqrt(inputs)));
             var output = _owner.Apply(_out, context);

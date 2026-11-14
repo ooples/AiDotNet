@@ -197,6 +197,19 @@ public partial class GradTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingO
     private double CumulativeNoise(double t) => _options.BetaMin * t + 0.5 * (_options.BetaMax - _options.BetaMin) * t * t;
     private double Noise(double t) => _options.BetaMin + (_options.BetaMax - _options.BetaMin) * t;
 
+    /// <summary>
+    /// ½ β_t h at the reverse solver's interval midpoints t_i = 1 − (i + ½) h, h = 1 / steps, with β_t = β_min +
+    /// (β_max − β_min) t: each formed in double and rounded to T once, as the reference's Python floats scale the tensors.
+    /// </summary>
+    internal static T[] StepScales(int steps, double betaMin, double betaMax)
+    {
+        double h = 1.0 / steps;
+        var scales = new double[steps];
+        for (int i = 0; i < steps; i++)
+            scales[i] = 0.5 * (betaMin + (betaMax - betaMin) * (1.0 - (i + 0.5) * h)) * h;
+        return new Tensor<double>(scales, new[] { steps }).Cast<T>().ToArray();
+    }
+
     /// <summary>Pads to the configured U-Net's actual downsampling factor (4 in the released three-resolution model).</summary>
     private int CompatibleLength(int length)
     {
@@ -206,9 +219,7 @@ public partial class GradTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingO
 
     private Tensor<T> FrameMask(int frames, int padded)
     {
-        var mask = new Tensor<T>(new[] { 1, 1, 1, padded });
-        for (int i = 0; i < frames; i++) mask[0, 0, 0, i] = NumOps.One;
-        return mask;
+        return PaddedFrameMask(frames, padded);
     }
 
     private Tensor<T> PadFrames(Tensor<T> x, int frames)
@@ -251,17 +262,8 @@ public partial class GradTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingO
         int batch = input.Shape[0], tokens = input.Shape[1];
         var outputs = new List<Tensor<T>>(batch);
         for (int b = 0; b < batch; b++)
-        {
-            var row = new Tensor<T>(new[] { tokens });
-            for (int i = 0; i < tokens; i++) row[i] = input[b, i];
-            outputs.Add(SynthesizeOne(row));
-        }
-        int longest = outputs.Max(o => o.Shape[0]);
-        var result = new Tensor<T>(new[] { batch, longest, _options.MelChannels });
-        for (int b = 0; b < batch; b++)
-            for (int f = 0; f < outputs[b].Shape[0]; f++)
-                for (int m = 0; m < _options.MelChannels; m++) result[b, f, m] = outputs[b][f, m];
-        return result;
+            outputs.Add(SynthesizeOne(BatchRow(input, b)));
+        return PadAndStack(outputs, _options.MelChannels);
     }
 
     private Tensor<T> SynthesizeOne(Tensor<T> tokens)
@@ -269,9 +271,7 @@ public partial class GradTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingO
         using var _ = new NoGradScope<T>();
         var (hidden, means) = Encode(tokens);
         var logDurations = LogDurations(hidden);
-        var durations = new int[logDurations.Length];
-        for (int i = 0; i < durations.Length; i++)
-            durations[i] = (int)(Math.Ceiling(Math.Exp(NumOps.ToDouble(logDurations[i]))) * _options.LengthScale);
+        var durations = CeilScaledDurations(logDurations, _options.LengthScale);
         int frames = Math.Max(1, durations.Sum());
         if (durations.Sum() == 0) durations[durations.Length - 1] = 1;
         int padded = CompatibleLength(frames);
@@ -283,11 +283,12 @@ public partial class GradTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingO
         var x = Engine.TensorMultiply(Engine.TensorAdd(mu, Gaussian(mu._shape, random, 1.0 / _options.Temperature)), maskRows);
         int steps = _options.NumDiffusionSteps;
         double h = 1.0 / steps;
+        var stepScale = StepScales(steps, _options.BetaMin, _options.BetaMax);
         for (int i = 0; i < steps; i++)
         {
             double t = 1.0 - (i + 0.5) * h;
             var score = _scoreNetwork!.Estimate(x, mu, t, mask);
-            var dx = Engine.TensorMultiplyScalar(Engine.TensorSubtract(Engine.TensorSubtract(mu, x), score), NumOps.FromDouble(0.5 * Noise(t) * h));
+            var dx = Engine.TensorMultiplyScalar(Engine.TensorSubtract(Engine.TensorSubtract(mu, x), score), stepScale[i]);
             x = Engine.TensorMultiply(Engine.TensorSubtract(x, dx), maskRows);
         }
         return Engine.TensorSlice(x, new[] { 0, 0 }, new[] { frames, _options.MelChannels });
@@ -382,22 +383,9 @@ public partial class GradTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingO
         var (hidden, means) = Encode(tokens);
 
         int tokenCount = means.Shape[0];
-        var scores = new double[tokenCount, frames];
-        for (int i = 0; i < tokenCount; i++)
-            for (int j = 0; j < frames; j++)
-            {
-                double sum = 0;
-                for (int c = 0; c < channels; c++)
-                {
-                    double d = NumOps.ToDouble(mel[j, c]) - NumOps.ToDouble(means[i, c]);
-                    sum += d * d;
-                }
-                scores[i, j] = -0.5 * sum;
-            }
-        int[] durations = MonotonicAlignment.MaximumPath(scores);
+        int[] durations = MonotonicDurations(AlignmentScores(means, mel));
 
-        var target = new Tensor<T>(new[] { tokenCount });
-        for (int i = 0; i < tokenCount; i++) target[i] = NumOps.FromDouble(Math.Log(1e-8 + durations[i]));
+        var target = LogDurationTarget(durations, 1e-8);
         var durationError = Engine.TensorSubtract(LogDurations(hidden), target);
         var durationLoss = Engine.TensorMultiplyScalar(
             Engine.ReduceSum(Engine.TensorMultiply(durationError, durationError), new[] { 0 }, keepDims: false),

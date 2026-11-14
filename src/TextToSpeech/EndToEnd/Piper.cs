@@ -56,18 +56,20 @@ public partial class Piper<T> : StochasticDurationVitsBase<T>
     protected override Tensor<T> PrepareTokens(Tensor<T> tokens)
     {
         var o = PaperOptions;
-        int step = o.InterspersePad ? 2 : 1;
-        var ids = new Tensor<T>(new[] { step * (tokens.Length + 1) + 1 });
-        int k = 0;
-        ids[k++] = NumOps.FromDouble(o.BosId);
-        if (o.InterspersePad) ids[k++] = NumOps.FromDouble(o.PadId);
-        for (int i = 0; i < tokens.Length; i++)
+        int n = tokens.Length;
+        T pad = NumOps.FromDouble(o.PadId);
+        var parts = new List<Tensor<T>> { Tensor<T>.CreateDefault(new[] { 1 }, NumOps.FromDouble(o.BosId)) };
+        if (o.InterspersePad) parts.Add(Tensor<T>.CreateDefault(new[] { 1 }, pad));
+        if (n > 0)
         {
-            ids[k++] = tokens[i];
-            if (o.InterspersePad) ids[k++] = NumOps.FromDouble(o.PadId);
+            var flat = Engine.Reshape(tokens, new[] { n });
+            parts.Add(o.InterspersePad
+                // Each token followed by a pad: [n, 2] rows (token, pad) read out flat.
+                ? Engine.Reshape(Engine.TensorConcatenate(new[] { Engine.Reshape(flat, new[] { n, 1 }), Tensor<T>.CreateDefault(new[] { n, 1 }, pad) }, 1), new[] { 2 * n })
+                : flat);
         }
-        ids[k] = NumOps.FromDouble(o.EosId);
-        return ids;
+        parts.Add(Tensor<T>.CreateDefault(new[] { 1 }, NumOps.FromDouble(o.EosId)));
+        return Engine.TensorConcatenate(parts.ToArray(), 0);
     }
 
     /// <inheritdoc />

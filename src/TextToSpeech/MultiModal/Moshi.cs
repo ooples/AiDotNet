@@ -231,10 +231,9 @@ public partial class Moshi<T> : TtsModelBase<T>, ICodecTts<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
         if (!HasPaperLayers) return base.PredictCore(input);
-        var ids = new int[input.Length];
+        var ids = RoundedIds(input);
         for (int i = 0; i < ids.Length; i++)
         {
-            ids[i] = (int)Math.Round(Ops.ToDouble(input.GetFlat(i)));
             if (ids[i] < 0 || ids[i] >= _options.VocabSize) throw new ArgumentOutOfRangeException(nameof(input), $"Token ids lie in [0, {_options.VocabSize}).");
         }
         string text = Core.TextOf(ids);
@@ -255,10 +254,7 @@ public partial class Moshi<T> : TtsModelBase<T>, ICodecTts<T>
         if (!HasPaperLayers) throw NotNative();
         using var _ = Inference();
         var codes = Core.AudioCodes(audio);
-        var tokens = new Tensor<T>(new[] { codes.GetLength(1), codes.GetLength(0) });
-        for (int t = 0; t < codes.GetLength(1); t++)
-            for (int k = 0; k < codes.GetLength(0); k++) tokens[t, k] = Ops.FromDouble(codes[k, t]);
-        return tokens;
+        return FrameMajorCodes(codes, codes.GetLength(0));
     }
 
     /// <inheritdoc />
@@ -270,13 +266,9 @@ public partial class Moshi<T> : TtsModelBase<T>, ICodecTts<T>
         if (!HasPaperLayers) throw NotNative();
         int q = _options.Codebooks;
         if (tokens.Rank != 2 || tokens.Shape[1] != q) throw new ArgumentException($"Moshi's codes are [frames, {q}].", nameof(tokens));
-        var codes = new int[q, tokens.Shape[0]];
-        for (int t = 0; t < tokens.Shape[0]; t++)
-            for (int k = 0; k < q; k++)
-            {
-                codes[k, t] = (int)Math.Round(Ops.ToDouble(tokens[t, k]));
-                if (codes[k, t] < 0 || codes[k, t] >= _options.CodebookSize) throw new ArgumentException($"Codes lie in [0, {_options.CodebookSize}).", nameof(tokens));
-            }
+        var codes = LevelMajorCodes(tokens);
+        foreach (int c in codes)
+            if (c < 0 || c >= _options.CodebookSize) throw new ArgumentException($"Codes lie in [0, {_options.CodebookSize}).", nameof(tokens));
         using var _ = Inference();
         return Core.Audio(codes);
     }

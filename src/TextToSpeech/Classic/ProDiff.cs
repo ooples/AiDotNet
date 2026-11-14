@@ -262,13 +262,15 @@ public partial class ProDiff<T> : VarianceAdaptorTtsModelBase<T>, IAcousticModel
 
     private Tensor<T> Gaussian(int[] shape, Random random)
     {
-        var t = new Tensor<T>(shape);
-        for (int i = 0; i < t.Length; i++)
+        int length = 1;
+        foreach (int d in shape) length *= d;
+        var draws = new T[length];
+        for (int i = 0; i < draws.Length; i++)
         {
             double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-            t[i] = NumOps.FromDouble(Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2));
+            draws[i] = NumOps.FromDouble(Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2));
         }
-        return t;
+        return new Tensor<T>(draws, shape);
     }
 
     // ---------------------------------------------------------------- training
