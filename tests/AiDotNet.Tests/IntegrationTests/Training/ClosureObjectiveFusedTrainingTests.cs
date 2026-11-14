@@ -4,6 +4,7 @@ using System.Linq;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Optimization;
@@ -43,9 +44,12 @@ public class ClosureObjectiveFusedTrainingTests
 
     /// <summary>
     /// mean((tanh(x W1) W2 - y)^2) * scale on data built INSIDE the closure from the step index: new tensor objects,
-    /// new values, and a per-step scalar every call.
+    /// new values, and a per-step scalar every call. With <paramref name="noise"/> the prediction also gets per-step
+    /// noise drawn through <see cref="CompiledStepRandom{T}"/>, and with <paramref name="dropout"/> the hidden layer
+    /// goes through a seeded dropout layer: randomness owned by the model rather than by the step index.
     /// </summary>
-    private static Func<Tensor<double>> Objective(Tensor<double>[] weights, Func<int> step, Func<int, int> batchOf)
+    private static Func<Tensor<double>> Objective(Tensor<double>[] weights, Func<int> step, Func<int, int> batchOf,
+        Random? noise = null, DropoutLayer<double>? dropout = null)
     {
         var engine = AiDotNetEngine.Current;
         return () =>
@@ -56,7 +60,13 @@ public class ClosureObjectiveFusedTrainingTests
             var y = Seeded(new[] { batch, 1 }, 200 + t);
             double scale = 1.0 + 0.25 * t;   // a per-step coefficient, like a diffusion timestep's weight
             var h = engine.Tanh(engine.TensorMatMul(x, weights[0]));
-            var diff = engine.TensorSubtract(engine.TensorMatMul(h, weights[1]), y);
+            if (dropout is not null)
+                h = dropout.Forward(h);
+            var predicted = engine.TensorMatMul(h, weights[1]);
+            if (noise is not null)
+                predicted = engine.TensorAdd(predicted,
+                    engine.TensorMultiplyScalar(CompiledStepRandom<double>.StandardNormal(new[] { batch, 1 }, noise), 0.1));
+            var diff = engine.TensorSubtract(predicted, y);
             var mse = engine.ReduceMean(engine.TensorMultiply(diff, diff), new[] { 0, 1 }, keepDims: false);
             return engine.TensorMultiplyScalar(mse, scale);
         };
@@ -69,9 +79,11 @@ public class ClosureObjectiveFusedTrainingTests
             EnableGradientClipping = false,
         });
 
-    private sealed record RunResult(Tensor<double>[] Weights, int FusedSteps, int PlanCount, bool Dynamic);
+    private sealed record RunResult(Tensor<double>[] Weights, int FusedSteps, int PlanCount, bool Dynamic,
+        int GeneratorNext = 0);
 
-    private static RunResult Run(bool compile, int steps, Func<int, int> batchOf)
+    private static RunResult Run(bool compile, int steps, Func<int, int> batchOf, int? noiseSeed = null,
+        int? dropoutSeed = null)
     {
         var original = TensorCodecOptions.Current;
         try
@@ -81,12 +93,16 @@ public class ClosureObjectiveFusedTrainingTests
             var weights = Clone(InitialWeights());
             var optimizer = Adam();
             int step = 0;
-            var objective = Objective(weights, () => step, batchOf);
+            var noise = noiseSeed is { } n ? new Random(n) : null;
+            using var dropout = dropoutSeed is { } d ? new DropoutLayer<double>(0.5) { RandomSeed = d } : null;
+            dropout?.SetTrainingMode(true);
+            var objective = Objective(weights, () => step, batchOf, noise, dropout);
             for (step = 0; step < steps; step++)
                 TapeTrainingStepper<double>.EagerObjectiveStep(() => weights, objective, optimizer);
             var stepper = TapeTrainingStepper<double>.ForOwner(optimizer);
             return new RunResult(weights, stepper.FusedStepCount,
-                CompiledTapeTrainingStep<double>.LastClosurePlanCount, CompiledTapeTrainingStep<double>.LastClosureIsDynamic);
+                CompiledTapeTrainingStep<double>.LastClosurePlanCount, CompiledTapeTrainingStep<double>.LastClosureIsDynamic,
+                noise?.Next() ?? 0);
         }
         finally
         {
@@ -116,6 +132,35 @@ public class ClosureObjectiveFusedTrainingTests
         Assert.Equal(0, eager.FusedSteps);
         Assert.Equal(6, compiled.FusedSteps);
         Assert.Equal(1, compiled.PlanCount);
+        AssertSameWeights(eager.Weights, compiled.Weights);
+    }
+
+    [Fact]
+    public void Model_random_draws_advance_the_generator_once_per_step_as_eager_does()
+    {
+        // Step 2's batch of 5 misses the cached plan, so that step is probed and then traced again: the trace must
+        // reuse the probe's draws. The other steps replay, where the probe's draws are the step's draws and nothing
+        // may redraw them. Either mistake moves the generator past the eager run's and changes the noise.
+        int[] batches = { 8, 8, 5, 8, 8 };
+        var eager = Run(compile: false, steps: batches.Length, batchOf: t => batches[t], noiseSeed: 7);
+        var compiled = Run(compile: true, steps: batches.Length, batchOf: t => batches[t], noiseSeed: 7);
+
+        Assert.Equal(batches.Length, compiled.FusedSteps);
+        Assert.Equal(eager.GeneratorNext, compiled.GeneratorNext);
+        AssertSameWeights(eager.Weights, compiled.Weights);
+    }
+
+    [Fact]
+    public void Seeded_dropout_masks_match_eager_through_replays_and_retraces()
+    {
+        // Dropout derives each mask from its seed and a per-forward counter. The stepper's warm-up must not advance
+        // the counter, a replay must not refresh the mask its probe drew, and the retrace of step 2 must reuse the
+        // probe's counter value.
+        int[] batches = { 8, 8, 5, 8, 8 };
+        var eager = Run(compile: false, steps: batches.Length, batchOf: t => batches[t], dropoutSeed: 11);
+        var compiled = Run(compile: true, steps: batches.Length, batchOf: t => batches[t], dropoutSeed: 11);
+
+        Assert.Equal(batches.Length, compiled.FusedSteps);
         AssertSameWeights(eager.Weights, compiled.Weights);
     }
 

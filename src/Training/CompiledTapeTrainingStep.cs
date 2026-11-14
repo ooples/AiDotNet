@@ -1169,6 +1169,9 @@ public static class CompiledTapeTrainingStep<T>
 
         var configured = _configuredPlan;
         ClosureObjectiveState<T>.Entry? entry = null;
+        // The probe runs the closure for real on the host side, so its random draws are this step's draws. A retrace
+        // of the same step must reuse them, or the step consumes the model's generator twice.
+        CompiledStepRandom<T>.CaptureScope? probeDraws = null;
         if (configured is null && closure.PlanCount == 0)
         {
             var first = CompileClosurePlan(objective, parameters, out var firstGuard, out var firstReason);
@@ -1189,7 +1192,12 @@ public static class CompiledTapeTrainingStep<T>
         {
             if (!closure.IsDynamic)
             {
-                var probe = ClosureObjectiveGuard<T>.Probe(objective, parameters, out var signature, out var leaves, out string? reason);
+                ClosureGuardResult probe;
+                ObjectiveSignature? signature;
+                object[] leaves;
+                string? reason;
+                using (probeDraws = CompiledStepRandom<T>.CaptureDraws())
+                    probe = ClosureObjectiveGuard<T>.Probe(objective, parameters, out signature, out leaves, out reason);
                 if (probe == ClosureGuardResult.Matched && signature is not null)
                 {
                     entry = closure.Find(signature);
@@ -1218,7 +1226,10 @@ public static class CompiledTapeTrainingStep<T>
 
             if (entry is null)
             {
-                var traced = CompileClosurePlan(objective, parameters, out var tracedGuard, out _);
+                ICompiledTrainingPlan<T> traced;
+                ClosureObjectiveGuard<T>? tracedGuard;
+                using (probeDraws is null ? null : CompiledStepRandom<T>.ReplayDraws(probeDraws))
+                    traced = CompileClosurePlan(objective, parameters, out tracedGuard, out _);
                 entry = new ClosureObjectiveState<T>.Entry(traced, closure.IsDynamic ? null : tracedGuard);
                 closure.Add(entry, keepAlive: configured);
                 compiledThisCall = true;
@@ -1840,7 +1851,11 @@ public static class CompiledTapeTrainingStep<T>
             // forever and optimize a different objective than eager training. Keep the
             // first traced draw for step one, then refresh captured tensors in place before
             // later replays. The fused plan and optimizer moments remain intact.
-            if (!isFirstStepForConfiguredPlan)
+            // A closure objective's step has already drawn: its probe ran the closure, whose dropout masks and
+            // CompiledStepRandom draws are this step's leaves and were copied into the plan (or the plan was traced
+            // from this step). Redrawing here would advance every generator twice per step and train on a different
+            // random stream than the eager tape.
+            if (!isFirstStepForConfiguredPlan && closureObjective is null)
             {
                 RefreshCompiledStochasticState(layers);
                 CompiledStepRandom<T>.RedrawFor(plan);
