@@ -1,0 +1,117 @@
+name: Website health (nightly)
+
+# Catches breakage that no deploy triggered: an expired secret, a dependency resolved fresh on
+# a redeploy, a hand-applied migration, a deploy that kept failing. Runs the production E2E
+# suite (real backend: license issue, email, SDK validation, revocation, community sign-up,
+# dialogs on small screens) plus drift checks, and reports through the website-health issue.
+
+on:
+  schedule:
+    - cron: '17 9 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    name: Production matches the repo
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: website
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      PROJECT_REF: yfkqwpgjahoamlgckjib
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13 # v1
+        with:
+          version: 2.84.4
+
+      - name: Link Supabase project
+        run: supabase link --project-ref "$PROJECT_REF"
+
+      - name: Latest website deploy succeeded
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          read -r conclusion url < <(gh run list -R "$GITHUB_REPOSITORY" -w deploy-website.yml -b master --status completed -L 1 \
+            --json conclusion,url --jq '.[0] | "\(.conclusion) \(.url)"')
+          echo "Latest deploy-website run on master: $conclusion $url"
+          [ "$conclusion" = success ] || { echo "::error::The latest website deploy did not succeed: $url"; exit 1; }
+
+      - name: Migrations match
+        run: |
+          set -euo pipefail
+          # Rows look like "  20261111000000 | 20261111000000 | 2026-11-11 00:00:00". An empty Local
+          # column is a migration applied to production by hand; an empty Remote column is one the
+          # deploy never applied.
+          supabase migration list --linked | tee list.txt
+          bad=$(awk -F'|' 'NF>=3 { l=$1; r=$2; gsub(/ /,"",l); gsub(/ /,"",r);
+                 if (l ~ /^[0-9]+$/ || r ~ /^[0-9]+$/) if (l != r) print "local=" (l==""?"(none)":l) " remote=" (r==""?"(none)":r) }' list.txt)
+          rows=$(awk -F'|' 'NF>=3 { l=$1; gsub(/ /,"",l); if (l ~ /^[0-9]+$/) n++ } END { print n+0 }' list.txt)
+          [ "$rows" -gt 0 ] || { echo "::error::Parsed no migration rows; the list format changed."; exit 1; }
+          if [ -n "$bad" ]; then echo "::error::Migration drift:"; echo "$bad"; exit 1; fi
+          echo "$rows migrations, repo and production agree."
+
+      - name: Revoke leftover e2e test licenses
+        # The lifecycle spec revokes its key in an afterEach, but a cancelled run (a newer deploy
+        # cancels the running one) never reaches it. Revoking also puts the key on the CRL (trigger).
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          n=$(psql "$(cat supabase/.temp/pooler-url)" -v ON_ERROR_STOP=1 -Atc "with r as (update public.license_keys set status = 'revoked', revoked_at = now() where customer_full_name like 'e2e-test %' and status <> 'revoked' and issued_at < now() - interval '1 hour' returning 1) select count(*) from r")
+          echo "Revoked $n leftover e2e test license(s)."
+
+      - name: Edge functions match
+        run: |
+          set -euo pipefail
+          supabase functions list --project-ref "$PROJECT_REF" -o json > deployed.json
+          fail=0
+          for dir in supabase/functions/*/; do
+            fn=$(basename "$dir")
+            [ "$fn" = _shared ] && continue
+            entry=$(jq -c --arg f "$fn" '.[] | select(.slug == $f)' deployed.json)
+            if [ -z "$entry" ]; then echo "::error::$fn is in the repo but not deployed"; fail=1; continue; fi
+            status=$(jq -r .status <<<"$entry")
+            [ "$status" = ACTIVE ] || { echo "::error::$fn status is $status"; fail=1; }
+            # verify_jwt must match supabase/config.toml (default true when the block is absent).
+            want=$(awk -v f="[functions.$fn]" '{sub(/\r$/,"")} $0==f {s=1; next} /^\[/ {s=0} s && /verify_jwt/ {gsub(/[ \r]/,""); split($0,a,"="); print a[2]}' supabase/config.toml)
+            want=${want:-true}
+            have=$(jq -r '.verify_jwt' <<<"$entry")
+            [ "$have" = "$want" ] || { echo "::error::$fn verify_jwt is $have in production, $want in config.toml"; fail=1; }
+            # Deployed after the last commit that changed it (or the shared code it imports).
+            changed=$(git log -1 --format=%ct -- "$dir" supabase/functions/_shared supabase/config.toml)
+            updated=$(jq -r '.updated_at' <<<"$entry")
+            case "$updated" in ''|*[!0-9]*) updated=$(date -d "$updated" +%s) ;; *) [ ${#updated} -gt 10 ] && updated=$((updated / 1000)) ;; esac
+            if [ "$updated" -lt "$changed" ]; then
+              echo "::error::$fn was deployed $(date -ud @"$updated") but changed in the repo $(date -ud @"$changed")"; fail=1
+            fi
+          done
+          extra=$(jq -r '.[].slug' deployed.json | while read -r s; do [ -d "supabase/functions/$s" ] || echo "$s"; done)
+          [ -z "$extra" ] || { echo "::error::Deployed but not in the repo: $extra"; fail=1; }
+          [ "$fail" = 0 ] && echo "All edge functions deployed, current, and configured as in the repo."
+          exit "$fail"
+
+  e2e:
+    name: E2E against production
+    uses: ./.github/workflows/website-e2e.yml
+    secrets: inherit
+
+  alert:
+    name: Report
+    needs: [drift, e2e]
+    if: always()
+    uses: ./.github/workflows/website-alert.yml
+    permissions:
+      issues: write
+    with:
+      result: ${{ (needs.drift.result == 'success' && needs.e2e.result == 'success') && 'success' || 'failure' }}
+      source: Website health (nightly)
