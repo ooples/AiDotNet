@@ -590,7 +590,7 @@ public class EvaluationNumericalMemoryTests
         var values = Enumerable.Range(0, size).Select(i => (Half)(i / 4.0)).ToArray();
         var tensor = new Tensor<Half>(values, new[] { size });
         var (_, _, ranks) = EvaluationTensorOps<Half>.SortedRunRanks(tensor, 1e-10);
-        var rows = new Tensor<Half>(values.Concat(values.Reverse()).ToArray(), new[] { 2, size });
+        var rows = new Tensor<Half>(values.Concat(Enumerable.Reverse(values)).ToArray(), new[] { 2, size });
         var descending = EvaluationTensorOps<Half>.RowRanksDescending(rows, 1e-10);
         for (int start = 0; start < size;)
         {

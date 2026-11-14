@@ -69,7 +69,7 @@ public class CACTUsPaperTests
     {
         var scale = Algorithm().DrawDimensionScale(5);
 
-        Assert.Equal(new[] { 1, 5 }, scale.Shape);
+        Assert.Equal(new[] { 1, 5 }, scale.Shape.ToArray());
         var expected = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(17);
         for (int d = 0; d < 5; d++) Assert.Equal(expected.NextDouble(), scale[new[] { 0, d }]);
     }
