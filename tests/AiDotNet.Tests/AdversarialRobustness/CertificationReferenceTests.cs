@@ -878,6 +878,92 @@ public class CertificationReferenceTests
         Assert.Equal(Enumerable.Range(1, 9).ToArray(), attack.TargetClassesOf(logits, 0, -1));
     }
 
+    private static AutoAttack<TNum, Vector<TNum>, Vector<TNum>> FabAttack<TNum>(AdversarialNormType norm) =>
+        new(new AdversarialAttackOptions<TNum> { NormType = norm, Epsilon = 0.1 });
+
+    private static double[] FabProjection<TNum>(AdversarialNormType norm, double[] point, double[] normal, double offset)
+    {
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<TNum>();
+        var attack = FabAttack<TNum>(norm);
+        var t = new Vector<TNum>(point.Select(ops.FromDouble).ToArray());
+        var w = new Vector<TNum>(normal.Select(ops.FromDouble).ToArray());
+        var d = norm == AdversarialNormType.L2
+            ? attack.ProjectL2Hyperplane(t, w, ops.FromDouble(offset))
+            : attack.ProjectLInfinityHyperplane(t, w, ops.FromDouble(offset));
+        return d.ToArray().Select(ops.ToDouble).ToArray();
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task FabProjections_MatchTheReferenceInABox()
+    {
+        await Task.Yield();
+
+        // x = (0.9, 0.5) onto x0 + x1 = 1.8 in [0, 1]^2: the free step (0.2, 0.2) leaves the box, so coordinate 0
+        // stops at 1 and coordinate 1 takes the rest, d = (0.1, 0.3), in both norms (autoattack projection_linf
+        // and projection_l2 give the same).
+        foreach (var norm in new[] { AdversarialNormType.LInfinity, AdversarialNormType.L2 })
+        {
+            var d = FabProjection<double>(norm, new[] { 0.9, 0.5 }, new[] { 1.0, 1.0 }, 1.8);
+            Assert.Equal(0.1, d[0], 1e-12);
+            Assert.Equal(0.3, d[1], 1e-12);
+        }
+
+        // x = (0.9, 0.5, 0.2) onto w . x = 400 with w = (300, -150, 600), w . x = 315: L-infinity takes
+        // lambda sign(w) with 1050 lambda = 85; L2 takes alpha w with alpha = 85 / 472500.
+        var linf = FabProjection<double>(AdversarialNormType.LInfinity, new[] { 0.9, 0.5, 0.2 }, new[] { 300.0, -150.0, 600.0 }, 400.0);
+        Assert.Equal(new[] { 17.0 / 210, -17.0 / 210, 17.0 / 210 }, linf, new ToleranceComparer(1e-12));
+        var l2 = FabProjection<double>(AdversarialNormType.L2, new[] { 0.9, 0.5, 0.2 }, new[] { 300.0, -150.0, 600.0 }, 400.0);
+        Assert.Equal(new[] { 17.0 / 315, -17.0 / 630, 34.0 / 315 }, l2, new ToleranceComparer(1e-12));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task FabProjections_HalfLargeNormalsMatchDouble()
+    {
+        await Task.Yield();
+
+        // The same hyperplane in Half: 300^2 = 90000 exceeds 65504, so the L2 projection summed infinite squares.
+        foreach (var norm in new[] { AdversarialNormType.LInfinity, AdversarialNormType.L2 })
+        {
+            var expected = FabProjection<double>(norm, new[] { 0.9, 0.5, 0.2 }, new[] { 300.0, -150.0, 600.0 }, 400.0);
+            var half = FabProjection<Half>(norm, new[] { 0.9, 0.5, 0.2 }, new[] { 300.0, -150.0, 600.0 }, 400.0);
+            Assert.Equal(expected, half, new ToleranceComparer(2e-3));
+        }
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task FabClosestBoundary_HalfLargeGradientsKeepTheirDistance()
+    {
+        await Task.Yield();
+
+        // Label 0; boundary 1 has f = 1000, g = (300, 300) at L2 distance 1000 / 424.26 = 2.357, boundary 2 has
+        // f = 1, g = (1, 1) at 0.707, so boundary 2 is the closest. In Half ||g_1||^2 = 180000 overflowed, which
+        // put boundary 1 at distance 0.
+        foreach (var expectedIndex in new[] { ClosestBoundaryIndex<double>(), ClosestBoundaryIndex<Half>() })
+        {
+            Assert.Equal(2, expectedIndex);
+        }
+    }
+
+    private static int ClosestBoundaryIndex<TNum>()
+    {
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<TNum>();
+        var attack = FabAttack<TNum>(AdversarialNormType.L2);
+        var differences = new Vector<TNum>(new[] { 0.0, 1000.0, 1.0 }.Select(ops.FromDouble).ToArray());
+        var normals = new Tensor<TNum>(new[] { 3, 2 }, new Vector<TNum>(new[] { 0.0, 0.0, 300.0, 300.0, 1.0, 1.0 }.Select(ops.FromDouble).ToArray()));
+        return attack.ClosestBoundary(differences, normals, 0).Index;
+    }
+
+    private sealed class ToleranceComparer : IEqualityComparer<double>
+    {
+        private readonly double _tolerance;
+
+        public ToleranceComparer(double tolerance) => _tolerance = tolerance;
+
+        public bool Equals(double x, double y) => Math.Abs(x - y) <= _tolerance;
+
+        public int GetHashCode(double obj) => 0;
+    }
+
     [Fact(Timeout = 300000)]
     public async Task AutoAttack_TargetedRunReachesTheTargetClass()
     {
