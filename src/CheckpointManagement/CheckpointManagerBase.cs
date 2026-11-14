@@ -153,6 +153,12 @@ public abstract class CheckpointManagerBase<T, TInput, TOutput> : ICheckpointMan
     public abstract int CleanupKeepBest(string metricName, int keepBest = 3, MetricOptimizationDirection direction = MetricOptimizationDirection.Minimize);
 
     /// <summary>
+    /// The improvement direction for one call: the caller's explicit choice, otherwise the configured
+    /// <see cref="AutoCheckpointConfiguration.MinimizeMetric"/> (minimize when no auto-save is configured).
+    /// </summary>
+    private bool ResolveMinimize(bool? shouldMinimize) => shouldMinimize ?? AutoConfig?.MinimizeMetric ?? true;
+
+    /// <summary>
     /// Attempts to save a checkpoint automatically based on configured auto-checkpoint settings.
     /// This method is called internally by training facades - users don't need to call it directly.
     /// The training loop calls this every step and it automatically decides when to save.
@@ -164,7 +170,7 @@ public abstract class CheckpointManagerBase<T, TInput, TOutput> : ICheckpointMan
     /// <param name="step">The current training step.</param>
     /// <param name="metrics">Training metrics to store with the checkpoint.</param>
     /// <param name="metricValue">Optional metric value for improvement-based checkpointing.</param>
-    /// <param name="shouldMinimize">Whether the metric should be minimized (true) or maximized (false).</param>
+    /// <param name="shouldMinimize">Whether the metric should be minimized (true) or maximized (false); null uses the configured AutoCheckpointConfiguration.MinimizeMetric.</param>
     /// <param name="metadata">Optional additional metadata.</param>
     /// <returns>The checkpoint ID if saved, or null if no checkpoint was saved.</returns>
     public abstract string? TryAutoSaveCheckpoint<TMetadata>(
@@ -174,7 +180,7 @@ public abstract class CheckpointManagerBase<T, TInput, TOutput> : ICheckpointMan
         int step,
         Dictionary<string, T> metrics,
         double? metricValue = null,
-        bool shouldMinimize = true,
+        bool? shouldMinimize = null,
         Dictionary<string, object>? metadata = null) where TMetadata : class;
 
     /// <summary>
@@ -273,7 +279,7 @@ public abstract class CheckpointManagerBase<T, TInput, TOutput> : ICheckpointMan
     /// </summary>
     /// <param name="currentStep">The current training step.</param>
     /// <param name="metricValue">Optional metric value for improvement-based checkpointing.</param>
-    /// <param name="shouldMinimize">Whether the metric should be minimized (true) or maximized (false).</param>
+    /// <param name="shouldMinimize">Whether the metric should be minimized (true) or maximized (false); null uses the configured AutoCheckpointConfiguration.MinimizeMetric.</param>
     /// <returns>True if a checkpoint should be saved.</returns>
     /// <remarks>
     /// <b>For Beginners:</b> Call this method during training to check if you should save:
@@ -288,7 +294,7 @@ public abstract class CheckpointManagerBase<T, TInput, TOutput> : ICheckpointMan
     /// }
     /// </code>
     /// </remarks>
-    public virtual bool ShouldAutoSaveCheckpoint(int currentStep, double? metricValue = null, bool shouldMinimize = true)
+    public virtual bool ShouldAutoSaveCheckpoint(int currentStep, double? metricValue = null, bool? shouldMinimize = null)
     {
         lock (SyncLock)
         {
@@ -322,7 +328,7 @@ public abstract class CheckpointManagerBase<T, TInput, TOutput> : ICheckpointMan
                     return true; // First value is always an improvement
                 }
 
-                bool isImprovement = shouldMinimize
+                bool isImprovement = ResolveMinimize(shouldMinimize)
                     ? metricValue.Value < BestMetricValue.Value
                     : metricValue.Value > BestMetricValue.Value;
 
@@ -341,11 +347,11 @@ public abstract class CheckpointManagerBase<T, TInput, TOutput> : ICheckpointMan
     /// </summary>
     /// <param name="step">The step at which the checkpoint was saved.</param>
     /// <param name="metricValue">Optional metric value for improvement tracking.</param>
-    /// <param name="shouldMinimize">Whether the metric should be minimized.</param>
+    /// <param name="shouldMinimize">Whether the metric should be minimized (true) or maximized (false); null uses the configured AutoCheckpointConfiguration.MinimizeMetric.</param>
     /// <remarks>
     /// Call this after saving a checkpoint to update internal tracking state.
     /// </remarks>
-    public virtual void UpdateAutoSaveState(int step, double? metricValue = null, bool shouldMinimize = true)
+    public virtual void UpdateAutoSaveState(int step, double? metricValue = null, bool? shouldMinimize = null)
     {
         lock (SyncLock)
         {
@@ -360,7 +366,7 @@ public abstract class CheckpointManagerBase<T, TInput, TOutput> : ICheckpointMan
                 }
                 else
                 {
-                    bool isImprovement = shouldMinimize
+                    bool isImprovement = ResolveMinimize(shouldMinimize)
                         ? metricValue.Value < BestMetricValue.Value
                         : metricValue.Value > BestMetricValue.Value;
 
