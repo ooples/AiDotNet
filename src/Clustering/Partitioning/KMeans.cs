@@ -193,14 +193,23 @@ public partial class KMeans<T> : ClusteringBase<T>
             Tolerance = tolerance;
             if (euclidean && x.Rows > 0)
             {
+                // The norm expansion subtracts numbers of the size of ||x||^2 to get a squared distance, so it is
+                // evaluated on the data shifted to its column means: distances are unchanged by the shift, and the
+                // cancellation error then scales with the spread of the data instead of its offset from the
+                // origin (in single precision, unit-spread clusters around 1e4 are otherwise unresolvable).
                 var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+                Origin = ClusteringTensorOps.ColumnMeans(x);
+                Values = ClusteringTensorOps.SubtractRow(x, Origin);
                 RowNorms = engine.ReduceSum(engine.TensorSquare(Values), new[] { 1 }, true);
             }
         }
 
+        /// <summary>The column means subtracted from <see cref="Values"/>; null unless Euclidean.</summary>
+        public Vector<T>? Origin { get; }
+
         public Matrix<T> X { get; }
 
-        /// <summary>The data as a [rows, columns] tensor.</summary>
+        /// <summary>The data as a [rows, columns] tensor, shifted to its column means when Euclidean.</summary>
         public Tensor<T> Values { get; }
 
         public bool Euclidean { get; }
@@ -336,7 +345,7 @@ public partial class KMeans<T> : ClusteringBase<T>
             if (minDistances is null)
             {
                 minDistances = Engine.Reshape(
-                    SquaredDistancesTo(data, ClusteringTensorOps.SelectRows(x, new[] { chosen[k - 1] })), new[] { rows }).ToVector();
+                    SquaredDistancesToRows(data, new[] { chosen[k - 1] }), new[] { rows }).ToVector();
             }
 
             // Select next center with probability proportional to distance squared, keeping the best of the trials
@@ -344,7 +353,7 @@ public partial class KMeans<T> : ClusteringBase<T>
             if (trials == 1)
             {
                 chosen[k] = candidates[0];
-                var toChosen = SquaredDistancesTo(data, ClusteringTensorOps.SelectRows(x, candidates));
+                var toChosen = SquaredDistancesToRows(data, candidates);
                 minDistances = Engine.TensorMin(minDistances.AsTensor(), Engine.Reshape(toChosen, new[] { rows })).ToVector();
                 continue;
             }
@@ -352,7 +361,7 @@ public partial class KMeans<T> : ClusteringBase<T>
             // [rows, trials]: every row's minimum squared distance once each candidate is a center
             var lowered = Engine.TensorMin(
                 Engine.TensorBroadcastTo(Tensor<T>.FromVector(minDistances, new[] { rows, 1 }), new[] { rows, trials }),
-                SquaredDistancesTo(data, ClusteringTensorOps.SelectRows(x, candidates)));
+                SquaredDistancesToRows(data, candidates));
             var potentials = Engine.ReduceSum(lowered, new[] { 0 }, false).ToVector();
             int best = ClusteringTensorOps.ArgMin(potentials);
             chosen[k] = candidates[best];
@@ -360,6 +369,29 @@ public partial class KMeans<T> : ClusteringBase<T>
         }
 
         return ClusteringTensorOps.SelectRows(x, chosen);
+    }
+
+    /// <summary>
+    /// Squared distance from every row of the data to the data rows at <paramref name="rowIndices"/>, as
+    /// [rows, rowIndices.Length]: one matrix product for Euclidean distance, the square of the configured metric
+    /// otherwise.
+    /// </summary>
+    private Tensor<T> SquaredDistancesToRows(KMeansData data, int[] rowIndices)
+    {
+        if (data.Euclidean && data.RowNorms is not null)
+        {
+            // Gathered from the shifted tensor, so neither the data nor the points are copied or re-shifted.
+            // Replicating every row against every point instead costs rows * points * columns elements per
+            // call, which dominated k-means++ on large inputs.
+            var pointsT = Engine.TensorTranspose(
+                Engine.TensorIndexSelect(data.Values, Vector<int>.Wrap(rowIndices).AsTensor(), 0));
+            var pointNorms = Engine.Reshape(
+                Engine.ReduceSum(Engine.TensorSquare(pointsT), new[] { 0 }, false), new[] { 1, rowIndices.Length });
+            return Engine.TensorMax(
+                SquaredDistanceScores(data.Values, data.RowNorms, pointsT, pointNorms), NumOps.Zero);
+        }
+
+        return SquaredDistancesTo(data, ClusteringTensorOps.SelectRows(data.X, rowIndices));
     }
 
     /// <summary>
@@ -385,7 +417,7 @@ public partial class KMeans<T> : ClusteringBase<T>
     private Vector<T> AssignLabels(KMeansData data, Matrix<T> centers)
     {
         var x = data.X;
-        if (!data.Euclidean || data.RowNorms is null || centers.Rows == 0)
+        if (!data.Euclidean || data.RowNorms is null || data.Origin is null || centers.Rows == 0)
         {
             var distanceMetric = _options.DistanceMetric ?? new EuclideanDistance<T>();
             return ClusteringTensorOps.FromIntArray<T>(ClusteringTensorOps.NearestCenters(distanceMetric, x, centers));
@@ -393,14 +425,60 @@ public partial class KMeans<T> : ClusteringBase<T>
 
         int rows = x.Rows;
         int clusters = centers.Rows;
-        var ct = ClusteringTensorOps.ToTensor(centers);
-        var dots = Engine.TensorMatMul(data.Values, Engine.TensorTranspose(ct));
-        var centerNorms = Engine.Reshape(Engine.ReduceSum(Engine.TensorSquare(ct), new[] { 1 }, false), new[] { 1, clusters });
+        var centersT = Engine.TensorTranspose(ClusteringTensorOps.SubtractRow(centers, data.Origin));
+        // ||x||^2 is the same for every center of a row, so the nearest center minimizes ||c||^2 / 2 - x.c.
+        var halfCenterNorms = Engine.TensorMultiplyScalar(
+            Engine.Reshape(Engine.ReduceSum(Engine.TensorSquare(centersT), new[] { 0 }, false), new[] { 1, clusters }),
+            NumOps.FromDouble(0.5));
+
+        // Rows are scored in cache-sized blocks so the [rows, clusters] intermediates stay small.
+        int rowsPerBlock = Math.Max(1, Math.Min(rows, AssignmentBlockElements / clusters));
+        if (rowsPerBlock >= rows)
+        {
+            return ClusteringTensorOps.FromIntArray<T>(NearestCenterIndices(data.Values, centersT, halfCenterNorms));
+        }
+
+        var nearest = new int[rows];
+        for (int start = 0; start < rows; start += rowsPerBlock)
+        {
+            int count = Math.Min(rowsPerBlock, rows - start);
+            var values = Engine.TensorSlice(data.Values, new[] { start, 0 }, new[] { count, x.Columns });
+            Array.Copy(NearestCenterIndices(values, centersT, halfCenterNorms), 0, nearest, start, count);
+        }
+
+        return ClusteringTensorOps.FromIntArray<T>(nearest);
+    }
+
+    /// <summary>Upper bound on the elements of one [rows, clusters] block of the Euclidean assignment.</summary>
+    private const int AssignmentBlockElements = 1 << 18;
+
+    /// <summary>
+    /// Index of the center minimizing <c>||c||^2 / 2 - x.c</c> (the lowest index on a tie) for every row of
+    /// <paramref name="values"/> ([rows, d]) against the transposed centers [d, clusters] and their halved squared
+    /// norms [1, clusters].
+    /// </summary>
+    private int[] NearestCenterIndices(Tensor<T> values, Tensor<T> centersT, Tensor<T> halfCenterNorms)
+    {
+        int rows = values.Shape[0];
+        int clusters = centersT.Shape[1];
+        var scores = Engine.TensorSubtract(
+            Engine.TensorBroadcastTo(halfCenterNorms, new[] { rows, clusters }), Engine.TensorMatMul(values, centersT));
+        return Engine.TensorArgMin(scores, 1).ToArray();
+    }
+
+    /// <summary>
+    /// <c>||x||^2 + ||c||^2 - 2 x.c</c> as [rows, clusters]: the squared distances up to rounding (which can
+    /// leave a slightly negative value for a row that coincides with a center).
+    /// </summary>
+    private Tensor<T> SquaredDistanceScores(Tensor<T> values, Tensor<T> rowNorms, Tensor<T> centersT, Tensor<T> centerNorms)
+    {
+        int rows = values.Shape[0];
+        int clusters = centersT.Shape[1];
+        var dots = Engine.TensorMatMul(values, centersT);
         var norms = Engine.TensorAdd(
-            Engine.TensorBroadcastTo(data.RowNorms, new[] { rows, clusters }),
+            Engine.TensorBroadcastTo(rowNorms, new[] { rows, clusters }),
             Engine.TensorBroadcastTo(centerNorms, new[] { rows, clusters }));
-        var scores = Engine.TensorSubtract(norms, Engine.TensorMultiplyScalar(dots, NumOps.FromDouble(2.0)));
-        return ClusteringTensorOps.FromIntArray<T>(Engine.TensorArgMin(scores, 1).ToArray());
+        return Engine.TensorSubtract(norms, Engine.TensorMultiplyScalar(dots, NumOps.FromDouble(2.0)));
     }
 
     private Matrix<T> UpdateCenters(Matrix<T> x, Vector<T> labels, Matrix<T> oldCenters)
