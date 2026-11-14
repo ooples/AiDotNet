@@ -313,6 +313,52 @@ public class RetrievalPaperReferenceTests
         Assert.Equal(0.0, emptyDocument[1], Tolerance);
     }
 
+    /// <summary>
+    /// TF-IDF for Half over 70,000 documents: idf = ln(N / df) = ln 70000 ≈ 11.16 fits Half, but N itself does
+    /// not (Half max 65504). Converting N to Half gave +inf idf for the matching document and 0 · inf = NaN for
+    /// the others.
+    /// </summary>
+    [Fact]
+    public void Tfidf_Half_LargeCorpus_KeepsFiniteIdf()
+    {
+        const int documents = 70000;
+        var docs = new List<Document<Half>>(documents) { new Document<Half>("d0", "rare") };
+        for (int i = 1; i < documents; i++)
+            docs.Add(new Document<Half>("d" + i, "common"));
+
+        var scores = TFIDFRetriever<Half>.ScoreDocuments(
+            new List<string> { "rare" }, TFIDFRetriever<Half>.BuildIndex(docs));
+
+        Assert.Equal((Half)Math.Log(documents), scores[0]);
+        Assert.Equal((Half)0, scores[1]);
+        Assert.Equal((Half)0, scores[documents - 1]);
+    }
+
+    /// <summary>
+    /// TF-IDF over 50,000 single-term documents for a query of all 50,000 terms: every document scores
+    /// tf · idf = 1 · ln(50000 / 1). Scoring used a dense documents x terms count array (2.5 · 10^9 entries,
+    /// past int range); it must use the postings only.
+    /// </summary>
+    [Fact]
+    public void Tfidf_ManyQueryTerms_ScoresFromPostingsOnly()
+    {
+        const int documents = 50000;
+        var docs = new List<Document<double>>(documents);
+        var query = new List<string>(documents);
+        for (int i = 0; i < documents; i++)
+        {
+            docs.Add(new Document<double>("d" + i, "w" + i));
+            query.Add("w" + i);
+        }
+
+        var scores = TFIDFRetriever<double>.ScoreDocuments(query, TFIDFRetriever<double>.BuildIndex(docs));
+
+        Assert.Equal(documents, scores.Length);
+        Assert.Equal(Math.Log(documents), scores[0], Tolerance);
+        Assert.Equal(Math.Log(documents), scores[documents - 1], Tolerance);
+        Assert.All(scores, s => Assert.Equal(Math.Log(documents), s, 1e-9));
+    }
+
     private static InMemoryDocumentStore<TNum> Store<TNum>(params string[] contents)
     {
         var store = new InMemoryDocumentStore<TNum>(1);

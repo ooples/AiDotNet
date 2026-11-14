@@ -84,26 +84,71 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
             if (terms == 0)
                 return new T[documents];
 
-            var counts = new int[documents * terms];
+            // The postings of the query terms: memory is linear in the matching (document, term) pairs, never
+            // documents x terms. Each document is probed from the smaller side, its own terms or the query terms.
+            var termIndex = new Dictionary<string, int>(terms);
+            for (int t = 0; t < terms; t++)
+                termIndex[vocabulary[t]] = t;
+
+            var postingDocuments = new List<int>();
+            var postingTerms = new List<int>();
+            var postingCounts = new List<int>();
             for (int d = 0; d < documents; d++)
             {
-                for (int t = 0; t < terms; t++)
+                var termCounts = index.TermCounts[d];
+                if (termCounts.Count < terms)
                 {
-                    counts[d * terms + t] = index.TermCounts[d].TryGetValue(vocabulary[t], out var count) ? count : 0;
+                    foreach (var entry in termCounts)
+                    {
+                        if (termIndex.TryGetValue(entry.Key, out var t))
+                        {
+                            postingDocuments.Add(d);
+                            postingTerms.Add(t);
+                            postingCounts.Add(entry.Value);
+                        }
+                    }
+                }
+                else
+                {
+                    for (int t = 0; t < terms; t++)
+                    {
+                        if (termCounts.TryGetValue(vocabulary[t], out var count))
+                        {
+                            postingDocuments.Add(d);
+                            postingTerms.Add(t);
+                            postingCounts.Add(count);
+                        }
+                    }
                 }
             }
 
-            var queryCounts = vocabulary.Select(term => queryTerms.Count(q => q == term)).ToArray();
-            var df = new Tensor<int>(vocabulary.Select(term => index.DocumentFrequency[term]).ToArray(), [terms]).Cast<T>();
-            var idf = Engine.TensorLog(Engine.TensorDivide(Tensor<T>.CreateDefault([terms], NumOps.FromDouble(documents)), df));
-            var termWeights = Engine.TensorMultiply(idf, new Tensor<int>(queryCounts, [terms]).Cast<T>());
+            int postings = postingCounts.Count;
+            if (postings == 0)
+                return new T[documents];
 
-            // Documents without terms have max count 0 but no matching counts either; divide by 1 instead.
-            var maxCounts = new Tensor<int>(index.MaxTermCount.Select(m => Math.Max(m, 1)).ToArray(), [documents, 1]).Cast<T>();
-            var tf = Engine.TensorDivide(
-                new Tensor<int>(counts, [documents, terms]).Cast<T>(), Engine.TensorBroadcastTo(maxCounts, [documents, terms]));
+            // The counts and the ratio N / df are formed in double: in Half, N = 70,000 or a count above 65,504
+            // overflows to +inf before the ratio. idf = ln N - ln df, tf = count / max count and their weighted
+            // sum per document are bounded, and only the finished scores are converted to T.
+            var queryCounts = new int[terms];
+            foreach (var term in queryTerms)
+            {
+                if (termIndex.TryGetValue(term, out var t))
+                    queryCounts[t]++;
+            }
 
-            return Engine.TensorMatMul(tf, Engine.Reshape(termWeights, [terms, 1])).ToArray();
+            var df = new Tensor<int>(vocabulary.Select(term => index.DocumentFrequency[term]).ToArray(), [terms]).Cast<double>();
+            var idf = Engine.ScalarMinusTensor(Math.Log(documents), Engine.TensorLog(df));
+            var termWeights = Engine.TensorMultiply(idf, new Tensor<int>(queryCounts, [terms]).Cast<double>());
+
+            var postingDocumentIndex = new Tensor<int>(postingDocuments.ToArray(), [postings]);
+            var maxCounts = Engine.TensorIndexSelect(
+                new Tensor<int>(index.MaxTermCount.Select(m => Math.Max(m, 1)).ToArray(), [documents]).Cast<double>(),
+                postingDocumentIndex, 0);
+            var tf = Engine.TensorDivide(new Tensor<int>(postingCounts.ToArray(), [postings]).Cast<double>(), maxCounts);
+            var contributions = Engine.TensorMultiply(
+                tf, Engine.TensorIndexSelect(termWeights, new Tensor<int>(postingTerms.ToArray(), [postings]), 0));
+
+            return Engine.ScatterAdd(contributions, postingDocumentIndex, 0, documents).Cast<T>().ToArray();
         }
 
         internal static List<string> Tokenize(string text)
