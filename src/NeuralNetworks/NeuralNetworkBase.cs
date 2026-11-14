@@ -11716,6 +11716,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     protected void RunWithTrainingStepHooks(Tensor<T> input, Tensor<T> target, Action step)
     {
         Guard.NotNull(step);
+        // The step may update parameters without advancing their versions (a device-resident optimizer update in a
+        // compiled replay): derived inference caches (a recurrent layer's stacked gate weights) rebuild on next use.
+        AiDotNet.NeuralNetworks.Layers.DerivedTensorCacheGeneration.Advance();
         OnTrainingStepStarting(input, target);
         bool succeeded = false;
         try

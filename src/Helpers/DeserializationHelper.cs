@@ -4454,7 +4454,10 @@ public static class DeserializationHelper
         // the wrong (identity) activation and diverged from the source despite byte-identical weights.
         // Passing null activations lets the ctor restore its Tanh (candidate) / Sigmoid (gate) defaults,
         // which match the model's default GRU construction.
-        return new GRULayer<T>(hiddenSize, returnSequences, activation, recurrentActivation);
+        // A layer saved before ResetAfter existed applied the reset gate before the recurrent product.
+        bool resetAfter = TryGetBool(additionalParams, "ResetAfter") ?? false;
+        return new GRULayer<T>(hiddenSize, returnSequences, activation, recurrentActivation, stateful: false,
+            resetAfter: resetAfter);
     }
 
     /// <summary>

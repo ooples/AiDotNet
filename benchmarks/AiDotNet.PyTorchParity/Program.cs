@@ -1216,7 +1216,9 @@ internal sealed class ResourceMonitor : IDisposable
     private readonly Process _process = Process.GetCurrentProcess();
     private readonly CancellationTokenSource _cts = new();
     private readonly List<double> _rssMb = [];
+    private readonly List<double> _gpuMemMb = [];
     private readonly Task _task;
+    private readonly Task? _gpuTask;
 
     private ResourceMonitor()
     {
@@ -1229,6 +1231,21 @@ internal sealed class ResourceMonitor : IDisposable
                 await Task.Delay(100, _cts.Token).ContinueWith(_ => { });
             }
         });
+        // GPU runs only (#2561's "peak VRAM must not exceed PyTorch's"): nvidia-smi's memory.used, exactly what
+        // benchmark.py's ResourceMonitor samples for torch on a CUDA device. It is device-wide, as on the torch side.
+        if (AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine)
+            _gpuTask = Task.Run(async () =>
+            {
+                while (!_cts.IsCancellationRequested)
+                {
+                    var line = NvidiaSmi.TryRead();
+                    var parts = line?.Split(',');
+                    if (parts is { Length: >= 2 } && double.TryParse(parts[1].Trim(),
+                            System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double mem))
+                        lock (_gpuMemMb) _gpuMemMb.Add(mem);
+                    await Task.Delay(100, _cts.Token).ContinueWith(_ => { });
+                }
+            });
     }
 
     public static ResourceMonitor Start() => new();
@@ -1240,26 +1257,29 @@ internal sealed class ResourceMonitor : IDisposable
     // ProcessRssMbHwm is the OS high-water-mark (PeakWorkingSet64): the true peak the
     // 100 ms sampler can miss between ticks.
     //
-    // NvidiaSmiSample is null by design: this benchmark hard-pins the CPU
-    // engine (GpuDisableBootstrap + ResetToCpu), and nvidia-smi reports
-    // SYSTEM-WIDE GPU utilization/memory — sampling it here attributed
-    // whatever the desktop GPU happened to be doing (browser, compositor)
-    // to a CPU-only run. Mirrors the device-gated GPU sampling on the
-    // Python side (benchmark.py ResourceMonitor.track_gpu). If a GPU mode
-    // is ever added, gate the NvidiaSmi.TryRead() call on it.
+    // NvidiaSmiSample stays null. GpuMemMbPeak is sampled on GPU runs only (the constructor gates it on the engine),
+    // as benchmark.py gates its nvidia-smi sampling on a CUDA device: nvidia-smi reports device-wide memory, so a CPU
+    // run would attribute whatever the desktop GPU was doing (browser, compositor) to itself.
     public ResourceReport Summary()
     {
         _process.Refresh();
         return new ResourceReport(
             ProcessRssMbPeak: Math.Round(_rssMb.Count == 0 ? 0 : _rssMb.Max(), 3),
             ProcessRssMbHwm: Math.Round(_process.PeakWorkingSet64 / 1024d / 1024d, 3),
-            NvidiaSmiSample: null);
+            NvidiaSmiSample: null,
+            GpuMemMbPeak: GpuPeak());
+    }
+
+    private double? GpuPeak()
+    {
+        lock (_gpuMemMb) return _gpuMemMb.Count == 0 ? null : _gpuMemMb.Max();
     }
 
     public void Dispose()
     {
         _cts.Cancel();
         _task.Wait(TimeSpan.FromSeconds(2));
+        _gpuTask?.Wait(TimeSpan.FromSeconds(2));
         _cts.Dispose();
     }
 }
@@ -1401,7 +1421,8 @@ internal sealed record TrainingReport(double[] EpochSeconds, double TotalSeconds
     double SteadyStateEpochSecondsMedian, double SteadyStateEpochSecondsP25, double SteadyStateEpochSecondsP75, int StepsPerEpoch, double GradientSecondsAvg, double DataLoadingSecondsAvg, ResourceReport Resources,
     [property: System.Text.Json.Serialization.JsonNumberHandling(System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals)] double? FirstLoss,
     [property: System.Text.Json.Serialization.JsonNumberHandling(System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals)] double? LastLoss);
-internal sealed record ResourceReport(double ProcessRssMbPeak, double ProcessRssMbHwm, string? NvidiaSmiSample);
+internal sealed record ResourceReport(double ProcessRssMbPeak, double ProcessRssMbHwm, string? NvidiaSmiSample,
+    double? GpuMemMbPeak = null);
 internal sealed record InferenceReport(int BatchSize, double WarmupSecondsAvg, double SteadyStateLatencyMsAvg, double SteadyStateLatencyMsP95,
     double SteadyStateLatencyMsMedian, double SteadyStateLatencyMsP25, double SteadyStateLatencyMsP75, double ThroughputSamplesPerSecond, double MemoryMbPeak);
 

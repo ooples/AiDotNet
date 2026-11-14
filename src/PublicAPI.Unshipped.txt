@@ -682,7 +682,6 @@ const AiDotNet.Safety.Watermarking.WatermarkStatistics.FullConfidenceZ = 6 -> do
 const AiDotNet.Safety.Watermarking.WatermarkStatistics.ZeroConfidenceZ = 3 -> double
 override AiDotNet.NeuralNetworks.DenseNetNetwork<T>.ReleasesInferenceIntermediates.get -> bool
 override AiDotNet.NeuralNetworks.Layers.ConvolutionalLayer<T>.SetTrainingMode(bool isTraining) -> void
-override AiDotNet.NeuralNetworks.Layers.GRULayer<T>.SetTrainingMode(bool isTraining) -> void
 override AiDotNet.NeuralNetworks.Options.ColBERTOptions.Validate() -> void
 override AiDotNet.NeuralNetworks.ResNetNetwork<T>.ReleasesInferenceIntermediates.get -> bool
 override AiDotNet.NeuralNetworks.VGGNetwork<T>.ReleasesInferenceIntermediates.get -> bool
@@ -22930,3 +22929,11 @@ AiDotNet.NeuralNetworks.Layers.DenseBlockLayer<T>.DenseBlockLayer(int growthRate
 *REMOVED*AiDotNet.NeuralNetworks.Layers.TransitionLayer<T>.TransitionLayer(double compressionFactor = 0.5) -> void
 AiDotNet.NeuralNetworks.Layers.TransitionLayer<T>.TransitionLayer(double compressionFactor) -> void
 AiDotNet.NeuralNetworks.Layers.TransitionLayer<T>.TransitionLayer(double compressionFactor = 0.5, bool convolutionBias = true) -> void
+*REMOVED*AiDotNet.NeuralNetworks.Layers.GRULayer<T>.GRULayer(int hiddenSize, bool returnSequences = false, AiDotNet.Interfaces.IActivationFunction<T>? activation = null, AiDotNet.Interfaces.IActivationFunction<T>? recurrentActivation = null, bool stateful = false) -> void
+AiDotNet.NeuralNetworks.Layers.GRULayer<T>.GRULayer(int hiddenSize, bool returnSequences, AiDotNet.Interfaces.IActivationFunction<T>? activation, AiDotNet.Interfaces.IActivationFunction<T>? recurrentActivation, bool stateful) -> void
+AiDotNet.NeuralNetworks.Layers.GRULayer<T>.GRULayer(int hiddenSize, bool returnSequences = false, AiDotNet.Interfaces.IActivationFunction<T>? activation = null, AiDotNet.Interfaces.IActivationFunction<T>? recurrentActivation = null, bool stateful = false, bool resetAfter = true) -> void
+*REMOVED*AiDotNet.NeuralNetworks.Layers.GRULayer<T>.GRULayer(int hiddenSize, AiDotNet.Interfaces.IVectorActivationFunction<T>! vectorActivation, bool returnSequences = false, AiDotNet.Interfaces.IVectorActivationFunction<T>? vectorRecurrentActivation = null, bool stateful = false) -> void
+AiDotNet.NeuralNetworks.Layers.GRULayer<T>.GRULayer(int hiddenSize, AiDotNet.Interfaces.IVectorActivationFunction<T>! vectorActivation, bool returnSequences, AiDotNet.Interfaces.IVectorActivationFunction<T>? vectorRecurrentActivation, bool stateful) -> void
+AiDotNet.NeuralNetworks.Layers.GRULayer<T>.GRULayer(int hiddenSize, AiDotNet.Interfaces.IVectorActivationFunction<T>! vectorActivation, bool returnSequences = false, AiDotNet.Interfaces.IVectorActivationFunction<T>? vectorRecurrentActivation = null, bool stateful = false, bool resetAfter = true) -> void
+AiDotNet.NeuralNetworks.Layers.GRULayer<T>.ResetAfter.get -> bool
+*REMOVED*override AiDotNet.NeuralNetworks.Layers.LSTMLayer<T>.SetTrainingMode(bool isTraining) -> void
