@@ -203,8 +203,12 @@ public partial class RuleBasedContentClassifier<T> : ContentClassifierBase<T>
     }
 
     /// <summary>The proportion of patterns matched, in T.</summary>
-    private static T MatchProportion(int matched, int total) =>
-        NumOps.Divide(NumOps.FromDouble(matched), NumOps.FromDouble(total));
+    /// <remarks>
+    /// Divided while both counts are exact (in double) and rounded to T once: Half represents integers above
+    /// 2048 only approximately, so converting the counts first could move the ratio across the threshold.
+    /// </remarks>
+    internal static T MatchProportion(int matched, int total) =>
+        NumOps.FromDouble((double)matched / total);
 
     private void InitializeDefaultPatterns()
     {
