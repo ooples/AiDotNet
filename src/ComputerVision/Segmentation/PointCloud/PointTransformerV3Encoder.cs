@@ -147,7 +147,11 @@ public sealed partial class PointTransformerV3Encoder<T> : LayerBase<T>, IShapeC
         _enableConditionalPositionalEncoding = enableConditionalPositionalEncoding;
         _preNorm = preNorm;
         _shuffleOrders = shuffleOrders;
-        _serializationOrders = serializationOrders ?? new[] { "z", "z-trans", "hilbert", "hilbert-trans" };
+        _serializationOrders = serializationOrders ?? SpaceFillingCurves.NamesOf(new[]
+        {
+            PointSerializationOrder.ZOrder, PointSerializationOrder.ZOrderTransposed,
+            PointSerializationOrder.Hilbert, PointSerializationOrder.HilbertTransposed
+        });
         _revision = revision;
         _encoderOnly = encoderOnly;
         _maskToken = maskToken;

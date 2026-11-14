@@ -33,7 +33,7 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 [PaperDefault(nameof(EnableConditionalPositionalEncoding), true, Source = "Wu et al. 2024, Sec. 3.3: enhanced conditional positional encoding (xCPE)")]
 [PaperDefault(nameof(PreNorm), true, Source = "Wu et al. 2024, Sec. 3.3 and Table 4: pre-norm with LayerNorm")]
 [PaperDefault(nameof(ShuffleOrders), true, Source = "Wu et al. 2024, Sec. 3.2: shuffle order")]
-[PaperDefault(nameof(SerializationOrders), new[] { "z", "z-trans", "hilbert", "hilbert-trans" }, Source = "Wu et al. 2024, appendix model settings (Pointcept PT-v3m1 base): serialization pattern Z + TZ + H + TH")]
+[PaperDefault(nameof(SerializationOrders), new[] { PointSerializationOrder.ZOrder, PointSerializationOrder.ZOrderTransposed, PointSerializationOrder.Hilbert, PointSerializationOrder.HilbertTransposed }, Source = "Wu et al. 2024, appendix model settings (Pointcept PT-v3m1 base): serialization pattern Z + TZ + H + TH")]
 public class PointTransformerV3Options : PointTransformerV3EncoderOptions
 {
     /// <summary>Initializes a new instance with the PTv3 m1 base values.</summary>

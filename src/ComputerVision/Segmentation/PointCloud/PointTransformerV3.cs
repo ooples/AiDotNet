@@ -155,7 +155,7 @@ public partial class PointTransformerV3<T> : Common.SemanticSegmentationBase<T>
         Encoder = new PointTransformerV3Encoder<T>(o.InputChannels, false, o.GridSize, o.Strides, o.EncoderDepths,
             o.EncoderChannels, o.EncoderNumHeads, o.EncoderPatchSizes, o.DecoderDepths, o.DecoderChannels,
             o.DecoderNumHeads, o.DecoderPatchSizes, o.MlpRatio, o.DropPathRate, o.EnableConditionalPositionalEncoding,
-            o.PreNorm, o.ShuffleOrders, o.SerializationOrders, PointTransformerV3Revision.M1Base, false, false, o.Seed);
+            o.PreNorm, o.ShuffleOrders, SpaceFillingCurves.NamesOf(o.SerializationOrders), PointTransformerV3Revision.M1Base, false, false, o.Seed);
         Layers.Add(Encoder);
         _encoderLayerEnd = 1;
         // Pointcept seg_head: Linear(dec_channels[0], num_classes).

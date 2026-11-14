@@ -418,7 +418,7 @@ public partial class Sonata<T> : Common.SemanticSegmentationBase<T>
         var o = _options;
         return new PointTransformerV3Encoder<T>(o.InputChannels, true, o.GridSize, o.Strides, o.EncoderDepths,
             o.EncoderChannels, o.EncoderNumHeads, o.EncoderPatchSizes, null, null, null, null, o.MlpRatio, dropPath,
-            o.EnableConditionalPositionalEncoding, o.PreNorm, o.ShuffleOrders, o.SerializationOrders,
+            o.EnableConditionalPositionalEncoding, o.PreNorm, o.ShuffleOrders, SpaceFillingCurves.NamesOf(o.SerializationOrders),
             PointTransformerV3Revision.M2Sonata, true, true, seed);
     }
 

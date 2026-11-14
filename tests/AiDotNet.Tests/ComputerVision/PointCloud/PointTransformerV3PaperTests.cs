@@ -48,17 +48,17 @@ public class PointTransformerV3PaperTests
 
     public static IEnumerable<object[]> GridCurves()
     {
-        yield return new object[] { "z", ZCodes };
-        yield return new object[] { "z-trans", ZTransCodes };
-        yield return new object[] { "hilbert", HilbertCodes };
-        yield return new object[] { "hilbert-trans", HilbertTransCodes };
+        yield return new object[] { PointSerializationOrder.ZOrder, ZCodes };
+        yield return new object[] { PointSerializationOrder.ZOrderTransposed, ZTransCodes };
+        yield return new object[] { PointSerializationOrder.Hilbert, HilbertCodes };
+        yield return new object[] { PointSerializationOrder.HilbertTransposed, HilbertTransCodes };
     }
 
     [Theory]
     [MemberData(nameof(GridCurves))]
-    public void Curve_CodesMatchPointceptOnFourCubedGrid(string order, long[] expected)
+    public void Curve_CodesMatchPointceptOnFourCubedGrid(PointSerializationOrder order, long[] expected)
     {
-        var curve = SpaceFillingCurves.Resolve(order);
+        var curve = SpaceFillingCurves.Get(order);
         var actual = new long[64];
         for (int x = 0; x < 4; x++)
             for (int y = 0; y < 4; y++)
@@ -215,7 +215,7 @@ public class PointTransformerV3PaperTests
         Assert.Equal(new[] { 2, 2, 2, 2 }, options.DecoderDepths);
         Assert.Equal(new[] { 64, 64, 128, 256 }, options.DecoderChannels);
         Assert.All(options.EncoderPatchSizes, p => Assert.Equal(1024, p));
-        Assert.Equal(new[] { "z", "z-trans", "hilbert", "hilbert-trans" }, options.SerializationOrders);
+        Assert.Equal(new[] { PointSerializationOrder.ZOrder, PointSerializationOrder.ZOrderTransposed, PointSerializationOrder.Hilbert, PointSerializationOrder.HilbertTransposed }, options.SerializationOrders);
         Assert.Equal(4.0, options.MlpRatio);
         Assert.Equal(0.3, options.DropPathRate);
         Assert.True(options.EnableConditionalPositionalEncoding);

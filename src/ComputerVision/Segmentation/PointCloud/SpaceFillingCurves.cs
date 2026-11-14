@@ -49,6 +49,30 @@ public static class SpaceFillingCurves
     /// <returns>A new array, so callers may modify it.</returns>
     public static ISpaceFillingCurve[] PaperOrders() => new[] { ZOrder, ZOrderTransposed, Hilbert, HilbertTransposed };
 
+    /// <summary>The curve for a built-in <see cref="PointSerializationOrder"/>.</summary>
+    /// <param name="order">The order.</param>
+    /// <returns>The shared curve instance.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="order"/> is not a defined value.</exception>
+    public static ISpaceFillingCurve Get(PointSerializationOrder order) => order switch
+    {
+        PointSerializationOrder.ZOrder => ZOrder,
+        PointSerializationOrder.ZOrderTransposed => ZOrderTransposed,
+        PointSerializationOrder.Hilbert => Hilbert,
+        PointSerializationOrder.HilbertTransposed => HilbertTransposed,
+        _ => throw new ArgumentOutOfRangeException(nameof(order), order, "Unknown serialization order.")
+    };
+
+    /// <summary>The registered curve names of built-in orders, as the encoder stores them.</summary>
+    /// <param name="orders">The orders.</param>
+    /// <returns>One <see cref="ISpaceFillingCurve.Name"/> per order.</returns>
+    public static string[] NamesOf(IReadOnlyList<PointSerializationOrder> orders)
+    {
+        if (orders is null) throw new ArgumentNullException(nameof(orders));
+        var names = new string[orders.Count];
+        for (int i = 0; i < names.Length; i++) names[i] = Get(orders[i]).Name;
+        return names;
+    }
+
     /// <summary>Registers a curve so models referring to its name can be rebuilt.</summary>
     /// <param name="curve">The curve; replaces any curve already registered under the same name.</param>
     public static void Register(ISpaceFillingCurve curve)

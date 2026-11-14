@@ -52,7 +52,7 @@ public abstract class PointTransformerV3EncoderOptions : SegmentationModelOption
         EnableConditionalPositionalEncoding = other.EnableConditionalPositionalEncoding;
         PreNorm = other.PreNorm;
         ShuffleOrders = other.ShuffleOrders;
-        SerializationOrders = (string[])other.SerializationOrders.Clone();
+        SerializationOrders = (PointSerializationOrder[])other.SerializationOrders.Clone();
     }
 
     /// <summary>
@@ -108,15 +108,19 @@ public abstract class PointTransformerV3EncoderOptions : SegmentationModelOption
     public bool ShuffleOrders { get; set; } = true;
 
     /// <summary>
-    /// Names of the <see cref="ISpaceFillingCurve"/> orders, resolved through
-    /// <see cref="SpaceFillingCurves.Resolve(string)"/>. Default: z, z-trans, hilbert, hilbert-trans.
+    /// The serialization orders the blocks cycle through. Default: z, z-trans, hilbert, hilbert-trans.
     /// </summary>
     /// <remarks>
-    /// <b>For Beginners:</b> Add your own curve by implementing <see cref="ISpaceFillingCurve"/>,
-    /// registering it with <see cref="SpaceFillingCurves.Register(ISpaceFillingCurve)"/> and listing
-    /// its name here.
+    /// <b>For Beginners:</b> Reorder, repeat or drop entries to change which curves the blocks use.
+    /// For a curve of your own, implement <see cref="ISpaceFillingCurve"/>, register it with
+    /// <see cref="SpaceFillingCurves.Register(ISpaceFillingCurve)"/> and pass its name to
+    /// <see cref="PointTransformerV3Encoder{T}"/>.
     /// </remarks>
-    public string[] SerializationOrders { get; set; } = { "z", "z-trans", "hilbert", "hilbert-trans" };
+    public PointSerializationOrder[] SerializationOrders { get; set; } =
+    {
+        PointSerializationOrder.ZOrder, PointSerializationOrder.ZOrderTransposed,
+        PointSerializationOrder.Hilbert, PointSerializationOrder.HilbertTransposed
+    };
 
     /// <summary>Throws when the backbone settings cannot build a network.</summary>
     /// <param name="encoderOnly">Whether the decoder arrays are ignored.</param>
@@ -156,7 +160,7 @@ public abstract class PointTransformerV3EncoderOptions : SegmentationModelOption
         if (!(MlpRatio > 0)) throw new ArgumentException("MlpRatio must be positive.");
         if (DropPathRate < 0 || DropPathRate >= 1) throw new ArgumentException("DropPathRate must be in [0, 1).");
         if (SerializationOrders.Length == 0) throw new ArgumentException("SerializationOrders needs at least one curve.");
-        foreach (var name in SerializationOrders) SpaceFillingCurves.Resolve(name);
+        foreach (var order in SerializationOrders) SpaceFillingCurves.Get(order);
         ValidateSegmentationCore();
     }
 }
