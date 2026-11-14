@@ -216,17 +216,20 @@ public sealed class KoLeoRegularizer<T> : ISonataFeatureRegularizer<T>
     internal int[] NearestNeighbours(IEngine engine, INumericOperations<T> numOps, Tensor<T> x, int n, int c)
     {
         var nearest = new int[n];
-        var bestScore = new T[n];
-        var found = new bool[n];
         int block = BlockSize;
+        int tiles = (n + block - 1) / block;
+        var selfPenalty = numOps.FromDouble(3.0);
         using (new NoGradScope<T>())
         {
             for (int queryStart = 0; queryStart < n; queryStart += block)
             {
                 int queryCount = Math.Min(block, n - queryStart);
                 var queries = engine.TensorSlice(x, new[] { queryStart, 0 }, new[] { queryCount, c });
-                for (int referenceStart = 0; referenceStart < n; referenceStart += block)
+                var tileMaxima = new Tensor<T>[tiles];
+                var tileIndices = new int[tiles][];
+                for (int t = 0; t < tiles; t++)
                 {
+                    int referenceStart = t * block;
                     int referenceCount = Math.Min(block, n - referenceStart);
                     var references = engine.TensorSlice(x, new[] { referenceStart, 0 }, new[] { referenceCount, c });
                     var dots = engine.TensorMatMul(queries, engine.TensorPermute(references, new[] { 1, 0 }));
@@ -234,22 +237,18 @@ public sealed class KoLeoRegularizer<T> : ISonataFeatureRegularizer<T>
                     {
                         // Tiles share one grid, so only the diagonal tile holds self pairs; push them below
                         // -1, the smallest cosine, so a point never picks itself.
-                        var self = engine.TensorMultiplyScalar(engine.TensorEye<T>(queryCount), numOps.FromDouble(3.0));
-                        dots = engine.TensorSubtract(dots, self);
+                        dots = engine.TensorSubtract(dots, engine.TensorMultiplyScalar(engine.TensorEye<T>(queryCount), selfPenalty));
                     }
 
-                    var tileBest = engine.ReduceMax(dots, new[] { 1 }, false).ToArray();
-                    var tileIndex = engine.TensorArgMax(dots, 1).ToArray();
-                    for (int i = 0; i < queryCount; i++)
-                    {
-                        int row = queryStart + i;
-                        // Strictly greater keeps the earliest index on ties, as one argmax over the row would.
-                        if (found[row] && !numOps.GreaterThan(tileBest[i], bestScore[row])) continue;
-                        found[row] = true;
-                        bestScore[row] = tileBest[i];
-                        nearest[row] = referenceStart + tileIndex[i];
-                    }
+                    tileMaxima[t] = engine.ReduceMax(dots, new[] { 1 }, true);
+                    tileIndices[t] = engine.TensorArgMax(dots, 1).ToArray();
                 }
+
+                // [queries, tiles] of per-tile maxima: argmax picks the first tile holding the row maximum,
+                // and within it the first column, so ties resolve to the earliest index as one argmax would.
+                var winner = engine.TensorArgMax(tiles == 1 ? tileMaxima[0] : engine.TensorConcatenate(tileMaxima, 1), 1).ToArray();
+                for (int i = 0; i < queryCount; i++)
+                    nearest[queryStart + i] = winner[i] * block + tileIndices[winner[i]][i];
             }
         }
 

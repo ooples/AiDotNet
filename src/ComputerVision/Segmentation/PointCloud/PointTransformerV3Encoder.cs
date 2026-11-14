@@ -138,11 +138,11 @@ public sealed partial class PointTransformerV3Encoder<T> : LayerBase<T>, IShapeC
         // passed (or reusing options for another model) cannot desynchronise the built network.
         _strides = Copy(strides) ?? new[] { 2, 2, 2, 2 };
         _encoderDepths = Copy(encoderDepths) ?? new[] { 2, 2, 2, 6, 2 };
-        _encoderChannels = Copy(encoderChannels) ?? Copy(DefaultEncoderChannels);
+        _encoderChannels = Copy(encoderChannels) ?? (int[])DefaultEncoderChannels.Clone();
         _encoderNumHeads = Copy(encoderNumHeads) ?? new[] { 2, 4, 8, 16, 32 };
         _encoderPatchSizes = Copy(encoderPatchSizes) ?? Repeat(1024, _encoderDepths.Length);
         _decoderDepths = Copy(decoderDepths) ?? new[] { 2, 2, 2, 2 };
-        _decoderChannels = Copy(decoderChannels) ?? Copy(DefaultDecoderChannels);
+        _decoderChannels = Copy(decoderChannels) ?? (int[])DefaultDecoderChannels.Clone();
         _decoderNumHeads = Copy(decoderNumHeads) ?? new[] { 4, 4, 8, 16 };
         _decoderPatchSizes = Copy(decoderPatchSizes) ?? Repeat(1024, _decoderDepths.Length);
         _mlpRatio = mlpRatio;
@@ -317,16 +317,7 @@ public sealed partial class PointTransformerV3Encoder<T> : LayerBase<T>, IShapeC
 
         int total = clouds * points;
         var flat = Engine.Reshape(input, new[] { total, width });
-        // Geometry is read straight into double: routing it through float would merge voxels of a
-        // double-precision cloud far from the origin (float has a 0.125 m step at 2^20 m).
-        var values = flat.ToArray();
-        var coordinates = new double[total * 3];
-        for (int i = 0; i < total; i++)
-        {
-            coordinates[i * 3] = NumOps.ToDouble(values[i * width]);
-            coordinates[i * 3 + 1] = NumOps.ToDouble(values[i * width + 1]);
-            coordinates[i * 3 + 2] = NumOps.ToDouble(values[i * width + 2]);
-        }
+        var coordinates = ReadCoordinates(flat.ToArray(), total, width);
 
         var features = _coordinatesAsFeatures
             ? flat
@@ -496,6 +487,39 @@ public sealed partial class PointTransformerV3Encoder<T> : LayerBase<T>, IShapeC
     }
 
     private static int[]? Copy(int[]? values) => values is null ? null : (int[])values.Clone();
+
+    /// <summary>
+    /// The xyz of every row, in double. A double tensor is read as is: routing it through float would
+    /// merge voxels of a cloud far from the origin (float has a 0.125 m step at 2^20 m). Every other
+    /// network type (float, half) is exactly representable in float, so the vectorised float span
+    /// conversion is lossless for it.
+    /// </summary>
+    private double[] ReadCoordinates(T[] values, int total, int width)
+    {
+        var coordinates = new double[total * 3];
+        if (values is double[] asDouble)
+        {
+            for (int i = 0; i < total; i++)
+            {
+                coordinates[i * 3] = asDouble[i * width];
+                coordinates[i * 3 + 1] = asDouble[i * width + 1];
+                coordinates[i * 3 + 2] = asDouble[i * width + 2];
+            }
+
+            return coordinates;
+        }
+
+        var asFloat = new float[values.Length];
+        NumOps.ToFloatSpan(values, asFloat);
+        for (int i = 0; i < total; i++)
+        {
+            coordinates[i * 3] = asFloat[i * width];
+            coordinates[i * 3 + 1] = asFloat[i * width + 1];
+            coordinates[i * 3 + 2] = asFloat[i * width + 2];
+        }
+
+        return coordinates;
+    }
 
     private static int[] Repeat(int value, int count)
     {
