@@ -11295,8 +11295,6 @@
 3	ADNELEM002|AiDotNet.ComputerVision.Segmentation.PointCloud.ConcertoIntraModalObjective<T>.ComputeLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>?, double, double)
 3	ADNELEM002|AiDotNet.ComputerVision.Segmentation.PointCloud.ConcertoIntraModalObjective<T>.UpdateCenter(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, AiDotNet.Tensors.LinearAlgebra.Tensor<T>, double)
 3	ADNELEM002|AiDotNet.ComputerVision.Segmentation.PointCloud.ConcertoIntraModalObjective<T>.UpdateTeacher(AiDotNet.Tensors.LinearAlgebra.Vector<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>, double)
-1	ADNELEM002|AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3<T>.PredictOnnx(AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
-1	ADNELEM002|AiDotNet.ComputerVision.Segmentation.PointCloud.Sonata<T>.PredictOnnx(AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
 1	ADNELEM002|AiDotNet.ComputerVision.Segmentation.Referring.LISA<T>.PredictOnnx(AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
 3	ADNELEM002|AiDotNet.ComputerVision.Segmentation.Referring.LISA<T>.SegmentFromExpression(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, string)
 1	ADNELEM002|AiDotNet.ComputerVision.Segmentation.Referring.OMGLLaVA<T>.PredictOnnx(AiDotNet.Tensors.LinearAlgebra.Tensor<T>)

@@ -1,58 +1,53 @@
-﻿using System.IO;
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.Optimizers;
-using Microsoft.ML.OnnxRuntime;
-using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
 namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 
 /// <summary>
-/// Point Transformer V3: Simpler, Faster, Stronger 3D point cloud segmentation.
+/// Point Transformer V3: Simpler, Faster, Stronger -- per-point semantic segmentation of 3D point clouds.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// <b>For Beginners:</b> 3D point cloud semantic segmentation. Autonomous driving LiDAR processing.
-///
-/// Common use cases:
-/// - 3D point cloud semantic segmentation
-/// - Autonomous driving LiDAR processing
-/// - Indoor scene understanding
-/// - 3D object part segmentation
+/// <b>For Beginners:</b> Give the model a point cloud -- a list of points, each with its xyz position
+/// and a few extra values such as colour and surface normal -- and it returns a score for every class
+/// at every point. It is used for LiDAR and indoor-scan understanding.
 /// </para>
 /// <para>
-/// <b>Technical Details:</b>
-/// - Serialized attention replacing expensive k-NN search
-/// - Space-filling curves (Hilbert, Z-order) for point serialization
-/// - Patch-based attention for scalability to large point clouds
-/// - Supports both indoor and outdoor 3D segmentation
+/// <b>Architecture</b> (Wu et al., CVPR 2024; Pointcept <c>PT-v3m1</c>), built by
+/// <see cref="PointTransformerV3Encoder{T}"/>:
 /// </para>
+/// <list type="bullet">
+/// <item>Serialization: points are voxelised (<c>grid_size</c> 0.02 m) and ordered along Z-order and
+/// Hilbert curves and their xy-transposed variants; each block attends in one order, cycling through
+/// them, and training shuffles the orders after every pooling.</item>
+/// <item>Serialized patch attention: multi-head attention among patches of 1024 consecutive points of
+/// the current order, with xCPE (a 3x3x3 submanifold convolution) before it.</item>
+/// <item>Grid pooling between stages (stride 2, max-pool of the projected features) and unpooling that
+/// adds the coarse features back to their points, U-Net style.</item>
+/// <item>Encoder depths (2, 2, 2, 6, 2), channels (32, 64, 128, 256, 512), heads (2, 4, 8, 16, 32);
+/// decoder depths (2, 2, 2, 2), channels (64, 64, 128, 256); pre-norm, MLP ratio 4, drop path 0.3;
+/// a linear segmentation head on the finest decoder features.</item>
+/// </list>
 /// <para>
-/// <b>Reference:</b> Wu et al., "Point Transformer V3: Simpler, Faster, Stronger", CVPR 2024.
+/// <b>Input</b>: <c>[points, 3 + InputChannels]</c> or <c>[batch, points, 3 + InputChannels]</c>,
+/// xyz in metres first. <b>Output</b>: class logits <c>[..., points, NumClasses]</c>.
 /// </para>
 /// </remarks>
 /// <example>
 /// <code>
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
-///     InputType.ThreeDimensional, NeuralNetworkTaskType.ImageSegmentation,
-///     inputSize: 6, outputSize: 40);
+///     InputType.TwoDimensional, NeuralNetworkTaskType.ImageSegmentation,
+///     inputSize: 9, outputSize: 20);
+/// var options = new PointTransformerV3Options { NumClasses = 20 };
+/// var model = new PointTransformerV3&lt;float&gt;(architecture, options: options);
 ///
-/// var trainPoints = Tensor&lt;float&gt;.CreateRandom(4, 128, 6);
-/// var trainLabels = Tensor&lt;float&gt;.CreateRandom(4, 128, 40);
-///
-/// // Every tunable is set through the options object; these are the defaults.
-/// var options = new PointTransformerV3Options { NumClasses = 40, DropRate = 0.1, ModelSize = PointTransformerV3ModelSize.Base };
-/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
-///     .ConfigureModel(new PointTransformerV3&lt;float&gt;(architecture, options: options))
-///     .Build(trainPoints, trainLabels);
-///
-/// var pointCloudTensor = Tensor&lt;float&gt;.CreateRandom(1, 128, 6);
-/// Tensor&lt;float&gt; labels = result.Predict(pointCloudTensor);
+/// var cloud = Tensor&lt;float&gt;.CreateRandom(4096, 9);   // xyz, colour, normal
+/// Tensor&lt;float&gt; logits = model.Predict(cloud);          // [4096, 20]
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -61,190 +56,152 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 [ModelTask(ModelTask.Segmentation)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Point Transformer V3: Simpler, Faster, Stronger", "https://arxiv.org/abs/2312.10035", Year = 2024, Authors = "Wu et al.")]
+[ResearchPaper("Point Transformer V3: Simpler, Faster, Stronger", "https://arxiv.org/abs/2312.10035", Year = 2024,
+    Authors = "Xiaoyang Wu, Li Jiang, Peng-Shuai Wang, Zhijian Liu, Xihui Liu, Yu Qiao, Wanli Ouyang, Tong He, Hengshuang Zhao")]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Length, TensorAxis.Features, Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Length, TensorAxis.Classes, Direction = TensorLayoutDirection.Output, BatchOptional = true)]
 public partial class PointTransformerV3<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly PointTransformerV3Options _options;
 
-    #region Fields
-    // Only PointTransformerV3's OWN configuration lives here. _height, _width, _channels,
-    // _numClasses, _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and
-    // _encoderLayerEnd all come from SemanticSegmentationBase -> SegmentationModelBase.
-    private readonly PointTransformerV3ModelSize _modelSize;
-    private readonly int[] _channelDims;
-    private readonly int _decoderDim;
-    private readonly int[] _depths;
-    private readonly double _dropRate;
-    #endregion
-
-    #region Properties
-    // SupportsTraining, NumClasses, InputHeight, InputWidth and IsOnnxMode are all inherited and
-    // say exactly the same thing.
-    internal bool UseNativeMode => _useNativeMode;
-    internal PointTransformerV3ModelSize ModelSize => _modelSize;
-    #endregion
-
-    #region Constructors
     /// <summary>
     /// Initializes PointTransformerV3 in native (trainable) mode.
     /// </summary>
-    /// <param name="architecture">Neural network architecture defining input dimensions.</param>
+    /// <param name="architecture">Neural network architecture; custom layers in it replace the default network.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
-    /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
-    /// <param name="options">Optional model options.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Creates a trainable PointTransformerV3 model.
-    /// </para>
-    /// </remarks>
+    /// <param name="lossFunction">Loss function (default: per-point cross-entropy over the last axis).</param>
+    /// <param name="options">Model options; the defaults are the PTv3 m1 base configuration.</param>
     public PointTransformerV3(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         PointTransformerV3Options? options = null)
-        // The base resolves height/width/channels/numClasses/native-mode from the architecture and
-        // defaults `optimizer` lazily via CreateDefaultOptimizer(), so null is passed straight through.
-        : base(architecture, optimizer, lossFunction, (options ??= new PointTransformerV3Options()).NumClasses)
+        : base(architecture, optimizer, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(-1),
+            (options ??= new PointTransformerV3Options()).NumClasses)
     {
-        _options = options; Options = _options;
-        // Point clouds are [C, N] not images: this model's own fallback geometry is 1x1x6, not the
-        // base's 512x512x3.
-        if (architecture.InputHeight <= 0) _height = 1;
-        if (architecture.InputWidth <= 0) _width = 1;
-        if (architecture.InputDepth <= 0) _channels = 6;
-        _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
+        _options = options;
+        Options = _options;
+        _options.Validate();
+        _channels = _options.InputChannels + 3;
         InitializeLayers();
     }
 
     /// <summary>
     /// Initializes PointTransformerV3 in ONNX (inference-only) mode.
     /// </summary>
-    /// <param name="architecture">Neural network architecture defining input dimensions.</param>
+    /// <param name="architecture">Neural network architecture.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
     /// <param name="options">Optional model options.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Loads a pre-trained PointTransformerV3 from ONNX for inference.
-    /// </para>
-    /// </remarks>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
     public PointTransformerV3(NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         PointTransformerV3Options? options = null)
-        // The base validates the path, sets ONNX mode, resolves the input geometry and opens the
-        // InferenceSession.
         : base(architecture, onnxModelPath, (options ??= new PointTransformerV3Options()).NumClasses)
     {
-        _options = options; Options = _options;
-        // Point clouds are [C, N] not images: this model's own fallback geometry is 1x1x6, not the
-        // base's 512x512x3.
-        if (architecture.InputHeight <= 0) _height = 1;
-        if (architecture.InputWidth <= 0) _width = 1;
-        if (architecture.InputDepth <= 0) _channels = 6;
-        _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
+        _options = options;
+        Options = _options;
+        _options.Validate();
+        _channels = _options.InputChannels + 3;
         InitializeLayers();
     }
-    #endregion
 
-    #region Public Methods
-    /// <summary>
-    /// Runs a forward pass to produce segmentation logits.
-    /// </summary>
-    /// <param name="input">The input tensor [C, H, W] or [B, C, H, W].</param>
-    /// <returns>Segmentation logits tensor.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Pass an image to get a per-pixel class prediction map.
-    /// </para>
-    /// </remarks>
+    internal bool UseNativeMode => _useNativeMode;
+
+    /// <summary>The backbone, or null in ONNX mode or with custom architecture layers.</summary>
+    internal PointTransformerV3Encoder<T>? Encoder { get; private set; }
+
+    /// <summary>The data-dependent serialization and pooling indices cannot be fused into a compiled plan.</summary>
+    protected override bool SupportsFusedCompiledTraining => false;
+
+    /// <inheritdoc />
+    public override IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => PointCloudContract(inputRank, _numClasses);
+
+    /// <summary>Argmax over the class (last) axis: one class index per point.</summary>
+    public override Tensor<T> GetClassMap(Tensor<T> image) => LastAxisArgMax(Segment(image));
+
+    /// <summary>Softmax over the class (last) axis.</summary>
+    public override Tensor<T> GetProbabilityMap(Tensor<T> image) => Engine.TensorSoftmax(Segment(image), -1);
+
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
-
-    #endregion
-
-    #region Private Methods
-    private static (int[] ChannelDims, int[] Depths, int DecoderDim) GetModelConfig(PointTransformerV3ModelSize modelSize) => modelSize switch
-    {
-        PointTransformerV3ModelSize.Base => ([48, 96, 192, 384], [2, 2, 6, 2], 256),
-        PointTransformerV3ModelSize.Large => ([64, 128, 256, 512], [2, 4, 8, 4], 256),
-        _ => ([48, 96, 192, 384], [2, 2, 6, 2], 256)
-    };
 
     /// <inheritdoc />
     protected override Tensor<T> Forward(Tensor<T> input)
     {
-        bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
+        if (input is null) throw new ArgumentNullException(nameof(input));
         var features = input;
-        for (int i = 0; i < _encoderLayerEnd; i++) features = Layers[i].Forward(features);
-        for (int i = _encoderLayerEnd; i < Layers.Count; i++) features = Layers[i].Forward(features);
-        if (!hasBatch) features = RemoveBatchDimension(features); return features;
+        foreach (var layer in Layers) features = layer.Forward(features);
+        return features;
     }
 
     /// <inheritdoc />
-    protected override Tensor<T> PredictOnnx(Tensor<T> input)
-    {
-        if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
-        bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
-        var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
-        string inputName = _onnxSession.InputMetadata.Keys.FirstOrDefault() ?? "images";
-        var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
-        using var results = _onnxSession.Run(inputs);
-        var outputTensor = results.First().AsTensor<float>();
-        var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++) outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-        var result = new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
-        if (!hasBatch) result = RemoveBatchDimension(result); return result;
-    }
-    #endregion
-
-    #region Abstract Implementation
-    /// <summary>
-    /// Initializes the encoder and decoder layers.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In native mode, builds the neural network layers.
-    /// In ONNX mode, no layers are created.
-    /// </para>
-    /// </remarks>
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode) { ClearLayers(); return; }
-        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
-        { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Architecture.Layers.Count / 2; }
-        else
+        if (!_useNativeMode)
         {
-            var encoderLayers = LayerHelper<T>.CreatePointTransformerV3EncoderLayers(_channels, _height, _width, _channelDims, _depths, _dropRate).ToList();
-            _encoderLayerEnd = encoderLayers.Count; Layers.AddRange(encoderLayers);
-            int fH = _height / 32, fW = _width / 32;
-            var decoderLayers = LayerHelper<T>.CreatePointTransformerV3DecoderLayers(_channelDims[^1], _decoderDim, _numClasses, fH, fW);
-            Layers.AddRange(decoderLayers);
+            ClearLayers();
+            return;
         }
+
+        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            _encoderLayerEnd = Math.Max(0, Architecture.Layers.Count - 1);
+            return;
+        }
+
+        var o = _options;
+        Encoder = new PointTransformerV3Encoder<T>(o.InputChannels, false, o.GridSize, o.Strides, o.EncoderDepths,
+            o.EncoderChannels, o.EncoderNumHeads, o.EncoderPatchSizes, o.DecoderDepths, o.DecoderChannels,
+            o.DecoderNumHeads, o.DecoderPatchSizes, o.MlpRatio, o.DropPathRate, o.EnableConditionalPositionalEncoding,
+            o.PreNorm, o.ShuffleOrders, o.SerializationOrders, PointTransformerV3Revision.M1Base, false, false, o.Seed);
+        Layers.Add(Encoder);
+        _encoderLayerEnd = 1;
+        // Pointcept seg_head: Linear(dec_channels[0], num_classes).
+        Layers.Add(new DenseLayer<T>(_numClasses, (IActivationFunction<T>?)null));
     }
 
-    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
-    // exactly the same enumeration, so this said nothing the base does not already say.
-    /// <summary>
-    /// Collects metadata describing this model's configuration.
-    /// </summary>
-    /// <returns>Model metadata.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Returns a summary for saving or display.
-    /// </para>
-    /// </remarks>
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        AdditionalInfo = new Dictionary<string, object> { { "ModelName", "PointTransformerV3" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "ModelSize", _modelSize.ToString() }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
+        AdditionalInfo = new Dictionary<string, object>
+        {
+            { "ModelName", "PointTransformerV3" },
+            { "Revision", PointTransformerV3Revision.M1Base.ToString() },
+            { "InputChannels", _options.InputChannels },
+            { "NumClasses", _numClasses },
+            { "EncoderDepths", string.Join(",", _options.EncoderDepths) },
+            { "EncoderChannels", string.Join(",", _options.EncoderChannels) },
+            { "UseNativeMode", _useNativeMode },
+            { "NumLayers", Layers.Count }
+        },
         ModelDataProvider = () => SerializeForMetadata()
     };
-    #endregion
 
-    // NumClasses, InputHeight, InputWidth, IsOnnxMode and Segment come from SegmentationModelBase;
-    // GetClassMap (argmax of Segment) and GetProbabilityMap (softmax of Segment) come from
-    // SemanticSegmentationBase and are the same two expressions this file used to spell out.
+    /// <summary>The per-point output contract shared by PTv3 and Sonata.</summary>
+    internal static IReadOnlyList<OutputAxisContract>? PointCloudContract(int inputRank, int classes)
+    {
+        var points = new OutputAxisContract(TensorAxis.Length, AxisRelation.Same(TensorAxis.Length));
+        var logits = new OutputAxisContract(TensorAxis.Classes, AxisRelation.Fixed(classes));
+        return inputRank switch
+        {
+            2 => new[] { points, logits },
+            3 => new[] { new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)), points, logits },
+            _ => null
+        };
+    }
+
+    /// <summary>Argmax over the last axis, returned in <typeparamref name="T"/>.</summary>
+    internal static Tensor<T> LastAxisArgMax(Tensor<T> logits)
+    {
+        var indices = AiDotNetEngine.Current.TensorArgMax(logits, logits.Rank - 1).ToArray();
+        var asFloat = new float[indices.Length];
+        for (int i = 0; i < indices.Length; i++) asFloat[i] = indices[i];
+        var values = new T[indices.Length];
+        MathHelper.GetNumericOperations<T>().FromFloatSpan(asFloat, values);
+        var shape = new int[logits.Rank - 1];
+        for (int i = 0; i < shape.Length; i++) shape[i] = logits.Shape[i];
+        return new Tensor<T>(values, shape);
+    }
 }
