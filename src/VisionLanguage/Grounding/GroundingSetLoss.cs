@@ -110,7 +110,9 @@ internal sealed class GroundingSetLoss<T>
         for (int t = 0; t < g; t++) targetOfQuery[queryOfTarget[t]] = t;
         var labelsWithNone = _engine.TensorConcatenate(new[] { targetLabels, new Tensor<T>(new[] { 1, c }) }, 0);
         var y = _engine.TensorIndexSelect(labelsWithNone, new Tensor<int>(new[] { q }, Vector<int>.FromArray(targetOfQuery)), 0);
-        var classLoss = _engine.TensorMultiplyScalar(_engine.ReduceSum(FocalLoss(logits, y), new[] { 0, 1 }, false), inverseCount);
+        // Each term is divided by the box count before the sum: summed first, Q x C focal terms (900 x 256 above 1 each
+        // at logit 2) pass Half's 65504 although the normalized loss does not.
+        var classLoss = _engine.ReduceSum(_engine.TensorMultiplyScalar(FocalLoss(logits, y), inverseCount), new[] { 0, 1 }, false);
 
         Tensor<T> boxLoss, giouLoss;
         if (g == 0)
@@ -122,11 +124,11 @@ internal sealed class GroundingSetLoss<T>
         else
         {
             var matched = _engine.TensorIndexSelect(boxes, new Tensor<int>(new[] { g }, Vector<int>.FromArray(queryOfTarget)), 0);
-            boxLoss = _engine.TensorMultiplyScalar(
-                _engine.ReduceSum(_engine.TensorAbs(_engine.TensorSubtract(matched, targetBoxes)), new[] { 0, 1 }, false), inverseCount);
+            boxLoss = _engine.ReduceSum(
+                _engine.TensorMultiplyScalar(_engine.TensorAbs(_engine.TensorSubtract(matched, targetBoxes)), inverseCount), new[] { 0, 1 }, false);
             var pairGIoU = Diagonal(PairwiseGeneralizedIoU(matched, targetBoxes));
-            giouLoss = _engine.TensorMultiplyScalar(_engine.ReduceSum(_engine.ScalarMinusTensor(NumOps.One, pairGIoU), new[] { 0 }, false),
-                inverseCount);
+            giouLoss = _engine.ReduceSum(
+                _engine.TensorMultiplyScalar(_engine.ScalarMinusTensor(NumOps.One, pairGIoU), inverseCount), new[] { 0 }, false);
         }
 
         var total = _engine.TensorAdd(_engine.TensorMultiplyScalar(classLoss, NumOps.FromDouble(ClassWeight)),
@@ -189,6 +191,13 @@ internal sealed class GroundingSetLoss<T>
     }
 
     /// <summary>The GIoU (Rezatofighi et al. 2019) of every pair of (cx, cy, w, h) boxes <c>[A, 4]</c> x <c>[B, 4]</c>: <c>[A, B]</c>.</summary>
+    /// <remarks>
+    /// GIoU is a ratio of areas, so it is unchanged by translating a pair and scaling each axis. Each pair is moved so
+    /// its smallest x and y are zero and divided by its x and y spans before any area is formed: in Half, the identical
+    /// boxes with corners <c>(2^-14, 2^-14, 2^-13, 2^-13)</c> have area 2^-26, which rounds to zero, so the GIoU was 0/0
+    /// and the matching cost NaN. A pair with no union area (both boxes empty) scores IoU 0 and no hull penalty, rather
+    /// than NaN.
+    /// </remarks>
     internal Tensor<T> PairwiseGeneralizedIoU(Tensor<T> a, Tensor<T> b)
     {
         int na = a.Shape[0], nb = b.Shape[0];
@@ -204,8 +213,18 @@ internal sealed class GroundingSetLoss<T>
             return (spread(_engine.TensorSubtract(Column(x, 0), halfW)), spread(_engine.TensorSubtract(Column(x, 1), halfH)),
                 spread(_engine.TensorAdd(Column(x, 0), halfW)), spread(_engine.TensorAdd(Column(x, 1), halfH)));
         }
-        var (ax1, ay1, ax2, ay2) = Corners(a, Rows);
-        var (bx1, by1, bx2, by2) = Corners(b, Columns);
+        var (rax1, ray1, rax2, ray2) = Corners(a, Rows);
+        var (rbx1, rby1, rbx2, rby2) = Corners(b, Columns);
+        Tensor<T> Min4(Tensor<T> p, Tensor<T> q, Tensor<T> r, Tensor<T> s) => _engine.TensorMin(_engine.TensorMin(p, q), _engine.TensorMin(r, s));
+        Tensor<T> Max4(Tensor<T> p, Tensor<T> q, Tensor<T> r, Tensor<T> s) => _engine.TensorMax(_engine.TensorMax(p, q), _engine.TensorMax(r, s));
+        var originX = Min4(rax1, rax2, rbx1, rbx2);
+        var originY = Min4(ray1, ray2, rby1, rby2);
+        var scaleX = PositiveOrOne(_engine.TensorSubtract(Max4(rax1, rax2, rbx1, rbx2), originX));
+        var scaleY = PositiveOrOne(_engine.TensorSubtract(Max4(ray1, ray2, rby1, rby2), originY));
+        Tensor<T> X(Tensor<T> x) => _engine.TensorDivide(_engine.TensorSubtract(x, originX), scaleX);
+        Tensor<T> Y(Tensor<T> y) => _engine.TensorDivide(_engine.TensorSubtract(y, originY), scaleY);
+        Tensor<T> ax1 = X(rax1), ay1 = Y(ray1), ax2 = X(rax2), ay2 = Y(ray2);
+        Tensor<T> bx1 = X(rbx1), by1 = Y(rby1), bx2 = X(rbx2), by2 = Y(rby2);
         var inter = _engine.TensorMultiply(_engine.ReLU(_engine.TensorSubtract(_engine.TensorMin(ax2, bx2), _engine.TensorMax(ax1, bx1))),
             _engine.ReLU(_engine.TensorSubtract(_engine.TensorMin(ay2, by2), _engine.TensorMax(ay1, by1))));
         var areaA = _engine.TensorMultiply(_engine.TensorSubtract(ax2, ax1), _engine.TensorSubtract(ay2, ay1));
@@ -213,8 +232,16 @@ internal sealed class GroundingSetLoss<T>
         var union = _engine.TensorSubtract(_engine.TensorAdd(areaA, areaB), inter);
         var hull = _engine.TensorMultiply(_engine.TensorSubtract(_engine.TensorMax(ax2, bx2), _engine.TensorMin(ax1, bx1)),
             _engine.TensorSubtract(_engine.TensorMax(ay2, by2), _engine.TensorMin(ay1, by1)));
-        return _engine.TensorSubtract(_engine.TensorDivide(inter, union), _engine.TensorDivide(_engine.TensorSubtract(hull, union), hull));
+        return _engine.TensorSubtract(Ratio(inter, union), Ratio(_engine.TensorSubtract(hull, union), hull));
     }
+
+    /// <summary>The span where it is positive, else one, so a zero-extent pair is not divided by zero.</summary>
+    private Tensor<T> PositiveOrOne(Tensor<T> span)
+        => _engine.TensorWhere(_engine.TensorGreaterThan(span, NumOps.Zero), span, _engine.TensorOnesLike(span));
+
+    /// <summary><c>numerator / denominator</c> where the denominator is positive, else zero.</summary>
+    private Tensor<T> Ratio(Tensor<T> numerator, Tensor<T> denominator)
+        => _engine.TensorMultiply(_engine.TensorGreaterThan(denominator, NumOps.Zero), _engine.TensorDivide(numerator, PositiveOrOne(denominator)));
 
     // The diagonal [n] of a square [n, n] matrix.
     private Tensor<T> Diagonal(Tensor<T> square)

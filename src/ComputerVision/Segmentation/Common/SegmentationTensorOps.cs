@@ -294,7 +294,6 @@ public static class SegmentationTensorOps
             throw new ArgumentException("features2 must have the same rank as features1.", nameof(features2));
 
         var engine = AiDotNetEngine.Current;
-        var numOps = MathHelper.GetNumericOperations<T>();
         var a = EnsureUnbatched(features1);
         var b = EnsureUnbatched(features2);
         int c = a.Shape[0], h = a.Shape[1], w = a.Shape[2];
@@ -313,8 +312,11 @@ public static class SegmentationTensorOps
         var norm1 = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(unitA), [0], keepDims: false));
         var norm2 = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(unitB), [0], keepDims: false));
         var denom = engine.TensorMultiply(norm1, norm2);
-        var originalDenom = engine.TensorMultiply(engine.TensorMultiply(denom, scaleA), scaleB);
-        var valid = engine.TensorGreaterThan(originalDenom, numOps.FromDouble(1e-8));
+        // The unscaled norm product is formed in double: in Half, two 2^-13 scales multiply to 2^-26, which rounds to
+        // zero, and 1e-8 itself rounds to zero, so identical small features were rejected and scored 0 instead of 1.
+        var originalDenom = engine.TensorMultiply(
+            engine.TensorMultiply(denom.Cast<double>(), scaleA.Cast<double>()), scaleB.Cast<double>());
+        var valid = engine.TensorGreaterThan(originalDenom, 1e-8).Cast<T>();
         var safeDenom = engine.TensorWhere(valid, denom, CvTensorOps<T>.Fill([h, w], 1.0));
         return engine.TensorWhere(valid, engine.TensorDivide(dot, safeDenom), new Tensor<T>([h, w]));
     }
