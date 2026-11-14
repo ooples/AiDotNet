@@ -114,7 +114,8 @@ public partial class Sonata<T> : Common.SemanticSegmentationBase<T>
     internal bool UseNativeMode => _useNativeMode;
 
     /// <summary>The student encoder, or null in ONNX mode or with custom architecture layers.</summary>
-    internal PointTransformerV3Encoder<T>? Encoder { get; private set; }
+    /// <remarks>Read from the layer list, so it follows a deserialized or cloned model.</remarks>
+    internal PointTransformerV3Encoder<T>? Encoder => _useNativeMode && Layers.Count > 0 ? Layers[0] as PointTransformerV3Encoder<T> : null;
 
     internal PointTransformerV3Encoder<T>? Teacher => _teacher;
 
@@ -398,7 +399,7 @@ public partial class Sonata<T> : Common.SemanticSegmentationBase<T>
         int seed = o.Seed ?? RandomHelper.CreateSecureRandom().Next();
         _viewRandom = RandomHelper.CreateSeededRandom(seed);
         // Sonata teacher_custom: drop_path=0. Same architecture, values copied from the student.
-        _teacher = CreateEncoder(0.0, seed);
+        _teacher = CreateEncoder(0.0, seed, student.Curves);
         SonataPretraining.CopyInto(_teacher.GetTrainableParameters(), student.GetTrainableParameters());
 
         int headIn = 0;
@@ -419,12 +420,12 @@ public partial class Sonata<T> : Common.SemanticSegmentationBase<T>
         return Encoder ?? throw new InvalidOperationException("Pretraining needs the built-in Sonata encoder, not custom architecture layers.");
     }
 
-    private PointTransformerV3Encoder<T> CreateEncoder(double dropPath, int? seed)
+    private PointTransformerV3Encoder<T> CreateEncoder(double dropPath, int? seed, IReadOnlyList<ISpaceFillingCurve> curves)
     {
         var o = _options;
         return new PointTransformerV3Encoder<T>(o.InputChannels, true, o.GridSize, o.Strides, o.EncoderDepths,
             o.EncoderChannels, o.EncoderNumHeads, o.EncoderPatchSizes, null, null, null, null, o.MlpRatio, dropPath,
-            o.EnableConditionalPositionalEncoding, o.PreNorm, o.ShuffleOrders, SpaceFillingCurves.NamesOf(o.SerializationOrders),
+            o.EnableConditionalPositionalEncoding, o.PreNorm, o.ShuffleOrders, new SpaceFillingCurveSet(curves),
             PointTransformerV3Revision.M2Sonata, true, true, seed);
     }
 
@@ -451,8 +452,7 @@ public partial class Sonata<T> : Common.SemanticSegmentationBase<T>
             return;
         }
 
-        Encoder = CreateEncoder(_options.DropPathRate, _options.Seed);
-        Layers.Add(Encoder);
+        Layers.Add(CreateEncoder(_options.DropPathRate, _options.Seed, _options.SerializationCurves));
         _encoderLayerEnd = 1;
         // Linear probe on the fully up-cast features (Sonata linear probing: 1232 channels -> classes).
         Layers.Add(new DenseLayer<T>(_numClasses, (IActivationFunction<T>?)null));

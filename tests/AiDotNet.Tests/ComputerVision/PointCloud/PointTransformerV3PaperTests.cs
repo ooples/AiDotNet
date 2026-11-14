@@ -215,7 +215,9 @@ public class PointTransformerV3PaperTests
         Assert.Equal(new[] { 2, 2, 2, 2 }, options.DecoderDepths);
         Assert.Equal(new[] { 64, 64, 128, 256 }, options.DecoderChannels);
         Assert.All(options.EncoderPatchSizes, p => Assert.Equal(1024, p));
-        Assert.Equal(new[] { PointSerializationOrder.ZOrder, PointSerializationOrder.ZOrderTransposed, PointSerializationOrder.Hilbert, PointSerializationOrder.HilbertTransposed }, options.SerializationOrders);
+        Assert.Equal(new[] { PointSerializationOrder.ZOrder, PointSerializationOrder.ZOrderTransposed, PointSerializationOrder.Hilbert, PointSerializationOrder.HilbertTransposed }
+            .Select(SpaceFillingCurves.Get), options.SerializationCurves);
+        Assert.Equal(new[] { "z", "z-trans", "hilbert", "hilbert-trans" }, options.SerializationCurves.Select(c => c.Name));
         Assert.Equal(4.0, options.MlpRatio);
         Assert.Equal(0.3, options.DropPathRate);
         Assert.True(options.EnableConditionalPositionalEncoding);
@@ -232,6 +234,90 @@ public class PointTransformerV3PaperTests
         var logits = model.Predict(cloud);
         Assert.Equal(new[] { 48, 5 }, logits.Shape.ToArray());
         Assert.Equal(new[] { 48 }, model.GetClassMap(cloud).Shape.ToArray());
+    }
+
+    [Fact]
+    public void CustomCurve_PassedThroughOptions_DrivesTheSerializationOrder()
+    {
+        var curve = new LexicographicCurve("test-lexicographic-options");
+        var options = PointCloudTestOptions.SmallPtv3(5);
+        options.SerializationCurves = new ISpaceFillingCurve[] { curve };
+        var model = new PointTransformerV3<float>(PointCloudArchitecture(), options: options);
+        var encoder = model.Encoder ?? throw new InvalidOperationException("The native model has an encoder.");
+        Assert.Same(curve, Assert.Single(encoder.Curves));
+
+        var level = encoder.PrepareInput(PointCloudTestOptions.Cloud(48, 9, seed: 29), training: false).Level;
+        var serialization = level.Serialization;
+        int depth = serialization.Depth;
+        var order = serialization.Orders[0];
+        for (int i = 0; i < level.Count; i++)
+        {
+            long expected = ((long)level.Batch[i] << (3 * depth))
+                | curve.Encode(level.Grid[i * 3], level.Grid[i * 3 + 1], level.Grid[i * 3 + 2], depth);
+            Assert.Equal(expected, serialization.Codes[0][i]);
+        }
+
+        for (int i = 1; i < order.Length; i++)
+            Assert.True(serialization.Codes[0][order[i - 1]] <= serialization.Codes[0][order[i]], $"order breaks at {i}");
+
+        // The same cloud under the paper's first curve (z) is ordered differently.
+        var zOrder = PointSerialization.Serialize(level.Grid, level.Batch, depth, new[] { SpaceFillingCurves.ZOrder }).Orders[0];
+        Assert.NotEqual(zOrder, order);
+    }
+
+    [Fact]
+    public void RegisteredCustomCurve_SurvivesSaveAndLoad()
+    {
+        var curve = new LexicographicCurve("test-lexicographic-registered");
+        SpaceFillingCurves.Register(curve);
+        var options = PointCloudTestOptions.SmallPtv3(5);
+        options.SerializationCurves = new ISpaceFillingCurve[] { curve, SpaceFillingCurves.Hilbert };
+        var model = new PointTransformerV3<float>(PointCloudArchitecture(), options: options);
+        var cloud = PointCloudTestOptions.Cloud(48, 9, seed: 31);
+        var expected = model.Predict(cloud).ToArray();
+        var saved = model.Serialize();
+
+        var loaded = new PointTransformerV3<float>(PointCloudArchitecture(), options: PointCloudTestOptions.SmallPtv3(5));
+        loaded.Deserialize(saved);
+        var encoder = loaded.Encoder ?? throw new InvalidOperationException("The loaded model has an encoder.");
+        Assert.Equal(new[] { "test-lexicographic-registered", "hilbert" }, encoder.Curves.Select(c => c.Name));
+        Assert.Same(curve, encoder.Curves[0]);
+        var actual = loaded.Predict(cloud).ToArray();
+        Assert.Equal(expected.Length, actual.Length);
+        for (int i = 0; i < expected.Length; i++) Assert.Equal(expected[i], actual[i], 5);
+    }
+
+    [Fact]
+    public void UnregisteredCustomCurve_SaveThrowsNamingTheCurve()
+    {
+        var curve = new LexicographicCurve("test-lexicographic-unregistered");
+        Assert.False(SpaceFillingCurves.IsRegistered(curve));
+        var options = PointCloudTestOptions.SmallPtv3(5);
+        options.SerializationCurves = new ISpaceFillingCurve[] { curve };
+        var model = new PointTransformerV3<float>(PointCloudArchitecture(), options: options);
+
+        var thrown = Assert.ThrowsAny<Exception>(() => model.Serialize());
+        var cause = Unwrap(thrown).OfType<InvalidOperationException>().FirstOrDefault(e => e.Message.Contains("test-lexicographic-unregistered"));
+        Assert.NotNull(cause);
+        Assert.Contains(nameof(SpaceFillingCurves.Register), cause?.Message ?? string.Empty);
+    }
+
+    private static IEnumerable<Exception> Unwrap(Exception exception)
+    {
+        for (Exception? e = exception; e is not null; e = e.InnerException) yield return e;
+    }
+
+    private static NeuralNetworkArchitecture<float> PointCloudArchitecture()
+        => new(InputType.ThreeDimensional, NeuralNetworkTaskType.Regression, NetworkComplexity.Deep, 0, 32, 32, 3, 0);
+
+    /// <summary>x-major lexicographic order: a curve none of the built-in four produce.</summary>
+    private sealed class LexicographicCurve : ISpaceFillingCurve
+    {
+        internal LexicographicCurve(string name) => Name = name;
+
+        public string Name { get; }
+
+        public long Encode(int x, int y, int z, int depth) => ((long)x << (2 * depth)) | ((long)y << depth) | (long)z;
     }
 
     private static PointCloudLevel<double> RandomLevel(int count, int channels, int seed)

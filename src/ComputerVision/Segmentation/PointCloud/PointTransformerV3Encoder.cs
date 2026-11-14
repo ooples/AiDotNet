@@ -64,7 +64,7 @@ public sealed partial class PointTransformerV3Encoder<T> : LayerBase<T>, IShapeC
     private readonly bool _enableConditionalPositionalEncoding;
     private readonly bool _preNorm;
     private readonly bool _shuffleOrders;
-    private readonly string[] _serializationOrders;
+    private readonly SpaceFillingCurveSet _serializationCurves;
     private readonly PointTransformerV3Revision _revision;
     private readonly bool _encoderOnly;
     private readonly bool _maskToken;
@@ -99,7 +99,8 @@ public sealed partial class PointTransformerV3Encoder<T> : LayerBase<T>, IShapeC
     /// <param name="enableConditionalPositionalEncoding">Whether each block starts with xCPE (true).</param>
     /// <param name="preNorm">Pre-norm blocks (true).</param>
     /// <param name="shuffleOrders">Whether training permutes the serialization orders after every pooling (true).</param>
-    /// <param name="serializationOrders">Registered <see cref="ISpaceFillingCurve"/> names (z, z-trans, hilbert, hilbert-trans).</param>
+    /// <param name="serializationCurves">The curves the blocks cycle through; null uses z, z-trans, hilbert, hilbert-trans.
+    /// Saved by registered name, see <see cref="SpaceFillingCurveSet"/>.</param>
     /// <param name="revision">Which Pointcept backbone to build.</param>
     /// <param name="encoderOnly">Drop the decoder and up-cast the encoder features instead (Sonata).</param>
     /// <param name="maskToken">Learn a mask token for Sonata's masked views (m2 only).</param>
@@ -122,7 +123,7 @@ public sealed partial class PointTransformerV3Encoder<T> : LayerBase<T>, IShapeC
         [LayerState] bool enableConditionalPositionalEncoding = true,
         [LayerState] bool preNorm = true,
         [LayerState] bool shuffleOrders = true,
-        [LayerState] string[]? serializationOrders = null,
+        [LayerState] SpaceFillingCurveSet? serializationCurves = null,
         [LayerState] PointTransformerV3Revision revision = PointTransformerV3Revision.M1Base,
         [LayerState] bool encoderOnly = false,
         [LayerState] bool maskToken = false,
@@ -147,19 +148,14 @@ public sealed partial class PointTransformerV3Encoder<T> : LayerBase<T>, IShapeC
         _enableConditionalPositionalEncoding = enableConditionalPositionalEncoding;
         _preNorm = preNorm;
         _shuffleOrders = shuffleOrders;
-        _serializationOrders = serializationOrders ?? SpaceFillingCurves.NamesOf(new[]
-        {
-            PointSerializationOrder.ZOrder, PointSerializationOrder.ZOrderTransposed,
-            PointSerializationOrder.Hilbert, PointSerializationOrder.HilbertTransposed
-        });
+        _serializationCurves = serializationCurves ?? new SpaceFillingCurveSet();
         _revision = revision;
         _encoderOnly = encoderOnly;
         _maskToken = maskToken;
         _seed = seed;
         Validate();
 
-        _curves = new ISpaceFillingCurve[_serializationOrders.Length];
-        for (int i = 0; i < _curves.Length; i++) _curves[i] = SpaceFillingCurves.Resolve(_serializationOrders[i]);
+        _curves = _serializationCurves.Curves.ToArray();
 
         var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
         bool m1 = revision == PointTransformerV3Revision.M1Base;
@@ -477,7 +473,6 @@ public sealed partial class PointTransformerV3Encoder<T> : LayerBase<T>, IShapeC
             && (_decoderDepths.Length != stages - 1 || _decoderChannels.Length != stages - 1
                 || _decoderNumHeads.Length != stages - 1 || _decoderPatchSizes.Length != stages - 1))
             throw new ArgumentException("Decoder depths, channels, heads and patch sizes need one entry per stage but the last.");
-        if (_serializationOrders.Length == 0) throw new ArgumentException("At least one serialization order is required.");
         if (!(_mlpRatio > 0)) throw new ArgumentException("The MLP ratio must be positive.");
         if (_dropPathRate < 0 || _dropPathRate >= 1) throw new ArgumentException("The drop-path rate must be in [0, 1).");
         if (_maskToken && _revision != PointTransformerV3Revision.M2Sonata)

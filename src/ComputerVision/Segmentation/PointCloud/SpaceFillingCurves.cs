@@ -62,17 +62,6 @@ public static class SpaceFillingCurves
         _ => throw new ArgumentOutOfRangeException(nameof(order), order, "Unknown serialization order.")
     };
 
-    /// <summary>The registered curve names of built-in orders, as the encoder stores them.</summary>
-    /// <param name="orders">The orders.</param>
-    /// <returns>One <see cref="ISpaceFillingCurve.Name"/> per order.</returns>
-    public static string[] NamesOf(IReadOnlyList<PointSerializationOrder> orders)
-    {
-        if (orders is null) throw new ArgumentNullException(nameof(orders));
-        var names = new string[orders.Count];
-        for (int i = 0; i < names.Length; i++) names[i] = Get(orders[i]).Name;
-        return names;
-    }
-
     /// <summary>Registers a curve so models referring to its name can be rebuilt.</summary>
     /// <param name="curve">The curve; replaces any curve already registered under the same name.</param>
     public static void Register(ISpaceFillingCurve curve)
@@ -80,7 +69,19 @@ public static class SpaceFillingCurves
         if (curve is null) throw new ArgumentNullException(nameof(curve));
         if (string.IsNullOrWhiteSpace(curve.Name))
             throw new ArgumentException("A space-filling curve needs a non-empty Name.", nameof(curve));
+        if (curve.Name.IndexOf('\n') >= 0 || curve.Name.IndexOf('\r') >= 0)
+            throw new ArgumentException("A space-filling curve Name must be a single line.", nameof(curve));
         Registered[curve.Name] = curve;
+    }
+
+    /// <summary>Whether <paramref name="curve"/> is registered, so a saved model can rebuild it by name.</summary>
+    /// <param name="curve">The curve.</param>
+    /// <returns>True when its name maps to this instance or to another instance of the same type.</returns>
+    public static bool IsRegistered(ISpaceFillingCurve curve)
+    {
+        if (curve is null) throw new ArgumentNullException(nameof(curve));
+        return curve.Name is not null && Registered.TryGetValue(curve.Name, out var registered)
+            && (ReferenceEquals(registered, curve) || registered.GetType() == curve.GetType());
     }
 
     /// <summary>Looks up a registered curve by name.</summary>

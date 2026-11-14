@@ -52,7 +52,7 @@ public abstract class PointTransformerV3EncoderOptions : SegmentationModelOption
         EnableConditionalPositionalEncoding = other.EnableConditionalPositionalEncoding;
         PreNorm = other.PreNorm;
         ShuffleOrders = other.ShuffleOrders;
-        SerializationOrders = (PointSerializationOrder[])other.SerializationOrders.Clone();
+        SerializationCurves = other.SerializationCurves.ToArray();
     }
 
     /// <summary>
@@ -108,19 +108,22 @@ public abstract class PointTransformerV3EncoderOptions : SegmentationModelOption
     public bool ShuffleOrders { get; set; } = true;
 
     /// <summary>
-    /// The serialization orders the blocks cycle through. Default: z, z-trans, hilbert, hilbert-trans.
+    /// The space-filling curves the blocks cycle through, in order. Default: the paper's
+    /// z, z-trans, hilbert, hilbert-trans (Wu et al. 2024, appendix model settings).
     /// </summary>
     /// <remarks>
-    /// <b>For Beginners:</b> Reorder, repeat or drop entries to change which curves the blocks use.
-    /// For a curve of your own, implement <see cref="ISpaceFillingCurve"/>, register it with
-    /// <see cref="SpaceFillingCurves.Register(ISpaceFillingCurve)"/> and pass its name to
-    /// <see cref="PointTransformerV3Encoder{T}"/>.
+    /// <para>
+    /// Any <see cref="ISpaceFillingCurve"/> works here; <see cref="SpaceFillingCurves.Get(PointSerializationOrder)"/>
+    /// returns the built-in ones. Saving, loading or cloning the model stores each curve by
+    /// <see cref="ISpaceFillingCurve.Name"/>, so register a custom curve with
+    /// <see cref="SpaceFillingCurves.Register(ISpaceFillingCurve)"/> first; saving an unregistered one throws.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> Reorder, repeat or drop entries to change which curves the blocks use,
+    /// or add your own curve class.
+    /// </para>
     /// </remarks>
-    public PointSerializationOrder[] SerializationOrders { get; set; } =
-    {
-        PointSerializationOrder.ZOrder, PointSerializationOrder.ZOrderTransposed,
-        PointSerializationOrder.Hilbert, PointSerializationOrder.HilbertTransposed
-    };
+    public IReadOnlyList<ISpaceFillingCurve> SerializationCurves { get; set; } = SpaceFillingCurves.PaperOrders();
 
     /// <summary>Throws when the backbone settings cannot build a network.</summary>
     /// <param name="encoderOnly">Whether the decoder arrays are ignored.</param>
@@ -130,7 +133,7 @@ public abstract class PointTransformerV3EncoderOptions : SegmentationModelOption
         if (!(GridSize > 0) || double.IsInfinity(GridSize)) throw new ArgumentException("GridSize must be positive and finite.");
         if (Strides is null || EncoderDepths is null || EncoderChannels is null || EncoderNumHeads is null
             || EncoderPatchSizes is null || DecoderDepths is null || DecoderChannels is null || DecoderNumHeads is null
-            || DecoderPatchSizes is null || SerializationOrders is null)
+            || DecoderPatchSizes is null || SerializationCurves is null)
             throw new ArgumentException("Backbone arrays must not be null.");
         int stages = EncoderDepths.Length;
         if (stages == 0) throw new ArgumentException("EncoderDepths needs at least one stage.");
@@ -159,8 +162,8 @@ public abstract class PointTransformerV3EncoderOptions : SegmentationModelOption
 
         if (!(MlpRatio > 0)) throw new ArgumentException("MlpRatio must be positive.");
         if (DropPathRate < 0 || DropPathRate >= 1) throw new ArgumentException("DropPathRate must be in [0, 1).");
-        if (SerializationOrders.Length == 0) throw new ArgumentException("SerializationOrders needs at least one curve.");
-        foreach (var order in SerializationOrders) SpaceFillingCurves.Get(order);
+        if (SerializationCurves.Count == 0) throw new ArgumentException("SerializationCurves needs at least one curve.");
+        if (SerializationCurves.Any(curve => curve is null)) throw new ArgumentException("SerializationCurves must not contain null.");
         ValidateSegmentationCore();
     }
 }

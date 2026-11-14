@@ -22959,7 +22959,6 @@ AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3Encoder<T>.Inp
 AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3Encoder<T>.IsEncoderOnly.get -> bool
 AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3Encoder<T>.OutputAxesFor(int inputRank) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.OutputAxisContract>?
 AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3Encoder<T>.OutputChannels.get -> int
-AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3Encoder<T>.PointTransformerV3Encoder(int inputChannels = 6, bool coordinatesAsFeatures = false, double gridSize = 0.02, int[]? strides = null, int[]? encoderDepths = null, int[]? encoderChannels = null, int[]? encoderNumHeads = null, int[]? encoderPatchSizes = null, int[]? decoderDepths = null, int[]? decoderChannels = null, int[]? decoderNumHeads = null, int[]? decoderPatchSizes = null, double mlpRatio = 4, double dropPathRate = 0.3, bool enableConditionalPositionalEncoding = true, bool preNorm = true, bool shuffleOrders = true, string![]? serializationOrders = null, AiDotNet.Enums.PointTransformerV3Revision revision = AiDotNet.Enums.PointTransformerV3Revision.M1Base, bool encoderOnly = false, bool maskToken = false, int? seed = null) -> void
 AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions
 AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.DecoderChannels.get -> int[]!
 AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.DecoderChannels.set -> void
@@ -22991,8 +22990,6 @@ AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions
 AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.PointTransformerV3EncoderOptions(AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions! other) -> void
 AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.PreNorm.get -> bool
 AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.PreNorm.set -> void
-AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.SerializationOrders.get -> AiDotNet.Enums.PointSerializationOrder[]!
-AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.SerializationOrders.set -> void
 AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.ShuffleOrders.get -> bool
 AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.ShuffleOrders.set -> void
 AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.Strides.get -> int[]!
@@ -23112,9 +23109,18 @@ override AiDotNet.ComputerVision.Segmentation.PointCloud.Sonata<T>.SupportsFused
 static AiDotNet.ComputerVision.Segmentation.PointCloud.SpaceFillingCurves.Get(AiDotNet.Enums.PointSerializationOrder order) -> AiDotNet.ComputerVision.Segmentation.PointCloud.ISpaceFillingCurve!
 static AiDotNet.ComputerVision.Segmentation.PointCloud.SpaceFillingCurves.Hilbert.get -> AiDotNet.ComputerVision.Segmentation.PointCloud.ISpaceFillingCurve!
 static AiDotNet.ComputerVision.Segmentation.PointCloud.SpaceFillingCurves.HilbertTransposed.get -> AiDotNet.ComputerVision.Segmentation.PointCloud.ISpaceFillingCurve!
-static AiDotNet.ComputerVision.Segmentation.PointCloud.SpaceFillingCurves.NamesOf(System.Collections.Generic.IReadOnlyList<AiDotNet.Enums.PointSerializationOrder>! orders) -> string![]!
 static AiDotNet.ComputerVision.Segmentation.PointCloud.SpaceFillingCurves.PaperOrders() -> AiDotNet.ComputerVision.Segmentation.PointCloud.ISpaceFillingCurve![]!
 static AiDotNet.ComputerVision.Segmentation.PointCloud.SpaceFillingCurves.Register(AiDotNet.ComputerVision.Segmentation.PointCloud.ISpaceFillingCurve! curve) -> void
 static AiDotNet.ComputerVision.Segmentation.PointCloud.SpaceFillingCurves.Resolve(string! name) -> AiDotNet.ComputerVision.Segmentation.PointCloud.ISpaceFillingCurve!
 static AiDotNet.ComputerVision.Segmentation.PointCloud.SpaceFillingCurves.ZOrder.get -> AiDotNet.ComputerVision.Segmentation.PointCloud.ISpaceFillingCurve!
 static AiDotNet.ComputerVision.Segmentation.PointCloud.SpaceFillingCurves.ZOrderTransposed.get -> AiDotNet.ComputerVision.Segmentation.PointCloud.ISpaceFillingCurve!
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3Encoder<T>.PointTransformerV3Encoder(int inputChannels = 6, bool coordinatesAsFeatures = false, double gridSize = 0.02, int[]? strides = null, int[]? encoderDepths = null, int[]? encoderChannels = null, int[]? encoderNumHeads = null, int[]? encoderPatchSizes = null, int[]? decoderDepths = null, int[]? decoderChannels = null, int[]? decoderNumHeads = null, int[]? decoderPatchSizes = null, double mlpRatio = 4, double dropPathRate = 0.3, bool enableConditionalPositionalEncoding = true, bool preNorm = true, bool shuffleOrders = true, AiDotNet.ComputerVision.Segmentation.PointCloud.SpaceFillingCurveSet? serializationCurves = null, AiDotNet.Enums.PointTransformerV3Revision revision = AiDotNet.Enums.PointTransformerV3Revision.M1Base, bool encoderOnly = false, bool maskToken = false, int? seed = null) -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.SerializationCurves.get -> System.Collections.Generic.IReadOnlyList<AiDotNet.ComputerVision.Segmentation.PointCloud.ISpaceFillingCurve!>!
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.SerializationCurves.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SpaceFillingCurveSet
+AiDotNet.ComputerVision.Segmentation.PointCloud.SpaceFillingCurveSet.Curves.get -> System.Collections.Generic.IReadOnlyList<AiDotNet.ComputerVision.Segmentation.PointCloud.ISpaceFillingCurve!>!
+AiDotNet.ComputerVision.Segmentation.PointCloud.SpaceFillingCurveSet.LoadState(string! text) -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SpaceFillingCurveSet.SaveState() -> string!
+AiDotNet.ComputerVision.Segmentation.PointCloud.SpaceFillingCurveSet.SpaceFillingCurveSet() -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SpaceFillingCurveSet.SpaceFillingCurveSet(System.Collections.Generic.IEnumerable<AiDotNet.ComputerVision.Segmentation.PointCloud.ISpaceFillingCurve!>! curves) -> void
+static AiDotNet.ComputerVision.Segmentation.PointCloud.SpaceFillingCurves.IsRegistered(AiDotNet.ComputerVision.Segmentation.PointCloud.ISpaceFillingCurve! curve) -> bool

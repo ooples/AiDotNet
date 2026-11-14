@@ -109,7 +109,8 @@ public partial class PointTransformerV3<T> : Common.SemanticSegmentationBase<T>
     internal bool UseNativeMode => _useNativeMode;
 
     /// <summary>The backbone, or null in ONNX mode or with custom architecture layers.</summary>
-    internal PointTransformerV3Encoder<T>? Encoder { get; private set; }
+    /// <remarks>Read from the layer list, so it follows a deserialized or cloned model.</remarks>
+    internal PointTransformerV3Encoder<T>? Encoder => _useNativeMode && Layers.Count > 0 ? Layers[0] as PointTransformerV3Encoder<T> : null;
 
     /// <summary>The data-dependent serialization and pooling indices cannot be fused into a compiled plan.</summary>
     protected override bool SupportsFusedCompiledTraining => false;
@@ -152,11 +153,11 @@ public partial class PointTransformerV3<T> : Common.SemanticSegmentationBase<T>
         }
 
         var o = _options;
-        Encoder = new PointTransformerV3Encoder<T>(o.InputChannels, false, o.GridSize, o.Strides, o.EncoderDepths,
+        var encoder = new PointTransformerV3Encoder<T>(o.InputChannels, false, o.GridSize, o.Strides, o.EncoderDepths,
             o.EncoderChannels, o.EncoderNumHeads, o.EncoderPatchSizes, o.DecoderDepths, o.DecoderChannels,
             o.DecoderNumHeads, o.DecoderPatchSizes, o.MlpRatio, o.DropPathRate, o.EnableConditionalPositionalEncoding,
-            o.PreNorm, o.ShuffleOrders, SpaceFillingCurves.NamesOf(o.SerializationOrders), PointTransformerV3Revision.M1Base, false, false, o.Seed);
-        Layers.Add(Encoder);
+            o.PreNorm, o.ShuffleOrders, new SpaceFillingCurveSet(o.SerializationCurves), PointTransformerV3Revision.M1Base, false, false, o.Seed);
+        Layers.Add(encoder);
         _encoderLayerEnd = 1;
         // Pointcept seg_head: Linear(dec_channels[0], num_classes).
         Layers.Add(new DenseLayer<T>(_numClasses, (IActivationFunction<T>?)null));

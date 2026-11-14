@@ -33,7 +33,6 @@ namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 [PaperDefault(nameof(EncoderPatchSizes), new[] { 1024, 1024, 1024, 1024, 1024 }, Source = "Pointcept pretrain-sonata-v1m1-0-base: enc_patch_size=1024")]
 [PaperDefault(nameof(MlpRatio), 4.0, Source = "Pointcept pretrain-sonata-v1m1-0-base: mlp_ratio=4")]
 [PaperDefault(nameof(DropPathRate), 0.3, Source = "Pointcept pretrain-sonata-v1m1-0-base: drop_path=0.3 (teacher 0)")]
-[PaperDefault(nameof(SerializationOrders), new[] { PointSerializationOrder.ZOrder, PointSerializationOrder.ZOrderTransposed, PointSerializationOrder.Hilbert, PointSerializationOrder.HilbertTransposed }, Source = "Pointcept pretrain-sonata-v1m1-0-base: order=(z, z-trans, hilbert, hilbert-trans)")]
 [PaperDefault(nameof(UpCastLevel), 2, Source = "Pointcept pretrain-sonata-v1m1-0-base: up_cast_level=2")]
 [PaperDefault(nameof(HeadHiddenChannels), 4096, Source = "Pointcept pretrain-sonata-v1m1-0-base: head_hidden_channels=4096")]
 [PaperDefault(nameof(HeadEmbedChannels), 256, Source = "Pointcept pretrain-sonata-v1m1-0-base: head_embed_channels=256")]
