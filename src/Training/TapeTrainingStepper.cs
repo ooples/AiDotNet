@@ -866,6 +866,7 @@ internal sealed class TapeTrainingStepper<T>
     /// Differentiates each term of an additive objective on its own tape (its backward on the mixed-precision scaled
     /// loss) and sums the terms' losses and gradients into owned tensors.
     /// </summary>
+    [AiDotNet.Attributes.ScalarKernel("Reads each objective term's one scalar loss; the loop runs over terms, not tensor elements.")]
     private static (Tensor<T> Loss, Dictionary<Tensor<T>, Tensor<T>> Gradients) DifferentiateObjectiveTerms(
         NeuralNetworks.NeuralNetworkBase<T> distNet,
         MixedPrecision.MixedPrecisionContext? mpCtx,
