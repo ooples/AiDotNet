@@ -84,66 +84,46 @@ public sealed class EGarchModel<T> : ClassicalVolatilityModelBase<T>
     /// <remarks>
     /// <para>arch's <c>egarch_recursion</c>: ln σ²_0 = ω + β·backcast and, for t ≥ 1,
     /// ln σ²_t = ω + α·(|z_(t-1)| − √(2/π)) + γ·z_(t-1) + β·ln σ²_(t-1) with z = ε/σ.</para>
-    /// <para>Given the whole ln σ² path the shocks are known, and given the shocks the path is a linear
-    /// recurrence, so the path is the fixed point of that map, each sweep a whole-tensor evaluation.
-    /// The recursion is causal, so sweep k fixes the first k entries exactly and at most n + 1 sweeps are
-    /// needed; in practice the map is a contraction and it settles in a few.</para>
+    /// <para>The shock of step t depends on ln σ²_(t-1) through z = ε·exp(−ln σ²/2), so unlike the GARCH and
+    /// GJR paths this recursion is not linear in its state and has no whole-tensor closed form. It is evaluated
+    /// as the one-pass causal recursion it is, in double, and the path is rounded to
+    /// <typeparamref name="T"/> once. Solving it as a fixed point of whole-tensor sweeps costs one full
+    /// linear-recurrence solve per sweep and needs up to n + 1 sweeps wherever the map is not a contraction,
+    /// which the simplex search visits: a fit of 600 returns took 22 s and one of 1500 did not finish in
+    /// two minutes, against milliseconds for the single pass.</para>
     /// <para>As in <see cref="NextVariance"/>, the previous variance enters each step floored at 1e-18, in both
     /// the standardized shock and the β term. The floor keeps z = ε·exp(−ln σ²/2) finite: without it a very
     /// negative ln σ² (or a −∞ backcast from an all-zero residual series) overflowed exp, and 0·∞ made the path
-    /// NaN. The β-term floor is carried in the drive as β·(max(ln σ²_(t-1), ln 1e-18) − ln σ²_(t-1)), which is
-    /// zero whenever the floor is inactive, so the fixed point is the floored causal recursion.</para>
+    /// NaN. As in arch, a ln σ² above the cap is stored capped and the capped value feeds the next step.</para>
     /// </remarks>
     protected override Tensor<T> VariancePath(Tensor<T> residuals, T backcast, Vector<T> p)
     {
         var engine = AiDotNetEngine.Current;
-        T omega = p[0];
-        T alpha = p[1];
-        T gamma = p[2];
-        T beta = p[3];
-        T cap = NumOps.FromDouble(LogVarianceMax);
-        T floor = NumOps.FromDouble(LogVarianceMin);
-        T start = NumOps.GreaterThan(backcast, floor) ? backcast : floor;
-        T minusHalf = NumOps.FromDouble(-0.5);
-        T centre = NumOps.Multiply(alpha, NumOps.FromDouble(ExpAbsZ));
         int n = residuals.Length;
+        double omega = NumOps.ToDouble(p[0]);
+        double alpha = NumOps.ToDouble(p[1]);
+        double gamma = NumOps.ToDouble(p[2]);
+        double beta = NumOps.ToDouble(p[3]);
+        double centre = alpha * ExpAbsZ;
+        double presample = NumOps.ToDouble(backcast);
 
-        // Sweep 0: no shocks. drive_0 = ω always (no pre-sample shock); drive_t = ω + shock_(t-1).
-        var omegaDrive = new Tensor<T>(new[] { n });
-        engine.TensorFill(omegaDrive, omega);
-        var logVariance = engine.TensorClampMax(LinearRecurrence(omegaDrive, beta, start), cap);
-        for (int sweep = 0; sweep <= n; sweep++)
+        // Contiguous() first: Cast on a narrowed view reads from the start of the backing storage.
+        double[] shocks = residuals.Contiguous().Cast<double>().ToArray();
+        var logVariance = new double[n];
+
+        // ln σ²_0 = ω + β·backcast (no pre-sample shock); ln σ²_t = ω + shock_(t-1) + β·ln σ²_(t-1).
+        double previous = presample > LogVarianceMin ? presample : LogVarianceMin;
+        double shock = 0.0;
+        for (int t = 0; t < n; t++)
         {
-            var floored = engine.TensorClampMin(logVariance, floor);
-            var z = engine.TensorMultiply(residuals, engine.TensorExp(engine.TensorMultiplyScalar(floored, minusHalf)));
-            var shock = engine.TensorSubtractScalar(engine.TensorAdd(
-                engine.TensorMultiplyScalar(engine.TensorAbs(z), alpha), engine.TensorMultiplyScalar(z, gamma)), centre);
-            var lift = engine.TensorMultiplyScalar(engine.TensorSubtract(floored, logVariance), beta);
-            var drive = engine.TensorAddScalar(Lagged(engine.TensorAdd(shock, lift), NumOps.Zero), omega);
-            var next = engine.TensorClampMax(LinearRecurrence(drive, beta, start), cap);
-            bool settled = HasSettled(logVariance, next, out bool nonFinite);
-            logVariance = next;
-            if (settled || nonFinite)
-            {
-                // A NaN path never settles and further sweeps cannot repair it; it is returned as is, so the
-                // likelihood rejects these parameters.
-                break;
-            }
+            double current = Math.Min(omega + shock + (beta * previous), LogVarianceMax);
+            logVariance[t] = current;
+            previous = Math.Max(current, LogVarianceMin);
+            double z = shocks[t] * Math.Exp(-0.5 * previous);
+            shock = (alpha * Math.Abs(z)) + (gamma * z) - centre;
         }
 
-        return engine.TensorExp(logVariance);
-    }
-
-    /// <summary>True once a sweep changes no entry by more than 1e-13 relative to the path's scale.</summary>
-    /// <remarks>A NaN change is not convergence: it is reported through <paramref name="nonFinite"/>.</remarks>
-    private bool HasSettled(Tensor<T> previous, Tensor<T> next, out bool nonFinite)
-    {
-        var engine = AiDotNetEngine.Current;
-        T change = engine.TensorMaxValue(engine.TensorAbs(engine.TensorSubtract(next, previous)));
-        T scale = engine.TensorMaxValue(engine.TensorAbs(next));
-        T tolerance = NumOps.Multiply(NumOps.FromDouble(1e-13), Garch11Model<T>.Floor(scale, 1.0));
-        nonFinite = NumOps.IsNaN(change);
-        return !nonFinite && NumOps.LessThanOrEquals(change, tolerance);
+        return engine.TensorExp(new Tensor<double>(logVariance, new[] { n })).Cast<T>();
     }
 
     /// <inheritdoc/>
