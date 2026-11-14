@@ -19,6 +19,7 @@ using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tests.ModelFamilyTests.Base;
 using System;
 using System.Threading.Tasks;
+using AiDotNet.Tests.Helpers;
 
 using AiDotNet.Tests.Helpers;
 
@@ -1006,6 +1007,8 @@ public class SegmentationTrainingRobustnessTests : IDisposable
     public async Task UniverSeg_MultiStepTrain_DoesNotThrow()
     {
         using var model = new UniverSeg<float>(Arch(), options: new UniverSegOptions { NumClasses = 5 });
+        // UniverSeg is defined only for a non-empty support set (Butoi et al. 2023).
+        model.SetSupportSet(Rand(7, 2, 3, 32, 32), Rand(8, 2, 32, 32));
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -1191,7 +1194,7 @@ public class SegmentationTrainingRobustnessTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task ODISE_MultiStepTrain_DoesNotThrow()
     {
-        using var model = new ODISE<float>(Arch(), options: new ODISEOptions { NumClasses = 5, ModelSize = ODISEModelSize.Base });
+        using var model = new ODISE<float>(Arch(), new DeterministicTextEncoder<float>(), new DeterministicVisualEncoder<float>(), options: new ODISEOptions { NumClasses = 5, ModelSize = ODISEModelSize.Base });
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 

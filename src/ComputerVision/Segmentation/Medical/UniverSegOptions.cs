@@ -30,7 +30,21 @@ public class UniverSegOptions : SegmentationModelOptions
         MaxGradNorm = other.MaxGradNorm;
         NumClasses = other.NumClasses;
         DropRate = other.DropRate;
+        EncoderFeatures = other.EncoderFeatures?.ToArray() ?? Array.Empty<int>();
+        DecoderFeatures = other.DecoderFeatures?.ToArray() ?? Array.Empty<int>();
     }
+
+    /// <summary>
+    /// Gets or sets the width of each encoder CrossBlock, one per resolution level. Default: 64 at four levels
+    /// (Butoi et al. 2023).
+    /// </summary>
+    public int[] EncoderFeatures { get; set; } = [64, 64, 64, 64];
+
+    /// <summary>
+    /// Gets or sets the width of each decoder CrossBlock; one fewer than the encoder levels. Default: 64 at three
+    /// levels (Butoi et al. 2023).
+    /// </summary>
+    public int[] DecoderFeatures { get; set; } = [64, 64, 64];
 
     /// <summary>
     /// Throws when a value on this instance cannot produce a working model.

@@ -33,6 +33,8 @@ public class UniVSOptions : SegmentationModelOptions
         NumClasses = other.NumClasses;
         DropRate = other.DropRate;
         ModelSize = other.ModelSize;
+        NumPromptPoints = other.NumPromptPoints;
+        PromptMemoryLength = other.PromptMemoryLength;
     }
 
     /// <summary>
@@ -53,6 +55,19 @@ public class UniVSOptions : SegmentationModelOptions
     /// </para>
     /// </remarks>
     public UniVSModelSize ModelSize { get; set; }
+
+    /// <summary>
+    /// Gets or sets how many points the visual sampler takes from each visual prompt (a mask) to make its prompt
+    /// tokens. Default: 32 (Li et al. 2024: "We sample 32 points per visual prompt").
+    /// </summary>
+    public int NumPromptPoints { get; set; } = 32;
+
+    /// <summary>
+    /// Gets or sets how many of the most recent visual prompts each object's prompt memory pool keeps. Default: 5,
+    /// the authors' configuration (<c>MODEL.UniVS.TEST.NUM_PREV_FRAMES_MEMORY = 5</c> in the official UniVS code,
+    /// which slices the memory to its last five entries).
+    /// </summary>
+    public int PromptMemoryLength { get; set; } = 5;
 
     /// <summary>
     /// Throws when a value on this instance cannot produce a working model.

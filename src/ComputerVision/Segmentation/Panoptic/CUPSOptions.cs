@@ -13,7 +13,8 @@ public class CUPSOptions : SegmentationModelOptions
     /// <summary>Initializes a new instance with default values.</summary>
     public CUPSOptions()
     {
-        NumClasses = 133;
+        // CUPS clusters 27 pseudo classes (Hahn et al. 2025, Sec. 4: "By default, CUPS uses 27 pseudo classes").
+        NumClasses = 27;
         DropRate = 0.1;
     }
 
@@ -33,6 +34,10 @@ public class CUPSOptions : SegmentationModelOptions
         ChannelDimensions = (int[])other.ChannelDimensions.Clone();
         StageDepths = (int[])other.StageDepths.Clone();
         DecoderDimension = other.DecoderDimension;
+        ThingStuffThreshold = other.ThingStuffThreshold;
+        InstanceScoreThreshold = other.InstanceScoreThreshold;
+        OverlapThreshold = other.OverlapThreshold;
+        StuffAreaThreshold = other.StuffAreaThreshold;
     }
 
     /// <summary>Feature widths for the four hierarchical encoder stages.</summary>
@@ -43,6 +48,30 @@ public class CUPSOptions : SegmentationModelOptions
 
     /// <summary>Feature width used by the panoptic decoder.</summary>
     public int DecoderDimension { get; set; } = 256;
+
+    /// <summary>
+    /// Gets or sets <c>psi_ts</c>: a pseudo class is a thing when the share of its pixels inside instance pseudo
+    /// masks exceeds this value, and stuff otherwise. Default: 0.08 (Hahn et al. 2025).
+    /// </summary>
+    public double ThingStuffThreshold { get; set; } = 0.08;
+
+    /// <summary>
+    /// Gets or sets the minimum score of an instance pasted by the panoptic merge. Default: 0.4 (the CUPS
+    /// Panoptic Cascade Mask R-CNN's <c>confidence_threshold</c>).
+    /// </summary>
+    public double InstanceScoreThreshold { get; set; } = 0.4;
+
+    /// <summary>
+    /// Gets or sets the largest share of an instance that may already be claimed when it is pasted. Default:
+    /// 0.5 (Panoptic FPN).
+    /// </summary>
+    public double OverlapThreshold { get; set; } = 0.5;
+
+    /// <summary>
+    /// Gets or sets the smallest stuff region, in input-image pixels, kept by the panoptic merge. Default: 4096
+    /// (Panoptic FPN).
+    /// </summary>
+    public double StuffAreaThreshold { get; set; } = 4096;
 
     /// <summary>
     /// Throws when a value on this instance cannot produce a working model.

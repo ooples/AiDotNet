@@ -7,6 +7,8 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.VisionLanguage.Interfaces;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -44,13 +46,15 @@ namespace AiDotNet.ComputerVision.Segmentation.Panoptic;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.MultiClassClassification,
 ///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 133);
-/// var model = new ODISE&lt;double&gt;(architecture);
+/// // textEncoder and clipImageEncoder are a frozen CLIP's two towers (for example an OpenCLIP model from
+/// // AiDotNet.VisionLanguage.Encoders, which implements both ITextEncoder and IVisualEncoder).
+/// var model = new ODISE&lt;double&gt;(architecture, clip, clip);
 /// // Every tunable is now set through the options object; these are the defaults:
-/// var custom = new ODISE&lt;double&gt;(architecture,
+/// var custom = new ODISE&lt;double&gt;(architecture, clip, clip,
 ///     options: new ODISEOptions { NumClasses = 133, DropRate = 0.1, ModelSize = ODISEModelSize.Base });
 ///
 /// // Or load a pre-trained ONNX model for diffusion-based segmentation
-/// var onnxModel = new ODISE&lt;double&gt;(architecture, "odise.onnx");
+/// var onnxModel = new ODISE&lt;double&gt;(architecture, "odise.onnx", clip, clip, options: null);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -101,6 +105,27 @@ public partial class ODISE<T> : Common.PanopticSegmentationBase<T>
     // this many layers per stage before inserting the skip-concat. Aliases the single
     // source of truth in LayerHelper so the builder and this consumer can't drift apart.
     private const int DecoderStageLayerCount = LayerHelper<T>.ODISEDecoderStageLayerCount;
+
+    // Mask-classification head (Xu et al. 2023, Sec. 3.4-3.6): N queries refined by masked attention over a
+    // D-wide pixel embedding; each query's embedding is classified against the text encoder's embeddings of
+    // the class names.
+    private readonly ITextEncoder<T> _textEncoder;
+    // The frozen CLIP image encoder of the discriminative branch (Sec. 3.6): it classifies every query's masked
+    // image, and that prediction is fused with the diffusion classifier at inference.
+    private readonly IVisualEncoder<T> _clipImageEncoder;
+    // Native layers end with the learnable diffusion-classifier logit scale; the decoder ends before it.
+    private int _headLayerEnd;
+    // True when no loss function was given: training uses Mask2Former's Hungarian set-prediction loss.
+    private readonly bool _usesSetPredictionLoss;
+    private readonly int _numQueries;
+    private readonly int _pixelDim;
+    private readonly int _embeddingDim;
+    private readonly int _decoderLayers;
+    // Mask2Former transformer decoder widths: attention heads and FFN hidden width.
+    private readonly int _attentionHeads;
+    private readonly int _feedForwardDim;
+    private readonly string[] _classNames;
+    private Tensor<T>? _closedSetText;
     #endregion
 
     #region Properties
@@ -115,8 +140,13 @@ public partial class ODISE<T> : Common.PanopticSegmentationBase<T>
     /// Initializes ODISE in native (trainable) mode.
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
+    /// <param name="textEncoder">CLIP-style text encoder whose embeddings classify the masks.</param>
+    /// <param name="clipImageEncoder">The frozen CLIP image encoder (same embedding space as
+    /// <paramref name="textEncoder"/>) whose masked-image classification is fused with the diffusion classifier.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
-    /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
+    /// <param name="lossFunction">Loss function. Default (null): Mask2Former's set-prediction loss with Hungarian
+    /// matching (class cross-entropy, mask BCE and Dice), as ODISE trains; a supplied loss is applied to the
+    /// per-pixel semantic scores instead.</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -124,6 +154,8 @@ public partial class ODISE<T> : Common.PanopticSegmentationBase<T>
     /// </para>
     /// </remarks>
     public ODISE(NeuralNetworkArchitecture<T> architecture,
+        ITextEncoder<T> textEncoder,
+        IVisualEncoder<T> clipImageEncoder,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         ODISEOptions? options = null)
@@ -137,6 +169,12 @@ public partial class ODISE<T> : Common.PanopticSegmentationBase<T>
         _options = options; Options = _options;
         _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
         _hasUserSuppliedOptimizer = optimizer is not null;
+        _usesSetPredictionLoss = lossFunction is null;
+        _textEncoder = textEncoder ?? throw new ArgumentNullException(nameof(textEncoder));
+        _clipImageEncoder = clipImageEncoder ?? throw new ArgumentNullException(nameof(clipImageEncoder));
+        (_numQueries, _pixelDim, _embeddingDim, _decoderLayers, _classNames) = ValidateHead(_options, textEncoder);
+        (_attentionHeads, _feedForwardDim) = ValidateDecoder(_options);
+        ValidateImageEncoder(clipImageEncoder);
         (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
         InitializeLayers();
     }
@@ -145,8 +183,14 @@ public partial class ODISE<T> : Common.PanopticSegmentationBase<T>
     /// Initializes ODISE in ONNX (inference-only) mode.
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
-    /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="options">Optional model options.</param>
+    /// <param name="onnxModelPath">Path to the pre-trained ONNX model file. The graph must emit the Mask2Former
+    /// decoder's outputs, in order: the query mask logits <c>[B, N, H, W]</c>, the queries' text-space class embeddings
+    /// <c>[B, N, E]</c> and their cosine similarity to the void (null) embedding <c>[B, N, 1]</c>.</param>
+    /// <param name="textEncoder">CLIP-style text encoder whose embeddings classify the masks.</param>
+    /// <param name="clipImageEncoder">The frozen CLIP image encoder whose masked-image classification is fused
+    /// with the diffusion classifier.</param>
+    /// <param name="options">Model options, or null for the defaults. Only the native constructor carries optional
+    /// parameters (RS0026: two new overloads may not both).</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Loads a pre-trained ODISE from ONNX for inference.
@@ -157,7 +201,9 @@ public partial class ODISE<T> : Common.PanopticSegmentationBase<T>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
     public ODISE(NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        ODISEOptions? options = null)
+        ITextEncoder<T> textEncoder,
+        IVisualEncoder<T> clipImageEncoder,
+        ODISEOptions? options)
         // The base validates the path, sets ONNX mode, resolves the input geometry and opens the
         // InferenceSession.
         : base(architecture, onnxModelPath, (options ??= new ODISEOptions()).NumClasses,
@@ -165,6 +211,11 @@ public partial class ODISE<T> : Common.PanopticSegmentationBase<T>
     {
         _options = options; Options = _options;
         _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
+        _textEncoder = textEncoder ?? throw new ArgumentNullException(nameof(textEncoder));
+        _clipImageEncoder = clipImageEncoder ?? throw new ArgumentNullException(nameof(clipImageEncoder));
+        (_numQueries, _pixelDim, _embeddingDim, _decoderLayers, _classNames) = ValidateHead(_options, textEncoder);
+        (_attentionHeads, _feedForwardDim) = ValidateDecoder(_options);
+        ValidateImageEncoder(clipImageEncoder);
         (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
         InitializeLayers();
     }
@@ -197,9 +248,62 @@ public partial class ODISE<T> : Common.PanopticSegmentationBase<T>
         // breaking SegmentPanoptic's confidence math (which assumes values
         // in [0, 1]). Apply the same softmax in both paths so the public
         // contract is consistent.
-        var logits = _useNativeMode ? Forward(input) : PredictOnnx(input);
+        var logits = Forward(input);
         return Common.SegmentationTensorOps.SoftmaxAlongClassDim(logits);
     }
+
+    /// <summary>
+    /// Trains with Mask2Former's set-prediction loss (ODISE's training objective) when no loss function was given
+    /// to the constructor.
+    /// </summary>
+    /// <remarks>
+    /// The target is the semantic segmentation <c>[B, K, H, W]</c> (or a <c>[B, H, W]</c> class-index map); every
+    /// class present in an image is one ground-truth segment. Queries are matched to segments by the Hungarian
+    /// algorithm on <c>2 * (-p_class) + 5 * BCE + 5 * Dice</c>; matched queries learn the class (cross-entropy over
+    /// the diffusion classifier's logits and the void logit, void down-weighted to 0.1) and the mask (BCE and Dice,
+    /// weight 5 each); unmatched queries learn void. As in ODISE, the CLIP image branch is not trained: it joins
+    /// only at inference.
+    /// </remarks>
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expected)
+    {
+        if (!_usesSetPredictionLoss) return false;
+        if (!_useNativeMode) throw new NotSupportedException("Training is not supported in ONNX inference mode.");
+        TrainWithCustomObjective(input, expected, SetPredictionLoss);
+        return true;
+    }
+
+    /// <summary>ODISE's set-prediction loss of one training batch, recomputed from the input.</summary>
+    internal Tensor<T> SetPredictionLoss(Tensor<T> input, Tensor<T> expected)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (expected is null) throw new ArgumentNullException(nameof(expected));
+        bool hasBatch = input.Rank == 4;
+        var batched = hasBatch ? input : AddBatchDimension(input);
+        var target = hasBatch ? expected : Engine.Reshape(expected, new[] { 1 }.Concat(expected.Shape.ToArray()).ToArray());
+        _closedSetText ??= EncodeNames(_classNames);
+        // Mask2Former's deep supervision: the initial queries' prediction and every decoder layer's prediction are
+        // each matched and supervised.
+        var predictions = Decode(batched);
+        var final = predictions[predictions.Count - 1];
+        var segments = Common.MaskSetPredictionLoss.SemanticSegments(target, _numClasses, batched.Shape[0], final.Height, final.Width);
+        Tensor<T>? total = null;
+        foreach (var prediction in predictions)
+        {
+            var (maskLogits, classLogits, _) = QueryLogits(prediction, _closedSetText);
+            var term = Common.MaskSetPredictionLoss.Mask2Former(classLogits, maskLogits, segments);
+            total = total is null ? term : Engine.TensorAdd(total, term);
+        }
+
+        return total ?? throw new InvalidOperationException("ODISE's decoder produced no prediction.");
+    }
+
+    /// <summary>The Mask2Former decoder's layers (query embeddings, prediction heads and every decoder layer).</summary>
+    /// <remarks>A method, not a property: the layers already live in <c>Layers</c>, and a layer-collection property
+    /// would be surfaced a second time by the parameter generator.</remarks>
+    internal IReadOnlyList<ILayer<T>> GetDecoderLayers()
+        => _useNativeMode
+            ? Layers.Skip(QueryDecoderStart).Take(Common.Mask2FormerTransformerDecoder.LayerCount(_decoderLayers)).ToList()
+            : new List<ILayer<T>>();
 
     /// <summary>
     /// Performs one training step.
@@ -263,6 +367,277 @@ public partial class ODISE<T> : Common.PanopticSegmentationBase<T>
     #endregion
 
     #region Private Methods
+    private static (int Queries, int PixelDim, int EmbeddingDim, int Layers, string[] ClassNames) ValidateHead(
+        ODISEOptions options, ITextEncoder<T> textEncoder)
+    {
+        if (options.NumQueries < 1) throw new ArgumentException("NumQueries must be positive.", nameof(options));
+        if (options.PixelEmbeddingDimension < 1)
+            throw new ArgumentException("PixelEmbeddingDimension must be positive.", nameof(options));
+        if (options.NumDecoderLayers < 1) throw new ArgumentException("NumDecoderLayers must be positive.", nameof(options));
+        if (!(options.Temperature > 0)) throw new ArgumentException("Temperature must be positive.", nameof(options));
+        if (!(options.InVocabularyClipWeight >= 0 && options.InVocabularyClipWeight <= 1)
+            || !(options.OutOfVocabularyClipWeight >= 0 && options.OutOfVocabularyClipWeight <= 1))
+            throw new ArgumentException("The CLIP fusion weights must lie in [0, 1].", nameof(options));
+        if (textEncoder.TextEmbeddingDimension < 1)
+            throw new ArgumentException("The text encoder must declare a positive TextEmbeddingDimension.", nameof(textEncoder));
+        string[] names = options.ClassNames?.ToArray()
+            ?? Enumerable.Range(0, options.NumClasses).Select(i => $"class {i}").ToArray();
+        if (names.Length != options.NumClasses)
+            throw new ArgumentException(
+                $"ClassNames has {names.Length} names but NumClasses is {options.NumClasses}.", nameof(options));
+        return (options.NumQueries, options.PixelEmbeddingDimension, textEncoder.TextEmbeddingDimension,
+            options.NumDecoderLayers, names);
+    }
+
+    private static (int Heads, int FeedForwardDim) ValidateDecoder(ODISEOptions options)
+    {
+        if (options.NumAttentionHeads < 1 || options.PixelEmbeddingDimension % options.NumAttentionHeads != 0)
+            throw new ArgumentException("NumAttentionHeads must divide PixelEmbeddingDimension.", nameof(options));
+        if (options.FeedForwardDimension < 1)
+            throw new ArgumentException("FeedForwardDimension must be positive.", nameof(options));
+        return (options.NumAttentionHeads, options.FeedForwardDimension);
+    }
+
+    /// <summary>The CLIP image tower must share the text tower's embedding space and the model's input channels.</summary>
+    private void ValidateImageEncoder(IVisualEncoder<T> clipImageEncoder)
+    {
+        if (clipImageEncoder.EmbeddingDimension != _embeddingDim)
+            throw new ArgumentException(
+                $"The CLIP image encoder embeds into {clipImageEncoder.EmbeddingDimension} dimensions but the text encoder into {_embeddingDim}; ODISE needs one CLIP space.",
+                nameof(clipImageEncoder));
+        if (clipImageEncoder.ImageChannels != _channels)
+            throw new ArgumentException(
+                $"The CLIP image encoder takes {clipImageEncoder.ImageChannels}-channel images but the model's input has {_channels}.",
+                nameof(clipImageEncoder));
+        if (clipImageEncoder.ImageSize < 1)
+            throw new ArgumentException("The CLIP image encoder must declare a positive ImageSize.", nameof(clipImageEncoder));
+    }
+
+    /// <summary>
+    /// CLIP's logit scale for the frozen image-side classifier: CLIP's learned <c>exp(logit_scale)</c> saturates at
+    /// its clamp of 100 (Radford et al. 2021), the scale ODISE's CLIP head applies.
+    /// </summary>
+    internal const double ClipLogitScale = 100.0;
+
+    /// <summary>Channels the pixel decoder emits: the D-wide mask features the transformer decoder reads.</summary>
+    private int HeadChannels => _pixelDim;
+
+    /// <summary>Index of the Mask2Former decoder's first layer, after the learnable logit scale.</summary>
+    private int QueryDecoderStart => _headLayerEnd + 1;
+
+    /// <summary>The L2-normalized text embeddings <c>[K, E]</c> of <paramref name="names"/> (the encoder is frozen).</summary>
+    private Tensor<T> EncodeNames(IReadOnlyList<string> names)
+    {
+        using var noGrad = new NoGradScope<T>();
+        return Common.TextEmbeddingClassifier.EncodeNormalized(_textEncoder, names);
+    }
+
+    /// <summary>
+    /// The queries' mask logits <c>[B, N, HW]</c>, class logits <c>[B, N, K + 1]</c> (ODISE's
+    /// <c>s * cos(z_n, t_k)</c> with the learned logit scale <c>s</c>, then the void logit <c>s * cos(z_n, null)</c>)
+    /// and the diffusion logits alone <c>[B, N, K]</c>.
+    /// </summary>
+    private (Tensor<T> MaskLogits, Tensor<T> ClassLogits, Tensor<T> DiffusionLogits) QueryLogits(
+        Common.Mask2FormerPrediction<T> prediction, Tensor<T> text)
+    {
+        var embeddings = prediction.ClassEmbeddings;
+        int b = embeddings.Shape[0], n = embeddings.Shape[1], k = text.Shape[0];
+        var similarity = Engine.TensorConcatenate(new[]
+        {
+            Engine.TensorMatMul(Common.MaskClassificationOps.NormalizeAxis(embeddings, 2), Engine.TensorTranspose(text)),
+            prediction.VoidSimilarity,
+        }, 2);
+        var classLogits = ScaleDiffusionLogits(similarity);
+        var diffusionLogits = Engine.TensorSlice(classLogits, new[] { 0, 0, 0 }, new[] { b, n, k });
+        return (prediction.MaskLogits, classLogits, diffusionLogits);
+    }
+
+    /// <summary>
+    /// The Mask2Former decoder's predictions for a batched input: in native mode the initial queries' prediction and
+    /// one per decoder layer (the last is the output); in ONNX mode the graph's outputs.
+    /// </summary>
+    private IReadOnlyList<Common.Mask2FormerPrediction<T>> Decode(Tensor<T> batched)
+    {
+        if (!_useNativeMode) return new[] { OnnxPrediction(batched) };
+        var features = RawHeadOutput(batched);
+        int b = features.Shape[0], h = features.Shape[2], w = features.Shape[3];
+        if (features.Shape[1] != _pixelDim)
+            throw new InvalidOperationException(
+                $"The pixel decoder emitted {features.Shape[1]} channels; the transformer decoder reads {_pixelDim}.");
+        var pixel = Engine.Reshape(features, new[] { b, _pixelDim, h * w });
+        return Common.Mask2FormerTransformerDecoder.Run(
+            Layers, QueryDecoderStart, _numQueries, _attentionHeads, _decoderLayers, pixel, h, w);
+    }
+
+    /// <summary>The decoder outputs read from the ONNX graph: mask logits, class embeddings, void similarity.</summary>
+    private Common.Mask2FormerPrediction<T> OnnxPrediction(Tensor<T> batched)
+    {
+        if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
+        var inputData = new float[batched.Length];
+        NumOps.ToFloatSpan(batched.Data.Span.Slice(0, batched.Length), inputData);
+        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, batched._shape);
+        string inputName = _onnxSession.InputMetadata.Keys.FirstOrDefault() ?? "images";
+        var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
+        using var results = _onnxSession.Run(inputs);
+        var outputs = results.Select(result => ReadOnnx(result.AsTensor<float>())).ToList();
+        if (outputs.Count < 3)
+            throw new InvalidOperationException(
+                "An ODISE ONNX graph must emit the mask logits [B, N, H, W], the class embeddings [B, N, E] and the void similarity [B, N, 1].");
+        var masks = outputs[0];
+        var embeddings = outputs[1];
+        var voidSimilarity = outputs[2];
+        if (masks.Rank != 4 || masks.Shape[1] != _numQueries || embeddings.Rank != 3 || embeddings.Shape[1] != _numQueries
+            || embeddings.Shape[2] != _embeddingDim || voidSimilarity.Rank != 3 || voidSimilarity.Shape[1] != _numQueries
+            || voidSimilarity.Shape[2] != 1)
+            throw new InvalidOperationException(
+                $"The ONNX outputs must be [B, {_numQueries}, H, W] mask logits, [B, {_numQueries}, {_embeddingDim}] class embeddings and [B, {_numQueries}, 1] void similarities.");
+        int b = masks.Shape[0], h = masks.Shape[2], w = masks.Shape[3];
+        return new Common.Mask2FormerPrediction<T>(
+            Engine.Reshape(masks, new[] { b, _numQueries, h * w }), embeddings, voidSimilarity, h, w);
+    }
+
+    private Tensor<T> ReadOnnx(OnnxTensors.Tensor<float> tensor)
+    {
+        var data = new T[tensor.Length];
+        NumOps.FromFloatSpan(tensor.ToDenseTensor().Buffer.Span, data);
+        return new Tensor<T>(tensor.Dimensions.ToArray(), new Vector<T>(data));
+    }
+
+    /// <summary>
+    /// The diffusion classifier's logit scale, learned as in ODISE (<c>logit_scale</c> initialized to
+    /// <c>log(1 / Temperature)</c> and clamped at 100). An ONNX graph carries no trainable scale, so ONNX mode uses
+    /// the initial <c>1 / Temperature</c>.
+    /// </summary>
+    private Tensor<T> ScaleDiffusionLogits(Tensor<T> similarity)
+        => _useNativeMode && _headLayerEnd < Layers.Count
+            ? Layers[_headLayerEnd].Forward(similarity)
+            : Engine.TensorMultiplyScalar(similarity, NumOps.FromDouble(1.0 / _options.Temperature));
+
+    /// <summary>
+    /// The frozen CLIP image tower's embedding of every query's masked image, <c>[B, N, E]</c> (L2-normalized): the
+    /// image (resized to the mask resolution) times the query's binary mask (<c>logit &gt; 0</c>), resized to the
+    /// encoder's input size.
+    /// </summary>
+    internal Tensor<T> ClipQueryEmbeddings(Tensor<T> image, Tensor<T> maskLogits, int height, int width)
+    {
+        if (image is null) throw new ArgumentNullException(nameof(image));
+        if (maskLogits is null) throw new ArgumentNullException(nameof(maskLogits));
+        var batched = image.Rank == 4 ? image : AddBatchDimension(image);
+        int b = maskLogits.Shape[0], n = maskLogits.Shape[1], c = batched.Shape[1];
+        int size = _clipImageEncoder.ImageSize, e = _clipImageEncoder.EmbeddingDimension;
+        if (batched.Shape[0] != b) throw new ArgumentException("The image batch does not match the mask batch.", nameof(image));
+        using var noGrad = new NoGradScope<T>();
+        if (batched.Shape[2] != height || batched.Shape[3] != width)
+            batched = Engine.Interpolate(batched, new[] { height, width }, InterpolateMode.Bilinear, false);
+        var binary = Engine.TensorGreaterThan(maskLogits, NumOps.Zero);                              // [B, N, HW]
+        var perImage = new Tensor<T>[b];
+        for (int i = 0; i < b; i++)
+        {
+            var picture = Engine.TensorBroadcastTo(
+                Engine.TensorSlice(batched, new[] { i, 0, 0, 0 }, new[] { 1, c, height, width }), new[] { n, c, height, width });
+            var masks = Engine.TensorBroadcastTo(Engine.Reshape(
+                Engine.TensorSlice(binary, new[] { i, 0, 0 }, new[] { 1, n, height * width }), new[] { n, 1, height, width }),
+                new[] { n, c, height, width });
+            var crops = Engine.Interpolate(Engine.TensorMultiply(picture, masks), new[] { size, size }, InterpolateMode.Bilinear, false);
+            var rows = new Tensor<T>[n];
+            for (int q = 0; q < n; q++)
+            {
+                var crop = Engine.Reshape(Engine.TensorSlice(crops, new[] { q, 0, 0, 0 }, new[] { 1, c, size, size }), new[] { c, size, size });
+                var embedding = _clipImageEncoder.EncodeImage(crop);
+                if (embedding.Length != e)
+                    throw new InvalidOperationException(
+                        $"The CLIP image encoder returned {embedding.Length} values for one image; it declares EmbeddingDimension {e}.");
+                rows[q] = Engine.Reshape(embedding, new[] { 1, 1, e });
+            }
+
+            perImage[i] = Engine.TensorConcatenate(rows, 1);                                         // [1, N, E]
+        }
+
+        return Common.MaskClassificationOps.NormalizeAxis(Engine.TensorConcatenate(perImage, 0), 2);
+    }
+
+    /// <summary>
+    /// ODISE's open-vocabulary classification of every query of a Mask2Former decoder prediction against
+    /// <paramref name="text"/>.
+    /// </summary>
+    /// <param name="prediction">The decoder's prediction.</param>
+    /// <param name="text">L2-normalized class-name embeddings <c>[K, E]</c>.</param>
+    /// <param name="clipWeights">The CLIP fusion weight of each class (<see cref="ClipWeights"/>).</param>
+    /// <param name="image">The input image; null skips the CLIP fusion (ODISE trains without it).</param>
+    /// <returns>Mask logits <c>[B, N, HW]</c> and class probabilities <c>[B, N, K + 1]</c> (void last).</returns>
+    /// <remarks>
+    /// <para>
+    /// The diffusion-branch prediction is <c>softmax_k(s * cos(z_n, t_k))</c> of the query embedding <c>z_n</c>
+    /// with the learned scale <c>s</c>; the discriminative prediction is the frozen CLIP image encoder's
+    /// classification of the query's masked image, <c>softmax_k(100 * cos(clip(x * m_n), t_k))</c>. They are fused
+    /// by a geometric mean, <c>p_diffusion^(1 - w) * p_clip^w</c>, with <c>w = alpha</c> (0.35) for in-vocabulary
+    /// classes and <c>w = beta</c> (0.65) for the rest, renormalized over the classes and scaled by
+    /// <c>1 - p_void</c>, where <c>p_void</c> comes from the softmax over the diffusion logits and the query's void
+    /// logit (ODISE's <c>CategoryODISE</c> inference).
+    /// </para>
+    /// </remarks>
+    internal (Tensor<T> MaskLogits, Tensor<T> ClassProbabilities) ClassifyQueries(
+        Common.Mask2FormerPrediction<T> prediction, Tensor<T> text, Tensor<T> clipWeights, Tensor<T>? image)
+    {
+        if (prediction is null) throw new ArgumentNullException(nameof(prediction));
+        int b = prediction.MaskLogits.Shape[0], k = text.Shape[0];
+        var (maskLogits, classLogits, diffusionLogits) = QueryLogits(prediction, text);
+        var withVoid = Engine.TensorSoftmax(classLogits, 2);
+        if (image is null) return (maskLogits, withVoid);
+
+        var clipLogits = Engine.TensorMultiplyScalar(
+            Engine.TensorMatMul(ClipQueryEmbeddings(image, maskLogits, prediction.Height, prediction.Width), Engine.TensorTranspose(text)),
+            NumOps.FromDouble(ClipLogitScale));
+        var diffusionProbability = Engine.TensorSoftmax(diffusionLogits, 2);
+        var clipProbability = Engine.TensorSoftmax(clipLogits, 2);
+        var voidProbability = Engine.TensorSlice(withVoid, new[] { 0, 0, k }, new[] { b, _numQueries, 1 });
+
+        var shape = new[] { b, _numQueries, k };
+        var clipExponent = Engine.TensorBroadcastTo(Engine.Reshape(clipWeights, new[] { 1, 1, k }), shape);
+        var fused = Engine.TensorMultiply(
+            Engine.TensorPower(diffusionProbability, Engine.ScalarMinusTensor(NumOps.One, clipExponent)),
+            Engine.TensorPower(clipProbability, clipExponent));
+        var normalized = Engine.TensorDivide(fused, Engine.TensorBroadcastTo(Engine.ReduceSum(fused, new[] { 2 }, true), shape));
+        var classProbabilities = Engine.TensorConcatenate(new[]
+        {
+            Engine.TensorMultiply(normalized, Engine.TensorBroadcastTo(Engine.ScalarMinusTensor(NumOps.One, voidProbability), shape)),
+            voidProbability,
+        }, 2);
+        return (maskLogits, classProbabilities);
+    }
+
+    /// <summary>The CLIP fusion weight of each name: alpha for in-vocabulary names, beta otherwise.</summary>
+    internal Tensor<T> ClipWeights(IReadOnlyList<string> names)
+    {
+        var seen = _options.InVocabularyClassNames is null
+            ? null
+            : new HashSet<string>(_options.InVocabularyClassNames, StringComparer.Ordinal);
+        var flags = new bool[names.Count];
+        for (int i = 0; i < flags.Length; i++) flags[i] = seen is null || seen.Contains(names[i]);
+        var inVocabulary = Common.MaskClassificationOps.BoolTable<T>(flags);
+        var alpha = NumOps.FromDouble(_options.InVocabularyClipWeight);
+        var beta = NumOps.FromDouble(_options.OutOfVocabularyClipWeight);
+        return Engine.TensorAdd(
+            Engine.TensorMultiplyScalar(inVocabulary, alpha),
+            Engine.TensorMultiplyScalar(Engine.ScalarMinusTensor(NumOps.One, inVocabulary), beta));
+    }
+
+    /// <summary>
+    /// MaskFormer semantic inference over the closed-set classes, as log scores <c>[B, K, H, W]</c>; with an
+    /// <paramref name="image"/> the CLIP image branch is fused in (inference), without it only the diffusion
+    /// classifier is used (training).
+    /// </summary>
+    private Tensor<T> SemanticScores(Common.Mask2FormerPrediction<T> prediction, Tensor<T>? image)
+    {
+        if (image is not null && image.Rank == 3) image = AddBatchDimension(image);
+        int b = prediction.MaskLogits.Shape[0];
+        _closedSetText ??= EncodeNames(_classNames);
+        var (maskLogits, classProbabilities) = ClassifyQueries(prediction, _closedSetText, ClipWeights(_classNames), image);
+        var withoutVoid = Engine.TensorSlice(classProbabilities, new[] { 0, 0, 0 }, new[] { b, _numQueries, _numClasses });
+        return Common.MaskClassificationOps.SemanticLogScores(
+            withoutVoid, Engine.TensorSigmoid(maskLogits), prediction.Height, prediction.Width);
+    }
+
     private static (int[] ChannelDims, int[] Depths, int DecoderDim) GetModelConfig(ODISEModelSize modelSize) => modelSize switch
     {
         ODISEModelSize.Base => ([64, 128, 320, 512], [2, 2, 4, 2], 256),
@@ -280,17 +655,27 @@ public partial class ODISE<T> : Common.PanopticSegmentationBase<T>
     /// downsample collapses a small input to a 1x1 bottleneck and the output is
     /// spatially uniform.
     /// </summary>
-    protected override Tensor<T> Forward(Tensor<T> input)
+    protected override Tensor<T> Forward(Tensor<T> input) => SemanticForward(input, fuseClip: true);
+
+    /// <summary>The semantic log scores of <paramref name="input"/>, with or without the CLIP image branch.</summary>
+    private Tensor<T> SemanticForward(Tensor<T> input, bool fuseClip)
     {
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
+        var predictions = Decode(input);
+        var scores = SemanticScores(predictions[predictions.Count - 1], fuseClip ? input : null);
+        if (!hasBatch) scores = RemoveBatchDimension(scores); return scores;
+    }
 
+    /// <summary>The pixel decoder's mask features <c>[B, HeadChannels, H, W]</c> for a batched input.</summary>
+    private Tensor<T> RawHeadOutput(Tensor<T> input)
+    {
         // When the layers come from a pre-supplied Architecture (no generated
         // encoder/decoder split), fall back to a plain sequential pass.
         if (_encoderStageLayerCounts is null)
         {
             var seq = input;
-            for (int i = 0; i < Layers.Count; i++) seq = Layers[i].Forward(seq);
-            if (!hasBatch) seq = RemoveBatchDimension(seq); return seq;
+            for (int i = 0; i < _headLayerEnd; i++) seq = Layers[i].Forward(seq);
+            return seq;
         }
 
         var features = input;
@@ -317,36 +702,22 @@ public partial class ODISE<T> : Common.PanopticSegmentationBase<T>
 
         // Stem-reversal upsample stage + dense head — no skip (encoder has no feature
         // map above the stem resolution). Run all remaining layers sequentially.
-        while (li < Layers.Count) features = Layers[li++].Forward(features);
+        while (li < _headLayerEnd) features = Layers[li++].Forward(features);
 
-        if (!hasBatch) features = RemoveBatchDimension(features); return features;
+        return features;
     }
 
     /// <summary>
     /// Training forward MUST use the same skip-connection path as inference so the lazy
     /// decoder convolutions resolve their input channel counts against the CONCATENATED
     /// feature maps. A plain sequential pass would resolve them against non-concatenated
-    /// inputs and then mismatch at the first real (skip) forward.
+    /// inputs and then mismatch at the first real (skip) forward. Training uses the diffusion classifier alone; the
+    /// frozen CLIP image branch joins only at inference, as in ODISE.
     /// </summary>
-    public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => SemanticForward(input, fuseClip: false);
 
     /// <inheritdoc />
-    protected override Tensor<T> PredictOnnx(Tensor<T> input)
-    {
-        if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
-        bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
-        var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
-        string inputName = _onnxSession.InputMetadata.Keys.FirstOrDefault() ?? "images";
-        var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
-        using var results = _onnxSession.Run(inputs);
-        var outputTensor = results.First().AsTensor<float>();
-        var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++) outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-        var result = new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
-        if (!hasBatch) result = RemoveBatchDimension(result); return result;
-    }
+    protected override Tensor<T> PredictOnnx(Tensor<T> input) => Forward(input);
     #endregion
 
     #region Abstract Implementation
@@ -373,9 +744,17 @@ public partial class ODISE<T> : Common.PanopticSegmentationBase<T>
             // wrapped as ResidualLayer + GroupNorm.
             _encoderStageLayerCounts = new int[_depths.Length];
             for (int s = 0; s < _depths.Length; s++) _encoderStageLayerCounts[s] = 3 + (_depths[s] - 1) * 2;
-            var decoderLayers = LayerHelper<T>.CreateODISEDecoderLayers(_channelDims, _decoderDim, _numClasses);
+            // The final 1x1 convolution emits the D-wide mask features the transformer decoder reads.
+            var decoderLayers = LayerHelper<T>.CreateODISEDecoderLayers(_channelDims, _decoderDim, HeadChannels);
             Layers.AddRange(decoderLayers);
         }
+
+        // The diffusion classifier's learnable logit scale (initialized to 1 / Temperature) follows the pixel
+        // decoder, then Mask2Former's transformer decoder (masked cross-attention, self-attention and FFN per layer).
+        _headLayerEnd = Layers.Count;
+        Layers.Add(new LearnableLogitScaleLayer<T>(_options.Temperature));
+        Layers.AddRange(Common.Mask2FormerTransformerDecoder.CreateLayers<T>(
+            _pixelDim, _feedForwardDim, _embeddingDim, _decoderLayers));
     }
 
     private bool _lazyShapesResolved;
@@ -412,7 +791,7 @@ public partial class ODISE<T> : Common.PanopticSegmentationBase<T>
         // materializes every lazy layer with its correct (concatenated) channels.
         using (InferenceMode.Enter())
         {
-            Forward(new Tensor<T>([1, _channels, _height, _width]));
+            SemanticForward(new Tensor<T>([1, _channels, _height, _width]), fuseClip: false);
         }
         _lazyShapesResolved = true;
     }
@@ -440,45 +819,63 @@ public partial class ODISE<T> : Common.PanopticSegmentationBase<T>
     // all come from the base; only the model-specific override remains.
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// Classifies the queries against the closed-set <see cref="ODISEOptions.ClassNames"/> (classes below
+    /// <c>NumStuffClasses</c> are stuff) and merges them with Mask2Former's panoptic inference.
+    /// </para>
+    /// </remarks>
     public override PanopticSegmentationResult<T> SegmentPanoptic(Tensor<T> image)
     {
-        // Predict() returns per-pixel softmax probabilities (paper-faithful
-        // inference output per Xu et al. 2023 §3), so the probability map and
-        // argmax-derived class map both come directly from that — applying
-        // SoftmaxAlongClassDim again would double-softmax. Argmax is invariant
-        // under softmax so the semanticMap is unchanged.
-        var probMap = Common.SegmentationTensorOps.EnsureUnbatched(Predict(image));
-        var semanticMap = Common.SegmentationTensorOps.ArgmaxAlongClassDim(probMap);
-        int h = semanticMap.Shape[0], w = semanticMap.Shape[1];
-        int numStuff = Math.Max(1, _numClasses / 3);
-        var instanceMap = new Tensor<T>([h, w]);
-        var panopticMap = new Tensor<T>([h, w]);
-        var segments = new List<PanopticSegment<T>>();
-        int nextInstId = 1;
-        for (int cls = 0; cls < numStuff; cls++)
-        {
-            int area = 0; double sumConf = 0;
-            for (int row = 0; row < h; row++)
-                for (int col = 0; col < w; col++)
-                    if (NumOps.Compare(semanticMap[row, col], NumOps.FromDouble(cls)) == 0)
-                    { panopticMap[row, col] = NumOps.FromDouble(cls * 1000); area++; sumConf += NumOps.ToDouble(probMap[cls, row, col]); }
-            if (area > 0) segments.Add(new PanopticSegment<T> { SegmentId = cls, ClassId = cls, IsThing = false, Confidence = sumConf / area, Area = area });
-        }
-        for (int cls = numStuff; cls < _numClasses; cls++)
-        {
-            var (labelMap, count) = Common.SegmentationTensorOps.LabelConnectedComponents(semanticMap, cls);
-            for (int comp = 1; comp <= count; comp++)
-            {
-                int instId = nextInstId++;
-                int area = 0; double sumConf = 0; var compMask = new Tensor<T>([h, w]);
-                for (int row = 0; row < h; row++)
-                    for (int col = 0; col < w; col++)
-                        if (NumOps.Compare(labelMap[row, col], NumOps.FromDouble(comp)) == 0)
-                        { instanceMap[row, col] = NumOps.FromDouble(instId); panopticMap[row, col] = NumOps.FromDouble(cls * 1000 + instId); compMask[row, col] = NumOps.FromDouble(1.0); area++; sumConf += NumOps.ToDouble(probMap[cls, row, col]); }
-                if (area > 0) segments.Add(new PanopticSegment<T> { SegmentId = instId, ClassId = cls, IsThing = true, Confidence = sumConf / area, Area = area, Mask = compMask });
-            }
-        }
-        return new PanopticSegmentationResult<T> { SemanticMap = semanticMap, InstanceMap = instanceMap, PanopticMap = panopticMap, Segments = segments };
+        if (image is null) throw new ArgumentNullException(nameof(image));
+        _closedSetText ??= EncodeNames(_classNames);
+        var isThing = new bool[_numClasses];
+        for (int c = NumStuffClasses; c < _numClasses; c++) isThing[c] = true;
+        return SegmentPanopticCore(image, _closedSetText, ClipWeights(_classNames), isThing);
+    }
+
+    /// <summary>
+    /// Open-vocabulary panoptic segmentation: segments <paramref name="image"/> into the given stuff and thing
+    /// categories, which need not be the training classes.
+    /// </summary>
+    /// <param name="image">Image <c>[C, H, W]</c> or <c>[1, C, H, W]</c>.</param>
+    /// <param name="stuffClassNames">Names of the stuff categories (class ids 0 .. S-1).</param>
+    /// <param name="thingClassNames">Names of the thing categories (class ids S .. S+T-1).</param>
+    /// <returns>The panoptic result; void pixels are <c>-1</c> in the semantic and panoptic maps.</returns>
+    /// <remarks>
+    /// <para>
+    /// Each query's class distribution fuses the diffusion classifier with the frozen CLIP image encoder's
+    /// classification of the query's masked image per category: in-vocabulary names (<see cref="ODISEOptions.InVocabularyClassNames"/>) use alpha = 0.35,
+    /// the rest beta = 0.65 (Xu et al. 2023).
+    /// </para>
+    /// </remarks>
+    public PanopticSegmentationResult<T> SegmentPanoptic(
+        Tensor<T> image, IReadOnlyList<string> stuffClassNames, IReadOnlyList<string> thingClassNames)
+    {
+        if (image is null) throw new ArgumentNullException(nameof(image));
+        if (stuffClassNames is null) throw new ArgumentNullException(nameof(stuffClassNames));
+        if (thingClassNames is null) throw new ArgumentNullException(nameof(thingClassNames));
+        var names = stuffClassNames.Concat(thingClassNames).ToArray();
+        if (names.Length == 0) throw new ArgumentException("At least one category name is required.", nameof(stuffClassNames));
+        var isThing = new bool[names.Length];
+        for (int c = stuffClassNames.Count; c < names.Length; c++) isThing[c] = true;
+        return SegmentPanopticCore(image, EncodeNames(names), ClipWeights(names), isThing);
+    }
+
+    private PanopticSegmentationResult<T> SegmentPanopticCore(Tensor<T> image, Tensor<T> text, Tensor<T> clipWeights, bool[] isThing)
+    {
+        var batched = image.Rank == 4 ? image : AddBatchDimension(image);
+        if (batched.Shape[0] != 1)
+            throw new ArgumentException("SegmentPanoptic takes a single image.", nameof(image));
+        using var noGrad = new NoGradScope<T>();
+        var predictions = Decode(batched);
+        var final = predictions[predictions.Count - 1];
+        int h = final.Height, w = final.Width, k = text.Shape[0];
+        var (maskLogits, classProbabilities) = ClassifyQueries(final, text, clipWeights, batched);
+        var masks = Engine.Reshape(Engine.TensorSigmoid(maskLogits), new[] { _numQueries, h, w });
+        var probabilities = Engine.Reshape(classProbabilities, new[] { _numQueries, k + 1 });
+        return Common.MaskClassificationOps.MergeMask2Former(
+            probabilities, masks, isThing, _options.ObjectMaskThreshold, _options.OverlapThreshold);
     }
     #endregion
 }

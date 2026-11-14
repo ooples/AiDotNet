@@ -342,9 +342,18 @@ public class PointCloudMedicalSegmentationIntegrationTests
     public async Task UniverSeg_Predict_ReturnsOutput()
     {
         var model = new UniverSeg<double>(Arch());
+        // UniverSeg is defined only for a non-empty support set (Butoi et al. 2023).
+        model.SetSupportSet(Rand(2, 3, 32, 32), Rand(2, 32, 32));
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task UniverSeg_PredictWithoutSupportSet_Throws()
+    {
+        var model = new UniverSeg<double>(Arch());
+        Assert.Throws<System.InvalidOperationException>(() => model.Predict(Rand(1, 3, 32, 32)));
     }
 
     [Fact(Timeout = 120000)]
