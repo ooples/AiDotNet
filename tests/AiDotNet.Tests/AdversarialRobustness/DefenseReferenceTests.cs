@@ -184,6 +184,35 @@ public class DefenseReferenceTests
         Assert.True(output.Max() > 1.3, $"max {output.Max()}");
     }
 
+    [Fact(Timeout = 60000)]
+    public async Task PromptDefense_AdversarialTrainingInputStaysInsideTheEpsilonBall()
+    {
+        await Task.Yield();
+
+        // A prompt entry of -0.5 puts x + delta at 0.2 - 0.5 = -0.3. FGSM clips to [0, 1], so its output there
+        // is 0 for either gradient sign and attacked - prompted = 0.3, three times the defense epsilon = 0.1. The
+        // training input x + offset must stay within epsilon of x (Chen et al. 2023: max over ||x_adv - x|| <= eps).
+        var defense = new AdversarialPromptDefense<double, Vector<double>, Vector<double>>(
+            new AdversarialDefenseOptions<double> { Epsilon = 0.1 }, promptLength: 4, promptOptimizationSteps: 1);
+        using (global::AiDotNet.Helpers.ModelPersistenceGuard.InternalOperation())
+        {
+            defense.Deserialize(System.Text.Encoding.UTF8.GetBytes(
+                "{\"Options\":{\"Epsilon\":0.1},\"PromptData\":[-0.5,0.0,0.0,0.0]}"));
+        }
+
+        var attack = new FGSMAttack<double, Vector<double>, Vector<double>>(
+            new AdversarialAttackOptions<double> { Epsilon = 0.1 });
+        var x = new Vector<double>(new[] { 0.2, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5 });
+
+        var adversarial = defense.AdversarialInput(x, new Vector<double>(new[] { 1.0, 0.0 }), new LengthCheckingModel(10), attack);
+
+        Assert.Equal(0.3, adversarial[0], 1e-12);
+        for (int i = 0; i < x.Length; i++)
+        {
+            Assert.True(Math.Abs(adversarial[i] - x[i]) <= 0.1 + 1e-12, $"entry {i} moved {adversarial[i] - x[i]}");
+        }
+    }
+
     /// <summary>Exposes the character-frequency features of the content classifier.</summary>
     private sealed class FrequencyProbe<TNum> : RuleBasedContentClassifier<TNum>
     {
