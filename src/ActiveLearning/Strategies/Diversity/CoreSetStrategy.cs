@@ -98,6 +98,12 @@ public class CoreSetStrategy<T, TInput, TOutput> : IDiversityStrategy<T, TInput,
         // Extract features for unlabeled samples
         var unlabeledFeatures = ExtractFeatures(model, unlabeledPool);
 
+        if (unlabeledFeatures.Count == 0)
+        {
+            // Exhausted pool: nothing to score (the block concatenation below rejects an empty list)
+            return new Vector<T>(0);
+        }
+
         if (_labeledFeatures == null || _labeledFeatures.Count == 0)
         {
             // No labeled samples yet - all samples get equal high scores
@@ -445,6 +451,12 @@ public class CoreSetStrategy<T, TInput, TOutput> : IDiversityStrategy<T, TInput,
         var engine = AiDotNetEngine.Current;
         int m = points.Shape[0];
         int k = covered.Shape[0];
+        if (m == 0)
+        {
+            // No points: the block loop below would hand TensorConcatenate an empty list, which it rejects
+            return new Tensor<T>(new[] { 0 });
+        }
+
         if (k == 0)
         {
             return Filled(m, NumOps.MaxValue);
