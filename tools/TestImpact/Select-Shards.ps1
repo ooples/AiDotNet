@@ -26,6 +26,14 @@
     paths the merge changes relative to it are this pull request's change. Mutually exclusive
     with BaseSha.
 
+.PARAMETER MapLineageRef
+    The branch the map was measured on, when that is not the pull request's base branch: a stacked
+    pull request selecting with master's map because its own base branch has none. Only valid with
+    PullRequestHeadSha. The change selected for is then everything the checkout adds to that
+    branch (the diff from their merge base), not only the diff from the base branch - the base
+    branch's own commits were never measured by, or validated against, this map's lineage. The
+    checkout must contain the map's commit; otherwise selection escalates.
+
 .PARAMETER BaseSha
     An explicit base for the current change. The nightly audit passes the audited commit itself,
     so every map-to-HEAD path is replayed as one change and only selection-control edits are
@@ -53,6 +61,7 @@ param(
     [Parameter(ParameterSetName = 'Select')] [switch] $AuditUnchangedMap,
     [Parameter(ParameterSetName = 'Select')] [string] $ShardManifestFile,
     [Parameter(ParameterSetName = 'Select')] [string] $DeltaFromTree,
+    [Parameter(ParameterSetName = 'Select')] [string] $MapLineageRef,
     [Parameter(ParameterSetName = 'Select')]
     [Parameter(ParameterSetName = 'Classify')] [string] $BaseSha,
     [Parameter(ParameterSetName = 'Select')]
@@ -86,6 +95,34 @@ $script:SharedInfrastructureFiles = @(
 # remaining keys are formatting and diagnostic severities. Escalating 164 shards - 34,421 tests -
 # to prove an indent rule is the single largest unjustified escalation measured on real PRs.
 $script:BuildOnlyFiles = @('.editorconfig')
+# Analyzer and pack inputs of src/AiDotNet.csproj, by exact path. None is compiled into an assembly or
+# read by a test (verified by grep over tests/), and each is checked by a job that a build-only
+# change still runs:
+#   - PublicAPI.Shipped/Unshipped.txt: AdditionalFiles of Microsoft.CodeAnalysis.PublicApiAnalyzers
+#     (RS0016/RS0017), reported by the Build job's analyzer-enabled compile of src/AiDotNet.csproj.
+#   - ElementWiseBaseline.txt: an AdditionalFile read only by ElementWiseAnalyzer, a
+#     DiagnosticAnalyzer (ADNELEM001-003). No source generator reads AdditionalFiles, so no
+#     generated code depends on it.
+#   - CompatibilitySuppressions.xml: package validation, run by the compat build's `dotnet pack`.
+# They are regenerated with almost every product change, so until they were listed here an
+# otherwise mapped pull request escalated on "not executed by any mapped shard" for a text file
+# (18 of 42 pull-request runs measured in November 2026).
+$script:BuildOnlyPaths = @(
+    'src/PublicAPI.Shipped.txt',
+    'src/PublicAPI.Unshipped.txt',
+    'src/ElementWiseBaseline.txt',
+    'src/CompatibilitySuppressions.xml'
+)
+# The per-framework public API baselines: src/PublicAPI/<tfm>/PublicAPI.(Shipped|Unshipped).txt.
+$script:BuildOnlyPublicApiDirectory = 'src/PublicAPI/'
+$script:BuildOnlyPublicApiNames = @('PublicAPI.Shipped.txt', 'PublicAPI.Unshipped.txt')
+# Benchmark projects. The solution build compiles them (which is why a build-only change still
+# builds), but no test shard executes them: no test or product project references them and
+# .github/test-shards.yml names none. Test-BuildOnlyDirectoryConsumed re-checks that against the
+# tree on every run, so the day a test project references one of these the selector stops trusting
+# it. Build files inside them (Directory.Build.props, global.json) stay full validation: the
+# shared-infrastructure rule is applied first.
+$script:BuildOnlyDirectories = @('AiDotNetBenchmarkTests/', 'benchmarks/')
 # Per tool directory: whether this workflow's build or tests reference it (Test-ToolDirectoryReferenced).
 $script:ToolReferenceCache = @{}
 $script:FullValidationPaths = @(
@@ -114,7 +151,17 @@ $script:SelectionControlDirectories = @('tools/TestImpact/')
 # AN ALLOWLIST, and deliberately short. A directory earns a place here only by demonstrably holding
 # nothing the solution compiles; Assert-NonRuntimeDirectories re-checks that on every run, so the
 # day someone adds a project under one of these the selector stops trusting it.
-$script:NonRuntimeDirectories = @('website/')
+#
+# tools/reference-data/ holds the Python scripts that generate reference fixtures from the original
+# implementations (369 .py, a README and a requirements file; no .cs, no project). Tests read the
+# generated fixtures under tests/, never this directory (verified by grep over tests/), and
+# tts-paper-contracts.yml triggers on it by itself. It fell through to MapCandidate only because
+# comments in src/ name its scripts, which Test-ToolDirectoryReferenced counts as a reference.
+$script:NonRuntimeDirectories = @('website/', 'tools/reference-data/')
+# Exact root-level files nothing in this workflow's build or tests reads. vercel.json configures the
+# Vercel deployment of api/ (scripts/vercel-ignore-api.sh is its only reader); a root-level file has
+# no directory for Test-ToolDirectoryReferenced to scope by, so it used to escalate as unmapped.
+$script:NonRuntimePaths = @('vercel.json')
 # These helpers cannot choose shards or certify validation. They are exercised by the
 # mandatory tooling checks before selection, including real HTTP transfer regressions.
 # Keep this exact: unknown helpers and selection/certificate policy remain fail-closed.
@@ -198,6 +245,20 @@ function Get-ChangedPathImpact {
     foreach ($entry in $script:BuildOnlyFiles) {
         if ($buildOnlyName -ieq $entry) { return [ChangedPathImpact]::BuildOnly }
     }
+    # Exact and case-sensitive: a path that differs only in case is another file on the runners,
+    # not the reviewed analyzer or pack input.
+    if ($normalized -cin $script:BuildOnlyPaths) { return [ChangedPathImpact]::BuildOnly }
+    if ($normalized.StartsWith($script:BuildOnlyPublicApiDirectory, [StringComparison]::Ordinal) -and
+        $buildOnlyName -cin $script:BuildOnlyPublicApiNames) {
+        return [ChangedPathImpact]::BuildOnly
+    }
+    foreach ($entry in $script:BuildOnlyDirectories) {
+        if ($normalized.StartsWith($entry, [StringComparison]::Ordinal) -and
+            -not (Test-BuildOnlyDirectoryConsumed -Directory $entry)) {
+            return [ChangedPathImpact]::BuildOnly
+        }
+    }
+    if ($normalized -cin $script:NonRuntimePaths) { return [ChangedPathImpact]::NonRuntime }
 
     # AFTER shared infrastructure, so a build file keeps its meaning wherever it sits, and before the
     # markdown and map-candidate rules, so a non-product tree is spared whatever its file extension.
@@ -288,6 +349,47 @@ function Test-ToolDirectoryReferenced {
     }
     $script:ToolReferenceCache[$directory] = $referenced
     return $referenced
+}
+
+<#
+.SYNOPSIS
+Whether a test or product project consumes a directory trusted as build-only.
+
+.DESCRIPTION
+A build-only directory holds code the solution compiles and no test shard executes. That stops being true when a
+project outside it references it (a ProjectReference, a linked Compile item), the shard manifest names it, or a test
+reads it at run time. Searched at HEAD: every project and MSBuild file outside the build-only directories and the
+shard manifest for the directory as a path, then tests/ for it inside a string literal or as a Path.Combine/Path.Join
+argument. A comment that merely names a benchmark is not a reference. A failed search counts as consumed.
+#>
+function Test-BuildOnlyDirectoryConsumed {
+    param([Parameter(Mandatory)] [string] $Directory)
+    $key = 'build-only:' + $Directory
+    if ($script:ToolReferenceCache.ContainsKey($key)) { return $script:ToolReferenceCache[$key] }
+    $name = [regex]::Escape($Directory.TrimEnd('/'))
+    $excluded = @($script:BuildOnlyDirectories | ForEach-Object { ":(exclude)$_" })
+    # POSIX ERE (git grep -E); see Test-ToolDirectoryReferenced for why [:space:] and not \s.
+    $asPath = '(^|["''[:space:]=;(,>]|\.\.[/\\])' + $name + '[/\\]'
+    $null = & git grep -q -i -E $asPath HEAD -- '*.csproj' '*.props' '*.targets' '.github/test-shards.yml' @excluded 2>$null
+    $consumed = $LASTEXITCODE -ne 1
+    if (-not $consumed) {
+        # Two passes: the regular expression over all of tests/ takes minutes, a fixed-string search under a
+        # second, and only the few files that name the directory at all can match the expression.
+        $naming = @(& git -c core.quotepath=false grep -l -i -F -e $Directory.TrimEnd('/') HEAD -- 'tests/' 2>$null)
+        if ($LASTEXITCODE -gt 1) { $consumed = $true }
+        elseif ($LASTEXITCODE -eq 0 -and $naming.Count -gt 0) {
+            $inLiteral = '["''][^"''[:space:]]*' + $name + '[/\\]'
+            $joined = 'Path\.(Combine|Join)\([^)]*["'']' + $name + '["'']'
+            $files = @($naming | ForEach-Object { ([string] $_) -replace '^HEAD:', '' })
+            for ($i = 0; $i -lt $files.Count -and -not $consumed; $i += 100) {
+                $batch = @($files[$i..([Math]::Min($i + 99, $files.Count - 1))])
+                $null = & git --literal-pathspecs grep -q -i -E "($inLiteral)|($joined)" HEAD -- @batch 2>$null
+                $consumed = $LASTEXITCODE -ne 1
+            }
+        }
+    }
+    $script:ToolReferenceCache[$key] = $consumed
+    return $consumed
 }
 
 <#
@@ -2134,6 +2236,48 @@ function Resolve-PullRequestBase {
     return $parents[1]
 }
 
+function Resolve-MapLineageBase {
+    <#
+        The base to select from when the map was measured on another branch than the pull request's
+        base: a stacked pull request (base branch B, itself ahead of master) using master's map.
+
+        Selecting on the diff from B alone would trust the map for everything B added to master,
+        and the map has never seen it: a test B adds can execute the lines this pull request
+        changes without any shard being recorded for them, and no map run validated B's commits
+        when they landed, because they have not landed. So the change is everything the checkout
+        adds to the map's branch - the diff from their merge base - which is exactly the shape of
+        an ordinary pull request against that branch: the merge base is a commit of the map's own
+        lineage, and both diffs Get-ScopedChangedRanges takes (map -> base, base -> HEAD) mean
+        what they mean there.
+
+        That holds only when the checkout contains the map's commit. A stack cut from master
+        before the map's commit is missing the commits between its merge base and the map; the
+        map describes code the tested tree does not have, and a diff from the merge base does not
+        show that difference. It fails closed, as does an ambiguous (criss-cross) merge base.
+    #>
+    param(
+        [Parameter(Mandatory)] [string] $LineageRef,
+        [Parameter(Mandatory)] [string] $MapSha
+    )
+
+    $lineage = [string] (& git rev-parse --verify --quiet "$LineageRef^{commit}" 2>$null)
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($lineage)) {
+        throw "the map's branch '$LineageRef' is not present in this checkout"
+    }
+    & git merge-base --is-ancestor $MapSha HEAD 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        throw "the checkout does not contain the map's commit $MapSha, so a map from '$LineageRef' does not describe it; update the base branch from '$LineageRef'"
+    }
+    $bases = @(& git merge-base --all HEAD $lineage 2>$null | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    if ($LASTEXITCODE -ne 0 -or $bases.Count -eq 0) {
+        throw "the checkout shares no history with the map's branch '$LineageRef'"
+    }
+    if ($bases.Count -gt 1) {
+        throw "the checkout has $($bases.Count) merge bases with the map's branch '$LineageRef', so what it adds to that branch is ambiguous"
+    }
+    return ([string] $bases[0]).Trim()
+}
+
 # ---------------------------------------------------------------- self-test
 
 if ($SelfTest) {
@@ -2182,7 +2326,38 @@ if ($SelfTest) {
         @{ Pr = 2098; Path = 'src/AiDotNet.Generators/PaperOptimizerAnalyzer.cs'; Expect = [ChangedPathImpact]::FullValidation },
         @{ Pr = 0; Path = 'Directory.Build.props'; Expect = [ChangedPathImpact]::FullValidation },
         @{ Pr = 0; Path = 'website/Directory.Build.props'; Expect = [ChangedPathImpact]::FullValidation },
-        @{ Pr = 0; Path = '.github/workflows/sonarcloud.yml'; Expect = [ChangedPathImpact]::SelectionControl }
+        @{ Pr = 0; Path = '.github/workflows/sonarcloud.yml'; Expect = [ChangedPathImpact]::SelectionControl },
+        # Paths that sent otherwise mapped pull requests to the full matrix in November 2026 (35 of
+        # 42 runs ran every shard). #2578 changed DeserializationHelper.cs and one benchmark and ran
+        # all 167 shards for the benchmark.
+        @{ Pr = 2578; Path = 'AiDotNetBenchmarkTests/BenchmarkTests/GaussianProcessBenchmarks.cs'; Expect = [ChangedPathImpact]::BuildOnly },
+        @{ Pr = 2578; Path = 'src/Helpers/DeserializationHelper.cs'; Expect = [ChangedPathImpact]::MapCandidate },
+        @{ Pr = 0; Path = 'AiDotNetBenchmarkTests/AiDotNetBenchmarkTests.csproj'; Expect = [ChangedPathImpact]::BuildOnly },
+        @{ Pr = 0; Path = 'benchmarks/AiDotNet.Benchmarks/Program.cs'; Expect = [ChangedPathImpact]::BuildOnly },
+        @{ Pr = 0; Path = 'benchmarks/AiDotNet.PyTorchParity/AiDotNet.PyTorchParity.csproj'; Expect = [ChangedPathImpact]::BuildOnly },
+        @{ Pr = 0; Path = 'src/PublicAPI.Unshipped.txt'; Expect = [ChangedPathImpact]::BuildOnly },
+        @{ Pr = 0; Path = 'src/PublicAPI.Shipped.txt'; Expect = [ChangedPathImpact]::BuildOnly },
+        @{ Pr = 0; Path = 'src/PublicAPI/net471/PublicAPI.Unshipped.txt'; Expect = [ChangedPathImpact]::BuildOnly },
+        @{ Pr = 0; Path = 'src/PublicAPI/net10.0/PublicAPI.Shipped.txt'; Expect = [ChangedPathImpact]::BuildOnly },
+        @{ Pr = 0; Path = 'src/ElementWiseBaseline.txt'; Expect = [ChangedPathImpact]::BuildOnly },
+        @{ Pr = 0; Path = 'src/CompatibilitySuppressions.xml'; Expect = [ChangedPathImpact]::BuildOnly },
+        @{ Pr = 0; Path = 'tools/reference-data/vallex_phone_reference.py'; Expect = [ChangedPathImpact]::NonRuntime },
+        @{ Pr = 0; Path = 'tools/reference-data/requirements.txt'; Expect = [ChangedPathImpact]::NonRuntime },
+        @{ Pr = 0; Path = 'vercel.json'; Expect = [ChangedPathImpact]::NonRuntime },
+        # The lists are exact. A lookalike, another text or XML file beside them, the same name in
+        # another project or in a different case, and a build file inside a benchmark tree keep
+        # the behaviour they had.
+        @{ Pr = 0; Path = 'src/PublicAPI.Unshipped.txt.bak'; Expect = [ChangedPathImpact]::MapCandidate },
+        @{ Pr = 0; Path = 'src/Resources/Vocabulary.txt'; Expect = [ChangedPathImpact]::MapCandidate },
+        @{ Pr = 0; Path = 'src/AiDotNet.Serving/PublicAPI.Unshipped.txt'; Expect = [ChangedPathImpact]::MapCandidate },
+        @{ Pr = 0; Path = 'src/AiDotNet.Serving/CompatibilitySuppressions.xml'; Expect = [ChangedPathImpact]::MapCandidate },
+        @{ Pr = 0; Path = 'src/PublicAPI/net471/Other.txt'; Expect = [ChangedPathImpact]::MapCandidate },
+        @{ Pr = 0; Path = 'SRC/ElementWiseBaseline.txt'; Expect = [ChangedPathImpact]::MapCandidate },
+        @{ Pr = 0; Path = 'src/vercel.json'; Expect = [ChangedPathImpact]::MapCandidate },
+        @{ Pr = 0; Path = 'benchmarks/Directory.Build.props'; Expect = [ChangedPathImpact]::FullValidation },
+        @{ Pr = 0; Path = 'benchmarks/AiDotNet.Benchmarks/global.json'; Expect = [ChangedPathImpact]::FullValidation },
+        @{ Pr = 0; Path = 'AiDotNetBenchmarkTests/Directory.Packages.props'; Expect = [ChangedPathImpact]::FullValidation },
+        @{ Pr = 0; Path = 'tests/AiDotNet.Tests/Benchmarks/SomeBenchmarkTests.cs'; Expect = [ChangedPathImpact]::MapCandidate }
     )
     foreach ($case in $classification) {
         $actual = Get-ChangedPathImpact -Path $case.Path
@@ -2212,6 +2387,87 @@ if ($SelfTest) {
     } finally {
         Remove-Item -LiteralPath $tripwire -Recurse -Force -ErrorAction SilentlyContinue
     }
+
+    # A build-only directory is trusted only while nothing outside it consumes it. Proved against
+    # throwaway repositories: unreferenced, referenced by a test project, named by the shard
+    # manifest, read by a test at run time, and merely mentioned in a comment.
+    $savedReferenceCache = $script:ToolReferenceCache
+    $consumerRoot = Join-Path ([IO.Path]::GetTempPath()) ("buildonly-" + [Guid]::NewGuid().ToString('n'))
+    try {
+        foreach ($case in @(
+            @{ Name = 'unreferenced'; File = 'tests/Proj/Notes.cs'; Text = '// measured by benchmarks/AiDotNet.Benchmarks (see the report)'; Consumed = $false },
+            @{ Name = 'project reference'; File = 'tests/Proj/Proj.csproj'; Text = '<ProjectReference Include="..\..\benchmarks\AiDotNet.Benchmarks\AiDotNet.Benchmarks.csproj" />'; Consumed = $true },
+            @{ Name = 'shard manifest'; File = '.github/test-shards.yml'; Text = '    project: benchmarks/AiDotNet.Benchmarks/AiDotNet.Benchmarks.csproj'; Consumed = $true },
+            @{ Name = 'run-time read'; File = 'tests/Proj/ReadsData.cs'; Text = 'var text = File.ReadAllText("../../benchmarks/data/expected.json");'; Consumed = $true },
+            @{ Name = 'run-time join'; File = 'tests/Proj/JoinsData.cs'; Text = 'var path = Path.Combine(root, "benchmarks", "data");'; Consumed = $true }
+        )) {
+            $caseRoot = Join-Path $consumerRoot ([Guid]::NewGuid().ToString('n'))
+            [void] (New-Item -ItemType Directory -Path (Join-Path $caseRoot (Split-Path -Parent $case.File)) -Force)
+            [void] (New-Item -ItemType Directory -Path (Join-Path $caseRoot 'benchmarks/AiDotNet.Benchmarks') -Force)
+            Set-Content -LiteralPath (Join-Path $caseRoot $case.File) -Value $case.Text
+            # A benchmark project referencing itself or the product is not a consumer.
+            Set-Content -LiteralPath (Join-Path $caseRoot 'benchmarks/AiDotNet.Benchmarks/AiDotNet.Benchmarks.csproj') `
+                -Value '<Compile Include="..\..\benchmarks\Shared\Harness.cs" />'
+            Push-Location $caseRoot
+            try {
+                $null = & git init -q 2>&1
+                $null = & git add -A 2>&1
+                $null = & git -c user.email=fixture@example.invalid -c user.name=fixture -c commit.gpgSign=false -c core.hooksPath=.no-hooks commit -q -m fixture 2>&1
+                if ($LASTEXITCODE -ne 0) { [void] $failures.Add("build-only consumer fixture '$($case.Name)' could not be committed"); continue }
+                $script:ToolReferenceCache = @{}
+                $impact = Get-ChangedPathImpact -Path 'benchmarks/AiDotNet.Benchmarks/Program.cs'
+                $expectedImpact = if ($case.Consumed) { [ChangedPathImpact]::MapCandidate } else { [ChangedPathImpact]::BuildOnly }
+                Assert-True ($impact -eq $expectedImpact) `
+                    "build-only directory, $($case.Name): expected $expectedImpact but got $impact"
+            }
+            finally { Pop-Location }
+        }
+        # Outside any repository the search itself fails, which must read as consumed.
+        [void] (New-Item -ItemType Directory -Path (Join-Path $consumerRoot 'no-repository') -Force)
+        Push-Location (Join-Path $consumerRoot 'no-repository')
+        try {
+            $savedCeiling = $env:GIT_CEILING_DIRECTORIES
+            $env:GIT_CEILING_DIRECTORIES = $consumerRoot
+            $script:ToolReferenceCache = @{}
+            Assert-True ((Get-ChangedPathImpact -Path 'benchmarks/AiDotNet.Benchmarks/Program.cs') -eq [ChangedPathImpact]::MapCandidate) `
+                'a failed consumer search must not classify a benchmark as build-only'
+        }
+        finally {
+            $env:GIT_CEILING_DIRECTORIES = $savedCeiling
+            Pop-Location
+        }
+    }
+    finally {
+        $script:ToolReferenceCache = $savedReferenceCache
+        $global:LASTEXITCODE = 0
+        Remove-Item -LiteralPath $consumerRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    # What the new classes do to a selection. #2578's exact path set: the benchmark no longer
+    # escalates, and the mapped source still selects its own shards.
+    $r = Select-ImpactedShards -Map $map -Changed @{
+        'AiDotNetBenchmarkTests/BenchmarkTests/GaussianProcessBenchmarks.cs' = @(1, 2)
+        'src/Covered.cs' = @(12, 14)
+    }
+    Assert-True (-not $r.Escalate -and $r.RequiresValidation -and ($r.Shards -join ',') -ceq 'Alpha,HeavyNoCoverage') `
+        "a benchmark beside a mapped source widened or suppressed the selection: $($r.Shards -join ',')"
+    $r = Select-ImpactedShards -Map $map -Changed @{
+        'src/PublicAPI.Unshipped.txt' = @(1, 2)
+        'src/ElementWiseBaseline.txt' = @(1, 2)
+        'src/CompatibilitySuppressions.xml' = @(1, 2)
+        'tools/reference-data/vallex_phone_reference.py' = @(1, 2)
+        'vercel.json' = @(1, 2)
+        'src/Covered.cs' = @(105, 106)
+    }
+    Assert-True (-not $r.Escalate -and $r.RequiresValidation -and ($r.Shards -join ',') -ceq 'Beta,HeavyNoCoverage') `
+        "baseline, reference-data or deployment files beside a mapped source widened or suppressed the selection: $($r.Shards -join ',')"
+    # Alone, an analyzer or pack input still has to build, and still selects no shard; the
+    # workflow keeps the build through requiresValidation (see buildOnlyChange below).
+    $r = Select-ImpactedShards -Map $map -Changed @{ 'src/PublicAPI.Unshipped.txt' = @(1, 2) }
+    Assert-True (-not $r.Escalate -and $r.Shards.Count -eq 0) 'a public API baseline alone selected shards or escalated'
+    # An unlisted text file beside them still escalates.
+    $r = Select-ImpactedShards -Map $map -Changed @{ 'src/Resources/Vocabulary.txt' = @(1, 2); 'src/Covered.cs' = @(12, 14) }
+    Assert-True $r.Escalate 'an unlisted data file must still escalate'
 
     $r = Select-ImpactedShards -Map $map -Changed @{ 'src/Covered.cs' = @(12, 14) }
     Assert-True (-not $r.Escalate) 'a mapped, fully covered change must not escalate'
@@ -2627,8 +2883,17 @@ file class Private { }
             'an unreferenced top-level tree (api/) is not NonRuntime'
     }
     if (Test-Path -LiteralPath 'benchmarks') {
-        Assert-True ((Get-ChangedPathImpact -Path 'benchmarks/AiDotNet.Benchmarks/Program.cs') -eq [ChangedPathImpact]::MapCandidate) `
-            'a tree the solution builds (benchmarks/) was downgraded'
+        # The solution builds benchmarks/, so it must never be NonRuntime (that would skip the compile). It is
+        # build-only while no test or product project consumes it, and a map candidate again the day one does.
+        Assert-True ((Get-ChangedPathImpact -Path 'benchmarks/AiDotNet.Benchmarks/Program.cs') -eq [ChangedPathImpact]::BuildOnly) `
+            'a tree the solution builds and no test consumes (benchmarks/) is not build-only'
+        $savedBuildOnlyDirectories = $script:BuildOnlyDirectories
+        try {
+            $script:BuildOnlyDirectories = @()
+            Assert-True ((Get-ChangedPathImpact -Path 'benchmarks/AiDotNet.Benchmarks/Program.cs') -eq [ChangedPathImpact]::MapCandidate) `
+                'a tree the solution builds (benchmarks/) was downgraded to non-runtime by the unreferenced-tree rule'
+        }
+        finally { $script:BuildOnlyDirectories = $savedBuildOnlyDirectories }
     }
     if (Test-Path -LiteralPath 'samples') {
         Assert-True ((Get-ChangedPathImpact -Path 'samples/x/y.txt') -eq [ChangedPathImpact]::MapCandidate) `
@@ -3261,6 +3526,13 @@ try {
         $BaseSha = Resolve-PullRequestBase -PullRequestHeadSha $PullRequestHeadSha
         $scopeToPullRequest = $true
         Write-Host "pull request base (merge commit's first parent): $BaseSha"
+        if ($MapLineageRef) {
+            $BaseSha = Resolve-MapLineageBase -LineageRef $MapLineageRef -MapSha $mapSha
+            Write-Host "the map is from '$MapLineageRef', not the pull request's base branch: selecting for everything the checkout adds to it (merge base $BaseSha)"
+        }
+    }
+    elseif ($MapLineageRef) {
+        throw 'MapLineageRef is only meaningful with PullRequestHeadSha'
     }
     if ($DeltaFromTree) {
         # A tree, not a commit: the validated pull-request merge commit may no longer be fetchable,

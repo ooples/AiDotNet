@@ -905,6 +905,7 @@ jobs:
           rm -rf map map-resolution.json
           run_id=''
           kind=''
+          lineage_ref=''
           if [ "$FORCE_COVERAGE" = 'true' ]; then
             case "${INPUT_MAP_RUN_ID:-}" in
               '')
@@ -940,6 +941,35 @@ jobs:
               echo '::warning::certified map resolver failed; selection will fail closed'
               rm -rf map
             fi
+
+            # A stacked pull request's base is another feature branch, and maps are only ever built on
+            # master, so the lookup above finds no run at all and every stacked pull request ran the
+            # full matrix (6 of the 9 no-map runs measured in November 2026). Fall back to master's
+            # certified map, and tell the selector the map is master's (lineage_ref): it then selects
+            # for everything the stack adds to master, not only this pull request's diff against its
+            # base branch, which that map has never measured.
+            #
+            # Only NoCertifiedRun falls back. A revoked, unclassified or certificate-less run on the
+            # base branch is negative evidence about that branch and stays fail-closed, and master's
+            # own revocation barrier applies unchanged to the map resolved here.
+            if [ -z "$run_id" ] && [ "$MAP_BRANCH" != 'master' ] && [ -f map-resolution.json ] &&
+               [ "$(jq -r '.status // empty' map-resolution.json)" = 'NoCertifiedRun' ]; then
+              echo "no certified map was ever built on '$MAP_BRANCH' - resolving master's map for a stacked pull request"
+              rm -rf map map-resolution.json
+              if pwsh -NoProfile -File ./tools/TestImpact/Resolve-CertifiedShardMap.ps1 \
+                   -Repository "$GITHUB_REPOSITORY" -OutDirectory map \
+                   -ResultFile map-resolution.json -MapBranch master; then
+                candidate=$(jq -r 'if .found then (.runId | tostring) else empty end' map-resolution.json)
+                if [ -n "$candidate" ]; then
+                  run_id="$candidate"
+                  kind='certified'
+                  lineage_ref='origin/master'
+                fi
+              else
+                echo '::warning::certified map resolver failed for master; selection will fail closed'
+                rm -rf map
+              fi
+            fi
           fi
 
           if [ -z "$run_id" ]; then
@@ -947,6 +977,7 @@ jobs:
           fi
           echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
           echo "kind=$kind" >> "$GITHUB_OUTPUT"
+          echo "lineage_ref=$lineage_ref" >> "$GITHUB_OUTPUT"
 
       # The impact tooling's own tests, run here rather than nowhere. Two defects on this PR were caught
       # only because these exist - reading the wrong side of a diff hunk, and a staleness check that
@@ -1043,6 +1074,8 @@ jobs:
         env:
           MAP_KIND: ${{ steps.map.outputs.kind }}
           MAP_RUN_ID: ${{ steps.map.outputs.run_id }}
+          # Set only when a stacked pull request fell back to master's map (Download the shard map).
+          MAP_LINEAGE_REF: ${{ steps.map.outputs.lineage_ref }}
           # Self-hosted runner routing (Get-SelfHostedShardPlan): a JSON configuration and a token that can
           # read the repository's runners, both repository secrets. Fork pull requests get neither, so
           # their code never runs on a self-hosted machine.
@@ -1227,9 +1260,16 @@ jobs:
               # numbers the map's ranges are expressed in; the pull request head only decides WHICH
               # paths are this pull request's change.
               try {
+                # A stacked pull request selecting with master's map: the selector widens the change
+                # to everything the stack adds to master (Resolve-MapLineageBase).
+                $lineage = @{}
+                if (-not [string]::IsNullOrWhiteSpace($env:MAP_LINEAGE_REF)) {
+                  $lineage['MapLineageRef'] = [string] $env:MAP_LINEAGE_REF
+                }
                 & ./tools/TestImpact/Select-Shards.ps1 `
                     -MapFile map/shard-map.json `
                     -PullRequestHeadSha $changeHeadSha `
+                    @lineage `
                     -ShardManifestFile shard-manifest.json `
                     -ExpectedShards @($all.name) `
                     -OutFile selection.json
