@@ -1758,6 +1758,24 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         return engine.ReduceSum(weighted, new[] { 0 }, false).ToVector();
     }
 
+    /// <summary>
+    /// Uniform quantization of <paramref name="delta"/> onto <paramref name="levels"/> + 1 grid points over
+    /// [-maxAbs, maxAbs]: q = round((clamp(v / maxAbs, -1, 1) + 1) / 2 * levels) (half to even, as Math.Round),
+    /// dequantized as (q / levels * 2 - 1) * maxAbs. The grid arithmetic runs in double and is rounded to T once:
+    /// the level count (up to 65535) is not a Half (it rounds to infinity, which sends every entry to -maxAbs),
+    /// and neither Half nor float holds the half-level steps of the finer grids.
+    /// </summary>
+    internal static Vector<T> QuantizeUniform(Vector<T> delta, double maxAbs, int levels)
+    {
+        var engine = AiDotNetEngine.Current;
+        var values = delta.AsTensor().Cast<double>();
+        var normalized = engine.TensorClamp(engine.TensorDivideScalar(values, maxAbs), -1.0, 1.0);
+        var qReal = engine.TensorMultiplyScalar(engine.TensorAddScalar(normalized, 1.0), 0.5 * levels);
+        var q = engine.TensorClamp(engine.TensorRound(qReal), 0.0, (double)levels);
+        var deNormalized = engine.TensorAddScalar(engine.TensorMultiplyScalar(engine.TensorDivideScalar(q, (double)levels), 2.0), -1.0);
+        return engine.TensorMultiplyScalar(deNormalized, maxAbs).Cast<T>().ToVector();
+    }
+
     private static int GetClusterId(int clientId, int clusterCount)
     {
         clusterCount = Math.Max(1, clusterCount);
@@ -2105,17 +2123,8 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
             if (strategy == FederatedCompressionStrategy.UniformQuantization)
             {
-                // q = round((clamp(v / maxAbs, -1, 1) + 1) / 2 * levels) (half to even, as Math.Round),
-                // dequantized as (q / levels * 2 - 1) * maxAbs.
-                T one = NumOps.One;
-                T levelsT = NumOps.FromDouble(levels);
-                var normalized = Engine.TensorClamp(Engine.TensorDivideScalar(delta.AsTensor(), NumOps.FromDouble(maxAbs)), NumOps.Negate(one), one);
-                var qReal = Engine.TensorMultiplyScalar(Engine.TensorAddScalar(normalized, one), NumOps.FromDouble(0.5 * levels));
-                var q = Engine.TensorClamp(Engine.TensorRound(qReal), NumOps.Zero, levelsT);
-                var deNormalized = Engine.TensorAddScalar(Engine.TensorMultiplyScalar(Engine.TensorDivideScalar(q, levelsT), NumOps.FromDouble(2.0)), NumOps.Negate(one));
-
                 uploadRatio = ComputeQuantizationRatio(bits);
-                return Engine.TensorMultiplyScalar(deNormalized, NumOps.FromDouble(maxAbs)).ToVector();
+                return QuantizeUniform(delta, maxAbs, levels);
             }
 
             var result = new Vector<T>(n);

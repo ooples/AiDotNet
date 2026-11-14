@@ -172,6 +172,25 @@ public class FederatedFloatRangeReviewTests
     }
 
     [Fact]
+    public void UniformQuantization_HalfAtSixteenBits_StaysOnTheDoubleGrid()
+    {
+        // 16 bits is 65535 levels, which is not a Half: formed in T it rounds to infinity, q / infinity is 0 and
+        // every entry dequantizes to -maxAbs. The grid is worked in double and rounded to Half once.
+        var values = new[] { -1.0, -0.25, 0.0, 0.5, 1.0 };
+        var half = MathHelper.GetNumericOperations<Half>();
+        var delta = new Vector<Half>(Array.ConvertAll(values, half.FromDouble));
+
+        var quantized = InMemoryFederatedTrainer<Half, Matrix<Half>, Vector<Half>>.QuantizeUniform(delta, 1.0, 65535);
+
+        for (int i = 0; i < values.Length; i++)
+        {
+            double q = Math.Round((values[i] + 1.0) * 0.5 * 65535);
+            double expected = half.ToDouble(half.FromDouble(q / 65535 * 2.0 - 1.0));
+            Assert.Equal(expected, half.ToDouble(quantized[i]), 6);
+        }
+    }
+
+    [Fact]
     public void PFedMeDefaults_AreThePaperSettings()
     {
         // Dinh, Tran and Nguyen (2020), section 5 and the official implementation: lambda 15, K 5,
