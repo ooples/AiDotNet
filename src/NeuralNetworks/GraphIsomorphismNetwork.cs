@@ -462,13 +462,16 @@ public partial class GraphIsomorphismNetwork<T> : GraphModelLayoutBase<T>
                 $"final layer), then call TrainOnGraphs again.");
         }
 
+        // One copy of the label tensor for the whole run; copying it per graph made every epoch
+        // quadratic in the number of graphs.
+        var allLabels = graphLabels.ToArray();
         for (int epoch = 0; epoch < epochs; epoch++)
         {
             for (int g = 0; g < graphs.Count; g++)
             {
                 // Slice this graph's label row out as a fresh [1, numClasses] copy.
                 var graphLabel = new Tensor<T>(
-                    graphLabels.ToArray().AsSpan(g * graphLabelClasses, graphLabelClasses).ToArray(), [1, graphLabelClasses]);
+                    allLabels.AsSpan(g * graphLabelClasses, graphLabelClasses).ToArray(), [1, graphLabelClasses]);
 
                 TrainStepWithAdjacency(graphs[g], adjacencyMatrices[g], graphLabel);
             }
