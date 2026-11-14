@@ -103,6 +103,22 @@ public sealed class LayerConstructionStateCloneTests
         var denseBlock = new DenseBlock<double>(numLayers: 1, growthRate: 2, bnMomentum: 0.37);
         var denseClone = (DenseBlock<double>)denseBlock.Clone(CloneOptions.Architecture);
         Assert.Equal(0.37, Field<double>(denseClone, "_bnMomentum"), precision: 12);
+        Assert.True(Field<bool>(denseClone, "_convolutionBias"));
+
+        // bnMomentum is the new batch's weight (PyTorch); BatchNormalizationLayer's momentum is the weight it keeps.
+        var innerLayer = Assert.IsType<DenseBlockLayer<double>>(Assert.Single(denseBlock.GetSubLayers()));
+        var innerNorms = innerLayer.GetSubLayers().OfType<BatchNormalizationLayer<double>>().ToArray();
+        Assert.Equal(2, innerNorms.Length);
+        Assert.All(innerNorms, norm => Assert.Equal(0.63, norm.GetMomentum(), precision: 12));
+
+        // The bias-free layout changes the parameter count, so a clone that fell back to the default could not
+        // take the original's weights.
+        var biasFreeBlock = new DenseBlock<double>(numLayers: 1, growthRate: 2, bnMomentum: 0.1, convolutionBias: false);
+        var biasFreeBlockClone = (DenseBlock<double>)biasFreeBlock.Clone(CloneOptions.Architecture);
+        Assert.False(Field<bool>(biasFreeBlockClone, "_convolutionBias"));
+        var biasFreeTransition = new TransitionLayer<double>(compressionFactor: 0.5, convolutionBias: false);
+        var biasFreeTransitionClone = (TransitionLayer<double>)biasFreeTransition.Clone(CloneOptions.Architecture);
+        Assert.False(Field<bool>(biasFreeTransitionClone, "_convolutionBias"));
 
         var cls = new PrependCLSTokenLayer<double>(embedDim: 4, initScale: 0.17, seed: 3);
         var clsClone = (PrependCLSTokenLayer<double>)cls.Clone(CloneOptions.Architecture);
