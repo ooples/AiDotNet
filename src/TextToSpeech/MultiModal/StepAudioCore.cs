@@ -141,7 +141,10 @@ internal sealed class StepAudioCore<T>
     private Tensor<T> Resample(Tensor<T> audio, int from, int to)
     {
         var flat = _engine.Reshape(audio, new[] { audio.Length });
-        return from == to ? flat : _engine.Reshape(AudioHelper<T>.ResampleBandLimited(_engine, flat, from, to), new[] { -1 });
+        if (from == to) return flat;
+        // Tensor.Reshape has no inferred (-1) dimension; the flat length is spelled out.
+        var resampled = AudioHelper<T>.ResampleBandLimited(_engine, flat, from, to);
+        return _engine.Reshape(resampled, new[] { resampled.Length });
     }
 
     /// <summary>
