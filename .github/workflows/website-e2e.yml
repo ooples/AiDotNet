@@ -1,0 +1,85 @@
+name: Website E2E (production)
+
+# The Playwright suite against https://www.aidotnet.dev, shared by the post-deploy smoke run
+# (deploy-website.yml) and the nightly health check (website-health.yml). The auth-backed
+# specs use the real backend: they issue, email, validate and revoke a labelled test license
+# and register the test user's community license.
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: Playwright against production
+    runs-on: ubuntu-latest
+    # The license-lifecycle spec writes to production; never run two suites at once.
+    concurrency:
+      group: website-e2e-production
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: website
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers (Chromium only)
+        # We only run Chromium in CI (see playwright.config.ts). Skipping
+        # Firefox + WebKit saves ~3 minutes of browser install per run.
+        run: npx playwright install --with-deps chromium
+
+      - name: Verify required E2E secrets
+        env:
+          PLAYWRIGHT_USER_EMAIL: ${{ secrets.PLAYWRIGHT_USER_EMAIL }}
+          PLAYWRIGHT_USER_PASSWORD: ${{ secrets.PLAYWRIGHT_USER_PASSWORD }}
+          PLAYWRIGHT_ADMIN_EMAIL: ${{ secrets.PLAYWRIGHT_ADMIN_EMAIL }}
+          PLAYWRIGHT_ADMIN_PASSWORD: ${{ secrets.PLAYWRIGHT_ADMIN_PASSWORD }}
+        run: |
+          # All four are mandatory — the user.setup / admin.setup projects
+          # fail loudly if they're missing, but surfacing the missing-
+          # secret error here (before browsers launch) keeps the failure
+          # attribution clean: "secret not set" vs. "login form regressed".
+          : "${PLAYWRIGHT_USER_EMAIL:?Missing PLAYWRIGHT_USER_EMAIL secret}"
+          : "${PLAYWRIGHT_USER_PASSWORD:?Missing PLAYWRIGHT_USER_PASSWORD secret}"
+          : "${PLAYWRIGHT_ADMIN_EMAIL:?Missing PLAYWRIGHT_ADMIN_EMAIL secret}"
+          : "${PLAYWRIGHT_ADMIN_PASSWORD:?Missing PLAYWRIGHT_ADMIN_PASSWORD secret}"
+
+      - name: Wait for Vercel propagation
+        # Vercel's alias swap is nearly instant but the CDN edge can serve
+        # a stale version for a few seconds after deploy. A short sleep is
+        # cheaper than flaky first-run failures on the live smoke pass.
+        run: sleep 15
+
+      - name: Run Playwright E2E smoke tests
+        run: npx playwright test
+        env:
+          PLAYWRIGHT_BASE_URL: https://www.aidotnet.dev
+          PLAYWRIGHT_USER_EMAIL: ${{ secrets.PLAYWRIGHT_USER_EMAIL }}
+          PLAYWRIGHT_USER_PASSWORD: ${{ secrets.PLAYWRIGHT_USER_PASSWORD }}
+          PLAYWRIGHT_ADMIN_EMAIL: ${{ secrets.PLAYWRIGHT_ADMIN_EMAIL }}
+          PLAYWRIGHT_ADMIN_PASSWORD: ${{ secrets.PLAYWRIGHT_ADMIN_PASSWORD }}
+          CI: '1'
+
+      - name: Upload Playwright report
+        # Always upload (success or fail) — on failure the HTML report +
+        # trace viewer is the fastest path to diagnosing a broken deploy;
+        # on success the artifact proves the run happened with the
+        # expected test counts.
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-report
+          path: website/playwright-report/
+          retention-days: 14
