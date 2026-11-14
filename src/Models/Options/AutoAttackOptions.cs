@@ -44,6 +44,7 @@ public class AutoAttackOptions<T> : AdversarialAttackOptions<T>
             throw new ArgumentNullException(nameof(other));
         }
 
+        Seed = other.Seed;
         Epsilon = other.Epsilon;
         StepSize = other.StepSize;
         Iterations = other.Iterations;
