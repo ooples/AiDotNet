@@ -134,7 +134,15 @@ public class FedKDCompressor<T> : Infrastructure.FederatedLearningComponentBase<
         var studentLogProbs = Engine.TensorLogSoftmax(studentLogits, 1);
         T teacherTask = NumOps.Negate(NumOps.Multiply(Engine.TensorSum(Engine.TensorMultiply(oneHot, teacherLogProbs)), invSamples));
         T studentTask = NumOps.Negate(NumOps.Multiply(Engine.TensorSum(Engine.TensorMultiply(oneHot, studentLogProbs)), invSamples));
-        T adaptiveScale = NumOps.Divide(NumOps.One, NumOps.Add(teacherTask, studentTask));
+
+        // 1 / (L_t^t + L_t^s). When both models are confident and correct every label log-probability rounds
+        // to 0 (in float, at a logit margin of about 17), the sum is exactly 0, and 1 / 0 = Infinity would turn
+        // the distillation terms, which are 0 for two identical one-hot outputs, into 0 * Infinity = NaN.
+        // The sum is floored below any cross-entropy T can represent, so the scale stays finite.
+        T taskLossFloor = NumOps.FromDouble(typeof(T) == typeof(Half) ? 6.103515625E-05 : 1e-12);
+        T taskLossSum = NumOps.Add(teacherTask, studentTask);
+        T adaptiveScale = NumOps.Divide(
+            NumOps.One, NumOps.GreaterThan(taskLossSum, taskLossFloor) ? taskLossSum : taskLossFloor);
 
         // Distillation: KL(y^t || y^s) teaches the student, KL(y^s || y^t) teaches the teacher.
         var temperatureT = NumOps.FromDouble(_temperature);
