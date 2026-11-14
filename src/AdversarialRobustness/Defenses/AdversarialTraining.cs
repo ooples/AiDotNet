@@ -48,31 +48,52 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private AdversarialDefenseOptions<T> options;
-    private readonly IAdversarialAttack<T, TInput, TOutput> attackMethod;
+    private readonly IAdversarialAttack<T, TInput, TOutput>? customAttack;
 
     /// <summary>
-    /// Initializes a new instance of adversarial training.
+    /// Initializes a new instance of adversarial training that generates its training examples with
+    /// <see cref="AdversarialDefenseOptions{T}.AttackMethod"/>.
     /// </summary>
     /// <param name="options">The defense configuration options.</param>
     public AdversarialTraining(AdversarialDefenseOptions<T> options)
     {
         Guard.NotNull(options);
         this.options = options;
-
-        // Initialize the attack method to use during training
-        var attackOptions = new AdversarialAttackOptions<T>
-        {
-            Epsilon = options.Epsilon,
-            StepSize = options.Epsilon / 4.0,
-            Iterations = 10,
-            UseRandomStart = true
-        };
-
-        // Use PGD attack as the default for adversarial training
-        attackMethod = new PGDAttack<T, TInput, TOutput>(attackOptions);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Initializes a new instance of adversarial training that generates its training examples with a custom attack.
+    /// </summary>
+    /// <param name="options">The defense configuration options.</param>
+    /// <param name="trainingAttack">The attack that replaces <see cref="AdversarialDefenseOptions{T}.AttackMethod"/>.</param>
+    public AdversarialTraining(AdversarialDefenseOptions<T> options, IAdversarialAttack<T, TInput, TOutput> trainingAttack)
+        : this(options)
+    {
+        Guard.NotNull(trainingAttack);
+        customAttack = trainingAttack;
+    }
+
+    /// <summary>
+    /// Adversarially trains <paramref name="model"/> (or an ensemble of copies of it) and wraps the result with the
+    /// configured preprocessing defense.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For <see cref="AdversarialDefenseOptions{T}.TrainingEpochs"/> epochs the data is shuffled and split into
+    /// mini-batches of <see cref="AdversarialDefenseOptions{T}.BatchSize"/>. In each batch the first
+    /// round(<see cref="AdversarialDefenseOptions{T}.AdversarialRatio"/> * size) samples are replaced by adversarial
+    /// examples generated against the current model (Madry et al. 2018; mixed clean and adversarial batches per
+    /// Goodfellow et al. 2015). A model that computes gradients takes one step of
+    /// <see cref="AdversarialDefenseOptions{T}.LearningRate"/> on the batch-mean gradient; any other model is
+    /// trained sample by sample through its own <c>Train</c>.
+    /// </para>
+    /// <para>
+    /// With <see cref="AdversarialDefenseOptions{T}.UseEnsemble"/> the procedure runs on
+    /// <see cref="AdversarialDefenseOptions{T}.EnsembleSize"/> deep copies, each with its own shuffling and attack
+    /// random starts, and the returned model predicts the mean of their outputs. The returned model applies
+    /// <see cref="PreprocessInput"/> before every prediction.
+    /// </para>
+    /// </remarks>
     public IFullModel<T, TInput, TOutput> ApplyDefense(TInput[] trainingData, TOutput[] labels, IFullModel<T, TInput, TOutput> model)
     {
         if (model == null)
@@ -95,14 +116,147 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
             throw new ArgumentException("Number of labels must match number of training samples.", nameof(labels));
         }
 
-        // Training-time adversarial example augmentation requires integration with a trainer.
-        // For now, return a runtime defense wrapper that applies preprocessing before inference.
-        if (!options.UsePreprocessing)
+        ValidateOptions();
+
+        int memberCount = options.UseEnsemble ? options.EnsembleSize : 1;
+        var members = new IFullModel<T, TInput, TOutput>[memberCount];
+        int baseSeed = options.Seed ?? RandomHelper.CreateSecureRandom().Next();
+        for (int m = 0; m < memberCount; m++)
+        {
+            // Ensemble members are independent copies; a single model is trained in place, as before.
+            members[m] = options.UseEnsemble ? model.DeepCopy() : model;
+            Train(members[m], trainingData, labels, unchecked(baseSeed + 7919 * m));
+        }
+
+        if (!options.UseEnsemble && !options.UsePreprocessing)
         {
             return model;
         }
 
-        return new PreprocessingFullModel(model, this);
+        return new PreprocessingFullModel(members, this);
+    }
+
+    /// <summary>
+    /// Runs the mixed clean/adversarial training loop on one model.
+    /// </summary>
+    private void Train(IFullModel<T, TInput, TOutput> model, TInput[] trainingData, TOutput[] labels, int seed)
+    {
+        int n = trainingData.Length;
+        if (options.TrainingEpochs == 0 || n == 0)
+        {
+            return;
+        }
+
+        var random = RandomHelper.CreateSeededRandom(seed);
+        var attack = customAttack ?? CreateTrainingAttack(seed);
+        var gradientModel = model as IGradientComputable<T, TInput, TOutput>;
+        T learningRate = NumOps.FromDouble(options.LearningRate);
+        var order = Enumerable.Range(0, n).ToArray();
+
+        for (int epoch = 0; epoch < options.TrainingEpochs; epoch++)
+        {
+            Shuffle(order, random);
+            for (int start = 0; start < n; start += options.BatchSize)
+            {
+                int size = Math.Min(options.BatchSize, n - start);
+                int adversarialCount = (int)Math.Round(options.AdversarialRatio * size, MidpointRounding.AwayFromZero);
+                Vector<T>? gradientSum = null;
+                for (int b = 0; b < size; b++)
+                {
+                    int index = order[start + b];
+                    var sample = b < adversarialCount
+                        ? attack.GenerateAdversarialExample(trainingData[index], labels[index], model)
+                        : trainingData[index];
+                    if (gradientModel is null)
+                    {
+                        model.Train(sample, labels[index]);
+                        continue;
+                    }
+
+                    var gradient = gradientModel.ComputeGradients(sample, labels[index]);
+                    gradientSum = gradientSum is null ? gradient : Engine.Add<T>(gradientSum, gradient);
+                }
+
+                if (gradientModel is not null && gradientSum is not null)
+                {
+                    gradientModel.ApplyGradients(Engine.Divide<T>(gradientSum, NumOps.FromDouble(size)), learningRate);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// The training attack named by <see cref="AdversarialDefenseOptions{T}.AttackMethod"/>: epsilon from the options,
+    /// step epsilon / 4, <see cref="AdversarialDefenseOptions{T}.AttackIterations"/> iterations, a random start.
+    /// </summary>
+    private IAdversarialAttack<T, TInput, TOutput> CreateTrainingAttack(int seed)
+    {
+        var attackOptions = new AdversarialAttackOptions<T>
+        {
+            Epsilon = options.Epsilon,
+            StepSize = options.Epsilon / 4.0,
+            Iterations = options.AttackIterations,
+            UseRandomStart = true,
+            RandomSeed = seed
+        };
+
+        return options.AttackMethod switch
+        {
+            AdversarialAttackMethod.Fgsm => new FGSMAttack<T, TInput, TOutput>(attackOptions),
+            AdversarialAttackMethod.Pgd => new PGDAttack<T, TInput, TOutput>(attackOptions),
+            AdversarialAttackMethod.CarliniWagner => new CWAttack<T, TInput, TOutput>(attackOptions),
+            AdversarialAttackMethod.AutoAttack => new AutoAttack<T, TInput, TOutput>(attackOptions),
+            _ => throw new InvalidOperationException(
+                $"AdversarialDefenseOptions.AttackMethod has the undefined value {(int)options.AttackMethod}.")
+        };
+    }
+
+    private static void Shuffle(int[] order, Random random)
+    {
+        for (int i = order.Length - 1; i > 0; i--)
+        {
+            int j = random.Next(i + 1);
+            (order[i], order[j]) = (order[j], order[i]);
+        }
+    }
+
+    private void ValidateOptions()
+    {
+        if (!(options.AdversarialRatio >= 0.0 && options.AdversarialRatio <= 1.0))
+        {
+            throw new InvalidOperationException(
+                $"AdversarialDefenseOptions.AdversarialRatio must lie in [0, 1] (was {options.AdversarialRatio}).");
+        }
+
+        if (options.TrainingEpochs < 0)
+        {
+            throw new InvalidOperationException(
+                $"AdversarialDefenseOptions.TrainingEpochs must not be negative (was {options.TrainingEpochs}).");
+        }
+
+        if (options.BatchSize < 1)
+        {
+            throw new InvalidOperationException(
+                $"AdversarialDefenseOptions.BatchSize must be at least 1 (was {options.BatchSize}).");
+        }
+
+        if (options.AttackIterations < 1)
+        {
+            throw new InvalidOperationException(
+                $"AdversarialDefenseOptions.AttackIterations must be at least 1 (was {options.AttackIterations}).");
+        }
+
+        if (!(options.LearningRate > 0.0 && !double.IsInfinity(options.LearningRate)))
+        {
+            throw new InvalidOperationException(
+                $"AdversarialDefenseOptions.LearningRate must be a positive finite number (was {options.LearningRate}).");
+        }
+
+        if (options.UseEnsemble && options.EnsembleSize < 1)
+        {
+            throw new InvalidOperationException(
+                $"AdversarialDefenseOptions.EnsembleSize must be at least 1 (was {options.EnsembleSize}).");
+        }
     }
 
     /// <inheritdoc/>
@@ -113,17 +267,19 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
             return input;
         }
 
-        // Apply preprocessing based on the method
         // Convert to vector for preprocessing, then convert back
         var vectorInput = ConversionsHelper.ConvertToVector<T, TInput>(input);
 
-        var preprocessed = options.PreprocessingMethod.ToLowerInvariant() switch
-        {
-            "jpeg" => ApplyJPEGCompression(vectorInput),
-            "bit_depth_reduction" => ApplyBitDepthReduction(vectorInput),
-            "denoising" => ApplyDenoising(vectorInput),
-            _ => vectorInput
-        };
+        var preprocessed = options.CustomPreprocessor is { } custom
+            ? custom.Preprocess(vectorInput)
+            : options.PreprocessingMethod switch
+            {
+                AdversarialPreprocessingMethod.JpegCompression => ApplyJPEGCompression(vectorInput),
+                AdversarialPreprocessingMethod.BitDepthReduction => ApplyBitDepthReduction(vectorInput),
+                AdversarialPreprocessingMethod.MedianSmoothing => ApplyMedianSmoothing(vectorInput),
+                _ => throw new InvalidOperationException(
+                    $"AdversarialDefenseOptions.PreprocessingMethod has the undefined value {(int)options.PreprocessingMethod}.")
+            };
 
         return ConversionsHelper.ConvertVectorToInput<T, TInput>(preprocessed, input);
     }
@@ -493,20 +649,82 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
 
     private Vector<T> ApplyBitDepthReduction(Vector<T> input)
     {
-        // Feature squeezing (Xu et al. 2018): i-bit depth keeps 2^i levels, x -> round(x (2^i - 1)) / (2^i - 1).
-        // 4 bits are 16 levels, so the multiplier is 15; 16 would give 17 levels.
-        T levels = NumOps.FromDouble(15.0);
-        var scaled = Engine.TensorMultiplyScalar(input.AsTensor(), levels);
+        // Feature squeezing (Xu et al. 2018): b-bit depth keeps 2^b levels, x -> round(x (2^b - 1)) / (2^b - 1).
+        if (options.BitDepth < 1 || options.BitDepth > 30)
+        {
+            throw new InvalidOperationException(
+                $"AdversarialDefenseOptions.BitDepth must lie in [1, 30] (was {options.BitDepth}).");
+        }
+
+        T levels = NumOps.FromDouble((1 << options.BitDepth) - 1);
+        var scaled = Engine.TensorMultiplyScalar(Engine.TensorClamp(input.AsTensor(), NumOps.Zero, NumOps.One), levels);
         var reduced = Engine.TensorDivideScalar(Engine.TensorRound(scaled), levels);
         return Engine.TensorClamp(reduced, NumOps.Zero, NumOps.One).ToVector();
     }
 
-    private Vector<T> ApplyDenoising(Vector<T> input)
+    /// <summary>
+    /// Local spatial smoothing (Xu et al. 2018, Section 3.2): every pixel becomes the median of its k x k window.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The window and border follow scipy.ndimage.median_filter, the implementation Xu et al. use: the window covers
+    /// offsets [-(k / 2), k - 1 - k / 2] on each axis, borders are reflected (d c b a | a b c d), and the median of an
+    /// even-sized window is the upper middle value (rank k*k / 2). A square input of side s is filtered as an s x s
+    /// image; any other length as a 1 x n row with a 1 x k window.
+    /// </para>
+    /// </remarks>
+    private Vector<T> ApplyMedianSmoothing(Vector<T> input)
     {
-        // Simple moving average denoising (for demonstration)
-        // Use Engine to clone the vector
-        var zeros = Engine.FillZero<T>(input.Length);
-        return Engine.Add<T>(input, zeros);
+        int k = options.MedianFilterSize;
+        if (k < 1)
+        {
+            throw new InvalidOperationException(
+                $"AdversarialDefenseOptions.MedianFilterSize must be at least 1 (was {k}).");
+        }
+
+        int n = input.Length;
+        if (n == 0 || k == 1)
+        {
+            return input;
+        }
+
+        int side = (int)Math.Sqrt(n);
+        bool square = side * side == n && side > 1;
+        int height = square ? side : 1;
+        int width = square ? side : n;
+        int rowsWindow = square ? k : 1;
+
+        var image = Engine.Reshape(input.AsTensor(), new[] { height, width });
+        var shifted = new List<Tensor<T>>(rowsWindow * k);
+        for (int dy = -(rowsWindow / 2); dy <= rowsWindow - 1 - rowsWindow / 2; dy++)
+        {
+            var rows = Engine.TensorGather(image, ReflectedIndices(height, dy), 0);
+            for (int dx = -(k / 2); dx <= k - 1 - k / 2; dx++)
+            {
+                shifted.Add(Engine.TensorGather(rows, ReflectedIndices(width, dx), 1));
+            }
+        }
+
+        var (sorted, _) = Engine.TensorSort(Engine.TensorStack(shifted.ToArray(), 0), 0, false);
+        int rank = shifted.Count / 2;
+        var median = Engine.TensorSlice(sorted, new[] { rank, 0, 0 }, new[] { 1, height, width });
+        return Engine.Reshape(median, new[] { n }).ToVector();
+    }
+
+    /// <summary>
+    /// The indices i + offset for i in [0, count), reflected at the borders as scipy's "reflect" mode does.
+    /// </summary>
+    private static Tensor<int> ReflectedIndices(int count, int offset)
+    {
+        var indices = new int[count];
+        int period = 2 * count;
+        for (int i = 0; i < count; i++)
+        {
+            int j = ((i + offset) % period + period) % period;
+            indices[i] = j < count ? j : period - 1 - j;
+        }
+
+        return new Tensor<int>(indices, new[] { count });
     }
 
     private static int ArgMaxVector(Vector<T> vector)
@@ -523,15 +741,34 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
     private sealed class PreprocessingFullModel : IFullModel<T, TInput, TOutput>
     {
         private readonly IFullModel<T, TInput, TOutput> _inner;
+        private readonly IFullModel<T, TInput, TOutput>[] _members;
         private readonly AdversarialTraining<T, TInput, TOutput> _defense;
 
         public PreprocessingFullModel(IFullModel<T, TInput, TOutput> inner, AdversarialTraining<T, TInput, TOutput> defense)
+            : this(new[] { inner }, defense)
         {
-            Guard.NotNull(inner);
-            _inner = inner;
+        }
+
+        /// <summary>
+        /// Wraps one model or an ensemble. Predictions average the members' outputs; every other member of the
+        /// model contract (parameters, persistence, gradients) is the first member's.
+        /// </summary>
+        public PreprocessingFullModel(IFullModel<T, TInput, TOutput>[] members, AdversarialTraining<T, TInput, TOutput> defense)
+        {
+            Guard.NotNull(members);
+            if (members.Length == 0)
+            {
+                throw new ArgumentException("At least one model is required.", nameof(members));
+            }
+
+            _members = members;
+            _inner = members[0];
             Guard.NotNull(defense);
             _defense = defense;
         }
+
+        /// <summary>The ensemble members (one entry when no ensemble is used).</summary>
+        internal IReadOnlyList<IFullModel<T, TInput, TOutput>> Members => _members;
 
         /// <inheritdoc/>
         public ILossFunction<T> DefaultLossFunction => _inner.DefaultLossFunction;
@@ -550,7 +787,20 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
         public TOutput Predict(TInput input)
         {
             var preprocessed = _defense.PreprocessInput(input);
-            return _inner.Predict(preprocessed);
+            var first = _inner.Predict(preprocessed);
+            if (_members.Length == 1)
+            {
+                return first;
+            }
+
+            var sum = ConversionsHelper.ConvertToVector<T, TOutput>(first);
+            for (int m = 1; m < _members.Length; m++)
+            {
+                sum = AiDotNetEngine.Current.Add<T>(sum, ConversionsHelper.ConvertToVector<T, TOutput>(_members[m].Predict(preprocessed)));
+            }
+
+            var mean = AiDotNetEngine.Current.Divide<T>(sum, NumOps.FromDouble(_members.Length));
+            return ConversionsHelper.ConvertVectorToInput<T, TOutput>(mean, first);
         }
 
         /// <inheritdoc/>
@@ -648,15 +898,13 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
         /// <inheritdoc/>
         public IFullModel<T, TInput, TOutput> DeepCopy()
         {
-            var innerCopy = _inner.DeepCopy();
-            return new PreprocessingFullModel(innerCopy, _defense);
+            return new PreprocessingFullModel(_members.Select(m => m.DeepCopy()).ToArray(), _defense);
         }
 
         /// <inheritdoc/>
         public IFullModel<T, TInput, TOutput> Clone()
         {
-            var innerClone = _inner.Clone();
-            return new PreprocessingFullModel(innerClone, _defense);
+            return new PreprocessingFullModel(_members.Select(m => m.Clone()).ToArray(), _defense);
         }
 
         /// <inheritdoc/>
