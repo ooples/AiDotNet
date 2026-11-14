@@ -123,31 +123,38 @@ public class ExpectedCalibrationError<T>
     /// </summary>
     /// <remarks>
     /// Bin m (1-based) holds confidences in ((m-1)/M, m/M] (Naeini et al. 2015; Guo et al. 2017, Sec. 2),
-    /// i.e. index ceil(p M) - 1, clamped to [0, M-1] so p = 0 joins the first bin.
-    /// Counts stay int so they are exact for every T.
+    /// i.e. index ceil(p M) - 1, clamped to [0, M-1] so p = 0 joins the first bin. The product p M rounds
+    /// (0.07 * 100 = 7.000000000000001 in double, whose ceiling is 8), so the candidate index is then checked
+    /// against the boundaries k / M themselves, the values np.linspace(0, 1, M + 1) holds, and moved one bin
+    /// down where p &lt;= its lower boundary or up where p &gt; its upper one.
+    /// The per-bin sums are segmented sums over the bin index, so memory is linear in the samples plus the
+    /// bins, with no [samples x bins] membership. Counts stay int so they are exact for every T.
     /// </remarks>
     private (Tensor<int> Counts, Tensor<int> CorrectCounts, Tensor<T> SumConfidence) ComputeBinStatistics(
         Vector<T> probabilities, Vector<int> predictions, Vector<int> trueLabels)
     {
         var engine = AiDotNetEngine.Current;
         int n = probabilities.Length;
+        var binCount = _numOps.FromDouble(_numBins);
+        var lastBin = _numOps.FromDouble(_numBins - 1);
 
-        var confidence = Tensor<T>.FromVector(probabilities, new[] { n, 1 });
-        var scaled = engine.TensorCeiling(engine.TensorMultiplyScalar(confidence, _numOps.FromDouble(_numBins)));
-        var binIndex = engine.TensorClamp(engine.TensorSubtractScalar(scaled, _numOps.One), _numOps.Zero, _numOps.FromDouble(_numBins - 1));
-        var bins = engine.Reshape(binIndex, new[] { n }).Cast<int>();
+        var confidence = Tensor<T>.FromVector(probabilities, new[] { n });
+        var candidate = engine.TensorClamp(
+            engine.TensorSubtractScalar(engine.TensorCeiling(engine.TensorMultiplyScalar(confidence, binCount)), _numOps.One),
+            _numOps.Zero, lastBin);
+        var lower = engine.TensorDivideScalar(candidate, binCount);
+        var upper = engine.TensorDivideScalar(engine.TensorAddScalar(candidate, _numOps.One), binCount);
+        var atOrBelowLower = engine.ScalarMinusTensor(_numOps.One, engine.TensorGreaterThan(confidence, lower));
+        var aboveUpper = engine.TensorGreaterThan(confidence, upper);
+        var binIndex = engine.TensorClamp(
+            engine.TensorAdd(engine.TensorSubtract(candidate, atOrBelowLower), aboveUpper), _numOps.Zero, lastBin);
+        var bins = binIndex.Cast<int>();
 
-        var membership = engine.TensorOneHot<int>(bins, _numBins);                                   // [n, M]
-        var counts = engine.ReduceSum(membership, new[] { 0 }, keepDims: false);                     // [M]
-
+        var counts = engine.TensorBinCount(bins, _numBins);                                          // [M]
         var correct = engine.TensorEquals(
-            Tensor<int>.FromVector(predictions, new[] { n, 1 }), Tensor<int>.FromVector(trueLabels, new[] { n, 1 }));
-        var correctCounts = engine.ReduceSum(
-            engine.TensorMultiply(membership, engine.TensorBroadcastTo(correct, new[] { n, _numBins })), new[] { 0 }, keepDims: false);
-
-        var sumConfidence = engine.ReduceSum(
-            engine.TensorMultiply(engine.TensorOneHot<T>(bins, _numBins), engine.TensorBroadcastTo(confidence, new[] { n, _numBins })),
-            new[] { 0 }, keepDims: false);
+            Tensor<int>.FromVector(predictions, new[] { n }), Tensor<int>.FromVector(trueLabels, new[] { n }));
+        var correctCounts = engine.ScatterAdd(correct, bins, 0, _numBins);                           // [M]
+        var sumConfidence = engine.ScatterAdd(confidence, bins, 0, _numBins);                        // [M]
 
         return (counts, correctCounts, sumConfidence);
     }

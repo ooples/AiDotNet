@@ -190,4 +190,56 @@ public class UncertaintyQuantificationPaperReferenceTests
         Assert.Equal(0.0, metrics["predictive_entropy"][0], 12);
         Assert.Equal(0.0, metrics["mutual_information"][0], 12);
     }
+
+    /// <summary>
+    /// Bin m holds ((m-1)/M, m/M], the boundaries np.linspace(0, 1, M + 1) (Guo et al. 2017, Sec. 2). With
+    /// M = 100, ceil(p M) - 1 misplaces 0.07, 0.14, 0.28, 0.55 and 0.56 one bin up because p M rounds above
+    /// the integer (0.07 * 100 = 7.000000000000001). Each k / 100 must land alone in bin k, and 0.0700001,
+    /// just above the boundary 0.07, in the next bin.
+    /// </summary>
+    [Fact]
+    public void Ece_BoundaryProbabilities_StayInTheirRightClosedBin()
+    {
+        var ece = new ExpectedCalibrationError<double>(numBins: 100);
+        var probs = new Vector<double>(Enumerable.Range(1, 100).Select(k => k / 100.0).ToArray());
+        var ones = new Vector<int>(Enumerable.Repeat(1, 100).ToArray());
+
+        var diagram = ece.GetReliabilityDiagram(probs, ones, ones);
+
+        Assert.Equal(100, diagram.Count);
+        for (int k = 1; k <= 100; k++)
+        {
+            Assert.Equal(k / 100.0, diagram[k - 1].confidence, 12);
+            Assert.Equal(1, diagram[k - 1].count);
+        }
+
+        var nearBoundary = ece.GetReliabilityDiagram(
+            new Vector<double>(new[] { 0.07, 0.0700001 }), new Vector<int>(new[] { 1, 1 }), new Vector<int>(new[] { 1, 0 }));
+        Assert.Equal(2, nearBoundary.Count);
+        Assert.Equal(0.07, nearBoundary[0].confidence, 12);
+        Assert.Equal(1.0, nearBoundary[0].accuracy, 12);
+        Assert.Equal(0.0700001, nearBoundary[1].confidence, 12);
+        Assert.Equal(0.0, nearBoundary[1].accuracy, 12);
+    }
+
+    /// <summary>
+    /// ECE over 2,200,000 samples and 1,000 bins: p = (j + 0.5) / 1000 with j = i mod 1000, all correct, so
+    /// every bin holds 2,200 samples and ECE = 1 - mean(p) = 0.5. The per-bin sums must stay linear in the
+    /// samples; the one-hot [samples x bins] membership had 2.2 * 10^9 entries, past int range.
+    /// </summary>
+    [Fact]
+    public void Ece_LargeSampleManyBins_UsesLinearMemory()
+    {
+        const int n = 2200000;
+        const int bins = 1000;
+        var probs = new Vector<double>(Enumerable.Range(0, n).Select(i => (i % bins + 0.5) / bins).ToArray());
+        var labels = new Vector<int>(new int[n]);
+
+        var ece = new ExpectedCalibrationError<double>(numBins: bins);
+
+        Assert.Equal(0.5, ece.Compute(probs, labels, labels), 9);
+        var diagram = ece.GetReliabilityDiagram(probs, labels, labels);
+        Assert.Equal(bins, diagram.Count);
+        Assert.All(diagram, bin => Assert.Equal(n / bins, bin.count));
+    }
 }
