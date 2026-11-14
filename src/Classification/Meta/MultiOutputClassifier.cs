@@ -128,27 +128,15 @@ public partial class MultiOutputClassifier<T> : MetaClassifierBase<T>
         TaskType = ClassificationTaskType.MultiLabel;
 
         // Create class labels (0 to NumClasses-1)
-        ClassLabels = new Vector<T>(NumClasses);
-        for (int c = 0; c < NumClasses; c++)
-        {
-            ClassLabels[c] = NumOps.FromDouble(c);
-        }
+        ClassLabels = NumClasses == 0 ? new Vector<T>(0) : Engine.TensorArange<T>(0, NumClasses, 1).ToVector();
 
         _classifiers = new IClassifier<T>[NumClasses];
 
         // Train one classifier per output
         for (int c = 0; c < NumClasses; c++)
         {
-            // Get labels for this output
-            var yLabel = new Vector<T>(x.Rows);
-            for (int i = 0; i < x.Rows; i++)
-            {
-                yLabel[i] = yMultiLabel[i, c];
-            }
-
-            // Train classifier
             _classifiers[c] = CreateBaseEstimator();
-            _classifiers[c].Train(x, yLabel);
+            _classifiers[c].Train(x, yMultiLabel.GetColumn(c));
         }
     }
 
@@ -164,23 +152,12 @@ public partial class MultiOutputClassifier<T> : MetaClassifierBase<T>
 
         NumFeatures = x.Columns;
         var originalClassLabels = ExtractClassLabels(y);
-        int numOriginalClasses = originalClassLabels.Length;
         TaskType = InferTaskType(y);
 
         // Convert to multi-label format (one-hot encoding)
-        var yMultiLabel = new Matrix<T>(y.Length, numOriginalClasses);
-        for (int i = 0; i < y.Length; i++)
-        {
-            for (int c = 0; c < numOriginalClasses; c++)
-            {
-                if (NumOps.Compare(y[i], originalClassLabels[c]) == 0)
-                {
-                    yMultiLabel[i, c] = NumOps.One;
-                }
-            }
-        }
-
-        TrainMultiLabel(x, yMultiLabel);
+        ClassLabels = originalClassLabels;
+        NumClasses = originalClassLabels.Length;
+        TrainMultiLabel(x, ClassMembership(y).ToMatrix());
 
         // Restore original class labels for Predict to return correct label values
         ClassLabels = originalClassLabels;
@@ -191,26 +168,12 @@ public partial class MultiOutputClassifier<T> : MetaClassifierBase<T>
     {
         // For single-label prediction, return the class with highest probability
         var probs = PredictProbabilities(input);
-        var predictions = new Vector<T>(input.Rows);
-
-        for (int i = 0; i < input.Rows; i++)
+        if (ClassLabels is null)
         {
-            int bestClass = 0;
-            T bestProb = probs[i, 0];
-
-            for (int c = 1; c < NumClasses; c++)
-            {
-                if (NumOps.Compare(probs[i, c], bestProb) > 0)
-                {
-                    bestProb = probs[i, c];
-                    bestClass = c;
-                }
-            }
-
-            predictions[i] = (ClassLabels ?? throw new InvalidOperationException("ClassLabels has not been initialized."))[bestClass];
+            throw new InvalidOperationException("ClassLabels has not been initialized.");
         }
 
-        return predictions;
+        return input.Rows == 0 ? new Vector<T>(0) : ClassIndicesToLabels(ArgMaxRows(probs));
     }
 
     /// <summary>
@@ -225,7 +188,8 @@ public partial class MultiOutputClassifier<T> : MetaClassifierBase<T>
             throw new InvalidOperationException("Model has not been trained.");
         }
 
-        var predictions = new Matrix<T>(input.Rows, NumClasses);
+        var half = NumOps.FromDouble(0.5);
+        var predictions = new Vector<T>[NumClasses];
 
         // Predict for each output independently
         for (int c = 0; c < NumClasses; c++)
@@ -233,31 +197,21 @@ public partial class MultiOutputClassifier<T> : MetaClassifierBase<T>
             // Try to get probabilities first, fall back to using predictions directly
             if (_classifiers[c] is IProbabilisticClassifier<T> probClassifier)
             {
+                // Use probability of positive class (column 1 for binary classifiers)
                 var probs = probClassifier.PredictProbabilities(input);
-                for (int i = 0; i < input.Rows; i++)
-                {
-                    // Use probability of positive class (column 1 for binary classifiers)
-                    T posProb = probs.Columns > 1 ? probs[i, 1] : probs[i, 0];
-                    predictions[i, c] = NumOps.Compare(posProb, NumOps.FromDouble(0.5)) >= 0
-                        ? NumOps.One
-                        : NumOps.Zero;
-                }
+                predictions[c] = AtLeast(probs.GetColumn(probs.Columns > 1 ? 1 : 0), half);
             }
             else
             {
                 // Fall back to using class predictions (assumes binary 0/1 labels)
                 var labelPreds = _classifiers[c].Predict(input);
-                for (int i = 0; i < input.Rows; i++)
-                {
-                    // Compare to NumOps.One to check if positive class was predicted
-                    predictions[i, c] = NumOps.Compare(labelPreds[i], NumOps.One) == 0
-                        ? NumOps.One
-                        : NumOps.Zero;
-                }
+                predictions[c] = labelPreds.Length == 0
+                    ? new Vector<T>(0)
+                    : Engine.TensorEquals(labelPreds.AsTensor(), NumOps.One).ToVector();
             }
         }
 
-        return predictions;
+        return NumClasses == 0 ? new Matrix<T>(input.Rows, 0) : StackColumns(predictions);
     }
 
     /// <inheritdoc/>
@@ -268,7 +222,7 @@ public partial class MultiOutputClassifier<T> : MetaClassifierBase<T>
             throw new InvalidOperationException("Model has not been trained.");
         }
 
-        var probs = new Matrix<T>(input.Rows, NumClasses);
+        var probs = new Vector<T>[NumClasses];
 
         // Get probabilities for each output independently
         for (int c = 0; c < NumClasses; c++)
@@ -276,25 +230,15 @@ public partial class MultiOutputClassifier<T> : MetaClassifierBase<T>
             if (_classifiers[c] is IProbabilisticClassifier<T> probClassifier)
             {
                 var labelProbs = probClassifier.PredictProbabilities(input);
-                int posCol = labelProbs.Columns > 1 ? 1 : 0;
-
-                for (int i = 0; i < input.Rows; i++)
-                {
-                    probs[i, c] = labelProbs[i, posCol];
-                }
+                probs[c] = labelProbs.GetColumn(labelProbs.Columns > 1 ? 1 : 0);
             }
             else
             {
-                var labelPreds = _classifiers[c].Predict(input);
-
-                for (int i = 0; i < input.Rows; i++)
-                {
-                    probs[i, c] = labelPreds[i];
-                }
+                probs[c] = _classifiers[c].Predict(input);
             }
         }
 
-        return probs;
+        return NumClasses == 0 ? new Matrix<T>(input.Rows, 0) : StackColumns(probs);
     }
 
     /// <inheritdoc/>
@@ -306,23 +250,7 @@ public partial class MultiOutputClassifier<T> : MetaClassifierBase<T>
     /// <inheritdoc/>
     public override Matrix<T> PredictLogProbabilities(Matrix<T> input)
     {
-        var probs = PredictProbabilities(input);
-        var logProbs = new Matrix<T>(input.Rows, NumClasses);
-
-        for (int i = 0; i < input.Rows; i++)
-        {
-            for (int c = 0; c < NumClasses; c++)
-            {
-                T p = probs[i, c];
-                T minP = NumOps.FromDouble(1e-15);
-                if (NumOps.Compare(p, minP) < 0)
-                {
-                    p = minP;
-                }
-                logProbs[i, c] = NumOps.Log(p);
-            }
-        }
-
-        return logProbs;
+        // log(max(p, 1e-15))
+        return base.PredictLogProbabilities(input);
     }
 }

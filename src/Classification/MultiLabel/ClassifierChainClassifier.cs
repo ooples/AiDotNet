@@ -234,16 +234,9 @@ public partial class ClassifierChainClassifier<T> : MultiLabelClassifierBase<T>
             // Create augmented features: original features + previous label values
             var augmentedX = CreateAugmentedFeatures(x, y, chainPosition);
 
-            // Extract binary labels for this label
-            var binaryLabels = new Vector<T>(y.Rows);
-            for (int i = 0; i < y.Rows; i++)
-            {
-                binaryLabels[i] = y[i, labelIndex];
-            }
-
-            // Train classifier
+            // Train classifier on the binary labels for this label
             var classifier = _classifierFactory();
-            classifier.Train(augmentedX, binaryLabels);
+            classifier.Train(augmentedX, y.GetColumn(labelIndex));
             _chainClassifiers[chainPosition] = classifier;
         }
     }
@@ -328,32 +321,29 @@ public partial class ClassifierChainClassifier<T> : MultiLabelClassifierBase<T>
     /// </remarks>
     private Matrix<T> CreateAugmentedFeatures(Matrix<T> x, Matrix<T>? y, int chainPosition)
     {
-        int numAugmentedFeatures = x.Columns + chainPosition;
-        var augmented = new Matrix<T>(x.Rows, numAugmentedFeatures);
-
-        // Copy original features
-        for (int i = 0; i < x.Rows; i++)
+        if (chainPosition <= 0)
         {
-            for (int j = 0; j < x.Columns; j++)
-            {
-                augmented[i, j] = x[i, j];
-            }
+            return x;
         }
 
-        // Add previous label values (during training, use actual labels from y)
-        if (y is not null && chainPosition > 0)
+        // Add previous label values (during training, use actual labels from y); without y they stay zero
+        if (y is null)
         {
-            for (int i = 0; i < x.Rows; i++)
+            return Engine.TensorConcatenate(new[]
             {
-                for (int p = 0; p < chainPosition; p++)
-                {
-                    int prevLabelIndex = (_chainOrder ?? throw new InvalidOperationException("_chainOrder has not been initialized."))[p];
-                    augmented[i, x.Columns + p] = y[i, prevLabelIndex];
-                }
-            }
+                Tensor<T>.FromMatrix(x),
+                new Tensor<T>(new[] { x.Rows, chainPosition })
+            }, 1).ToMatrix();
         }
 
-        return augmented;
+        var chainOrder = _chainOrder ?? throw new InvalidOperationException("_chainOrder has not been initialized.");
+        var previous = new Vector<T>[chainPosition];
+        for (int p = 0; p < chainPosition; p++)
+        {
+            previous[p] = y.GetColumn(chainOrder[p]);
+        }
+
+        return AppendColumns(x, previous);
     }
 
     /// <summary>
@@ -369,33 +359,37 @@ public partial class ClassifierChainClassifier<T> : MultiLabelClassifierBase<T>
     /// the predictions from previous classifiers in the chain as the additional features.
     /// </para>
     /// </remarks>
-    private Matrix<T> CreateAugmentedFeaturesForPrediction(Matrix<T> x, Matrix<T> previousPredictions, int chainPosition)
+    private Matrix<T> CreateAugmentedFeaturesForPrediction(Matrix<T> x, IReadOnlyList<Vector<T>> previousPredictions, int chainPosition)
     {
-        int numAugmentedFeatures = x.Columns + chainPosition;
-        var augmented = new Matrix<T>(x.Rows, numAugmentedFeatures);
-
-        // Copy original features
-        for (int i = 0; i < x.Rows; i++)
+        if (chainPosition <= 0)
         {
-            for (int j = 0; j < x.Columns; j++)
-            {
-                augmented[i, j] = x[i, j];
-            }
+            return x;
         }
 
-        // Add previous predictions
-        if (chainPosition > 0)
+        var previous = new Vector<T>[chainPosition];
+        for (int p = 0; p < chainPosition; p++)
         {
-            for (int i = 0; i < x.Rows; i++)
-            {
-                for (int p = 0; p < chainPosition; p++)
-                {
-                    augmented[i, x.Columns + p] = previousPredictions[i, p];
-                }
-            }
+            previous[p] = previousPredictions[p];
         }
 
-        return augmented;
+        return AppendColumns(x, previous);
+    }
+
+    /// <summary>
+    /// [x | extra columns] as one column concatenation.
+    /// </summary>
+    private Matrix<T> AppendColumns(Matrix<T> x, IReadOnlyList<Vector<T>> extra)
+    {
+        if (extra.Count == 0)
+        {
+            return x;
+        }
+
+        return Engine.TensorConcatenate(new[]
+        {
+            Tensor<T>.FromMatrix(x),
+            Tensor<T>.FromMatrix(StackColumns(extra))
+        }, 1).ToMatrix();
     }
 
     #endregion
@@ -427,8 +421,9 @@ public partial class ClassifierChainClassifier<T> : MultiLabelClassifierBase<T>
             throw new InvalidOperationException("Model must be trained before making predictions.");
         }
 
-        var probabilities = new Matrix<T>(input.Rows, NumLabels);
-        var chainPredictions = new Matrix<T>(input.Rows, NumLabels);
+        var half = NumOps.FromDouble(0.5);
+        var probabilities = Enumerable.Repeat(new Vector<T>(input.Rows), NumLabels).ToArray();
+        var chainPredictions = new List<Vector<T>>(NumLabels);
 
         // Predict in chain order
         for (int chainPosition = 0; chainPosition < NumLabels; chainPosition++)
@@ -440,32 +435,24 @@ public partial class ClassifierChainClassifier<T> : MultiLabelClassifierBase<T>
             var augmentedX = CreateAugmentedFeaturesForPrediction(input, chainPredictions, chainPosition);
 
             // Get predictions
+            Vector<T> prob;
             if (classifier is IProbabilisticClassifier<T> probabilisticClassifier)
             {
+                // Probability of positive class
                 var labelProbs = probabilisticClassifier.PredictProbabilities(augmentedX);
-
-                for (int i = 0; i < input.Rows; i++)
-                {
-                    // Probability of positive class
-                    T prob = labelProbs.Columns > 1 ? labelProbs[i, 1] : labelProbs[i, 0];
-                    probabilities[i, labelIndex] = prob;
-                    chainPredictions[i, chainPosition] = prob;
-                }
+                prob = labelProbs.GetColumn(labelProbs.Columns > 1 ? 1 : 0);
             }
             else
             {
-                var predictions = classifier.Predict(augmentedX);
-                for (int i = 0; i < input.Rows; i++)
-                {
-                    // Use 0.5 threshold for values in [0,1] range
-                    T prob = NumOps.GreaterThanOrEquals(predictions[i], NumOps.FromDouble(0.5)) ? NumOps.One : NumOps.Zero;
-                    probabilities[i, labelIndex] = prob;
-                    chainPredictions[i, chainPosition] = prob;
-                }
+                // Use 0.5 threshold for values in [0,1] range
+                prob = AtLeast(classifier.Predict(augmentedX), half);
             }
+
+            probabilities[labelIndex] = prob;
+            chainPredictions.Add(prob);
         }
 
-        return probabilities;
+        return NumLabels == 0 ? new Matrix<T>(input.Rows, 0) : StackColumns(probabilities);
     }
 
     #endregion
@@ -514,29 +501,27 @@ public partial class ClassifierChainClassifier<T> : MultiLabelClassifierBase<T>
             return new Vector<T>(0);
         }
 
-        var allGradients = new List<T>();
+        var allGradients = new List<Tensor<T>>();
         for (int chainIdx = 0; chainIdx < _chainClassifiers.Length; chainIdx++)
         {
             var classifier = _chainClassifiers[chainIdx];
             var labelIdx = _chainOrder[chainIdx];
 
-            // Extract binary labels for this label
-            var binaryTarget = new Vector<T>(target.Rows);
-            for (int i = 0; i < target.Rows; i++)
-            {
-                binaryTarget[i] = target[i, labelIdx];
-            }
+            // Binary labels for this label
+            var binaryTarget = target.GetColumn(labelIdx);
 
             // Use augmented features to match training dimensions
             var augmentedX = CreateAugmentedFeatures(input, target, chainIdx);
             var gradients = ((IGradientComputable<T, Matrix<T>, Vector<T>>)classifier).ComputeGradients(augmentedX, binaryTarget, lossFunction);
-            for (int i = 0; i < gradients.Length; i++)
+            if (gradients.Length > 0)
             {
-                allGradients.Add(gradients[i]);
+                allGradients.Add(gradients.AsTensor());
             }
         }
 
-        return new Vector<T>(allGradients.ToArray());
+        return allGradients.Count == 0
+            ? new Vector<T>(0)
+            : Engine.TensorConcatenate(allGradients.ToArray(), 0).ToVector();
     }
 
     /// <summary>
@@ -560,12 +545,12 @@ public partial class ClassifierChainClassifier<T> : MultiLabelClassifierBase<T>
         foreach (var classifier in _chainClassifiers)
         {
             var classifierParams = ((IParameterizable<T, Matrix<T>, Vector<T>>)classifier).GetParameters();
-            var classifierGradients = new Vector<T>(classifierParams.Length);
-
-            for (int i = 0; i < classifierParams.Length && gradIndex < gradients.Length; i++)
-            {
-                classifierGradients[i] = gradients[gradIndex++];
-            }
+            // This classifier's slice of the gradients (zero-padded when the gradients run out)
+            int taken = Math.Min(classifierParams.Length, gradients.Length - gradIndex);
+            var classifierGradients = taken <= 0
+                ? new Vector<T>(classifierParams.Length)
+                : FitToLength(gradients.GetSubVector(gradIndex, taken), classifierParams.Length);
+            gradIndex += Math.Max(0, taken);
 
             ((IGradientComputable<T, Matrix<T>, Vector<T>>)classifier).ApplyGradients(classifierGradients, learningRate);
         }

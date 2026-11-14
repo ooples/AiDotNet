@@ -216,57 +216,50 @@ public partial class OrdinalRegression<T> : ClassifierBase<T>,
         // Validate ordinal data (should be integers 0 to K-1)
         ValidateOrdinalData(y);
 
+        var engine = Engine;
+
         // Initialize coefficients to zero
         _coefficients = new Vector<T>(NumFeatures);
-        for (int i = 0; i < NumFeatures; i++)
-        {
-            _coefficients[i] = NumOps.Zero;
-        }
 
-        // Initialize thresholds evenly spaced
-        _thresholds = new Vector<T>(NumClasses - 1);
-        for (int k = 0; k < NumClasses - 1; k++)
-        {
-            // Initial thresholds: -2, -1, 0, 1, 2, ... for K-1 thresholds centered around 0
-            double threshold = (k + 1.0) - NumClasses / 2.0;
-            _thresholds[k] = NumOps.FromDouble(threshold);
-        }
+        // Initial thresholds: -2, -1, 0, 1, 2, ... for K-1 thresholds centered around 0: (k + 1) - K / 2
+        _thresholds = NumClasses <= 1
+            ? new Vector<T>(0)
+            : engine.TensorSubtractScalar(engine.TensorArange<T>(1, NumClasses), NumOps.FromDouble(NumClasses / 2.0)).ToVector();
 
         // Gradient descent optimization
-        double prevLogLikelihood = double.NegativeInfinity;
+        T prevLogLikelihood = NumOps.FromDouble(double.NegativeInfinity);
+        T learningRate = NumOps.FromDouble(_options.LearningRate);
+        T regStrength = NumOps.FromDouble(_options.RegularizationStrength);
 
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
         {
             // Compute gradients and update parameters
             var (coeffGradient, threshGradient, logLikelihood) = ComputeGradients(x, y);
 
-            // Update coefficients
-            T learningRate = NumOps.FromDouble(_options.LearningRate);
-            T regStrength = NumOps.FromDouble(_options.RegularizationStrength);
-            for (int j = 0; j < NumFeatures; j++)
-            {
-                // Add L2 regularization gradient
-                T grad = NumOps.Subtract(coeffGradient[j], NumOps.Multiply(regStrength, _coefficients[j]));
-                _coefficients[j] = NumOps.Add(_coefficients[j], NumOps.Multiply(learningRate, grad));
-            }
-
-            // Update thresholds
-            for (int k = 0; k < NumClasses - 1; k++)
-            {
-                _thresholds[k] = NumOps.Add(_thresholds[k], NumOps.Multiply(learningRate, threshGradient[k]));
-            }
+            // Update coefficients (with the L2 regularization gradient) and thresholds
+            var grad = engine.Subtract(coeffGradient, engine.Multiply(_coefficients, regStrength));
+            _coefficients = engine.Add(_coefficients, engine.Multiply(grad, learningRate));
+            _thresholds = engine.Add(_thresholds, engine.Multiply(threshGradient, learningRate));
 
             // Enforce threshold ordering: α_1 < α_2 < ... < α_{K-1}
             EnforceThresholdOrdering();
 
             // Check convergence
-            if (Math.Abs(logLikelihood - prevLogLikelihood) < _options.Tolerance)
+            if (HasConverged(prevLogLikelihood, logLikelihood))
             {
                 break;
             }
 
             prevLogLikelihood = logLikelihood;
         }
+    }
+
+    /// <summary>
+    /// Whether the log-likelihood changed by less than the tolerance.
+    /// </summary>
+    private bool HasConverged(T previous, T current)
+    {
+        return NumOps.LessThan(NumOps.Abs(NumOps.Subtract(current, previous)), NumOps.FromDouble(_options.Tolerance));
     }
 
     /// <summary>
@@ -286,9 +279,10 @@ public partial class OrdinalRegression<T> : ClassifierBase<T>,
     /// </remarks>
     private void ValidateOrdinalData(Vector<T> y)
     {
-        for (int i = 0; i < y.Length; i++)
+        var classIndices = GetClassIndicesFromLabels(y);
+        for (int i = 0; i < classIndices.Length; i++)
         {
-            int classIdx = GetClassIndexFromLabel(y[i]);
+            int classIdx = classIndices[i];
             if (classIdx < 0 || classIdx >= NumClasses)
             {
                 throw new ArgumentException(
@@ -315,105 +309,79 @@ public partial class OrdinalRegression<T> : ClassifierBase<T>,
     /// the model's predictions. Positive gradient means "increase this parameter".
     /// </para>
     /// </remarks>
-    private (Vector<T> coeffGradient, Vector<T> threshGradient, double logLikelihood) ComputeGradients(Matrix<T> x, Vector<T> y)
+    private (Vector<T> coeffGradient, Vector<T> threshGradient, T logLikelihood) ComputeGradients(Matrix<T> x, Vector<T> y)
     {
+        var engine = Engine;
         int n = x.Rows;
-        var coeffGradient = new Vector<T>(NumFeatures);
-        var threshGradient = new Vector<T>(NumClasses - 1);
-        double logLikelihood = 0;
-
-        // Initialize gradients to zero
-        for (int j = 0; j < NumFeatures; j++) coeffGradient[j] = NumOps.Zero;
-        for (int k = 0; k < NumClasses - 1; k++) threshGradient[k] = NumOps.Zero;
-
-        // Compute linear predictor for all samples: η_i = β^T × x_i
-        var eta = new T[n];
-        for (int i = 0; i < n; i++)
+        int k = NumClasses;
+        if (n == 0)
         {
-            T sum = NumOps.Zero;
-            for (int j = 0; j < NumFeatures; j++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(_coefficients[j], x[i, j]));
-            }
-            eta[i] = sum;
+            return (new Vector<T>(NumFeatures), new Vector<T>(Math.Max(0, k - 1)), NumOps.Zero);
         }
 
-        // For each sample, compute probabilities and gradients
-        for (int i = 0; i < n; i++)
-        {
-            int yi = GetClassIndexFromLabel(y[i]);
+        // Linear predictor for all samples: η_i = β^T × x_i, cumulative probabilities P(Y ≤ k) = link(α_k - η)
+        var features = FeatureBlock(x);
+        var cumulative = CumulativeProbabilities(features);
 
-            // Compute cumulative probabilities P(Y ≤ k) = sigmoid(α_k - η)
-            var cumProbs = new double[NumClasses - 1];
-            for (int k = 0; k < NumClasses - 1; k++)
-            {
-                double alpha_k = NumOps.ToDouble(_thresholds[k]);
-                cumProbs[k] = ApplyLink(alpha_k - NumOps.ToDouble(eta[i]));
-            }
+        // Padded cumulative probabilities [0, P(Y≤0), ..., P(Y≤K-2), 1] and sigmoid' terms c(1-c)
+        var zeros = new Tensor<T>(new[] { n, 1 });
+        var ones = new Tensor<T>(new[] { n, 1 });
+        engine.TensorFill(ones, NumOps.One);
+        var padded = engine.TensorConcatenate(new[] { zeros, cumulative, ones }, 1).Reshape(n * (k + 1));
+        var gammas = engine.TensorMultiply(padded, engine.ScalarMinusTensor(NumOps.One, padded));
 
-            // Compute class probabilities P(Y = k)
-            var classProbs = new double[NumClasses];
-            classProbs[0] = cumProbs[0];
-            for (int k = 1; k < NumClasses - 1; k++)
-            {
-                classProbs[k] = cumProbs[k] - cumProbs[k - 1];
-            }
-            classProbs[NumClasses - 1] = 1.0 - cumProbs[NumClasses - 2];
+        // Row-wise picks at the sample's class: lo = P(Y ≤ y-1), hi = P(Y ≤ y)
+        var classIndices = GetClassIndexTensor(y);
+        var rowStarts = engine.TensorMultiplyScalar(engine.TensorArange<int>(0, n), k + 1);
+        var lo = engine.TensorAdd(rowStarts, classIndices);
+        var hi = engine.TensorAddScalar(lo, 1);
 
-            // Clamp probabilities to avoid log(0)
-            for (int k = 0; k < NumClasses; k++)
-            {
-                classProbs[k] = Math.Max(1e-10, Math.Min(1.0 - 1e-10, classProbs[k]));
-            }
+        // Class probabilities P(Y = y), clamped to avoid log(0)
+        var classProbs = engine.TensorClamp(
+            engine.TensorSubtract(engine.TensorGather(padded, hi, 0), engine.TensorGather(padded, lo, 0)),
+            Tolerance(1e-10), NumOps.FromDouble(1.0 - 1e-10));
+        T logLikelihood = engine.TensorSum(engine.TensorLog(classProbs));
 
-            // Add to log-likelihood
-            logLikelihood += Math.Log(classProbs[yi]);
+        // dP(Y=y)/dη = -sigmoid'(α_y - η) + sigmoid'(α_{y-1} - η) (end terms are zero)
+        var gammaLo = engine.TensorGather(gammas, lo, 0);
+        var gammaHi = engine.TensorGather(gammas, hi, 0);
+        var coeffFactor = engine.TensorDivide(engine.TensorSubtract(gammaLo, gammaHi), classProbs);
 
-            // Compute gradient contributions
-            // For coefficient gradient: need derivative of P(Y=yi) w.r.t. η
-            // d/dη P(Y=k) = -sigmoid'(α_k - η) + sigmoid'(α_{k-1} - η) = P(Y≤k)(1-P(Y≤k)) - P(Y≤k-1)(1-P(Y≤k-1))
+        // Gradient for coefficients: dL/dβ_j = Σ_i (1/P(Y=yi)) × dP(Y=yi)/dη × x_ij
+        var coeffGradient = engine.TensorMatMul(engine.TensorTranspose(features), coeffFactor.Reshape(n, 1)).Reshape(NumFeatures);
 
-            double dPdEta = 0;
-            if (yi < NumClasses - 1)
-            {
-                dPdEta -= cumProbs[yi] * (1 - cumProbs[yi]); // -sigmoid'(α_yi - η)
-            }
-            if (yi > 0)
-            {
-                dPdEta += cumProbs[yi - 1] * (1 - cumProbs[yi - 1]); // +sigmoid'(α_{yi-1} - η)
-            }
+        // Gradient for thresholds: +sigmoid'(α_y - η)/P at α_y, -sigmoid'(α_{y-1} - η)/P at α_{y-1}
+        var padIndex = engine.TensorSubtract(lo, rowStarts);
+        var threshGradient = new Tensor<T>(new[] { k + 1 });
+        threshGradient = engine.TensorScatterAdd(threshGradient, engine.TensorAddScalar(padIndex, 1),
+            engine.TensorDivide(gammaHi, classProbs), 0);
+        threshGradient = engine.TensorScatterAdd(threshGradient, padIndex,
+            engine.TensorNegate(engine.TensorDivide(gammaLo, classProbs)), 0);
 
-            // Gradient for coefficients: dL/dβ_j = Σ_i (1/P(Y=yi)) × dP(Y=yi)/dη × x_ij
-            // Since η = β^T x, dη/dβ = x, so the coefficient gradient accumulates dPdEta/P * x.
-            T coeffFactor = NumOps.FromDouble(dPdEta / classProbs[yi]);
-            for (int j = 0; j < NumFeatures; j++)
-            {
-                coeffGradient[j] = NumOps.Add(coeffGradient[j], NumOps.Multiply(coeffFactor, x[i, j]));
-            }
+        return (coeffGradient.ToVector(), threshGradient.Slice(0, 1, k).ToVector(), logLikelihood);
+    }
 
-            // Gradient for thresholds: (1/P(Y=yi)) × dP(Y=yi)/dα_k
-            // dP(Y=k)/dα_k = sigmoid'(α_k - η) = cumProbs[k] × (1 - cumProbs[k])
-            // dP(Y=k)/dα_{k-1} = -sigmoid'(α_{k-1} - η) = -cumProbs[k-1] × (1 - cumProbs[k-1])
-            for (int k = 0; k < NumClasses - 1; k++)
-            {
-                double threshGrad = 0;
+    /// <summary>
+    /// The first NumFeatures columns of <paramref name="x"/> as a tensor.
+    /// </summary>
+    private Tensor<T> FeatureBlock(Matrix<T> x)
+    {
+        var features = Tensor<T>.FromMatrix(x);
+        return x.Columns == NumFeatures ? features : features.Slice(1, 0, NumFeatures);
+    }
 
-                if (k == yi)
-                {
-                    // α_k appears in P(Y≤yi) with positive contribution
-                    threshGrad += cumProbs[k] * (1 - cumProbs[k]);
-                }
-                if (k == yi - 1)
-                {
-                    // α_{yi-1} appears in P(Y≤yi-1) which is subtracted
-                    threshGrad -= cumProbs[k] * (1 - cumProbs[k]);
-                }
-
-                threshGradient[k] = NumOps.Add(threshGradient[k], NumOps.FromDouble(threshGrad / classProbs[yi]));
-            }
-        }
-
-        return (coeffGradient, threshGradient, logLikelihood);
+    /// <summary>
+    /// [rows, K-1] cumulative probabilities P(Y ≤ k) = link(α_k - β^T x).
+    /// </summary>
+    private Tensor<T> CumulativeProbabilities(Tensor<T> features)
+    {
+        var engine = Engine;
+        int n = features.Shape[0];
+        var eta = NumFeatures == 0
+            ? new Tensor<T>(new[] { n, 1 })
+            : engine.TensorMatMul(features, FitToLength(_coefficients, NumFeatures).AsTensor().Reshape(NumFeatures, 1));
+        var thresholds = FitToLength(_thresholds, Math.Max(0, NumClasses - 1)).AsTensor().Reshape(1, Math.Max(0, NumClasses - 1));
+        return ApplyLink(engine.TensorSubtract(thresholds, eta));
     }
 
     /// <summary>
@@ -430,14 +398,15 @@ public partial class OrdinalRegression<T> : ClassifierBase<T>,
     /// This function converts the model's internal score to a probability between 0 and 1.
     /// </para>
     /// </remarks>
-    private double ApplyLink(double linearPredictor)
+    private Tensor<T> ApplyLink(Tensor<T> linearPredictor)
     {
+        var engine = Engine;
         return _options.LinkFunction switch
         {
-            OrdinalLinkFunction.Logit => 1.0 / (1.0 + Math.Exp(-linearPredictor)),
             OrdinalLinkFunction.Probit => NormalCdf(linearPredictor),
-            OrdinalLinkFunction.ComplementaryLogLog => 1.0 - Math.Exp(-Math.Exp(linearPredictor)),
-            _ => 1.0 / (1.0 + Math.Exp(-linearPredictor))
+            OrdinalLinkFunction.ComplementaryLogLog => engine.ScalarMinusTensor(NumOps.One,
+                engine.TensorExp(engine.TensorNegate(engine.TensorExp(linearPredictor)))),
+            _ => engine.TensorSigmoid(linearPredictor)
         };
     }
 
@@ -456,10 +425,12 @@ public partial class OrdinalRegression<T> : ClassifierBase<T>,
     /// variable being less than or equal to x. Used for the probit link function.
     /// </para>
     /// </remarks>
-    private static double NormalCdf(double x)
+    private Tensor<T> NormalCdf(Tensor<T> x)
     {
-        // Approximation using error function
-        return 0.5 * (1.0 + Erf(x / Math.Sqrt(2.0)));
+        // Approximation using error function: 0.5 * (1 + erf(x / sqrt(2)))
+        var engine = Engine;
+        var erf = Erf(engine.TensorDivideScalar(x, NumOps.FromDouble(Math.Sqrt(2.0))));
+        return engine.TensorMultiplyScalar(engine.TensorAddScalar(erf, NumOps.One), NumOps.FromDouble(0.5));
     }
 
     /// <summary>
@@ -467,23 +438,40 @@ public partial class OrdinalRegression<T> : ClassifierBase<T>,
     /// </summary>
     /// <param name="x">The input value.</param>
     /// <returns>The error function value.</returns>
-    private static double Erf(double x)
+    private Tensor<T> Erf(Tensor<T> x)
     {
-        // Horner form coefficients for approximation
-        double a1 = 0.254829592;
-        double a2 = -0.284496736;
-        double a3 = 1.421413741;
-        double a4 = -1.453152027;
-        double a5 = 1.061405429;
-        double p = 0.3275911;
+        // Horner form coefficients for approximation (Abramowitz and Stegun 7.1.26)
+        var engine = Engine;
+        T a1 = NumOps.FromDouble(0.254829592);
+        T a2 = NumOps.FromDouble(-0.284496736);
+        T a3 = NumOps.FromDouble(1.421413741);
+        T a4 = NumOps.FromDouble(-1.453152027);
+        T a5 = NumOps.FromDouble(1.061405429);
+        T p = NumOps.FromDouble(0.3275911);
 
-        int sign = x < 0 ? -1 : 1;
-        x = Math.Abs(x);
+        // sign = -1 for x < 0, +1 otherwise
+        var sign = engine.ScalarMinusTensor(NumOps.One,
+            engine.TensorMultiplyScalar(engine.TensorLessThan(x, NumOps.Zero), NumOps.FromDouble(2.0)));
+        var ax = engine.TensorAbs(x);
+        var t = engine.TensorDivide(Ones(ax), engine.TensorAddScalar(engine.TensorMultiplyScalar(ax, p), NumOps.One));
 
-        double t = 1.0 / (1.0 + p * x);
-        double y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.Exp(-x * x);
+        // y = 1 - (((((a5 t + a4) t) + a3) t + a2) t + a1) t exp(-x^2)
+        var poly = engine.TensorAddScalar(engine.TensorMultiplyScalar(t, a5), a4);
+        poly = engine.TensorAddScalar(engine.TensorMultiply(poly, t), a3);
+        poly = engine.TensorAddScalar(engine.TensorMultiply(poly, t), a2);
+        poly = engine.TensorAddScalar(engine.TensorMultiply(poly, t), a1);
+        var tail = engine.TensorMultiply(engine.TensorMultiply(poly, t), engine.TensorExp(engine.TensorNegate(engine.TensorMultiply(ax, ax))));
+        return engine.TensorMultiply(sign, engine.ScalarMinusTensor(NumOps.One, tail));
+    }
 
-        return sign * y;
+    /// <summary>
+    /// A tensor of ones shaped like <paramref name="like"/>.
+    /// </summary>
+    private Tensor<T> Ones(Tensor<T> like)
+    {
+        var ones = new Tensor<T>(like.Shape.ToArray());
+        Engine.TensorFill(ones, NumOps.One);
+        return ones;
     }
 
     /// <summary>
@@ -505,15 +493,19 @@ public partial class OrdinalRegression<T> : ClassifierBase<T>,
         if (_thresholds == null || _thresholds.Length <= 1) return;
 
         // Simple projection: ensure each threshold is at least slightly larger than the previous
+        // (a sequential scan: each fix depends on the previous, already fixed threshold)
         T minGap = NumOps.FromDouble(0.01);
-        for (int k = 1; k < _thresholds.Length; k++)
+        var values = _thresholds.ToArray();
+        for (int k = 1; k < values.Length; k++)
         {
-            T minAllowed = NumOps.Add(_thresholds[k - 1], minGap);
-            if (!NumOps.GreaterThan(_thresholds[k], minAllowed))
+            T minAllowed = NumOps.Add(values[k - 1], minGap);
+            if (!NumOps.GreaterThan(values[k], minAllowed))
             {
-                _thresholds[k] = minAllowed;
+                values[k] = minAllowed;
             }
         }
+
+        _thresholds = Vector<T>.Wrap(values);
     }
 
     /// <summary>
@@ -539,38 +531,22 @@ public partial class OrdinalRegression<T> : ClassifierBase<T>,
             throw new InvalidOperationException("Model must be trained first. Call Train().");
         }
 
-        var predictions = new Vector<T>(input.Rows);
-
-        for (int i = 0; i < input.Rows; i++)
+        var labels = ClassLabels ?? throw new InvalidOperationException("Model has not been fitted.");
+        if (input.Rows == 0)
         {
-            // Compute class probabilities
-            T[] classProbs = ComputeClassProbabilities(input, i);
-
-            // Find class with maximum probability
-            int maxClass = 0;
-            T maxProb = classProbs[0];
-            for (int k = 1; k < NumClasses; k++)
-            {
-                if (NumOps.GreaterThan(classProbs[k], maxProb))
-                {
-                    maxProb = classProbs[k];
-                    maxClass = k;
-                }
-            }
-
-            var labels = ClassLabels ?? throw new InvalidOperationException("Model has not been fitted.");
-            predictions[i] = labels[maxClass];
+            return new Vector<T>(0);
         }
 
-        return predictions;
+        // Class with maximum probability (the first one wins ties)
+        var probs = ComputeClassProbabilities(input);
+        return ClassIndicesToLabels(Engine.TensorArgMax(probs, 1));
     }
 
     /// <summary>
-    /// Computes the probability distribution over classes for a single sample.
+    /// Computes the probability distribution over classes for every sample.
     /// </summary>
     /// <param name="x">The feature matrix.</param>
-    /// <param name="sampleIndex">The index of the sample to compute probabilities for.</param>
-    /// <returns>An array of class probabilities.</returns>
+    /// <returns>The [rows, classes] class probabilities.</returns>
     /// <remarks>
     /// <para>
     /// Class probabilities are computed from cumulative probabilities:
@@ -581,45 +557,21 @@ public partial class OrdinalRegression<T> : ClassifierBase<T>,
     /// This computes the probability of being in each category (all probabilities sum to 1).
     /// </para>
     /// </remarks>
-    private T[] ComputeClassProbabilities(Matrix<T> x, int sampleIndex)
+    private Tensor<T> ComputeClassProbabilities(Matrix<T> x)
     {
-        // Compute linear predictor: η = β^T × x
-        T etaT = NumOps.Zero;
-        for (int j = 0; j < NumFeatures; j++)
-        {
-            etaT = NumOps.Add(etaT, NumOps.Multiply(_coefficients[j], x[sampleIndex, j]));
-        }
-        double eta = NumOps.ToDouble(etaT);
+        var engine = Engine;
+        int n = x.Rows;
 
-        // Compute cumulative probabilities P(Y ≤ k) — uses special functions (sigmoid, Erf)
-        var cumProbs = new double[NumClasses - 1];
-        for (int k = 0; k < NumClasses - 1; k++)
-        {
-            double alpha_k = NumOps.ToDouble(_thresholds[k]);
-            cumProbs[k] = ApplyLink(alpha_k - eta);
-        }
+        // Cumulative probabilities P(Y ≤ k) — uses special functions (sigmoid, Erf)
+        var cumulative = CumulativeProbabilities(FeatureBlock(x));
 
-        // Compute class probabilities and convert to T
-        var classProbs = new T[NumClasses];
-        classProbs[0] = NumOps.FromDouble(cumProbs[0]);
-        for (int k = 1; k < NumClasses - 1; k++)
-        {
-            classProbs[k] = NumOps.FromDouble(cumProbs[k] - cumProbs[k - 1]);
-        }
-        classProbs[NumClasses - 1] = NumOps.FromDouble(1.0 - cumProbs[NumClasses - 2]);
-
-        // Clamp probabilities
-        T zero = NumOps.Zero;
-        T one = NumOps.One;
-        for (int k = 0; k < NumClasses; k++)
-        {
-            if (NumOps.LessThan(classProbs[k], zero))
-                classProbs[k] = zero;
-            else if (NumOps.GreaterThan(classProbs[k], one))
-                classProbs[k] = one;
-        }
-
-        return classProbs;
+        // Class probabilities P(Y = k) = P(Y ≤ k) - P(Y ≤ k-1), clamped to [0, 1]
+        var zeros = new Tensor<T>(new[] { n, 1 });
+        var ones = new Tensor<T>(new[] { n, 1 });
+        engine.TensorFill(ones, NumOps.One);
+        var upper = engine.TensorConcatenate(new[] { cumulative, ones }, 1);
+        var lower = engine.TensorConcatenate(new[] { zeros, cumulative }, 1);
+        return engine.TensorClamp(engine.TensorSubtract(upper, lower), NumOps.Zero, NumOps.One);
     }
 
     /// <summary>
@@ -645,18 +597,7 @@ public partial class OrdinalRegression<T> : ClassifierBase<T>,
             throw new InvalidOperationException("Model must be trained first. Call Train().");
         }
 
-        var probs = new Matrix<T>(input.Rows, NumClasses);
-
-        for (int i = 0; i < input.Rows; i++)
-        {
-            T[] classProbs = ComputeClassProbabilities(input, i);
-            for (int k = 0; k < NumClasses; k++)
-            {
-                probs[i, k] = classProbs[k];
-            }
-        }
-
-        return probs;
+        return input.Rows == 0 ? new Matrix<T>(0, NumClasses) : ComputeClassProbabilities(input).ToMatrix();
     }
 
 
@@ -678,21 +619,12 @@ public partial class OrdinalRegression<T> : ClassifierBase<T>,
     {
         int numParams = NumFeatures + Math.Max(0, NumClasses - 1);
         if (numParams <= 0) return new Vector<T>(0);
-        var parameters = new Vector<T>(numParams);
 
-        // Add coefficients
-        for (int j = 0; j < NumFeatures; j++)
-        {
-            parameters[j] = _coefficients is not null ? _coefficients[j] : NumOps.Zero;
-        }
-
-        // Add thresholds
-        for (int k = 0; k < NumClasses - 1; k++)
-        {
-            parameters[NumFeatures + k] = _thresholds is not null ? _thresholds[k] : NumOps.Zero;
-        }
-
-        return parameters;
+        // Coefficients then thresholds
+        var coefficients = _coefficients is not null ? FitToLength(_coefficients, NumFeatures) : new Vector<T>(NumFeatures);
+        int numThresholds = Math.Max(0, NumClasses - 1);
+        var thresholds = _thresholds is not null ? FitToLength(_thresholds, numThresholds) : new Vector<T>(numThresholds);
+        return Vector<T>.Concatenate(coefficients, thresholds);
     }
 
     /// <summary>
@@ -747,19 +679,9 @@ public partial class OrdinalRegression<T> : ClassifierBase<T>,
                 return; // Can't match — accept silently
         }
 
-        // Extract coefficients
-        _coefficients = new Vector<T>(NumFeatures);
-        for (int j = 0; j < NumFeatures; j++)
-        {
-            _coefficients[j] = parameters[j];
-        }
-
-        // Extract thresholds
-        _thresholds = new Vector<T>(NumClasses - 1);
-        for (int k = 0; k < NumClasses - 1; k++)
-        {
-            _thresholds[k] = parameters[NumFeatures + k];
-        }
+        // Extract coefficients and thresholds
+        _coefficients = parameters.GetSubVector(0, NumFeatures);
+        _thresholds = parameters.GetSubVector(NumFeatures, NumClasses - 1);
     }
 
     /// <summary>
@@ -798,21 +720,11 @@ public partial class OrdinalRegression<T> : ClassifierBase<T>,
     {
         var (coeffGradient, threshGradient, _) = ComputeGradients(input, target);
 
-        int numParams = NumFeatures + NumClasses - 1;
-        var gradients = new Vector<T>(numParams);
-
         // Negate gradients (we compute gradient of log-likelihood but need gradient of loss)
-        for (int j = 0; j < NumFeatures; j++)
-        {
-            gradients[j] = NumOps.Negate(coeffGradient[j]);
-        }
-
-        for (int k = 0; k < NumClasses - 1; k++)
-        {
-            gradients[NumFeatures + k] = NumOps.Negate(threshGradient[k]);
-        }
-
-        return gradients;
+        var engine = Engine;
+        return Vector<T>.Concatenate(
+            engine.Negate(FitToLength(coeffGradient, NumFeatures)),
+            engine.Negate(FitToLength(threshGradient, Math.Max(0, NumClasses - 1))));
     }
 
     /// <summary>
@@ -836,17 +748,12 @@ public partial class OrdinalRegression<T> : ClassifierBase<T>,
             throw new InvalidOperationException("Model must be trained first. Call Train().");
         }
 
-        // Update coefficients
-        for (int j = 0; j < NumFeatures; j++)
-        {
-            _coefficients[j] = NumOps.Subtract(_coefficients[j], NumOps.Multiply(learningRate, gradients[j]));
-        }
-
-        // Update thresholds
-        for (int k = 0; k < NumClasses - 1; k++)
-        {
-            _thresholds[k] = NumOps.Subtract(_thresholds[k], NumOps.Multiply(learningRate, gradients[NumFeatures + k]));
-        }
+        // Update coefficients and thresholds: w = w - lr * g
+        var engine = Engine;
+        _coefficients = engine.Subtract(FitToLength(_coefficients, NumFeatures),
+            engine.Multiply(gradients.GetSubVector(0, NumFeatures), learningRate));
+        _thresholds = engine.Subtract(FitToLength(_thresholds, NumClasses - 1),
+            engine.Multiply(gradients.GetSubVector(NumFeatures, NumClasses - 1), learningRate));
 
         // Enforce threshold ordering
         EnforceThresholdOrdering();
@@ -869,14 +776,15 @@ public partial class OrdinalRegression<T> : ClassifierBase<T>,
     public override Dictionary<string, T> GetFeatureImportance()
     {
         var result = new Dictionary<string, T>();
-        if (_coefficients == null) return result;
+        if (_coefficients == null || _coefficients.Length == 0) return result;
 
-        for (int i = 0; i < _coefficients.Length; i++)
+        var magnitudes = Engine.TensorAbs(_coefficients.AsTensor()).ToArray();
+        for (int i = 0; i < magnitudes.Length; i++)
         {
             string name = FeatureNames != null && i < FeatureNames.Length
                 ? FeatureNames[i]
                 : $"Feature_{i}";
-            result[name] = NumOps.Abs(_coefficients[i]);
+            result[name] = magnitudes[i];
         }
 
         return result;

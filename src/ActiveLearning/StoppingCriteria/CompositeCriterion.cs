@@ -131,11 +131,17 @@ public class CompositeCriterion<T> : ICompositeCriterion<T>
             return NumOps.Zero;
         }
 
-        var progressValues = _criteria.Select(c => NumOps.ToDouble(c.GetProgress(context))).ToList();
+        var progressValues = new List<T>(_criteria.Count);
+        foreach (var criterion in _criteria)
+        {
+            progressValues.Add(criterion.GetProgress(context));
+        }
 
+        var engine = AiDotNetEngine.Current;
+        var progress = Tensor<T>.FromVector(Vector<T>.FromList(progressValues));
         return _mode == CombinationMode.Any
-            ? NumOps.FromDouble(progressValues.Max()) // Max for OR (any one being 1 means done)
-            : NumOps.FromDouble(progressValues.Min()); // Min for AND (all must be 1 to be done)
+            ? engine.TensorMaxValue(progress) // Max for OR (any one being 1 means done)
+            : engine.TensorMinValue(progress); // Min for AND (all must be 1 to be done)
     }
 
     /// <inheritdoc/>

@@ -86,15 +86,15 @@ public class UncertaintySamplingStrategy<T, TInput, TOutput> : IUncertaintyStrat
         IFullModel<T, TInput, TOutput> model,
         IDataset<T, TInput, TOutput> unlabeledPool)
     {
-        var scores = new T[unlabeledPool.Count];
+        var scores = new List<T>(unlabeledPool.Count);
 
         for (int i = 0; i < unlabeledPool.Count; i++)
         {
             var input = unlabeledPool.GetInput(i);
-            scores[i] = ComputeUncertainty(model, input);
+            scores.Add(ComputeUncertainty(model, input));
         }
 
-        return new Vector<T>(scores);
+        return Vector<T>.FromList(scores);
     }
 
     /// <inheritdoc/>
@@ -107,14 +107,7 @@ public class UncertaintySamplingStrategy<T, TInput, TOutput> : IUncertaintyStrat
         var batchSizeToUse = Math.Min(batchSize, unlabeledPool.Count);
 
         // Sort by score descending and take top batchSize
-        var indexedScores = scores
-            .Select((score, index) => (Index: index, Score: score))
-            .OrderByDescending(x => NumOps.ToDouble(x.Score))
-            .Take(batchSizeToUse)
-            .Select(x => x.Index)
-            .ToArray();
-
-        return indexedScores;
+        return ActiveLearningEngineOps.SelectTopScoring(scores, batchSizeToUse);
     }
 
     /// <inheritdoc/>
@@ -178,35 +171,27 @@ public class UncertaintySamplingStrategy<T, TInput, TOutput> : IUncertaintyStrat
 
     private T ComputeEntropy(Vector<T> probabilities)
     {
-        // H(p) = -Σ p_i * log(p_i)
-        T entropy = NumOps.Zero;
-        T epsilon = NumOps.FromDouble(1e-10);
-
-        for (int i = 0; i < probabilities.Length; i++)
-        {
-            var p = probabilities[i];
-            if (NumOps.Compare(p, NumOps.Zero) > 0)
-            {
-                var pClipped = NumOps.Add(p, epsilon);
-                var logP = NumOps.Log(pClipped);
-                entropy = NumOps.Subtract(entropy, NumOps.Multiply(p, logP));
-            }
-        }
-
-        return entropy;
+        // H(p) = -Σ p_i * log(p_i + eps) over the entries with p_i > 0
+        var engine = AiDotNetEngine.Current;
+        var p = Tensor<T>.FromVector(probabilities);
+        var terms = engine.TensorMultiply(p, engine.TensorLog(engine.TensorAddScalar(p, ActiveLearningEngineOps.Tolerance<T>(1e-10))));
+        var positive = engine.TensorGreaterThan(p, NumOps.Zero);
+        return NumOps.Negate(engine.TensorSum(engine.TensorWhere(positive, terms, new Tensor<T>(p.Shape.ToArray()))));
     }
 
     private T ComputeLeastConfidence(Vector<T> probabilities)
     {
-        // 1 - max(p)
+        // 1 - max(p), with max(p) floored at zero
         T maxProb = NumOps.Zero;
-        for (int i = 0; i < probabilities.Length; i++)
+        if (probabilities.Length > 0)
         {
-            if (NumOps.Compare(probabilities[i], maxProb) > 0)
+            var largest = AiDotNetEngine.Current.TensorMaxValue(Tensor<T>.FromVector(probabilities));
+            if (NumOps.GreaterThan(largest, maxProb))
             {
-                maxProb = probabilities[i];
+                maxProb = largest;
             }
         }
+
         return NumOps.Subtract(NumOps.One, maxProb);
     }
 
@@ -219,21 +204,10 @@ public class UncertaintySamplingStrategy<T, TInput, TOutput> : IUncertaintyStrat
         }
 
         // Find top two probabilities
-        T first = NumOps.MinValue;
-        T second = NumOps.MinValue;
-
-        for (int i = 0; i < probabilities.Length; i++)
-        {
-            if (NumOps.Compare(probabilities[i], first) > 0)
-            {
-                second = first;
-                first = probabilities[i];
-            }
-            else if (NumOps.Compare(probabilities[i], second) > 0)
-            {
-                second = probabilities[i];
-            }
-        }
+        var row = Tensor<T>.FromVector(probabilities).Reshape(new[] { 1, probabilities.Length });
+        var (topTwo, _) = AiDotNetEngine.Current.TopK(row, 2, 1, true);
+        T first = topTwo.GetFlat(0);
+        T second = topTwo.GetFlat(1);
 
         // Return 1 - margin (so higher uncertainty = higher score)
         var margin = NumOps.Subtract(first, second);
@@ -242,49 +216,28 @@ public class UncertaintySamplingStrategy<T, TInput, TOutput> : IUncertaintyStrat
 
     private T ComputeVariance(Vector<T> probabilities)
     {
-        // Variance of the probability distribution
-        T mean = NumOps.Divide(NumOps.One, NumOps.FromDouble(probabilities.Length));
-        T variance = NumOps.Zero;
+        // Variance of the probability distribution around the uniform mean 1/n
+        var engine = AiDotNetEngine.Current;
+        T count = NumOps.FromDouble(probabilities.Length);
+        T mean = NumOps.Divide(NumOps.One, count);
+        var diff = engine.TensorSubtractScalar(Tensor<T>.FromVector(probabilities), mean);
+        T variance = engine.TensorSum(engine.TensorMultiply(diff, diff));
 
-        for (int i = 0; i < probabilities.Length; i++)
-        {
-            var diff = NumOps.Subtract(probabilities[i], mean);
-            variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-        }
-
-        return NumOps.Divide(variance, NumOps.FromDouble(probabilities.Length));
+        return NumOps.Divide(variance, count);
     }
 
     private Vector<T> Softmax(Vector<T> logits)
     {
-        // Find max for numerical stability
-        T maxLogit = logits[0];
-        for (int i = 1; i < logits.Length; i++)
+        if (logits.Length == 0)
         {
-            if (NumOps.Compare(logits[i], maxLogit) > 0)
-            {
-                maxLogit = logits[i];
-            }
+            throw new ArgumentException("Logits must not be empty.", nameof(logits));
         }
 
-        // Compute exp(x - max) and sum
-        var expValues = new T[logits.Length];
-        T sum = NumOps.Zero;
-
-        for (int i = 0; i < logits.Length; i++)
-        {
-            var shifted = NumOps.Subtract(logits[i], maxLogit);
-            expValues[i] = NumOps.Exp(shifted);
-            sum = NumOps.Add(sum, expValues[i]);
-        }
-
-        // Normalize
-        for (int i = 0; i < expValues.Length; i++)
-        {
-            expValues[i] = NumOps.Divide(expValues[i], sum);
-        }
-
-        return new Vector<T>(expValues);
+        // exp(x - max) normalized by its sum
+        var engine = AiDotNetEngine.Current;
+        var values = Tensor<T>.FromVector(logits);
+        var expValues = engine.TensorExp(engine.TensorSubtractScalar(values, engine.TensorMaxValue(values)));
+        return engine.TensorDivideScalar(expValues, engine.TensorSum(expValues)).ToVector();
     }
 
     private T Sigmoid(T x)

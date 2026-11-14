@@ -140,45 +140,30 @@ public partial class DARTClassifier<T> : EnsembleClassifierBase<T>
         _treeWeights.Clear();
         Estimators.Clear();
 
+        var engine = Engine;
+
         // Convert to binary labels (for binary classification)
-        var yBinary = new Vector<T>(n);
         T positiveClass = ClassLabels[ClassLabels.Length - 1];
-        for (int i = 0; i < n; i++)
-        {
-            yBinary[i] = NumOps.Compare(y[i], positiveClass) == 0 ? NumOps.One : NumOps.Zero;
-        }
+        var yBinary = engine.TensorEquals(y.AsTensor(), positiveClass).ToVector();
 
         // Initialize with log-odds of the prior
-        int posCount = 0;
-        for (int i = 0; i < n; i++)
-        {
-            if (NumOps.Compare(yBinary[i], NumOps.One) == 0)
-            {
-                posCount++;
-            }
-        }
+        int posCount = engine.TensorCountNonzero(yBinary.AsTensor());
         double p = Math.Max(1e-10, Math.Min(1 - 1e-10, (double)posCount / n));
         _initPrediction = NumOps.FromDouble(Math.Log(p / (1 - p)));
 
         // Current predictions (log-odds)
         var predictions = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            predictions[i] = _initPrediction;
-        }
+        predictions.Fill(_initPrediction);
 
         T bestLoss = NumOps.MaxValue;
         int roundsWithoutImprovement = 0;
+        T learningRate = NumOps.FromDouble(_options.LearningRate);
 
         for (int iter = 0; iter < _options.NumberOfIterations; iter++)
         {
             // Perform dropout - select trees to drop
             var droppedIndices = new HashSet<int>();
-            var keptPredictions = new Vector<T>(n);
-            for (int i = 0; i < n; i++)
-            {
-                keptPredictions[i] = predictions[i];
-            }
+            var keptPredictions = predictions.Clone();
             var droppedTreePreds = new Dictionary<int, Vector<T>>();
 
             if (_trees.Count > 0)
@@ -201,25 +186,13 @@ public partial class DARTClassifier<T> : EnsembleClassifierBase<T>
                     }
 
                     // Subtract dropped tree contributions
-                    foreach (int dropIdx in droppedIndices)
-                    {
-                        T weight = NumOps.Multiply(_treeWeights[dropIdx], NumOps.FromDouble(_options.LearningRate));
-                        for (int i = 0; i < n; i++)
-                        {
-                            keptPredictions[i] = NumOps.Subtract(keptPredictions[i],
-                                NumOps.Multiply(weight, droppedTreePreds[dropIdx][i]));
-                        }
-                    }
+                    keptPredictions = engine.Subtract(keptPredictions,
+                        DroppedContribution(droppedIndices, droppedTreePreds, learningRate, n));
                 }
             }
 
             // Compute residuals from kept predictions
-            var residuals = new Vector<T>(n);
-            for (int i = 0; i < n; i++)
-            {
-                T prob = Sigmoid(keptPredictions[i]);
-                residuals[i] = NumOps.Subtract(yBinary[i], prob);
-            }
+            var residuals = engine.Subtract(yBinary, engine.Sigmoid(keptPredictions));
 
             // Train new tree on residuals
             var treeOptions = new DecisionTreeOptions
@@ -235,57 +208,21 @@ public partial class DARTClassifier<T> : EnsembleClassifierBase<T>
             newTree.Train(x, residuals);
             _trees.Add(newTree);
 
-            // Compute normalization factor
-            T newWeight = NumOps.One;
-            if (droppedIndices.Count > 0)
-            {
-                // DART normalization: divide new tree contribution
-                newWeight = NumOps.Divide(NumOps.One, NumOps.FromDouble(droppedIndices.Count + 1));
-
-                // Scale dropped trees
-                T scaleFactor = NumOps.Divide(NumOps.FromDouble(droppedIndices.Count),
-                    NumOps.FromDouble(droppedIndices.Count + 1));
-                foreach (int dropIdx in droppedIndices)
-                {
-                    _treeWeights[dropIdx] = NumOps.Multiply(_treeWeights[dropIdx], scaleFactor);
-                }
-            }
+            // Compute normalization factor (DART: new tree gets 1/(k+1), dropped trees scale by k/(k+1))
+            T newWeight = ApplyDartNormalization(droppedIndices);
             _treeWeights.Add(newWeight);
 
-            // Update predictions
-            T learningRate = NumOps.FromDouble(_options.LearningRate);
+            // Update predictions: kept + new tree + dropped trees re-added with their updated weights
             var newTreePred = newTree.Predict(x);
-            for (int i = 0; i < n; i++)
-            {
-                predictions[i] = NumOps.Add(keptPredictions[i],
-                    NumOps.Multiply(NumOps.Multiply(newWeight, learningRate), newTreePred[i]));
-
-                // Re-add dropped tree contributions with updated weights
-                foreach (int dropIdx in droppedIndices)
-                {
-                    predictions[i] = NumOps.Add(predictions[i],
-                        NumOps.Multiply(NumOps.Multiply(_treeWeights[dropIdx], learningRate),
-                            droppedTreePreds[dropIdx][i]));
-                }
-            }
+            var newContribution = engine.Multiply(newTreePred, NumOps.Multiply(newWeight, learningRate));
+            predictions = engine.Add(engine.Add(keptPredictions, newContribution),
+                DroppedContribution(droppedIndices, droppedTreePreds, learningRate, n));
 
             // Early stopping
-            if (_options.EarlyStoppingRounds.HasValue)
+            if (_options.EarlyStoppingRounds.HasValue
+                && ShouldStopEarly(ComputeLoss(predictions, yBinary), ref bestLoss, ref roundsWithoutImprovement))
             {
-                T loss = ComputeLoss(predictions, yBinary);
-                if (NumOps.LessThan(loss, bestLoss))
-                {
-                    bestLoss = loss;
-                    roundsWithoutImprovement = 0;
-                }
-                else
-                {
-                    roundsWithoutImprovement++;
-                    if (roundsWithoutImprovement >= _options.EarlyStoppingRounds.Value)
-                    {
-                        break;
-                    }
-                }
+                break;
             }
 
         }
@@ -298,20 +235,8 @@ public partial class DARTClassifier<T> : EnsembleClassifierBase<T>
     /// </summary>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        var probs = PredictProbabilities(input);
-        var predictions = new Vector<T>(input.Rows);
-
-        var classLabels = ClassLabels ?? throw new InvalidOperationException("Model must be trained before making predictions.");
-        T threshold = NumOps.FromDouble(0.5);
-        for (int i = 0; i < input.Rows; i++)
-        {
-            // Binary classification
-            predictions[i] = NumOps.Compare(probs[i, 1], threshold) >= 0
-                ? classLabels[classLabels.Length - 1]
-                : classLabels[0];
-        }
-
-        return predictions;
+        // Binary classification: P(positive) >= 0.5 selects the last label, otherwise the first.
+        return PredictBinaryLabels(PredictProbabilities(input));
     }
 
     /// <summary>
@@ -326,35 +251,25 @@ public partial class DARTClassifier<T> : EnsembleClassifierBase<T>
         }
 
         int n = input.Rows;
-        var probs = new Matrix<T>(n, NumClasses);
-
-        // Compute log-odds predictions
-        var logOdds = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
+        if (n == 0)
         {
-            logOdds[i] = _initPrediction;
+            return new Matrix<T>(0, NumClasses);
         }
 
-        T learningRate = NumOps.FromDouble(_options.LearningRate);
-        for (int t = 0; t < _trees.Count; t++)
+        var engine = Engine;
+
+        // Compute log-odds predictions: init + sum_t (w_t * lr) * tree_t(x)
+        var treePreds = new List<Vector<T>>(_trees.Count);
+        foreach (var tree in _trees)
         {
-            var treePred = _trees[t].Predict(input);
-            T weight = NumOps.Multiply(_treeWeights[t], learningRate);
-            for (int i = 0; i < n; i++)
-            {
-                logOdds[i] = NumOps.Add(logOdds[i], NumOps.Multiply(weight, treePred[i]));
-            }
+            treePreds.Add(tree.Predict(input));
         }
+
+        var weights = engine.Multiply(Vector<T>.FromList(_treeWeights), NumOps.FromDouble(_options.LearningRate));
+        var logOdds = engine.Add(FilledVector(n, _initPrediction), WeightedSumOfVectors(treePreds, weights, n));
 
         // Convert to probabilities
-        for (int i = 0; i < n; i++)
-        {
-            T prob1 = Sigmoid(logOdds[i]);
-            probs[i, 0] = NumOps.Subtract(NumOps.One, prob1);
-            probs[i, 1] = prob1;
-        }
-
-        return probs;
+        return BinaryProbabilitiesFromLogOdds(logOdds);
     }
 
     /// <summary>
@@ -392,78 +307,96 @@ public partial class DARTClassifier<T> : EnsembleClassifierBase<T>
     }
 
     /// <summary>
-    /// Sigmoid function for converting log-odds to probability.
+    /// Sum over the dropped trees of (w_d * learningRate) * prediction_d.
     /// </summary>
-    private T Sigmoid(T x)
+    private Vector<T> DroppedContribution(HashSet<int> droppedIndices, Dictionary<int, Vector<T>> droppedTreePreds,
+        T learningRate, int n)
     {
-        if (NumOps.GreaterThanOrEquals(x, NumOps.Zero))
+        var preds = new List<Vector<T>>(droppedIndices.Count);
+        var weights = new List<T>(droppedIndices.Count);
+        foreach (int dropIdx in droppedIndices)
         {
-            T ez = NumOps.Exp(NumOps.Negate(x));
-            return NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, ez));
+            preds.Add(droppedTreePreds[dropIdx]);
+            weights.Add(_treeWeights[dropIdx]);
         }
-        else
+
+        if (preds.Count == 0)
         {
-            T ez = NumOps.Exp(x);
-            return NumOps.Divide(ez, NumOps.Add(NumOps.One, ez));
+            return new Vector<T>(n);
         }
+
+        return WeightedSumOfVectors(preds, Engine.Multiply(Vector<T>.FromList(weights), learningRate), n);
+    }
+
+    /// <summary>
+    /// Applies DART normalization: scales the dropped trees by k/(k+1) and returns the new tree's weight 1/(k+1)
+    /// (1 when nothing was dropped).
+    /// </summary>
+    private T ApplyDartNormalization(HashSet<int> droppedIndices)
+    {
+        int k = droppedIndices.Count;
+        if (k == 0)
+        {
+            return NumOps.One;
+        }
+
+        var order = droppedIndices.ToArray();
+        var dropped = new T[k];
+        for (int d = 0; d < k; d++)
+        {
+            dropped[d] = _treeWeights[order[d]];
+        }
+
+        T scaleFactor = NumOps.Divide(NumOps.FromDouble(k), NumOps.FromDouble(k + 1));
+        var scaled = Engine.Multiply(Vector<T>.Wrap(dropped), scaleFactor).ToArray();
+        for (int d = 0; d < k; d++)
+        {
+            _treeWeights[order[d]] = scaled[d];
+        }
+
+        return NumOps.Divide(NumOps.One, NumOps.FromDouble(k + 1));
+    }
+
+    /// <summary>
+    /// Early-stopping bookkeeping: records an improvement or counts a stale round.
+    /// </summary>
+    /// <returns>True when training should stop.</returns>
+    private bool ShouldStopEarly(T loss, ref T bestLoss, ref int roundsWithoutImprovement)
+    {
+        if (NumOps.LessThan(loss, bestLoss))
+        {
+            bestLoss = loss;
+            roundsWithoutImprovement = 0;
+            return false;
+        }
+
+        roundsWithoutImprovement++;
+        return roundsWithoutImprovement >= (_options.EarlyStoppingRounds ?? int.MaxValue);
     }
 
     /// <summary>
     /// Computes log loss for current predictions.
     /// </summary>
-    private T ComputeLoss(Vector<T> logOdds, Vector<T> yBinary)
-    {
-        T eps = NumOps.FromDouble(1e-10);
-        T oneMinusEps = NumOps.Subtract(NumOps.One, eps);
-        T loss = NumOps.Zero;
-        for (int i = 0; i < logOdds.Length; i++)
-        {
-            T y = yBinary[i];
-            T p = Sigmoid(logOdds[i]);
-            // Clamp p to [eps, 1-eps]
-            if (NumOps.LessThan(p, eps)) p = eps;
-            if (NumOps.GreaterThan(p, oneMinusEps)) p = oneMinusEps;
-            // loss -= y * log(p) + (1 - y) * log(1 - p)
-            loss = NumOps.Subtract(loss,
-                NumOps.Add(
-                    NumOps.Multiply(y, NumOps.Log(p)),
-                    NumOps.Multiply(NumOps.Subtract(NumOps.One, y),
-                        NumOps.Log(NumOps.Subtract(NumOps.One, p)))));
-        }
-        return NumOps.Divide(loss, NumOps.FromDouble(logOdds.Length));
-    }
+    private T ComputeLoss(Vector<T> logOdds, Vector<T> yBinary) => ComputeBinaryLogLoss(logOdds, yBinary);
 
     /// <summary>
     /// Calculates feature importances from all trees.
     /// </summary>
     private void CalculateFeatureImportances(int featureCount)
     {
-        var importances = new Vector<T>(featureCount);
-
-        for (int t = 0; t < _trees.Count; t++)
+        var perTree = new List<Vector<T>>(_trees.Count);
+        foreach (var tree in _trees)
         {
-            var fi = _trees[t].FeatureImportances;
-            T weight = _treeWeights[t];
-            int copyCount = Math.Min(featureCount, fi.Length);
-            for (int i = 0; i < copyCount; i++)
-            {
-                importances[i] = NumOps.Add(importances[i],
-                    NumOps.Multiply(weight, fi[i]));
-            }
+            perTree.Add(FitToLength(tree.FeatureImportances, featureCount));
         }
+
+        var importances = WeightedSumOfVectors(perTree, Vector<T>.FromList(_treeWeights), featureCount);
 
         // Normalize
-        T sum = NumOps.Zero;
-        for (int i = 0; i < featureCount; i++)
-        {
-            sum = NumOps.Add(sum, importances[i]);
-        }
+        T sum = featureCount == 0 ? NumOps.Zero : Engine.Sum(importances);
         if (NumOps.GreaterThan(sum, NumOps.Zero))
         {
-            for (int i = 0; i < featureCount; i++)
-            {
-                importances[i] = NumOps.Divide(importances[i], sum);
-            }
+            importances = Engine.Divide(importances, sum);
         }
 
         FeatureImportances = importances;

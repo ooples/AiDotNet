@@ -158,7 +158,6 @@ public class PredictionStabilityCriterion<T> : IStoppingCriterion<T>
     {
         // For classification: fraction of samples where argmax is the same
         // For regression: this treats values as discrete decisions
-        int agreed = 0;
         int total = Math.Min(previous.Length, current.Length);
 
         if (total == 0)
@@ -166,15 +165,10 @@ public class PredictionStabilityCriterion<T> : IStoppingCriterion<T>
             return NumOps.One;
         }
 
-        for (int i = 0; i < total; i++)
-        {
-            // Check if predictions are "close enough" to be considered agreeing
-            var diff = NumOps.Abs(NumOps.Subtract(previous[i], current[i]));
-            if (NumOps.Compare(diff, NumOps.FromDouble(0.5)) < 0)
-            {
-                agreed++;
-            }
-        }
+        // Check if predictions are "close enough" to be considered agreeing
+        var engine = AiDotNetEngine.Current;
+        var diff = engine.Abs(engine.Subtract(Prefix(previous, total), Prefix(current, total)));
+        int agreed = engine.TensorCountNonzero(engine.TensorLessThan(Tensor<T>.FromVector(diff), NumOps.FromDouble(0.5)));
 
         return NumOps.FromDouble((double)agreed / total);
     }
@@ -187,42 +181,25 @@ public class PredictionStabilityCriterion<T> : IStoppingCriterion<T>
             return NumOps.One;
         }
 
-        // Compute means
-        T sumPrev = NumOps.Zero;
-        T sumCurr = NumOps.Zero;
+        var engine = AiDotNetEngine.Current;
+        var prev = Prefix(previous, n);
+        var curr = Prefix(current, n);
 
-        for (int i = 0; i < n; i++)
-        {
-            sumPrev = NumOps.Add(sumPrev, previous[i]);
-            sumCurr = NumOps.Add(sumCurr, current[i]);
-        }
+        // Means (divided before summing) and centered rows; the correlation is the dot product of the
+        // unit-norm centered rows, since sums of squares and products overflow in Half
+        var both = ActiveLearningEngineOps.StackVectors(new[] { prev, curr });
+        var centered = engine.TensorSubtract(both, engine.TensorBroadcastTo(
+            engine.ReduceSum(engine.TensorDivideScalar(both, NumOps.FromDouble(n)), new[] { 1 }, keepDims: true), new[] { 2, n }));
+        var norms = ActiveLearningEngineOps.ScaledNorms(centered, 1);
+        T denominator = NumOps.Multiply(norms.GetFlat(0), norms.GetFlat(1));
 
-        T meanPrev = NumOps.Divide(sumPrev, NumOps.FromDouble(n));
-        T meanCurr = NumOps.Divide(sumCurr, NumOps.FromDouble(n));
-
-        // Compute correlation
-        T numerator = NumOps.Zero;
-        T denomPrev = NumOps.Zero;
-        T denomCurr = NumOps.Zero;
-
-        for (int i = 0; i < n; i++)
-        {
-            T diffPrev = NumOps.Subtract(previous[i], meanPrev);
-            T diffCurr = NumOps.Subtract(current[i], meanCurr);
-
-            numerator = NumOps.Add(numerator, NumOps.Multiply(diffPrev, diffCurr));
-            denomPrev = NumOps.Add(denomPrev, NumOps.Multiply(diffPrev, diffPrev));
-            denomCurr = NumOps.Add(denomCurr, NumOps.Multiply(diffCurr, diffCurr));
-        }
-
-        T denominator = NumOps.Multiply(NumOps.Sqrt(denomPrev), NumOps.Sqrt(denomCurr));
-
-        if (NumOps.Compare(denominator, NumOps.FromDouble(1e-10)) < 0)
+        if (NumOps.Compare(denominator, ActiveLearningEngineOps.Tolerance<T>(1e-10)) < 0)
         {
             return NumOps.One; // No variance means perfect stability
         }
 
-        T correlation = NumOps.Divide(numerator, denominator);
+        var units = ActiveLearningEngineOps.UnitRows(centered, norms);
+        T correlation = engine.TensorSum(engine.TensorMultiply(units.Slice(0, 0, 1), units.Slice(0, 1, 2)));
 
         // Map correlation (-1 to 1) to stability (0 to 1)
         return NumOps.Divide(NumOps.Add(correlation, NumOps.One), NumOps.FromDouble(2.0));
@@ -237,17 +214,22 @@ public class PredictionStabilityCriterion<T> : IStoppingCriterion<T>
             return NumOps.One;
         }
 
-        T sumDiff = NumOps.Zero;
-        for (int i = 0; i < n; i++)
-        {
-            sumDiff = NumOps.Add(sumDiff, NumOps.Abs(NumOps.Subtract(previous[i], current[i])));
-        }
+        var engine = AiDotNetEngine.Current;
+        T sumDiff = engine.Sum(engine.Abs(engine.Subtract(Prefix(previous, n), Prefix(current, n))));
 
         T mad = NumOps.Divide(sumDiff, NumOps.FromDouble(n));
 
         // Assume values are in [0,1] range, so MAD is in [0,1]
         // Stability = 1 - MAD
         return NumOps.Subtract(NumOps.One, mad);
+    }
+
+    /// <summary>
+    /// Returns the first <paramref name="length"/> elements of a vector.
+    /// </summary>
+    private static Vector<T> Prefix(Vector<T> vector, int length)
+    {
+        return vector.Length == length ? vector : vector.GetSubVector(0, length);
     }
 
     #endregion

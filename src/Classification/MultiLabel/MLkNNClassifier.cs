@@ -80,9 +80,14 @@ public partial class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
     private Matrix<T> _trainFeatures = new Matrix<T>(0, 0);
     [AiDotNet.Attributes.FittedParameter]
     private Matrix<T> _trainLabels = new Matrix<T>(0, 0);
-    private double[]? _priorProbs; // P(H_l = 1)
-    private double[,] _condProbsPos = new double[0, 0]; // P(E_l = j | H_l = 1) for j = 0..k
-    private double[,] _condProbsNeg = new double[0, 0]; // P(E_l = j | H_l = 0) for j = 0..k
+    private Vector<T>? _priorProbs; // P(H_l = 1)
+    private Tensor<T> _condProbsPos = new Tensor<T>(new[] { 0, 0 }); // P(E_l = j | H_l = 1) for j = 0..k, [labels, k + 1]
+    private Tensor<T> _condProbsNeg = new Tensor<T>(new[] { 0, 0 }); // P(E_l = j | H_l = 0) for j = 0..k, [labels, k + 1]
+
+    /// <summary>
+    /// Maximum query x training x feature elements per exact distance batch.
+    /// </summary>
+    private const int DistanceBatchElements = 1 << 22;
 
     /// <summary>
     /// Creates a new ML-kNN classifier.
@@ -103,65 +108,39 @@ public partial class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
         _trainFeatures = features;
         _trainLabels = labels;
 
+        var engine = Engine;
         int n = features.Rows;
         int k = _options.KNeighbors;
+        int width = k + 1;
         double s = _options.Smoothing;
 
-        // Initialize probability arrays
-        _priorProbs = new double[NumLabels];
-        _condProbsPos = new double[NumLabels, k + 1];
-        _condProbsNeg = new double[NumLabels, k + 1];
+        // Neighbor label counts per sample (k nearest neighbors, excluding self) and the sample's own labels
+        var neighborCounts = CountNeighborLabels(NearestNeighbors(features, k, excludeSelf: true));
+        var hasLabel = ZeroOneToInt(PositiveLabels(labels));
 
-        // Count arrays for conditional probabilities
-        var countPos = new int[NumLabels, k + 1]; // C[l,j] = count of samples with label l having j neighbors with label l
-        var countNeg = new int[NumLabels, k + 1];
-        var totalPos = new int[NumLabels];
-        var totalNeg = new int[NumLabels];
-
-        // Compute prior probabilities and conditional counts
-        for (int i = 0; i < n; i++)
+        // C[l, j] = count of samples with (or without) label l having j neighbors with label l, counted
+        // in int (sums of T ones stop at 2048 for Half): codes of samples without the label are shifted
+        // past the first table so that one bin count fills both tables
+        int table = NumLabels * width;
+        var countPos = new Tensor<int>(new[] { table });
+        var countNeg = new Tensor<int>(new[] { table });
+        var totalPos = new Tensor<int>(new[] { NumLabels });
+        if (n > 0 && NumLabels > 0)
         {
-            // Find k nearest neighbors (excluding self)
-            var neighbors = FindKNearestNeighbors(features, i, k, excludeSelf: true);
-
-            for (int l = 0; l < NumLabels; l++)
-            {
-                // Count neighbors with label l
-                int neighborCount = 0;
-                foreach (int neighborIdx in neighbors)
-                {
-                    if (NumOps.GreaterThan(labels[neighborIdx, l], NumOps.FromDouble(0.5)))
-                    {
-                        neighborCount++;
-                    }
-                }
-
-                // Check if sample i has label l
-                bool hasLabel = NumOps.GreaterThan(labels[i, l], NumOps.FromDouble(0.5));
-                if (hasLabel)
-                {
-                    countPos[l, neighborCount]++;
-                    totalPos[l]++;
-                }
-                else
-                {
-                    countNeg[l, neighborCount]++;
-                    totalNeg[l]++;
-                }
-            }
+            var codes = CountCodes(neighborCounts, width).Reshape(n * NumLabels);
+            var negativeOffset = engine.TensorMultiplyScalar(engine.ScalarMinusTensor(1, hasLabel.Reshape(n * NumLabels)), table);
+            var counts = engine.TensorBinCount(engine.TensorAdd(codes, negativeOffset), 2 * table);
+            countPos = counts.Slice(0, 0, table);
+            countNeg = counts.Slice(0, table, 2 * table);
+            totalPos = engine.ReduceSum(hasLabel, new[] { 0 }, false);
         }
 
-        // Compute prior and conditional probabilities with smoothing
-        for (int l = 0; l < NumLabels; l++)
-        {
-            _priorProbs[l] = (totalPos[l] + s) / (n + s * 2);
+        var totalNeg = engine.ScalarMinusTensor(n, totalPos);
 
-            for (int j = 0; j <= k; j++)
-            {
-                _condProbsPos[l, j] = (countPos[l, j] + s) / (totalPos[l] + s * (k + 1));
-                _condProbsNeg[l, j] = (countNeg[l, j] + s) / (totalNeg[l] + s * (k + 1));
-            }
-        }
+        // Prior and conditional probabilities with smoothing, divided in double so counts above 2048 stay exact
+        _priorProbs = engine.TensorDivideScalar(engine.TensorAddScalar(totalPos.Cast<double>(), s), n + 2 * s).Cast<T>().ToVector();
+        _condProbsPos = SmoothedConditional(countPos, totalPos, s, width);
+        _condProbsNeg = SmoothedConditional(countNeg, totalNeg, s, width);
     }
 
     /// <inheritdoc />
@@ -174,92 +153,148 @@ public partial class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
 
         int n = features.Rows;
         int k = _options.KNeighbors;
-        var probs = new Matrix<T>(n, NumLabels);
-
-        for (int i = 0; i < n; i++)
+        if (n == 0 || NumLabels == 0)
         {
-            // Find k nearest neighbors in training data
-            var neighbors = FindKNearestNeighborsInTraining(features, i, k);
+            return new Matrix<T>(n, NumLabels);
+        }
 
-            for (int l = 0; l < NumLabels; l++)
+        // Count neighbors with each label among the k nearest training samples
+        var engine = Engine;
+        var neighborCounts = CountNeighborLabels(NearestNeighbors(features, k, excludeSelf: false));
+        var codes = CountCodes(neighborCounts, k + 1).Reshape(n * NumLabels);
+
+        // Bayesian inference: P(H_l=1|E_l=j) = P(E_l=j|H_l=1)*P(H_l=1) / P(E_l=j)
+        var prior = _priorProbs.AsTensor().Reshape(1, NumLabels);
+        var condPos = engine.TensorGather(_condProbsPos.Reshape(_condProbsPos.Length), codes, 0).Reshape(n, NumLabels);
+        var condNeg = engine.TensorGather(_condProbsNeg.Reshape(_condProbsNeg.Length), codes, 0).Reshape(n, NumLabels);
+        var pPos = engine.TensorMultiply(condPos, prior);
+        var pNeg = engine.TensorMultiply(condNeg, engine.ScalarMinusTensor(NumOps.One, prior));
+        var denominator = engine.TensorAddScalar(engine.TensorAdd(pPos, pNeg), Tolerance(1e-10));
+        return engine.TensorDivide(pPos, denominator).ToMatrix();
+    }
+
+    /// <summary>
+    /// (count + s) / (total + s * width) for a flattened [labels * width] count table and per-label totals.
+    /// </summary>
+    private Tensor<T> SmoothedConditional(Tensor<int> counts, Tensor<int> totals, double s, int width)
+    {
+        var engine = Engine;
+        // Contiguous first: Tensor.Cast reads a sliced view from the start of its storage, so the "without the
+        // label" table (the second half of the shared bin count) came out as a copy of the "with the label" one
+        var numerator = engine.TensorAddScalar(counts.Contiguous().Cast<double>().Reshape(NumLabels, width), s);
+        var denominator = engine.TensorAddScalar(totals.Contiguous().Cast<double>(), s * width).Reshape(NumLabels, 1);
+        return engine.TensorDivide(numerator, engine.TensorBroadcastTo(denominator, new[] { NumLabels, width })).Cast<T>();
+    }
+
+    /// <summary>
+    /// 1 where a label value is above 0.5, otherwise 0, as a [rows, NumLabels] tensor.
+    /// </summary>
+    private Tensor<T> PositiveLabels(Matrix<T> labels)
+    {
+        if (labels.Rows == 0 || NumLabels == 0)
+        {
+            return new Tensor<T>(new[] { labels.Rows, NumLabels });
+        }
+
+        var values = Tensor<T>.FromMatrix(labels);
+        if (labels.Columns != NumLabels)
+        {
+            values = values.Slice(1, 0, NumLabels);
+        }
+
+        return Engine.TensorGreaterThan(values, NumOps.FromDouble(0.5));
+    }
+
+    /// <summary>
+    /// Number of neighbors having each label: [queries, NumLabels] integer counts.
+    /// </summary>
+    private Tensor<int> CountNeighborLabels(int[][] neighbors)
+    {
+        int queries = neighbors.Length;
+        int perQuery = queries == 0 ? 0 : neighbors[0].Length;
+        if (queries == 0 || perQuery == 0 || NumLabels == 0)
+        {
+            return new Tensor<int>(new[] { queries, NumLabels });
+        }
+
+        var flat = new int[queries * perQuery];
+        for (int q = 0; q < queries; q++)
+        {
+            Array.Copy(neighbors[q], 0, flat, q * perQuery, perQuery);
+        }
+
+        var trainHasLabel = ZeroOneToInt(PositiveLabels(_trainLabels));
+        var gathered = Engine.TensorGather(trainHasLabel, new Tensor<int>(flat, new[] { flat.Length }), 0);
+        return Engine.ReduceSum(gathered.Reshape(queries, perQuery, NumLabels), new[] { 1 }, false);
+    }
+
+    /// <summary>
+    /// Flattened table codes l * width + count for each [query, label] neighbor count.
+    /// </summary>
+    private Tensor<int> CountCodes(Tensor<int> neighborCounts, int width)
+    {
+        var labelOffsets = Engine.TensorMultiplyScalar(Engine.TensorArange<int>(0, NumLabels), width).Reshape(1, NumLabels);
+        return Engine.TensorAdd(neighborCounts, labelOffsets);
+    }
+
+    /// <summary>
+    /// The k nearest training samples of every query row by Euclidean distance (ties go to the lower
+    /// index). With <paramref name="excludeSelf"/>, query i is training sample i and is skipped.
+    /// </summary>
+    private int[][] NearestNeighbors(Matrix<T> query, int k, bool excludeSelf)
+    {
+        var engine = Engine;
+        int queries = query.Rows;
+        int m = _trainFeatures.Rows;
+        int d = _trainFeatures.Columns;
+        int available = excludeSelf ? Math.Max(0, m - 1) : m;
+        int take = Math.Max(0, Math.Min(k, available));
+        var result = new int[queries][];
+        if (queries == 0 || take == 0)
+        {
+            for (int q = 0; q < queries; q++)
             {
-                // Count neighbors with label l
-                int neighborCount = 0;
-                foreach (int neighborIdx in neighbors)
+                result[q] = Array.Empty<int>();
+            }
+
+            return result;
+        }
+
+        int scan = Math.Min(m, take + (excludeSelf ? 1 : 0));
+        var train = Tensor<T>.FromMatrix(_trainFeatures).Reshape(1, m, d);
+        var queryTensor = Tensor<T>.FromMatrix(query);
+        int batch = Math.Max(1, DistanceBatchElements / Math.Max(1, m * Math.Max(1, d)));
+
+        for (int start = 0; start < queries; start += batch)
+        {
+            int rows = Math.Min(batch, queries - start);
+            var block = queryTensor.Slice(0, start, start + rows).Reshape(rows, 1, d);
+
+            // Exact distances sqrt(sum_c (q_c - t_c)^2), scaled so the squares cannot overflow in Half
+            var diff = engine.TensorSubtract(block, train);
+            var distances = ClassifierBase<T>.ScaledNorms(diff, 2, 2.0);
+
+            for (int r = 0; r < rows; r++)
+            {
+                // Stable per-row order (the engine sort is not stable): ties go to the lower index
+                int self = start + r;
+                var order = AiDotNet.ActiveLearning.ActiveLearningEngineOps.StableOrder(distances.Slice(0, r, r + 1), false);
+                var picked = new int[take];
+                int count = 0;
+                for (int j = 0; j < scan && count < take; j++)
                 {
-                    if (NumOps.GreaterThan(_trainLabels[neighborIdx, l], NumOps.FromDouble(0.5)))
+                    int candidate = order[j];
+                    if (!excludeSelf || candidate != self)
                     {
-                        neighborCount++;
+                        picked[count++] = candidate;
                     }
                 }
 
-                // Bayesian inference: P(H_l=1|E_l=j) = P(E_l=j|H_l=1)*P(H_l=1) / P(E_l=j)
-                double pPos = _condProbsPos[l, neighborCount] * _priorProbs[l];
-                double pNeg = _condProbsNeg[l, neighborCount] * (1 - _priorProbs[l]);
-
-                double prob = pPos / (pPos + pNeg + 1e-10);
-                probs[i, l] = NumOps.FromDouble(prob);
+                result[self] = picked;
             }
         }
 
-        return probs;
-    }
-
-    private int[] FindKNearestNeighbors(Matrix<T> data, int sampleIdx, int k, bool excludeSelf)
-    {
-        int n = data.Rows;
-        var distances = new List<(int Index, double Distance)>();
-
-        for (int i = 0; i < n; i++)
-        {
-            if (excludeSelf && i == sampleIdx) continue;
-
-            double dist = ComputeDistance(data, sampleIdx, data, i);
-            distances.Add((i, dist));
-        }
-
-        return distances
-            .OrderBy(x => x.Distance)
-            .Take(k)
-            .Select(x => x.Index)
-            .ToArray();
-    }
-
-    private int[] FindKNearestNeighborsInTraining(Matrix<T> query, int queryIdx, int k)
-    {
-        int n = _trainFeatures.Rows;
-        var distances = new List<(int Index, double Distance)>();
-
-        for (int i = 0; i < n; i++)
-        {
-            double dist = ComputeDistanceCross(query, queryIdx, _trainFeatures, i);
-            distances.Add((i, dist));
-        }
-
-        return distances
-            .OrderBy(x => x.Distance)
-            .Take(k)
-            .Select(x => x.Index)
-            .ToArray();
-    }
-
-    private double ComputeDistance(Matrix<T> data1, int idx1, Matrix<T> data2, int idx2)
-    {
-        return NumOps.ToDouble(VectorHelper.EuclideanDistance(data1.GetRow(idx1), data2.GetRow(idx2)));
-    }
-
-    private double ComputeDistanceCross(Matrix<T> query, int queryIdx, Matrix<T> train, int trainIdx)
-    {
-        double dist = 0;
-        int cols = query.Columns;
-
-        for (int c = 0; c < cols; c++)
-        {
-            double diff = NumOps.ToDouble(query[queryIdx, c]) - NumOps.ToDouble(train[trainIdx, c]);
-            dist += diff * diff;
-        }
-
-        return Math.Sqrt(dist);
+        return result;
     }
 
     /// <inheritdoc />
@@ -287,41 +322,22 @@ public partial class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
 
         int labels = _priorProbs.Length;
         int conditionalWidth = _options.KNeighbors + 1;
-        if (_condProbsPos.GetLength(0) != labels ||
-            _condProbsNeg.GetLength(0) != labels ||
-            _condProbsPos.GetLength(1) != conditionalWidth ||
-            _condProbsNeg.GetLength(1) != conditionalWidth)
+        if (_condProbsPos.Shape[0] != labels ||
+            _condProbsNeg.Shape[0] != labels ||
+            _condProbsPos.Shape[1] != conditionalWidth ||
+            _condProbsNeg.Shape[1] != conditionalWidth)
         {
             throw new InvalidOperationException(
                 "ML-kNN probability arrays do not share the fitted label and neighbor dimensions.");
         }
 
-        int size = checked((int)GetProbabilityParameterCount());
-        var parameters = new Vector<T>(size);
-
-        int idx = 0;
-        for (int l = 0; l < labels; l++)
+        // [priors | positive conditionals (row-major) | negative conditionals (row-major)]
+        return Engine.TensorConcatenate(new[]
         {
-            parameters[idx++] = NumOps.FromDouble(_priorProbs[l]);
-        }
-
-        for (int l = 0; l < labels; l++)
-        {
-            for (int j = 0; j < conditionalWidth; j++)
-            {
-                parameters[idx++] = NumOps.FromDouble(_condProbsPos[l, j]);
-            }
-        }
-
-        for (int l = 0; l < labels; l++)
-        {
-            for (int j = 0; j < conditionalWidth; j++)
-            {
-                parameters[idx++] = NumOps.FromDouble(_condProbsNeg[l, j]);
-            }
-        }
-
-        return parameters;
+            _priorProbs.AsTensor(),
+            _condProbsPos.Reshape(_condProbsPos.Length),
+            _condProbsNeg.Reshape(_condProbsNeg.Length)
+        }, 0).ToVector();
     }
 
     private void RestoreProbabilityParameters(Vector<T> parameters)
@@ -338,20 +354,11 @@ public partial class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
         }
 
         int labels = parameters.Length / valuesPerLabel;
+        int tableSize = labels * conditionalWidth;
         NumLabels = labels;
-        _priorProbs = new double[labels];
-        _condProbsPos = new double[labels, conditionalWidth];
-        _condProbsNeg = new double[labels, conditionalWidth];
-
-        int idx = 0;
-        for (int l = 0; l < labels; l++)
-            _priorProbs[l] = NumOps.ToDouble(parameters[idx++]);
-        for (int l = 0; l < labels; l++)
-            for (int j = 0; j < conditionalWidth; j++)
-                _condProbsPos[l, j] = NumOps.ToDouble(parameters[idx++]);
-        for (int l = 0; l < labels; l++)
-            for (int j = 0; j < conditionalWidth; j++)
-                _condProbsNeg[l, j] = NumOps.ToDouble(parameters[idx++]);
+        _priorProbs = parameters.GetSubVector(0, labels);
+        _condProbsPos = parameters.GetSubVector(labels, tableSize).AsTensor().Reshape(labels, conditionalWidth);
+        _condProbsNeg = parameters.GetSubVector(labels + tableSize, tableSize).AsTensor().Reshape(labels, conditionalWidth);
     }
 
     /// <inheritdoc />

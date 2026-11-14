@@ -49,6 +49,7 @@ public class HybridSampling<T> : IActiveLearningStrategy<T>
     private readonly INumericOperations<T> _numOps;
     private readonly List<(IActiveLearningStrategy<T> Strategy, double Weight)> _strategies;
     private readonly CombinationMethod _method;
+
     private bool _useBatchDiversity;
     private T _lastMinScore;
     private T _lastMaxScore;
@@ -210,21 +211,16 @@ public class HybridSampling<T> : IActiveLearningStrategy<T>
     /// </summary>
     private Vector<T> CombineWeightedSum(List<Vector<T>> allScores, int numSamples)
     {
-        var result = new Vector<T>(numSamples);
+        var engine = AiDotNetEngine.Current;
+        var result = new Tensor<T>(new[] { numSamples });
 
         for (int s = 0; s < _strategies.Count; s++)
         {
-            var scores = NormalizeScores(allScores[s]);
-            var weight = _numOps.FromDouble(_strategies[s].Weight);
-
-            for (int i = 0; i < numSamples; i++)
-            {
-                var weighted = _numOps.Multiply(scores[i], weight);
-                result[i] = _numOps.Add(result[i], weighted);
-            }
+            var scores = SamplePrefix(NormalizeScores(Tensor<T>.FromVector(allScores[s])), numSamples);
+            result = engine.TensorAdd(result, engine.TensorMultiplyScalar(scores, _numOps.FromDouble(_strategies[s].Weight)));
         }
 
-        return result;
+        return result.ToVector();
     }
 
     /// <summary>
@@ -232,30 +228,23 @@ public class HybridSampling<T> : IActiveLearningStrategy<T>
     /// </summary>
     private Vector<T> CombineProduct(List<Vector<T>> allScores, int numSamples)
     {
-        var result = new Vector<T>(numSamples);
-        var epsilon = _numOps.FromDouble(1e-10);
+        var engine = AiDotNetEngine.Current;
+        var epsilon = ActiveLearningEngineOps.Tolerance<T>(1e-10);
 
         // Initialize with ones
-        for (int i = 0; i < numSamples; i++)
-        {
-            result[i] = _numOps.One;
-        }
+        var result = new Tensor<T>(new[] { numSamples });
+        result.Fill(_numOps.One);
 
         for (int s = 0; s < _strategies.Count; s++)
         {
-            var scores = allScores[s];
-            var weight = _strategies[s].Weight;
-            var normalized = NormalizeScores(scores);
-            for (int i = 0; i < numSamples; i++)
-            {
-                // Add epsilon to avoid zero products, then apply weight as exponent
-                var value = _numOps.Add(normalized[i], epsilon);
-                var weightedValue = _numOps.FromDouble(Math.Pow(_numOps.ToDouble(value), weight));
-                result[i] = _numOps.Multiply(result[i], weightedValue);
-            }
+            var normalized = SamplePrefix(NormalizeScores(Tensor<T>.FromVector(allScores[s])), numSamples);
+
+            // Add epsilon to avoid zero products, then apply weight as exponent
+            var weightedValue = engine.TensorPower(engine.TensorAddScalar(normalized, epsilon), _numOps.FromDouble(_strategies[s].Weight));
+            result = engine.TensorMultiply(result, weightedValue);
         }
 
-        return result;
+        return result.ToVector();
     }
 
     /// <summary>
@@ -329,25 +318,17 @@ public class HybridSampling<T> : IActiveLearningStrategy<T>
     /// </summary>
     private Vector<T> CombineMaximum(List<Vector<T>> allScores, int numSamples)
     {
-        var result = new Vector<T>(numSamples);
+        var engine = AiDotNetEngine.Current;
+        var result = new Tensor<T>(new[] { numSamples });
+        result.Fill(_numOps.MinValue);
 
         // Normalize all scores first
-        var normalizedScores = allScores.Select(NormalizeScores).ToList();
-
-        for (int i = 0; i < numSamples; i++)
+        foreach (var scores in allScores)
         {
-            var maxScore = _numOps.MinValue;
-            foreach (var scores in normalizedScores)
-            {
-                if (_numOps.GreaterThan(scores[i], maxScore))
-                {
-                    maxScore = scores[i];
-                }
-            }
-            result[i] = maxScore;
+            result = engine.TensorMax(result, SamplePrefix(NormalizeScores(Tensor<T>.FromVector(scores)), numSamples));
         }
 
-        return result;
+        return result.ToVector();
     }
 
     /// <summary>
@@ -355,86 +336,62 @@ public class HybridSampling<T> : IActiveLearningStrategy<T>
     /// </summary>
     private Vector<T> CombineMinimum(List<Vector<T>> allScores, int numSamples)
     {
-        var result = new Vector<T>(numSamples);
+        var engine = AiDotNetEngine.Current;
+        var result = new Tensor<T>(new[] { numSamples });
+        result.Fill(_numOps.MaxValue);
 
         // Normalize all scores first
-        var normalizedScores = allScores.Select(NormalizeScores).ToList();
-
-        for (int i = 0; i < numSamples; i++)
+        foreach (var scores in allScores)
         {
-            var minScore = _numOps.MaxValue;
-            foreach (var scores in normalizedScores)
-            {
-                if (_numOps.LessThan(scores[i], minScore))
-                {
-                    minScore = scores[i];
-                }
-            }
-            result[i] = minScore;
+            result = engine.TensorMin(result, SamplePrefix(NormalizeScores(Tensor<T>.FromVector(scores)), numSamples));
         }
 
-        return result;
+        return result.ToVector();
+    }
+
+    /// <summary>
+    /// Returns the first <paramref name="numSamples"/> entries of a score tensor.
+    /// </summary>
+    private static Tensor<T> SamplePrefix(Tensor<T> scores, int numSamples)
+    {
+        return scores.Length == numSamples
+            ? scores
+            : AiDotNetEngine.Current.TensorSlice(scores, new[] { 0 }, new[] { numSamples });
     }
 
     /// <summary>
     /// Normalizes scores to [0, 1] range using min-max normalization.
     /// </summary>
-    private Vector<T> NormalizeScores(Vector<T> scores)
+    private Tensor<T> NormalizeScores(Tensor<T> scores)
     {
         if (scores.Length == 0)
         {
             return scores;
         }
 
-        var min = scores[0];
-        var max = scores[0];
-
-        for (int i = 1; i < scores.Length; i++)
-        {
-            if (_numOps.LessThan(scores[i], min)) min = scores[i];
-            if (_numOps.GreaterThan(scores[i], max)) max = scores[i];
-        }
-
+        var engine = AiDotNetEngine.Current;
+        var min = engine.TensorMinValue(scores);
+        var max = engine.TensorMaxValue(scores);
         var range = _numOps.Subtract(max, min);
-        var epsilon = _numOps.FromDouble(1e-10);
+        var epsilon = ActiveLearningEngineOps.Tolerance<T>(1e-10);
 
         // If all scores are the same, return 0.5 for all
         if (_numOps.LessThan(range, epsilon))
         {
-            var result = new Vector<T>(scores.Length);
-            var half = _numOps.FromDouble(0.5);
-            for (int i = 0; i < scores.Length; i++)
-            {
-                result[i] = half;
-            }
+            var result = new Tensor<T>(scores.Shape.ToArray());
+            result.Fill(_numOps.FromDouble(0.5));
             return result;
         }
 
-        var normalized = new Vector<T>(scores.Length);
-        for (int i = 0; i < scores.Length; i++)
-        {
-            normalized[i] = _numOps.Divide(_numOps.Subtract(scores[i], min), range);
-        }
-
-        return normalized;
+        return engine.TensorDivideScalar(engine.TensorSubtractScalar(scores, min), range);
     }
 
     /// <summary>
     /// Selects top-scoring samples.
     /// </summary>
-    private int[] SelectTopScoring(Vector<T> scores, int batchSize)
+    private static int[] SelectTopScoring(Vector<T> scores, int batchSize)
     {
-        var indexedScores = new List<(int Index, T Score)>();
-        for (int i = 0; i < scores.Length; i++)
-        {
-            indexedScores.Add((i, scores[i]));
-        }
-
-        return indexedScores
-            .OrderByDescending(x => _numOps.ToDouble(x.Score))
-            .Take(batchSize)
-            .Select(x => x.Index)
-            .ToArray();
+        return ActiveLearningEngineOps.SelectTopScoring(scores, batchSize);
     }
 
     /// <summary>
@@ -444,19 +401,6 @@ public class HybridSampling<T> : IActiveLearningStrategy<T>
     {
         if (scores.Length == 0) return;
 
-        _lastMinScore = scores[0];
-        _lastMaxScore = scores[0];
-        var sum = _numOps.Zero;
-
-        for (int i = 0; i < scores.Length; i++)
-        {
-            if (_numOps.LessThan(scores[i], _lastMinScore))
-                _lastMinScore = scores[i];
-            if (_numOps.GreaterThan(scores[i], _lastMaxScore))
-                _lastMaxScore = scores[i];
-            sum = _numOps.Add(sum, scores[i]);
-        }
-
-        _lastMeanScore = _numOps.Divide(sum, _numOps.FromDouble(scores.Length));
+        (_lastMinScore, _lastMaxScore, _lastMeanScore) = ActiveLearningEngineOps.Statistics(scores);
     }
 }

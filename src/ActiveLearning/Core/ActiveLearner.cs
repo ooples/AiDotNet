@@ -100,7 +100,7 @@ public class ActiveLearner<T, TInput, TOutput> : IActiveLearner<T, TInput, TOutp
     public event EventHandler<ActiveLearningIterationResult<T>>? IterationCompleted;
 
     /// <inheritdoc/>
-    public event EventHandler<SamplesSelectedEventArgs<TInput>>? SamplesSelected;
+    public event EventHandler<SamplesSelectedEventArgs<T, TInput>>? SamplesSelected;
 
     /// <inheritdoc/>
     public event EventHandler<ActiveLearningResult<T>>? LearningCompleted;
@@ -203,7 +203,6 @@ public class ActiveLearner<T, TInput, TOutput> : IActiveLearner<T, TInput, TOutp
 
         // Get the selected samples and their scores
         var selectedInputs = new TInput[selectedIndices.Length];
-        var scores = new double[selectedIndices.Length];
 
         for (int i = 0; i < selectedIndices.Length; i++)
         {
@@ -211,14 +210,14 @@ public class ActiveLearner<T, TInput, TOutput> : IActiveLearner<T, TInput, TOutp
         }
 
         // Compute scores for the selected samples
+        var engine = AiDotNetEngine.Current;
         var allScores = _queryStrategy.ComputeScores(_model, _unlabeledPool);
-        for (int i = 0; i < selectedIndices.Length; i++)
-        {
-            scores[i] = NumOps.ToDouble(allScores[selectedIndices[i]]);
-        }
+        var selectedScores = engine.TensorIndexSelect(
+            Tensor<T>.FromVector(allScores), new Tensor<int>(selectedIndices, new[] { selectedIndices.Length }), 0);
+        var scores = selectedScores.ToArray();
 
         // Fire samples selected event
-        OnSamplesSelected(new SamplesSelectedEventArgs<TInput>(selectedIndices, selectedInputs, scores));
+        OnSamplesSelected(new SamplesSelectedEventArgs<T, TInput>(selectedIndices, selectedInputs, scores));
 
         // Step 2: Get labels from oracle
         var labels = oracle.LabelBatch(selectedInputs);
@@ -245,9 +244,9 @@ public class ActiveLearner<T, TInput, TOutput> : IActiveLearner<T, TInput, TOutp
         iterationResult.TrainingAccuracy = trainingMetrics.Accuracy;
         iterationResult.TrainingLoss = trainingMetrics.Loss;
         iterationResult.QueriedIndices = selectedIndices;
-        iterationResult.QueryScores = scores.Select(s => NumOps.FromDouble(s)).ToArray();
-        iterationResult.AverageQueryScore = NumOps.FromDouble(scores.Average());
-        iterationResult.MaxQueryScore = NumOps.FromDouble(scores.Max());
+        iterationResult.QueryScores = selectedScores.ToArray();
+        iterationResult.AverageQueryScore = engine.TensorMean(selectedScores);
+        iterationResult.MaxQueryScore = engine.TensorMaxValue(selectedScores);
         iterationResult.UnlabeledRemaining = _unlabeledPool.Count;
 
         // Validation metrics if available
@@ -408,7 +407,7 @@ public class ActiveLearner<T, TInput, TOutput> : IActiveLearner<T, TInput, TOutp
         }
 
         int correct = 0;
-        T totalLoss = NumOps.Zero;
+        var sampleLosses = new List<T>(testData.Count);
 
         for (int i = 0; i < testData.Count; i++)
         {
@@ -425,8 +424,7 @@ public class ActiveLearner<T, TInput, TOutput> : IActiveLearner<T, TInput, TOutp
             // Compute loss using model's loss function
             try
             {
-                var lossValue = ComputeSampleLoss(predicted, expected);
-                totalLoss = NumOps.Add(totalLoss, lossValue);
+                sampleLosses.Add(ComputeSampleLoss(predicted, expected));
             }
             catch
             {
@@ -434,6 +432,9 @@ public class ActiveLearner<T, TInput, TOutput> : IActiveLearner<T, TInput, TOutp
             }
         }
 
+        T totalLoss = sampleLosses.Count > 0
+            ? AiDotNetEngine.Current.Sum(Vector<T>.FromList(sampleLosses))
+            : NumOps.Zero;
         var accuracy = NumOps.FromDouble((double)correct / testData.Count);
         var avgLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(testData.Count));
 
@@ -689,7 +690,7 @@ public class ActiveLearner<T, TInput, TOutput> : IActiveLearner<T, TInput, TOutp
         IterationCompleted?.Invoke(this, result);
     }
 
-    protected virtual void OnSamplesSelected(SamplesSelectedEventArgs<TInput> args)
+    protected virtual void OnSamplesSelected(SamplesSelectedEventArgs<T, TInput> args)
     {
         SamplesSelected?.Invoke(this, args);
     }

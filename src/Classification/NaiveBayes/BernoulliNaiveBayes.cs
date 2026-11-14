@@ -126,51 +126,52 @@ public partial class BernoulliNaiveBayes<T> : NaiveBayesBase<T>
     /// </remarks>
     protected override void ComputeClassParameters(Matrix<T> x, Vector<T> y)
     {
-        _logFeatureProbsPresent = new Matrix<T>(NumClasses, NumFeatures);
-        _logFeatureProbsAbsent = new Matrix<T>(NumClasses, NumFeatures);
-
+        var engine = Engine;
         T alpha = NumOps.FromDouble(Options.Alpha);
         T twoAlpha = NumOps.FromDouble(2.0 * Options.Alpha);
-
-        // For each class, compute the feature probabilities
-        for (int c = 0; c < NumClasses; c++)
+        if (ClassCounts is null)
         {
-            // Count of samples in this class (already computed in base class)
-            int classCount = (ClassCounts ?? throw new InvalidOperationException("ClassCounts has not been initialized."))[c];
-            T classSampleCount = NumOps.FromDouble(classCount);
-
-            // Count features present (value > threshold) for each feature
-            var featurePresenceCounts = new int[NumFeatures];
-
-            for (int i = 0; i < y.Length; i++)
-            {
-                if (GetClassIndex(y[i]) == c)
-                {
-                    for (int f = 0; f < NumFeatures; f++)
-                    {
-                        // Binarize: count as present if > threshold
-                        if (NumOps.Compare(x[i, f], _binarizeThreshold) > 0)
-                        {
-                            featurePresenceCounts[f]++;
-                        }
-                    }
-                }
-            }
-
-            // Compute log probabilities with Laplace smoothing
-            // P(f=1|c) = (count + alpha) / (class_count + 2*alpha)
-            T denominator = NumOps.Add(classSampleCount, twoAlpha);
-
-            for (int f = 0; f < NumFeatures; f++)
-            {
-                T numerator = NumOps.Add(NumOps.FromDouble(featurePresenceCounts[f]), alpha);
-                T probPresent = NumOps.Divide(numerator, denominator);
-                T probAbsent = NumOps.Subtract(NumOps.One, probPresent);
-
-                _logFeatureProbsPresent[c, f] = NumOps.Log(probPresent);
-                _logFeatureProbsAbsent[c, f] = NumOps.Log(probAbsent);
-            }
+            throw new InvalidOperationException("ClassCounts has not been initialized.");
         }
+
+        // Count features present (value > threshold) for each class with one bin count over
+        // class * NumFeatures + feature (in int: a sum of ones in T stops at 2048 for Half); absent entries and
+        // unknown labels go to a dropped last bin
+        var presenceCounts = new Tensor<T>(new[] { NumClasses, NumFeatures });
+        if (y.Length > 0 && NumClasses > 0 && NumFeatures > 0)
+        {
+            int n = x.Rows;
+            int bins = NumClasses * NumFeatures;
+            var features = Tensor<T>.FromMatrix(x);
+            if (x.Columns != NumFeatures)
+            {
+                features = features.Slice(1, 0, NumFeatures);
+            }
+
+            var present = ZeroOneToInt(engine.TensorGreaterThan(features, _binarizeThreshold));
+            var classIndex = GetClassIndexTensor(y).Reshape(n, 1);
+            var known = engine.TensorGreaterEqual(classIndex, new Tensor<int>(new[] { n, 1 }));
+            var codes = engine.TensorAdd(engine.TensorMultiplyScalar(classIndex, NumFeatures),
+                engine.TensorArange<int>(0, NumFeatures).Reshape(1, NumFeatures));
+            var dropped = new Tensor<int>(new[] { n, NumFeatures });
+            engine.TensorFill(dropped, bins);
+            var counted = engine.TensorMultiply(present, engine.TensorBroadcastTo(known, new[] { n, NumFeatures }));
+            var binned = engine.TensorWhere(counted, codes, dropped).Reshape(n * NumFeatures);
+            presenceCounts = CountsToValues(engine.TensorBinCount(binned, bins + 1).Slice(0, 0, bins))
+                .Reshape(NumClasses, NumFeatures);
+        }
+
+        // Compute log probabilities with Laplace smoothing
+        // P(f=1|c) = (count + alpha) / (class_count + 2*alpha)
+        var classCounts = CountsToValues(new Tensor<int>(ClassCounts, new[] { ClassCounts.Length })).ToVector();
+        var denominators = classCounts.Length == 0
+            ? new Tensor<T>(new[] { 0, 1 })
+            : engine.TensorAddScalar(classCounts.AsTensor(), twoAlpha).Reshape(NumClasses, 1);
+        var probPresent = engine.TensorDivide(engine.TensorAddScalar(presenceCounts, alpha), denominators);
+        var probAbsent = engine.ScalarMinusTensor(NumOps.One, probPresent);
+
+        _logFeatureProbsPresent = engine.TensorLog(probPresent).ToMatrix();
+        _logFeatureProbsAbsent = engine.TensorLog(probAbsent).ToMatrix();
     }
 
     /// <summary>
@@ -189,29 +190,37 @@ public partial class BernoulliNaiveBayes<T> : NaiveBayesBase<T>
     /// </remarks>
     protected override T ComputeLogLikelihood(Vector<T> sample, int classIndex)
     {
+        return SingleSampleLogLikelihood(sample, classIndex);
+    }
+
+    /// <inheritdoc/>
+    private protected override Tensor<T> ComputeLogLikelihoods(Matrix<T> input)
+    {
         if (_logFeatureProbsPresent == null || _logFeatureProbsAbsent == null)
         {
             throw new InvalidOperationException("Model must be trained before computing log-likelihood.");
         }
 
-        T logLikelihood = NumOps.Zero;
-
-        for (int f = 0; f < NumFeatures; f++)
+        if (input.Rows == 0 || NumClasses == 0 || NumFeatures == 0)
         {
-            // Check if feature is present (binarize)
-            bool isPresent = NumOps.Compare(sample[f], _binarizeThreshold) > 0;
-
-            if (isPresent)
-            {
-                logLikelihood = NumOps.Add(logLikelihood, _logFeatureProbsPresent[classIndex, f]);
-            }
-            else
-            {
-                logLikelihood = NumOps.Add(logLikelihood, _logFeatureProbsAbsent[classIndex, f]);
-            }
+            return new Tensor<T>(new[] { input.Rows, NumClasses });
         }
 
-        return logLikelihood;
+        // Add log P(f=1|c) where the feature is present (value > threshold), log P(f=0|c) otherwise
+        var engine = Engine;
+        var features = Tensor<T>.FromMatrix(input);
+        if (input.Columns != NumFeatures)
+        {
+            features = features.Slice(1, 0, NumFeatures);
+        }
+
+        var presence = ZeroOneToInt(engine.TensorGreaterThan(features, _binarizeThreshold));
+        var table = engine.TensorStack(new[]
+        {
+            Tensor<T>.FromMatrix(_logFeatureProbsAbsent),
+            Tensor<T>.FromMatrix(_logFeatureProbsPresent)
+        }, 2);
+        return SumSelectedLogProbabilities(presence, table, 2);
     }
 
     /// <inheritdoc/>
@@ -225,35 +234,11 @@ public partial class BernoulliNaiveBayes<T> : NaiveBayesBase<T>
 
     private void SerializeMatrix(Dictionary<string, object> data, string name, Matrix<T>? matrix)
     {
-        if (matrix is null) return;
-        var arr = new double[matrix.Rows * matrix.Columns];
-        int idx = 0;
-        for (int i = 0; i < matrix.Rows; i++)
-            for (int j = 0; j < matrix.Columns; j++)
-                arr[idx++] = NumOps.ToDouble(matrix[i, j]);
-        data[$"{name}"] = arr;
-        data[$"{name}Rows"] = matrix.Rows;
-        data[$"{name}Cols"] = matrix.Columns;
+        SerializeMatrixValues(data, name, matrix);
     }
 
     private Matrix<T>? DeserializeMatrix(JObject obj, string name)
     {
-        var token = obj[name];
-        if (token is null) return null;
-        var arr = token.ToObject<double[]>() ?? Array.Empty<double>();
-        int rows = obj[$"{name}Rows"]?.ToObject<int>() ?? 0;
-        int cols = obj[$"{name}Cols"]?.ToObject<int>() ?? 0;
-        if (rows <= 0 || cols <= 0) return null;
-        if (arr.Length < rows * cols)
-        {
-            throw new InvalidOperationException(
-                $"Deserialization failed: {name} array length {arr.Length} is less than expected {rows}x{cols}={rows * cols}.");
-        }
-        var matrix = new Matrix<T>(rows, cols);
-        int idx = 0;
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < cols; j++)
-                matrix[i, j] = NumOps.FromDouble(arr[idx++]);
-        return matrix;
+        return DeserializeMatrixValues(obj, name);
     }
 }

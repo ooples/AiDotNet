@@ -239,9 +239,10 @@ public partial class EasyEnsembleClassifier<T> : ClassifierBase<T>
             classSamples[c] = [];
         }
 
-        for (int i = 0; i < y.Length; i++)
+        var sampleClasses = GetClassIndicesFromLabels(y);
+        for (int i = 0; i < sampleClasses.Length; i++)
         {
-            int classIdx = GetClassIndexFromLabel(y[i]);
+            int classIdx = sampleClasses[i];
             if (classIdx >= 0 && classIdx < NumClasses)
             {
                 classSamples[classIdx].Add(i);
@@ -267,16 +268,10 @@ public partial class EasyEnsembleClassifier<T> : ClassifierBase<T>
             var subsetIndices = CreateBalancedSubset(classSamples, minoritySize, minorityClass);
 
             // Extract subset data
-            var subX = new Matrix<T>(subsetIndices.Length, NumFeatures);
-            var subY = new Vector<T>(subsetIndices.Length);
-            for (int i = 0; i < subsetIndices.Length; i++)
+            var (subX, subY) = SelectSamples(x, y, subsetIndices);
+            if (subX.Columns != NumFeatures)
             {
-                int srcIdx = subsetIndices[i];
-                for (int j = 0; j < NumFeatures; j++)
-                {
-                    subX[i, j] = x[srcIdx, j];
-                }
-                subY[i] = y[srcIdx];
+                subX = subX.GetSubMatrix(0, 0, subX.Rows, NumFeatures);
             }
 
             // Train AdaBoost on this subset
@@ -356,55 +351,46 @@ public partial class EasyEnsembleClassifier<T> : ClassifierBase<T>
     /// </remarks>
     private AdaBoostSubClassifier TrainAdaBoost(Matrix<T> x, Vector<T> y)
     {
+        var engine = Engine;
         int n = x.Rows;
-        var weights = new double[n];
-        double initWeight = 1.0 / n;
-        for (int i = 0; i < n; i++)
-            weights[i] = initWeight;
+        var features = Tensor<T>.FromMatrix(x);
+        var weights = FilledVector(n, NumOps.FromDouble(1.0 / n)).AsTensor();
 
-        // Precompute class indices + feature columns to avoid repeated NumOps.ToDouble / GetClassIndexFromLabel
-        var classIndices = new int[n];
-        for (int i = 0; i < n; i++)
-            classIndices[i] = GetClassIndexFromLabel(y[i]);
-
-        var featureColumns = new double[NumFeatures][];
-        for (int j = 0; j < NumFeatures; j++)
-        {
-            featureColumns[j] = new double[n];
-            var col = x.GetColumn(j);
-            for (int i = 0; i < n; i++)
-                featureColumns[j][i] = NumOps.ToDouble(col[i]);
-        }
+        // 0/1 membership of class 0 and class 1 for every sample
+        var classValues = ClassIndicesToValues(GetClassIndexTensor(y), NumClasses).AsTensor();
+        var isOne = engine.TensorEquals(classValues, NumOps.One);
+        var isZero = engine.TensorEquals(classValues, NumOps.Zero);
 
         var weakLearners = new List<WeakLearner>();
-        var alphas = new List<double>();
+        var alphas = new List<Tensor<T>>();
+        T halfLearningRate = NumOps.Multiply(NumOps.FromDouble(_learningRate), NumOps.FromDouble(0.5));
+        T minError = Tolerance(1e-10);
+        T two = NumOps.FromDouble(2.0);
 
         for (int t = 0; t < _nEstimatorsPerSubset; t++)
         {
-            var learner = TrainWeakLearnerFast(featureColumns, classIndices, weights, n);
+            var learner = TrainWeakLearner(features, isOne, isZero, weights);
 
-            double weightedError = 0;
-            var predictions = new int[n];
-            for (int i = 0; i < n; i++)
-            {
-                predictions[i] = (learner.Polarity * (featureColumns[learner.FeatureIndex][i] - learner.Threshold) > 0) ? 1 : 0;
-                if (predictions[i] != classIndices[i])
-                    weightedError += weights[i];
-            }
+            // A sample is misclassified unless (prediction 1 and class 1) or (prediction 0 and class 0)
+            var predictions = PredictWeakLearner(learner, features);
+            var correct = engine.TensorAdd(engine.TensorMultiply(predictions, isOne),
+                engine.TensorMultiply(engine.ScalarMinusTensor(NumOps.One, predictions), isZero));
+            var misclassified = engine.ScalarMinusTensor(NumOps.One, correct);
 
-            weightedError = Math.Max(1e-10, Math.Min(1 - 1e-10, weightedError));
-            double alpha = _learningRate * 0.5 * Math.Log((1 - weightedError) / weightedError);
+            // [1] alpha = lr * 0.5 * log((1 - err) / err) with err and 1 - err each kept at or above 1e-10
+            // (raised to Half's smallest normal for Half, and clamped separately because 1 - 1e-10 rounds to 1
+            // in float and Half)
+            var weightedError = engine.ReduceSum(engine.TensorMultiply(weights, misclassified), new[] { 0 }, true);
+            var errorTerm = engine.TensorClampMin(weightedError, minError);
+            var accuracyTerm = engine.TensorClampMin(engine.ScalarMinusTensor(NumOps.One, weightedError), minError);
+            var alpha = engine.TensorMultiplyScalar(
+                engine.TensorSubtract(engine.TensorLog(accuracyTerm), engine.TensorLog(errorTerm)),
+                halfLearningRate);
 
-            double weightSum = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double sign = predictions[i] == classIndices[i] ? -1 : 1;
-                weights[i] *= Math.Exp(alpha * sign);
-                weightSum += weights[i];
-            }
-
-            for (int i = 0; i < n; i++)
-                weights[i] /= weightSum;
+            // w *= exp(alpha * sign) with sign = +1 for misclassified and -1 otherwise, then normalize
+            var sign = engine.TensorSubtractScalar(engine.TensorMultiplyScalar(misclassified, two), NumOps.One);
+            weights = engine.TensorMultiply(weights, engine.TensorExp(engine.TensorMultiply(sign, engine.TensorBroadcastTo(alpha, new[] { n }))));
+            weights = engine.TensorDivideScalar(weights, engine.TensorSum(weights));
 
             weakLearners.Add(learner);
             alphas.Add(alpha);
@@ -413,164 +399,115 @@ public partial class EasyEnsembleClassifier<T> : ClassifierBase<T>
         return new AdaBoostSubClassifier
         {
             WeakLearners = weakLearners,
-            Alphas = alphas
+            Alphas = alphas.Count == 0
+                ? new List<T>()
+                : new List<T>(engine.TensorConcatenate(alphas.ToArray(), 0).ToArray())
         };
     }
 
     /// <summary>
-    /// Trains a weak learner (decision stump or shallow tree).
+    /// Trains the decision stump with the lowest weighted error.
     /// </summary>
-    /// <param name="x">Feature matrix.</param>
-    /// <param name="y">Labels.</param>
+    /// <param name="features">The [n, features] training features.</param>
+    /// <param name="isOne">1 for samples of class 1, else 0.</param>
+    /// <param name="isZero">1 for samples of class 0, else 0.</param>
     /// <param name="weights">Sample weights.</param>
     /// <returns>Trained weak learner.</returns>
     /// <remarks>
-    /// <para><b>For Beginners:</b> A weak learner is a simple classifier that's only slightly
-    /// better than random guessing. Decision stumps (depth-1 trees) are common because they're
-    /// fast and work well with boosting.</para>
+    /// A stump with polarity p and threshold t predicts 1 when p * (x - t) &gt; 0. Thresholds are the
+    /// midpoints between consecutive distinct values; features, thresholds and then polarities -1, +1
+    /// are tried in increasing order and the first strictly lowest error wins.
     /// </remarks>
-    private WeakLearner TrainWeakLearnerFast(double[][] featureColumns, int[] classIndices, double[] weights, int n)
+    private WeakLearner TrainWeakLearner(Tensor<T> features, Tensor<T> isOne, Tensor<T> isZero, Tensor<T> weights)
     {
-        var bestLearner = new WeakLearner();
-        double bestWeightedError = double.MaxValue;
+        var engine = Engine;
+        int n = features.Shape[0];
+        var oneWeights = engine.TensorMultiply(isOne, weights);
+        var zeroWeights = engine.TensorMultiply(isZero, weights);
+        T oneTotal = n == 0 ? NumOps.Zero : engine.TensorSum(oneWeights);
+        T zeroTotal = n == 0 ? NumOps.Zero : engine.TensorSum(zeroWeights);
 
-        for (int j = 0; j < NumFeatures; j++)
+        // Samples of any other class are misclassified by every stump
+        T otherTotal = n == 0 ? NumOps.Zero : NumOps.Subtract(NumOps.Subtract(engine.TensorSum(weights), oneTotal), zeroTotal);
+
+        var featureErrors = new List<Tensor<T>>();
+        var featureThresholds = new List<Tensor<T>>();
+        var featureIds = new List<int>();
+        var featurePolarities = new List<int>();
+
+        for (int j = 0; j < NumFeatures && n > 0; j++)
         {
-            var col = featureColumns[j];
-            var values = new SortedSet<double>();
-            for (int i = 0; i < n; i++)
-                values.Add(col[i]);
+            var column = features.Slice(1, j, j + 1).Reshape(n);
+            var (sortedValues, order) = engine.TensorSort(column, 0, false);
+            var distinct = engine.TensorUniqueConsecutive(sortedValues);
+            int numDistinct = distinct.Length;
+            if (numDistinct < 2) continue;
 
-            if (values.Count < 2) continue;
+            // Weight of class 1 / class 0 samples with value <= distinct[v]
+            var lastLeft = engine.TensorAddScalar(
+                engine.TensorSearchSorted(sortedValues, distinct.Slice(0, 0, numDistinct - 1), true), -1);
+            var oneLeft = engine.TensorGather(engine.TensorCumSum(engine.TensorGather(oneWeights, order, 0), 0), lastLeft, 0);
+            var zeroLeft = engine.TensorGather(engine.TensorCumSum(engine.TensorGather(zeroWeights, order, 0), 0), lastLeft, 0);
 
-            var valueList = values.ToList();
-            for (int v = 0; v < valueList.Count - 1; v++)
+            // Polarity -1 predicts 1 for x < t (= x <= distinct[v]); polarity +1 predicts 1 for x > t
+            var negativeError = engine.TensorAddScalar(
+                engine.TensorAdd(zeroLeft, engine.ScalarMinusTensor(oneTotal, oneLeft)), otherTotal);
+            var positiveError = engine.TensorAddScalar(
+                engine.TensorAdd(oneLeft, engine.ScalarMinusTensor(zeroTotal, zeroLeft)), otherTotal);
+            var errors = engine.TensorConcatenate(new[]
             {
-                double threshold = (valueList[v] + valueList[v + 1]) / 2.0;
+                negativeError.Reshape(numDistinct - 1, 1),
+                positiveError.Reshape(numDistinct - 1, 1)
+            }, 1).Reshape(2 * (numDistinct - 1));
 
-                for (int polarity = -1; polarity <= 1; polarity += 2)
-                {
-                    double weightedError = 0;
-                    for (int i = 0; i < n; i++)
-                    {
-                        int pred = (polarity * (col[i] - threshold) > 0) ? 1 : 0;
-                        if (pred != classIndices[i])
-                            weightedError += weights[i];
-                    }
-
-                    if (weightedError < bestWeightedError)
-                    {
-                        bestWeightedError = weightedError;
-                        bestLearner = new WeakLearner
-                        {
-                            FeatureIndex = j,
-                            Threshold = threshold,
-                            Polarity = polarity
-                        };
-                    }
-                }
-            }
+            int best = engine.TensorArgMin(errors, 0).ToArray()[0];
+            int v = best / 2;
+            featureErrors.Add(engine.TensorSlice(errors, new[] { best }, new[] { 1 }));
+            featureThresholds.Add(SplitThresholds(
+                engine.TensorSlice(distinct, new[] { v }, new[] { 1 }),
+                engine.TensorSlice(distinct, new[] { v + 1 }, new[] { 1 })));
+            featureIds.Add(j);
+            featurePolarities.Add(best % 2 == 0 ? -1 : 1);
         }
 
-        if (bestWeightedError == double.MaxValue)
+        if (featureErrors.Count == 0)
             throw new InvalidOperationException(
                 "No valid split found: all features appear to be constant.");
 
-        return bestLearner;
-    }
-
-    private WeakLearner TrainWeakLearner(Matrix<T> x, Vector<T> y, double[] weights)
-    {
-        int n = x.Rows;
-        var bestLearner = new WeakLearner();
-        double bestWeightedError = double.MaxValue;
-
-        // Try each feature
-        for (int j = 0; j < NumFeatures; j++)
+        // The first feature with the strictly lowest error wins
+        int bestFeature = engine.TensorArgMin(engine.TensorConcatenate(featureErrors.ToArray(), 0), 0).ToArray()[0];
+        return new WeakLearner
         {
-            // Get sorted unique values
-            var values = new SortedSet<double>();
-            for (int i = 0; i < n; i++)
-            {
-                values.Add(NumOps.ToDouble(x[i, j]));
-            }
-
-            if (values.Count < 2)
-            {
-                continue;
-            }
-
-            // Try split points
-            var valueList = values.ToList();
-            for (int v = 0; v < valueList.Count - 1; v++)
-            {
-                double threshold = (valueList[v] + valueList[v + 1]) / 2.0;
-
-                // Try both polarities
-                for (int polarity = -1; polarity <= 1; polarity += 2)
-                {
-                    double weightedError = 0;
-                    for (int i = 0; i < n; i++)
-                    {
-                        double val = NumOps.ToDouble(x[i, j]);
-                        int pred = (polarity * (val - threshold) > 0) ? 1 : 0;
-                        int actual = GetClassIndexFromLabel(y[i]);
-                        if (pred != actual)
-                        {
-                            weightedError += weights[i];
-                        }
-                    }
-
-                    if (weightedError < bestWeightedError)
-                    {
-                        bestWeightedError = weightedError;
-                        bestLearner = new WeakLearner
-                        {
-                            FeatureIndex = j,
-                            Threshold = threshold,
-                            Polarity = polarity
-                        };
-                    }
-                }
-            }
-        }
-
-        // If no valid split was found (all features constant), throw an exception
-        if (bestWeightedError == double.MaxValue)
-        {
-            throw new InvalidOperationException(
-                "No valid split found: all features appear to be constant. " +
-                "Cannot train a weak learner when there is no feature variation.");
-        }
-
-        return bestLearner;
+            FeatureIndex = featureIds[bestFeature],
+            Threshold = featureThresholds[bestFeature][0],
+            Polarity = featurePolarities[bestFeature]
+        };
     }
 
     /// <summary>
-    /// Gets prediction from a weak learner.
+    /// Predicts with a weak learner: 1 where polarity * (x - threshold) &gt; 0, else 0.
     /// </summary>
     /// <param name="learner">The weak learner.</param>
-    /// <param name="x">Feature matrix.</param>
-    /// <param name="sampleIdx">Sample index.</param>
-    /// <returns>Predicted class (0 or 1 for binary).</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Applies the simple threshold rule learned by the stump.
-    /// If polarity is positive, values above threshold predict class 1.</para>
-    /// </remarks>
-    private int PredictWeakLearner(WeakLearner learner, Matrix<T> x, int sampleIdx)
+    /// <param name="features">The [n, features] features.</param>
+    /// <returns>The 0/1 prediction of every row.</returns>
+    private Tensor<T> PredictWeakLearner(WeakLearner learner, Tensor<T> features)
     {
-        double val = NumOps.ToDouble(x[sampleIdx, learner.FeatureIndex]);
-        return (learner.Polarity * (val - learner.Threshold) > 0) ? 1 : 0;
+        var engine = Engine;
+        int n = features.Shape[0];
+        var column = features.Slice(1, learner.FeatureIndex, learner.FeatureIndex + 1).Reshape(n);
+        var margin = engine.TensorMultiplyScalar(engine.TensorSubtractScalar(column, learner.Threshold),
+            NumOps.FromDouble(learner.Polarity));
+        return engine.TensorGreaterThan(margin, NumOps.Zero);
     }
 
     /// <summary>
-    /// Predicts class labels for the given input data.
+    /// Predicts class labels using the ensemble.
     /// </summary>
     /// <param name="input">Feature matrix.</param>
     /// <returns>Predicted class labels.</returns>
     /// <remarks>
-    /// <para><b>For Beginners:</b> Each subset classifier votes. Final prediction comes from
-    /// combining all votes (soft voting averages probabilities, hard voting counts class votes).</para>
+    /// <para><b>For Beginners:</b> Each AdaBoost subclassifier votes (hard voting) or contributes
+    /// its probability (soft voting); class 1 wins only with strictly more support than class 0.</para>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
@@ -579,83 +516,60 @@ public partial class EasyEnsembleClassifier<T> : ClassifierBase<T>
             throw new InvalidOperationException("Model has not been trained.");
         }
 
-        var predictions = new Vector<T>(input.Rows);
-
-        for (int i = 0; i < input.Rows; i++)
+        var engine = Engine;
+        int rows = input.Rows;
+        if (rows == 0)
         {
+            return new Vector<T>(0);
+        }
+
+        var features = Tensor<T>.FromMatrix(input);
+        var classOne = new Tensor<T>(new[] { rows });
+        var classZero = new Tensor<T>(new[] { rows });
+        T two = NumOps.FromDouble(2.0);
+
+        foreach (var subClassifier in _subClassifiers)
+        {
+            var score = PredictAdaBoostScore(subClassifier, features);
+            Tensor<T> support;
             if (_softVoting)
             {
-                // Average probabilities across subclassifiers
-                var avgScores = new double[NumClasses];
-
-                foreach (var subClassifier in _subClassifiers)
-                {
-                    double score = PredictAdaBoostScore(subClassifier, input, i);
-                    // Convert score to probability
-                    double prob = 1.0 / (1.0 + Math.Exp(-2 * score));
-                    avgScores[1] += prob;
-                    avgScores[0] += 1 - prob;
-                }
-
-                // Pick class with highest average score
-                int bestClass = avgScores[1] > avgScores[0] ? 1 : 0;
-                predictions[i] = ClassLabels[bestClass];
+                // Average probabilities: P(class 1) = 1 / (1 + exp(-2 * score))
+                support = engine.TensorSigmoid(engine.TensorMultiplyScalar(score, two));
             }
             else
             {
-                // Hard voting
-                var votes = new int[NumClasses];
-                foreach (var subClassifier in _subClassifiers)
-                {
-                    int pred = PredictAdaBoost(subClassifier, input, i);
-                    votes[pred]++;
-                }
-
-                int bestClass = votes[1] > votes[0] ? 1 : 0;
-                predictions[i] = ClassLabels[bestClass];
+                // Hard voting: class 1 when score >= 0
+                support = engine.TensorGreaterEqual(score, new Tensor<T>(new[] { rows }));
             }
+
+            classOne = engine.TensorAdd(classOne, support);
+            classZero = engine.TensorAdd(classZero, engine.ScalarMinusTensor(NumOps.One, support));
         }
 
-        return predictions;
+        return ClassIndicesToLabels(ZeroOneToInt(engine.TensorGreaterThan(classOne, classZero)));
     }
 
     /// <summary>
-    /// Gets the raw AdaBoost score for a sample.
+    /// Computes the AdaBoost score of every row.
     /// </summary>
     /// <param name="classifier">AdaBoost classifier.</param>
-    /// <param name="x">Feature matrix.</param>
-    /// <param name="sampleIdx">Sample index.</param>
-    /// <returns>Weighted sum of weak learner predictions.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The score is the weighted sum of weak learner votes.
-    /// Positive scores indicate class 1, negative indicate class 0.</para>
-    /// </remarks>
-    private double PredictAdaBoostScore(AdaBoostSubClassifier classifier, Matrix<T> x, int sampleIdx)
+    /// <param name="features">The [n, features] features.</param>
+    /// <returns>sum_t alpha_t * (+1 for prediction 1, -1 for prediction 0) per row.</returns>
+    private Tensor<T> PredictAdaBoostScore(AdaBoostSubClassifier classifier, Tensor<T> features)
     {
-        double score = 0;
+        var engine = Engine;
+        var score = new Tensor<T>(new[] { features.Shape[0] });
+        T two = NumOps.FromDouble(2.0);
         for (int t = 0; t < classifier.WeakLearners.Count; t++)
         {
-            int pred = PredictWeakLearner(classifier.WeakLearners[t], x, sampleIdx);
-            int sign = pred == 1 ? 1 : -1;
-            score += classifier.Alphas[t] * sign;
+            var sign = engine.TensorSubtractScalar(
+                engine.TensorMultiplyScalar(PredictWeakLearner(classifier.WeakLearners[t], features), two),
+                NumOps.One);
+            score = engine.TensorAdd(score, engine.TensorMultiplyScalar(sign, classifier.Alphas[t]));
         }
-        return score;
-    }
 
-    /// <summary>
-    /// Gets the AdaBoost class prediction for a sample.
-    /// </summary>
-    /// <param name="classifier">AdaBoost classifier.</param>
-    /// <param name="x">Feature matrix.</param>
-    /// <param name="sampleIdx">Sample index.</param>
-    /// <returns>Predicted class index.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Takes the sign of the weighted score to get the final class.</para>
-    /// </remarks>
-    private int PredictAdaBoost(AdaBoostSubClassifier classifier, Matrix<T> x, int sampleIdx)
-    {
-        double score = PredictAdaBoostScore(classifier, x, sampleIdx);
-        return score >= 0 ? 1 : 0;
+        return score;
     }
 
     /// <summary>
@@ -682,19 +596,30 @@ public partial class EasyEnsembleClassifier<T> : ClassifierBase<T>
     /// </remarks>
     public override Dictionary<string, T> GetFeatureImportance()
     {
-        var importance = new double[NumFeatures];
-
+        // Sum of |alpha| of the weak learners splitting on each feature, normalized to sum to 1
+        var engine = Engine;
+        var featureIndices = new List<int>();
+        var weights = new List<T>();
         foreach (var subClassifier in _subClassifiers)
         {
             for (int t = 0; t < subClassifier.WeakLearners.Count; t++)
             {
-                int featureIdx = subClassifier.WeakLearners[t].FeatureIndex;
-                importance[featureIdx] += Math.Abs(subClassifier.Alphas[t]);
+                featureIndices.Add(subClassifier.WeakLearners[t].FeatureIndex);
+                weights.Add(subClassifier.Alphas[t]);
             }
         }
 
-        double total = importance.Sum();
-        if (total == 0) total = 1;
+        var importance = new Tensor<T>(new[] { NumFeatures });
+        if (featureIndices.Count > 0 && NumFeatures > 0)
+        {
+            importance = engine.TensorScatterAdd(importance,
+                new Tensor<int>(featureIndices.ToArray(), new[] { featureIndices.Count }),
+                engine.TensorAbs(Vector<T>.Wrap(weights.ToArray()).AsTensor()), 0);
+        }
+
+        T total = NumFeatures == 0 ? NumOps.Zero : engine.TensorSum(importance);
+        if (NumOps.Equals(total, NumOps.Zero)) total = NumOps.One;
+        var values = engine.TensorDivideScalar(importance, total).ToArray();
 
         var result = new Dictionary<string, T>();
         for (int i = 0; i < NumFeatures; i++)
@@ -702,7 +627,7 @@ public partial class EasyEnsembleClassifier<T> : ClassifierBase<T>
             string name = FeatureNames is not null && i < FeatureNames.Length
                 ? FeatureNames[i]
                 : $"Feature_{i}";
-            result[name] = NumOps.FromDouble(importance[i] / total);
+            result[name] = values[i];
         }
 
         return result;
@@ -725,7 +650,7 @@ public partial class EasyEnsembleClassifier<T> : ClassifierBase<T>
         /// <summary>
         /// Weights for each weak learner.
         /// </summary>
-        public List<double> Alphas { get; set; } = [];
+        public List<T> Alphas { get; set; } = [];
     }
 
     /// <summary>
@@ -745,7 +670,7 @@ public partial class EasyEnsembleClassifier<T> : ClassifierBase<T>
         /// <summary>
         /// Threshold value for the split.
         /// </summary>
-        public double Threshold { get; set; }
+        public T Threshold { get; set; } = MathHelper.GetNumericOperations<T>().Zero;
 
         /// <summary>
         /// Polarity: +1 means values above threshold predict class 1,

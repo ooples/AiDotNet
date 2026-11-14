@@ -145,31 +145,17 @@ internal static class ActiveLearningRepresentation
 
     private static Tensor<T> Row<T>(Tensor<T> pool, int i)
     {
-        int d = pool.Length / pool.Shape[0];
-        var row = new Tensor<T>(new[] { 1, d });
-        int baseIdx = i * d;
-        for (int j = 0; j < d; j++)
-        {
-            row[j] = pool[baseIdx + j];
-        }
-
-        return row;
+        int n = pool.Shape[0];
+        int d = pool.Length / n;
+        var rows = ActiveLearningEngineOps.AsRows(pool, n, d);
+        return AiDotNetEngine.Current.TensorSlice(rows, new[] { i, 0 }, new[] { 1, d }).Clone();
     }
 
     private static Matrix<T> InputFeatures<T>(Tensor<T> pool)
     {
         int n = pool.Shape[0];
         int d = pool.Length / n;
-        var m = new Matrix<T>(n, d);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                m[i, j] = pool[(i * d) + j];
-            }
-        }
-
-        return m;
+        return Matrix<T>.FromMemory(ActiveLearningEngineOps.AsRows(pool, n, d).ToArray(), n, d);
     }
 
     private static Matrix<T> StackRows<T>(List<Vector<T>> rows)
@@ -178,33 +164,35 @@ internal static class ActiveLearningRepresentation
         int dim = rows[0].Length;
         int outDim = Math.Min(dim, MaxDimension);
         var numOps = MathHelper.GetNumericOperations<T>();
-        var m = new Matrix<T>(n, outDim);
 
         if (dim <= MaxDimension)
         {
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < dim; j++)
-                {
-                    m[i, j] = rows[i][j];
-                }
-            }
-
-            return m;
+            return Matrix<T>.FromRowVectors(rows);
         }
 
-        // Deterministic signed feature-hashing to MaxDimension (bounded, geometry-preserving).
+        // Deterministic signed feature-hashing to MaxDimension (bounded, geometry-preserving):
+        // column j is added, with sign s(j), into bucket b(j).
+        var engine = AiDotNetEngine.Current;
+        var buckets = new int[dim];
+        var negative = new bool[dim];
+        for (int j = 0; j < dim; j++)
+        {
+            buckets[j] = (int)((uint)(j * 2654435761u) % (uint)outDim);
+            negative[j] = ((j * 40503) & 1) != 0;
+        }
+
+        var stacked = new Tensor<T>[n];
         for (int i = 0; i < n; i++)
         {
-            for (int j = 0; j < dim; j++)
-            {
-                int bucket = (int)((uint)(j * 2654435761u) % (uint)outDim);
-                double sign = ((j * 40503) & 1) == 0 ? 1.0 : -1.0;
-                double add = sign * numOps.ToDouble(rows[i][j]);
-                m[i, bucket] = numOps.FromDouble(numOps.ToDouble(m[i, bucket]) + add);
-            }
+            stacked[i] = Tensor<T>.FromVector(rows[i]);
         }
 
-        return m;
+        var features = engine.TensorStack(stacked, 0);
+        var signs = new Tensor<T>(new[] { 1, dim });
+        signs.Fill(numOps.One);
+        signs = engine.TensorMaskedFill(signs, negative, numOps.Negate(numOps.One));
+        var signed = engine.TensorMultiply(features, engine.TensorBroadcastTo(signs, new[] { n, dim }));
+        var hashed = engine.TensorIndexAdd(new Tensor<T>(new[] { n, outDim }), 1, new Tensor<int>(buckets, new[] { dim }), signed);
+        return Matrix<T>.FromMemory(hashed.ToArray(), n, outDim);
     }
 }

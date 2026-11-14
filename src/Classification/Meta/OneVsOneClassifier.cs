@@ -135,6 +135,7 @@ public partial class OneVsOneClassifier<T> : MetaClassifierBase<T>
         _estimators = new IClassifier<T>[numPairs];
 
         int pairIdx = 0;
+        var classIndices = GetClassIndicesFromLabels(y);
         for (int i = 0; i < NumClasses - 1; i++)
         {
             for (int j = i + 1; j < NumClasses; j++)
@@ -142,7 +143,7 @@ public partial class OneVsOneClassifier<T> : MetaClassifierBase<T>
                 _classPairs[pairIdx] = (i, j);
 
                 // Get samples for this pair of classes
-                var (xPair, yPair) = ExtractPairData(x, y, i, j);
+                var (xPair, yPair) = ExtractPairData(x, y, classIndices, i, j);
 
                 // Train binary classifier
                 _estimators[pairIdx] = CreateBaseEstimator();
@@ -156,49 +157,29 @@ public partial class OneVsOneClassifier<T> : MetaClassifierBase<T>
     /// <summary>
     /// Extracts samples belonging to a pair of classes.
     /// </summary>
-    private (Matrix<T> x, Vector<T> y) ExtractPairData(Matrix<T> x, Vector<T> y, int classA, int classB)
+    private (Matrix<T> x, Vector<T> y) ExtractPairData(Matrix<T> x, Vector<T> y, int[] classIndices, int classA, int classB)
     {
-        T labelA = (ClassLabels ?? throw new InvalidOperationException("ClassLabels has not been initialized."))[classA];
-        T labelB = ClassLabels[classB];
-
-        // Count samples for these classes
-        int count = 0;
-        for (int i = 0; i < y.Length; i++)
+        if (ClassLabels is null)
         {
-            if (NumOps.Compare(y[i], labelA) == 0 || NumOps.Compare(y[i], labelB) == 0)
+            throw new InvalidOperationException("ClassLabels has not been initialized.");
+        }
+
+        // Samples of either class, in their original order
+        var rows = new List<int>();
+        for (int i = 0; i < classIndices.Length; i++)
+        {
+            if (classIndices[i] == classA || classIndices[i] == classB)
             {
-                count++;
+                rows.Add(i);
             }
         }
 
-        // Extract data
-        var xPair = new Matrix<T>(count, NumFeatures);
-        var yPair = new Vector<T>(count);
-
-        int idx = 0;
-        for (int i = 0; i < y.Length; i++)
-        {
-            if (NumOps.Compare(y[i], labelA) == 0)
-            {
-                for (int j = 0; j < NumFeatures; j++)
-                {
-                    xPair[idx, j] = x[i, j];
-                }
-                yPair[idx] = NumOps.Zero;
-                idx++;
-            }
-            else if (NumOps.Compare(y[i], labelB) == 0)
-            {
-                for (int j = 0; j < NumFeatures; j++)
-                {
-                    xPair[idx, j] = x[i, j];
-                }
-                yPair[idx] = NumOps.One;
-                idx++;
-            }
-        }
-
-        return (xPair, yPair);
+        // classA -> 0, classB -> 1
+        var (xPair, yLabels) = SelectSamples(x, y, rows.ToArray());
+        var yPair = yLabels.Length == 0
+            ? new Vector<T>(0)
+            : Engine.TensorEquals(yLabels.AsTensor(), ClassLabels[classB]).ToVector();
+        return (LeadingColumns(xPair, NumFeatures), yPair);
     }
 
     /// <inheritdoc/>
@@ -209,53 +190,28 @@ public partial class OneVsOneClassifier<T> : MetaClassifierBase<T>
             throw new InvalidOperationException("Model has not been trained.");
         }
 
-        var predictions = new Vector<T>(input.Rows);
-
-        for (int i = 0; i < input.Rows; i++)
+        if (input.Rows == 0)
         {
-            // Count votes for each class
-            var votes = new int[NumClasses];
-
-            // Extract single sample
-            var sample = new Matrix<T>(1, NumFeatures);
-            for (int j = 0; j < NumFeatures; j++)
-            {
-                sample[0, j] = input[i, j];
-            }
-
-            // Each classifier votes for one of its classes
-            for (int p = 0; p < _estimators.Length; p++)
-            {
-                var (classA, classB) = _classPairs[p];
-                var pred = _estimators[p].Predict(sample);
-
-                // 0 = classA wins, 1 = classB wins
-                if (NumOps.Compare(pred[0], NumOps.FromDouble(0.5)) < 0)
-                {
-                    votes[classA]++;
-                }
-                else
-                {
-                    votes[classB]++;
-                }
-            }
-
-            // Find class with most votes
-            int bestClass = 0;
-            int maxVotes = votes[0];
-            for (int c = 1; c < NumClasses; c++)
-            {
-                if (votes[c] > maxVotes)
-                {
-                    maxVotes = votes[c];
-                    bestClass = c;
-                }
-            }
-
-            predictions[i] = ClassLabels[bestClass];
+            return new Vector<T>(0);
         }
 
-        return predictions;
+        var engine = Engine;
+        var samples = LeadingColumns(input, NumFeatures);
+        var half = NumOps.FromDouble(0.5);
+        var votes = new Tensor<T>(new[] { input.Rows, NumClasses });
+
+        // Each classifier votes for one of its classes: 0 = classA wins, 1 = classB wins
+        for (int p = 0; p < _estimators.Length; p++)
+        {
+            var (classA, classB) = _classPairs[p];
+            var votesB = AtLeast(_estimators[p].Predict(samples), half);
+            var votesA = engine.ScalarMinusTensor(NumOps.One, votesB.AsTensor()).ToVector();
+            votes = engine.TensorScatterAdd(votes, new Tensor<int>(new[] { classA, classB }, new[] { 2 }),
+                Tensor<T>.FromMatrix(StackColumns(new[] { votesA, votesB })), 1);
+        }
+
+        // Class with most votes (first class wins ties)
+        return MajorityVoteLabels(votes);
     }
 
     /// <inheritdoc/>
@@ -266,111 +222,56 @@ public partial class OneVsOneClassifier<T> : MetaClassifierBase<T>
             throw new InvalidOperationException("Model has not been trained.");
         }
 
-        var probs = new Matrix<T>(input.Rows, NumClasses);
-
-        for (int i = 0; i < input.Rows; i++)
+        if (input.Rows == 0 || NumClasses == 0)
         {
-            // Extract single sample
-            var sample = new Matrix<T>(1, NumFeatures);
-            for (int j = 0; j < NumFeatures; j++)
-            {
-                sample[0, j] = input[i, j];
-            }
-
-            // Accumulate pairwise probabilities
-            var pairwiseProbs = new T[NumClasses, NumClasses];
-            var pairwiseCounts = new int[NumClasses, NumClasses];
-
-            for (int p = 0; p < _estimators.Length; p++)
-            {
-                var (classA, classB) = _classPairs[p];
-                T probB;
-
-                // Get probability from classifier
-                if (_estimators[p] is IProbabilisticClassifier<T> probClassifier)
-                {
-                    var pairProbs = probClassifier.PredictProbabilities(sample);
-                    probB = pairProbs.Columns > 1 ? pairProbs[0, 1] : pairProbs[0, 0];
-                }
-                else
-                {
-                    var pred = _estimators[p].Predict(sample);
-                    probB = pred[0];
-                }
-
-                T probA = NumOps.Subtract(NumOps.One, probB);
-
-                pairwiseProbs[classA, classB] = probA;
-                pairwiseProbs[classB, classA] = probB;
-                pairwiseCounts[classA, classB]++;
-                pairwiseCounts[classB, classA]++;
-            }
-
-            // Aggregate to class probabilities using simple voting normalization
-            T sumProbs = NumOps.Zero;
-            for (int c = 0; c < NumClasses; c++)
-            {
-                T classProb = NumOps.Zero;
-                int count = 0;
-
-                for (int other = 0; other < NumClasses; other++)
-                {
-                    if (other != c && pairwiseCounts[c, other] > 0)
-                    {
-                        classProb = NumOps.Add(classProb, pairwiseProbs[c, other]);
-                        count++;
-                    }
-                }
-
-                if (count > 0)
-                {
-                    classProb = NumOps.Divide(classProb, NumOps.FromDouble(count));
-                }
-                else
-                {
-                    classProb = NumOps.Divide(NumOps.One, NumOps.FromDouble(NumClasses));
-                }
-
-                probs[i, c] = classProb;
-                sumProbs = NumOps.Add(sumProbs, classProb);
-            }
-
-            // Normalize
-            T minSum = NumOps.FromDouble(1e-15);
-            if (NumOps.Compare(sumProbs, minSum) < 0)
-            {
-                sumProbs = minSum;
-            }
-
-            for (int c = 0; c < NumClasses; c++)
-            {
-                probs[i, c] = NumOps.Divide(probs[i, c], sumProbs);
-            }
+            return new Matrix<T>(input.Rows, NumClasses);
         }
 
-        return probs;
+        var engine = Engine;
+        var samples = LeadingColumns(input, NumFeatures);
+        var pairwiseSums = new Tensor<T>(new[] { input.Rows, NumClasses });
+        var partnerCounts = new int[NumClasses];
+
+        // Accumulate pairwise probabilities: classA gets 1 - P(B), classB gets P(B)
+        for (int p = 0; p < _estimators.Length; p++)
+        {
+            var (classA, classB) = _classPairs[p];
+            Vector<T> probB;
+
+            // Get probability from classifier
+            if (_estimators[p] is IProbabilisticClassifier<T> probClassifier)
+            {
+                var pairProbs = probClassifier.PredictProbabilities(samples);
+                probB = pairProbs.GetColumn(pairProbs.Columns > 1 ? 1 : 0);
+            }
+            else
+            {
+                probB = _estimators[p].Predict(samples);
+            }
+
+            var probA = engine.ScalarMinusTensor(NumOps.One, probB.AsTensor()).ToVector();
+            pairwiseSums = engine.TensorScatterAdd(pairwiseSums, new Tensor<int>(new[] { classA, classB }, new[] { 2 }),
+                Tensor<T>.FromMatrix(StackColumns(new[] { probA, probB })), 1);
+            partnerCounts[classA]++;
+            partnerCounts[classB]++;
+        }
+
+        // Aggregate to class probabilities: mean over partners, or 1/NumClasses for a class without partners
+        var counts = CountsToValues(new Tensor<int>(partnerCounts, new[] { NumClasses }));
+        var denominators = engine.TensorClampMin(counts, NumOps.One).Reshape(1, NumClasses);
+        var noPartner = engine.TensorMultiplyScalar(engine.TensorEquals(counts, NumOps.Zero),
+            NumOps.Divide(NumOps.One, NumOps.FromDouble(NumClasses))).Reshape(1, NumClasses);
+        var classProbs = engine.TensorAdd(engine.TensorDivide(pairwiseSums, denominators), noPartner);
+
+        // Normalize
+        var rowSums = engine.TensorClampMin(engine.ReduceSum(classProbs, new[] { 1 }, true), Tolerance(1e-15));
+        return engine.TensorDivide(classProbs, rowSums).ToMatrix();
     }
 
     /// <inheritdoc/>
     public override Matrix<T> PredictLogProbabilities(Matrix<T> input)
     {
-        var probs = PredictProbabilities(input);
-        var logProbs = new Matrix<T>(input.Rows, NumClasses);
-
-        for (int i = 0; i < input.Rows; i++)
-        {
-            for (int c = 0; c < NumClasses; c++)
-            {
-                T p = probs[i, c];
-                T minP = NumOps.FromDouble(1e-15);
-                if (NumOps.Compare(p, minP) < 0)
-                {
-                    p = minP;
-                }
-                logProbs[i, c] = NumOps.Log(p);
-            }
-        }
-
-        return logProbs;
+        // log(max(p, 1e-15))
+        return base.PredictLogProbabilities(input);
     }
 }

@@ -135,12 +135,7 @@ public class QueryByCommittee<T> : IActiveLearningStrategy<T>
 
         var numSamples = unlabeledPool.Shape[0];
         var numClasses = allPredictions[0].Length / numSamples;
-        var scores = new Vector<T>(numSamples);
-
-        for (int i = 0; i < numSamples; i++)
-        {
-            scores[i] = ComputeDisagreement(allPredictions, i, numClasses);
-        }
+        var scores = ComputeDisagreement(allPredictions, numSamples, numClasses).ToVector();
 
         UpdateStatistics(scores);
         return scores;
@@ -159,260 +154,146 @@ public class QueryByCommittee<T> : IActiveLearningStrategy<T>
     }
 
     /// <summary>
-    /// Computes disagreement for a single sample based on the configured measure.
+    /// Computes the disagreement of every sample based on the configured measure.
     /// </summary>
-    private T ComputeDisagreement(List<Tensor<T>> allPredictions, int sampleIndex, int numClasses)
+    private Tensor<T> ComputeDisagreement(List<Tensor<T>> allPredictions, int numSamples, int numClasses)
     {
         return _measure switch
         {
-            DisagreementMeasure.VoteEntropy => ComputeVoteEntropy(allPredictions, sampleIndex, numClasses),
-            DisagreementMeasure.KLDivergence => ComputeAverageKL(allPredictions, sampleIndex, numClasses),
-            DisagreementMeasure.PredictionVariance => ComputePredictionVariance(allPredictions, sampleIndex, numClasses),
-            _ => ComputeVoteEntropy(allPredictions, sampleIndex, numClasses)
+            DisagreementMeasure.VoteEntropy => ComputeVoteEntropy(allPredictions, numSamples, numClasses),
+            DisagreementMeasure.KLDivergence => ComputeAverageKL(allPredictions, numSamples, numClasses),
+            DisagreementMeasure.PredictionVariance => ComputePredictionVariance(allPredictions, numSamples, numClasses),
+            _ => ComputeVoteEntropy(allPredictions, numSamples, numClasses)
         };
     }
 
     /// <summary>
     /// Computes vote entropy: entropy of the vote distribution across committee.
     /// </summary>
-    private T ComputeVoteEntropy(List<Tensor<T>> allPredictions, int sampleIndex, int numClasses)
+    private Tensor<T> ComputeVoteEntropy(List<Tensor<T>> allPredictions, int numSamples, int numClasses)
     {
-        var votes = new int[numClasses];
-        var startIdx = sampleIndex * numClasses;
+        var engine = AiDotNetEngine.Current;
 
-        // Count votes for each class
-        foreach (var preds in allPredictions)
-        {
-            var maxClass = 0;
-            var maxVal = preds[startIdx];
-            for (int c = 1; c < numClasses; c++)
-            {
-                if (_numOps.GreaterThan(preds[startIdx + c], maxVal))
-                {
-                    maxVal = preds[startIdx + c];
-                    maxClass = c;
-                }
-            }
-            votes[maxClass]++;
-        }
-
-        // Compute entropy of vote distribution
-        var entropy = _numOps.Zero;
-        var numMembers = (double)_committee.Count;
-        var epsilon = 1e-10;
-
-        for (int c = 0; c < numClasses; c++)
-        {
-            var p = votes[c] / numMembers;
-            if (p > epsilon)
-            {
-                var term = p * Math.Log(p);
-                entropy = _numOps.Subtract(entropy, _numOps.FromDouble(term));
-            }
-        }
-
-        return entropy;
+        // Compute entropy of vote distribution over classes with p > epsilon
+        var p = VoteFractions(allPredictions, numSamples, numClasses, _committee.Count);
+        var terms = engine.TensorMultiply(p, engine.TensorLog(p));
+        var counted = engine.TensorGreaterThan(p, ActiveLearningEngineOps.Tolerance<T>(1e-10));
+        var kept = engine.TensorWhere(counted, terms, new Tensor<T>(new[] { numSamples, numClasses }));
+        return engine.TensorNegate(engine.ReduceSum(kept, new[] { 1 }, keepDims: false));
     }
 
     /// <summary>
     /// Computes average KL divergence between each member and the consensus.
     /// </summary>
-    private T ComputeAverageKL(List<Tensor<T>> allPredictions, int sampleIndex, int numClasses)
+    /// <summary>
+    /// Fraction of the <paramref name="committeeSize"/> members voting for each class of each sample
+    /// (each member votes for its first highest logit). Votes are counted in int (a sum of T one-hot
+    /// rows stops at 2048 for Half) and divided in double.
+    /// </summary>
+    /// <returns>A [numSamples, numClasses] tensor.</returns>
+    internal static Tensor<T> VoteFractions(List<Tensor<T>> allPredictions, int numSamples, int numClasses, int committeeSize)
     {
-        var startIdx = sampleIndex * numClasses;
-        var consensus = new Vector<T>(numClasses);
-        var epsilon = _numOps.FromDouble(1e-10);
-
-        // Compute consensus (average) probability distribution
-        for (int c = 0; c < numClasses; c++)
-        {
-            var sum = _numOps.Zero;
-            foreach (var preds in allPredictions)
-            {
-                sum = _numOps.Add(sum, GetSoftmaxProb(preds, startIdx, c, numClasses));
-            }
-            consensus[c] = _numOps.Divide(sum, _numOps.FromDouble(_committee.Count));
-        }
-
-        // Compute average KL divergence
-        var totalKL = _numOps.Zero;
+        var engine = AiDotNetEngine.Current;
+        var votes = new Tensor<int>(new[] { numSamples, numClasses });
         foreach (var preds in allPredictions)
         {
-            var kl = _numOps.Zero;
-            for (int c = 0; c < numClasses; c++)
-            {
-                var p = GetSoftmaxProb(preds, startIdx, c, numClasses);
-                var q = _numOps.Add(consensus[c], epsilon);
-                var pPlusEps = _numOps.Add(p, epsilon);
-
-                var logP = _numOps.FromDouble(Math.Log(_numOps.ToDouble(pPlusEps)));
-                var logQ = _numOps.FromDouble(Math.Log(_numOps.ToDouble(q)));
-                var term = _numOps.Multiply(p, _numOps.Subtract(logP, logQ));
-                kl = _numOps.Add(kl, term);
-            }
-            totalKL = _numOps.Add(totalKL, kl);
+            var maxClass = engine.TensorArgMax(ActiveLearningEngineOps.AsRows(preds, numSamples, numClasses), 1);
+            votes = engine.TensorAdd(votes, engine.TensorOneHot<int>(maxClass, numClasses));
         }
 
-        return _numOps.Divide(totalKL, _numOps.FromDouble(_committee.Count));
+        return ActiveLearningEngineOps.CountFractions<T>(votes, committeeSize);
+    }
+
+    private Tensor<T> ComputeAverageKL(List<Tensor<T>> allPredictions, int numSamples, int numClasses)
+    {
+        var engine = AiDotNetEngine.Current;
+        var epsilon = ActiveLearningEngineOps.Tolerance<T>(1e-10);
+        var committeeSize = _numOps.FromDouble(_committee.Count);
+        var memberProbs = SoftmaxAll(allPredictions, numSamples, numClasses);
+
+        // Compute consensus (average) probability distribution
+        var consensus = engine.TensorDivideScalar(Sum(memberProbs, numSamples, numClasses), committeeSize);
+        var logQ = engine.TensorLog(engine.TensorAddScalar(consensus, epsilon));
+
+        // Compute average KL divergence
+        var totalKL = new Tensor<T>(new[] { numSamples });
+        foreach (var p in memberProbs)
+        {
+            var logP = engine.TensorLog(engine.TensorAddScalar(p, epsilon));
+            var terms = engine.TensorMultiply(p, engine.TensorSubtract(logP, logQ));
+            totalKL = engine.TensorAdd(totalKL, engine.ReduceSum(terms, new[] { 1 }, keepDims: false));
+        }
+
+        return engine.TensorDivideScalar(totalKL, committeeSize);
     }
 
     /// <summary>
     /// Computes variance of predictions across committee members.
     /// </summary>
-    private T ComputePredictionVariance(List<Tensor<T>> allPredictions, int sampleIndex, int numClasses)
+    private Tensor<T> ComputePredictionVariance(List<Tensor<T>> allPredictions, int numSamples, int numClasses)
     {
-        var startIdx = sampleIndex * numClasses;
-        var totalVariance = _numOps.Zero;
+        var engine = AiDotNetEngine.Current;
+        var committeeSize = _numOps.FromDouble(_committee.Count);
+        var memberProbs = SoftmaxAll(allPredictions, numSamples, numClasses);
 
-        for (int c = 0; c < numClasses; c++)
+        // Compute mean
+        var mean = engine.TensorDivideScalar(Sum(memberProbs, numSamples, numClasses), committeeSize);
+
+        // Compute variance per class, then total over classes
+        var squaredDeviation = new Tensor<T>(new[] { numSamples, numClasses });
+        foreach (var p in memberProbs)
         {
-            // Compute mean
-            var mean = _numOps.Zero;
-            foreach (var preds in allPredictions)
-            {
-                mean = _numOps.Add(mean, GetSoftmaxProb(preds, startIdx, c, numClasses));
-            }
-            mean = _numOps.Divide(mean, _numOps.FromDouble(_committee.Count));
-
-            // Compute variance
-            var variance = _numOps.Zero;
-            foreach (var preds in allPredictions)
-            {
-                var p = GetSoftmaxProb(preds, startIdx, c, numClasses);
-                var diff = _numOps.Subtract(p, mean);
-                variance = _numOps.Add(variance, _numOps.Multiply(diff, diff));
-            }
-            variance = _numOps.Divide(variance, _numOps.FromDouble(_committee.Count));
-            totalVariance = _numOps.Add(totalVariance, variance);
+            var diff = engine.TensorSubtract(p, mean);
+            squaredDeviation = engine.TensorAdd(squaredDeviation, engine.TensorMultiply(diff, diff));
         }
 
-        return totalVariance;
+        var variance = engine.TensorDivideScalar(squaredDeviation, committeeSize);
+        return engine.ReduceSum(variance, new[] { 1 }, keepDims: false);
     }
 
     /// <summary>
-    /// Gets softmax probability for a specific class.
+    /// Softmax probabilities of every committee member, each [numSamples, numClasses].
     /// </summary>
-    private T GetSoftmaxProb(Tensor<T> logits, int startIdx, int classIdx, int numClasses)
+    private static List<Tensor<T>> SoftmaxAll(List<Tensor<T>> allPredictions, int numSamples, int numClasses)
     {
-        var maxLogit = _numOps.MinValue;
-        for (int c = 0; c < numClasses; c++)
+        var probs = new List<Tensor<T>>(allPredictions.Count);
+        foreach (var preds in allPredictions)
         {
-            if (_numOps.GreaterThan(logits[startIdx + c], maxLogit))
-            {
-                maxLogit = logits[startIdx + c];
-            }
+            probs.Add(ActiveLearningEngineOps.SoftmaxRows(preds, numSamples, numClasses));
         }
 
-        var expSum = _numOps.Zero;
-        var expTarget = _numOps.Zero;
-        for (int c = 0; c < numClasses; c++)
+        return probs;
+    }
+
+    /// <summary>
+    /// Element-wise sum of [numSamples, numClasses] tensors.
+    /// </summary>
+    private static Tensor<T> Sum(List<Tensor<T>> tensors, int numSamples, int numClasses)
+    {
+        var engine = AiDotNetEngine.Current;
+        var sum = new Tensor<T>(new[] { numSamples, numClasses });
+        foreach (var tensor in tensors)
         {
-            var shifted = _numOps.Subtract(logits[startIdx + c], maxLogit);
-            var expVal = _numOps.FromDouble(Math.Exp(_numOps.ToDouble(shifted)));
-            expSum = _numOps.Add(expSum, expVal);
-            if (c == classIdx)
-            {
-                expTarget = expVal;
-            }
+            sum = engine.TensorAdd(sum, tensor);
         }
 
-        return _numOps.Divide(expTarget, expSum);
+        return sum;
     }
 
     /// <summary>
     /// Selects top-scoring samples.
     /// </summary>
-    private int[] SelectTopScoring(Vector<T> scores, int batchSize)
+    private static int[] SelectTopScoring(Vector<T> scores, int batchSize)
     {
-        var indexedScores = new List<(int Index, T Score)>();
-        for (int i = 0; i < scores.Length; i++)
-        {
-            indexedScores.Add((i, scores[i]));
-        }
-
-        return indexedScores
-            .OrderByDescending(x => _numOps.ToDouble(x.Score))
-            .Take(batchSize)
-            .Select(x => x.Index)
-            .ToArray();
+        return ActiveLearningEngineOps.SelectTopScoring(scores, batchSize);
     }
 
     /// <summary>
     /// Selects samples considering both committee disagreement score and diversity.
     /// </summary>
-    private int[] SelectWithDiversity(Vector<T> scores, Tensor<T> pool, int batchSize)
+    private static int[] SelectWithDiversity(Vector<T> scores, Tensor<T> pool, int batchSize)
     {
-        var selected = new List<int>();
-        var remaining = new HashSet<int>(Enumerable.Range(0, scores.Length));
-        var featureSize = pool.Length / pool.Shape[0];
-
-        while (selected.Count < batchSize && remaining.Count > 0)
-        {
-            var best = -1;
-            var bestCombinedScore = _numOps.MinValue;
-
-            foreach (var idx in remaining)
-            {
-                var disagreementScore = scores[idx];
-                var diversityScore = selected.Count == 0
-                    ? _numOps.One
-                    : ComputeMinDistanceToSelected(pool, idx, selected, featureSize);
-
-                var combinedScore = _numOps.Multiply(disagreementScore, diversityScore);
-
-                if (_numOps.GreaterThan(combinedScore, bestCombinedScore))
-                {
-                    bestCombinedScore = combinedScore;
-                    best = idx;
-                }
-            }
-
-            if (best >= 0)
-            {
-                selected.Add(best);
-                remaining.Remove(best);
-            }
-        }
-
-        return [.. selected];
-    }
-
-    /// <summary>
-    /// Computes minimum distance from a sample to already selected samples.
-    /// </summary>
-    private T ComputeMinDistanceToSelected(Tensor<T> pool, int sampleIdx, List<int> selected, int featureSize)
-    {
-        var minDist = _numOps.MaxValue;
-
-        foreach (var selIdx in selected)
-        {
-            var dist = ComputeEuclideanDistance(pool, sampleIdx, selIdx, featureSize);
-            if (_numOps.LessThan(dist, minDist))
-            {
-                minDist = dist;
-            }
-        }
-
-        return minDist;
-    }
-
-    /// <summary>
-    /// Computes Euclidean distance between two samples.
-    /// </summary>
-    private T ComputeEuclideanDistance(Tensor<T> pool, int idx1, int idx2, int featureSize)
-    {
-        var sumSquared = _numOps.Zero;
-        var start1 = idx1 * featureSize;
-        var start2 = idx2 * featureSize;
-
-        for (int i = 0; i < featureSize; i++)
-        {
-            var diff = _numOps.Subtract(pool[start1 + i], pool[start2 + i]);
-            var squared = _numOps.Multiply(diff, diff);
-            sumSquared = _numOps.Add(sumSquared, squared);
-        }
-
-        return _numOps.FromDouble(Math.Sqrt(_numOps.ToDouble(sumSquared)));
+        return ActiveLearningEngineOps.SelectWithDiversity(scores, pool, batchSize);
     }
 
     /// <summary>
@@ -422,19 +303,6 @@ public class QueryByCommittee<T> : IActiveLearningStrategy<T>
     {
         if (scores.Length == 0) return;
 
-        _lastMinScore = scores[0];
-        _lastMaxScore = scores[0];
-        var sum = _numOps.Zero;
-
-        for (int i = 0; i < scores.Length; i++)
-        {
-            if (_numOps.LessThan(scores[i], _lastMinScore))
-                _lastMinScore = scores[i];
-            if (_numOps.GreaterThan(scores[i], _lastMaxScore))
-                _lastMaxScore = scores[i];
-            sum = _numOps.Add(sum, scores[i]);
-        }
-
-        _lastMeanScore = _numOps.Divide(sum, _numOps.FromDouble(scores.Length));
+        (_lastMinScore, _lastMaxScore, _lastMeanScore) = ActiveLearningEngineOps.Statistics(scores);
     }
 }

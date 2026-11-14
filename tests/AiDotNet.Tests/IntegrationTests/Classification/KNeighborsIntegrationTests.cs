@@ -1,3 +1,6 @@
+using AiDotNet.Classification.Calibration;
+using AiDotNet.Classification.DiscriminantAnalysis;
+using AiDotNet.Classification.ImbalancedEnsemble;
 using AiDotNet.Classification.Neighbors;
 using AiDotNet.Models.Options;
 using Xunit;
@@ -642,6 +645,446 @@ public class KNeighborsIntegrationTests
         // Assert
         Assert.Equal(0.0, prediction[0], Tolerance);
         Assert.True(probs[0, 0] > 0.99, "Exact match should have very high probability");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task KNN_TiedDistancesAtTheKBoundary_SelectInPartialSelectionSortOrder()
+    {
+        // Arrange: distances from the query at 0 are [3, 1, 3, 2] for samples 0..3, so samples 0 and 2 tie
+        // for the third neighbor. The partial selection sort (swap the first strict minimum into place)
+        // takes sample 1, then sample 3 (swapping sample 0 to position 3), then sample 2, which now sits
+        // before sample 0. A stable sort would take sample 0 instead.
+        var x = new Matrix<double>(4, 1);
+        var y = new Vector<double>(4);
+        x[0, 0] = 3; y[0] = 0;
+        x[1, 0] = 1; y[1] = 1;
+        x[2, 0] = -3; y[2] = 2;
+        x[3, 0] = 2; y[3] = 1;
+
+        var knn = new KNeighborsClassifier<double>(new KNeighborsOptions<double> { NNeighbors = 3 });
+        knn.Train(x, y);
+
+        var test = new Matrix<double>(1, 1);
+        test[0, 0] = 0;
+
+        // Act
+        var probs = knn.PredictProbabilities(test);
+
+        // Assert: neighbors are samples 1, 3 and 2 -> classes {1, 1, 2}
+        Assert.Equal(0.0, probs[0, 0], Tolerance);
+        Assert.Equal(2.0 / 3.0, probs[0, 1], Tolerance);
+        Assert.Equal(1.0 / 3.0, probs[0, 2], Tolerance);
+    }
+
+    #endregion
+
+    #region Shared Classifier Helper Regressions
+
+    // 1 + 2^-23 and 1 + 2^-22: adjacent floats whose midpoint (a + b) / 2 rounds up to b in float, so a
+    // threshold taken as the plain midpoint sends both values to the "<= threshold" side.
+    private static float FloatFromBits(int bits) => BitConverter.ToSingle(BitConverter.GetBytes(bits), 0);
+
+    [Fact(Timeout = 120000)]
+    public async Task BalancedRandomForest_AdjacentFloatValues_SplitSeparatesThem()
+    {
+        // Arrange: one sample per class, at adjacent float values. The best Gini split lies between them; its
+        // threshold must stay below the upper value (scikit-learn uses the lower value when the midpoint rounds
+        // up to the upper one), otherwise every sample goes left and the leaves predict the majority class.
+        float lower = FloatFromBits(0x3F800001);
+        float upper = FloatFromBits(0x3F800002);
+        var x = new Matrix<float>(2, 1);
+        var y = new Vector<float>(2);
+        x[0, 0] = lower; y[0] = 0f;
+        x[1, 0] = upper; y[1] = 1f;
+
+        var forest = new BalancedRandomForestClassifier<float>(nEstimators: 3, maxDepth: 4, seed: 7);
+        forest.Train(x, y);
+
+        // Act
+        var predictions = forest.Predict(x);
+
+        // Assert
+        Assert.Equal(0f, predictions[0]);
+        Assert.Equal(1f, predictions[1]);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task EasyEnsemble_AdjacentFloatValues_StumpSeparatesThem()
+    {
+        // Arrange: the stump between two adjacent floats has zero weighted error only if its threshold stays
+        // below the upper value; a threshold that rounds up to it predicts class 0 for both samples.
+        float lower = FloatFromBits(0x3F800001);
+        float upper = FloatFromBits(0x3F800002);
+        var x = new Matrix<float>(2, 1);
+        var y = new Vector<float>(2);
+        x[0, 0] = lower; y[0] = 0f;
+        x[1, 0] = upper; y[1] = 1f;
+
+        var ensemble = new EasyEnsembleClassifier<float>(nSubsets: 1, nEstimatorsPerSubset: 1, seed: 3);
+        ensemble.Train(x, y);
+
+        // Act
+        var predictions = ensemble.Predict(x);
+
+        // Assert
+        Assert.Equal(0f, predictions[0]);
+        Assert.Equal(1f, predictions[1]);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task EasyEnsemble_Half_SeparableData_KeepsFiniteBoostingWeights()
+    {
+        // Arrange: a perfectly separating stump has weighted error 0. The error is clamped away from 0 before
+        // log((1 - err) / err); 1e-10 rounds to 0 in Half, which made alpha infinite, the sample weights NaN
+        // and every later prediction class 0.
+        var x = new Matrix<Half>(4, 1);
+        var y = new Vector<Half>(4);
+        for (int i = 0; i < 4; i++)
+        {
+            x[i, 0] = (Half)(float)i;
+            y[i] = i < 2 ? (Half)0f : (Half)1f;
+        }
+
+        var ensemble = new EasyEnsembleClassifier<Half>(nSubsets: 1, nEstimatorsPerSubset: 3, softVoting: false, seed: 5);
+        ensemble.Train(x, y);
+
+        // Act
+        var predictions = ensemble.Predict(x);
+
+        // Assert
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        Assert.Equal(0.0, ops.ToDouble(predictions[0]));
+        Assert.Equal(0.0, ops.ToDouble(predictions[1]));
+        Assert.Equal(1.0, ops.ToDouble(predictions[2]));
+        Assert.Equal(1.0, ops.ToDouble(predictions[3]));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CalibratedClassifier_Float_PlattScalingOnCertainProbabilities_StaysFinite()
+    {
+        // Arrange: a 1-nearest-neighbor base model gives probabilities of exactly 0 and 1. Platt scaling clamps
+        // them to [1e-10, 1 - 1e-10] before taking logit(p); 1 - 1e-10 rounds to 1 in float, so logit(1) was
+        // infinite and the fitted A and B (and every calibrated probability) became NaN.
+        var x = new Matrix<float>(20, 1);
+        var y = new Vector<float>(20);
+        for (int i = 0; i < 20; i++)
+        {
+            x[i, 0] = i;
+            y[i] = i < 10 ? 0f : 1f;
+        }
+
+        var calibrated = new CalibratedClassifier<float>(
+            new KNeighborsClassifier<float>(new KNeighborsOptions<float> { NNeighbors = 1 }),
+            new CalibratedClassifierOptions<float> { CalibrationMethod = AiDotNet.Enums.ProbabilityCalibrationMethod.PlattScaling, Seed = 11 });
+        calibrated.Train(x, y);
+
+        // Act
+        var probs = calibrated.PredictProbabilities(x);
+
+        // Assert: finite, and the positive class is more likely at the class-1 end than at the class-0 end
+        for (int i = 0; i < probs.Rows; i++)
+        {
+            for (int c = 0; c < probs.Columns; c++)
+            {
+                Assert.False(float.IsNaN(probs[i, c]) || float.IsInfinity(probs[i, c]), $"probs[{i}, {c}] = {probs[i, c]}");
+            }
+        }
+
+        Assert.True(probs[19, 1] > probs[0, 1]);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task LinearDiscriminantAnalysis_Half_PriorsCountEveryClassSample()
+    {
+        // Arrange: both classes have mean about 0 (alternating +1/-1), so the posterior equals the class prior,
+        // 3001 / 4001, about 0.75. Counting class samples as a sum of ones in Half stops at 2048, which gave priors
+        // 2048/4000 and 1000/4000 and a posterior of about 0.67.
+        int classZero = 3001;
+        int classOne = 1000;
+        int n = classZero + classOne;
+        var x = new Matrix<Half>(n, 1);
+        var y = new Vector<Half>(n);
+        for (int i = 0; i < n; i++)
+        {
+            x[i, 0] = i % 2 == 0 ? (Half)1f : (Half)(-1f);
+            y[i] = i < classZero ? (Half)0f : (Half)1f;
+        }
+
+        var lda = new LinearDiscriminantAnalysis<Half>();
+        lda.Train(x, y);
+        var query = new Matrix<Half>(1, 1);
+
+        // Act
+        var probs = lda.PredictProbabilities(query);
+
+        // Assert: the class counts are exact ints (3001 is not a Half value, so no count kept in Half can
+        // equal it), and the posterior is the prior 3001 / 4001
+        Assert.Equal(new[] { 3001, 1000 }, lda.CountClasses(y).ToArray());
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        Assert.Equal(0.75, ops.ToDouble(probs[0, 0]), 2);
+        Assert.Equal(0.25, ops.ToDouble(probs[0, 1]), 2);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task KNN_Double_DistanceWeights_ExactMatchTakesAllWeight()
+    {
+        // Arrange: as scikit-learn's weights='distance', neighbors at distance 0 get weight 1 and the others 0,
+        // so the query at a class-0 training point is class 0 with probability exactly 1. A fixed weight of 1e10
+        // left 1.5 / (1e10 + 1.5) for class 1.
+        var x = new Matrix<double>(3, 1);
+        var y = new Vector<double>(3);
+        x[0, 0] = 0; y[0] = 0;
+        x[1, 0] = 1; y[1] = 1;
+        x[2, 0] = 2; y[2] = 1;
+        var knn = new KNeighborsClassifier<double>(new KNeighborsOptions<double> { NNeighbors = 3, Weights = WeightingScheme.Distance });
+        knn.Train(x, y);
+
+        // Act
+        var probs = knn.PredictProbabilities(new Matrix<double>(1, 1));
+
+        // Assert
+        Assert.Equal(1.0, probs[0, 0]);
+        Assert.Equal(0.0, probs[0, 1]);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task KNN_Half_DistanceWeights_ExactMatchTakesAllWeight()
+    {
+        // Arrange: the fixed exact-match weight 1e10 is infinite in Half, so class 0 got inf / inf = NaN.
+        var x = new Matrix<Half>(3, 1);
+        var y = new Vector<Half>(3);
+        x[0, 0] = (Half)0f; y[0] = (Half)0f;
+        x[1, 0] = (Half)1f; y[1] = (Half)1f;
+        x[2, 0] = (Half)2f; y[2] = (Half)1f;
+        var knn = new KNeighborsClassifier<Half>(new KNeighborsOptions<Half> { NNeighbors = 3, Weights = WeightingScheme.Distance });
+        knn.Train(x, y);
+
+        // Act
+        var probs = knn.PredictProbabilities(new Matrix<Half>(1, 1));
+
+        // Assert
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        Assert.Equal(1.0, ops.ToDouble(probs[0, 0]));
+        Assert.Equal(0.0, ops.ToDouble(probs[0, 1]));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task KNN_Half_EuclideanDistancesPast255_PickTheNearestNeighbor()
+    {
+        // Arrange: from 0 the class-1 point (300) is nearer than the class-0 point (-1000), but both squared
+        // differences overflow Half, so both distances were infinite and the first training sample won.
+        var x = new Matrix<Half>(2, 1);
+        var y = new Vector<Half>(2);
+        x[0, 0] = (Half)(-1000f); y[0] = (Half)0f;
+        x[1, 0] = (Half)300f; y[1] = (Half)1f;
+        var knn = new KNeighborsClassifier<Half>(new KNeighborsOptions<Half> { NNeighbors = 1 });
+        knn.Train(x, y);
+
+        // Act
+        var predictions = knn.Predict(new Matrix<Half>(1, 1));
+
+        // Assert
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        Assert.Equal(1.0, ops.ToDouble(predictions[0]));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task KNN_Half_CosineOfLargeRows_PicksTheSameDirection()
+    {
+        // Arrange: the query (600, 10) points along the class-0 row (300, 0). Its dot product with that row and
+        // the squared norms overflow Half, which made that cosine distance inf / inf = NaN and the class-1 row
+        // (distance 1) the nearest.
+        var x = new Matrix<Half>(2, 2);
+        var y = new Vector<Half>(2);
+        x[0, 0] = (Half)0f; x[0, 1] = (Half)300f; y[0] = (Half)1f;
+        x[1, 0] = (Half)300f; x[1, 1] = (Half)0f; y[1] = (Half)0f;
+        var knn = new KNeighborsClassifier<Half>(new KNeighborsOptions<Half> { NNeighbors = 1, Metric = DistanceMetric.Cosine });
+        knn.Train(x, y);
+        var query = new Matrix<Half>(1, 2);
+        query[0, 0] = (Half)600f;
+        query[0, 1] = (Half)10f;
+
+        // Act
+        var predictions = knn.Predict(query);
+
+        // Assert
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        Assert.Equal(0.0, ops.ToDouble(predictions[0]));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task NuSupportVectorClassifier_Half_SmallNu_KeepsSupportVectors()
+    {
+        // Arrange: each class's multipliers sum to nu / 2 = 5e-5, below Half's smallest normal value 6.1e-5.
+        // Raising the support-vector threshold 1e-10 to that value dropped every sample from the support set.
+        var x = new Matrix<Half>(20, 1);
+        var y = new Vector<Half>(20);
+        for (int i = 0; i < 10; i++)
+        {
+            x[i, 0] = (Half)(-1f - i); y[i] = (Half)0f;
+            x[10 + i, 0] = (Half)(1f + i); y[10 + i] = (Half)1f;
+        }
+
+        var options = new AiDotNet.Models.Options.SVMOptions<Half> { Kernel = AiDotNet.Enums.KernelType.Linear, MaxIterations = 50, Seed = 42 };
+        var nuSvc = new AiDotNet.Classification.SVM.NuSupportVectorClassifier<Half>(options, null, nu: 0.0001);
+
+        // Act
+        nuSvc.Train(x, y);
+
+        // Assert
+        Assert.True(nuSvc.NSupportVectors > 0, "Every sample with a positive multiplier is a support vector.");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task OrdinalRidgeRegression_Half_TargetSumPast65504_PredictsBothClasses()
+    {
+        // Arrange: the target mean was a Half sum of 100 labels near 1000 (about 100100, infinite) divided by 100,
+        // which made every coefficient NaN and every prediction the lowest class.
+        var x = new Matrix<Half>(100, 1);
+        var y = new Vector<Half>(100);
+        for (int i = 0; i < 100; i++)
+        {
+            bool upper = i % 2 == 1;
+            x[i, 0] = upper ? (Half)1f : (Half)0f;
+            y[i] = upper ? (Half)1002f : (Half)1000f;
+        }
+
+        var ordinal = new AiDotNet.Classification.Ordinal.OrdinalRidgeRegression<Half>();
+        ordinal.Train(x, y);
+
+        // Act
+        var predictions = ordinal.Predict(x);
+
+        // Assert
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        Assert.Equal(1000.0, ops.ToDouble(predictions[0]));
+        Assert.Equal(1002.0, ops.ToDouble(predictions[1]));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task MLkNN_Half_DistancesPast255_UseTheNearestNeighbor()
+    {
+        // Arrange: label 1 is held by 300 and 600, label 0 by -1000, -1300 and -1600. From 0 the nearest training
+        // sample is 300 (label 1), so P(label 1) = 0.75 * 3/7 / (0.75 * 3/7 + 0.2 * 4/7), about 0.74. Every squared
+        // difference overflowed Half, so all distances were infinite and the neighbors were arbitrary.
+        float[] positions = { -1000f, -1300f, 300f, 600f, -1600f };
+        var x = new Matrix<Half>(5, 1);
+        var labels = new Matrix<Half>(5, 2);
+        for (int i = 0; i < 5; i++)
+        {
+            x[i, 0] = (Half)positions[i];
+            bool hasLabelOne = positions[i] > 0f;
+            labels[i, 0] = hasLabelOne ? (Half)0f : (Half)1f;
+            labels[i, 1] = hasLabelOne ? (Half)1f : (Half)0f;
+        }
+
+        var mlknn = new AiDotNet.Classification.MultiLabel.MLkNNClassifier<Half>(new MLkNNOptions<Half> { KNeighbors = 1, Smoothing = 1.0 });
+        mlknn.Train(x, labels);
+
+        // Act
+        var probs = mlknn.PredictMultiLabelProbabilities(new Matrix<Half>(1, 1));
+
+        // Assert
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        Assert.Equal(2.25 / 3.05, ops.ToDouble(probs[0, 1]), 2);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task GaussianNaiveBayes_Half_ClassSumsPast65504_KeepFiniteMeans()
+    {
+        // Arrange: 100 samples per class near 1000 and 1010. The per-class feature sums (about 100000) overflowed
+        // Half before the division by the count, so the means were infinite and every prediction class 0.
+        var x = new Matrix<Half>(200, 1);
+        var y = new Vector<Half>(200);
+        for (int i = 0; i < 100; i++)
+        {
+            float offset = i % 2 == 0 ? -1f : 1f;
+            x[i, 0] = (Half)(1000f + offset); y[i] = (Half)0f;
+            x[100 + i, 0] = (Half)(1010f + offset); y[100 + i] = (Half)1f;
+        }
+
+        var gnb = new AiDotNet.Classification.NaiveBayes.GaussianNaiveBayes<Half>();
+        gnb.Train(x, y);
+        var query = new Matrix<Half>(2, 1);
+        query[0, 0] = (Half)1000f;
+        query[1, 0] = (Half)1010f;
+
+        // Act
+        var predictions = gnb.Predict(query);
+
+        // Assert
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        Assert.Equal(0.0, ops.ToDouble(predictions[0]));
+        Assert.Equal(1.0, ops.ToDouble(predictions[1]));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task AddClassVotes_Half_CountsPast2048Exactly()
+    {
+        // Arrange: ensemble votes are counted per class; a sum of one-hot rows in Half stops at 2048.
+        var x = new Matrix<Half>(2, 1);
+        var y = new Vector<Half>(2);
+        x[1, 0] = (Half)1f;
+        y[1] = (Half)1f;
+        var knn = new KNeighborsClassifier<Half>(new KNeighborsOptions<Half> { NNeighbors = 1 });
+        knn.Train(x, y);
+        var votes = new AiDotNet.Tensors.LinearAlgebra.Tensor<int>(new[] { 1, 2 });
+        var classZero = new Vector<Half>(new[] { (Half)0f });
+
+        // Act
+        for (int i = 0; i < 3001; i++)
+        {
+            votes = knn.AddClassVotes(votes, classZero);
+        }
+
+        // Assert
+        Assert.Equal(3001, votes[0, 0]);
+        Assert.Equal(0, votes[0, 1]);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task KNN_ExactlyEquidistantNeighbors_KeepTheLowerTrainingIndex()
+    {
+        await Task.Yield();
+
+        // Arrange: (2, 9) and (6, 7) are both sqrt(85) from the origin. Scaling each difference by its own largest
+        // component before squaring rounds the two norms one ulp apart (9.219544457292889 against ...887), so the
+        // second point won instead of the first.
+        var x = new Matrix<double>(2, 2);
+        x[0, 0] = 2; x[0, 1] = 9;
+        x[1, 0] = 6; x[1, 1] = 7;
+        var y = new Vector<double>(new[] { 0.0, 1.0 });
+        var knn = new KNeighborsClassifier<double>(new KNeighborsOptions<double> { NNeighbors = 1 });
+        knn.Train(x, y);
+
+        // Act
+        var prediction = knn.Predict(new Matrix<double>(1, 2));
+
+        // Assert
+        Assert.Equal(0.0, prediction[0]);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task KNN_DistanceWeights_Decimal_ExactMatch_DoesNotDivideByZero()
+    {
+        await Task.Yield();
+
+        // Arrange: predicting a training point with distance weighting. The inverse distances were computed for
+        // every neighbor before the exact matches were masked, which throws DivideByZeroException for decimal.
+        var x = new Matrix<decimal>(4, 1);
+        x[0, 0] = 0m; x[1, 0] = 1m; x[2, 0] = 10m; x[3, 0] = 11m;
+        var y = new Vector<decimal>(new[] { 0m, 0m, 1m, 1m });
+        var knn = new KNeighborsClassifier<decimal>(
+            new KNeighborsOptions<decimal> { NNeighbors = 3, Weights = WeightingScheme.Distance });
+        knn.Train(x, y);
+
+        // Act
+        var probabilities = knn.PredictProbabilities(x);
+
+        // Assert: an exact match takes all the weight
+        Assert.Equal(1m, probabilities[0, 0]);
+        Assert.Equal(0m, probabilities[0, 1]);
+        Assert.Equal(1m, probabilities[3, 1]);
     }
 
     #endregion

@@ -236,14 +236,9 @@ public partial class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
         _labelDistributions = InitializeLabelDistributions(labeledY, totalSamples);
 
         // Store the initial labeled distributions (they won't change)
-        var fixedLabels = new Matrix<T>(_numLabeled, NumClasses);
-        for (int i = 0; i < _numLabeled; i++)
-        {
-            for (int j = 0; j < NumClasses; j++)
-            {
-                fixedLabels[i, j] = _labelDistributions[i, j];
-            }
-        }
+        var fixedLabels = _numLabeled == 0
+            ? new Matrix<T>(0, NumClasses)
+            : Tensor<T>.FromMatrix(_labelDistributions).Slice(0, 0, _numLabeled).ToMatrix();
 
         // Propagate labels
         PropagateLabels(transitionMatrix, fixedLabels);
@@ -291,28 +286,18 @@ public partial class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
     /// </remarks>
     private Matrix<T> CombineData(Matrix<T> labeledX, Matrix<T> unlabeledX)
     {
-        int totalRows = labeledX.Rows + unlabeledX.Rows;
-        var combined = new Matrix<T>(totalRows, labeledX.Columns);
-
-        // Copy labeled data
-        for (int i = 0; i < labeledX.Rows; i++)
+        if (unlabeledX.Rows == 0)
         {
-            for (int j = 0; j < labeledX.Columns; j++)
-            {
-                combined[i, j] = labeledX[i, j];
-            }
+            return labeledX.Clone();
         }
 
-        // Copy unlabeled data
-        for (int i = 0; i < unlabeledX.Rows; i++)
+        if (labeledX.Rows == 0)
         {
-            for (int j = 0; j < unlabeledX.Columns; j++)
-            {
-                combined[labeledX.Rows + i, j] = unlabeledX[i, j];
-            }
+            return unlabeledX.Clone();
         }
 
-        return combined;
+        return Engine.TensorConcatenate(
+            new[] { Tensor<T>.FromMatrix(labeledX), Tensor<T>.FromMatrix(unlabeledX) }, 0).ToMatrix();
     }
 
     /// <summary>
@@ -332,30 +317,8 @@ public partial class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
     /// </remarks>
     private Matrix<T> BuildAffinityMatrix(Matrix<T> features)
     {
-        int n = features.Rows;
-        var affinity = new Matrix<T>(n, n);
-
-        for (int i = 0; i < n; i++)
-        {
-            var xi = features.GetRow(i);
-            for (int j = i; j < n; j++)
-            {
-                if (i == j)
-                {
-                    // Self-similarity is 0 (no self-loops in the graph)
-                    affinity[i, j] = NumOps.Zero;
-                }
-                else
-                {
-                    var xj = features.GetRow(j);
-                    var similarity = _kernel.Calculate(xi, xj);
-                    affinity[i, j] = similarity;
-                    affinity[j, i] = similarity; // Symmetric
-                }
-            }
-        }
-
-        return affinity;
+        // Self-similarity is 0 (no self-loops in the graph); the matrix is symmetric
+        return KernelSimilarities(_kernel, features, features, true).ToMatrix();
     }
 
     /// <summary>
@@ -373,36 +336,8 @@ public partial class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
     /// </remarks>
     private Matrix<T> NormalizeAffinity(Matrix<T> affinity)
     {
-        int n = affinity.Rows;
-        var transition = new Matrix<T>(n, n);
-
-        for (int i = 0; i < n; i++)
-        {
-            T rowSum = NumOps.Zero;
-            for (int j = 0; j < n; j++)
-            {
-                rowSum = NumOps.Add(rowSum, affinity[i, j]);
-            }
-
-            if (NumOps.Compare(rowSum, NumOps.Zero) > 0)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    transition[i, j] = NumOps.Divide(affinity[i, j], rowSum);
-                }
-            }
-            else
-            {
-                // Fallback to uniform distribution when all affinities are zero
-                T uniform = NumOps.Divide(NumOps.One, NumOps.FromDouble(n));
-                for (int j = 0; j < n; j++)
-                {
-                    transition[i, j] = uniform;
-                }
-            }
-        }
-
-        return transition;
+        // Row-stochastic transitions; uniform fallback when all affinities of a row are zero
+        return NormalizeRowSums(Tensor<T>.FromMatrix(affinity), true).ToMatrix();
     }
 
     #endregion
@@ -425,29 +360,8 @@ public partial class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
     /// </remarks>
     private Matrix<T> InitializeLabelDistributions(Vector<T> labeledY, int totalSamples)
     {
-        var distributions = new Matrix<T>(totalSamples, NumClasses);
-        T uniformProb = NumOps.Divide(NumOps.One, NumOps.FromDouble(NumClasses));
-
-        // Initialize labeled samples with one-hot encoding
-        for (int i = 0; i < labeledY.Length; i++)
-        {
-            int classIndex = GetClassIndex(labeledY[i]);
-            for (int c = 0; c < NumClasses; c++)
-            {
-                distributions[i, c] = (c == classIndex) ? NumOps.One : NumOps.Zero;
-            }
-        }
-
-        // Initialize unlabeled samples with uniform distribution
-        for (int i = labeledY.Length; i < totalSamples; i++)
-        {
-            for (int c = 0; c < NumClasses; c++)
-            {
-                distributions[i, c] = uniformProb;
-            }
-        }
-
-        return distributions;
+        // Labeled samples are one-hot; unlabeled samples start uniform
+        return InitialLabelDistributions(labeledY, totalSamples);
     }
 
     /// <summary>
@@ -468,90 +382,40 @@ public partial class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
     /// </remarks>
     private void PropagateLabels(Matrix<T> transitionMatrix, Matrix<T> fixedLabels)
     {
+        var engine = Engine;
         int n = _labelDistributions.Rows;
+        var transition = Tensor<T>.FromMatrix(transitionMatrix);
+        var fixedPart = Tensor<T>.FromMatrix(fixedLabels);
 
         for (int iter = 0; iter < _maxIterations; iter++)
         {
-            // Store previous distributions for convergence check
-            var prevDistributions = new Matrix<T>(n, NumClasses);
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < NumClasses; j++)
-                {
-                    prevDistributions[i, j] = _labelDistributions[i, j];
-                }
-            }
+            var previous = Tensor<T>.FromMatrix(_labelDistributions);
 
             // Propagate: new_dist = transition_matrix @ old_dist
-            var newDistributions = MultiplyMatrices(transitionMatrix, _labelDistributions);
+            var propagated = engine.TensorMatMul(transition, previous);
 
             // Clamp the labeled samples back to their original distributions
-            for (int i = 0; i < _numLabeled; i++)
+            if (_numLabeled >= n)
             {
-                for (int c = 0; c < NumClasses; c++)
-                {
-                    newDistributions[i, c] = fixedLabels[i, c];
-                }
+                // Every sample is labeled: nothing can change
+                _labelDistributions = fixedPart.ToMatrix();
+                break;
             }
 
-            _labelDistributions = newDistributions;
+            var unlabeledPart = propagated.Slice(0, _numLabeled, n);
+            var updated = _numLabeled == 0
+                ? propagated
+                : engine.TensorConcatenate(new[] { fixedPart, unlabeledPart }, 0);
+            _labelDistributions = updated.ToMatrix();
 
-            // Check convergence
-            T maxChange = NumOps.Zero;
-            for (int i = _numLabeled; i < n; i++)
-            {
-                for (int c = 0; c < NumClasses; c++)
-                {
-                    T change = NumOps.Abs(NumOps.Subtract(_labelDistributions[i, c], prevDistributions[i, c]));
-                    if (NumOps.Compare(change, maxChange) > 0)
-                    {
-                        maxChange = change;
-                    }
-                }
-            }
+            // Check convergence on the unlabeled rows
+            T maxChange = MaxAbsoluteChange(unlabeledPart, previous.Slice(0, _numLabeled, n));
 
             if (NumOps.Compare(maxChange, _tolerance) < 0)
             {
                 break;
             }
         }
-    }
-
-    /// <summary>
-    /// Multiplies two matrices.
-    /// </summary>
-    /// <param name="a">First matrix (m x n).</param>
-    /// <param name="b">Second matrix (n x p).</param>
-    /// <returns>Result matrix (m x p).</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Matrix multiplication combines two tables of numbers in a specific way.
-    /// Here, it's used to compute how label information flows through the graph - the transition
-    /// matrix says "how connected" samples are, and the label matrix says "what labels they have."
-    /// Multiplying them together tells us what new labels each sample should have after one step of propagation.
-    /// </para>
-    /// </remarks>
-    private Matrix<T> MultiplyMatrices(Matrix<T> a, Matrix<T> b)
-    {
-        int m = a.Rows;
-        int n = a.Columns;
-        int p = b.Columns;
-        var result = new Matrix<T>(m, p);
-
-        for (int i = 0; i < m; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                T sum = NumOps.Zero;
-                for (int k = 0; k < n; k++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(a[i, k], b[k, j]));
-                }
-                result[i, j] = sum;
-            }
-        }
-
-        return result;
     }
 
     /// <summary>
@@ -566,31 +430,7 @@ public partial class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
     /// </remarks>
     private void ExtractPseudoLabels()
     {
-        int numUnlabeled = _labelDistributions.Rows - _numLabeled;
-        if (numUnlabeled <= 0) return;
-
-        PseudoLabels = new Vector<T>(numUnlabeled);
-        PseudoLabelConfidences = new Vector<T>(numUnlabeled);
-
-        for (int i = 0; i < numUnlabeled; i++)
-        {
-            int sampleIndex = _numLabeled + i;
-            int bestClass = 0;
-            T bestProb = _labelDistributions[sampleIndex, 0];
-
-            for (int c = 1; c < NumClasses; c++)
-            {
-                if (NumOps.Compare(_labelDistributions[sampleIndex, c], bestProb) > 0)
-                {
-                    bestProb = _labelDistributions[sampleIndex, c];
-                    bestClass = c;
-                }
-            }
-
-            var labels = ClassLabels ?? throw new InvalidOperationException("ClassLabels must be set before extracting pseudo-labels.");
-            PseudoLabels[i] = labels[bestClass];
-            PseudoLabelConfidences[i] = bestProb;
-        }
+        SetPseudoLabelsFromDistributions(_labelDistributions, _numLabeled, "ClassLabels must be set before extracting pseudo-labels.");
     }
 
     #endregion
@@ -617,88 +457,14 @@ public partial class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
             throw new InvalidOperationException("Model must be trained before making predictions.");
         }
 
-        var predictions = new Vector<T>(input.Rows);
-
-        for (int i = 0; i < input.Rows; i++)
+        if (input.Rows == 0)
         {
-            var sample = input.GetRow(i);
-            predictions[i] = PredictSingle(sample);
+            return new Vector<T>(0);
         }
 
-        return predictions;
-    }
-
-    /// <summary>
-    /// Predicts the class label for a single sample.
-    /// </summary>
-    /// <param name="sample">The feature vector of the sample.</param>
-    /// <returns>The predicted class label.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> To predict a single sample, we:
-    /// 1. Compute how similar it is to each training sample
-    /// 2. Use those similarities as weights to average the training samples' label distributions
-    /// 3. Pick the class with the highest average probability
-    /// </para>
-    /// </remarks>
-    private T PredictSingle(Vector<T> sample)
-    {
-        // Compute similarities to all training samples
-        int n = _allFeatures.Rows;
-        var similarities = new Vector<T>(n);
-        T sumSim = NumOps.Zero;
-
-        for (int i = 0; i < n; i++)
-        {
-            var trainSample = _allFeatures.GetRow(i);
-            similarities[i] = _kernel.Calculate(sample, trainSample);
-            sumSim = NumOps.Add(sumSim, similarities[i]);
-        }
-
-        // Normalize similarities
-        if (NumOps.Compare(sumSim, NumOps.Zero) > 0)
-        {
-            for (int i = 0; i < n; i++)
-            {
-                similarities[i] = NumOps.Divide(similarities[i], sumSim);
-            }
-        }
-        else
-        {
-            // Fallback to uniform similarities when total similarity is zero
-            T uniform = NumOps.Divide(NumOps.One, NumOps.FromDouble(n));
-            for (int i = 0; i < n; i++)
-            {
-                similarities[i] = uniform;
-            }
-        }
-
-        // Compute weighted label distribution
-        var distribution = new Vector<T>(NumClasses);
-        for (int c = 0; c < NumClasses; c++)
-        {
-            T weightedSum = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                weightedSum = NumOps.Add(weightedSum,
-                    NumOps.Multiply(similarities[i], _labelDistributions[i, c]));
-            }
-            distribution[c] = weightedSum;
-        }
-
-        // Find best class
-        int bestClass = 0;
-        T bestProb = distribution[0];
-        for (int c = 1; c < NumClasses; c++)
-        {
-            if (NumOps.Compare(distribution[c], bestProb) > 0)
-            {
-                bestProb = distribution[c];
-                bestClass = c;
-            }
-        }
-
-        return ClassLabels is not null ? ClassLabels[bestClass] : NumOps.FromDouble(bestClass);
+        // Weighted label distribution from normalized similarities, then the best class per row
+        var distributions = PropagatedDistributions(_kernel, input, _allFeatures, _labelDistributions);
+        return ClassIndicesToLabels(ArgMaxRows(distributions));
     }
 
     /// <summary>
@@ -720,106 +486,12 @@ public partial class LabelPropagation<T> : SemiSupervisedClassifierBase<T>
             throw new InvalidOperationException("Model must be trained before making predictions.");
         }
 
-        var probabilities = new Matrix<T>(input.Rows, NumClasses);
-
-        for (int i = 0; i < input.Rows; i++)
-        {
-            var sample = input.GetRow(i);
-            var probs = PredictProbabilitiesSingle(sample);
-            for (int c = 0; c < NumClasses; c++)
-            {
-                probabilities[i, c] = probs[c];
-            }
-        }
-
-        return probabilities;
-    }
-
-    /// <summary>
-    /// Predicts class probabilities for a single sample.
-    /// </summary>
-    /// <param name="sample">The feature vector of the sample.</param>
-    /// <returns>A vector of class probabilities.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This computes a probability distribution over all classes
-    /// for one sample, using the similarity-weighted average of training samples' distributions.
-    /// </para>
-    /// </remarks>
-    private Vector<T> PredictProbabilitiesSingle(Vector<T> sample)
-    {
-        int n = _allFeatures.Rows;
-        var similarities = new Vector<T>(n);
-        T sumSim = NumOps.Zero;
-
-        for (int i = 0; i < n; i++)
-        {
-            var trainSample = _allFeatures.GetRow(i);
-            similarities[i] = _kernel.Calculate(sample, trainSample);
-            sumSim = NumOps.Add(sumSim, similarities[i]);
-        }
-
-        if (NumOps.Compare(sumSim, NumOps.Zero) > 0)
-        {
-            for (int i = 0; i < n; i++)
-            {
-                similarities[i] = NumOps.Divide(similarities[i], sumSim);
-            }
-        }
-        else
-        {
-            // Fallback to uniform similarities when total similarity is zero
-            T uniform = NumOps.Divide(NumOps.One, NumOps.FromDouble(n));
-            for (int i = 0; i < n; i++)
-            {
-                similarities[i] = uniform;
-            }
-        }
-
-        var distribution = new Vector<T>(NumClasses);
-        for (int c = 0; c < NumClasses; c++)
-        {
-            T weightedSum = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                weightedSum = NumOps.Add(weightedSum,
-                    NumOps.Multiply(similarities[i], _labelDistributions[i, c]));
-            }
-            distribution[c] = weightedSum;
-        }
-
-        return distribution;
+        return PropagatedDistributions(_kernel, input, _allFeatures, _labelDistributions);
     }
 
     #endregion
 
     #region Helper Methods
-
-    /// <summary>
-    /// Gets the index of a class label in the ClassLabels array.
-    /// </summary>
-    /// <param name="label">The class label to find.</param>
-    /// <returns>The zero-based index of the class.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Class labels might be any values (1, 2, 3 or "cat", "dog", "bird").
-    /// This method converts a label to its position in our internal list of classes, which
-    /// is needed for the one-hot encoding used in label distributions.
-    /// </para>
-    /// </remarks>
-    private int GetClassIndex(T label)
-    {
-        if (ClassLabels is null)
-            throw new InvalidOperationException("ClassLabels must be set before calling GetClassIndex.");
-        for (int i = 0; i < ClassLabels.Length; i++)
-        {
-            if (NumOps.Compare(ClassLabels[i], label) == 0)
-            {
-                return i;
-            }
-        }
-        throw new ArgumentException($"Unknown class label: {label}");
-    }
 
     /// <summary>
     /// Creates the default kernel (RBF/Gaussian).

@@ -149,20 +149,27 @@ public partial class RAkELClassifier<T> : MultiLabelClassifierBase<T>
         int numIterations = 100;
         double learningRate = 0.1;
 
+        var engine = Engine;
+        var augmented = AugmentWithBias(features);
+        var labelTensor = Tensor<T>.FromMatrix(labels);
+
         foreach (var labelset in _labelsets)
         {
             // Create label combinations for this labelset
             var combinationMap = new Dictionary<string, int>();
             var inverseCombinationMap = new Dictionary<int, int[]>();
+            var trueClasses = new int[numSamples];
 
-            // Extract labels for this labelset and create unique combinations
+            // Extract labels for this labelset (label value > 0.5) and create unique combinations
+            var bits = numSamples == 0 || labelset.Length == 0
+                ? Array.Empty<int>()
+                : ZeroOneToInt(engine.TensorGreaterThan(
+                    engine.TensorIndexSelect(labelTensor, new Tensor<int>(labelset, new[] { labelset.Length }), 1),
+                    NumOps.FromDouble(0.5))).ToArray();
             for (int i = 0; i < numSamples; i++)
             {
                 var combination = new int[labelset.Length];
-                for (int j = 0; j < labelset.Length; j++)
-                {
-                    combination[j] = NumOps.GreaterThan(labels[i, labelset[j]], NumOps.FromDouble(0.5)) ? 1 : 0;
-                }
+                Array.Copy(bits, i * labelset.Length, combination, 0, labelset.Length);
 
                 string key = string.Join(",", combination);
                 if (!combinationMap.ContainsKey(key))
@@ -171,6 +178,8 @@ public partial class RAkELClassifier<T> : MultiLabelClassifierBase<T>
                     combinationMap[key] = classIdx;
                     inverseCombinationMap[classIdx] = combination;
                 }
+
+                trueClasses[i] = combinationMap[key];
             }
 
             _labelCombinationMaps.Add(combinationMap);
@@ -178,65 +187,57 @@ public partial class RAkELClassifier<T> : MultiLabelClassifierBase<T>
 
             int numClasses = combinationMap.Count;
 
-            // Initialize weights for this labelset classifier
-            var weights = new Matrix<T>(NumFeatures + 1, numClasses); // +1 for bias
+            // Weights for this labelset classifier, kept transposed as [numClasses, NumFeatures + 1] (+1 for bias)
+            var weightsT = new Tensor<T>(new[] { numClasses, NumFeatures + 1 });
+            var targets = numSamples == 0 || numClasses == 0
+                ? new Tensor<T>(new[] { numSamples, numClasses })
+                : engine.TensorOneHot<T>(new Tensor<int>(trueClasses, new[] { numSamples }), numClasses);
+            T stepScale = NumOps.FromDouble(learningRate / numSamples);
 
-            // Train with softmax cross-entropy via gradient descent
-            for (int iter = 0; iter < numIterations; iter++)
+            // Train with softmax cross-entropy via per-sample gradient descent
+            for (int iter = 0; iter < numIterations && numClasses > 0; iter++)
             {
                 for (int i = 0; i < numSamples; i++)
                 {
-                    // Get the true class for this sample
-                    var combination = new int[labelset.Length];
-                    for (int j = 0; j < labelset.Length; j++)
-                    {
-                        combination[j] = NumOps.GreaterThan(labels[i, labelset[j]], NumOps.FromDouble(0.5)) ? 1 : 0;
-                    }
-                    string key = string.Join(",", combination);
-                    int trueClass = combinationMap[key];
-
-                    // Compute logits
-                    var logits = new double[numClasses];
-                    for (int c = 0; c < numClasses; c++)
-                    {
-                        logits[c] = NumOps.ToDouble(weights[NumFeatures, c]); // bias
-                        for (int f = 0; f < NumFeatures; f++)
-                        {
-                            logits[c] += NumOps.ToDouble(features[i, f]) * NumOps.ToDouble(weights[f, c]);
-                        }
-                    }
-
-                    // Softmax
-                    double maxLogit = logits.Max();
-                    var expLogits = logits.Select(l => Math.Exp(l - maxLogit)).ToArray();
-                    double sumExp = expLogits.Sum();
-                    var probs = expLogits.Select(e => e / sumExp).ToArray();
-
-                    // Gradient update (cross-entropy)
-                    for (int c = 0; c < numClasses; c++)
-                    {
-                        double target = c == trueClass ? 1.0 : 0.0;
-                        double gradient = (probs[c] - target) / numSamples;
-
-                        // Update bias
-                        weights[NumFeatures, c] = NumOps.Subtract(
-                            weights[NumFeatures, c],
-                            NumOps.FromDouble(learningRate * gradient));
-
-                        // Update feature weights
-                        for (int f = 0; f < NumFeatures; f++)
-                        {
-                            double featureGrad = gradient * NumOps.ToDouble(features[i, f]);
-                            weights[f, c] = NumOps.Subtract(
-                                weights[f, c],
-                                NumOps.FromDouble(learningRate * featureGrad));
-                        }
-                    }
+                    weightsT = SoftmaxStep(weightsT, augmented.Slice(0, i, i + 1), targets.Slice(0, i, i + 1), stepScale);
                 }
             }
 
-            _labelsetWeights.Add(weights);
+            _labelsetWeights.Add(engine.TensorTranspose(weightsT).ToMatrix());
         }
+    }
+
+    /// <summary>
+    /// [x | 1]: the first NumFeatures columns of <paramref name="x"/> followed by a bias column.
+    /// </summary>
+    private Tensor<T> AugmentWithBias(Matrix<T> x)
+    {
+        var features = Tensor<T>.FromMatrix(x);
+        if (x.Columns != NumFeatures)
+        {
+            features = features.Slice(1, 0, NumFeatures);
+        }
+
+        var ones = new Tensor<T>(new[] { x.Rows, 1 });
+        Engine.TensorFill(ones, NumOps.One);
+        return Engine.TensorConcatenate(new[] { features, ones }, 1);
+    }
+
+    /// <summary>
+    /// One cross-entropy gradient step on a single sample: W -= scale * (softmax(W x) - target) x^T.
+    /// </summary>
+    /// <param name="weightsT">The [classes, features + 1] weights.</param>
+    /// <param name="sample">The [1, features + 1] augmented sample.</param>
+    /// <param name="target">The [1, classes] one-hot target.</param>
+    /// <param name="scale">learningRate / numSamples.</param>
+    /// <returns>The updated weights.</returns>
+    private Tensor<T> SoftmaxStep(Tensor<T> weightsT, Tensor<T> sample, Tensor<T> target, T scale)
+    {
+        var engine = Engine;
+        var logits = engine.TensorMatMul(sample, engine.TensorTranspose(weightsT));
+        var residual = engine.TensorSubtract(engine.Softmax(logits, 1), target);
+        var update = engine.TensorMatMul(engine.TensorTranspose(residual), sample);
+        return engine.TensorSubtract(weightsT, engine.TensorMultiplyScalar(update, scale));
     }
 
     /// <summary>
@@ -263,8 +264,15 @@ public partial class RAkELClassifier<T> : MultiLabelClassifierBase<T>
     public override Matrix<T> PredictMultiLabelProbabilities(Matrix<T> input)
     {
         int numSamples = input.Rows;
-        var labelVotes = new double[numSamples, NumLabels];
         var labelCounts = new int[NumLabels];
+        if (numSamples == 0 || NumLabels == 0)
+        {
+            return new Matrix<T>(numSamples, NumLabels);
+        }
+
+        var engine = Engine;
+        var augmented = AugmentWithBias(input);
+        var labelVotes = new Tensor<T>(new[] { numSamples, NumLabels });
 
         // Accumulate votes from each labelset classifier
         for (int ls = 0; ls < _labelsets.Count; ls++)
@@ -278,51 +286,41 @@ public partial class RAkELClassifier<T> : MultiLabelClassifierBase<T>
             foreach (int labelIdx in labelset)
                 labelCounts[labelIdx]++;
 
-            for (int i = 0; i < numSamples; i++)
+            if (numClasses == 0 || labelset.Length == 0)
             {
-                // Compute logits for this labelset classifier
-                var logits = new double[numClasses];
-                for (int c = 0; c < numClasses; c++)
-                {
-                    logits[c] = NumOps.ToDouble(weights[NumFeatures, c]); // bias
-                    for (int f = 0; f < NumFeatures; f++)
-                    {
-                        logits[c] += NumOps.ToDouble(input[i, f]) * NumOps.ToDouble(weights[f, c]);
-                    }
-                }
-
-                // Softmax
-                double maxLogit = logits.Max();
-                var expLogits = logits.Select(l => Math.Exp(l - maxLogit)).ToArray();
-                double sumExp = expLogits.Sum();
-                var probs = expLogits.Select(e => e / sumExp).ToArray();
-
-                // Vote for each label based on class probabilities
-                for (int c = 0; c < numClasses; c++)
-                {
-                    var labelCombination = inverseLabelMap[c];
-                    for (int j = 0; j < labelset.Length; j++)
-                    {
-                        int labelIdx = labelset[j];
-                        // Weight vote by probability and label value
-                        labelVotes[i, labelIdx] += probs[c] * labelCombination[j];
-                    }
-                }
+                continue;
             }
+
+            // Class probabilities: softmax of [x | 1] W
+            var probs = engine.Softmax(engine.TensorMatMul(augmented, Tensor<T>.FromMatrix(weights)), 1);
+
+            // Vote for each label: probability-weighted label values of every class combination
+            var votes = engine.TensorMatMul(probs, CombinationMatrix(inverseLabelMap, numClasses, labelset.Length));
+            labelVotes = engine.TensorScatterAdd(labelVotes,
+                new Tensor<int>(labelset, new[] { labelset.Length }), votes, 1);
         }
 
-        // Normalize votes to get probabilities
-        var result = new Matrix<T>(numSamples, NumLabels);
-        for (int i = 0; i < numSamples; i++)
+        // Normalize votes to get probabilities (labels in no labelset stay 0), clamped to [0, 1]
+        var counts = engine.TensorGather(engine.TensorArange<T>(0, _labelsets.Count + 1),
+            new Tensor<int>(labelCounts, new[] { NumLabels }), 0);
+        var denominators = engine.TensorClampMin(counts, NumOps.One).Reshape(1, NumLabels);
+        var normalized = engine.TensorDivide(labelVotes, denominators);
+        return engine.TensorClamp(normalized, NumOps.Zero, NumOps.One).ToMatrix();
+    }
+
+    /// <summary>
+    /// The [classes, labelsetSize] 0/1 label values of every class combination.
+    /// </summary>
+    private Tensor<T> CombinationMatrix(Dictionary<int, int[]> inverseLabelMap, int numClasses, int labelsetSize)
+    {
+        var flags = new int[numClasses * labelsetSize];
+        for (int c = 0; c < numClasses; c++)
         {
-            for (int l = 0; l < NumLabels; l++)
-            {
-                double prob = labelCounts[l] > 0 ? labelVotes[i, l] / labelCounts[l] : 0;
-                result[i, l] = NumOps.FromDouble(Math.Max(0, Math.Min(1, prob)));
-            }
+            Array.Copy(inverseLabelMap[c], 0, flags, c * labelsetSize, labelsetSize);
         }
 
-        return result;
+        return Engine.TensorGather(Engine.TensorArange<T>(0, 2), new Tensor<int>(flags, new[] { flags.Length }), 0)
+            .Reshape(numClasses, labelsetSize);
     }
 
     /// <inheritdoc />
