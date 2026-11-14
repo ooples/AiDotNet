@@ -302,7 +302,13 @@ public partial class NTMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             "NTM.ControllerInputWidth",
             () => (_controller as INTMControllerLayout)?.ResolvedInputWidth ?? -1,
             RestoreInputWidth);
-        state.DeclareAfterParameterRestore("NTM.ResetEpisode", ResetMemoryState);
+        state.DeclareAfterParameterRestore("NTM.ResetEpisode", () =>
+        {
+            ResetMemoryState();
+            // The optimizer's moments belong to the parameters it was stepping, and are not saved: every restore
+            // path (Load, Deserialize, a clone) starts it fresh.
+            SetMetaModel(MetaModel);
+        });
     }
 
     /// <inheritdoc/>
@@ -310,7 +316,7 @@ public partial class NTMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     /// Writes the model checkpoint (<see cref="ModelBase{T, TInput, TOutput}.Serialize"/>), whose parameters are
     /// the controller's. It used to save only the supplied meta-model, which the NTM never trains, and so dropped
     /// the controller entirely (and threw when the meta-model could not serialize itself). Optimizer state is not
-    /// saved and is reset by <see cref="Load"/>.
+    /// saved and is reset whenever a checkpoint is restored.
     /// </remarks>
     public override void Save(string filePath)
     {
@@ -329,10 +335,8 @@ public partial class NTMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     public override void Load(string filePath)
     {
         Guard.NotNull(filePath);
+        // The after-restore hook resets the optimizer state.
         Deserialize(System.IO.File.ReadAllBytes(filePath));
-
-        // The optimizer's moments belong to the parameters it was stepping; SetMetaModel resets them.
-        SetMetaModel(MetaModel);
     }
 
     /// <summary>
@@ -1809,6 +1813,18 @@ internal static class NTMControllerMath<T>
         return result;
     }
 
+    /// <summary>
+    /// A head's weighting before its first step: all attention on slot 0. An all-zero previous weighting is not a
+    /// distribution, so the gate's (1 - g) w_prev term contributed nothing and every slot started symmetric.
+    /// </summary>
+    internal static Tensor<T> InitialWeights(int size)
+    {
+        var weights = new Tensor<T>(new[] { size });
+        if (size > 0)
+            weights[0] = NumOps.One;
+        return weights;
+    }
+
     /// <summary>The tensors' elements, concatenated in order.</summary>
     internal static Vector<T> FlattenParameters(IReadOnlyList<Tensor<T>> tensors)
     {
@@ -2513,7 +2529,7 @@ public class NTMReadHead<T>
     {
         Guard.NotNull(addressing);
         Guard.NotNull(memory);
-        var weights = memory.Address(addressing, PreviousWeights ?? new Tensor<T>(new int[] { memory.Size }));
+        var weights = memory.Address(addressing, PreviousWeights ?? NTMControllerMath<T>.InitialWeights(memory.Size));
         PreviousWeights = weights;
         return weights;
     }
@@ -2572,7 +2588,7 @@ public class NTMWriteHead<T>
     {
         Guard.NotNull(addressing);
         Guard.NotNull(memory);
-        var weights = memory.Address(addressing, PreviousWeights ?? new Tensor<T>(new int[] { memory.Size }));
+        var weights = memory.Address(addressing, PreviousWeights ?? NTMControllerMath<T>.InitialWeights(memory.Size));
         PreviousWeights = weights;
         return weights;
     }

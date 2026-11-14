@@ -93,7 +93,12 @@ public partial class iTAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         var meanAdapted = Engine.Divide(adaptedSum, NumOps.FromDouble(taskBatch.Tasks.Length));
         double eta = CurrentEta();
         ParamModel.SetParameters(baseParams);
-        ParamModel.SetParameters(ApplyOuterGradients(baseParams, Engine.Subtract(baseParams, meanAdapted), eta));
+        var stepped = ApplyOuterGradients(baseParams, Engine.Subtract(baseParams, meanAdapted), eta);
+        // Without a meta-optimizer eta is already the SGD step size. A meta-optimizer applies its own learning rate,
+        // so eta scales the displacement it produced: the paper's eta-weighted blend, at the optimizer's step.
+        if (MetaOptimizer is not null)
+            stepped = Engine.Add(baseParams, Engine.Multiply(Engine.Subtract(stepped, baseParams), NumOps.FromDouble(eta)));
+        ParamModel.SetParameters(stepped);
         _metaIteration++;
 
         return ComputeMean(losses);

@@ -96,15 +96,31 @@ public partial class UnsupervisedMetaLearnAlgorithm<T, TInput, TOutput> : MetaLe
         var pool = ConcatInputs(parts);
         var embeddings = Embed(pool);
 
-        foreach (var task in taskBatch.Tasks)
+        try
         {
-            var pseudo = BuildPseudoTask(pool, embeddings, task);
-            if (pseudo is null) continue;
+            foreach (var task in taskBatch.Tasks)
+            {
+                var pseudo = BuildPseudoTask(pool, embeddings, task);
+                if (pseudo is null) continue;
 
-            var adaptedParams = AdaptFrom(initParams, pseudo.Value.SupportX, pseudo.Value.SupportY);
-            ParamModel.SetParameters(adaptedParams);
-            losses.Add(ComputeLossFromOutput(MetaModel.Predict(pseudo.Value.QueryX), pseudo.Value.QueryY));
-            metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, pseudo.Value.QueryX, pseudo.Value.QueryY)));
+                var adaptedParams = AdaptFrom(initParams, pseudo.Value.SupportX, pseudo.Value.SupportY);
+                ParamModel.SetParameters(adaptedParams);
+                losses.Add(ComputeLossFromOutput(MetaModel.Predict(pseudo.Value.QueryX), pseudo.Value.QueryY));
+                metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, pseudo.Value.QueryX, pseudo.Value.QueryY)));
+            }
+        }
+        finally
+        {
+            ParamModel.SetParameters(initParams);
+        }
+
+        // A batch whose every partition was too small trains nothing; that is reported rather than returned as a
+        // zero loss that looks like a converged step.
+        if (metaGradients.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "No pseudo-task could be built from this batch: the k-means partition never produced enough clusters " +
+                "with NumShots + NumQueryPerClass members. Use larger tasks or fewer clusters (NumClusters).");
         }
 
         ApplyOuterUpdate(initParams, metaGradients, _algoOptions.OuterLearningRate);
@@ -115,8 +131,16 @@ public partial class UnsupervisedMetaLearnAlgorithm<T, TInput, TOutput> : MetaLe
     {
         if (task == null) throw new ArgumentNullException(nameof(task));
         var initParams = ParamModel.GetParameters();
-        var adaptedParams = AdaptFrom(initParams, task.SupportInput, task.SupportOutput);
-        ParamModel.SetParameters(initParams);
+        Vector<T> adaptedParams;
+        try
+        {
+            adaptedParams = AdaptFrom(initParams, task.SupportInput, task.SupportOutput);
+        }
+        finally
+        {
+            ParamModel.SetParameters(initParams);
+        }
+
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
@@ -156,8 +180,10 @@ public partial class UnsupervisedMetaLearnAlgorithm<T, TInput, TOutput> : MetaLe
 
         var eligible = new List<int>();
         for (int c = 0; c < k; c++) if (members[c].Count >= perCluster) eligible.Add(c);
-        int ways = Math.Min(Math.Max(2, slot.NumWays), eligible.Count);
-        if (ways < 2) return null;
+        // The slot's way count is what the pseudo-task must have; a partition with fewer large clusters is rejected
+        // rather than silently shrunk to a smaller task.
+        int ways = Math.Max(2, slot.NumWays);
+        if (eligible.Count < ways) return null;
 
         Shuffle(eligible);
         var supportIdx = new int[ways * shots];

@@ -115,9 +115,13 @@ public class CACTUsPaperTests
             NumWays = 2, NumShots = 1, NumQueryPerClass = 2,
         };
 
+        var before = model.GetParameters().Clone();
         double loss = algorithm.MetaTrain(new TaskBatch<double, Matrix<double>, Vector<double>>(new[] { task }));
 
         Assert.False(double.IsNaN(loss) || double.IsInfinity(loss));
+        // A pseudo-task was trained, not skipped: the outer update moved the initialization.
+        var after = model.GetParameters();
+        Assert.Contains(Enumerable.Range(0, after.Length), i => after[i] != before[i]);
     }
 
     [Fact]

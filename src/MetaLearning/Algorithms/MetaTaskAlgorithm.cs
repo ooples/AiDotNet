@@ -76,19 +76,28 @@ public partial class MetaTaskAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
         var metaGradients = new List<Vector<T>>();
         var initParams = ParamModel.GetParameters();
 
-        foreach (var task in taskBatch.Tasks)
+        try
         {
-            var adaptedParams = Adapted(initParams, task);
+            foreach (var task in taskBatch.Tasks)
+            {
+                var adaptedParams = Adapted(initParams, task);
 
-            // Eq. 4-5: Z virtual examples mixed from random pairs, one λ ~ Beta(α̌, α̌) per episode.
-            var (first, second) = DrawPairs(task);
-            double lambda = SampleBeta(_algoOptions.InterpolationAlpha, _algoOptions.InterpolationAlpha);
-            var (mixedX, mixedY) = BuildMixedSet(task, first, second, lambda);
+                // Eq. 4-5: Z virtual examples mixed from random pairs, one λ ~ Beta(α̌, α̌) per episode.
+                var (first, second) = DrawPairs(task);
+                double lambda = SampleBeta(_algoOptions.InterpolationAlpha, _algoOptions.InterpolationAlpha);
+                var (mixedX, mixedY) = BuildMixedSet(task, first, second, lambda);
 
-            // Eq. 6-7: the mixed set replaces the query set in the outer objective.
-            ParamModel.SetParameters(adaptedParams);
-            mixedLosses.Add(ComputeLossFromOutput(MetaModel.Predict(mixedX), mixedY));
-            metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, mixedX, mixedY)));
+                // Eq. 6-7: the mixed set replaces the query set in the outer objective.
+                ParamModel.SetParameters(adaptedParams);
+                mixedLosses.Add(ComputeLossFromOutput(MetaModel.Predict(mixedX), mixedY));
+                metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, mixedX, mixedY)));
+            }
+        }
+        finally
+        {
+            // A failed episode (DrawPairs on an empty set, a throwing loss) must not leave task-adapted weights in;
+            // on success ApplyOuterUpdate starts from initParams too.
+            ParamModel.SetParameters(initParams);
         }
 
         ApplyOuterUpdate(initParams, metaGradients, _algoOptions.OuterLearningRate);
@@ -119,14 +128,21 @@ public partial class MetaTaskAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
     }
 
     /// <summary>
+    /// The number of examples in <paramref name="input"/>: a vector holds one scalar example per element (the
+    /// batch-size helper reads a vector as one example), a matrix or tensor one per row.
+    /// </summary>
+    private static int ExampleCount(TInput input)
+        => input is Vector<T> vector ? vector.Length : InputHelper<T, TInput>.GetBatchSize(input);
+
+    /// <summary>
     /// Algorithm 1, line 9: Z random example pairs. The first index is into the query set (or the support
     /// set under <see cref="MetaMixSource.SupportAndQuery"/>), the second into the query set.
     /// </summary>
     private (int[] First, int[] Second) DrawPairs(IMetaLearningTask<T, TInput, TOutput> task)
     {
-        int queryCount = InputHelper<T, TInput>.GetBatchSize(task.QueryInput);
+        int queryCount = ExampleCount(task.QueryInput);
         int firstCount = _algoOptions.MixSource == MetaMixSource.SupportAndQuery
-            ? InputHelper<T, TInput>.GetBatchSize(task.SupportInput)
+            ? ExampleCount(task.SupportInput)
             : queryCount;
         if (queryCount <= 0 || firstCount <= 0)
         {

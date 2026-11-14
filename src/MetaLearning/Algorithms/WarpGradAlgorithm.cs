@@ -265,21 +265,27 @@ public partial class WarpGradAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
 
         var initParams = ParamModel.GetParameters();
 
-        foreach (var task in taskBatch.Tasks)
+        try
         {
-            // Inner loop with warped gradients; the warp meta-gradient is accumulated along the trajectory.
-            var trajectory = WarpedTrajectory(task, initParams);
+            foreach (var task in taskBatch.Tasks)
+            {
+                // Inner loop with warped gradients; the warp meta-gradient is accumulated along the trajectory.
+                var trajectory = WarpedTrajectory(task, initParams);
 
-            // Evaluate on query set (the model holds the adapted parameters)
-            losses.Add(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
+                // Evaluate on query set (the model holds the adapted parameters)
+                losses.Add(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
 
-            // First-order meta-gradient for the initialization: the query gradient at the adapted parameters
-            metaGradients.Add(ClipGradients(trajectory.QueryGradient));
-            warpGradientsList.Add(trajectory.WarpGradients);
+                // First-order meta-gradient for the initialization: the query gradient at the adapted parameters
+                metaGradients.Add(ClipGradients(trajectory.QueryGradient));
+                warpGradientsList.Add(trajectory.WarpGradients);
+            }
         }
-
-        // Restore original params before applying outer update
-        ParamModel.SetParameters(initParams);
+        finally
+        {
+            // Restore the original parameters before the outer update, and on failure, so task-adapted weights
+            // never stay installed.
+            ParamModel.SetParameters(initParams);
+        }
 
         // Average and apply meta-gradients to initialization
         if (metaGradients.Count > 0)
