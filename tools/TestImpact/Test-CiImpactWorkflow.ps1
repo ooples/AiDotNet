@@ -17,6 +17,7 @@
 param(
     [string] $ValidationWorkflow = '.github/workflows/sonarcloud.yml',
     [string] $MapWorkflow = '.github/workflows/test-impact-map.yml',
+    [string] $CodeQlWorkflow = '.github/workflows/codeql.yml',
     [string] $Selector = 'tools/TestImpact/Select-Shards.ps1',
     [string] $CertifiedMapResolver = 'tools/TestImpact/Resolve-CertifiedShardMap.ps1',
     [string] $RequiredArtifactReceiver = 'tools/TestImpact/Receive-RequiredArtifact.ps1',
@@ -176,6 +177,7 @@ function Test-MapSelectorPullRequestScope {
 
 $validation = Get-Content -LiteralPath $ValidationWorkflow -Raw
 $map = Get-Content -LiteralPath $MapWorkflow -Raw
+$codeql = Get-Content -LiteralPath $CodeQlWorkflow -Raw
 $selectorText = Get-Content -LiteralPath $Selector -Raw
 $certifiedMapResolverText = Get-Content -LiteralPath $CertifiedMapResolver -Raw
 $requiredArtifactReceiverText = Get-Content -LiteralPath $RequiredArtifactReceiver -Raw
@@ -197,7 +199,7 @@ $validationJobs = @(
     'paper-fidelity-plan',
     'paper-fidelity'
 )
-$qualityJobs = @('codeql', 'sonarcloud')
+$qualityJobs = @('sonarcloud')
 $expensiveJobs = @($validationJobs) + @($qualityJobs)
 
 foreach ($job in $expensiveJobs) {
@@ -224,20 +226,45 @@ foreach ($job in $expensiveJobs) {
     }
 }
 
-# The active repository ruleset requires a CodeQL result for the candidate commit, even when no
-# runtime files changed. Keep it as one mandatory job while suppressing every model/test matrix.
-$codeqlJob = Get-JobBlock -WorkflowText $validation -Job 'codeql'
-$codeqlHeader = Get-JobHeader -JobBlock $codeqlJob
-Assert-Contract (-not $codeqlHeader.Contains(
-        'fromJSON(needs.select-shards.outputs.requires_validation')) `
-    'CodeQL can be skipped even though the Main ruleset requires its result'
-Assert-Contract ($codeqlHeader.Contains('always()') -and $codeqlHeader.Contains('!cancelled()')) `
-    'CodeQL cannot publish its required result after a selector failure'
+# CodeQL runs after merge, never on a pull request (owner decision, 2026-11-14): the traced analysis held
+# every non-draft pull request for 80-95 minutes whatever it changed. Both analyses live in their own
+# workflow, so nothing in the validation workflow may run CodeQL or wait for it.
+Assert-Contract (-not [Regex]::IsMatch($validation, '(?m)^  codeql(-traced)?:\s*\r?$')) `
+    'the validation workflow still defines a CodeQL job, so pull requests wait for it again'
+Assert-Contract (-not $validation.Contains('github/codeql-action/')) `
+    'the validation workflow still runs a CodeQL action'
+Assert-Contract (-not [Regex]::IsMatch($validation, '(?m)^      - codeql(-traced)?\s*\r?$') -and
+    -not $validation.Contains('needs.codeql')) `
+    'a validation job still waits for a CodeQL job that no longer exists in that workflow'
+
+# The trigger policy is checked on the parsed workflow, so a quoted key ('pull_request':) or a flow mapping
+# cannot slip a pull-request trigger past a spelling-sensitive match.
+$codeqlJson = $codeql | & yq -o=json -I=0 '.' '-'
+Assert-Contract ($LASTEXITCODE -eq 0) 'the CodeQL workflow is not valid YAML'
+$codeqlOn = ($codeqlJson | ConvertFrom-Json -AsHashtable)['on']
+Assert-Contract ($codeqlOn -is [System.Collections.IDictionary]) 'the CodeQL workflow has no trigger mapping'
+$codeqlEvents = @($codeqlOn.Keys | ForEach-Object { [string] $_ })
+foreach ($forbiddenTrigger in 'pull_request', 'pull_request_target', 'merge_group') {
+    Assert-Contract ($codeqlEvents -cnotcontains $forbiddenTrigger) "CodeQL runs on $forbiddenTrigger again"
+}
+foreach ($requiredTrigger in 'push', 'schedule', 'workflow_dispatch') {
+    Assert-Contract ($codeqlEvents -ccontains $requiredTrigger) "the CodeQL workflow lost its $requiredTrigger trigger"
+}
+$codeqlPush = $codeqlOn['push']
+$codeqlPushBranches = if ($codeqlPush -is [System.Collections.IDictionary]) { @($codeqlPush['branches']) } else { @() }
+Assert-Contract ($codeqlPushBranches -ccontains 'master') 'CodeQL does not run on pushes to master'
+# A master scan that has started must finish: the validation workflow's master runs are cancelled by the
+# next push, which is why the scan does not live there.
+$codeqlConcurrency = [Regex]::Match($codeql, '(?ms)^concurrency:\s*\r?\n(?<body>(?:  [^\r\n]*\r?\n)+)').Groups['body'].Value
+Assert-Contract ($codeqlConcurrency.Contains('group: codeql-') -and
+    [Regex]::IsMatch($codeqlConcurrency, '(?m)^  cancel-in-progress: false\s*\r?$')) `
+    'a newer push can cancel a running CodeQL scan of master'
 
 # The traced analysis runs in its own job. It analyzes only what its build compiles: a project dropped from
 # the build step silently disappears from code scanning instead of failing, which is how the Serving API and
 # the playground functions went unanalyzed. Every build must also be restored first (--no-restore).
-$tracedJob = Get-JobBlock -WorkflowText $validation -Job 'codeql-traced'
+$codeqlJob = Get-JobBlock -WorkflowText $codeql -Job 'codeql'
+$tracedJob = Get-JobBlock -WorkflowText $codeql -Job 'codeql-traced'
 $codeqlBuild = Get-StepBlock -JobBlock $tracedJob -Step 'Build for CodeQL (net10.0)'
 $codeqlRestore = Get-StepBlock -JobBlock $tracedJob -Step 'Restore dependencies'
 Assert-Contract ([bool] $codeqlBuild) 'the traced CodeQL job has no build step'
@@ -253,35 +280,27 @@ foreach ($codeqlProject in @(
         "CodeQL builds '$projectPath' with --no-restore but never restores it"
 }
 
-# THE REQUIRED RESULT AND ITS BASELINE ARE PRODUCED THE SAME WAY. Build-less and traced extraction do not
-# report the same alerts on the same code (380 error-level alerts existed only in build-less results), so a
-# pull request compared build-less against a traced master baseline was blamed for alerts in lines it never
-# touched (#2136). The codeql job is build-less on every event under the standard category; the traced
-# analysis runs only off pull requests, under its own category, so it can never be that baseline, and a
-# pull request never pays for a traced build.
-$codeqlPrInit = Get-StepBlock -JobBlock $codeqlJob -Step 'Initialize CodeQL (build-less, pull requests)'
+# Build-less and traced extraction do not report the same alerts on the same code (380 error-level alerts
+# existed only in build-less results, #2136), so each analysis keeps the category it has always uploaded
+# under: alert history on master continues, and neither can replace the other's results.
 $codeqlFullInit = Get-StepBlock -JobBlock $codeqlJob -Step 'Initialize CodeQL (build-less, whole library)'
 $codeqlAnalyze = Get-StepBlock -JobBlock $codeqlJob -Step 'Perform CodeQL Analysis'
-Assert-Contract ($codeqlPrInit.Contains("if: github.event_name == 'pull_request'") -and $codeqlPrInit.Contains('build-mode: none')) `
-    'pull-request CodeQL is not build-less'
-Assert-Contract ($codeqlFullInit.Contains("if: github.event_name != 'pull_request'") -and $codeqlFullInit.Contains('build-mode: none')) `
-    'the master/nightly CodeQL baseline is not build-less, so pull requests are compared with a different extractor'
+Assert-Contract ($codeqlFullInit.Contains('build-mode: none') -and -not $codeqlFullInit.Contains('      if:')) `
+    'the build-less CodeQL analysis is not build-less on every event'
 Assert-Contract ($codeqlAnalyze.Contains('category: "/language:csharp"')) `
-    'the required CodeQL result is not uploaded under the standard category'
+    'the build-less CodeQL result is not uploaded under the standard category'
 Assert-Contract (-not $codeqlJob.Contains('build-mode: manual') -and -not $codeqlJob.Contains('dotnet build ')) `
-    'the required CodeQL job traces a build'
-$tracedHeader = Get-JobHeader -JobBlock $tracedJob
+    'the build-less CodeQL job traces a build'
 $tracedInit = Get-StepBlock -JobBlock $tracedJob -Step 'Initialize CodeQL (traced build)'
 $tracedAnalyze = Get-StepBlock -JobBlock $tracedJob -Step 'Perform CodeQL Analysis'
 Assert-Contract ($tracedInit.Contains('build-mode: manual')) 'master/nightly CodeQL lost its traced analysis'
-Assert-Contract (-not $tracedHeader.Contains("github.event_name != 'pull_request'")) `
-    'the required traced CodeQL category is skipped on pull requests'
 Assert-Contract ($tracedAnalyze.Contains('category: "/language:csharp-traced"')) `
-    'the traced CodeQL analysis shares the build-less baseline category'
-Assert-Contract (Test-JobDependency -JobHeader $tracedHeader -Dependency 'validation-source') `
-    'the traced CodeQL job does not depend on validation-source'
-Assert-Contract ($tracedHeader.Contains('fromJSON(needs.validation-source.outputs.execute_quality)')) `
-    'the traced CodeQL job ignores the reuse decision'
+    'the traced CodeQL analysis shares the build-less category'
+foreach ($init in $codeqlFullInit, $tracedInit) {
+    Assert-Contract ($init.Contains('config-file: ./.github/codeql/codeql-config.yml') -and
+        $init.Contains('queries: security-and-quality') -and $init.Contains('languages: csharp')) `
+        'a CodeQL analysis no longer uses the shared config, query suite and language'
+}
 
 # Every Sonar step parses this value with fromJSON. It must therefore be defined on the Sonar job,
 # not on a neighboring job where it is invisible and becomes a null template value at runtime.
@@ -1038,8 +1057,9 @@ Assert-Contract ($ciGatePolicyText.Contains('enum CiValidationReuseScope')) `
     'CI Gate reuse control flow is represented by strings instead of a closed enum'
 Assert-Contract ($ciGatePolicyText.Contains('([CiValidationReuseScope]::Validation)')) `
     'CI Gate has no validation-only reuse mode'
-Assert-Contract ($ciGatePolicyText.Contains("Add-RequiredSuccess `$requirements 'codeql' `$codeql")) `
-    'validation-only reuse does not rerun CodeQL'
+Assert-Contract (-not $ciGatePolicyText.Contains("Add-RequiredSuccess `$requirements 'codeql'") -and
+    -not $ciGatePolicyText.Contains('CodeQLResult')) `
+    'CI Gate requires CodeQL, which no longer runs in the workflow it judges'
 # SonarCloud is advisory: the gate reports it but must never require it, or its unfinished
 # analysis blocks every merge again.
 Assert-Contract (-not $ciGatePolicyText.Contains("Add-RequiredSuccess `$requirements 'sonarcloud'")) `
