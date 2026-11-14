@@ -97,8 +97,18 @@ public abstract partial class ReferringSegmentationBase<T> : SegmentationModelBa
         : base(architecture, onnxModelPath, RequireOptions(options).NumClasses)
     {
         _maxTextLength = maxTextLength;
-        _textEncoder = textEncoder ?? throw new ArgumentNullException(nameof(textEncoder));
-        (_logitScale, _maskThreshold, _vocabularyEmbeddings) = PrepareVocabulary(textEncoder, options);
+        try
+        {
+            _textEncoder = textEncoder ?? throw new ArgumentNullException(nameof(textEncoder));
+            (_logitScale, _maskThreshold, _vocabularyEmbeddings) = PrepareVocabulary(textEncoder, options);
+        }
+        catch
+        {
+            // The base already opened the ONNX session; a failed constructor leaves the caller nothing to dispose.
+            _onnxSession?.Dispose();
+            _onnxSession = null;
+            throw;
+        }
     }
 
     private static ReferringSegmentationOptions RequireOptions(ReferringSegmentationOptions options)
@@ -110,8 +120,7 @@ public abstract partial class ReferringSegmentationBase<T> : SegmentationModelBa
         if (textEncoder is null) throw new ArgumentNullException(nameof(textEncoder));
         options.ValidateTextQuerySettings();
         options.ValidateMaskThreshold();
-        var numOps = MathHelper.GetNumericOperations<T>();
-        return (numOps.FromDouble(1.0 / options.Temperature),
+        return (TextEmbeddingClassifier.LogitScale<T>(options.Temperature),
             options.MaskThreshold,
             TextEmbeddingClassifier.EncodeNormalized(textEncoder, options.ResolveClassNames()));
     }
@@ -123,6 +132,23 @@ public abstract partial class ReferringSegmentationBase<T> : SegmentationModelBa
     /// </summary>
     protected Tensor<T> ClassifyPixels(Tensor<T> pixelEmbeddings)
         => TextEmbeddingClassifier.Classify(pixelEmbeddings, _queryEmbeddings ?? _vocabularyEmbeddings, _logitScale);
+
+    /// <summary>
+    /// The training forward: the base layer walk (seed wiring, checkpointing and weight streaming included)
+    /// followed by <see cref="ClassifyPixels"/>, so training fits the same per-name logits that Predict returns
+    /// rather than the pixel embeddings the layers end with.
+    /// </summary>
+    /// <remarks>
+    /// Overriding this keeps the public input unchanged before the forward, which these models already do:
+    /// they override PredictCore, so the base would skip the public-input preparation either way.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => ClassifyPixels(base.ForwardForTraining(input));
+
+    /// <summary>
+    /// The GPU-resident forward: the base layer walk followed by <see cref="ClassifyPixels"/>, the same output
+    /// as Forward and Predict instead of the decoder's pixel embeddings.
+    /// </summary>
+    public override Tensor<T> ForwardGpu(Tensor<T> input) => ClassifyPixels(base.ForwardGpu(input));
 
     /// <inheritdoc/>
     /// <remarks>

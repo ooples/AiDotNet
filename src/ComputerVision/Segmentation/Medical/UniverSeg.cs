@@ -209,6 +209,8 @@ public partial class UniverSeg<T> : Common.MedicalSegmentationBase<T>
         if (supportImages.Rank != 4)
             throw new ArgumentException("Support images must be [S, C, H, W] or [C, H, W].", nameof(images));
         int s = supportImages.Shape[0], h = supportImages.Shape[2], w = supportImages.Shape[3];
+        if (s < 1)
+            throw new ArgumentException("UniverSeg needs at least one support image.", nameof(images));
         Tensor<T> supportLabels = labels.Rank switch
         {
             2 => Engine.Reshape(labels, new[] { 1, 1, labels.Shape[0], labels.Shape[1] }),
@@ -444,9 +446,15 @@ public partial class UniverSeg<T> : Common.MedicalSegmentationBase<T>
 
     #region IMedicalSegmentation Implementation
     /// <summary>Segments a single 2D medical slice against the current support set.</summary>
+    /// <remarks>
+    /// With one output channel (the default <see cref="UniverSegOptions"/> NumClasses of 1) the channel is the
+    /// foreground logit, read through a sigmoid as in the few-shot path; a softmax over one channel would be 1
+    /// everywhere and label every pixel as class 0.
+    /// </remarks>
     public override MedicalSegmentationResult<T> SegmentSlice(Tensor<T> slice)
     {
         var output = Common.SegmentationTensorOps.EnsureUnbatched(Predict(slice));
+        if (output.Shape[0] == 1) return ForegroundResult(output, "Foreground");
         var probs = Engine.TensorSoftmax(output, 0);
         var labels = Engine.TensorArgMax(output, 0).Cast<T>();
         var structures = Common.SegmentationStructureStatistics.Summarize(labels, probs);
@@ -481,6 +489,16 @@ public partial class UniverSeg<T> : Common.MedicalSegmentationBase<T>
             _supportLabels = previousLabels;
         }
 
+        return ForegroundResult(logits, "FewShot_Target");
+    }
+
+    /// <summary>
+    /// The binary result of a foreground logit in the first channel of <paramref name="logits"/> <c>[C, H, W]</c>:
+    /// labels <c>[H, W]</c> (1 where the sigmoid is at least 0.5), probabilities <c>[2, H, W]</c> (background,
+    /// foreground) and the foreground structure named <paramref name="structureName"/>.
+    /// </summary>
+    private MedicalSegmentationResult<T> ForegroundResult(Tensor<T> logits, string structureName)
+    {
         int h = logits.Shape[1], w = logits.Shape[2];
         var foreground = Engine.TensorSigmoid(Engine.TensorSlice(logits, new[] { 0, 0, 0 }, new[] { 1, h, w }));
         var mask = Engine.TensorGreaterEqual(foreground, Tensor<T>.CreateDefault(new[] { 1, h, w }, NumOps.FromDouble(0.5)));
@@ -493,7 +511,7 @@ public partial class UniverSeg<T> : Common.MedicalSegmentationBase<T>
             double confidence = Common.MaskClassificationOps.MeanOverMask(
                 Engine.Reshape(foreground, new[] { 1, h * w }), Engine.Reshape(mask, new[] { 1, h * w }),
                 new Tensor<int>(new[] { area }, new[] { 1 })).Cast<double>().ToArray()[0];
-            structures.Add(new SegmentedStructure { ClassId = 1, Name = "FewShot_Target", VolumeOrArea = area, MeanConfidence = confidence });
+            structures.Add(new SegmentedStructure { ClassId = 1, Name = structureName, VolumeOrArea = area, MeanConfidence = confidence });
         }
 
         return new MedicalSegmentationResult<T>

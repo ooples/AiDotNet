@@ -491,7 +491,11 @@ public partial class ODISE<T> : Common.PanopticSegmentationBase<T>
             || voidSimilarity.Shape[2] != 1)
             throw new InvalidOperationException(
                 $"The ONNX outputs must be [B, {_numQueries}, H, W] mask logits, [B, {_numQueries}, {_embeddingDim}] class embeddings and [B, {_numQueries}, 1] void similarities.");
-        int b = masks.Shape[0], h = masks.Shape[2], w = masks.Shape[3];
+        // A graph may emit the masks at a stride (Mask2Former's are stride 4), but OutputAxesFor declares stride 1, so the
+        // logits are resized to the input resolution.
+        int b = masks.Shape[0], h = batched.Shape[2], w = batched.Shape[3];
+        if (masks.Shape[2] != h || masks.Shape[3] != w)
+            masks = Engine.Interpolate(masks, new[] { h, w }, InterpolateMode.Bilinear, false);
         return new Common.Mask2FormerPrediction<T>(
             Engine.Reshape(masks, new[] { b, _numQueries, h * w }), embeddings, voidSimilarity, h, w);
     }
@@ -588,16 +592,17 @@ public partial class ODISE<T> : Common.PanopticSegmentationBase<T>
         var clipLogits = Engine.TensorMultiplyScalar(
             Engine.TensorMatMul(ClipQueryEmbeddings(image, maskLogits, prediction.Height, prediction.Width), Engine.TensorTranspose(text)),
             NumOps.FromDouble(ClipLogitScale));
-        var diffusionProbability = Engine.TensorSoftmax(diffusionLogits, 2);
-        var clipProbability = Engine.TensorSoftmax(clipLogits, 2);
         var voidProbability = Engine.TensorSlice(withVoid, new[] { 0, 0, k }, new[] { b, _numQueries, 1 });
 
         var shape = new[] { b, _numQueries, k };
         var clipExponent = Engine.TensorBroadcastTo(Engine.Reshape(clipWeights, new[] { 1, 1, k }), shape);
-        var fused = Engine.TensorMultiply(
-            Engine.TensorPower(diffusionProbability, Engine.ScalarMinusTensor(NumOps.One, clipExponent)),
-            Engine.TensorPower(clipProbability, clipExponent));
-        var normalized = Engine.TensorDivide(fused, Engine.TensorBroadcastTo(Engine.ReduceSum(fused, new[] { 2 }, true), shape));
+        // The geometric fusion p_d^(1-w) p_c^w, normalized over the names, formed in log space: two softmaxes that put
+        // their mass on different names can each underflow to 0 elsewhere, making every product 0 and the
+        // normalization 0 / 0. softmax((1-w) log p_d + w log p_c) is the same distribution and stays finite.
+        var logFused = Engine.TensorAdd(
+            Engine.TensorMultiply(Engine.TensorLogSoftmax(diffusionLogits, 2), Engine.ScalarMinusTensor(NumOps.One, clipExponent)),
+            Engine.TensorMultiply(Engine.TensorLogSoftmax(clipLogits, 2), clipExponent));
+        var normalized = Engine.TensorSoftmax(logFused, 2);
         var classProbabilities = Engine.TensorConcatenate(new[]
         {
             Engine.TensorMultiply(normalized, Engine.TensorBroadcastTo(Engine.ScalarMinusTensor(NumOps.One, voidProbability), shape)),

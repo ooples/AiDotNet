@@ -38,12 +38,24 @@ public class UniverSegOptions : SegmentationModelOptions
     /// Gets or sets the width of each encoder CrossBlock, one per resolution level. Default: 64 at four levels
     /// (Butoi et al. 2023).
     /// </summary>
+    /// <value>Positive channel counts, at least one entry. The default is [64, 64, 64, 64].</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Each number is how many feature channels one encoder level learns, from the finest
+    /// resolution to the coarsest. More levels see more context but cost more memory. DecoderFeatures must have exactly
+    /// one entry fewer, or the constructor throws ArgumentException. (Butoi et al. 2023, UniverSeg.)</para>
+    /// </remarks>
     public int[] EncoderFeatures { get; set; } = [64, 64, 64, 64];
 
     /// <summary>
     /// Gets or sets the width of each decoder CrossBlock; one fewer than the encoder levels. Default: 64 at three
     /// levels (Butoi et al. 2023).
     /// </summary>
+    /// <value>Positive channel counts, exactly one fewer than EncoderFeatures. The default is [64, 64, 64].</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Each number is the width of one decoder level as the prediction is upsampled back to
+    /// full resolution. The constructor throws ArgumentException if the count is not one less than
+    /// EncoderFeatures.</para>
+    /// </remarks>
     public int[] DecoderFeatures { get; set; } = [64, 64, 64];
 
     /// <summary>

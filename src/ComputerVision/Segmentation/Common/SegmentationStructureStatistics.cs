@@ -38,17 +38,17 @@ internal static class SegmentationStructureStatistics
         // Pixel/voxel count of every class, and the probability each pixel/voxel gave its own class summed per class.
         var counts = engine.TensorBinCount(classIndex, numClasses);
         int[] areas = counts.ToArray();
+        // Summed and divided in double: in T = Half a class covering 512x512 pixels has an area (and, at probability
+        // 1, a confidence sum) of 262144, past Half's range, so the mean would be NaN instead of 1.
         var probabilityByPixel = engine.TensorPermute(
-            engine.Reshape(probabilities, new[] { numClasses, spatial }), new[] { 1, 0 });
-        var assignedProbability = engine.TensorGatherClassValues(probabilityByPixel, classIds);
+            engine.Reshape(probabilities.Cast<double>(), new[] { numClasses, spatial }), new[] { 1, 0 });
+        var assignedProbability = engine.TensorGatherClassValues(probabilityByPixel, classIds.Cast<double>());
         var confidenceSums = engine.TensorScatterAdd(
-            new Tensor<T>(new[] { numClasses }), classIndex, assignedProbability, 0);
-        var meanConfidence = engine.TensorDivide(
-            confidenceSums,
-            engine.TensorClampMin(counts.Cast<T>(), MathHelper.GetNumericOperations<T>().One));
+            new Tensor<double>(new[] { numClasses }), classIndex, assignedProbability, 0);
+        var meanConfidence = engine.TensorDivide(confidenceSums, engine.TensorClampMin(counts.Cast<double>(), 1.0));
 
         // SegmentedStructure reports its statistics as double (shared by every medical model).
-        double[] meanConfidenceValues = meanConfidence.Cast<double>().ToArray();
+        double[] meanConfidenceValues = meanConfidence.ToArray();
 
         IEnumerable<int> classOrder = Enumerable.Range(0, numClasses);
         if (firstOccurrenceOrder)
