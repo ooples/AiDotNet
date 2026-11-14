@@ -340,8 +340,9 @@ internal sealed class FusedTrainingSession<T>
 
         // The first replay with new data (the step after the trace) is checked against the eager forward when the
         // caller asks: the eager loss on this batch, and a copy of the trained tensors to undo a disagreeing update.
-        // In distributed mode stepLoss is the globally reduced loss across all ranks, whereas eagerLoss is local.
-        bool checkReplay = !isDistributed && request.VerifyReplayAgreement && IsCommitted && !_replayAgreementVerified;
+        // In distributed mode stepLoss is the globally reduced loss, so each rank compares its own eager loss with
+        // its own local compiled loss, and the ranks then take one verdict.
+        bool checkReplay = request.VerifyReplayAgreement && IsCommitted && !_replayAgreementVerified;
         double eagerLoss = 0.0;
         (Tensor<T> Live, Tensor<T> Saved)[]? snapshot = null;
         if (checkReplay)
@@ -410,10 +411,16 @@ internal sealed class FusedTrainingSession<T>
 
         if (checkReplay && snapshot is not null)
         {
-            double replayLoss = NumOps.ToDouble(ReadLoss(stepLoss, deferredLoss.Value));
+            double replayLoss = isDistributed
+                ? CompiledTapeTrainingStep<T>.LastDistributedLocalLoss
+                : NumOps.ToDouble(ReadLoss(stepLoss, deferredLoss.Value));
             double scale = Math.Max(1.0, Math.Max(Math.Abs(eagerLoss), Math.Abs(replayLoss)));
             bool agree = (double.IsNaN(eagerLoss) && double.IsNaN(replayLoss))
                 || Math.Abs(eagerLoss - replayLoss) <= ReplayAgreementTolerance * scale;
+            // Every rank undoes the synchronized update and leaves the compiled path together, or none does: a rank
+            // that declined alone would run different collectives from the others.
+            if (_owner is NeuralNetworks.NeuralNetworkBase<T> { DistributedCoordinator: { } replayCoordinator })
+                agree = !replayCoordinator.AnyRank(!agree);
             if (!agree)
             {
                 RestoreTrainedTensors(snapshot);

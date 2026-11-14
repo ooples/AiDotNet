@@ -1131,6 +1131,24 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
         }
     }
 
+    /// <summary>
+    /// True on every rank when <paramref name="localFlag"/> is true on any rank, so all ranks take one decision.
+    /// A single-rank coordinator returns the flag unchanged.
+    /// </summary>
+    /// <param name="localFlag">This rank's flag.</param>
+    /// <returns>Whether any rank raised the flag.</returns>
+    internal bool AnyRank(bool localFlag)
+    {
+        ThrowIfDisposed();
+        if (WorldSize <= 1)
+        {
+            return localFlag;
+        }
+
+        EnsureBackendInitialized();
+        return AllReduceAnyRankFlag(localFlag);
+    }
+
     private bool AllReduceAnyRankFlag(bool hasLocal)
     {
         _singleElementBuffer.AsWritableSpan()[0] = NumOps.FromDouble(hasLocal ? 1.0 : 0.0);

@@ -125,6 +125,9 @@ public static class CompiledTapeTrainingStep<T>
         internal List<(Tensor<T> Input, Tensor<T> Target)>? persistentByShape;
         internal int[]? cachedCompositeShapeKey;
         [AiDotNet.Attributes.Scratch] internal Dictionary<Tensor<T>, Tensor<T>>? distributedGradMap;
+        // This rank's own loss from the last distributed compiled step, before the cross-rank reduction (NaN when no
+        // distributed step has run): what a replay-agreement check compares with this rank's eager forward.
+        internal double lastDistributedLocalLoss = double.NaN;
         internal object? shapeSwitchFrom;
         internal CompiledModelCache<T>? retiringCache;
     }
@@ -2204,6 +2207,7 @@ public static class CompiledTapeTrainingStep<T>
             }
 
             double localLoss = lossOutput.Length > 0 ? numOps.ToDouble(lossOutput.Data.Span[0]) : 0.0;
+            CurrentState.lastDistributedLocalLoss = localLoss;
             long localTokens = DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(target);
             collectivesStarted = true;
             var (rankWeight, globalLoss, _) = distCoord.SynchronizeStepMetadata(localTokens, localLoss);
@@ -2242,6 +2246,11 @@ public static class CompiledTapeTrainingStep<T>
                 owner: distNet);
         }
     }
+
+    /// <summary>
+    /// This rank's local (unreduced) loss from the last distributed compiled step on the current state, or NaN.
+    /// </summary>
+    internal static double LastDistributedLocalLoss => CurrentState.lastDistributedLocalLoss;
 
     private static bool TryStepDistributedCompiledPlan(
         NeuralNetworks.NeuralNetworkBase<T> distNet,
@@ -2375,6 +2384,7 @@ public static class CompiledTapeTrainingStep<T>
             }
 
             double localLoss = lossOutput.Length > 0 ? numOps.ToDouble(lossOutput.Data.Span[0]) : 0.0;
+            CurrentState.lastDistributedLocalLoss = localLoss;
             long localTokens = DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(target);
             collectivesStarted = true;
             var (rankWeight, globalLoss, _) = distCoord.SynchronizeStepMetadata(localTokens, localLoss);
