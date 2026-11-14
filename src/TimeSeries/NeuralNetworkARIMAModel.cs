@@ -1,7 +1,6 @@
 global using AiDotNet.ActivationFunctions;
 global using AiDotNet.NeuralNetworks;
 using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.Helpers;
 

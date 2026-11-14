@@ -1,5 +1,4 @@
 ﻿using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.DirectGpu;
 
@@ -114,27 +113,6 @@ public class SiLUActivation<T> : ActivationFunctionBase<T>, Fused.IFusedActivati
         T xSigmoidDerivative = NumOps.Multiply(input, sigmoidDerivative);
 
         return NumOps.Add(sigmoid, xSigmoidDerivative);
-    }
-
-    /// <summary>
-    /// Applies this activation function to a computation graph node.
-    /// </summary>
-    /// <param name="input">The computation node to apply the activation to.</param>
-    /// <returns>A new computation node with SiLU/Swish activation applied.</returns>
-    /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method maps SiLU to TensorOperations&lt;T&gt;.Swish(input) since SiLU and Swish
-    /// are mathematically equivalent: f(x) = x * sigmoid(x).
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
-    {
-        if (input == null)
-            throw new ArgumentNullException(nameof(input));
-
-        // SiLU is mathematically equivalent to Swish: x * sigmoid(x)
-        return TensorOperations<T>.Swish(input);
     }
 
     #region GPU Training Support

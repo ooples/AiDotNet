@@ -265,7 +265,11 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     // Optional user-supplied speculative-decoding draft model (ConfigureSpeculativeDecoding). Live object,
     // in-process serving only; the serving engine verifies this draft's guesses against the target model.
     private AiDotNet.Inference.SpeculativeDecoding.IDraftModel<T>? _servingDraftModel;
-    private AiDotNet.Configuration.JitCompilationConfig? _jitCompilationConfig;
+    // JIT compilation is on by default: the compiled predict path verifies value-stability against the eager forward
+    // before it trusts a plan and falls back to eager permanently if it ever disagrees, so it is safe for every model.
+    // Opt out with ConfigureJitCompilation(JitCompilationConfig.Disabled).
+    private AiDotNet.Configuration.JitCompilationConfig? _jitCompilationConfig
+        = AiDotNet.Configuration.JitCompilationConfig.Default;
     private bool _reportAccelerationAtBuild;
     private Action<string>? _accelerationLogger;
     private AiDotNet.Diagnostics.AccelerationSnapshot? _accelerationSnapshot;

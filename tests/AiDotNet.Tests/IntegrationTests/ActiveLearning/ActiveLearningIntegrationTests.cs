@@ -1,6 +1,5 @@
 using AiDotNet.ActiveLearning;
 using AiDotNet.ActiveLearning.Interfaces;
-using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;

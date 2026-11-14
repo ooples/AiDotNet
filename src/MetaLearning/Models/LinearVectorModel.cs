@@ -1,7 +1,6 @@
 using AiDotNet.Attributes;
 using System.Globalization;
 using System.Text;
-using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;

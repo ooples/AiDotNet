@@ -2,7 +2,6 @@ using AiDotNet.Helpers;
 #pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -618,26 +617,6 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>, IShapeContract
     {
         _weightsGradient = null;
         _biasesGradient = null;
-    }
-
-    /// <summary>
-    /// Applies the activation function to a computation node.
-    /// </summary>
-    private ComputationNode<T> ApplyActivationToComputationNode(ComputationNode<T> node)
-    {
-        // ScalarActivation is guaranteed non-null here since this method is only called when ScalarActivation is not null
-        if (ScalarActivation is null)
-            throw new InvalidOperationException("ScalarActivation cannot be null when applying activation to computation node.");
-
-        // Use ApplyToGraph if the activation supports JIT compilation
-        if (ScalarActivation.SupportsJitCompilation)
-        {
-            return ScalarActivation.ApplyToGraph(node);
-        }
-
-        // Fallback: apply activation directly to values and wrap as constant
-        var activated = ScalarActivation.Activate(node.Value);
-        return TensorOperations<T>.Constant(activated, "activated_output");
     }
 
     /// <summary>

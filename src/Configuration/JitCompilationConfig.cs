@@ -97,8 +97,20 @@ public sealed class JitCompilationConfig
     public bool Enabled { get; set; } = true;
 
     /// <summary>
-    /// When <c>true</c>, a compilation failure in the builder's <c>JitCompiledFunction</c>
-    /// wrapper (the one populated by <c>AiModelBuilder.BuildCompiledPredictFunction</c>)
+    /// Whether a saved model embeds its compiled program (default <c>true</c>): the network's forward as a portable
+    /// AiDotNet.Tensors program plus a compiled plan for the device it was saved on. A loaded model then predicts
+    /// from a compiled plan on its first call, and on other hardware recompiles itself from the program. Weights
+    /// are not stored twice: the program binds the model's own parameters when loaded.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> leave this on. Turn it off only to keep model files minimal when they will be
+    /// loaded somewhere compilation is disabled anyway.</para>
+    /// </remarks>
+    public bool PersistCompiledProgram { get; set; } = true;
+
+    /// <summary>
+    /// When <c>true</c>, a compilation failure in the compiled
+    /// predictor the model facade uses for neural-network predictions (<c>CompiledNeuralPredictor</c>)
     /// propagates as an exception instead of silently falling back to the eager
     /// Predict path. Use in tests to catch regressions.
     /// </summary>

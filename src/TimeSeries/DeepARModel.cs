@@ -2,7 +2,6 @@ using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.LossFunctions;
 using AiDotNet.Optimizers;

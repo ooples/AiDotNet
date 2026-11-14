@@ -1,6 +1,5 @@
 using AiDotNet.Helpers;
 using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Extensions;
 using AiDotNet.Initialization;
@@ -1457,7 +1456,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
             // the per-instance buffer on the next call to this layer would corrupt it. cacheBwd is false
             // under eval mode regardless of the tape, so it can't gate this — check the tape directly.
             if (ForwardScratchGate.FusedLinear && AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null
-                && !AiDotNet.Autodiff.GradientRecording.IsTrainingTrace)
+                && !AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsTrainingTrace)
             {
                 int outputSize = _weights.Shape[1];
                 if (_fusedLinearScratch == null
@@ -1618,31 +1617,6 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
         _weights = resizedWeights;
         _weightsGradient = null;
         UpdateInputShape([actualInputSize]);
-    }
-
-    /// <summary>
-    /// Applies activation function using autodiff operations.
-    /// </summary>
-    private Autodiff.ComputationNode<T> ApplyActivationAutodiff(Autodiff.ComputationNode<T> input)
-    {
-        if (ScalarActivation is ReLUActivation<T>)
-        {
-            return Autodiff.TensorOperations<T>.ReLU(input);
-        }
-        else if (ScalarActivation is SigmoidActivation<T>)
-        {
-            return Autodiff.TensorOperations<T>.Sigmoid(input);
-        }
-        else if (ScalarActivation is TanhActivation<T>)
-        {
-            return Autodiff.TensorOperations<T>.Tanh(input);
-        }
-        else
-        {
-            // For unsupported activations, return input unchanged
-            // This is a limitation of autodiff - not all activations are implemented yet
-            return input;
-        }
     }
 
     [AiDotNet.Attributes.Buffer]

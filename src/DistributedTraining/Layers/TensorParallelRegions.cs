@@ -1,4 +1,4 @@
-using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.DistributedTraining.Layers;
@@ -42,7 +42,7 @@ internal sealed class CopyToTensorParallelRegion<T> : AutogradFunction<T>
 
     public override Tensor<T> Forward(AutogradContext ctx, params Tensor<T>[] inputs) => inputs[0];
 
-    public override Tensor<T>[] Backward(AutogradContext ctx, Tensor<T> gradOutput)
+    public override Tensor<T>?[] Backward(AutogradContext ctx, Tensor<T> gradOutput)
     {
         if (_backend.WorldSize <= 1) return [gradOutput];
         var v = gradOutput.ToVector();
@@ -75,7 +75,7 @@ internal sealed class ReduceFromTensorParallelRegion<T> : AutogradFunction<T>
         return Tensor<T>.FromVector(v).Reshape(inputs[0]._shape);
     }
 
-    public override Tensor<T>[] Backward(AutogradContext ctx, Tensor<T> gradOutput) => [gradOutput];
+    public override Tensor<T>?[] Backward(AutogradContext ctx, Tensor<T> gradOutput) => [gradOutput];
 }
 
 /// <summary>
@@ -122,32 +122,34 @@ internal sealed class GatherFromTensorParallelRegion<T> : AutogradFunction<T>
                 "variable-count gather the backends do not provide. Use an output size divisible by the " +
                 "world size, or gatherOutput=false feeding a following RowParallelLinear.");
         int batch = local._shape[0];
-        var gathered = _backend.AllGather(local.ToVector());
+        var gathered = _backend.AllGather(local.ToVector()).AsSpan();
         var full = new Tensor<T>(new[] { batch, _fullOutputSize });
+        var fullSpan = full.AsWritableSpan();
         int offset = 0, colBase = 0;
         for (int r = 0; r < _backend.WorldSize; r++)
         {
             int outR = ShardCount(r);
             for (int b = 0; b < batch; b++)
-                for (int c = 0; c < outR; c++)
-                    full[b, colBase + c] = gathered[offset + b * outR + c];
+                gathered.Slice(offset + b * outR, outR).CopyTo(fullSpan.Slice(b * _fullOutputSize + colBase, outR));
             offset += batch * outR;
             colBase += outR;
         }
         return full;
     }
 
-    public override Tensor<T>[] Backward(AutogradContext ctx, Tensor<T> gradOutput)
+    public override Tensor<T>?[] Backward(AutogradContext ctx, Tensor<T> gradOutput)
     {
         // Adjoint of the column-gather: hand each rank back only its own output-column block.
         if (_backend.WorldSize <= 1) return [gradOutput];
         int batch = gradOutput._shape[0];
         int localOut = ShardCount(_backend.Rank);
         int colStart = ColumnStart(_backend.Rank);
+        int fullOut = gradOutput._shape[1];
+        var source = gradOutput.IsContiguous ? gradOutput.AsSpan() : gradOutput.Contiguous().AsSpan();
         var slice = new Tensor<T>(new[] { batch, localOut });
+        var sliceSpan = slice.AsWritableSpan();
         for (int b = 0; b < batch; b++)
-            for (int c = 0; c < localOut; c++)
-                slice[b, c] = gradOutput[b, colStart + c];
+            source.Slice(b * fullOut + colStart, localOut).CopyTo(sliceSpan.Slice(b * localOut, localOut));
         return [slice];
     }
 }
@@ -167,7 +169,7 @@ internal sealed class AverageGradientAcrossRanks<T> : AutogradFunction<T>
 
     public override Tensor<T> Forward(AutogradContext ctx, params Tensor<T>[] inputs) => inputs[0];
 
-    public override Tensor<T>[] Backward(AutogradContext ctx, Tensor<T> gradOutput)
+    public override Tensor<T>?[] Backward(AutogradContext ctx, Tensor<T> gradOutput)
     {
         if (_backend.WorldSize <= 1) return [gradOutput];
         var v = gradOutput.ToVector();

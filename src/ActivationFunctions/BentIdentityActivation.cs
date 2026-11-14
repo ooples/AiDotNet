@@ -1,5 +1,4 @@
 ﻿using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 
 namespace AiDotNet.ActivationFunctions;
@@ -108,23 +107,4 @@ public class BentIdentityActivation<T> : ActivationFunctionBase<T>, Fused.IFused
         return NumOps.Add(firstTerm, NumOps.One);
     }
 
-    /// <summary>
-    /// Applies this activation function to a computation graph node.
-    /// </summary>
-    /// <param name="input">The computation node to apply the activation to.</param>
-    /// <returns>A new computation node with BentIdentity activation applied.</returns>
-    /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method maps the BentIdentity activation to TensorOperations&lt;T&gt;.BentIdentity(input),
-    /// which handles both forward and backward passes for JIT compilation.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
-    {
-        if (input == null)
-            throw new ArgumentNullException(nameof(input));
-
-        return TensorOperations<T>.BentIdentity(input);
-    }
 }

@@ -6452,7 +6452,6 @@ Console.WriteLine(""Memory: 50% reduction"");
                     Difficulty = "Advanced",
                     Tags = ["autodiff", "gradients", "backprop"],
                     Code = @"// Automatic Differentiation
-using AiDotNet.Autodiff;
 
 Console.WriteLine(""Automatic Differentiation"");
 Console.WriteLine(""-------------------------"");

@@ -5,7 +5,6 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Tensors;
 using AiDotNet.Tensors.Engines;

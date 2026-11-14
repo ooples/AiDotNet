@@ -1,5 +1,4 @@
 using AiDotNet.ActivationFunctions;
-using AiDotNet.Autodiff;
 using AiDotNet.Engines;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
@@ -16,9 +15,17 @@ namespace AiDotNet.Tests.UnitTests.Training;
 [Collection("NonParallelIntegration")]
 public class RemainingLstmIntegrationTests
 {
+    // The production LSTM cell (LstmGateDispatch -> IEngine.LstmCellFromGates) that replaced the legacy
+    // graph LSTMCell. x = [input, h, c, W, U, b].
+    private static (Tensor<TNum> H, Tensor<TNum> C) Cell<TNum>(IEngine e, Tensor<TNum>[] x)
+    {
+        var gates = e.TensorAdd(e.TensorAdd(e.TensorMatMul(x[0], x[3]), e.TensorMatMul(x[1], x[4])), x[5]);
+        var h = AiDotNet.Helpers.LstmGateDispatch<TNum>.Forward(e, gates, x[2], out var c);
+        return (h, c);
+    }
     [Fact]
     [Trait("Category", "GPU")]
-    public void OpenCl_LegacyCellKeepsBothStateAdjointsOnDevice()
+    public void OpenCl_FusedCellKeepsBothStateAdjointsOnDevice()
     {
         using var backend = new OpenClBackend(); Assert.True(backend.IsAvailable, backend.InitializationException?.ToString());
         using var direct = new DirectGpuEngine(backend); using var gpu = new DirectGpuTensorEngine(direct);
@@ -27,24 +34,23 @@ public class RemainingLstmIntegrationTests
         {
             var values = new[] { new[] { 2, 3 }, new[] { 2, 2 }, new[] { 2, 2 }, new[] { 3, 8 }, new[] { 2, 8 }, new[] { 8 } }
                 .Select(shape => { var x = new Tensor<float>(shape); for (int i = 0; i < x.Length; i++) x[i] = MathF.Sin(i + .3f) * .4f; return x; }).ToArray();
-            ComputationNode<float>[] Run()
+            Dictionary<Tensor<float>, Tensor<float>> Run(IEngine e)
             {
-                var nodes = values.Select(x => TensorOperations<float>.Variable(x)).ToArray();
-                var (h, c) = TensorOperations<float>.LSTMCell(nodes[0], nodes[1], nodes[2], nodes[3], nodes[4], nodes[5]);
-                TensorOperations<float>.Add(h, c).Backward();
-                return nodes;
+                using var tape = new GradientTape<float>();
+                var (h, c) = Cell(e, values);
+                return tape.ComputeGradients(e.ReduceSum(e.TensorAdd(h, c), null), values);
             }
-            AiDotNetEngine.Current = new CpuEngine(); var expected = Run();
+            var cpu = new CpuEngine(); AiDotNetEngine.Current = cpu; var expected = Run(cpu);
             AiDotNetEngine.Current = gpu;
-            ComputationNode<float>[] actual;
+            Dictionary<Tensor<float>, Tensor<float>> actual;
             using (var scope = GpuResidencyScope.Begin(captureOperations: true))
             {
-                actual = Run();
+                actual = Run(gpu);
                 Assert.True(scope.Downloads == 0, string.Join("\n", scope.Events.Where(x => x.Kind == GpuTransferKind.DeviceToHost)));
             }
             for (int j = 0; j < values.Length; j++)
                 for (int i = 0; i < values[j].Length; i++)
-                    Assert.InRange(MathF.Abs(expected[j].Gradient![i] - actual[j].Gradient![i]), 0, 2e-5f);
+                    Assert.InRange(MathF.Abs(expected[values[j]][i] - actual[values[j]][i]), 0, 2e-5f);
         }
         finally { AiDotNetEngine.Current = prior; }
     }
@@ -101,16 +107,19 @@ public class RemainingLstmIntegrationTests
         for (int i = 0; i < a.Length; i++) Assert.InRange(Math.Abs(a[i] - b[i]), 0, 1e-9);
     }
     [Theory] [InlineData(1)] [InlineData(2)] [InlineData(3)]
-    public void LegacyCell_CombinesIndependentStateGradients(int mask)
+    public void FusedCell_CombinesIndependentStateGradients(int mask)
     {
         var prior = AiDotNetEngine.Current; var e = new CpuEngine(); AiDotNetEngine.Current = e;
         try
         {
             var x = new[] { Values(2, 3), Values(2, 2), Values(2, 2), Values(3, 8), Values(2, 8), Values(8) };
-            var nodes = x.Select(v => TensorOperations<double>.Variable(v)).ToArray();
-            var (h, c) = TensorOperations<double>.LSTMCell(nodes[0], nodes[1], nodes[2], nodes[3], nodes[4], nodes[5]);
-            var root = mask == 1 ? h : mask == 2 ? c : TensorOperations<double>.Add(h, c);
-            root.Backward(Tensor<double>.CreateDefault(new[] { 2, 2 }, 1.0));
+            Tensor<double> root; Dictionary<Tensor<double>, Tensor<double>> fused;
+            using (var fusedTape = new GradientTape<double>())
+            {
+                var (h, c) = Cell(e, x);
+                root = mask == 1 ? h : mask == 2 ? c : e.TensorAdd(h, c);
+                fused = fusedTape.ComputeGradients(e.ReduceSum(root, null), x);
+            }
             using var tape = new GradientTape<double>();
             var gates = e.TensorAdd(e.TensorAdd(e.TensorMatMul(x[0], x[3]), e.TensorMatMul(x[1], x[4])), x[5]);
             Tensor<double> Gate(int j) => e.TensorNarrow(gates, 1, 2 * j, 2);
@@ -118,8 +127,8 @@ public class RemainingLstmIntegrationTests
             var rh = e.TensorMultiply(e.Sigmoid(Gate(3)), e.Tanh(rc));
             var output = mask == 1 ? rh : mask == 2 ? rc : e.TensorAdd(rh, rc);
             var grads = tape.ComputeGradients(e.ReduceSum(output, null), x);
-            Near(output, root.Value);
-            for (int j = 0; j < x.Length; j++) Near(grads[x[j]], nodes[j].Gradient!);
+            Near(output, root);
+            for (int j = 0; j < x.Length; j++) Near(grads[x[j]], fused[x[j]]);
         }
         finally { AiDotNetEngine.Current = prior; }
     }

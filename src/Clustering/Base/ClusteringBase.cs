@@ -1,5 +1,4 @@
 using System.Text;
-using AiDotNet.Autodiff;
 using AiDotNet.Clustering.Interfaces;
 using AiDotNet.Clustering.Options;
 using AiDotNet.Enums;

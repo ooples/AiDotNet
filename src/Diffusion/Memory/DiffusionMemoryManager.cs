@@ -1,4 +1,3 @@
-using AiDotNet.Autodiff;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Interfaces;
 using AiDotNet.Attributes;

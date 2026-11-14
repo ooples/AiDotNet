@@ -419,7 +419,7 @@ public partial class StyleTTS<T>
     /// differentiable into the discriminator (as StyleGAN's R1 penalty is built here).</summary>
     private Tensor<T> R1Penalty(Tensor<T> real)
     {
-        if (!AiDotNet.Autodiff.GradientRecording.IsRecording<T>()) return new Tensor<T>(new[] { 1 });
+        if (!AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsRecording<T>()) return new Tensor<T>(new[] { 1 });
         using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         var input = new Tensor<T>(Image(real).Shape.ToArray());
         real.AsSpan().CopyTo(input.AsWritableSpan());

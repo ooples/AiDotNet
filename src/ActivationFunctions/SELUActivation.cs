@@ -1,5 +1,4 @@
 ﻿using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.DirectGpu;
 
@@ -141,26 +140,6 @@ public class SELUActivation<T> : ActivationFunctionBase<T>, Fused.IFusedActivati
         {
             return NumOps.Multiply(_lambda, NumOps.Multiply(_alpha, NumOps.Exp(input)));
         }
-    }
-
-    /// <summary>
-    /// Applies this activation function to a computation graph node.
-    /// </summary>
-    /// <param name="input">The computation node to apply the activation to.</param>
-    /// <returns>A new computation node with SELU activation applied.</returns>
-    /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method maps the SELU activation to TensorOperations&lt;T&gt;.SELU(input),
-    /// which handles both forward and backward passes for JIT compilation.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
-    {
-        if (input == null)
-            throw new ArgumentNullException(nameof(input));
-
-        return TensorOperations<T>.SELU(input);
     }
 
     #region GPU Training Support

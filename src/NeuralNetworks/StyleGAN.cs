@@ -462,7 +462,7 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
     {
         // Nothing is recorded during a step's shape warm-up (an unrecorded forward whose value is discarded), so the
         // inner tape would have no operations to differentiate. The penalty only matters to a recorded objective.
-        if (!AiDotNet.Autodiff.GradientRecording.IsRecording<T>())
+        if (!AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsRecording<T>())
             return new Tensor<T>(new[] { 1 });
 
         // Outside the step arena: the input gradients the inner tape builds outlive that tape, and an arena may

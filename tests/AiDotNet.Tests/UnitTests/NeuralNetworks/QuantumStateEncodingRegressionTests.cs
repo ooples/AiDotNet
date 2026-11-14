@@ -180,7 +180,7 @@ public class QuantumStateEncodingRegressionTests
             gpuLayer.SetParameters(parameters);
             var backend = gpu.GetBackend();
             Assert.NotNull(backend);
-            devicePreservesSubnormals = PreservesSubnormalsInArithmetic(backend);
+            devicePreservesSubnormals = PreservesSubnormalsInArithmetic(gpu);
             using var gpuHostInput = CreateEdgeMagnitudeRows();
             using var gpuInput = GpuTensorHelper.UploadToGpu(backend, gpuHostInput, GpuTensorRole.Input);
             using var gpuOutput = gpuLayer.ForwardGpu(gpuInput);
@@ -241,25 +241,32 @@ public class QuantumStateEncodingRegressionTests
         => values.Skip(row * RowWidth).Take(RowWidth);
 
     /// <summary>
-    /// Measures whether this device keeps subnormals through the max reduction the prescale uses.
-    /// <c>Abs</c> alone does not answer it -- that is a sign-bit mask and survives flush-to-zero
-    /// hardware unchanged; the comparison inside the reduction is where a device drops them.
+    /// Measures, independently of the layer, whether this device's arithmetic keeps subnormals: a subnormal divided
+    /// by itself must be exactly 1.
     /// </summary>
-    private static bool PreservesSubnormalsInArithmetic(IDirectGpuBackend backend)
+    /// <remarks>
+    /// Comparisons, max/min and selects are required to be exact for subnormals on every device (AiDotNet.Tensors
+    /// decides them on IEEE bit patterns, immune to fast-math flushing), so they are NOT probed here: a device that
+    /// flushes in a comparison is a bug this test must report, not an allowed flush. Only arithmetic may flush, which
+    /// OpenCL permits (-cl-fast-relaxed-math); division is the arithmetic the prescale relies on. The probe is
+    /// GPU-resident (uploaded like the layer's input) so nothing runs on the host.
+    /// </remarks>
+    private static bool PreservesSubnormalsInArithmetic(DirectGpuTensorEngine gpu)
     {
-        // Measured through arithmetic, as the name says: a comparison (the max below) passes a subnormal through
-        // even on a device that flushes it to zero in arithmetic, and the layer's prescaling divides by the row's
-        // maximum magnitude. Probing with the max alone reported "preserves" on such a device, and the test then
-        // demanded the CPU's value for a row the device had legitimately flushed.
-        using var source = backend.AllocateBuffer(RowWidth);
-        backend.Fill(source, float.Epsilon, RowWidth);
-        using var scaled = backend.AllocateBuffer(RowWidth);
-        backend.Scale(source, scaled, 1.0f, RowWidth);
-        using var reduced = backend.AllocateBuffer(1);
-        backend.MaxAxis(scaled, reduced, 1, RowWidth);
-        var host = new float[1];
-        backend.DownloadBuffer(reduced, host);
-        return host[0] > 0f;
+        var previous = AiDotNetEngine.Current;
+        try
+        {
+            AiDotNetEngine.Current = gpu;
+            using var host = new Tensor<float>([1, RowWidth]);
+            host.Fill(float.Epsilon);
+            using var subnormal = GpuTensorHelper.UploadToGpu(gpu.GetBackend()!, host, GpuTensorRole.Input);
+            using var quotient = gpu.TensorDivide(subnormal, subnormal);
+            return quotient.ToArray()[0] == 1f;
+        }
+        finally
+        {
+            AiDotNetEngine.Current = previous;
+        }
     }
 
     private static Tensor<float> CreateEdgeMagnitudeRows()

@@ -1,4 +1,3 @@
-using AiDotNet.Autodiff;
 using AiDotNet.Tensors.Engines.DirectGpu;
 
 namespace AiDotNet.Interfaces;
@@ -93,48 +92,6 @@ public interface IActivationFunction<T>
     /// <param name="input">The input tensor.</param>
     /// <returns>A new tensor containing derivatives for each input element.</returns>
     Tensor<T> Derivative(Tensor<T> input);
-
-    /// <summary>
-    /// Gets whether this activation function supports JIT compilation.
-    /// </summary>
-    /// <value>True if the activation can be applied to computation graphs for JIT compilation.</value>
-    /// <remarks>
-    /// <para>
-    /// Activation functions return false if:
-    /// - Gradient computation (backward pass) is not yet implemented
-    /// - The activation uses operations not supported by TensorOperations
-    /// - The activation has dynamic behavior that cannot be represented in a static graph
-    /// </para>
-    /// <para>
-    /// Once gradient computation is implemented and tested, set this to true.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> JIT (Just-In-Time) compilation is an advanced optimization technique
-    /// that pre-compiles the neural network's operations into a faster execution graph.
-    /// This property indicates whether this activation function is ready to be part of that
-    /// optimized execution. If false, the activation will fall back to the standard execution path.
-    /// </para>
-    /// </remarks>
-    bool SupportsJitCompilation { get; }
-
-    /// <summary>
-    /// Applies this activation function to a computation graph node.
-    /// </summary>
-    /// <param name="input">The computation node to apply the activation to.</param>
-    /// <returns>A new computation node with the activation applied.</returns>
-    /// <exception cref="NotSupportedException">Thrown if SupportsJitCompilation is false.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method maps the activation to the corresponding TensorOperations method.
-    /// For example, ReLU returns TensorOperations&lt;T&gt;.ReLU(input).
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This method adds the activation function to the computation graph,
-    /// which is a data structure that represents all the operations in the neural network.
-    /// The graph can then be optimized and executed more efficiently through JIT compilation.
-    /// </para>
-    /// </remarks>
-    ComputationNode<T> ApplyToGraph(ComputationNode<T> input);
 
     // Backward removed — tape-based autodiff handles activation gradients.
 

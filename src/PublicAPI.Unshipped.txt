@@ -22581,6 +22581,236 @@ override AiDotNet.Diffusion.LatentDiffusionModelBase<T>.IsBatchedTrainingSample(
 virtual AiDotNet.Diffusion.DiffusionModelBase<T>.IsBatchedTrainingSample(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! sample) -> bool
 *REMOVED*AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double
 AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
+AiDotNet.PhysicsInformed.NeuralNetworkDerivatives<T>
+const AiDotNet.Serialization.DelegateState.ProgramScheme = "program:" -> string!
+static AiDotNet.PhysicsInformed.NeuralNetworkDerivatives<T>.ComputeDerivatives(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! network, T[]! inputs, int outputDim) -> AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>!
+static AiDotNet.PhysicsInformed.NeuralNetworkDerivatives<T>.ComputeHessian(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! network, T[]! inputs, int outputIndex = 0) -> T[,]!
+static AiDotNet.Serialization.DelegateState.Save(System.Delegate? value, int[]? inputShape) -> string!
+static AiDotNet.Serialization.LayerStateBag.FormatDelegate(System.Delegate? value, int[]? inputShape) -> string!
+*REMOVED*AiDotNet.Autodiff.AutogradContext
+*REMOVED*AiDotNet.Autodiff.AutogradContext.AutogradContext() -> void
+*REMOVED*AiDotNet.Autodiff.AutogradContext.GetSaved<T>(int index) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.Autodiff.AutogradContext.SavedCount.get -> int
+*REMOVED*AiDotNet.Autodiff.AutogradContext.SaveForBackward<T>(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! tensor) -> void
+*REMOVED*AiDotNet.Autodiff.AutogradContext.SaveForBackward<T>(params AiDotNet.Tensors.LinearAlgebra.Tensor<T>![]! tensors) -> void
+*REMOVED*AiDotNet.Autodiff.AutogradFunction<T>
+*REMOVED*AiDotNet.Autodiff.AutogradFunction<T>.Apply(params AiDotNet.Tensors.LinearAlgebra.Tensor<T>![]! inputs) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.Autodiff.AutogradFunction<T>.AutogradFunction() -> void
+*REMOVED*AiDotNet.Autodiff.ComputationNode<T>
+*REMOVED*AiDotNet.Autodiff.ComputationNode<T>.Backward(AiDotNet.Tensors.LinearAlgebra.Tensor<T>? seed = null) -> void
+*REMOVED*AiDotNet.Autodiff.ComputationNode<T>.BackwardFunction.get -> System.Action<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>?
+*REMOVED*AiDotNet.Autodiff.ComputationNode<T>.BackwardFunction.set -> void
+*REMOVED*AiDotNet.Autodiff.ComputationNode<T>.ComputationNode(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! value, bool requiresGradient = false, System.Collections.Generic.List<AiDotNet.Autodiff.ComputationNode<T>!>? parents = null, System.Action<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? backwardFunction = null, string? name = null) -> void
+*REMOVED*AiDotNet.Autodiff.ComputationNode<T>.Gradient.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+*REMOVED*AiDotNet.Autodiff.ComputationNode<T>.Gradient.set -> void
+*REMOVED*AiDotNet.Autodiff.ComputationNode<T>.Name.get -> string?
+*REMOVED*AiDotNet.Autodiff.ComputationNode<T>.Name.set -> void
+*REMOVED*AiDotNet.Autodiff.ComputationNode<T>.OperationParams.get -> System.Collections.Generic.Dictionary<string!, object!>?
+*REMOVED*AiDotNet.Autodiff.ComputationNode<T>.OperationParams.set -> void
+*REMOVED*AiDotNet.Autodiff.ComputationNode<T>.OperationType.get -> AiDotNet.Enums.OperationType?
+*REMOVED*AiDotNet.Autodiff.ComputationNode<T>.OperationType.set -> void
+*REMOVED*AiDotNet.Autodiff.ComputationNode<T>.Parents.get -> System.Collections.Generic.List<AiDotNet.Autodiff.ComputationNode<T>!>!
+*REMOVED*AiDotNet.Autodiff.ComputationNode<T>.Parents.set -> void
+*REMOVED*AiDotNet.Autodiff.ComputationNode<T>.RequiresGradient.get -> bool
+*REMOVED*AiDotNet.Autodiff.ComputationNode<T>.RequiresGradient.set -> void
+*REMOVED*AiDotNet.Autodiff.ComputationNode<T>.Value.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.Autodiff.ComputationNode<T>.Value.set -> void
+*REMOVED*AiDotNet.Autodiff.ComputationNode<T>.ZeroGradient() -> void
+*REMOVED*AiDotNet.Autodiff.ComputationNode<T>.ZeroGradientRecursive() -> void
+*REMOVED*AiDotNet.Autodiff.NeuralNetworkDerivatives<T>
+*REMOVED*AiDotNet.Autodiff.TensorOperations<T>
+*REMOVED*override AiDotNet.NeuralNetworks.Tabular.EntmoidActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.NeuralNetworkDerivatives<T>.ComputeDerivatives(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! network, T[]! inputs, int outputDim) -> AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives<T>!
+*REMOVED*static AiDotNet.Autodiff.NeuralNetworkDerivatives<T>.ComputeHessian(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! network, T[]! inputs, int outputIndex = 0) -> T[,]!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Abs(AiDotNet.Autodiff.ComputationNode<T>! a) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Add(AiDotNet.Autodiff.ComputationNode<T>! a, AiDotNet.Autodiff.ComputationNode<T>! b) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.AffineGrid(AiDotNet.Autodiff.ComputationNode<T>! theta, int outputHeight, int outputWidth) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.AnomalyScore(AiDotNet.Autodiff.ComputationNode<T>! input, AiDotNet.Autodiff.ComputationNode<T>! reconstruction) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.ApplyActivation(AiDotNet.Autodiff.ComputationNode<T>! input, AiDotNet.Interfaces.IActivationFunction<T>! activation) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.AvgPool2D(AiDotNet.Autodiff.ComputationNode<T>! a, int[]! poolSize, int[]? strides = null) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.BatchMatrixMultiply(AiDotNet.Autodiff.ComputationNode<T>! a, AiDotNet.Autodiff.ComputationNode<T>! b) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.BatchNorm(AiDotNet.Autodiff.ComputationNode<T>! a, AiDotNet.Autodiff.ComputationNode<T>? gamma = null, AiDotNet.Autodiff.ComputationNode<T>? beta = null, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? runningMean = null, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? runningVar = null, bool training = true, double epsilon = 1E-05) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.BentIdentity(AiDotNet.Autodiff.ComputationNode<T>! a) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Broadcast(AiDotNet.Autodiff.ComputationNode<T>! a, int[]! targetShape) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.CELU(AiDotNet.Autodiff.ComputationNode<T>! a, double alpha = 1) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.ComplexMatMul(AiDotNet.Autodiff.ComputationNode<T>! a, AiDotNet.Autodiff.ComputationNode<T>! b, string! format = "split") -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.ComplexMultiply(AiDotNet.Autodiff.ComputationNode<T>! a, AiDotNet.Autodiff.ComputationNode<T>! b, string! format = "split") -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Concat(System.Collections.Generic.List<AiDotNet.Autodiff.ComputationNode<T>!>! nodes, int axis = 0) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Constant(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! value, string? name = null) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Conv2D(AiDotNet.Autodiff.ComputationNode<T>! input, AiDotNet.Autodiff.ComputationNode<T>! kernel, AiDotNet.Autodiff.ComputationNode<T>? bias = null, int[]? stride = null, int[]? padding = null) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Conv3D(AiDotNet.Autodiff.ComputationNode<T>! input, AiDotNet.Autodiff.ComputationNode<T>! kernel, AiDotNet.Autodiff.ComputationNode<T>? bias = null, int[]? stride = null, int[]? padding = null) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.ConvTranspose2D(AiDotNet.Autodiff.ComputationNode<T>! input, AiDotNet.Autodiff.ComputationNode<T>! kernel, AiDotNet.Autodiff.ComputationNode<T>? bias = null, int[]? stride = null, int[]? padding = null, int[]? outputPadding = null) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.CRFForward(AiDotNet.Autodiff.ComputationNode<T>! emissions, AiDotNet.Autodiff.ComputationNode<T>! transitions, AiDotNet.Autodiff.ComputationNode<T>? startScores = null, AiDotNet.Autodiff.ComputationNode<T>? endScores = null) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Crop(AiDotNet.Autodiff.ComputationNode<T>! a, int[]! cropping) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.DeformableConv2D(AiDotNet.Autodiff.ComputationNode<T>! input, AiDotNet.Autodiff.ComputationNode<T>! kernel, AiDotNet.Autodiff.ComputationNode<T>! offset, AiDotNet.Autodiff.ComputationNode<T>? mask = null, AiDotNet.Autodiff.ComputationNode<T>? bias = null, int[]? stride = null, int[]? padding = null, int[]? dilation = null) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.DepthwiseConv2D(AiDotNet.Autodiff.ComputationNode<T>! input, AiDotNet.Autodiff.ComputationNode<T>! kernel, AiDotNet.Autodiff.ComputationNode<T>? bias = null, int[]? stride = null, int[]? padding = null) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.DilatedConv2D(AiDotNet.Autodiff.ComputationNode<T>! input, AiDotNet.Autodiff.ComputationNode<T>! kernel, AiDotNet.Autodiff.ComputationNode<T>? bias = null, int[]? stride = null, int[]? padding = null, int[]? dilation = null) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Divide(AiDotNet.Autodiff.ComputationNode<T>! a, AiDotNet.Autodiff.ComputationNode<T>! b) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.ElementwiseMultiply(AiDotNet.Autodiff.ComputationNode<T>! a, AiDotNet.Autodiff.ComputationNode<T>! b) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.ELU(AiDotNet.Autodiff.ComputationNode<T>! a, double alpha = 1) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.EmbeddingLookup(AiDotNet.Autodiff.ComputationNode<T>! embeddings, AiDotNet.Autodiff.ComputationNode<T>! indices) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Exp(AiDotNet.Autodiff.ComputationNode<T>! a) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.FakeQuantize(AiDotNet.Autodiff.ComputationNode<T>! input, int numBits = 8, T? scale = default(T?), T? zeroPoint = default(T?), bool symmetric = true) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Gaussian(AiDotNet.Autodiff.ComputationNode<T>! a) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.GELU(AiDotNet.Autodiff.ComputationNode<T>! a) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.GraphConv(AiDotNet.Autodiff.ComputationNode<T>! input, AiDotNet.Autodiff.ComputationNode<T>! adjacency, AiDotNet.Autodiff.ComputationNode<T>! weights, AiDotNet.Autodiff.ComputationNode<T>? bias = null) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.GridSample(AiDotNet.Autodiff.ComputationNode<T>! input, AiDotNet.Autodiff.ComputationNode<T>! grid) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.GroupNorm(AiDotNet.Autodiff.ComputationNode<T>! a, int numGroups, AiDotNet.Autodiff.ComputationNode<T>? gamma = null, AiDotNet.Autodiff.ComputationNode<T>? beta = null, double epsilon = 1E-05) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.GRUCell(AiDotNet.Autodiff.ComputationNode<T>! input, AiDotNet.Autodiff.ComputationNode<T>! hiddenState, AiDotNet.Autodiff.ComputationNode<T>! weightIH, AiDotNet.Autodiff.ComputationNode<T>! weightHH, AiDotNet.Autodiff.ComputationNode<T>! bias) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.GumbelSoftmax(AiDotNet.Autodiff.ComputationNode<T>! logits, double temperature = 1, bool hard = false) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.HardSigmoid(AiDotNet.Autodiff.ComputationNode<T>! a) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.HardTanh(AiDotNet.Autodiff.ComputationNode<T>! a) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.HierarchicalSoftmax(AiDotNet.Autodiff.ComputationNode<T>! input, AiDotNet.Autodiff.ComputationNode<T>! nodeWeights, int numClasses) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.HyperbolicLinear(AiDotNet.Autodiff.ComputationNode<T>! input, AiDotNet.Autodiff.ComputationNode<T>! weights, AiDotNet.Autodiff.ComputationNode<T>? biases = null, double curvature = -1) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.ISRU(AiDotNet.Autodiff.ComputationNode<T>! a, double alpha = 1) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.LayerNorm(AiDotNet.Autodiff.ComputationNode<T>! a, int[]! normalizedShape, AiDotNet.Autodiff.ComputationNode<T>? gamma = null, AiDotNet.Autodiff.ComputationNode<T>? beta = null, double epsilon = 1E-05) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.LeakyReLU(AiDotNet.Autodiff.ComputationNode<T>! a, double alpha = 0.01) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.LeakyStateUpdate(AiDotNet.Autodiff.ComputationNode<T>! prevState, AiDotNet.Autodiff.ComputationNode<T>! input, AiDotNet.Autodiff.ComputationNode<T>! weights, double leakingRate = 1) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.LiSHT(AiDotNet.Autodiff.ComputationNode<T>! a) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.LocallyConnectedConv2D(AiDotNet.Autodiff.ComputationNode<T>! input, AiDotNet.Autodiff.ComputationNode<T>! weights, AiDotNet.Autodiff.ComputationNode<T>? bias = null, int[]? stride = null) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Log(AiDotNet.Autodiff.ComputationNode<T>! a) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.LogSoftmax(AiDotNet.Autodiff.ComputationNode<T>! a, int axis = -1) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.LogSoftmin(AiDotNet.Autodiff.ComputationNode<T>! a, int axis = -1) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.LSTMCell(AiDotNet.Autodiff.ComputationNode<T>! input, AiDotNet.Autodiff.ComputationNode<T>! hiddenState, AiDotNet.Autodiff.ComputationNode<T>! cellState, AiDotNet.Autodiff.ComputationNode<T>! weightIH, AiDotNet.Autodiff.ComputationNode<T>! weightHH, AiDotNet.Autodiff.ComputationNode<T>! bias) -> (AiDotNet.Autodiff.ComputationNode<T>!, AiDotNet.Autodiff.ComputationNode<T>!)
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.MatrixMultiply(AiDotNet.Autodiff.ComputationNode<T>! a, AiDotNet.Autodiff.ComputationNode<T>! b) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.MatrixVectorMultiply(AiDotNet.Autodiff.ComputationNode<T>! matrix, AiDotNet.Autodiff.ComputationNode<T>! vector) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Maxout(AiDotNet.Autodiff.ComputationNode<T>! a, int numPieces = 2) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.MaxPool2D(AiDotNet.Autodiff.ComputationNode<T>! a, int[]! poolSize, int[]? strides = null) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.MaxPool3D(AiDotNet.Autodiff.ComputationNode<T>! input, int[]! poolSize, int[]? strides = null) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Mean(AiDotNet.Autodiff.ComputationNode<T>! a) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Mish(AiDotNet.Autodiff.ComputationNode<T>! a) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.MobiusAdd(AiDotNet.Autodiff.ComputationNode<T>! x, AiDotNet.Autodiff.ComputationNode<T>! y, double curvature = -1) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.MultiHeadAttention(AiDotNet.Autodiff.ComputationNode<T>! query, AiDotNet.Autodiff.ComputationNode<T>! key, AiDotNet.Autodiff.ComputationNode<T>! value, int numHeads, AiDotNet.Autodiff.ComputationNode<T>! wQ, AiDotNet.Autodiff.ComputationNode<T>! wK, AiDotNet.Autodiff.ComputationNode<T>! wV, AiDotNet.Autodiff.ComputationNode<T>! wO) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Negate(AiDotNet.Autodiff.ComputationNode<T>! a) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Norm(AiDotNet.Autodiff.ComputationNode<T>! a, int axis = -1, bool keepDims = false, double epsilon = 1E-12) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.OctonionMatMul(AiDotNet.Autodiff.ComputationNode<T>! input, AiDotNet.Autodiff.ComputationNode<T>! weights, AiDotNet.Autodiff.ComputationNode<T>? biases = null) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Pad(AiDotNet.Autodiff.ComputationNode<T>! a, int[,]! padWidth, T? value = default(T?)) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Pad(AiDotNet.Autodiff.ComputationNode<T>! a, int[]! padding) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Permute(AiDotNet.Autodiff.ComputationNode<T>! a, params int[]! axes) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.PixelShuffle(AiDotNet.Autodiff.ComputationNode<T>! a, int upscaleFactor) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.PoincareDistance(AiDotNet.Autodiff.ComputationNode<T>! x, AiDotNet.Autodiff.ComputationNode<T>! y, double curvature = -1) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.PoincareExpMap(AiDotNet.Autodiff.ComputationNode<T>! point, AiDotNet.Autodiff.ComputationNode<T>! tangent, double curvature = -1) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.PoincareLogMap(AiDotNet.Autodiff.ComputationNode<T>! point, AiDotNet.Autodiff.ComputationNode<T>! target, double curvature = -1) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.PoincareProject(AiDotNet.Autodiff.ComputationNode<T>! point, double curvature = -1, double epsilon = 1E-05) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Power(AiDotNet.Autodiff.ComputationNode<T>! a, double exponent) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.PReLU(AiDotNet.Autodiff.ComputationNode<T>! a, double alpha = 0.01) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.RBFKernel(AiDotNet.Autodiff.ComputationNode<T>! input, AiDotNet.Autodiff.ComputationNode<T>! centers, AiDotNet.Autodiff.ComputationNode<T>! epsilons) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.ReduceLogVariance(AiDotNet.Autodiff.ComputationNode<T>! input, int axis, double epsilon = 1E-08) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.ReduceMax(AiDotNet.Autodiff.ComputationNode<T>! a, int[]? axes = null, bool keepDims = false) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.ReduceMean(AiDotNet.Autodiff.ComputationNode<T>! a, int[]? axes = null, bool keepDims = false) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.ReLU(AiDotNet.Autodiff.ComputationNode<T>! a) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Reshape(AiDotNet.Autodiff.ComputationNode<T>! a, params int[]! newShape) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.RReLU(AiDotNet.Autodiff.ComputationNode<T>! a, double lower = 0.125, double upper = 0.333, bool isTraining = false, int? seed = null) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.ScaledDotProductAttention(AiDotNet.Autodiff.ComputationNode<T>! query, AiDotNet.Autodiff.ComputationNode<T>! key, AiDotNet.Autodiff.ComputationNode<T>! value, AiDotNet.Autodiff.ComputationNode<T>? mask = null) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.ScaledTanh(AiDotNet.Autodiff.ComputationNode<T>! a, double beta = 1) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.SELU(AiDotNet.Autodiff.ComputationNode<T>! a) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Sigmoid(AiDotNet.Autodiff.ComputationNode<T>! a) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Sign(AiDotNet.Autodiff.ComputationNode<T>! a, double surrogateBeta = 1) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.SinusoidalTimeEmbedding(AiDotNet.Autodiff.ComputationNode<T>! timesteps, int embeddingDim) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Slice(AiDotNet.Autodiff.ComputationNode<T>! a, int start, int length, int step = 1, int axis = 0) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.SoftKNN(AiDotNet.Autodiff.ComputationNode<T>! input, AiDotNet.Autodiff.ComputationNode<T>! supportVectors, AiDotNet.Autodiff.ComputationNode<T>! labels, T? temperature = default(T?)) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.SoftLocallyWeighted(AiDotNet.Autodiff.ComputationNode<T>! input, AiDotNet.Autodiff.ComputationNode<T>! xTrain, AiDotNet.Autodiff.ComputationNode<T>! yTrain, T? bandwidth = default(T?)) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Softmax(AiDotNet.Autodiff.ComputationNode<T>! a, int axis = -1) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Softmin(AiDotNet.Autodiff.ComputationNode<T>! a, int axis = -1) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.SoftPlus(AiDotNet.Autodiff.ComputationNode<T>! a) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.SoftSign(AiDotNet.Autodiff.ComputationNode<T>! a) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.SoftSplit(AiDotNet.Autodiff.ComputationNode<T>! input, AiDotNet.Autodiff.ComputationNode<T>! leftValue, AiDotNet.Autodiff.ComputationNode<T>! rightValue, int featureIndex, T threshold, T? temperature = default(T?)) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Sparsemax(AiDotNet.Autodiff.ComputationNode<T>! a, int axis = -1) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.SphericalSoftmax(AiDotNet.Autodiff.ComputationNode<T>! a, int axis = -1) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Split(AiDotNet.Autodiff.ComputationNode<T>! a, int numSplits, int axis = 0) -> System.Collections.Generic.List<AiDotNet.Autodiff.ComputationNode<T>!>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.SQRBF(AiDotNet.Autodiff.ComputationNode<T>! a, double beta = 1) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Sqrt(AiDotNet.Autodiff.ComputationNode<T>! a) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Square(AiDotNet.Autodiff.ComputationNode<T>! a) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Squash(AiDotNet.Autodiff.ComputationNode<T>! a, double epsilon = 1E-07) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.StraightThroughThreshold(AiDotNet.Autodiff.ComputationNode<T>! input, double threshold) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Subtract(AiDotNet.Autodiff.ComputationNode<T>! a, AiDotNet.Autodiff.ComputationNode<T>! b) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Sum(AiDotNet.Autodiff.ComputationNode<T>! a, int[]? axes = null, bool keepDims = false) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.SurrogateSpike(AiDotNet.Autodiff.ComputationNode<T>! membranePotential, double threshold = 1, double surrogateBeta = 1) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Swish(AiDotNet.Autodiff.ComputationNode<T>! a) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Tanh(AiDotNet.Autodiff.ComputationNode<T>! a) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.TaylorSoftmax(AiDotNet.Autodiff.ComputationNode<T>! a, int order = 2, int axis = -1) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.ThresholdedReLU(AiDotNet.Autodiff.ComputationNode<T>! a, double threshold = 1) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.TopKSoftmax(AiDotNet.Autodiff.ComputationNode<T>! scores, int k) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Transpose(AiDotNet.Autodiff.ComputationNode<T>! a) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Upsample(AiDotNet.Autodiff.ComputationNode<T>! a, int scale) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Upsample3D(AiDotNet.Autodiff.ComputationNode<T>! input, int scaleD, int scaleH, int scaleW) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Autodiff.TensorOperations<T>.Variable(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! value, string? name = null, bool requiresGradient = true) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*static AiDotNet.Interpretability.Helpers.GradientHelperFactory<T>.CreateGradientFunction(AiDotNet.Interfaces.IFullModel<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! model) -> System.Func<AiDotNet.Tensors.LinearAlgebra.Vector<T>!, int, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>!
+*REMOVED*static AiDotNet.Interpretability.Helpers.GradientHelperFactory<T>.FromAutodiffModel(System.Func<AiDotNet.Autodiff.ComputationNode<T>!, AiDotNet.Autodiff.ComputationNode<T>!>! modelFunction) -> AiDotNet.Interpretability.Helpers.AutodiffGradientHelper<T>!
+*REMOVED*static AiDotNet.Interpretability.Helpers.GradientHelperFactory<T>.FromNeuralNetwork(AiDotNet.Interfaces.INeuralNetwork<T>! network) -> AiDotNet.Interpretability.Helpers.InputGradientHelper<T>!
+*REMOVED*static AiDotNet.Interpretability.Helpers.GradientHelperFactory<T>.FromPredictFunction(System.Func<AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>! predictFunction, double epsilon = 0.0001) -> AiDotNet.Interpretability.Helpers.InputGradientHelper<T>!
+*REMOVED*static AiDotNet.Serialization.DelegateState.SaveTraceable<T>(System.Func<AiDotNet.Autodiff.ComputationNode<T>!, AiDotNet.Autodiff.ComputationNode<T>!>? value, int[]? inputShape) -> string!
+*REMOVED*static AiDotNet.Serialization.GraphTrace.Compile<T>(string! graph, string! layerName, string! key) -> System.Func<AiDotNet.Autodiff.ComputationNode<T>!, AiDotNet.Autodiff.ComputationNode<T>!>!
+*REMOVED*static AiDotNet.Serialization.GraphTrace.Trace<T>(System.Func<AiDotNet.Autodiff.ComputationNode<T>!, AiDotNet.Autodiff.ComputationNode<T>!>? expression, int[]? inputShape) -> string?
+*REMOVED*virtual AiDotNet.ActivationFunctions.ActivationFunctionBase<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*virtual AiDotNet.ActivationFunctions.ActivationFunctionBase<T>.SupportsJitCompilation.get -> bool
+*REMOVED*virtual AiDotNet.NeuralNetworks.Layers.LayerBase<T>.SetCaptureMode(bool isCapturing) -> void
+*REMOVED*abstract AiDotNet.Autodiff.AutogradFunction<T>.Backward(AiDotNet.Autodiff.AutogradContext! ctx, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! gradOutput) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>![]!
+*REMOVED*abstract AiDotNet.Autodiff.AutogradFunction<T>.Forward(AiDotNet.Autodiff.AutogradContext! ctx, params AiDotNet.Tensors.LinearAlgebra.Tensor<T>![]! inputs) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.Interfaces.IActivationFunction<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*AiDotNet.Interfaces.IActivationFunction<T>.SupportsJitCompilation.get -> bool
+*REMOVED*AiDotNet.Interfaces.IVectorActivationFunction<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*AiDotNet.Interfaces.IVectorActivationFunction<T>.SupportsJitCompilation.get -> bool
+*REMOVED*AiDotNet.Interpretability.Helpers.AutodiffGradientHelper<T>
+*REMOVED*AiDotNet.Interpretability.Helpers.AutodiffGradientHelper<T>.AutodiffGradientHelper(System.Func<AiDotNet.Autodiff.ComputationNode<T>!, AiDotNet.Autodiff.ComputationNode<T>!>! modelFunction) -> void
+*REMOVED*AiDotNet.Interpretability.Helpers.AutodiffGradientHelper<T>.ComputeGradient(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, int outputIndex = 0) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.Interpretability.Helpers.AutodiffGradientHelper<T>.ComputeGradient(AiDotNet.Tensors.LinearAlgebra.Vector<T>! input, int outputIndex = 0) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+*REMOVED*AiDotNet.Interpretability.Helpers.AutodiffGradientHelper<T>.ComputeHessianVectorProduct(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! vector, int outputIndex = 0) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.Interpretability.Helpers.AutodiffGradientHelper<T>.CreateGradientFunction() -> System.Func<AiDotNet.Tensors.LinearAlgebra.Vector<T>!, int, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>!
+*REMOVED*AiDotNet.Interpretability.Helpers.AutodiffGradientHelper<T>.CreateTensorGradientFunction() -> System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, int, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+*REMOVED*AiDotNet.Interpretability.Helpers.AutodiffGradientHelper<T>.GradientMethod.get -> string!
+*REMOVED*AiDotNet.Interpretability.Helpers.AutodiffGradientHelper<T>.SupportsExactGradients.get -> bool
+*REMOVED*AiDotNet.Interpretability.Helpers.GradientHelperFactory<T>
+*REMOVED*AiDotNet.ActivationFunctions.HierarchicalSoftmaxActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input, AiDotNet.Autodiff.ComputationNode<T>! nodeWeights) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*AiDotNet.NeuralNetworks.Layers.LambdaLayer<T>.LambdaLayer(int[]! inputShape, int[]! outputShape, System.Func<AiDotNet.Autodiff.ComputationNode<T>!, AiDotNet.Autodiff.ComputationNode<T>!>! traceableExpression, AiDotNet.Interfaces.IActivationFunction<T>? activationFunction = null) -> void
+*REMOVED*AiDotNet.NeuralNetworks.Layers.LayerBase<T>.CapturedGraphOutput -> AiDotNet.Autodiff.ComputationNode<T>?
+*REMOVED*AiDotNet.NeuralNetworks.Layers.LayerBase<T>.IsCapturing -> bool
+*REMOVED*AiDotNet.Serialization.GraphTrace
+*REMOVED*override AiDotNet.ActivationFunctions.BentIdentityActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.BinarySpikingActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.CELUActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.ELUActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.GaussianActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.GELUActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.GumbelSoftmaxActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.HardSigmoidActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.HardSwishActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.HardTanhActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.HierarchicalSoftmaxActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.IdentityActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.ISRUActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.LeakyReLUActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.LiSHTActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.LogSoftmaxActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.LogSoftminActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.MaxoutActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.MishActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.PReLUActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.ReLU6Activation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.ReLUActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.RReLUActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.ScaledTanhActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.SELUActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.SigmoidActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.SignActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.SiLUActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.SoftmaxActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.SoftminActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.SoftPlusActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.SoftSignActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.SparsemaxActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.SphericalSoftmaxActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.SQRBFActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.SquashActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.SwishActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.SwishActivation<T>.SupportsJitCompilation.get -> bool
+*REMOVED*override AiDotNet.ActivationFunctions.TanhActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.TaylorSoftmaxActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+*REMOVED*override AiDotNet.ActivationFunctions.ThresholdedReLUActivation<T>.ApplyToGraph(AiDotNet.Autodiff.ComputationNode<T>! input) -> AiDotNet.Autodiff.ComputationNode<T>!
+AiDotNet.Configuration.JitCompilationConfig.PersistCompiledProgram.get -> bool
+AiDotNet.Configuration.JitCompilationConfig.PersistCompiledProgram.set -> void
+AiDotNet.Models.Results.AiModelResult<T, TInput, TOutput>.CompiledPlansChanged.get -> bool
+AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.PredictWithGradients(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.TiedReadoutLocalErrorCreditRule(int readoutLayerCount = 2, double localWeight = 1, bool detachReadoutOnHiddenLayers = false, int layerStride = 1, bool useDepthProgressiveWeight = false) -> void
 AiDotNet.Models.Options.Adam8BitOptimizerOptions<T, TInput, TOutput>.UseDecoupledWeightDecay.get -> bool
 AiDotNet.Models.Options.Adam8BitOptimizerOptions<T, TInput, TOutput>.UseDecoupledWeightDecay.set -> void

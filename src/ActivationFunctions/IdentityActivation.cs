@@ -1,5 +1,4 @@
 ﻿using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 
 namespace AiDotNet.ActivationFunctions;
@@ -120,24 +119,4 @@ public class IdentityActivation<T> : ActivationFunctionBase<T>, Fused.IFusedActi
     /// </summary>
     public override Tensor<T> Activate(Tensor<T> input) => input;
 
-    /// <summary>
-    /// Applies this activation function to a computation graph node.
-    /// </summary>
-    /// <param name="input">The computation node to apply the activation to.</param>
-    /// <returns>The same computation node (Identity is a no-op).</returns>
-    /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method returns the input node unchanged, as Identity activation does nothing.
-    /// No TensorOperations call is needed.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
-    {
-        if (input == null)
-            throw new ArgumentNullException(nameof(input));
-
-        // Identity is a no-op, just return the input
-        return input;
-    }
 }

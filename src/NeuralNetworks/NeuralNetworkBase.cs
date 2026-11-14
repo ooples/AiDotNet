@@ -1,5 +1,4 @@
 #pragma warning disable CS0649, CS0414, CS0169
-using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Interpretability;
 using AiDotNet.Models;
@@ -7086,8 +7085,46 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     }
 
     /// <inheritdoc />
-    public virtual Tensor<T> Predict(Tensor<T> input)
+    public virtual Tensor<T> Predict(Tensor<T> input) => PredictFunnel(input, differentiable: false);
+
+    /// <summary>
+    /// Runs the same inference forward as <see cref="Predict(Tensor{T})"/> (evaluation mode: dropout off, batch
+    /// normalization on running statistics) but records it on the active <see cref="GradientTape{T}"/>, so gradients
+    /// with respect to the input -- and higher derivatives -- can be taken.
+    /// </summary>
+    /// <param name="input">The input; take gradients with respect to this tensor.</param>
+    /// <returns>The network output, connected to <paramref name="input"/> on the tape.</returns>
+    /// <remarks>
+    /// <para>
+    /// <see cref="Predict(Tensor{T})"/> runs under a no-grad scope, so a gradient of its output is zero. Use this for
+    /// input attributions (saliency, integrated gradients), physics-informed residuals that need derivatives of the
+    /// network output, and adversarial inputs.
+    /// </para>
+    /// <para><b>For Beginners:</b> this answers "how does the output change if I nudge the input?", which a normal
+    /// prediction does not keep track of.</para>
+    /// </remarks>
+    public Tensor<T> PredictWithGradients(Tensor<T> input)
     {
+        // Through the virtual Predict, so a model that overrides it (detection heads, OCR, segmentation decoders) is
+        // differentiated through the same function it predicts with; the funnel those overrides reach skips its
+        // no-grad scope while this flag is set.
+        bool prior = t_differentiablePredict;
+        t_differentiablePredict = true;
+        try
+        {
+            return Predict(input);
+        }
+        finally
+        {
+            t_differentiablePredict = prior;
+        }
+    }
+
+    [ThreadStatic] private static bool t_differentiablePredict;
+
+    private Tensor<T> PredictFunnel(Tensor<T> input, bool differentiable)
+    {
+        differentiable |= t_differentiablePredict;
         RequireArchitectureAgreesWithInput();
         // A model that assembles its layers lazily does so here; the seed must be wired onto those layers.
         EnsureParametersReady();
@@ -7122,11 +7159,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Not while a layer observer is recording: it keeps intermediate outputs to read after Predict returns.
         // Not while a graph is being traced either: the trace's results are lazy nodes, and keeping the output reads its
         // storage, which realizes it on the host and marks the trace as escaping the graph, so the plan is refused.
-        var resultScope = ReleasesInferenceIntermediates && Graph.LayerForwardObserver<T>.Current is null
+        // A differentiable forward keeps its intermediates: the tape holds them for the backward.
+        var resultScope = !differentiable && ReleasesInferenceIntermediates && Graph.LayerForwardObserver<T>.Current is null
                           && !Tensors.Engines.Compilation.GraphMode.IsActive
             ? TensorScope.Begin()
             : null;
-        using var noGrad = new NoGradScope<T>();
+        IDisposable? noGrad = differentiable ? null : new NoGradScope<T>();
         try
         {
             var output = PredictInInferenceMode(input);
@@ -7170,6 +7208,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             }
             finally
             {
+                noGrad?.Dispose();
                 // Even when restoring the mode throws: an abandoned scope would keep collecting this thread's GPU results.
                 resultScope?.Dispose();
             }
@@ -7322,7 +7361,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Here the topology is not guessed, it is OBSERVED: the caller wanted this forward anyway, so
         // tracing it costs one observer allocation and yields the real dataflow. Runs then come from
         // the trace, which breaks at branches and rejoins by construction.
-        if (!_chainValidatedFromTrace)
+        // The one-time chain validation runs its own instrumented forward whose output is not the recorded one; while
+        // a forward is being differentiated it waits for the next plain Predict.
+        bool recording = AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsRecording<T>();
+        if (!_chainValidatedFromTrace && !recording)
         {
             _chainValidatedFromTrace = true;
             return PredictAndValidateChain(input);
@@ -7341,8 +7383,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         var callerArena = t_callerArena;
         if (callerArena.Owner is not null) ExchangeCallerArena(default);
 
+        // A forward that is being differentiated (PredictWithGradients) cannot run in an inference arena: the arena
+        // returns a detached copy of the output, which cuts it off the tape, and recycles the intermediates the tape
+        // still holds for the backward.
         if (!InferenceArenaSettings.Enabled
-            || GraphCaptureCompatibility.IsActive)
+            || GraphCaptureCompatibility.IsActive
+            || recording)
             return PredictCore(input);
 
         if (ReferenceEquals(callerArena.Owner, this) && callerArena.Arena is { } arenaOfCaller
@@ -9279,7 +9325,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Not engaged (small model with no opt-in, or training) → behave exactly like the plain eager
         // forward: no gate, no trace, no overhead, so wrapping any model is always safe. Engagement is
         // computed each call (explicit opt-in for any size, or foundation-scale auto in eval).
-        if (!InferenceAccelerationEngaged)
+        // A forward being differentiated (PredictWithGradients, a PINN residual, an attribution) runs eager: a
+        // compiled replay records as one opaque step, so higher derivatives through it would vanish.
+        if (!InferenceAccelerationEngaged || AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsRecording<T>())
             return eagerForward();
 
         return _inferenceGate.Run(
@@ -16934,7 +16982,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     // v9 writes each layer's input-sized buffers after its extras. They are kept out of the parameter vector by design
     // (a graph layer's adjacency is sized by the graph, not the layer), and the vector plus extras was all this format
     // stored, so a saved graph network, and every clone that fell back to this round trip, lost its graph.
-    private const int SerializationVersion = 9;
+    // v10 records the architecture descriptor right after the encoding, followed by how many of the
+    // network's leading layers the architecture's own layer list held. Until v10 a payload restored into an
+    // instance built with any other architecture -- AiModelResult.Deserialize's JSON skeleton, which a
+    // parameterless constructor gives a default 128-wide input -- came back with the saved layers and the
+    // skeleton's descriptor, and the loaded model rejected the inputs it was trained on.
+    private const int SerializationVersion = 10;
 
     /// <summary>How the parameter values of a serialized network are stored (format v8 and later).</summary>
     private enum SerializedParameterEncoding : byte
@@ -17049,6 +17102,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         writer.Write(SerializationMagic);
         writer.Write(SerializationVersion);
         writer.Write((byte)encoding);
+
+        // v10: the architecture that describes these layers, so a restore reproduces the model's input and
+        // output contract instead of keeping whatever the target instance was constructed with.
+        Architecture.WriteDescriptor(writer);
+        writer.Write(CountArchitectureLayersMirroringNetwork());
 
         // Write the number of layers
         writer.Write(Layers.Count);
@@ -17193,14 +17251,31 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         int layerCount;
 
         var encoding = SerializedParameterEncoding.Float64;
+        int architectureLayerMirrorCount = -1;
         if (first == SerializationMagic)
         {
             version = reader.ReadInt32();
+            // A later format adds fields this reader does not know; reading on would misparse every field after them.
+            if (version > SerializationVersion)
+                throw new InvalidDataException(
+                    $"Serialized network format version {version} is newer than this library supports ({SerializationVersion}); " +
+                    "load it with the AiDotNet version that saved it or a later one.");
             if (version >= 8)
             {
                 encoding = (SerializedParameterEncoding)reader.ReadByte();
                 if (encoding != SerializedParameterEncoding.Float64 && encoding != SerializedParameterEncoding.Float32)
                     throw new InvalidDataException($"Serialized network declares unknown parameter encoding {(byte)encoding}.");
+            }
+            if (version >= 10)
+            {
+                // Restore the descriptor BEFORE the layers are rebuilt: lazy-layer resolution below reads
+                // Architecture.GetInputShape() when a saved shape is still symbolic. Only a skeleton adopts it
+                // (SerializedArchitectureAdoption); an instance the caller built keeps its own architecture, so
+                // DeserializeNetworkSpecificData can still report a payload written for a different one.
+                bool adopt = SerializedArchitectureAdoption.IsActive;
+                Architecture.ReadAndRestoreDescriptor(reader, apply: adopt);
+                int mirrorCount = reader.ReadInt32();
+                if (adopt) architectureLayerMirrorCount = mirrorCount;
             }
             layerCount = reader.ReadInt32();
         }
@@ -17393,6 +17468,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Independent layer members are left alone because rebinding is reference-identity based.
         RebindLayerAliases(previousLayers, _layers);
         BindLayerGraphReferences();
+        RestoreArchitectureLayerMirror(architectureLayerMirrorCount);
 
         if (version >= 6) RestoreGeneratedAdditionalLayerState(reader, version);
 
@@ -17408,6 +17484,52 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // observed while the destination graph was materialized. Derived CPU weight packs and
         // resident GPU buffers must never survive a bulk restore.
         InvalidateWeightCachesAfterSuccessfulWeightUpdate();
+    }
+
+    /// <summary>
+    /// How many of this network's leading layers the architecture's own layer list holds by reference, or
+    /// -1 when the architecture's layers are not such a prefix (and so cannot be rebuilt from the network's).
+    /// </summary>
+    /// <remarks>
+    /// A network built from an architecture that carries layers takes those objects by reference, so for a
+    /// freshly constructed model this is the architecture's layer count; an architecture that carries none
+    /// (the network built its own defaults) records zero.
+    /// </remarks>
+    private int CountArchitectureLayersMirroringNetwork()
+    {
+        var architectureLayers = Architecture.Layers;
+        if (architectureLayers.Count > _layers.Count) return -1;
+        for (int i = 0; i < architectureLayers.Count; i++)
+        {
+            if (!ReferenceEquals(architectureLayers[i], _layers[i])) return -1;
+        }
+        return architectureLayers.Count;
+    }
+
+    /// <summary>
+    /// Points the architecture's layer list at the restored layers, as it pointed at the saved model's.
+    /// </summary>
+    /// <param name="mirrorCount">The count written by <see cref="CountArchitectureLayersMirroringNetwork"/>,
+    /// or -1 when the payload predates v9 or the saved architecture's layers were not a prefix of the network's.</param>
+    private void RestoreArchitectureLayerMirror(int mirrorCount)
+    {
+        if (mirrorCount < 0 || mirrorCount > _layers.Count) return;
+        // A clone whose CreateNewInstance reused the source's architecture must not repoint the source's
+        // layer list at the clone's layers: that architecture still describes the source.
+        if (Architecture.IsClaimedByAnotherModel(this)) return;
+        var architectureLayers = Architecture.Layers;
+        bool alreadyMirrors = architectureLayers.Count == mirrorCount;
+        for (int i = 0; alreadyMirrors && i < mirrorCount; i++)
+        {
+            alreadyMirrors = ReferenceEquals(architectureLayers[i], _layers[i]);
+        }
+        if (alreadyMirrors) return;
+
+        architectureLayers.Clear();
+        for (int i = 0; i < mirrorCount; i++) architectureLayers.Add(_layers[i]);
+        // The architecture now holds this model's layer objects; record the ownership a constructor
+        // taking them would have recorded, so a second model cannot silently share them.
+        if (mirrorCount > 0) Architecture.ClaimForModel(this);
     }
 
     /// <summary>
