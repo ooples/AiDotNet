@@ -325,14 +325,15 @@ public class CertificationReferenceTests
     {
         await Task.Yield();
 
-        // The probe step (k queries at sigma_min) composes with the certification step into one Gaussian
-        // mechanism of noise (k / sigma_min^2 + 1 / sigma^2)^(-1/2); the radius uses it, not sigma(x).
+        // The probe step (a noisy reference and k probes, k + 1 queries at sigma_min) composes with the
+        // certification step into one Gaussian mechanism of noise ((k + 1) / sigma_min^2 + 1 / sigma^2)^(-1/2);
+        // the radius uses it, not sigma(x).
         var options = new CertifiedDefenseOptions<double> { NumSamples = 100, SelectionSamples = 10, ConfidenceLevel = 0.999, Seed = 7 };
         var adaptive = new AdaptiveRandomizedSmoothing<double, Vector<double>, Vector<double>>(options, 0.1, 1.0, 20);
         var result = adaptive.CertifyPrediction(new Vector<double>(new[] { 0.3 }), ConstantClass(1, 0, 2));
 
         double sigma = (double)result.CertificationDetails["AdaptiveSigma"];
-        double effective = 1.0 / Math.Sqrt(20 / (0.1 * 0.1) + 1 / (sigma * sigma));
+        double effective = 1.0 / Math.Sqrt((20 + 1) / (0.1 * 0.1) + 1 / (sigma * sigma));
         Assert.Equal(effective, (double)result.CertificationDetails["EffectiveSigma"], 1e-12);
         Assert.Equal(effective * InverseNormal(Math.Pow(0.001, 1.0 / 100)), result.CertifiedRadius, 1e-5);
     }
@@ -596,18 +597,52 @@ public class CertificationReferenceTests
 
         // The model flips when x0 > 0.05, so at x = 0 about 31% of the probes at sigma_min = 0.1 change the class
         // and sigma(x) exceeds sigma_min. A nearby input can realize a smaller sigma, so the sound composed noise
-        // is sigma_min / sqrt(k + 1), not (k / sigma_min^2 + 1 / sigma(x)^2)^(-1/2). Every Monte Carlo sample runs
-        // the k probes and the classification: 1 clean call plus (n0 + n)(k + 1) noisy calls.
+        // is sigma_min / sqrt(k + 2), not ((k + 1) / sigma_min^2 + 1 / sigma(x)^2)^(-1/2). Every Monte Carlo
+        // sample runs a noisy reference, the k probes and the classification: (n0 + n)(k + 2) noisy calls. The
+        // clean call f(x) that the probes used to be compared with is not a Gaussian query, so it is gone.
         const int k = 20;
         var options = new CertifiedDefenseOptions<double> { NumSamples = 200, SelectionSamples = 10, ConfidenceLevel = 0.99, Seed = 9 };
         var adaptive = new AdaptiveRandomizedSmoothing<double, Vector<double>, Vector<double>>(options, 0.1, 1.0, k);
         var model = new ConstantModel<double>(1, 2, x => x[0] > 0.05 ? 1 : 0);
         var result = adaptive.CertifyPrediction(new Vector<double>(new[] { 0.0 }), model);
 
-        Assert.Equal(0.1 / Math.Sqrt(k + 1), (double)result.CertificationDetails["EffectiveSigma"], 1e-15);
+        Assert.Equal(0.1 / Math.Sqrt(k + 2), (double)result.CertificationDetails["EffectiveSigma"], 1e-15);
         Assert.True((double)result.CertificationDetails["AdaptiveSigma"] > 0.1);
-        Assert.Equal(1 + (10 + 200) * (k + 1), model.Calls);
+        Assert.Equal((10 + 200) * (k + 2), model.Calls);
         Assert.Equal(CertifiedDefenseMethod.AdaptiveRandomizedSmoothing, (CertifiedDefenseMethod)result.CertificationDetails["Method"]);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task HalfSmoothing_BoundsAreRoundedOutward()
+    {
+        await Task.Yield();
+
+        // All 50 votes for class 0 at 99% confidence: p_A_lower = 0.01^(1/50) = 0.912011, which Half rounds to
+        // nearest as 0.912109, above the proven bound. Converted outward it is the Half value just below.
+        var options = new CertifiedDefenseOptions<Half> { NoiseSigma = 0.25, NumSamples = 50, SelectionSamples = 10, ConfidenceLevel = 0.99, Seed = 3 };
+        var smoothing = new RandomizedSmoothing<Half, Vector<Half>, Vector<Half>>(options);
+        var result = smoothing.CertifyPrediction(new Vector<Half>(new[] { (Half)0.5 }), new ConstantModel<Half>(1, 2, _ => 0));
+
+        double lower = SmoothingStatistics.ClopperPearsonLower(50, 50, 0.99);
+        double upper = SmoothingStatistics.ClopperPearsonUpper(50, 50, 0.99);
+        Assert.Equal(50, (int)result.CertificationDetails["TopClassCount"]);
+        Assert.True((double)result.LowerBound <= lower, $"lower {(double)result.LowerBound} > {lower}");
+        Assert.True(lower - (double)result.LowerBound < 1e-3);
+        Assert.True((double)result.UpperBound >= upper);
+        Assert.True((double)result.CertifiedRadius <= SmoothingStatistics.Radius(lower, 0.25));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task CertificationArgMax_RejectsAnEmptyClassScoreVector()
+    {
+        await Task.Yield();
+
+        // An empty model output names no class; it was counted as class 0 by the smoothing votes.
+        Assert.Throws<ArgumentException>(() => CertificationMath<double>.ArgMax(new Vector<double>(0)));
+        var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(
+            new CertifiedDefenseOptions<double> { NumSamples = 10, SelectionSamples = 5, Seed = 1 });
+        Assert.Throws<ArgumentException>(() =>
+            smoothing.CertifyPrediction(new Vector<double>(new[] { 0.5 }), new DelegateModel(1, _ => Array.Empty<double>())));
     }
 
     /// <summary>One dense layer, one input, two logits z = (x, -x): the L-infinity margin 2x - 2 eps.</summary>
@@ -864,6 +899,91 @@ public class CertificationReferenceTests
         var crown = new CROWNVerification<double, Tensor<double>, Tensor<double>>(LInfinityOptions(0.1));
         Assert.False((bool)ibp.CertifyPrediction(ReferenceInput(), network).CertificationDetails["Sound"]);
         Assert.False((bool)crown.CertifyPrediction(ReferenceInput(), network).CertificationDetails["Sound"]);
+    }
+
+    /// <summary>A ReLU subclass with a different forward pass: max(z, 0) + 1.</summary>
+    private sealed class ShiftedReLUActivation : ReLUActivation<double>
+    {
+        public override double Activate(double input) => base.Activate(input) + 1.0;
+
+        public override Vector<double> Activate(Vector<double> input)
+            => new Vector<double>(base.Activate(input).ToArray().Select(v => v + 1.0).ToArray());
+
+        public override Tensor<double> Activate(Tensor<double> input)
+        {
+            var activated = base.Activate(input);
+            return new Tensor<double>(activated.Shape.ToArray(), new Vector<double>(activated.ToArray().Select(v => v + 1.0).ToArray()));
+        }
+    }
+
+    private static FeedForwardNeuralNetwork<double> NetworkWith(
+        IActivationFunction<double>? hiddenActivation,
+        IActivationFunction<double>? outputActivation,
+        double[] outputBias)
+    {
+        var hidden = new DenseLayer<double>(outputSize: 2, activationFunction: hiddenActivation, biasMode: BiasMode.Always);
+        var output = new DenseLayer<double>(outputSize: 2, activationFunction: outputActivation, biasMode: BiasMode.Always);
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 2,
+            outputSize: 2,
+            layers: new List<ILayer<double>> { hidden, output });
+        var network = new FeedForwardNeuralNetwork<double>(architecture);
+        network.Predict(new Tensor<double>(new[] { 1, 2 }));
+        Assign(hidden, W1, B1);
+        Assign(output, W2, outputBias);
+        return network;
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task BoundPropagation_DoesNotReadAnActivationSubclassAsItsBaseFunction()
+    {
+        await Task.Yield();
+
+        // The reference network with a ReLU subclass whose forward pass adds 1. Matching by "is" read it as a
+        // plain ReLU and called the bounds of a different function sound.
+        var network = NetworkWith(new ShiftedReLUActivation(), null, B2);
+
+        var ibp = new IntervalBoundPropagation<double, Tensor<double>, Tensor<double>>(LInfinityOptions(0.1));
+        var crown = new CROWNVerification<double, Tensor<double>, Tensor<double>>(LInfinityOptions(0.1));
+        Assert.False((bool)ibp.CertifyPrediction(ReferenceInput(), network).CertificationDetails["Sound"]);
+        Assert.False((bool)crown.CertifyPrediction(ReferenceInput(), network).CertificationDetails["Sound"]);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Crown_ReportsBoundsAfterATrailingActivation()
+    {
+        await Task.Yield();
+
+        // The reference network with a sigmoid on its output: the reported bounds of class 0 are those of the
+        // network output, sigmoid of the CROWN logit bounds (1.15 below). They were the pre-sigmoid logit bounds.
+        var crown = new CROWNVerification<double, Tensor<double>, Tensor<double>>(LInfinityOptions(0.1));
+        var logits = crown.CertifyPrediction(ReferenceInput(), ReferenceNetwork());
+        var squashed = crown.CertifyPrediction(ReferenceInput(), NetworkWith(new ReLUActivation<double>(), new SigmoidActivation<double>(), B2));
+
+        static double Sigmoid(double z) => 1.0 / (1.0 + Math.Exp(-z));
+        Assert.Equal(1.15, logits.LowerBound, 1e-12);
+        Assert.Equal(Sigmoid(logits.LowerBound), squashed.LowerBound, 1e-12);
+        Assert.Equal(Sigmoid(logits.UpperBound), squashed.UpperBound, 1e-12);
+        Assert.Equal(0.45, (double)squashed.CertificationDetails["MarginLowerBound"], 1e-12);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Ibp_ZeroSlopeLeakyReLUOutputNeedsAPositiveTopLogit()
+    {
+        await Task.Yield();
+
+        // Output biases of -5 make every pre-activation logit negative over the ball, so a trailing LeakyReLU
+        // with slope 0 (a ReLU) outputs (0, 0): a tie, not a certified prediction. Its pre-activation margin
+        // (0.3) was trusted as if the activation were strictly increasing.
+        var network = NetworkWith(new ReLUActivation<double>(), new LeakyReLUActivation<double>(0.0), new[] { -5.0, -5.0 });
+
+        var ibp = new IntervalBoundPropagation<double, Tensor<double>, Tensor<double>>(LInfinityOptions(0.1));
+        var result = ibp.CertifyPrediction(ReferenceInput(), network);
+
+        Assert.True((bool)result.CertificationDetails["Sound"]);
+        Assert.False(result.IsCertified);
     }
 
     [Fact(Timeout = 60000)]

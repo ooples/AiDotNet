@@ -412,7 +412,7 @@ public class CROWNVerification<T, TInput, TOutput> : ICertifiedDefense<T, TInput
                 ? network.CrownMargins(x, epsilon, norm, predictedClass, out topLogitLower)
                 : network.IntervalMargins(x, epsilon, norm, predictedClass, out topLogitLower);
             var (lower, upper) = network.SupportsCrown
-                ? network.CrownLogitBounds(x, epsilon, norm)
+                ? network.CrownOutputBounds(x, epsilon, norm)
                 : network.IntervalBounds(x, epsilon, norm, network.Operations.Count);
             T minimumMargin = Engine.TensorMinValue(margins);
             bool certified = NumOps.GreaterThan(minimumMargin, NumOps.Zero)
