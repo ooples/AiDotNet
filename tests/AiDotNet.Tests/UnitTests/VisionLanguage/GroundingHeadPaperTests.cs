@@ -311,6 +311,38 @@ public class GroundingHeadPaperTests
         }
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CoordinateGrounders_TrainGrounding_LowersTheAnswerLoss(bool ferret)
+    {
+        // The head used to be registered for saving but reached by no objective, so its weights kept their
+        // initialization. TrainGrounding reads the answer teacher-forced and steps on its cross-entropy.
+        var architecture = new NeuralNetworkArchitecture<double>(inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.ObjectDetection, inputSize: 32, outputSize: 4);
+        using IDisposable owner = ferret
+            ? new Ferret<double>(architecture, new FerretOptions
+            {
+                ImageSize = 28, VisionDim = 32, DecoderDim = 32, NumVisionLayers = 1, NumDecoderLayers = 1, NumHeads = 4,
+                VocabSize = 64, MaxSequenceLength = 8, MaxGenerationLength = 4, DropoutRate = 0.0,
+            })
+            : new Shikra<double>(architecture, new ShikraOptions
+            {
+                ImageSize = 28, VisionDim = 32, DecoderDim = 32, NumVisionLayers = 1, NumDecoderLayers = 1, NumHeads = 4,
+                VocabSize = 64, MaxSequenceLength = 8, MaxGenerationLength = 4, DropoutRate = 0.0,
+            });
+        var model = (AiDotNet.VisionLanguage.Interfaces.IGroundingTrainable<double>)owner;
+        var image = new Tensor<double>(Random(21, 1, 4, 32).ToArray(), new[] { 1, 4, 32 });
+        var boxes = new[] { new GroundingBox("cat", 0.1, 0.2, 0.5, 0.6) };
+
+        double before = model.EvaluateGroundingLoss(image, "cat", boxes);
+        for (int step = 0; step < 10; step++) model.TrainGrounding(image, "cat", boxes);
+        double after = model.EvaluateGroundingLoss(image, "cat", boxes);
+
+        Assert.True(double.IsFinite(before) && before > 0, $"initial loss {before}");
+        Assert.True(after < before, $"the answer loss did not fall: {before} -> {after}");
+    }
+
     [Fact]
     public void Shikra_DefaultLanguageModel_IsCausalWithRotaryPositions()
     {

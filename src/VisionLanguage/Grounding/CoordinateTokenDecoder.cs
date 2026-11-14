@@ -50,6 +50,7 @@ internal sealed class CoordinateTokenDecoder<T> : GroundingHeadModule<T>
     private readonly DenseLayer<T> _head;
     private readonly Dictionary<string, int> _values = new(StringComparer.Ordinal);
     private readonly HashSet<string> _prefixes = new(StringComparer.Ordinal);
+    private readonly string[] _spellings;
     private readonly int _longestSpelling;
 
     public CoordinateTokenDecoder(IEngine engine, List<ILayer<T>> stream, CoordinateTokenDecoderConfiguration configuration)
@@ -64,11 +65,13 @@ internal sealed class CoordinateTokenDecoder<T> : GroundingHeadModule<T>
         _head = Linear(Vocabulary, bias: false);
         int places = Math.Max(0, (int)Math.Round(Math.Log10(c.Divisor)));
         string format = "F" + places.ToString(CultureInfo.InvariantCulture);
+        _spellings = new string[c.Bins];
         for (int k = 0; k < c.Bins; k++)
         {
             string spelling = c.Spelling == CoordinateSpelling.Integer
                 ? k.ToString(CultureInfo.InvariantCulture)
                 : (k / c.Divisor).ToString(format, CultureInfo.InvariantCulture);
+            _spellings[k] = spelling;
             if (_values.ContainsKey(spelling)) continue;
             _values[spelling] = k;
             for (int length = 1; length <= spelling.Length; length++) _prefixes.Add(spelling.Substring(0, length));
@@ -127,6 +130,76 @@ internal sealed class CoordinateTokenDecoder<T> : GroundingHeadModule<T>
         var one = NumOps.One;
         var zero = NumOps.Zero;
         return new Tensor<T>(new[] { 1, Vocabulary }, Vector<T>.FromArray(allowed.Select(a => a ? one : zero).ToArray()));
+    }
+
+    /// <summary>The boxes of a grounding answer as <c>[b, 4]</c> normalized (x1, y1, x2, y2), in the given order.</summary>
+    internal static Tensor<T> BoxesOf(IReadOnlyList<GroundingBox> boxes)
+    {
+        if (boxes is null) throw new ArgumentNullException(nameof(boxes));
+        var values = new double[boxes.Count * 4];
+        for (int b = 0; b < boxes.Count; b++)
+        {
+            var box = boxes[b] ?? throw new ArgumentException("A box is null.", nameof(boxes));
+            double[] corners = { box.X1, box.Y1, box.X2, box.Y2 };
+            if (corners.Any(v => double.IsNaN(v) || v < 0 || v > 1) || box.X2 < box.X1 || box.Y2 < box.Y1)
+                throw new ArgumentException($"Box {b} must have 0 <= x1 <= x2 <= 1 and 0 <= y1 <= y2 <= 1.", nameof(boxes));
+            Array.Copy(corners, 0, values, 4 * b, 4);
+        }
+        return new Tensor<double>(new[] { boxes.Count, 4 }, Vector<double>.FromArray(values)).Cast<T>();
+    }
+
+    /// <summary>
+    /// The answer that writes <paramref name="boxes"/> <c>[b, 4]</c> (normalized x1, y1, x2, y2): each box as
+    /// <c>[</c>, its four coordinate values spelled character by character and separated by <c>,</c>, then <c>]</c>; the
+    /// boxes separated by <c>;</c>, then the end token. A coordinate is the value <c>round(v · Divisor)</c>, clamped to
+    /// the values the decoder can write.
+    /// </summary>
+    internal List<int> AnswerTokens(Tensor<T> boxes)
+    {
+        if (boxes is null) throw new ArgumentNullException(nameof(boxes));
+        if (boxes.Rank != 2 || boxes.Shape[1] != 4) throw new ArgumentException("The boxes must be [b, 4].", nameof(boxes));
+        var tokens = new List<int>();
+        double[] coordinates = boxes.Cast<double>().ToArray();
+        for (int b = 0; b < boxes.Shape[0]; b++)
+        {
+            if (b > 0) tokens.Add(Semicolon);
+            tokens.Add(Open);
+            for (int i = 0; i < 4; i++)
+            {
+                if (i > 0) tokens.Add(Comma);
+                double v = coordinates[(4 * b) + i];
+                int k = (int)Math.Max(0, Math.Min(Configuration.Bins - 1, Math.Round(v * Configuration.Divisor)));
+                foreach (char ch in _spellings[k]) tokens.Add(Characters.IndexOf(ch));
+            }
+            tokens.Add(Close);
+        }
+        tokens.Add(EndToken);
+        return tokens;
+    }
+
+    /// <summary>
+    /// The training loss of the references (Shikra and Ferret train the language model with next-token cross-entropy
+    /// on the answer): the answer that writes <paramref name="boxes"/> is read teacher-forced after the image tokens and
+    /// the instruction, and every answer token takes the cross-entropy of the head's prediction at the position before
+    /// it. Returns the mean over the answer's tokens, a one-element tensor.
+    /// </summary>
+    internal Tensor<T> AnswerLoss(Tensor<T> imageTokens, IReadOnlyList<int> tokenIds, Func<Tensor<T>, Tensor<T>> languageModel,
+        Tensor<T> boxes)
+    {
+        if (imageTokens is null) throw new ArgumentNullException(nameof(imageTokens));
+        if (languageModel is null) throw new ArgumentNullException(nameof(languageModel));
+        var answer = AnswerTokens(boxes);
+        var prefix = Engine.TensorConcatenate(new[] { AsRows(Engine, imageTokens), EmbedText(tokenIds) }, 0);
+        int length = answer.Count, start = prefix.Shape[0] - 1;
+        var inputs = length > 1
+            ? Engine.TensorConcatenate(new[] { prefix, Rows(_coordinateEmbedding, OneHot(answer.Take(length - 1).ToList(), Vocabulary)) }, 0)
+            : prefix;
+        var hidden = AsRows(Engine, languageModel(inputs));
+        var predicting = Engine.TensorSlice(hidden, new[] { start, 0 }, new[] { length, hidden.Shape[1] });
+        var logProbabilities = Engine.TensorLogSoftmax(Rows(_head, predicting).Reshape(new[] { length, Vocabulary }), 1);
+        var target = Engine.TensorOneHot<T>(new Tensor<int>(new[] { length }, Vector<int>.FromList(answer)), Vocabulary);
+        var total = Engine.ReduceSum(Engine.TensorMultiply(logProbabilities, target), new[] { 0, 1 }, false);
+        return Engine.TensorMultiplyScalar(total, NumOps.FromDouble(-1.0 / length));
     }
 
     /// <summary>
