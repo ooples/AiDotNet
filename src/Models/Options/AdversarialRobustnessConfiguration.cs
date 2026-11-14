@@ -35,6 +35,16 @@ public class AdversarialRobustnessConfiguration<T, TInput, TOutput>
     public bool Enabled { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets the logger for the robustness build steps.
+    /// </summary>
+    /// <remarks>
+    /// <para>Failures of the optional robustness evaluation steps are logged as warnings, and with
+    /// <see cref="AdversarialRobustnessOptions{T}.VerboseLogging"/> every step is logged as information.
+    /// Null (the default) discards the messages.</para>
+    /// </remarks>
+    public Microsoft.Extensions.Logging.ILogger? Logger { get; set; }
+
+    /// <summary>
     /// Gets or sets the robustness options.
     /// </summary>
     public AdversarialRobustnessOptions<T> Options { get; set; } = new();

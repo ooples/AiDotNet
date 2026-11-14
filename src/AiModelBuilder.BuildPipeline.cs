@@ -12,6 +12,8 @@ using AiDotNet.Preprocessing.Scalers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
 
+using Microsoft.Extensions.Logging;
+
 namespace AiDotNet;
 
 /// <summary>
@@ -890,7 +892,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         AiModelResult<T, TInput, TOutput> result, TInput preparedX, TOutput preparedY,
         OptimizationResult<T, TInput, TOutput> optimizationResult)
     {
-        if (_configuredAdversarialAttack is null)
+        var attacks = RobustnessAuditAttacks();
+        if (attacks.Count == 0)
         {
             return;
         }
@@ -904,9 +907,16 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 dataMatrix = ConversionsHelper.ConvertToMatrix<T, TInput>(preparedX);
                 labelVector = ConversionsHelper.ConvertToVector<T, TOutput>(preparedY);
             }
-            catch { dataMatrix = null; }
+            catch (Exception ex)
+            {
+                RobustnessLogger.LogWarning(ex, "Robustness audit skipped: the data is not tabular.");
+                dataMatrix = null;
+            }
 
-            if (optimizationResult.BestSolution is not IFullModel<T, AiDotNet.Tensors.LinearAlgebra.Matrix<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>> tabularModel
+            // The audit measures the model the result predicts with: the defended model when adversarial training
+            // replaced it at build.
+            var auditedModel = result.Model ?? optimizationResult.BestSolution;
+            if (auditedModel is not IFullModel<T, AiDotNet.Tensors.LinearAlgebra.Matrix<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>> tabularModel
                 || dataMatrix is null || labelVector is null || dataMatrix.Rows == 0
                 || labelVector.Length != dataMatrix.Rows)
             {
@@ -953,82 +963,110 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 return outp.Length > 0 ? numOps.ToDouble(outp[0]) : 0.0;
             }
 
-            // Build per-sample inputs/labels in the attack's (TInput, TOutput) space (Matrix row / Vector).
-            int n = dataMatrix.Rows;
+            // Build per-sample inputs/labels in the attack's (TInput, TOutput) space (Matrix row / Vector), over the
+            // evaluation subset (RobustnessEvaluationSampleRatio).
+            var sampleIndices = RobustnessEvaluationIndices(dataMatrix.Rows);
+            int n = sampleIndices.Length;
             var inputs = new TInput[n];
             var labels = new TOutput[n];
+            var targets = new double[n];
             var cleanCorrect = new bool[n];
-            for (int i = 0; i < n; i++)
+            for (int s = 0; s < n; s++)
             {
+                int i = sampleIndices[s];
                 var sample = new AiDotNet.Tensors.LinearAlgebra.Matrix<T>(1, dataMatrix.Columns);
                 for (int j = 0; j < dataMatrix.Columns; j++) sample[0, j] = dataMatrix[i, j];
                 var lbl = new AiDotNet.Tensors.LinearAlgebra.Vector<T>(1) { [0] = labelVector[i] };
-                inputs[i] = (TInput)(object)sample;
-                labels[i] = (TOutput)(object)lbl;
-                cleanCorrect[i] = Math.Abs(PredictScalar(sample) - numOps.ToDouble(labelVector[i])) <= tolerance;
+                inputs[s] = (TInput)(object)sample;
+                labels[s] = (TOutput)(object)lbl;
+                targets[s] = numOps.ToDouble(labelVector[i]);
+                cleanCorrect[s] = Math.Abs(PredictScalar(sample) - targets[s]) <= tolerance;
             }
 
             double cleanAccuracy = cleanCorrect.Count(c => c) / (double)n;
             var attackModel = (IFullModel<T, TInput, TOutput>)(object)tabularModel;
-            double baseEpsilon = _configuredAdversarialAttack.GetOptions().Epsilon;
-            if (baseEpsilon <= 0) baseEpsilon = 0.1;
+            var baseEpsilons = attacks.Select(a => a.GetOptions().Epsilon).ToArray();
+            double baseEpsilon = baseEpsilons[0] > 0 ? baseEpsilons[0] : 0.1;
+            var budgets = RobustnessCurveBudgets(baseEpsilon);
+            double headline = budgets.OrderBy(b => Math.Abs(b - baseEpsilon)).First();
+            LogRobustnessStep("Robustness audit: {Attacks} attack(s), {Samples} samples, {Budgets} budgets.", attacks.Count, n, budgets.Length);
 
             var curve = new List<AdversarialRobustness.RobustnessCurvePoint<T>>();
-            double[] multipliers = { 0.25, 0.5, 1.0, 2.0 };
             double robustAtBase = cleanAccuracy;
             double successAtBase = 0;
             double perturbSum = 0; int perturbCount = 0;
-            // Empirical robust accuracy is a worst-case measure: a sample must be
-            // correct on the clean input and remain correct for every attack tried
-            // up to the current budget. Counting adversarial correctness alone can
-            // incorrectly reward an attack that happens to repair a clean mistake.
+            // Empirical robust accuracy is a worst-case measure: a sample must be correct on the clean input and
+            // remain correct for every attack tried up to the current budget. Counting adversarial correctness alone
+            // can incorrectly reward an attack that happens to repair a clean mistake.
             var robustThroughBudget = cleanCorrect.ToArray();
 
-            foreach (double mult in multipliers)
+            try
             {
-                _configuredAdversarialAttack.GetOptions().Epsilon = baseEpsilon * mult;
-                TInput[] adversarial;
-                try { adversarial = _configuredAdversarialAttack.GenerateAdversarialBatch(inputs, labels, attackModel); }
-                catch { break; } // attack could not run (e.g. predict contract) — stop the sweep.
-
-                int correct = 0, flipped = 0;
-                for (int i = 0; i < n; i++)
+                foreach (double budget in budgets)
                 {
-                    var advInput = adversarial[i];
-                    if (advInput is null)
+                    bool atHeadline = Math.Abs(budget - headline) < 1e-12;
+                    var foolPerturbation = new double?[n];
+                    bool ran = false;
+                    foreach (var attack in attacks)
                     {
-                        robustThroughBudget[i] = false;
-                        continue;
-                    }
-                    var adv = (AiDotNet.Tensors.LinearAlgebra.Matrix<T>)(object)advInput;
-                    bool advCorrect = Math.Abs(PredictScalar(adv) - numOps.ToDouble(labelVector[i])) <= tolerance;
-                    robustThroughBudget[i] = robustThroughBudget[i] && advCorrect;
-                    if (robustThroughBudget[i]) correct++;
-                    if (Math.Abs(mult - 1.0) < 1e-9)
-                    {
-                        if (cleanCorrect[i] && !advCorrect)
+                        attack.GetOptions().Epsilon = budget;
+                        TInput[] adversarial;
+                        try { adversarial = attack.GenerateAdversarialBatch(inputs, labels, attackModel); }
+                        catch (Exception ex)
                         {
-                            flipped++;
-                            if (_configuredAdversarialAttack.CalculatePerturbation(inputs[i], advInput)
-                                is AiDotNet.Tensors.LinearAlgebra.Matrix<T> perturbation)
+                            // The attack could not run (e.g. its predict contract does not fit the model).
+                            RobustnessLogger.LogWarning(ex, "Robustness audit: {Attack} failed at budget {Budget}.", attack.GetType().Name, budget);
+                            continue;
+                        }
+
+                        ran = true;
+                        for (int i = 0; i < n; i++)
+                        {
+                            var advInput = adversarial[i];
+                            if (advInput is null)
                             {
-                                perturbSum += FrobeniusNorm(perturbation, numOps);
-                                perturbCount++;
+                                robustThroughBudget[i] = false;
+                                continue;
+                            }
+
+                            var adv = (AiDotNet.Tensors.LinearAlgebra.Matrix<T>)(object)advInput;
+                            bool advCorrect = Math.Abs(PredictScalar(adv) - targets[i]) <= tolerance;
+                            robustThroughBudget[i] = robustThroughBudget[i] && advCorrect;
+                            if (atHeadline && cleanCorrect[i] && !advCorrect && foolPerturbation[i] is null
+                                && attack.CalculatePerturbation(inputs[i], advInput) is AiDotNet.Tensors.LinearAlgebra.Matrix<T> perturbation)
+                            {
+                                foolPerturbation[i] = FrobeniusNorm(perturbation, numOps);
                             }
                         }
                     }
-                }
 
-                double robustAcc = correct / (double)n;
-                curve.Add(new AdversarialRobustness.RobustnessCurvePoint<T> { Epsilon = baseEpsilon * mult, RobustAccuracy = robustAcc });
-                if (Math.Abs(mult - 1.0) < 1e-9)
-                {
-                    robustAtBase = robustAcc;
-                    successAtBase = cleanCorrect.Count(c => c) > 0 ? flipped / (double)cleanCorrect.Count(c => c) : 0;
+                    if (!ran)
+                    {
+                        break; // no attack could run at this budget: stop the sweep.
+                    }
+
+                    double robustAcc = robustThroughBudget.Count(r => r) / (double)n;
+                    curve.Add(new AdversarialRobustness.RobustnessCurvePoint<T> { Epsilon = budget, RobustAccuracy = robustAcc });
+                    if (atHeadline)
+                    {
+                        robustAtBase = robustAcc;
+                        int clean = cleanCorrect.Count(c => c);
+                        int flipped = Enumerable.Range(0, n).Count(i => cleanCorrect[i] && !robustThroughBudget[i]);
+                        successAtBase = clean > 0 ? flipped / (double)clean : 0;
+                        foreach (var p in foolPerturbation)
+                        {
+                            if (p.HasValue) { perturbSum += p.Value; perturbCount++; }
+                        }
+                    }
                 }
             }
-
-            _configuredAdversarialAttack.GetOptions().Epsilon = baseEpsilon; // restore
+            finally
+            {
+                for (int a = 0; a < attacks.Count; a++)
+                {
+                    attacks[a].GetOptions().Epsilon = baseEpsilons[a]; // restore
+                }
+            }
 
             if (curve.Count == 0)
             {
@@ -1040,7 +1078,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
             result.SetAdversarialRobustnessReport(new AdversarialRobustness.AdversarialRobustnessReport<T>
             {
-                AttackName = _configuredAdversarialAttack.GetType().Name,
+                AttackName = string.Join("+", attacks.Select(a => a.GetType().Name)),
                 CleanAccuracy = cleanAccuracy,
                 RobustAccuracy = robustAtBase,
                 CleanVsRobustGap = cleanAccuracy - robustAtBase,
@@ -1053,6 +1091,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
         catch (Exception ex)
         {
+            RobustnessLogger.LogWarning(ex, "Adversarial robustness could not be computed; AiModelResult.AdversarialRobustness is null.");
             System.Diagnostics.Trace.TraceWarning(
                 $"Adversarial robustness could not be computed: {ex.Message}. The trained model is " +
                 "unaffected; AiModelResult.AdversarialRobustness is null.");
@@ -1068,14 +1107,18 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// Certifies at the same perturbation budget the empirical attack uses (its epsilon), so certified
     /// accuracy (guaranteed lower bound) and empirical robust accuracy (attack upper bound) sandwich the
     /// true robustness like-for-like. Covers tabular models; a failure is surfaced as a warning and never
-    /// discards the trained model.
+    /// discards the trained model. The defense is <c>ConfigureCertifiedDefense</c>, else the robustness
+    /// configuration's <c>CustomCertifiedDefense</c> or <c>CertificationMethod</c> engine when
+    /// <c>IncludeRobustnessInEvaluation</c> is on.
     /// </para>
     /// </remarks>
     private void ComputeCertifiedRobustness(
         AiModelResult<T, TInput, TOutput> result, TInput preparedX, TOutput preparedY,
         OptimizationResult<T, TInput, TOutput> optimizationResult)
     {
-        if (_configuredCertifiedDefense is null)
+        var certifiedDefense = _configuredCertifiedDefense
+            ?? (ActiveRobustnessConfiguration is { IncludeRobustnessInEvaluation: true } ? EffectiveCertifiedDefense() : null);
+        if (certifiedDefense is null)
         {
             return;
         }
@@ -1089,34 +1132,43 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 dataMatrix = ConversionsHelper.ConvertToMatrix<T, TInput>(preparedX);
                 labelVector = ConversionsHelper.ConvertToVector<T, TOutput>(preparedY);
             }
-            catch { dataMatrix = null; }
+            catch (Exception ex)
+            {
+                RobustnessLogger.LogWarning(ex, "Certification skipped: the data is not tabular.");
+                dataMatrix = null;
+            }
 
-            if (optimizationResult.BestSolution is not IFullModel<T, AiDotNet.Tensors.LinearAlgebra.Matrix<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>> tabularModel
+            var certifiedModel = result.Model ?? optimizationResult.BestSolution;
+            if (certifiedModel is not IFullModel<T, AiDotNet.Tensors.LinearAlgebra.Matrix<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>> tabularModel
                 || dataMatrix is null || labelVector is null || dataMatrix.Rows == 0
                 || labelVector.Length != dataMatrix.Rows)
             {
                 return;
             }
 
-            int n = dataMatrix.Rows;
+            var sampleIndices = RobustnessEvaluationIndices(dataMatrix.Rows);
+            int n = sampleIndices.Length;
             var inputs = new TInput[n];
             var labels = new TOutput[n];
-            for (int i = 0; i < n; i++)
+            for (int s = 0; s < n; s++)
             {
+                int i = sampleIndices[s];
                 var sample = new AiDotNet.Tensors.LinearAlgebra.Matrix<T>(1, dataMatrix.Columns);
                 for (int j = 0; j < dataMatrix.Columns; j++) sample[0, j] = dataMatrix[i, j];
-                inputs[i] = (TInput)(object)sample;
-                labels[i] = (TOutput)(object)new AiDotNet.Tensors.LinearAlgebra.Vector<T>(1) { [0] = labelVector[i] };
+                inputs[s] = (TInput)(object)sample;
+                labels[s] = (TOutput)(object)new AiDotNet.Tensors.LinearAlgebra.Vector<T>(1) { [0] = labelVector[i] };
             }
 
             var numOps = MathHelper.GetNumericOperations<T>();
             // Certify at the empirical attack's budget so the two bounds are comparable; else a default.
-            double radius = _configuredAdversarialAttack is not null && _configuredAdversarialAttack.GetOptions().Epsilon > 0
-                ? _configuredAdversarialAttack.GetOptions().Epsilon
+            var auditAttack = RobustnessAuditAttacks().FirstOrDefault();
+            double radius = auditAttack is not null && auditAttack.GetOptions().Epsilon > 0
+                ? auditAttack.GetOptions().Epsilon
                 : 0.1;
 
+            LogRobustnessStep("Certification: {Defense} at radius {Radius} over {Samples} samples.", certifiedDefense.GetType().Name, radius, n);
             var certModel = (IFullModel<T, TInput, TOutput>)(object)tabularModel;
-            var metrics = _configuredCertifiedDefense.EvaluateCertifiedAccuracy(inputs, labels, certModel, numOps.FromDouble(radius));
+            var metrics = certifiedDefense.EvaluateCertifiedAccuracy(inputs, labels, certModel, numOps.FromDouble(radius));
 
             // Sandwich: certified accuracy (lower bound) vs the empirical robust accuracy (upper bound) at
             // the same budget, when the adversarial attack audit is available.
@@ -1125,7 +1177,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
             result.SetCertifiedRobustnessReport(new AdversarialRobustness.CertifiedRobustnessReport<T>
             {
-                DefenseName = _configuredCertifiedDefense.GetType().Name,
+                DefenseName = certifiedDefense.GetType().Name,
                 RadiusUsed = radius,
                 Metrics = metrics,
                 EmpiricalRobustAccuracy = empirical,
@@ -1135,6 +1187,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
         catch (Exception ex)
         {
+            RobustnessLogger.LogWarning(ex, "Certified robustness could not be computed; AiModelResult.CertifiedRobustness is null.");
             System.Diagnostics.Trace.TraceWarning(
                 $"Certified robustness could not be computed: {ex.Message}. The trained model is " +
                 "unaffected; AiModelResult.CertifiedRobustness is null.");
@@ -5794,6 +5847,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             finalResult.SetSelfSupervisedLearningPretrainingResult(_selfSupervisedLearningPretrainingResult);
         }
         ComputeExplanationFaithfulness(finalResult, preparedX, optimizationResult);
+        ApplyConfiguredAdversarialDefense(finalResult, preparedX, preparedY);
         ComputeAdversarialRobustness(finalResult, preparedX, preparedY, optimizationResult);
         ComputeCertifiedRobustness(finalResult, preparedX, preparedY, optimizationResult);
         ComputeModelCompression(finalResult, preparedX, preparedY, optimizationResult);

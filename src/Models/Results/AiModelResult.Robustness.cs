@@ -62,6 +62,111 @@ public partial class AiModelResult<T, TInput, TOutput>
     }
 
     /// <summary>
+    /// The certified defense of <see cref="PredictCertified"/>: <c>ConfigureCertifiedDefense</c>, the robustness
+    /// configuration's <c>CustomCertifiedDefense</c>, or the <c>CertificationMethod</c> engine. Not persisted.
+    /// </summary>
+    [JsonIgnore]
+    internal ICertifiedDefense<T, TInput, TOutput>? CertifiedDefense { get; private set; }
+
+    /// <summary>The inference-time certification settings of the robustness configuration. Not persisted.</summary>
+    [JsonIgnore]
+    internal CertifiedInferenceSettings? CertifiedInference { get; private set; }
+
+    internal void SetCertifiedDefense(ICertifiedDefense<T, TInput, TOutput>? defense)
+    {
+        CertifiedDefense = defense;
+    }
+
+    internal void SetCertifiedInference(CertifiedInferenceSettings? settings)
+    {
+        CertifiedInference = settings;
+    }
+
+    /// <summary>
+    /// Gets the result of red teaming the safety pipeline at build (<c>EnableRedTeaming</c>), or null.
+    /// </summary>
+    /// <remarks>
+    /// <para>Every prompt is a case of one of the library's safety benchmarks: recall is the share of adversarial
+    /// prompts the pipeline caught, and the false-positive rate the share of benign controls it blocked.</para>
+    /// </remarks>
+    [JsonIgnore]
+    public AiDotNet.Safety.Benchmarking.SafetyBenchmarkResult? RedTeamingReport { get; private set; }
+
+    internal void SetRedTeamingReport(AiDotNet.Safety.Benchmarking.SafetyBenchmarkResult? report)
+    {
+        RedTeamingReport = report;
+    }
+
+    /// <summary>
+    /// Gets the robustness model card generated at build (<c>AutoGenerateModelCardSections</c>), or null.
+    /// </summary>
+    /// <remarks>
+    /// <para>Its robustness metrics are the empirical, certified and red-teaming figures of this result, and its
+    /// caveats include <c>ModelCardRobustnessNotes</c>.</para>
+    /// </remarks>
+    [JsonIgnore]
+    public AiDotNet.AdversarialRobustness.Documentation.ModelCard? RobustnessModelCard { get; private set; }
+
+    internal void SetRobustnessModelCard(AiDotNet.AdversarialRobustness.Documentation.ModelCard? card)
+    {
+        RobustnessModelCard = card;
+    }
+
+    /// <summary>
+    /// Predicts the class of <paramref name="input"/> with a certified robustness guarantee.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Runs the certified defense on the trained model: with randomized smoothing (Cohen et al. 2019) the class is
+    /// the smoothed classifier's, certified within an L2 radius at the configured confidence; IBP and CROWN bound the
+    /// network's outputs over the perturbation ball. A prediction whose radius is below
+    /// <c>MinimumCertifiedRadius</c> is reported as not certified, and with <c>RejectNonRobustPredictions</c> it is
+    /// rejected.
+    /// </para>
+    /// <para><b>For Beginners:</b> The answer comes with a promise: no change to the input smaller than the
+    /// returned radius can change it.</para>
+    /// </remarks>
+    /// <param name="input">The input, in the model's input space.</param>
+    /// <returns>The predicted class, certified radius and bounds.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// No certified defense is configured, or the prediction is not certified and
+    /// <c>RejectNonRobustPredictions</c> is on.
+    /// </exception>
+    public CertifiedPrediction<T> PredictCertified(TInput input)
+    {
+        if (Model == null)
+        {
+            throw new InvalidOperationException("Model is not initialized.");
+        }
+
+        var defense = CertifiedDefense ?? throw new InvalidOperationException(
+            "No certified defense is configured. Set AdversarialRobustnessOptions.EnableCertifiedRobustness, " +
+            "AdversarialRobustnessConfiguration.CustomCertifiedDefense, or call ConfigureCertifiedDefense on the builder.");
+
+        var prediction = defense.CertifyPrediction(input, Model);
+        var settings = CertifiedInference;
+        if (settings is null)
+        {
+            return prediction;
+        }
+
+        if (prediction.IsCertified && _robustnessNumOps.ToDouble(prediction.CertifiedRadius) < settings.MinimumCertifiedRadius)
+        {
+            prediction.IsCertified = false;
+            prediction.CertificationDetails["BelowMinimumCertifiedRadius"] = settings.MinimumCertifiedRadius;
+        }
+
+        if (settings.RejectNonRobustPredictions && !prediction.IsCertified)
+        {
+            throw new InvalidOperationException(
+                $"The prediction is not certified at the minimum radius {settings.MinimumCertifiedRadius} " +
+                $"(certified radius {_robustnessNumOps.ToDouble(prediction.CertifiedRadius)}), and RejectNonRobustPredictions is on.");
+        }
+
+        return prediction;
+    }
+
+    /// <summary>
     /// Makes a prediction with adversarial preprocessing applied if configured.
     /// </summary>
     /// <remarks>
@@ -79,6 +184,16 @@ public partial class AiModelResult<T, TInput, TOutput>
         if (Model == null)
         {
             throw new InvalidOperationException("Model is not initialized.");
+        }
+
+        if (CertifiedInference is { UseCertifiedInference: true } && CertifiedDefense is not null)
+        {
+            // Certified inference: the certified class, one-hot in the shape of the model's output.
+            var reference = Model.Predict(input);
+            var certified = PredictCertified(input);
+            int classes = ConversionsHelper.ConvertToVector<T, TOutput>(reference).Length;
+            var oneHot = Vector<T>.CreateStandardBasis(Math.Max(classes, certified.PredictedClass + 1), certified.PredictedClass);
+            return ConversionsHelper.ConvertVectorToInput<T, TOutput>(oneHot, reference);
         }
 
         if (!HasAdversarialRobustness || AdversarialDefense == null)
@@ -614,4 +729,32 @@ public partial class AiModelResult<T, TInput, TOutput>
         return RobustnessEngine.Subtract(a, b);
     }
 
+}
+
+/// <summary>
+/// The inference-time certification settings of an <see cref="AdversarialRobustnessConfiguration{T, TInput, TOutput}"/>.
+/// </summary>
+internal sealed class CertifiedInferenceSettings
+{
+    public CertifiedInferenceSettings(bool useCertifiedInference, double minimumCertifiedRadius, bool rejectNonRobustPredictions)
+    {
+        if (!(minimumCertifiedRadius >= 0.0 && !double.IsInfinity(minimumCertifiedRadius)))
+        {
+            throw new InvalidOperationException(
+                $"AdversarialRobustnessConfiguration.MinimumCertifiedRadius must be a non-negative finite number (was {minimumCertifiedRadius}).");
+        }
+
+        UseCertifiedInference = useCertifiedInference;
+        MinimumCertifiedRadius = minimumCertifiedRadius;
+        RejectNonRobustPredictions = rejectNonRobustPredictions;
+    }
+
+    /// <summary>Whether <c>PredictWithDefense</c> returns the certified prediction.</summary>
+    public bool UseCertifiedInference { get; }
+
+    /// <summary>The radius below which a prediction is not considered certified.</summary>
+    public double MinimumCertifiedRadius { get; }
+
+    /// <summary>Whether a prediction that is not certified is rejected.</summary>
+    public bool RejectNonRobustPredictions { get; }
 }
