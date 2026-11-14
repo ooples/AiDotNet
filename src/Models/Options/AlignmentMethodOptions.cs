@@ -50,6 +50,10 @@ public class AlignmentMethodOptions<T> : ModelOptions
     /// </summary>
     /// <value>The KL coefficient, defaulting to 0.1.</value>
     /// <remarks>
+    /// <para>beta of the KL-regularized objective max E[r] - beta KL(pi || pi_ref). The aligned policy of
+    /// <c>RLHFAlignment</c> (and the inference fallback of <c>AdversarialPreferenceAlignment</c>) is its optimum
+    /// softmax(z + r / beta) over the base model's output classes (Rafailov et al. 2023, eq. 4): a large beta keeps the
+    /// base distribution, a small one moves all mass to the highest-reward class. Must be positive.</para>
     /// <para><b>For Beginners:</b> This prevents the model from changing too much during alignment.
     /// It's like a leash that keeps the aligned model close to the original model's behavior.</para>
     /// </remarks>

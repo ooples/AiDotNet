@@ -85,7 +85,8 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
     /// examples generated against the current model (Madry et al. 2018; mixed clean and adversarial batches per
     /// Goodfellow et al. 2015). A model that computes gradients takes one step of
     /// <see cref="AdversarialDefenseOptions{T}.LearningRate"/> on the batch-mean gradient; any other model is
-    /// trained sample by sample through its own <c>Train</c>.
+    /// trained once per epoch on the stacked mixed epoch (matrix rows or tensor slices), or sample by sample through
+    /// its own <c>Train</c> for other input types.
     /// </para>
     /// <para>
     /// With <see cref="AdversarialDefenseOptions{T}.UseEnsemble"/> the procedure runs on
@@ -151,11 +152,15 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
         var attack = customAttack ?? CreateTrainingAttack(seed);
         var gradientModel = model as IGradientComputable<T, TInput, TOutput>;
         T learningRate = NumOps.FromDouble(options.LearningRate);
+        T fullBatch = NumOps.FromDouble(Math.Min(options.BatchSize, n));
+        T lastBatch = NumOps.FromDouble(n % options.BatchSize == 0 ? Math.Min(options.BatchSize, n) : n % options.BatchSize);
         var order = Enumerable.Range(0, n).ToArray();
 
         for (int epoch = 0; epoch < options.TrainingEpochs; epoch++)
         {
             Shuffle(order, random);
+            var epochInputs = new List<TInput>(gradientModel is null ? n : 0);
+            var epochLabels = new List<TOutput>(gradientModel is null ? n : 0);
             for (int start = 0; start < n; start += options.BatchSize)
             {
                 int size = Math.Min(options.BatchSize, n - start);
@@ -169,7 +174,8 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
                         : trainingData[index];
                     if (gradientModel is null)
                     {
-                        model.Train(sample, labels[index]);
+                        epochInputs.Add(sample);
+                        epochLabels.Add(labels[index]);
                         continue;
                     }
 
@@ -179,9 +185,60 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
 
                 if (gradientModel is not null && gradientSum is not null)
                 {
-                    gradientModel.ApplyGradients(Engine.Divide<T>(gradientSum, NumOps.FromDouble(size)), learningRate);
+                    gradientModel.ApplyGradients(Engine.Divide<T>(gradientSum, size == options.BatchSize ? fullBatch : lastBatch), learningRate);
                 }
             }
+
+            if (gradientModel is null)
+            {
+                TrainOnEpoch(model, epochInputs, epochLabels);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Trains a model without gradients on one epoch of mixed samples: one <c>Train</c> call on the stacked epoch when
+    /// the samples are matrix rows or tensor slices (so a model that refits from scratch, such as a closed-form
+    /// regression, fits the whole adversarially augmented epoch), otherwise one call per sample.
+    /// </summary>
+    private void TrainOnEpoch(IFullModel<T, TInput, TOutput> model, List<TInput> inputs, List<TOutput> labels)
+    {
+        if (inputs.Count == 0)
+        {
+            return;
+        }
+
+        var matrices = inputs.OfType<Matrix<T>>().ToArray();
+        var vectors = labels.OfType<Vector<T>>().ToArray();
+        if (matrices.Length == inputs.Count && vectors.Length == labels.Count)
+        {
+            int columns = matrices[0].Columns;
+            var stacked = new Matrix<T>(matrices.Sum(m => m.Rows), columns);
+            int row = 0;
+            foreach (var m in matrices)
+            {
+                for (int i = 0; i < m.Rows; i++)
+                {
+                    stacked.SetRow(row++, m.GetRow(i));
+                }
+            }
+
+            var targets = Engine.TensorConcatenate(vectors.Select(v => v.AsTensor()).ToArray(), 0).ToVector();
+            model.Train((TInput)(object)stacked, (TOutput)(object)targets);
+            return;
+        }
+
+        var tensors = inputs.OfType<Tensor<T>>().ToArray();
+        var tensorLabels = labels.OfType<Tensor<T>>().ToArray();
+        if (tensors.Length == inputs.Count && tensorLabels.Length == labels.Count)
+        {
+            model.Train((TInput)(object)Engine.TensorConcatenate(tensors, 0), (TOutput)(object)Engine.TensorConcatenate(tensorLabels, 0));
+            return;
+        }
+
+        for (int i = 0; i < inputs.Count; i++)
+        {
+            model.Train(inputs[i], labels[i]);
         }
     }
 

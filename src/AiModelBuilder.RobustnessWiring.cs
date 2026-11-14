@@ -264,6 +264,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// Splits a prepared data set into per-sample inputs and labels: matrix rows with vector entries, or the
     /// leading axis of tensors.
     /// </summary>
+    [AiDotNet.Attributes.ScalarKernel("Splitting a data set into samples is one element per sample by definition.")]
     internal static bool TrySplitSamples(TInput x, TOutput y, out TInput[] inputs, out TOutput[] labels)
     {
         inputs = Array.Empty<TInput>();
