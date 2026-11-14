@@ -70,6 +70,16 @@ public class AdversarialDefenseOptions<T> : ModelOptions
     public int AttackIterations { get; set; } = 7;
 
     /// <summary>
+    /// Gets or sets the step size of the mini-batch gradient update of adversarial training.
+    /// </summary>
+    /// <value>Defaults to 0.1, the initial SGD learning rate of Madry et al. 2018 on CIFAR-10.</value>
+    /// <remarks>
+    /// <para>Used for models that compute gradients (<see cref="IGradientComputable{T, TInput, TOutput}"/>). Other
+    /// models are trained sample by sample through their own <c>Train</c> and their own update rule.</para>
+    /// </remarks>
+    public double LearningRate { get; set; } = 0.1;
+
+    /// <summary>
     /// Gets or sets whether to use input preprocessing for defense.
     /// </summary>
     /// <value>True to use preprocessing, false otherwise (default: true).</value>
