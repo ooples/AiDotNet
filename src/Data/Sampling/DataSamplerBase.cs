@@ -123,7 +123,7 @@ public abstract class WeightedSamplerBase<T> : DataSamplerBase, IWeightedSampler
     /// <summary>
     /// Cumulative probabilities for weighted sampling.
     /// </summary>
-    protected double[] CumulativeProbabilities;
+    protected Tensor<T> CumulativeProbabilities;
 
     /// <summary>
     /// Whether to sample with replacement.
@@ -162,7 +162,7 @@ public abstract class WeightedSamplerBase<T> : DataSamplerBase, IWeightedSampler
 
         NumSamplesOverride = numSamples;
         ReplacementEnabled = replacement;
-        CumulativeProbabilities = new double[WeightsArray.Length];
+        CumulativeProbabilities = new Tensor<T>(new[] { WeightsArray.Length });
         // Call the private core method directly to avoid virtual call in constructor
         ComputeCumulativeProbabilitiesCore();
     }
@@ -216,35 +216,38 @@ public abstract class WeightedSamplerBase<T> : DataSamplerBase, IWeightedSampler
     /// </summary>
     private void ComputeCumulativeProbabilitiesCore()
     {
-        CumulativeProbabilities = new double[WeightsArray.Length];
-
-        // Convert weights to doubles and compute sum
-        double sum = 0;
-        for (int i = 0; i < WeightsArray.Length; i++)
-        {
-            double w = NumOps.ToDouble(WeightsArray[i]);
-            if (w < 0)
-            {
-                throw new ArgumentException($"Weight at index {i} is negative ({w}). Weights must be non-negative.");
-            }
-            sum += w;
-        }
-
-        if (sum <= 0)
+        CumulativeProbabilities = new Tensor<T>(new[] { WeightsArray.Length });
+        if (WeightsArray.Length == 0)
         {
             throw new ArgumentException("Total weight must be greater than zero.");
         }
 
-        // Compute cumulative probabilities
-        double cumulative = 0;
-        for (int i = 0; i < WeightsArray.Length; i++)
+        // Validate the weights with engine ops
+        var engine = AiDotNetEngine.Current;
+        var weights = new Tensor<T>((T[])WeightsArray.Clone(), new[] { WeightsArray.Length });
+        var negative = engine.TensorLessThan(weights, NumOps.Zero);
+        if (NumOps.GreaterThan(engine.TensorMaxValue(negative), NumOps.Zero))
         {
-            cumulative += NumOps.ToDouble(WeightsArray[i]) / sum;
-            CumulativeProbabilities[i] = cumulative;
+            // ArgMax returns the first maximum, i.e. the first negative weight.
+            int i = engine.TensorArgMax(negative, 0).AsSpan()[0];
+            T w = WeightsArray[i];
+            throw new ArgumentException($"Weight at index {i} is negative ({w}). Weights must be non-negative.");
         }
 
+        // Running sum (left to right, like the previous scalar accumulation); its last entry is the total
+        var runningSum = engine.TensorCumSum(weights, 0);
+        T sum = runningSum.AsSpan()[WeightsArray.Length - 1];
+
+        if (NumOps.LessThanOrEquals(sum, NumOps.Zero))
+        {
+            throw new ArgumentException("Total weight must be greater than zero.");
+        }
+
+        // Compute cumulative probabilities: cumulative sum of w / sum
+        CumulativeProbabilities = engine.TensorCumSum(engine.TensorDivideScalar(weights, sum), 0);
+
         // Ensure last element is exactly 1.0 to avoid floating point issues
-        CumulativeProbabilities[WeightsArray.Length - 1] = 1.0;
+        CumulativeProbabilities[WeightsArray.Length - 1] = NumOps.One;
     }
 
     /// <summary>
@@ -253,24 +256,11 @@ public abstract class WeightedSamplerBase<T> : DataSamplerBase, IWeightedSampler
     /// <returns>A randomly selected index based on weights.</returns>
     protected int SampleWeightedIndex()
     {
-        double r = Random.NextDouble();
-        int left = 0;
-        int right = CumulativeProbabilities.Length - 1;
-
-        while (left < right)
-        {
-            int mid = (left + right) / 2;
-            if (CumulativeProbabilities[mid] < r)
-            {
-                left = mid + 1;
-            }
-            else
-            {
-                right = mid;
-            }
-        }
-
-        return left;
+        // First entry with r <= cumulative (left search-sorted), capped at the last index like the former
+        // binary search.
+        var r = new Tensor<T>(new[] { NumOps.FromDouble(Random.NextDouble()) }, new[] { 1 });
+        int firstAtOrAbove = AiDotNetEngine.Current.TensorSearchSorted(CumulativeProbabilities, r, right: false).AsSpan()[0];
+        return Math.Min(firstAtOrAbove, CumulativeProbabilities.Length - 1);
     }
 }
 

@@ -16,15 +16,15 @@ internal static class FlacDecoder
     /// <summary>
     /// Decodes FLAC audio bytes into a target array of normalized [-1, 1] mono samples.
     /// </summary>
-    internal static void DecodeFlac<T>(byte[] flacBytes, T[] target, int offset, int maxSamples,
-        INumericOperations<T> numOps)
+    /// <returns>The number of samples written, starting at <paramref name="offset"/>.</returns>
+    internal static int DecodeFlac<T>(byte[] flacBytes, T[] target, int offset, int maxSamples)
     {
-        if (flacBytes.Length < 42) return; // Minimum FLAC: 4 magic + 38 STREAMINFO
+        if (flacBytes.Length < 42) return 0; // Minimum FLAC: 4 magic + 38 STREAMINFO
 
         // Verify "fLaC" magic
         if (flacBytes[0] != (byte)'f' || flacBytes[1] != (byte)'L' ||
             flacBytes[2] != (byte)'a' || flacBytes[3] != (byte)'C')
-            return;
+            return 0;
 
         // Parse metadata blocks to find STREAMINFO
         int pos = 4;
@@ -86,7 +86,7 @@ internal static class FlacDecoder
             try
             {
                 int written = DecodeFrame(reader, numChannels, bitsPerSample, normFactor,
-                    target, offset + samplesWritten, maxSamples - samplesWritten, numOps);
+                    target, offset + samplesWritten, maxSamples - samplesWritten);
                 samplesWritten += written;
                 pos = reader.BytePosition;
                 // Align to byte boundary and skip CRC-16
@@ -102,10 +102,12 @@ internal static class FlacDecoder
                 pos = frameStart + 2;
             }
         }
+
+        return samplesWritten;
     }
 
     private static int DecodeFrame<T>(BitReader reader, int streamChannels, int streamBps,
-        double normFactor, T[] target, int offset, int maxSamples, INumericOperations<T> numOps)
+        double normFactor, T[] target, int offset, int maxSamples)
     {
         // Frame header
         reader.ReadBits(14); // sync code
@@ -187,50 +189,51 @@ internal static class FlacDecoder
             channelData[ch] = DecodeSubframe(reader, blockSize, subframeBps);
         }
 
-        // Apply inter-channel decorrelation
+        // Only the first samplesToWrite samples of the block are emitted.
+        int samplesToWrite = Math.Min(blockSize, maxSamples);
+        if (samplesToWrite <= 0) return samplesToWrite;
+
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var shape = new[] { samplesToWrite };
+        var channels = new Tensor<int>[numChannels];
+        for (int ch = 0; ch < numChannels; ch++)
+        {
+            var samples = new int[samplesToWrite];
+            Array.Copy(channelData[ch], samples, samplesToWrite);
+            channels[ch] = new Tensor<int>(samples, shape);
+        }
+
+        // Apply inter-channel decorrelation (integer engine ops)
         if (isLeftSide)
         {
-            for (int i = 0; i < blockSize; i++)
-                channelData[1][i] = channelData[0][i] - channelData[1][i];
+            channels[1] = engine.TensorSubtract(channels[0], channels[1]);
         }
         else if (isRightSide)
         {
-            for (int i = 0; i < blockSize; i++)
-                channelData[0][i] = channelData[0][i] + channelData[1][i];
+            channels[0] = engine.TensorAdd(channels[0], channels[1]);
         }
         else if (isMidSide)
         {
-            for (int i = 0; i < blockSize; i++)
-            {
-                int mid = channelData[0][i];
-                int side = channelData[1][i];
-                // Mid-side decoding: mid is stored shifted right by 1, side is the difference.
-                // Restore: mid = mid << 1 | (side & 1), then left = (mid + side) / 2, right = (mid - side) / 2
-                mid = (mid << 1) | (side & 1);
-                channelData[0][i] = (mid + side) >> 1;
-                channelData[1][i] = (mid - side) >> 1;
-            }
+            // Mid-side decoding: mid is stored shifted right by 1, side is the difference.
+            // Restore: mid = mid << 1 | (side & 1), then left = (mid + side) >> 1, right = (mid - side) >> 1
+            var side = channels[1];
+            var ones = engine.TensorFullLike(side, 1);
+            var twos = engine.TensorFullLike(side, 2);
+            var mid = engine.TensorAdd(engine.TensorMultiply(channels[0], twos), engine.TensorBitwiseAnd(side, ones));
+            channels[0] = engine.TensorFloorDivide(engine.TensorAdd(mid, side), twos);
+            channels[1] = engine.TensorFloorDivide(engine.TensorSubtract(mid, side), twos);
         }
 
-        // Output: average channels to mono, normalize
-        int samplesToWrite = Math.Min(blockSize, maxSamples);
-        for (int i = 0; i < samplesToWrite; i++)
-        {
-            double sample;
-            if (numChannels == 1)
-            {
-                sample = channelData[0][i] * normFactor;
-            }
-            else
-            {
-                double sum = 0;
-                for (int ch = 0; ch < numChannels; ch++)
-                    sum += channelData[ch][i];
-                sample = (sum / numChannels) * normFactor;
-            }
-
-            target[offset + i] = numOps.FromDouble(Math.Max(-1.0, Math.Min(1.0, sample)));
-        }
+        // Output: average channels to mono, normalize and clamp to [-1, 1]
+        var mono = numChannels == 1
+            ? channels[0].Cast<T>()
+            : engine.TensorDivideScalar(
+                engine.ReduceSum(engine.TensorStack(channels, 0), new[] { 0 }, false).Cast<T>(),
+                numOps.FromDouble(numChannels));
+        var normalized = engine.TensorClamp(
+            engine.TensorMultiplyScalar(mono, numOps.FromDouble(normFactor)), numOps.FromDouble(-1.0), numOps.One);
+        normalized.AsSpan().CopyTo(target.AsSpan(offset, samplesToWrite));
 
         return samplesToWrite;
     }

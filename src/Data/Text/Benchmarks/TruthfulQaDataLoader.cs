@@ -106,8 +106,8 @@ public class TruthfulQaDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
         var vocabulary = TextLoaderHelper.BuildVocabulary(allTexts, allTexts.Count, _options.VocabularySize);
 
         int qLen = _options.MaxQuestionLength, aLen = _options.MaxAnswerLength;
-        var featuresData = new T[totalSamples * qLen];
-        var labelsData = new T[totalSamples * aLen];
+        var featuresData = new int[totalSamples * qLen];
+        var labelsData = new int[totalSamples * aLen];
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -115,12 +115,12 @@ public class TruthfulQaDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
             int[] qTok = TextLoaderHelper.TokenizeAndEncode(questions[i], vocabulary, qLen);
             int[] aTok = TextLoaderHelper.TokenizeAndEncode(answers[i], vocabulary, aLen);
             int qOff = i * qLen, aOff = i * aLen;
-            for (int j = 0; j < qLen; j++) featuresData[qOff + j] = NumOps.FromDouble(qTok[j]);
-            for (int j = 0; j < aLen; j++) labelsData[aOff + j] = NumOps.FromDouble(aTok[j]);
+            Array.Copy(qTok, 0, featuresData, qOff, qLen);
+            Array.Copy(aTok, 0, labelsData, aOff, aLen);
         }
 
-        LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, qLen });
-        LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, aLen });
+        LoadedFeatures = new Tensor<int>(featuresData, new[] { totalSamples, qLen }).Cast<T>();
+        LoadedLabels = new Tensor<int>(labelsData, new[] { totalSamples, aLen }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 

@@ -938,15 +938,17 @@ public class MolecularDatasetLoader<T> : GraphDataLoaderBase<T>
         int numAtoms = atomTypes.Count;
         int numAtomFeatures = AtomTypeMap.Count + 4; // One-hot atom type + additional features
 
-        // Build node features
-        var nodeFeatures = new Tensor<T>([numAtoms, numAtomFeatures]);
+        // Build the integral node features (one-hot type, degree) as int; cast to T once below.
+        var nodeFeatureData = new int[numAtoms * numAtomFeatures];
         for (int i = 0; i < numAtoms; i++)
         {
             // One-hot encode atom type
             int atomType = atomTypes[i];
             if (atomType < AtomTypeMap.Count)
             {
-                nodeFeatures[i, atomType] = NumOps.One;
+                if (atomType < 0)
+                    throw new ArgumentOutOfRangeException(nameof(atomTypes), $"Atom type {atomType} is negative.");
+                nodeFeatureData[i * numAtomFeatures + atomType] = 1;
             }
 
             // Additional features (degree will be computed after bonds)
@@ -963,8 +965,10 @@ public class MolecularDatasetLoader<T> : GraphDataLoaderBase<T>
         // Add degree as feature
         for (int i = 0; i < numAtoms; i++)
         {
-            nodeFeatures[i, AtomTypeMap.Count] = NumOps.FromDouble(degree[i]);
+            nodeFeatureData[i * numAtomFeatures + AtomTypeMap.Count] = degree[i];
         }
+
+        var nodeFeatures = new Tensor<int>(nodeFeatureData, new[] { numAtoms, numAtomFeatures }).Cast<T>();
 
         // Build edge index (undirected - add both directions)
         var edgeList = new List<(int, int)>();
@@ -977,21 +981,16 @@ public class MolecularDatasetLoader<T> : GraphDataLoaderBase<T>
             edgeTypeList.Add(bond.bondType);
         }
 
-        var edgeIndex = new Tensor<T>([edgeList.Count, 2]);
-        for (int i = 0; i < edgeList.Count; i++)
-        {
-            edgeIndex[i, 0] = NumOps.FromDouble(edgeList[i].Item1);
-            edgeIndex[i, 1] = NumOps.FromDouble(edgeList[i].Item2);
-        }
+        var edgeIndex = GraphTensorHelper.EdgeIndex<T>(edgeList);
 
-        // Build edge features
+        // Build edge features (one-hot bond types)
         int numBondFeatures = BondTypeMap.Count;
-        var edgeFeatures = new Tensor<T>([edgeList.Count, numBondFeatures]);
+        var bondTypes = new int[edgeTypeList.Count];
         for (int i = 0; i < edgeTypeList.Count; i++)
         {
-            int bondType = MathPolyfill.Clamp(edgeTypeList[i], 0, numBondFeatures - 1);
-            edgeFeatures[i, bondType] = NumOps.One;
+            bondTypes[i] = MathPolyfill.Clamp(edgeTypeList[i], 0, numBondFeatures - 1);
         }
+        var edgeFeatures = GraphTensorHelper.OneHot<T>(bondTypes, numBondFeatures);
 
         return new GraphData<T>
         {
@@ -1180,24 +1179,26 @@ public class MolecularDatasetLoader<T> : GraphDataLoaderBase<T>
     /// </summary>
     private Tensor<T> CreateGraphLabels(int numGraphs, int numTargets, bool isRegression, Random random)
     {
-        var labels = new Tensor<T>([numGraphs, numTargets]);
-
-        for (int i = 0; i < numGraphs; i++)
+        if (isRegression)
         {
-            if (isRegression)
+            var labels = new Tensor<T>([numGraphs, numTargets]);
+            for (int i = 0; i < numGraphs; i++)
             {
                 // Continuous property values (e.g., energy, dipole moment)
                 labels[i, 0] = NumOps.FromDouble(random.NextDouble() * 10.0 - 5.0);
             }
-            else
-            {
-                // Binary classification (e.g., toxic/non-toxic)
-                int classIdx = random.Next(numTargets);
-                labels[i, classIdx] = NumOps.One;
-            }
+
+            return labels;
         }
 
-        return labels;
+        // Binary classification (e.g., toxic/non-toxic): draw the class ids (same RNG order), then one-hot
+        var classIndices = new int[numGraphs];
+        for (int i = 0; i < numGraphs; i++)
+        {
+            classIndices[i] = random.Next(numTargets);
+        }
+
+        return GraphTensorHelper.OneHot<T>(classIndices, numTargets);
     }
 
     /// <summary>
@@ -1300,10 +1301,12 @@ public class MolecularDatasetLoader<T> : GraphDataLoaderBase<T>
 
         // Count bonds per atom
         var bondCounts = new int[graph.NumNodes];
+        int[] edgeInts = GraphTensorHelper.EdgeIndexToInt32(graph.EdgeIndex);
+        int edgeCols = graph.EdgeIndex.Shape.Length > 1 ? graph.EdgeIndex.Shape[1] : 2;
         for (int i = 0; i < graph.EdgeIndex.Shape[0]; i++)
         {
-            int src = NumOps.ToInt32(graph.EdgeIndex[i, 0]);
-            int dst = NumOps.ToInt32(graph.EdgeIndex[i, 1]);
+            int src = edgeInts[i * edgeCols];
+            int dst = edgeInts[i * edgeCols + 1];
             if (src < bondCounts.Length)
             {
                 bondCounts[src]++;
@@ -1314,19 +1317,22 @@ public class MolecularDatasetLoader<T> : GraphDataLoaderBase<T>
             }
         }
 
+        // Atom type = first one-hot column above 0.5 (0 when none): threshold the atom-type columns
+        // with the engine and take the first maximum per row (ArgMax returns the first occurrence).
+        int atomTypeColumns = Math.Min(AtomTypeMap.Count, graph.NodeFeatures.Shape[1]);
+        int[] atomTypes = new int[graph.NumNodes];
+        if (atomTypeColumns > 0 && graph.NumNodes > 0)
+        {
+            var engine = AiDotNetEngine.Current;
+            var typeColumns = graph.NodeFeatures.Slice(1, 0, atomTypeColumns);
+            var aboveHalf = engine.TensorGreaterThan(typeColumns, NumOps.FromDouble(0.5));
+            atomTypes = engine.TensorArgMax(aboveHalf, 1).AsSpan().ToArray();
+        }
+
         // Check valency constraints (allowing some flexibility)
         for (int i = 0; i < graph.NumNodes; i++)
         {
-            // Get atom type from one-hot encoding
-            int atomType = 0;
-            for (int j = 0; j < AtomTypeMap.Count && j < graph.NodeFeatures.Shape[1]; j++)
-            {
-                if (NumOps.GreaterThan(graph.NodeFeatures[i, j], NumOps.FromDouble(0.5)))
-                {
-                    atomType = j;
-                    break;
-                }
-            }
+            int atomType = atomTypes[i];
 
             int maxVal = maxValency.GetValueOrDefault(atomType, 4);
             // Each edge is counted twice (undirected), so divide by 2

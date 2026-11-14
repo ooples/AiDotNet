@@ -16,18 +16,27 @@ namespace AiDotNet.Data.Transforms.Numeric;
 public class MinMaxScaleTransform<T> : ITransform<T[], T[]>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-    private readonly double[] _min;
-    private readonly double[] _max;
+    private readonly Tensor<T> _min;
+    private readonly Tensor<T> _max;
     private readonly double _targetMin;
     private readonly double _targetMax;
+
+    /// <summary>
+    /// Creates a min-max scaler from a reference dataset that maps to the range [0, 1].
+    /// </summary>
+    /// <param name="referenceData">The reference data to compute min/max from.</param>
+    public MinMaxScaleTransform(T[][] referenceData)
+        : this(referenceData, 0.0, 1.0)
+    {
+    }
 
     /// <summary>
     /// Creates a min-max scaler from a reference dataset.
     /// </summary>
     /// <param name="referenceData">The reference data to compute min/max from.</param>
-    /// <param name="targetMin">The minimum value of the target range. Default is 0.</param>
-    /// <param name="targetMax">The maximum value of the target range. Default is 1.</param>
-    public MinMaxScaleTransform(T[][] referenceData, double targetMin = 0.0, double targetMax = 1.0)
+    /// <param name="targetMin">The minimum value of the target range.</param>
+    /// <param name="targetMax">The maximum value of the target range.</param>
+    public MinMaxScaleTransform(T[][] referenceData, double targetMin, double targetMax)
     {
         if (referenceData is null)
         {
@@ -63,31 +72,30 @@ public class MinMaxScaleTransform<T> : ITransform<T[], T[]>
             }
         }
 
-        _min = new double[featureCount];
-        _max = new double[featureCount];
-
-        for (int j = 0; j < featureCount; j++)
+        if (featureCount == 0)
         {
-            _min[j] = double.MaxValue;
-            _max[j] = double.MinValue;
+            _min = new Tensor<T>(new[] { 0 });
+            _max = new Tensor<T>(new[] { 0 });
         }
-
-        for (int i = 0; i < referenceData.Length; i++)
+        else
         {
-            for (int j = 0; j < featureCount; j++)
-            {
-                double val = NumOps.ToDouble(referenceData[i][j]);
-                if (val < _min[j])
-                {
-                    _min[j] = val;
-                }
-
-                if (val > _max[j])
-                {
-                    _max[j] = val;
-                }
-            }
+            // Column-wise min and max (min = -max(-x)) with engine axis reductions
+            var engine = AiDotNetEngine.Current;
+            var data = TransformTensors.Rows(referenceData, featureCount);
+            var axis0 = new[] { 0 };
+            _max = engine.ReduceMax(data, axis0, false);
+            _min = engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(data), axis0, false));
         }
+    }
+
+    /// <summary>
+    /// Creates a min-max scaler from pre-computed statistics that maps to the range [0, 1].
+    /// </summary>
+    /// <param name="min">The minimum for each feature.</param>
+    /// <param name="max">The maximum for each feature.</param>
+    public MinMaxScaleTransform(T[] min, T[] max)
+        : this(min, max, 0.0, 1.0)
+    {
     }
 
     /// <summary>
@@ -95,9 +103,9 @@ public class MinMaxScaleTransform<T> : ITransform<T[], T[]>
     /// </summary>
     /// <param name="min">The minimum for each feature.</param>
     /// <param name="max">The maximum for each feature.</param>
-    /// <param name="targetMin">The minimum value of the target range. Default is 0.</param>
-    /// <param name="targetMax">The maximum value of the target range. Default is 1.</param>
-    public MinMaxScaleTransform(double[] min, double[] max, double targetMin = 0.0, double targetMax = 1.0)
+    /// <param name="targetMin">The minimum value of the target range.</param>
+    /// <param name="targetMax">The maximum value of the target range.</param>
+    public MinMaxScaleTransform(T[] min, T[] max, double targetMin, double targetMax)
     {
         if (min is null)
         {
@@ -121,8 +129,8 @@ public class MinMaxScaleTransform<T> : ITransform<T[], T[]>
             throw new ArgumentException("Target min must be less than target max.");
         }
 
-        _min = (double[])min.Clone();
-        _max = (double[])max.Clone();
+        _min = TransformTensors.FromStatistics<T>(min);
+        _max = TransformTensors.FromStatistics<T>(max);
         _targetMin = targetMin;
         _targetMax = targetMax;
     }
@@ -137,30 +145,28 @@ public class MinMaxScaleTransform<T> : ITransform<T[], T[]>
 
         int len = Math.Min(input.Length, _min.Length);
         var result = new T[input.Length];
-        double targetRange = _targetMax - _targetMin;
+        T targetRange = NumOps.FromDouble(_targetMax - _targetMin);
+        T targetMin = NumOps.FromDouble(_targetMin);
 
-        for (int i = 0; i < len; i++)
+        if (len > 0)
         {
-            double val = NumOps.ToDouble(input[i]);
-            double range = _max[i] - _min[i];
-
-            double scaled;
-            if (Math.Abs(range) < 1e-12)
-            {
-                scaled = _targetMin;
-            }
-            else
-            {
-                scaled = ((val - _min[i]) / range) * targetRange + _targetMin;
-            }
-
-            result[i] = NumOps.FromDouble(scaled);
+            // ((x - min) / (max - min)) * targetRange + targetMin; constant features map to targetMin
+            var engine = AiDotNetEngine.Current;
+            var shape = new[] { len };
+            var min = TransformTensors.Prefix(_min, len);
+            var range = engine.TensorSubtract(TransformTensors.Prefix(_max, len), min);
+            var values = TransformTensors.Prefix(input, len);
+            var scaled = engine.TensorAddScalar(
+                engine.TensorMultiplyScalar(engine.TensorDivide(engine.TensorSubtract(values, min), range), targetRange),
+                targetMin);
+            var constant = engine.TensorLessThan(engine.TensorAbs(range), NumOps.FromDouble(1e-12));
+            var targetMinFill = new Tensor<T>(shape);
+            targetMinFill.Fill(targetMin);
+            engine.TensorWhere(constant, targetMinFill, scaled).AsSpan().CopyTo(result.AsSpan(0, len));
         }
 
-        for (int i = len; i < input.Length; i++)
-        {
-            result[i] = input[i];
-        }
+        // Features beyond the fitted statistics pass through unchanged
+        Array.Copy(input, len, result, len, input.Length - len);
 
         return result;
     }

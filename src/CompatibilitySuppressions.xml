@@ -42015,227 +42015,178 @@
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
-  <Suppression><DiagnosticId>CP0001</DiagnosticId><Target>T:AiDotNet.Safety.Watermarking.NeuralImageWatermarker`1</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0001</DiagnosticId><Target>T:AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0001</DiagnosticId><Target>T:AiDotNet.Safety.Watermarking.NeuralImageWatermarker`1</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0001</DiagnosticId><Target>T:AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0001</DiagnosticId><Target>T:AiDotNet.Safety.Watermarking.NeuralImageWatermarker`1</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0001</DiagnosticId><Target>T:AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Helpers.LayerHelper`1.CreateDefaultTtsLayers(System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Double)</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.A2COptions`1.get_ValueLossCoefficient</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.A2COptions`1.set_ValueLossCoefficient(`0)</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.A3COptions`1.get_Optimizer</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.A3COptions`1.get_ValueLossCoefficient</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.A3COptions`1.set_Optimizer(AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.A3COptions`1.set_ValueLossCoefficient(`0)</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.CQLOptions`1.get_TargetEntropy</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.DQNOptions`1.get_Optimizer</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.DQNOptions`1.set_Optimizer(AiDotNet.Interfaces.IGradientBasedOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0}})</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.DreamerOptions`1.get_LatentSize</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.DreamerOptions`1.get_Optimizer</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.DreamerOptions`1.set_LatentSize(System.Int32)</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.DreamerOptions`1.set_Optimizer(AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.MADDPGOptions`1.get_Optimizer</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.MADDPGOptions`1.set_Optimizer(AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.MuZeroOptions`1.get_Optimizer</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.MuZeroOptions`1.get_UseValuePrefix</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.MuZeroOptions`1.set_Optimizer(AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.MuZeroOptions`1.set_UseValuePrefix(System.Boolean)</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.PPOOptions`1.get_ValueLossCoefficient</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.PPOOptions`1.set_ValueLossCoefficient(`0)</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.RainbowDQNOptions`1.get_Optimizer</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.RainbowDQNOptions`1.set_Optimizer(AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.SACOptions`1.get_TargetEntropy</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.TRPOOptions`1.get_Optimizer</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.TRPOOptions`1.set_Optimizer(AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.WorldModelsOptions`1.get_Optimizer</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.WorldModelsOptions`1.set_Optimizer(AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.NeuralNetworks.Layers.DuelingCombinationLayer`1.#ctor(System.Int32,System.Int32,System.Nullable{System.Int32})</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.ProgramSynthesis.Engines.NeuralProgramSynthesizer`1.#ctor(AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture{`0},AiDotNet.ProgramSynthesis.Interfaces.ICodeModel{`0},AiDotNet.Interfaces.ILossFunction{`0},AiDotNet.Interfaces.IGradientBasedOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},AiDotNet.ProgramSynthesis.Interfaces.IProgramExecutionEngine,AiDotNet.ProgramSynthesis.Options.NeuralProgramSynthesizerOptions,AiDotNet.ProgramSynthesis.Interfaces.ISqlSyntaxValidator)</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.ReinforcementLearning.Agents.A3C.A3CAgent`1.#ctor(AiDotNet.Models.Options.A3COptions{`0},AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.ReinforcementLearning.Agents.Dreamer.DreamerAgent`1.#ctor(AiDotNet.Models.Options.DreamerOptions{`0},AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.ReinforcementLearning.Agents.MADDPG.MADDPGAgent`1.#ctor(AiDotNet.Models.Options.MADDPGOptions{`0},AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.ReinforcementLearning.Agents.Rainbow.RainbowDQNAgent`1.#ctor(AiDotNet.Models.Options.RainbowDQNOptions{`0},AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.ReinforcementLearning.Agents.TRPO.TRPOAgent`1.#ctor(AiDotNet.Models.Options.TRPOOptions{`0},AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0008</DiagnosticId><Target>T:AiDotNet.ReinforcementLearning.Agents.Dreamer.DreamerAgent`1</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.A2COptions`1.get_ValueLossCoefficient</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.A2COptions`1.set_ValueLossCoefficient(`0)</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.A3COptions`1.get_Optimizer</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.A3COptions`1.get_ValueLossCoefficient</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.A3COptions`1.set_Optimizer(AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.A3COptions`1.set_ValueLossCoefficient(`0)</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.CQLOptions`1.get_TargetEntropy</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.DQNOptions`1.get_Optimizer</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.DQNOptions`1.set_Optimizer(AiDotNet.Interfaces.IGradientBasedOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0}})</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.DreamerOptions`1.get_LatentSize</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.DreamerOptions`1.get_Optimizer</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.DreamerOptions`1.set_LatentSize(System.Int32)</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.DreamerOptions`1.set_Optimizer(AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.MADDPGOptions`1.get_Optimizer</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.MADDPGOptions`1.set_Optimizer(AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.MuZeroOptions`1.get_Optimizer</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.MuZeroOptions`1.get_UseValuePrefix</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.MuZeroOptions`1.set_Optimizer(AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.MuZeroOptions`1.set_UseValuePrefix(System.Boolean)</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.PPOOptions`1.get_ValueLossCoefficient</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.PPOOptions`1.set_ValueLossCoefficient(`0)</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.RainbowDQNOptions`1.get_Optimizer</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.RainbowDQNOptions`1.set_Optimizer(AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.SACOptions`1.get_TargetEntropy</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.TRPOOptions`1.get_Optimizer</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.TRPOOptions`1.set_Optimizer(AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.WorldModelsOptions`1.get_Optimizer</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.WorldModelsOptions`1.set_Optimizer(AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.NeuralNetworks.Layers.DuelingCombinationLayer`1.#ctor(System.Int32,System.Int32,System.Nullable{System.Int32})</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.ReinforcementLearning.Agents.A3C.A3CAgent`1.#ctor(AiDotNet.Models.Options.A3COptions{`0},AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.ReinforcementLearning.Agents.Dreamer.DreamerAgent`1.#ctor(AiDotNet.Models.Options.DreamerOptions{`0},AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.ReinforcementLearning.Agents.MADDPG.MADDPGAgent`1.#ctor(AiDotNet.Models.Options.MADDPGOptions{`0},AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.ReinforcementLearning.Agents.Rainbow.RainbowDQNAgent`1.#ctor(AiDotNet.Models.Options.RainbowDQNOptions{`0},AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.ReinforcementLearning.Agents.TRPO.TRPOAgent`1.#ctor(AiDotNet.Models.Options.TRPOOptions{`0},AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0008</DiagnosticId><Target>T:AiDotNet.ReinforcementLearning.Agents.Dreamer.DreamerAgent`1</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Safety.Watermarking.FrequencyImageWatermarker`1.#ctor(System.Double)</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Safety.Watermarking.ImageWatermarker`1.#ctor(System.Double,System.Double)</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Safety.Watermarking.ImageWatermarkerBase`1.#ctor(System.Double)</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Safety.Watermarking.InvisibleImageWatermarker`1.#ctor(System.Double)</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Helpers.LayerHelper`1.CreateDefaultTtsLayers(System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Double)</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.A2COptions`1.get_ValueLossCoefficient</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.A2COptions`1.set_ValueLossCoefficient(`0)</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.A3COptions`1.get_Optimizer</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.A3COptions`1.get_ValueLossCoefficient</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.A3COptions`1.set_Optimizer(AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.A3COptions`1.set_ValueLossCoefficient(`0)</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.CQLOptions`1.get_TargetEntropy</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.DQNOptions`1.get_Optimizer</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.DQNOptions`1.set_Optimizer(AiDotNet.Interfaces.IGradientBasedOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0}})</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.DreamerOptions`1.get_LatentSize</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.DreamerOptions`1.get_Optimizer</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.DreamerOptions`1.set_LatentSize(System.Int32)</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.DreamerOptions`1.set_Optimizer(AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.MADDPGOptions`1.get_Optimizer</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.MADDPGOptions`1.set_Optimizer(AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.MuZeroOptions`1.get_Optimizer</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.MuZeroOptions`1.get_UseValuePrefix</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.MuZeroOptions`1.set_Optimizer(AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.MuZeroOptions`1.set_UseValuePrefix(System.Boolean)</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.PPOOptions`1.get_ValueLossCoefficient</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.PPOOptions`1.set_ValueLossCoefficient(`0)</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.RainbowDQNOptions`1.get_Optimizer</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.RainbowDQNOptions`1.set_Optimizer(AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.SACOptions`1.get_TargetEntropy</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.TRPOOptions`1.get_Optimizer</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.TRPOOptions`1.set_Optimizer(AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.WorldModelsOptions`1.get_Optimizer</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Models.Options.WorldModelsOptions`1.set_Optimizer(AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.NeuralNetworks.Layers.DuelingCombinationLayer`1.#ctor(System.Int32,System.Int32,System.Nullable{System.Int32})</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.ProgramSynthesis.Engines.NeuralProgramSynthesizer`1.#ctor(AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture{`0},AiDotNet.ProgramSynthesis.Interfaces.ICodeModel{`0},AiDotNet.Interfaces.ILossFunction{`0},AiDotNet.Interfaces.IGradientBasedOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},AiDotNet.ProgramSynthesis.Interfaces.IProgramExecutionEngine,AiDotNet.ProgramSynthesis.Options.NeuralProgramSynthesizerOptions,AiDotNet.ProgramSynthesis.Interfaces.ISqlSyntaxValidator)</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.ReinforcementLearning.Agents.A3C.A3CAgent`1.#ctor(AiDotNet.Models.Options.A3COptions{`0},AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.ReinforcementLearning.Agents.Dreamer.DreamerAgent`1.#ctor(AiDotNet.Models.Options.DreamerOptions{`0},AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.ReinforcementLearning.Agents.MADDPG.MADDPGAgent`1.#ctor(AiDotNet.Models.Options.MADDPGOptions{`0},AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.ReinforcementLearning.Agents.Rainbow.RainbowDQNAgent`1.#ctor(AiDotNet.Models.Options.RainbowDQNOptions{`0},AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.ReinforcementLearning.Agents.TRPO.TRPOAgent`1.#ctor(AiDotNet.Models.Options.TRPOOptions{`0},AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0008</DiagnosticId><Target>T:AiDotNet.ReinforcementLearning.Agents.Dreamer.DreamerAgent`1</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Safety.Watermarking.FrequencyImageWatermarker`1.#ctor(System.Double)</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Safety.Watermarking.ImageWatermarker`1.#ctor(System.Double,System.Double)</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Safety.Watermarking.ImageWatermarkerBase`1.#ctor(System.Double)</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Safety.Watermarking.InvisibleImageWatermarker`1.#ctor(System.Double)</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Helpers.LayerHelper`1.CreateDefaultTtsLayers(System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Double)</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.ProgramSynthesis.Engines.NeuralProgramSynthesizer`1.#ctor(AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture{`0},AiDotNet.ProgramSynthesis.Interfaces.ICodeModel{`0},AiDotNet.Interfaces.ILossFunction{`0},AiDotNet.Interfaces.IGradientBasedOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},AiDotNet.ProgramSynthesis.Interfaces.IProgramExecutionEngine,AiDotNet.ProgramSynthesis.Options.NeuralProgramSynthesizerOptions,AiDotNet.ProgramSynthesis.Interfaces.ISqlSyntaxValidator)</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Safety.Watermarking.FrequencyImageWatermarker`1.#ctor(System.Double)</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Safety.Watermarking.ImageWatermarker`1.#ctor(System.Double,System.Double)</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Safety.Watermarking.ImageWatermarkerBase`1.#ctor(System.Double)</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.Safety.Watermarking.InvisibleImageWatermarker`1.#ctor(System.Double)</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0005</DiagnosticId><Target>M:AiDotNet.Safety.Watermarking.ImageWatermarkerBase`1.CoefficientCount(System.Int32,System.Int32)</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0005</DiagnosticId><Target>M:AiDotNet.Safety.Watermarking.ImageWatermarkerBase`1.get_PatternSalt</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0005</DiagnosticId><Target>M:AiDotNet.Safety.Watermarking.ImageWatermarkerBase`1.get_WatermarkDescription</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0005</DiagnosticId><Target>M:AiDotNet.Safety.Watermarking.ImageWatermarkerBase`1.TileCoefficients(System.Double[0:,0:])</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0005</DiagnosticId><Target>M:AiDotNet.Safety.Watermarking.ImageWatermarkerBase`1.TileDelta(System.Int32,System.Int32,System.Double[])</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0005</DiagnosticId><Target>P:AiDotNet.Safety.Watermarking.ImageWatermarkerBase`1.PatternSalt</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0005</DiagnosticId><Target>P:AiDotNet.Safety.Watermarking.ImageWatermarkerBase`1.WatermarkDescription</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0005</DiagnosticId><Target>M:AiDotNet.Safety.Watermarking.ImageWatermarkerBase`1.CoefficientCount(System.Int32,System.Int32)</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0005</DiagnosticId><Target>M:AiDotNet.Safety.Watermarking.ImageWatermarkerBase`1.get_PatternSalt</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0005</DiagnosticId><Target>M:AiDotNet.Safety.Watermarking.ImageWatermarkerBase`1.get_WatermarkDescription</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0005</DiagnosticId><Target>M:AiDotNet.Safety.Watermarking.ImageWatermarkerBase`1.TileCoefficients(System.Double[0:,0:])</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0005</DiagnosticId><Target>M:AiDotNet.Safety.Watermarking.ImageWatermarkerBase`1.TileDelta(System.Int32,System.Int32,System.Double[])</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0005</DiagnosticId><Target>P:AiDotNet.Safety.Watermarking.ImageWatermarkerBase`1.PatternSalt</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0005</DiagnosticId><Target>P:AiDotNet.Safety.Watermarking.ImageWatermarkerBase`1.WatermarkDescription</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0005</DiagnosticId><Target>M:AiDotNet.Safety.Watermarking.ImageWatermarkerBase`1.CoefficientCount(System.Int32,System.Int32)</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0005</DiagnosticId><Target>M:AiDotNet.Safety.Watermarking.ImageWatermarkerBase`1.get_PatternSalt</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0005</DiagnosticId><Target>M:AiDotNet.Safety.Watermarking.ImageWatermarkerBase`1.get_WatermarkDescription</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0005</DiagnosticId><Target>M:AiDotNet.Safety.Watermarking.ImageWatermarkerBase`1.TileCoefficients(System.Double[0:,0:])</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0005</DiagnosticId><Target>M:AiDotNet.Safety.Watermarking.ImageWatermarkerBase`1.TileDelta(System.Int32,System.Int32,System.Double[])</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0005</DiagnosticId><Target>P:AiDotNet.Safety.Watermarking.ImageWatermarkerBase`1.PatternSalt</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0005</DiagnosticId><Target>P:AiDotNet.Safety.Watermarking.ImageWatermarkerBase`1.WatermarkDescription</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0006</DiagnosticId><Target>M:AiDotNet.Safety.Watermarking.IImageWatermarker`1.EmbedWatermark(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0006</DiagnosticId><Target>M:AiDotNet.Safety.Watermarking.IImageWatermarker`1.EmbedWatermark(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0006</DiagnosticId><Target>M:AiDotNet.Safety.Watermarking.IImageWatermarker`1.EmbedWatermark(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0012</DiagnosticId><Target>M:AiDotNet.Safety.Watermarking.ImageWatermarkerBase`1.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0012</DiagnosticId><Target>M:AiDotNet.Safety.Watermarking.ImageWatermarkerBase`1.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0012</DiagnosticId><Target>M:AiDotNet.Safety.Watermarking.ImageWatermarkerBase`1.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.PointCloud.Models.DGCNN`1.#ctor(AiDotNet.Models.Options.DGCNNOptions,AiDotNet.Interfaces.ILossFunction{`0},AiDotNet.Models.Options.DGCNNOptions)</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.PointCloud.Models.DGCNN`1.#ctor(System.Int32,System.Int32[],AiDotNet.Interfaces.ILossFunction{`0})</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.ReinforcementLearning.ReplayBuffers.PrioritizedReplayBuffer`1.#ctor(System.Int32)</Target><Left>lib/net10.0/AiDotNet.dll</Left><Right>lib/net10.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.PointCloud.Models.DGCNN`1.#ctor(AiDotNet.Models.Options.DGCNNOptions,AiDotNet.Interfaces.ILossFunction{`0},AiDotNet.Models.Options.DGCNNOptions)</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.PointCloud.Models.DGCNN`1.#ctor(System.Int32,System.Int32[],AiDotNet.Interfaces.ILossFunction{`0})</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.ReinforcementLearning.ReplayBuffers.PrioritizedReplayBuffer`1.#ctor(System.Int32)</Target><Left>lib/net8.0/AiDotNet.dll</Left><Right>lib/net8.0/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.PointCloud.Models.DGCNN`1.#ctor(AiDotNet.Models.Options.DGCNNOptions,AiDotNet.Interfaces.ILossFunction{`0},AiDotNet.Models.Options.DGCNNOptions)</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.PointCloud.Models.DGCNN`1.#ctor(System.Int32,System.Int32[],AiDotNet.Interfaces.ILossFunction{`0})</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.ReinforcementLearning.ReplayBuffers.PrioritizedReplayBuffer`1.#ctor(System.Int32)</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-<Suppression>
-    <DiagnosticId>CP0006</DiagnosticId>
-    <Target>M:AiDotNet.Interfaces.IAiModelBuilder`3.ConfigureTokenizer(AiDotNet.Tokenization.Configuration.TokenizationConfig)</Target>
-    <Left>lib/net10.0/AiDotNet.dll</Left>
-    <Right>lib/net10.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-<Suppression>
-    <DiagnosticId>CP0006</DiagnosticId>
-    <Target>M:AiDotNet.Interfaces.IAiModelBuilder`3.ConfigureTokenizer</Target>
-    <Left>lib/net10.0/AiDotNet.dll</Left>
-    <Right>lib/net10.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-<Suppression>
-    <DiagnosticId>CP0006</DiagnosticId>
-    <Target>M:AiDotNet.Interfaces.IAiModelBuilder`3.ConfigureTokenizer(AiDotNet.Tokenization.Interfaces.ITokenizer,AiDotNet.Tokenization.Configuration.TokenizationConfig)</Target>
-    <Left>lib/net471/AiDotNet.dll</Left>
-    <Right>lib/net471/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-<Suppression>
-    <DiagnosticId>CP0006</DiagnosticId>
-    <Target>M:AiDotNet.Interfaces.IAiModelBuilder`3.ConfigureTokenizer(AiDotNet.Tokenization.Configuration.TokenizationConfig)</Target>
-    <Left>lib/net471/AiDotNet.dll</Left>
-    <Right>lib/net471/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-<Suppression>
-    <DiagnosticId>CP0006</DiagnosticId>
-    <Target>M:AiDotNet.Interfaces.IAiModelBuilder`3.ConfigureTokenizer</Target>
-    <Left>lib/net471/AiDotNet.dll</Left>
-    <Right>lib/net471/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-<Suppression>
-    <DiagnosticId>CP0006</DiagnosticId>
-    <Target>M:AiDotNet.Interfaces.IAiModelBuilder`3.ConfigureTokenizer(AiDotNet.Tokenization.Interfaces.ITokenizer,AiDotNet.Tokenization.Configuration.TokenizationConfig)</Target>
-    <Left>lib/net8.0/AiDotNet.dll</Left>
-    <Right>lib/net8.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-<Suppression>
-    <DiagnosticId>CP0006</DiagnosticId>
-    <Target>M:AiDotNet.Interfaces.IAiModelBuilder`3.ConfigureTokenizer(AiDotNet.Tokenization.Configuration.TokenizationConfig)</Target>
-    <Left>lib/net8.0/AiDotNet.dll</Left>
-    <Right>lib/net8.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-<Suppression>
-    <DiagnosticId>CP0006</DiagnosticId>
-    <Target>M:AiDotNet.Interfaces.IAiModelBuilder`3.ConfigureTokenizer</Target>
-    <Left>lib/net8.0/AiDotNet.dll</Left>
-    <Right>lib/net8.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsLayer`1.#ctor(System.Collections.Generic.List{AiDotNet.Interfaces.ILayer{`0}},AiDotNet.Interfaces.ILayer{`0},System.Int32[],System.Int32[],System.Int32,AiDotNet.Interfaces.IActivationFunction{`0},System.Boolean,`0)</Target>
@@ -42253,6 +42204,69 @@
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsLayer`1.#ctor(System.Collections.Generic.List{AiDotNet.Interfaces.ILayer{`0}},AiDotNet.Interfaces.ILayer{`0},System.Int32[],System.Int32[],System.Int32,AiDotNet.Interfaces.IActivationFunction{`0},System.Boolean,`0)</Target>
+    <Left>lib/net8.0/AiDotNet.dll</Left>
+    <Right>lib/net8.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>F:AiDotNet.Data.Sampling.WeightedSamplerBase`1.CumulativeProbabilities</Target>
+    <Left>lib/net10.0/AiDotNet.dll</Left>
+    <Right>lib/net10.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>F:AiDotNet.Data.Sampling.WeightedSamplerBase`1.CumulativeProbabilities</Target>
+    <Left>lib/net471/AiDotNet.dll</Left>
+    <Right>lib/net471/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>F:AiDotNet.Data.Sampling.WeightedSamplerBase`1.CumulativeProbabilities</Target>
+    <Left>lib/net8.0/AiDotNet.dll</Left>
+    <Right>lib/net8.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:AiDotNet.Data.Transforms.Numeric.MinMaxScaleTransform`1.#ctor(System.Double[],System.Double[],System.Double,System.Double)</Target>
+    <Left>lib/net10.0/AiDotNet.dll</Left>
+    <Right>lib/net10.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:AiDotNet.Data.Transforms.Numeric.MinMaxScaleTransform`1.#ctor(System.Double[],System.Double[],System.Double,System.Double)</Target>
+    <Left>lib/net471/AiDotNet.dll</Left>
+    <Right>lib/net471/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:AiDotNet.Data.Transforms.Numeric.MinMaxScaleTransform`1.#ctor(System.Double[],System.Double[],System.Double,System.Double)</Target>
+    <Left>lib/net8.0/AiDotNet.dll</Left>
+    <Right>lib/net8.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:AiDotNet.Data.Transforms.Numeric.StandardScaleTransform`1.#ctor(System.Double[],System.Double[])</Target>
+    <Left>lib/net10.0/AiDotNet.dll</Left>
+    <Right>lib/net10.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:AiDotNet.Data.Transforms.Numeric.StandardScaleTransform`1.#ctor(System.Double[],System.Double[])</Target>
+    <Left>lib/net471/AiDotNet.dll</Left>
+    <Right>lib/net471/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:AiDotNet.Data.Transforms.Numeric.StandardScaleTransform`1.#ctor(System.Double[],System.Double[])</Target>
     <Left>lib/net8.0/AiDotNet.dll</Left>
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>

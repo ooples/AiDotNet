@@ -22921,3 +22921,12 @@ AiDotNet.Enums.MixtureOfExpertsGatingNoise.SoftplusOfRouterLogits = 1 -> AiDotNe
 AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.Entmax15 = 0 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.SoftmaxSigmoid = 1 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
+AiDotNet.Data.Sampling.WeightedSamplerBase<T>.CumulativeProbabilities -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.Data.Transforms.Numeric.MinMaxScaleTransform<T>.MinMaxScaleTransform(double[]! min, double[]! max, double targetMin = 0, double targetMax = 1) -> void
+*REMOVED*AiDotNet.Data.Transforms.Numeric.StandardScaleTransform<T>.StandardScaleTransform(double[]! mean, double[]! std) -> void
+AiDotNet.Data.Transforms.Numeric.MinMaxScaleTransform<T>.MinMaxScaleTransform(T[]! min, T[]! max) -> void
+AiDotNet.Data.Transforms.Numeric.MinMaxScaleTransform<T>.MinMaxScaleTransform(T[]! min, T[]! max, double targetMin, double targetMax) -> void
+AiDotNet.Data.Transforms.Numeric.StandardScaleTransform<T>.StandardScaleTransform(T[]! mean, T[]! std) -> void
+*REMOVED*AiDotNet.Data.Transforms.Numeric.MinMaxScaleTransform<T>.MinMaxScaleTransform(T[]![]! referenceData, double targetMin = 0, double targetMax = 1) -> void
+AiDotNet.Data.Transforms.Numeric.MinMaxScaleTransform<T>.MinMaxScaleTransform(T[]![]! referenceData) -> void
+AiDotNet.Data.Transforms.Numeric.MinMaxScaleTransform<T>.MinMaxScaleTransform(T[]![]! referenceData, double targetMin, double targetMax) -> void

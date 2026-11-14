@@ -92,8 +92,8 @@ public class Kinetics400DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, 
             totalSamples = _options.MaxSamples.Value;
 
         _sampleCount = totalSamples;
-        var featuresData = new T[totalSamples * _featureSize];
-        var labelsData = new T[totalSamples * NumClasses];
+        var featuresData = new int[totalSamples * _featureSize];
+        var labelsData = new int[totalSamples * NumClasses];
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -112,18 +112,21 @@ public class Kinetics400DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, 
                 byte[] imageBytes = await FilePolyfill.ReadAllBytesAsync(frameFiles[f], cancellationToken);
                 int featureOffset = i * _featureSize + f * framePixels;
                 int pixelCount = Math.Min(imageBytes.Length, framePixels);
-                for (int p = 0; p < pixelCount; p++)
-                {
-                    double val = _options.Normalize ? imageBytes[p] / 255.0 : imageBytes[p];
-                    featuresData[featureOffset + p] = NumOps.FromDouble(val);
-                }
+                Array.Copy(imageBytes, 0, featuresData, featureOffset, pixelCount);
             }
 
-            labelsData[i * NumClasses + classIndex] = NumOps.FromDouble(1.0);
+            labelsData[i * NumClasses + classIndex] = 1;
         }
 
-        LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, _featureSize });
-        LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, NumClasses });
+        var features = new Tensor<int>(featuresData, new[] { totalSamples, _featureSize }).Cast<T>();
+        if (_options.Normalize)
+        {
+            // Raw bytes -> [0, 1] in one engine op (unfilled positions stay 0)
+            features = AiDotNetEngine.Current.TensorDivideScalar(features, NumOps.FromDouble(255.0));
+        }
+
+        LoadedFeatures = features;
+        LoadedLabels = new Tensor<int>(labelsData, new[] { totalSamples, NumClasses }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 

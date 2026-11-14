@@ -123,8 +123,8 @@ public class MathDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
         var vocabulary = TextLoaderHelper.BuildVocabulary(allTexts, allTexts.Count, _options.VocabularySize);
 
         int pLen = _options.MaxProblemLength, sLen = _options.MaxSolutionLength;
-        var featuresData = new T[totalSamples * pLen];
-        var labelsData = new T[totalSamples * sLen];
+        var featuresData = new int[totalSamples * pLen];
+        var labelsData = new int[totalSamples * sLen];
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -132,12 +132,12 @@ public class MathDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
             int[] pTok = TextLoaderHelper.TokenizeAndEncode(problems[i], vocabulary, pLen);
             int[] sTok = TextLoaderHelper.TokenizeAndEncode(solutions[i], vocabulary, sLen);
             int pOff = i * pLen, sOff = i * sLen;
-            for (int j = 0; j < pLen; j++) featuresData[pOff + j] = NumOps.FromDouble(pTok[j]);
-            for (int j = 0; j < sLen; j++) labelsData[sOff + j] = NumOps.FromDouble(sTok[j]);
+            Array.Copy(pTok, 0, featuresData, pOff, pLen);
+            Array.Copy(sTok, 0, labelsData, sOff, sLen);
         }
 
-        LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, pLen });
-        LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, sLen });
+        LoadedFeatures = new Tensor<int>(featuresData, new[] { totalSamples, pLen }).Cast<T>();
+        LoadedLabels = new Tensor<int>(labelsData, new[] { totalSamples, sLen }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 

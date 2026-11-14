@@ -157,6 +157,18 @@ public class CityscapesDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
         int pixelsPerLabel = _h * _w;
         var featuresData = new T[totalSamples * pixelsPerImage];
         var labelsData = new T[totalSamples * pixelsPerLabel];
+        T ignore = NumOps.FromDouble(IgnoreLabel);
+        var engine = AiDotNetEngine.Current;
+
+        // Train-id lookup table with one extra slot holding IgnoreLabel for ids outside the table
+        var trainIdTable = new int[IdToTrainId.Length + 1];
+        Array.Copy(IdToTrainId, trainIdTable, IdToTrainId.Length);
+        trainIdTable[IdToTrainId.Length] = IgnoreLabel;
+        var trainIdTensor = new Tensor<int>(trainIdTable, new[] { trainIdTable.Length });
+
+        // R channel = every third entry of the interleaved RGB label image
+        var redChannel = Enumerable.Range(0, pixelsPerLabel).Select(p => p * 3).ToArray();
+        var redChannelIndices = new Tensor<int>(redChannel, new[] { pixelsPerLabel });
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -174,9 +186,7 @@ public class CityscapesDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
                 // Test split: labels are unavailable; fill with IgnoreLabel (255) so
                 // consumers and loss heads skip these pixels rather than training on class 0.
                 int lblOffSentinel = i * pixelsPerLabel;
-                T ignore = NumOps.FromDouble(IgnoreLabel);
-                for (int p = 0; p < pixelsPerLabel; p++)
-                    labelsData[lblOffSentinel + p] = ignore;
+                labelsData.AsSpan(lblOffSentinel, pixelsPerLabel).Fill(ignore);
                 continue;
             }
 
@@ -184,16 +194,23 @@ public class CityscapesDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
             // for *_labelIds.png — single-channel grayscale or first channel of RGB).
             var lblPixels = VisionLoaderHelper.LoadAndResizeImage<T>(lblPath, _h, _w, 3, normalize: false);
             int lblOff = i * pixelsPerLabel;
-            for (int p = 0; p < pixelsPerLabel; p++)
+            if (pixelsPerLabel == 0) continue;
+
+            // Take the R channel (engine gather), round to the nearest id, then optionally map through the
+            // train-id table (engine gather; out-of-range ids hit the IgnoreLabel slot).
+            var labelPixels = new Tensor<T>(lblPixels, new[] { lblPixels.Length });
+            var srcIds = engine.TensorRound(engine.TensorIndexSelect(labelPixels, redChannelIndices, 0));
+            Tensor<T> outIds = srcIds;
+            if (_options.MapToTrainIds)
             {
-                // Take the R channel — first of every 3 entries.
-                double idVal = NumOps.ToDouble(lblPixels[p * 3]);
-                int srcId = (int)Math.Round(idVal);
-                int outId = _options.MapToTrainIds
-                    ? (srcId >= 0 && srcId < IdToTrainId.Length ? IdToTrainId[srcId] : IgnoreLabel)
-                    : srcId;
-                labelsData[lblOff + p] = NumOps.FromDouble(outId);
+                var ids = srcIds.Cast<int>().AsSpan().ToArray();
+                var slots = new int[ids.Length];
+                for (int p = 0; p < ids.Length; p++)
+                    slots[p] = ids[p] >= 0 && ids[p] < IdToTrainId.Length ? ids[p] : IdToTrainId.Length;
+                outIds = engine.TensorIndexSelect(trainIdTensor, new Tensor<int>(slots, new[] { slots.Length }), 0).Cast<T>();
             }
+
+            outIds.AsSpan().CopyTo(labelsData.AsSpan(lblOff, pixelsPerLabel));
         }
 
         LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, _h, _w, 3 });

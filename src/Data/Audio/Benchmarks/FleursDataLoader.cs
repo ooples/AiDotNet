@@ -101,7 +101,7 @@ public class FleursDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
         _sampleCount = totalSamples;
         var featuresData = new T[totalSamples * _maxAudioSamples];
         int maxTextLen = 256;
-        var labelsData = new T[totalSamples * maxTextLen];
+        var labelsData = new int[totalSamples * maxTextLen];
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -115,12 +115,12 @@ public class FleursDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
             }
 
             int labelOffset = i * maxTextLen;
-            for (int c = 0; c < Math.Min(transcript.Length, maxTextLen); c++)
-                labelsData[labelOffset + c] = NumOps.FromDouble(transcript[c]);
+            int charCount = Math.Min(transcript.Length, maxTextLen);
+            Array.Copy(transcript.ToCharArray(0, charCount), 0, labelsData, labelOffset, charCount);
         }
 
         LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, _maxAudioSamples });
-        LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, maxTextLen });
+        LoadedLabels = new Tensor<int>(labelsData, new[] { totalSamples, maxTextLen }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 

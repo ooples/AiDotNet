@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
+using AiDotNet.Data.Graph;
 using AiDotNet.Data.Structures;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
@@ -284,28 +285,8 @@ public abstract class GraphDataLoaderBase<T> : DataLoaderBase<T>, IGraphDataLoad
     /// </summary>
     private Tensor<T> ExtractLabels(Tensor<T> labels, int[] indices)
     {
-        if (labels.Shape.Length == 1)
-        {
-            var result = new Tensor<T>([indices.Length]);
-            for (int i = 0; i < indices.Length; i++)
-            {
-                result[i] = labels[indices[i]];
-            }
-            return result;
-        }
-        else
-        {
-            int numClasses = labels.Shape[1];
-            var result = new Tensor<T>([indices.Length, numClasses]);
-            for (int i = 0; i < indices.Length; i++)
-            {
-                for (int c = 0; c < numClasses; c++)
-                {
-                    result[i, c] = labels[indices[i], c];
-                }
-            }
-            return result;
-        }
+        // Rows (and, for 2-d labels, every class column) of the requested nodes.
+        return BatchGather.Rows(labels, indices);
     }
 
     /// <inheritdoc/>
@@ -370,13 +351,8 @@ public abstract class GraphDataLoaderBase<T> : DataLoaderBase<T>, IGraphDataLoad
     /// </summary>
     private Tensor<T> ExtractEdges(Tensor<T> edgeIndex, int[] indices)
     {
-        var result = new Tensor<T>([indices.Length, 2]);
-        for (int i = 0; i < indices.Length; i++)
-        {
-            result[i, 0] = edgeIndex[indices[i], 0];
-            result[i, 1] = edgeIndex[indices[i], 1];
-        }
-        return result;
+        var rows = BatchGather.Rows(edgeIndex, indices);
+        return edgeIndex.Shape[1] == 2 ? rows : rows.Slice(1, 0, 2);
     }
 
     /// <summary>
@@ -389,10 +365,12 @@ public abstract class GraphDataLoaderBase<T> : DataLoaderBase<T>, IGraphDataLoad
         int numEdges = graph.NumEdges;
 
         // Build set of existing edges
+        int[] edgeInts = GraphTensorHelper.EdgeIndexToInt32(edgeIndex);
+        int edgeCols = edgeIndex.Shape.Length > 1 ? edgeIndex.Shape[1] : 2;
         for (int i = 0; i < numEdges; i++)
         {
-            int src = NumOps.ToInt32(edgeIndex[i, 0]);
-            int dst = NumOps.ToInt32(edgeIndex[i, 1]);
+            int src = edgeInts[i * edgeCols];
+            int dst = edgeInts[i * edgeCols + 1];
             existingEdges.Add((src, dst));
         }
 
@@ -413,14 +391,7 @@ public abstract class GraphDataLoaderBase<T> : DataLoaderBase<T>, IGraphDataLoad
         }
 
         // Convert to tensor
-        var result = new Tensor<T>([negatives.Count, 2]);
-        for (int i = 0; i < negatives.Count; i++)
-        {
-            result[i, 0] = NumOps.FromDouble(negatives[i].src);
-            result[i, 1] = NumOps.FromDouble(negatives[i].dst);
-        }
-
-        return result;
+        return GraphTensorHelper.EdgeIndex<T>(negatives);
     }
 
     #region PyTorch-Style Batch Iteration

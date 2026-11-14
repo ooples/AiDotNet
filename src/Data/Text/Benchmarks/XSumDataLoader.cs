@@ -104,8 +104,8 @@ public class XSumDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
         var vocabulary = TextLoaderHelper.BuildVocabulary(allTexts, allTexts.Count, _options.VocabularySize);
 
         int dLen = _options.MaxDocumentLength, sLen = _options.MaxSummaryLength;
-        var featuresData = new T[totalSamples * dLen];
-        var labelsData = new T[totalSamples * sLen];
+        var featuresData = new int[totalSamples * dLen];
+        var labelsData = new int[totalSamples * sLen];
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -113,12 +113,12 @@ public class XSumDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
             int[] dTok = TextLoaderHelper.TokenizeAndEncode(docs[i], vocabulary, dLen);
             int[] sTok = TextLoaderHelper.TokenizeAndEncode(sums[i], vocabulary, sLen);
             int dOff = i * dLen, sOff = i * sLen;
-            for (int j = 0; j < dLen; j++) featuresData[dOff + j] = NumOps.FromDouble(dTok[j]);
-            for (int j = 0; j < sLen; j++) labelsData[sOff + j] = NumOps.FromDouble(sTok[j]);
+            Array.Copy(dTok, 0, featuresData, dOff, dLen);
+            Array.Copy(sTok, 0, labelsData, sOff, sLen);
         }
 
-        LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, dLen });
-        LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, sLen });
+        LoadedFeatures = new Tensor<int>(featuresData, new[] { totalSamples, dLen }).Cast<T>();
+        LoadedLabels = new Tensor<int>(labelsData, new[] { totalSamples, sLen }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 

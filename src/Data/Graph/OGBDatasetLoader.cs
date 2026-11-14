@@ -345,19 +345,14 @@ public class OGBDatasetLoader<T> : GraphDataLoaderBase<T>
             }
         }
 
-        var edgeIndex = new Tensor<T>([edges.Count, 2]);
-        for (int i = 0; i < edges.Count; i++)
-        {
-            edgeIndex[i, 0] = NumOps.FromDouble(edges[i].src);
-            edgeIndex[i, 1] = NumOps.FromDouble(edges[i].dst);
-        }
+        var edgeIndex = GraphTensorHelper.EdgeIndex<T>(edges);
 
-        var labelTensor = new Tensor<T>([numNodes, _numClasses]);
-        for (int i = 0; i < labels.Count && i < numNodes; i++)
+        var labelIndices = new int[Math.Min(labels.Count, numNodes)];
+        for (int i = 0; i < labelIndices.Length; i++)
         {
-            int labelIdx = MathPolyfill.Clamp(labels[i], 0, _numClasses - 1);
-            labelTensor[i, labelIdx] = NumOps.One;
+            labelIndices[i] = MathPolyfill.Clamp(labels[i], 0, _numClasses - 1);
         }
+        var labelTensor = GraphTensorHelper.OneHotPadded<T>(labelIndices, numNodes, _numClasses);
 
         var graph = new GraphData<T>
         {
@@ -668,20 +663,14 @@ public class OGBDatasetLoader<T> : GraphDataLoaderBase<T>
             }
 
             // Build edge index
-            var edgeIndex = new Tensor<T>([graphEdges.Count, 2]);
-            for (int i = 0; i < graphEdges.Count; i++)
-            {
-                edgeIndex[i, 0] = NumOps.FromDouble(graphEdges[i].Item1);
-                edgeIndex[i, 1] = NumOps.FromDouble(graphEdges[i].Item2);
-            }
+            var edgeIndex = GraphTensorHelper.EdgeIndex<T>(graphEdges);
 
             // Build graph label
             Tensor<T>? graphLabel = null;
             if (g < graphLabels.Count)
             {
-                graphLabel = new Tensor<T>([1, _numClasses]);
                 int labelIdx = MathPolyfill.Clamp(graphLabels[g], 0, _numClasses - 1);
-                graphLabel[0, labelIdx] = NumOps.One;
+                graphLabel = GraphTensorHelper.OneHot<T>(new[] { labelIdx }, _numClasses);
             }
 
             graphs.Add(new GraphData<T>
@@ -833,12 +822,12 @@ public class OGBDatasetLoader<T> : GraphDataLoaderBase<T>
 
         // Build node features (one-hot atom type)
         int numAtomTypes = 10;
-        var nodeFeatures = new Tensor<T>([atomTypes.Count, numAtomTypes]);
+        var clampedAtomTypes = new int[atomTypes.Count];
         for (int j = 0; j < atomTypes.Count; j++)
         {
-            int atomType = MathPolyfill.Clamp(atomTypes[j], 0, numAtomTypes - 1);
-            nodeFeatures[j, atomType] = NumOps.One;
+            clampedAtomTypes[j] = MathPolyfill.Clamp(atomTypes[j], 0, numAtomTypes - 1);
         }
+        var nodeFeatures = GraphTensorHelper.OneHot<T>(clampedAtomTypes, numAtomTypes);
 
         // Build edge index (undirected)
         var edgeList = new List<(int, int)>();
@@ -848,12 +837,7 @@ public class OGBDatasetLoader<T> : GraphDataLoaderBase<T>
             edgeList.Add((bond.dst, bond.src));
         }
 
-        var edgeIndex = new Tensor<T>([edgeList.Count, 2]);
-        for (int j = 0; j < edgeList.Count; j++)
-        {
-            edgeIndex[j, 0] = NumOps.FromDouble(edgeList[j].Item1);
-            edgeIndex[j, 1] = NumOps.FromDouble(edgeList[j].Item2);
-        }
+        var edgeIndex = GraphTensorHelper.EdgeIndex<T>(edgeList);
 
         return new GraphData<T>
         {
@@ -1046,10 +1030,12 @@ public class OGBDatasetLoader<T> : GraphDataLoaderBase<T>
         var allEdges = new List<(int src, int dst)>();
         var existingEdgeSet = new HashSet<(int, int)>();
 
+        int[] edgeInts = GraphTensorHelper.EdgeIndexToInt32(graph.EdgeIndex);
+        int edgeCols = graph.EdgeIndex.Shape.Length > 1 ? graph.EdgeIndex.Shape[1] : 2;
         for (int i = 0; i < graph.EdgeIndex.Shape[0]; i++)
         {
-            int src = NumOps.ToInt32(graph.EdgeIndex[i, 0]);
-            int dst = NumOps.ToInt32(graph.EdgeIndex[i, 1]);
+            int src = edgeInts[i * edgeCols];
+            int dst = edgeInts[i * edgeCols + 1];
 
             if (src < dst)
             {
@@ -1110,13 +1096,7 @@ public class OGBDatasetLoader<T> : GraphDataLoaderBase<T>
     /// </summary>
     private Tensor<T> ConvertEdgesToTensor((int src, int dst)[] edges)
     {
-        var tensor = new Tensor<T>([edges.Length, 2]);
-        for (int i = 0; i < edges.Length; i++)
-        {
-            tensor[i, 0] = NumOps.FromDouble(edges[i].src);
-            tensor[i, 1] = NumOps.FromDouble(edges[i].dst);
-        }
-        return tensor;
+        return GraphTensorHelper.EdgeIndex<T>(edges);
     }
 
     /// <summary>
@@ -1124,27 +1104,30 @@ public class OGBDatasetLoader<T> : GraphDataLoaderBase<T>
     /// </summary>
     private Tensor<T> CollectGraphLabels(List<GraphData<T>> graphs, int numClasses)
     {
-        var labels = new Tensor<T>([graphs.Count, numClasses]);
+        if (graphs.Count == 0)
+        {
+            return new Tensor<T>([0, numClasses]);
+        }
+
         var random = RandomHelper.CreateSeededRandom(42);
+        var rows = new Tensor<T>[graphs.Count];
 
         for (int i = 0; i < graphs.Count; i++)
         {
             var graphLabel = graphs[i].GraphLabel;
             if (graphLabel is not null && graphLabel.Shape[1] >= numClasses)
             {
-                for (int j = 0; j < numClasses; j++)
-                {
-                    labels[i, j] = graphLabel[0, j];
-                }
+                // First row, first numClasses columns of the graph's own label.
+                rows[i] = graphLabel.Slice(0, 0, 1).Slice(1, 0, numClasses);
             }
             else
             {
                 // Default label if not available
                 int classIdx = random.Next(numClasses);
-                labels[i, classIdx] = NumOps.One;
+                rows[i] = GraphTensorHelper.OneHot<T>(new[] { classIdx }, numClasses);
             }
         }
 
-        return labels;
+        return AiDotNetEngine.Current.TensorConcatenate(rows, 0);
     }
 }

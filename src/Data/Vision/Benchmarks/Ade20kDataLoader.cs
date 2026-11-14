@@ -86,6 +86,7 @@ public class Ade20kDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
         var featuresData = new T[totalSamples * featureSize];
         var labelsData = new T[totalSamples * labelSize];
 
+        T numClasses = NumOps.FromDouble(_options.NumClasses);
         for (int i = 0; i < totalSamples; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -103,11 +104,21 @@ public class Ade20kDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
                 // Load annotation mask as single-channel image (class indices per pixel)
                 var annPixels = VisionLoaderHelper.LoadAndResizeImage<T>(annFile, h, w, 1, false);
                 int annToRead = Math.Min(annPixels.Length, labelSize);
-                var numOps = MathHelper.GetNumericOperations<T>();
-                for (int p = 0; p < annToRead; p++)
+                if (annToRead > 0)
                 {
-                    double classVal = numOps.ToDouble(annPixels[p]);
-                    labelsData[lblOff + p] = numOps.FromDouble(((int)classVal) % _options.NumClasses);
+                    // class = trunc(value) % NumClasses with engine ops: trunc(x) = x - fmod(x, 1), and fmod keeps
+                    // the dividend's sign exactly like C#'s integer remainder.
+                    var engine = AiDotNetEngine.Current;
+                    var shape = new[] { annToRead };
+                    var annPrefix = new T[annToRead];
+                    Array.Copy(annPixels, annPrefix, annToRead);
+                    var values = new Tensor<T>(annPrefix, shape);
+                    var ones = new Tensor<T>(shape);
+                    ones.Fill(NumOps.One);
+                    var classCount = new Tensor<T>(shape);
+                    classCount.Fill(numClasses);
+                    var truncated = engine.TensorSubtract(values, engine.TensorFmod(values, ones));
+                    engine.TensorFmod(truncated, classCount).AsSpan().CopyTo(labelsData.AsSpan(lblOff, annToRead));
                 }
             }
         }
