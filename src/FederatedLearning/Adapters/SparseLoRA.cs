@@ -220,6 +220,14 @@ public class SparseLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, I
         var delta = Engine.Subtract(adapterAfter, adapterBefore).AsTensor();
         var magnitudes = Engine.TensorAbs(delta);
 
+        // A NaN entry ranks below every number, where the ascending Array.Sort this replaced put it. The engine
+        // sort puts NaN last, which made the threshold NaN and the update empty. (A NaN anywhere makes the
+        // total NaN, so the all-finite case pays one reduction and no copy.)
+        if (NumOps.IsNaN(Engine.TensorSum(magnitudes)))
+        {
+            magnitudes = Engine.TensorNanToNum(magnitudes, -1.0, double.PositiveInfinity, double.NegativeInfinity);
+        }
+
         // The k-th largest magnitude is the threshold.
         var (sortedMagnitudes, _) = Engine.TensorSort(magnitudes, 0, false);
         T threshold = sortedMagnitudes[len - k];

@@ -275,6 +275,15 @@ public class FetchSGDCompressor<T> : Infrastructure.FederatedLearningComponentBa
         // Keep the k largest magnitudes: everything above the k-th largest, then ties in index order.
         int k = Math.Min(_topK, length);
         var magnitudes = Engine.TensorAbs(estimates);
+
+        // A NaN estimate ranks below every number, where the descending CompareTo sort this replaced put it.
+        // The engine sort puts NaN last, which made the threshold NaN and the recovered update all zero.
+        // (A NaN anywhere makes the total NaN, so the all-finite case pays one reduction and no copy.)
+        if (NumOps.IsNaN(Engine.TensorSum(magnitudes)))
+        {
+            magnitudes = Engine.TensorNanToNum(magnitudes, -1.0, double.PositiveInfinity, double.NegativeInfinity);
+        }
+
         var (sortedMagnitudes, _) = Engine.TensorSort(magnitudes, 0, false);
         T threshold = sortedMagnitudes[length - k];
         var above = Engine.TensorGreaterThan(magnitudes, threshold).Cast<int>();
