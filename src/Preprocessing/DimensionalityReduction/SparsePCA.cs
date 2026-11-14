@@ -212,8 +212,9 @@ public class SparsePCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             var updated = DimensionalityReductionOps.NormalizeRows(DimensionalityReductionOps.SoftThreshold(
                 engine.TensorDivide(correlation, codesSquared), engine.TensorDivide(alpha, codesSquared)));
 
-            // Skip components whose codes vanish
-            var keep = engine.TensorLessThan(codesSquared, floor);
+            // Skip components whose codes vanish. TensorWhere does not broadcast its condition, so the [1, 1] flag
+            // is expanded to the [1, p] row first.
+            var keep = engine.TensorBroadcastTo(engine.TensorLessThan(codesSquared, floor), updated.Shape.ToArray());
             components = DimensionalityReductionOps.WithRow(components, c, engine.TensorWhere(keep, row, updated));
         }
 

@@ -778,6 +778,51 @@ public class DimensionalityReductionReferenceTests
         Assert.Equal(0.0, half.ToDouble(same[1, 2]));
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task SparsePCA_DefaultFit_WithSeveralFeatures_Completes()
+    {
+        await Task.Yield();
+
+        // The component update selects between the old and the new [1, p] row with a [1, 1] "codes vanish" flag.
+        // TensorWhere does not broadcast its condition, so every fit with more than one feature threw
+        // "All tensors must have the same shape".
+        var model = new SparsePCA<double>(nComponents: 2, alpha: 0.1, maxIter: 5, randomState: 0);
+        var codes = model.FitTransform(new Matrix<double>(Data));
+
+        Assert.Equal(Data.GetLength(0), codes.Rows);
+        Assert.Equal(2, codes.Columns);
+        AssertAllFinite(codes);
+        AssertAllFinite(model.Components);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DictionaryLearning_DefaultFit_WithSeveralFeatures_Completes()
+    {
+        await Task.Yield();
+
+        // Same [1, 1] condition against [1, p] rows in the atom update of the default (coordinate descent) fit.
+        var model = new DictionaryLearning<double>(nComponents: 2, alpha: 0.1, maxIter: 5, randomState: 0);
+        var codes = model.FitTransform(new Matrix<double>(Data));
+
+        Assert.Equal(Data.GetLength(0), codes.Rows);
+        Assert.Equal(2, codes.Columns);
+        AssertAllFinite(codes);
+        AssertAllFinite(model.Components);
+    }
+
+    private static void AssertAllFinite(Matrix<double>? m)
+    {
+        Assert.NotNull(m);
+        if (m is null) return;
+        for (int i = 0; i < m.Rows; i++)
+        {
+            for (int j = 0; j < m.Columns; j++)
+            {
+                Assert.False(double.IsNaN(m[i, j]) || double.IsInfinity(m[i, j]), $"[{i}, {j}] is {m[i, j]}");
+            }
+        }
+    }
+
     private static double[,] SignRows(int start, int count)
     {
         var rows = new double[count, SignData.GetLength(1)];
