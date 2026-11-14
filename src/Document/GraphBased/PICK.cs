@@ -315,7 +315,9 @@ public partial class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
             throw new ArgumentException(
                 "PICK expects packed segments [N, 4 + T]: each row a box (x0, y0, x1, y1) followed by T token ids.", nameof(packed));
         int n = packed.Shape[0], width = packed.Shape[1], slots = width - 4;
-        double[] values = packed.Cast<double>().ToArray();
+        // Contiguous first: Cast on a narrowed view (one page's rows of a larger buffer) reads from the start
+        // of the underlying buffer rather than from the view's own rows.
+        double[] values = DocumentTensorOps.Wide(packed).ToArray();
         var boxes = new double[n][];
         var tokens = new int[n][];
         for (int i = 0; i < n; i++)
@@ -579,7 +581,7 @@ public partial class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
         if (target.Shape[0] != n * slots)
             throw new ArgumentException($"PICK tags must cover the {n} x {slots} slot grid ({n * slots} rows).", nameof(target));
         int width = indices ? 1 : target.Shape[1];
-        double[] values = target.Cast<double>().ToArray();
+        double[] values = DocumentTensorOps.Wide(target).ToArray();
         var labels = new List<int>();
         for (int i = 0; i < n; i++)
             for (int t = 0; t < segments.Tokens[i].Length; t++)

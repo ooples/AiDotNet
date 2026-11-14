@@ -386,6 +386,9 @@ internal static class DocumentTensorOps
         IEngine engine, Tensor<T> output, int maxNodes, int classes, int imageSize, double threshold)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
+        // A page with no nodes has no regions (and no row width to divide the length by).
+        if (output.Rank == 0 || output.Shape[0] == 0 || output.Length == 0)
+            return new List<LayoutRegion<T>>();
         int numNodes = Math.Min(output.Shape[0], maxNodes);
         int width = output.Shape.Length > 1 ? output.Length / output.Shape[0] : classes;
         int numClasses = Math.Min(width, classes);
@@ -445,6 +448,12 @@ internal static class DocumentTensorOps
         var wide = Wide(flat);
         var mean = engine.ReduceMean(wide, new[] { 1 }, keepDims: true);
         var deviation = engine.TensorSubtract(wide, engine.TensorBroadcastTo(mean, shape));
+        // One correction step: the rounding error of a mean over N values is tiny, but the std floor divides
+        // by as little as 1 / sqrt(N), which magnified it until a flat page no longer mapped to zeros. The mean
+        // of the deviations is that error, and removing it leaves the mean exact to the last place.
+        var correction = engine.ReduceMean(deviation, new[] { 1 }, keepDims: true);
+        mean = engine.TensorAdd(mean, correction);
+        deviation = engine.TensorSubtract(deviation, engine.TensorBroadcastTo(correction, shape));
         var std = engine.TensorMax(
             engine.TensorSqrt(engine.ReduceMean(engine.TensorMultiply(deviation, deviation), new[] { 1 }, keepDims: true)),
             1.0 / Math.Sqrt(n));
