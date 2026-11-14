@@ -22,8 +22,10 @@ public class KNNPersonalizationPaperTests
     }
 
     [Fact(Timeout = 60000)]
-    public void KNNPredict_UsesExpNegativeEuclideanDistanceWeights()
+    public async Task KNNPredict_UsesExpNegativeEuclideanDistanceWeights()
     {
+        await Task.Yield();
+
         // Query 0 -> neighbors at distance 0 (class 0) and 1 (class 1): p = [1, e^-1] / (1 + e^-1).
         // The old max(0, cosine) weighting returned [0.5, 0.5] here (zero-norm query).
         var p = BuildLine(k: 2).KNNPredict(new[] { 0.0 }, numClasses: 2);
@@ -33,8 +35,10 @@ public class KNNPersonalizationPaperTests
     }
 
     [Fact(Timeout = 60000)]
-    public void KNNPredict_TemperatureScalesDistances()
+    public async Task KNNPredict_TemperatureScalesDistances()
     {
+        await Task.Yield();
+
         // tau = 0.5: weights [1, e^-2].
         var p = BuildLine(k: 2, temperature: 0.5).KNNPredict(new[] { 0.0 }, numClasses: 2);
 
@@ -43,8 +47,10 @@ public class KNNPersonalizationPaperTests
     }
 
     [Fact(Timeout = 60000)]
-    public void KNNPredict_Float_DistantCacheDoesNotUnderflowToUniform()
+    public async Task KNNPredict_Float_DistantCacheDoesNotUnderflowToUniform()
     {
+        await Task.Yield();
+
         // Distances 1000 and 1001: exp(-1000) underflows, but Eq. 4 normalizes, so the answer equals the
         // offset-0 case.
         var knn = new KNNPersonalization<float>(k: 2);
@@ -57,8 +63,10 @@ public class KNNPersonalizationPaperTests
     }
 
     [Fact(Timeout = 60000)]
-    public void KNNPredict_CosineDistance_UsesOneMinusCosine()
+    public async Task KNNPredict_CosineDistance_UsesOneMinusCosine()
     {
+        await Task.Yield();
+
         var knn = new KNNPersonalization<double>(k: 2, distanceMetric: DistanceMetricType.Cosine);
         knn.BuildCache(
             new[] { new[] { 1.0, 0.0 }, new[] { 0.0, 1.0 }, new[] { 1.0, 1.0 } },
@@ -72,8 +80,10 @@ public class KNNPersonalizationPaperTests
     }
 
     [Fact(Timeout = 60000)]
-    public void KNNPredict_NoValidNeighborLabel_ReturnsUniform()
+    public async Task KNNPredict_NoValidNeighborLabel_ReturnsUniform()
     {
+        await Task.Yield();
+
         var knn = new KNNPersonalization<double>(k: 2);
         knn.BuildCache(new[] { new[] { 0.0 }, new[] { 1.0 } }, new[] { 5, -1 });
 
@@ -83,8 +93,10 @@ public class KNNPersonalizationPaperTests
     }
 
     [Fact(Timeout = 60000)]
-    public void CombinedPredict_MixesKnnAndGlobalWithLambda()
+    public async Task CombinedPredict_MixesKnnAndGlobalWithLambda()
     {
+        await Task.Yield();
+
         var knn = new KNNPersonalization<double>(k: 2, lambda: 0.5);
         knn.BuildCache(new[] { new[] { 0.0 }, new[] { 1.0 }, new[] { 3.0 } }, new[] { 0, 1, 1 });
 
@@ -95,8 +107,10 @@ public class KNNPersonalizationPaperTests
     }
 
     [Fact(Timeout = 60000)]
-    public void BuildCache_RejectsMixedFeatureLengths()
+    public async Task BuildCache_RejectsMixedFeatureLengths()
     {
+        await Task.Yield();
+
         var knn = new KNNPersonalization<double>();
 
         Assert.Throws<ArgumentException>(() =>
@@ -104,15 +118,19 @@ public class KNNPersonalizationPaperTests
     }
 
     [Fact(Timeout = 60000)]
-    public void Constructor_RejectsUnsupportedDistance()
+    public async Task Constructor_RejectsUnsupportedDistance()
     {
+        await Task.Yield();
+
         Assert.Throws<ArgumentException>(() =>
             new KNNPersonalization<double>(distanceMetric: DistanceMetricType.Hamming));
     }
 
     [Fact(Timeout = 60000)]
-    public void FedAGHN_ComputeGradientSimilarity_IsGenericCosine()
+    public async Task FedAGHN_ComputeGradientSimilarity_IsGenericCosine()
     {
+        await Task.Yield();
+
         var aghn = new FedAGHNPersonalization<float>(sharedDimension: 2);
 
         Assert.Equal(0.7071068, (double)aghn.ComputeGradientSimilarity(new[] { 1f, 0f }, new[] { 1f, 1f }), 5);
@@ -120,8 +138,10 @@ public class KNNPersonalizationPaperTests
     }
 
     [Fact(Timeout = 60000)]
-    public void FedAGHN_ComputeAdaptiveWeights_ReluNormalizesThenBlendsMomentum()
+    public async Task FedAGHN_ComputeAdaptiveWeights_ReluNormalizesThenBlendsMomentum()
     {
+        await Task.Yield();
+
         var aghn = new FedAGHNPersonalization<double>(sharedDimension: 2, adaptiveWeightMomentum: 0.9);
         var clients = new Dictionary<int, double[]>
         {
