@@ -454,9 +454,15 @@ public partial class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T
         var binGradients = engine.TensorScatterAdd(zeros, bins, grad, 0);
         var binHessians = engine.TensorScatterAdd(zeros, bins, hess, 0);
 
+        // Bins without hessian mass are skipped, as in the scalar loop, and must not be divided either: with
+        // L2 = 0 an empty bin (normal in an interaction grid) has a zero divisor, which throws for decimal
+        var active = engine.TensorGreaterThan(binHessians, eps);
+        var ones = new Tensor<T>(zeros.Shape.ToArray());
+        engine.TensorFill(ones, NumOps.One);
         var step = engine.TensorMultiplyScalar(
-            engine.TensorDivide(binGradients, engine.TensorAddScalar(binHessians, l2Reg)), learningRate);
-        return engine.TensorWhere(engine.TensorGreaterThan(binHessians, eps), step, zeros).ToVector();
+            engine.TensorDivide(binGradients, engine.TensorWhere(active, engine.TensorAddScalar(binHessians, l2Reg), ones)),
+            learningRate);
+        return engine.TensorWhere(active, step, zeros).ToVector();
     }
 
     /// <summary>
