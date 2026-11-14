@@ -150,10 +150,10 @@ public static class SerializationHelper<T>
         {
             writer.Write(Convert.ToChar(value));
         }
-        else if (typeof(T) == typeof(Half))
+        else if (value is Half halfValue)
         {
             // Stored as its float widening, which is exact; ReadValue narrows it back to the same Half.
-            writer.Write((float)(Half)(object)value);
+            writer.Write((float)halfValue);
         }
         else
         {
