@@ -89,7 +89,7 @@ public partial class NLinearModel<T> : TimeSeriesModelBase<T>
             ? Engine.TensorSlice(raw, new[] { 0, start }, new[] { batch, take })
             : new Tensor<T>(new[] { batch, 0 });
         window = Engine.TensorDivideScalar(Engine.TensorSubtractScalar(window, _xMean), _xStd);
-        window = Engine.TensorNanToNum(window, 0.0, 0.0, 0.0);
+        window = ZeroNonFinite(window);
         if (take < _l)
         {
             window = Engine.TensorConcatenate(new[] { window, new Tensor<T>(new[] { batch, _l - take }) }, 1);

@@ -106,7 +106,7 @@ public partial class TiDEModel<T> : TimeSeriesModelBase<T>
             window = Engine.TensorConcatenate(new[] { window, new Tensor<T>(new[] { batch, _l - take }) }, 1);
         }
 
-        return Engine.TensorNanToNum(window, 0.0, 0.0, 0.0);
+        return ZeroNonFinite(window);
     }
 
     /// <summary>ReLU that maps NaN to zero, like <c>z &gt; 0 ? z : 0</c>.</summary>
@@ -205,8 +205,7 @@ public partial class TiDEModel<T> : TimeSeriesModelBase<T>
 
         // Filtering the statistics alone does not keep a NaN label out of the gradient: that row's error
         // would still be NaN and would poison every weight it touches. Such rows are skipped (zero error).
-        var finiteTarget = Engine.TensorIsFinite(targets);
-        var keep = Engine.TensorWhere(finiteTarget, Engine.TensorOnesLike(targets), Engine.TensorZerosLike(targets));
+        var keep = FiniteMask(targets);
         var normalizedTargets = Engine.TensorDivideScalar(Engine.TensorSubtractScalar(targets, _targetMean), _targetStd);
 
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
