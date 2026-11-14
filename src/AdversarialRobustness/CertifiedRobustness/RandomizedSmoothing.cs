@@ -72,7 +72,7 @@ public class RandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense<T, TInp
         // for proper statistical validity of the certification
         this.random = options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(options.Seed.Value)
-            : RandomHelper.CreateSeededRandom(Environment.TickCount);
+            : RandomHelper.CreateSecureRandom();
     }
 
     /// <inheritdoc/>
@@ -106,21 +106,21 @@ public class RandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense<T, TInp
         var estimationCounts = SampleClassCounts(vectorInput, input, model, sigma, options.NumSamples);
         int topCount = estimationCounts.TryGetValue(topClass, out int observed) ? observed : 0;
 
-        T confidence = NumOps.FromDouble(options.ConfidenceLevel);
-        T lowerBound = StatisticsHelper<T>.CalculateClopperPearsonLowerBound(topCount, options.NumSamples, confidence);
-        T upperBound = StatisticsHelper<T>.CalculateClopperPearsonInterval(topCount, options.NumSamples, confidence).Upper;
-        T half = NumOps.FromDouble(0.5);
-        bool certified = NumOps.GreaterThanOrEquals(lowerBound, half);
-        T certifiedRadius = certified ? ComputeCertifiedRadius(lowerBound, sigma) : NumOps.Zero;
+        // The bounds, the radius and the frequency are computed in double: counts above 2048 are not exact in
+        // Half, and a lower bound near 1 rounds to 1 there, where Phi^-1 is infinite.
+        double lowerBound = SmoothingStatistics.ClopperPearsonLower(topCount, options.NumSamples, options.ConfidenceLevel);
+        double upperBound = SmoothingStatistics.ClopperPearsonUpper(topCount, options.NumSamples, options.ConfidenceLevel);
+        bool certified = lowerBound >= 0.5;
+        double certifiedRadius = certified ? SmoothingStatistics.Radius(lowerBound, options.NoiseSigma) : 0.0;
 
         var result = new CertifiedPrediction<T>
         {
             PredictedClass = topClass,
-            CertifiedRadius = certifiedRadius,
+            CertifiedRadius = NumOps.FromDouble(certifiedRadius),
             IsCertified = certified,
-            Confidence = NumOps.Divide(NumOps.FromDouble(topCount), NumOps.FromDouble(options.NumSamples)),
-            LowerBound = lowerBound,
-            UpperBound = upperBound
+            Confidence = NumOps.FromDouble((double)topCount / options.NumSamples),
+            LowerBound = NumOps.FromDouble(lowerBound),
+            UpperBound = NumOps.FromDouble(upperBound)
         };
 
         result.CertificationDetails["SampleCount"] = options.NumSamples;
@@ -171,9 +171,8 @@ public class RandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense<T, TInp
 
         int topCount = counts[ranked[0]];
         int runnerUpCount = ranked.Count > 1 ? counts[ranked[1]] : 0;
-        T pValue = TwoSidedBinomialPValue(topCount, topCount + runnerUpCount);
-        T alpha = NumOps.FromDouble(1.0 - options.ConfidenceLevel);
-        return NumOps.LessThanOrEquals(pValue, alpha) ? ranked[0] : null;
+        double pValue = SmoothingStatistics.TwoSidedBinomialPValue(topCount, topCount + runnerUpCount);
+        return pValue <= 1.0 - options.ConfidenceLevel ? ranked[0] : null;
     }
 
     /// <summary>
@@ -181,24 +180,15 @@ public class RandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense<T, TInp
     /// for k at least n / 2: min(1, 2 P(X >= k)), with P(X >= k) = I_{1/2}(k, n - k + 1).
     /// </summary>
     internal static T TwoSidedBinomialPValue(int successes, int trials)
-    {
-        if (trials <= 0 || successes <= 0)
-        {
-            return NumOps.One;
-        }
-
-        T half = NumOps.FromDouble(0.5);
-        T upperTail = StatisticsHelper<T>.CalculateBetaCDF(
-            half,
-            NumOps.FromDouble(successes),
-            NumOps.FromDouble(trials - successes + 1));
-        T twoSided = NumOps.Multiply(NumOps.FromDouble(2.0), upperTail);
-        return NumOps.LessThan(twoSided, NumOps.One) ? twoSided : NumOps.One;
-    }
+        => NumOps.FromDouble(SmoothingStatistics.TwoSidedBinomialPValue(successes, trials));
 
     /// <summary>
     /// Classifies <paramref name="count"/> Gaussian-noise samples x + N(0, sigma^2 I) and counts each class.
     /// </summary>
+    /// <remarks>
+    /// The noise is drawn <see cref="CertifiedDefenseOptions{T}.BatchSize"/> samples at a time, one engine draw
+    /// per batch, as Cohen et al.'s <c>_sample_noise</c> does.
+    /// </remarks>
     private Dictionary<int, int> SampleClassCounts(
         Vector<T> vectorInput,
         TInput referenceInput,
@@ -206,20 +196,37 @@ public class RandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense<T, TInp
         T sigma,
         int count)
     {
+        int batchSize = ValidatedBatchSize(options.BatchSize);
+        int dimension = vectorInput.Length;
         var counts = new Dictionary<int, int>();
-        for (int i = 0; i < count; i++)
+        for (int first = 0; first < count; first += batchSize)
         {
-            int sampledClass = ClassifyNoisy(vectorInput, referenceInput, model, sigma);
-            counts[sampledClass] = counts.TryGetValue(sampledClass, out int seen) ? seen + 1 : 1;
+            int batch = Math.Min(batchSize, count - first);
+            var noise = Engine.GenerateGaussianNoise<T>(batch * dimension, NumOps.Zero, sigma, random.Next()).AsTensor();
+            for (int b = 0; b < batch; b++)
+            {
+                // x + N(0, sigma^2 I), unclipped: clipping would smooth a different base classifier than the one
+                // the radius is reported for.
+                var row = Engine.TensorSlice(noise, new[] { b * dimension }, new[] { dimension }).ToVector();
+                var noisyInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(Engine.Add<T>(vectorInput, row), referenceInput);
+                int sampledClass = ArgMax(ConversionsHelper.ConvertToVector<T, TOutput>(model.Predict(noisyInput)));
+                counts[sampledClass] = counts.TryGetValue(sampledClass, out int seen) ? seen + 1 : 1;
+            }
         }
 
         return counts;
     }
 
-    private int ClassifyNoisy(Vector<T> vectorInput, TInput referenceInput, IFullModel<T, TInput, TOutput> model, T sigma)
+    /// <summary>The configured noise batch size; it must be positive.</summary>
+    internal static int ValidatedBatchSize(int batchSize)
     {
-        var noisyInput = ConversionsHelper.ConvertVectorToInput<T, TInput>(AddGaussianNoise(vectorInput, sigma), referenceInput);
-        return ArgMax(ConversionsHelper.ConvertToVector<T, TOutput>(model.Predict(noisyInput)));
+        if (batchSize <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(CertifiedDefenseOptions<T>.BatchSize), batchSize, "BatchSize must be at least 1.");
+        }
+
+        return batchSize;
     }
 
     /// <summary>
@@ -363,33 +370,6 @@ public class RandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense<T, TInp
         {
             Deserialize(File.ReadAllBytes(filePath));
         }
-    }
-
-    private Vector<T> AddGaussianNoise(Vector<T> input, T sigma)
-    {
-        // x + N(0, sigma^2 I), as in Cohen et al. (2019). The sample is not clipped: clipping would smooth a
-        // different base classifier than the one the radius is reported for.
-        var noise = Engine.GenerateGaussianNoise<T>(
-            input.Length,
-            NumOps.Zero,
-            sigma,
-            random.Next());
-
-        return Engine.Add<T>(input, noise);
-    }
-
-    /// <summary>
-    /// The certified L2 radius sigma * Phi^-1(p_A_lower) (Cohen et al. 2019, Theorem 1 with p_B = 1 - p_A).
-    /// </summary>
-    private static T ComputeCertifiedRadius(T lowerBound, T sigma)
-    {
-        if (!NumOps.GreaterThan(lowerBound, NumOps.FromDouble(0.5)))
-        {
-            return NumOps.Zero;
-        }
-
-        var radius = NumOps.Multiply(sigma, StatisticsHelper<T>.CalculateInverseNormalCDF(lowerBound));
-        return NumOps.GreaterThan(radius, NumOps.Zero) ? radius : NumOps.Zero;
     }
 
     private static int ArgMax(Vector<T> vector) => CertificationMath<T>.ArgMax(vector);
