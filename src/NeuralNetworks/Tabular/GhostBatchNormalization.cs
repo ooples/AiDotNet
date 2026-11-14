@@ -144,7 +144,9 @@ public partial class GhostBatchNormalization<T> : LayerBase<T>, IShapeContract
 
         if (features != _numFeatures)
         {
-            throw new ArgumentException($"Expected {_numFeatures} features, got {features}", nameof(input));
+            throw new ArgumentException(
+                $"Input shape [batch_size, {features}] does not match this layer's feature dimension {_numFeatures}.",
+                nameof(input));
         }
 
         var engine = Engine;
