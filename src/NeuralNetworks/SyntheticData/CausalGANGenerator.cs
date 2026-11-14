@@ -943,11 +943,22 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
             _adjacency = candidate.Cast<T>().ToMatrix();
 
         // Dual ascent on alpha; rho grows tenfold when h did not fall below a quarter of its previous value.
-        double hNew = Acyclicity(Tensor<T>.FromMatrix(_adjacency).Cast<double>()).H;
+        double hNew = NumOps.ToDouble(ComputeNOTEARSConstraintAndGradient().ConstraintValue);
         _lagrangeAlpha += _lagrangeRho * hNew;
         if (Math.Abs(hNew) > 0.25 * Math.Abs(_prevDagConstraint) && _prevDagConstraint < double.MaxValue)
             _lagrangeRho = Math.Min(_lagrangeRho * 10.0, 1e16);
         _prevDagConstraint = hNew;
+    }
+
+    /// <summary>
+    /// The NOTEARS acyclicity constraint of the current adjacency and its gradient, h(W) = tr(e^(W o W)) - d and
+    /// (e^(W o W))^T o 2W, evaluated in double (see <see cref="Acyclicity"/>).
+    /// </summary>
+    private (T ConstraintValue, Tensor<T> Gradient) ComputeNOTEARSConstraintAndGradient()
+    {
+        if (_adjacency is null) return (NumOps.Zero, new Tensor<T>([0, 0]));
+        var (h, gradient) = Acyclicity(Tensor<T>.FromMatrix(_adjacency).Cast<double>());
+        return (NumOps.FromDouble(h), gradient.Cast<T>());
     }
 
     /// <summary>h(W) = tr(e^(W o W)) - d and its gradient (e^(W o W))^T o 2W (Zheng et al., 2018), in double.</summary>
