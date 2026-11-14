@@ -279,6 +279,25 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
     protected IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>
+    /// The 0/1 mask (in T) of the finite entries: |x| &lt;= MaxValue holds for them only (NaN compares false and
+    /// infinity is above it). Not <c>Engine.TensorIsFinite</c>, which converts each element through IConvertible
+    /// and throws InvalidCastException for Half, which does not implement it.
+    /// </summary>
+    private protected Tensor<T> FiniteMask(Tensor<T> values)
+    {
+        var magnitude = Engine.TensorAbs(values);
+        return Engine.TensorAdd(
+            Engine.TensorLessThan(magnitude, NumOps.MaxValue), Engine.TensorEquals(magnitude, NumOps.MaxValue));
+    }
+
+    /// <summary>
+    /// <paramref name="values"/> with NaN and both infinities replaced by zero (<c>nan_to_num(x, 0, 0, 0)</c>), for
+    /// any T: <c>Engine.TensorNanToNum</c> has the IConvertible conversion of <see cref="FiniteMask"/>'s note.
+    /// </summary>
+    private protected Tensor<T> ZeroNonFinite(Tensor<T> values) =>
+        Engine.TensorWhere(FiniteMask(values), values, Engine.TensorZerosLike(values));
+
+    /// <summary>
     /// Copies <paramref name="parameters"/> into <paramref name="snapshot"/> (allocated on the first call and reused),
     /// on whichever device holds them: the best-epoch checkpoint a training loop restores at its end.
     /// </summary>
@@ -567,7 +586,7 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
         {
             // Largest finite |y| (NaN and infinite values are ignored)
             var absY = Tensor<T>.FromVector(Engine.Abs(y));
-            var finiteAbsY = Engine.TensorWhere(Engine.TensorIsFinite(absY), absY, Engine.TensorZerosLike(absY));
+            var finiteAbsY = ZeroNonFinite(absY);
             maxAbsY = Math.Max(maxAbsY, NumOps.ToDouble(Engine.TensorMaxValue(finiteAbsY)));
         }
         _autoGuardThreshold = maxAbsY > 0 ? maxAbsY * 1000.0 : 1e15;
