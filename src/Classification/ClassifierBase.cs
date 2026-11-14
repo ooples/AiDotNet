@@ -563,6 +563,9 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
         return Engine.TensorAdd(votes, Engine.TensorOneHot<int>(shifted, NumClasses + 1).Slice(1, 1, NumClasses + 1));
     }
 
+    private const double EuclideanNormOrder = 2.0;
+    private const double NormOrderTolerance = 1e-12;
+
     /// <summary>
     /// p-norms (sum |x|^p)^(1/p) along <paramref name="axis"/>, computed as s * (sum (|x| / s)^p)^(1/p)
     /// with s = max |x| along that axis, so that the powers cannot overflow (a Half square overflows
@@ -576,26 +579,29 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     {
         var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
+        // The Euclidean order squares instead of calling pow, as the scalar loop did. A tolerance rather than ==:
+        // both branches compute the same norm, so an order within rounding of 2 may take either.
+        bool euclidean = Math.Abs(p - EuclideanNormOrder) <= NormOrderTolerance;
         var magnitudes = engine.TensorAbs(values);
         var scale = engine.ReduceMax(magnitudes, new[] { axis }, true);
         var ones = new Tensor<T>(scale.Shape.ToArray());
         engine.TensorFill(ones, numOps.One);
         var safeScale = engine.TensorWhere(engine.TensorGreaterThan(scale, numOps.Zero), scale, ones);
         var unit = engine.TensorDivide(magnitudes, engine.TensorBroadcastTo(safeScale, values.Shape.ToArray()));
-        var powered = p == 2.0 ? engine.TensorMultiply(unit, unit) : engine.TensorPower(unit, numOps.FromDouble(p));
+        var powered = euclidean ? engine.TensorMultiply(unit, unit) : engine.TensorPower(unit, numOps.FromDouble(p));
         var sums = engine.ReduceSum(powered, new[] { axis }, false);
-        var norms = p == 2.0 ? engine.TensorSqrt(sums) : engine.TensorPower(sums, numOps.FromDouble(1.0 / p));
+        var norms = euclidean ? engine.TensorSqrt(sums) : engine.TensorPower(sums, numOps.FromDouble(1.0 / p));
         var scaled = engine.TensorMultiply(norms, safeScale.Reshape(norms.Shape.ToArray()));
 
         // The scaled form rounds differently for every slice (s differs), so two slices with the same exact norm,
         // for instance offsets (2, 9) and (6, 7), can come out one ulp apart and a distance tie is then decided by
         // rounding instead of by index. Where the direct powers neither overflow nor underflow, the direct norm is
         // used, as the scalar loop computed it; the scaled norm only covers the remaining slices.
-        var plainPowered = p == 2.0
+        var plainPowered = euclidean
             ? engine.TensorMultiply(magnitudes, magnitudes)
             : engine.TensorPower(magnitudes, numOps.FromDouble(p));
         var plainSums = engine.ReduceSum(plainPowered, new[] { axis }, false);
-        var plain = p == 2.0 ? engine.TensorSqrt(plainSums) : engine.TensorPower(plainSums, numOps.FromDouble(1.0 / p));
+        var plain = euclidean ? engine.TensorSqrt(plainSums) : engine.TensorPower(plainSums, numOps.FromDouble(1.0 / p));
         var usable = engine.TensorMultiply(
             engine.TensorGreaterThan(plainSums, numOps.Zero), engine.TensorLessThan(plainSums, numOps.MaxValue));
         return engine.TensorWhere(usable, plain, scaled);
