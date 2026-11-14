@@ -96,6 +96,35 @@ public class ParameterGradientPublicationTests
         for (int i = rawOffset; i < flat.Length; i++) Assert.Equal(11, flat[i]);
     }
 
+    // A tape step's device gradients are published as a snapshot: the optimizer that runs after publication scales
+    // them in place (AdamOptimizer's own global-norm clip), and the surface must keep the values that were published,
+    // as the CPU path's copy does.
+    [SkippableFact]
+    public void DevicePublication_IsASnapshot_NotAnAliasOfGradientsScaledInPlaceAfterwards()
+    {
+        using var gpu = new AiDotNet.Tensors.Engines.DirectGpuTensorEngine();
+        if (System.Environment.GetEnvironmentVariable("AIDOTNET_REQUIRE_GPU_TESTS") == "1")
+            Assert.True(gpu.IsGpuAvailable, "The required GPU backend failed to initialize.");
+        Skip.If(!gpu.IsGpuAvailable, "No DirectGpuTensorEngine available.");
+        var previous = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        AiDotNet.Tensors.Engines.AiDotNetEngine.Current = gpu;
+        try
+        {
+            var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+            using var network = new PublicationNetwork();
+            var parameters = network.TrainableTensors;
+            using var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<float>();
+            var grads = parameters.ToDictionary(p => p, p => engine.TensorMultiplyScalar(FilledLike(p, 1), 7f));
+            network.Publish(grads);
+            foreach (var g in grads.Values) engine.TensorMultiplyScalarInPlace(g, 0.5f);
+            var flat = network.GetParameterGradients();
+            int rawOffset = flat.Length - parameters[^1].Length;
+            Assert.True(rawOffset > 0);
+            for (int i = 0; i < rawOffset; i++) Assert.Equal(7f, flat[i]);
+        }
+        finally { AiDotNet.Tensors.Engines.AiDotNetEngine.Current = previous; }
+    }
+
     [Fact]
     public void Publication_ZeroesAReusedLayerSliceThatGetsNoGradientThisStep()
     {
