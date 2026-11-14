@@ -22986,3 +22986,18 @@ AiDotNet.Models.Options.CertifiedDefenseOptions<T>.NormType.get -> AiDotNet.Enum
 AiDotNet.Models.Options.AdversarialRobustnessOptions<T>.CertificationMethod.get -> AiDotNet.Enums.CertifiedDefenseMethod
 AiDotNet.Models.Options.AdversarialRobustnessOptions<T>.CertificationNormType.get -> AiDotNet.Enums.AdversarialNormType
 static AiDotNet.Models.Options.AdversarialRobustnessConfiguration<T, TInput, TOutput>.WithCertification(AiDotNet.Enums.CertifiedDefenseMethod certificationMethod = AiDotNet.Enums.CertifiedDefenseMethod.RandomizedSmoothing) -> AiDotNet.Models.Options.AdversarialRobustnessConfiguration<T, TInput, TOutput>!
+*REMOVED*AiDotNet.Models.Results.AiModelResult<T, TInput, TOutput>.EvaluateRobustness(TInput[]! testInputs, TOutput[]! testLabels, double epsilon = 0.03) -> AiDotNet.Models.RobustnessStats<T>!
+*REMOVED*AiDotNet.Models.Results.AiModelResult<T, TInput, TOutput>.EvaluateRobustnessWithAutoAttack(TInput[]! testInputs, TOutput[]! testLabels, double epsilon = 0.03) -> AiDotNet.Models.RobustnessStats<T>!
+*REMOVED*AiDotNet.Models.Results.AiModelResult<T, TInput, TOutput>.GenerateAdversarialExample(TInput input, TOutput trueLabel, double epsilon = 0.03) -> TInput
+*REMOVED*AiDotNet.Models.Options.AdversarialRobustnessOptions<T>.AttackMethods.get -> string![]!
+AiDotNet.Models.Results.AiModelResult<T, TInput, TOutput>.EvaluateRobustness(TInput[]! testInputs, TOutput[]! testLabels) -> AiDotNet.Models.RobustnessStats<T>!
+AiDotNet.Models.Results.AiModelResult<T, TInput, TOutput>.EvaluateRobustness(TInput[]! testInputs, TOutput[]! testLabels, double epsilon) -> AiDotNet.Models.RobustnessStats<T>!
+AiDotNet.Models.Results.AiModelResult<T, TInput, TOutput>.EvaluateRobustnessWithAutoAttack(TInput[]! testInputs, TOutput[]! testLabels, double? epsilon = null) -> AiDotNet.Models.RobustnessStats<T>!
+AiDotNet.Models.Results.AiModelResult<T, TInput, TOutput>.GenerateAdversarialExample(TInput input, TOutput trueLabel, double? epsilon = null) -> TInput
+AiDotNet.Models.Results.AiModelResult<T, TInput, TOutput>.EvaluateConfiguredRobustness(TInput[]! testInputs, TOutput[]! testLabels) -> System.Collections.Generic.IReadOnlyDictionary<AiDotNet.Enums.AdversarialAttackMethod, AiDotNet.Models.RobustnessStats<T>!>!
+AiDotNet.Models.Options.AdversarialRobustnessOptions<T>.AttackMethods.get -> AiDotNet.Enums.AdversarialAttackMethod[]!
+AiDotNet.Enums.AdversarialAttackMethod
+AiDotNet.Enums.AdversarialAttackMethod.Fgsm = 0 -> AiDotNet.Enums.AdversarialAttackMethod
+AiDotNet.Enums.AdversarialAttackMethod.Pgd = 1 -> AiDotNet.Enums.AdversarialAttackMethod
+AiDotNet.Enums.AdversarialAttackMethod.CarliniWagner = 2 -> AiDotNet.Enums.AdversarialAttackMethod
+AiDotNet.Enums.AdversarialAttackMethod.AutoAttack = 3 -> AiDotNet.Enums.AdversarialAttackMethod

@@ -3,6 +3,7 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -93,7 +94,7 @@ public class CWAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, TOu
             var attackLossGradient = ComputeAttackLossInputGradient(adversarial, outputVector, realIndex, input, targetModel);
             T cost = state.Step(adversarial, outputVector, realIndex, attackLossGradient);
 
-            state.TrackBest(adversarial, IsSuccessfulAttack(outputVector, trueLabelIndex));
+            state.TrackBest(adversarial, IsSuccessfulAttack(outputVector, trueLabelIndex, realIndex));
 
             // torchattacks CW: every tenth of the run, stop once the objective stops decreasing.
             if (iteration % abortCheckInterval == 0 && state.ObjectiveStoppedDecreasing(cost))
@@ -219,11 +220,16 @@ public class CWAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, TOu
     /// <summary>
     /// Checks if an attack was successful based on the model's output.
     /// </summary>
-    private bool IsSuccessfulAttack(Vector<T> output, int trueLabel)
+    /// <remarks>
+    /// A targeted attack succeeds when the prediction is the class its loss drives up
+    /// (<paramref name="realIndex"/>, the target class clamped to the model's classes), so the success test
+    /// and the loss always agree on the target.
+    /// </remarks>
+    private bool IsSuccessfulAttack(Vector<T> output, int trueLabel, int realIndex)
     {
         int predictedClass = ArgMaxIndex(output);
         return Options.IsTargeted
-            ? predictedClass == Options.TargetClass
+            ? predictedClass == realIndex
             : predictedClass != trueLabel;
     }
 
@@ -235,6 +241,8 @@ public class CWAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, TOu
         private const double Beta1 = 0.9;
         private const double Beta2 = 0.999;
         private const double AdamEpsilon = 1e-8;
+        private static readonly double SqrtBeta2 = Math.Sqrt(Beta2);
+        private static readonly double SqrtOneMinusBeta2 = Math.Sqrt(1.0 - Beta2);
 
         private readonly CWAttack<T, TInput, TOutput> _attack;
         private readonly Vector<T> _original;
@@ -242,7 +250,8 @@ public class CWAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, TOu
         private readonly T _learningRate;
         private Vector<T> _w;
         private Vector<T> _firstMoment;
-        private Vector<T> _secondMoment;
+        private Vector<T> _rootSecondMoment;
+        private readonly T _adamEpsilon;
         private int _step;
         private T _bestSquaredDistance;
         private T _previousCost;
@@ -255,15 +264,18 @@ public class CWAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, TOu
             _c = NumOps.FromDouble(attack.Options.CWConstant);
             _learningRate = NumOps.FromDouble(attack.Options.CWLearningRate);
 
-            // w = atanh(2x - 1), clipped away from +-1 so pixels at the box edges stay finite.
+            // w = atanh(2x - 1), clipped away from +-1 so pixels at the box edges stay finite. In a type too
+            // coarse to hold 0.9999 below 1 (Half rounds it to 1, where atanh is infinite and the pixel could
+            // never move) the bound is the largest value below 1 instead.
             var engine = attack.Engine;
-            var bound = NumOps.FromDouble(0.9999);
+            var bound = NumOps.FromDouble(Math.Min(0.9999, 1.0 - RelativeResolution / 2));
             var scaled = engine.Subtract<T>(
                 engine.Multiply<T>(original, NumOps.FromDouble(2.0)),
                 engine.Fill<T>(original.Length, NumOps.One));
             _w = engine.Atanh<T>(engine.Clamp<T>(scaled, NumOps.Negate(bound), bound));
             _firstMoment = new Vector<T>(original.Length);
-            _secondMoment = new Vector<T>(original.Length);
+            _rootSecondMoment = new Vector<T>(original.Length);
+            _adamEpsilon = PositiveConstant(AdamEpsilon);
             BestAdversarial = original.Clone();
             _bestSquaredDistance = NumOps.MaxValue;
             _previousCost = NumOps.MaxValue;
@@ -304,17 +316,39 @@ public class CWAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, TOu
             _firstMoment = engine.Add<T>(
                 engine.Multiply<T>(_firstMoment, NumOps.FromDouble(Beta1)),
                 engine.Multiply<T>(gradient, NumOps.FromDouble(1.0 - Beta1)));
-            _secondMoment = engine.Add<T>(
-                engine.Multiply<T>(_secondMoment, NumOps.FromDouble(Beta2)),
-                engine.Multiply<T>(engine.Multiply<T>(gradient, gradient), NumOps.FromDouble(1.0 - Beta2)));
+            _rootSecondMoment = RootSecondMoment(engine, gradient);
             T firstCorrection = NumOps.FromDouble(1.0 - Math.Pow(Beta1, _step));
-            T secondCorrection = NumOps.FromDouble(1.0 - Math.Pow(Beta2, _step));
+            T rootSecondCorrection = NumOps.FromDouble(Math.Sqrt(1.0 - Math.Pow(Beta2, _step)));
             var denominator = engine.Add<T>(
-                engine.Sqrt<T>(engine.Divide<T>(_secondMoment, secondCorrection)),
-                engine.Fill<T>(_w.Length, NumOps.FromDouble(AdamEpsilon)));
+                engine.Divide<T>(_rootSecondMoment, rootSecondCorrection),
+                engine.Fill<T>(_w.Length, _adamEpsilon));
             var update = engine.Divide<T>(engine.Divide<T>(_firstMoment, firstCorrection), denominator);
             _w = engine.Subtract<T>(_w, engine.Multiply<T>(update, _learningRate));
             return cost;
+        }
+
+        /// <summary>
+        /// sqrt(v_t) for Adam's v_t = beta2 v_{t-1} + (1 - beta2) g^2, kept as
+        /// hypot(sqrt(beta2) sqrt(v_{t-1}), sqrt(1 - beta2) |g|).
+        /// </summary>
+        /// <remarks>
+        /// The same quantity as the square root of PyTorch's exp_avg_sq, but the squares are never formed:
+        /// in Half, (1 - beta2) g^2 underflows to zero for |g| below about 0.008, which leaves v = 0 and turns
+        /// the update m / (sqrt(v) + eps) into a jump of g / eps.
+        /// </remarks>
+        private Vector<T> RootSecondMoment(IEngine engine, Vector<T> gradient)
+        {
+            var decayed = engine.TensorMultiplyScalar(_rootSecondMoment.AsTensor(), NumOps.FromDouble(SqrtBeta2));
+            var fresh = engine.TensorMultiplyScalar(
+                engine.TensorAbs(gradient.AsTensor()), NumOps.FromDouble(SqrtOneMinusBeta2));
+            var larger = engine.TensorMax(decayed, fresh);
+            var smaller = engine.TensorMin(decayed, fresh);
+            var positive = engine.TensorGreaterThan(larger, NumOps.Zero);
+            var zeros = new Tensor<T>(larger.Shape.ToArray());
+            var safeLarger = engine.TensorWhere(positive, larger, engine.TensorAddScalar(zeros, NumOps.One));
+            var ratio = engine.TensorWhere(positive, engine.TensorDivide(smaller, safeLarger), zeros);
+            var root = engine.TensorSqrt(engine.TensorAddScalar(engine.TensorMultiply(ratio, ratio), NumOps.One));
+            return engine.TensorMultiply(larger, root).ToVector();
         }
 
         /// <summary>Keeps the successful candidate with the smallest L2 distance.</summary>

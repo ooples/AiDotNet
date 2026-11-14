@@ -153,7 +153,9 @@ public class VideoColorJitter<T> : SpatialVideoAugmenterBase<T>
                 ColorAdjustment.Contrast => Blend(
                     color,
                     contrastFactor,
-                    engine.TensorAddScalar(new Tensor<T>(new[] { colorChannels, height, width }), engine.TensorMean(Grayscale(color))),
+                    engine.TensorAddScalar(
+                        new Tensor<T>(new[] { colorChannels, height, width }),
+                        OverflowSafeReductions.Mean(Grayscale(color))),
                     maxVal),
                 ColorAdjustment.Saturation => colorChannels == 3
                     ? Blend(
