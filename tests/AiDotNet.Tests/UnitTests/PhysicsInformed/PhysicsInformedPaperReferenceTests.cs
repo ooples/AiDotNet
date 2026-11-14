@@ -395,6 +395,115 @@ public class PhysicsInformedPaperReferenceTests
         }
     }
 
+    [Fact]
+    public void FourierLayer2D_EachModeCornerHasItsOwnWeights()
+    {
+        // Li et al. (2021), SpectralConv2d in the reference code: rfft2, then out_ft[:, :, :m1, :m2] uses weights1
+        // and out_ft[:, :, -m1:, :m2] uses weights2, then irfft2. The old layer used one weight tensor for both
+        // corners, which tied R(k1, k2) to R(k1 - m1, k2) and halved the spectral parameters.
+        const int n1 = 4, n2 = 6, m = 2;
+        var layer = new FourierLayer<double>(1, m, new[] { n1, n2 }, new IdentityActivation<double>());
+        double[] lowRe = { 0.5, -0.3, 0.8, 0.2 }, highRe = { -0.7, 0.4, 0.1, 0.9 };
+        double[] lowIm = { 0.3, 0.6, -0.2, 0.5 }, highIm = { 0.0, -0.4, 0.7, -0.1 };
+        const double pointwise = 0.7, bias = 0.1;
+        layer.SetParameters(new Vector<double>(lowRe.Concat(highRe).Concat(lowIm).Concat(highIm)
+            .Concat(new[] { pointwise, bias }).ToArray()));
+
+        var x = new double[n1 * n2];
+        for (int i = 0; i < x.Length; i++)
+        {
+            x[i] = Math.Sin(0.9 * i) + 0.3 * Math.Cos(2.1 * i);
+        }
+
+        var output = layer.Forward(new Tensor<double>(x, new[] { 1, 1, n1, n2 })).ToArray();
+
+        // The kept spectrum Y on the half plane k2 = 0 .. m - 1: rows 0 .. m - 1 with the first weights and rows
+        // n1 - m .. n1 - 1 with the second.
+        var yRe = new double[n1, m];
+        var yIm = new double[n1, m];
+        for (int corner = 0; corner < 2; corner++)
+        {
+            for (int j = 0; j < m; j++)
+            {
+                int k1 = corner == 0 ? j : n1 - m + j;
+                for (int k2 = 0; k2 < m; k2++)
+                {
+                    double xRe = 0, xIm = 0;
+                    for (int a = 0; a < n1; a++)
+                    {
+                        for (int b = 0; b < n2; b++)
+                        {
+                            double angle = -2.0 * Math.PI * ((double)k1 * a / n1 + (double)k2 * b / n2);
+                            xRe += x[a * n2 + b] * Math.Cos(angle);
+                            xIm += x[a * n2 + b] * Math.Sin(angle);
+                        }
+                    }
+
+                    int w = j * m + k2;
+                    double wRe = corner == 0 ? lowRe[w] : highRe[w];
+                    double wIm = corner == 0 ? lowIm[w] : highIm[w];
+                    yRe[k1, k2] = wRe * xRe - wIm * xIm;
+                    yIm[k1, k2] = wRe * xIm + wIm * xRe;
+                }
+            }
+        }
+
+        // irfft2: the k2 = 0 column once, every other kept k2 twice for its Hermitian partner.
+        for (int a = 0; a < n1; a++)
+        {
+            for (int b = 0; b < n2; b++)
+            {
+                double spectral = 0;
+                for (int k1 = 0; k1 < n1; k1++)
+                {
+                    for (int k2 = 0; k2 < m; k2++)
+                    {
+                        double phase = 2.0 * Math.PI * ((double)k1 * a / n1 + (double)k2 * b / n2);
+                        double hermitian = k2 == 0 ? 1.0 : 2.0;
+                        spectral += hermitian * (yRe[k1, k2] * Math.Cos(phase) - yIm[k1, k2] * Math.Sin(phase));
+                    }
+                }
+
+                double expected = spectral / (n1 * n2) + pointwise * x[a * n2 + b] + bias;
+                Assert.Equal(expected, output[a * n2 + b], 1e-10);
+            }
+        }
+    }
+
+    [Fact]
+    public void FourierLayer_HermitianWeightsMarkOnlyDcAndNyquist_InHalfPrecision()
+    {
+        // irfft counts the DC term and the Nyquist term of an even length once and every other kept frequency
+        // twice. The weights were found by comparing a frequency ramp built in T with n / 2; in half precision
+        // integers above 2048 are not exact, so the comparison flagged a neighbour of the Nyquist index too.
+        const int length = 8200;
+        const int modes = length / 2 + 1;
+        var weights = FourierLayer<Half>.HermitianWeights(length, modes, 1).ToArray();
+
+        Assert.Equal(modes, weights.Length);
+        for (int k = 0; k < modes; k++)
+        {
+            float expected = k == 0 || k == length / 2 ? 1f : 2f;
+            Assert.Equal((Half)expected, weights[k]);
+        }
+    }
+
+    [Fact]
+    public void SymbolicPhysicsLearner_MeanSquaredErrorDoesNotOverflowHalfPrecision()
+    {
+        // The MSE squared the raw errors and divided by n in T. In half precision 300^2 = 90000 is above 65504, so
+        // an expression whose mean squared error 22500 is representable scored +infinity and was discarded.
+        var learner = new SymbolicPhysicsLearner<Half>();
+        var expression = new SymbolicExpression<Half>("x1", SymbolicExpressionType.Variable);
+        var inputs = new Tensor<Half>(new[] { (Half)300f, (Half)0f, (Half)0f, (Half)0f }, new[] { 4, 1 });
+        var outputs = new Tensor<Half>(new[] { (Half)0f, (Half)0f, (Half)0f, (Half)0f }, new[] { 4 });
+
+        double mse = learner.ComputeMse(expression, inputs, outputs);
+
+        // 22500 rounds to the half value 22496.
+        Assert.Equal(22500.0, mse, 32.0);
+    }
+
     private sealed class DiffusivityIdentification : IInverseProblem<double>
     {
         public DiffusivityIdentification(IReadOnlyList<(double[] location, double[] value)> observations)
