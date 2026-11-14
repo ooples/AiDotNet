@@ -22921,3 +22921,19 @@ AiDotNet.Enums.MixtureOfExpertsGatingNoise.SoftplusOfRouterLogits = 1 -> AiDotNe
 AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.Entmax15 = 0 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.SoftmaxSigmoid = 1 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
+*REMOVED*AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3Options.ModelSize.get -> AiDotNet.Enums.PointTransformerV3ModelSize
+*REMOVED*AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3Options.ModelSize.set -> void
+*REMOVED*AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.ModelSize.get -> AiDotNet.Enums.SonataModelSize
+*REMOVED*AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.ModelSize.set -> void
+*REMOVED*AiDotNet.Enums.PointTransformerV3ModelSize
+*REMOVED*AiDotNet.Enums.PointTransformerV3ModelSize.Base = 0 -> AiDotNet.Enums.PointTransformerV3ModelSize
+*REMOVED*AiDotNet.Enums.PointTransformerV3ModelSize.Large = 1 -> AiDotNet.Enums.PointTransformerV3ModelSize
+*REMOVED*AiDotNet.Enums.SonataModelSize
+*REMOVED*AiDotNet.Enums.SonataModelSize.Base = 0 -> AiDotNet.Enums.SonataModelSize
+*REMOVED*AiDotNet.Enums.SonataModelSize.Large = 1 -> AiDotNet.Enums.SonataModelSize
+*REMOVED*override AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3<T>.PredictOnnx(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.ComputerVision.Segmentation.PointCloud.Sonata<T>.PredictOnnx(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreatePointTransformerV3DecoderLayers(int encoderOutputChannels, int decoderDim, int numClasses, int featureHeight, int featureWidth) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreatePointTransformerV3EncoderLayers(int inputChannels, int inputHeight, int inputWidth, int[]! channelDims, int[]! depths, double dropRate) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateSonataDecoderLayers(int encoderOutputChannels, int decoderDim, int numClasses, int featureHeight, int featureWidth) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateSonataEncoderLayers(int inputChannels, int inputHeight, int inputWidth, int[]! channelDims, int[]! depths, double dropRate) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!

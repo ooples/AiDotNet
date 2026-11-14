@@ -22,7 +22,7 @@ internal sealed class SonataPrototypeHead<T>
         _fc1 = new PtLinear<T>(ctx, inputChannels, hiddenChannels);
         _fc2 = new PtLinear<T>(ctx, hiddenChannels, embedChannels);
         var prototype = new Tensor<T>(new[] { embedChannels, prototypes });
-        // nn.Linear's default init for the direction v; only its direction matters.
+        // Only the direction of each prototype column matters: the weight-norm gain is frozen at one.
         ctx.InitializeWeight(prototype, embedChannels);
         _prototypes = ctx.Add(prototype, PersistentTensorRole.Weights);
         EmbedChannels = embedChannels;

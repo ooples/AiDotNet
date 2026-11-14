@@ -363,26 +363,24 @@ public class SegmentationModelSizeVariationTests : IDisposable
 
     #region Point Cloud Models — All sizes
 
-    [Theory]
-    [InlineData(PointTransformerV3ModelSize.Base)]
-    [InlineData(PointTransformerV3ModelSize.Large)]
-    public void PointTransformerV3_AllModelSizes_ConstructAndPredict(PointTransformerV3ModelSize size)
+    // PTv3 and Sonata are sized by their stage arrays, not a size enum; a CI-scale configuration
+    // exercises the same code paths as the paper's.
+    [Fact]
+    public void PointTransformerV3_CiScaleConfig_ConstructAndPredict()
     {
-        var model = new PointTransformerV3<float>(Arch(), options: new PointTransformerV3Options { NumClasses = 5, ModelSize = size });
+        var model = new PointTransformerV3<float>(Arch(), options: AiDotNet.Tests.ComputerVision.PointCloud.PointCloudTestOptions.SmallPtv3(5));
+        var output = model.Predict(Rand(1, 24, 9));
         Assert.True(model.ParameterCount > 0);
-        var output = model.Predict(Rand(1, 3, 32, 32));
-        Assert.True(output.Length > 0);
+        Assert.Equal(new[] { 1, 24, 5 }, output.Shape.ToArray());
     }
 
-    [Theory]
-    [InlineData(SonataModelSize.Base)]
-    [InlineData(SonataModelSize.Large)]
-    public void Sonata_AllModelSizes_ConstructAndPredict(SonataModelSize size)
+    [Fact]
+    public void Sonata_CiScaleConfig_ConstructAndPredict()
     {
-        var model = new Sonata<float>(Arch(), options: new SonataOptions { NumClasses = 5, ModelSize = size });
+        var model = new Sonata<float>(Arch(), options: AiDotNet.Tests.ComputerVision.PointCloud.PointCloudTestOptions.SmallSonata(5));
+        var output = model.Predict(Rand(1, 24, 9));
         Assert.True(model.ParameterCount > 0);
-        var output = model.Predict(Rand(1, 3, 32, 32));
-        Assert.True(output.Length > 0);
+        Assert.Equal(new[] { 1, 24, 5 }, output.Shape.ToArray());
     }
 
     [Theory]
