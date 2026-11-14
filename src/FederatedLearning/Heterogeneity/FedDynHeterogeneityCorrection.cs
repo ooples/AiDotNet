@@ -45,21 +45,11 @@ public sealed class FedDynHeterogeneityCorrection<T> : FederatedHeterogeneityCor
         }
 
         // Update accumulator using the observed drift (local - global).
-        for (int i = 0; i < n; i++)
-        {
-            var drift = NumOps.Subtract(localParameters[i], globalParameters[i]);
-            acc[i] = NumOps.Add(acc[i], drift);
-        }
+        acc = Engine.Add(acc, Engine.Subtract(localParameters, globalParameters));
+        _clientAccumulators[clientId] = acc;
 
         // Apply correction: local + alpha * accumulator.
-        var corrected = new Vector<T>(n);
-        var alphaT = NumOps.FromDouble(_alpha);
-        for (int i = 0; i < n; i++)
-        {
-            corrected[i] = NumOps.Add(localParameters[i], NumOps.Multiply(alphaT, acc[i]));
-        }
-
-        return corrected;
+        return Engine.Add(localParameters, Engine.Multiply(acc, NumOps.FromDouble(_alpha)));
     }
 
     /// <inheritdoc />

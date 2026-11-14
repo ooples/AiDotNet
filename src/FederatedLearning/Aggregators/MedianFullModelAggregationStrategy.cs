@@ -29,23 +29,11 @@ public sealed class MedianFullModelAggregationStrategy<T, TInput, TOutput> :
         var clientIds = clientParameters.Keys.OrderBy(id => id).ToArray();
         int n = clientIds.Length;
 
-        var aggregated = new Vector<T>(parameterCount);
-        var buffer = new double[n];
-
-        for (int i = 0; i < parameterCount; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                buffer[j] = NumOps.ToDouble(clientParameters[clientIds[j]][i]);
-            }
-
-            Array.Sort(buffer);
-            double median = (n % 2 == 1)
-                ? buffer[n / 2]
-                : 0.5 * (buffer[(n / 2) - 1] + buffer[n / 2]);
-
-            aggregated[i] = NumOps.FromDouble(median);
-        }
+        var sorted = SortCoordinatesAcrossClients(clientParameters, clientIds);
+        // Even n: mean of the two middle order statistics, formed as 0.5 a + 0.5 b so it cannot overflow.
+        var aggregated = (n % 2 == 1)
+            ? OrderStatisticRow(sorted, n / 2)
+            : CombineOrderStatisticRows(sorted, BlockMeanWeights(n, (n / 2) - 1, 2));
 
         return InterfaceGuard.Parameterizable(reference).WithParameters(aggregated);
     }

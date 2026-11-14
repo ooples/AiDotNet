@@ -1,5 +1,6 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.FederatedLearning.Infrastructure;
 
 namespace AiDotNet.FederatedLearning.Aggregators;
 
@@ -137,19 +138,10 @@ public class BobaAggregationStrategy<T> : ParameterDictionaryAggregationStrategy
         }
 
         // Flatten all client models into vectors.
-        var flatVectors = new double[n][];
+        var flatVectors = new Vector<T>[n];
         for (int c = 0; c < n; c++)
         {
-            flatVectors[c] = new double[totalParams];
-            int offset = 0;
-            foreach (var layerName in layerNames)
-            {
-                var cp = clientModels[clientIds[c]][layerName];
-                for (int i = 0; i < cp.Length; i++)
-                {
-                    flatVectors[c][offset++] = NumOps.ToDouble(cp[i]);
-                }
-            }
+            flatVectors[c] = FlattenLayers(clientModels[clientIds[c]], layerNames, totalParams);
         }
 
         // Initialize beliefs for new clients.
@@ -202,12 +194,7 @@ public class BobaAggregationStrategy<T> : ParameterDictionaryAggregationStrategy
 
             foreach (var layerName in layerNames)
             {
-                var cp = clientModel[layerName];
-                var rp = result[layerName];
-                for (int i = 0; i < rp.Length; i++)
-                {
-                    rp[i] = NumOps.Add(rp[i], NumOps.Multiply(cp[i], wT));
-                }
+                AddScaledInto(result[layerName], clientModel[layerName], wT);
             }
         }
 
@@ -227,31 +214,13 @@ public class BobaAggregationStrategy<T> : ParameterDictionaryAggregationStrategy
     /// </list>
     /// <para>After convergence, the honest responsibilities are the aggregation weights.</para>
     /// </remarks>
-    private double[] RunEM(double[][] vectors, List<int> clientIds, int n, int dim)
+    private double[] RunEM(Vector<T>[] vectors, List<int> clientIds, int n, int dim)
     {
         // Work with squared distances from the mean for efficiency.
         // This is equivalent to a 1D projection (distance to centroid) for mixture modeling.
-        var mean = new double[dim];
-        for (int c = 0; c < n; c++)
-        {
-            for (int i = 0; i < dim; i++)
-            {
-                mean[i] += vectors[c][i] / n;
-            }
-        }
-
-        var sqDistances = new double[n];
-        for (int c = 0; c < n; c++)
-        {
-            double sumSq = 0;
-            for (int i = 0; i < dim; i++)
-            {
-                double diff = vectors[c][i] - mean[i];
-                sumSq += diff * diff;
-            }
-
-            sqDistances[c] = sumSq;
-        }
+        var rows = Engine.TensorStack(vectors.Select(v => v.AsTensor()).ToArray(), 0);
+        var mean = FederatedReductions.Mean(vectors);
+        var sqDistances = FederatedReductions.RowSquaredDistances(rows, mean);
 
         // Initialize EM parameters using cross-round beliefs as priors.
         double piH = 0;

@@ -35,7 +35,7 @@ namespace AiDotNet.FederatedLearning.Compression;
 public class PowerSGDCompressor<T> : FederatedLearningComponentBase<T>
 {
     private readonly AdvancedCompressionOptions _options;
-    private readonly Dictionary<int, double[,]> _clientQFactors = new();
+    private readonly Dictionary<int, Tensor<T>> _clientQFactors = new();
 
     /// <summary>
     /// Initializes a new instance of <see cref="PowerSGDCompressor{T}"/>.
@@ -52,89 +52,67 @@ public class PowerSGDCompressor<T> : FederatedLearningComponentBase<T>
     /// <param name="gradient">The gradient tensor to compress.</param>
     /// <param name="clientId">Client ID for warm-start factor reuse.</param>
     /// <returns>Compressed representation as (P factor, Q factor, original shape info).</returns>
-    public (double[,] P, double[,] Q, int Rows, int Cols) Compress(Tensor<T> gradient, int clientId)
+    public (Matrix<T> P, Matrix<T> Q, int Rows, int Cols) Compress(Tensor<T> gradient, int clientId)
     {
         if (gradient is null) throw new ArgumentNullException(nameof(gradient));
 
         int totalSize = gradient.Shape[0];
-        int rank = Math.Min(_options.PowerSGDRank, totalSize);
 
-        // Reshape 1D gradient into a 2D matrix (approximately square)
+        // Reshape 1D gradient into a 2D matrix (approximately square), zero-padding the tail.
         int rows = (int)Math.Ceiling(Math.Sqrt(totalSize));
         int cols = (int)Math.Ceiling((double)totalSize / rows);
-
-        // Build gradient matrix G
-        var G = new double[rows, cols];
-        for (int i = 0; i < totalSize; i++)
-        {
-            int r = i / cols;
-            int c = i % cols;
-            G[r, c] = NumOps.ToDouble(gradient[i]);
-        }
+        int rank = EffectiveRank(rows, cols);
+        var padded = new Tensor<T>(new[] { rows * cols });
+        gradient.AsSpan().Slice(0, totalSize).CopyTo(padded.AsWritableSpan());
+        var g = padded.Reshape(rows, cols);
 
         // Initialize or reuse Q factor
-        double[,] Q;
-        if (_options.PowerSGDWarmStart && _clientQFactors.ContainsKey(clientId))
+        Tensor<T> q;
+        if (_options.PowerSGDWarmStart && _clientQFactors.TryGetValue(clientId, out var stored)
+            && stored.Shape[0] == cols && stored.Shape[1] == rank)
         {
-            Q = _clientQFactors[clientId];
-            // Resize Q if needed
-            if (Q.GetLength(0) != cols || Q.GetLength(1) != rank)
-            {
-                Q = InitializeRandomMatrix(cols, rank);
-            }
+            q = stored;
         }
         else
         {
-            Q = InitializeRandomMatrix(cols, rank);
+            q = InitializeRandomMatrix(cols, rank);
         }
 
-        // Step 1: P = G * Q (rows x rank)
-        var P = MatMul(G, Q, rows, cols, rank);
-
-        // Step 2: Orthogonalize P via modified Gram-Schmidt
-        Orthogonalize(P, rows, rank);
-
-        // Step 3: Q = G^T * P (cols x rank)
-        var Gt = Transpose(G, rows, cols);
-        Q = MatMul(Gt, P, cols, rows, rank);
+        // Vogels et al. 2019, Algorithm 1: P = G Q, P <- orthogonalize(P), Q = G^T P.
+        var p = Engine.TensorMatMul(g, q);
+        p = AiDotNet.Helpers.LinalgDispatch<T>.QR(p, "reduced").Q;
+        q = Engine.TensorMatMul(Engine.TensorTranspose(g), p);
 
         // Store Q for warm-start
         if (_options.PowerSGDWarmStart)
         {
-            _clientQFactors[clientId] = Q;
+            _clientQFactors[clientId] = q;
         }
 
-        return (P, Q, rows, cols);
+        return (p.ToMatrix(), q.ToMatrix(), rows, cols);
     }
 
     /// <summary>
-    /// Decompresses a PowerSGD representation back to a gradient tensor.
+    /// Decompresses PowerSGD factors back to a gradient tensor.
     /// </summary>
-    /// <param name="P">P factor matrix.</param>
-    /// <param name="Q">Q factor matrix.</param>
-    /// <param name="rows">Number of rows in the gradient matrix.</param>
-    /// <param name="cols">Number of columns in the gradient matrix.</param>
-    /// <param name="originalSize">Original gradient vector size.</param>
+    /// <param name="P">The P factor (rows x rank).</param>
+    /// <param name="Q">The Q factor (cols x rank).</param>
+    /// <param name="rows">Number of rows in the reshaped gradient matrix.</param>
+    /// <param name="cols">Number of columns in the reshaped gradient matrix.</param>
+    /// <param name="originalSize">Original 1D gradient size.</param>
     /// <returns>Reconstructed gradient tensor.</returns>
-    public Tensor<T> Decompress(double[,] P, double[,] Q, int rows, int cols, int originalSize)
+    public Tensor<T> Decompress(Matrix<T> P, Matrix<T> Q, int rows, int cols, int originalSize)
     {
-        int rank = P.GetLength(1);
+        if (P is null) throw new ArgumentNullException(nameof(P));
+        if (Q is null) throw new ArgumentNullException(nameof(Q));
 
         // Reconstruct: G_approx = P * Q^T
-        var Qt = Transpose(Q, cols, rank);
-        var G = MatMulTranspose(P, Qt, rows, rank, cols);
+        var g = Engine.TensorMatMul(Tensor<T>.FromMatrix(P), Engine.TensorTranspose(Tensor<T>.FromMatrix(Q)));
+        var flat = g.Reshape(rows * cols);
+        int kept = Math.Min(originalSize, rows * cols);
 
         var result = new Tensor<T>(new[] { originalSize });
-        for (int i = 0; i < originalSize; i++)
-        {
-            int r = i / cols;
-            int c = i % cols;
-            if (r < rows && c < cols)
-            {
-                result[i] = NumOps.FromDouble(G[r, c]);
-            }
-        }
-
+        flat.AsSpan().Slice(0, kept).CopyTo(result.AsWritableSpan());
         return result;
     }
 
@@ -145,122 +123,23 @@ public class PowerSGDCompressor<T> : FederatedLearningComponentBase<T>
     {
         int rows = (int)Math.Ceiling(Math.Sqrt(originalSize));
         int cols = (int)Math.Ceiling((double)originalSize / rows);
-        int rank = Math.Min(_options.PowerSGDRank, originalSize);
+        int rank = EffectiveRank(rows, cols);
 
         double compressedSize = (rows * rank) + (cols * rank);
         return compressedSize / originalSize;
     }
 
-    private double[,] InitializeRandomMatrix(int rows, int cols)
+    /// <summary>
+    /// The approximation rank min(r, rows, cols) for a rows x cols gradient matrix: a rank above min(rows, cols) has
+    /// no extra columns to fill (the orthogonalized P has at most min(rows, cols) columns), as in the reference
+    /// PowerSGD hook's <c>min(n, m, matrix_approximation_rank)</c>.
+    /// </summary>
+    private int EffectiveRank(int rows, int cols) => Math.Min(_options.PowerSGDRank, Math.Min(rows, cols));
+
+    private static Tensor<T> InitializeRandomMatrix(int rows, int cols)
     {
-        var rng = RandomHelper.CreateSecureRandom();
-        var matrix = new double[rows, cols];
-        double scale = 1.0 / Math.Sqrt(cols);
-
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                // Box-Muller for Gaussian initialization
-                double u1 = 1.0 - rng.NextDouble();
-                double u2 = rng.NextDouble();
-                matrix[i, j] = scale * Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
-            }
-        }
-
-        return matrix;
-    }
-
-    private static double[,] MatMul(double[,] A, double[,] B, int m, int k, int n)
-    {
-        var C = new double[m, n];
-        for (int i = 0; i < m; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                double sum = 0;
-                for (int p = 0; p < k; p++)
-                {
-                    sum += A[i, p] * B[p, j];
-                }
-
-                C[i, j] = sum;
-            }
-        }
-
-        return C;
-    }
-
-    private static double[,] MatMulTranspose(double[,] A, double[,] Bt, int m, int k, int n)
-    {
-        // A (m x k) * B^T where Bt is stored as (k x n) transposed
-        var C = new double[m, n];
-        for (int i = 0; i < m; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                double sum = 0;
-                for (int p = 0; p < k; p++)
-                {
-                    sum += A[i, p] * Bt[p, j];
-                }
-
-                C[i, j] = sum;
-            }
-        }
-
-        return C;
-    }
-
-    private static double[,] Transpose(double[,] A, int rows, int cols)
-    {
-        var At = new double[cols, rows];
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                At[j, i] = A[i, j];
-            }
-        }
-
-        return At;
-    }
-
-    private static void Orthogonalize(double[,] P, int rows, int cols)
-    {
-        // Modified Gram-Schmidt orthogonalization
-        for (int j = 0; j < cols; j++)
-        {
-            // Subtract projections of previous columns
-            for (int k = 0; k < j; k++)
-            {
-                double dot = 0;
-                for (int i = 0; i < rows; i++)
-                {
-                    dot += P[i, j] * P[i, k];
-                }
-
-                for (int i = 0; i < rows; i++)
-                {
-                    P[i, j] -= dot * P[i, k];
-                }
-            }
-
-            // Normalize column
-            double norm = 0;
-            for (int i = 0; i < rows; i++)
-            {
-                norm += P[i, j] * P[i, j];
-            }
-
-            norm = Math.Sqrt(norm);
-            if (norm > 1e-12)
-            {
-                for (int i = 0; i < rows; i++)
-                {
-                    P[i, j] /= norm;
-                }
-            }
-        }
+        // Gaussian initialization N(0, 1/cols).
+        var scale = NumOps.FromDouble(1.0 / Math.Sqrt(cols));
+        return Engine.TensorRandomNormal(new[] { rows, cols }, NumOps.Zero, scale);
     }
 }

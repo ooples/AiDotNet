@@ -57,34 +57,22 @@ public sealed class ScaffoldHeterogeneityCorrection<T> : FederatedHeterogeneityC
 
         // Parameter-delta proxy: localParameters = globalParameters + delta
         // SCAFFOLD client update correction approximated by adding lr * (c - c_i) to the delta.
-        var corrected = new Vector<T>(n);
         var lrStepsT = NumOps.FromDouble(lrSteps);
-        for (int i = 0; i < n; i++)
-        {
-            var delta = NumOps.Subtract(localParameters[i], globalParameters[i]);
-            var control = NumOps.Subtract(_serverControlVariate[i], clientC[i]);
-            corrected[i] = NumOps.Add(globalParameters[i], NumOps.Add(delta, NumOps.Multiply(lrStepsT, control)));
-        }
+        var delta = Engine.Subtract(localParameters, globalParameters);
+        var control = Engine.Subtract(_serverControlVariate, clientC);
+        var corrected = Engine.Add(globalParameters, Engine.Add(delta, Engine.Multiply(control, lrStepsT)));
 
         // Update client control variate:
         // c_i <- c_i - c + (1/(lr*steps)) * (global - local)
-        var inv = 1.0 / lrSteps;
-        var invT = NumOps.FromDouble(inv);
-        var oldClientC = clientC.Clone();
-        for (int i = 0; i < n; i++)
-        {
-            var diff = NumOps.Subtract(globalParameters[i], localParameters[i]);
-            var term = NumOps.Multiply(invT, diff);
-            clientC[i] = NumOps.Add(NumOps.Subtract(clientC[i], _serverControlVariate[i]), term);
-        }
+        var invT = NumOps.FromDouble(1.0 / lrSteps);
+        var oldClientC = clientC;
+        var term = Engine.Multiply(Engine.Subtract(globalParameters, localParameters), invT);
+        clientC = Engine.Add(Engine.Subtract(clientC, _serverControlVariate), term);
+        _clientControlVariates[clientId] = clientC;
 
         // Update server control variate using the average delta in control variates over participating clients.
         // In the in-memory trainer, we approximate this online per call.
-        for (int i = 0; i < n; i++)
-        {
-            var deltaC = NumOps.Subtract(clientC[i], oldClientC[i]);
-            _serverControlVariate[i] = NumOps.Add(_serverControlVariate[i], deltaC);
-        }
+        _serverControlVariate = Engine.Add(_serverControlVariate, Engine.Subtract(clientC, oldClientC));
 
         return corrected;
     }

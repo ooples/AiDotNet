@@ -22921,3 +22921,52 @@ AiDotNet.Enums.MixtureOfExpertsGatingNoise.SoftplusOfRouterLogits = 1 -> AiDotNe
 AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.Entmax15 = 0 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.SoftmaxSigmoid = 1 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
+*REMOVED*AiDotNet.FederatedLearning.Aggregators.DivideAndConquerAggregationStrategy<T>.DivideAndConquerAggregationStrategy(int numByzantine = 1, int subspaceDimension = 10, int seed = 42) -> void
+AiDotNet.FederatedLearning.Aggregators.DivideAndConquerAggregationStrategy<T>.DivideAndConquerAggregationStrategy(int numByzantine = 1, int subspaceDimension = 10000, int seed = 42, int iterations = 1, double filterFraction = 1) -> void
+AiDotNet.FederatedLearning.Aggregators.DivideAndConquerAggregationStrategy<T>.Iterations.get -> int
+AiDotNet.FederatedLearning.Aggregators.DivideAndConquerAggregationStrategy<T>.FilterFraction.get -> double
+*REMOVED*AiDotNet.FederatedLearning.Aggregators.FedLcAggregationStrategy<T>.ClearAllDistributions() -> void
+*REMOVED*AiDotNet.FederatedLearning.Aggregators.FedLcAggregationStrategy<T>.RegisterClassDistribution(int clientId, AiDotNet.Tensors.LinearAlgebra.Vector<T>! classDistribution) -> void
+*REMOVED*AiDotNet.FederatedLearning.Aggregators.FedLcAggregationStrategy<T>.UnregisterClassDistribution(int clientId) -> bool
+*REMOVED*static AiDotNet.FederatedLearning.Aggregators.FedLcAggregationStrategy<T>.ComputeClassDistribution(int[]! labels, int numClasses) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.FederatedLearning.Aggregators.FedLcAggregationStrategy<T>.ClearAllClassCounts() -> void
+AiDotNet.FederatedLearning.Aggregators.FedLcAggregationStrategy<T>.RegisterClassCounts(int clientId, AiDotNet.Tensors.LinearAlgebra.Vector<T>! classCounts) -> void
+AiDotNet.FederatedLearning.Aggregators.FedLcAggregationStrategy<T>.UnregisterClassCounts(int clientId) -> bool
+static AiDotNet.FederatedLearning.Aggregators.FedLcAggregationStrategy<T>.ComputeClassCounts(int[]! labels, int numClasses) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+*REMOVED*AiDotNet.FederatedLearning.ServerOptimizers.FedAdagradServerOptimizer<T>.FedAdagradServerOptimizer(double learningRate = 1, double epsilon = 1E-08) -> void
+AiDotNet.FederatedLearning.ServerOptimizers.FedAdagradServerOptimizer<T>.FedAdagradServerOptimizer(double learningRate = 1, double epsilon = 0.001, double beta1 = 0.9) -> void
+*REMOVED*AiDotNet.FederatedLearning.ServerOptimizers.FedAdamServerOptimizer<T>.FedAdamServerOptimizer(double learningRate = 1, double beta1 = 0.9, double beta2 = 0.999, double epsilon = 1E-08) -> void
+AiDotNet.FederatedLearning.ServerOptimizers.FedAdamServerOptimizer<T>.FedAdamServerOptimizer(double learningRate = 1, double beta1 = 0.9, double beta2 = 0.99, double epsilon = 0.001) -> void
+*REMOVED*AiDotNet.FederatedLearning.Privacy.ShuffleModelDP<T>.ShuffleModelDP(double localEpsilon = 8, int seed = 42) -> void
+AiDotNet.FederatedLearning.Privacy.ShuffleModelDP<T>.ShuffleModelDP(double localEpsilon = 8, int seed = 42, double clipNorm = 1) -> void
+AiDotNet.FederatedLearning.Privacy.ShuffleModelDP<T>.ClipNorm.get -> double
+*REMOVED*AiDotNet.FederatedLearning.Compression.ErrorFeedbackCompressor<T>.CompressOneBit(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! gradient, int clientId) -> (AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Compressed, double Scale)
+AiDotNet.FederatedLearning.Compression.ErrorFeedbackCompressor<T>.CompressOneBit(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! gradient, int clientId) -> (AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Compressed, T Scale)
+*REMOVED*AiDotNet.FederatedLearning.Compression.ErrorFeedbackCompressor<T>.GetErrorNorm(int clientId) -> double
+AiDotNet.FederatedLearning.Compression.ErrorFeedbackCompressor<T>.GetErrorNorm(int clientId) -> T
+*REMOVED*AiDotNet.FederatedLearning.Compression.PowerSGDCompressor<T>.Compress(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! gradient, int clientId) -> (double[,]! P, double[,]! Q, int Rows, int Cols)
+AiDotNet.FederatedLearning.Compression.PowerSGDCompressor<T>.Compress(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! gradient, int clientId) -> (AiDotNet.Tensors.LinearAlgebra.Matrix<T>! P, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! Q, int Rows, int Cols)
+*REMOVED*AiDotNet.FederatedLearning.Compression.PowerSGDCompressor<T>.Decompress(double[,]! P, double[,]! Q, int rows, int cols, int originalSize) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.FederatedLearning.Compression.PowerSGDCompressor<T>.Decompress(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! P, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! Q, int rows, int cols, int originalSize) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.FederatedLearning.Compression.GradientSketchCompressor<T>.Compress(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! gradient) -> (double[,]! Sketch, int OriginalSize, int Width)
+AiDotNet.FederatedLearning.Compression.GradientSketchCompressor<T>.Compress(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! gradient) -> (AiDotNet.Tensors.LinearAlgebra.Matrix<T>! Sketch, int OriginalSize, int Width)
+*REMOVED*AiDotNet.FederatedLearning.Compression.GradientSketchCompressor<T>.Decompress(double[,]! sketch, int originalSize, int width) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.FederatedLearning.Compression.GradientSketchCompressor<T>.Decompress(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! sketch, int originalSize, int width) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.FederatedLearning.Compression.GradientSketchCompressor<T>.DecompressTopK(double[,]! sketch, int originalSize, int width, int topK) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.FederatedLearning.Compression.GradientSketchCompressor<T>.DecompressTopK(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! sketch, int originalSize, int width, int topK) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.FederatedLearning.Personalization.FedCPPersonalization<T>.CombineExpertOutputs(T[]![]! expertOutputs, double[]! routingWeights) -> T[]!
+AiDotNet.FederatedLearning.Personalization.FedCPPersonalization<T>.CombineExpertOutputs(T[]![]! expertOutputs, T[]! routingWeights) -> T[]!
+*REMOVED*AiDotNet.FederatedLearning.Personalization.FedCPPersonalization<T>.ComputeRoutingWeights(T[]! policyLogits) -> double[]!
+AiDotNet.FederatedLearning.Personalization.FedCPPersonalization<T>.ComputeRoutingWeights(T[]! policyLogits) -> T[]!
+*REMOVED*AiDotNet.FederatedLearning.Personalization.KNNPersonalization<T>.KNNPersonalization(int k = 5, double lambda = 0.5) -> void
+AiDotNet.FederatedLearning.Personalization.KNNPersonalization<T>.KNNPersonalization(int k = 5, double lambda = 0.5, double temperature = 1, AiDotNet.Enums.DistanceMetricType distanceMetric = AiDotNet.Enums.DistanceMetricType.Euclidean) -> void
+*REMOVED*AiDotNet.FederatedLearning.Personalization.KNNPersonalization<T>.KNNPredict(T[]! queryFeatures, int numClasses) -> double[]!
+AiDotNet.FederatedLearning.Personalization.KNNPersonalization<T>.KNNPredict(T[]! queryFeatures, int numClasses) -> T[]!
+*REMOVED*AiDotNet.FederatedLearning.Personalization.KNNPersonalization<T>.CombinedPredict(T[]! queryFeatures, double[]! globalPrediction, int numClasses) -> double[]!
+AiDotNet.FederatedLearning.Personalization.KNNPersonalization<T>.CombinedPredict(T[]! queryFeatures, T[]! globalPrediction, int numClasses) -> T[]!
+AiDotNet.FederatedLearning.Personalization.KNNPersonalization<T>.Temperature.get -> double
+AiDotNet.FederatedLearning.Personalization.KNNPersonalization<T>.DistanceMetric.get -> AiDotNet.Enums.DistanceMetricType
+*REMOVED*AiDotNet.FederatedLearning.Personalization.FedAGHNPersonalization<T>.ComputeGradientSimilarity(T[]! gradA, T[]! gradB) -> double
+AiDotNet.FederatedLearning.Personalization.FedAGHNPersonalization<T>.ComputeGradientSimilarity(T[]! gradA, T[]! gradB) -> T
+*REMOVED*AiDotNet.FederatedLearning.Personalization.FedAGHNPersonalization<T>.ComputeAdaptiveWeights(T[]! targetGradient, System.Collections.Generic.Dictionary<int, T[]!>! clientGradients, System.Collections.Generic.Dictionary<int, double>? previousWeights = null) -> System.Collections.Generic.Dictionary<int, double>!
+AiDotNet.FederatedLearning.Personalization.FedAGHNPersonalization<T>.ComputeAdaptiveWeights(T[]! targetGradient, System.Collections.Generic.Dictionary<int, T[]!>! clientGradients, System.Collections.Generic.Dictionary<int, T>? previousWeights = null) -> System.Collections.Generic.Dictionary<int, T>!

@@ -63,12 +63,7 @@ public abstract class ParameterDictionaryAggregationStrategyBase<T> :
                         nameof(clientModels));
                 }
 
-                for (int i = 0; i < clientParams.Length; i++)
-                {
-                    aggregatedParams[i] = NumOps.Add(
-                        aggregatedParams[i],
-                        NumOps.Multiply(clientParams[i], normalizedWeightT));
-                }
+                AddScaledInto(aggregatedParams, clientParams, normalizedWeightT);
             }
         }
 
@@ -110,23 +105,38 @@ public abstract class ParameterDictionaryAggregationStrategyBase<T> :
             }
 
             var normalizedWeightT = NumOps.FromDouble(clientWeight / totalWeight);
-            for (int i = 0; i < destination.Length; i++)
-            {
-                destination[i] = NumOps.Add(
-                    destination[i],
-                    NumOps.Multiply(clientParams[i], normalizedWeightT));
-            }
+            AddScaledInto(destination, clientParams, normalizedWeightT);
         }
     }
 
     protected static T[] CreateZeroInitializedLayer(int length)
     {
         var layer = new T[length];
-        for (int i = 0; i < layer.Length; i++)
+        Vector<T>.Wrap(layer).Fill(NumOps.Zero);
+        return layer;
+    }
+
+    /// <summary>Computes <c>destination += source * weight</c> with engine ops and writes it back into <paramref name="destination"/>.</summary>
+    private protected static void AddScaledInto(T[] destination, T[] source, T weight)
+    {
+        var sum = Engine.Add(Vector<T>.Wrap(destination), Engine.Multiply(Vector<T>.Wrap(source), weight));
+        sum.AsSpan().CopyTo(destination);
+    }
+
+    /// <summary>
+    /// Concatenates a client's layers (in <paramref name="layerNames"/> order) into one parameter vector.
+    /// </summary>
+    private protected static Vector<T> FlattenLayers(Dictionary<string, T[]> model, string[] layerNames, int totalParams)
+    {
+        var flat = new T[totalParams];
+        int offset = 0;
+        foreach (var layerName in layerNames)
         {
-            layer[i] = NumOps.Zero;
+            var layer = model[layerName];
+            Array.Copy(layer, 0, flat, offset, layer.Length);
+            offset += layer.Length;
         }
 
-        return layer;
+        return Vector<T>.Wrap(flat);
     }
 }

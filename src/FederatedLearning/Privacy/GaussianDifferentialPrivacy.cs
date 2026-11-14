@@ -177,20 +177,19 @@ public class GaussianDifferentialPrivacy<T> : PrivacyMechanismBase<Dictionary<st
         }
 
         // Step 1: Gradient clipping - Calculate L2 norm of all parameters
-        var l2Norm = CalculateL2Norm(noisyModel);
-        var clipNormT = NumOps.FromDouble(_clipNorm);
+        // The norm and the clip factor stay in double: a Half norm above 65504 would be infinite and turn the
+        // factor C / ||x|| into 0, zeroing the update instead of clipping it.
+        double l2Norm = CalculateL2Norm(noisyModel);
 
         // If norm exceeds clip threshold, scale down
-        if (NumOps.GreaterThan(l2Norm, clipNormT))
+        if (l2Norm > _clipNorm)
         {
-            var scaleFactor = NumOps.Divide(clipNormT, l2Norm);
+            double scaleFactor = _clipNorm / l2Norm;
 
             foreach (var parameters in noisyModel.Values)
             {
-                for (int i = 0; i < parameters.Length; i++)
-                {
-                    parameters[i] = NumOps.Multiply(parameters[i], scaleFactor);
-                }
+                AiDotNet.FederatedLearning.Infrastructure.FederatedReductions.Scale(Vector<T>.Wrap(parameters), scaleFactor)
+                    .AsSpan().CopyTo(parameters);
             }
         }
 
@@ -233,16 +232,11 @@ public class GaussianDifferentialPrivacy<T> : PrivacyMechanismBase<Dictionary<st
     /// </remarks>
     /// <param name="model">The model to calculate norm for.</param>
     /// <returns>The L2 norm of all parameters.</returns>
-    private T CalculateL2Norm(Dictionary<string, T[]> model)
+    private static double CalculateL2Norm(Dictionary<string, T[]> model)
     {
-        var sumOfSquares = NumOps.Zero;
-
-        foreach (var param in model.Values.SelectMany(layer => layer))
-        {
-            sumOfSquares = NumOps.Add(sumOfSquares, NumOps.Square(param));
-        }
-
-        return NumOps.Sqrt(sumOfSquares);
+        // The sum of squares is formed in float for Half / BFloat16 (it passes Half's 65504 at a norm of 256).
+        var all = Vector<T>.Wrap(model.Values.SelectMany(layer => layer).ToArray());
+        return Math.Sqrt(AiDotNet.FederatedLearning.Infrastructure.FederatedReductions.SquaredNorm(all));
     }
 
     /// <summary>

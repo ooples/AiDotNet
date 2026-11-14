@@ -1,5 +1,6 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.FederatedLearning.Infrastructure;
 
 namespace AiDotNet.FederatedLearning.Decentralized;
 
@@ -139,12 +140,7 @@ internal class DFedBCAProtocol<T> : Infrastructure.FederatedLearningComponentBas
             double blockNorm = 0;
             for (int i = start; i < end; i++)
             {
-                var layerGrad = gradient[layerNames[i]];
-                for (int j = 0; j < layerGrad.Length; j++)
-                {
-                    double v = NumOps.ToDouble(layerGrad[j]);
-                    blockNorm += v * v;
-                }
+                blockNorm += FederatedReductions.SquaredNorm(Vector<T>.Wrap(gradient[layerNames[i]]));
             }
 
             _blockImportanceScores[b] += Math.Sqrt(blockNorm); // Accumulate L2 norm.
@@ -224,7 +220,8 @@ internal class DFedBCAProtocol<T> : Infrastructure.FederatedLearningComponentBas
 
         foreach (var (layerName, layerParams) in template)
         {
-            var averaged = new double[layerParams.Length];
+            var members = new List<Vector<T>>();
+            var weights = new List<double>();
             double layerWeight = 0;
 
             foreach (var (neighborId, block) in clientBlocks)
@@ -238,22 +235,17 @@ internal class DFedBCAProtocol<T> : Infrastructure.FederatedLearningComponentBas
                             $"Neighbor {neighborId} layer '{layerName}' length {neighborLayer.Length} differs from expected {layerParams.Length}.");
                     }
 
-                    for (int i = 0; i < neighborLayer.Length; i++)
-                    {
-                        averaged[i] += w * NumOps.ToDouble(neighborLayer[i]);
-                    }
-
+                    members.Add(Vector<T>.Wrap(neighborLayer));
+                    weights.Add(w);
                     layerWeight += w;
                 }
             }
 
-            var averagedT = new T[layerParams.Length];
-            for (int i = 0; i < averagedT.Length; i++)
-            {
-                averagedT[i] = NumOps.FromDouble(layerWeight > 0 ? averaged[i] / layerWeight : 0);
-            }
-
-            result[layerName] = averagedT;
+            // sum_j (w_j / W) x_j: the mixing weights are normalized before they touch T, so unnormalized weights
+            // cannot overflow a Half accumulator.
+            result[layerName] = layerWeight > 0
+                ? AiDotNet.FederatedLearning.Infrastructure.FederatedReductions.WeightedSum(members, weights.Select(w => w / layerWeight).ToArray()).ToArray()
+                : new Vector<T>(layerParams.Length).ToArray();
         }
 
         return result;

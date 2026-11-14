@@ -102,46 +102,9 @@ internal class FedNtdAggregationStrategy<T> : ParameterDictionaryAggregationStra
             return NumOps.Zero;
         }
 
-        // Step 1: Extract non-true class logits and apply temperature scaling.
-        int ntCount = numClasses - 1;
-        var localNT = new double[ntCount];
-        var globalNT = new double[ntCount];
-        int idx = 0;
-
-        for (int c = 0; c < numClasses; c++)
-        {
-            if (c == trueClassIndex)
-            {
-                continue;
-            }
-
-            double localVal = NumOps.ToDouble(localLogits[c]) / _temperature;
-            double globalVal = NumOps.ToDouble(globalLogits[c]) / _temperature;
-            if (double.IsNaN(localVal) || double.IsInfinity(localVal) || double.IsNaN(globalVal) || double.IsInfinity(globalVal))
-                throw new InvalidOperationException($"Non-finite logit at class {c}: local={localVal}, global={globalVal}");
-            localNT[idx] = localVal;
-            globalNT[idx] = globalVal;
-            idx++;
-        }
-
-        // Step 2: Compute softmax for both (numerically stable).
-        var pLocal = SoftmaxInPlace(localNT);
-        var qGlobal = SoftmaxInPlace(globalNT);
-
-        // Step 3: KL divergence: KL(q || p) = sum(q * log(q / p))
-        double kl = 0;
-        for (int i = 0; i < ntCount; i++)
-        {
-            if (qGlobal[i] > 1e-10)
-            {
-                double pClamped = Math.Max(pLocal[i], 1e-10);
-                kl += qGlobal[i] * Math.Log(qGlobal[i] / pClamped);
-            }
-        }
-
-        // Step 4: Scale by beta * tau^2 (standard KD scaling).
-        double loss = _distillationWeight * _temperature * _temperature * kl;
-        return NumOps.FromDouble(loss);
+        var local = localLogits.AsTensor().Reshape(1, numClasses);
+        var global = globalLogits.AsTensor().Reshape(1, numClasses);
+        return NumOps.Multiply(NotTrueDistillationScale(), NotTrueKlSum(local, global, new[] { trueClassIndex }));
     }
 
     /// <summary>
@@ -190,42 +153,92 @@ internal class FedNtdAggregationStrategy<T> : ParameterDictionaryAggregationStra
             throw new ArgumentException("Must provide one true class index per sample.");
         }
 
-        double totalLoss = 0;
-
-        for (int s = 0; s < batchSize; s++)
+        if (localLogitsBatch.Columns != globalLogitsBatch.Columns)
         {
-            var localRow = localLogitsBatch.GetRow(s);
-            var globalRow = globalLogitsBatch.GetRow(s);
-            totalLoss += NumOps.ToDouble(ComputeNTDLoss(localRow, globalRow, trueClassIndices[s]));
+            throw new ArgumentException("Local and global logits must have the same number of classes.");
         }
 
-        return NumOps.FromDouble(totalLoss / batchSize);
-    }
-
-    private static double[] SoftmaxInPlace(double[] logits)
-    {
-        double max = double.NegativeInfinity;
-        for (int i = 0; i < logits.Length; i++)
+        int numClasses = localLogitsBatch.Columns;
+        foreach (int trueClassIndex in trueClassIndices)
         {
-            if (logits[i] > max)
+            if (trueClassIndex < 0 || trueClassIndex >= numClasses)
             {
-                max = logits[i];
+                throw new ArgumentOutOfRangeException(nameof(trueClassIndices),
+                    $"True class index must be in [0, {numClasses}).");
             }
         }
 
-        double sum = 0;
-        for (int i = 0; i < logits.Length; i++)
+        if (numClasses <= 1)
         {
-            logits[i] = Math.Exp(logits[i] - max);
-            sum += logits[i];
+            return NumOps.Zero;
         }
 
-        for (int i = 0; i < logits.Length; i++)
+        var klSum = NotTrueKlSum(
+            Tensor<T>.FromMatrix(localLogitsBatch), Tensor<T>.FromMatrix(globalLogitsBatch), trueClassIndices);
+        return NumOps.Divide(NumOps.Multiply(NotTrueDistillationScale(), klSum), NumOps.FromDouble(batchSize));
+    }
+
+    /// <summary>beta * tau^2 (standard KD scaling).</summary>
+    private T NotTrueDistillationScale() => NumOps.FromDouble(_distillationWeight * _temperature * _temperature);
+
+    /// <summary>
+    /// Sum over rows of KL(q_global || p_local) between the temperature-softened softmaxes over each row's
+    /// not-true classes (Lee et al. 2022, FedNTD). Half / BFloat16 logits are evaluated in float, where the
+    /// 1e-10 probability floor is representable (in Half it rounds to 0 and log(0) makes the loss infinite).
+    /// </summary>
+    private T NotTrueKlSum(Tensor<T> local, Tensor<T> global, int[] trueClassIndices)
+    {
+        if (AiDotNet.FederatedLearning.Infrastructure.FederatedReductions.IsNarrowFloat<T>())
         {
-            logits[i] /= sum;
+            return NumOps.FromDouble(NotTrueKlSumCore(local.Cast<float>(), global.Cast<float>(), trueClassIndices, _temperature));
         }
 
-        return logits;
+        return NotTrueKlSumCore(local, global, trueClassIndices, _temperature);
+    }
+
+    private static TV NotTrueKlSumCore<TV>(Tensor<TV> local, Tensor<TV> global, int[] trueClassIndices, double temperature)
+    {
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<TV>();
+        int rows = local.Shape[0];
+        int classes = local.Shape[1];
+        var invTemperature = ops.FromDouble(1.0 / temperature);
+        var localScaled = Engine.TensorMultiplyScalar(local, invTemperature);
+        var globalScaled = Engine.TensorMultiplyScalar(global, invTemperature);
+
+        // Non-finite input: a NaN makes the sum NaN, an infinity makes the largest magnitude infinite. (Testing the
+        // sum alone would also reject finite logits whose total merely overflows.)
+        var localTotal = Engine.TensorSum(localScaled);
+        var globalTotal = Engine.TensorSum(globalScaled);
+        var localLargest = Engine.TensorMaxValue(Engine.TensorAbs(localScaled));
+        var globalLargest = Engine.TensorMaxValue(Engine.TensorAbs(globalScaled));
+        if (ops.IsNaN(localTotal) || ops.IsInfinity(localLargest)
+            || ops.IsNaN(globalTotal) || ops.IsInfinity(globalLargest))
+        {
+            throw new InvalidOperationException(
+                $"Non-finite temperature-scaled logit: local sum={localTotal}, global sum={globalTotal}.");
+        }
+
+        var trueMask = new int[rows * classes];
+        for (int r = 0; r < rows; r++)
+        {
+            trueMask[(r * classes) + trueClassIndices[r]] = 1;
+        }
+
+        var isTrue = Vector<int>.Wrap(trueMask).AsTensor().Reshape(rows, classes).Cast<TV>();
+        var excluded = new Tensor<TV>(new[] { rows, classes });
+        Engine.TensorFill(excluded, ops.FromDouble(double.NegativeInfinity));
+        var pLocal = Engine.TensorSoftmax(Engine.TensorWhere(isTrue, excluded, localScaled), 1);
+        var qGlobal = Engine.TensorSoftmax(Engine.TensorWhere(isTrue, excluded, globalScaled), 1);
+
+        // KL(q || p) = sum q * log(q / max(p, 1e-10)), skipping terms with q <= 1e-10.
+        var floor = ops.FromDouble(1e-10);
+        var logRatio = Engine.TensorSubtract(
+            Engine.TensorLog(Engine.TensorClampMin(qGlobal, floor)),
+            Engine.TensorLog(Engine.TensorClampMin(pLocal, floor)));
+        var terms = Engine.TensorMultiply(qGlobal, logRatio);
+        var kept = Engine.TensorWhere(
+            Engine.TensorGreaterThan(qGlobal, floor), terms, new Tensor<TV>(new[] { rows, classes }));
+        return Engine.TensorSum(kept);
     }
 
     /// <summary>Gets the not-true distillation weight (beta).</summary>

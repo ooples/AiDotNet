@@ -57,7 +57,7 @@ public class GradientSketchCompressor<T> : FederatedLearningComponentBase<T>
     /// </summary>
     /// <param name="gradient">The gradient tensor to compress.</param>
     /// <returns>The sketch table and metadata for decompression.</returns>
-    public (double[,] Sketch, int OriginalSize, int Width) Compress(Tensor<T> gradient)
+    public (Matrix<T> Sketch, int OriginalSize, int Width) Compress(Tensor<T> gradient)
     {
         if (gradient is null) throw new ArgumentNullException(nameof(gradient));
 
@@ -67,21 +67,22 @@ public class GradientSketchCompressor<T> : FederatedLearningComponentBase<T>
             ? _options.SketchWidth
             : Math.Max(100, originalSize / 20); // Auto: ~5% of original size
 
-        var sketch = new double[depth, width];
+        var values = Engine.TensorSlice(gradient.Reshape(gradient.Length), new[] { 0 }, new[] { originalSize });
 
-        for (int i = 0; i < originalSize; i++)
+        // Entries with |value| < 1e-15 are not inserted (|value| >= 1e-15 is kept, the bound itself included).
+        var significant = Engine.ScalarMinusTensor(
+            NumOps.One, Engine.TensorLessThan(Engine.TensorAbs(values), NumOps.FromDouble(1e-15)));
+        values = Engine.TensorWhere(significant, values, new Tensor<T>(new[] { originalSize }));
+
+        var rows = new Tensor<T>[depth];
+        for (int d = 0; d < depth; d++)
         {
-            double value = NumOps.ToDouble(gradient[i]);
-            if (Math.Abs(value) < 1e-15) continue;
-
-            for (int d = 0; d < depth; d++)
-            {
-                int pos = HashPosition(i, d, width);
-                int sign = HashSign(i, d);
-                sketch[d, pos] += sign * value;
-            }
+            var (positions, signs) = HashRow(d, originalSize, width);
+            rows[d] = Engine.TensorScatterAdd(
+                new Tensor<T>(new[] { width }), positions, Engine.TensorMultiply(signs, values), 0);
         }
 
+        var sketch = depth > 0 ? Engine.TensorStack(rows, 0).ToMatrix() : new Matrix<T>(0, width);
         return (sketch, originalSize, width);
     }
 
@@ -92,27 +93,10 @@ public class GradientSketchCompressor<T> : FederatedLearningComponentBase<T>
     /// <param name="originalSize">Original gradient vector size.</param>
     /// <param name="width">Sketch width used during compression.</param>
     /// <returns>Reconstructed gradient tensor.</returns>
-    public Tensor<T> Decompress(double[,] sketch, int originalSize, int width)
+    public Tensor<T> Decompress(Matrix<T> sketch, int originalSize, int width)
     {
-        int depth = _options.SketchDepth;
-        var result = new Tensor<T>(new[] { originalSize });
-        var estimates = new double[depth];
-
-        for (int i = 0; i < originalSize; i++)
-        {
-            for (int d = 0; d < depth; d++)
-            {
-                int pos = HashPosition(i, d, width);
-                int sign = HashSign(i, d);
-                estimates[d] = sign * sketch[d, pos];
-            }
-
-            // Use median for robustness against hash collisions
-            double value = Median(estimates, depth);
-            result[i] = NumOps.FromDouble(value);
-        }
-
-        return result;
+        if (sketch is null) throw new ArgumentNullException(nameof(sketch));
+        return MedianEstimates(sketch, originalSize, width);
     }
 
     /// <summary>
@@ -123,39 +107,72 @@ public class GradientSketchCompressor<T> : FederatedLearningComponentBase<T>
     /// <param name="width">Sketch width used during compression.</param>
     /// <param name="topK">Number of top elements to recover. 0 = recover all.</param>
     /// <returns>Sparse gradient tensor with only top-k elements non-zero.</returns>
-    public Tensor<T> DecompressTopK(double[,] sketch, int originalSize, int width, int topK)
+    public Tensor<T> DecompressTopK(Matrix<T> sketch, int originalSize, int width, int topK)
     {
+        if (sketch is null) throw new ArgumentNullException(nameof(sketch));
         if (topK <= 0 || topK >= originalSize)
         {
             return Decompress(sketch, originalSize, width);
         }
 
+        var estimates = MedianEstimates(sketch, originalSize, width);
+        Engine.TensorTopK(Engine.TensorAbs(estimates), topK, 0, out var topIndices);
+        var mask = new int[originalSize];
+        foreach (int index in topIndices.ToArray())
+        {
+            mask[index] = 1;
+        }
+
+        return Engine.TensorWhere(
+            Vector<int>.Wrap(mask).AsTensor().Cast<T>(), estimates, new Tensor<T>(new[] { originalSize }));
+    }
+
+    /// <summary>
+    /// Per-element estimate: the median over sketch rows of sign_d(i) * sketch[d, h_d(i)].
+    /// </summary>
+    private Tensor<T> MedianEstimates(Matrix<T> sketch, int originalSize, int width)
+    {
         int depth = _options.SketchDepth;
-        var result = new Tensor<T>(new[] { originalSize });
-        var allEstimates = new (int Index, double Value)[originalSize];
-        var estimates = new double[depth];
-
-        for (int i = 0; i < originalSize; i++)
+        if (depth == 0)
         {
-            for (int d = 0; d < depth; d++)
-            {
-                int pos = HashPosition(i, d, width);
-                int sign = HashSign(i, d);
-                estimates[d] = sign * sketch[d, pos];
-            }
-
-            allEstimates[i] = (i, Median(estimates, depth));
+            return new Tensor<T>(new[] { originalSize });
         }
 
-        // Sort by absolute value descending, take top-k
-        Array.Sort(allEstimates, (a, b) => Math.Abs(b.Value).CompareTo(Math.Abs(a.Value)));
-
-        for (int k = 0; k < topK; k++)
+        var table = Tensor<T>.FromMatrix(sketch);
+        var rows = new Tensor<T>[depth];
+        for (int d = 0; d < depth; d++)
         {
-            result[allEstimates[k].Index] = NumOps.FromDouble(allEstimates[k].Value);
+            var (positions, signs) = HashRow(d, originalSize, width);
+            var row = Engine.TensorSlice(table, new[] { d, 0 }, new[] { 1, width }).Reshape(width);
+            rows[d] = Engine.TensorMultiply(signs, Engine.TensorGather(row, positions, 0));
         }
 
-        return result;
+        // Median across rows (mean of the two middle values for an even depth) for robustness to collisions.
+        var sorted = Engine.TensorSort(Engine.TensorStack(rows, 0), 0, false).Values;
+        var upper = Engine.TensorSlice(sorted, new[] { depth / 2, 0 }, new[] { 1, originalSize }).Reshape(originalSize);
+        if (depth % 2 == 1)
+        {
+            return upper;
+        }
+
+        var lower = Engine.TensorSlice(sorted, new[] { (depth / 2) - 1, 0 }, new[] { 1, originalSize }).Reshape(originalSize);
+        // 0.5 a + 0.5 b rather than (a + b) / 2: the sum of two large Half estimates overflows 65504.
+        var half = NumOps.FromDouble(0.5);
+        return Engine.TensorAdd(Engine.TensorMultiplyScalar(lower, half), Engine.TensorMultiplyScalar(upper, half));
+    }
+
+    /// <summary>Hash bucket indices and +-1 signs of elements 0..count-1 for sketch row <paramref name="depth"/>.</summary>
+    private (Tensor<int> Positions, Tensor<T> Signs) HashRow(int depth, int count, int width)
+    {
+        var positions = new int[count];
+        var signs = new int[count];
+        for (int i = 0; i < count; i++)
+        {
+            positions[i] = HashPosition(i, depth, width);
+            signs[i] = HashSign(i, depth);
+        }
+
+        return (Vector<int>.Wrap(positions).AsTensor(), Vector<int>.Wrap(signs).AsTensor().Cast<T>());
     }
 
     /// <summary>
@@ -184,22 +201,5 @@ public class GradientSketchCompressor<T> : FederatedLearningComponentBase<T>
         long seed = _hashSeeds[depth * 2 + 1];
         long hash = (seed * element + 0x517CC1B7L) & 0x7FFFFFFFL;
         return (hash % 2 == 0) ? 1 : -1;
-    }
-
-    private static double Median(double[] values, int count)
-    {
-        if (count == 0) return 0;
-        if (count == 1) return values[0];
-
-        var sorted = new double[count];
-        Array.Copy(values, sorted, count);
-        Array.Sort(sorted);
-
-        if (count % 2 == 0)
-        {
-            return (sorted[count / 2 - 1] + sorted[count / 2]) / 2.0;
-        }
-
-        return sorted[count / 2];
     }
 }
