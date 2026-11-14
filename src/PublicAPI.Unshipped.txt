@@ -22974,6 +22974,7 @@ AiDotNet.Models.Options.AutoAttackOptions<T>.FabBeta.set -> void
 AiDotNet.Enums.CertifiedDefenseMethod.RandomizedSmoothing = 0 -> AiDotNet.Enums.CertifiedDefenseMethod
 AiDotNet.Enums.CertifiedDefenseMethod.Crown = 2 -> AiDotNet.Enums.CertifiedDefenseMethod
 AiDotNet.Enums.CertifiedDefenseMethod.IntervalBoundPropagation = 1 -> AiDotNet.Enums.CertifiedDefenseMethod
+AiDotNet.Enums.CertifiedDefenseMethod.AdaptiveRandomizedSmoothing = 3 -> AiDotNet.Enums.CertifiedDefenseMethod
 AiDotNet.Enums.CertifiedDefenseMethod
 AiDotNet.AdversarialRobustness.CertifiedRobustness.RandomizedSmoothing<T, TInput, TOutput>.PredictWithAbstention(TInput input, AiDotNet.Interfaces.IFullModel<T, TInput, TOutput>! model) -> int?
 AiDotNet.Models.CertifiedPrediction<T>.LowerBound.get -> T

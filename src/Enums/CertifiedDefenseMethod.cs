@@ -22,5 +22,11 @@ public enum CertifiedDefenseMethod
     /// <summary>
     /// CROWN linear relaxation bounds (Zhang et al. 2018).
     /// </summary>
-    Crown
+    Crown,
+
+    /// <summary>
+    /// Randomized smoothing whose noise level is chosen per input by a Gaussian probe step, certified with the
+    /// composed Gaussian mechanism.
+    /// </summary>
+    AdaptiveRandomizedSmoothing
 }
