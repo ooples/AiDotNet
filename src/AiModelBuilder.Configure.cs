@@ -1941,6 +1941,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
     private void AttachSafetyPipeline(AiModelResult<T, TInput, TOutput> result)
     {
+        // The content moderation group of ConfigureAdversarialRobustness fills the unset text settings.
+        MergeContentModerationIntoSafetyConfig();
         if (_safetyPipelineConfig != null)
         {
             result.SafetyPipeline = AiDotNet.Safety.SafetyPipelineFactory<T>.Create(_safetyPipelineConfig);
@@ -1991,10 +1993,22 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             result.SetAdversarialRobustnessOptions(_adversarialRobustnessConfiguration.Options);
         }
 
-        if (defense is not null)
+        // A defense whose defended model already replaced the result's model must not preprocess a second time in
+        // PredictWithDefense. Without any defense, UseInputPreprocessing alone attaches the preprocessing defense.
+        if (defense is null && !_adversarialDefenseAppliedToModel
+            && _adversarialRobustnessConfiguration is { Options.UseInputPreprocessing: true } preprocessingOnly)
+        {
+            var preprocessingOptions = ToAdversarialDefenseOptions(preprocessingOnly.Options);
+            preprocessingOptions.TrainingEpochs = 0;
+            defense = new AiDotNet.AdversarialRobustness.Defenses.AdversarialTraining<T, TInput, TOutput>(preprocessingOptions);
+        }
+
+        if (defense is not null && !(_adversarialDefenseAppliedToModel && ReferenceEquals(defense, _adversarialRobustnessConfiguration?.CustomDefense)))
         {
             result.SetAdversarialDefense(defense);
         }
+
+        AttachConfiguredRobustness(result);
     }
 
     private void ProcessKnowledgeGraphOptions(AiModelResult<T, TInput, TOutput> result)

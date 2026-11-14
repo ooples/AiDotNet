@@ -208,6 +208,12 @@ public class AdversarialRobustnessOptions<T> : ModelOptions
     public double AdversarialTrainingRatio { get; set; } = 0.5;
 
     /// <summary>
+    /// Gets or sets the number of adversarial training epochs run on the trained model at build.
+    /// </summary>
+    /// <value>Defaults to 100, as <see cref="AdversarialDefenseOptions{T}.TrainingEpochs"/>.</value>
+    public int AdversarialTrainingEpochs { get; set; } = 100;
+
+    /// <summary>
     /// Gets or sets the perturbation budget for adversarial training.
     /// </summary>
     public double DefenseEpsilon { get; set; } = 0.1;
