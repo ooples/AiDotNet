@@ -262,11 +262,10 @@ public sealed class LeafFederatedDatasetLoader<T> : FederatedLearningComponentBa
         var firstFeatures = FlattenNumericSample(userId, firstSample);
         int featureCount = firstFeatures.Count;
 
-        var features = new Matrix<T>(sampleCount, featureCount);
-        for (int j = 0; j < featureCount; j++)
-        {
-            features[0, j] = NumOps.FromDouble(firstFeatures[j]);
-        }
+        // Each JSON number is converted to T once while parsing; rows are then copied into the matrix
+        // storage in bulk.
+        var featureData = new T[sampleCount * featureCount];
+        firstFeatures.CopyTo(featureData, 0);
 
         int rowIndex = 1;
         foreach (var sampleFeatures in xArray.Skip(1).Select(sample => FlattenNumericSample(userId, sample)))
@@ -277,13 +276,11 @@ public sealed class LeafFederatedDatasetLoader<T> : FederatedLearningComponentBa
                     $"LEAF user '{userId}' has inconsistent feature dimensions. Expected {featureCount} numeric values but found {sampleFeatures.Count}.");
             }
 
-            for (int j = 0; j < featureCount; j++)
-            {
-                features[rowIndex, j] = NumOps.FromDouble(sampleFeatures[j]);
-            }
-
+            sampleFeatures.CopyTo(featureData, rowIndex * featureCount);
             rowIndex++;
         }
+
+        var features = Matrix<T>.FromMemory(new Memory<T>(featureData), sampleCount, featureCount);
 
         var labelValues = yArray
             .Select(label =>
@@ -302,18 +299,18 @@ public sealed class LeafFederatedDatasetLoader<T> : FederatedLearningComponentBa
         return new AiDotNet.Models.FederatedClientDataset<Matrix<T>, Vector<T>>(features, labels, sampleCount);
     }
 
-    private static List<double> FlattenNumericSample(string userId, JToken sample)
+    private static List<T> FlattenNumericSample(string userId, JToken sample)
     {
-        var values = new List<double>();
+        var values = new List<T>();
         FlattenNumericValuesRecursive(userId, sample, values);
         return values;
     }
 
-    private static void FlattenNumericValuesRecursive(string userId, JToken element, List<double> values)
+    private static void FlattenNumericValuesRecursive(string userId, JToken element, List<T> values)
     {
         if (element.Type == JTokenType.Integer || element.Type == JTokenType.Float)
         {
-            values.Add(element.Value<double>());
+            values.Add(NumOps.FromDouble(element.Value<double>()));
             return;
         }
 

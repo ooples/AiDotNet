@@ -80,37 +80,28 @@ public class FederatedLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>
         int totalParams = fullModelParameters.Length;
         int adapterCount = Math.Min(AdapterParameterCount, totalParams);
 
-        var adapterParams = new T[adapterCount];
         int start = totalParams - adapterCount;
-        for (int i = 0; i < adapterCount; i++)
-        {
-            adapterParams[i] = fullModelParameters[start + i];
-        }
-
-        return new Vector<T>(adapterParams);
+        var adapterParams = new Vector<T>(adapterCount);
+        fullModelParameters.AsSpan().Slice(start, adapterCount).CopyTo(adapterParams.AsWritableSpan());
+        return adapterParams;
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// The stored LoRA factors are written back unscaled. LoRA (Hu et al. 2021) applies alpha / rank to the
+    /// product B*A in the forward pass; scaling both stored factors here would apply it squared and compound
+    /// it every round.
+    /// </remarks>
     public Vector<T> MergeAdapterParameters(Vector<T> fullModelParameters, Vector<T> aggregatedAdapters)
     {
         int totalParams = fullModelParameters.Length;
         int adapterCount = aggregatedAdapters.Length;
         int start = totalParams - adapterCount;
 
-        var merged = new T[totalParams];
-        // Copy frozen base parameters
-        for (int i = 0; i < start; i++)
-        {
-            merged[i] = fullModelParameters[i];
-        }
-        // Replace adapter parameters with aggregated ones
-        double scalingFactor = _alpha / _rank;
-        for (int i = 0; i < adapterCount; i++)
-        {
-            merged[start + i] = NumOps.Multiply(aggregatedAdapters[i], NumOps.FromDouble(scalingFactor));
-        }
-
-        return new Vector<T>(merged);
+        // Copy frozen base parameters, then replace adapter parameters with aggregated ones.
+        var merged = fullModelParameters.Clone();
+        aggregatedAdapters.AsSpan().CopyTo(merged.AsWritableSpan().Slice(start, adapterCount));
+        return merged;
     }
 
     /// <inheritdoc/>
@@ -120,28 +111,93 @@ public class FederatedLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>
             throw new ArgumentException("No client adapters provided.", nameof(clientAdapters));
 
         int adapterLen = clientAdapters.Values.First().Length;
-        var aggregated = new T[adapterLen];
+        var aggregated = new Vector<T>(adapterLen);
         double totalWeight = 0;
 
-        // FedEx-LoRA exact aggregation: weighted average of adapter parameters
+        // FedEx-LoRA: A and B are each the weighted average of the clients' factors.
         foreach (var (clientId, adapters) in clientAdapters)
         {
             double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
             totalWeight += w;
+            aggregated = Engine.Add(aggregated, Engine.Multiply(adapters, NumOps.FromDouble(w)));
+        }
 
-            T weight = NumOps.FromDouble(w);
-            for (int i = 0; i < adapterLen; i++)
+        return Engine.Multiply(aggregated, NumOps.FromDouble(1.0 / totalWeight));
+    }
+
+    /// <summary>
+    /// Computes the FedEx-LoRA residual that makes the aggregation exact.
+    /// </summary>
+    /// <remarks>
+    /// <para>Averaging B and A separately gives avg(B) * avg(A), which differs from the ideal update
+    /// avg(B_k * A_k). FedEx-LoRA (Sun et al. 2025) folds the difference into the frozen base weights:</para>
+    /// <code>
+    /// residual_l = sum_k p_k * B_k,l * A_k,l - (sum_k p_k * B_k,l) * (sum_k p_k * A_k,l)
+    /// W0_l += (alpha / rank) * residual_l
+    /// </code>
+    /// <para><b>For Beginners:</b> The averaged adapters lose a little information. This returns, per
+    /// adapted layer, the exact correction to add to that layer's frozen weight matrix (after scaling by
+    /// alpha / rank) so the global model equals the average of the clients' fine-tuned models.</para>
+    /// </remarks>
+    /// <param name="clientAdapters">Adapter parameters from each client (layout per layer: B then A).</param>
+    /// <param name="clientWeights">Optional per-client weights.</param>
+    /// <returns>Residuals of shape [numAdaptedLayers, layerOutputDim, layerInputDim].</returns>
+    public Tensor<T> ComputeExactAggregationResidual(
+        Dictionary<int, Vector<T>> clientAdapters,
+        Dictionary<int, double>? clientWeights)
+    {
+        Guard.NotNull(clientAdapters);
+        if (clientAdapters.Count == 0)
+        {
+            throw new ArgumentException("No client adapters provided.", nameof(clientAdapters));
+        }
+
+        int bSize = _layerOutputDim * _rank;
+        int aSize = _rank * _layerInputDim;
+        int paramsPerLayer = bSize + aSize;
+        int required = _numAdaptedLayers * paramsPerLayer;
+        foreach (var (clientId, adapters) in clientAdapters)
+        {
+            if (adapters.Length < required)
             {
-                aggregated[i] = NumOps.Add(aggregated[i], NumOps.Multiply(adapters[i], weight));
+                throw new ArgumentException(
+                    $"Client {clientId} adapter length {adapters.Length} is shorter than the LoRA layout ({required}).",
+                    nameof(clientAdapters));
             }
         }
 
-        T invTotal = NumOps.FromDouble(1.0 / totalWeight);
-        for (int i = 0; i < adapterLen; i++)
+        double totalWeight = 0;
+        foreach (var clientId in clientAdapters.Keys)
         {
-            aggregated[i] = NumOps.Multiply(aggregated[i], invTotal);
+            totalWeight += clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
         }
 
-        return new Vector<T>(aggregated);
+        if (totalWeight <= 0)
+        {
+            throw new ArgumentException("Total client weight must be positive.", nameof(clientWeights));
+        }
+
+        // Batched over layers: B is [layers, out, rank] and A is [layers, rank, in].
+        var bShape = new[] { _numAdaptedLayers, _layerOutputDim, _rank };
+        var aShape = new[] { _numAdaptedLayers, _rank, _layerInputDim };
+        var products = new List<Tensor<T>>(clientAdapters.Count);
+        var factorsB = new List<Tensor<T>>(clientAdapters.Count);
+        var factorsA = new List<Tensor<T>>(clientAdapters.Count);
+        var weights = new List<double>(clientAdapters.Count);
+        foreach (var (clientId, adapters) in clientAdapters)
+        {
+            var layers = new Tensor<T>(new[] { _numAdaptedLayers, paramsPerLayer }, adapters.GetSubVector(0, required));
+            var b = Engine.TensorSlice(layers, new[] { 0, 0 }, new[] { _numAdaptedLayers, bSize }).Reshape(bShape);
+            var a = Engine.TensorSlice(layers, new[] { 0, bSize }, new[] { _numAdaptedLayers, aSize }).Reshape(aShape);
+            products.Add(Engine.TensorMatMul(b, a));
+            factorsB.Add(b);
+            factorsA.Add(a);
+            weights.Add(clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0);
+        }
+
+        var meanProduct = Infrastructure.FederatedTensorMath<T>.WeightedSum(products, weights, totalWeight);
+        var meanB = Infrastructure.FederatedTensorMath<T>.WeightedSum(factorsB, weights, totalWeight);
+        var meanA = Infrastructure.FederatedTensorMath<T>.WeightedSum(factorsA, weights, totalWeight);
+        return Engine.TensorSubtract(meanProduct, Engine.TensorMatMul(meanB, meanA));
     }
 }

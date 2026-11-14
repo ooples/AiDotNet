@@ -111,12 +111,7 @@ public class SecureComparisonProtocol<T> : FederatedLearningComponentBase<T>
         var negMax = new Tensor<T>[max.Length];
         for (int p = 0; p < max.Length; p++)
         {
-            int total = ComputeTotalElements(max[p]);
-            negMax[p] = new Tensor<T>(max[p]._shape);
-            for (int i = 0; i < total; i++)
-            {
-                negMax[p][i] = NumOps.FromDouble(-NumOps.ToDouble(max[p][i]));
-            }
+            negMax[p] = Engine.TensorNegate(max[p]);
         }
 
         return _protocol.SecureAdd(sum, negMax);
@@ -139,19 +134,11 @@ public class SecureComparisonProtocol<T> : FederatedLearningComponentBase<T>
 
         // Sum all elements into a scalar
         int n = squared.Length;
-        int totalElements = ComputeTotalElements(squared[0]);
 
         var result = new Tensor<T>[n];
         for (int p = 0; p < n; p++)
         {
-            result[p] = new Tensor<T>(new[] { 1 });
-            double sum = 0.0;
-            for (int i = 0; i < totalElements; i++)
-            {
-                sum += NumOps.ToDouble(squared[p][i]);
-            }
-
-            result[p][0] = NumOps.FromDouble(sum);
+            result[p] = Engine.TensorFullLike(new Tensor<T>(new[] { 1 }), Engine.TensorSum(squared[p]));
         }
 
         return result;
@@ -163,35 +150,11 @@ public class SecureComparisonProtocol<T> : FederatedLearningComponentBase<T>
         var result = new Tensor<T>[shares.Length];
         for (int p = 0; p < shares.Length; p++)
         {
-            int total = ComputeTotalElements(shares[p]);
-            result[p] = new Tensor<T>(shares[p]._shape);
-            for (int i = 0; i < total; i++)
-            {
-                double val = NumOps.ToDouble(shares[p][i]);
-                if (p == 0)
-                {
-                    // Only party 0 subtracts from 1
-                    result[p][i] = NumOps.FromDouble(1.0 - val);
-                }
-                else
-                {
-                    // Other parties negate their share
-                    result[p][i] = NumOps.FromDouble(-val);
-                }
-            }
+            // Only party 0 subtracts from 1; other parties negate their share
+            var negated = Engine.TensorNegate(shares[p]);
+            result[p] = p == 0 ? Engine.TensorAddScalar(negated, NumOps.One) : negated;
         }
 
         return result;
-    }
-
-    private static int ComputeTotalElements(Tensor<T> tensor)
-    {
-        int total = 1;
-        for (int d = 0; d < tensor.Rank; d++)
-        {
-            total *= tensor.Shape[d];
-        }
-
-        return total;
     }
 }

@@ -104,16 +104,17 @@ public class FLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IFeder
         int adapterCount = Math.Min(AdapterParameterCount, totalParams);
         int start = totalParams - adapterCount;
 
-        var adapterParams = new T[adapterCount];
-        for (int i = 0; i < adapterCount; i++)
-        {
-            adapterParams[i] = fullModelParameters[start + i];
-        }
-
-        return new Vector<T>(adapterParams);
+        var adapterParams = new Vector<T>(adapterCount);
+        fullModelParameters.AsSpan().Slice(start, adapterCount).CopyTo(adapterParams.AsWritableSpan());
+        return adapterParams;
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// The stored LoRA factors are written back unscaled. LoRA (Hu et al. 2021) applies alpha / rank to the
+    /// product B*A in the forward pass (see <see cref="Alpha"/> and <see cref="Rank"/>); scaling both stored
+    /// factors here would apply it squared and compound it every round.
+    /// </remarks>
     public Vector<T> MergeAdapterParameters(Vector<T> fullModelParameters, Vector<T> aggregatedAdapters)
     {
         Guard.NotNull(fullModelParameters);
@@ -130,20 +131,9 @@ public class FLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IFeder
 
         int start = totalParams - adapterCount;
 
-        var merged = new T[totalParams];
-        for (int i = 0; i < start; i++)
-        {
-            merged[i] = fullModelParameters[i];
-        }
-
-        double scale = _alpha / _rank;
-        var scaleT = NumOps.FromDouble(scale);
-        for (int i = 0; i < adapterCount; i++)
-        {
-            merged[start + i] = NumOps.Multiply(aggregatedAdapters[i], scaleT);
-        }
-
-        return new Vector<T>(merged);
+        var merged = fullModelParameters.Clone();
+        aggregatedAdapters.AsSpan().CopyTo(merged.AsWritableSpan().Slice(start, adapterCount));
+        return merged;
     }
 
     /// <inheritdoc/>
@@ -182,7 +172,7 @@ public class FLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IFeder
             throw new InvalidOperationException("Total client weight must be positive.");
         }
 
-        var aggregated = new T[adapterLen];
+        var aggregated = new Vector<T>(adapterLen);
 
         // Process each adapted layer independently.
         for (int layer = 0; layer < _numAdaptedLayers; layer++)
@@ -195,196 +185,57 @@ public class FLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IFeder
             }
 
             // Step 1: Reconstruct weighted sum of ΔW = sum(w_k * B_k * A_k).
-            // ΔW is [out_dim x in_dim].
-            var deltaW = new double[_layerOutputDim * _layerInputDim];
+            // ΔW is [out_dim x in_dim]; B_k is [out_dim x rank] and A_k is [rank x in_dim], row-major.
+            var deltaW = new Tensor<T>(new[] { _layerOutputDim, _layerInputDim });
 
             foreach (var (clientId, adapters) in clientAdapters)
             {
                 double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
                 double normalizedW = w / totalWeight;
 
-                // Extract B_k [out_dim x rank] and A_k [rank x in_dim].
-                // Compute B_k * A_k and add weighted result to deltaW.
-                for (int i = 0; i < _layerOutputDim; i++)
-                {
-                    for (int j = 0; j < _layerInputDim; j++)
-                    {
-                        double sum = 0;
-                        for (int r = 0; r < _rank; r++)
-                        {
-                            double bVal = NumOps.ToDouble(adapters[layerOffset + i * _rank + r]);
-                            double aVal = NumOps.ToDouble(adapters[layerOffset + bSize + r * _layerInputDim + j]);
-                            sum += bVal * aVal;
-                        }
-
-                        deltaW[i * _layerInputDim + j] += normalizedW * sum;
-                    }
-                }
+                var bK = new Tensor<T>(new[] { _layerOutputDim, _rank }, adapters.GetSubVector(layerOffset, bSize));
+                var aK = new Tensor<T>(new[] { _rank, _layerInputDim }, adapters.GetSubVector(layerOffset + bSize, aSize));
+                deltaW = Engine.TensorAdd(
+                    deltaW,
+                    Engine.TensorMultiplyScalar(Engine.TensorMatMul(bK, aK), NumOps.FromDouble(normalizedW)));
             }
 
-            // Step 2: SVD of ΔW to re-decompose into rank-r factors.
-            // Use power iteration method for truncated SVD (efficient for low rank).
+            // Step 2: Truncated SVD of ΔW re-decomposes it into rank-r factors.
             var (newB, newA) = TruncatedSVD(deltaW, _layerOutputDim, _layerInputDim, _rank);
 
             // Step 3: Write B_new and A_new back to the aggregated adapter vector.
-            for (int i = 0; i < _layerOutputDim; i++)
-            {
-                for (int r = 0; r < _rank; r++)
-                {
-                    aggregated[layerOffset + i * _rank + r] = NumOps.FromDouble(newB[i * _rank + r]);
-                }
-            }
-
-            for (int r = 0; r < _rank; r++)
-            {
-                for (int j = 0; j < _layerInputDim; j++)
-                {
-                    aggregated[layerOffset + bSize + r * _layerInputDim + j] = NumOps.FromDouble(newA[r * _layerInputDim + j]);
-                }
-            }
+            var aggregatedSpan = aggregated.AsWritableSpan();
+            newB.AsSpan().CopyTo(aggregatedSpan.Slice(layerOffset, bSize));
+            newA.AsSpan().CopyTo(aggregatedSpan.Slice(layerOffset + bSize, aSize));
         }
 
-        return new Vector<T>(aggregated);
+        return aggregated;
     }
 
     /// <summary>
-    /// Truncated SVD via power iteration. Decomposes M [rows x cols] into
-    /// B [rows x rank] and A [rank x cols] such that M ≈ B * A.
+    /// Truncated SVD. Decomposes M [rows x cols] into B [rows x rank] and A [rank x cols] such that
+    /// M ≈ B * A is the best rank-r approximation (Eckart-Young).
     /// Singular values are split evenly: B absorbs sqrt(sigma), A absorbs sqrt(sigma).
+    /// Components beyond min(rows, cols) are zero.
     /// </summary>
-    private static (double[] B, double[] A) TruncatedSVD(double[] matrix, int rows, int cols, int rank)
+    private static (Tensor<T> B, Tensor<T> A) TruncatedSVD(Tensor<T> matrix, int rows, int cols, int rank)
     {
-        const int maxIter = 50;
-        const double tolerance = 1e-8;
-        var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
+        var (u, s, vh) = LinalgDispatch<T>.Svd(matrix, fullMatrices: false);
+        int kept = Math.Min(rank, s.Length);
 
-        var B = new double[rows * rank];
-        var A = new double[rank * cols];
+        var sqrtSigma = Engine.TensorSqrt(Engine.TensorSlice(s, new[] { 0 }, new[] { kept }));
+        var b = Engine.TensorMultiply(
+            Engine.TensorSlice(u, new[] { 0, 0 }, new[] { rows, kept }), sqrtSigma.Reshape(new[] { 1, kept }));
+        var a = Engine.TensorMultiply(
+            Engine.TensorSlice(vh, new[] { 0, 0 }, new[] { kept, cols }), sqrtSigma.Reshape(new[] { kept, 1 }));
 
-        // Compute each singular vector via power iteration.
-        // Work on residual matrix to get successive components.
-        var residual = (double[])matrix.Clone();
-
-        for (int r = 0; r < rank; r++)
+        if (kept < rank)
         {
-            // Initialize random vector v [cols].
-            var v = new double[cols];
-            for (int j = 0; j < cols; j++)
-            {
-                v[j] = rng.NextDouble() - 0.5;
-            }
-
-            Normalize(v);
-
-            double sigma = 0;
-
-            for (int iter = 0; iter < maxIter; iter++)
-            {
-                // u = M * v (u is [rows])
-                var u = new double[rows];
-                for (int i = 0; i < rows; i++)
-                {
-                    double sum = 0;
-                    for (int j = 0; j < cols; j++)
-                    {
-                        sum += residual[i * cols + j] * v[j];
-                    }
-
-                    u[i] = sum;
-                }
-
-                double newSigma = Normalize(u);
-
-                // v = M^T * u (v is [cols])
-                var vNew = new double[cols];
-                for (int j = 0; j < cols; j++)
-                {
-                    double sum = 0;
-                    for (int i = 0; i < rows; i++)
-                    {
-                        sum += residual[i * cols + j] * u[i];
-                    }
-
-                    vNew[j] = sum;
-                }
-
-                Normalize(vNew);
-
-                if (Math.Abs(newSigma - sigma) < tolerance * Math.Max(sigma, 1e-10))
-                {
-                    sigma = newSigma;
-                    v = vNew;
-                    break;
-                }
-
-                sigma = newSigma;
-                v = vNew;
-            }
-
-            // Split sigma evenly: B gets sqrt(sigma) * u, A gets sqrt(sigma) * v^T.
-            double sqrtSigma = Math.Sqrt(Math.Max(sigma, 0));
-
-            // Recompute u for final sigma.
-            var uFinal = new double[rows];
-            for (int i = 0; i < rows; i++)
-            {
-                double sum = 0;
-                for (int j = 0; j < cols; j++)
-                {
-                    sum += residual[i * cols + j] * v[j];
-                }
-
-                uFinal[i] = sum;
-            }
-
-            double norm = Normalize(uFinal);
-            if (norm < 1e-15)
-            {
-                // Remaining singular values are essentially zero.
-                break;
-            }
-
-            for (int i = 0; i < rows; i++)
-            {
-                B[i * rank + r] = sqrtSigma * uFinal[i];
-            }
-
-            for (int j = 0; j < cols; j++)
-            {
-                A[r * cols + j] = sqrtSigma * v[j];
-            }
-
-            // Deflate: residual -= sigma * u * v^T.
-            for (int i = 0; i < rows; i++)
-            {
-                for (int j = 0; j < cols; j++)
-                {
-                    residual[i * cols + j] -= sigma * uFinal[i] * v[j];
-                }
-            }
+            b = Engine.TensorConcatenate(new[] { b, new Tensor<T>(new[] { rows, rank - kept }) }, 1);
+            a = Engine.TensorConcatenate(new[] { a, new Tensor<T>(new[] { rank - kept, cols }) }, 0);
         }
 
-        return (B, A);
-    }
-
-    private static double Normalize(double[] vec)
-    {
-        double norm = 0;
-        for (int i = 0; i < vec.Length; i++)
-        {
-            norm += vec[i] * vec[i];
-        }
-
-        norm = Math.Sqrt(norm);
-        if (norm > 1e-15)
-        {
-            for (int i = 0; i < vec.Length; i++)
-            {
-                vec[i] /= norm;
-            }
-        }
-
-        return norm;
+        return (b, a);
     }
 
     /// <summary>Gets the target LoRA rank.</summary>

@@ -63,13 +63,9 @@ public class HeterogeneousLoRA<T> : Infrastructure.FederatedLearningComponentBas
         int adapterCount = Math.Min(AdapterParameterCount, totalParams);
         int start = totalParams - adapterCount;
 
-        var adapterParams = new T[adapterCount];
-        for (int i = 0; i < adapterCount; i++)
-        {
-            adapterParams[i] = fullModelParameters[start + i];
-        }
-
-        return new Vector<T>(adapterParams);
+        var adapterParams = new Vector<T>(adapterCount);
+        fullModelParameters.AsSpan().Slice(start, adapterCount).CopyTo(adapterParams.AsWritableSpan());
+        return adapterParams;
     }
 
     /// <inheritdoc/>
@@ -79,71 +75,110 @@ public class HeterogeneousLoRA<T> : Infrastructure.FederatedLearningComponentBas
         int adapterCount = aggregatedAdapters.Length;
         int start = totalParams - adapterCount;
 
-        var merged = new T[totalParams];
-        for (int i = 0; i < start; i++)
-        {
-            merged[i] = fullModelParameters[i];
-        }
-        for (int i = 0; i < adapterCount; i++)
-        {
-            merged[start + i] = aggregatedAdapters[i];
-        }
-
-        return new Vector<T>(merged);
+        var merged = fullModelParameters.Clone();
+        aggregatedAdapters.AsSpan().CopyTo(merged.AsWritableSpan().Slice(start, adapterCount));
+        return merged;
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Returns the global adapters at the server's target rank; see <see cref="AggregateAdaptersForRank"/>.
+    /// </remarks>
     public Vector<T> AggregateAdapters(Dictionary<int, Vector<T>> clientAdapters, Dictionary<int, double>? clientWeights)
     {
+        return AggregateAdaptersForRank(clientAdapters, clientWeights, _targetRank);
+    }
+
+    /// <summary>
+    /// Aggregates heterogeneous-rank LoRA adapters and re-decomposes the result at the requested rank.
+    /// </summary>
+    /// <remarks>
+    /// <para>FlexLoRA (Bai et al. 2024): every client k sends B_k [layerDim x r_k] followed by
+    /// A_k [r_k x layerDim], so its rank is r_k = length / (2 * layerDim). The server forms the full-size
+    /// update dW = sum_k p_k B_k A_k, takes its SVD dW = U S V^T and hands each client the rank-r_k
+    /// truncation B = U_r S_r, A = V_r^T (the best rank-r approximation of dW).</para>
+    /// <para><b>For Beginners:</b> Call this with each client's own rank to give it a global adapter it
+    /// can load directly.</para>
+    /// </remarks>
+    /// <param name="clientAdapters">Adapter parameters from each client, possibly with different ranks.</param>
+    /// <param name="clientWeights">Optional per-client weights.</param>
+    /// <param name="rank">Rank of the returned adapters.</param>
+    /// <returns>Adapters [B (layerDim x rank), A (rank x layerDim)] of length 2 * layerDim * rank.</returns>
+    public Vector<T> AggregateAdaptersForRank(
+        Dictionary<int, Vector<T>> clientAdapters,
+        Dictionary<int, double>? clientWeights,
+        int rank)
+    {
+        Guard.NotNull(clientAdapters);
         if (clientAdapters.Count == 0)
             throw new ArgumentException("No client adapters provided.", nameof(clientAdapters));
+        if (rank <= 0)
+            throw new ArgumentOutOfRangeException(nameof(rank), "Rank must be positive.");
 
-        // SVD-based aggregation: pad shorter adapters, average in full space, truncate to target rank
-        int maxLen = clientAdapters.Values.Max(a => a.Length);
-        int targetLen = AdapterParameterCount;
-
-        // Step 1: Reconstruct full-rank deltas by zero-padding to common dimension
-        var fullDeltas = new double[maxLen];
+        int blockSize = 2 * _layerDim;
         double totalWeight = 0;
-
         foreach (var (clientId, adapters) in clientAdapters)
         {
-            double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
-            totalWeight += w;
-
-            for (int i = 0; i < adapters.Length; i++)
+            if (adapters.Length == 0 || adapters.Length % blockSize != 0)
             {
-                fullDeltas[i] += NumOps.ToDouble(adapters[i]) * w;
+                throw new ArgumentException(
+                    $"Client {clientId} adapter length {adapters.Length} is not a positive multiple of 2 * layerDim ({blockSize}).",
+                    nameof(clientAdapters));
             }
-        }
 
-        // Normalize
-        for (int i = 0; i < maxLen; i++)
-        {
-            fullDeltas[i] /= totalWeight;
-        }
-
-        // Step 2: Truncate to target rank (keep top-targetLen components by magnitude)
-        // Sort indices by magnitude, keep top targetLen
-        var indexed = new (double magnitude, int index)[maxLen];
-        for (int i = 0; i < maxLen; i++)
-        {
-            indexed[i] = (Math.Abs(fullDeltas[i]), i);
-        }
-        Array.Sort(indexed, (a, b) => b.magnitude.CompareTo(a.magnitude));
-
-        var result = new T[targetLen];
-        for (int i = 0; i < targetLen; i++)
-        {
-            if (i < maxLen)
+            int clientRank = adapters.Length / blockSize;
+            if (clientRank > _maxRank)
             {
-                int srcIdx = indexed[i].index;
-                // Map to target position preserving relative order
-                int targetIdx = i;
-                result[targetIdx] = NumOps.FromDouble(fullDeltas[srcIdx]);
+                throw new ArgumentException(
+                    $"Client {clientId} rank {clientRank} exceeds the maximum supported rank {_maxRank}.",
+                    nameof(clientAdapters));
             }
+
+            totalWeight += clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
         }
 
-        return new Vector<T>(result);
+        if (totalWeight <= 0)
+        {
+            throw new ArgumentException("Total client weight must be positive.", nameof(clientWeights));
+        }
+
+        // Step 1: reconstruct and average the full-size updates dW = sum_k p_k B_k A_k.
+        var updates = new List<Tensor<T>>(clientAdapters.Count);
+        var weights = new List<double>(clientAdapters.Count);
+        foreach (var (clientId, adapters) in clientAdapters)
+        {
+            int clientRank = adapters.Length / blockSize;
+            int factorSize = _layerDim * clientRank;
+            var b = new Tensor<T>(new[] { _layerDim, clientRank }, adapters.GetSubVector(0, factorSize));
+            var a = new Tensor<T>(new[] { clientRank, _layerDim }, adapters.GetSubVector(factorSize, factorSize));
+            updates.Add(Engine.TensorMatMul(b, a));
+            weights.Add(clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0);
+        }
+
+        var deltaW = Infrastructure.FederatedTensorMath<T>.WeightedSum(updates, weights, totalWeight);
+
+        // Step 2: SVD and rank-r truncation, B = U_r S_r, A = V_r^T.
+        var (u, s, vh) = LinalgDispatch<T>.Svd(deltaW, fullMatrices: false);
+        int kept = Math.Min(rank, s.Length);
+        var sigma = Engine.TensorSlice(s, new[] { 0 }, new[] { kept }).Reshape(new[] { 1, kept });
+        var newB = Engine.TensorMultiply(Engine.TensorSlice(u, new[] { 0, 0 }, new[] { _layerDim, kept }), sigma);
+        var newA = Engine.TensorSlice(vh, new[] { 0, 0 }, new[] { kept, _layerDim });
+
+        int outFactorSize = _layerDim * rank;
+        var result = new Vector<T>(2 * outFactorSize);
+        var resultSpan = result.AsWritableSpan();
+        if (kept == rank)
+        {
+            newB.AsSpan().CopyTo(resultSpan.Slice(0, outFactorSize));
+        }
+        else
+        {
+            // Ranks beyond min(layerDim, layerDim) are zero columns of B.
+            Engine.TensorConcatenate(new[] { newB, new Tensor<T>(new[] { _layerDim, rank - kept }) }, 1)
+                .AsSpan().CopyTo(resultSpan.Slice(0, outFactorSize));
+        }
+
+        newA.AsSpan().CopyTo(resultSpan.Slice(outFactorSize, kept * _layerDim));
+        return result;
     }
 }

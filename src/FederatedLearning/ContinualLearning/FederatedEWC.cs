@@ -43,55 +43,52 @@ public class FederatedEWC<T> : Infrastructure.FederatedLearningComponentBase<T>,
     /// <inheritdoc/>
     public Vector<T> ComputeImportance(Vector<T> modelParameters, Matrix<T> taskData)
     {
+        Guard.NotNull(modelParameters);
+        Guard.NotNull(taskData);
         int d = modelParameters.Length;
         int n = Math.Min(_fisherSamples, taskData.Rows);
-
-        // Approximate Fisher information: average squared gradient per parameter
-        var fisher = new double[d];
-
-        for (int i = 0; i < n; i++)
+        int columns = taskData.Columns;
+        if (n <= 0 || columns == 0)
         {
-            // Compute pseudo-gradient: how much each parameter contributes to prediction
-            for (int j = 0; j < d; j++)
-            {
-                double paramVal = NumOps.ToDouble(modelParameters[j]);
-                double dataContrib = 0;
-
-                // Cross-correlate parameter with data features
-                int featIdx = j % taskData.Columns;
-                double dataVal = NumOps.ToDouble(taskData[i, featIdx]);
-                dataContrib = paramVal * dataVal;
-
-                // Squared gradient approximation
-                fisher[j] += dataContrib * dataContrib;
-            }
+            throw new ArgumentException(
+                "Task data must contain at least one row and one column, and fisherSamples must be positive.", nameof(taskData));
         }
 
-        // Normalize
-        var importance = new T[d];
+        // Approximate Fisher information: average squared gradient per parameter. The pseudo-gradient of
+        // parameter j on sample i is theta_j * x_{i, j mod C}, so the average of its square factors into
+        // theta_j^2 * mean_i(x_{i, j mod C}^2).
+        var samples = Engine.TensorSlice(Tensor<T>.FromMatrix(taskData), new[] { 0, 0 }, new[] { n, columns });
+        var columnMeanSquares = Engine.ReduceMean(Engine.TensorSquare(samples), new[] { 0 }, false); // [C]
+
+        var featureIndex = new int[d];
         for (int j = 0; j < d; j++)
         {
-            importance[j] = NumOps.FromDouble(fisher[j] / n);
+            featureIndex[j] = j % columns;
         }
 
-        return new Vector<T>(importance);
+        var perParameter = Engine.TensorGather(columnMeanSquares, new Tensor<int>(featureIndex, new[] { d }), 0);
+        return Engine.TensorMultiply(Engine.TensorSquare(modelParameters.AsTensor()), perParameter).ToVector();
     }
 
     /// <inheritdoc/>
     public T ComputeRegularizationPenalty(Vector<T> currentParameters, Vector<T> referenceParameters,
         Vector<T> importanceWeights, double regularizationStrength)
     {
+        Guard.NotNull(currentParameters);
+        Guard.NotNull(referenceParameters);
+        Guard.NotNull(importanceWeights);
         int d = currentParameters.Length;
-        double penalty = 0;
-
-        for (int i = 0; i < d; i++)
+        if (d == 0)
         {
-            double diff = NumOps.ToDouble(currentParameters[i]) - NumOps.ToDouble(referenceParameters[i]);
-            double importance = NumOps.ToDouble(importanceWeights[i]);
-            penalty += importance * diff * diff;
+            return NumOps.Zero;
         }
 
-        return NumOps.FromDouble(0.5 * regularizationStrength * penalty);
+        var reference = referenceParameters.Length == d ? referenceParameters : referenceParameters.GetSubVector(0, d);
+        var importance = importanceWeights.Length == d ? importanceWeights : importanceWeights.GetSubVector(0, d);
+        var diff = Engine.Subtract(currentParameters, reference);
+        T penalty = Engine.Sum(Engine.Multiply(importance, Engine.Multiply(diff, diff)));
+
+        return NumOps.Multiply(penalty, NumOps.FromDouble(0.5 * regularizationStrength));
     }
 
     /// <inheritdoc/>
@@ -106,30 +103,36 @@ public class FederatedEWC<T> : Infrastructure.FederatedLearningComponentBase<T>,
     public Vector<T> AggregateImportance(Dictionary<int, Vector<T>> clientImportances,
         Dictionary<int, double>? clientWeights)
     {
+        Guard.NotNull(clientImportances);
         if (clientImportances.Count == 0)
             throw new ArgumentException("No client importances provided.", nameof(clientImportances));
 
         int d = clientImportances.Values.First().Length;
-        var aggregated = new double[d];
         double totalWeight = 0;
+        foreach (var clientId in clientImportances.Keys)
+        {
+            totalWeight += clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
+        }
 
+        if (totalWeight <= 0)
+        {
+            throw new ArgumentException("Client weights must sum to a positive value.", nameof(clientWeights));
+        }
+
+        // Weights are normalized by their total before scaling, so the running sum stays bounded for narrow T.
+        var aggregated = new Vector<T>(d);
         foreach (var (clientId, importance) in clientImportances)
         {
             double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
-            totalWeight += w;
-
-            for (int i = 0; i < d; i++)
+            if (importance.Length != d)
             {
-                aggregated[i] += NumOps.ToDouble(importance[i]) * w;
+                throw new ArgumentException(
+                    $"Client {clientId} importance has length {importance.Length}; expected {d}.", nameof(clientImportances));
             }
+
+            aggregated = Engine.Add(aggregated, Engine.Multiply(importance, NumOps.FromDouble(w / totalWeight)));
         }
 
-        var result = new T[d];
-        for (int i = 0; i < d; i++)
-        {
-            result[i] = NumOps.FromDouble(aggregated[i] / totalWeight);
-        }
-
-        return new Vector<T>(result);
+        return aggregated;
     }
 }

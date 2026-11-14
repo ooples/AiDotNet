@@ -92,21 +92,22 @@ public class FedSelectPersonalization<T> : Infrastructure.FederatedLearningCompo
                 throw new InvalidOperationException(
                     $"No mask logits found for layer '{kvp.Key}'. Model structure may have changed since InitializeMasks was called.");
             }
-            var result = new T[kvp.Value.Length];
-            for (int i = 0; i < result.Length; i++)
+            if (kvp.Value.Length != logits.Length)
             {
-                double mask = 1.0 / (1.0 + Math.Exp(-logits[i])); // sigmoid
-                if (mask < _maskThreshold)
-                {
-                    result[i] = kvp.Value[i]; // shared
-                }
-                else
-                {
-                    result[i] = NumOps.Zero; // personalized, zero out for aggregation
-                }
+                throw new InvalidOperationException(
+                    $"Layer '{kvp.Key}' has {kvp.Value.Length} parameters but {logits.Length} mask logits.");
             }
 
-            shared[kvp.Key] = result;
+            // Personalized entries (sigmoid(logit) >= threshold) are zeroed out for aggregation; shared entries pass.
+            var personalized = new bool[logits.Length];
+            for (int i = 0; i < logits.Length; i++)
+            {
+                double mask = 1.0 / (1.0 + Math.Exp(-logits[i])); // sigmoid
+                personalized[i] = mask >= _maskThreshold;
+            }
+
+            var values = new Tensor<T>((T[])kvp.Value.Clone(), new[] { kvp.Value.Length });
+            shared[kvp.Key] = Engine.TensorWhere(personalized, new Tensor<T>(new[] { kvp.Value.Length }), values).ToArray();
         }
 
         return shared;
@@ -181,14 +182,19 @@ public class FedSelectPersonalization<T> : Infrastructure.FederatedLearningCompo
                 nameof(parameterGradients));
         }
 
+        // Convert once to double (values past the end of a shorter array count as 0).
+        var gradientValues = ToDoubles(parameterGradients, logits.Length);
+        var personalValues = ToDoubles(personalizedValues, logits.Length);
+        var sharedDoubles = ToDoubles(sharedValues, logits.Length);
+
         for (int i = 0; i < logits.Length; i++)
         {
             double sigma = 1.0 / (1.0 + Math.Exp(-logits[i])); // sigmoid
 
             // STE gradient: d(loss)/d(logit) = d(loss)/d(param) * (personal - shared) * sigma * (1 - sigma)
-            double paramGrad = NumOps.ToDouble(parameterGradients[i]);
-            double personalVal = i < personalizedValues.Length ? NumOps.ToDouble(personalizedValues[i]) : 0;
-            double sharedVal = i < sharedValues.Length ? NumOps.ToDouble(sharedValues[i]) : 0;
+            double paramGrad = gradientValues[i];
+            double personalVal = personalValues[i];
+            double sharedVal = sharedDoubles[i];
             double maskGrad = paramGrad * (personalVal - sharedVal) * sigma * (1 - sigma);
 
             // L1 regularization gradient: always push towards shared (lower sigmoid → logit decreases).
@@ -225,6 +231,22 @@ public class FedSelectPersonalization<T> : Infrastructure.FederatedLearningCompo
         }
 
         return total > 0 ? _maskRegularization * loss / total : 0;
+    }
+
+    /// <summary>
+    /// The first <paramref name="length"/> values as doubles, zero-padded when the source is shorter.
+    /// </summary>
+    private static double[] ToDoubles(T[] source, int length)
+    {
+        var result = new double[length];
+        int copied = Math.Min(length, source.Length);
+        if (copied > 0)
+        {
+            var converted = new Tensor<T>((T[])source.Clone(), new[] { source.Length }).Cast<double>().ToArray();
+            Array.Copy(converted, result, copied);
+        }
+
+        return result;
     }
 
     /// <summary>Gets the mask binarization threshold.</summary>

@@ -106,13 +106,9 @@ public class HierarchicalFedLoRA<T> : Infrastructure.FederatedLearningComponentB
         int adapterCount = Math.Min(AdapterParameterCount, totalParams);
         int start = totalParams - adapterCount;
 
-        var adapterParams = new T[adapterCount];
-        for (int i = 0; i < adapterCount; i++)
-        {
-            adapterParams[i] = fullModelParameters[start + i];
-        }
-
-        return new Vector<T>(adapterParams);
+        var adapterParams = new Vector<T>(adapterCount);
+        fullModelParameters.AsSpan().Slice(start, adapterCount).CopyTo(adapterParams.AsWritableSpan());
+        return adapterParams;
     }
 
     /// <inheritdoc/>
@@ -132,18 +128,9 @@ public class HierarchicalFedLoRA<T> : Infrastructure.FederatedLearningComponentB
 
         int start = totalParams - adapterCount;
 
-        var merged = new T[totalParams];
-        for (int i = 0; i < start; i++)
-        {
-            merged[i] = fullModelParameters[i];
-        }
-
-        for (int i = 0; i < adapterCount; i++)
-        {
-            merged[start + i] = aggregatedAdapters[i];
-        }
-
-        return new Vector<T>(merged);
+        var merged = fullModelParameters.Clone();
+        aggregatedAdapters.AsSpan().CopyTo(merged.AsWritableSpan().Slice(start, adapterCount));
+        return merged;
     }
 
     /// <inheritdoc/>
@@ -185,19 +172,14 @@ public class HierarchicalFedLoRA<T> : Infrastructure.FederatedLearningComponentB
             }
         }
 
-        var aggregated = new T[adapterLen];
+        var aggregated = new Vector<T>(adapterLen);
         double totalWeight = 0;
 
         foreach (var (clientId, adapters) in clientAdapters)
         {
             double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
             totalWeight += w;
-
-            var wT = NumOps.FromDouble(w);
-            for (int i = 0; i < adapterLen; i++)
-            {
-                aggregated[i] = NumOps.Add(aggregated[i], NumOps.Multiply(adapters[i], wT));
-            }
+            aggregated = Engine.Add(aggregated, Engine.Multiply(adapters, NumOps.FromDouble(w)));
         }
 
         if (totalWeight <= 0)
@@ -205,13 +187,7 @@ public class HierarchicalFedLoRA<T> : Infrastructure.FederatedLearningComponentB
             throw new InvalidOperationException("Total client weight must be positive.");
         }
 
-        var invTotal = NumOps.FromDouble(1.0 / totalWeight);
-        for (int i = 0; i < adapterLen; i++)
-        {
-            aggregated[i] = NumOps.Multiply(aggregated[i], invTotal);
-        }
-
-        return new Vector<T>(aggregated);
+        return Engine.Multiply(aggregated, NumOps.FromDouble(1.0 / totalWeight));
     }
 
     /// <summary>
@@ -234,7 +210,6 @@ public class HierarchicalFedLoRA<T> : Infrastructure.FederatedLearningComponentB
     {
         Guard.NotNull(localAdapter);
         int localParamsPerLayer = 2 * _layerDim * _localRank;
-        int globalParamsPerLayer = 2 * _layerDim * _globalRank;
         int expectedLocalLen = _numAdaptedLayers * localParamsPerLayer;
 
         if (localAdapter.Length < expectedLocalLen)
@@ -244,50 +219,16 @@ public class HierarchicalFedLoRA<T> : Infrastructure.FederatedLearningComponentB
                 nameof(localAdapter));
         }
 
-        int globalTotalParams = _numAdaptedLayers * globalParamsPerLayer;
-
-        var promoted = new T[globalTotalParams];
-        // Initialize all to zero (already default for value types via NumOps).
-
-        for (int layer = 0; layer < _numAdaptedLayers; layer++)
+        var (b, a) = SplitFactors(localAdapter, _localRank);
+        int extra = _globalRank - _localRank;
+        if (extra > 0)
         {
-            int localOffset = layer * localParamsPerLayer;
-            int globalOffset = layer * globalParamsPerLayer;
-
-            int localBSize = _layerDim * _localRank;
-            int globalBSize = _layerDim * _globalRank;
-
-            // Promote B matrix: [dim x localRank] -> [dim x globalRank].
-            // Copy each row, zero-padding extra rank columns.
-            for (int row = 0; row < _layerDim; row++)
-            {
-                for (int r = 0; r < _localRank; r++)
-                {
-                    if (localOffset + row * _localRank + r < localAdapter.Length)
-                    {
-                        promoted[globalOffset + row * _globalRank + r] = localAdapter[localOffset + row * _localRank + r];
-                    }
-                }
-                // Remaining columns [localRank..globalRank) stay zero.
-            }
-
-            // Promote A matrix: [localRank x dim] -> [globalRank x dim].
-            // Copy first localRank rows, remaining rows stay zero.
-            for (int r = 0; r < _localRank; r++)
-            {
-                for (int col = 0; col < _layerDim; col++)
-                {
-                    int localIdx = localOffset + localBSize + r * _layerDim + col;
-                    int globalIdx = globalOffset + globalBSize + r * _layerDim + col;
-                    if (localIdx < localAdapter.Length)
-                    {
-                        promoted[globalIdx] = localAdapter[localIdx];
-                    }
-                }
-            }
+            // B gains zero rank columns, A gains zero rank rows.
+            b = Engine.TensorConcatenate(new[] { b, new Tensor<T>(new[] { _numAdaptedLayers, _layerDim, extra }) }, 2);
+            a = Engine.TensorConcatenate(new[] { a, new Tensor<T>(new[] { _numAdaptedLayers, extra, _layerDim }) }, 1);
         }
 
-        return new Vector<T>(promoted);
+        return JoinFactors(b, a, _globalRank);
     }
 
     /// <summary>
@@ -298,7 +239,6 @@ public class HierarchicalFedLoRA<T> : Infrastructure.FederatedLearningComponentB
     public Vector<T> DemoteToLocalRank(Vector<T> globalAdapter)
     {
         Guard.NotNull(globalAdapter);
-        int localParamsPerLayer = 2 * _layerDim * _localRank;
         int globalParamsPerLayer = 2 * _layerDim * _globalRank;
         int expectedGlobalLen = _numAdaptedLayers * globalParamsPerLayer;
 
@@ -309,40 +249,10 @@ public class HierarchicalFedLoRA<T> : Infrastructure.FederatedLearningComponentB
                 nameof(globalAdapter));
         }
 
-        int localTotalParams = _numAdaptedLayers * localParamsPerLayer;
-
-        var demoted = new T[localTotalParams];
-
-        for (int layer = 0; layer < _numAdaptedLayers; layer++)
-        {
-            int localOffset = layer * localParamsPerLayer;
-            int globalOffset = layer * globalParamsPerLayer;
-
-            int localBSize = _layerDim * _localRank;
-            int globalBSize = _layerDim * _globalRank;
-
-            // Truncate B matrix: [dim x globalRank] -> [dim x localRank].
-            for (int row = 0; row < _layerDim; row++)
-            {
-                for (int r = 0; r < _localRank; r++)
-                {
-                    demoted[localOffset + row * _localRank + r] = globalAdapter[globalOffset + row * _globalRank + r];
-                }
-            }
-
-            // Truncate A matrix: [globalRank x dim] -> [localRank x dim].
-            for (int r = 0; r < _localRank; r++)
-            {
-                for (int col = 0; col < _layerDim; col++)
-                {
-                    int localIdx = localOffset + localBSize + r * _layerDim + col;
-                    int globalIdx = globalOffset + globalBSize + r * _layerDim + col;
-                    demoted[localIdx] = globalAdapter[globalIdx];
-                }
-            }
-        }
-
-        return new Vector<T>(demoted);
+        var (b, a) = SplitFactors(globalAdapter, _globalRank);
+        var localB = Engine.TensorSlice(b, new[] { 0, 0, 0 }, new[] { _numAdaptedLayers, _layerDim, _localRank });
+        var localA = Engine.TensorSlice(a, new[] { 0, 0, 0 }, new[] { _numAdaptedLayers, _localRank, _layerDim });
+        return JoinFactors(localB, localA, _localRank);
     }
 
     /// <summary>
@@ -355,6 +265,11 @@ public class HierarchicalFedLoRA<T> : Infrastructure.FederatedLearningComponentB
     /// they first get "promoted" to a higher rank. The cloud then combines all the edge results
     /// in this higher-rank space, which can capture cross-edge patterns that wouldn't fit in the
     /// lower rank. The result is sent back to edges after "demotion" back to local rank.</para>
+    /// <para>The higher-rank space is used through the edges' full updates: per layer the cloud forms
+    /// dW = sum_e p_e B_e A_e (rank up to edges * localRank) and re-decomposes it by SVD into the best
+    /// globalRank factors B = U_r sqrt(S_r), A = sqrt(S_r) V_r^T. Averaging zero-padded factors instead
+    /// would only reproduce the local-rank average avg(B) avg(A). Demotion keeps the leading localRank
+    /// singular directions, which is the best local-rank approximation.</para>
     /// </remarks>
     /// <param name="edgeAdapters">Dictionary of edge ID to edge-aggregated adapter vectors (at local rank).</param>
     /// <param name="edgeWeights">Optional per-edge weights (typically proportional to number of clients).</param>
@@ -377,21 +292,10 @@ public class HierarchicalFedLoRA<T> : Infrastructure.FederatedLearningComponentB
             promotedAdapters[edgeId] = PromoteToGlobalRank(adapter);
         }
 
-        // Step 2: Weighted average in the global-rank space.
-        int globalLen = promotedAdapters.Values.First().Length;
-        var aggregated = new T[globalLen];
         double totalWeight = 0;
-
-        foreach (var (edgeId, adapter) in promotedAdapters)
+        foreach (var edgeId in promotedAdapters.Keys)
         {
-            double w = edgeWeights?.GetValueOrDefault(edgeId, 1.0) ?? 1.0;
-            totalWeight += w;
-
-            var wT = NumOps.FromDouble(w);
-            for (int i = 0; i < globalLen; i++)
-            {
-                aggregated[i] = NumOps.Add(aggregated[i], NumOps.Multiply(adapter[i], wT));
-            }
+            totalWeight += edgeWeights?.GetValueOrDefault(edgeId, 1.0) ?? 1.0;
         }
 
         if (totalWeight <= 0)
@@ -399,16 +303,69 @@ public class HierarchicalFedLoRA<T> : Infrastructure.FederatedLearningComponentB
             throw new InvalidOperationException("Total edge weight must be positive.");
         }
 
-        var invTotal = NumOps.FromDouble(1.0 / totalWeight);
-        for (int i = 0; i < globalLen; i++)
+        // Step 2: Weighted average of the full updates in the global-rank space, batched over layers.
+        var deltaW = new Tensor<T>(new[] { _numAdaptedLayers, _layerDim, _layerDim });
+        foreach (var (edgeId, adapter) in promotedAdapters)
         {
-            aggregated[i] = NumOps.Multiply(aggregated[i], invTotal);
+            double p = (edgeWeights?.GetValueOrDefault(edgeId, 1.0) ?? 1.0) / totalWeight;
+            var (b, a) = SplitFactors(adapter, _globalRank);
+            deltaW = Engine.TensorAdd(deltaW, Engine.TensorMultiplyScalar(Engine.TensorMatMul(b, a), NumOps.FromDouble(p)));
         }
 
-        var globalResult = new Vector<T>(aggregated);
+        // Step 3: Re-decompose each layer at global rank.
+        var layerB = new Tensor<T>[_numAdaptedLayers];
+        var layerA = new Tensor<T>[_numAdaptedLayers];
+        int kept = Math.Min(_globalRank, _layerDim);
+        for (int layer = 0; layer < _numAdaptedLayers; layer++)
+        {
+            var layerDelta = Engine.TensorSlice(deltaW, new[] { layer, 0, 0 }, new[] { 1, _layerDim, _layerDim })
+                .Reshape(new[] { _layerDim, _layerDim });
+            var (u, s, vh) = LinalgDispatch<T>.Svd(layerDelta, fullMatrices: false);
+            var sqrtSigma = Engine.TensorSqrt(Engine.TensorSlice(s, new[] { 0 }, new[] { kept }));
+            var b = Engine.TensorMultiply(
+                Engine.TensorSlice(u, new[] { 0, 0 }, new[] { _layerDim, kept }), sqrtSigma.Reshape(new[] { 1, kept }));
+            var a = Engine.TensorMultiply(
+                Engine.TensorSlice(vh, new[] { 0, 0 }, new[] { kept, _layerDim }), sqrtSigma.Reshape(new[] { kept, 1 }));
+            if (kept < _globalRank)
+            {
+                b = Engine.TensorConcatenate(new[] { b, new Tensor<T>(new[] { _layerDim, _globalRank - kept }) }, 1);
+                a = Engine.TensorConcatenate(new[] { a, new Tensor<T>(new[] { _globalRank - kept, _layerDim }) }, 0);
+            }
 
-        // Step 3: Optionally demote back to local rank for distribution.
+            layerB[layer] = b.Reshape(new[] { 1, _layerDim, _globalRank });
+            layerA[layer] = a.Reshape(new[] { 1, _globalRank, _layerDim });
+        }
+
+        var globalResult = JoinFactors(
+            Engine.TensorConcatenate(layerB, 0), Engine.TensorConcatenate(layerA, 0), _globalRank);
+
+        // Step 4: Optionally demote back to local rank for distribution.
         return demoteResult ? DemoteToLocalRank(globalResult) : globalResult;
+    }
+
+    /// <summary>
+    /// Splits the leading layers * 2 * dim * rank adapter entries into B [layers, dim, rank] and
+    /// A [layers, rank, dim].
+    /// </summary>
+    private (Tensor<T> B, Tensor<T> A) SplitFactors(Vector<T> adapter, int rank)
+    {
+        int factorSize = _layerDim * rank;
+        var layers = new Tensor<T>(
+            new[] { _numAdaptedLayers, 2 * factorSize }, adapter.GetSubVector(0, _numAdaptedLayers * 2 * factorSize));
+        var b = Engine.TensorSlice(layers, new[] { 0, 0 }, new[] { _numAdaptedLayers, factorSize })
+            .Reshape(new[] { _numAdaptedLayers, _layerDim, rank });
+        var a = Engine.TensorSlice(layers, new[] { 0, factorSize }, new[] { _numAdaptedLayers, factorSize })
+            .Reshape(new[] { _numAdaptedLayers, rank, _layerDim });
+        return (b, a);
+    }
+
+    /// <summary>Flattens B [layers, dim, rank] and A [layers, rank, dim] back to the per-layer [B, A] layout.</summary>
+    private Vector<T> JoinFactors(Tensor<T> b, Tensor<T> a, int rank)
+    {
+        int factorSize = _layerDim * rank;
+        var joined = Engine.TensorConcatenate(
+            new[] { b.Reshape(new[] { _numAdaptedLayers, factorSize }), a.Reshape(new[] { _numAdaptedLayers, factorSize }) }, 1);
+        return joined.ToVector();
     }
 
     /// <summary>

@@ -13,10 +13,11 @@ namespace AiDotNet.FederatedLearning.Adapters;
 /// attention and feed-forward layers in each transformer block. Only these tiny bottleneck
 /// layers are trained and shared in federated learning, keeping the base model frozen.</para>
 ///
-/// <para>Architecture per adapted layer:</para>
+/// <para>Architecture per adapter (Houlsby et al. 2019; two adapters per transformer layer, one after
+/// the attention sub-layer and one after the feed-forward sub-layer):</para>
 /// <code>
-/// x → DownProject(d → bottleneck) → ReLU → UpProject(bottleneck → d) → + x (residual)
-/// Params per layer = 2 * d * bottleneck + bottleneck (bias)
+/// x → DownProject(d → bottleneck) + b_down → ReLU → UpProject(bottleneck → d) + b_up → + x (residual)
+/// Params per adapter = 2 * d * bottleneck + bottleneck + d; params per layer = 2 * params per adapter
 /// </code>
 ///
 /// <para>Reference: Cai, X., et al. (2023). "FedAdapter: Efficient Federated Learning via
@@ -76,9 +77,8 @@ public class FederatedAdapterTuning<T> : Infrastructure.FederatedLearningCompone
         _numAdaptedLayers = numAdaptedLayers;
         _layerDim = layerDim;
 
-        // Down projection + up projection + bias per layer
-        int paramsPerLayer = 2 * _layerDim * _bottleneckDim + _bottleneckDim;
-        AdapterParameterCount = _numAdaptedLayers * paramsPerLayer;
+        // Two adapters per layer (after attention and after FFN), each with down/up projections and biases.
+        AdapterParameterCount = _numAdaptedLayers * AdaptersPerLayer * ParamsPerAdapter;
         CompressionRatio = _modelDim > 0 ? (double)AdapterParameterCount / _modelDim : 0;
     }
 
@@ -89,13 +89,9 @@ public class FederatedAdapterTuning<T> : Infrastructure.FederatedLearningCompone
         int adapterCount = Math.Min(AdapterParameterCount, totalParams);
         int start = totalParams - adapterCount;
 
-        var adapterParams = new T[adapterCount];
-        for (int i = 0; i < adapterCount; i++)
-        {
-            adapterParams[i] = fullModelParameters[start + i];
-        }
-
-        return new Vector<T>(adapterParams);
+        var adapterParams = new Vector<T>(adapterCount);
+        fullModelParameters.AsSpan().Slice(start, adapterCount).CopyTo(adapterParams.AsWritableSpan());
+        return adapterParams;
     }
 
     /// <inheritdoc/>
@@ -115,18 +111,9 @@ public class FederatedAdapterTuning<T> : Infrastructure.FederatedLearningCompone
 
         int start = totalParams - adapterCount;
 
-        var merged = new T[totalParams];
-        for (int i = 0; i < start; i++)
-        {
-            merged[i] = fullModelParameters[i];
-        }
-
-        for (int i = 0; i < adapterCount; i++)
-        {
-            merged[start + i] = aggregatedAdapters[i];
-        }
-
-        return new Vector<T>(merged);
+        var merged = fullModelParameters.Clone();
+        aggregatedAdapters.AsSpan().CopyTo(merged.AsWritableSpan().Slice(start, adapterCount));
+        return merged;
     }
 
     /// <inheritdoc/>
@@ -151,19 +138,14 @@ public class FederatedAdapterTuning<T> : Infrastructure.FederatedLearningCompone
             }
         }
 
-        var aggregated = new T[adapterLen];
+        var aggregated = new Vector<T>(adapterLen);
         double totalWeight = 0;
 
         foreach (var (clientId, adapters) in clientAdapters)
         {
             double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
             totalWeight += w;
-
-            var wT = NumOps.FromDouble(w);
-            for (int i = 0; i < adapterLen; i++)
-            {
-                aggregated[i] = NumOps.Add(aggregated[i], NumOps.Multiply(adapters[i], wT));
-            }
+            aggregated = Engine.Add(aggregated, Engine.Multiply(adapters, NumOps.FromDouble(w)));
         }
 
         if (totalWeight <= 0)
@@ -171,17 +153,12 @@ public class FederatedAdapterTuning<T> : Infrastructure.FederatedLearningCompone
             throw new InvalidOperationException("Total client weight must be positive.");
         }
 
-        var invTotal = NumOps.FromDouble(1.0 / totalWeight);
-        for (int i = 0; i < adapterLen; i++)
-        {
-            aggregated[i] = NumOps.Multiply(aggregated[i], invTotal);
-        }
-
-        return new Vector<T>(aggregated);
+        return Engine.Multiply(aggregated, NumOps.FromDouble(1.0 / totalWeight));
     }
 
     /// <summary>
-    /// Applies the adapter forward pass with residual connection: output = x + scale * UpProject(ReLU(DownProject(x))).
+    /// Applies the adapter forward pass with residual connection:
+    /// output = x + scale * (UpProject(ReLU(DownProject(x) + b_down)) + b_up).
     /// </summary>
     /// <remarks>
     /// <para><b>For Beginners:</b> The adapter is a bottleneck layer that compresses the input down
@@ -190,8 +167,9 @@ public class FederatedAdapterTuning<T> : Infrastructure.FederatedLearningCompone
     /// only learns the "delta" — what to change. The scale factor controls how much influence
     /// the adapter has; a smaller scale means more conservative updates.</para>
     /// </remarks>
-    /// <param name="input">Input activations of shape [batchSize x layerDim].</param>
-    /// <param name="adapterParams">Adapter parameters for one layer: [DownProject, UpProject, Bias].</param>
+    /// <param name="input">Input activations of one token, length layerDim. Entries past layerDim pass through.</param>
+    /// <param name="adapterParams">Adapter parameters for one adapter:
+    /// [DownProject (layerDim x bottleneck), UpProject (bottleneck x layerDim), down bias (bottleneck), up bias (layerDim)].</param>
     /// <param name="residualScale">Scale factor for the adapter output before adding to residual. Default: 1.0.</param>
     /// <returns>Output activations with adapter applied.</returns>
     public T[] ApplyAdapterForward(T[] input, T[] adapterParams, double residualScale = 1.0)
@@ -200,59 +178,39 @@ public class FederatedAdapterTuning<T> : Infrastructure.FederatedLearningCompone
         Guard.NotNull(adapterParams);
         int downSize = _layerDim * _bottleneckDim;
         int upSize = _layerDim * _bottleneckDim;
+        int paramsPerAdapter = downSize + upSize + _bottleneckDim + _layerDim;
 
-        if (adapterParams.Length < downSize + upSize + _bottleneckDim)
+        if (adapterParams.Length < paramsPerAdapter)
         {
             throw new ArgumentException(
-                $"Adapter params too short. Expected at least {downSize + upSize + _bottleneckDim}, got {adapterParams.Length}.",
+                $"Adapter params too short. Expected at least {paramsPerAdapter}, got {adapterParams.Length}.",
                 nameof(adapterParams));
         }
 
-        // DownProject: [layerDim x bottleneck]
-        var hidden = new T[_bottleneckDim];
-        for (int b = 0; b < _bottleneckDim; b++)
+        var output = (T[])input.Clone();
+        int active = Math.Min(_layerDim, input.Length);
+        if (active == 0)
         {
-            hidden[b] = NumOps.Zero;
-            for (int d = 0; d < _layerDim && d < input.Length; d++)
-            {
-                hidden[b] = NumOps.Add(hidden[b], NumOps.Multiply(input[d], adapterParams[d * _bottleneckDim + b]));
-            }
-
-            // Add bias.
-            hidden[b] = NumOps.Add(hidden[b], adapterParams[downSize + upSize + b]);
+            return output;
         }
 
-        // ReLU activation.
-        for (int b = 0; b < _bottleneckDim; b++)
-        {
-            if (NumOps.LessThan(hidden[b], NumOps.Zero))
-            {
-                hidden[b] = NumOps.Zero;
-            }
-        }
+        var x = new Tensor<T>(new[] { 1, active }, Vector<T>.FromSpan(input.AsSpan(0, active)));
+        var down = Engine.TensorSlice(
+            new Tensor<T>(new[] { _layerDim, _bottleneckDim }, Vector<T>.FromSpan(adapterParams.AsSpan(0, downSize))),
+            new[] { 0, 0 }, new[] { active, _bottleneckDim });
+        var up = Engine.TensorSlice(
+            new Tensor<T>(new[] { _bottleneckDim, _layerDim }, Vector<T>.FromSpan(adapterParams.AsSpan(downSize, upSize))),
+            new[] { 0, 0 }, new[] { _bottleneckDim, active });
+        var downBias = new Tensor<T>(new[] { 1, _bottleneckDim }, Vector<T>.FromSpan(adapterParams.AsSpan(downSize + upSize, _bottleneckDim)));
+        var upBias = new Tensor<T>(new[] { 1, active }, Vector<T>.FromSpan(adapterParams.AsSpan(downSize + upSize + _bottleneckDim, active)));
 
-        // UpProject: [bottleneck x layerDim]
-        var output = new T[input.Length];
+        // DownProject + bias, ReLU, UpProject + bias.
+        var hidden = Engine.TensorReLU(Engine.TensorAdd(Engine.TensorMatMul(x, down), downBias));
+        var adapterOut = Engine.TensorAdd(Engine.TensorMatMul(hidden, up), upBias);
 
-        // Preserve residual for dimensions beyond _layerDim (adapter doesn't touch them).
-        for (int d = _layerDim; d < input.Length; d++)
-        {
-            output[d] = input[d];
-        }
-
-        var scaleT = NumOps.FromDouble(residualScale);
-        for (int d = 0; d < input.Length && d < _layerDim; d++)
-        {
-            T sum = NumOps.Zero;
-            for (int b = 0; b < _bottleneckDim; b++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(hidden[b], adapterParams[downSize + b * _layerDim + d]));
-            }
-
-            // Residual connection: output = x + scale * adapter(x)
-            output[d] = NumOps.Add(input[d], NumOps.Multiply(sum, scaleT));
-        }
-
+        // Residual connection: output = x + scale * adapter(x).
+        var result = Engine.TensorAdd(x, Engine.TensorMultiplyScalar(adapterOut, NumOps.FromDouble(residualScale)));
+        result.AsSpan().CopyTo(output.AsSpan(0, active));
         return output;
     }
 
@@ -284,9 +242,8 @@ public class FederatedAdapterTuning<T> : Infrastructure.FederatedLearningCompone
                 "Position must be 0 (attention) or 1 (FFN).");
         }
 
-        int paramsPerAdapter = 2 * _layerDim * _bottleneckDim + _bottleneckDim;
-        int adaptersPerLayer = 2; // attention + FFN
-        int offset = (layerIndex * adaptersPerLayer + position) * paramsPerAdapter;
+        int paramsPerAdapter = ParamsPerAdapter;
+        int offset = (layerIndex * AdaptersPerLayer + position) * paramsPerAdapter;
 
         if (offset + paramsPerAdapter > allAdapterParams.Length)
         {
@@ -294,14 +251,12 @@ public class FederatedAdapterTuning<T> : Infrastructure.FederatedLearningCompone
                 $"Layer {layerIndex} position {position} exceeds adapter parameter bounds.");
         }
 
-        var result = new T[paramsPerAdapter];
-        for (int i = 0; i < paramsPerAdapter; i++)
-        {
-            result[i] = allAdapterParams[offset + i];
-        }
-
-        return result;
+        return allAdapterParams.AsSpan().Slice(offset, paramsPerAdapter).ToArray();
     }
+
+    private const int AdaptersPerLayer = 2; // attention + FFN
+
+    private int ParamsPerAdapter => 2 * _layerDim * _bottleneckDim + _bottleneckDim + _layerDim;
 
     /// <summary>Gets the bottleneck hidden dimension.</summary>
     public int BottleneckDimension => _bottleneckDim;

@@ -139,15 +139,15 @@ public class FedBABUPersonalization<T> : Infrastructure.FederatedLearningCompone
 
         foreach (var (layerName, values) in headParams)
         {
-            var result = new T[values.Length];
+            var draws = new double[values.Length];
             // Kaiming uniform: limit = sqrt(6 / fan_in), assume fan_in ≈ param count
             double limit = Math.Sqrt(6.0 / Math.Max(1, values.Length));
-            for (int i = 0; i < result.Length; i++)
+            for (int i = 0; i < draws.Length; i++)
             {
-                result[i] = NumOps.FromDouble((rng.NextDouble() * 2 - 1) * limit);
+                draws[i] = (rng.NextDouble() * 2 - 1) * limit;
             }
 
-            initialized[layerName] = result;
+            initialized[layerName] = new Tensor<double>(draws, new[] { draws.Length }).Cast<T>().ToArray();
         }
 
         return initialized;
@@ -161,7 +161,8 @@ public class FedBABUPersonalization<T> : Infrastructure.FederatedLearningCompone
     public Dictionary<string, T[]> MaskHeadGradients(Dictionary<string, T[]> gradients)
     {
         Guard.NotNull(gradients);
-        var layerNames = gradients.Keys.ToArray();
+        // Same ordinal ordering as ExtractBody/ExtractHead, so the frozen layers are exactly the head.
+        var layerNames = gradients.Keys.OrderBy(k => k, StringComparer.Ordinal).ToArray();
         int headStart = (int)(layerNames.Length * (1.0 - _headFraction));
 
         var masked = new Dictionary<string, T[]>(gradients.Count);

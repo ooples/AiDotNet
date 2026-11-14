@@ -112,13 +112,8 @@ public class FederatedExperienceReplay<T> : Infrastructure.FederatedLearningComp
     /// <inheritdoc/>
     public Vector<T> ComputeImportance(Vector<T> modelParameters, Matrix<T> taskData)
     {
-        var importance = new T[modelParameters.Length];
-        for (int i = 0; i < importance.Length; i++)
-        {
-            importance[i] = NumOps.FromDouble(1.0); // Uniform importance for ER.
-        }
-
-        return new Vector<T>(importance);
+        Guard.NotNull(modelParameters);
+        return Engine.TensorOnesLike(modelParameters.AsTensor()).ToVector(); // Uniform importance for ER.
     }
 
     /// <inheritdoc/>
@@ -148,25 +143,24 @@ public class FederatedExperienceReplay<T> : Infrastructure.FederatedLearningComp
         }
 
         int d = clientImportances.Values.First().Length;
-        var aggregated = new T[d];
-        for (int i = 0; i < d; i++) aggregated[i] = NumOps.Zero;
-        double totalWeight = clientWeights?.Values.Sum() ?? clientImportances.Count;
-        if (totalWeight <= 0)
+        var aggregated = new Vector<T>(d);
+
+        // Normalize over the weights actually applied: participating clients, with 1.0 for a missing entry.
+        double totalWeight = clientImportances.Keys.Sum(id => clientWeights?.GetValueOrDefault(id, 1.0) ?? 1.0);
+        bool uniform = totalWeight <= 0;
+        if (uniform)
         {
             totalWeight = clientImportances.Count;
         }
 
         foreach (var (clientId, importance) in clientImportances)
         {
-            double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
-            var wT = NumOps.FromDouble(w / totalWeight);
-            for (int i = 0; i < d; i++)
-            {
-                aggregated[i] = NumOps.Add(aggregated[i], NumOps.Multiply(importance[i], wT));
-            }
+            double w = uniform ? 1.0 : clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
+            var clientImportance = importance.Length == d ? importance : importance.GetSubVector(0, d);
+            aggregated = Engine.Add(aggregated, Engine.Multiply(clientImportance, NumOps.FromDouble(w / totalWeight)));
         }
 
-        return new Vector<T>(aggregated);
+        return aggregated;
     }
 
     /// <summary>Gets the buffer capacity.</summary>

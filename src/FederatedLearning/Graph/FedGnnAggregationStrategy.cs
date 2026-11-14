@@ -88,33 +88,32 @@ public class FedGnnAggregationStrategy<T> : FederatedLearningComponentBase<T>, I
             throw new InvalidOperationException("Client models are empty.");
         }
 
-        // Weighted average
-        var aggregated = new Tensor<T>(new[] { modelSize });
+        // Weighted average (weights divided by their total before scaling, so the sum stays bounded for narrow T)
         double totalWeight = 0;
+        foreach (int clientId in clientModels.Keys)
+        {
+            totalWeight += weights.TryGetValue(clientId, out double w) ? w : 1.0;
+        }
+
+        var aggregated = new Tensor<T>(new[] { modelSize });
+        if (totalWeight <= 0)
+        {
+            return aggregated;
+        }
 
         foreach (var kvp in clientModels)
         {
             int clientId = kvp.Key;
-            double weight = weights.ContainsKey(clientId) ? weights[clientId] : 1.0;
-            totalWeight += weight;
-
+            double weight = weights.TryGetValue(clientId, out double w) ? w : 1.0;
             var model = kvp.Value;
-            for (int i = 0; i < modelSize; i++)
+            if (model.Shape[0] < modelSize)
             {
-                double current = NumOps.ToDouble(aggregated[i]);
-                double clientVal = NumOps.ToDouble(model[i]);
-                aggregated[i] = NumOps.FromDouble(current + clientVal * weight);
+                throw new ArgumentException(
+                    $"Client {clientId} model has {model.Shape[0]} entries; expected {modelSize}.", nameof(clientModels));
             }
-        }
 
-        // Normalize
-        if (totalWeight > 0)
-        {
-            for (int i = 0; i < modelSize; i++)
-            {
-                double val = NumOps.ToDouble(aggregated[i]);
-                aggregated[i] = NumOps.FromDouble(val / totalWeight);
-            }
+            var head = model.Shape[0] == modelSize && model.Rank == 1 ? model : Engine.TensorSlice(model.Reshape(new[] { model.Length }), new[] { 0 }, new[] { modelSize });
+            aggregated = Engine.TensorAdd(aggregated, Engine.TensorMultiplyScalar(head, NumOps.FromDouble(weight / totalWeight)));
         }
 
         return aggregated;

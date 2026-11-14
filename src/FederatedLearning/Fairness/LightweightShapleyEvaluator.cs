@@ -64,18 +64,13 @@ public class LightweightShapleyEvaluator<T> : Infrastructure.FederatedLearningCo
             return scores;
         }
 
-        // Compute global gradient norm.
-        double globalNorm2 = 0;
-        for (int i = 0; i < globalModel.Length; i++)
-        {
-            double v = NumOps.ToDouble(globalModel[i]);
-            globalNorm2 += v * v;
-        }
-
-        double globalNorm = Math.Sqrt(globalNorm2);
+        // Compute the global direction u = g / max|g|; the score max(0, cos) * |c| / |g| equals
+        // max(0, c · g) / |g|^2 = max(0, c · u) / (max|g| * |u|^2), whose norms cannot overflow narrow T.
+        var globalVector = globalModel.ToVector();
+        T globalMax = globalModel.Length > 0 ? Engine.TensorMaxValue(Engine.TensorAbs(globalModel)) : NumOps.Zero;
 
         // Zero global norm means no update signal — all clients get zero scores.
-        if (globalNorm <= 0)
+        if (!NumOps.GreaterThan(globalMax, NumOps.Zero))
         {
             foreach (var clientId in clientModels.Keys)
             {
@@ -85,30 +80,20 @@ public class LightweightShapleyEvaluator<T> : Infrastructure.FederatedLearningCo
             return scores;
         }
 
+        var unit = Engine.Divide(globalVector, globalMax);
+        double unitNorm2 = NumOps.ToDouble(Engine.DotProduct(unit, unit));
+        double globalScale = NumOps.ToDouble(globalMax);
+
         foreach (var (clientId, clientModel) in clientModels)
         {
-            double dot = 0, clientNorm2 = 0;
             if (clientModel.Length != globalModel.Length)
             {
                 throw new ArgumentException(
                     $"Client {clientId} model length {clientModel.Length} does not match global model length {globalModel.Length}.");
             }
 
-            int len = clientModel.Length;
-
-            for (int i = 0; i < len; i++)
-            {
-                double cv = NumOps.ToDouble(clientModel[i]);
-                double gv = NumOps.ToDouble(globalModel[i]);
-                dot += cv * gv;
-                clientNorm2 += cv * cv;
-            }
-
-            double clientNorm = Math.Sqrt(clientNorm2);
-            double cosSim = (clientNorm > 0 && globalNorm > 0) ? dot / (clientNorm * globalNorm) : 0;
-            double magnitude = globalNorm > 0 ? clientNorm / globalNorm : 0;
-
-            scores[clientId] = Math.Max(0, cosSim) * magnitude;
+            double dot = NumOps.ToDouble(Engine.DotProduct(clientModel.ToVector(), unit));
+            scores[clientId] = Math.Max(0, dot) / (globalScale * unitNorm2);
         }
 
         // Normalize to [0, 1].

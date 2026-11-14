@@ -59,65 +59,54 @@ public class PrototypicalContributionEvaluator<T> : FederatedLearningComponentBa
         var scores = new Dictionary<int, double>();
         var clientIds = new List<int>(clientModels.Keys);
         int modelSize = globalModel.Shape[0];
+        int k = clientIds.Count;
 
-        if (clientIds.Count == 0) return scores;
+        if (k == 0) return scores;
 
         // Compute prototypes: mean update direction for each client
-        var prototypes = new Dictionary<int, double[]>();
-        foreach (int clientId in clientIds)
+        var prototypes = new Tensor<T>[k];
+        for (int c = 0; c < k; c++)
         {
-            var prototype = new double[modelSize];
-            var model = clientModels[clientId];
-
-            for (int i = 0; i < modelSize && i < model.Shape[0]; i++)
-            {
-                prototype[i] = NumOps.ToDouble(model[i]);
-            }
+            int clientId = clientIds[c];
+            var prototype = FitToLength(clientModels[clientId], modelSize);
 
             // If we have history, use the mean over all rounds for a more stable prototype
-            if (clientHistories is not null && clientHistories.ContainsKey(clientId))
+            if (clientHistories is not null && clientHistories.TryGetValue(clientId, out var history) && history.Count > 1)
             {
-                var history = clientHistories[clientId];
-                if (history.Count > 1)
+                // Mean of the history with each update pre-divided by the count, so the running sum cannot
+                // overflow narrow T when the mean itself is in range.
+                var updates = new List<Tensor<T>>(history.Count);
+                var ones = new List<double>(history.Count);
+                foreach (var update in history)
                 {
-                    prototype = new double[modelSize];
-                    foreach (var update in history)
-                    {
-                        for (int i = 0; i < modelSize && i < update.Shape[0]; i++)
-                        {
-                            prototype[i] += NumOps.ToDouble(update[i]);
-                        }
-                    }
-
-                    for (int i = 0; i < modelSize; i++)
-                    {
-                        prototype[i] /= history.Count;
-                    }
+                    updates.Add(FitToLength(update, modelSize));
+                    ones.Add(1.0);
                 }
+
+                prototype = Infrastructure.FederatedTensorMath<T>.WeightedSum(updates, ones, history.Count);
             }
 
-            prototypes[clientId] = prototype;
+            prototypes[c] = prototype.Reshape(new[] { 1, modelSize });
         }
 
-        // Compute global direction (mean of all client models)
-        var globalDirection = new double[modelSize];
-        for (int i = 0; i < modelSize; i++)
-        {
-            globalDirection[i] = NumOps.ToDouble(globalModel[i]);
-        }
+        // Unit prototypes and the global direction (first modelSize entries of the global model).
+        var (units, magnitudes) = Infrastructure.FederatedTensorMath<T>.NormalizeRows(Engine.TensorConcatenate(prototypes, 0));
+        var (globalUnit, _) = Infrastructure.FederatedTensorMath<T>.NormalizeRows(FitToLength(globalModel, modelSize).Reshape(new[] { 1, modelSize }));
+        var alignments = Engine.TensorMatMul(units, Engine.TensorTranspose(globalUnit)).Cast<double>().ToArray();
+        var cosines = Engine.TensorMatMul(units, Engine.TensorTranspose(units)).Cast<double>().ToArray();
 
         // Score each client
-        foreach (int clientId in clientIds)
+        for (int c = 0; c < k; c++)
         {
-            double alignment = CosineSimilarity(prototypes[clientId], globalDirection);
-            double diversity = ComputeDiversity(clientId, prototypes, clientIds);
-            double magnitude = ComputeMagnitude(prototypes[clientId]);
+            double alignment = alignments[c];
+            double diversity = ComputeDiversity(c, cosines, k);
+            double magnitude = magnitudes[c];
 
             // Contribution = alignment * diversity * magnitude
             // Alignment rewards clients moving in the right direction
             // Diversity rewards clients bringing unique information
             // Magnitude rewards clients with substantial updates
-            scores[clientId] = Math.Max(0, alignment) * (1.0 + diversity) * (1.0 + Math.Log(1.0 +magnitude));
+            scores[clientIds[c]] = Math.Max(0, alignment) * (1.0 + diversity) * (1.0 + Math.Log(1.0 + magnitude));
         }
 
         NormalizeScores(scores);
@@ -150,49 +139,38 @@ public class PrototypicalContributionEvaluator<T> : FederatedLearningComponentBa
 
         return freeRiders;
     }
-
-    private static double ComputeDiversity(int clientId, Dictionary<int, double[]> prototypes, List<int> clientIds)
+    private static double ComputeDiversity(int index, double[] cosines, int count)
     {
         // Diversity: average angular distance from other clients
         // Higher = more unique contribution
-        var clientProto = prototypes[clientId];
+        if (count < 2)
+        {
+            return 0;
+        }
+
         double totalDistance = 0;
-        int count = 0;
-
-        foreach (int otherId in clientIds)
+        for (int other = 0; other < count; other++)
         {
-            if (otherId == clientId) continue;
-
-            var otherProto = prototypes[otherId];
-            double similarity = CosineSimilarity(clientProto, otherProto);
-            totalDistance += 1.0 - Math.Abs(similarity); // Angular distance
-            count++;
+            if (other == index) continue;
+            totalDistance += 1.0 - Math.Abs(cosines[index * count + other]); // Angular distance
         }
 
-        return count > 0 ? totalDistance / count : 0;
+        return totalDistance / (count - 1);
     }
 
-    private static double CosineSimilarity(double[] a, double[] b)
+    /// <summary>
+    /// Copies the first <paramref name="length"/> entries of a flattened model, zero-padding short models.
+    /// </summary>
+    private Tensor<T> FitToLength(Tensor<T> model, int length)
     {
-        double dot = 0, normA = 0, normB = 0;
-        for (int i = 0; i < a.Length; i++)
+        var flat = model.Reshape(new[] { model.Length });
+        int covered = Math.Min(length, model.Length);
+        if (covered == length)
         {
-            dot += a[i] * b[i];
-            normA += a[i] * a[i];
-            normB += b[i] * b[i];
+            return covered == model.Length ? flat : Engine.TensorSlice(flat, new[] { 0 }, new[] { length });
         }
-        double denom = Math.Sqrt(normA) * Math.Sqrt(normB);
-        return denom > 1e-10 ? dot / denom : 0;
-    }
 
-    private static double ComputeMagnitude(double[] prototype)
-    {
-        double sum = 0;
-        for (int i = 0; i < prototype.Length; i++)
-        {
-            sum += prototype[i] * prototype[i];
-        }
-        return Math.Sqrt(sum);
+        return Engine.TensorConcatenate(new[] { flat, new Tensor<T>(new[] { length - covered }) }, 0);
     }
 
     private static void NormalizeScores(Dictionary<int, double> scores)
