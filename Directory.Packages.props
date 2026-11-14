@@ -488,7 +488,7 @@ Bumped 0.135.0 to 0.136.0 for AiDotNet.Tensors #1146: 0.135.0's stride-1 conv in
     <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.3.1" />
     <!-- Code analysis (default version; source generators may override) -->
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="5.9.0" />
-    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.12.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Common" Version="5.0.0" />
     <!-- Public API contract gate for src/AiDotNet.csproj (PublicAPI.Shipped/Unshipped.txt, RS0016/RS0017). -->
     <PackageVersion Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" Version="5.6.0" />
