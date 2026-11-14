@@ -132,6 +132,11 @@ public class AdversarialRobustnessOptions<T> : ModelOptions
     /// </summary>
     /// <value>Defaults to <see cref="AdversarialNormType.LInfinity"/>. Selects the PGD step (gradient sign for
     /// L-infinity, normalized gradient for L2), its projection ball and its random start.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is how the attack's budget is measured. L-infinity lets every feature
+    /// move by up to epsilon; L2 limits the overall (Euclidean) size of the change to epsilon. It only describes
+    /// what attacks may do; <see cref="CertificationNormType"/> separately sets the norm certificates cover.</para>
+    /// </remarks>
     public AdversarialNormType AttackNormType { get; set; } = AdversarialNormType.LInfinity;
 
     /// <summary>
@@ -227,6 +232,12 @@ public class AdversarialRobustnessOptions<T> : ModelOptions
     /// Gets or sets the certification method to use.
     /// </summary>
     /// <value>Defaults to <see cref="CertifiedDefenseMethod.RandomizedSmoothing"/>.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> A certification method proves that no change to the input within a given
+    /// size can flip the prediction. Randomized smoothing works with any model by voting over noisy copies of
+    /// the input; interval bound propagation and CROWN read a neural network's layers and bound its outputs
+    /// directly, which is exact about what it proves but only works for the layer types they model.</para>
+    /// </remarks>
     public CertifiedDefenseMethod CertificationMethod { get; set; } = CertifiedDefenseMethod.RandomizedSmoothing;
 
     /// <summary>
@@ -252,6 +263,13 @@ public class AdversarialRobustnessOptions<T> : ModelOptions
     /// <summary>
     /// Gets or sets the norm type for certification.
     /// </summary>
+    /// <value>Defaults to <see cref="AdversarialNormType.L2"/>, the norm randomized smoothing certifies.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This is how the size of an input change is measured when a prediction is
+    /// certified, and it is separate from <see cref="AttackNormType"/>, which sets the budget attacks are given.
+    /// L2 measures the overall (Euclidean) size of the change; L-infinity measures the largest change to any
+    /// single feature. A certificate only covers changes measured in the norm it was computed for.</para>
+    /// </remarks>
     public AdversarialNormType CertificationNormType { get; set; } = AdversarialNormType.L2;
 
     // ========================================================================
