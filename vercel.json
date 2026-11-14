@@ -3,6 +3,12 @@
   "version": 2,
   "name": "aidotnet-playground-api",
   "ignoreCommand": "bash scripts/vercel-ignore-api.sh",
+  "git": {
+    "deploymentEnabled": {
+      "**": false,
+      "master": true
+    }
+  },
   "functions": {
     "api/execute.ts": {
       "maxDuration": 30,
