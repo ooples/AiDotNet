@@ -549,6 +549,25 @@ Assert-Contract ($selectStep.Contains('$deltaPartial') -and $selectStep.Contains
 $mapDownload = Get-StepBlock -JobBlock $selectorJob -Step 'Download the shard map'
 Assert-Contract ($mapDownload.Contains("MAP_BRANCH: `${{ startsWith(github.base_ref, 'ci-proof/') && 'master' || github.base_ref || 'master' }}")) `
     'a canary into a ci-proof/** branch looks for maps built on that branch, finds none, and cannot prove selection'
+# A stacked pull request's base branch never has a map. It may use master's, but only when its own
+# branch has no evidence at all, and only while the selector is told the map is master's so it selects
+# for everything the stack adds to master.
+Assert-Contract ($mapDownload.Contains("[ `"`$(jq -r '.status // empty' map-resolution.json)`" = 'NoCertifiedRun' ]") -and
+        $mapDownload.Contains("[ `"`$MAP_BRANCH`" != 'master' ]") -and
+        $mapDownload.Contains('-ResultFile map-resolution.json -MapBranch master')) `
+    'a stacked pull request cannot fall back to the certified map on master, or falls back past negative evidence on its base branch'
+Assert-Contract ($mapDownload.Contains("lineage_ref='origin/master'") -and
+        $mapDownload.Contains('echo "lineage_ref=$lineage_ref" >> "$GITHUB_OUTPUT"') -and
+        ([regex]::Matches($mapDownload, "lineage_ref='origin/master'")).Count -eq 1) `
+    'the fallback to the map on master does not tell the selector which branch the map is from'
+Assert-Contract ($selectStep.Contains('MAP_LINEAGE_REF: ${{ steps.map.outputs.lineage_ref }}') -and
+        $selectStep.Contains("`$lineage['MapLineageRef'] = [string] `$env:MAP_LINEAGE_REF") -and
+        $selectStep.Contains('@lineage `')) `
+    'a stacked pull request selecting with the map on master is scoped to its own diff, which that map has never measured'
+$selectorLineageText = Get-Content -LiteralPath 'tools/TestImpact/Select-Shards.ps1' -Raw
+Assert-Contract ($selectorLineageText.Contains('& git merge-base --is-ancestor $MapSha HEAD') -and
+        $selectorLineageText.Contains('$BaseSha = Resolve-MapLineageBase -LineageRef $MapLineageRef -MapSha $mapSha')) `
+    'the selector accepts a map from another branch without requiring the checkout to contain its commit'
 Assert-Contract (-not $selectStep.Contains('-DeltaFromTree')) `
     'the select step computes its own master delta - a second, unaudited reuse mechanism'
 Assert-Contract ($selectStep.Contains('foreach ($name in $importShards) { [void] $running.Add($name) }')) `

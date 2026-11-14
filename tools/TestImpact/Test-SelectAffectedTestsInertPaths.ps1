@@ -9,7 +9,9 @@
     were such files). This runs the real script, with the real Select-Shards.ps1 classifier copied into a throwaway
     repository, on a change to README.md, .editorconfig and a C# source, and asserts that the change list handed to
     TypeImpact holds only the C# source. A second run without the classifier proves a classification failure removes
-    nothing.
+    nothing. A third and fourth run repeat both with the analyzer and pack inputs, benchmark sources, reference-data
+    scripts and deployment configuration the selector classifies as build-only or non-runtime, beside an unlisted data
+    file and a second C# source, which must stay inputs.
 #>
 [CmdletBinding()]
 param()
@@ -23,8 +25,12 @@ $names = 'GITHUB_OUTPUT', 'GITHUB_STEP_SUMMARY', 'GITHUB_EVENT_NAME', 'REQUIRES_
     'COLLECT_COVERAGE_EVERYWHERE', 'SELECTED_MATRIX', 'SELECTED_LEDGER_MATRIX', 'SELECTED_SKIPPED', 'TMP', 'TEMP', 'TMPDIR'
 foreach ($name in $names) { $saved[$name] = [Environment]::GetEnvironmentVariable($name) }
 
+# Read once: each fixture points TMP at its own directory, so a later fixture would otherwise nest inside the
+# previous one's (removed) directory, one level deeper per run, and outgrow the Windows path limit.
+$tempBase = [IO.Path]::GetTempPath()
+
 function Invoke-Fixture([bool] $WithClassifier) {
-    $root = Join-Path ([IO.Path]::GetTempPath()) ("select-affected-inert-" + [guid]::NewGuid().ToString('N'))
+    $root = Join-Path $tempBase ("select-affected-inert-" + [guid]::NewGuid().ToString('N'))
     $repo = Join-Path $root 'repo'
     $tmp = Join-Path $root 'tmp'
     New-Item -ItemType Directory -Path $repo, $tmp -Force | Out-Null
@@ -42,10 +48,16 @@ function Invoke-Fixture([bool] $WithClassifier) {
             Set-Content -LiteralPath 'README.md' -Value 'one'
             Set-Content -LiteralPath '.editorconfig' -Value 'root = true'
             Set-Content -LiteralPath 'src/Model.cs' -Value 'class Model { }'
+            foreach ($path in $script:ExtraPaths) {
+                $parent = Split-Path -Parent $path
+                if ($parent) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
+                Set-Content -LiteralPath $path -Value 'one'
+            }
             & git add -A; & git commit -q -m base
             Set-Content -LiteralPath 'README.md' -Value 'two'
             Set-Content -LiteralPath '.editorconfig' -Value "root = true`nindent_size = 4"
             Set-Content -LiteralPath 'src/Model.cs' -Value 'class Model { int x; }'
+            foreach ($path in $script:ExtraPaths) { Set-Content -LiteralPath $path -Value 'two' }
             & git commit -q -am change
             if ($LASTEXITCODE -ne 0) { throw 'fixture repository setup failed' }
         }
@@ -75,7 +87,14 @@ function Invoke-Fixture([bool] $WithClassifier) {
     }
 }
 
+function Join-Sorted([string[]] $Paths) {
+    $sorted = [string[]] @($Paths)
+    [Array]::Sort($sorted, [StringComparer]::Ordinal)
+    return $sorted -join ','
+}
+
 try {
+    $script:ExtraPaths = @()
     $paths = Invoke-Fixture -WithClassifier $true
     if (($paths -join ',') -cne 'src/Model.cs') {
         throw "TypeImpact's input should hold only src/Model.cs once README.md and .editorconfig are classified; got: $($paths -join ', ')"
@@ -83,6 +102,28 @@ try {
     $unclassified = Invoke-Fixture -WithClassifier $false
     if ((@($unclassified | Sort-Object) -join ',') -cne '.editorconfig,README.md,src/Model.cs') {
         throw "without the classifier every changed path must stay a TypeImpact input; got: $($unclassified -join ', ')"
+    }
+
+    # The analyzer and pack inputs, benchmark sources, reference-data scripts and deployment configuration the
+    # shard selector classifies as build-only or non-runtime (one such file beside a C# edit passed 16 of 20
+    # recorded runs through). What is not classified that way stays an input and still passes the decision
+    # through: a data file the selector escalates on, and a C# source TypeImpact may not be able to map.
+    $inert = @(
+        'src/PublicAPI.Unshipped.txt', 'src/PublicAPI/net471/PublicAPI.Shipped.txt', 'src/ElementWiseBaseline.txt',
+        'src/CompatibilitySuppressions.xml', 'AiDotNetBenchmarkTests/BenchmarkTests/Bench.cs',
+        'benchmarks/AiDotNet.Benchmarks/Program.cs', 'tools/reference-data/reference.py', 'vercel.json'
+    )
+    $kept = @('src/Resources/Vocabulary.txt', 'src/Orphan/NoCompiledType.cs')
+    $script:ExtraPaths = @($inert) + @($kept)
+    $paths = Invoke-Fixture -WithClassifier $true
+    $expected = Join-Sorted (@($kept) + @('src/Model.cs'))
+    if ((Join-Sorted $paths) -cne $expected) {
+        throw "TypeImpact's input should hold exactly the paths that can affect a test ($expected); got: $(Join-Sorted $paths)"
+    }
+    $unclassified = Invoke-Fixture -WithClassifier $false
+    $expected = Join-Sorted (@($script:ExtraPaths) + @('.editorconfig', 'README.md', 'src/Model.cs'))
+    if ((Join-Sorted $unclassified) -cne $expected) {
+        throw "without the classifier every changed path must stay a TypeImpact input; got: $(Join-Sorted $unclassified)"
     }
     Write-Host 'Select-AffectedTests leaves out paths that cannot affect a test, and only when classification succeeds.'
 }

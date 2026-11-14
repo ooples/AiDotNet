@@ -456,6 +456,99 @@ try {
         Assert-True ([bool] (Get-Content non-merge-selection.json -Raw | ConvertFrom-Json).escalate) `
             'a checkout that is not a merge commit was trusted as a pull-request merge'
 
+        # ---- A STACKED pull request: its base is a branch ahead of master, the map is master's. ----
+        # The base branch adds a Beta test; the stacked pull request edits the Alpha line. No map
+        # was ever built on the base branch, so the workflow falls back to master's map and names
+        # master as the map's lineage. The change selected for must then be everything the stack
+        # adds to master: the base branch's test has never been measured by, or validated against,
+        # that map, and selecting on the pull request's own diff would leave its shard out.
+        Invoke-Git checkout --quiet --detach $masterSha
+        New-Item -ItemType Directory -Path tests/Proj/UnitTests/Beta -Force | Out-Null
+        @(
+            'using Xunit;',
+            'namespace Proj.UnitTests.Beta;',
+            'public class StackBaseTests',
+            '{',
+            '    [Fact]',
+            '    public void Works() { }',
+            '}'
+        ) | Set-Content -LiteralPath tests/Proj/UnitTests/Beta/StackBaseTests.cs -Encoding utf8
+        Invoke-Git add tests/Proj/UnitTests/Beta/StackBaseTests.cs
+        Invoke-Git commit --quiet -m stack-base-branch-change
+        $stackBaseSha = ((Invoke-Git rev-parse HEAD) | Out-String).Trim()
+        @('class Feature {', 'int Alpha() { return 4; }', '', 'int Beta() { return 1; }', '}') |
+            Set-Content -LiteralPath src/Feature.cs -Encoding utf8
+        Invoke-Git add src/Feature.cs
+        Invoke-Git commit --quiet -m stacked-pull-request-change
+        $stackHeadSha = ((Invoke-Git rev-parse HEAD) | Out-String).Trim()
+        Invoke-Git checkout --quiet --detach $stackBaseSha
+        Invoke-Git merge --quiet --no-ff --no-edit $stackHeadSha
+        Invoke-Git update-ref refs/remotes/origin/master $masterSha
+
+        # Reproduction: the pull request's own diff alone never sees the base branch's test.
+        & $selector -MapFile certified/shard-map.json -PullRequestHeadSha $stackHeadSha `
+            -ShardManifestFile shard-manifest.json -ExpectedShards $shardNames -OutFile stacked-own-diff-selection.json
+        $stackedOwn = Get-Content stacked-own-diff-selection.json -Raw | ConvertFrom-Json
+        Assert-True (-not [bool] $stackedOwn.escalate -and (@($stackedOwn.shards) -join ',') -eq 'Alpha,Always') `
+            "reproduction failed: the stacked pull request's own diff was expected to select Alpha,Always: $(@($stackedOwn.shards) -join ',')"
+
+        & $selector -MapFile certified/shard-map.json -PullRequestHeadSha $stackHeadSha -MapLineageRef origin/master `
+            -ShardManifestFile shard-manifest.json -ExpectedShards $shardNames -OutFile stacked-selection.json
+        Assert-True ($LASTEXITCODE -eq 0) 'selection for a stacked pull request failed'
+        $stacked = Get-Content stacked-selection.json -Raw | ConvertFrom-Json
+        Assert-True (-not [bool] $stacked.escalate) `
+            "a stacked pull request selecting with master's map escalated: $(@($stacked.reasons) -join '; ')"
+        Assert-True ((@($stacked.shards) -join ',') -eq 'Alpha,Always,Beta') `
+            "a stacked pull request did not select for what its base branch adds to master: $(@($stacked.shards) -join ',')"
+        Assert-True (@($stacked.routes | Where-Object { $_ -like 'Beta <= runs tests affected by tests/Proj/UnitTests/Beta/StackBaseTests.cs*' }).Count -eq 1) `
+            "the base branch's new test was not routed to its shard"
+        Assert-True ([int] $stacked.map.changedByThisChange -eq 2) `
+            "a stacked selection must cover exactly the two paths the stack adds to master, not master's own commits: $($stacked.map.changedByThisChange)"
+
+        # Master moves on after the stack was cut: the merge base stays where the stack left
+        # master, so master's later commits are not charged to the stack.
+        Invoke-Git checkout --quiet --detach $masterSha
+        'later master documentation' | Set-Content -LiteralPath LATER.md -Encoding utf8
+        New-Item -ItemType Directory -Path tools/TestImpact -Force | Out-Null
+        'later selector fix' | Set-Content -LiteralPath tools/TestImpact/Later.ps1 -Encoding utf8
+        Invoke-Git add LATER.md tools/TestImpact/Later.ps1
+        Invoke-Git commit --quiet -m master-moves-on-again
+        $laterMasterSha = ((Invoke-Git rev-parse HEAD) | Out-String).Trim()
+        Invoke-Git update-ref refs/remotes/origin/master $laterMasterSha
+        Invoke-Git checkout --quiet --detach $stackBaseSha
+        Invoke-Git merge --quiet --no-ff --no-edit $stackHeadSha
+        & $selector -MapFile certified/shard-map.json -PullRequestHeadSha $stackHeadSha -MapLineageRef origin/master `
+            -ShardManifestFile shard-manifest.json -ExpectedShards $shardNames -OutFile stacked-behind-selection.json
+        $stackedBehind = Get-Content stacked-behind-selection.json -Raw | ConvertFrom-Json
+        Assert-True (-not [bool] $stackedBehind.escalate -and (@($stackedBehind.shards) -join ',') -eq 'Alpha,Always,Beta') `
+            "a stacked pull request behind master was charged with master's later commits: $(@($stackedBehind.reasons) -join '; ')"
+
+        # Fail closed: a map whose commit the stack does not contain (here the later master
+        # commit) describes code the tested tree lacks; a lineage branch that is absent; and a
+        # lineage without a pull-request merge to scope.
+        $laterMap = Get-Content certified/shard-map.json -Raw | ConvertFrom-Json
+        $laterMap.sha = $laterMasterSha
+        $laterMap | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath later-shard-map.json -Encoding utf8
+        foreach ($case in @(
+            @{ Name = 'map-ahead'; Map = 'later-shard-map.json'; Arguments = @{ PullRequestHeadSha = $stackHeadSha; MapLineageRef = 'origin/master' }
+               Why = 'a stack that does not contain the map''s commit was selected with that map' },
+            @{ Name = 'lineage-missing'; Map = 'certified/shard-map.json'; Arguments = @{ PullRequestHeadSha = $stackHeadSha; MapLineageRef = 'origin/no-such-branch' }
+               Why = 'an absent lineage branch was not treated as a selection failure' },
+            @{ Name = 'lineage-without-head'; Map = 'certified/shard-map.json'; Arguments = @{ MapLineageRef = 'origin/master' }
+               Why = 'a map lineage without a pull-request head was accepted' }
+        )) {
+            $arguments = $case.Arguments
+            $closedOutput = @(& $selector -MapFile $case.Map @arguments -ShardManifestFile shard-manifest.json `
+                -ExpectedShards $shardNames -OutFile "stacked-$($case.Name)-selection.json" 6>&1)
+            foreach ($line in $closedOutput) {
+                Write-Host (('[expected escalation, stacked ' + $case.Name + '] ' + [string] $line) -replace '::warning::', '')
+            }
+            $closed = Get-Content "stacked-$($case.Name)-selection.json" -Raw | ConvertFrom-Json
+            Assert-True ([bool] $closed.escalate -and [string] $closed.reason -eq 'selection-failed') $case.Why
+        }
+        Invoke-Git update-ref '-d' refs/remotes/origin/master
+        Invoke-Git checkout --quiet --detach $prHeadSha
+
         # A pull request that DELETES a test file: no file at HEAD names its types, so the reference
         # search's git grep exits 1. The selector must still exit 0 - callers read a nonzero exit as
         # a selector failure and throw away the (valid) selection for the full matrix.
