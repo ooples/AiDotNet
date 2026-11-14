@@ -1555,6 +1555,73 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     }
 
     /// <summary>
+    /// Fused-path audit (opt-in: <c>AIDOTNET_FUSED_AUDIT=&lt;file&gt;</c>). Trains three steps and appends one tab-separated
+    /// line to the file: the model, whether the fused compiled session committed, and the gate or session reason when
+    /// it did not. Records, never asserts: it lists every family that falls off the compiled path and why.
+    /// </summary>
+    [SkippableFact(Timeout = 120000)]
+    public virtual async Task FusedTrainingPath_Audit()
+    {
+        string? path = System.Environment.GetEnvironmentVariable("AIDOTNET_FUSED_AUDIT");
+        Skip.If(string.IsNullOrEmpty(path), "Set AIDOTNET_FUSED_AUDIT to a file to run the fused-path audit.");
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        using var network = CreateNetwork();
+        string model = network.GetType().Name;
+        string committed, reason;
+        if (network is not AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn)
+        {
+            committed = "n/a";
+            reason = "not a NeuralNetworkBase";
+        }
+        else if (TrainingInvariantsNotApplicable(network))
+        {
+            committed = "n/a";
+            reason = "training invariants not applicable";
+        }
+        else
+        {
+            try
+            {
+                var input = CreateRandomTensor(EffectiveInputShape, rng);
+                var target = CreateLossCompatibleTarget(network, ShapeCheckedOutputShape, rng);
+                target = ResolveTrainingObjectiveTarget(network, input, target);
+                PrepareForSupervisedTrainingInvariant(network, input);
+                for (int i = 0; i < 3; i++) TrainOn(network, input, target);
+                if (nn.FusedSession.IsCommitted)
+                {
+                    committed = "yes";
+                    reason = "";
+                }
+                else if (nn.CustomFusedStepCount > 0 || nn.CustomEagerStepCount > 0)
+                {
+                    // A custom or declared objective (TrainCustomTapeStep), on its own objective session.
+                    committed = nn.ObjectiveSessionCommitted ? "yes" : "no";
+                    reason = $"custom objective: fused {nn.CustomFusedStepCount}, eager {nn.CustomEagerStepCount}"
+                        + (nn.ObjectiveSessionCommitted ? "" : "; " + (nn.LastObjectiveMissReason ?? "no reason recorded"));
+                }
+                else
+                {
+                    committed = "no";
+                    reason = nn.LastFusedGateMissReason ?? nn.FusedSession.LastMissReason
+                        ?? (nn.LastTrainingRoute is { } route ? "route: " + route : "TrainWithTape never called (custom training step)");
+                }
+            }
+            catch (System.Exception ex)
+            {
+                committed = "error";
+                reason = ex.GetType().Name + ": " + ex.Message;
+            }
+        }
+        string line = string.Join("\t", typeof(T).Name, model, committed,
+            reason.Replace('\t', ' ').Replace('\r', ' ').Replace('\n', ' ')) + System.Environment.NewLine;
+        lock (s_fusedAuditLock) System.IO.File.AppendAllText(path!, line);
+    }
+
+    private static readonly object s_fusedAuditLock = new();
+
+    /// <summary>
     /// Computes a content hash per parameter chunk for fast pre/post-train
     /// comparison. Full coverage (every chunk, every value) with O(num_chunks)
     /// memory — replaces the prior bounded-sample approach that silently

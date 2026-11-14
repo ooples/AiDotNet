@@ -162,7 +162,7 @@ public partial class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : 
     protected override void InitializeAdaptiveParameters()
     {
         base.InitializeAdaptiveParameters();
-        CurrentLearningRate = NumOps.FromDouble(_options.InitialLearningRate);
+        ResetLearningRateToSchedule();
         CurrentMomentum = NumOps.FromDouble(_options.InitialMomentum);
     }
 

@@ -140,7 +140,7 @@ public partial class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     protected override void InitializeAdaptiveParameters()
     {
         base.InitializeAdaptiveParameters();
-        CurrentLearningRate = NumOps.FromDouble(_options.InitialLearningRate);
+        ResetLearningRateToSchedule();
         _iteration = 0;
     }
 

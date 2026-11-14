@@ -271,23 +271,24 @@ public class FusedSpecMatchesEagerBehaviourTests
     }
 
     /// <summary>
-    /// Momentum stores <c>lr_t * grad</c> in its velocity while the kernel stores the raw gradient and
-    /// applies the rate at the parameter write, so a moving rate separates the two.
+    /// Momentum stores <c>lr_t * grad</c> in its velocity while the classical kernel stores the raw gradient and
+    /// applies the rate at the parameter write, so a moving rate separates the two. Under a schedule the spec selects
+    /// the kernel's learning-rate-in-velocity form instead of declining (see FusedScheduledMomentumParityTests for the
+    /// trajectory parity).
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Constant lr makes the two identical because it factors out of the whole recurrence. Under a
-    /// schedule the kernel re-scales the ENTIRE accumulated history by the current rate, while the eager
-    /// path keeps each gradient at the rate that was in force when it arrived — the same distinction that
-    /// made the LARS kernel wrong.
+    /// Constant lr makes the two identical because it factors out of the whole recurrence, so a constant-rate spec
+    /// keeps the classical kernel. Under a schedule the classical kernel would re-scale the ENTIRE accumulated history
+    /// by the current rate, while the eager path keeps each gradient at the rate that was in force when it arrived.
     /// </para>
     /// <para>
-    /// NAG is unaffected and does not decline here: its eager step already stores the unscaled gradient
-    /// (<c>v = mu*v + g; p -= lr*(g + mu*v)</c>), which is the kernel's convention exactly.
+    /// NAG is unaffected: its eager step already stores the unscaled gradient
+    /// (<c>v = mu*v + g; p -= lr*(g + mu*v)</c>), which is the classical kernel's convention exactly.
     /// </para>
     /// </remarks>
     [Fact]
-    public void Momentum_DeclinesOnANonConstantSchedule()
+    public void Momentum_OnANonConstantSchedule_FusesWithTheLearningRateInTheVelocity()
     {
         var optimizer = new MomentumOptimizer<double, Matrix<double>, Vector<double>>(
             null,
@@ -299,12 +300,11 @@ public class FusedSpecMatchesEagerBehaviourTests
                 LearningRateScheduler = new AiDotNet.LearningRateSchedulers.ExponentialLRScheduler(0.05, 0.95),
             });
 
-        Assert.False(TryGetConfig(optimizer, out _),
-            "Momentum fused under a moving learning rate; its velocity holds lr*grad, so the fused path " +
-            "would re-scale the accumulated history by the current rate.");
+        Assert.True(TryGetConfig(optimizer, out var scheduled));
+        Assert.Equal(Tensors.Engines.Compilation.OptimizerType.SGDMomentum, scheduled.Type);
+        Assert.True(scheduled.Extras is { VelocityIncludesLearningRate: true },
+            "a scheduled momentum spec must select the learning-rate-in-velocity kernel form.");
 
-        // Without a schedule the same configuration still fuses — the decline is about the schedule, not
-        // a blanket refusal.
         var constant = new MomentumOptimizer<double, Matrix<double>, Vector<double>>(
             null,
             new MomentumOptimizerOptions<double, Matrix<double>, Vector<double>>
@@ -315,6 +315,7 @@ public class FusedSpecMatchesEagerBehaviourTests
             });
         Assert.True(TryGetConfig(constant, out var config));
         Assert.Equal(Tensors.Engines.Compilation.OptimizerType.SGDMomentum, config.Type);
+        Assert.False(config.Extras is { VelocityIncludesLearningRate: true });
     }
 
     // ── NesterovAcceleratedGradient → SGDMomentum + Nesterov ─────────────────
