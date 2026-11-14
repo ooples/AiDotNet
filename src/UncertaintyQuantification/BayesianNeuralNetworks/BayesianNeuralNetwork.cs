@@ -143,6 +143,9 @@ public partial class BayesianNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEs
     /// <remarks>
     /// <b>For Beginners:</b> Aleatoric uncertainty represents irreducible randomness in the data itself.
     /// For example, if you're predicting dice rolls, there's inherent randomness that can't be eliminated.
+    /// For class-probability outputs this returns the expected Bernoulli variance E_s[p_s (1 - p_s)] over the
+    /// weight samples (Kwon et al. 2020); for other outputs it is zero, since the network predicts no noise
+    /// variance (Kendall and Gal 2017).
     /// </remarks>
     public Tensor<T> EstimateAleatoricUncertainty(Tensor<T> input)
     {

@@ -102,10 +102,11 @@ public class DeepEnsemble<T> : IUncertaintyEstimator<T>
     /// its own uncertainty estimate (e.g., Gaussian likelihood), the average of individual
     /// model uncertainties represents aleatoric uncertainty (data noise).
     ///
-    /// <b>Important:</b> This implementation does not currently have per-model variance heads, so a true
-    /// aleatoric/epistemic decomposition is not available. As a conservative default, this method returns
-    /// zeros; to estimate aleatoric uncertainty, modify ensemble members to output explicit variance (e.g.,
-    /// a Gaussian likelihood head).
+    /// <b>Important:</b> For class-probability outputs (each row sums to one) this returns the expected
+    /// Bernoulli variance E_m[p_m (1 - p_m)] over the members (Kwon et al. 2020). The members have no
+    /// variance heads, so for any other output the aleatoric part is zero and all of the spread across
+    /// members is epistemic; to estimate it there, make the members output an explicit variance (e.g., a
+    /// Gaussian likelihood head, Lakshminarayanan et al. 2017).
     /// </remarks>
     public Tensor<T> EstimateAleatoricUncertainty(Tensor<T> input)
     {

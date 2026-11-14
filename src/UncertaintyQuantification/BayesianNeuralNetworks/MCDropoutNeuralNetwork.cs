@@ -130,8 +130,9 @@ public class MCDropoutNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator
     /// <returns>The aleatoric uncertainty estimate.</returns>
     /// <remarks>
     /// <b>For Beginners:</b> MC Dropout primarily captures epistemic uncertainty.
-    /// Aleatoric uncertainty would require the network to explicitly model output variance,
-    /// so this is a simplified estimate.
+    /// For class-probability outputs this returns the expected Bernoulli variance E_s[p_s (1 - p_s)] over the
+    /// dropout samples (Kwon et al. 2020). For other outputs it is zero: aleatoric uncertainty would require
+    /// the network to explicitly model output variance (Kendall and Gal 2017).
     /// </remarks>
     public Tensor<T> EstimateAleatoricUncertainty(Tensor<T> input)
     {
