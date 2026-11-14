@@ -230,21 +230,23 @@ public class TimeSeriesTokenizer<T>
         double minValue = NumOps.ToDouble(min);
         double rangeValue = NumOps.ToDouble(engine.TensorMaxValue(series)) - minValue;
         if (rangeValue < 1e-10) rangeValue = 1.0;
-        T range = NumOps.FromDouble(rangeValue);
 
         // Edges min + range * i / V for i = 0..V: a schedule, computed in double and rounded to T once.
-        T vocabulary = NumOps.FromDouble(VocabularySize);
         var binEdges = engine.TensorAddScalar(
             engine.TensorDivideScalar(
                 engine.TensorMultiplyScalar(engine.TensorArange<double>(0, VocabularySize + 1), rangeValue),
                 (double)VocabularySize),
             minValue).Cast<T>();
 
-        // Map value to bin index [0, VocabularySize-1] using consistent binEdges spacing
+        // Map value to bin index [0, VocabularySize-1] using consistent binEdges spacing. The offset, the division
+        // by the range and the scaling run in double, as master did: in Half a range past 65504 rounds to infinity
+        // (and so does value - min), and the clamp bound VocabularySize - 1 = 4095 rounds up to 4096, one past the
+        // last token. The clamp is applied to the int bins.
         var scaled = engine.TensorMultiplyScalar(
-            engine.TensorDivideScalar(engine.TensorSubtractScalar(series, min), range), vocabulary);
-        var bins = engine.TensorClamp(engine.TensorFloor(scaled), NumOps.Zero, NumOps.FromDouble(VocabularySize - 1));
-        var tokens = bins.Cast<int>().ToArray();
+            engine.TensorDivideScalar(engine.TensorSubtractScalar(series.Cast<double>(), minValue), rangeValue),
+            (double)VocabularySize);
+        var bins = engine.TensorFloor(scaled).Cast<int>();
+        var tokens = engine.TensorClamp(bins, 0, VocabularySize - 1).ToArray();
 
         return (tokens, binEdges);
     }
@@ -266,12 +268,14 @@ public class TimeSeriesTokenizer<T>
         // Bin centres (edge_b + edge_(b+1)) / 2, gathered at each token clamped to [0, bins - 1].
         var engine = AiDotNetEngine.Current;
         int binCount = binEdges.Length - 1;
-        var edges = engine.Reshape(binEdges, new[] { binEdges.Length });
+        // The centres are formed in double and rounded to T once: in Half two adjacent edges near 40000 sum past
+        // 65504 and the centre came out infinite.
+        var edges = engine.Reshape(binEdges, new[] { binEdges.Length }).Cast<double>();
         var centers = engine.TensorMultiplyScalar(
             engine.TensorAdd(
                 engine.TensorSlice(edges, new[] { 0 }, new[] { binCount }),
                 engine.TensorSlice(edges, new[] { 1 }, new[] { binCount })),
-            NumOps.FromDouble(0.5));
+            0.5).Cast<T>();
         var bins = tokens.Select(token => Math.Max(0, Math.Min(token, binCount - 1))).ToArray();
         return engine.TensorTake(centers, new Tensor<int>(bins, new[] { bins.Length }));
     }

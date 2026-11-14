@@ -260,10 +260,17 @@ public static class BaselinePolicies
                 engine.TensorGreaterThan(m, ops.One),
                 engine.TensorReciprocal(vol),
                 new Tensor<T>(new[] { tradableCount }));
-            T sum = engine.TensorSum(invVol);
-            return ops.GreaterThan(sum, ops.Zero)
-                ? engine.TensorDivideScalar(invVol, sum).ToVector()
-                : new Vector<T>(tradableCount);
+            // Normalized by the largest inverse vol before the sum: each share is then at most 1 and the sum at most
+            // tradableCount. In Half four flat assets each have 1 / 2^-14 = 16384, whose raw sum (65536) is past
+            // 65504, so the weights came out 16384 / inf = 0 instead of 0.25 each.
+            T largest = engine.TensorMaxValue(invVol);
+            if (!ops.GreaterThan(largest, ops.Zero))
+            {
+                return new Vector<T>(tradableCount);
+            }
+
+            var share = engine.TensorDivideScalar(invVol, largest);
+            return engine.TensorDivideScalar(share, engine.TensorSum(share)).ToVector();
         };
     }
 

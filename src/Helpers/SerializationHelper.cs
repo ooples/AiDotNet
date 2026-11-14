@@ -150,6 +150,11 @@ public static class SerializationHelper<T>
         {
             writer.Write(Convert.ToChar(value));
         }
+        else if (typeof(T) == typeof(Half))
+        {
+            // Stored as its float widening, which is exact; ReadValue narrows it back to the same Half.
+            writer.Write((float)(Half)(object)value);
+        }
         else
         {
             throw new NotSupportedException($"Serialization of type {typeof(T)} is not supported.");
@@ -219,6 +224,10 @@ public static class SerializationHelper<T>
         else if (typeof(T) == typeof(char))
         {
             return (T)(object)reader.ReadChar();
+        }
+        else if (typeof(T) == typeof(Half))
+        {
+            return (T)(object)(Half)reader.ReadSingle();
         }
         else
         {

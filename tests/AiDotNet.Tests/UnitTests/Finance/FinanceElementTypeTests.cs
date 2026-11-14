@@ -28,6 +28,7 @@ public class FinanceElementTypeTests
         double stddev = Math.Sqrt(2.0 / 8);
         var weights = FeedforwardPolicyAgent<float>.CreateRandom(new[] { 64, 8 }, stddev, 11);
 
+        Assert.Equal(64 * 8, weights.Length);
         var rng = RandomHelper.CreateSeededRandom(11);
         for (int i = 0; i < weights.Length; i++)
         {
@@ -43,6 +44,7 @@ public class FinanceElementTypeTests
         double stddev = Math.Sqrt(2.0 / 32);
         var weights = RecurrentPolicyAgent<float>.CreateRandom(new[] { 16, 32 }, stddev, 7);
 
+        Assert.Equal(16 * 32, weights.Length);
         var rng = RandomHelper.CreateSeededRandom(7);
         for (int i = 0; i < weights.Length; i++)
         {
@@ -169,6 +171,7 @@ public class FinanceElementTypeTests
 
         var expected = (Half)(1.0 / assets);
         Assert.NotEqual((Half)(1.0 / 2048), expected);
+        Assert.Equal(assets, weights.Length);
         for (int i = 0; i < assets; i++)
         {
             Assert.Equal(expected, weights[i]);
@@ -347,5 +350,266 @@ public class FinanceElementTypeTests
             double expected = Math.Pow(0.94, i) / total;
             Assert.True(Math.Abs(expected - weights[i]) <= 1.5e-7 * expected, $"w[{i}] = {weights[i]}, expected {expected}.");
         }
+    }
+
+    // ---------------- review fixes: wide intermediates for Half and float ----------------
+
+    [Fact(Timeout = 60000)]
+    public async Task TokenizerQuantize_Half_RangePastHalfMaxKeepsTheMidpointInTheMiddleBin()
+    {
+        await Task.CompletedTask;
+
+        // master (double): range 80000, so 0 maps to (0 + 40000) / 80000 * 64 = token 32. In Half the range and
+        // value - min overflowed to infinity and every value but the maximum fell into bin 0.
+        var tokenizer = new TimeSeriesTokenizer<Half>(TimeSeriesTokenizationStrategy.Quantization, vocabularySize: 64);
+        var series = new Tensor<Half>(new[] { (Half)(-40000), (Half)0, (Half)40000, (Half)(-20000) }, new[] { 4 });
+
+        var (tokens, _) = tokenizer.Quantize(series);
+
+        Assert.Equal(new[] { 0, 32, 63, 16 }, tokens);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task TokenizerQuantize_Half_DefaultVocabularyClampsTheMaximumToTheLastToken()
+    {
+        await Task.CompletedTask;
+
+        // The maximum scales to 4096 and is clamped to 4095. In Half 4095 rounds to 4096, so a clamp in T
+        // returned token 4096, outside the vocabulary.
+        var tokenizer = new TimeSeriesTokenizer<Half>(TimeSeriesTokenizationStrategy.Quantization);
+        var series = new Tensor<Half>(new[] { (Half)0, (Half)1 }, new[] { 2 });
+
+        var (tokens, _) = tokenizer.Quantize(series);
+
+        Assert.Equal(new[] { 0, 4095 }, tokens);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task TokenizerDequantize_Half_LargeConstantSeriesKeepsItsValue()
+    {
+        await Task.CompletedTask;
+
+        // A constant series of 40000 gets edges 40000 + i / 64 (all rounded to 40000 in Half). The centre of bin 0
+        // is 40000; adding two edges in Half overflowed to infinity first.
+        var tokenizer = new TimeSeriesTokenizer<Half>(TimeSeriesTokenizationStrategy.Quantization, vocabularySize: 64);
+        var series = new Tensor<Half>(Enumerable.Repeat((Half)40000, 3).ToArray(), new[] { 3 });
+
+        var (tokens, edges) = tokenizer.Quantize(series);
+        var values = tokenizer.Dequantize(tokens, edges);
+
+        Assert.Equal(3, values.Length);
+        for (int i = 0; i < values.Length; i++)
+        {
+            Assert.Equal((Half)40000, values[i]);
+        }
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task PolicyGradientLossWeights_Half_LargeReturnsWhitenInDouble()
+    {
+        await Task.CompletedTask;
+
+        // gamma = 0: returns (1000, 0), centred (500, -500), std 500, weights +-1 * 0.5 / 0.04 = +-12.5. In Half the
+        // sum of squares (500000) overflowed, std became infinite and both weights zero.
+        var rewards = new[] { (Half)1000, Half.Zero };
+
+        var weights = PolicyGradientRollout<Half>.LossWeights(rewards, Half.Zero, 0.2);
+
+        Assert.Equal(2, weights.Length);
+        Assert.Equal(12.5, (double)weights[0], 1e-2);
+        Assert.Equal(-12.5, (double)weights[1], 1e-2);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task PolicyGradientLossWeights_Half_SmallSigmaGivesZeroForAZeroReturn()
+    {
+        await Task.CompletedTask;
+
+        // A one-step zero-reward episode whitens to 0. 0.5 / sigma^2 = 500000 is infinite in Half, and 0 * inf
+        // made the weight NaN.
+        var weights = PolicyGradientRollout<Half>.LossWeights(new[] { Half.Zero }, (Half)0.99, 0.001);
+
+        Assert.Equal(1, weights.Length);
+        Assert.Equal(0.0, (double)weights[0]);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task GaussianLogDensity_Half_VerySmallLogStdIsFinite()
+    {
+        await Task.CompletedTask;
+
+        // a = mu = 0, logStd = -20: log N = -0 - (-20) - 0.5 log(2 pi) = 19.0811. exp(-20) underflows to zero in
+        // Half, and dividing by it gave NaN.
+        var value = TradingAgentBase<Half>.GaussianLogDensity(
+            new Vector<Half>(new[] { Half.Zero }), new Vector<Half>(new[] { Half.Zero }),
+            new Vector<Half>(new[] { (Half)(-20) }));
+
+        Assert.Equal(20.0 - (0.5 * Math.Log(2.0 * Math.PI)), (double)value, 2e-2);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task RiskParity_Half_FourFlatAssetsGetEqualWeights()
+    {
+        await Task.CompletedTask;
+
+        // Four flat assets share the same inverse vol (1 / 2^-14 = 16384), so each weight is 0.25. Their raw sum,
+        // 65536, is past Half's 65504, and the weights came out 16384 / inf = 0.
+        var policy = BaselinePolicies.RiskParity<Half>(windowSize: 4, totalColumns: 4, tradableCount: 4);
+        var state = new Vector<Half>(Enumerable.Repeat((Half)1, 16).ToArray());
+
+        var weights = policy(state);
+
+        Assert.Equal(4, weights.Length);
+        for (int i = 0; i < 4; i++)
+        {
+            Assert.Equal(0.25, (double)weights[i]);
+        }
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task MaskedMae_Half_ErrorSumPastHalfMaxAveragesInDouble()
+    {
+        await Task.CompletedTask;
+
+        // 128 errors of 1000: MAE 1000. The Half error sum (128000) overflowed before the division.
+        const int n = 128;
+        var labels = new Vector<Half>(Enumerable.Repeat((Half)1, n).ToArray());
+        var predictions = new Vector<Half>(Enumerable.Repeat((Half)1001, n).ToArray());
+
+        var mae = StockformerMultiTaskLoss<Half>.MaskedMae(predictions, labels);
+
+        Assert.Equal(1000.0, (double)mae);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task CrossEntropy_Float_LargeCommonOffsetKeepsLogTwo()
+    {
+        await Task.CompletedTask;
+
+        // Equal logits give -log(1/2) = log 2 whatever their common value. With logsumexp materialized unshifted
+        // in float, 1e8 + log 2 rounded back to 1e8 and the loss came out 0.
+        var offset = StockformerMultiTaskLoss<float>.CrossEntropy(
+            new Vector<float>(new[] { 1e8f, 1e8f }), new Vector<float>(new[] { 0f }), 2);
+        var plain = StockformerMultiTaskLoss<float>.CrossEntropy(
+            new Vector<float>(new[] { 0f, 0f }), new Vector<float>(new[] { 0f }), 2);
+
+        Assert.Equal(Math.Log(2.0), offset, 1e-6);
+        Assert.Equal(plain, offset);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task GarchNegLogLikelihood_Half_FiniteTotalIsNotRejected()
+    {
+        await Task.CompletedTask;
+
+        // 40000 returns of +-1 under (mu, omega, alpha, beta) = (0, 1, 0, 0): sigma^2 = 1, so the NLL is
+        // 0.5 * (log(2 pi) * 40000 + 40000) = 56757.5, finite in Half. The Half constant term alone (73515)
+        // overflowed and the likelihood was rejected with an infinite penalty.
+        const int n = 40000;
+        var returns = new Tensor<Half>(
+            Enumerable.Range(0, n).Select(i => i % 2 == 0 ? (Half)1 : (Half)(-1)).ToArray(), new[] { n });
+        var model = new Garch11Model<Half>();
+
+        var nll = model.NegLogLikelihood(new Vector<Half>(new[] { Half.Zero, Half.One, Half.Zero, Half.Zero }), returns);
+
+        double expected = 0.5 * ((1.8378770664093453 * n) + n);
+        Assert.Equal(expected, (double)nll, 32.0);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task GarchForecastVolatility_Float_FirstHorizonIsTheOneStepVariance()
+    {
+        await Task.CompletedTask;
+
+        // alpha + beta = 0.99999994 makes the unconditional variance about 5.0e6 while the one-step variance is
+        // about 0.9. uncond + (var1 - uncond) rounds var1 to float's 0.5 spacing at 5e6 and gave 1.0 at h = 1.
+        var model = new Garch11Model<float>();
+        model.SetParameters(new Vector<float>(new[] { 0f, 0.3f, 0f, 0.99999994f }));
+
+        float var1 = model.ForecastNextVariance(new Vector<float>(new[] { 0f, 0f }));
+        var forecast = model.ForecastVolatility(new Tensor<float>(new[] { 0f, 0f }, new[] { 2 }), 3);
+
+        Assert.InRange(var1, 0.85f, 0.95f);
+        Assert.Equal((float)Math.Sqrt(var1), forecast[0]);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task GarchSerialize_Half_RoundTripsTheParameters()
+    {
+        await Task.CompletedTask;
+
+        // SerializationHelper had no Half case, so a fitted Half model threw NotSupportedException on Serialize.
+        var model = new Garch11Model<Half>();
+        var parameters = new[] { (Half)0.5, (Half)0.25, (Half)0.125, (Half)0.75 };
+        model.SetParameters(new Vector<Half>(parameters));
+
+        var restored = new Garch11Model<Half>();
+        restored.Deserialize(model.Serialize());
+
+        Assert.Equal(parameters, restored.GetParameters().ToArray());
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task GarchDeserialize_PreMeanThreeParameterCheckpoint_IsRejected()
+    {
+        await Task.CompletedTask;
+
+        // master wrote GARCH(1,1) as an int count and [omega, alpha, beta] as doubles. Read in the current
+        // (mu, omega, alpha, beta) layout, omega became mu and the unconditional variance indexed past the end.
+        var bytes = new byte[sizeof(int) + (3 * sizeof(double))];
+        BitConverter.GetBytes(3).CopyTo(bytes, 0);
+        Buffer.BlockCopy(new[] { 2e-6, 0.08, 0.90 }, 0, bytes, sizeof(int), 3 * sizeof(double));
+
+        var model = new Garch11Model<double>();
+
+        Assert.Throws<InvalidOperationException>(() => model.Deserialize(bytes));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task EGarchVariancePath_Double_VeryNegativeLogVarianceFollowsTheFlooredRecursion()
+    {
+        await Task.CompletedTask;
+
+        // An all-zero residual series backcasts ln(0) = -inf. NextVariance floors the previous variance at 1e-18
+        // (ln = L), so ln s2_0 = w + b L and ln s2_t = w + a (0 - sqrt(2/pi)) + b L. Unfloored, exp(-ln s2 / 2)
+        // overflowed and 0 * inf made the path NaN.
+        const int n = 6;
+        const double omega = -100, alpha = 0.1, gamma = 0.0, beta = 0.5;
+        double floor = Math.Log(1e-18);
+        var model = new EGarchModel<double>();
+        var variancePath = typeof(EGarchModel<double>).GetMethod("VariancePath", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("VariancePath not found.");
+
+        var path = (Tensor<double>)(variancePath.Invoke(model, new object[]
+        {
+            new Tensor<double>(new[] { n }), double.NegativeInfinity, new Vector<double>(new[] { omega, alpha, gamma, beta }),
+        }) ?? throw new InvalidOperationException("VariancePath returned null."));
+
+        Assert.Equal(n, path.Length);
+        double first = omega + (beta * floor);
+        Assert.Equal(Math.Exp(first), path[0], Math.Exp(first) * 1e-12);
+        double rest = omega - (alpha * Math.Sqrt(2.0 / Math.PI)) + (beta * floor);
+        for (int t = 1; t < n; t++)
+        {
+            Assert.Equal(Math.Exp(rest), path[t], Math.Exp(rest) * 1e-12);
+        }
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task VolatilityStatistics_Half_SquaresAndScatterAccumulateInDouble()
+    {
+        await Task.CompletedTask;
+
+        // Returns of +-100 over 8 samples: covariance 80000 / 7 = 11428.6, finite in Half, though the Half scatter
+        // sum (80000) overflowed. A return of 300 squares to 90000, so the realized vol of 300 overflowed too.
+        var alternating = new Tensor<Half>(
+            Enumerable.Range(0, 8).Select(i => i % 2 == 0 ? (Half)100 : (Half)(-100)).ToArray(), new[] { 8, 1 });
+        var large = new Tensor<Half>(Enumerable.Repeat((Half)300, 4).ToArray(), new[] { 4, 1 });
+
+        var covariance = VolatilityStatistics<Half>.Covariance(alternating);
+        var realized = VolatilityStatistics<Half>.RealizedVolatility(large);
+
+        Assert.Equal((double)(Half)(80000.0 / 7), (double)covariance[0, 0]);
+        Assert.Equal(300.0, (double)realized[0]);
     }
 }

@@ -7,8 +7,6 @@ namespace AiDotNet.Finance.Volatility;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 internal static class VolatilityStatistics<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
     /// <summary>
     /// Views a 2D <c>[samples, assets]</c> or 3D <c>[batch, sequence, assets]</c> return tensor as a
     /// <c>[samples, assets]</c> matrix (a 3D batch contributes <c>batch * sequence</c> samples).
@@ -30,35 +28,43 @@ internal static class VolatilityStatistics<T>
     }
 
     /// <summary>Sample covariance <c>[assets, assets]</c> with the <c>n - 1</c> denominator (at least 1).</summary>
-    internal static Tensor<T> Covariance(Tensor<T> returns)
-    {
-        var engine = AiDotNetEngine.Current;
-        var x = ReturnMatrix(returns);
-        int samples = x.Shape[0];
-        var means = engine.TensorDivideScalar(
-            engine.ReduceSum(x, new[] { 0 }, keepDims: true), NumOps.FromDouble(samples));
-        var centered = engine.TensorSubtract(x, engine.TensorBroadcastTo(means, x.Shape.ToArray()));
-        var scatter = engine.TensorMatMul(engine.TensorTranspose(centered), centered);
-        return engine.TensorDivideScalar(scatter, NumOps.FromDouble(Math.Max(1, samples - 1)));
-    }
+    /// <remarks>
+    /// The centring, the scatter products and their sums run in double and only the covariance is rounded to
+    /// <typeparamref name="T"/>: in Half a return of 300 already squares past 65504, and a scatter sum over many
+    /// samples overflows long before the averaged covariance does.
+    /// </remarks>
+    internal static Tensor<T> Covariance(Tensor<T> returns) => WideCovariance(returns).Cast<T>();
 
-    /// <summary>Correlation <c>cov_ij / (sqrt(cov_ii) * sqrt(cov_jj))</c>.</summary>
+    /// <summary>Correlation <c>cov_ij / (sqrt(cov_ii) * sqrt(cov_jj))</c>, from the double covariance.</summary>
     internal static Tensor<T> Correlation(Tensor<T> returns)
     {
         var engine = AiDotNetEngine.Current;
-        var covariance = Covariance(returns);
+        var covariance = WideCovariance(returns);
         var std = engine.TensorSqrt(engine.TensorDiagonal(covariance));
-        return engine.TensorDivide(covariance, engine.TensorOuter(std, std));
+        return engine.TensorDivide(covariance, engine.TensorOuter(std, std)).Cast<T>();
     }
 
     /// <summary>Per-asset realized volatility <c>sqrt(mean(r^2))</c>, <c>[assets]</c>.</summary>
+    /// <remarks>The squares and their sum run in double; only the volatility is rounded to
+    /// <typeparamref name="T"/>, so a Half or float sum of squares cannot overflow first.</remarks>
     internal static Tensor<T> RealizedVolatility(Tensor<T> returns)
     {
         var engine = AiDotNetEngine.Current;
-        var x = ReturnMatrix(returns);
+        var x = ReturnMatrix(returns).Cast<double>();
         var meanSquare = engine.TensorDivideScalar(
-            engine.ReduceSum(engine.TensorSquare(x), new[] { 0 }, keepDims: false), NumOps.FromDouble(x.Shape[0]));
-        return engine.TensorSqrt(meanSquare);
+            engine.ReduceSum(engine.TensorMultiply(x, x), new[] { 0 }, keepDims: false), (double)x.Shape[0]);
+        return engine.TensorSqrt(meanSquare).Cast<T>();
+    }
+
+    private static Tensor<double> WideCovariance(Tensor<T> returns)
+    {
+        var engine = AiDotNetEngine.Current;
+        var x = ReturnMatrix(returns).Cast<double>();
+        int samples = x.Shape[0];
+        var means = engine.TensorDivideScalar(engine.ReduceSum(x, new[] { 0 }, keepDims: true), (double)samples);
+        var centered = engine.TensorSubtract(x, engine.TensorBroadcastTo(means, x.Shape.ToArray()));
+        var scatter = engine.TensorMatMul(engine.TensorTranspose(centered), centered);
+        return engine.TensorDivideScalar(scatter, (double)Math.Max(1, samples - 1));
     }
 
     /// <summary>

@@ -22,9 +22,11 @@ internal static class PolicyGradientRollout<T>
 
     /// <summary>The per-step loss weights adv_t · 0.5 / σ², from the discounted returns whitened over the episode.</summary>
     /// <remarks>
-    /// The 1e-8 floor on the standard deviation is a <see cref="FinanceNumerics.Tolerance{T}"/> (it rounds to zero
-    /// in Half), and the whitening divides before it scales: a constant-return episode then gives 0 / floor = 0
-    /// rather than 0 times an overflowed 0.5 / (σ² · floor).
+    /// The whitening and the scaling run in double and only the finished weights are rounded to
+    /// <typeparamref name="T"/>. In Half the sum of squared centred returns passes 65504 for returns of a few
+    /// hundred (the standard deviation became infinite and every weight zero), the 1e-8 floor rounds to zero, and
+    /// 0.5 / σ² overflows for σ below about 0.0028, so a zero normalized return times that infinite coefficient
+    /// was NaN. A constant-return episode gives 0 / 1e-8 = 0.
     /// </remarks>
     public static Tensor<T> LossWeights(IReadOnlyList<T> rewards, T gamma, double sigma)
     {
@@ -36,13 +38,12 @@ internal static class PolicyGradientRollout<T>
 
         var returns = AiDotNet.Helpers.LinearRecurrence<T>.DiscountedReturns(
             new Tensor<T>(rewards.ToArray(), new[] { n }), gamma);
-        var centred = Engine.TensorSubtractScalar(returns, Engine.TensorMean(returns));
-        T std = NumOps.Add(
-            NumOps.Sqrt(NumOps.Divide(Engine.TensorSumOfSquares(centred), NumOps.FromDouble(n))),
-            FinanceNumerics.Tolerance<T>(1e-8));
+        var wide = returns.Cast<double>();
+        var centred = Engine.TensorSubtractScalar(wide, Engine.TensorMean(wide));
+        double std = Math.Sqrt(Engine.TensorSum(Engine.TensorMultiply(centred, centred)) / n) + 1e-8;
 
-        T halfInvSigma2 = NumOps.FromDouble(0.5 / (sigma * sigma));
-        return Engine.TensorMultiplyScalar(Engine.TensorDivideScalar(centred, std), halfInvSigma2);
+        double halfInvSigma2 = 0.5 / (sigma * sigma);
+        return Engine.TensorMultiplyScalar(Engine.TensorDivideScalar(centred, std), halfInvSigma2).Cast<T>();
     }
 
     /// <summary>
