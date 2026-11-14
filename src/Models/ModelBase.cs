@@ -565,6 +565,10 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
         return stream.ToArray();
     }
 
+    /// <summary>The parameter vector restored from the doubles the serialization payload stores.</summary>
+    private static Vector<T> ParametersFromPayload(double[] payload) =>
+        payload.Length == 0 ? new Vector<T>(0) : new Tensor<double>(payload, new[] { payload.Length }).Cast<T>().ToVector();
+
     /// <inheritdoc/>
     public virtual void Deserialize(byte[] data)
     {
@@ -596,10 +600,14 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
 
         int count = reader.ReadInt32();
         var parameters = new Vector<T>(count);
+        var payload = new double[count];
         for (int i = 0; i < count; i++)
         {
-            parameters[i] = NumOps.FromDouble(reader.ReadDouble());
+            payload[i] = reader.ReadDouble();
         }
+
+        // Convert the whole payload to T at once, then fill the parameter vector.
+        ParametersFromPayload(payload).AsSpan().CopyTo(parameters.AsWritableSpan());
 
         // Restore STRUCTURE before pouring the flat parameter vector into it. A fitted tree can have
         // one constant in its constructor-created shell and two after its declared node graph is
