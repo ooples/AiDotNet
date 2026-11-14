@@ -93,56 +93,74 @@ public class AdversarialRobustnessOptions<T> : ModelOptions
     // ========================================================================
     // ADVERSARIAL ATTACK OPTIONS (for robustness testing)
     // ========================================================================
+    //
+    // These settings are read by the robustness methods of the trained model's result:
+    // AiModelResult.EvaluateRobustness(inputs, labels), EvaluateRobustnessWithAutoAttack,
+    // GenerateAdversarialExample(input, label) and EvaluateConfiguredRobustness. Invalid values are
+    // rejected there with an ArgumentOutOfRangeException or InvalidOperationException naming the setting.
 
     /// <summary>
     /// Gets or sets whether to enable adversarial robustness testing.
     /// </summary>
     /// <remarks>
-    /// <para><b>For Beginners:</b> When enabled, the model is tested against adversarial attacks
-    /// during evaluation to measure its robustness.</para>
+    /// <para><b>For Beginners:</b> When enabled, <c>AiModelResult.EvaluateConfiguredRobustness</c> tests the
+    /// model against every attack in <see cref="AttackMethods"/>; when disabled that method refuses to run.</para>
     /// </remarks>
     public bool EnableRobustnessTesting { get; set; } = false;
 
     /// <summary>
     /// Gets or sets the maximum perturbation budget (epsilon) for attacks.
     /// </summary>
+    /// <value>Defaults to 0.1; must be positive. An epsilon passed to a robustness method overrides it.</value>
     public double AttackEpsilon { get; set; } = 0.1;
 
     /// <summary>
     /// Gets or sets the step size for iterative attacks.
     /// </summary>
+    /// <value>Defaults to 0.01; must be positive. PGD steps by this much per iteration.</value>
     public double AttackStepSize { get; set; } = 0.01;
 
     /// <summary>
     /// Gets or sets the number of iterations for iterative attacks.
     /// </summary>
+    /// <value>Defaults to 40; must be at least 1. PGD takes this many steps and Carlini-Wagner this many
+    /// optimizer steps.</value>
     public int AttackIterations { get; set; } = 40;
 
     /// <summary>
     /// Gets or sets the norm type for perturbation constraints.
     /// </summary>
-    /// <value>"L-infinity", "L2", or "L1"</value>
-    public string AttackNormType { get; set; } = "L-infinity";
+    /// <value>Defaults to <see cref="AdversarialNormType.LInfinity"/>. Selects the PGD step (gradient sign for
+    /// L-infinity, normalized gradient for L2), its projection ball and its random start.</value>
+    public AdversarialNormType AttackNormType { get; set; } = AdversarialNormType.LInfinity;
 
     /// <summary>
     /// Gets or sets whether to use targeted attacks.
     /// </summary>
+    /// <remarks>
+    /// When enabled the attacks push every input toward <see cref="TargetClass"/>, and the attack success rate
+    /// counts the inputs whose adversarial prediction becomes that class.
+    /// </remarks>
     public bool UseTargetedAttacks { get; set; } = false;
 
     /// <summary>
     /// Gets or sets the target class for targeted attacks.
     /// </summary>
+    /// <value>Defaults to 0; with targeted attacks it must be a valid class index of the model output.</value>
     public int TargetClass { get; set; } = 0;
 
     /// <summary>
     /// Gets or sets whether to use random initialization for attacks.
     /// </summary>
+    /// <value>Defaults to true: PGD starts from a uniformly random point of the epsilon ball.</value>
     public bool UseRandomStartForAttacks { get; set; } = true;
 
     /// <summary>
     /// Gets or sets which attack methods to use for testing.
     /// </summary>
-    public string[] AttackMethods { get; set; } = new[] { "FGSM", "PGD", "CW" };
+    /// <value>Defaults to FGSM, PGD and Carlini-Wagner; must be non-empty and free of duplicates.</value>
+    public AdversarialAttackMethod[] AttackMethods { get; set; } =
+        new[] { AdversarialAttackMethod.Fgsm, AdversarialAttackMethod.Pgd, AdversarialAttackMethod.CarliniWagner };
 
     // ========================================================================
     // ADVERSARIAL DEFENSE OPTIONS
@@ -208,8 +226,8 @@ public class AdversarialRobustnessOptions<T> : ModelOptions
     /// <summary>
     /// Gets or sets the certification method to use.
     /// </summary>
-    /// <value>"RandomizedSmoothing", "IBP", or "CROWN"</value>
-    public string CertificationMethod { get; set; } = "RandomizedSmoothing";
+    /// <value>Defaults to <see cref="CertifiedDefenseMethod.RandomizedSmoothing"/>.</value>
+    public CertifiedDefenseMethod CertificationMethod { get; set; } = CertifiedDefenseMethod.RandomizedSmoothing;
 
     /// <summary>
     /// Gets or sets the number of samples for randomized smoothing.
@@ -234,7 +252,7 @@ public class AdversarialRobustnessOptions<T> : ModelOptions
     /// <summary>
     /// Gets or sets the norm type for certification.
     /// </summary>
-    public string CertificationNormType { get; set; } = "L2";
+    public AdversarialNormType CertificationNormType { get; set; } = AdversarialNormType.L2;
 
     // ========================================================================
     // CONTENT MODERATION OPTIONS (for LLMs)
@@ -389,7 +407,13 @@ public class AdversarialRobustnessOptions<T> : ModelOptions
             TrainingAttackMethod = "PGD",
             DefenseEpsilon = 0.1,
             EnableRobustnessTesting = true,
-            AttackMethods = new[] { "FGSM", "PGD", "CW", "AutoAttack" }
+            AttackMethods = new[]
+            {
+                AdversarialAttackMethod.Fgsm,
+                AdversarialAttackMethod.Pgd,
+                AdversarialAttackMethod.CarliniWagner,
+                AdversarialAttackMethod.AutoAttack
+            }
         };
     }
 }

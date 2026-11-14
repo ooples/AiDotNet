@@ -326,41 +326,38 @@ public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
     {
         // Train a reward model that scores input-output pairs
         // Use preference data to learn which outputs are preferred
-        var outputs = feedbackData.Outputs;
-        var preferences = feedbackData.Preferences;
-
-        // Compute centroid of preferred outputs as a simple reward signal
-        var preferredCentroid = new T[outputs.Columns];
-        int preferredCount = 0;
-
-        foreach (var (preferred, _) in preferences)
-        {
-            if (preferred >= 0 && preferred < outputs.Rows)
-            {
-                var row = outputs.GetRow(preferred);
-                for (int c = 0; c < outputs.Columns; c++)
-                {
-                    preferredCentroid[c] = NumOps.Add(preferredCentroid[c], row[c]);
-                }
-                preferredCount++;
-            }
-        }
-
-        if (preferredCount > 0)
-        {
-            T divisor = NumOps.FromDouble(preferredCount);
-            for (int c = 0; c < preferredCentroid.Length; c++)
-            {
-                preferredCentroid[c] = NumOps.Divide(preferredCentroid[c], divisor);
-            }
-        }
-
-        var centroidVec = new Vector<T>(preferredCentroid);
+        var centroidVec = PreferredCentroid(feedbackData);
 
         return (input, output) =>
         {
             return VectorHelper.CosineSimilarity(output, centroidVec);
         };
+    }
+
+    /// <summary>
+    /// The centroid of the preferred outputs (zero when no preference names a valid row).
+    /// </summary>
+    /// <remarks>
+    /// Summed and divided in double and converted to T once: in Half three preferred entries of 30000 already
+    /// sum past 65504, and a count above 2048 is not exact, so a running sum in T lost the centroid.
+    /// </remarks>
+    internal static Vector<T> PreferredCentroid(AlignmentFeedbackData<T> feedbackData)
+    {
+        var outputs = feedbackData.Outputs;
+        var preferredSum = new Vector<double>(outputs.Columns);
+        int preferredCount = 0;
+
+        foreach (var (preferred, _) in feedbackData.Preferences)
+        {
+            if (preferred >= 0 && preferred < outputs.Rows)
+            {
+                preferredSum = Engine.Add(preferredSum, outputs.GetRow(preferred).AsTensor().Contiguous().Cast<double>().ToVector());
+                preferredCount++;
+            }
+        }
+
+        var centroid = preferredCount > 0 ? Engine.Divide(preferredSum, (double)preferredCount) : preferredSum;
+        return centroid.AsTensor().Cast<T>().ToVector();
     }
 
     private IPredictiveModel<T, Vector<T>, Vector<T>> AdversarialRLHFFinetune(
@@ -427,45 +424,43 @@ public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
         // Gradient-free PGD approximation: uses random sign perturbation since this
         // defense operates on opaque IPredictiveModel without gradient access.
         // Each step applies a random direction perturbation projected to the epsilon ball.
-        var result = new T[input.Length];
-        for (int i = 0; i < input.Length; i++)
+        // The draws are taken in the original order (all coordinates of the start, then all of each step).
+        int n = input.Length;
+        var start = new double[n];
+        for (int i = 0; i < n; i++)
         {
-            double val = NumOps.ToDouble(input[i]);
-            double perturbation = (random.NextDouble() * 2.0 - 1.0) * _perturbationBudget;
-            result[i] = NumOps.FromDouble(val + perturbation);
+            start[i] = (random.NextDouble() * 2.0 - 1.0) * _perturbationBudget;
         }
 
-        // Iterative refinement (simplified PGD)
+        var original = input.AsTensor();
+        var result = Engine.TensorAdd(original, ToTensor(start));
+
+        // Iterative refinement (simplified PGD): a signed step, then projection onto the epsilon ball.
+        T budget = NumOps.FromDouble(_perturbationBudget);
+        T negativeBudget = NumOps.Negate(budget);
+        T stepSize = NumOps.FromDouble(_perturbationBudget / _adversarialSteps);
         for (int step = 1; step < _adversarialSteps; step++)
         {
-            for (int i = 0; i < input.Length; i++)
+            var signs = new double[n];
+            for (int i = 0; i < n; i++)
             {
-                double original = NumOps.ToDouble(input[i]);
-                double current = NumOps.ToDouble(result[i]);
-                double sign = random.NextDouble() > 0.5 ? 1.0 : -1.0;
-                double stepSize = _perturbationBudget / _adversarialSteps;
-                double newVal = current + sign * stepSize;
-
-                // Project to epsilon ball
-                double diff = newVal - original;
-                if (diff > _perturbationBudget) diff = _perturbationBudget;
-                if (diff < -_perturbationBudget) diff = -_perturbationBudget;
-                result[i] = NumOps.FromDouble(original + diff);
+                signs[i] = random.NextDouble() > 0.5 ? 1.0 : -1.0;
             }
+
+            var moved = Engine.TensorAdd(result, Engine.TensorMultiplyScalar(ToTensor(signs), stepSize));
+            var offset = Engine.TensorClamp(Engine.TensorSubtract(moved, original), negativeBudget, budget);
+            result = Engine.TensorAdd(original, offset);
         }
 
-        return new Vector<T>(result);
+        return result.ToVector();
     }
+
+    /// <summary>A double buffer of random draws as a tensor of T.</summary>
+    private static Tensor<T> ToTensor(double[] values) => new Tensor<double>(values, new[] { values.Length }).Cast<T>();
 
     private static Vector<T> CopyVector(Vector<T> source)
     {
-        var data = new T[source.Length];
-        for (int i = 0; i < source.Length; i++)
-        {
-            data[i] = source[i];
-        }
-
-        return new Vector<T>(data);
+        return new Vector<T>(source.AsSpan().ToArray());
     }
 
     private static Vector<T> ScaleVector(Vector<T> v, double scalar)
@@ -483,14 +478,10 @@ public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
         // KL penalty gradient: _options.KLCoefficient * (currentParams - referenceParams)
         // This pulls parameters back toward the reference model to prevent drift
         int len = Math.Min(currentParams.Length, referenceParams.Length);
-        var result = new T[len];
-        for (int i = 0; i < len; i++)
-        {
-            double diff = NumOps.ToDouble(currentParams[i]) - NumOps.ToDouble(referenceParams[i]);
-            result[i] = NumOps.FromDouble(_options.KLCoefficient * diff);
-        }
-
-        return new Vector<T>(result);
+        var difference = Engine.TensorSubtract(
+            Engine.TensorSlice(currentParams.AsTensor(), new[] { 0 }, new[] { len }),
+            Engine.TensorSlice(referenceParams.AsTensor(), new[] { 0 }, new[] { len }));
+        return Engine.TensorMultiplyScalar(difference, NumOps.FromDouble(_options.KLCoefficient)).ToVector();
     }
 
     private Vector<T> GetPreferredTarget(AlignmentFeedbackData<T> feedbackData, int inputIndex)
@@ -530,13 +521,13 @@ public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
         var probes = new List<Vector<T>>();
         for (int p = 0; p < numProbes; p++)
         {
-            var data = new T[inputDim];
+            var data = new double[inputDim];
             for (int i = 0; i < inputDim; i++)
             {
-                data[i] = NumOps.FromDouble((random.NextDouble() * 2.0 - 1.0) * _perturbationBudget * 2);
+                data[i] = (random.NextDouble() * 2.0 - 1.0) * _perturbationBudget * 2;
             }
 
-            probes.Add(new Vector<T>(data));
+            probes.Add(ToTensor(data).ToVector());
         }
 
         return probes;
@@ -548,21 +539,9 @@ public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
         // Higher output variance indicates less controlled / less compliant behavior
         if (output.Length == 0) return 0.0;
 
-        double sum = 0;
-        for (int i = 0; i < output.Length; i++)
-        {
-            sum += NumOps.ToDouble(output[i]);
-        }
-
-        double mean = sum / output.Length;
-        double varianceSum = 0;
-        for (int i = 0; i < output.Length; i++)
-        {
-            double diff = NumOps.ToDouble(output[i]) - mean;
-            varianceSum += diff * diff;
-        }
-
-        double variance = varianceSum / output.Length;
+        var values = output.AsTensor();
+        var centered = Engine.TensorAddScalar(values, NumOps.Negate(Engine.TensorMean(values)));
+        double variance = NumOps.ToDouble(Engine.TensorMean(Engine.TensorSquare(centered)));
 
         // Low variance + moderate mean = more compliant behavior
         // Principles with "harm" or "safe" keywords enforce stricter thresholds
@@ -581,25 +560,15 @@ public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
         // This pushes the output toward moderate, controlled values
         if (output.Length == 0) return output;
 
-        double sum = 0;
-        for (int i = 0; i < output.Length; i++)
-        {
-            sum += NumOps.ToDouble(output[i]);
-        }
-
-        double mean = sum / output.Length;
-
-        // Dampen toward the mean — reduce variance while preserving overall direction
+        // Dampen toward the mean — reduce variance while preserving overall direction:
+        // mean + (x - mean) d = d x + (1 - d) mean.
+        var values = output.AsTensor();
+        T mean = Engine.TensorMean(values);
         double dampeningFactor = principle.Contains("harm", StringComparison.OrdinalIgnoreCase) ? 0.3 : 0.5;
-        var result = new T[output.Length];
-        for (int i = 0; i < output.Length; i++)
-        {
-            double val = NumOps.ToDouble(output[i]);
-            double dampened = mean + (val - mean) * dampeningFactor;
-            result[i] = NumOps.FromDouble(dampened);
-        }
-
-        return new Vector<T>(result);
+        var dampened = Engine.TensorAddScalar(
+            Engine.TensorMultiplyScalar(values, NumOps.FromDouble(dampeningFactor)),
+            NumOps.Multiply(mean, NumOps.FromDouble(1.0 - dampeningFactor)));
+        return dampened.ToVector();
     }
 
     private sealed class AlignmentWrappedModel : IPredictiveModel<T, Vector<T>, Vector<T>>
@@ -626,15 +595,11 @@ public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
             var reward = _rewardModel(input, output);
 
             // Adjust output based on reward signal: push toward higher-reward regions
-            var adjusted = new T[output.Length];
             double adjustment = reward * (1.0 - _klCoefficient) * 0.1;
-            for (int i = 0; i < output.Length; i++)
-            {
-                double val = NumOps.ToDouble(output[i]);
-                adjusted[i] = NumOps.FromDouble(MathHelper.Clamp(val + adjustment, 0.0, 1.0));
-            }
+            var shifted = Engine.TensorAddScalar(output.AsTensor(), NumOps.FromDouble(adjustment));
+            var adjusted = Engine.TensorClamp(shifted, NumOps.Zero, NumOps.One).ToVector();
 
-            return new Vector<T>(adjusted);
+            return adjusted;
         }
 
         public ModelMetadata<T> GetModelMetadata() => _baseModel.GetModelMetadata();

@@ -847,7 +847,7 @@ public class AdversarialRobustnessIntegrationTests
 
         // Assert
         Assert.NotNull(options);
-        Assert.Equal("IBP", options.CertificationMethod);
+        Assert.Equal(CertifiedDefenseMethod.IntervalBoundPropagation, options.CertificationMethod);
     }
 
     [Fact(Timeout = 120000)]
@@ -929,7 +929,7 @@ public class AdversarialRobustnessIntegrationTests
         var newOptions = ibp.GetOptions();
 
         // Assert
-        Assert.Equal("IBP", newOptions.CertificationMethod);
+        Assert.Equal(CertifiedDefenseMethod.IntervalBoundPropagation, newOptions.CertificationMethod);
     }
 
     [Fact(Timeout = 120000)]
@@ -1005,7 +1005,7 @@ public class AdversarialRobustnessIntegrationTests
 
         // Assert
         Assert.NotNull(options);
-        Assert.Equal("CROWN", options.CertificationMethod);
+        Assert.Equal(CertifiedDefenseMethod.Crown, options.CertificationMethod);
         Assert.True(options.UseTightBounds);
     }
 
@@ -1093,7 +1093,7 @@ public class AdversarialRobustnessIntegrationTests
         var newOptions = crown.GetOptions();
 
         // Assert
-        Assert.Equal("CROWN", newOptions.CertificationMethod);
+        Assert.Equal(CertifiedDefenseMethod.Crown, newOptions.CertificationMethod);
         Assert.True(newOptions.UseTightBounds);
     }
 
