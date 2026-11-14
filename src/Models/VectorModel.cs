@@ -97,6 +97,9 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
     /// The fixed multiplier is a deliberate double-precision policy: combined with
     /// <c>max(rows, columns) * sigmaMax</c>, it rejects numerically meaningless singular directions
     /// while preserving useful rank for the small and moderately conditioned systems targeted here.
+    /// It is floored at the machine epsilon of <typeparamref name="T"/>, the LAPACK/numpy default
+    /// (<c>rcond = max(rows, columns) * eps</c>), because float and Half cannot resolve singular values
+    /// below their own precision (and 1e-12 rounds to 0 in Half).
     /// </remarks>
     private const double PseudoInverseTolerance = 1e-12;
 
@@ -322,17 +325,17 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
         // Compute loss gradient w.r.t. predictions: ∂L/∂y_pred
         var predictionGradient = Tensor<T>.FromVector(loss.ComputeGradient(predictions, target));
 
-        // ∂L/∂coefficients = (1/n) * X^T * ∂L/∂y_pred and ∂L/∂intercept = (1/n) * sum(∂L/∂y_pred)
-        T sampleCount = NumOps.FromDouble(input.Rows);
+        // ∂L/∂coefficients = (1/n) * X^T * ∂L/∂y_pred and ∂L/∂intercept = (1/n) * sum(∂L/∂y_pred). The 1/n is
+        // applied before the sums, so the gradient cannot overflow in low precision when the sums would.
+        var scaledGradient = Engine.TensorDivideScalar(predictionGradient, NumOps.FromDouble(input.Rows));
         var weightGradient = Engine.Reshape(
             Engine.TensorMatMul(
                 Engine.TensorTranspose(Tensor<T>.FromMatrix(input)),
-                Engine.Reshape(predictionGradient, new[] { input.Rows, 1 })),
+                Engine.Reshape(scaledGradient, new[] { input.Rows, 1 })),
             new[] { Coefficients.Length });
         var interceptGradient = new Tensor<T>(new[] { 1 });
-        Engine.TensorFill(interceptGradient, Engine.TensorSum(predictionGradient));
-        var gradients = Engine.TensorConcatenate(new[] { weightGradient, interceptGradient }, 0);
-        return Engine.TensorDivideScalar(gradients, sampleCount).ToVector();
+        Engine.TensorFill(interceptGradient, Engine.TensorSum(scaledGradient));
+        return Engine.TensorConcatenate(new[] { weightGradient, interceptGradient }, 0).ToVector();
     }
 
     /// <summary>
@@ -486,8 +489,10 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
             var shape = new[] { X.Rows, X.Columns };
             var features = Tensor<T>.FromMatrix(X);
             var targets = Tensor<T>.FromVector(y);
-            var featureMeans = Engine.ReduceMean(features, new[] { 0 }, true);
-            T targetMean = Engine.TensorMean(targets);
+            // Means divide by the count before summing, so the sums cannot overflow in low precision (65504 in Half).
+            T sampleCount = NumOps.FromDouble(X.Rows);
+            var featureMeans = Engine.ReduceSum(Engine.TensorDivideScalar(features, sampleCount), new[] { 0 }, true);
+            T targetMean = Engine.TensorSum(Engine.TensorDivideScalar(targets, sampleCount));
 
             var centeredX = Engine.TensorSubtract(features, Engine.TensorBroadcastTo(featureMeans, shape)).ToMatrix();
             var centeredY = Engine.TensorSubtractScalar(targets, targetMean).ToVector();
@@ -542,8 +547,9 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
             sigmaMax = largest;
         }
 
+        double relativeTolerance = Math.Max(PseudoInverseTolerance, MatrixExtensions.MachineEpsilon<T>());
         T tolerance = NumOps.Multiply(
-            NumOps.FromDouble(Math.Max(matrix.Rows, matrix.Columns) * PseudoInverseTolerance),
+            NumOps.FromDouble(Math.Max(matrix.Rows, matrix.Columns) * relativeTolerance),
             sigmaMax);
 
         // x = sum over kept singular triplets of (u_i · y / s_i) v_i, i.e. V_k diag(1 / s_k) U_k^T y, where a
