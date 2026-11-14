@@ -104,7 +104,11 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
     /// Lazy ctor with the convolutions' bias stated.
     /// </summary>
     /// <param name="growthRate">The number of channels this layer adds.</param>
-    /// <param name="bnMomentum">Batch normalization momentum.</param>
+    /// <param name="bnMomentum">
+    /// Batch normalization momentum in PyTorch's convention: the weight of the new batch in the running statistics
+    /// (torchvision DenseNet's 0.1). <see cref="BatchNormalizationLayer{T}"/> takes the weight kept from the prior
+    /// statistics instead, so its layers receive <c>1 - bnMomentum</c>.
+    /// </param>
     /// <param name="convolutionBias">
     /// Whether the convolutions carry a bias. Every DenseNet convolution feeds a BatchNorm (directly, or through the
     /// concatenation or the transition's average pool), whose shift makes a per-channel bias unobservable, so the
@@ -121,9 +125,13 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
         _convolutionBias = convolutionBias;
         _relu = new ReLUActivation<T>();
 
-        int bottleneckChannels = 4 * growthRate;
+        if (!(bnMomentum >= 0.0 && bnMomentum <= 1.0))
+            throw new ArgumentOutOfRangeException(nameof(bnMomentum), bnMomentum, "Batch normalization momentum must be in [0, 1].");
 
-        _bn1 = new BatchNormalizationLayer<T>(momentum: bnMomentum);
+        int bottleneckChannels = 4 * growthRate;
+        double runningStatisticsRetention = 1.0 - bnMomentum;
+
+        _bn1 = new BatchNormalizationLayer<T>(momentum: runningStatisticsRetention);
         _conv1x1 = new ConvolutionalLayer<T>(
             outputDepth: bottleneckChannels,
             kernelSize: 1,
@@ -131,7 +139,7 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
             padding: 0,
             activationFunction: new IdentityActivation<T>(),
             biasMode: convolutionBias ? BiasMode.Auto : BiasMode.Never);
-        _bn2 = new BatchNormalizationLayer<T>(momentum: bnMomentum);
+        _bn2 = new BatchNormalizationLayer<T>(momentum: runningStatisticsRetention);
         _conv3x3 = new ConvolutionalLayer<T>(
             outputDepth: growthRate,
             kernelSize: 3,

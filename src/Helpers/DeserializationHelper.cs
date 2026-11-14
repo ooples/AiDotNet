@@ -2440,7 +2440,7 @@ public static class DeserializationHelper
             double bnMomentum = TryGetDouble(additionalParams, "BnMomentum") ?? 0.1;
 
             // A checkpoint written before ConvolutionBias existed has a bias on every convolution.
-            bool convolutionBias = TryGetBool(additionalParams, "ConvolutionBias") ?? true;
+            bool convolutionBias = ReadBooleanOption(additionalParams, "ConvolutionBias", true);
             var lazyCtor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(double), typeof(bool) });
             var ctor = lazyCtor is null
                 ? type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(double) })
@@ -2534,7 +2534,7 @@ public static class DeserializationHelper
             int outputChannels = TryGetInt(additionalParams, "OutputChannels") ?? (outputShape.Length > 1 ? outputShape[1] : outputShape[0]);
             double compressionFactor = inputChannels > 0 ? (double)outputChannels / inputChannels : 0.5;
 
-            bool convolutionBias = TryGetBool(additionalParams, "ConvolutionBias") ?? true;
+            bool convolutionBias = ReadBooleanOption(additionalParams, "ConvolutionBias", true);
             var lazyCtor = type.GetConstructor(new Type[] { typeof(double), typeof(bool) });
             var ctor = lazyCtor is null
                 ? type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(double) })
@@ -4455,7 +4455,7 @@ public static class DeserializationHelper
         // Passing null activations lets the ctor restore its Tanh (candidate) / Sigmoid (gate) defaults,
         // which match the model's default GRU construction.
         // A layer saved before ResetAfter existed applied the reset gate before the recurrent product.
-        bool resetAfter = TryGetBool(additionalParams, "ResetAfter") ?? false;
+        bool resetAfter = ReadBooleanOption(additionalParams, "ResetAfter", false);
         return new GRULayer<T>(hiddenSize, returnSequences, activation, recurrentActivation, stateful: false,
             resetAfter: resetAfter);
     }
@@ -4919,6 +4919,19 @@ public static class DeserializationHelper
                 return parsed;
         }
         return null;
+    }
+
+    /// <summary>
+    /// A persisted behaviour flag: <paramref name="legacyDefault"/> when the key is absent (a checkpoint written before
+    /// the flag existed), the parsed value when present. A present value that is not a boolean throws, because a
+    /// silently defaulted flag can load the same parameter count and compute a different layer.
+    /// </summary>
+    private static bool ReadBooleanOption(Dictionary<string, object>? parameters, string key, bool legacyDefault)
+    {
+        if (parameters is null || !parameters.TryGetValue(key, out var value) || value is null)
+            return legacyDefault;
+        return TryGetBool(parameters, key)
+            ?? throw new InvalidOperationException($"Invalid '{key}' layer metadata '{value}'; expected true or false.");
     }
 
     private static string? TryGetString(Dictionary<string, object>? parameters, string key)

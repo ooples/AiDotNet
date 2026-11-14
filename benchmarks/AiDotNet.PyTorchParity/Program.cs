@@ -1233,12 +1233,16 @@ internal sealed class ResourceMonitor : IDisposable
         });
         // GPU runs only (#2561's "peak VRAM must not exceed PyTorch's"): nvidia-smi's memory.used, exactly what
         // benchmark.py's ResourceMonitor samples for torch on a CUDA device. It is device-wide, as on the torch side.
-        if (AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine)
+        // The sample is pinned to the engine's GPU (nvidia-smi --id); when that GPU cannot be identified, VRAM is
+        // not reported rather than read from whichever GPU nvidia-smi lists first.
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        string? gpuId = engine is AiDotNet.Tensors.Engines.DirectGpuTensorEngine ? NvidiaSmi.ResolveDevice(engine.Name) : null;
+        if (gpuId is not null)
             _gpuTask = Task.Run(async () =>
             {
                 while (!_cts.IsCancellationRequested)
                 {
-                    var line = NvidiaSmi.TryRead();
+                    var line = NvidiaSmi.TryRead(gpuId);
                     var parts = line?.Split(',');
                     if (parts is { Length: >= 2 } && double.TryParse(parts[1].Trim(),
                             System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double mem))
@@ -1286,22 +1290,52 @@ internal sealed class ResourceMonitor : IDisposable
 
 internal static class NvidiaSmi
 {
-    public static string? TryRead()
+    /// <summary>utilization.gpu and memory.used of the GPU <paramref name="id"/> (an nvidia-smi index or UUID).</summary>
+    public static string? TryRead(string? id = null)
+    {
+        var arguments = new List<string> { "--query-gpu=utilization.gpu,memory.used", "--format=csv,noheader,nounits" };
+        if (id is not null) arguments.Add($"--id={id}");
+        return Query(arguments)?.FirstOrDefault();
+    }
+
+    /// <summary>
+    /// The nvidia-smi id of the GPU the engine runs on, or null when it cannot be told apart. A UUID in
+    /// CUDA_VISIBLE_DEVICES names it outright; otherwise the single GPU, or the single GPU whose name appears in
+    /// the engine description. Tensors exposes no device UUID or PCI bus id, so two GPUs of the same model are
+    /// ambiguous unless CUDA_VISIBLE_DEVICES pins one.
+    /// </summary>
+    public static string? ResolveDevice(string engineDescription)
+    {
+        var visible = Environment.GetEnvironmentVariable("CUDA_VISIBLE_DEVICES")?.Split(',')[0].Trim();
+        if (visible is not null && visible.StartsWith("GPU-", StringComparison.OrdinalIgnoreCase))
+            return visible;
+
+        var rows = Query(new List<string> { "--query-gpu=index,name", "--format=csv,noheader" });
+        if (rows is null) return null;
+        var gpus = rows.Select(row => row.Split(',', 2)).Where(parts => parts.Length == 2)
+            .Select(parts => (Index: parts[0].Trim(), Name: parts[1].Trim())).ToList();
+        if (gpus.Count == 1) return gpus[0].Index;
+
+        var named = gpus.Where(gpu => engineDescription.Contains(gpu.Name, StringComparison.OrdinalIgnoreCase)).ToList();
+        return named.Count == 1 ? named[0].Index : null;
+    }
+
+    private static List<string>? Query(List<string> arguments)
     {
         try
         {
-            using var process = Process.Start(new ProcessStartInfo
-            {
-                FileName = "nvidia-smi",
-                ArgumentList = { "--query-gpu=utilization.gpu,memory.used", "--format=csv,noheader,nounits" },
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-            });
+            var start = new ProcessStartInfo { FileName = "nvidia-smi", RedirectStandardOutput = true, RedirectStandardError = true };
+            foreach (var argument in arguments) start.ArgumentList.Add(argument);
+            using var process = Process.Start(start);
             if (process is null || !process.WaitForExit(1000) || process.ExitCode != 0) return null;
-            return process.StandardOutput.ReadLine();
+            var lines = new List<string>();
+            for (string? line = process.StandardOutput.ReadLine(); line is not null; line = process.StandardOutput.ReadLine())
+                if (line.Trim().Length > 0) lines.Add(line);
+            return lines;
         }
-        catch
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
+            // nvidia-smi is absent or failed to start: no sample, as before.
             return null;
         }
     }
