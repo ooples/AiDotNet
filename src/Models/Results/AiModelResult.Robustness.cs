@@ -152,6 +152,11 @@ public partial class AiModelResult<T, TInput, TOutput>
             EvaluationEpsilon = attackOptions.Epsilon
         };
 
+        // The attack runs against the classifier being evaluated: with a configured defense its queries (and so
+        // its gradients, by finite differences) go through the defense's preprocessing, as the clean and the
+        // adversarial predictions below do. Attacking the raw model overstated the defended robustness.
+        var attackTarget = AttackTarget();
+
         // RobustBench / AutoAttack accounting: an example is robust only when the clean prediction is correct
         // and the prediction on its adversarial example is still correct. Inputs the model already gets wrong
         // count as non-robust (they need no attack), and the attack success rate is the fraction of
@@ -180,7 +185,14 @@ public partial class AiModelResult<T, TInput, TOutput>
             cleanCorrect++;
 
             var attackLabel = targeted ? TargetLabel(labelVector, label, targetClass) : label;
-            var adversarial = attack.GenerateAdversarialExample(input, attackLabel, Model);
+            var adversarial = attack.GenerateAdversarialExample(input, attackLabel, attackTarget);
+
+            // Carlini-Wagner minimizes the distortion without a budget, so its example can lie outside the
+            // epsilon these statistics report; such an example does not count, and the clean input is scored.
+            if (attack is CWAttack<T, TInput, TOutput> && !WithinBudget(input, adversarial, attackOptions))
+            {
+                adversarial = input;
+            }
 
             int adversarialClass = ArgMaxVector(ConversionsHelper.ConvertToVector<T, TOutput>(PredictWithDefense(adversarial)));
             if (adversarialClass == trueClass)
@@ -216,6 +228,111 @@ public partial class AiModelResult<T, TInput, TOutput>
         stats.IsEvaluated = true;
 
         return stats;
+    }
+
+    /// <summary>
+    /// The model an attack queries: the model itself, or with an active defense a view of it whose predictions
+    /// go through <see cref="PredictWithDefense"/>.
+    /// </summary>
+    private IFullModel<T, TInput, TOutput> AttackTarget()
+    {
+        var model = Model ?? throw new InvalidOperationException("Model is not initialized.");
+        return HasAdversarialRobustness && AdversarialDefense is { } defense
+            ? new DefendedAttackModel(model, defense)
+            : model;
+    }
+
+    /// <summary>
+    /// Whether the perturbation of <paramref name="adversarial"/> is within the attack's epsilon in its norm.
+    /// </summary>
+    private bool WithinBudget(TInput input, TInput adversarial, AdversarialAttackOptions<T> options)
+    {
+        var delta = SubtractVectors(
+            ConversionsHelper.ConvertToVector<T, TInput>(adversarial),
+            ConversionsHelper.ConvertToVector<T, TInput>(input));
+        if (delta.Length == 0)
+        {
+            return true;
+        }
+
+        // The engine's tensor norm accumulates in double, so the L2 norm of a Half perturbation stays finite.
+        double size = options.NormType == AdversarialNormType.L2
+            ? _robustnessNumOps.ToDouble(RobustnessEngine.TensorNorm(delta.AsTensor()).Data.Span[0])
+            : _robustnessNumOps.ToDouble(RobustnessEngine.TensorMaxValue(RobustnessEngine.TensorAbs(delta.AsTensor())));
+        return size <= options.Epsilon;
+    }
+
+    /// <summary>
+    /// The model as an attack sees it when a defense is configured: predictions (and gradients computed from
+    /// them) include the defense's input preprocessing; everything else is the wrapped model's.
+    /// </summary>
+    [AiDotNet.Attributes.ModelMetadataExempt]
+    private sealed class DefendedAttackModel : IFullModel<T, TInput, TOutput>
+    {
+        private readonly IFullModel<T, TInput, TOutput> _inner;
+        private readonly IAdversarialDefense<T, TInput, TOutput> _defense;
+
+        public DefendedAttackModel(IFullModel<T, TInput, TOutput> inner, IAdversarialDefense<T, TInput, TOutput> defense)
+        {
+            _inner = inner;
+            _defense = defense;
+        }
+
+        public ILossFunction<T> DefaultLossFunction => _inner.DefaultLossFunction;
+
+        public long ParameterCount => InterfaceGuard.Parameterizable(_inner).ParameterCount;
+
+        public bool SupportsParameterInitialization => InterfaceGuard.Parameterizable(_inner).SupportsParameterInitialization;
+
+        public Vector<T> SanitizeParameters(Vector<T> parameters) => InterfaceGuard.Parameterizable(_inner).SanitizeParameters(parameters);
+
+        public TOutput Predict(TInput input) => _inner.Predict(_defense.PreprocessInput(input));
+
+        public void Train(TInput input, TOutput expectedOutput) => _inner.Train(_defense.PreprocessInput(input), expectedOutput);
+
+        public ModelMetadata<T> GetModelMetadata() => _inner.GetModelMetadata();
+
+        public byte[] Serialize() => _inner.Serialize();
+
+        public void Deserialize(byte[] data) => _inner.Deserialize(data);
+
+        public void SaveModel(string filePath) => _inner.SaveModel(filePath);
+
+        public void LoadModel(string filePath) => _inner.LoadModel(filePath);
+
+        public void SaveState(Stream stream) => _inner.SaveState(stream);
+
+        public void LoadState(Stream stream) => _inner.LoadState(stream);
+
+        public Vector<T> GetParameters() => InterfaceGuard.Parameterizable(_inner).GetParameters();
+
+        public void SetParameters(Vector<T> parameters) => InterfaceGuard.Parameterizable(_inner).SetParameters(parameters);
+
+        public IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
+            => new DefendedAttackModel(InterfaceGuard.Parameterizable(_inner).WithParameters(parameters), _defense);
+
+        public IEnumerable<int> GetActiveFeatureIndices() => InterfaceGuard.FeatureAware(_inner).GetActiveFeatureIndices();
+
+        public void SetActiveFeatureIndices(IEnumerable<int> featureIndices) => InterfaceGuard.FeatureAware(_inner).SetActiveFeatureIndices(featureIndices);
+
+        public bool IsFeatureUsed(int featureIndex) => InterfaceGuard.FeatureAware(_inner).IsFeatureUsed(featureIndex);
+
+        public Dictionary<string, T> GetFeatureImportance() => _inner.GetFeatureImportance();
+
+        public IFullModel<T, TInput, TOutput> DeepCopy() => new DefendedAttackModel(_inner.DeepCopy(), _defense);
+
+        public IFullModel<T, TInput, TOutput> Clone() => new DefendedAttackModel(_inner.Clone(), _defense);
+
+        public Vector<T> ComputeGradients(TInput input, TOutput target, ILossFunction<T>? lossFunction = null)
+            => InterfaceGuard.GradientComputable(_inner).ComputeGradients(_defense.PreprocessInput(input), target, lossFunction);
+
+        public void ApplyGradients(Vector<T> gradients, T learningRate) => InterfaceGuard.GradientComputable(_inner).ApplyGradients(gradients, learningRate);
+
+        // The wrapped model belongs to the result, which disposes it; the view owns nothing.
+        public void Dispose()
+        {
+            System.GC.SuppressFinalize(this);
+        }
     }
 
     /// <summary>
