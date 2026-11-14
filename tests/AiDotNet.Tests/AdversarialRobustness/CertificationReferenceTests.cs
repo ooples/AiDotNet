@@ -718,6 +718,68 @@ public class CertificationReferenceTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task Ibp_HalfL2BoundsWithLargeWeightsAreFinite()
+    {
+        await Task.Yield();
+
+        // z0 = 300 x0 + 300 x1, z1 = 0 at x = (0.01, 0.01) with an L2 radius of 0.01: z0 = 6 +/- 0.01 * 300 sqrt(2).
+        // In Half, 300^2 = 90000 exceeds 65504, so a row norm summed in Half is infinite and so were the bounds.
+        var expected = WideL2Bounds<double>();
+        Assert.Equal(6.0 - 3.0 * Math.Sqrt(2.0), expected.Lower, 1e-9);
+        Assert.Equal(6.0 + 3.0 * Math.Sqrt(2.0), expected.Upper, 1e-9);
+
+        var half = WideL2Bounds<Half>();
+        Assert.False(double.IsInfinity(half.Lower) || double.IsNaN(half.Lower));
+        Assert.False(double.IsInfinity(half.Upper) || double.IsNaN(half.Upper));
+        Assert.Equal(expected.Lower, half.Lower, 0.05);
+        Assert.Equal(expected.Upper, half.Upper, 0.05);
+    }
+
+    private static (double Lower, double Upper) WideL2Bounds<TNum>()
+    {
+        var ops = AiDotNet.Helpers.MathHelper.GetNumericOperations<TNum>();
+        var layer = new DenseLayer<TNum>(outputSize: 2, biasMode: BiasMode.Always);
+        var architecture = new NeuralNetworkArchitecture<TNum>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 2,
+            outputSize: 2,
+            layers: new List<ILayer<TNum>> { layer });
+        var network = new FeedForwardNeuralNetwork<TNum>(architecture);
+        network.Predict(new Tensor<TNum>(new[] { 1, 2 }));
+        var w = layer.GetWeights();
+        var b = layer.GetBiases();
+        Assert.NotNull(w);
+        Assert.NotNull(b);
+        if (w is null || b is null)
+        {
+            return (double.NaN, double.NaN);
+        }
+
+        // [in, out] layout: both inputs feed logit 0 with weight 300, logit 1 is 0.
+        w[0, 0] = ops.FromDouble(300.0);
+        w[1, 0] = ops.FromDouble(300.0);
+        w[0, 1] = ops.Zero;
+        w[1, 1] = ops.Zero;
+        b[0] = ops.Zero;
+        b[1] = ops.Zero;
+
+        var options = new CertifiedDefenseOptions<TNum>
+        {
+            NoiseSigma = 0.01,
+            NormType = AdversarialNormType.L2,
+            NumSamples = 10,
+            Seed = 1
+        };
+        var input = new Tensor<TNum>(new[] { 1, 2 }, new Vector<TNum>(new[] { ops.FromDouble(0.01), ops.FromDouble(0.01) }));
+        var ibp = new IntervalBoundPropagation<TNum, Tensor<TNum>, Tensor<TNum>>(options);
+        var result = ibp.CertifyPrediction(input, network);
+        Assert.Equal(0, result.PredictedClass);
+        Assert.True((bool)result.CertificationDetails["Sound"]);
+        return (ops.ToDouble(result.LowerBound), ops.ToDouble(result.UpperBound));
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task Ibp_UsesTheLayersLeakyReluSlope()
     {
         await Task.Yield();
