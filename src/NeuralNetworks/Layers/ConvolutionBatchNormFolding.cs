@@ -55,6 +55,41 @@ internal static class ConvolutionBatchNormFolding<T>
     }
 
     /// <summary>
+    /// <c>act(bnPost(conv(relu(bnPre(input)))))</c>, or <c>act(conv(relu(bnPre(input))))</c> without
+    /// <paramref name="post"/>, as one pre-activated convolution (AiDotNet.Tensors' BatchNormActivationConv2D[BatchNorm]):
+    /// on a GPU the pre-activation batch norm and ReLU are applied as the convolution loads its input, so the normalized
+    /// activation is never written (DenseNet's dense and transition layers). False, with nothing computed, under the
+    /// conditions of <see cref="TryForward(ConvolutionalLayer{T}, BatchNormalizationLayer{T}, Tensor{T}, FusedActivationType, out Tensor{T})"/>
+    /// for either batch norm, or when the input is a strided view.
+    /// </summary>
+    internal static bool TryPreActivatedForward(BatchNormalizationLayer<T> pre, ConvolutionalLayer<T> conv,
+        BatchNormalizationLayer<T>? post, Tensor<T> input, FusedActivationType activation, out Tensor<T> output)
+    {
+        output = input;
+        if (!CanFuse(pre, conv, input) || (post is not null && post.InTrainingMode) || !input.IsContiguous) return false;
+        if (!conv.CanFoldFollowingBatchNorm || input.Shape[1] != conv.InputDepth) return false;
+        if (!pre.TryGetFoldingStatistics(conv.InputDepth, out var preGamma, out var preBeta, out var preMean,
+                out var preVariance, out double preEpsilon))
+            return false;
+        Tensor<T>? gamma = null, beta = null, mean = null, variance = null;
+        double epsilon = 0;
+        if (post is not null && !post.TryGetFoldingStatistics(conv.OutputDepth, out gamma, out beta, out mean,
+                out variance, out epsilon))
+            return false;
+        if (ObserverSuppresses()) return false;
+
+        var engine = AiDotNetEngine.Current;
+        output = post is null
+            ? engine.BatchNormActivationConv2D(input, preGamma, preBeta, preMean, preVariance, preEpsilon,
+                conv.KernelsForFolding, conv.BiasesForFolding, conv.Stride, conv.Stride, conv.Padding, conv.Padding, 1, 1,
+                activation)
+            : engine.BatchNormActivationConv2DBatchNorm(input, preGamma, preBeta, preMean, preVariance, preEpsilon,
+                conv.KernelsForFolding, conv.BiasesForFolding, gamma!, beta!, mean!, variance!, epsilon,
+                conv.Stride, conv.Stride, conv.Padding, conv.Padding, 1, 1, activation);
+        return true;
+    }
+
+    /// <summary>
     /// <c>act(bn(input))</c> in one pass over the activation (AiDotNet.Tensors' BatchNormInference with an activation),
     /// where a batch norm cannot fold into the convolution before it: a depthwise convolution, say. False, with nothing
     /// computed, when folding is off, the layer is training, a tape is recording, a graph is being captured, shapes are

@@ -223,6 +223,12 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
         // the 1x1 fold declines; training and backward retain the ordinary engine graph without storing intermediates.
         bool tryFuse = !ShouldCacheForBackward;
 
+        // BN1-ReLU-Conv1x1-BN2-ReLU as one pre-activated convolution: on a GPU BN1 and its ReLU run as the convolution
+        // loads its input, so the normalized activation is never written. Otherwise the stages below, each fused on its own.
+        if (tryFuse && ConvolutionBatchNormFolding<T>.TryPreActivatedForward(_bn1, _conv1x1, _bn2, x,
+                FusedActivationType.ReLU, out var preActivatedBottleneck))
+            return Finish(_conv3x3.Forward(preActivatedBottleneck));
+
         // BN1-ReLU (DenseNet paper: pre-activation bottleneck)
         Tensor<T> preActivated;
         if (tryFuse && ConvolutionBatchNormFolding<T>.TryBatchNormActivation(_bn1, x, FusedActivationType.ReLU, out var fusedPre))
@@ -252,13 +258,13 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
             bottleneck = Engine.ReLU(bn2Out);
         }
 
-        var output = _conv3x3.Forward(bottleneck);
+        return Finish(_conv3x3.Forward(bottleneck));
 
         // Remove batch dim if we added it
-        if (input.Shape.Length == 3 && output.Shape.Length == 4 && output.Shape[0] == 1)
-            output = Engine.Reshape(output, [output.Shape[1], output.Shape[2], output.Shape[3]]);
-
-        return output;
+        Tensor<T> Finish(Tensor<T> output)
+            => input.Shape.Length == 3 && output.Shape.Length == 4 && output.Shape[0] == 1
+                ? Engine.Reshape(output, [output.Shape[1], output.Shape[2], output.Shape[3]])
+                : output;
     }
 
     private Tensor<T> ApplyReluDerivative(Tensor<T> input, Tensor<T> grad)

@@ -320,18 +320,30 @@ public partial class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtra
 
         // BN → ReLU → Conv1x1 → AvgPool. In inference BN + ReLU is one pass (when the block's ReLU is exactly a ReLU);
         // otherwise the stages run separately. Keep intermediates local so inference doesn't retain activations.
-        Tensor<T> reluOut;
-        if (!ShouldCacheForBackward && _relu.GetType() == typeof(ReLUActivation<T>)
-            && ConvolutionBatchNormFolding<T>.TryBatchNormActivation(_bn, processInput, FusedActivationType.ReLU, out var preActivated))
+        // BN + ReLU + Conv1x1 first as one pre-activated convolution (on a GPU the normalized activation is never written).
+        bool exactRelu = _relu.GetType() == typeof(ReLUActivation<T>);
+        Tensor<T> convOut;
+        if (!ShouldCacheForBackward && exactRelu
+            && ConvolutionBatchNormFolding<T>.TryPreActivatedForward(_bn, conv, post: null, processInput,
+                FusedActivationType.None, out var preActivatedConv))
         {
-            reluOut = preActivated;
+            convOut = preActivatedConv;
         }
         else
         {
-            var bnOut = _bn.Forward(processInput);
-            reluOut = _relu.Activate(bnOut);
+            Tensor<T> reluOut;
+            if (!ShouldCacheForBackward && exactRelu
+                && ConvolutionBatchNormFolding<T>.TryBatchNormActivation(_bn, processInput, FusedActivationType.ReLU, out var preActivated))
+            {
+                reluOut = preActivated;
+            }
+            else
+            {
+                var bnOut = _bn.Forward(processInput);
+                reluOut = _relu.Activate(bnOut);
+            }
+            convOut = conv.Forward(reluOut);
         }
-        var convOut = conv.Forward(reluOut);
 
         // Handle batched input (4D) - use Engine.AvgPool2D directly
         // AveragePoolingLayer expects 3D input, so we handle 4D separately
