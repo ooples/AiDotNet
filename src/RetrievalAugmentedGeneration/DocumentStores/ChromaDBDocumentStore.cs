@@ -180,8 +180,18 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
         using var response = await _httpClient.PostAsync($"/api/v1/collections/{_collectionName}/query", content, cancellationToken).ConfigureAwait(false);
         response.EnsureSuccessStatusCode();
         var responseContent = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-        var result = JObject.Parse(responseContent);
+        return ParseQueryResponse(JObject.Parse(responseContent));
+    }
 
+    /// <summary>
+    /// Builds the scored hits of a ChromaDB query response, with relevance 1 / (1 + distance).
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// A hit has no finite numeric distance. A missing distance used to score as 0, i.e. relevance 1, which
+    /// made malformed responses indistinguishable from perfect matches.
+    /// </exception>
+    internal static List<Document<T>> ParseQueryResponse(JObject result)
+    {
         var results = new List<Document<T>>();
         var scores = new List<double>();
         var ids = result["ids"]?[0];
@@ -201,9 +211,14 @@ public class ChromaDBDocumentStore<T> : DocumentStoreBase<T>
             var doc = docToken.ToString();
             var metadataObj = metadatas?[i]?.ToObject<Dictionary<string, object>>() ?? new Dictionary<string, object>();
 
-            var distance = distances?[i] is JToken distanceToken && distanceToken.Type != JTokenType.Null
-                ? Convert.ToDouble(distanceToken, System.Globalization.CultureInfo.InvariantCulture)
-                : 0.0;
+            var distanceToken = distances is not null && i < distances.Count() ? distances[i] : null;
+            if (distanceToken is null
+                || (distanceToken.Type != JTokenType.Float && distanceToken.Type != JTokenType.Integer))
+                throw new InvalidOperationException($"ChromaDB returned no numeric distance for hit {i} ('{id}').");
+
+            var distance = distanceToken.Value<double>();
+            if (double.IsNaN(distance) || double.IsInfinity(distance))
+                throw new InvalidOperationException($"ChromaDB returned a non-finite distance for hit {i} ('{id}').");
 
             results.Add(new Document<T>(id, doc, metadataObj));
             scores.Add(1.0 / (1.0 + distance));

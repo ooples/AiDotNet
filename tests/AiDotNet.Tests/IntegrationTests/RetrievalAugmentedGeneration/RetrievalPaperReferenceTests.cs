@@ -7,6 +7,7 @@ using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Rerankers;
 using AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies;
 using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
+using Newtonsoft.Json.Linq;
 using Xunit;
 
 namespace AiDotNet.Tests.IntegrationTests.RetrievalAugmentedGeneration;
@@ -163,6 +164,31 @@ public class RetrievalPaperReferenceTests
         // tf = 1 / max count 1, idf = ln(2 / 1)
         Assert.Equal("d1", results[0].Id);
         Assert.Equal(Math.Log(2.0), results[0].RelevanceScore, Tolerance);
+    }
+
+    /// <summary>
+    /// ChromaDB hits score 1 / (1 + distance). A hit with a null or missing distance used to score as distance
+    /// 0, i.e. a perfect match with relevance 1; it must be rejected as a malformed response.
+    /// </summary>
+    [Fact]
+    public void ChromaDb_QueryResponse_RejectsMissingDistances()
+    {
+        var valid = JObject.Parse(
+            "{\"ids\":[[\"a\",\"b\"]],\"documents\":[[\"x\",\"y\"]],\"distances\":[[0.25,3]]}");
+        var hits = ChromaDBDocumentStore<double>.ParseQueryResponse(valid);
+        Assert.Equal(1.0 / 1.25, hits[0].RelevanceScore, Tolerance);
+        Assert.Equal(1.0 / 4.0, hits[1].RelevanceScore, Tolerance);
+
+        var nullDistance = JObject.Parse(
+            "{\"ids\":[[\"a\",\"b\"]],\"documents\":[[\"x\",\"y\"]],\"distances\":[[0.25,null]]}");
+        Assert.Throws<InvalidOperationException>(() => ChromaDBDocumentStore<double>.ParseQueryResponse(nullDistance));
+
+        var noDistances = JObject.Parse("{\"ids\":[[\"a\"]],\"documents\":[[\"x\"]]}");
+        Assert.Throws<InvalidOperationException>(() => ChromaDBDocumentStore<double>.ParseQueryResponse(noDistances));
+
+        var shortDistances = JObject.Parse(
+            "{\"ids\":[[\"a\",\"b\"]],\"documents\":[[\"x\",\"y\"]],\"distances\":[[0.25]]}");
+        Assert.Throws<InvalidOperationException>(() => ChromaDBDocumentStore<double>.ParseQueryResponse(shortDistances));
     }
 
     private static InMemoryDocumentStore<TNum> Store<TNum>(params string[] contents)
