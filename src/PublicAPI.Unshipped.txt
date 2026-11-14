@@ -25089,3 +25089,4 @@ AiDotNet.Safety.TextSafetyConfig.PIITypes.set -> void
 *REMOVED*AiDotNet.Models.Options.AdversarialRobustnessOptions<T>.PreprocessingMethod.get -> string!
 *REMOVED*AiDotNet.Models.Options.AdversarialRobustnessOptions<T>.RedTeamingCategories.get -> string![]!
 *REMOVED*AiDotNet.Models.Options.AdversarialRobustnessOptions<T>.TrainingAttackMethod.get -> string!
+AiDotNet.AdversarialRobustness.Safety.SafetyFilter<T>.DetectJailbreak(string! text) -> AiDotNet.Models.JailbreakDetectionResult<T>!
