@@ -205,6 +205,10 @@ public class NCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         }
 
         _transformationMatrix = a.ToMatrix();
+
+        // The supervised fit does not go through TransformerBase.Fit, so it has to mark the transformer fitted
+        // itself; otherwise Transform (and FitTransformSupervised) throws "has not been fitted".
+        IsFitted = true;
     }
 
     /// <summary>
