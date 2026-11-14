@@ -91,7 +91,8 @@ public class SilhouetteScore<T> : IClusterMetric<T>
         }
 
         // Per-sample silhouette scores (zero for noise points and singleton clusters)
-        var silhouetteScores = SampleScores(data, labels, labelsIds.Max() + 1, metric);
+        var compact = ClusteringTensorOps.CompactLabels<T>(labelsIds, out var slotLabels);
+        var silhouetteScores = SampleScores(data, compact, slotLabels.Length, metric);
 
         // Average over non-noise points
         int validPoints = labelsIds.Count(label => label >= 0);
@@ -127,38 +128,82 @@ public class SilhouetteScore<T> : IClusterMetric<T>
             return new Vector<T>(n);
         }
 
-        return SampleScores(data, labels, labelsIds.Max() + 1, metric);
+        var compact = ClusteringTensorOps.CompactLabels<T>(labelsIds, out var slotLabels);
+        return SampleScores(data, compact, slotLabels.Length, metric);
     }
 
+    /// <summary>Upper bound on the elements of one [rows, n] or [rows, clusters] block.</summary>
+    private const int BlockElements = 1 << 22;
+
     /// <summary>
-    /// s(i) = (b - a) / max(a, b) where a is the mean distance to the other members of i's cluster and b the
+    /// s(i) = (b - a) / max(a, b) where a is the mean distance to the other members of the cluster of i and b the
     /// smallest mean distance to another non-empty cluster; zero for noise, singletons and max(a, b) = 0.
     /// </summary>
+    /// <remarks>
+    /// Rows are scored in blocks so the working set is [rows, n] rather than several n x n tensors: the
+    /// score of one sample only needs its own row of distances.
+    /// </remarks>
     private Vector<T> SampleScores(Matrix<T> data, Vector<T> labels, int numSlots, IDistanceMetric<T> metric)
     {
         var engine = AiDotNetEngine.Current;
         int n = data.Rows;
+        var mask = ClusteringTensorOps.OneHotMask(labels, numSlots);
+        var counts = engine.Reshape(engine.ReduceSum(mask, new[] { 0 }, false), new[] { 1, numSlots });
+
+        int rowsPerBlock = Math.Max(1, Math.Min(n, BlockElements / Math.Max(n, numSlots)));
+        if (rowsPerBlock >= n)
+        {
+            return BlockScores(data, data, mask, mask, counts, 0, numSlots, metric).ToVector();
+        }
+
+        var dataTensor = Tensor<T>.FromMatrix(data);
+        var scores = Tensor<T>.CreateZeros(new[] { n });
+        for (int start = 0; start < n; start += rowsPerBlock)
+        {
+            int count = Math.Min(rowsPerBlock, n - start);
+            var rows = engine.TensorSlice(dataTensor, new[] { start, 0 }, new[] { count, data.Columns }).ToMatrix();
+            var rowMask = engine.TensorSlice(mask, new[] { start, 0 }, new[] { count, numSlots });
+            scores = engine.TensorSetSlice(
+                scores, BlockScores(rows, data, mask, rowMask, counts, start, numSlots, metric), new[] { start });
+        }
+
+        return scores.ToVector();
+    }
+
+    /// <summary>
+    /// Silhouette scores of <paramref name="rows"/>, which are rows start..start+rows.Rows-1 of
+    /// <paramref name="data"/>; <paramref name="rowMask"/> is their slice of the membership <paramref name="mask"/>.
+    /// </summary>
+    private Tensor<T> BlockScores(
+        Matrix<T> rows, Matrix<T> data, Tensor<T> mask, Tensor<T> rowMask, Tensor<T> counts, int start, int numSlots,
+        IDistanceMetric<T> metric)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = data.Rows;
+        int count = rows.Rows;
         var zero = _numOps.Zero;
         var one = _numOps.One;
 
         // Distances to every other point (self excluded) and per-cluster sums of them
-        var offDiagonal = engine.ScalarMinusTensor(one, engine.TensorEye<T>(n));
-        var distances = engine.TensorMultiply(Tensor<T>.FromMatrix(metric.ComputePairwise(data, data)), offDiagonal);
-        var mask = ClusteringTensorOps.OneHotMask(labels, numSlots);
+        var rowIds = engine.TensorBroadcastTo(
+            engine.Reshape(engine.TensorArange<T>(start, start + count, 1), new[] { count, 1 }), new[] { count, n });
+        var columnIds = engine.TensorBroadcastTo(
+            engine.Reshape(engine.TensorArange<T>(0, n, 1), new[] { 1, n }), new[] { count, n });
+        var offDiagonal = engine.ScalarMinusTensor(one, engine.TensorEquals(rowIds, columnIds));
+        var distances = engine.TensorMultiply(Tensor<T>.FromMatrix(metric.ComputePairwise(rows, data)), offDiagonal);
         var clusterSums = engine.TensorMatMul(distances, mask);
 
         // Other members of each cluster as seen from each point (own cluster excludes the point itself)
-        var counts = engine.Reshape(engine.ReduceSum(mask, new[] { 0 }, false), new[] { 1, numSlots });
-        var others = engine.TensorSubtract(engine.TensorBroadcastTo(counts, new[] { n, numSlots }), mask);
+        var others = engine.TensorSubtract(engine.TensorBroadcastTo(counts, new[] { count, numSlots }), rowMask);
         var meanDistances = engine.TensorDivide(clusterSums, engine.TensorMax(others, one));
 
         // a(i) and the own-cluster size (excluding i)
-        var a = engine.ReduceSum(engine.TensorMultiply(meanDistances, mask), new[] { 1 }, false);
-        var ownOthers = engine.ReduceSum(engine.TensorMultiply(others, mask), new[] { 1 }, false);
+        var a = engine.ReduceSum(engine.TensorMultiply(meanDistances, rowMask), new[] { 1 }, false);
+        var ownOthers = engine.ReduceSum(engine.TensorMultiply(others, rowMask), new[] { 1 }, false);
 
         // b(i): smallest mean distance over the other non-empty clusters (0 when there is none)
         var available = engine.TensorMultiply(
-            engine.TensorGreaterThan(others, zero), engine.ScalarMinusTensor(one, mask));
+            engine.TensorGreaterThan(others, zero), engine.ScalarMinusTensor(one, rowMask));
         var ceiling = _numOps.Add(engine.TensorMaxValue(meanDistances), one);
         var candidates = engine.TensorWhere(available, meanDistances, engine.TensorFullLike(meanDistances, ceiling));
         var hasOther = engine.ReduceMax(available, new[] { 1 }, false);
@@ -168,6 +213,6 @@ public class SilhouetteScore<T> : IClusterMetric<T>
         var maxAB = engine.TensorMax(a, b);
         var valid = engine.TensorMultiply(engine.TensorGreaterThan(maxAB, zero), engine.TensorGreaterThan(ownOthers, zero));
         var safeMax = engine.TensorWhere(valid, maxAB, engine.TensorOnesLike(maxAB));
-        return engine.TensorMultiply(engine.TensorDivide(engine.TensorSubtract(b, a), safeMax), valid).ToVector();
+        return engine.TensorMultiply(engine.TensorDivide(engine.TensorSubtract(b, a), safeMax), valid);
     }
 }

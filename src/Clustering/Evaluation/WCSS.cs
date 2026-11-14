@@ -72,7 +72,9 @@ public class WCSS<T> : IClusterMetric<T>
         }
 
         // WCSS = sum of squared distances of the non-noise samples to their cluster centroid
-        var centroids = ClusteringTensorOps.ClusterMeans(data, labels, labelsIds.Max() + 1, out _);
+        // One slot per cluster present (sized by k, not by the largest label id)
+        labels = ClusteringTensorOps.CompactLabels<T>(labelsIds, out var slotLabels);
+        var centroids = ClusteringTensorOps.ClusterMeans(data, labels, slotLabels.Length, out _);
         return _numOps.ToDouble(ClusteringTensorOps.Inertia(data, labels, centroids));
     }
 
@@ -99,7 +101,9 @@ public class WCSS<T> : IClusterMetric<T>
         }
 
         // Squared distance of every non-noise sample to its cluster centroid, summed per cluster
-        int numSlots = uniqueLabels.Count == 0 ? 0 : labelsIds.Max() + 1;
+        // One slot per cluster present (sized by k, not by the largest label id)
+        labels = ClusteringTensorOps.CompactLabels<T>(labelsIds, out var slotLabels);
+        int numSlots = slotLabels.Length;
         var result = new Dictionary<int, T>();
         if (numSlots == 0)
         {
@@ -112,9 +116,9 @@ public class WCSS<T> : IClusterMetric<T>
         var mask = ClusteringTensorOps.OneHotMask(labels, numSlots);
         var perSlot = engine.TensorMatMul(
             engine.TensorTranspose(mask), Tensor<T>.FromVector(sampleDistances, new[] { n, 1 })).ToArray();
-        foreach (int label in uniqueLabels)
+        for (int slot = 0; slot < numSlots; slot++)
         {
-            result[label] = perSlot[label];
+            result[slotLabels[slot]] = perSlot[slot];
         }
 
         return result;
@@ -188,7 +192,8 @@ public class BCSS<T> : IClusterMetric<T>
 
         // Cluster centroids over label slots 0..max and the centroid of all non-noise points
         var engine = AiDotNetEngine.Current;
-        var sums = ClusteringTensorOps.ClusterSums(data, labels, labelsIds.Max() + 1, out var counts);
+        labels = ClusteringTensorOps.CompactLabels<T>(labelsIds, out var slotLabels);
+        var sums = ClusteringTensorOps.ClusterSums(data, labels, slotLabels.Length, out var counts);
         var centroids = ClusteringTensorOps.DivideRows(sums, counts);
         var globalCentroid = engine.Divide(
             engine.ReduceSum(Tensor<T>.FromMatrix(sums), new[] { 0 }, false).ToVector(), _numOps.FromDouble(validPoints));

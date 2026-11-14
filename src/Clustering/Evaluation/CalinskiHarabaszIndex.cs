@@ -83,9 +83,10 @@ public class CalinskiHarabaszIndex<T> : IClusterMetric<T>
         int validPoints = labelsIds.Count(label => label >= 0);
         if (validPoints == 0) return 0;
 
-        // Cluster sums/counts over label slots 0..max (unused slots have zero members and contribute nothing)
+        // Cluster sums/counts over one slot per cluster present (sized by k, not by the largest label id)
         var engine = AiDotNetEngine.Current;
-        int numSlots = labelsIds.Max() + 1;
+        labels = ClusteringTensorOps.CompactLabels<T>(labelsIds, out var slotLabels);
+        int numSlots = slotLabels.Length;
         var sums = ClusteringTensorOps.ClusterSums(data, labels, numSlots, out var counts);
         var centroids = ClusteringTensorOps.DivideRows(sums, counts);
         var overallCentroid = engine.Divide(

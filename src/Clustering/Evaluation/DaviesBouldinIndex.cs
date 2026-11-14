@@ -84,11 +84,11 @@ public class DaviesBouldinIndex<T> : IClusterMetric<T>
             return 0; // Need at least 2 clusters
         }
 
-        var labelList = uniqueLabels.ToList();
         var engine = AiDotNetEngine.Current;
 
-        // Centroids over label slots 0..max; only the slots in labelList are used below
-        int numSlots = labelList.Max() + 1;
+        // Centroids over one slot per cluster present (sized by k, not by the largest label id)
+        labels = ClusteringTensorOps.CompactLabels<T>(labelsIds, out var slotLabels);
+        int numSlots = slotLabels.Length;
         var mask = ClusteringTensorOps.OneHotMask(labels, numSlots);
         var counts = engine.ReduceSum(mask, new[] { 0 }, false);
         var sums = engine.TensorMatMul(engine.TensorTranspose(mask), Tensor<T>.FromMatrix(data)).ToMatrix();
@@ -102,10 +102,9 @@ public class DaviesBouldinIndex<T> : IClusterMetric<T>
         var allScatter = engine.TensorDivide(
             engine.Reshape(scatterSums, new[] { numSlots }), engine.TensorMax(counts, _numOps.One));
 
-        // Restrict to the clusters that are present
-        var present = labelList.ToArray();
-        var centroids = ClusteringTensorOps.SelectRows(allCentroids, present);
-        var scatter = ClusteringTensorOps.SelectElements(allScatter.ToVector(), present);
+        // Every slot is a cluster that is present
+        var centroids = allCentroids;
+        var scatter = allScatter.ToVector();
 
         // R_ij = (s_i + s_j) / d(c_i, c_j) for i != j with d > 0; DB = mean_i max_j R_ij (0 when no such j)
         var centroidDist = Tensor<T>.FromMatrix(metric.ComputePairwise(centroids, centroids));

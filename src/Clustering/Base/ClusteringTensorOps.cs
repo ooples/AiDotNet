@@ -165,8 +165,14 @@ internal static class ClusteringTensorOps
 
     /// <summary>
     /// Converts integral values stored as <typeparamref name="T"/> (labels, counts, flags) to <see cref="int"/>
-    /// with one bulk search against the integer range they span.
+    /// with one bulk cast; fractional values round down.
     /// </summary>
+    /// <remarks>
+    /// The cost is proportional to the number of values, not to the range they span: label vectors are
+    /// arbitrary ids (two clusters labelled 0 and 20 000 000 are valid input to every metric), so a lookup
+    /// table over [min, max] is unbounded. The floored tensor is a fresh contiguous buffer, which
+    /// <c>Cast</c> requires (it ignores the offset of a narrowed view).
+    /// </remarks>
     internal static int[] ToIntArray<T>(Vector<T> integralValues)
     {
         int n = integralValues.Length;
@@ -175,15 +181,39 @@ internal static class ClusteringTensorOps
             return Array.Empty<int>();
         }
 
-        var engine = Engine;
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var values = integralValues.AsTensor();
-        int min = (int)Math.Floor(numOps.ToDouble(engine.TensorMinValue(values)));
-        int max = (int)Math.Ceiling(numOps.ToDouble(engine.TensorMaxValue(values)));
-        var table = engine.TensorArange<T>(min, (double)max + 1, 1);
-        // With right = true the position of an integral value v is (v - min + 1); fractional values round down.
-        var positions = engine.TensorSearchSorted(table, values, true);
-        return (min == 1 ? positions : engine.TensorAddScalar(positions, min - 1)).ToArray();
+        return Engine.TensorFloor(integralValues.AsTensor()).Contiguous().Cast<int>().ToArray();
+    }
+
+    /// <summary>
+    /// Relabels cluster ids to consecutive slots 0..k-1 (ascending by id) so per-cluster tensors are sized by
+    /// the number of clusters present instead of by the largest id. Negative ids (noise) become -1.
+    /// <paramref name="slotLabels"/>[slot] is the original id; ids that are already 0..k-1 are unchanged.
+    /// </summary>
+    internal static Vector<T> CompactLabels<T>(int[] ids, out int[] slotLabels)
+    {
+        var present = new SortedSet<int>();
+        foreach (int id in ids)
+        {
+            if (id >= 0)
+            {
+                present.Add(id);
+            }
+        }
+
+        slotLabels = present.ToArray();
+        var slotOf = new Dictionary<int, int>(slotLabels.Length);
+        for (int slot = 0; slot < slotLabels.Length; slot++)
+        {
+            slotOf[slotLabels[slot]] = slot;
+        }
+
+        var slots = new int[ids.Length];
+        for (int i = 0; i < ids.Length; i++)
+        {
+            slots[i] = ids[i] >= 0 ? slotOf[ids[i]] : -1;
+        }
+
+        return FromIntArray<T>(slots);
     }
 
     /// <summary>Converts integer values (labels, indices) to a <typeparamref name="T"/> vector with one bulk gather.</summary>
@@ -216,6 +246,20 @@ internal static class ClusteringTensorOps
         return engine.TensorEquals(column, ids);
     }
 
+    /// <summary>True when every id is a valid slot in [0, k).</summary>
+    private static bool AllWithin(int[] ids, int k)
+    {
+        foreach (int id in ids)
+        {
+            if (id < 0 || id >= k)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     /// <summary>Number of samples carrying each label 0..k-1 ([k], in T).</summary>
     internal static Vector<T> ClusterCounts<T>(Vector<T> labels, int k)
         => Engine.ReduceSum(OneHotMask(labels, k), new[] { 0 }, false).ToVector();
@@ -224,6 +268,17 @@ internal static class ClusteringTensorOps
     internal static Matrix<T> ClusterSums<T>(Matrix<T> x, Vector<T> labels, int k, out Vector<T> counts)
     {
         var engine = Engine;
+        int n = labels.Length;
+        var ids = ToIntArray(labels);
+        if (n > 0 && AllWithin(ids, k))
+        {
+            // Every label names a cluster: scatter-add the rows, O(n d), instead of an [n, k] mask product.
+            var index = Vector<int>.Wrap(ids).AsTensor();
+            var ones = Tensor<T>.CreateDefault(new[] { n }, MathHelper.GetNumericOperations<T>().One);
+            counts = engine.TensorIndexAdd(new Tensor<T>(new[] { k }), 0, index, ones).ToVector();
+            return engine.TensorIndexAdd(new Tensor<T>(new[] { k, x.Columns }), 0, index, ToTensor(x)).ToMatrix();
+        }
+
         var mask = OneHotMask(labels, k);
         counts = engine.ReduceSum(mask, new[] { 0 }, false).ToVector();
         return engine.TensorMatMul(engine.TensorTranspose(mask), ToTensor(x)).ToMatrix();
@@ -252,6 +307,15 @@ internal static class ClusteringTensorOps
     internal static Tensor<T> AssignedRows<T>(Vector<T> labels, Matrix<T> centers, out Tensor<T> valid)
     {
         var engine = Engine;
+        int n = labels.Length;
+        var ids = ToIntArray(labels);
+        if (n > 0 && AllWithin(ids, centers.Rows))
+        {
+            // Every label names a center: gather the rows instead of multiplying by an [n, k] mask.
+            valid = Tensor<T>.CreateDefault(new[] { n }, MathHelper.GetNumericOperations<T>().One);
+            return engine.TensorIndexSelect(ToTensor(centers), Vector<int>.Wrap(ids).AsTensor(), 0);
+        }
+
         var mask = OneHotMask(labels, centers.Rows);
         valid = engine.ReduceSum(mask, new[] { 1 }, false);
         return engine.TensorMatMul(mask, ToTensor(centers));
