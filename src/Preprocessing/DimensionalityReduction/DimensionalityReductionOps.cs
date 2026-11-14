@@ -126,7 +126,8 @@ internal static class DimensionalityReductionOps
         double largest = Math.Max(
             a.Length == 0 ? 0.0 : numOps.ToDouble(engine.TensorMaxValue(engine.TensorAbs(a))),
             b.Length == 0 ? 0.0 : numOps.ToDouble(engine.TensorMaxValue(engine.TensorAbs(b))));
-        if (!(largest > 0) || double.IsInfinity(largest))
+        // NaN must take this branch too, so the test is not written as largest <= 0 alone
+        if (largest <= 0 || double.IsNaN(largest) || double.IsInfinity(largest))
         {
             return engine.TensorCDist(a, b, 2.0);
         }
@@ -325,7 +326,6 @@ internal static class DimensionalityReductionOps
     internal static Tensor<T> OrthonormalizeColumns<T>(Tensor<T> a, double tolerance = 1e-10)
     {
         var engine = Engine;
-        var numOps = MathHelper.GetNumericOperations<T>();
         T tol = Tolerance<T>(tolerance);
         int n = a.Shape[1];
         var columns = new Tensor<T>[n];
@@ -364,7 +364,6 @@ internal static class DimensionalityReductionOps
     internal static Tensor<T> NormalizeRows<T>(Tensor<T> x, double tolerance = 1e-10)
     {
         var engine = Engine;
-        var numOps = MathHelper.GetNumericOperations<T>();
         var norm = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(x), new[] { 1 }, true));
         var divisor = engine.TensorWhere(
             engine.TensorGreaterThan(norm, Tolerance<T>(tolerance)), norm, engine.TensorOnesLike(norm));
@@ -375,7 +374,6 @@ internal static class DimensionalityReductionOps
     internal static Tensor<T> NormalizeColumns<T>(Tensor<T> x, double tolerance = 1e-10)
     {
         var engine = Engine;
-        var numOps = MathHelper.GetNumericOperations<T>();
         var norm = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(x), new[] { 0 }, true));
         var divisor = engine.TensorWhere(
             engine.TensorGreaterThan(norm, Tolerance<T>(tolerance)), norm, engine.TensorOnesLike(norm));
@@ -527,7 +525,6 @@ internal static class DimensionalityReductionOps
     internal static Tensor<T> OrthonormalizeColumnsEach<T>(Tensor<T> a, bool unitFallback, double tolerance = 1e-10)
     {
         var engine = Engine;
-        var numOps = MathHelper.GetNumericOperations<T>();
         int k = a.Shape[1];
         int count = Math.Min(k, a.Shape[2]);
         var tol = Tolerance<T>(tolerance);
