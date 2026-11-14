@@ -541,12 +541,9 @@ public class TreeSHAPExplainer<T> : ILocalExplainer<T, TreeSHAPExplanation<T>>, 
         }
         else
         {
-            double sum = 0;
-            foreach (var tree in (_ensemble ?? throw new InvalidOperationException("_ensemble is null where it is required.")))
-            {
-                sum += NumOps.ToDouble(PredictTree(tree, instance));
-            }
-            return NumOps.FromDouble(sum / _ensemble.Count);
+            var ensemble = _ensemble ?? throw new InvalidOperationException("_ensemble is null where it is required.");
+            var treePredictions = new Vector<T>(ensemble.Select(tree => PredictTree(tree, instance)));
+            return AiDotNetEngine.Current.Mean(treePredictions);
         }
     }
 
@@ -700,16 +697,11 @@ public class TreeSHAPExplanation<T> : AiDotNet.Interpretability.IFeatureAttribut
     /// This method checks that property - a small error indicates correct computation.
     /// </para>
     /// </remarks>
-    public double GetSumError()
+    public T GetSumError()
     {
-        double shapSum = 0;
-        for (int i = 0; i < ShapValues.Length; i++)
-        {
-            shapSum += NumOps.ToDouble(ShapValues[i]);
-        }
-
-        double expectedDiff = NumOps.ToDouble(Prediction) - NumOps.ToDouble(ExpectedValue);
-        return Math.Abs(shapSum - expectedDiff);
+        T shapSum = AiDotNetEngine.Current.Sum(ShapValues);
+        T expectedDiff = NumOps.Subtract(Prediction, ExpectedValue);
+        return NumOps.Abs(NumOps.Subtract(shapSum, expectedDiff));
     }
 
     /// <summary>
@@ -720,8 +712,8 @@ public class TreeSHAPExplanation<T> : AiDotNet.Interpretability.IFeatureAttribut
         var lines = new List<string>
         {
             "TreeSHAP Explanation:",
-            $"  Expected value: {NumOps.ToDouble(ExpectedValue):F4}",
-            $"  Prediction: {NumOps.ToDouble(Prediction):F4}",
+            $"  Expected value: {ExpectedValue:F4}",
+            $"  Prediction: {Prediction:F4}",
             $"  Sum error: {GetSumError():F6} (should be ~0 for exact TreeSHAP)",
             "",
             "Top Positive Contributions:"
@@ -730,7 +722,7 @@ public class TreeSHAPExplanation<T> : AiDotNet.Interpretability.IFeatureAttribut
         var positive = GetPositiveContributions().Take(5);
         foreach (var (name, value, shap) in positive)
         {
-            lines.Add($"  {name} = {NumOps.ToDouble(value):F4}: +{NumOps.ToDouble(shap):F4}");
+            lines.Add($"  {name} = {value:F4}: +{shap:F4}");
         }
 
         lines.Add("");
@@ -739,7 +731,7 @@ public class TreeSHAPExplanation<T> : AiDotNet.Interpretability.IFeatureAttribut
         var negative = GetNegativeContributions().Take(5);
         foreach (var (name, value, shap) in negative)
         {
-            lines.Add($"  {name} = {NumOps.ToDouble(value):F4}: {NumOps.ToDouble(shap):F4}");
+            lines.Add($"  {name} = {value:F4}: {shap:F4}");
         }
 
         return string.Join(Environment.NewLine, lines);

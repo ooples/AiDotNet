@@ -126,15 +126,11 @@ public class SHAPExplanation<T> : AiDotNet.Interpretability.IFeatureAttribution<
     /// <returns>True if the SHAP values are consistent.</returns>
     public bool VerifyConsistency(double tolerance = 1e-6)
     {
-        var sum = NumOps.Zero;
-        for (int i = 0; i < NumFeatures; i++)
-        {
-            sum = NumOps.Add(sum, ShapValues[i]);
-        }
+        var sum = AiDotNetEngine.Current.Sum(ShapValues);
 
         var expected = NumOps.Subtract(Prediction, BaselineValue);
-        var diff = Math.Abs(NumOps.ToDouble(NumOps.Subtract(sum, expected)));
-        return diff <= tolerance;
+        var diff = NumOps.Abs(NumOps.Subtract(sum, expected));
+        return NumOps.LessThanOrEquals(diff, NumOps.FromDouble(tolerance));
     }
 
     /// <summary>
@@ -151,10 +147,13 @@ public class SHAPExplanation<T> : AiDotNet.Interpretability.IFeatureAttribution<
             $"  Top contributing features:"
         };
 
-        foreach (var (index, name, value) in top)
+        // Negative contributions already print their own sign; the rest get a leading "+".
+        var negative = AiDotNetEngine.Current.TensorLessThan(
+            new Vector<T>(top.Select(feature => feature.Value)).AsTensor(), NumOps.Zero).Cast<int>().ToVector();
+        foreach (var ((index, name, value), isNegative) in top.Zip(negative, (feature, flag) => (feature, flag)))
         {
             var featureLabel = name ?? $"Feature {index}";
-            var direction = !NumOps.LessThan(value, NumOps.Zero) ? "+" : "";
+            var direction = isNegative == 0 ? "+" : "";
             lines.Add($"    {featureLabel}: {direction}{value}");
         }
 
@@ -214,19 +213,8 @@ public class GlobalSHAPExplanation<T>
     /// </summary>
     public Vector<T> GetMeanAbsoluteShapValues()
     {
-        var result = new T[NumFeatures];
-
-        for (int j = 0; j < NumFeatures; j++)
-        {
-            double sum = 0;
-            for (int i = 0; i < LocalExplanations.Length; i++)
-            {
-                sum += Math.Abs(NumOps.ToDouble(LocalExplanations[i].ShapValues[j]));
-            }
-            result[j] = NumOps.FromDouble(sum / LocalExplanations.Length);
-        }
-
-        return new Vector<T>(result);
+        var engine = AiDotNetEngine.Current;
+        return engine.ReduceMean(engine.TensorAbs(StackShapValues()), new[] { 0 }, false).ToVector();
     }
 
     /// <summary>
@@ -248,41 +236,32 @@ public class GlobalSHAPExplanation<T>
     /// </summary>
     public Vector<T> GetMeanShapValues()
     {
-        var result = new T[NumFeatures];
-
-        for (int j = 0; j < NumFeatures; j++)
-        {
-            var sum = NumOps.Zero;
-            for (int i = 0; i < LocalExplanations.Length; i++)
-            {
-                sum = NumOps.Add(sum, LocalExplanations[i].ShapValues[j]);
-            }
-            result[j] = NumOps.Divide(sum, NumOps.FromDouble(LocalExplanations.Length));
-        }
-
-        return new Vector<T>(result);
+        return AiDotNetEngine.Current.ReduceMean(StackShapValues(), new[] { 0 }, false).ToVector();
     }
 
     /// <summary>
-    /// Gets the standard deviation of SHAP values for each feature.
+    /// Gets the (population) standard deviation of SHAP values for each feature across all explanations.
     /// </summary>
+    /// <returns>Vector of standard deviations for each feature.</returns>
     public Vector<T> GetShapValueStdDev()
     {
-        var mean = GetMeanShapValues();
-        var result = new T[NumFeatures];
+        var engine = AiDotNetEngine.Current;
+        var stacked = StackShapValues();
+        var mean = engine.ReduceMean(stacked, new[] { 0 }, true);
+        var centered = engine.TensorSubtract(stacked, engine.TensorBroadcastTo(mean, stacked.Shape.ToArray()));
+        return AiDotNet.Interpretability.Helpers.ExplainerTensorOps<T>.ColumnRootMeanSquares(centered, stacked.Shape[0])
+            .ToVector();
+    }
 
-        for (int j = 0; j < NumFeatures; j++)
-        {
-            double sumSq = 0;
-            double meanVal = NumOps.ToDouble(mean[j]);
-            for (int i = 0; i < LocalExplanations.Length; i++)
-            {
-                double diff = NumOps.ToDouble(LocalExplanations[i].ShapValues[j]) - meanVal;
-                sumSq += diff * diff;
-            }
-            result[j] = NumOps.FromDouble(Math.Sqrt(sumSq / LocalExplanations.Length));
-        }
-
-        return new Vector<T>(result);
+    /// <summary>
+    /// The local SHAP values as a [explanations, features] tensor, each row trimmed to <see cref="NumFeatures"/>.
+    /// </summary>
+    private Tensor<T> StackShapValues()
+    {
+        var rows = LocalExplanations
+            .Select(e => (e.ShapValues.Length == NumFeatures ? e.ShapValues : e.ShapValues.GetSubVector(0, NumFeatures))
+                .AsTensor())
+            .ToArray();
+        return AiDotNetEngine.Current.TensorStack(rows, 0);
     }
 }

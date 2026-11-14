@@ -86,13 +86,11 @@ public static class InterpretableModelHelper
         // Use MSE-based score function (negative because higher is better)
         Func<Vector<T>, Vector<T>, T> scoreFunc = (actual, predicted) =>
         {
-            double mse = 0;
-            for (int i = 0; i < actual.Length; i++)
-            {
-                double diff = numOps.ToDouble(actual[i]) - numOps.ToDouble(predicted[i]);
-                mse += diff * diff;
-            }
-            return numOps.FromDouble(-mse / actual.Length); // Negative MSE (higher is better)
+            var residual = AiDotNetEngine.Current.TensorSubtract(actual.AsTensor(), predicted.GetSubVector(0, actual.Length).AsTensor());
+            // mean of r^2 as the sum of (r / sqrt(n))^2, so the running sum stays at the scale of the mean (Half)
+            var scaledResidual = AiDotNetEngine.Current.TensorDivideScalar(residual, numOps.FromDouble(Math.Sqrt(actual.Length)));
+            T mse = AiDotNetEngine.Current.TensorSumOfSquares(scaledResidual);
+            return numOps.Negate(mse); // Negative MSE (higher is better)
         };
 
         var pfi = new PermutationFeatureImportance<T>(
@@ -104,11 +102,7 @@ public static class InterpretableModelHelper
         var result = pfi.Calculate(data, labels);
 
         // Convert to dictionary
-        var importance = new Dictionary<int, T>();
-        for (int i = 0; i < result.Importances.Length; i++)
-        {
-            importance[i] = result.Importances[i];
-        }
+        var importance = ToIndexDictionary(result.Importances);
 
         return Task.FromResult(importance);
     }
@@ -151,50 +145,28 @@ public static class InterpretableModelHelper
                 var parameters = firstLayer.GetParameters();
                 if (parameters.Length > 0 && parameters[0] is Tensor<T> weights)
                 {
-                    for (int i = 0; i < numFeatures && i < weights.Shape[0]; i++)
-                    {
-                        var sum = numOps.Zero;
-                        int outputDim = weights.Shape.Length > 1 ? weights.Shape[1] : 1;
-                        for (int j = 0; j < outputDim; j++)
-                        {
-                            int idx = i * outputDim + j;
-                            if (idx < weights.Data.Length)
-                            {
-                                sum = numOps.Add(sum, numOps.Abs(weights.Data.Span[idx]));
-                            }
-                        }
-                        importance[i] = sum;
-                    }
+                    int outputDim = weights.Shape.Length > 1 ? weights.Shape[1] : 1;
+                    var sums = AbsoluteWeightRowSums(weights, Math.Min(numFeatures, weights.Shape[0]), outputDim);
 
                     // Normalize
-                    var total = numOps.Zero;
-                    foreach (var v in importance.Values)
-                        total = numOps.Add(total, v);
-
-                    if (numOps.ToDouble(total) > 1e-10)
+                    T total = AiDotNetEngine.Current.Sum(sums);
+                    if (numOps.GreaterThan(total, ExplainerTensorOps<T>.Tolerance(1e-10)))
                     {
-                        foreach (var key in importance.Keys.ToList())
-                        {
-                            importance[key] = numOps.Divide(importance[key], total);
-                        }
+                        sums = AiDotNetEngine.Current.Divide(sums, total);
                     }
 
-                    return Task.FromResult(importance);
+                    return Task.FromResult(ToIndexDictionary(sums));
                 }
             }
 
-            for (int i = 0; i < numFeatures; i++)
-            {
-                importance[i] = numOps.FromDouble(1.0 / numFeatures);
-            }
+            T uniform = numOps.Divide(numOps.One, numOps.FromDouble(numFeatures));
+            importance = Enumerable.Range(0, Math.Max(0, numFeatures)).ToDictionary(i => i, _ => uniform);
         }
         else
         {
             // For non-NN models without data, return uniform importance
-            for (int i = 0; i < 10; i++)
-            {
-                importance[i] = numOps.FromDouble(0.1);
-            }
+            T uniform = numOps.FromDouble(0.1);
+            importance = Enumerable.Range(0, 10).ToDictionary(i => i, _ => uniform);
         }
 
         return Task.FromResult(importance);
@@ -238,35 +210,19 @@ public static class InterpretableModelHelper
                 var parameters = firstLayer.GetParameters();
                 if (parameters.Length > 0 && parameters[0] is Tensor<T> weights)
                 {
+                    var engine = AiDotNetEngine.Current;
                     int numFeatures = Math.Min(input.Data.Length, weights.Shape[0]);
                     int outputDim = weights.Shape.Length > 1 ? weights.Shape[1] : 1;
 
-                    for (int i = 0; i < numFeatures; i++)
-                    {
-                        var weightSum = numOps.Zero;
-                        for (int j = 0; j < outputDim; j++)
-                        {
-                            int idx = i * outputDim + j;
-                            if (idx < weights.Data.Length)
-                            {
-                                weightSum = numOps.Add(weightSum, numOps.Abs(weights.Data.Span[idx]));
-                            }
-                        }
-                        var inputVal = numOps.Abs(input.Data.Span[i]);
-                        var avgWeight = numOps.Divide(weightSum, numOps.FromDouble(outputDim));
-                        importance[i] = numOps.Multiply(inputVal, avgWeight);
-                    }
-
-                    return Task.FromResult(importance);
+                    var avgWeights = engine.Divide(AbsoluteWeightRowSums(weights, numFeatures, outputDim), numOps.FromDouble(outputDim));
+                    var inputValues = engine.Abs(input.ToVector().GetSubVector(0, Math.Max(0, numFeatures)));
+                    return Task.FromResult(ToIndexDictionary(engine.Multiply(inputValues, avgWeights)));
                 }
             }
         }
 
         // Fallback: use absolute input values
-        for (int i = 0; i < input.Data.Length; i++)
-        {
-            importance[i] = numOps.Abs(input.Data.Span[i]);
-        }
+        importance = ToIndexDictionary(AiDotNetEngine.Current.Abs(input.ToVector()));
 
         return Task.FromResult(importance);
     }
@@ -337,10 +293,8 @@ public static class InterpretableModelHelper
             var instance = inputMatrix.GetRow(i);
             var explanation = shapExplainer.Explain(instance);
 
-            for (int j = 0; j < numFeatures && j < explanation.ShapValues.Length; j++)
-            {
-                shapValues[i, j] = explanation.ShapValues[j];
-            }
+            // Features past the explanation's end stay zero
+            AiDotNetEngine.Current.SetRow(shapValues, i, ExplainerTensorOps<T>.PadOrTruncate(explanation.ShapValues, numFeatures));
         }
 
         return Task.FromResult(shapValues);
@@ -402,11 +356,8 @@ public static class InterpretableModelHelper
         var instanceVector = new Vector<T>(input.Data.ToArray());
         var limeResult = limeExplainer.Explain(instanceVector);
 
-        var featureImportance = new Dictionary<int, T>();
-        for (int i = 0; i < Math.Min(numFeatures, limeResult.Coefficients.Length); i++)
-        {
-            featureImportance[i] = limeResult.Coefficients[i];
-        }
+        var featureImportance = ToIndexDictionary(
+            limeResult.Coefficients.GetSubVector(0, Math.Max(0, Math.Min(numFeatures, limeResult.Coefficients.Length))));
 
         var limeExplanation = new LimeExplanation<T>
         {
@@ -801,10 +752,10 @@ public static class InterpretableModelHelper
             var featureIdx = featureIdxArray[f];
             if (pdpResult.PartialDependence.TryGetValue(featureIdx, out var pdValues))
             {
-                for (int g = 0; g < Math.Min(gridResolution, pdValues.Length); g++)
-                {
-                    pdpMatrix[f, g] = pdValues[g];
-                }
+                // Grid points beyond the explainer's output stay zero
+                var row = new Vector<T>(pdValues.Take(gridResolution)
+                    .Concat(Enumerable.Repeat(MathHelper.GetNumericOperations<T>().Zero, Math.Max(0, gridResolution - pdValues.Length))));
+                AiDotNetEngine.Current.SetRow(pdpMatrix, f, row);
             }
         }
 
@@ -813,19 +764,9 @@ public static class InterpretableModelHelper
         {
             foreach (var featureIdx in featureIdxArray)
             {
-                if (pdpResult.IceCurves.TryGetValue(featureIdx, out var iceArray))
+                if (pdpResult.IceCurves.TryGetValue(featureIdx, out var iceMatrix))
                 {
-                    int numInstances = iceArray.GetLength(0);
-                    int numGridPoints = iceArray.GetLength(1);
-                    var iceMatrix = new Matrix<T>(numInstances, numGridPoints);
-                    for (int i = 0; i < numInstances; i++)
-                    {
-                        for (int g = 0; g < numGridPoints; g++)
-                        {
-                            iceMatrix[i, g] = iceArray[i, g];
-                        }
-                    }
-                    iceCurves.Add(iceMatrix);
+                    iceCurves.Add(iceMatrix.Clone());
                 }
             }
         }
@@ -1101,99 +1042,68 @@ public static class InterpretableModelHelper
                 statisticalParityDifference: numOps.Zero));
         }
 
-        // Split samples by sensitive attribute (binary: above/below median)
-        double medianSensitive = 0;
-        var sensitiveValues = new double[numSamples];
-        for (int i = 0; i < numSamples; i++)
-        {
-            sensitiveValues[i] = numOps.ToDouble(inputMatrix[i, sensitiveFeatureIndex]);
-        }
-        var sortedSensitive = sensitiveValues.OrderBy(x => x).ToArray();
-        medianSensitive = sortedSensitive[numSamples / 2];
+        // Split samples by sensitive attribute (binary: below / at or above the median)
+        var engine = AiDotNetEngine.Current;
+        var (group0, group1, predictedPositive) = FairnessMasks(inputMatrix, predictions, sensitiveFeatureIndex);
+        var labels = groundTruthLabels.AsTensor();
+        var actualPositive = engine.TensorGreaterEqual(labels, engine.TensorFullLike(labels, numOps.FromDouble(0.5)));
 
         // Counts for each group
-        int group0Count = 0, group0Positive = 0, group0TP = 0, group0FP = 0, group0FN = 0, group0TN = 0;
-        int group1Count = 0, group1Positive = 0, group1TP = 0, group1FP = 0, group1FN = 0, group1TN = 0;
-
-        for (int i = 0; i < numSamples; i++)
-        {
-            double sensitiveVal = numOps.ToDouble(inputMatrix[i, sensitiveFeatureIndex]);
-            double predVal = numOps.ToDouble(predictions[i]);
-            double actualVal = numOps.ToDouble(groundTruthLabels[i]);
-            bool isPredPositive = predVal >= 0.5;
-            bool isActualPositive = actualVal >= 0.5;
-
-            if (sensitiveVal < medianSensitive)
-            {
-                group0Count++;
-                if (isPredPositive) group0Positive++;
-                if (isPredPositive && isActualPositive) group0TP++;
-                if (isPredPositive && !isActualPositive) group0FP++;
-                if (!isPredPositive && isActualPositive) group0FN++;
-                if (!isPredPositive && !isActualPositive) group0TN++;
-            }
-            else
-            {
-                group1Count++;
-                if (isPredPositive) group1Positive++;
-                if (isPredPositive && isActualPositive) group1TP++;
-                if (isPredPositive && !isActualPositive) group1FP++;
-                if (!isPredPositive && isActualPositive) group1FN++;
-                if (!isPredPositive && !isActualPositive) group1TN++;
-            }
-        }
+        var group0Predicted = engine.TensorMultiply(group0, predictedPositive);
+        var group1Predicted = engine.TensorMultiply(group1, predictedPositive);
+        T group0Count = engine.TensorSum(group0);
+        T group1Count = engine.TensorSum(group1);
+        T group0Positive = engine.TensorSum(group0Predicted);
+        T group1Positive = engine.TensorSum(group1Predicted);
+        T group0TP = engine.TensorSum(engine.TensorMultiply(group0Predicted, actualPositive));
+        T group1TP = engine.TensorSum(engine.TensorMultiply(group1Predicted, actualPositive));
+        T group0ActualPositive = engine.TensorSum(engine.TensorMultiply(group0, actualPositive)); // TP + FN
+        T group1ActualPositive = engine.TensorSum(engine.TensorMultiply(group1, actualPositive));
+        T group0FP = numOps.Subtract(group0Positive, group0TP);
+        T group1FP = numOps.Subtract(group1Positive, group1TP);
+        T group0ActualNegative = numOps.Subtract(group0Count, group0ActualPositive); // FP + TN
+        T group1ActualNegative = numOps.Subtract(group1Count, group1ActualPositive);
 
         // Compute proper fairness metrics
-        double rate0 = group0Count > 0 ? (double)group0Positive / group0Count : 0;
-        double rate1 = group1Count > 0 ? (double)group1Positive / group1Count : 0;
+        T rate0 = SafeRatio(numOps, group0Positive, group0Count);
+        T rate1 = SafeRatio(numOps, group1Positive, group1Count);
 
         // Demographic Parity (difference in positive prediction rates)
-        double demographicParity = Math.Abs(rate0 - rate1);
+        T demographicParity = numOps.Abs(numOps.Subtract(rate0, rate1));
 
         // Disparate Impact (ratio of positive rates)
-        double disparateImpact = 1.0;
-        if (rate0 > 0 && rate1 > 0)
-        {
-            disparateImpact = Math.Min(rate0, rate1) / Math.Max(rate0, rate1);
-        }
-        else if (rate0 == 0 && rate1 == 0)
-        {
-            disparateImpact = 1.0;
-        }
-        else
-        {
-            disparateImpact = 0.0;
-        }
+        T disparateImpact = DisparateImpact(numOps, rate0, rate1);
 
         // Statistical Parity Difference
-        double statisticalParityDifference = rate0 - rate1;
+        T statisticalParityDifference = numOps.Subtract(rate0, rate1);
 
         // True Positive Rates (for Equal Opportunity)
-        double tpr0 = (group0TP + group0FN) > 0 ? (double)group0TP / (group0TP + group0FN) : 0;
-        double tpr1 = (group1TP + group1FN) > 0 ? (double)group1TP / (group1TP + group1FN) : 0;
+        T tpr0 = SafeRatio(numOps, group0TP, group0ActualPositive);
+        T tpr1 = SafeRatio(numOps, group1TP, group1ActualPositive);
 
         // False Positive Rates (for Equalized Odds)
-        double fpr0 = (group0FP + group0TN) > 0 ? (double)group0FP / (group0FP + group0TN) : 0;
-        double fpr1 = (group1FP + group1TN) > 0 ? (double)group1FP / (group1FP + group1TN) : 0;
+        T fpr0 = SafeRatio(numOps, group0FP, group0ActualNegative);
+        T fpr1 = SafeRatio(numOps, group1FP, group1ActualNegative);
 
         // Equal Opportunity (difference in TPR)
-        double equalOpportunity = Math.Abs(tpr0 - tpr1);
+        T equalOpportunity = numOps.Abs(numOps.Subtract(tpr0, tpr1));
 
         // Equalized Odds (max of TPR difference and FPR difference)
-        double equalizedOdds = Math.Max(Math.Abs(tpr0 - tpr1), Math.Abs(fpr0 - fpr1));
+        T fprGap = numOps.Abs(numOps.Subtract(fpr0, fpr1));
+        T equalizedOdds = numOps.GreaterThan(fprGap, equalOpportunity) ? fprGap : equalOpportunity;
 
         // Predictive Parity (difference in precision)
-        double precision0 = group0Positive > 0 ? (double)group0TP / group0Positive : 0;
-        double precision1 = group1Positive > 0 ? (double)group1TP / group1Positive : 0;
-        double predictiveParity = Math.Abs(precision0 - precision1);
+        T precision0 = SafeRatio(numOps, group0TP, group0Positive);
+        T precision1 = SafeRatio(numOps, group1TP, group1Positive);
+        T predictiveParity = numOps.Abs(numOps.Subtract(precision0, precision1));
 
         return Task.FromResult(new FairnessMetrics<T>(
-            demographicParity: numOps.FromDouble(demographicParity),
-            equalOpportunity: numOps.FromDouble(equalOpportunity),
-            equalizedOdds: numOps.FromDouble(equalizedOdds),
-            predictiveParity: numOps.FromDouble(predictiveParity),
-            disparateImpact: numOps.FromDouble(disparateImpact),
-            statisticalParityDifference: numOps.FromDouble(statisticalParityDifference)));
+            demographicParity: demographicParity,
+            equalOpportunity: equalOpportunity,
+            equalizedOdds: equalizedOdds,
+            predictiveParity: predictiveParity,
+            disparateImpact: disparateImpact,
+            statisticalParityDifference: statisticalParityDifference));
     }
 
     /// <summary>
@@ -1229,69 +1139,35 @@ public static class InterpretableModelHelper
                 statisticalParityDifference: numOps.Zero));
         }
 
-        var sensitiveValues = new double[numSamples];
-        for (int i = 0; i < numSamples; i++)
-        {
-            sensitiveValues[i] = numOps.ToDouble(inputMatrix[i, sensitiveFeatureIndex]);
-        }
-        var sortedSensitive = sensitiveValues.OrderBy(x => x).ToArray();
-        double medianSensitive = sortedSensitive[numSamples / 2];
+        var engine = AiDotNetEngine.Current;
+        var (group0, group1, predictedPositive) = FairnessMasks(inputMatrix, predictions, sensitiveFeatureIndex);
 
-        int group0Count = 0, group0Positive = 0;
-        int group1Count = 0, group1Positive = 0;
+        T group0Count = engine.TensorSum(group0);
+        T group1Count = engine.TensorSum(group1);
+        T group0Positive = engine.TensorSum(engine.TensorMultiply(group0, predictedPositive));
+        T group1Positive = engine.TensorSum(engine.TensorMultiply(group1, predictedPositive));
 
-        for (int i = 0; i < numSamples; i++)
-        {
-            double sensitiveVal = numOps.ToDouble(inputMatrix[i, sensitiveFeatureIndex]);
-            double predVal = numOps.ToDouble(predictions[i]);
-            bool isPositive = predVal >= 0.5;
+        T rate0 = SafeRatio(numOps, group0Positive, group0Count);
+        T rate1 = SafeRatio(numOps, group1Positive, group1Count);
 
-            if (sensitiveVal < medianSensitive)
-            {
-                group0Count++;
-                if (isPositive) group0Positive++;
-            }
-            else
-            {
-                group1Count++;
-                if (isPositive) group1Positive++;
-            }
-        }
-
-        double rate0 = group0Count > 0 ? (double)group0Positive / group0Count : 0;
-        double rate1 = group1Count > 0 ? (double)group1Positive / group1Count : 0;
-
-        double demographicParity = Math.Abs(rate0 - rate1);
-
-        double disparateImpact = 1.0;
-        if (rate0 > 0 && rate1 > 0)
-        {
-            disparateImpact = Math.Min(rate0, rate1) / Math.Max(rate0, rate1);
-        }
-        else if (rate0 == 0 && rate1 == 0)
-        {
-            disparateImpact = 1.0;
-        }
-        else
-        {
-            disparateImpact = 0.0;
-        }
-
-        double statisticalParityDifference = rate0 - rate1;
+        T demographicParity = numOps.Abs(numOps.Subtract(rate0, rate1));
+        T disparateImpact = DisparateImpact(numOps, rate0, rate1);
+        T statisticalParityDifference = numOps.Subtract(rate0, rate1);
 
         // Without ground truth, approximate Equal Opportunity and Equalized Odds
-        double equalOpportunity = 1.0 - demographicParity;
-        double equalizedOdds = 1.0 - demographicParity;
-        double predictiveParity = 1.0 - Math.Abs((double)group0Positive / Math.Max(1, numSamples) -
-                                                   (double)group1Positive / Math.Max(1, numSamples));
+        T equalOpportunity = numOps.Subtract(numOps.One, demographicParity);
+        T equalizedOdds = numOps.Subtract(numOps.One, demographicParity);
+        T sampleCount = numOps.FromDouble(Math.Max(1, numSamples));
+        T predictiveParity = numOps.Subtract(numOps.One, numOps.Abs(numOps.Subtract(
+            numOps.Divide(group0Positive, sampleCount), numOps.Divide(group1Positive, sampleCount))));
 
         return Task.FromResult(new FairnessMetrics<T>(
-            demographicParity: numOps.FromDouble(demographicParity),
-            equalOpportunity: numOps.FromDouble(equalOpportunity),
-            equalizedOdds: numOps.FromDouble(equalizedOdds),
-            predictiveParity: numOps.FromDouble(predictiveParity),
-            disparateImpact: numOps.FromDouble(disparateImpact),
-            statisticalParityDifference: numOps.FromDouble(statisticalParityDifference)));
+            demographicParity: demographicParity,
+            equalOpportunity: equalOpportunity,
+            equalizedOdds: equalizedOdds,
+            predictiveParity: predictiveParity,
+            disparateImpact: disparateImpact,
+            statisticalParityDifference: statisticalParityDifference));
     }
 
     /// <summary>
@@ -1383,18 +1259,18 @@ public static class InterpretableModelHelper
         sb.AppendLine($"Input dimensions: {input.Data.Length}");
         sb.AppendLine($"Prediction: {prediction.Data.Span[0]}");
 
-        var inputMagnitudes = new List<(int Index, T Value, double AbsValue)>();
-        for (int i = 0; i < input.Data.Length; i++)
-        {
-            inputMagnitudes.Add((i, input.Data.Span[i], Math.Abs(numOps.ToDouble(input.Data.Span[i]))));
-        }
-        inputMagnitudes = inputMagnitudes.OrderByDescending(x => x.AbsValue).Take(5).ToList();
+        var inputValues = input.ToVector();
+        var magnitudeRanks = inputValues.Length > 0
+            ? ExplainerTensorOps<T>.DenseRanks(AiDotNetEngine.Current.TensorAbs(inputValues.AsTensor()))
+            : Array.Empty<int>();
+        var topIndices = Enumerable.Range(0, inputValues.Length).OrderByDescending(i => magnitudeRanks[i]).Take(5).ToList();
+        var topValues = inputValues.GetElements(topIndices).ToList();
+        var directions = topValues.Count > 0 ? ExplainerTensorOps<T>.SignPrefixes(topValues) : Array.Empty<string>();
 
         sb.AppendLine();
         sb.AppendLine("Top input features by magnitude:");
-        foreach (var (idx, value, _) in inputMagnitudes)
+        foreach (var (idx, value, direction) in topIndices.Zip(topValues, (i, v) => (i, v)).Zip(directions, (iv, d) => (iv.i, iv.v, d)))
         {
-            var direction = numOps.ToDouble(value) >= 0 ? "+" : "";
             sb.AppendLine($"  Feature {idx}: {direction}{value}");
         }
 
@@ -1424,18 +1300,16 @@ public static class InterpretableModelHelper
         {
             return inputMatrix =>
             {
-                int numRows = inputMatrix.Rows;
-                var results = new T[numRows];
-
-                for (int i = 0; i < numRows; i++)
+                // First output of each row's prediction (zero when the model returns nothing)
+                var outputs = new List<Vector<T>>(inputMatrix.Rows);
+                for (int i = 0; i < inputMatrix.Rows; i++)
                 {
                     var row = inputMatrix.GetRow(i);
                     var inputTensor = new Tensor<T>(new[] { row.Length }, row);
-                    var outputTensor = nnModel.Predict(inputTensor);
-                    results[i] = outputTensor.Data.Length > 0 ? outputTensor.Data.Span[0] : numOps.Zero;
+                    outputs.Add(ExplainerTensorOps<T>.PadOrTruncate(nnModel.Predict(inputTensor).ToVector(), 1));
                 }
 
-                return new Vector<T>(results);
+                return outputs.Count > 0 ? ExplainerTensorOps<T>.Stack(outputs).ToVector() : new Vector<T>(0);
             };
         }
 
@@ -1444,18 +1318,16 @@ public static class InterpretableModelHelper
         {
             return inputMatrix =>
             {
-                int numRows = inputMatrix.Rows;
-                var results = new T[numRows];
-
-                for (int i = 0; i < numRows; i++)
+                // First output of each row's prediction (zero when the model returns nothing)
+                var outputs = new List<Vector<T>>(inputMatrix.Rows);
+                for (int i = 0; i < inputMatrix.Rows; i++)
                 {
                     var row = inputMatrix.GetRow(i);
                     var inputTensor = new Tensor<T>(new[] { row.Length }, row);
-                    var outputTensor = fullModel.Predict(inputTensor);
-                    results[i] = outputTensor.Data.Length > 0 ? outputTensor.Data.Span[0] : numOps.Zero;
+                    outputs.Add(ExplainerTensorOps<T>.PadOrTruncate(fullModel.Predict(inputTensor).ToVector(), 1));
                 }
 
-                return new Vector<T>(results);
+                return outputs.Count > 0 ? ExplainerTensorOps<T>.Stack(outputs).ToVector() : new Vector<T>(0);
             };
         }
 
@@ -1463,13 +1335,7 @@ public static class InterpretableModelHelper
         {
             return inputMatrix =>
             {
-                var output = matrixModel.Predict(inputMatrix);
-                var results = new T[output.Rows];
-                for (int i = 0; i < output.Rows; i++)
-                {
-                    results[i] = output[i, 0];
-                }
-                return new Vector<T>(results);
+                return matrixModel.Predict(inputMatrix).GetColumn(0);
             };
         }
 
@@ -1477,13 +1343,10 @@ public static class InterpretableModelHelper
         {
             return inputMatrix =>
             {
-                int numRows = inputMatrix.Rows;
-                var results = new T[numRows];
-
-                for (int i = 0; i < numRows; i++)
+                var results = new List<T>(inputMatrix.Rows);
+                for (int i = 0; i < inputMatrix.Rows; i++)
                 {
-                    var row = inputMatrix.GetRow(i);
-                    results[i] = vectorModel.Predict(row);
+                    results.Add(vectorModel.Predict(inputMatrix.GetRow(i)));
                 }
 
                 return new Vector<T>(results);
@@ -1562,37 +1425,89 @@ public static class InterpretableModelHelper
     {
         if (tensor.Shape.Length == 1)
         {
-            var matrix = new Matrix<T>(1, tensor.Shape[0]);
-            for (int j = 0; j < tensor.Shape[0]; j++)
-            {
-                matrix[0, j] = tensor.Data.Span[j];
-            }
-            return matrix;
+            return new Tensor<T>(new[] { 1, tensor.Shape[0] }, tensor.ToVector()).ToMatrix();
         }
         else if (tensor.Shape.Length >= 2)
         {
             int rows = tensor.Shape[0];
             int cols = tensor.Data.Length / rows;
-            var matrix = new Matrix<T>(rows, cols);
-
-            for (int i = 0; i < rows; i++)
-            {
-                for (int j = 0; j < cols; j++)
-                {
-                    matrix[i, j] = tensor.Data.Span[i * cols + j];
-                }
-            }
-            return matrix;
+            return new Tensor<T>(new[] { rows, cols }, tensor.ToVector().GetSubVector(0, rows * cols)).ToMatrix();
         }
         else
         {
-            var matrix = new Matrix<T>(1, 1);
-            if (tensor.Data.Length > 0)
-            {
-                matrix[0, 0] = tensor.Data.Span[0];
-            }
-            return matrix;
+            return new Tensor<T>(new[] { 1, 1 }, ExplainerTensorOps<T>.PadOrTruncate(tensor.ToVector(), 1)).ToMatrix();
         }
+    }
+
+    /// <summary>
+    /// Maps each position of <paramref name="values"/> to its value.
+    /// </summary>
+    private static Dictionary<int, T> ToIndexDictionary<T>(Vector<T> values)
+    {
+        return Enumerable.Range(0, values.Length)
+            .Zip(values, (index, value) => (index, value))
+            .ToDictionary(entry => entry.index, entry => entry.value);
+    }
+
+    /// <summary>
+    /// Sum of |w| over the <paramref name="outputDim"/> consecutive flat weights of each of the first
+    /// <paramref name="count"/> rows (weights past the tensor's end count as zero).
+    /// </summary>
+    private static Vector<T> AbsoluteWeightRowSums<T>(Tensor<T> weights, int count, int outputDim)
+    {
+        if (count <= 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        var engine = AiDotNetEngine.Current;
+        var flat = ExplainerTensorOps<T>.PadOrTruncate(weights.ToVector(), count * outputDim);
+        var rows = engine.Reshape(engine.TensorAbs(flat.AsTensor()), new[] { count, outputDim });
+        return engine.ReduceSum(rows, new[] { 1 }, false).ToVector();
+    }
+
+    /// <summary>
+    /// numerator / denominator, or zero when the denominator is not positive.
+    /// </summary>
+    private static T SafeRatio<T>(INumericOperations<T> numOps, T numerator, T denominator)
+    {
+        return numOps.GreaterThan(denominator, numOps.Zero) ? numOps.Divide(numerator, denominator) : numOps.Zero;
+    }
+
+    /// <summary>
+    /// min(rate0, rate1) / max(rate0, rate1) when both are positive, 1 when both are zero, else 0.
+    /// </summary>
+    private static T DisparateImpact<T>(INumericOperations<T> numOps, T rate0, T rate1)
+    {
+        if (numOps.GreaterThan(rate0, numOps.Zero) && numOps.GreaterThan(rate1, numOps.Zero))
+        {
+            T smaller = numOps.LessThan(rate0, rate1) ? rate0 : rate1;
+            T larger = numOps.GreaterThan(rate0, rate1) ? rate0 : rate1;
+            return numOps.Divide(smaller, larger);
+        }
+
+        // Rates are non-negative, so neither being positive means both are zero
+        return !numOps.GreaterThan(rate0, numOps.Zero) && !numOps.GreaterThan(rate1, numOps.Zero) ? numOps.One : numOps.Zero;
+    }
+
+    /// <summary>
+    /// 0/1 masks for samples below (group 0) and at or above (group 1) the median of the sensitive column,
+    /// and for predictions at or above 0.5.
+    /// </summary>
+    private static (Tensor<T> Group0, Tensor<T> Group1, Tensor<T> PredictedPositive) FairnessMasks<T>(
+        Matrix<T> inputMatrix, Vector<T> predictions, int sensitiveFeatureIndex)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int numSamples = inputMatrix.Rows;
+
+        var sensitive = inputMatrix.GetColumn(sensitiveFeatureIndex).AsTensor();
+        T medianSensitive = engine.TensorSort(sensitive).Item1.ToVector()[numSamples / 2];
+        var group0 = engine.TensorLessThan(sensitive, medianSensitive);
+        var group1 = engine.TensorSubtract(engine.TensorFullLike(group0, numOps.One), group0);
+        var predicted = predictions.GetSubVector(0, numSamples).AsTensor();
+        var predictedPositive = engine.TensorGreaterEqual(predicted, engine.TensorFullLike(predicted, numOps.FromDouble(0.5)));
+        return (group0, group1, predictedPositive);
     }
 
     /// <summary>
