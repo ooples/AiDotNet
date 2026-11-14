@@ -331,16 +331,21 @@ public abstract class NODEBase<T> : IParameterSource<T>
         var halved = TensorTapeOps.TapeMultiplyScalar(engine, logits.Reshape(rows, n), NumOps.FromDouble(0.5));
         var x = engine.TensorSubtract(halved, engine.ReduceMax(halved, new[] { 1 }, true));
 
-        // Threshold candidates over the descending order, and the support size
-        var sorted = engine.TensorSort(x, -1, descending: true).Values;
-        var rank = engine.TensorArange<T>(1, n + 1).Reshape(1, n);
+        // Threshold candidates over the descending order, and the support size. This search is not
+        // differentiated, and it runs in double: the candidates need meansq - mean^2, a difference of order
+        // 1 / r between values of order 1, and the running sums themselves. In Half that difference is below
+        // the spacing of the operands and the sums stop growing at 4096, so the search picked a wrong support
+        // (2100 logits with one large entry returned infinity instead of a one-hot row).
+        var searched = x.Cast<double>();
+        var sorted = engine.TensorSort(searched, -1, descending: true).Values;
+        var rank = engine.TensorArange<double>(1, n + 1).Reshape(1, n);
         var mean = engine.TensorDivide(engine.TensorCumSum(sorted, 1), rank);
         var meanSquare = engine.TensorDivide(engine.TensorCumSum(engine.TensorMultiply(sorted, sorted), 1), rank);
         var spread = engine.TensorMultiply(rank, engine.TensorSubtract(meanSquare, engine.TensorMultiply(mean, mean)));
-        var delta = engine.TensorDivide(engine.ScalarMinusTensor(one, spread), rank);
+        var delta = engine.TensorDivide(engine.ScalarMinusTensor(1.0, spread), rank);
         var candidates = engine.TensorSubtract(mean, engine.TensorSqrt(engine.ReLU(delta)));
         // Counted in int: a 0/1 sum in T stops counting at 2048 in Half and would pick the wrong threshold
-        var outside = engine.TensorLessThan(engine.TensorSubtract(sorted, candidates), NumOps.Zero);
+        var outside = engine.TensorLessThan(engine.TensorSubtract(sorted, candidates), 0.0);
         var supportCount = engine.ScalarMinusTensor(n, engine.ReduceSum(outside.Cast<int>(), new[] { 1 }, true));
         var supportSize = supportCount.Cast<T>();
 
@@ -348,7 +353,7 @@ public abstract class NODEBase<T> : IParameterSource<T>
         var lastIndex = engine.TensorAddScalar(supportCount, -1);
         var smallestSupported = engine.TensorTakeAlongDim(sorted, lastIndex, 1);
         var support = engine.ScalarMinusTensor(
-            one, engine.TensorLessThan(engine.TensorSubtract(x, smallestSupported), NumOps.Zero));
+            1.0, engine.TensorLessThan(engine.TensorSubtract(searched, smallestSupported), 0.0)).Cast<T>();
 
         // tau over the support: mean_S - sqrt((1 - ss_S) / k), ss_S = sum_S x^2 - k mean_S^2
         var sum = engine.ReduceSum(engine.TensorMultiply(support, x), new[] { 1 }, true);
