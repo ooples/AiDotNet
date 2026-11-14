@@ -186,6 +186,7 @@ public class DPFedLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IF
         // Steps 1-2: clip each client's adapters to clipNorm, then take the weighted average.
         var aggregated = new Vector<T>(adapterLen);
         double totalWeight = 0;
+        double maxWeight = 0;
         foreach (var (clientId, adapters) in clientAdapters)
         {
             // The norm is taken pre-scaled and kept in double: squaring a Half entry above 256 overflows, and an
@@ -196,21 +197,31 @@ public class DPFedLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IF
 
             double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
             totalWeight += w;
+            maxWeight = Math.Max(maxWeight, Math.Abs(w));
             aggregated = Engine.Add(aggregated, Engine.Multiply(clippedAdapter, NumOps.FromDouble(w)));
         }
 
+        int n = clientAdapters.Count;
+
+        // The largest share any one client has of the average: max_k |w_k| / W (1 / n for equal weights).
+        double largestShare = 1.0 / n;
         if (totalWeight <= 0)
         {
             totalWeight = clientAdapters.Count;
         }
+        else
+        {
+            largestShare = maxWeight / totalWeight;
+        }
 
         aggregated = Engine.Multiply(aggregated, NumOps.FromDouble(1.0 / totalWeight));
 
-        // Step 3: Gaussian mechanism on the average of n clipped vectors. Every client's whole adapter
-        // vector is clipped to clipNorm, so the L2 sensitivity of the average is clipNorm / n and every
-        // coordinate gets N(0, (sigma * clipNorm / n)^2). The noise scale must not depend on the data:
-        // a per-layer split of the clip budget taken from the clients' own norms under-noises the release.
-        int n = clientAdapters.Count;
+        // Step 3: Gaussian mechanism on the weighted average of n clipped vectors. Every client's whole adapter
+        // vector is clipped to clipNorm, so replacing client k moves the average by at most
+        // (w_k / W) * clipNorm: the L2 sensitivity is clipNorm * max_k w_k / W, which is clipNorm / n only for
+        // equal weights. Every coordinate gets N(0, (sigma * sensitivity)^2). The noise scale depends on the
+        // weights but not on the updates: a per-layer split of the clip budget taken from the clients' own
+        // norms under-noises the release, and so does clipNorm / n when one client carries most of the weight.
         if (_noiseMultiplier > 0 && n > 0)
         {
             // System.Random is used with a deterministic seed for reproducible DP noise.
@@ -218,7 +229,7 @@ public class DPFedLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IF
             // replace with System.Security.Cryptography.RandomNumberGenerator.
             var rng = RandomHelper.CreateSeededRandom(_seed + _roundCounter);
             _roundCounter++;
-            double noiseStd = _noiseMultiplier * _clipNorm / n;
+            double noiseStd = _noiseMultiplier * _clipNorm * largestShare;
 
             for (int i = 0; i < adapterLen; i++)
             {
