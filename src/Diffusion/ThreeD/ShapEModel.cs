@@ -643,19 +643,24 @@ public partial class ShapEModel<T> : ThreeDDiffusionModelBase<T>
     /// </exception>
     internal static Tensor<T> FaceTensor(List<int> triangles)
     {
-        double exactLimit = Math.Pow(2.0, MathHelper.GetNumericOperations<T>().PrecisionBits);
+        // Exactness is checked by round trip rather than from INumericOperations.PrecisionBits: that property is the
+        // storage width (16 for Half), not the significand width (11), so 2^PrecisionBits never rejects anything.
         int faceCount = triangles.Count / 3;
         var faceValues = new double[Math.Max(faceCount, 1) * 3];
         for (int i = 0; i < triangles.Count; i++)
-        {
-            if (triangles[i] > exactLimit)
-                throw new InvalidOperationException(
-                    $"Vertex index {triangles[i]} cannot be stored exactly in {typeof(T).Name} (integers are exact only " +
-                    $"up to {exactLimit}); lower the resolution or use GenerateMesh, whose faces are integers.");
             faceValues[i] = triangles[i];
+
+        var faces = new Tensor<double>(new[] { Math.Max(faceCount, 1), 3 }, new Vector<double>(faceValues)).Cast<T>();
+        double[] stored = faces.Cast<double>().ToArray();
+        for (int i = 0; i < triangles.Count; i++)
+        {
+            if (stored[i] != faceValues[i])
+                throw new InvalidOperationException(
+                    $"Vertex index {triangles[i]} cannot be stored exactly in {typeof(T).Name}; lower the resolution " +
+                    "or use GenerateMesh, whose faces are integers.");
         }
 
-        return new Tensor<double>(new[] { Math.Max(faceCount, 1), 3 }, new Vector<double>(faceValues)).Cast<T>();
+        return faces;
     }
 
     /// <summary>The vertices [max(count, 1), 3] of the flat coordinate list (one zero row when empty).</summary>
