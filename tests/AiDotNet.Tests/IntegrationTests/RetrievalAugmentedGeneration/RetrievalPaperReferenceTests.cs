@@ -92,22 +92,37 @@ public class RetrievalPaperReferenceTests
     }
 
     /// <summary>
-    /// Okapi BM25 (Robertson and Zaragoza 2009, Eq. 3.15) with k1 = 1.5, b = 0.75 on "a b", "a a c", "c" for
-    /// query "c": N = 3, df = 2, avgdl = 5/3, idf = ln(1.5 / 2.5).
+    /// Okapi BM25 (Robertson and Zaragoza 2009, Eq. 3.15) with k1 = 1.5, b = 0.75 and the Lucene idf
+    /// ln(1 + (N - df + 0.5) / (df + 0.5)) on "a b", "a a c", "c" for query "c": N = 3, df = 2, avgdl = 5/3,
+    /// idf = ln(1 + 1.5 / 2.5). The idf without the 1 + is ln(0.6) &lt; 0 here, which scored both documents
+    /// containing "c" below "a b" (score 0); they must rank first.
     /// </summary>
     [Fact]
-    public void Bm25_Scores_MatchRobertsonZaragoza()
+    public void Bm25_Scores_MatchRobertsonZaragozaWithLuceneIdf()
     {
         var retriever = new BM25Retriever<double>(Store<double>("a b", "a a c", "c"), k1: 1.5, b: 0.75);
 
-        var results = retriever.Retrieve("c", topK: 3).ToDictionary(d => d.Id, d => d.RelevanceScore);
+        var ranked = retriever.Retrieve("c", topK: 3).ToList();
+        var results = ranked.ToDictionary(d => d.Id, d => d.RelevanceScore);
 
-        double idf = Math.Log(1.5 / 2.5);
+        Assert.Equal(new[] { "d2", "d1", "d0" }, ranked.Select(d => d.Id).ToArray());
+        double idf = Math.Log(1.0 + 1.5 / 2.5);
         double avgdl = 5.0 / 3.0;
         double Term(double tf, double dl) => idf * tf * 2.5 / (tf + 1.5 * (0.25 + 0.75 * dl / avgdl));
         Assert.Equal(Term(1, 3), results["d1"], Tolerance);
         Assert.Equal(Term(1, 1), results["d2"], Tolerance);
         Assert.Equal(0.0, results["d0"], Tolerance);
+    }
+
+    /// <summary>k1 must be non-negative and b in [0, 1] (Robertson and Zaragoza 2009, Sec. 3.4).</summary>
+    [Fact]
+    public void Bm25_RejectsOutOfRangeParameters()
+    {
+        var store = Store<double>("a");
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => new BM25Retriever<double>(store, k1: -0.1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new BM25Retriever<double>(store, b: 1.5));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new BM25Retriever<double>(store, b: -0.5));
     }
 
     /// <summary>BM25 and TF-IDF are generic in T: master computed the idf / ranking through Convert.ToDouble,

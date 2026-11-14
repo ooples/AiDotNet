@@ -26,6 +26,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
         {
             if (documentStore == null)
                 throw new ArgumentNullException(nameof(documentStore));
+            if (double.IsNaN(k1) || k1 < 0)
+                throw new ArgumentOutOfRangeException(nameof(k1), "k1 must be non-negative.");
+            if (double.IsNaN(b) || b < 0 || b > 1)
+                throw new ArgumentOutOfRangeException(nameof(b), "b must be in [0, 1].");
 
             _documentStore = documentStore;
             _k1 = NumOps.FromDouble(k1);
@@ -58,7 +62,9 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
         /// <summary>
         /// Okapi BM25 (Robertson and Zaragoza 2009, Eq. 3.15) of every document for the query:
         /// Σ_t qtf_t · idf_t · tf (k1 + 1) / (tf + k1 (1 - b + b · dl / avgdl)),
-        /// with idf_t = ln((N - df_t + 0.5) / (df_t + 0.5)) and repeated query terms counted per occurrence.
+        /// with the Lucene idf_t = ln(1 + (N - df_t + 0.5) / (df_t + 0.5)) and repeated query terms counted per
+        /// occurrence. The Robertson-Sparck Jones idf without the 1 + turns negative once a term is in more than
+        /// half the documents, which ranks the documents that contain a query term below the ones that do not.
         /// </summary>
         internal T[] ScoreDocuments(List<string> queryTerms, List<List<string>> documentTerms)
         {
@@ -91,12 +97,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
             foreach (var term in queryTerms)
                 queryCounts[termIndex[term]]++;
 
-            // idf_t = ln((N - df + 0.5) / (df + 0.5)), skipped (0) for terms no document contains.
+            // idf_t = ln(1 + (N - df + 0.5) / (df + 0.5)) (Lucene BM25Similarity), skipped (0) for terms no
+            // document contains.
             var half = NumOps.FromDouble(0.5);
             var df = new Tensor<int>(documentFrequency, [terms]).Cast<T>();
-            var idf = Engine.TensorLog(Engine.TensorDivide(
+            var idf = Engine.TensorLog(Engine.TensorAddScalar(Engine.TensorDivide(
                 Engine.ScalarMinusTensor(NumOps.Add(NumOps.FromDouble(documents), half), df),
-                Engine.TensorAddScalar(df, half)));
+                Engine.TensorAddScalar(df, half)), NumOps.One));
             idf = Engine.TensorWhere(Engine.TensorGreaterThan(df, NumOps.Zero), idf, new Tensor<T>([terms]));
             var termWeights = Engine.TensorMultiply(idf, new Tensor<int>(queryCounts, [terms]).Cast<T>());
 
