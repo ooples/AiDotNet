@@ -750,6 +750,28 @@ public class AttackReferenceTests
         Assert.Equal(0.2, stats.EvaluationEpsilon, 12);
     }
 
+    [Fact(Timeout = 300000)]
+    public async Task ConfiguredTargetedAutoAttack_ReachesTheConfiguredTargetClass()
+    {
+        // With targeted attacks configured, AutoAttack runs APGD-T and FAB-T against TargetClass = 2. It ran the
+        // untargeted ensemble instead, whose class-1 misclassification is not a targeted success.
+        var model = new LinearLogitModel(
+            new double[,] { { 1.0, 0.0, 0.0 }, { 0.0, 1.0, 0.0 }, { 0.0, 0.0, 1.0 } },
+            new double[] { 0.0, 0.0, 0.0 });
+        var result = ResultWith(model, new AdversarialRobustnessOptions<double>
+        {
+            AttackEpsilon = 0.2,
+            AttackIterations = 10,
+            UseTargetedAttacks = true,
+            TargetClass = 2,
+            UseRandomStartForAttacks = false
+        });
+
+        var stats = result.EvaluateRobustnessWithAutoAttack(new[] { new Vector<double>(new[] { 0.5, 0.45, 0.4 }) }, new[] { OneHot(0, 3) });
+
+        Assert.Equal(1.0, stats.AttackSuccessRate, 12);
+    }
+
     [Fact(Timeout = 60000)]
     public async Task ConfiguredRandomStart_Disabled_LeavesAZeroGradientInputUnchanged()
     {

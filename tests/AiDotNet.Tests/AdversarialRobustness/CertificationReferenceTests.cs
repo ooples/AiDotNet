@@ -472,4 +472,365 @@ public class CertificationReferenceTests
     }
 
     #endregion
+
+    #region Review fixes
+
+    /// <summary>A model of any numeric type that always predicts one class, counting its calls.</summary>
+    private sealed class ConstantModel<TNum> : IFullModel<TNum, Vector<TNum>, Vector<TNum>>
+    {
+        private readonly int _inputs;
+        private readonly Func<TNum[], int> _classOf;
+        private readonly int _classes;
+        private List<int> _activeFeatures;
+
+        public ConstantModel(int inputs, int classes, Func<TNum[], int> classOf)
+        {
+            _inputs = inputs;
+            _classes = classes;
+            _classOf = classOf;
+            _activeFeatures = Enumerable.Range(0, inputs).ToList();
+        }
+
+        public int Calls { get; private set; }
+
+        public ILossFunction<TNum> DefaultLossFunction => new MeanSquaredErrorLoss<TNum>();
+
+        public Vector<TNum> Predict(Vector<TNum> input)
+        {
+            Calls++;
+            var ops = AiDotNet.Helpers.MathHelper.GetNumericOperations<TNum>();
+            int cls = _classOf(input.ToArray());
+            return new Vector<TNum>(Enumerable.Range(0, _classes).Select(c => c == cls ? ops.One : ops.Zero).ToArray());
+        }
+
+        public void Train(Vector<TNum> input, Vector<TNum> expectedOutput) { }
+        public ModelMetadata<TNum> GetModelMetadata() => new();
+        public byte[] Serialize() => Array.Empty<byte>();
+        public void Deserialize(byte[] data) { }
+        public void SaveModel(string filePath) { }
+        public void LoadModel(string filePath) { }
+        public void SaveState(Stream stream) { }
+        public void LoadState(Stream stream) { }
+        public IFullModel<TNum, Vector<TNum>, Vector<TNum>> Clone() => new ConstantModel<TNum>(_inputs, _classes, _classOf);
+        public IFullModel<TNum, Vector<TNum>, Vector<TNum>> DeepCopy() => new ConstantModel<TNum>(_inputs, _classes, _classOf);
+        public Vector<TNum> ComputeGradients(Vector<TNum> input, Vector<TNum> target, ILossFunction<TNum>? lossFunction = null) => new Vector<TNum>(_inputs);
+        public void ApplyGradients(Vector<TNum> gradients, TNum learningRate) { }
+        public Vector<TNum> GetParameters() => new Vector<TNum>(0);
+        public void SetParameters(Vector<TNum> parameters) { }
+        public IFullModel<TNum, Vector<TNum>, Vector<TNum>> WithParameters(Vector<TNum> parameters) => new ConstantModel<TNum>(_inputs, _classes, _classOf);
+        public long ParameterCount => 0;
+        public bool SupportsParameterInitialization => false;
+        public IEnumerable<int> GetActiveFeatureIndices() => _activeFeatures;
+        public void SetActiveFeatureIndices(IEnumerable<int> featureIndices) => _activeFeatures = featureIndices.ToList();
+        public bool IsFeatureUsed(int featureIndex) => _activeFeatures.Contains(featureIndex);
+        public Dictionary<string, TNum> GetFeatureImportance() => new();
+        public Vector<TNum> SanitizeParameters(Vector<TNum> parameters) => parameters;
+        public void Dispose() { }
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task Certify_RadiusUsesTheExactNormalQuantile()
+    {
+        await Task.Yield();
+
+        // n = 100 hits at alpha = 0.001: p_A_lower = 0.001^(1/100) and R = 0.5 * Phi^-1(p_A_lower), with
+        // scipy.stats.norm.ppf giving R = 0.7502375120603182. The Abramowitz-Stegun approximation used before
+        // errs by up to 4.5e-4 in Phi^-1, which overstates or understates the certified radius.
+        var options = new CertifiedDefenseOptions<double>
+        {
+            NoiseSigma = 0.5,
+            NumSamples = 100,
+            SelectionSamples = 10,
+            ConfidenceLevel = 0.999,
+            Seed = 3
+        };
+        var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
+        var result = smoothing.CertifyPrediction(new Vector<double>(new[] { 0.2, 0.7 }), ConstantClass(2, 1, 3));
+
+        Assert.Equal(0.7502375120603182, result.CertifiedRadius, 1e-12);
+    }
+
+    [Fact(Timeout = 300000)]
+    public async Task Certify_HalfCountsBeyondTheHalfRangeKeepTheCertificate()
+    {
+        await Task.Yield();
+
+        // 70000 hits out of 70000: the count and the trial number exceed Half's largest finite value (65504), and
+        // p_A_lower = 0.001^(1/70000) = 0.99990132 rounds to 1 in Half, where Phi^-1 is infinite. The statistics
+        // run in double: R = 0.25 * Phi^-1(0.9999013226506588) = 0.9305946838334416 (scipy) and the frequency is 1.
+        var options = new CertifiedDefenseOptions<Half>
+        {
+            NoiseSigma = 0.25,
+            NumSamples = 70000,
+            SelectionSamples = 10,
+            ConfidenceLevel = 0.999,
+            BatchSize = 1000,
+            Seed = 4
+        };
+        var smoothing = new RandomizedSmoothing<Half, Vector<Half>, Vector<Half>>(options);
+        var model = new ConstantModel<Half>(1, 2, _ => 0);
+        var result = smoothing.CertifyPrediction(new Vector<Half>(new[] { (Half)0.5 }), model);
+
+        Assert.True(result.IsCertified);
+        Assert.Equal(1.0, (double)result.Confidence, 1e-12);
+        Assert.Equal((double)(Half)0.9305946838334416, (double)result.CertifiedRadius, 1e-12);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task Smoothing_RejectsANonPositiveBatchSize()
+    {
+        await Task.Yield();
+
+        // The noise is drawn BatchSize samples at a time (Cohen et al.'s _sample_noise), so the option is read
+        // and must be positive.
+        var options = new CertifiedDefenseOptions<double> { NumSamples = 10, SelectionSamples = 5, BatchSize = 0, Seed = 1 };
+        var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            smoothing.CertifyPrediction(new Vector<double>(new[] { 0.5 }), ConstantClass(1, 0, 2)));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task AdaptiveSmoothing_SamplesTheWholeMechanismAndUsesTheWorstCaseSigma()
+    {
+        await Task.Yield();
+
+        // The model flips when x0 > 0.05, so at x = 0 about 31% of the probes at sigma_min = 0.1 change the class
+        // and sigma(x) exceeds sigma_min. A nearby input can realize a smaller sigma, so the sound composed noise
+        // is sigma_min / sqrt(k + 1), not (k / sigma_min^2 + 1 / sigma(x)^2)^(-1/2). Every Monte Carlo sample runs
+        // the k probes and the classification: 1 clean call plus (n0 + n)(k + 1) noisy calls.
+        const int k = 20;
+        var options = new CertifiedDefenseOptions<double> { NumSamples = 200, SelectionSamples = 10, ConfidenceLevel = 0.99, Seed = 9 };
+        var adaptive = new AdaptiveRandomizedSmoothing<double, Vector<double>, Vector<double>>(options, 0.1, 1.0, k);
+        var model = new ConstantModel<double>(1, 2, x => x[0] > 0.05 ? 1 : 0);
+        var result = adaptive.CertifyPrediction(new Vector<double>(new[] { 0.0 }), model);
+
+        Assert.Equal(0.1 / Math.Sqrt(k + 1), (double)result.CertificationDetails["EffectiveSigma"], 1e-15);
+        Assert.True((double)result.CertificationDetails["AdaptiveSigma"] > 0.1);
+        Assert.Equal(1 + (10 + 200) * (k + 1), model.Calls);
+        Assert.Equal(CertifiedDefenseMethod.AdaptiveRandomizedSmoothing, (CertifiedDefenseMethod)result.CertificationDetails["Method"]);
+    }
+
+    /// <summary>One dense layer, one input, two logits z = (x, -x): the L-infinity margin 2x - 2 eps.</summary>
+    private static FeedForwardNeuralNetwork<double> WideMarginNetwork()
+    {
+        var output = new DenseLayer<double>(outputSize: 2, biasMode: BiasMode.Always);
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 1,
+            outputSize: 2,
+            layers: new List<ILayer<double>> { output });
+        var network = new FeedForwardNeuralNetwork<double>(architecture);
+        network.Predict(new Tensor<double>(new[] { 1, 1 }));
+        Assign(output, new double[,] { { 1.0, -1.0 } }, new[] { 0.0, 0.0 });
+        return network;
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CertifiedRadius_IsNotCappedAtOne()
+    {
+        await Task.Yield();
+
+        // At x = 3 the margin 6 - 2 eps stays positive up to eps = 3; the bisection over [0, 1] returned < 1.
+        var input = new Tensor<double>(new[] { 1, 1 }, new Vector<double>(new[] { 3.0 }));
+        var ibp = new IntervalBoundPropagation<double, Tensor<double>, Tensor<double>>(LInfinityOptions(0.1));
+        var crown = new CROWNVerification<double, Tensor<double>, Tensor<double>>(LInfinityOptions(0.1));
+
+        Assert.Equal(3.0, ibp.ComputeCertifiedRadius(input, WideMarginNetwork()), 1e-5);
+        Assert.Equal(3.0, crown.ComputeCertifiedRadius(input, WideMarginNetwork()), 1e-5);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task EvaluateCertifiedAccuracy_UsesTheEvaluationRadius()
+    {
+        await Task.Yield();
+
+        // The options' radius (NoiseSigma = 0.5) is too large to certify the reference input, but its certified
+        // radius exceeds the evaluation radius 0.05 (it is certified at 0.1). Certified accuracy at 0.05 is 1;
+        // requiring IsCertified at NoiseSigma reported 0.
+        var options = LInfinityOptions(0.5);
+        var ibp = new IntervalBoundPropagation<double, Tensor<double>, Tensor<double>>(options);
+        var crown = new CROWNVerification<double, Tensor<double>, Tensor<double>>(LInfinityOptions(0.5));
+        var inputs = new[] { ReferenceInput() };
+        var labels = new[] { new Tensor<double>(new[] { 2 }, new Vector<double>(new[] { 1.0, 0.0 })) };
+
+        Assert.False(ibp.CertifyPrediction(inputs[0], ReferenceNetwork()).IsCertified);
+        Assert.Equal(1.0, ibp.EvaluateCertifiedAccuracy(inputs, labels, ReferenceNetwork(), 0.05).CertifiedAccuracy, Tolerance);
+        Assert.Equal(1.0, crown.EvaluateCertifiedAccuracy(inputs, labels, ReferenceNetwork(), 0.05).CertifiedAccuracy, Tolerance);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Ibp_TightBoundsKeepTheCrownMargin()
+    {
+        await Task.Yield();
+
+        // UseTightBounds also bounds the margin with CROWN and keeps the larger sound bound: 0.45, not IBP's 0.3.
+        var options = LInfinityOptions(0.1);
+        options.UseTightBounds = true;
+        var ibp = new IntervalBoundPropagation<double, Tensor<double>, Tensor<double>>(options);
+        var result = ibp.CertifyPrediction(ReferenceInput(), ReferenceNetwork());
+
+        Assert.Equal(0.45, (double)result.CertificationDetails["MarginLowerBound"], 1e-12);
+    }
+
+    /// <summary>The reference network with the hidden layer as a FullyConnectedLayer, which stores [out, in].</summary>
+    private static FeedForwardNeuralNetwork<double> FullyConnectedReferenceNetwork()
+    {
+        var hidden = new FullyConnectedLayer<double>(2, 2, new ReLUActivation<double>());
+        var output = new DenseLayer<double>(outputSize: 2, biasMode: BiasMode.Always);
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 2,
+            outputSize: 2,
+            layers: new List<ILayer<double>> { hidden, output });
+        var network = new FeedForwardNeuralNetwork<double>(architecture);
+        network.Predict(new Tensor<double>(new[] { 1, 2 }));
+        var transposed = new double[2, 2];
+        for (int i = 0; i < 2; i++)
+        {
+            for (int j = 0; j < 2; j++)
+            {
+                transposed[i, j] = W1[j, i];
+            }
+        }
+
+        Assign(hidden, transposed, B1);
+        Assign(output, W2, B2);
+        return network;
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Ibp_ReadsFullyConnectedWeightsAsOutByIn()
+    {
+        await Task.Yield();
+
+        // The same function as the reference network, so the same bounds. Orientation was guessed from the
+        // width; a square [out, in] matrix was transposed as if it were a dense layer's [in, out].
+        var network = FullyConnectedReferenceNetwork();
+        var output = network.Predict(ReferenceInput());
+        Assert.Equal(1.5, output.GetFlat(0), 1e-12);
+
+        var ibp = new IntervalBoundPropagation<double, Tensor<double>, Tensor<double>>(LInfinityOptions(0.1));
+        var result = ibp.CertifyPrediction(ReferenceInput(), network);
+        Assert.True((bool)result.CertificationDetails["Sound"]);
+        Assert.Equal(0.3, (double)result.CertificationDetails["MarginLowerBound"], 1e-12);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Ibp_UsesTheLayersLeakyReluSlope()
+    {
+        await Task.Yield();
+
+        // LeakyReLU with slope 0.2: the crossing neuron h1 in [-0.3, 0.1] gives a1 in [-0.06, 0.1], so
+        // z0 = a0 - a1 <= 1.8 + 0.06 = 1.86. The fixed slope 0.01 gave 1.803, which is not an upper bound.
+        var hidden = new DenseLayer<double>(outputSize: 2, activationFunction: new LeakyReLUActivation<double>(0.2), biasMode: BiasMode.Always);
+        var output = new DenseLayer<double>(outputSize: 2, biasMode: BiasMode.Always);
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 2,
+            outputSize: 2,
+            layers: new List<ILayer<double>> { hidden, output });
+        var network = new FeedForwardNeuralNetwork<double>(architecture);
+        network.Predict(new Tensor<double>(new[] { 1, 2 }));
+        Assign(hidden, W1, B1);
+        Assign(output, W2, B2);
+
+        var ibp = new IntervalBoundPropagation<double, Tensor<double>, Tensor<double>>(LInfinityOptions(0.1));
+        var result = ibp.CertifyPrediction(ReferenceInput(), network);
+        Assert.Equal(1.86, result.UpperBound, 1e-12);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Ibp_DoesNotCallANetworkWithAnUnknownActivationSound()
+    {
+        await Task.Yield();
+
+        // The layer's activation-type list reports activations it does not know (Mish) as identity, so the
+        // network was bounded without its nonlinearity and reported as sound.
+        var hidden = new DenseLayer<double>(outputSize: 2, activationFunction: new MishActivation<double>(), biasMode: BiasMode.Always);
+        var output = new DenseLayer<double>(outputSize: 2, biasMode: BiasMode.Always);
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 2,
+            outputSize: 2,
+            layers: new List<ILayer<double>> { hidden, output });
+        var network = new FeedForwardNeuralNetwork<double>(architecture);
+        network.Predict(new Tensor<double>(new[] { 1, 2 }));
+        Assign(hidden, W1, B1);
+        Assign(output, W2, B2);
+
+        var ibp = new IntervalBoundPropagation<double, Tensor<double>, Tensor<double>>(LInfinityOptions(0.1));
+        var crown = new CROWNVerification<double, Tensor<double>, Tensor<double>>(LInfinityOptions(0.1));
+        Assert.False((bool)ibp.CertifyPrediction(ReferenceInput(), network).CertificationDetails["Sound"]);
+        Assert.False((bool)crown.CertifyPrediction(ReferenceInput(), network).CertificationDetails["Sound"]);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task AutoAttack_TargetClassesExcludeTheLabelOnTies()
+    {
+        await Task.Yield();
+
+        // All logits tie: the label (0) is excluded by index and the rest keep class order. Skipping the first
+        // ranked position of an unstable sort could drop a wrong class and target the label itself.
+        var attack = new AutoAttack<double, Vector<double>, Vector<double>>(new AdversarialAttackOptions<double>());
+        var logits = new Vector<double>(new double[12]);
+        Assert.Equal(Enumerable.Range(1, 9).ToArray(), attack.TargetClassesOf(logits, 0, -1));
+    }
+
+    [Fact(Timeout = 300000)]
+    public async Task AutoAttack_TargetedRunReachesTheTargetClass()
+    {
+        await Task.Yield();
+
+        // Class 1 is the easiest misclassification, so the untargeted ensemble stops there. With IsTargeted the
+        // attack must reach TargetClass = 2, which the L-infinity ball allows (x = (0.3, 0.3, 0.7)).
+        var attack = new AutoAttack<double, Vector<double>, Vector<double>>(new AdversarialAttackOptions<double>
+        {
+            Epsilon = 0.2,
+            NormType = AdversarialNormType.LInfinity,
+            Iterations = 20,
+            IsTargeted = true,
+            TargetClass = 2,
+            RandomSeed = 5
+        });
+        var model = new DelegateModel(3, x => new[] { x[0], x[1] - 0.05, x[2] - 0.3 });
+        var input = new Vector<double>(new[] { 0.5, 0.5, 0.5 });
+        var adversarial = attack.GenerateAdversarialExample(input, new Vector<double>(new[] { 1.0, 0.0, 0.0 }), model);
+
+        var logits = model.Predict(adversarial).ToArray();
+        Assert.Equal(2, Array.IndexOf(logits, logits.Max()));
+        for (int i = 0; i < 3; i++)
+        {
+            Assert.True(Math.Abs(adversarial[i] - input[i]) <= 0.2 + 1e-12);
+        }
+    }
+
+    [Fact(Timeout = 300000)]
+    public async Task AutoAttack_WithoutRandomStartApgdIsDeterministic()
+    {
+        await Task.Yield();
+
+        // UseRandomStart = false starts APGD at the clean input (autoattack use_rs), so APGD-CE, which fools this
+        // model, returns the same point for any seed. A random start depends on the seed.
+        Vector<double> Run(int seed)
+        {
+            var attack = new AutoAttack<double, Vector<double>, Vector<double>>(new AdversarialAttackOptions<double>
+            {
+                Epsilon = 0.2,
+                NormType = AdversarialNormType.LInfinity,
+                Iterations = 20,
+                UseRandomStart = false,
+                RandomSeed = seed
+            });
+            var model = new DelegateModel(2, x => new[] { x[0] - x[1] + 0.1, x[1] - x[0] });
+            return attack.GenerateAdversarialExample(new Vector<double>(new[] { 0.5, 0.5 }), new Vector<double>(new[] { 1.0, 0.0 }), model);
+        }
+
+        Assert.Equal(Run(1).ToArray(), Run(2).ToArray());
+    }
+
+    #endregion
 }
