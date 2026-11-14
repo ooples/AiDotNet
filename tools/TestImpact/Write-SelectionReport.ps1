@@ -18,6 +18,8 @@ It never influences the matrix: it only reads the decision files. Missing or mal
 .PARAMETER WorkflowReason     Why the workflow overrode or skipped the selector, when it did.
 .PARAMETER TypeImpactPlanFile type-impact-plan.json from Select-AffectedTests.ps1 (Build job).
 .PARAMETER EffectiveFile      type-impact-effective.json: what actually ran after Select-AffectedTests post-processing.
+.PARAMETER MapResolutionFile  map-resolution.json from Resolve-CertifiedShardMap.ps1: which certified map was used, its age,
+                              and whether it stands in for newer map runs that failed.
 .PARAMETER SummaryFile        Markdown destination; defaults to GITHUB_STEP_SUMMARY.
 .PARAMETER ReportFile         JSON report destination.
 #>
@@ -30,6 +32,7 @@ param(
     [Parameter(ParameterSetName = 'Report')] [string] $WorkflowReason = '',
     [Parameter(ParameterSetName = 'Report')] [string] $TypeImpactPlanFile = '',
     [Parameter(ParameterSetName = 'Report')] [string] $EffectiveFile = '',
+    [Parameter(ParameterSetName = 'Report')] [string] $MapResolutionFile = '',
     [Parameter(ParameterSetName = 'Report')] [string] $SummaryFile = $env:GITHUB_STEP_SUMMARY,
     [Parameter(ParameterSetName = 'Report')] [string] $ReportFile = '',
     [Parameter(Mandatory, ParameterSetName = 'SelfTest')] [switch] $SelfTest
@@ -86,7 +89,7 @@ function Test-StructuralRoute([string] $Why) {
     return $Why -match '^(is always run|is not in the coverage map yet|changed its manifest definition|reflection inventory changed|its manifest or execution policy changed)'
 }
 
-function New-SelectionReport($Selection, [int] $Total, [int] $FinalCount, [bool] $Escalated, [string] $Reason, $Plan, $Effective = $null) {
+function New-SelectionReport($Selection, [int] $Total, [int] $FinalCount, [bool] $Escalated, [string] $Reason, $Plan, $Effective = $null, $MapResolution = $null) {
     $reasons = @(Get-Prop $Selection 'reasons' | Where-Object { $_ })
     # Evidence, not absence: a missing or partial selection.json must not read as "coverage selected nothing".
     $wouldProperty = if ($null -ne $Selection) { $Selection.PSObject.Properties['wouldSelect'] } else { $null }
@@ -143,6 +146,17 @@ function New-SelectionReport($Selection, [int] $Total, [int] $FinalCount, [bool]
             selectionAvailable = $selectionAvailable; workflowReason = $Reason
         }
         map = Get-Prop $Selection 'map'
+        # Which certified map run supplied the map, and whether newer map runs failed in front of it.
+        mapResolution = $(if ($null -ne $MapResolution) {
+            [pscustomobject]@{
+                status = [string] (Get-Prop $MapResolution 'status'); runId = Get-Prop $MapResolution 'runId'
+                mapCreatedAt = Get-Prop $MapResolution 'mapCreatedAt'; mapAgeDays = Get-Prop $MapResolution 'mapAgeDays'
+                skippedFailedRunIds = @(Get-Prop $MapResolution 'skippedFailedRunIds' | Where-Object { $_ })
+                failedRunFallbackMaxAgeDays = Get-Prop $MapResolution 'failedRunFallbackMaxAgeDays'
+            }
+        } else { $null })
+        # How a Directory.Packages.props change was routed (Select-Shards.ps1, Get-PackagePropsVerdict).
+        packageRouting = Get-Prop $Selection 'packageRouting'
         escalations = @($escalations)
         files = $files
         shards = @($shards)
@@ -169,6 +183,37 @@ function ConvertTo-SelectionMarkdown($Report) {
     if ($Report.map) {
         [void] $sb.AppendLine()
         [void] $sb.AppendLine("Map ``$([string]$Report.map.sha)``: $($Report.map.changedSinceMap) file(s) changed since it was built; $($Report.map.changedByThisChange) changed by this change.")
+    }
+
+    $mr = $Report.mapResolution
+    if ($null -ne $mr -and $mr.status) {
+        [void] $sb.AppendLine()
+        $failed = @($mr.skippedFailedRunIds)
+        if ($mr.status -eq 'Found') {
+            $line = "Certified map from map run ``$($mr.runId)``, built $($mr.mapCreatedAt) ($($mr.mapAgeDays) day(s) old)."
+            if ($failed.Count -gt 0) {
+                $line += " **Fallback:** newer map run(s) $(($failed | ForEach-Object { '`' + $_ + '`' }) -join ', ') failed without an audit decision, so the last certified map is used (allowed up to $($mr.failedRunFallbackMaxAgeDays) day(s) old)."
+            }
+            [void] $sb.AppendLine($line)
+        }
+        elseif ($mr.status -eq 'FailedRunFallbackExpired') {
+            [void] $sb.AppendLine("No usable certified map: map run ``$($mr.runId)`` failed without an audit decision and the last certified map is older than $($mr.failedRunFallbackMaxAgeDays) day(s).")
+        }
+        else {
+            [void] $sb.AppendLine("No usable certified map: resolver status ``$(Format-Cell $mr.status)``$(if ($mr.runId) { " (map run ``$($mr.runId)``)" }).")
+        }
+    }
+    $pr = $Report.packageRouting
+    if ($null -ne $pr) {
+        [void] $sb.AppendLine()
+        [void] $sb.AppendLine("Package versions (``Directory.Packages.props``): **$(Format-Cell ([string] $pr.impact))** - $(Format-Cell ([string] $pr.why))")
+        $packages = @(Get-Prop $pr 'packages' | Where-Object { $_ })
+        if ($packages.Count -gt 0) {
+            [void] $sb.AppendLine(); [void] $sb.AppendLine('| Package | From | To | Reaches | Why |'); [void] $sb.AppendLine('| --- | --- | --- | --- | --- |')
+            foreach ($p in @($packages | Select-Object -First $MaxRows)) {
+                [void] $sb.AppendLine("| ``$(Format-Cell ([string] $p.name))`` | $(Format-Cell ([string] $p.from)) | $(Format-Cell ([string] $p.to)) | $(Format-Cell ([string] $p.reach)) | $(Format-Cell ([string] $p.why)) |")
+            }
+        }
     }
 
     if (@($Report.escalations).Count -gt 0) {
@@ -291,7 +336,24 @@ if ($SelfTest) {
     $effectiveRecord = [pscustomobject]@{ mode = 'passthrough'; reason = 'a changed file cannot be mapped to types'; shards = @(
         [pscustomobject]@{ name = 'Alpha'; narrowed = $false; classes = $null }) }
     $eff = ConvertTo-SelectionMarkdown (New-SelectionReport $null 5 5 $false '' $planWithCandidate $effectiveRecord)
+    $fallbackResolution = [pscustomobject]@{ found = $true; runId = 100; status = 'Found'; mapCreatedAt = '2026-09-21T04:00:00Z'
+        mapAgeDays = 1.5; skippedFailedRunIds = @(400, 300); failedRunFallbackMaxAgeDays = 14 }
+    $fallbackMd = ConvertTo-SelectionMarkdown (New-SelectionReport $fixture 5 5 $false '' $null $null $fallbackResolution)
+    $plainMd = ConvertTo-SelectionMarkdown (New-SelectionReport $fixture 5 5 $false '' $null $null (
+        [pscustomobject]@{ found = $true; runId = 100; status = 'Found'; mapCreatedAt = '2026-09-21T04:00:00Z'; mapAgeDays = 1.5
+            skippedFailedRunIds = @(); failedRunFallbackMaxAgeDays = 14 }))
+    $expiredMd = ConvertTo-SelectionMarkdown (New-SelectionReport $null 5 5 $true 'no certified shard map' $null $null (
+        [pscustomobject]@{ found = $false; runId = 400; status = 'FailedRunFallbackExpired'; mapCreatedAt = $null; mapAgeDays = $null
+            skippedFailedRunIds = @(400); failedRunFallbackMaxAgeDays = 14 }))
+    $packageFixture = [pscustomobject]@{ escalate = $false; reasons = @(); shards = @(); wouldSelect = @(); routes = @(); files = @()
+        packageRouting = [pscustomobject]@{ impact = 'BuildOnly'; why = 'every changed package reaches only projects no shard executes'
+            packages = @([pscustomobject]@{ name = 'TorchSharp'; from = '0.105.0'; to = '0.106.0'; reach = 'build-only'; why = 'AiDotNetBenchmarkTests/AiDotNetBenchmarkTests.csproj' }) } }
+    $packageMd = ConvertTo-SelectionMarkdown (New-SelectionReport $packageFixture 5 0 $false '' $null)
     $checks = @(
+        (Check 'a failed-map fallback names the map used, its age and the failed runs' ($fallbackMd -match 'map run `100`, built 2026-09-21T04:00:00Z \(1\.5 day\(s\) old\)\. \*\*Fallback:\*\* newer map run\(s\) `400`, `300` failed' -and $fallbackMd -match 'allowed up to 14 day')),
+        (Check 'a map used without a fallback is named without a fallback notice' ($plainMd -match 'map run `100`' -and $plainMd -notmatch 'Fallback')),
+        (Check 'an expired fallback says why no map is usable' ($expiredMd -match 'map run `400` failed without an audit decision and the last certified map is older than 14 day')),
+        (Check 'package routing names the package, its versions and its reach' ($packageMd -match '\*\*BuildOnly\*\*' -and $packageMd -match '\| `TorchSharp` \| 0\.105\.0 \| 0\.106\.0 \| build-only \|')),
         (Check 'verdict names the full matrix and the would-select count' ($md -match 'Full matrix: 5 of 5 shards\.\*\* Coverage alone would have selected \*\*3\*\* of 5')),
         (Check 'two abstract-base reasons collapse into one rule row with count 2' ($md -match '\| Abstract test base: generated subclasses unresolved \| 2 \|')),
         (Check 'generator escalation is its own rule' ($md -match 'Validation infrastructure \(FullValidation\) \| 1 \|')),
@@ -318,7 +380,7 @@ try {
     $plan = Read-JsonFile $TypeImpactPlanFile
     $finalCount = if ($FinalShardCount -ge 0) { $FinalShardCount } else { @(Get-Prop $selection 'shards').Count }
     $effective = Read-JsonFile $EffectiveFile
-    $report = New-SelectionReport $selection $TotalShards $finalCount ([bool] $FinalEscalated) $WorkflowReason $plan $effective
+    $report = New-SelectionReport $selection $TotalShards $finalCount ([bool] $FinalEscalated) $WorkflowReason $plan $effective (Read-JsonFile $MapResolutionFile)
     if ($ReportFile) { $report | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $ReportFile -Encoding utf8 }
     if ($SummaryFile) {
         # With a plan, the Build job appends only the test-level section; the selection part is Select shards' own.

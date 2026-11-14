@@ -564,6 +564,12 @@ Assert-Contract ($selectStep.Contains('MAP_LINEAGE_REF: ${{ steps.map.outputs.li
         $selectStep.Contains("`$lineage['MapLineageRef'] = [string] `$env:MAP_LINEAGE_REF") -and
         $selectStep.Contains('@lineage `')) `
     'a stacked pull request selecting with the map on master is scoped to its own diff, which that map has never measured'
+# A map that stands in for newer failed map runs must be visible: the report is handed the resolver's
+# result, and the workflow leaves the age cap to the resolver's one documented setting.
+Assert-Contract ($selectStep.Contains('-MapResolutionFile map-resolution.json -ReportFile selection-report.json')) `
+    'the selection report is not told which certified map was used, so a failed-map-run fallback is invisible'
+Assert-Contract (-not $validation.Contains('-FailedRunFallbackMaxAgeDays ')) `
+    'the workflow overrides the failed-map-run age cap instead of leaving it to the single setting in Resolve-CertifiedShardMap.ps1'
 $selectorLineageText = Get-Content -LiteralPath 'tools/TestImpact/Select-Shards.ps1' -Raw
 Assert-Contract ($selectorLineageText.Contains('& git merge-base --is-ancestor $MapSha HEAD') -and
         $selectorLineageText.Contains('$BaseSha = Resolve-MapLineageBase -LineageRef $MapLineageRef -MapSha $mapSha')) `

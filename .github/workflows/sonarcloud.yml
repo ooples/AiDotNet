@@ -927,8 +927,11 @@ jobs:
             esac
           else
             # The executable resolver makes the newest completed map workflow a revocation barrier.
-            # Its adversarial fixtures record every download attempt and prove that a newer failed
-            # or certificate-withholding run can never fall back to an older certificate.
+            # Its adversarial fixtures record every download attempt and prove that a newer run
+            # that audited a miss, or that withholds its certificate, can never fall back to an
+            # older certificate. A run that failed WITHOUT a typed audit decision is neutral: the
+            # last certified map stays in use while it is no older than the resolver's
+            # FailedRunFallbackMaxAgeDays setting (default 14), and the selection report says so.
             if pwsh -NoProfile -File ./tools/TestImpact/Resolve-CertifiedShardMap.ps1 \
                  -Repository "$GITHUB_REPOSITORY" -OutDirectory map \
                  -ResultFile map-resolution.json -MapBranch "$MAP_BRANCH"; then
@@ -1452,7 +1455,7 @@ jobs:
               $finalCount = if ($escalate) { $all.Count } else { @($matrixShards).Count }
               & ./tools/TestImpact/Write-SelectionReport.ps1 -SelectionFile selection.json -TotalShards $all.Count `
                   -FinalShardCount $finalCount -FinalEscalated:$escalate -WorkflowReason $decisionReason `
-                  -ReportFile selection-report.json
+                  -MapResolutionFile map-resolution.json -ReportFile selection-report.json
               if ($LASTEXITCODE -ne 0) { throw "the report script exited $LASTEXITCODE" }
             }
             catch {
