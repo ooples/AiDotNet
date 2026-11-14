@@ -62,7 +62,10 @@ internal sealed record GroundingTextEncoderLayer<T>(GroundingMaskedAttention<T> 
 /// <remarks>The special tokens ([CLS], [SEP], "." and "?") split the prompt. Every token attends to itself; a special
 /// token at the first or last position attends only to itself at position 0; any other special token closes the phrase
 /// that began after the previous special token, and the phrase's tokens, the closing special token included, attend
-/// only to each other with positions restarting at 0. Without special tokens the text is one phrase.</remarks>
+/// only to each other with positions restarting at 0. Without special tokens the text is one phrase. The reference
+/// closes every prompt with "." before tokenizing (<c>preprocess_caption</c>), so its last phrase always ends at a
+/// special token; here the tokens after the last separator are joined as a phrase too, before a final end token or at
+/// the end of a truncated prompt, so "red car" without a period is still one phrase.</remarks>
 internal sealed record GroundingTextStructure(bool[] Allowed, int[] Positions)
 {
     public int Length => Positions.Length;
@@ -83,24 +86,39 @@ internal sealed record GroundingTextStructure(bool[] Allowed, int[] Positions)
 
         var special = new HashSet<int>(specialTokenIds);
         for (int i = 0; i < n; i++) allowed[i * n + i] = true;
-        int previous = 0;
+        // Tokens first..last (inclusive) attend to each other, with positions from 0.
+        void Phrase(int first, int last)
+        {
+            for (int row = first; row <= last; row++)
+            {
+                for (int key = first; key <= last; key++) allowed[row * n + key] = true;
+                positions[row] = row - first;
+            }
+        }
+
+        // -1 so a prompt that does not open with a special token still puts its first token in the first phrase.
+        int previous = -1;
+        bool closed = true;
         for (int column = 0; column < n; column++)
         {
-            if (!special.Contains(tokenIds[column])) continue;
+            if (!special.Contains(tokenIds[column]))
+            {
+                closed = false;
+                continue;
+            }
             if (column == 0 || column == n - 1)
             {
+                if (column == n - 1 && column > previous + 1) Phrase(previous + 1, column - 1);
                 positions[column] = 0;
             }
             else
             {
-                for (int row = previous + 1; row <= column; row++)
-                {
-                    for (int key = previous + 1; key <= column; key++) allowed[row * n + key] = true;
-                    positions[row] = row - previous - 1;
-                }
+                Phrase(previous + 1, column);
             }
             previous = column;
+            closed = true;
         }
+        if (!closed) Phrase(previous + 1, n - 1);
         return new GroundingTextStructure(allowed, positions);
     }
 }

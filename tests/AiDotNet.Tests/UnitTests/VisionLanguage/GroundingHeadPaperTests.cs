@@ -196,15 +196,33 @@ public class GroundingHeadPaperTests
         var decoder = new CoordinateTokenDecoder<double>(Engine, new List<ILayer<double>>(),
             new CoordinateTokenDecoderConfiguration(8, 32, 4, Bins: 11, Divisor: 10, CoordinateSpelling.DecimalFraction));
 
-        // A stand-in language model that passes its input through.
-        var (boxes, scores) = decoder.Ground(Random(4, 3, 8), new[] { 1, 2 }, rows => rows, maxBoxes: 3);
+        // A stand-in language model with zero output: the bias-free head gives every permitted character the same
+        // logit, and ties go to the first index. So '[' (p 1/2 against the end token), then per coordinate "0" (1/2
+        // against "1"), "." (1), "0" (1/10), and "," or "]" (1): one zero box with probability 0.5 * 0.05^4.
+        var (boxes, scores) = decoder.Ground(
+            Random(4, 3, 8), new[] { 1, 2 }, rows => new Tensor<double>(rows.Shape.ToArray()), maxBoxes: 1);
 
-        int count = scores.Length;
-        Assert.InRange(count, 0, 3);
-        Assert.Equal(new[] { count, 4 }, boxes.Shape.ToArray());
-        // Every coordinate is a tenth: 0, 0.1, ..., 1.
-        Assert.All(boxes.ToArray(), v => Assert.Equal(0.0, v * 10 - Math.Round(v * 10), 1e-9));
-        Assert.All(scores.ToArray(), s => Assert.InRange(s, 0.0, 1.0));
+        Assert.Equal(new[] { 1, 4 }, boxes.Shape.ToArray());
+        Assert.Equal(new[] { 0.0, 0.0, 0.0, 0.0 }, boxes.ToArray());
+        Assert.Equal(1, scores.Length);
+        Assert.Equal(0.5 * Math.Pow(0.05, 4), scores[0], 1e-12);
+    }
+
+    [Fact]
+    public void CoordinateDecoder_DecodingBudget_FitsMaxBoxesAndTheirSeparators()
+    {
+        // Three 17-token boxes, two ';' and the end token are 54 steps; the budget was 3 * 17 + 1 = 52, which cut the
+        // third box off. After '[' each later box starts with ';' (1/2 against the end token) and '[' (1).
+        var decoder = new CoordinateTokenDecoder<double>(Engine, new List<ILayer<double>>(),
+            new CoordinateTokenDecoderConfiguration(8, 32, 4, Bins: 11, Divisor: 10, CoordinateSpelling.DecimalFraction));
+
+        var (boxes, scores) = decoder.Ground(
+            Random(4, 3, 8), new[] { 1, 2 }, rows => new Tensor<double>(rows.Shape.ToArray()), maxBoxes: 3);
+
+        Assert.Equal(new[] { 3, 4 }, boxes.Shape.ToArray());
+        Assert.All(boxes.ToArray(), v => Assert.Equal(0.0, v));
+        Assert.Equal(new[] { 0.5 * Math.Pow(0.05, 4), Math.Pow(0.05, 4), Math.Pow(0.05, 4) }, scores.ToArray(),
+            new ToleranceComparer(1e-12));
     }
 
     [Fact]
@@ -225,6 +243,21 @@ public class GroundingHeadPaperTests
         // v = 1 + 0.125 + 2 * 0.5 = 2.125. (Averaging the tokens whose centre lies in the box would give 2.)
         Assert.Equal(2.5, features[0], 1e-9);
         Assert.Equal(2.125, features[1], 1e-9);
+    }
+
+    [Fact]
+    public void Groma_Ground_StopsAtMaxRegions()
+    {
+        // With a zero-output language model every unused region ties with the end token and ties go to the first
+        // index, so each step refers to one more region; the budget of maxRegions + 1 steps returned two of three.
+        var grounder = new GromaRegionGrounder<double>(Engine, new List<ILayer<double>>(),
+            new GromaRegionGrounderConfiguration(8, 8, 2, 1, 3, 32, 4));
+
+        var (boxes, scores) = grounder.Ground(Random(5, 16, 8), new[] { 1, 2 }, rows => new Tensor<double>(rows.Shape.ToArray()), maxRegions: 1);
+
+        Assert.Equal(new[] { 1, 4 }, boxes.Shape.ToArray());
+        Assert.Equal(1, scores.Length);
+        Assert.Equal(1.0 / 4, scores[0], 1e-12); // Three regions and the end token, equally likely.
     }
 
     private sealed class HeadProbe : GroundingHeadModule<double>
@@ -312,6 +345,31 @@ public class GroundingHeadPaperTests
         for (int i = 0; i < 2; i++)
             for (int j = 0; j < 3; j++)
                 Assert.Equal(GroundingDinoLoss<double>.GeneralizedIoU(a[i], b[j]), giou[i, j], 1e-12);
+    }
+
+    [Theory]
+    [InlineData(true)]   // [BOS, red, car, EOS]: no period before the end token.
+    [InlineData(false)]  // [BOS, red, car]: the end token truncated away.
+    public void TextStructure_UnpunctuatedTail_IsOnePhrase(bool withEnd)
+    {
+        const int bos = 1, eos = 2, red = 10, car = 11;
+        var ids = withEnd ? new[] { bos, red, car, eos } : new[] { bos, red, car };
+        int n = ids.Length;
+
+        var structure = GroundingTextStructure.Build(ids, new[] { bos, eos });
+
+        Assert.Equal(new[] { 0, 0, 1 }, structure.Positions.Take(3));
+        for (int row = 1; row <= 2; row++)
+            for (int key = 1; key <= 2; key++)
+                Assert.True(structure.Allowed[row * n + key], $"token {row} should attend to {key}");
+        Assert.False(structure.Allowed[0 * n + 1]);
+        Assert.False(structure.Allowed[1 * n + 0]);
+        if (withEnd)
+        {
+            Assert.Equal(0, structure.Positions[3]);
+            Assert.False(structure.Allowed[3 * n + 1]);
+            Assert.False(structure.Allowed[1 * n + 3]);
+        }
     }
 
     [Fact]
