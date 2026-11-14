@@ -166,8 +166,11 @@ public abstract partial class AdversarialAttackBase<T, TInput, TOutput> : IAdver
             throw new ArgumentNullException(nameof(data));
         }
 
+        // Read the payload back as the runtime type of the current options: Serialize writes every property of
+        // a derived options class (AutoAttackOptions, for example), and reading it as the base class dropped them.
         var json = Encoding.UTF8.GetString(data);
-        Options = JsonConvert.DeserializeObject<AdversarialAttackOptions<T>>(json) ?? new AdversarialAttackOptions<T>();
+        Options = JsonConvert.DeserializeObject(json, Options.GetType()) as AdversarialAttackOptions<T>
+            ?? new AdversarialAttackOptions<T>();
 
         // Re-initialize Random with the deserialized seed to ensure consistent behavior
         Random = RandomHelper.CreateSeededRandom(Options.RandomSeed);

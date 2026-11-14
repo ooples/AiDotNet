@@ -1016,5 +1016,150 @@ public class CertificationReferenceTests
         Assert.Equal(Run(1).ToArray(), Run(2).ToArray());
     }
 
+    private static int ArgMaxOf(double[] values) => Array.IndexOf(values, values.Max());
+
+    [Fact(Timeout = 300000)]
+    public async Task AutoAttack_RunsWithTheOptionsItExposes()
+    {
+        await Task.Yield();
+
+        // z = (x0 - x1 + 0.1, x1 - x0) at x = (0.5, 0.5): flipping needs x1 - x0 > 0.05, which an L-infinity
+        // budget of 0.01 cannot reach and 0.1 can. Plain options were copied into a private execution object,
+        // so raising the budget through GetOptions changed the reported budget but not the attack.
+        var attack = new AutoAttack<double, Vector<double>, Vector<double>>(new AdversarialAttackOptions<double>
+        {
+            Epsilon = 0.01,
+            NormType = AdversarialNormType.LInfinity,
+            Iterations = 20,
+            UseRandomStart = false
+        });
+        attack.GetOptions().Epsilon = 0.1;
+        var model = new DelegateModel(2, x => new[] { x[0] - x[1] + 0.1, x[1] - x[0] });
+        var input = new Vector<double>(new[] { 0.5, 0.5 });
+
+        var adversarial = attack.GenerateAdversarialExample(input, new Vector<double>(new[] { 1.0, 0.0 }), model);
+
+        Assert.IsType<AutoAttackOptions<double>>(attack.GetOptions());
+        Assert.Equal(1, ArgMaxOf(model.Predict(adversarial).ToArray()));
+        Assert.All(Enumerable.Range(0, 2), i => Assert.True(Math.Abs(adversarial[i] - input[i]) <= 0.1 + 1e-12));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task AutoAttack_DeserializeRestoresTheAutoAttackSettings()
+    {
+        await Task.Yield();
+
+        // Deserialize read the payload as the base options class, which dropped the version and the budgets.
+        var original = new AutoAttack<double, Vector<double>, Vector<double>>(new AutoAttackOptions<double>
+        {
+            Epsilon = 0.2,
+            Version = AutoAttackVersion.Plus,
+            SquareQueries = 7,
+            FabBeta = 0.5
+        });
+        var restored = new AutoAttack<double, Vector<double>, Vector<double>>(new AdversarialAttackOptions<double>());
+
+        restored.Deserialize(original.Serialize());
+
+        var options = Assert.IsType<AutoAttackOptions<double>>(restored.GetOptions());
+        Assert.Equal(0.2, options.Epsilon, Tolerance);
+        Assert.Equal(AutoAttackVersion.Plus, options.Version);
+        Assert.Equal(7, options.SquareQueries);
+        Assert.Equal(0.5, options.FabBeta, Tolerance);
+    }
+
+    [Fact(Timeout = 300000)]
+    public async Task AutoAttack_TargetedRunWithTheTargetAsLabelAttacksFromTheCleanClass()
+    {
+        await Task.Yield();
+
+        // The robustness facade passes the target one-hot as the label of a targeted attack. z = (x0, x1 - 0.05,
+        // -10, -10) at x = (0.5, 0.5) predicts class 0, and an L-infinity budget of 0.2 reaches target 1. With
+        // the label taken as the source class, APGD-T's z_y - z_t and FAB-T's normal were zero, so without a
+        // random start the attack never moved.
+        var attack = new AutoAttack<double, Vector<double>, Vector<double>>(new AdversarialAttackOptions<double>
+        {
+            Epsilon = 0.2,
+            NormType = AdversarialNormType.LInfinity,
+            Iterations = 20,
+            IsTargeted = true,
+            TargetClass = 1,
+            UseRandomStart = false
+        });
+        var model = new DelegateModel(2, x => new[] { x[0], x[1] - 0.05, -10.0, -10.0 });
+        var input = new Vector<double>(new[] { 0.5, 0.5 });
+
+        var adversarial = attack.GenerateAdversarialExample(input, new Vector<double>(new[] { 0.0, 1.0, 0.0, 0.0 }), model);
+
+        Assert.Equal(1, ArgMaxOf(model.Predict(adversarial).ToArray()));
+        Assert.All(Enumerable.Range(0, 2), i => Assert.True(Math.Abs(adversarial[i] - input[i]) <= 0.2 + 1e-12));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task AutoAttack_HalfZeroDirectionsStayZero()
+    {
+        await Task.Yield();
+
+        // In Half the norm guard falls back to 1e-7, whose reciprocal (and epsilon / 1e-7) is infinite: the
+        // normalized zero gradient of a flat model and the rescaled zero Square delta were 0 * infinity = NaN.
+        var attack = new AutoAttack<Half, Vector<Half>, Vector<Half>>(new AdversarialAttackOptions<Half>
+        {
+            Epsilon = 0.5,
+            NormType = AdversarialNormType.L2
+        });
+
+        var direction = attack.NormalizeThreat(new Vector<Half>(4)).ToArray();
+        var delta = attack.ScaleToEpsilon(new Tensor<Half>(new[] { 1, 2, 2 })).ToArray();
+
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        Assert.All(direction, v => Assert.Equal(0.0, ops.ToDouble(v)));
+        Assert.All(delta, v => Assert.Equal(0.0, ops.ToDouble(v)));
+    }
+
+    [Fact(Timeout = 300000)]
+    public async Task AutoAttack_SquareKeepsSearchingPastACorrectlyClassifiedTie()
+    {
+        await Task.Yield();
+
+        // A piecewise-constant model: no gradient, so APGD and FAB cannot move and only Square can. The logits
+        // tie at (0, 0), which the label 0 wins, unless x0 < 0.45. Square's L-infinity start puts x0 at 0.4 or
+        // 0.6 at random. From 0.6 the margin is a zero tie, which stopped the search before its first query, so
+        // the attack failed for every seed whose start raised x0; it must flip x0 within its 200 queries.
+        var model = new DelegateModel(3, x => x[0] < 0.45 ? new[] { 0.0, 1.0 } : new[] { 0.0, 0.0 });
+        var input = new Vector<double>(new[] { 0.5, 0.5, 0.5 });
+        for (int seed = 1; seed <= 8; seed++)
+        {
+            var attack = new AutoAttack<double, Vector<double>, Vector<double>>(new AutoAttackOptions<double>
+            {
+                Epsilon = 0.1,
+                NormType = AdversarialNormType.LInfinity,
+                Iterations = 5,
+                UseRandomStart = false,
+                SquareQueries = 200,
+                RandomSeed = seed
+            });
+
+            var adversarial = attack.GenerateAdversarialExample(input, new Vector<double>(new[] { 1.0, 0.0 }), model);
+
+            Assert.True(adversarial[0] < 0.45, $"seed {seed}: x0 = {adversarial[0]}");
+        }
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task Square_WindowPositionsIncludeTheLastOne()
+    {
+        await Task.Yield();
+
+        // Square Attack (Andriushchenko et al. 2020, Alg. 2): the window starts uniformly in {0, ..., w - h}.
+        // Random.Next(0, w - h) never drew w - h, so with one-cell windows the last coordinate never changed.
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(3);
+        var starts = Enumerable.Range(0, 300)
+            .Select(_ => AutoAttack<double, Vector<double>, Vector<double>>.SquareWindowStart(random, 3, 1))
+            .ToArray();
+
+        Assert.Equal(new[] { 0, 1, 2 }, starts.Distinct().OrderBy(s => s).ToArray());
+        Assert.Equal(0, AutoAttack<double, Vector<double>, Vector<double>>.SquareWindowStart(random, 4, 4));
+    }
+
     #endregion
 }
