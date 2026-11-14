@@ -117,10 +117,13 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
                     Engine.TensorMultiplyScalar(Engine.TensorDivideScalar(dl, avgdl), _b), NumOps.Subtract(NumOps.One, _b)),
                 _k1);
 
+            // The denominator is tf + lengthNorm, which is 0 / 0 for an absent term when lengthNorm is 0 (k1 = 0,
+            // or b = 1 on an empty document). Absent terms saturate to 0, so divide them by 1 instead.
             var tf = new Tensor<int>(termCounts, [documents, terms]).Cast<T>();
-            var saturation = Engine.TensorDivide(
-                Engine.TensorMultiplyScalar(tf, NumOps.Add(_k1, NumOps.One)),
-                Engine.TensorAdd(tf, Engine.TensorBroadcastTo(Engine.Reshape(lengthNorm, [documents, 1]), [documents, terms])));
+            var denominator = Engine.TensorAdd(tf, Engine.TensorBroadcastTo(Engine.Reshape(lengthNorm, [documents, 1]), [documents, terms]));
+            denominator = Engine.TensorWhere(
+                Engine.TensorGreaterThan(tf, NumOps.Zero), denominator, Tensor<T>.CreateDefault([documents, terms], NumOps.One));
+            var saturation = Engine.TensorDivide(Engine.TensorMultiplyScalar(tf, NumOps.Add(_k1, NumOps.One)), denominator);
 
             return Engine.TensorMatMul(saturation, Engine.Reshape(termWeights, [terms, 1])).ToArray();
         }

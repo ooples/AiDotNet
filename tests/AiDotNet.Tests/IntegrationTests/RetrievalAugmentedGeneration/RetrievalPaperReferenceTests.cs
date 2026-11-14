@@ -290,6 +290,29 @@ public class RetrievalPaperReferenceTests
         Assert.Equal(0.5, results[1].RelevanceScore, Tolerance);
     }
 
+    /// <summary>
+    /// BM25 term saturation tf (k1 + 1) / (tf + k1 (1 - b + b dl / avgdl)) is 0 for an absent term. With k1 = 0,
+    /// or b = 1 on an empty document, the denominator is 0 too, and the 0 / 0 made the whole score NaN.
+    /// k1 = 0 reduces BM25 to Σ idf over the present terms (Robertson and Zaragoza 2009, Sec. 3.4).
+    /// </summary>
+    [Fact]
+    public void Bm25_AbsentTerms_DoNotProduceNaN()
+    {
+        var store = Store<double>("a");
+        double idf = Math.Log(1.0 + 1.5 / 1.5); // N = 2, df = 1
+
+        var binary = new BM25Retriever<double>(store, k1: 0, b: 0.75).ScoreDocuments(
+            new List<string> { "a", "c" }, new List<List<string>> { new() { "a", "b" }, new() { "c" } });
+        Assert.Equal(idf, binary[0], Tolerance);
+        Assert.Equal(idf, binary[1], Tolerance);
+
+        var emptyDocument = new BM25Retriever<double>(store, k1: 1.5, b: 1).ScoreDocuments(
+            new List<string> { "a" }, new List<List<string>> { new() { "a" }, new() });
+        double avgdl = 0.5;
+        Assert.Equal(idf * 2.5 / (1 + 1.5 * (1.0 / avgdl)), emptyDocument[0], Tolerance);
+        Assert.Equal(0.0, emptyDocument[1], Tolerance);
+    }
+
     private static InMemoryDocumentStore<TNum> Store<TNum>(params string[] contents)
     {
         var store = new InMemoryDocumentStore<TNum>(1);
