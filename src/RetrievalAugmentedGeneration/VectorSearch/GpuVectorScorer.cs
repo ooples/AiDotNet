@@ -267,10 +267,17 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch
         }
 
         /// <summary>Each row divided by its Euclidean norm; zero rows stay zero.</summary>
+        /// <remarks>
+        /// The row is first divided by its largest magnitude and the scaled row is normalised directly. Multiplying
+        /// the scaled norm back by that magnitude overflows narrow types: for the Half row [60000, 60000] the norm
+        /// 84853 is +inf, and the row divided by it became zero.
+        /// </remarks>
         private static Tensor<T> UnitRows<T>(IEngine engine, Tensor<T> matrix)
         {
-            var norms = NonZero(engine, engine.Reshape(RowNorms(engine, matrix), [matrix._shape[0], 1]));
-            return engine.TensorDivide(matrix, engine.TensorBroadcastTo(norms, matrix._shape));
+            var scale = NonZero(engine, engine.ReduceMax(engine.TensorAbs(matrix), [1], true));
+            var scaled = engine.TensorDivide(matrix, engine.TensorBroadcastTo(scale, matrix._shape));
+            var norms = NonZero(engine, engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(scaled), [1], true)));
+            return engine.TensorDivide(scaled, engine.TensorBroadcastTo(norms, matrix._shape));
         }
 
         /// <summary>Replaces zero entries with one so dividing a zero row by them leaves it zero.</summary>

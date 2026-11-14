@@ -259,6 +259,25 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
             }
         }
 
+        /// <summary>
+        /// Cosine of the Half vector [60000, 60000] with itself is 1. Unit rows used to rebuild the full norm
+        /// (scaled norm sqrt(2) times 60000 = 84853, past the Half maximum 65504), divide the row by +inf and
+        /// score 0 while reporting success.
+        /// </summary>
+        [Fact(Timeout = 60000)]
+        public async Task Scorer_Cosine_HalfRowsNearMaximum_DoNotOverflow()
+        {
+            await Task.Yield();
+            var metric = new CosineSimilarityMetric<Half>();
+            var big = new Vector<Half>(new[] { (Half)60000, (Half)60000 });
+            var docs = new List<Vector<Half>> { big, new Vector<Half>(new[] { (Half)60000, (Half)0 }) };
+
+            Assert.True(GpuVectorScorer.TryScoreBatch(metric, big, docs, 1, new CpuEngine(), out var scores));
+
+            Assert.Equal(1.0, (double)scores[0], 2);
+            Assert.Equal(Math.Sqrt(0.5), (double)scores[1], 2);
+        }
+
         [Fact(Timeout = 60000)]
         public async Task Scorer_TryScoreBatch_EngineErrorReturnsFalse()
         {
