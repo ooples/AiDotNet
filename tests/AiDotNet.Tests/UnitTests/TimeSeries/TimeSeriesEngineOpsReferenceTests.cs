@@ -425,7 +425,8 @@ public class TimeSeriesHalfPrecisionTests
             var parameters = grn.GetParameters();
             for (int i = 0; i < parameters.Length; i++)
             {
-                Assert.True(Half.IsFinite(parameters[i]), $"seed {seed}, parameter {i} is {parameters[i]}");
+                // Half.IsFinite does not exist on net471, which this project also targets.
+                Assert.True(!float.IsNaN((float)parameters[i]) && !float.IsInfinity((float)parameters[i]), $"seed {seed}, parameter {i} is {parameters[i]}");
             }
         }
     }

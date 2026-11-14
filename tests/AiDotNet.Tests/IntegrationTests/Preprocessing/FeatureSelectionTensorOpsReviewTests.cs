@@ -13,6 +13,9 @@ namespace AiDotNet.Tests.IntegrationTests.Preprocessing;
 /// </summary>
 public class FeatureSelectionTensorOpsReviewTests
 {
+    // Half.IsFinite does not exist on net471, which this project also targets.
+    private static bool HalfIsFinite(Half value) => !float.IsNaN((float)value) && !float.IsInfinity((float)value);
+
     // 3000 rows all in code 0: a 0/1 sum in Half stops at 2048 (2048 + 1 rounds back to 2048).
     [Fact(Timeout = 60000)]
     public async Task CodeCounts_Half_CountPast2048()
@@ -303,7 +306,7 @@ public class FeatureSelectionTensorOpsReviewTests
             HalfMatrix(edges, p, p));
         for (int v = 0; v < p; v++)
         {
-            Assert.True(Half.IsFinite(half[v]), $"node {v} is {half[v]}");
+            Assert.True(HalfIsFinite(half[v]), $"node {v} is {half[v]}");
             Assert.True(Math.Abs((double)half[v] - reference[v]) <= 1e-3 * Math.Max(1, reference[v]),
                 $"node {v}: {(double)half[v]} vs {reference[v]}");
         }
@@ -336,7 +339,7 @@ public class FeatureSelectionTensorOpsReviewTests
     {
         for (int j = 0; j < reference.Length; j++)
         {
-            Assert.True(Half.IsFinite(half[j]), $"{what} {j} is {half[j]}");
+            Assert.True(HalfIsFinite(half[j]), $"{what} {j} is {half[j]}");
             Assert.True(Math.Abs((double)half[j] - reference[j]) <= 2e-3 * Math.Max(1, Math.Abs(reference[j])),
                 $"{what} {j}: {(double)half[j]} vs {reference[j]}");
         }

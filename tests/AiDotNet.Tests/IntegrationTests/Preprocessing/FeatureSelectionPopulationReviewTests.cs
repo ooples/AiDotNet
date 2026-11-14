@@ -15,6 +15,9 @@ namespace AiDotNet.Tests.IntegrationTests.Preprocessing;
 /// </summary>
 public class FeatureSelectionPopulationReviewTests
 {
+    // Half.IsFinite does not exist on net471, which this project also targets.
+    private static bool HalfIsFinite(Half value) => !float.IsNaN((float)value) && !float.IsInfinity((float)value);
+
     // |r| = 1 for a feature equal to the target, 0 and 4 alternating over 300 rows: sxx = syy = 1200, and
     // sqrt(sxx * syy) overflowed Half (1.44e6 > 65504), which made r 0.
     [Fact(Timeout = 60000)]
@@ -152,7 +155,7 @@ public class FeatureSelectionPopulationReviewTests
     private static void AssertAllFinite(Tensor<Half> values)
     {
         for (int j = 0; j < values.Length; j++)
-            Assert.True(Half.IsFinite(values[j]), $"element {j} is {values[j]}");
+            Assert.True(HalfIsFinite(values[j]), $"element {j} is {values[j]}");
     }
 
     private static Tensor<Half> HalfTensor(double[] values, params int[] shape)
@@ -544,7 +547,7 @@ public class FeatureSelectionPopulationReviewTests
         selector.Fit(new Matrix<Half>(data), new Vector<Half>(target));
 
         Assert.NotNull(selector.Importances);
-        Assert.True(Half.IsFinite(selector.Importances[0]));
+        Assert.True(HalfIsFinite(selector.Importances[0]));
     }
 
     // 100 rows alternating -1024 / 1024 with the default mean-of-features prediction: each local coefficient is about
@@ -980,7 +983,7 @@ public class FeatureSelectionPopulationReviewTests
 
         Assert.NotNull(selector.FeatureScores);
         for (int j = 0; j < 100; j++)
-            Assert.True(Half.IsFinite(selector.FeatureScores[j]), $"score {j} is {selector.FeatureScores[j]}");
+            Assert.True(HalfIsFinite(selector.FeatureScores[j]), $"score {j} is {selector.FeatureScores[j]}");
     }
 
     // theta = pi / 4 rotated by 2.0 towards bit 1 overshot to 2.785, lowering P(1) to 0.12; it stops at pi / 2.
