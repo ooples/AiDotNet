@@ -170,17 +170,19 @@ public abstract partial class TabRBase<T> : IParameterSource<T>
             for (int i = 0; i < _encoderLayers.Count; i++)
                 registry.Register($"00000000/{i:D8}", _encoderLayers[i]);
 
-            registry.Register("00000001/encoderNorm", _encoderNorm);
+            // Optional components are registered only when built: a null entry is a shape-deferred slot,
+            // which makes every parameter read and count throw ParameterLayoutNotReadyException.
+            if (_encoderNorm is not null) registry.Register("00000001/encoderNorm", _encoderNorm);
 
             for (int i = 0; i < _contextLayers.Count; i++)
                 registry.Register($"00000002/{i:D8}", _contextLayers[i]);
 
-            registry.Register("00000003/contextNorm", _contextNorm);
+            if (_contextNorm is not null) registry.Register("00000003/contextNorm", _contextNorm);
 
             registry.Register("00000005/key", _keyProjection);
             registry.Register("00000006/value", _valueProjection);
             registry.Register("00000007/output", _outputProjection);
-            registry.Register("00000008/labelEmbedding", _labelEmbedding);
+            if (_labelEmbedding is not null) registry.Register("00000008/labelEmbedding", _labelEmbedding);
 
             int extraIndex = 0;
             foreach (var extra in GetExtraTrainableLayers())
