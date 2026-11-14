@@ -409,8 +409,13 @@ public class DimensionalityReductionDeepMathIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task TruncatedSVD_ExplainedVarianceDescending()
+    public async Task TruncatedSVD_SingularValuesDescending_ExplainedVarianceIsProjectionVariance()
     {
+        await Task.Yield();
+
+        // Truncated SVD does not centre the data, so (as in scikit-learn) explained_variance_ is the variance of
+        // each projected column and is not ordered: the first singular direction mostly carries the mean. Here it
+        // is 2.38 against 14.03 for the second. The ordered quantity is the singular values.
         var svd = new TruncatedSVD<double>();
 
         var data = new Matrix<double>(5, 3);
@@ -420,16 +425,31 @@ public class DimensionalityReductionDeepMathIntegrationTests
         data[3, 0] = 2.0; data[3, 1] = 3.0; data[3, 2] = 9.0;
         data[4, 0] = 5.0; data[4, 1] = 6.0; data[4, 2] = 4.0;
 
-        svd.Fit(data);
+        var projected = svd.FitTransform(data);
+
+        var singular = svd.SingularValues;
+        Assert.NotNull(singular);
+        if (singular is null) return;
+        Assert.True(singular.Length > 1);
+        for (int i = 0; i < singular.Length - 1; i++)
+        {
+            Assert.True(singular[i] >= singular[i + 1],
+                $"Singular values should be descending: index {i} ({singular[i]}) >= index {i + 1} ({singular[i + 1]})");
+        }
 
         var variance = svd.ExplainedVariance;
-        if (variance is not null && variance.Length > 1)
+        Assert.NotNull(variance);
+        if (variance is null) return;
+        Assert.Equal(projected.Columns, variance.Length);
+        for (int c = 0; c < projected.Columns; c++)
         {
-            for (int i = 0; i < variance.Length - 1; i++)
-            {
-                Assert.True(variance[i] >= variance[i + 1],
-                    $"Variance should be descending: index {i} ({variance[i]}) >= index {i + 1} ({variance[i + 1]})");
-            }
+            double mean = 0;
+            for (int i = 0; i < projected.Rows; i++) mean += projected[i, c];
+            mean /= projected.Rows;
+            double expected = 0;
+            for (int i = 0; i < projected.Rows; i++) expected += (projected[i, c] - mean) * (projected[i, c] - mean);
+            expected /= projected.Rows;
+            Assert.Equal(expected, variance[c], 9);
         }
     }
 
