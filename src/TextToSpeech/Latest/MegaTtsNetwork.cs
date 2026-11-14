@@ -32,6 +32,8 @@ internal sealed class MegaTtsMel<T>
     public Tensor<T> LogMel(Tensor<T> audio)
     {
         var engine = AiDotNetEngine.Current;
+        // Off the gradient tape, as the array code it replaces was: log10's backward is infinite at a silent frame.
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var magnitude = EngineStft<T>.Magnitude(audio, FftSize, HopSize, _window, AiDotNet.Tensors.Engines.PadMode.Constant);
         return engine.TensorLog10(engine.TensorMax(engine.TensorMatMul(magnitude, _basis), Ops.FromDouble(1e-6)));
     }

@@ -12,6 +12,9 @@ internal static class EngineStft<T>
 {
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
 
+    // The real DFT bases [fftSize, fftSize / 2 + 1] of the sizes the engine's FFT does not cover, built once per size.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, (Tensor<T> Cos, Tensor<T> Sin)> Bases = new();
+
     /// <summary>A fixed coefficient table (a mel filterbank) as a <c>[rows, columns]</c> tensor, converted once.</summary>
     public static Tensor<T> Table(double[,] table)
     {
@@ -47,15 +50,30 @@ internal static class EngineStft<T>
     {
         if (audio is null) throw new ArgumentNullException(nameof(audio));
         var engine = AiDotNetEngine.Current;
+        // A feature of the waveform, not a differentiable layer: off the gradient tape, as the array code it replaces
+        // was (the backward of the magnitude and of a log above it is NaN at a silent frame).
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         int pad = fftSize / 2, bins = fftSize / 2 + 1;
         var x = engine.Reshape(audio, new[] { audio.Length });
         var padded = engine.PadNd(x, new[] { pad, pad }, padMode, Ops.Zero);
         int frames = FrameCount(audio.Length, fftSize, hop);
         var framed = engine.TensorMultiply(engine.TensorUnfold(padded, 0, fftSize, hop),
-            engine.TensorBroadcastTo(engine.Reshape(window, new[] { 1, fftSize }), new[] { frames, fftSize }));
-        engine.FFT(framed.Contiguous(), new Tensor<T>(new[] { frames, fftSize }), out var outRe, out var outIm);
-        var re = engine.TensorSlice(outRe, new[] { 0, 0 }, new[] { frames, bins });
-        var im = engine.TensorSlice(outIm, new[] { 0, 0 }, new[] { frames, bins });
+            engine.TensorBroadcastTo(engine.Reshape(window, new[] { 1, fftSize }), new[] { frames, fftSize })).Contiguous();
+        Tensor<T> re, im;
+        if ((fftSize & (fftSize - 1)) == 0)
+        {
+            engine.FFT(framed, new Tensor<T>(new[] { frames, fftSize }), out var outRe, out var outIm);
+            re = engine.TensorSlice(outRe, new[] { 0, 0 }, new[] { frames, bins });
+            im = engine.TensorSlice(outIm, new[] { 0, 0 }, new[] { frames, bins });
+        }
+        else
+        {
+            // The engine's FFT is the DFT only for a power-of-two length; any other size goes through the real DFT
+            // bases (cos and -sin of 2 pi k n / fftSize), as whisper's 400-point STFT does.
+            var (cos, sin) = Bases.GetOrAdd(fftSize, size => AiDotNet.LossFunctions.DftBasis<T>.Build(size, size / 2 + 1, negateSine: true));
+            re = engine.TensorMatMul(framed, cos);
+            im = engine.TensorMatMul(framed, sin);
+        }
         T peak = engine.TensorMaxValue(engine.TensorMax(engine.TensorAbs(re), engine.TensorAbs(im)));
         T scale = Ops.GreaterThan(peak, Ops.Zero) ? peak : Ops.One;
         var squares = engine.TensorAdd(engine.TensorSquare(engine.TensorDivideScalar(re, scale)),

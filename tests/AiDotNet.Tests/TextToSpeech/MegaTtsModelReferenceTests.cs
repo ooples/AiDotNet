@@ -125,21 +125,42 @@ public class MegaTtsModelReferenceTests
         Assert.Equal(mel.ToArray(), model.Predict(model.TextToTokens("Good morning.")).ToArray());
     }
 
-    // librosa.stft(center=True, pad_mode="constant") as librosa_wav2spec calls it: fft/2 zeros each side and
-    // 1 + (n + 2 (fft/2) - fft) / hop frames. For an odd FFT size the old frame count 1 + n / hop is one too many
-    // (here 5 instead of 4), and its last frame read past the padded signal.
+    // The log-mel is a feature of the recording: the array code it replaced never reached the gradient tape, and on a
+    // tape log10's backward is taken at the floored (silent) frames too. Half of this recording is silence.
     [Fact(Timeout = 120000)]
-    public async Task LogMel_OddFftSize_MatchesLibrosaFraming()
+    public async Task LogMel_IsComputedOffTheGradientTape()
     {
         await Task.Yield();
-        const int rate = 8000, fft = 63, hop = 16, win = 48, mels = 8, n = 64;
+        var samples = new double[2048];
+        for (int i = 0; i < 1024; i++) samples[i] = 0.3 * Math.Sin(2 * Math.PI * 440 * i / 16000.0);
+        var audio = new Tensor<double>(new[] { samples.Length }, new Vector<double>(samples));
+        var extractor = new MegaTtsMel<double>(16000, 256, 64, 256, 20, 0, 8000);
+        using var tape = new GradientTape<double>();
+        var mel = extractor.LogMel(audio);
+        Assert.Equal(0, tape.EntryCount);
+        Assert.Equal(new[] { 33, 20 }, mel.Shape.ToArray());
+    }
+
+    // librosa.stft(center=True, pad_mode="constant") as librosa_wav2spec calls it: fft/2 zeros each side and
+    // 1 + (n + 2 (fft/2) - fft) / hop frames. For an odd FFT size the old frame count 1 + n / hop is one too many
+    // (here 5 instead of 4), and its last frame read past the padded signal. The bins are checked against a direct
+    // DFT at an odd size, an even size that is not a power of two, and a power of two: the engine's FFT is the DFT
+    // only at the last, so the others take the DFT bases.
+    [Theory(Timeout = 120000)]
+    [InlineData(63, 4)]
+    [InlineData(60, 5)]
+    [InlineData(64, 5)]
+    public async Task LogMel_OddFftSize_MatchesLibrosaFraming(int fft, int expectedFrames)
+    {
+        await Task.Yield();
+        const int rate = 8000, hop = 16, win = 48, mels = 8, n = 64;
         var x = new double[n];
         for (int i = 0; i < n; i++) x[i] = Math.Sin(2 * Math.PI * 440 * i / rate) + 0.3 * Math.Cos(2 * Math.PI * 1900 * i / rate);
         var mel = new MegaTtsMel<double>(rate, fft, hop, win, mels, 0, rate / 2.0)
             .LogMel(new Tensor<double>(new[] { n }, new Vector<double>((double[])x.Clone())));
 
         int pad = fft / 2, bins = fft / 2 + 1, frames = 1 + (n + 2 * pad - fft) / hop;
-        Assert.Equal(4, frames);
+        Assert.Equal(expectedFrames, frames);
         Assert.Equal(2, mel.Shape.Length);
         Assert.Equal(frames, mel.Shape[0]);
         Assert.Equal(mels, mel.Shape[1]);
