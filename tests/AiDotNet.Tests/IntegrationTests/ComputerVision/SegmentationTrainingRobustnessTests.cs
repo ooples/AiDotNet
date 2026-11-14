@@ -19,6 +19,9 @@ using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tests.ModelFamilyTests.Base;
 using System;
 using System.Threading.Tasks;
+using AiDotNet.Tests.Helpers;
+
+using AiDotNet.Tests.Helpers;
 
 namespace AiDotNet.Tests.IntegrationTests.ComputerVision;
 
@@ -505,7 +508,7 @@ public class SegmentationTrainingRobustnessTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task SAN_MultiStepTrain_DoesNotThrow()
     {
-        using var model = new SAN<float>(Arch(), options: new SANOptions { NumClasses = 5 });
+        using var model = new SAN<float>(Arch(), new DeterministicTextEncoder<float>(), options: new SANOptions { NumClasses = 5 });
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -519,7 +522,7 @@ public class SegmentationTrainingRobustnessTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task LISA_MultiStepTrain_DoesNotThrow()
     {
-        using var model = new LISA<float>(Arch(), options: new LISAOptions { NumClasses = 5 });
+        using var model = new LISA<float>(Arch(), new DeterministicTextEncoder<float>(), options: new LISAOptions { NumClasses = 5 });
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -724,7 +727,7 @@ public class SegmentationTrainingRobustnessTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task LISA_Train_Unbatched3DInput_DoesNotThrow()
     {
-        using var model = new LISA<float>(Arch(), options: new LISAOptions { NumClasses = 5 });
+        using var model = new LISA<float>(Arch(), new DeterministicTextEncoder<float>(), options: new LISAOptions { NumClasses = 5 });
         var input = Rand(42, 3, 32, 32);
         var predicted = model.Predict(input);
         var expected = Rand(99, predicted.Shape.ToArray());
@@ -826,7 +829,7 @@ public class SegmentationTrainingRobustnessTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task CATSeg_MultiStepTrain_DoesNotThrow()
     {
-        using var model = new CATSeg<float>(Arch(), options: new CATSegOptions { NumClasses = 5 });
+        using var model = new CATSeg<float>(Arch(), new DeterministicTextEncoder<float>(), options: new CATSegOptions { NumClasses = 5 });
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -840,7 +843,7 @@ public class SegmentationTrainingRobustnessTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task SED_MultiStepTrain_DoesNotThrow()
     {
-        using var model = new SED<float>(Arch(), options: new SEDOptions { NumClasses = 5 });
+        using var model = new SED<float>(Arch(), new DeterministicTextEncoder<float>(), options: new SEDOptions { NumClasses = 5 });
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -854,7 +857,7 @@ public class SegmentationTrainingRobustnessTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task MaskAdapter_MultiStepTrain_DoesNotThrow()
     {
-        using var model = new MaskAdapter<float>(Arch(), options: new MaskAdapterOptions { NumClasses = 5 });
+        using var model = new MaskAdapter<float>(Arch(), new DeterministicTextEncoder<float>(), options: new MaskAdapterOptions { NumClasses = 5 });
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -870,7 +873,7 @@ public class SegmentationTrainingRobustnessTests : IDisposable
     {
         // Its default encoder (channels 384-3072, depths 6/8/18/8) streams its weights and took 3 min here; the
         // #1706 ladder shrinks it to the same architecture at channels 32-256 and one block per stage.
-        using var model = new OpenVocabSAM<float>(Arch(), options: new OpenVocabSAMOptions
+        using var model = new OpenVocabSAM<float>(Arch(), new DeterministicTextEncoder<float>(), options: new OpenVocabSAMOptions
         {
             NumClasses = 5,
             ChannelDimensions = [32, 64, 128, 256],
@@ -891,7 +894,7 @@ public class SegmentationTrainingRobustnessTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task VideoLISA_MultiStepTrain_DoesNotThrow()
     {
-        using var model = new VideoLISA<float>(Arch(), options: new VideoLISAOptions { NumClasses = 5 });
+        using var model = new VideoLISA<float>(Arch(), new DeterministicTextEncoder<float>(), options: new VideoLISAOptions { NumClasses = 5 });
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -905,7 +908,7 @@ public class SegmentationTrainingRobustnessTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task OMGLLaVA_MultiStepTrain_DoesNotThrow()
     {
-        using var model = new OMGLLaVA<float>(Arch(), options: new OMGLLaVAOptions { NumClasses = 5 });
+        using var model = new OMGLLaVA<float>(Arch(), new DeterministicTextEncoder<float>(), options: new OMGLLaVAOptions { NumClasses = 5 });
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -919,7 +922,7 @@ public class SegmentationTrainingRobustnessTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task PixelLM_MultiStepTrain_DoesNotThrow()
     {
-        using var model = new PixelLM<float>(Arch(), options: new PixelLMOptions { NumClasses = 5 });
+        using var model = new PixelLM<float>(Arch(), new DeterministicTextEncoder<float>(), options: new PixelLMOptions { NumClasses = 5 });
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -1004,6 +1007,8 @@ public class SegmentationTrainingRobustnessTests : IDisposable
     public async Task UniverSeg_MultiStepTrain_DoesNotThrow()
     {
         using var model = new UniverSeg<float>(Arch(), options: new UniverSegOptions { NumClasses = 5 });
+        // UniverSeg is defined only for a non-empty support set (Butoi et al. 2023).
+        model.SetSupportSet(Rand(7, 2, 3, 32, 32), Rand(8, 2, 32, 32));
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 
@@ -1189,7 +1194,7 @@ public class SegmentationTrainingRobustnessTests : IDisposable
     [Fact(Timeout = 120000)]
     public async Task ODISE_MultiStepTrain_DoesNotThrow()
     {
-        using var model = new ODISE<float>(Arch(), options: new ODISEOptions { NumClasses = 5, ModelSize = ODISEModelSize.Base });
+        using var model = new ODISE<float>(Arch(), new DeterministicTextEncoder<float>(), new DeterministicVisualEncoder<float>(), options: new ODISEOptions { NumClasses = 5, ModelSize = ODISEModelSize.Base });
         var input = Rand(42, 1, 3, 32, 32);
         var predicted = model.Predict(input);
 

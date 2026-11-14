@@ -199,12 +199,14 @@ public sealed class TwoStageDetectionLoss<T>
             }
         }
 
+        // With no objects every RoI is background (detectron2's matcher labels every proposal 0): the background IoU
+        // floor applies only when there is an object to overlap, or it would exclude every RoI and train nothing.
         double threshold = _options.StageForegroundIoU[stage];
         var foregroundRows = Sample(Enumerable.Range(0, count).Where(r => gold.Count > 0 && bestIoU[r] >= threshold).ToList(),
             (int)(_options.RoiBatchSizePerImage * _options.RoiForegroundFraction), random);
         foreground = foregroundRows.Select(r => (r, match[r])).ToArray();
         var background = Sample(Enumerable.Range(0, count)
-                .Where(r => (gold.Count == 0 || bestIoU[r] < threshold) && bestIoU[r] >= _options.RoiBackgroundIoULow).ToList(),
+                .Where(r => gold.Count == 0 || (bestIoU[r] < threshold && bestIoU[r] >= _options.RoiBackgroundIoULow)).ToList(),
             _options.RoiBatchSizePerImage - foregroundRows.Count, random);
         int sampled = foregroundRows.Count + background.Count;
         if (sampled == 0)
@@ -352,7 +354,7 @@ public sealed class TwoStageDetectionLoss<T>
         var foregroundRows = Sample(Enumerable.Range(0, count).Where(r => gold.Count > 0 && bestIoU[r] >= threshold).ToList(),
             (int)(_options.RoiBatchSizePerImage * _options.RoiForegroundFraction), random);
         var background = Sample(Enumerable.Range(0, count)
-                .Where(r => (gold.Count == 0 || bestIoU[r] < threshold) && bestIoU[r] >= _options.RoiBackgroundIoULow).ToList(),
+                .Where(r => gold.Count == 0 || (bestIoU[r] < threshold && bestIoU[r] >= _options.RoiBackgroundIoULow)).ToList(),
             _options.RoiBatchSizePerImage - foregroundRows.Count, random);
         return foregroundRows.Concat(background).ToArray();
     }

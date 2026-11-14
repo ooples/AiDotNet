@@ -8,7 +8,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Referring;
 /// <remarks>
 /// <para><b>For Beginners:</b> These options configure the PixelLM model. Default values follow the original paper settings.</para>
 /// </remarks>
-public class PixelLMOptions : SegmentationModelOptions
+public class PixelLMOptions : ReferringSegmentationOptions
 {
     /// <summary>Initializes a new instance with default values.</summary>
     public PixelLMOptions()
@@ -24,6 +24,8 @@ public class PixelLMOptions : SegmentationModelOptions
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));
+
+        CopyReferringSettings(other);
 
         Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
@@ -81,5 +83,10 @@ public class PixelLMOptions : SegmentationModelOptions
     /// Thrown when <see cref="SegmentationModelOptions.NumClasses"/> is not positive, or when
     /// <see cref="SegmentationModelOptions.DropRate"/> is not a fraction in [0, 1).
     /// </exception>
-    public void Validate() => ValidateSegmentationCore();
+    public void Validate()
+    {
+        ValidateSegmentationCore();
+        ValidateTextQuerySettings();
+        ValidateMaskThreshold();
+    }
 }
