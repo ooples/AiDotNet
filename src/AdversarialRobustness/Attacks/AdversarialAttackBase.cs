@@ -75,6 +75,12 @@ public abstract partial class AdversarialAttackBase<T, TInput, TOutput> : IAdver
     protected static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
+    /// The machine epsilon of T: the gap between 1 and the next representable value (2^-10 for Half,
+    /// 2^-23 for float, 2^-52 for double).
+    /// </summary>
+    private protected static readonly double RelativeResolution = ResolutionFrom(1);
+
+    /// <summary>
     /// Configuration options for the attack.
     /// </summary>
     protected AdversarialAttackOptions<T> Options { get; private set; }
@@ -309,6 +315,16 @@ public abstract partial class AdversarialAttackBase<T, TInput, TOutput> : IAdver
         T delta)
     {
         int n = vectorInput.Length;
+
+        // A step below the type's resolution rounds x + delta back to x (1e-4 is below half an ulp of
+        // Half anywhere in [0.0625, 1]), so every probe would collapse and the gradient would be zero.
+        // Eight ulps at 1 keeps the probe representable across the whole [0, 1] domain.
+        var minimumDelta = NumOps.FromDouble(8 * RelativeResolution);
+        if (NumOps.LessThan(delta, minimumDelta))
+        {
+            delta = minimumDelta;
+        }
+
         var plusAll = Engine.Clamp<T>(Engine.Add<T>(vectorInput, Engine.Fill<T>(n, delta)), NumOps.Zero, NumOps.One);
         var minusAll = Engine.Clamp<T>(Engine.Subtract<T>(vectorInput, Engine.Fill<T>(n, delta)), NumOps.Zero, NumOps.One);
 
@@ -355,19 +371,46 @@ public abstract partial class AdversarialAttackBase<T, TInput, TOutput> : IAdver
     /// </remarks>
     protected static T DivisionGuard()
     {
-        var guard = NumOps.FromDouble(1e-10);
-        return NumOps.GreaterThan(guard, NumOps.Zero)
-            ? guard
+        return PositiveConstant(1e-10);
+    }
+
+    /// <summary>
+    /// <paramref name="value"/> in T, or the library's default stability epsilon when it underflows to zero.
+    /// </summary>
+    /// <remarks>
+    /// Stability constants such as 1e-10 or Adam's 1e-8 are zero in Half, which turns 0 / (0 + eps) into NaN.
+    /// </remarks>
+    private protected static T PositiveConstant(double value)
+    {
+        var constant = NumOps.FromDouble(value);
+        return NumOps.GreaterThan(constant, NumOps.Zero)
+            ? constant
             : NumOps.FromDouble(NumericalStabilityHelper.DefaultEpsilon);
+    }
+
+    /// <summary>
+    /// The smallest power of two 2^-k (k &gt;= <paramref name="exponent"/>) with 1 + 2^-k still distinct from 1 in T.
+    /// </summary>
+    private static double ResolutionFrom(int exponent)
+    {
+        double next = Math.Pow(2.0, -(exponent + 1));
+        return exponent >= 60 || NumOps.ToDouble(NumOps.FromDouble(1.0 + next)) <= 1.0
+            ? Math.Pow(2.0, -exponent)
+            : ResolutionFrom(exponent + 1);
     }
 
     /// <summary>
     /// Mean squared error between a model output and a target vector, as engine reductions.
     /// </summary>
+    /// <remarks>
+    /// Computed as (||diff||_2 / sqrt(n))^2 so the sum of squares is never formed in T: in Half it overflows
+    /// once it passes 65504 (for example 1000 logits that are each 10 away from the target).
+    /// </remarks>
     protected T ComputeMeanSquaredError(Vector<T> output, Vector<T> target)
     {
         var diff = Engine.Subtract<T>(output, target);
-        return NumOps.Divide(Engine.DotProduct<T>(diff, diff), NumOps.FromDouble(diff.Length));
+        var rootMeanSquare = NumOps.Divide(ComputeL2Norm(diff), NumOps.Sqrt(NumOps.FromDouble(diff.Length)));
+        return NumOps.Multiply(rootMeanSquare, rootMeanSquare);
     }
 
     /// <summary>
@@ -388,9 +431,18 @@ public abstract partial class AdversarialAttackBase<T, TInput, TOutput> : IAdver
     /// <summary>
     /// Computes the L2 norm of a vector using vectorized operations.
     /// </summary>
+    /// <remarks>
+    /// The engine's tensor norm accumulates the squares in double, so a Half vector whose norm exceeds 256
+    /// (or a Gaussian direction with more than 65504 entries) still gets a finite norm instead of infinity.
+    /// </remarks>
     protected T ComputeL2Norm(Vector<T> vector)
     {
-        return Engine.Norm<T>(vector);
+        if (vector.Length == 0)
+        {
+            return NumOps.Zero;
+        }
+
+        return Engine.TensorNorm(vector.AsTensor()).Data.Span[0];
     }
 
     /// <summary>

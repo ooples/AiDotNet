@@ -58,4 +58,32 @@ public class VideoColorJitterReferenceTests
             Assert.Equal(0.2, result[0].GetPixel(1, 1, c), 4);
         }
     }
+
+    [Fact(Timeout = 60000)]
+    public async Task HalfContrast_MeanStaysFiniteForA255RangeFrame()
+    {
+        // A uniform 32x32 frame of 200 in the 0-255 range: contrast leaves it unchanged for any factor. In Half the
+        // plain sum of its grayscale (204780) passes 65504, so the mean became infinite and the blend clipped the
+        // whole frame to 0 or 255.
+        var frame = new ImageTensor<Half>(32, 32, 3, ChannelOrder.CHW) { IsNormalized = false };
+        for (int y = 0; y < 32; y++)
+        {
+            for (int x = 0; x < 32; x++)
+            {
+                for (int c = 0; c < 3; c++)
+                {
+                    frame.SetPixel(y, x, c, (Half)200.0);
+                }
+            }
+        }
+
+        var jitter = new VideoColorJitter<Half>(brightnessRange: 0.0, contrastRange: 0.5, saturationRange: 0.0, probability: 1.0);
+
+        var result = jitter.Apply(new[] { frame }, new AugmentationContext<Half>(seed: 3));
+
+        for (int c = 0; c < 3; c++)
+        {
+            Assert.InRange((double)result[0].GetPixel(31, 31, c), 199.5, 200.5);
+        }
+    }
 }
