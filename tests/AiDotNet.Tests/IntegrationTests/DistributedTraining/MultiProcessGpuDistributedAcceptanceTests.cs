@@ -40,6 +40,8 @@ namespace AiDotNet.Tests.IntegrationTests.DistributedTraining;
 /// (<c>GPU 0 = RTX 3080</c> 12 GB, <c>GPU 1 = RTX 3090</c> 24 GB).
 /// </summary>
 [Collection("SequentialMultiProcessGpuDistributed")]
+// The multi-process child-host suite runs on net8.0+ only; the legacy target compiles no part of it.
+#if NET8_0_OR_GREATER
 public sealed class MultiProcessGpuDistributedAcceptanceTests : IDisposable
 {
     private readonly ITestOutputHelper _output;
@@ -70,7 +72,6 @@ public sealed class MultiProcessGpuDistributedAcceptanceTests : IDisposable
         }
     }
 
-#if NET8_0_OR_GREATER
 
     #region Worker Specification & Result DTOs
 
@@ -795,8 +796,29 @@ public static class Program
                 return Array.Empty<string>();
             }
 
-            string output = proc.StandardOutput.ReadToEnd();
-            proc.WaitForExit(5000);
+            // Both streams are drained asynchronously so a hung nvidia-smi that keeps stdout open cannot outlast the
+            // deadline; on timeout the process is killed and the streams finish when it exits.
+            var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+            var stderrTask = proc.StandardError.ReadToEndAsync();
+            if (!proc.WaitForExit(5000))
+            {
+                try
+                {
+                    proc.Kill(entireProcessTree: true);
+                }
+                catch (InvalidOperationException)
+                {
+                    // The process exited between the timeout and the kill.
+                }
+
+                proc.WaitForExit();
+                Task.WaitAll(stdoutTask, stderrTask);
+                return Array.Empty<string>();
+            }
+
+            proc.WaitForExit();
+            string output = stdoutTask.GetAwaiter().GetResult();
+            stderrTask.GetAwaiter().GetResult();
             if (proc.ExitCode != 0)
             {
                 return Array.Empty<string>();
@@ -1971,15 +1993,5 @@ public static class Program
     }
 
     #endregion
-
-#else
-
-    [Fact]
-    public void MultiProcessGpuSuite_CompilesCleanlyOnLegacyFramework()
-    {
-        // Multi-process child-host execution runs on net10.0; net471 compiles cleanly without executing.
-        Assert.NotNull(_output);
-    }
-
-#endif
 }
+#endif

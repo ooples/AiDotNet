@@ -251,6 +251,9 @@ public sealed class StreamingDistributedEnablersTests : IDisposable
         double max = 0.0;
         for (int i = 0; i < a.Length; i++)
         {
+            // A NaN difference compares false against any tolerance, so non-finite parameters must fail here.
+            Assert.False(float.IsNaN(a[i]) || float.IsInfinity(a[i]), $"Left parameter {i} is not finite.");
+            Assert.False(float.IsNaN(b[i]) || float.IsInfinity(b[i]), $"Right parameter {i} is not finite.");
             double diff = Math.Abs((double)a[i] - b[i]);
             if (diff > max)
             {
@@ -1200,6 +1203,12 @@ public sealed class StreamingDistributedEnablersTests : IDisposable
                 .ToArray();
             Assert.True(jsonFiles.Length >= 1,
                 "Expected >=1 checkpoint written purely from wall-clock SaveInterval (saveFrequency=0, saveOnImprovement=false).");
+
+            // The completion save always records the final step (MaxSteps = 8); only an interval save records an
+            // earlier one, so at least one retained checkpoint below the final step proves SaveInterval fired.
+            var saved = new CheckpointManager<float, Tensor<float>, Tensor<float>>(ckptDir).ListCheckpoints();
+            Assert.NotEmpty(saved);
+            Assert.Contains(saved, c => c.Step < 8);
         }
         finally
         {
