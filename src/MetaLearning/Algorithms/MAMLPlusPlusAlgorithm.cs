@@ -168,11 +168,7 @@ public partial class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase
         RequirePlainSgdInnerSteps(options.UsePerStepLearningRates, "meta-learned per-step inner learning rates");
 
         // Initialize per-step learning rates
-        _perStepLearningRates = new Vector<T>(options.AdaptationSteps);
-        for (int i = 0; i < options.AdaptationSteps; i++)
-        {
-            _perStepLearningRates[i] = NumOps.FromDouble(options.InnerLearningRate);
-        }
+        _perStepLearningRates = Engine.Fill(options.AdaptationSteps, NumOps.FromDouble(options.InnerLearningRate));
     }
 
     /// <summary>
@@ -220,11 +216,7 @@ public partial class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase
         foreach (var task in taskBatch.Tasks)
         {
             // Clone parameters for this task
-            var taskParams = new Vector<T>(initParams.Length);
-            for (int i = 0; i < initParams.Length; i++)
-            {
-                taskParams[i] = initParams[i];
-            }
+            var taskParams = initParams.Clone();
 
             ParamModel.SetParameters(taskParams);
 
@@ -241,10 +233,7 @@ public partial class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase
                 // Accumulate weighted inner-step gradients for multi-step loss
                 if (_mamlOptions.UseMultiStepLoss && !useFirstOrder)
                 {
-                    var weightedGrad = new Vector<T>(gradients.Length);
-                    for (int i = 0; i < gradients.Length; i++)
-                        weightedGrad[i] = NumOps.Multiply(gradients[i], NumOps.FromDouble(stepWeights[step]));
-                    innerStepGradients.Add(weightedGrad);
+                    innerStepGradients.Add(Engine.Multiply(gradients, NumOps.FromDouble(stepWeights[step])));
                 }
 
                 // Apply per-step learning rate
@@ -270,13 +259,10 @@ public partial class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase
             if (_mamlOptions.UseMultiStepLoss && !useFirstOrder && innerStepGradients.Count > 0)
             {
                 double queryWeight = stepWeights[^1];
-                var blended = new Vector<T>(metaGrad.Length);
-                for (int i = 0; i < metaGrad.Length; i++)
-                    blended[i] = NumOps.Multiply(metaGrad[i], NumOps.FromDouble(queryWeight));
+                var blended = Engine.Multiply(metaGrad, NumOps.FromDouble(queryWeight));
                 foreach (var stepGrad in innerStepGradients)
                 {
-                    for (int i = 0; i < blended.Length; i++)
-                        blended[i] = NumOps.Add(blended[i], stepGrad[i]);
+                    blended = Engine.Add(blended, stepGrad);
                 }
                 metaGradients.Add(blended);
             }
@@ -321,41 +307,55 @@ public partial class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase
     {
         var resume = ParamModel.GetParameters();
         double epsilon = 1e-3;
+        T epsT = NumOps.FromDouble(epsilon);
+        T twoEpsT = NumOps.FromDouble(2.0 * epsilon);
 
         for (int step = 0; step < _mamlOptions.AdaptationSteps; step++)
         {
-            double lossPlus = 0;
-            double lossMinus = 0;
+            T lossPlus = NumOps.Zero;
+            T lossMinus = NumOps.Zero;
 
             // Evaluate with alpha_k + epsilon
-            T epsT = NumOps.FromDouble(epsilon);
             _perStepLearningRates[step] = NumOps.Add(_perStepLearningRates[step], epsT);
             foreach (var task in taskBatch.Tasks)
             {
-                lossPlus += NumOps.ToDouble(EvaluateTaskLoss(task, initParams));
+                lossPlus = NumOps.Add(lossPlus, EvaluateTaskLoss(task, initParams));
             }
 
             // Evaluate with alpha_k - epsilon (delta = 2*epsilon from current)
-            _perStepLearningRates[step] = NumOps.Subtract(_perStepLearningRates[step], NumOps.FromDouble(2.0 * epsilon));
+            _perStepLearningRates[step] = NumOps.Subtract(_perStepLearningRates[step], twoEpsT);
             foreach (var task in taskBatch.Tasks)
             {
-                lossMinus += NumOps.ToDouble(EvaluateTaskLoss(task, initParams));
+                lossMinus = NumOps.Add(lossMinus, EvaluateTaskLoss(task, initParams));
             }
 
             // Restore original alpha_k
             _perStepLearningRates[step] = NumOps.Add(_perStepLearningRates[step], epsT);
 
-            // Finite difference gradient: dL/d(alpha_k) ≈ (L+ - L-) / (2 * epsilon)
-            int numTasks = Math.Max(taskBatch.Tasks.Length, 1);
-            double grad = (lossPlus / numTasks - lossMinus / numTasks) / (2.0 * epsilon);
-
-            // Update alpha_k, clamped to [1e-6, 1.0] for stability
-            double newLR = Math.Max(1e-6,
-                Math.Min(1.0, NumOps.ToDouble(_perStepLearningRates[step]) - outerLR * grad));
-            _perStepLearningRates[step] = NumOps.FromDouble(newLR);
+            _perStepLearningRates[step] = UpdatedStepRate(
+                _perStepLearningRates[step], lossPlus, lossMinus, taskBatch.Tasks.Length, epsilon, outerLR);
         }
 
         ParamModel.SetParameters(resume);
+    }
+
+    /// <summary>
+    /// alpha - outerLR * dL/d(alpha), with dL/d(alpha) ≈ (L+ / n - L- / n) / (2 * epsilon) and n = max(tasks, 1),
+    /// clamped to [1e-6, 1.0] for stability (NaN passes through, as Math.Min/Max do).
+    /// </summary>
+    private T UpdatedStepRate(T current, T lossPlus, T lossMinus, int taskCount, double epsilon, double outerLR)
+    {
+        T numTasks = NumOps.FromDouble(Math.Max(taskCount, 1));
+        T grad = NumOps.Divide(
+            NumOps.Subtract(NumOps.Divide(lossPlus, numTasks), NumOps.Divide(lossMinus, numTasks)),
+            NumOps.FromDouble(2.0 * epsilon));
+
+        T newLR = NumOps.Subtract(current, NumOps.Multiply(NumOps.FromDouble(outerLR), grad));
+        T upper = NumOps.One;
+        T lower = NumOps.FromDouble(1e-6);
+        if (NumOps.GreaterThan(newLR, upper)) newLR = upper;
+        if (NumOps.LessThan(newLR, lower)) newLR = lower;
+        return newLR;
     }
 
     /// <summary>
@@ -367,9 +367,7 @@ public partial class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase
     /// <returns>Query loss after inner-loop adaptation.</returns>
     private T EvaluateTaskLoss(IMetaLearningTask<T, TInput, TOutput> task, Vector<T> initParams)
     {
-        var taskParams = new Vector<T>(initParams.Length);
-        for (int i = 0; i < initParams.Length; i++)
-            taskParams[i] = initParams[i];
+        var taskParams = initParams.Clone();
 
         ParamModel.SetParameters(taskParams);
 
@@ -408,11 +406,7 @@ public partial class MAMLPlusPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         var initParams = ParamModel.GetParameters();
-        var adaptedParams = new Vector<T>(initParams.Length);
-        for (int i = 0; i < initParams.Length; i++)
-        {
-            adaptedParams[i] = initParams[i];
-        }
+        var adaptedParams = initParams.Clone();
 
         ParamModel.SetParameters(adaptedParams);
 
