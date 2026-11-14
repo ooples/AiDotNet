@@ -266,7 +266,7 @@ public class InputGradientHelper<T>
     /// </remarks>
     private Vector<T> ComputeNumericalGradient(Vector<T> input, int outputIndex)
     {
-        if (_predictFunction == null)
+        if (_predictFunction is not { } predict)
             throw new InvalidOperationException("Predict function not configured.");
 
         var engine = AiDotNetEngine.Current;
@@ -275,7 +275,6 @@ public class InputGradientHelper<T>
         var plusAll = engine.TensorAddScalar(inputTensor, epsilon);
         var minusAll = engine.TensorSubtractScalar(inputTensor, epsilon);
         var positions = engine.TensorArange<int>(0, input.Length, 1);
-        Func<Vector<T>, Vector<T>> predict = _predictFunction;
 
         // Feature i is perturbed on its own: one-hot select of the shifted values.
         return CentralDifferences(
@@ -303,7 +302,7 @@ public class InputGradientHelper<T>
     /// </remarks>
     private Tensor<T> ComputeNumericalGradientTensor(Tensor<T> input, int outputIndex)
     {
-        if (_tensorPredictFunction == null)
+        if (_tensorPredictFunction is not { } predict)
             throw new InvalidOperationException("Tensor predict function not configured.");
 
         var engine = AiDotNetEngine.Current;
@@ -311,7 +310,6 @@ public class InputGradientHelper<T>
         var plusAll = engine.TensorAddScalar(input, epsilon);
         var minusAll = engine.TensorSubtractScalar(input, epsilon);
         var positions = engine.TensorArange<int>(0, input.Length, 1).Reshape(input._shape);
-        Func<Tensor<T>, Tensor<T>> predict = _tensorPredictFunction;
 
         // Element i is perturbed on its own: one-hot select of the shifted values.
         var gradient = CentralDifferences(
