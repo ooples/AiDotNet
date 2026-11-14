@@ -233,9 +233,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                 throw new ArgumentOutOfRangeException(nameof(numSteps), "Number of steps must be positive.");
             }
 
-            T dt = NumOps.Divide(NumOps.Subtract(tEnd, tStart), NumOps.FromDouble(numSteps));
-            var times = Engine.TensorAddScalar(
-                Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, numSteps, 1), dt), tStart).ToArray();
+            var times = TimeGrid(tStart, tEnd, numSteps, out T dt);
 
             var states = new List<T[]>(numSteps + 1) { (T[])initialState.Clone() };
             for (int step = 0; step < numSteps; step++)
@@ -246,6 +244,30 @@ namespace AiDotNet.PhysicsInformed.ScientificML
             }
 
             return new Tensor<T>(states.SelectMany(state => state).ToArray(), new[] { numSteps + 1, _stateDim });
+        }
+
+        /// <summary>
+        /// The step start times t_k = t0 + k (t1 - t0) / n, k = 0 .. n - 1, and the step dt.
+        /// </summary>
+        /// <remarks>
+        /// The grid is built in double and rounded to T once. It was arange(k) in T times dt in T: the engine's arange
+        /// rounds each k once, and the product rounds again, so in half precision k = 2049 became 2048 and a time
+        /// landed one half-precision step away from the nearest value of the exact time.
+        /// </remarks>
+        internal static T[] TimeGrid(T tStart, T tEnd, int numSteps, out T dt)
+        {
+            if (numSteps <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(numSteps), "Number of steps must be positive.");
+            }
+
+            var numOps = MathHelper.GetNumericOperations<T>();
+            double start = numOps.ToDouble(tStart);
+            double step = (numOps.ToDouble(tEnd) - start) / numSteps;
+            dt = numOps.FromDouble(step);
+            var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+            var grid = engine.TensorAddScalar(engine.TensorMultiplyScalar(engine.TensorArange<double>(0, numSteps, 1), step), start);
+            return grid.Cast<T>().ToArray();
         }
 
         private T[] StepEuler(T[] state, T time, T dt)

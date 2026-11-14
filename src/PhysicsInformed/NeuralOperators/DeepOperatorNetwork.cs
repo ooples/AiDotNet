@@ -600,9 +600,17 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
     // UpdateParameters restated a fold the base now derives from generated component registration.
     // Removed under AIDN082.
         /// <inheritdoc />
+        /// <remarks>
+        /// The gradients of the last step in the layout of <see cref="NeuralNetworkBase{T}.GetParameters"/>: the
+        /// branch layers, the trunk layers, then the output bias b0, whose gradient is dL/db0 = sum over the outputs of
+        /// dL/dG (Lu et al. 2021, Eq. 2). It concatenated the sub-networks' own gradients, one entry short of the
+        /// parameters and with no b0 gradient. Before any training step every gradient is zero.
+        /// </remarks>
         public override Vector<T> GetGradients()
         {
-            return Vector<T>.Concatenate(_branchNet.GetGradients(), _trunkNet.GetGradients());
+            var gradients = GetParameterGradients();
+            int parameterCount = GetParameters().Length;
+            return gradients.Length == parameterCount ? gradients : new Vector<T>(parameterCount);
         }
 
         /// <inheritdoc/>

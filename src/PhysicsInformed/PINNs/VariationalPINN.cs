@@ -173,44 +173,82 @@ namespace AiDotNet.PhysicsInformed.PINNs
         }
 
         /// <summary>
-        /// Gauss-Legendre nodes and weights of <paramref name="count"/> points on [-1, 1].
+        /// Gauss-Legendre nodes (ascending) and weights of <paramref name="count"/> points on [-1, 1], in T.
         /// </summary>
         /// <remarks>
-        /// Newton's method on P_count from the Chebyshev-like guesses cos(pi (i + 3/4) / (count + 1/2)); the weights
-        /// are 2 / ((1 - x^2) P'_count(x)^2).
+        /// The rule is computed once in double by <see cref="GaussLegendreRule"/> and rounded to T once. Computed in T,
+        /// P'_n at the outer nodes is near n (n + 1) / 2, so P'^2 overflows half precision from n = 16 or so and the
+        /// outer weights became zero; the recurrence also held every P_0 .. P_n, count tensors of count values.
         /// </remarks>
-        private Tensor<T> GaussLegendre(int count, out Tensor<T> weights)
+        internal static Tensor<T> GaussLegendre(int count, out Tensor<T> weights)
         {
-            var indices = Engine.TensorArange<T>(0, count, 1);
-            var nodes = Engine.TensorCos(Engine.TensorMultiplyScalar(
-                Engine.TensorAddScalar(indices, NumOps.FromDouble(0.75)), NumOps.FromDouble(Math.PI / (count + 0.5))));
-
-            Tensor<T> derivative = nodes;
-            for (int iteration = 0; iteration < 8; iteration++)
-            {
-                derivative = LegendreDerivative(nodes, count, out var value);
-                nodes = Engine.TensorSubtract(nodes, Engine.TensorDivide(value, derivative));
-            }
-
-            derivative = LegendreDerivative(nodes, count, out _);
-            var oneMinusSquare = Engine.TensorSubtract(
-                Tensor<T>.CreateDefault(nodes.Shape.ToArray(), NumOps.One), Engine.TensorMultiply(nodes, nodes));
-            weights = Engine.TensorMultiplyScalar(
-                Engine.TensorReciprocal(Engine.TensorMultiply(oneMinusSquare, Engine.TensorMultiply(derivative, derivative))),
-                NumOps.FromDouble(2.0));
-            return nodes;
+            var (nodes, rule) = GaussLegendreRule(count);
+            weights = new Tensor<double>(rule, new[] { count }).Cast<T>();
+            return new Tensor<double>(nodes, new[] { count }).Cast<T>();
         }
 
         /// <summary>
-        /// P'_n(x) = n (x P_n - P_{n-1}) / (x^2 - 1), with P_n in <paramref name="value"/>.
+        /// Gauss-Legendre nodes (ascending) and weights of <paramref name="count"/> points on [-1, 1], in double.
         /// </summary>
-        private Tensor<T> LegendreDerivative(Tensor<T> x, int n, out Tensor<T> value)
+        /// <remarks>
+        /// Newton's method on P_count from the guesses -cos(pi (i + 3/4) / (count + 1/2)), with P_count and P_count-1 from
+        /// Bonnet's recurrence (n + 1) P_{n+1} = (2n + 1) x P_n - n P_{n-1}, keeping only the last two terms. The weights
+        /// are 2 / ((1 - x^2) P'_count(x)^2), with P'_n(x) = n (x P_n - P_{n-1}) / (x^2 - 1).
+        /// </remarks>
+        internal static (double[] Nodes, double[] Weights) GaussLegendreRule(int count)
         {
-            var polynomials = Legendre(x, n);
-            value = polynomials[n];
-            var numerator = Engine.TensorSubtract(Engine.TensorMultiply(x, polynomials[n]), polynomials[n - 1]);
-            var denominator = Engine.TensorSubtractScalar(Engine.TensorMultiply(x, x), NumOps.One);
-            return Engine.TensorMultiplyScalar(Engine.TensorDivide(numerator, denominator), NumOps.FromDouble(n));
+            if (count < 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(count), "A Gauss-Legendre rule needs at least one point.");
+            }
+
+            var nodes = new double[count];
+            var weights = new double[count];
+            for (int i = 0; i < count; i++)
+            {
+                double x = -Math.Cos(Math.PI * (i + 0.75) / (count + 0.5));
+                double derivative = 1.0;
+                for (int iteration = 0; iteration < 20; iteration++)
+                {
+                    double value = LegendrePair(x, count, out double previous);
+                    derivative = count * (x * value - previous) / (x * x - 1.0);
+                    double delta = value / derivative;
+                    x -= delta;
+                    if (Math.Abs(delta) <= 4e-16 * Math.Max(1.0, Math.Abs(x)))
+                    {
+                        break;
+                    }
+                }
+
+                double finalValue = LegendrePair(x, count, out double finalPrevious);
+                derivative = count * (x * finalValue - finalPrevious) / (x * x - 1.0);
+                nodes[i] = x;
+                weights[i] = 2.0 / ((1.0 - x * x) * derivative * derivative);
+            }
+
+            return (nodes, weights);
+        }
+
+        /// <summary>P_n(x), with P_{n-1}(x) in <paramref name="previous"/>, by the recurrence with two terms kept.</summary>
+        private static double LegendrePair(double x, int n, out double previous)
+        {
+            double lower = 1.0;
+            double current = x;
+            if (n == 0)
+            {
+                previous = 0.0;
+                return 1.0;
+            }
+
+            for (int k = 1; k < n; k++)
+            {
+                double next = ((2 * k + 1) * x * current - k * lower) / (k + 1);
+                lower = current;
+                current = next;
+            }
+
+            previous = lower;
+            return current;
         }
 
         /// <summary>
