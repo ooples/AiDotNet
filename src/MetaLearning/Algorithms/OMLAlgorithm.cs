@@ -13,31 +13,27 @@ using AiDotNet.Data.Structures;
 namespace AiDotNet.MetaLearning.Algorithms;
 
 /// <summary>
-/// Implementation of OML: Online Meta-Learning (Javed &amp; White, 2019).
+/// Implementation of OML: Online-aware Meta-Learning (Javed &amp; White, NeurIPS 2019).
 /// </summary>
 /// <remarks>
 /// <para>
-/// OML partitions model parameters into a Representation Learning Network (RLN) and a
-/// Prediction Learning Network (PLN). The RLN (first 1-f fraction of parameters) is only
-/// updated in the outer loop, while the PLN (last f fraction) is adapted in the inner loop.
-/// This division encourages the RLN to learn sparse, non-interfering representations that
-/// support continual learning — the PLN can be quickly adapted without forgetting.
+/// OML partitions model parameters into a Representation Learning Network (RLN, parameters theta) and a
+/// Prediction Learning Network (PLN, parameters W). The inner loop is ONLINE: it updates only W, one
+/// support example at a time, as a continual learner would see a trajectory. The meta-objective then
+/// asks the adapted network to fit both that trajectory and random samples from the task (the query set),
+/// so that sequential updates do not interfere with what was learned before. Sparse representations
+/// emerge from this objective; the paper adds no sparsity penalty.
 /// </para>
-/// <para><b>Algorithm:</b>
+/// <para><b>Algorithm (paper Algorithm 1):</b>
 /// <code>
-/// Parameter partition:
-///   PLN indices: [P*(1-f), P)  (last f fraction)
-///   RLN indices: [0, P*(1-f))  (first 1-f fraction)
-///
-/// Inner loop (only PLN params):
-///   θ_PLN ← θ_PLN - η * ∇_PLN L_support
-///   θ_RLN stays frozen
-///
-/// Outer loop (both RLN + PLN):
-///   L_meta = L_query + SparsityPenalty * ||θ_RLN||₁
-///                     + RepresentationRegWeight * ||θ_RLN - θ_RLN_init||²
-///   Update all θ
+/// W_0 = W
+/// for j = 1..k (each support example x_j in turn):  W_j = W_{j-1} - beta * grad_W L(f(x_j; theta, W_{j-1}))
+/// meta-loss: L(f(S_traj U X_rand; theta, W_k)),  update theta and W with it (first order)
 /// </code>
+/// </para>
+/// <para>
+/// PLN indices are the last <c>PlnFraction</c> of the flat parameter vector. <c>SparsityPenalty</c> adds an
+/// optional L1 term on the RLN parameters (off by default, as in the paper).
 /// </para>
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
@@ -78,104 +74,113 @@ public partial class OMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     /// <inheritdoc/>
     public override T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch)
     {
+        if (taskBatch == null) throw new ArgumentNullException(nameof(taskBatch));
+        if (taskBatch.Tasks.Length == 0) return NumOps.Zero;
+
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
         var initParams = ParamModel.GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
-            // Inner loop: only adapt PLN parameters
-            var adaptedParams = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
-
-            for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
-            {
-                ParamModel.SetParameters(adaptedParams);
-                var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-
-                // Only update PLN parameters (RLN stays frozen in inner loop)
-                StepPredictionNetwork(adaptedParams, grad, step == 0);
-            }
-
-            ParamModel.SetParameters(adaptedParams);
-            var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
-
-            // L1 sparsity on RLN parameters
-            double sparsity = 0;
-            for (int d = 0; d < _plnStart; d++)
-                sparsity += Math.Abs(NumOps.ToDouble(adaptedParams[d]));
-
-            // L2 regularization on RLN change
-            double rlnReg = 0;
-            for (int d = 0; d < _plnStart; d++)
-            {
-                double diff = NumOps.ToDouble(adaptedParams[d]) - NumOps.ToDouble(initParams[d]);
-                rlnReg += diff * diff;
-            }
-
-            var totalLoss = NumOps.Add(queryLoss,
-                NumOps.FromDouble(_algoOptions.SparsityPenalty * sparsity
-                                + _algoOptions.RepresentationRegWeight * rlnReg));
-
-            losses.Add(totalLoss);
-
-            // Compute gradient including regularization terms so outer update matches totalLoss
-            var queryGrad = ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput);
-            for (int d = 0; d < _plnStart; d++)
-            {
-                double paramVal = NumOps.ToDouble(adaptedParams[d]);
-                double initVal = NumOps.ToDouble(initParams[d]);
-                // L1 sparsity gradient: sign(param) * penalty
-                double sparsityGrad = Math.Sign(paramVal) * _algoOptions.SparsityPenalty;
-                // L2 RLN reg gradient: 2 * weight * (param - init)
-                double rlnGrad = 2.0 * _algoOptions.RepresentationRegWeight * (paramVal - initVal);
-                queryGrad[d] = NumOps.Add(queryGrad[d], NumOps.FromDouble(sparsityGrad + rlnGrad));
-            }
-            metaGradients.Add(ClipGradients(queryGrad));
+            var adaptedParams = AdaptPredictionNetwork(task, initParams);
+            var (loss, gradient) = MetaObjective(task, adaptedParams);
+            losses.Add(loss);
+            metaGradients.Add(ClipGradients(gradient));
         }
 
-        // Outer loop: update ALL parameters (both RLN and PLN)
+        // Outer loop: update ALL parameters (both RLN and PLN).
         ApplyOuterUpdate(initParams, metaGradients, _algoOptions.OuterLearningRate);
 
         return ComputeMean(losses);
+    }
+
+    /// <summary>
+    /// The meta-loss at the adapted parameters: the per-example mean over S_traj U X_rand, plus the optional
+    /// L1 term on the RLN parameters, and its first-order gradient.
+    /// </summary>
+    private (T Loss, Vector<T> Gradient) MetaObjective(IMetaLearningTask<T, TInput, TOutput> task, Vector<T> adaptedParams)
+    {
+        ParamModel.SetParameters(adaptedParams);
+        int nSupport = InputHelper<T, TInput>.GetBatchSize(task.SupportInput);
+        int nQuery = InputHelper<T, TInput>.GetBatchSize(task.QueryInput);
+        T wSupport = NumOps.FromDouble((double)nSupport / (nSupport + nQuery));
+        T wQuery = NumOps.FromDouble((double)nQuery / (nSupport + nQuery));
+        T trajectoryLoss = ComputeLossFromOutput(MetaModel.Predict(task.SupportInput), task.SupportOutput);
+        T randomLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
+        var gradient = Engine.Add(
+            Engine.Multiply(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput), wSupport),
+            Engine.Multiply(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput), wQuery));
+        T loss = NumOps.Add(NumOps.Multiply(trajectoryLoss, wSupport), NumOps.Multiply(randomLoss, wQuery));
+
+        // Optional L1 on the RLN parameters: penalty * ||theta||_1, gradient penalty * sign(theta).
+        if (_plnStart > 0 && _algoOptions.SparsityPenalty > 0)
+        {
+            T penalty = NumOps.FromDouble(_algoOptions.SparsityPenalty);
+            var rln = adaptedParams.GetSubVector(0, _plnStart);
+            loss = NumOps.Add(loss, NumOps.Multiply(penalty, Engine.Sum(Engine.Abs(rln))));
+            gradient = Engine.Add(gradient, Vector<T>.Concatenate(new[]
+            {
+                Engine.Multiply(Engine.Sign(rln), penalty),
+                new Vector<T>(_paramDim - _plnStart),
+            }));
+        }
+
+        return (loss, gradient);
     }
 
     /// <inheritdoc/>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         var initParams = ParamModel.GetParameters();
-        var adaptedParams = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
-
-        // Only adapt PLN parameters
-        for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
-        {
-            ParamModel.SetParameters(adaptedParams);
-            var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-
-            StepPredictionNetwork(adaptedParams, grad, step == 0);
-        }
-
+        var adaptedParams = AdaptPredictionNetwork(task, initParams);
         ParamModel.SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
     /// <summary>
-    /// One inner step on the prediction network's parameters only (the representation network stays frozen), in place.
+    /// The inner loop: <c>AdaptationSteps</c> passes over the support set, updating only the PLN. With
+    /// <c>OnlineInnerLoop</c> (the paper) each pass takes one step per support example, in order.
     /// </summary>
-    private void StepPredictionNetwork(Vector<T> adaptedParams, Vector<T> grad, bool firstStep)
+    private Vector<T> AdaptPredictionNetwork(IMetaLearningTask<T, TInput, TOutput> task, Vector<T> initParams)
     {
-        int count = _paramDim - _plnStart;
-        var parameters = new Vector<T>(count);
-        var gradients = new Vector<T>(count);
-        for (int i = 0; i < count; i++)
+        var adaptedParams = initParams.Clone();
+        int examples = _algoOptions.OnlineInnerLoop ? InputHelper<T, TInput>.GetBatchSize(task.SupportInput) : 1;
+        bool first = true;
+        for (int pass = 0; pass < _algoOptions.AdaptationSteps; pass++)
         {
-            parameters[i] = adaptedParams[_plnStart + i];
-            gradients[i] = grad[_plnStart + i];
+            for (int j = 0; j < examples; j++)
+            {
+                var input = task.SupportInput;
+                var target = task.SupportOutput;
+                if (_algoOptions.OnlineInnerLoop)
+                {
+                    var index = new[] { j };
+                    input = InputHelper<T, TInput>.GetBatch(task.SupportInput, index);
+                    target = InputHelper<T, TOutput>.GetBatch(task.SupportOutput, index);
+                }
+
+                ParamModel.SetParameters(adaptedParams);
+                var grad = ClipGradients(ComputeGradients(MetaModel, input, target));
+                adaptedParams = StepPredictionNetwork(adaptedParams, grad, first);
+                first = false;
+            }
         }
 
-        var updated = ApplyInnerGradients(parameters, gradients, _algoOptions.InnerLearningRate, firstStep);
-        for (int i = 0; i < count; i++)
-            adaptedParams[_plnStart + i] = updated[i];
+        return adaptedParams;
+    }
+
+    /// <summary>
+    /// One inner step on the prediction network's parameters only (the representation network stays frozen).
+    /// </summary>
+    private Vector<T> StepPredictionNetwork(Vector<T> adaptedParams, Vector<T> grad, bool firstStep)
+    {
+        int count = _paramDim - _plnStart;
+        var updated = ApplyInnerGradients(
+            adaptedParams.GetSubVector(_plnStart, count), grad.GetSubVector(_plnStart, count),
+            _algoOptions.InnerLearningRate, firstStep);
+        return _plnStart == 0
+            ? updated
+            : Vector<T>.Concatenate(new[] { adaptedParams.GetSubVector(0, _plnStart), updated });
     }
 }

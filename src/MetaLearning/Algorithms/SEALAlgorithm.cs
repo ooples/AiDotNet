@@ -190,7 +190,7 @@ public partial class SEALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
         // Accumulate meta-gradients across all tasks in the batch
         Vector<T>? metaGradients = null;
-        T totalMetaLoss = NumOps.Zero;
+        var metaLosses = new List<T>(taskBatch.BatchSize);
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -203,24 +203,8 @@ public partial class SEALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
             // Evaluate on query set to get meta-loss
             var queryPredictions = taskModel.Predict(task.QueryInput);
-            T metaLoss = ComputeLossFromOutput(queryPredictions, task.QueryOutput);
-
-            // Apply temperature scaling if configured
-            if (Math.Abs(currentTemperature - 1.0) > 1e-10)
-            {
-                T temperature = NumOps.FromDouble(currentTemperature);
-                metaLoss = NumOps.Divide(metaLoss, temperature);
-            }
-
-            // Add entropy regularization if configured
-            if (_sealOptions.EntropyCoefficient > 0.0 && _sealOptions.EntropyOnlyDuringMetaTrain)
-            {
-                T entropyTerm = ComputeEntropyRegularization(queryPredictions);
-                T entropyCoef = NumOps.FromDouble(_sealOptions.EntropyCoefficient);
-                metaLoss = NumOps.Subtract(metaLoss, NumOps.Multiply(entropyCoef, entropyTerm));
-            }
-
-            totalMetaLoss = NumOps.Add(totalMetaLoss, metaLoss);
+            metaLosses.Add(RegularizedMetaLoss(
+                ComputeLossFromOutput(queryPredictions, task.QueryOutput), queryPredictions, currentTemperature));
 
             // Compute meta-gradients (gradients with respect to initial parameters)
             var taskMetaGradients = ComputeMetaGradients(taskModel, task, adaptedParameters);
@@ -232,17 +216,7 @@ public partial class SEALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             }
 
             // Accumulate meta-gradients
-            if (metaGradients == null)
-            {
-                metaGradients = taskMetaGradients;
-            }
-            else
-            {
-                for (int i = 0; i < metaGradients.Length; i++)
-                {
-                    metaGradients[i] = NumOps.Add(metaGradients[i], taskMetaGradients[i]);
-                }
-            }
+            metaGradients = metaGradients == null ? taskMetaGradients : Engine.Add(metaGradients, taskMetaGradients);
         }
 
         if (metaGradients == null)
@@ -252,20 +226,13 @@ public partial class SEALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
         // Average the meta-gradients
         T batchSizeT = NumOps.FromDouble(taskBatch.BatchSize);
-        for (int i = 0; i < metaGradients.Length; i++)
-        {
-            metaGradients[i] = NumOps.Divide(metaGradients[i], batchSizeT);
-        }
+        metaGradients = Engine.Divide(metaGradients, batchSizeT);
 
-        // Apply weight decay if configured
+        // Apply weight decay if configured: gradient += weight_decay * parameters
         if (_sealOptions.WeightDecay > 0.0)
         {
-            var currentParams = ParamModel.GetParameters();
-            T decay = NumOps.FromDouble(_sealOptions.WeightDecay);
-            for (int i = 0; i < metaGradients.Length; i++)
-            {
-                metaGradients[i] = NumOps.Add(metaGradients[i], NumOps.Multiply(decay, currentParams[i]));
-            }
+            metaGradients = Engine.Add(
+                metaGradients, Engine.Multiply(ParamModel.GetParameters(), NumOps.FromDouble(_sealOptions.WeightDecay)));
         }
 
         // Outer loop: Update meta-parameters
@@ -274,7 +241,27 @@ public partial class SEALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         ParamModel.SetParameters(updatedMetaParams);
 
         // Return average meta-loss
-        return NumOps.Divide(totalMetaLoss, batchSizeT);
+        return NumOps.Divide(Engine.Sum(new Vector<T>(metaLosses.ToArray())), batchSizeT);
+    }
+
+    /// <summary>
+    /// The query loss with temperature scaling (loss / temperature) and, when configured, the entropy
+    /// bonus subtracted: loss - entropy_coef * H(predictions).
+    /// </summary>
+    private T RegularizedMetaLoss(T metaLoss, TOutput queryPredictions, double currentTemperature)
+    {
+        if (Math.Abs(currentTemperature - 1.0) > 1e-10)
+        {
+            metaLoss = NumOps.Divide(metaLoss, NumOps.FromDouble(currentTemperature));
+        }
+
+        if (_sealOptions.EntropyCoefficient > 0.0 && _sealOptions.EntropyOnlyDuringMetaTrain)
+        {
+            T entropyTerm = ComputeEntropyRegularization(queryPredictions);
+            metaLoss = NumOps.Subtract(metaLoss, NumOps.Multiply(NumOps.FromDouble(_sealOptions.EntropyCoefficient), entropyTerm));
+        }
+
+        return metaLoss;
     }
 
     /// <summary>
@@ -364,16 +351,12 @@ public partial class SEALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     private Vector<T> InnerLoopAdaptation(IFullModel<T, TInput, TOutput> model, IMetaLearningTask<T, TInput, TOutput> task)
     {
         var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
-        Vector<T>? runningSquaredGrads = null;
+        Vector<T>? runningRootMeanSquare = null;
 
-        // Initialize running squared gradients for RunningMean mode
+        // Initialize the running root-mean-square gradient for RunningMean mode
         if (_sealOptions.UseAdaptiveInnerLR && _sealOptions.AdaptiveLearningRateMode == SEALAdaptiveLearningRateMode.RunningMean)
         {
-            runningSquaredGrads = new Vector<T>(parameters.Length);
-            for (int i = 0; i < parameters.Length; i++)
-            {
-                runningSquaredGrads[i] = NumOps.Zero;
-            }
+            runningRootMeanSquare = Engine.Fill(parameters.Length, NumOps.Zero);
         }
 
         // Perform adaptation steps
@@ -385,7 +368,7 @@ public partial class SEALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             // Apply adaptive learning rates if configured
             if (_sealOptions.UseAdaptiveInnerLR)
             {
-                var adaptiveLr = ComputeAdaptiveLearningRates(gradients, ref runningSquaredGrads);
+                var adaptiveLr = ComputeAdaptiveLearningRates(gradients, ref runningRootMeanSquare);
                 parameters = ApplyAdaptiveGradients(parameters, gradients, adaptiveLr);
             }
             else
@@ -404,7 +387,7 @@ public partial class SEALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// Computes adaptive learning rates based on gradient statistics.
     /// </summary>
     /// <param name="gradients">The current gradient vector.</param>
-    /// <param name="runningSquaredGrads">Running squared gradient state (for RunningMean mode).</param>
+    /// <param name="runningRootMeanSquare">Running root-mean-square gradient state sqrt(v) (for RunningMean mode).</param>
     /// <returns>Adaptive learning rates for each parameter.</returns>
     /// <remarks>
     /// <para>
@@ -414,70 +397,65 @@ public partial class SEALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// - PerLayer: Averages gradient norms across layer parameters
     /// </para>
     /// </remarks>
-    private Vector<T> ComputeAdaptiveLearningRates(Vector<T> gradients, ref Vector<T>? runningSquaredGrads)
+    internal Vector<T> ComputeAdaptiveLearningRates(Vector<T> gradients, ref Vector<T>? runningRootMeanSquare)
     {
-        var adaptiveLr = new Vector<T>(gradients.Length);
         T epsilon = NumOps.FromDouble(_sealOptions.AdaptiveLearningRateEpsilon);
         T baseLr = NumOps.FromDouble(_sealOptions.InnerLearningRate);
 
         switch (_sealOptions.AdaptiveLearningRateMode)
         {
             case SEALAdaptiveLearningRateMode.GradientNorm:
-                // AdaGrad-like: lr = base_lr / (sqrt(grad^2) + epsilon)
-                for (int i = 0; i < gradients.Length; i++)
-                {
-                    T gradSquared = NumOps.Multiply(gradients[i], gradients[i]);
-                    T sqrtGrad = NumOps.FromDouble(Math.Sqrt(Math.Max(NumOps.ToDouble(gradSquared), 1e-16)));
-                    T denominator = NumOps.Add(sqrtGrad, epsilon);
-                    adaptiveLr[i] = NumOps.Divide(baseLr, denominator);
-                }
-                break;
+                // AdaGrad-like: lr = base_lr / (sqrt(grad^2) + epsilon). sqrt(max(grad^2, 1e-16)) = max(|grad|, 1e-8),
+                // taken without squaring so a gradient past sqrt(MaxValue) (256 in Half) does not overflow to inf.
+                var magnitude = Engine.TensorMax(Engine.TensorAbs(Tensor<T>.FromVector(gradients)), NumOps.FromDouble(1e-8));
+                return ScaledInverse(magnitude, baseLr, epsilon);
 
             case SEALAdaptiveLearningRateMode.RunningMean:
-                // RMSprop-like: uses exponential moving average of squared gradients
-                if (runningSquaredGrads == null)
-                {
-                    runningSquaredGrads = new Vector<T>(gradients.Length);
-                    for (int i = 0; i < gradients.Length; i++)
-                    {
-                        runningSquaredGrads[i] = NumOps.Zero;
-                    }
-                }
-
-                T decay = NumOps.FromDouble(_sealOptions.AdaptiveLearningRateDecay);
-                T oneMinusDecay = NumOps.FromDouble(1.0 - _sealOptions.AdaptiveLearningRateDecay);
-
-                for (int i = 0; i < gradients.Length; i++)
-                {
-                    T gradSquared = NumOps.Multiply(gradients[i], gradients[i]);
-                    // running = decay * running + (1 - decay) * grad^2
-                    runningSquaredGrads[i] = NumOps.Add(
-                        NumOps.Multiply(decay, runningSquaredGrads[i]),
-                        NumOps.Multiply(oneMinusDecay, gradSquared)
-                    );
-
-                    T sqrtRunning = NumOps.FromDouble(Math.Sqrt(Math.Max(NumOps.ToDouble(runningSquaredGrads[i]), 1e-16)));
-                    T denominator = NumOps.Add(sqrtRunning, epsilon);
-                    adaptiveLr[i] = NumOps.Divide(baseLr, denominator);
-                }
-                break;
+                // RMSprop-like: v = decay * v + (1 - decay) * grad^2, lr = base_lr / (sqrt(max(v, 1e-16)) + epsilon).
+                // The state holds the root r = sqrt(v), never v itself: a gradient past sqrt(MaxValue) (256 in Half)
+                // squares to inf, and the rate went to 0. With m = max(r, |g|) the update is
+                // r' = m sqrt(decay (r / m)^2 + (1 - decay) (g / m)^2), whose squares are all <= 1.
+                var previousRoot = Tensor<T>.FromVector(runningRootMeanSquare ?? Engine.Fill(gradients.Length, NumOps.Zero));
+                var magnitude2 = Engine.TensorAbs(Tensor<T>.FromVector(gradients));
+                var peak = Engine.TensorMax(previousRoot, magnitude2);
+                var safePeak = Engine.TensorWhere(
+                    Engine.TensorGreaterThan(peak, NumOps.Zero), peak, Engine.TensorOnesLike(peak));
+                var oldShare = Engine.TensorSquare(Engine.TensorDivide(previousRoot, safePeak));
+                var newShare = Engine.TensorSquare(Engine.TensorDivide(magnitude2, safePeak));
+                var root = Engine.TensorMultiply(peak, Engine.TensorSqrt(Engine.TensorLerp(
+                    newShare, oldShare, NumOps.FromDouble(_sealOptions.AdaptiveLearningRateDecay))));
+                runningRootMeanSquare = root.ToVector();
+                return ScaledInverse(Engine.TensorMax(root, NumOps.FromDouble(1e-8)), baseLr, epsilon);
 
             case SEALAdaptiveLearningRateMode.PerLayer:
-                // Compute average gradient norm across all parameters
-                T sumSquared = NumOps.Zero;
-                sumSquared = NumOps.Add(sumSquared, Engine.DotProduct(gradients, gradients));
-                T avgSquared = NumOps.Divide(sumSquared, NumOps.FromDouble(gradients.Length));
-                T avgSqrt = NumOps.FromDouble(Math.Sqrt(Math.Max(NumOps.ToDouble(avgSquared), 1e-16)));
-                T sharedLr = NumOps.Divide(baseLr, NumOps.Add(avgSqrt, epsilon));
+                // One shared rate from the root-mean-square gradient across all parameters. The statistic is taken in
+                // double (one conversion of the gradient), so neither the squares, their sum nor the parameter count
+                // overflow a narrow T, and the 1e-8 floor and epsilon do not round to zero.
+                if (gradients.Length == 0) return new Vector<T>(0);
+                var wide = Tensor<T>.FromVector(gradients).Cast<double>();
+                double rms = Math.Sqrt(Engine.TensorMean(Engine.TensorMultiply(wide, wide)));
 
-                for (int i = 0; i < gradients.Length; i++)
-                {
-                    adaptiveLr[i] = sharedLr;
-                }
-                break;
+                double sharedRate = _sealOptions.InnerLearningRate / (Math.Max(rms, 1e-8) + _sealOptions.AdaptiveLearningRateEpsilon);
+                return Engine.Fill(gradients.Length, NumOps.FromDouble(Math.Min(sharedRate, NumOps.ToDouble(NumOps.MaxValue))));
+
+            default:
+                return new Vector<T>(gradients.Length);
         }
+    }
 
-        return adaptiveLr;
+    /// <summary>
+    /// <c>base_lr / (root + epsilon)</c>, elementwise, capped at the largest finite T. In double the cap never binds
+    /// (base_lr / 1e-8 is far below double.MaxValue); in Half the 1e-8 floor and epsilon round to 0, so a zero
+    /// gradient would give 1 / 0 = inf and the update inf * 0 = NaN. The cap keeps that update at exactly 0.
+    /// </summary>
+    private Vector<T> ScaledInverse(Tensor<T> root, T baseLr, T epsilon)
+    {
+        // Divided directly: rounding the reciprocal to T first loses base_lr / (root + eps) in Half before scaling.
+        var denominator = Engine.TensorAddScalar(root, epsilon);
+        var numerator = new Tensor<T>(denominator.Shape.ToArray());
+        Engine.TensorFill(numerator, baseLr);
+        var rates = Engine.TensorDivide(numerator, denominator);
+        return Engine.TensorClamp(rates, NumOps.Zero, NumOps.MaxValue).ToVector();
     }
 
     /// <summary>
@@ -488,14 +466,7 @@ public partial class SEALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// <param name="adaptiveLr">Per-parameter learning rates.</param>
     /// <returns>Updated parameters.</returns>
     private Vector<T> ApplyAdaptiveGradients(Vector<T> parameters, Vector<T> gradients, Vector<T> adaptiveLr)
-    {
-        var updated = new Vector<T>(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            updated[i] = NumOps.Subtract(parameters[i], NumOps.Multiply(adaptiveLr[i], gradients[i]));
-        }
-        return updated;
-    }
+        => Engine.Subtract(parameters, Engine.Multiply(adaptiveLr, gradients));
 
     /// <summary>
     /// Computes meta-gradients for the outer loop update.
@@ -570,81 +541,49 @@ public partial class SEALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// which helps it adapt better to new tasks.
     /// </para>
     /// </remarks>
-    private T ComputeEntropyRegularization(TOutput predictions)
+    internal T ComputeEntropyRegularization(TOutput predictions)
     {
-        try
-        {
-            // Convert predictions to probabilities (softmax if not already)
-            var probabilities = ConvertToProbabilities(predictions);
-            T entropy = NumOps.Zero;
+        // Outputs that are not logits (neither a Vector nor a Tensor) carry no entropy term (no regularization).
+        var probabilities = ConvertToProbabilities(predictions);
+        if (probabilities is null || probabilities.Length == 0) return NumOps.Zero;
+        int rows = probabilities.Shape[0];
+        int classes = probabilities.Shape[1];
 
-            // Compute entropy: -sum(p * log(p))
-            T epsilon = NumOps.FromDouble(_sealOptions.AdaptiveLearningRateEpsilon);
+        // Avoid log(0) by adding a small epsilon, then renormalize each row: p' = (p + eps) / sum(p + eps).
+        var shifted = Engine.TensorAddScalar(probabilities, NumOps.FromDouble(_sealOptions.AdaptiveLearningRateEpsilon));
+        var rowSums = Engine.ReduceSum(shifted, new[] { 1 }, keepDims: true);
+        var p = Engine.TensorDivide(shifted, Engine.TensorBroadcastTo(rowSums, new[] { rows, classes }));
 
-            for (int i = 0; i < probabilities.Length; i++)
-            {
-                T p = probabilities[i];
-
-                // Avoid log(0) by adding small epsilon
-                p = NumOps.Add(p, epsilon);
-
-                // Normalize to ensure sum = 1
-                T sum = NumOps.Zero;
-                for (int j = 0; j < probabilities.Length; j++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Add(probabilities[j], epsilon));
-                }
-                p = NumOps.Divide(p, sum);
-
-                // Compute p * log(p)
-                T logP = NumOps.FromDouble(Math.Log(NumOps.ToDouble(p)));
-                T contribution = NumOps.Multiply(p, logP);
-                entropy = NumOps.Subtract(entropy, contribution);
-            }
-
-            return entropy;
-        }
-        catch
-        {
-            // If entropy computation fails, return zero (no regularization)
-            return NumOps.Zero;
-        }
+        // H = -sum(p' * log(p')) per example with 0 log 0 = 0, averaged over the examples. In double the epsilon
+        // shift keeps every p' > 0; in Half epsilon rounds to 0, an underflowed p' is exactly 0, and log is taken
+        // of 1 there so the term is 0 instead of NaN.
+        var safe = Engine.TensorWhere(Engine.TensorGreaterThan(p, NumOps.Zero), p, Engine.TensorOnesLike(p));
+        var total = Engine.TensorSum(Engine.TensorMultiply(p, Engine.TensorLog(safe)));
+        return NumOps.Negate(NumOps.Divide(total, NumOps.FromDouble(rows)));
     }
 
     /// <summary>
-    /// Converts model outputs to probability distribution using softmax.
+    /// Converts model outputs to one probability distribution per example: a softmax over the last axis.
     /// </summary>
     /// <param name="predictions">The raw model predictions (logits).</param>
-    /// <returns>Normalized probability distribution.</returns>
-    /// <remarks>
-    /// <para>
-    /// Applies the softmax function: softmax(x)_i = exp(x_i) / sum(exp(x_j))
-    /// Uses the numerical stability trick of subtracting max(x) before exponentiating.
-    /// </para>
-    /// </remarks>
-    private Vector<T> ConvertToProbabilities(TOutput predictions)
+    /// <returns>
+    /// The probabilities as [examples, classes], or null for an output that is not a Vector or Tensor. A Vector or a
+    /// rank-1 Tensor is one example; a higher-rank Tensor has its classes on the last axis. The softmax used to run
+    /// over the whole flattened output, so a batch was scored as a single distribution over every example's classes.
+    /// </returns>
+    private Tensor<T>? ConvertToProbabilities(TOutput predictions)
     {
-        // Extract vector from TOutput
-        Vector<T>? logits = null;
-        if (typeof(TOutput) == typeof(Vector<T>))
+        Tensor<T>? logits = (object?)predictions switch
         {
-            logits = predictions as Vector<T>;
-        }
-        else if (typeof(TOutput) == typeof(Tensor<T>))
-        {
-            var tensor = predictions as Tensor<T>;
-            if (tensor != null)
-            {
-                logits = tensor.ToVector();
-            }
-        }
+            Vector<T> v => Tensor<T>.FromVector(v),
+            Tensor<T> t => t,
+            _ => null,
+        };
+        if (logits is null || logits.Length == 0) return null;
 
-        if (logits == null)
-        {
-            throw new NotSupportedException($"Cannot compute entropy for type {typeof(TOutput).Name}");
-        }
-
-        // SIMD softmax via Engine
-        return Softmax(logits);
+        int classes = logits.Rank == 0 ? 1 : logits.Shape[logits.Rank - 1];
+        if (classes == 0) return null;
+        var rows = logits.Reshape(new[] { logits.Length / classes, classes });
+        return Engine.TensorSoftmax(rows, 1);
     }
 }

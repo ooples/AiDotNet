@@ -25,7 +25,9 @@ public class PEARLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
     /// <inheritdoc/>
     public double OuterLearningRate { get; set; } = 0.001;
     /// <inheritdoc/>
-    public int AdaptationSteps { get; set; } = 5;
+    /// <value>0 by default: PEARL infers the task from the posterior over z with no gradient steps. Positive
+    /// values add optional fine-tuning steps on the support set after modulation.</value>
+    public int AdaptationSteps { get; set; } = 0;
     /// <inheritdoc/>
     public int MetaBatchSize { get; set; } = 4;
     /// <inheritdoc/>

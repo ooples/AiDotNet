@@ -29,7 +29,10 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// <item>Aggregate refined representations and modulate model parameters.</item>
 /// </list>
 /// </para>
-/// <para><b>Reference:</b> Gridded Transformer Neural Processes for Large Unstructured Spatio-Temporal Data (2024).</para>
+/// <para>Positions are the support INPUTS (the mean of each example's input features), so attention depends on
+/// x_i - x_j and the refinement is translation equivariant by construction; the paper uses no regularizer for
+/// it (<c>EquivarianceRegWeight</c> is an optional extra, 0 by default).</para>
+/// <para><b>Reference:</b> Ashman et al., "Translation-Equivariant Transformer Neural Processes", ICML 2024.</para>
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.MetaLearning)]
@@ -38,10 +41,11 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("Gridded Transformer Neural Processes for Large Unstructured Spatio-Temporal Data",
-    "https://arxiv.org/abs/2410.06731",
+[ResearchPaper("Translation-Equivariant Transformer Neural Processes",
+    "https://arxiv.org/abs/2406.12409",
     Year = 2024,
-    Authors = "Matthew Ashman, Cristiana Diaconu, Eric Langezaal, Adrian Weller, Richard E. Turner")]
+    Authors = "Matthew Ashman, Cristiana Diaconu, Junhyuck Kim, Lakee Sivaraya, Stratis Markou, James Requeima, " +
+              "Wessel P. Bruinsma, Richard E. Turner")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
 public partial class TETNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, TInput, TOutput>
@@ -86,20 +90,18 @@ public partial class TETNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, T
             var supportLabels = ConvertToVector(task.SupportOutput);
 
             // 1. Encode context pairs into per-example representations
-            var contextReps = BuildContextRepresentations(supportFeatures, supportLabels);
+            var contextReps = BuildContextRepresentations(supportFeatures, supportLabels, SupportRows(task.SupportInput));
 
             // 2. Refine representations with relative-position self-attention
-            var refinedReps = ApplyRelativeSelfAttention(contextReps, supportFeatures, supportLabels);
+            var refinedReps = ApplyRelativeSelfAttention(contextReps, task.SupportInput);
 
             // 3. Aggregate and modulate
             var aggRep = AggregateRepresentations(refinedReps);
             ModulateParameters(initParams, ComputeModScale(aggRep));
 
-            // 4. Query loss + equivariance regularization
+            // 4. Query loss (+ the optional norm-variance regularizer, off by default)
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
-            double equivReg = ComputeEquivarianceReg(contextReps, refinedReps);
-            double totalLoss = NumOps.ToDouble(queryLoss) + _algoOptions.EquivarianceRegWeight * equivReg;
-            losses.Add(NumOps.FromDouble(totalLoss));
+            losses.Add(WithRegularizer(queryLoss, contextReps, refinedReps));
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
         }
 
@@ -117,8 +119,8 @@ public partial class TETNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, T
         var supportFeatures = ConvertToVector(MetaModel.Predict(task.SupportInput));
         var supportLabels = ConvertToVector(task.SupportOutput);
 
-        var contextReps = BuildContextRepresentations(supportFeatures, supportLabels);
-        var refinedReps = ApplyRelativeSelfAttention(contextReps, supportFeatures, supportLabels);
+        var contextReps = BuildContextRepresentations(supportFeatures, supportLabels, SupportRows(task.SupportInput));
+        var refinedReps = ApplyRelativeSelfAttention(contextReps, task.SupportInput);
         var aggRep = AggregateRepresentations(refinedReps);
 
         return new NeuralProcessModel<T, TInput, TOutput>(MetaModel, ScaleVector(currentParams, ComputeModScale(aggRep)), aggRep);
@@ -128,156 +130,167 @@ public partial class TETNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, T
     /// Applies multi-head self-attention with relative positional encoding.
     /// Attention score between i,j uses sinusoidal encoding of (x_i - x_j).
     /// </summary>
-    private List<Vector<T>> ApplyRelativeSelfAttention(
-        List<Vector<T>> reps, Vector<T>? supportFeatures, Vector<T>? supportLabels)
+    /// <remarks>
+    /// score_h(i, j) = (r_i^h . r_j^h + w_h . [delta, sin(2^b pi delta), cos(2^b pi delta)]_b) / sqrt(headDim + relDim)
+    /// with delta = x_i - x_j; out_i = r_i + 0.5 * concat_h(sum_j softmax_j(score_h) r_j^h).
+    /// </remarks>
+    internal List<Vector<T>> ApplyRelativeSelfAttention(List<Vector<T>> reps, TInput supportInput)
     {
         int n = reps.Count;
-        if (n <= 1 || supportFeatures == null || supportLabels == null)
-            return reps;
+        if (n <= 1) return reps;
+        var positions = InputPositions(supportInput, n);
+        if (positions is null) return reps;
 
-        int numEx = Math.Max(1, supportLabels.Length);
-        int fDim = Math.Max(1, supportFeatures.Length / numEx);
+        int dim = RepresentationDim;
+        int heads = Math.Min(_numHeads, dim);
         int relDim = 1 + 2 * _numBands;
-        int headDim = Math.Max(1, RepresentationDim / _numHeads);
 
-        // Extract scalar position for each example (mean of features)
-        var positions = new double[n];
-        for (int i = 0; i < n; i++)
+        var stacked = new Tensor<T>[n];
+        for (int i = 0; i < n; i++) stacked[i] = Tensor<T>.FromVector(Fit(reps[i], dim));
+        var r = Engine.TensorStack(stacked, 0);
+
+        // delta[i, j] = x_i - x_j, then the relative encoding [delta, sin(f_b delta), cos(f_b delta)] on the last axis.
+        var column = Engine.TensorBroadcastTo(positions.Reshape(new[] { n, 1 }), new[] { n, n });
+        var row = Engine.TensorBroadcastTo(positions.Reshape(new[] { 1, n }), new[] { n, n });
+        var delta = Engine.TensorSubtract(column, row);
+        // Frequencies f_b = 2^b pi = pi exp(b ln 2); sin and cos interleave per band: [sin_0, cos_0, sin_1, ...].
+        var frequencies = Engine.TensorMultiplyScalar(
+            Engine.TensorExp(Engine.TensorMultiplyScalar(Engine.TensorArange<T>(0, _numBands, 1), NumOps.FromDouble(Math.Log(2.0)))),
+            NumOps.FromDouble(Math.PI));
+        var scaled = Engine.TensorMultiply(
+            Engine.TensorBroadcastTo(delta.Reshape(new[] { n, n, 1 }), new[] { n, n, _numBands }),
+            Engine.TensorBroadcastTo(frequencies.Reshape(new[] { 1, 1, _numBands }), new[] { n, n, _numBands }));
+        var waves = Engine.TensorStack(new[] { Engine.TensorSin(scaled), Engine.TensorCos(scaled) }, 3)
+            .Reshape(new[] { n, n, 2 * _numBands });
+        var encoding = Engine.TensorConcatenate(new[] { delta.Reshape(new[] { n, n, 1 }), waves }, 2)
+            .Reshape(new[] { n * n, relDim });
+        var weights = Engine.TensorTranspose(Tensor<T>.FromVector(
+            _relPosParams.GetSubVector(0, _numHeads * relDim), new[] { _numHeads, relDim }));
+        var relative = Engine.TensorMatMul(encoding, weights);    // [n*n, numHeads]
+
+        // Every dimension belongs to a head: head h covers [h dim / heads, (h + 1) dim / heads), so a dimension
+        // the heads do not divide evenly is spread over them instead of the trailing ones being left unattended.
+        // Head widths are dim / heads or one more, so the two 1 / sqrt(width + relDim) scales are formed once.
+        int narrow = dim / heads;
+        var narrowScale = NumOps.FromDouble(1.0 / Math.Sqrt(narrow + relDim));
+        var wideScale = NumOps.FromDouble(1.0 / Math.Sqrt(narrow + 1 + relDim));
+        var headOutputs = new Tensor<T>[heads];
+        for (int h = 0; h < heads; h++)
         {
-            double sum = 0;
-            int start = i * fDim;
-            int count = 0;
-            for (int j = 0; j < fDim && start + j < supportFeatures.Length; j++)
-            {
-                sum += NumOps.ToDouble(supportFeatures[start + j]);
-                count++;
-            }
-            positions[i] = count > 0 ? sum / count : 0;
+            int start = h * dim / heads;
+            int width = (h + 1) * dim / heads - start;
+            var scale = width == narrow ? narrowScale : wideScale;
+            var rh = Engine.TensorSlice(r, new[] { 0, start }, new[] { n, width });
+            var content = Engine.TensorMatMul(rh, Engine.TensorTranspose(rh));
+            var rel = Engine.TensorSlice(relative, new[] { 0, h }, new[] { n * n, 1 }).Reshape(new[] { n, n });
+            var attention = Engine.TensorSoftmax(Engine.TensorMultiplyScalar(Engine.TensorAdd(content, rel), scale), 1);
+            headOutputs[h] = Engine.TensorMatMul(attention, rh);
         }
+
+        var attended = Engine.TensorConcatenate(headOutputs, 1);
+        var output = Engine.TensorAdd(r, Engine.TensorMultiplyScalar(attended, NumOps.FromDouble(0.5)));
 
         var refined = new List<Vector<T>>(n);
         for (int i = 0; i < n; i++)
-        {
-            var output = new Vector<T>(RepresentationDim);
-            // Copy original representation as residual
-            for (int d = 0; d < RepresentationDim && d < reps[i].Length; d++)
-                output[d] = reps[i][d];
-
-            // Multi-head relative attention
-            for (int h = 0; h < _numHeads; h++)
-            {
-                // Compute attention weights for head h
-                double[] attnLogits = new double[n];
-                double maxLogit = double.NegativeInfinity;
-
-                for (int j = 0; j < n; j++)
-                {
-                    double delta = positions[i] - positions[j];
-                    // Sinusoidal relative positional encoding
-                    double score = 0;
-                    int pBase = h * relDim;
-                    // Raw delta term
-                    score += delta * NumOps.ToDouble(_relPosParams[pBase % _relPosParams.Length]);
-                    // Sinusoidal terms
-                    for (int b = 0; b < _numBands; b++)
-                    {
-                        double freq = Math.Pow(2.0, b) * Math.PI;
-                        int sinIdx = (pBase + 1 + 2 * b) % _relPosParams.Length;
-                        int cosIdx = (pBase + 2 + 2 * b) % _relPosParams.Length;
-                        score += Math.Sin(freq * delta) * NumOps.ToDouble(_relPosParams[sinIdx]);
-                        score += Math.Cos(freq * delta) * NumOps.ToDouble(_relPosParams[cosIdx]);
-                    }
-                    // Content-based attention dot product for this head
-                    int hStart = h * headDim;
-                    for (int d = 0; d < headDim && hStart + d < RepresentationDim; d++)
-                    {
-                        int idx = hStart + d;
-                        if (idx < reps[i].Length && idx < reps[j].Length)
-                            score += NumOps.ToDouble(reps[i][idx]) * NumOps.ToDouble(reps[j][idx]);
-                    }
-                    score /= Math.Sqrt(headDim + relDim);
-                    attnLogits[j] = score;
-                    if (score > maxLogit) maxLogit = score;
-                }
-
-                // Softmax
-                double sumExp = 0;
-                for (int j = 0; j < n; j++)
-                {
-                    attnLogits[j] = Math.Exp(attnLogits[j] - maxLogit);
-                    sumExp += attnLogits[j];
-                }
-                if (sumExp > 0)
-                    for (int j = 0; j < n; j++) attnLogits[j] /= sumExp;
-
-                // Weighted sum of values for this head → add to output (residual)
-                int hOut = h * headDim;
-                for (int d = 0; d < headDim && hOut + d < RepresentationDim; d++)
-                {
-                    double val = 0;
-                    for (int j = 0; j < n; j++)
-                    {
-                        int idx = hOut + d;
-                        if (idx < reps[j].Length)
-                            val += attnLogits[j] * NumOps.ToDouble(reps[j][idx]);
-                    }
-                    int outIdx = hOut + d;
-                    output[outIdx] = NumOps.Add(output[outIdx], NumOps.FromDouble(val * 0.5));
-                }
-            }
-            refined.Add(output);
-        }
+            refined.Add(Engine.TensorSlice(output, new[] { i, 0 }, new[] { 1, dim }).ToVector());
         return refined;
     }
 
     /// <summary>
-    /// Equivariance regularization: penalizes variance in representation norms
-    /// to encourage consistent behavior under translations.
+    /// The number of support examples: the input's rows. Counting labels instead split a multi-output episode into
+    /// one representation per output, which no longer matched the inputs, so the attention was skipped.
     /// </summary>
-    private double ComputeEquivarianceReg(List<Vector<T>> original, List<Vector<T>> refined)
+    private static int SupportRows(TInput supportInput) => InputHelper<T, TInput>.GetBatchSize(supportInput);
+
+    /// <summary>The position of each support example: the mean of its input features. Null if counts disagree.</summary>
+    private Tensor<T>? InputPositions(TInput supportInput, int n)
     {
-        if (refined.Count <= 1) return 0;
-        // Variance of L2 norms — equivariant representations should have similar norms
-        double mean = 0;
-        var norms = new double[refined.Count];
-        for (int i = 0; i < refined.Count; i++)
+        Tensor<T> x;
+        try
         {
-            double sq = 0;
-            for (int d = 0; d < refined[i].Length; d++)
-                sq += NumOps.ToDouble(refined[i][d]) * NumOps.ToDouble(refined[i][d]);
-            norms[i] = Math.Sqrt(sq / Math.Max(refined[i].Length, 1));
-            mean += norms[i];
+            x = ConversionsHelper.ConvertToTensor<T>(supportInput as object ?? throw new ArgumentNullException(nameof(supportInput)));
         }
-        mean /= refined.Count;
-        double var = 0;
-        for (int i = 0; i < refined.Count; i++)
-            var += (norms[i] - mean) * (norms[i] - mean);
-        return var / refined.Count;
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+
+        if (x.Rank == 0 || x.Shape[0] != n) return null;
+        int features = x.Length / n;
+        return Engine.ReduceMean(x.Reshape(new[] { n, features }), new[] { 1 }, keepDims: false);
     }
 
-    private double ComputeAuxLoss(TaskBatch<T, TInput, TOutput> tb)
+    /// <summary>The first <paramref name="dim"/> entries, zero-padded if shorter.</summary>
+    private static Vector<T> Fit(Vector<T> v, int dim)
+        => v.Length == dim ? v
+            : v.Length > dim ? v.GetSubVector(0, dim)
+            : Vector<T>.Concatenate(new[] { v, new Vector<T>(dim - v.Length) });
+
+    /// <summary>
+    /// Optional regularizer: the variance of the representations' RMS norms. Not part of TE-TNP, which is
+    /// equivariant by construction.
+    /// </summary>
+    private T ComputeEquivarianceReg(List<Vector<T>> original, List<Vector<T>> refined)
+    {
+        if (refined.Count <= 1) return NumOps.Zero;
+        int dim = RepresentationDim;
+        var rows = new Tensor<T>[refined.Count];
+        for (int i = 0; i < refined.Count; i++) rows[i] = Tensor<T>.FromVector(Fit(refined[i], dim));
+        var stacked = Engine.TensorStack(rows, 0);
+        var norms = Engine.TensorSqrt(Engine.ReduceMean(Engine.TensorSquare(stacked), new[] { 1 }, keepDims: false));
+        var centered = Engine.TensorSubtract(norms,
+            Engine.TensorBroadcastTo(Engine.ReduceMean(norms, new[] { 0 }, keepDims: true), new[] { refined.Count }));
+        return Engine.TensorMean(Engine.TensorSquare(centered));
+    }
+
+    /// <summary>queryLoss + EquivarianceRegWeight * the optional regularizer.</summary>
+    private T WithRegularizer(T queryLoss, List<Vector<T>> contextReps, List<Vector<T>> refinedReps)
+    {
+        // Weight 0 (the default) disables the regularizer: skip its stacking, norms and reductions entirely.
+        if (_algoOptions.EquivarianceRegWeight == 0.0)
+            return queryLoss;
+
+        return NumOps.Add(queryLoss, NumOps.Multiply(
+            NumOps.FromDouble(_algoOptions.EquivarianceRegWeight), ComputeEquivarianceReg(contextReps, refinedReps)));
+    }
+
+    /// <summary>
+    /// The SPSA objective for the encoder and the relative-position weights: the training loss of
+    /// <see cref="MetaTrain"/>, i.e. the query loss of the model MODULATED by the attended context, plus the optional
+    /// regularizer. It used to score the query at the unmodulated parameters, which neither weight set reaches, so
+    /// with the regularizer off (the default) SPSA saw a constant objective and never moved them.
+    /// </summary>
+    internal double ComputeAuxLoss(TaskBatch<T, TInput, TOutput> tb)
     {
         var ip = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
-        double total = 0;
-        foreach (var t in tb.Tasks)
+        var losses = new List<T>();
+        try
+        {
+            foreach (var t in tb.Tasks)
+            {
+                InterfaceGuard.Parameterizable(MetaModel).SetParameters(ip);
+                var contextReps = BuildContextRepresentations(
+                    ConvertToVector(MetaModel.Predict(t.SupportInput)), ConvertToVector(t.SupportOutput),
+                    SupportRows(t.SupportInput));
+                var refinedReps = ApplyRelativeSelfAttention(contextReps, t.SupportInput);
+                ModulateParameters(ip, ComputeModScale(AggregateRepresentations(refinedReps)));
+
+                var queryLoss = ComputeLossFromOutput(MetaModel.Predict(t.QueryInput), t.QueryOutput);
+                losses.Add(WithRegularizer(queryLoss, contextReps, refinedReps));
+            }
+        }
+        finally
         {
             InterfaceGuard.Parameterizable(MetaModel).SetParameters(ip);
-            double queryLoss = NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(t.QueryInput), t.QueryOutput));
-
-            // Include equivariance regularization so SPSA optimizes encoder params for equivariance
-            var sf = ConvertToVector(MetaModel.Predict(t.SupportInput));
-            var sl = ConvertToVector(t.SupportOutput);
-            if (sf != null && sl != null && sf.Length > 0 && sl.Length > 0)
-            {
-                var contextReps = BuildContextRepresentations(sf, sl);
-                var refinedReps = ApplyRelativeSelfAttention(contextReps, sf, sl);
-                double equivReg = ComputeEquivarianceReg(contextReps, refinedReps);
-                queryLoss += _algoOptions.EquivarianceRegWeight * equivReg;
-            }
-
-            total += queryLoss;
         }
-        InterfaceGuard.Parameterizable(MetaModel).SetParameters(ip);
-        return total / Math.Max(tb.Tasks.Length, 1);
+
+        return NumOps.ToDouble(ComputeMean(losses));
+    }
+
+    /// <summary>Gets or sets a copy of the relative-position scoring weights (for tests).</summary>
+    internal Vector<T> RelativePositionParametersForTesting
+    {
+        get => _relPosParams.Clone();
+        set => _relPosParams = value.Clone();
     }
 }

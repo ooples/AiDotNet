@@ -19,24 +19,24 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// <remarks>
 /// <para>
 /// PEARL infers a latent task variable z from context (support data) using a probabilistic
-/// encoder q(z|c). The encoder produces a Gaussian posterior, and z is sampled via
-/// reparameterization. The policy/model is conditioned on z through parameter modulation.
-/// At test time, z is inferred from support data without gradient updates.
+/// encoder q(z|c). The posterior is permutation invariant: a product of independent Gaussian
+/// factors, one per context example (paper Eq. 4), and z is sampled via reparameterization.
+/// The model is conditioned on z through parameter modulation (a generic model has no input slot
+/// for z). At test time, z is inferred from support data without gradient updates.
 /// </para>
 /// <para><b>Algorithm:</b>
 /// <code>
-/// Context encoder: q(z|c) = N(μ(c), σ²(c))
-///   c = aggregate of support (input, output) pairs
-///   μ, log(σ²) = encoder_params applied to aggregated context
-///
-/// Inner loop:
-///   1. Encode context: z ~ q(z|support)
+/// Context encoder: q(z|c) = Π_n N(μ_n, σ_n²)   (product of per-example factors, Eq. 4)
+///   c_n = features of support pair n (its loss gradient, first EncoderHiddenDim entries)
+///   μ_n, log(σ_n²) = encoder MLP(c_n)
+///   σ² = 1 / Σ_n σ_n⁻²,  μ = σ² Σ_n μ_n / σ_n²
+/// Task inference:
+///   1. z ~ q(z|support)
 ///   2. Modulate params: θ_z = θ_0 + W_z * z  (linear projection of z)
-///   3. Gradient adapt θ_z on support with modulated params
-///
+///   (no gradient steps by default; AdaptationSteps &gt; 0 adds optional fine-tuning)
 /// Outer loop:
 ///   L = E_z[L_query(θ_z)] + β * KL(q(z|c) || N(0,I))
-///   Update θ_0, encoder params, W_z
+///   Update θ_0 by gradient; encoder and W_z by SPSA on the same objective
 /// </code>
 /// </para>
 /// </remarks>
@@ -92,16 +92,28 @@ public partial class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         _compressedDim = Math.Min(_paramDim, options.EncoderHiddenDim);
 
         // Encoder: compressed context → hidden → (μ, log_σ²)
+        // N(0, 0.01^2) draws: one SampleNormal per weight, in order; the loops only store the draws.
         int encoderSize = _compressedDim * _algoOptions.EncoderHiddenDim + _algoOptions.EncoderHiddenDim * 2 * _latentDim;
-        _encoderParams = new Vector<T>(encoderSize);
+        // The 0.01 scale is applied in double and each weight rounded to T once (in Half g and 0.01 were both
+        // rounded before the product).
+        var encoderDraws = new double[encoderSize];
         for (int i = 0; i < encoderSize; i++)
-            _encoderParams[i] = NumOps.FromDouble(0.01 * SampleNormal());
+            encoderDraws[i] = SampleNormal();
+        _encoderParams = ScaledDraws(encoderDraws, 0.01);
 
         // Projection: z → parameter delta
-        _projectionParams = new Vector<T>(_latentDim * _compressedDim);
-        for (int i = 0; i < _projectionParams.Length; i++)
-            _projectionParams[i] = NumOps.FromDouble(0.01 * SampleNormal());
+        var projectionDraws = new double[_latentDim * _compressedDim];
+        for (int i = 0; i < projectionDraws.Length; i++)
+            projectionDraws[i] = SampleNormal();
+        _projectionParams = ScaledDraws(projectionDraws, 0.01);
     }
+
+    /// <summary><paramref name="scale"/> times each double draw, rounded to T once.</summary>
+    /// <summary>The posterior draws SPSA's evaluations share within one MetaTrain call, per task then sample.</summary>
+    private Vector<T>[][]? _objectiveDraws;
+
+    private Vector<T> ScaledDraws(double[] draws, double scale)
+        => Engine.TensorMultiplyScalar(new Tensor<double>(draws, new[] { draws.Length }), scale).Cast<T>().ToVector();
 
     /// <inheritdoc/>
     public override T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch)
@@ -116,57 +128,42 @@ public partial class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         foreach (var task in taskBatch.Tasks)
         {
             // Encode context from support set
-            ParamModel.SetParameters(initParams);
-            var contextVec = ComputeContext(task.SupportInput, task.SupportOutput, initParams);
-            var (mu, logVar) = Encode(contextVec);
+            var (mu, logVar) = Encode(ComputeContext(task.SupportInput, task.SupportOutput, initParams));
 
-            // Sample z and compute KL
-            double totalKL = 0;
             var sampleLosses = new List<T>();
             var sampleGrads = new List<Vector<T>>();
-
-            int numSamples = _algoOptions.NumPosteriorSamples;
-            for (int s = 0; s < numSamples; s++)
+            for (int s = 0; s < _algoOptions.NumPosteriorSamples; s++)
             {
-                var z = Reparameterize(mu, logVar);
-                var paramDelta = ProjectZ(z);
-
-                // Modulate parameters
-                var modulatedParams = new Vector<T>(_paramDim);
-                for (int d = 0; d < _paramDim; d++)
-                {
-                    int cd = d % _compressedDim;
-                    modulatedParams[d] = NumOps.Add(initParams[d], paramDelta[cd]);
-                }
-
-                // Gradient adaptation
-                for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
-                {
-                    ParamModel.SetParameters(modulatedParams);
-                    var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-                    modulatedParams = ApplyInnerGradients(modulatedParams, grad, _algoOptions.InnerLearningRate, step == 0);
-                }
-
+                // epsilon ~ N(0, I): one SampleNormal per latent dimension, in order; the loop only stores draws.
+                var eps = new Vector<T>(_latentDim);
+                for (int i = 0; i < _latentDim; i++)
+                    eps[i] = NumOps.FromDouble(SampleNormal());
+                var modulatedParams = Infer(initParams, task, Reparameterize(mu, logVar, eps));
                 ParamModel.SetParameters(modulatedParams);
                 sampleLosses.Add(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
                 sampleGrads.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
             }
 
-            // KL(q(z|c) || N(0,I))
-            for (int i = 0; i < _latentDim; i++)
-                totalKL += 0.5 * (Math.Exp(logVar[i]) + mu[i] * mu[i] - 1.0 - logVar[i]);
-
-            var taskLoss = NumOps.Add(ComputeMean(sampleLosses), NumOps.FromDouble(_algoOptions.KLWeight * totalKL));
-            losses.Add(taskLoss);
+            losses.Add(WithKL(ComputeMean(sampleLosses), mu, logVar));
             metaGradients.Add(AverageVectors(sampleGrads));
         }
-
         // Outer loop
         ApplyOuterUpdate(initParams, metaGradients, _algoOptions.OuterLearningRate);
 
-        // Update encoder and projection via SPSA
-        UpdateAuxiliaryParamsSPSA(taskBatch, ref _encoderParams, _algoOptions.OuterLearningRate * SpsaLearningRateMultiplier, ComputePEARLLoss);
-        UpdateAuxiliaryParamsSPSA(taskBatch, ref _projectionParams, _algoOptions.OuterLearningRate * SpsaLearningRateMultiplier, ComputePEARLLoss);
+        // Update encoder and projection via SPSA, on one fixed set of posterior draws: the base and the perturbed
+        // evaluations then differ only by the perturbation, not by fresh sampling noise.
+        _objectiveDraws = taskBatch.Tasks
+            .Select(_ => Enumerable.Range(0, _algoOptions.NumPosteriorSamples).Select(_ => DrawEpsilon()).ToArray())
+            .ToArray();
+        try
+        {
+            UpdateAuxiliaryParamsSPSA(taskBatch, ref _encoderParams, _algoOptions.OuterLearningRate * SpsaLearningRateMultiplier, ComputePEARLLoss);
+            UpdateAuxiliaryParamsSPSA(taskBatch, ref _projectionParams, _algoOptions.OuterLearningRate * SpsaLearningRateMultiplier, ComputePEARLLoss);
+        }
+        finally
+        {
+            _objectiveDraws = null;
+        }
 
         return ComputeMean(losses);
     }
@@ -176,17 +173,24 @@ public partial class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     {
         if (task == null) throw new ArgumentNullException(nameof(task));
         var initParams = ParamModel.GetParameters();
-        var contextVec = ComputeContext(task.SupportInput, task.SupportOutput, initParams);
-        var (mu, _) = Encode(contextVec);
+        var (mu, _) = Encode(ComputeContext(task.SupportInput, task.SupportOutput, initParams));
 
         // Use posterior mean (no sampling for deterministic adaptation)
-        var paramDelta = ProjectZ(mu);
-        var modulatedParams = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++)
-        {
-            int cd = d % _compressedDim;
-            modulatedParams[d] = NumOps.Add(initParams[d], paramDelta[cd]);
-        }
+        var modulatedParams = Infer(initParams, task, mu);
+        ParamModel.SetParameters(initParams);
+        return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, modulatedParams);
+    }
+
+    /// <summary>
+    /// theta_z = theta_0 + W_z z (the compressed delta tiled over the parameters), then the optional
+    /// <c>AdaptationSteps</c> fine-tuning steps on the support set (none in the paper).
+    /// </summary>
+    private Vector<T> Infer(Vector<T> initParams, IMetaLearningTask<T, TInput, TOutput> task, Vector<T> z)
+    {
+        var delta = ProjectZ(z);
+        int copies = (_paramDim + _compressedDim - 1) / _compressedDim;
+        var modulatedParams = Engine.Add(initParams,
+            Vector<T>.Concatenate(Enumerable.Repeat(delta, copies).ToArray()).GetSubVector(0, _paramDim));
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
@@ -195,106 +199,137 @@ public partial class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             modulatedParams = ApplyInnerGradients(modulatedParams, grad, _algoOptions.InnerLearningRate, step == 0);
         }
 
-        ParamModel.SetParameters(initParams);
-        return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, modulatedParams);
+        return modulatedParams;
     }
 
-    private Vector<T> ComputeContext(TInput supportInput, TOutput supportOutput, Vector<T> currentParams)
+    /// <summary>
+    /// Per-example context features c_n as the columns of a [compressedDim, N] tensor: the loss gradient of each
+    /// support pair at <paramref name="currentParams"/>, truncated to the encoder's input width.
+    /// </summary>
+    private Tensor<T> ComputeContext(TInput supportInput, TOutput supportOutput, Vector<T> currentParams)
     {
         ParamModel.SetParameters(currentParams);
-        var grad = ComputeGradients(MetaModel, supportInput, supportOutput);
-        var ctx = new Vector<T>(_compressedDim);
-        for (int d = 0; d < _compressedDim && d < grad.Length; d++)
-            ctx[d] = grad[d];
-        return ctx;
+        int n = InputHelper<T, TInput>.GetBatchSize(supportInput);
+        var columns = new Tensor<T>[Math.Max(n, 1)];
+        if (n == 0)
+        {
+            columns[0] = Tensor<T>.FromVector(Truncate(ComputeGradients(MetaModel, supportInput, supportOutput)));
+        }
+        else
+        {
+            for (int i = 0; i < n; i++)
+            {
+                var index = new[] { i };
+                var grad = ComputeGradients(MetaModel,
+                    InputHelper<T, TInput>.GetBatch(supportInput, index),
+                    InputHelper<T, TOutput>.GetBatch(supportOutput, index));
+                columns[i] = Tensor<T>.FromVector(Truncate(grad));
+            }
+        }
+
+        return Engine.TensorStack(columns, 1);
     }
 
-    private (double[] mu, double[] logVar) Encode(Vector<T> context)
+    /// <summary>The first compressedDim entries, zero-padded if the gradient is shorter.</summary>
+    private Vector<T> Truncate(Vector<T> grad)
+        => grad.Length >= _compressedDim
+            ? grad.GetSubVector(0, _compressedDim)
+            : Vector<T>.Concatenate(new[] { grad, new Vector<T>(_compressedDim - grad.Length) });
+
+    /// <summary>
+    /// The product-of-Gaussians posterior (Eq. 4): every context column goes through the encoder MLP to a factor
+    /// N(μ_n, σ_n²), and the factors are multiplied: σ² = 1 / Σ σ_n⁻², μ = σ² Σ μ_n σ_n⁻². Returns μ and log σ².
+    /// </summary>
+    internal (Vector<T> Mu, Vector<T> LogVar) Encode(Tensor<T> contexts)
     {
         int hiddenDim = _algoOptions.EncoderHiddenDim;
-        var hidden = new double[hiddenDim];
-        int offset = 0;
+        int l1 = _compressedDim * hiddenDim;
+        int head = _latentDim * hiddenDim;
+        var w1 = Tensor<T>.FromVector(_encoderParams.GetSubVector(0, l1), new[] { hiddenDim, _compressedDim });
+        var wMu = Tensor<T>.FromVector(_encoderParams.GetSubVector(l1, head), new[] { _latentDim, hiddenDim });
+        var wLogVar = Tensor<T>.FromVector(_encoderParams.GetSubVector(l1 + head, head), new[] { _latentDim, hiddenDim });
 
-        // Layer 1: context → hidden (ReLU)
-        for (int h = 0; h < hiddenDim; h++)
-        {
-            double sum = 0;
-            for (int c = 0; c < _compressedDim; c++)
-                sum += NumOps.ToDouble(context[c]) * NumOps.ToDouble(_encoderParams[offset + h * _compressedDim + c]);
-            hidden[h] = Math.Max(0, sum); // ReLU
-        }
-        offset += _compressedDim * hiddenDim;
+        // Layer 1: context → hidden (ReLU); layer 2: hidden → (μ_n, log σ_n²), log σ_n² clamped to [-10, 2].
+        var hidden = Engine.TensorReLU(Engine.TensorMatMul(w1, contexts));
+        var muN = Engine.TensorMatMul(wMu, hidden);
+        var logVarN = Engine.TensorClamp(Engine.TensorMatMul(wLogVar, hidden), NumOps.FromDouble(-10), NumOps.FromDouble(2));
 
-        // Layer 2: hidden → (μ, log_σ²)
-        var mu = new double[_latentDim];
-        var logVar = new double[_latentDim];
-        for (int l = 0; l < _latentDim; l++)
-        {
-            double sumMu = 0, sumLogVar = 0;
-            for (int h = 0; h < hiddenDim; h++)
-            {
-                sumMu += hidden[h] * NumOps.ToDouble(_encoderParams[offset + l * hiddenDim + h]);
-                sumLogVar += hidden[h] * NumOps.ToDouble(_encoderParams[offset + _latentDim * hiddenDim + l * hiddenDim + h]);
-            }
-            mu[l] = sumMu;
-            logVar[l] = Math.Max(-10, Math.Min(2, sumLogVar)); // Clamp
-        }
-
-        return (mu, logVar);
+        // Precisions are summed in the log domain: with m = max_n(-log σ_n²) the factors are exp(-log σ_n² - m) <= 1,
+        // so Σ σ_n⁻² cannot overflow a narrow T (each raw factor reaches e^10 ≈ 22026, past Half's 65504 at n = 3).
+        // log σ² = -(m + log Σ exp(-log σ_n² - m)); μ = Σ μ_n w_n / Σ w_n is unchanged by the common factor e^m.
+        var negLogVarN = Engine.TensorNegate(logVarN);
+        var shift = Engine.ReduceMax(negLogVarN, new[] { 1 }, keepDims: true);
+        var weights = Engine.TensorExp(Engine.TensorSubtract(negLogVarN, Engine.TensorBroadcastTo(shift, new[] { _latentDim, negLogVarN.Shape[1] })));
+        var weightSum = Engine.ReduceSum(weights, new[] { 1 }, keepDims: false);
+        // The weights are normalized before they scale the means, so mu is a convex combination of the mu_n and its
+        // accumulation stays within their range (summing mu_n w_n first overflowed Half for large means).
+        var normalized = Engine.TensorDivide(
+            weights, Engine.TensorBroadcastTo(weightSum.Reshape(new[] { _latentDim, 1 }), new[] { _latentDim, negLogVarN.Shape[1] }));
+        var mu = Engine.ReduceSum(Engine.TensorMultiply(muN, normalized), new[] { 1 }, keepDims: false);
+        var logVar = Engine.TensorNegate(Engine.TensorAdd(shift.Reshape(new[] { _latentDim }), Engine.TensorLog(weightSum)));
+        return (mu.ToVector(), logVar.ToVector());
     }
 
-    private double[] Reparameterize(double[] mu, double[] logVar)
+    /// <summary>loss + β KL(q(z|c) || N(0, I)).</summary>
+    private T WithKL(T loss, Vector<T> mu, Vector<T> logVar)
+        => NumOps.Add(loss, NumOps.Multiply(NumOps.FromDouble(_algoOptions.KLWeight), KLToStandardNormal(mu, logVar)));
+
+    /// <summary>KL(N(μ, σ²) || N(0, I)) = ½ Σ (σ² + μ² − 1 − log σ²).</summary>
+    private T KLToStandardNormal(Vector<T> mu, Vector<T> logVar)
     {
-        var z = new double[_latentDim];
-        for (int i = 0; i < _latentDim; i++)
-            z[i] = mu[i] + Math.Exp(0.5 * logVar[i]) * SampleNormal();
-        return z;
+        var terms = Engine.Subtract(
+            Engine.Add(Engine.Exp(logVar), Engine.Multiply(mu, mu)),
+            Engine.Add(logVar, Engine.Fill(_latentDim, NumOps.One)));
+        return NumOps.Multiply(NumOps.FromDouble(0.5), Engine.Sum(terms));
     }
 
-    private Vector<T> ProjectZ(double[] z)
+    /// <summary>z = μ + exp(½ log σ²) ε for standard-normal draws ε.</summary>
+    private Vector<T> Reparameterize(Vector<T> mu, Vector<T> logVar, Vector<T> eps)
     {
-        var delta = new Vector<T>(_compressedDim);
-        for (int d = 0; d < _compressedDim; d++)
-        {
-            double sum = 0;
-            for (int l = 0; l < _latentDim; l++)
-                sum += z[l] * NumOps.ToDouble(_projectionParams[d * _latentDim + l]);
-            delta[d] = NumOps.FromDouble(sum);
-        }
-        return delta;
+        return Engine.Add(mu, Engine.Multiply(Engine.Exp(Engine.Multiply(logVar, NumOps.FromDouble(0.5))), eps));
     }
 
+    /// <summary>W_z z, with W_z stored [compressedDim, latentDim] row-major.</summary>
+    private Vector<T> ProjectZ(Vector<T> z)
+    {
+        var w = Tensor<T>.FromVector(_projectionParams, new[] { _compressedDim, _latentDim });
+        return Engine.TensorMatMul(w, Tensor<T>.FromVector(z, new[] { _latentDim, 1 })).ToVector();
+    }
+
+    /// <summary>One standard-normal draw per latent dimension.</summary>
+    private Vector<T> DrawEpsilon()
+    {
+        var draws = Enumerable.Range(0, _latentDim).Select(_ => SampleNormal()).ToArray();
+        return new Tensor<double>(draws, new[] { _latentDim }).Cast<T>().ToVector();
+    }
+
+    /// <summary>
+    /// The objective MetaTrain optimizes, for SPSA: each task's query loss averaged over NumPosteriorSamples
+    /// reparameterized latents, plus the KL term. It used to score the posterior mean only, which is not what the
+    /// encoder is trained on.
+    /// </summary>
     private double ComputePEARLLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
-        double totalLoss = 0;
+        var losses = new List<T>();
         var initParams = ParamModel.GetParameters();
+        var draws = _objectiveDraws;
 
-        foreach (var task in taskBatch.Tasks)
+        for (int t = 0; t < taskBatch.Tasks.Length; t++)
         {
-            var contextVec = ComputeContext(task.SupportInput, task.SupportOutput, initParams);
-            var (mu, logVar) = Encode(contextVec);
-            var paramDelta = ProjectZ(mu);
-
-            var modulatedParams = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++)
-                modulatedParams[d] = NumOps.Add(initParams[d], paramDelta[d % _compressedDim]);
-
-            for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
+            var task = taskBatch.Tasks[t];
+            var (mu, logVar) = Encode(ComputeContext(task.SupportInput, task.SupportOutput, initParams));
+            var sampleLosses = new List<T>(_algoOptions.NumPosteriorSamples);
+            for (int s = 0; s < _algoOptions.NumPosteriorSamples; s++)
             {
-                ParamModel.SetParameters(modulatedParams);
-                var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-                modulatedParams = ApplyInnerGradients(modulatedParams, grad, _algoOptions.InnerLearningRate, step == 0);
+                var eps = draws is not null && t < draws.Length ? draws[t][s] : DrawEpsilon();
+                ParamModel.SetParameters(Infer(initParams, task, Reparameterize(mu, logVar, eps)));
+                sampleLosses.Add(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
             }
 
-            ParamModel.SetParameters(modulatedParams);
-            double loss = NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
-            double kl = 0;
-            for (int i = 0; i < _latentDim; i++)
-                kl += 0.5 * (Math.Exp(logVar[i]) + mu[i] * mu[i] - 1.0 - logVar[i]);
-            totalLoss += loss + _algoOptions.KLWeight * kl;
+            losses.Add(WithKL(ComputeMean(sampleLosses), mu, logVar));
         }
 
         ParamModel.SetParameters(initParams);
-        return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
+        return NumOps.ToDouble(ComputeMean(losses));
     }
 }

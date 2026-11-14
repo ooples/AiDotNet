@@ -13,32 +13,26 @@ using AiDotNet.Data.Structures;
 namespace AiDotNet.MetaLearning.Algorithms;
 
 /// <summary>
-/// Implementation of iTAML: incremental Task-Agnostic Meta-Learning (Rajasegaran et al., 2020).
+/// Implementation of iTAML: incremental Task-Agnostic Meta-Learning (Rajasegaran et al., CVPR 2020).
 /// </summary>
 /// <remarks>
 /// <para>
-/// iTAML prevents catastrophic forgetting by maintaining an exponential moving average (EMA)
-/// teacher model. The meta-objective combines task-specific loss with a knowledge distillation
-/// loss that preserves the teacher's predictions. Task-balanced gradient weighting normalizes
-/// gradient magnitudes across tasks to prevent any single task from dominating.
+/// iTAML keeps a single set of meta-parameters balanced across all tasks seen so far. Each task in the
+/// batch takes r inner steps from the shared parameters; the meta-update then moves the shared parameters
+/// towards the average of the task-adapted ones, by a weight eta that shrinks as training progresses, so
+/// later tasks cannot pull the parameters away from earlier ones as fast as the first did.
 /// </para>
-/// <para><b>Algorithm:</b>
+/// <para><b>Algorithm (paper Algorithm 1):</b>
 /// <code>
-/// Teacher model: θ_teacher = EMA(θ_student) with decay α
-///
-/// Inner loop: standard MAML-style adaptation
-///   θ_adapted = θ - η * ∇L_support(θ)
-///
-/// Distillation loss: KL between softened student/teacher predictions
-///   L_distill = Σ_d (p_teacher_d - p_student_d)² / temperature²
-///   (simplified L2 distillation for generic T)
-///
-/// Task-balanced gradient: normalize each task gradient by its L2 norm
-///   g_normalized = g / ||g|| if TaskBalancingEnabled
-///
-/// L_meta = L_query + DistillationWeight * L_distill
-/// Outer: update student, then teacher = α * teacher + (1-α) * student
+/// Phi_base = Phi
+/// for each task i in the batch:  Phi_i = Phi;  repeat r times: Phi_i = Optimizer(Phi_i, L_i)
+/// eta = exp(-beta * t / T)
+/// Phi = eta * (1/n) sum_i Phi_i + (1 - eta) * Phi_base
 /// </code>
+/// </para>
+/// <para>
+/// t / T is the fraction of <c>NumMetaIterations</c> completed. Inference-time adaptation (Algorithm 3)
+/// is the same r-step update on the task's support set.
 /// </para>
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
@@ -59,10 +53,8 @@ public partial class iTAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     private readonly iTAMLOptions<T, TInput, TOutput> _algoOptions;
     private readonly int _paramDim;
 
-    /// <summary>Teacher model parameters (EMA of student).</summary>
-    [Buffer]
-    private Vector<T> _teacherParams;
-
+    /// <summary>Meta-iterations completed, the t in eta = exp(-beta * t / T).</summary>
+    private int _metaIteration;
     /// <inheritdoc/>
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.iTAML;
 
@@ -71,108 +63,43 @@ public partial class iTAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
                options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
-        if (options.DistillationTemperature <= 0)
-            throw new ArgumentOutOfRangeException(nameof(options), "DistillationTemperature must be positive.");
+        if (options.EtaDecay < 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "EtaDecay must be non-negative.");
 
         _algoOptions = options;
         _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
-
-        // Initialize teacher as copy of student
-        var initParams = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters();
-        _teacherParams = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++) _teacherParams[d] = initParams[d];
     }
 
     /// <inheritdoc/>
     public override T MetaTrain(TaskBatch<T, TInput, TOutput> taskBatch)
     {
+        if (taskBatch == null) throw new ArgumentNullException(nameof(taskBatch));
+        if (taskBatch.Tasks.Length == 0) return NumOps.Zero;
+
         var losses = new List<T>();
-        var metaGradients = new List<Vector<T>>();
-        var initParams = ParamModel.GetParameters();
+        var baseParams = ParamModel.GetParameters();
+        var adaptedSum = new Vector<T>(_paramDim);
 
         foreach (var task in taskBatch.Tasks)
         {
-            // Inner loop: standard MAML adaptation
-            var adaptedParams = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
+            var adaptedParams = AdaptFrom(baseParams, task);
+            adaptedSum = Engine.Add(adaptedSum, adaptedParams);
 
-            for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
-            {
-                ParamModel.SetParameters(adaptedParams);
-                var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-                adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate, step == 0);
-            }
-
-            // Query loss with adapted params
             ParamModel.SetParameters(adaptedParams);
-            var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
-
-            // Knowledge distillation loss: L2 distance between student and teacher predictions
-            // Student prediction (already computed) vs teacher prediction
-            var studentPred = ConvertToVector(MetaModel.Predict(task.QueryInput)) ?? new Vector<T>(1);
-            ParamModel.SetParameters(_teacherParams);
-            var teacherPred = ConvertToVector(MetaModel.Predict(task.QueryInput)) ?? new Vector<T>(1);
-
-            double distillLoss = 0;
-            double tempSq = _algoOptions.DistillationTemperature * _algoOptions.DistillationTemperature;
-            int predLen = Math.Min(studentPred.Length, teacherPred.Length);
-            for (int d = 0; d < predLen; d++)
-            {
-                double diff = NumOps.ToDouble(studentPred[d]) - NumOps.ToDouble(teacherPred[d]);
-                distillLoss += diff * diff / tempSq;
-            }
-            if (predLen > 0) distillLoss /= predLen;
-
-            // Combine query loss with distillation regularization for reporting
-            double combinedLoss = NumOps.ToDouble(queryLoss) + _algoOptions.DistillationWeight * distillLoss;
-            losses.Add(NumOps.FromDouble(combinedLoss));
-
-            // Compute meta-gradient: blend task gradient with distillation gradient
-            ParamModel.SetParameters(adaptedParams);
-            var taskGrad = ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput));
-
-            // Add distillation gradient: d/dθ (distillLoss) ≈ 2*(student - teacher)/T² per param
-            double distillWeight = _algoOptions.DistillationWeight;
-            var metaGrad = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++)
-            {
-                double tg = NumOps.ToDouble(taskGrad[d]);
-                // Distillation gradient pushes student toward teacher
-                double dg = d < predLen
-                    ? 2.0 * (NumOps.ToDouble(studentPred[d]) - NumOps.ToDouble(teacherPred[d])) / (tempSq * predLen)
-                    : 0.0;
-                metaGrad[d] = NumOps.FromDouble(tg + distillWeight * dg);
-            }
-
-            // Task-balanced gradient normalization
-            if (_algoOptions.TaskBalancingEnabled)
-            {
-                double gradNorm = 0;
-                for (int d = 0; d < _paramDim; d++)
-                    gradNorm += NumOps.ToDouble(metaGrad[d]) * NumOps.ToDouble(metaGrad[d]);
-                gradNorm = Math.Sqrt(gradNorm) + 1e-10;
-                for (int d = 0; d < _paramDim; d++)
-                    metaGrad[d] = NumOps.FromDouble(NumOps.ToDouble(metaGrad[d]) / gradNorm);
-            }
-
-            metaGradients.Add(metaGrad);
+            losses.Add(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
 
-        // Outer loop: update student params
-        ParamModel.SetParameters(initParams);
-        if (metaGradients.Count > 0)
-        {
-            var avgGrad = AverageVectors(metaGradients);
-            var newParams = ApplyOuterGradients(initParams, avgGrad, _algoOptions.OuterLearningRate);
-            ParamModel.SetParameters(newParams);
-
-            // Update teacher via EMA
-            double decay = _algoOptions.TeacherEmaDecay;
-            for (int d = 0; d < _paramDim; d++)
-                _teacherParams[d] = NumOps.FromDouble(
-                    decay * NumOps.ToDouble(_teacherParams[d])
-                  + (1.0 - decay) * NumOps.ToDouble(newParams[d]));
-        }
+        // Phi = eta * mean_i Phi_i + (1 - eta) * Phi_base, i.e. a step of size eta along Phi_base - mean_i Phi_i.
+        var meanAdapted = Engine.Divide(adaptedSum, NumOps.FromDouble(taskBatch.Tasks.Length));
+        double eta = CurrentEta();
+        ParamModel.SetParameters(baseParams);
+        var stepped = ApplyOuterGradients(baseParams, Engine.Subtract(baseParams, meanAdapted), eta);
+        // Without a meta-optimizer eta is already the SGD step size. A meta-optimizer applies its own learning rate,
+        // so eta scales the displacement it produced: the paper's eta-weighted blend, at the optimizer's step.
+        if (MetaOptimizer is not null)
+            stepped = Engine.Add(baseParams, Engine.Multiply(Engine.Subtract(stepped, baseParams), NumOps.FromDouble(eta)));
+        ParamModel.SetParameters(stepped);
+        _metaIteration++;
 
         return ComputeMean(losses);
     }
@@ -181,9 +108,24 @@ public partial class iTAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         var initParams = ParamModel.GetParameters();
-        var adaptedParams = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
+        var adaptedParams = AdaptFrom(initParams, task);
+        ParamModel.SetParameters(initParams);
+        return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
+    }
 
+    /// <summary>eta = exp(-beta * t / T) for the current meta-iteration.</summary>
+    internal double CurrentEta()
+    {
+        double progress = _algoOptions.NumMetaIterations > 0
+            ? Math.Min(1.0, (double)_metaIteration / _algoOptions.NumMetaIterations)
+            : 0.0;
+        return Math.Exp(-_algoOptions.EtaDecay * progress);
+    }
+
+    /// <summary>r inner steps on the task's support set from <paramref name="start"/>.</summary>
+    private Vector<T> AdaptFrom(Vector<T> start, IMetaLearningTask<T, TInput, TOutput> task)
+    {
+        var adaptedParams = start.Clone();
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
             ParamModel.SetParameters(adaptedParams);
@@ -191,7 +133,6 @@ public partial class iTAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate, step == 0);
         }
 
-        ParamModel.SetParameters(initParams);
-        return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
+        return adaptedParams;
     }
 }

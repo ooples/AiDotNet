@@ -27,10 +27,10 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// learning problems".
 /// </para>
 /// <code>
-///   gate_d = sigmoid(phi_d)                       one learned logit per parameter
-///   inner:  theta_d &lt;- theta_d - eta * gate_d * grad_d
-///   outer:  theta  &lt;- meta-update as usual
-///           phi    &lt;- meta-update against the QUERY loss
+///   gate = 1[m &gt;= 0]                                   one learned logit per parameter (Eq. 4)
+///   inner:  phi_{k+1} = phi_k - alpha * gate * grad L_in(phi_k),  phi_0 = theta
+///   outer:  theta &lt;- theta - gamma_theta * E[grad L_out(phi_K)]
+///           m     &lt;- m + alpha * gamma_m * E[grad L_out(phi_K) * sum_k grad L_in(phi_k)]   (Eq. 5)
 /// </code>
 /// <para>
 /// <b>Three properties carry the method, and all three are implemented rather than described.</b>
@@ -47,11 +47,11 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// sparsity in the result was selected for.</description></item>
 /// </list>
 /// <para>
-/// <b>Estimator.</b> The gate's gradient flows through the inner-loop update, so computing it
-/// exactly needs second-order autodiff through an arbitrary model, which the generic
-/// <c>IFullModel</c> contract cannot provide. The logits are therefore meta-updated by SPSA, the
-/// estimator this library already uses for auxiliary parameters. The OBJECTIVE is the paper's; only
-/// the way its gradient is estimated differs.
+/// <b>Estimator.</b> As in the paper, the step function is differentiated with the straight-through
+/// estimator and second-order terms are dropped (first-order, like FOMAML), which gives Eq. 5. The
+/// <see cref="SparseMAMLGateFunction.Sigmoid"/> relaxation multiplies that by sigmoid'(m). Gate logits
+/// start at the constant <c>InitialGateLogit</c>: a generic parameter vector carries no fan-in, so the
+/// paper's Kaiming initialization of m is not available.
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> When a model learns from only a handful of examples, changing every one of
@@ -121,27 +121,33 @@ public partial class SparseMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
     /// <inheritdoc/>
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.SparseMAML;
 
-    /// <summary>Gets the gate logits phi.</summary>
+    /// <summary>Gets the gate logits m.</summary>
     public Vector<T> GateLogits => _gateLogits;
 
     /// <summary>
-    /// Gets the gate for parameter <paramref name="index"/>: <c>sigmoid(phi)</c>, in (0, 1).
+    /// Gets the gate for parameter <paramref name="index"/>: 1[m &gt;= 0] for the paper's step gate, or
+    /// sigmoid(m) for the relaxation.
     /// </summary>
-    public double Gate(int index) => Sigmoid(NumOps.ToDouble(_gateLogits[index]));
+    public T Gate(int index)
+    {
+        T logit = _gateLogits[index];
+        if (_algoOptions.GateFunction == SparseMAMLGateFunction.Sigmoid)
+            return NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, NumOps.Exp(NumOps.Negate(logit))));
+
+        return NumOps.LessThan(logit, NumOps.Zero) ? NumOps.Zero : NumOps.One;
+    }
 
     /// <summary>
     /// Gets the fraction of parameters currently gated OFF, i.e. the discovered sparsity.
     /// </summary>
-    public double Sparsity
-    {
-        get
-        {
-            int closed = 0;
-            for (int d = 0; d < _paramDim; d++) if (Gate(d) < _algoOptions.SparsityThreshold) closed++;
-            return _paramDim > 0 ? (double)closed / _paramDim : 0.0;
-        }
-    }
-
+    /// <remarks>
+    /// The closed gates are counted as an int and the ratio is formed in double: summing the 0/1 mask in T stalls
+    /// a Half count at 2048, and a model past 65504 parameters made both count and size inf in Half (inf / inf = NaN).
+    /// </remarks>
+    public T Sparsity
+        => NumOps.FromDouble((double)Engine.TensorCountNonzero(Engine.TensorLessThan(
+                Tensor<T>.FromVector(Gates(_gateLogits)), NumOps.FromDouble(_algoOptions.SparsityThreshold)))
+            / _paramDim);
     /// <summary>
     /// Initializes sparse-MAML over a model.
     /// </summary>
@@ -159,16 +165,11 @@ public partial class SparseMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
         if (_paramDim == 0)
             throw new ArgumentException("MetaModel has zero parameters.", nameof(options));
 
-        _gateLogits = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++)
-        {
-            _gateLogits[d] = NumOps.FromDouble(options.InitialGateLogit);
-        }
+        _gateLogits = Engine.Fill(_paramDim, NumOps.FromDouble(options.InitialGateLogit));
 
         if (options.MetaLearnPerParameterRates)
         {
-            _perParameterRates = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) _perParameterRates[d] = NumOps.One;
+            _perParameterRates = Engine.Fill(_paramDim, NumOps.One);
         }
     }
 
@@ -185,20 +186,33 @@ public partial class SparseMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
         var initParams = ParamModel.GetParameters();
+        var logitGradient = new Vector<T>(_paramDim);
+        var rateGradient = new Vector<T>(_paramDim);
 
         foreach (var task in taskBatch.Tasks)
         {
-            var adapted = AdaptWithGate(task, initParams);
+            var (adapted, innerGradientSum) = AdaptWithGate(task, initParams);
             ParamModel.SetParameters(adapted);
             losses.Add(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
-            metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
+            var outerGradient = ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput));
+            metaGradients.Add(outerGradient);
+
+            // -dL_out/d(gate * rate) / alpha = grad L_out(phi_K) * sum_k grad L_in(phi_k), first order (Eq. 5).
+            var product = Engine.Multiply(outerGradient, innerGradientSum);
+            logitGradient = Engine.Add(logitGradient, Engine.Multiply(product, Rates()));
+            if (_perParameterRates.Length > 0)
+                rateGradient = Engine.Add(rateGradient, Engine.Multiply(product, Gates(_gateLogits)));
         }
 
+        // theta <- theta - gamma_theta E[grad L_out(phi_K)].
         ApplyOuterUpdate(initParams, metaGradients, _algoOptions.OuterLearningRate);
 
-        // The gate is meta-learned against the QUERY loss — how well the ADAPTED model generalizes,
-        // not how large the support gradients were.
-        UpdateGatesSpsa(taskBatch, ParamModel.GetParameters());
+        // m <- m + alpha gamma_m E[...] (Eq. 5): the gate is judged by the QUERY loss of the adapted model.
+        T step = NumOps.FromDouble(
+            _algoOptions.InnerLearningRate * _algoOptions.GateLearningRate / taskBatch.Tasks.Length);
+        _gateLogits = Engine.Add(_gateLogits, Engine.Multiply(Engine.Multiply(logitGradient, GateSlope()), step));
+        if (_perParameterRates.Length > 0)
+            _perParameterRates = Engine.Add(_perParameterRates, Engine.Multiply(rateGradient, step));
 
         return ComputeMean(losses);
     }
@@ -208,111 +222,59 @@ public partial class SparseMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
     {
         if (task == null) throw new ArgumentNullException(nameof(task));
         var initParams = ParamModel.GetParameters();
-        var adapted = AdaptWithGate(task, initParams);
+        var (adapted, _) = AdaptWithGate(task, initParams);
         ParamModel.SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adapted);
     }
 
     /// <summary>
-    /// The inner loop, gated: <c>theta_d &lt;- theta_d - eta * gate_d * grad_d</c>.
+    /// The gated inner loop (Eq. 4): <c>phi &lt;- phi - alpha * rate * gate * grad L_in(phi)</c>. Also returns
+    /// the sum of the inner gradients, which Eq. 5 needs.
     /// </summary>
     /// <remarks>
     /// The gate multiplies the UPDATE, not the parameter. Scaling the parameter would change the
     /// function the model computes; scaling the update changes only where learning is allowed to
     /// happen, which is what "learning where to learn" means.
     /// </remarks>
-    private Vector<T> AdaptWithGate(IMetaLearningTask<T, TInput, TOutput> task, Vector<T> initParams)
+    private (Vector<T> Adapted, Vector<T> InnerGradientSum) AdaptWithGate(
+        IMetaLearningTask<T, TInput, TOutput> task, Vector<T> initParams)
     {
         var adapted = initParams.Clone();
+        var gradientSum = new Vector<T>(_paramDim);
+        var scale = Engine.Multiply(
+            Engine.Multiply(Gates(_gateLogits), Rates()), NumOps.FromDouble(_algoOptions.InnerLearningRate));
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
             ParamModel.SetParameters(adapted);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-
-            for (int d = 0; d < _paramDim; d++)
-            {
-                double gate = Gate(d);
-                double rate = _algoOptions.InnerLearningRate;
-                if (_perParameterRates.Length > 0) rate *= NumOps.ToDouble(_perParameterRates[d]);
-
-                adapted[d] = NumOps.Subtract(adapted[d],
-                    NumOps.FromDouble(rate * gate * NumOps.ToDouble(grad[d])));
-            }
+            gradientSum = Engine.Add(gradientSum, grad);
+            adapted = Engine.Subtract(adapted, Engine.Multiply(scale, grad));
         }
-        return adapted;
+        return (adapted, gradientSum);
     }
+
+    /// <summary>The gates for <paramref name="logits"/>: 1[m &gt;= 0], or sigmoid(m) for the relaxation.</summary>
+    private Vector<T> Gates(Vector<T> logits)
+        => _algoOptions.GateFunction == SparseMAMLGateFunction.Sigmoid
+            ? Engine.Sigmoid(logits)
+            : Engine.Subtract(
+                Engine.Fill(_paramDim, NumOps.One),
+                Engine.TensorLessThan(Tensor<T>.FromVector(logits), NumOps.Zero).ToVector());
 
     /// <summary>
-    /// SPSA meta-update of the gate logits against the query loss of the adapted model.
+    /// d gate / d m: 1 under the straight-through estimator for the step gate, sigmoid(m)(1 - sigmoid(m))
+    /// for the relaxation.
     /// </summary>
-    /// <remarks>
-    /// Each probe must RE-RUN the gated inner loop, because the gate reaches the query loss only
-    /// through that adaptation. Probing the logits while measuring a model that was adapted under
-    /// the unperturbed gate would measure a quantity independent of them, and the estimate would be
-    /// identically zero.
-    /// </remarks>
-    private void UpdateGatesSpsa(TaskBatch<T, TInput, TOutput> taskBatch, Vector<T> metaParams)
+    private Vector<T> GateSlope()
     {
-        if (taskBatch.Tasks.Length == 0) return;
-
-        const double perturbation = 1e-2;
-        var delta = new double[_paramDim];
-        for (int d = 0; d < _paramDim; d++) delta[d] = RandomGenerator.NextDouble() < 0.5 ? -1.0 : 1.0;
-
-        var baseLogits = _gateLogits.Clone();
-
-        double Probe(double sign)
-        {
-            var shifted = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++)
-            {
-                shifted[d] = NumOps.FromDouble(
-                    NumOps.ToDouble(baseLogits[d]) + sign * perturbation * delta[d]);
-            }
-            _gateLogits = shifted;
-
-            double total = 0.0;
-            foreach (var task in taskBatch.Tasks)
-            {
-                var adapted = AdaptWithGate(task, metaParams);
-                ParamModel.SetParameters(adapted);
-                total += NumOps.ToDouble(
-                    ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
-            }
-            return total / taskBatch.Tasks.Length;
-        }
-
-        // RESTORED ON EVERY EXIT, NOT JUST THE HAPPY ONE. Probe assigns _gateLogits and runs a full
-        // gated inner loop plus a forward pass per task; anything in there that throws used to leave
-        // this instance holding PERTURBED gates and an adapted ParamModel, and the corruption is
-        // silent -- it simply persists into the next meta-step and biases it. The restore belongs in
-        // a finally so it survives that path.
-        double lossPlus;
-        double lossMinus;
-        try
-        {
-            lossPlus = Probe(+1.0);
-            lossMinus = Probe(-1.0);
-        }
-        finally
-        {
-            _gateLogits = baseLogits;
-            ParamModel.SetParameters(metaParams);
-        }
-
-        double scaled = (lossPlus - lossMinus) / (2.0 * perturbation);
-        if (double.IsNaN(scaled) || double.IsInfinity(scaled)) return;
-
-        var updated = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++)
-        {
-            updated[d] = NumOps.FromDouble(
-                NumOps.ToDouble(baseLogits[d]) - _algoOptions.GateLearningRate * scaled / delta[d]);
-        }
-        _gateLogits = updated;
+        if (_algoOptions.GateFunction != SparseMAMLGateFunction.Sigmoid)
+            return Engine.Fill(_paramDim, NumOps.One);
+        var g = Engine.Sigmoid(_gateLogits);
+        return Engine.Multiply(g, Engine.Subtract(Engine.Fill(_paramDim, NumOps.One), g));
     }
 
-    private static double Sigmoid(double x) =>
-        x >= 0 ? 1.0 / (1.0 + Math.Exp(-x)) : Math.Exp(x) / (1.0 + Math.Exp(x));
+    /// <summary>The meta-learned per-parameter rates, or ones when that variant is off.</summary>
+    private Vector<T> Rates()
+        => _perParameterRates.Length > 0 ? _perParameterRates : Engine.Fill(_paramDim, NumOps.One);
 }

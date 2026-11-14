@@ -24,7 +24,8 @@ public class iTAMLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
     /// <inheritdoc/>
     public double OuterLearningRate { get; set; } = 0.001;
     /// <inheritdoc/>
-    public int AdaptationSteps { get; set; } = 5;
+    /// <value>r, the inner steps per task; 1 by default, the paper's choice.</value>
+    public int AdaptationSteps { get; set; } = 1;
     /// <inheritdoc/>
     public int MetaBatchSize { get; set; } = 4;
     /// <inheritdoc/>
@@ -61,29 +62,11 @@ public class iTAMLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
     public IEpisodicDataLoader<T, TInput, TOutput>? DataLoader { get; set; }
 
     /// <summary>
-    /// EMA decay rate for the teacher model. Values closer to 1.0 make the teacher
-    /// more stable. Default: 0.999.
+    /// beta in the paper's meta-update weight eta = exp(-beta * t / T), where t / T is training progress
+    /// (meta-iteration over <see cref="NumMetaIterations"/>). Larger values make later updates move the
+    /// meta-parameters more slowly. Default: 1.0, the paper's value.
     /// </summary>
-    public double TeacherEmaDecay { get; set; } = 0.999;
-
-    /// <summary>
-    /// Weight of the knowledge distillation loss between student and teacher predictions.
-    /// L_total = L_task + DistillationWeight * L_distill. Default: 1.0.
-    /// </summary>
-    public double DistillationWeight { get; set; } = 1.0;
-
-    /// <summary>
-    /// Temperature for softening predictions in the distillation loss.
-    /// Higher values produce softer probability distributions. Default: 2.0.
-    /// </summary>
-    public double DistillationTemperature { get; set; } = 2.0;
-
-    /// <summary>
-    /// Whether to normalize gradient magnitudes across tasks to prevent
-    /// high-loss tasks from dominating. Default: true.
-    /// </summary>
-    public bool TaskBalancingEnabled { get; set; } = true;
-
+    public double EtaDecay { get; set; } = 1.0;
     /// <summary>Creates options for meta-learning <paramref name="metaModel"/>, with the default settings.</summary>
     /// <param name="metaModel">The model whose parameters are meta-learned.</param>
     public iTAMLOptions(IFullModel<T, TInput, TOutput> metaModel)
@@ -92,8 +75,7 @@ public class iTAMLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
     /// <inheritdoc/>
     public bool IsValid() =>
         MetaModel != null && OuterLearningRate > 0 && MetaBatchSize > 0 &&
-        TeacherEmaDecay > 0 && TeacherEmaDecay < 1 && DistillationWeight >= 0 &&
-        DistillationTemperature > 0;
+        EtaDecay >= 0 && AdaptationSteps > 0;
     /// <inheritdoc/>
     public IMetaLearnerOptions<T> Clone() => new iTAMLOptions<T, TInput, TOutput>(MetaModel)
     {
@@ -103,7 +85,6 @@ public class iTAMLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
         GradientClipThreshold = GradientClipThreshold, RandomSeed = RandomSeed, EvaluationTasks = EvaluationTasks,
         EvaluationFrequency = EvaluationFrequency, EnableCheckpointing = EnableCheckpointing,
         CheckpointFrequency = CheckpointFrequency, UseFirstOrder = UseFirstOrder,
-        TeacherEmaDecay = TeacherEmaDecay, DistillationWeight = DistillationWeight,
-        DistillationTemperature = DistillationTemperature, TaskBalancingEnabled = TaskBalancingEnabled
+        EtaDecay = EtaDecay
     };
 }

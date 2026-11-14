@@ -161,24 +161,41 @@ public partial class ImplicitPosteriorGenerator<T>
 
     private int FillScaled(Random rng, int offset, int count, int fanIn)
     {
-        double scale = Math.Sqrt(1.0 / Math.Max(1, fanIn));
+        // U(-scale, scale): one NextDouble per weight, in order; the loop only stores the draws. (2u - 1) scale runs
+        // in double and each weight is rounded to T once: in Half, rounding u first and then subtracting scale
+        // cancels the leading bits of the draw.
+        var draws = new double[count];
         for (int i = 0; i < count; i++)
-            _lambda[offset + i] = NumOps.FromDouble(((rng.NextDouble() * 2.0) - 1.0) * scale);
+            draws[i] = rng.NextDouble();
+        double scale = Math.Sqrt(1.0 / Math.Max(1, fanIn));
+        var weights = Engine.TensorMultiplyScalar(
+            Engine.TensorAddScalar(Engine.TensorMultiplyScalar(new Tensor<double>(draws, new[] { count }), 2.0), -1.0),
+            scale).Cast<T>().ToVector();
+        Place(offset, weights);
         return offset + count;
     }
 
     private int FillZero(int offset, int count)
     {
-        for (int i = 0; i < count; i++) _lambda[offset + i] = NumOps.Zero;
+        Place(offset, new Vector<T>(count));
         return offset + count;
+    }
+
+    /// <summary>Writes <paramref name="values"/> into the weights starting at <paramref name="offset"/>.</summary>
+    private void Place(int offset, Vector<T> values)
+    {
+        int tail = _lambda.Length - offset - values.Length;
+        var parts = new List<Vector<T>>(3);
+        if (offset > 0) parts.Add(_lambda.GetSubVector(0, offset));
+        parts.Add(values);
+        if (tail > 0) parts.Add(_lambda.GetSubVector(offset + values.Length, tail));
+        _lambda = Vector<T>.Concatenate(parts);
     }
 
     /// <summary>Gets the flattened generator weights <c>lambda</c>.</summary>
     public Vector<T> GetParameters()
     {
-        var copy = new Vector<T>(_lambda.Length);
-        for (int i = 0; i < _lambda.Length; i++) copy[i] = _lambda[i];
-        return copy;
+        return _lambda.Clone();
     }
 
     /// <summary>Sets the flattened generator weights <c>lambda</c>.</summary>
@@ -191,7 +208,7 @@ public partial class ImplicitPosteriorGenerator<T>
                 $"Expected {_lambda.Length} generator weights; got {lambda.Length}.", nameof(lambda));
         }
 
-        for (int i = 0; i < lambda.Length; i++) _lambda[i] = lambda[i];
+        _lambda = lambda.Clone();
     }
 
     /// <summary>
@@ -259,37 +276,30 @@ public partial class ImplicitPosteriorGenerator<T>
 
     private Vector<T> Forward(double[] z)
     {
-        int o = 0;
-        var h1 = new double[_hidden1];
-        for (int j = 0; j < _hidden1; j++)
-        {
-            double sum = 0.0;
-            for (int i = 0; i < _latent; i++) sum += z[i] * NumOps.ToDouble(_lambda[o + (i * _hidden1) + j]);
-            h1[j] = Math.Tanh(sum + NumOps.ToDouble(_lambda[o + _w1 + j]));
-        }
-        o += _w1 + _b1;
+        // The latent arrives as double draws (U[0,1] from a Random, or a caller's test latent); it is converted
+        // once, then the three tanh layers run as engine matmuls: h = tanh(x W + b), W stored [fanIn, fanOut].
+        var latent = new Tensor<double>(z, new[] { _latent }).Cast<T>().ToVector();
 
-        var h2 = new double[_hidden2];
-        for (int j = 0; j < _hidden2; j++)
-        {
-            double sum = 0.0;
-            for (int i = 0; i < _hidden1; i++) sum += h1[i] * NumOps.ToDouble(_lambda[o + (i * _hidden2) + j]);
-            h2[j] = Math.Tanh(sum + NumOps.ToDouble(_lambda[o + _w2 + j]));
-        }
+        int o = 0;
+        var h1 = Layer(Tensor<T>.FromVector(latent, new[] { 1, _latent }), o, _latent, _hidden1);
+        o += _w1 + _b1;
+        var h2 = Layer(h1, o, _hidden1, _hidden2);
         o += _w2 + _b2;
 
         // tanh on the OUTPUT is the paper's stated choice: it bounds the generated parameters, which keeps
         // an untrained generator from emitting parameters large enough to make the base model diverge on
         // its first forward pass. The hidden nonlinearity is not stated; tanh is used throughout for
         // consistency.
-        var w = new Vector<T>(_outputDim);
-        for (int j = 0; j < _outputDim; j++)
-        {
-            double sum = 0.0;
-            for (int i = 0; i < _hidden2; i++) sum += h2[i] * NumOps.ToDouble(_lambda[o + (i * _outputDim) + j]);
-            w[j] = NumOps.FromDouble(Math.Tanh(sum + NumOps.ToDouble(_lambda[o + _w3 + j])));
-        }
-
-        return w;
+        return Layer(h2, o, _hidden2, _outputDim).ToVector();
     }
+
+    /// <summary>tanh(x W + b) for the [fanIn, fanOut] weights at <paramref name="offset"/> followed by the bias.</summary>
+    private Tensor<T> Layer(Tensor<T> x, int offset, int fanIn, int fanOut)
+    {
+        var w = Tensor<T>.FromVector(_lambda.GetSubVector(offset, fanIn * fanOut), new[] { fanIn, fanOut });
+        var b = Tensor<T>.FromVector(_lambda.GetSubVector(offset + fanIn * fanOut, fanOut), new[] { 1, fanOut });
+        return Engine.TensorTanh(Engine.TensorAdd(Engine.TensorMatMul(x, w), b));
+    }
+
+    private static IEngine Engine => AiDotNetEngine.Current;
 }
