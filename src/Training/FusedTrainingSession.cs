@@ -443,7 +443,10 @@ internal sealed class FusedTrainingSession<T>
         if (checkReplay && snapshot is not null)
         {
             double replayLoss = NumOps.ToDouble(ReadLoss(stepLoss, deferredLoss.Value));
-            double scale = Math.Max(1.0, Math.Max(Math.Abs(eagerLoss), Math.Abs(replayLoss)));
+            // Relative to the losses themselves, with no floor: floored at 1, a loss below 1e-3 (a small-magnitude
+            // regression target, a model near convergence) passed whatever the plan had frozen, and the stale plan
+            // was committed for the rest of the run.
+            double scale = Math.Max(Math.Abs(eagerLoss), Math.Abs(replayLoss));
             bool agree = (double.IsNaN(eagerLoss) && double.IsNaN(replayLoss))
                 || Math.Abs(eagerLoss - replayLoss) <= ReplayAgreementTolerance * scale;
             if (!agree)

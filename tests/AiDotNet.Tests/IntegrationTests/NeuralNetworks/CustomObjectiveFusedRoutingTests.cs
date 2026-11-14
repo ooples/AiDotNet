@@ -48,6 +48,10 @@ public class CustomObjectiveFusedRoutingTests
     }
 
     private static (Vector<float> Parameters, ObjectiveNetwork Model) Train(bool compiled, bool captured, Vector<float>? init)
+        => Train(compiled, captured, init, targetScale: 0.5);
+
+    private static (Vector<float> Parameters, ObjectiveNetwork Model) Train(bool compiled, bool captured, Vector<float>? init,
+        double targetScale)
     {
         var optimizer = new AdamOptimizer<float, Tensor<float>, Tensor<float>>(null,
             new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 0.01, UseAdaptiveLearningRate = false });
@@ -61,7 +65,7 @@ public class CustomObjectiveFusedRoutingTests
             for (int s = 0; s < Steps; s++)
             {
                 var x = Batch(s, 4, 6, 1.0);
-                var y = Batch(s + 100, 4, 2, 0.5);   // a different target every step
+                var y = Batch(s + 100, 4, 2, targetScale);   // a different target every step
                 if (captured) model.CapturedTargetStep(x, y);
                 else model.ArgumentObjectiveStep(x, y);
             }
@@ -115,5 +119,23 @@ public class CustomObjectiveFusedRoutingTests
         Assert.Contains("traced step was redone on the eager tape", fused.Model.LastObjectiveMissReason ?? "");
         double divergence = MaxAbsDifference(fused.Parameters, eager.Parameters);
         Assert.True(divergence < 1e-4, $"a baked-target run diverged from eager by {divergence:E3}");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async System.Threading.Tasks.Task ACapturedTarget_IsCaughtWhenTheLossIsSmall()
+    {
+        await System.Threading.Tasks.Task.CompletedTask;
+        // Targets of magnitude 1e-2 and a network that starts near zero output give losses around 1e-4. The replay
+        // check compared losses with an absolute floor of 1e-3, so every such disagreement passed, the plan that had
+        // frozen the first step's target was committed, and the run trained on that one target throughout.
+        var init = Train(compiled: false, captured: true, init: null, targetScale: 0.01).Model.GetParameters();
+        for (int i = 0; i < init.Length; i++) init[i] *= 0.01f;
+        var eager = Train(compiled: false, captured: true, init, targetScale: 0.01);
+        var fused = Train(compiled: true, captured: true, init, targetScale: 0.01);
+
+        Assert.False(fused.Model.ObjectiveSessionCommitted, "a closure-captured target was replayed from the trace.");
+        Assert.Contains("disagrees with the eager forward", fused.Model.LastObjectiveMissReason ?? "");
+        double divergence = MaxAbsDifference(fused.Parameters, eager.Parameters);
+        Assert.True(divergence < 1e-4, $"a baked-target run with small losses diverged from eager by {divergence:E3}");
     }
 }
