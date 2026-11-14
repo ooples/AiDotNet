@@ -263,12 +263,36 @@ public static class TensorExtensions
     /// helping the network learn faster and more reliably.
     /// </para>
     /// </remarks>
+    /// <exception cref="ArgumentNullException"><paramref name="shape"/> or <paramref name="random"/> is null.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A dimension is negative, or the element count exceeds
+    /// <see cref="int.MaxValue"/>.</exception>
     public static Tensor<T> CreateXavierInitializedTensor<T>(int[] shape, double stddev, Random random)
     {
-        int length = 1;
+        if (shape is null)
+        {
+            throw new ArgumentNullException(nameof(shape));
+        }
+
+        if (random is null)
+        {
+            throw new ArgumentNullException(nameof(random));
+        }
+
+        // The shape is validated before anything is allocated: a negative dimension, or a product that wraps
+        // around int, used to size the draw buffer from a meaningless length.
+        long length = 1;
         foreach (int dimension in shape)
         {
+            if (dimension < 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(shape), dimension, "Tensor dimensions must be non-negative.");
+            }
+
             length *= dimension;
+            if (length > int.MaxValue)
+            {
+                throw new ArgumentOutOfRangeException(nameof(shape), "The tensor has more than int.MaxValue elements.");
+            }
         }
 
         var draws = new double[length];

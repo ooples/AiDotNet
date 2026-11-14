@@ -1,6 +1,8 @@
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.AdversarialRobustness.CertifiedRobustness;
@@ -12,8 +14,15 @@ namespace AiDotNet.AdversarialRobustness.CertifiedRobustness;
 /// <remarks>
 /// <para>
 /// Every bound is a whole-tensor engine computation generic in T. Affine weights are stored as [out, in], so
-/// z = W a + b. Dense layers expose their weights as [in, out] (the library convention); a weight matrix whose
-/// first axis matches the incoming width is transposed, one whose second axis matches is used as is.
+/// z = W a + b. <see cref="DenseLayer{T}"/> stores its weights as [in, out] and is transposed;
+/// <see cref="FullyConnectedLayer{T}"/> stores [out, in] and is used as is.
+/// </para>
+/// <para>
+/// Only layers whose function is known exactly are read: dense and fully connected layers, activation layers,
+/// and the shape-only or inference-identity layers (input, flatten, reshape, dropout). Their activations must
+/// be ReLU, LeakyReLU with a slope in [0, 1], sigmoid, tanh, identity or softmax, read from the activation
+/// objects themselves. Any other layer or activation makes the network unboundable here, so the caller falls
+/// back to its unsound sampled bounds and says so, instead of certifying a network it did not bound.
 /// </para>
 /// <para>
 /// Perturbations are bounded in L-infinity or L2 norm around the input x. The first affine map is bounded
@@ -40,8 +49,14 @@ internal sealed class BoundNetwork<T>
         }
 
         public Operation(ActivationFunction activation)
+            : this(activation, LeakySlope)
+        {
+        }
+
+        public Operation(ActivationFunction activation, T slope)
         {
             Activation = activation;
+            Slope = slope;
         }
 
         /// <summary>The [out, in] weight of an affine step, or null for an activation.</summary>
@@ -53,6 +68,9 @@ internal sealed class BoundNetwork<T>
         /// <summary>The element-wise activation of an activation step.</summary>
         public ActivationFunction Activation { get; }
 
+        /// <summary>The negative-side slope of a LeakyReLU step.</summary>
+        public T Slope { get; } = NumOps.Zero;
+
         public bool IsAffine => Weight is not null;
     }
 
@@ -60,8 +78,33 @@ internal sealed class BoundNetwork<T>
     public List<Operation> Operations { get; }
 
     /// <summary>
-    /// Reads a network from its layers; null when a layer has weights that are not an affine matrix of the
-    /// right width, so no sound bound can be computed from the layer list.
+    /// The layer types read here. A subclass can override the forward pass while keeping the inherited weights,
+    /// so only these exact runtime types are bounded; any other layer, subclasses included, has no sound bound.
+    /// </summary>
+    private static readonly Type[] BoundedLayerTypes =
+    {
+        typeof(DenseLayer<T>),
+        typeof(FullyConnectedLayer<T>),
+        typeof(ActivationLayer<T>),
+        typeof(DropoutLayer<T>),
+        typeof(FlattenLayer<T>),
+        typeof(ReshapeLayer<T>),
+        typeof(InputLayer<T>)
+    };
+
+    /// <summary>The activation types read here, matched by exact runtime type for the same reason.</summary>
+    private static readonly Type[] BoundedActivationTypes =
+    {
+        typeof(ReLUActivation<T>),
+        typeof(LeakyReLUActivation<T>),
+        typeof(SigmoidActivation<T>),
+        typeof(TanhActivation<T>),
+        typeof(SoftmaxActivation<T>)
+    };
+
+    /// <summary>
+    /// Reads a network from its layers; null when a layer or an activation is not one whose exact function is
+    /// known here (see the class remarks), so no sound bound can be computed from the layer list.
     /// </summary>
     public static BoundNetwork<T>? FromLayers(IReadOnlyList<ILayer<T>> layers, int inputLength)
     {
@@ -69,10 +112,34 @@ internal sealed class BoundNetwork<T>
         int width = inputLength;
         foreach (var layer in layers)
         {
-            var weights = layer.GetWeights();
-            if (weights is not null)
+            if (layer is null || Array.IndexOf(BoundedLayerTypes, layer.GetType()) < 0)
             {
-                var affine = AffineFrom(weights, layer.GetBiases(), width);
+                return null;
+            }
+
+            Operation? affine;
+            switch (layer)
+            {
+                case DenseLayer<T>:
+                    affine = AffineFrom(layer.GetWeights(), layer.GetBiases(), width, inputByOutput: true);
+                    break;
+                case FullyConnectedLayer<T>:
+                    affine = AffineFrom(layer.GetWeights(), layer.GetBiases(), width, inputByOutput: false);
+                    break;
+                case ActivationLayer<T>:
+                case DropoutLayer<T>:
+                case FlattenLayer<T>:
+                case ReshapeLayer<T>:
+                case InputLayer<T>:
+                    // Element-wise or shape-only: the flattened width is unchanged.
+                    affine = null;
+                    break;
+                default:
+                    return null;
+            }
+
+            if (layer is DenseLayer<T> || layer is FullyConnectedLayer<T>)
+            {
                 if (affine?.Weight is null)
                 {
                     return null;
@@ -81,29 +148,60 @@ internal sealed class BoundNetwork<T>
                 operations.Add(affine);
                 width = affine.Weight._shape[0];
             }
-            else if (ShapeLength(layer.GetOutputShape()) != width)
+
+            if (layer is not LayerBase<T> layerBase)
             {
-                // A parameter-free layer that changes the width (pooling, cropping, ...) is not element-wise.
                 return null;
             }
 
-            foreach (var activation in layer.GetActivationTypes())
+            foreach (var activationObject in new object?[] { layerBase.ScalarActivation, layerBase.VectorActivation })
             {
-                if (activation == ActivationFunction.Identity || activation == ActivationFunction.Linear)
+                if (activationObject is null || activationObject.GetType() == typeof(IdentityActivation<T>))
                 {
                     continue;
                 }
 
-                if (!IsSupported(activation))
+                var activation = ActivationOf(activationObject);
+                if (activation is null)
                 {
                     return null;
                 }
 
-                operations.Add(new Operation(activation));
+                operations.Add(activation);
             }
         }
 
         return new BoundNetwork<T>(operations);
+    }
+
+    /// <summary>
+    /// The bounded step of an activation object, or null for an activation without sound bounds here. The type
+    /// is read from the object itself: the layer's activation-type list reports unknown activations as identity.
+    /// </summary>
+    private static Operation? ActivationOf(object activation)
+    {
+        if (Array.IndexOf(BoundedActivationTypes, activation.GetType()) < 0)
+        {
+            return null;
+        }
+
+        switch (activation)
+        {
+            case ReLUActivation<T>:
+                return new Operation(ActivationFunction.ReLU);
+            case LeakyReLUActivation<T> leaky:
+                // max(z, a z) is the LeakyReLU only for a slope a in [0, 1].
+                bool slopeInRange = !NumOps.LessThan(leaky.Alpha, NumOps.Zero) && !NumOps.GreaterThan(leaky.Alpha, NumOps.One);
+                return slopeInRange ? new Operation(ActivationFunction.LeakyReLU, leaky.Alpha) : null;
+            case SigmoidActivation<T>:
+                return new Operation(ActivationFunction.Sigmoid);
+            case TanhActivation<T>:
+                return new Operation(ActivationFunction.Tanh);
+            case SoftmaxActivation<T>:
+                return new Operation(ActivationFunction.Softmax);
+            default:
+                return null;
+        }
     }
 
     /// <summary>
@@ -141,50 +239,21 @@ internal sealed class BoundNetwork<T>
         return width;
     }
 
-    /// <summary>The activations with sound interval and linear bounds here.</summary>
-    internal static bool IsSupported(ActivationFunction activation) =>
-        activation == ActivationFunction.ReLU
-        || activation == ActivationFunction.LeakyReLU
-        || activation == ActivationFunction.Sigmoid
-        || activation == ActivationFunction.Tanh
-        || activation == ActivationFunction.Softmax;
-
-    private static int ShapeLength(int[] shape)
-    {
-        int length = 1;
-        foreach (int dimension in shape)
-        {
-            // Unresolved (-1) and empty placeholders carry no width.
-            length *= dimension > 0 ? dimension : 1;
-        }
-
-        return length;
-    }
-
-    private static Operation? AffineFrom(Tensor<T> weights, Tensor<T>? biases, int width)
+    private static Operation? AffineFrom(Tensor<T>? weights, Tensor<T>? biases, int width, bool inputByOutput)
     {
         var engine = AiDotNetEngine.Current;
-        if (weights.Rank != 2)
+        if (weights is null || weights.Rank != 2)
         {
             return null;
         }
 
         var shape = weights._shape;
-        Tensor<T> outByIn;
-        if (shape[0] == width)
-        {
-            // The library's dense layers store [in, out].
-            outByIn = engine.TensorTranspose(weights);
-        }
-        else if (shape[1] == width)
-        {
-            outByIn = weights;
-        }
-        else
+        if (shape[inputByOutput ? 0 : 1] != width)
         {
             return null;
         }
 
+        var outByIn = inputByOutput ? engine.TensorTranspose(weights) : weights;
         int outputs = outByIn._shape[0];
         Tensor<T> bias;
         if (biases is null || biases.Length == 0)
@@ -214,11 +283,15 @@ internal sealed class BoundNetwork<T>
     }
 
     /// <summary>Row-wise dual norm: L1 for an L-infinity ball, L2 for an L2 ball.</summary>
+    /// <remarks>
+    /// The L2 norm is accumulated in double: in Half, the square of a weight above 256 exceeds 65504, so the
+    /// norm (and with it the bound) would be infinite.
+    /// </remarks>
     private static Tensor<T> DualRowNorms(Tensor<T> matrix, AdversarialNormType norm)
     {
         var engine = AiDotNetEngine.Current;
         return norm == AdversarialNormType.L2
-            ? engine.TensorNorm(matrix, 1, false)
+            ? engine.TensorNorm(matrix.Contiguous().Cast<double>(), 1, false).Cast<T>()
             : engine.ReduceSum(engine.TensorAbs(matrix), new[] { 1 }, false);
     }
 
@@ -260,8 +333,9 @@ internal sealed class BoundNetwork<T>
     /// <summary>
     /// The interval image of a monotone element-wise activation; softmax outputs lie in [0, 1].
     /// </summary>
-    private static (Tensor<T> Lower, Tensor<T> Upper) ActivationOverBox(ActivationFunction activation, Tensor<T> lower, Tensor<T> upper)
+    private static (Tensor<T> Lower, Tensor<T> Upper) ActivationOverBox(Operation operation, Tensor<T> lower, Tensor<T> upper)
     {
+        var activation = operation.Activation;
         var engine = AiDotNetEngine.Current;
         switch (activation)
         {
@@ -272,7 +346,7 @@ internal sealed class BoundNetwork<T>
             case ActivationFunction.Tanh:
                 return (engine.TensorTanh(lower), engine.TensorTanh(upper));
             case ActivationFunction.LeakyReLU:
-                return (LeakyReLU(lower), LeakyReLU(upper));
+                return (LeakyReLU(lower, operation.Slope), LeakyReLU(upper, operation.Slope));
             case ActivationFunction.Softmax:
                 return (engine.TensorZerosLike(lower), engine.TensorOnesLike(upper));
             default:
@@ -283,10 +357,10 @@ internal sealed class BoundNetwork<T>
     /// <summary>The default LeakyReLU slope of the library's activation (0.01).</summary>
     internal static T LeakySlope => NumOps.FromDouble(0.01);
 
-    private static Tensor<T> LeakyReLU(Tensor<T> values)
+    private static Tensor<T> LeakyReLU(Tensor<T> values, T slope)
     {
         var engine = AiDotNetEngine.Current;
-        return engine.TensorMax(values, engine.TensorMultiplyScalar(values, LeakySlope));
+        return engine.TensorMax(values, engine.TensorMultiplyScalar(values, slope));
     }
 
     #endregion
@@ -298,6 +372,7 @@ internal sealed class BoundNetwork<T>
     /// produces (identity, softmax and strictly increasing activations, or ReLU when the top logit stays
     /// positive), else -1.
     /// </summary>
+    [AiDotNet.Attributes.ScalarKernel("Walks the handful of network steps and reads one slope scalar per step, not tensor elements.")]
     private int LogitStep(out bool requiresPositiveTop)
     {
         requiresPositiveTop = false;
@@ -309,7 +384,11 @@ internal sealed class BoundNetwork<T>
 
         for (int i = last + 1; i < Operations.Count; i++)
         {
-            requiresPositiveTop |= Operations[i].Activation == ActivationFunction.ReLU;
+            // A LeakyReLU with slope 0 is a ReLU: it also maps every negative logit to 0, so a non-positive
+            // top logit can tie with them.
+            requiresPositiveTop |= Operations[i].Activation == ActivationFunction.ReLU
+                || (Operations[i].Activation == ActivationFunction.LeakyReLU
+                    && !NumOps.GreaterThan(Operations[i].Slope, NumOps.Zero));
         }
 
         return last;
@@ -349,7 +428,7 @@ internal sealed class BoundNetwork<T>
                 : AffineOverBox(operation.Weight, operation.Bias, lower, upper);
         }
 
-        return ActivationOverBox(operation.Activation, lower, upper);
+        return ActivationOverBox(operation, lower, upper);
     }
 
     /// <summary>
@@ -488,9 +567,14 @@ internal sealed class BoundNetwork<T>
     }
 
     /// <summary>
-    /// CROWN bounds on every output of the network's last affine step (for reporting).
+    /// Bounds on every network output (for reporting): CROWN bounds of the last affine step, carried through
+    /// the activations after it as boxes.
     /// </summary>
-    public (Tensor<T> Lower, Tensor<T> Upper) CrownLogitBounds(Tensor<T> x, T epsilon, AdversarialNormType norm)
+    /// <remarks>
+    /// The reported bounds describe what the network outputs, so a trailing sigmoid, ReLU or softmax is applied
+    /// to the logit box; certification itself still uses the logit margins.
+    /// </remarks>
+    public (Tensor<T> Lower, Tensor<T> Upper) CrownOutputBounds(Tensor<T> x, T epsilon, AdversarialNormType norm)
     {
         int step = LogitStep(out _);
         if (step < 0)
@@ -499,7 +583,13 @@ internal sealed class BoundNetwork<T>
         }
 
         var inputBounds = CrownActivationInputBounds(x, epsilon, norm);
-        return CrownBoundsOf(step, x, epsilon, norm, inputBounds);
+        var (lower, upper) = CrownBoundsOf(step, x, epsilon, norm, inputBounds);
+        for (int i = step + 1; i < Operations.Count; i++)
+        {
+            (lower, upper) = ActivationOverBox(Operations[i], lower, upper);
+        }
+
+        return (lower, upper);
     }
 
     private static Tensor<T> CreateIdentity(int size) => Tensor<T>.CreateIdentity(size);
@@ -523,7 +613,7 @@ internal sealed class BoundNetwork<T>
             else
             {
                 bounds.Add(current);
-                current = ActivationOverBox(operation.Activation, current.Lower, current.Upper);
+                current = ActivationOverBox(operation, current.Lower, current.Upper);
             }
         }
 
@@ -573,7 +663,7 @@ internal sealed class BoundNetwork<T>
             }
             else if (i < inputBounds.Count && inputBounds[i] is { } box)
             {
-                (coefficients, bias) = BackSubstituteActivation(coefficients, bias, operation.Activation, box.Lower, box.Upper);
+                (coefficients, bias) = BackSubstituteActivation(coefficients, bias, operation, box.Lower, box.Upper);
             }
         }
 
@@ -587,12 +677,12 @@ internal sealed class BoundNetwork<T>
     private static (Tensor<T> Coefficients, Tensor<T> Bias) BackSubstituteActivation(
         Tensor<T> coefficients,
         Tensor<T> bias,
-        ActivationFunction activation,
+        Operation operation,
         Tensor<T> lower,
         Tensor<T> upper)
     {
         var engine = AiDotNetEngine.Current;
-        var relaxation = Relax(activation, lower, upper);
+        var relaxation = Relax(operation.Activation, lower, upper, operation.Slope);
         var positive = engine.TensorMax(coefficients, NumOps.Zero);
         var negative = engine.TensorMin(coefficients, NumOps.Zero);
         var newBias = engine.TensorAdd(bias, engine.TensorAdd(MatVec(positive, relaxation.LowerIntercept), MatVec(negative, relaxation.UpperIntercept)));
@@ -628,13 +718,19 @@ internal sealed class BoundNetwork<T>
     /// CROWN's linear relaxations (Zhang et al. 2018, Sec. 3.2 and Table 1).
     /// </summary>
     internal static Relaxation Relax(ActivationFunction activation, Tensor<T> lower, Tensor<T> upper)
+        => Relax(activation, lower, upper, LeakySlope);
+
+    /// <summary>
+    /// CROWN's linear relaxations, with <paramref name="slope"/> the negative-side slope of a LeakyReLU.
+    /// </summary>
+    internal static Relaxation Relax(ActivationFunction activation, Tensor<T> lower, Tensor<T> upper, T slope)
     {
         switch (activation)
         {
             case ActivationFunction.ReLU:
                 return PiecewiseLinear(lower, upper, NumOps.Zero);
             case ActivationFunction.LeakyReLU:
-                return PiecewiseLinear(lower, upper, LeakySlope);
+                return PiecewiseLinear(lower, upper, slope);
             case ActivationFunction.Sigmoid:
             case ActivationFunction.Tanh:
                 return Smooth(activation, lower, upper);

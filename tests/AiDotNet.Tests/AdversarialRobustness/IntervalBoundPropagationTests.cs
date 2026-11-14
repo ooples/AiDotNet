@@ -114,7 +114,7 @@ public class IntervalBoundPropagationTests
     }
 
     [Fact(Timeout = 60000)]
-    public async Task CertifyPrediction_WithSmallEpsilon_MayCertify()
+    public async Task CertifyPrediction_SampledBoundsOfALayerlessModel_DoNotCertify()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -131,8 +131,11 @@ public class IntervalBoundPropagationTests
 
         // Assert
         Assert.NotNull(result);
-        // With small epsilon and large margin, should be certified
-        Assert.True(result.IsCertified);
+        // The mock exposes no layers, so its bounds come from sampling. A sampled interval is an inner estimate
+        // of the output range, not a certificate: auto_LiRPA rejects operations it can not bound, and the IBP
+        // bounds of Gowal et al. (2018) are sound by construction. So even a large margin does not certify.
+        Assert.False(result.IsCertified);
+        Assert.False((bool)result.CertificationDetails["Sound"]);
     }
 
     [Fact(Timeout = 60000)]

@@ -54,6 +54,12 @@ internal static class TabularResamplingHelper<T>
     /// <summary>
     /// Euclidean distances from <paramref name="point"/> (length d) to every row of <paramref name="points"/> [n, d].
     /// </summary>
+    /// <remarks>
+    /// Each row's differences are divided by that row's largest |difference| m before squaring, and the result is
+    /// m * sqrt(sum((diff / m)^2)) (the hypot scaling). The squares then lie in [0, 1] and their sum in [1, d], so
+    /// a Half distance above 256 stays finite instead of overflowing past 65504, and near rows keep their
+    /// precision because every row is scaled by its own m.
+    /// </remarks>
     public static Tensor<T> DistancesTo(Tensor<T> points, Tensor<T> point)
     {
         var engine = AiDotNetEngine.Current;
@@ -61,8 +67,15 @@ internal static class TabularResamplingHelper<T>
         int d = points.Shape[1];
         var broadcast = engine.TensorBroadcastTo(engine.Reshape(point, new[] { 1, d }), new[] { n, d });
         var diff = engine.TensorSubtract(points, broadcast);
-        var squared = engine.ReduceSum(engine.TensorMultiply(diff, diff), new[] { 1 }, keepDims: false);
-        return engine.TensorSqrt(squared);
+
+        var rowScale = engine.ReduceMax(engine.TensorAbs(diff), new[] { 1 }, keepDims: false);
+        var zeros = new Tensor<T>(new[] { n });
+        var positive = engine.TensorGreaterThan(rowScale, NumOps.Zero);
+        var safeScale = engine.TensorWhere(positive, rowScale, engine.TensorAddScalar(zeros, NumOps.One));
+        var scaled = engine.TensorDivide(
+            diff, engine.TensorBroadcastTo(engine.Reshape(safeScale, new[] { n, 1 }), new[] { n, d }));
+        var squared = engine.ReduceSum(engine.TensorMultiply(scaled, scaled), new[] { 1 }, keepDims: false);
+        return engine.TensorMultiply(rowScale, engine.TensorSqrt(squared));
     }
 
     /// <summary>
@@ -92,14 +105,23 @@ internal static class TabularResamplingHelper<T>
             return neighbors;
         }
 
+        // The row itself is removed from the candidates rather than masked with the largest value of T: an
+        // infinite distance (a difference past Half's range) or a tie at that value let the row pick itself.
         var points = Tensor<T>.FromMatrix(data);
-        var highest = engine.TensorAddScalar(new Tensor<T>(new[] { rows }), NumOps.MaxValue);
+        var candidates = new int[rows - 1];
         for (int i = 0; i < rows; i++)
         {
+            for (int j = 0, c = 0; j < rows; j++)
+            {
+                if (j != i)
+                {
+                    candidates[c++] = j;
+                }
+            }
+
             var distances = DistancesTo(points, data.GetRow(i).AsTensor());
-            var self = Vector<T>.CreateStandardBasis(rows, i).AsTensor();
-            var others = engine.TensorWhere(self, highest, distances);
-            neighbors[i] = engine.TensorArgMin(others, 0).Data.Span[0];
+            var others = engine.TensorIndexSelect(distances, new Tensor<int>((int[])candidates.Clone(), new[] { rows - 1 }), 0);
+            neighbors[i] = candidates[engine.TensorArgMin(others, 0).Data.Span[0]];
         }
 
         return neighbors;
