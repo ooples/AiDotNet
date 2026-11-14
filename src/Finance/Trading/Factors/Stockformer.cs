@@ -218,11 +218,7 @@ public partial class Stockformer<T> : CrossSectionalGraphModelBase<T>
 
         // Single-feature convenience: one series per asset. The paper's real input carries D factors,
         // so prefer the Tensor overload for anything beyond a smoke test.
-        var asTensor = new Tensor<T>(new[] { perStockReturns.Rows, perStockReturns.Columns });
-        for (int a = 0; a < perStockReturns.Rows; a++)
-            for (int t = 0; t < perStockReturns.Columns; t++)
-                asTensor[(a * perStockReturns.Columns) + t] = perStockReturns[a, t];
-        return PredictBands(asTensor);
+        return PredictBands(Tensor<T>.FromMatrix(perStockReturns));
     }
 
     /// <summary>
@@ -245,9 +241,7 @@ public partial class Stockformer<T> : CrossSectionalGraphModelBase<T>
 
     private static Vector<T> ToVector(Tensor<T> t)
     {
-        var v = new Vector<T>(t.Length);
-        for (int i = 0; i < t.Length; i++) v[i] = t[i];
-        return v;
+        return AiDotNetEngine.Current.Reshape(t, new[] { t.Length }).ToVector();
     }
 
     /// <summary>
@@ -272,7 +266,7 @@ public partial class Stockformer<T> : CrossSectionalGraphModelBase<T>
     /// <param name="returnTarget">Realized forward return per stock.</param>
     /// <param name="directionTarget">Realized direction class per stock.</param>
     /// <returns>Regression term, classification term, and their task-weighted sum.</returns>
-    public (double Regression, double Classification, double Total) ComputeLoss(
+    public (T Regression, T Classification, T Total) ComputeLoss(
         Matrix<T> perStockReturns, Vector<T> returnTarget, Vector<T> directionTarget)
     {
         var prediction = PredictBands(perStockReturns);
@@ -662,26 +656,12 @@ public partial class Stockformer<T> : CrossSectionalGraphModelBase<T>
                 "axis order is not what this model expects.", nameof(features));
         }
 
-        var series = new Vector<T>(time);
-        var lowBands = new Matrix<T>(assets * featureCount, bandLength);
-        var highBands = new Matrix<T>(assets * featureCount, bandLength);
-
-        for (int a = 0; a < assets; a++)
-        {
-            for (int f = 0; f < featureCount; f++)
-            {
-                for (int t = 0; t < time; t++)
-                    series[t] = features[((a * time) + t) * featureCount + f];
-
-                var (lo, hi) = _bands.Split(series);
-                int row = (a * featureCount) + f;
-                for (int t = 0; t < bandLength; t++)
-                {
-                    lowBands[row, t] = t < lo.Length ? lo[t] : Ops.Zero;
-                    highBands[row, t] = t < hi.Length ? hi[t] : Ops.Zero;
-                }
-            }
-        }
+        // One series per (asset, feature): [assets, time, features] -> rows (a * features + f) of [*, time].
+        var engine = AiDotNetEngine.Current;
+        var series = engine.Reshape(
+            engine.TensorPermute(engine.Reshape(features, new[] { assets, time, featureCount }), new[] { 0, 2, 1 }),
+            new[] { assets * featureCount, time });
+        var (lowBands, highBands) = _bands.SplitAll(series.ToMatrix());
 
         // Eq. 3-4: learnable inverse filters restore each band to the FULL window length.
         return (Restore(lowBands, (_lowUpsample ?? throw new InvalidOperationException("_lowUpsample is null where it is required.")), assets, time, featureCount),
@@ -693,10 +673,7 @@ public partial class Stockformer<T> : CrossSectionalGraphModelBase<T>
     /// </summary>
     private Tensor<T> Restore(Matrix<T> bands, ILayer<T> filter, int assets, int time, int featureCount)
     {
-        int rows = bands.Rows;
-        var input = new Tensor<T>(new[] { rows, bands.Columns });
-        for (int r = 0; r < rows; r++)
-            for (int c = 0; c < bands.Columns; c++) input[(r * bands.Columns) + c] = bands[r, c];
+        var input = Tensor<T>.FromMatrix(bands);
 
         var restored = filter.Forward(input);   // [rows, restoredTime]
 
@@ -727,32 +704,32 @@ public partial class Stockformer<T> : CrossSectionalGraphModelBase<T>
         }
 
         // Back to [assets, time, features].
-        var result = new Tensor<T>(new[] { assets, time, featureCount });
-        for (int a = 0; a < assets; a++)
-        {
-            for (int f = 0; f < featureCount; f++)
-            {
-                int row = (a * featureCount) + f;
-                for (int t = 0; t < time; t++)
-                    result[((a * time) + t) * featureCount + f] = restored[(row * time) + t];
-            }
-        }
-        return result;
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorPermute(engine.Reshape(restored, new[] { assets, featureCount, time }), new[] { 0, 2, 1 });
     }
 
     /// <summary>rho^tem: sinusoidal position encoding over the full window.</summary>
-    private Matrix<T> TemporalEmbedding(int time)
+    private Matrix<T> TemporalEmbedding(int time) => TemporalEmbedding(time, _options.HiddenDimension);
+
+    /// <summary>
+    /// The sinusoidal table <c>[time, width]</c>: <c>angle[t, f] = t / 10000^(2*(f/2) / width)</c> (2*(f/2): the
+    /// sin/cos pair index), sin on even f and cos on odd f.
+    /// </summary>
+    /// <remarks>
+    /// The table is a constant, so it is computed in double and rounded to <typeparamref name="T"/> once, as master
+    /// did. Forming the angle in <typeparamref name="T"/> rounds the frequency and the product first, an absolute
+    /// angle error that grows with t (about 1e-5 by t = 2000 in float).
+    /// </remarks>
+    internal static Matrix<T> TemporalEmbedding(int time, int width)
     {
-        int width = _options.HiddenDimension;
-        var te = new Matrix<T>(time, width);
-        for (int t = 0; t < time; t++)
-        {
-            for (int f = 0; f < width; f++)
-            {
-                double angle = t / Math.Pow(10000.0, (double)(f - f % 2) / width);   // 2*(f/2): the sin/cos pair index
-                te[t, f] = Ops.FromDouble(f % 2 == 0 ? Math.Sin(angle) : Math.Cos(angle));
-            }
-        }
-        return te;
+        var engine = AiDotNetEngine.Current;
+        var shape = new[] { time, width };
+        var f = engine.TensorArange<double>(0, width);
+        var pairBase = engine.TensorMultiplyScalar(engine.TensorFloor(engine.TensorMultiplyScalar(f, 0.5)), 2.0);
+        var inverseFrequency = engine.TensorExp(engine.TensorMultiplyScalar(pairBase, -Math.Log(10000.0) / width));
+        var angle = engine.TensorOuter(engine.TensorArange<double>(0, time), inverseFrequency);
+        var even = engine.TensorBroadcastTo(
+            engine.Reshape(engine.TensorEquals(f, pairBase), new[] { 1, width }), shape);
+        return engine.TensorWhere(even, engine.TensorSin(angle), engine.TensorCos(angle)).Cast<T>().ToMatrix();
     }
 }

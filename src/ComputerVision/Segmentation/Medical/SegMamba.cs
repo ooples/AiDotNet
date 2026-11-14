@@ -443,14 +443,14 @@ public partial class SegMamba<T> : Common.MedicalSegmentationBase<T>
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 5; if (!hasBatch) input = AddVolumeBatchDimension(input);
         var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
+        NumOps.ToFloatSpan(input.Data.Span.Slice(0, input.Length), inputData);
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         string inputName = _onnxSession.InputMetadata.Keys.FirstOrDefault() ?? "images";
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
         using var results = _onnxSession.Run(inputs);
         var outputTensor = results.First().AsTensor<float>();
         var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++) outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span, outputData);
         var result = new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }
@@ -598,7 +598,7 @@ public partial class SegMamba<T> : Common.MedicalSegmentationBase<T>
         }
 
         // The final upsample returns to the input volume without another skip concat.
-        depth = Architecture.InputHeight;
+        depth = Architecture.InputDepth;
         height = Architecture.InputHeight;
         width = Architecture.InputWidth;
         _decConvs[convIdx].ResolveFromShape([currentChannels, depth, height, width]);
@@ -698,33 +698,21 @@ public partial class SegMamba<T> : Common.MedicalSegmentationBase<T>
                 $"of size {output.Shape[0]}. Pre-split the batch and call SegmentVolume per-volume, " +
                 $"or use the lower-level Predict API directly to handle a batched output.");
         var logits = output.Rank == 5 ? RemoveBatchDimension(output) : output;
-        int numC = logits.Shape[0], depth = logits.Shape[1], h = logits.Shape[2], w = logits.Shape[3];
+        // Class probabilities: softmax over the CLASS axis (axis 0 of [numClasses, D, H, W]). The
+        // [C, H, W] / [B, C, H, W] helper would have normalized over depth for a rank-4 volume.
+        var probs = Engine.Softmax(logits, 0);
 
-        var labels = new Tensor<T>([depth, h, w]);
-        var probs = Common.SegmentationTensorOps.SoftmaxAlongClassDim(logits);
-        var structAccum = new Dictionary<int, (double area, double confSum)>();
-        for (int z = 0; z < depth; z++)
-            for (int y = 0; y < h; y++)
-                for (int x = 0; x < w; x++)
-                {
-                    int best = 0; double bestVal = double.NegativeInfinity;
-                    for (int c = 0; c < numC; c++)
-                    {
-                        double v = NumOps.ToDouble(logits[c, z, y, x]);
-                        if (v > bestVal) { bestVal = v; best = c; }
-                    }
-                    labels[z, y, x] = NumOps.FromDouble(best);
-                    double conf = NumOps.ToDouble(probs[best, z, y, x]);
-                    if (structAccum.TryGetValue(best, out var ex))
-                        structAccum[best] = (ex.area + 1, ex.confSum + conf);
-                    else
-                        structAccum[best] = (1, conf);
-                }
+        // Labels: first class with the largest logit; NaN logits never win (they are treated as -inf).
+        // Only a NaN-holding (floating) tensor converts -infinity, which decimal cannot represent.
+        var isNan = Engine.TensorIsNan(logits);
+        var finiteLogits = Engine.TensorCountNonzero(isNan) == 0
+            ? logits
+            : Engine.TensorWhere(isNan, Engine.TensorFullLike(logits, NumOps.FromDouble(double.NegativeInfinity)), logits);
+        var labels = Engine.TensorArgMax(finiteLogits, 0).Cast<T>();
 
-        var structures = new List<SegmentedStructure>();
-        foreach (var kvp in structAccum)
-            if (kvp.Key != 0)
-                structures.Add(new SegmentedStructure { ClassId = kvp.Key, Name = $"Class_{kvp.Key}", VolumeOrArea = kvp.Value.area, MeanConfidence = kvp.Value.confSum / kvp.Value.area });
+        // Foreground structures (background class 0 omitted) in the order they first appear in the volume.
+        var structures = Common.SegmentationStructureStatistics.Summarize(
+            labels, probs, skipClassId: 0, firstOccurrenceOrder: true);
 
         return new MedicalSegmentationResult<T> { Labels = labels, Probabilities = probs, Structures = structures };
     }

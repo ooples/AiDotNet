@@ -21,50 +21,142 @@ public sealed class EGarchModel<T> : ClassicalVolatilityModelBase<T>
 {
     private const double ExpAbsZ = 0.7978845608028654; // E|z| = √(2/π) for a standard normal
 
+    /// <summary>arch's cap on ln σ² (ln of the largest double, less 0.1).</summary>
+    private const double LogVarianceMax = 709.682712;
+
+    /// <summary>ln(1e-18): the floor <see cref="NextVariance"/> puts on the previous variance.</summary>
+    private const double LogVarianceMin = -41.446531673892821;
+
     /// <inheritdoc/>
     public override string ModelName => "EGARCH(1,1)";
-    /// <inheritdoc/>
-    public override int ParameterCount => 4; // ω, α, γ, β
 
     /// <inheritdoc/>
-    protected override double[] InitialGuess(double sampleVariance)
+    public override int ParameterCount => 5; // μ, ω, α, γ, β
+
+    /// <inheritdoc/>
+    protected override Vector<T> InitialGuess(T sampleVariance)
         // ω chosen so the implied unconditional variance ≈ sample variance: ω = (1−β)·ln(sampleVar).
-        => [0.05 * Math.Log(Math.Max(sampleVariance, 1e-8)), 0.1, -0.05, 0.95];
+        => new(new[]
+        {
+            NumOps.Multiply(NumOps.FromDouble(0.05), NumOps.Log(Garch11Model<T>.Floor(sampleVariance, 1e-8))),
+            NumOps.FromDouble(0.1),
+            NumOps.FromDouble(-0.05),
+            NumOps.FromDouble(0.95),
+        });
 
     /// <inheritdoc/>
-    protected override double[] ToNatural(double[] u)
-        => [u[0], u[1], u[2], Math.Tanh(u[3])]; // β = tanh(u3) ∈ (−1, 1); ω, α, γ free in log-space
-
-    /// <inheritdoc/>
-    protected override double[] ToUnconstrained(double[] p)
+    protected override Vector<T> ToNatural(Vector<T> u)
     {
-        double beta = Math.Min(Math.Max(p[3], -1.0 + 1e-9), 1.0 - 1e-9);
-        return [p[0], p[1], p[2], Atanh(beta)];
+        // β = tanh(u3) = 2·sigmoid(2·u3) − 1 ∈ (−1, 1); ω, α, γ free
+        T two = NumOps.FromDouble(2.0);
+        T beta = NumOps.Subtract(NumOps.Multiply(two, Garch11Model<T>.Sigmoid(NumOps.Multiply(two, u[3]))), NumOps.One);
+        return new Vector<T>(new[] { u[0], u[1], u[2], beta });
     }
 
     /// <inheritdoc/>
-    protected override double NextVariance(double prevVariance, double prevReturn, double[] p)
+    protected override Vector<T> ToUnconstrained(Vector<T> p)
     {
-        double sigma = Math.Sqrt(Math.Max(prevVariance, 1e-18));
-        double z = prevReturn / sigma;
-        double lnNext = p[0] + (p[3] * Math.Log(Math.Max(prevVariance, 1e-18)))
-                        + (p[1] * (Math.Abs(z) - ExpAbsZ)) + (p[2] * z);
-        return Math.Exp(lnNext);
+        T low = NumOps.FromDouble(-1.0 + 1e-9);
+        T high = NumOps.FromDouble(1.0 - 1e-9);
+        T beta = NumOps.LessThan(p[3], low) ? low : NumOps.GreaterThan(p[3], high) ? high : p[3];
+        T atanh = NumOps.Multiply(NumOps.FromDouble(0.5),
+            NumOps.Log(NumOps.Divide(NumOps.Add(NumOps.One, beta), NumOps.Subtract(NumOps.One, beta))));
+        return new Vector<T>(new[] { p[0], p[1], p[2], atanh });
     }
 
     /// <inheritdoc/>
-    protected override double UnconditionalVariance(double[] p)
+    /// <remarks>arch's EGARCH backcasts ln σ²: the log of the GARCH backcast.</remarks>
+    protected override T Backcast(Tensor<T> residuals) => NumOps.Log(base.Backcast(residuals));
+
+    /// <inheritdoc/>
+    protected override T NextVariance(T prevVariance, T prevResidual, Vector<T> p)
     {
-        double denom = 1.0 - p[3];
-        double lnVar = denom > 1e-9 ? p[0] / denom : p[0] / 1e-9;
-        return Math.Exp(Math.Min(lnVar, 50.0)); // guard overflow
+        T variance = Garch11Model<T>.Floor(prevVariance, 1e-18);
+        T z = NumOps.Divide(prevResidual, NumOps.Sqrt(variance));
+        T lnNext = NumOps.Add(
+            NumOps.Add(p[0], NumOps.Multiply(p[3], NumOps.Log(variance))),
+            NumOps.Add(NumOps.Multiply(p[1], NumOps.Subtract(NumOps.Abs(z), NumOps.FromDouble(ExpAbsZ))),
+                NumOps.Multiply(p[2], z)));
+        return NumOps.Exp(lnNext);
     }
 
     /// <inheritdoc/>
-    protected override double MeanReversionSpeed(double[] p) => p[3];
+    /// <remarks>
+    /// <para>arch's <c>egarch_recursion</c>: ln σ²_0 = ω + β·backcast and, for t ≥ 1,
+    /// ln σ²_t = ω + α·(|z_(t-1)| − √(2/π)) + γ·z_(t-1) + β·ln σ²_(t-1) with z = ε/σ.</para>
+    /// <para>Given the whole ln σ² path the shocks are known, and given the shocks the path is a linear
+    /// recurrence, so the path is the fixed point of that map, each sweep a whole-tensor evaluation.
+    /// The recursion is causal, so sweep k fixes the first k entries exactly and at most n + 1 sweeps are
+    /// needed; in practice the map is a contraction and it settles in a few.</para>
+    /// <para>As in <see cref="NextVariance"/>, the previous variance enters each step floored at 1e-18, in both
+    /// the standardized shock and the β term. The floor keeps z = ε·exp(−ln σ²/2) finite: without it a very
+    /// negative ln σ² (or a −∞ backcast from an all-zero residual series) overflowed exp, and 0·∞ made the path
+    /// NaN. The β-term floor is carried in the drive as β·(max(ln σ²_(t-1), ln 1e-18) − ln σ²_(t-1)), which is
+    /// zero whenever the floor is inactive, so the fixed point is the floored causal recursion.</para>
+    /// </remarks>
+    protected override Tensor<T> VariancePath(Tensor<T> residuals, T backcast, Vector<T> p)
+    {
+        var engine = AiDotNetEngine.Current;
+        T omega = p[0];
+        T alpha = p[1];
+        T gamma = p[2];
+        T beta = p[3];
+        T cap = NumOps.FromDouble(LogVarianceMax);
+        T floor = NumOps.FromDouble(LogVarianceMin);
+        T start = NumOps.GreaterThan(backcast, floor) ? backcast : floor;
+        T minusHalf = NumOps.FromDouble(-0.5);
+        T centre = NumOps.Multiply(alpha, NumOps.FromDouble(ExpAbsZ));
+        int n = residuals.Length;
+
+        // Sweep 0: no shocks. drive_0 = ω always (no pre-sample shock); drive_t = ω + shock_(t-1).
+        var omegaDrive = new Tensor<T>(new[] { n });
+        engine.TensorFill(omegaDrive, omega);
+        var logVariance = engine.TensorClampMax(LinearRecurrence(omegaDrive, beta, start), cap);
+        for (int sweep = 0; sweep <= n; sweep++)
+        {
+            var floored = engine.TensorClampMin(logVariance, floor);
+            var z = engine.TensorMultiply(residuals, engine.TensorExp(engine.TensorMultiplyScalar(floored, minusHalf)));
+            var shock = engine.TensorSubtractScalar(engine.TensorAdd(
+                engine.TensorMultiplyScalar(engine.TensorAbs(z), alpha), engine.TensorMultiplyScalar(z, gamma)), centre);
+            var lift = engine.TensorMultiplyScalar(engine.TensorSubtract(floored, logVariance), beta);
+            var drive = engine.TensorAddScalar(Lagged(engine.TensorAdd(shock, lift), NumOps.Zero), omega);
+            var next = engine.TensorClampMax(LinearRecurrence(drive, beta, start), cap);
+            bool settled = HasSettled(logVariance, next, out bool nonFinite);
+            logVariance = next;
+            if (settled || nonFinite)
+            {
+                // A NaN path never settles and further sweeps cannot repair it; it is returned as is, so the
+                // likelihood rejects these parameters.
+                break;
+            }
+        }
+
+        return engine.TensorExp(logVariance);
+    }
+
+    /// <summary>True once a sweep changes no entry by more than 1e-13 relative to the path's scale.</summary>
+    /// <remarks>A NaN change is not convergence: it is reported through <paramref name="nonFinite"/>.</remarks>
+    private bool HasSettled(Tensor<T> previous, Tensor<T> next, out bool nonFinite)
+    {
+        var engine = AiDotNetEngine.Current;
+        T change = engine.TensorMaxValue(engine.TensorAbs(engine.TensorSubtract(next, previous)));
+        T scale = engine.TensorMaxValue(engine.TensorAbs(next));
+        T tolerance = NumOps.Multiply(NumOps.FromDouble(1e-13), Garch11Model<T>.Floor(scale, 1.0));
+        nonFinite = NumOps.IsNaN(change);
+        return !nonFinite && NumOps.LessThanOrEquals(change, tolerance);
+    }
+
+    /// <inheritdoc/>
+    protected override T UnconditionalVariance(Vector<T> p)
+    {
+        T lnVar = NumOps.Divide(p[0], Garch11Model<T>.Floor(NumOps.Subtract(NumOps.One, p[3]), 1e-9));
+        T limit = NumOps.FromDouble(50.0);
+        return NumOps.Exp(NumOps.LessThan(lnVar, limit) ? lnVar : limit); // guard overflow
+    }
+
+    /// <inheritdoc/>
+    protected override T MeanReversionSpeed(Vector<T> p) => p[3];
 
     /// <inheritdoc/>
     protected override ClassicalVolatilityModelBase<T> CreateInstance() => new EGarchModel<T>();
-
-    private static double Atanh(double x) => 0.5 * Math.Log((1.0 + x) / (1.0 - x));
 }

@@ -5,8 +5,8 @@ namespace AiDotNet.Enums;
 /// </summary>
 /// <remarks>
 /// <para>
-/// <b>Reference:</b> "Sonata: Self-supervised Distillation for 3D Scene Understanding",
-/// CVPR 2025 Highlight.
+/// <b>Reference:</b> Wu et al., "Sonata: Self-Supervised Learning of Reliable Point Representations",
+/// CVPR 2025 (arXiv:2503.16429).
 /// </para>
 /// </remarks>
 public enum SonataModelSize

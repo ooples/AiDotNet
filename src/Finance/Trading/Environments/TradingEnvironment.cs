@@ -354,30 +354,22 @@ public abstract partial class TradingEnvironment<T> : IEnvironment<T>, IMaskedAc
     /// </remarks>
     protected virtual Vector<T> BuildObservation(int step)
     {
+        // Layout: the WindowSize rows ending at step (rows outside the data stay zero), then the positions, then cash.
         var observation = new Vector<T>(ObservationSpaceDimension);
-        int index = 0;
+        var target = observation.AsWritableSpan();
 
         int start = step - WindowSize + 1;
-        for (int t = 0; t < WindowSize; t++)
+        int first = Math.Max(start, 0);
+        int last = Math.Min(step, MarketData.Shape[0] - 1);
+        if (last >= first)
         {
-            int sourceIndex = start + t;
-            for (int asset = 0; asset < NumAssets; asset++)
-            {
-                T value = NumOps.Zero;
-                if (sourceIndex >= 0 && sourceIndex < MarketData.Shape[0])
-                {
-                    value = MarketData.Data.Span[(sourceIndex * NumAssets) + asset];
-                }
-                observation[index++] = value;
-            }
+            MarketData.Data.Span.Slice(first * NumAssets, (last - first + 1) * NumAssets)
+                .CopyTo(target.Slice((first - start) * NumAssets));
         }
 
-        for (int asset = 0; asset < NumAssets; asset++)
-        {
-            observation[index++] = _positions[asset];
-        }
-
-        observation[index] = _cash;
+        int positionsOffset = WindowSize * NumAssets;
+        _positions.AsSpan().CopyTo(target.Slice(positionsOffset, NumAssets));
+        target[positionsOffset + NumAssets] = _cash;
         return observation;
     }
 
@@ -411,10 +403,7 @@ public abstract partial class TradingEnvironment<T> : IEnvironment<T>, IMaskedAc
     protected Vector<T> GetPricesAt(int step)
     {
         var prices = new Vector<T>(NumAssets);
-        for (int asset = 0; asset < NumAssets; asset++)
-        {
-            prices[asset] = MarketData.Data.Span[(step * NumAssets) + asset];
-        }
+        MarketData.Data.Span.Slice(step * NumAssets, NumAssets).CopyTo(prices.AsWritableSpan());
         return prices;
     }
 

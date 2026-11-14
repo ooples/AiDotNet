@@ -219,15 +219,7 @@ public partial class SegNeXt<T> : Common.SemanticSegmentationBase<T>
     {
         var shape = logits.Shape.ToArray();
         // Subtracting a per-pixel constant leaves the softmax unchanged; the maximum is taken without a gradient.
-        var maximum = new Tensor<T>(new[] { shape[0], 1, shape[2], shape[3] });
-        int pixels = shape[2] * shape[3];
-        for (int b = 0; b < shape[0]; b++)
-            for (int p = 0; p < pixels; p++)
-            {
-                double m = double.NegativeInfinity;
-                for (int c = 0; c < shape[1]; c++) m = Math.Max(m, NumOps.ToDouble(logits[(b * shape[1] + c) * pixels + p]));
-                maximum[b * pixels + p] = NumOps.FromDouble(m);
-            }
+        var maximum = Engine.StopGradient(Engine.ReduceMax(logits, new[] { 1 }, true));
         var centered = Engine.TensorSubtract(logits, Engine.TensorBroadcastTo(maximum, shape));
         var logSumExp = Engine.TensorLog(Engine.ReduceSum(Engine.TensorExp(centered), new[] { 1 }, false));
         var picked = Engine.ReduceSum(Engine.TensorMultiply(centered, target), new[] { 1 }, false);
@@ -266,18 +258,17 @@ public partial class SegNeXt<T> : Common.SemanticSegmentationBase<T>
         var parameters = new List<Tensor<T>>();
         var rates = new List<T>();
         var decays = new List<T>();
+        T headRate = NumOps.FromDouble(o.HeadLearningRateMultiplier), baseRate = NumOps.One;
+        T noDecay = NumOps.Zero, fullDecay = NumOps.One;
         foreach (var layer in network.OwnedLayers)
         {
-            var rate = NumOps.FromDouble(head.Contains(layer) ? o.HeadLearningRateMultiplier : 1.0);
-            var decay = NumOps.FromDouble(normNamed.Contains(layer) ? 0.0 : 1.0);
+            var rate = head.Contains(layer) ? headRate : baseRate;
+            var decay = normNamed.Contains(layer) ? noDecay : fullDecay;
             foreach (var p in Training.TapeTrainingStep<T>.CollectParameters(new ILayer<T>[] { layer }))
             {
                 parameters.Add(p);
-                for (int i = 0; i < p.Length; i++)
-                {
-                    rates.Add(rate);
-                    decays.Add(decay);
-                }
+                rates.AddRange(Enumerable.Repeat(rate, p.Length));
+                decays.AddRange(Enumerable.Repeat(decay, p.Length));
             }
         }
         var options = (AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>)optimizer.GetOptions();
@@ -306,10 +297,7 @@ public partial class SegNeXt<T> : Common.SemanticSegmentationBase<T>
         }
 
         var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++)
-        {
-            inputData[i] = Convert.ToSingle(input.Data.Span[i]);
-        }
+        NumOps.ToFloatSpan(input.Data.Span.Slice(0, input.Length), inputData);
 
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         var inputMeta = _onnxSession.InputMetadata;
@@ -325,10 +313,7 @@ public partial class SegNeXt<T> : Common.SemanticSegmentationBase<T>
 
         var outputShape = outputTensor.Dimensions.ToArray();
         var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++)
-        {
-            outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-        }
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span, outputData);
 
         var result = new Tensor<T>(outputShape, new Vector<T>(outputData));
 

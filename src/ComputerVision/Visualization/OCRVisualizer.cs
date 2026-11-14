@@ -78,13 +78,8 @@ public class OCRVisualizer<T>
     /// </summary>
     public Tensor<T> CreateTextOverlay(Tensor<T> image, OCRResult<T> result)
     {
-        var output = CloneImage(image);
-
         // Dim the background
-        for (int i = 0; i < output.Length; i++)
-        {
-            output[i] = _numOps.FromDouble(_numOps.ToDouble(output[i]) * 0.3);
-        }
+        var output = AiDotNetEngine.Current.TensorMultiplyScalar(image, _numOps.FromDouble(0.3));
 
         // Draw text regions with white background
         foreach (var region in result.TextRegions)
@@ -197,25 +192,20 @@ public class OCRVisualizer<T>
 
         var color = ((byte)255, (byte)0, (byte)255); // Magenta for polygon
 
+        // Pixel coordinates [x0, y0, x1, y1, ...], truncated toward zero.
+        var points = ToPixelCoordinates(polygon.SelectMany(point => new[] { point.X, point.Y }).ToArray());
+
         // Draw lines between consecutive points
         for (int i = 0; i < polygon.Count; i++)
         {
             int nextIdx = (i + 1) % polygon.Count;
-
-            int x1 = (int)_numOps.ToDouble(polygon[i].X);
-            int y1 = (int)_numOps.ToDouble(polygon[i].Y);
-            int x2 = (int)_numOps.ToDouble(polygon[nextIdx].X);
-            int y2 = (int)_numOps.ToDouble(polygon[nextIdx].Y);
-
-            DrawLine(image, x1, y1, x2, y2, color);
+            DrawLine(image, points[2 * i], points[2 * i + 1], points[2 * nextIdx], points[2 * nextIdx + 1], color);
         }
 
         // Draw corner points
-        foreach (var point in polygon)
+        for (int i = 0; i < polygon.Count; i++)
         {
-            int px = (int)_numOps.ToDouble(point.X);
-            int py = (int)_numOps.ToDouble(point.Y);
-            DrawCircle(image, px, py, 3, color);
+            DrawCircle(image, points[2 * i], points[2 * i + 1], 3, color);
         }
     }
 
@@ -383,6 +373,15 @@ public class OCRVisualizer<T>
 
         var arrowColor = ((byte)255, (byte)255, (byte)0); // Yellow for reading order
 
+        // Block centres [cx0, cy0, cx1, cy1, ...]: ((X1 + X2) / 2, (Y1 + Y2) / 2) truncated toward zero.
+        var engine = AiDotNetEngine.Current;
+        int blockCount = layout.Blocks.Count;
+        var corners = new Tensor<T>(
+            layout.Blocks.SelectMany(block => new[] { block.Box.X1, block.Box.Y1, block.Box.X2, block.Box.Y2 }).ToArray(),
+            new[] { blockCount, 2, 2 });
+        var centreSums = engine.ReduceSum(corners, new[] { 1 }, keepDims: false);
+        var centres = ToPixelCoordinates(engine.TensorDivideScalar(centreSums, _numOps.FromDouble(2.0)).ToArray());
+
         for (int i = 0; i < layout.ReadingOrder.Count - 1; i++)
         {
             int currentIdx = layout.ReadingOrder[i];
@@ -390,14 +389,11 @@ public class OCRVisualizer<T>
 
             if (currentIdx < layout.Blocks.Count && nextIdx < layout.Blocks.Count)
             {
-                var currentBlock = layout.Blocks[currentIdx];
-                var nextBlock = layout.Blocks[nextIdx];
-
                 // Get center points
-                int cx1 = (int)((_numOps.ToDouble(currentBlock.Box.X1) + _numOps.ToDouble(currentBlock.Box.X2)) / 2);
-                int cy1 = (int)((_numOps.ToDouble(currentBlock.Box.Y1) + _numOps.ToDouble(currentBlock.Box.Y2)) / 2);
-                int cx2 = (int)((_numOps.ToDouble(nextBlock.Box.X1) + _numOps.ToDouble(nextBlock.Box.X2)) / 2);
-                int cy2 = (int)((_numOps.ToDouble(nextBlock.Box.Y1) + _numOps.ToDouble(nextBlock.Box.Y2)) / 2);
+                int cx1 = centres[2 * currentIdx];
+                int cy1 = centres[2 * currentIdx + 1];
+                int cx2 = centres[2 * nextIdx];
+                int cy2 = centres[2 * nextIdx + 1];
 
                 DrawLine(image, cx1, cy1, cx2, cy2, arrowColor);
 
@@ -457,15 +453,19 @@ public class OCRVisualizer<T>
             image[batch, 2, y, x] = _numOps.FromDouble(MathHelper.Clamp(b, 0, 1));
     }
 
-    private Tensor<T> CloneImage(Tensor<T> image)
+    /// <summary>Truncates coordinates toward zero (as an <c>(int)</c> cast does) in one engine pass.</summary>
+    private static int[] ToPixelCoordinates(T[] coordinates)
     {
-        var clone = new Tensor<T>(image._shape);
-        for (int i = 0; i < image.Length; i++)
+        if (coordinates.Length == 0)
         {
-            clone[i] = image[i];
+            return Array.Empty<int>();
         }
-        return clone;
+
+        var values = new Tensor<T>(coordinates, new[] { coordinates.Length });
+        return AiDotNetEngine.Current.TensorTrunc(values).Cast<int>().ToArray();
     }
+
+    private static Tensor<T> CloneImage(Tensor<T> image) => image.Clone();
 }
 
 /// <summary>

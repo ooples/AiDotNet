@@ -245,16 +245,16 @@ public sealed class StockformerDualEncoder<T>
     private Tensor<T> AddEmbeddings(
         Tensor<T> x, Matrix<T> spatial, Matrix<T> temporal, int assets, int time)
     {
-        var bias = new Tensor<T>(new[] { assets, time, _features });
-        for (int a = 0; a < assets; a++)
-        {
-            for (int t = 0; t < time; t++)
-            {
-                int at = ((a * time) + t) * _features;
-                for (int f = 0; f < _features; f++)
-                    bias[at + f] = Ops.Add(spatial[a, f], temporal[t, f]);
-            }
-        }
+        // bias[a, t, f] = spatial[a, f] + temporal[t, f]: [assets, 1, F] + [1, time, F] broadcast.
+        var shape = new[] { assets, time, _features };
+        var spatialRows = Engine.Reshape(
+            Engine.TensorSlice(Tensor<T>.FromMatrix(spatial), new[] { 0, 0 }, new[] { assets, _features }),
+            new[] { assets, 1, _features });
+        var temporalRows = Engine.Reshape(
+            Engine.TensorSlice(Tensor<T>.FromMatrix(temporal), new[] { 0, 0 }, new[] { time, _features }),
+            new[] { 1, time, _features });
+        var bias = Engine.TensorAdd(
+            Engine.TensorBroadcastTo(spatialRows, shape), Engine.TensorBroadcastTo(temporalRows, shape));
         // The bias is DATA, so building it by index costs no gradient; the add itself is recorded.
         return Engine.TensorAdd(x, bias);
     }
@@ -274,16 +274,34 @@ public sealed class StockformerDualEncoder<T>
     {
         if (_causalWindowOperators.TryGetValue(time, out var cached)) return cached;
 
-        var op = new Tensor<T>(new[] { time, time });
-        for (int t = 0; t < time; t++)
-        {
-            int first = Math.Max(0, t - _kernelWidth + 1);
-            var weight = Ops.FromDouble(1.0 / (t - first + 1));
-            for (int u = first; u <= t; u++) op[(t * time) + u] = weight;
-        }
-
+        var op = BuildCausalWindowOperator(time, _kernelWidth);
         _causalWindowOperators[time] = op;
         return op;
+    }
+
+    /// <summary>
+    /// The causal moving-average operator <c>[time, time]</c>: <c>op[t, u] = 1 / (window size)</c> for
+    /// <c>t - kernelWidth &lt; u &lt;= t</c>, i.e. lag <c>t - u</c> in <c>[0, kernelWidth)</c>.
+    /// </summary>
+    /// <remarks>
+    /// Positions, lags and window sizes are <c>int</c>; only the 0/1 window and its row weights become
+    /// <typeparamref name="T"/>. Positions held in <typeparamref name="T"/> merge once they pass what it
+    /// represents exactly (in Half 2049 rounds to 2048), which widened windows past that point.
+    /// </remarks>
+    internal static Tensor<T> BuildCausalWindowOperator(int time, int kernelWidth)
+    {
+        var engine = AiDotNetEngine.Current;
+        var shape = new[] { time, time };
+        var positions = engine.TensorArange<int>(0, time);
+        var lag = engine.TensorSubtract(
+            engine.TensorBroadcastTo(engine.Reshape(positions, new[] { time, 1 }), shape),
+            engine.TensorBroadcastTo(engine.Reshape(positions, new[] { 1, time }), shape));
+        var inWindow = engine.TensorMultiply(
+            engine.TensorGreaterThan(lag, -1),
+            engine.TensorLessThan(lag, kernelWidth));
+        var windowSize = engine.ReduceSum(inWindow, new[] { 1 }, keepDims: true);
+        return engine.TensorDivide(
+            inWindow.Cast<T>(), engine.TensorBroadcastTo(windowSize.Cast<T>(), shape));
     }
 
     /// <summary>Causal local mean over the last <c>kernelWidth</c> steps, as a matmul so it stays on the tape.</summary>

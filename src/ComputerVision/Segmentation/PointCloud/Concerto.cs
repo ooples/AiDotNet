@@ -244,16 +244,19 @@ public partial class Concerto<T> : Common.SemanticSegmentationBase<T>
         var teacher = new Vector<T>(GetParameters().ToArray());
         Tensor<T>? center = null;
         T lastEpochLoss = NumOps.Zero;
+        T intraModalWeight = NumOps.FromDouble(_options.IntraModalLossWeight);
+        T crossModalWeight = NumOps.FromDouble(_options.CrossModalLossWeight);
+        var sampleLosses = new T[samples.Count];
+        bool anyEpoch = false;
 
         SetTrainingMode(true);
         try
         {
             for (int epoch = 0; epoch < _options.PretrainingEpochs; epoch++)
             {
-                T epochLoss = NumOps.Zero;
-
-                foreach (var sample in samples)
+                for (int sampleIndex = 0; sampleIndex < samples.Count; sampleIndex++)
                 {
+                    var sample = samples[sampleIndex];
                     if (sample is null) throw new ArgumentException("A pretraining sample was null.", nameof(samples));
 
                     // Teacher pass first, outside any tape: swapping parameters mid-tape would
@@ -293,8 +296,8 @@ public partial class Concerto<T> : Common.SemanticSegmentationBase<T>
                             _options.VisibilityDepthToleranceMeters);
 
                         return Engine.TensorAdd(
-                            Engine.TensorMultiplyScalar(intraLoss, NumOps.FromDouble(_options.IntraModalLossWeight)),
-                            Engine.TensorMultiplyScalar(crossLoss, NumOps.FromDouble(_options.CrossModalLossWeight)));
+                            Engine.TensorMultiplyScalar(intraLoss, intraModalWeight),
+                            Engine.TensorMultiplyScalar(crossLoss, crossModalWeight));
                     }
 
                     T lossValue = AiDotNet.Training.TapeTrainingStepper<T>.EagerObjectiveStep(
@@ -302,7 +305,7 @@ public partial class Concerto<T> : Common.SemanticSegmentationBase<T>
                         StudentObjective,
                         opt,
                         beforeUpdate: MarkTrainMutationStarted);
-                    epochLoss = NumOps.Add(epochLoss, lossValue);
+                    sampleLosses[sampleIndex] = lossValue;
                     InvalidateWeightCachesAfterSuccessfulWeightUpdate();
 
                     // EMA teacher and DINO centering, both AFTER the student moved -- updating the
@@ -314,7 +317,13 @@ public partial class Concerto<T> : Common.SemanticSegmentationBase<T>
                     ConcertoIntraModalObjective<T>.UpdateCenter(center, teacherLogits);
                 }
 
-                lastEpochLoss = NumOps.Divide(epochLoss, NumOps.FromDouble(samples.Count));
+                anyEpoch = true;
+            }
+
+            // The mean loss over the final epoch's samples.
+            if (anyEpoch)
+            {
+                lastEpochLoss = MeanOfLosses(sampleLosses);
             }
         }
         finally
@@ -329,6 +338,26 @@ public partial class Concerto<T> : Common.SemanticSegmentationBase<T>
     #endregion
 
     #region Private Methods
+
+    /// <summary>
+    /// The mean of <paramref name="losses"/>, accumulated in double for a narrow <typeparamref name="T"/> and
+    /// rounded to <typeparamref name="T"/> once (<see cref="ConcertoWideAccumulation{T}.MeanOverRows"/>).
+    /// </summary>
+    /// <remarks>
+    /// Summing in Half overflows once the losses add up past 65504 (6554 samples at a loss of 10). Pre-scaling by
+    /// <c>1 / sqrt(count)</c> only moves that limit (10000 losses of 30000 still sum to 3e6 after scaling by 0.01),
+    /// and scaling by the full <c>1 / count</c> pushes small losses into Half's subnormal range (10000 losses of
+    /// 0.001 become 1e-7 each and the mean comes out about 19% high).
+    /// </remarks>
+    internal static T MeanOfLosses(T[] losses)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        if (losses.Length == 0) return numOps.Zero;
+        var mean = ConcertoWideAccumulation<T>.MeanOverRows(
+            new Tensor<T>(new[] { losses.Length }, new Vector<T>(losses)));
+        return mean.ToArray()[0];
+    }
+
     /// <summary>
     /// Runs the encoder and the first <paramref name="decoderLevel"/> decoder layers.
     /// </summary>
@@ -460,14 +489,14 @@ public partial class Concerto<T> : Common.SemanticSegmentationBase<T>
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
         var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
+        NumOps.ToFloatSpan(input.Data.Span.Slice(0, input.Length), inputData);
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         string inputName = _onnxSession.InputMetadata.Keys.FirstOrDefault() ?? "images";
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
         using var results = _onnxSession.Run(inputs);
         var outputTensor = results.First().AsTensor<float>();
         var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++) outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span, outputData);
         var result = new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }

@@ -168,16 +168,12 @@ public static class BaselinePolicies
             throw new ArgumentOutOfRangeException(nameof(tradableCount));
         }
 
-        var w = (T)Convert.ChangeType(1.0 / tradableCount, typeof(T), System.Globalization.CultureInfo.InvariantCulture);
+        var w = MathHelper.GetNumericOperations<T>().FromDouble(1.0 / tradableCount);
         return _ =>
         {
-            var a = new Vector<T>(tradableCount);
-            for (int i = 0; i < tradableCount; i++)
-            {
-                a[i] = w;
-            }
-
-            return a;
+            var a = new Tensor<T>(new[] { tradableCount });
+            AiDotNetEngine.Current.TensorFill(a, w);
+            return a.ToVector();
         };
     }
 
@@ -202,36 +198,22 @@ public static class BaselinePolicies
         if (windowSize < 2) throw new ArgumentOutOfRangeException(nameof(windowSize), "Momentum needs a window of at least 2.");
         if (tradableCount <= 0 || tradableCount > totalColumns) throw new ArgumentOutOfRangeException(nameof(tradableCount));
 
-        int lastRow = (windowSize - 1) * totalColumns;
         return state =>
         {
-            var winners = new bool[tradableCount];
-            int count = 0;
-            for (int i = 0; i < tradableCount; i++)
-            {
-                double first = Convert.ToDouble(state[i]);
-                double last = Convert.ToDouble(state[lastRow + i]);
-                if (last > first)
-                {
-                    winners[i] = true;
-                    count++;
-                }
-            }
+            // Window-start vs window-end price of each tradable asset; equal weight on the winners.
+            var engine = AiDotNetEngine.Current;
+            var ops = MathHelper.GetNumericOperations<T>();
+            var prices = TradablePrices(state, windowSize, totalColumns, tradableCount);
+            var first = engine.TensorSlice(prices, new[] { 0, 0 }, new[] { 1, tradableCount });
+            var last = engine.TensorSlice(prices, new[] { windowSize - 1, 0 }, new[] { 1, tradableCount });
+            var winners = engine.Reshape(engine.TensorGreaterThan(last, first), new[] { tradableCount });
 
-            var action = new Vector<T>(tradableCount);
-            if (count > 0)
-            {
-                var w = (T)Convert.ChangeType(1.0 / count, typeof(T), System.Globalization.CultureInfo.InvariantCulture);
-                for (int i = 0; i < tradableCount; i++)
-                {
-                    if (winners[i])
-                    {
-                        action[i] = w;
-                    }
-                }
-            }
-
-            return action;
+            // The winners are counted in int (a 0/1 sum in Half stops at 2048) and each gets 1 / count, formed in
+            // double and rounded once as master did.
+            int count = (int)engine.TensorCountNonzero(winners);
+            return count > 0
+                ? engine.TensorMultiplyScalar(winners, ops.FromDouble(1.0 / count)).ToVector()
+                : new Vector<T>(tradableCount);
         };
     }
 
@@ -248,52 +230,60 @@ public static class BaselinePolicies
 
         return state =>
         {
-            var invVol = new double[tradableCount];
-            double sum = 0;
-            for (int i = 0; i < tradableCount; i++)
+            var engine = AiDotNetEngine.Current;
+            var ops = MathHelper.GetNumericOperations<T>();
+            var prices = TradablePrices(state, windowSize, totalColumns, tradableCount);
+            int steps = windowSize - 1;
+            var prev = engine.TensorSlice(prices, new[] { 0, 0 }, new[] { steps, tradableCount });
+            var cur = engine.TensorSlice(prices, new[] { 1, 0 }, new[] { steps, tradableCount });
+
+            // Per-step returns of each asset across the window, counting only steps with a positive previous price.
+            var zeros = new Tensor<T>(new[] { steps, tradableCount });
+            var valid = engine.TensorGreaterThan(prev, ops.Zero);
+            var safePrev = engine.TensorWhere(valid, prev, engine.TensorAddScalar(zeros, ops.One));
+            var r = engine.TensorWhere(valid, engine.TensorDivide(engine.TensorSubtract(cur, prev), safePrev), zeros);
+            // Valid-return counts per asset are summed in int: a 0/1 sum in Half stops at 2048.
+            var m = engine.ReduceSum(valid.Cast<int>(), new[] { 0 }, keepDims: false).Cast<T>();
+            var sr = engine.ReduceSum(r, new[] { 0 }, keepDims: false);
+            var sr2 = engine.ReduceSum(engine.TensorSquare(r), new[] { 0 }, keepDims: false);
+
+            // Population variance of the valid returns; an asset without at least two valid returns gets zero
+            // weight, otherwise a degenerate near-zero vol would hand it a runaway inverse-vol weight.
+            var mSafe = engine.TensorClampMin(m, ops.One);
+            var mu = engine.TensorDivide(sr, mSafe);
+            var variance = engine.TensorClampMin(
+                engine.TensorSubtract(engine.TensorDivide(sr2, mSafe), engine.TensorSquare(mu)), ops.Zero);
+            // The 1e-6 floor is a Tolerance: in Half 1e-6 is subnormal and 1 / 1e-6 overflows to infinity, which
+            // turned a zero-volatility asset into an inf / inf = NaN weight.
+            var vol = engine.TensorAddScalar(engine.TensorSqrt(variance), FinanceNumerics.Tolerance<T>(1e-6));
+            var invVol = engine.TensorWhere(
+                engine.TensorGreaterThan(m, ops.One),
+                engine.TensorReciprocal(vol),
+                new Tensor<T>(new[] { tradableCount }));
+            // Normalized by the largest inverse vol before the sum: each share is then at most 1 and the sum at most
+            // tradableCount. In Half four flat assets each have 1 / 2^-14 = 16384, whose raw sum (65536) is past
+            // 65504, so the weights came out 16384 / inf = 0 instead of 0.25 each.
+            T largest = engine.TensorMaxValue(invVol);
+            if (!ops.GreaterThan(largest, ops.Zero))
             {
-                // Per-step returns of asset i across the window.
-                double sr = 0, sr2 = 0;
-                int m = 0;
-                for (int t = 1; t < windowSize; t++)
-                {
-                    double prev = Convert.ToDouble(state[(t - 1) * totalColumns + i]);
-                    double cur = Convert.ToDouble(state[t * totalColumns + i]);
-                    if (prev > 0)
-                    {
-                        double r = (cur - prev) / prev;
-                        sr += r;
-                        sr2 += r * r;
-                        m++;
-                    }
-                }
-
-                // Exclude any asset without enough valid returns to estimate a volatility — otherwise a
-                // degenerate near-zero vol would hand it a runaway inverse-vol weight. Excluded = zero weight.
-                if (m > 1)
-                {
-                    double mu = sr / m;
-                    double vol = Math.Sqrt(Math.Max(0.0, (sr2 / m) - (mu * mu))) + 1e-6;
-                    invVol[i] = 1.0 / vol;
-                }
-                else
-                {
-                    invVol[i] = 0.0;
-                }
-
-                sum += invVol[i];
+                return new Vector<T>(tradableCount);
             }
 
-            var action = new Vector<T>(tradableCount);
-            if (sum > 0)
-            {
-                for (int i = 0; i < tradableCount; i++)
-                {
-                    action[i] = (T)Convert.ChangeType(invVol[i] / sum, typeof(T), System.Globalization.CultureInfo.InvariantCulture);
-                }
-            }
-
-            return action;
+            var share = engine.TensorDivideScalar(invVol, largest);
+            return engine.TensorDivideScalar(share, engine.TensorSum(share)).ToVector();
         };
+    }
+
+    /// <summary>
+    /// The observation's price window as <c>[windowSize, tradableCount]</c>: the first
+    /// <c>windowSize * totalColumns</c> entries are row-major by time then asset.
+    /// </summary>
+    private static Tensor<T> TradablePrices<T>(Vector<T> state, int windowSize, int totalColumns, int tradableCount)
+    {
+        var engine = AiDotNetEngine.Current;
+        var window = engine.Reshape(
+            engine.TensorSlice(Tensor<T>.FromVector(state), new[] { 0 }, new[] { windowSize * totalColumns }),
+            new[] { windowSize, totalColumns });
+        return engine.TensorSlice(window, new[] { 0, 0 }, new[] { windowSize, tradableCount });
     }
 }

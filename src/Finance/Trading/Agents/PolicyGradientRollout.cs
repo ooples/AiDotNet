@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -19,52 +21,63 @@ internal static class PolicyGradientRollout<T>
     private static IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>The per-step loss weights adv_t · 0.5 / σ², from the discounted returns whitened over the episode.</summary>
-    public static double[] LossWeights(IReadOnlyList<double> rewards, double gamma, double sigma)
+    /// <remarks>
+    /// The whitening and the scaling run in double and only the finished weights are rounded to
+    /// <typeparamref name="T"/>. In Half the sum of squared centred returns passes 65504 for returns of a few
+    /// hundred (the standard deviation became infinite and every weight zero), the 1e-8 floor rounds to zero, and
+    /// 0.5 / σ² overflows for σ below about 0.0028, so a zero normalized return times that infinite coefficient
+    /// was NaN. A constant-return episode gives 0 / 1e-8 = 0.
+    /// </remarks>
+    public static Tensor<T> LossWeights(IReadOnlyList<T> rewards, T gamma, double sigma)
     {
-        var returns = DiscountedReturns(rewards, gamma);
-        int n = returns.Length;
-        double mean = returns.Average();
-        double var = returns.Sum(r => (r - mean) * (r - mean));
-        double std = Math.Sqrt(var / Math.Max(1, n)) + 1e-8;
+        int n = rewards.Count;
+        if (n == 0)
+        {
+            return new Tensor<T>(new[] { 0 });
+        }
+
+        var returns = AiDotNet.Helpers.LinearRecurrence<T>.DiscountedReturns(
+            new Tensor<T>(rewards.ToArray(), new[] { n }), gamma);
+        var wide = returns.Cast<double>();
+        var centred = Engine.TensorSubtractScalar(wide, Engine.TensorMean(wide));
+        double std = Math.Sqrt(Engine.TensorSum(Engine.TensorMultiply(centred, centred)) / n) + 1e-8;
 
         double halfInvSigma2 = 0.5 / (sigma * sigma);
-        return returns.Select(r => halfInvSigma2 * (r - mean) / std).ToArray();
+        return Engine.TensorMultiplyScalar(Engine.TensorDivideScalar(centred, std), halfInvSigma2).Cast<T>();
     }
 
-    /// <summary>G_t = r_t + γ·G_{t+1}, accumulated from the end of the episode.</summary>
-    private static double[] DiscountedReturns(IReadOnlyList<double> rewards, double gamma)
+    /// <summary>
+    /// The first <paramref name="dim"/> entries of <paramref name="values"/> as a <c>[dim]</c> tensor, zero-padded
+    /// when it is shorter.
+    /// </summary>
+    public static Tensor<T> Column(Vector<T> values, int dim)
     {
-        var returns = new double[rewards.Count];
-        double g = 0;
-        for (int t = rewards.Count - 1; t >= 0; t--)
-        {
-            g = rewards[t] + gamma * g;
-            returns[t] = g;
-        }
-        return returns;
+        var all = Tensor<T>.FromVector(values);
+        int kept = Math.Min(dim, values.Length);
+        var head = kept == values.Length ? all : Engine.TensorSlice(all, new[] { 0 }, new[] { kept });
+        return kept == dim ? head : Engine.TensorConcatenate(new[] { head, new Tensor<T>(new[] { dim - kept }) }, 0);
     }
 
     /// <summary>The states as <c>[stateDim, n]</c>, one column per step.</summary>
-    public static Tensor<T> States(IReadOnlyList<T[]> states, int stateDim)
-    {
-        int n = states.Count;
-        var packed = new Tensor<T>(new[] { stateDim, n });
-        for (int t = 0; t < n; t++)
-            for (int i = 0; i < stateDim; i++) packed[i, t] = states[t][i];
-        return packed;
-    }
+    public static Tensor<T> States(IReadOnlyList<Tensor<T>> states) => Engine.TensorStack(states.ToArray(), 1);
 
     /// <summary>The actions <c>[actionDim, n]</c> with the loss weights as one more row.</summary>
-    public static Tensor<T> Target(IReadOnlyList<T[]> actions, double[] weights, int actionDim)
-    {
-        int n = actions.Count;
-        var packed = new Tensor<T>(new[] { actionDim + 1, n });
-        for (int t = 0; t < n; t++)
+    public static Tensor<T> Target(IReadOnlyList<Tensor<T>> actions, Tensor<T> weights)
+        => Engine.TensorConcatenate(new[]
         {
-            for (int a = 0; a < actionDim; a++) packed[a, t] = actions[t][a];
-            packed[actionDim, t] = NumOps.FromDouble(weights[t]);
-        }
-        return packed;
+            Engine.TensorStack(actions.ToArray(), 1),
+            Engine.Reshape(weights, new[] { 1, weights.Length }),
+        }, 0);
+
+    /// <summary>
+    /// The explored action <c>clip(μ + noise, −1, 1)</c> for policy means and exploration noise of the same shape;
+    /// without exploration the clipped mean.
+    /// </summary>
+    public static Vector<T> Act(Tensor<T> mean, Tensor<T>? noise)
+    {
+        var perturbed = noise is null ? mean : Engine.TensorAdd(mean, noise);
+        var flat = Engine.Reshape(perturbed, new[] { perturbed.Length });
+        return Engine.TensorClamp(flat, NumOps.Negate(NumOps.One), NumOps.One).ToVector();
     }
 
     /// <summary>Σ_t w_t ‖a_t − μ_t‖² for the policy means <c>[actionDim, n]</c> against a packed target.</summary>
