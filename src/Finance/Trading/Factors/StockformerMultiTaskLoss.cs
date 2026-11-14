@@ -118,6 +118,15 @@ public static class StockformerMultiTaskLoss<T>
         }
 
         var target = engine.TensorRound(Tensor<T>.FromVector(targets));
+
+        // A NaN target is no class at all. It fails neither range comparison below, so it is rejected here
+        // rather than cast to an int and used as a class index.
+        if (engine.TensorCountNonzero(engine.TensorIsNan(target)) > 0)
+        {
+            throw new ArgumentException(
+                $"A target class is NaN; classes must lie in [0, {numClasses - 1}].", nameof(targets));
+        }
+
         T lowest = engine.TensorMinValue(target);
         T highest = engine.TensorMaxValue(target);
         if (Ops.LessThan(lowest, Ops.Zero) || Ops.GreaterThan(highest, Ops.FromDouble(numClasses - 1)))

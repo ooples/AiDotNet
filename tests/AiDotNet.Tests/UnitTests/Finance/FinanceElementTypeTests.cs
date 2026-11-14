@@ -612,4 +612,26 @@ public class FinanceElementTypeTests
         Assert.Equal((double)(Half)(80000.0 / 7), (double)covariance[0, 0]);
         Assert.Equal(300.0, (double)realized[0]);
     }
+
+    [Theory(Timeout = 60000)]
+    [InlineData(0)]
+    [InlineData(1)]
+    public async Task CrossEntropy_RejectsANaNTargetClass(int position)
+    {
+        await Task.CompletedTask;
+
+        // The per-sample loop rounded each target to an int and threw for one outside [0, classes - 1], which a
+        // NaN is. The whole-tensor range check compares the smallest and largest target against the bounds; NaN
+        // fails neither comparison, so the NaN was cast to an int and used as a class index and a loss came back.
+        var logits = new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0 });
+        var targets = new[] { 0.0, 1.0 };
+        targets[position] = double.NaN;
+
+        Assert.Throws<ArgumentException>(
+            () => StockformerMultiTaskLoss<double>.CrossEntropy(logits, new Vector<double>(targets), 2));
+        Assert.Throws<ArgumentException>(
+            () => StockformerMultiTaskLoss<float>.CrossEntropy(
+                new Vector<float>(new[] { 1f, 2f, 3f, 4f }),
+                new Vector<float>(targets.Select(value => (float)value).ToArray()), 2));
+    }
 }
