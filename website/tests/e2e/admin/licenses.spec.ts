@@ -44,10 +44,8 @@ test.describe('Admin — licenses', () => {
     // the guard this test protects evaporates silently.
     await expect(page.locator('#issue-product')).toHaveValue('');
 
-    // Cancel closes the modal — we never submit a real issuance from
-    // this test (that would create an unowned license in the DB). The
-    // end-to-end issuance path is covered by an integration-seed test
-    // run against a scratch Supabase branch, not prod.
+    // Cancel closes the modal. The real issuance path (issue, email,
+    // resend, SDK validation, revoke) is covered by license-lifecycle.spec.ts.
     await page.getByRole('button', { name: 'Cancel' }).click();
     await expect(page.locator('#issue-modal')).toBeHidden();
 
