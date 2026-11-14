@@ -36,7 +36,7 @@ namespace AiDotNet.FederatedLearning.Privacy;
 /// <typeparam name="T">The numeric type of the model parameters.</typeparam>
 [ComponentType(ComponentType.FederatedAggregator)]
 [PipelineStage(PipelineStage.Training)]
-public sealed class SecureAggregationServer<T> : FederatedLearningComponentBase<T>
+internal sealed class SecureAggregationServer<T> : FederatedLearningComponentBase<T>
 {
     private readonly int _parameterCount;
     private readonly int _threshold;

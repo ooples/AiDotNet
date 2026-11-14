@@ -18,7 +18,8 @@ namespace AiDotNet.FederatedLearning.Privacy;
 /// <para>
 /// The modular sum of <c>n</c> encodings decodes to the exact sum of the fixed-point values as long as that sum stays
 /// in <c>[-R/2, R/2)</c>; <see cref="EnsureSumFits(int)"/> checks the sufficient condition
-/// <c>n * ClipBound * 2^FractionalBits &lt; 2^(b-1)</c>.
+/// <c>n * round(ClipBound * 2^FractionalBits) &lt; 2^(b-1)</c> on the rounded largest encoded magnitude, which can
+/// exceed <c>ClipBound * 2^FractionalBits</c> by up to one half.
 /// </para>
 /// <para><b>For Beginners:</b> Cryptographic masks are random whole numbers that wrap around like a clock. To add a
 /// model parameter such as 0.375 to them, it is first turned into a whole number (0.375 * 2^24), and turned back after
@@ -48,7 +49,7 @@ public sealed class FixedPointRingEncoding
     /// <param name="fractionalBits">The number of fractional bits <c>f</c>; the scale is <c>2^f</c>. Between 0 and
     /// <c>b - 2</c>.</param>
     /// <param name="clipBound">The clipping bound <c>C &gt; 0</c>; inputs are clipped to <c>[-C, C]</c>. A single
-    /// clipped input must fit in the signed range: <c>C * 2^f &lt; 2^(b-1)</c>.</param>
+    /// clipped input must fit in the signed range after rounding: <c>round(C * 2^f) &lt; 2^(b-1)</c>.</param>
     public FixedPointRingEncoding(
         int bitWidth = DefaultBitWidth,
         int fractionalBits = DefaultFractionalBits,
@@ -76,11 +77,12 @@ public sealed class FixedPointRingEncoding
         _mask = bitWidth == 64 ? ulong.MaxValue : (1UL << bitWidth) - 1UL;
         _signBit = 1UL << (bitWidth - 1);
 
-        if (clipBound * Scale >= Math.Pow(2.0, bitWidth - 1))
+        MaxEncodedMagnitude = Math.Round(clipBound * Scale, MidpointRounding.ToEven);
+        if (MaxEncodedMagnitude >= Math.Pow(2.0, bitWidth - 1))
         {
             throw new ArgumentOutOfRangeException(
                 nameof(clipBound),
-                "clipBound * 2^fractionalBits must be below 2^(bitWidth - 1) so one clipped input fits the signed ring range.");
+                "round(clipBound * 2^fractionalBits) must be below 2^(bitWidth - 1) so one clipped input fits the signed ring range.");
         }
     }
 
@@ -95,6 +97,11 @@ public sealed class FixedPointRingEncoding
 
     /// <summary>Gets the fixed-point scale <c>2^f</c>.</summary>
     public double Scale { get; }
+
+    /// <summary>
+    /// Gets <c>round(C * 2^f)</c>, the largest integer magnitude <see cref="Encode(double)"/> produces.
+    /// </summary>
+    internal double MaxEncodedMagnitude { get; }
 
     /// <summary>Gets <c>R - 1</c>, the mask that reduces a 64-bit integer modulo <c>R</c>.</summary>
     public ulong ModulusMask => _mask;
@@ -172,10 +179,10 @@ public sealed class FixedPointRingEncoding
             throw new ArgumentOutOfRangeException(nameof(clientCount), "Client count must be positive.");
         }
 
-        if (clientCount * ClipBound * Scale >= Math.Pow(2.0, BitWidth - 1))
+        if (clientCount * MaxEncodedMagnitude >= Math.Pow(2.0, BitWidth - 1))
         {
             throw new ArgumentException(
-                $"The sum of {clientCount} inputs clipped to {ClipBound} with {FractionalBits} fractional bits can overflow a " +
+                $"The sum of {clientCount} inputs clipped to {ClipBound} and rounded to {FractionalBits} fractional bits can overflow a " +
                 $"{BitWidth}-bit ring. Increase the bit width, or lower the clip bound or fractional bits.",
                 nameof(clientCount));
         }

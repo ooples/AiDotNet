@@ -38,7 +38,7 @@ namespace AiDotNet.FederatedLearning.Privacy;
 /// <typeparam name="T">The numeric type of the model parameters.</typeparam>
 [ComponentType(ComponentType.FederatedAggregator)]
 [PipelineStage(PipelineStage.Training)]
-public sealed class SecureAggregationClient<T> : FederatedLearningComponentBase<T>, IDisposable
+internal sealed class SecureAggregationClient<T> : FederatedLearningComponentBase<T>, IDisposable
 {
     private readonly int _parameterCount;
     private readonly int _threshold;
@@ -239,6 +239,9 @@ public sealed class SecureAggregationClient<T> : FederatedLearningComponentBase<
             throw new ArgumentNullException(nameof(sharesForThisClient));
         }
 
+        // Encoded before the inbox changes: a NaN update must fail without leaving shares behind that make a retry
+        // with a finite update look like a duplicate forward.
+        var masked = SecureAggregationProtocol.EncodeVector(_encoding, input, weight);
         foreach (var share in sharesForThisClient)
         {
             if (share is null || share.RecipientId != ClientId || share.SenderId == ClientId || !_u1.ContainsKey(share.SenderId))
@@ -261,7 +264,6 @@ public sealed class SecureAggregationClient<T> : FederatedLearningComponentBase<
         }
 
         var maskingKeys = RequireKeys(_maskingKeys);
-        var masked = SecureAggregationProtocol.EncodeVector(_encoding, input, weight);
 
         var scratch = new ulong[_parameterCount];
         SecureAggregationProtocol.ApplyMask(_prg, _encoding, _selfMaskSeed, masked, scratch, subtract: false);

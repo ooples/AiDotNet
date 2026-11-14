@@ -398,6 +398,46 @@ public class SecureAggregationTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task RingEncoding_BoundsTheRoundedEncodedMagnitude()
+    {
+        await Task.Yield();
+        // round(3.75) = 4 is the sign bit of a 3-bit ring, although 3.75 < 4.
+        Assert.Throws<ArgumentOutOfRangeException>(() => new FixedPointRingEncoding(bitWidth: 3, fractionalBits: 0, clipBound: 3.75));
+
+        // round(1.75) = 2, so two clipped inputs encode to 4, which decodes as -4: the sum must be rejected.
+        var encoding = new FixedPointRingEncoding(bitWidth: 3, fractionalBits: 0, clipBound: 1.75);
+        Assert.Equal(2L, encoding.ToSignedInteger(encoding.Encode(1.75)));
+        encoding.EnsureSumFits(1);
+        Assert.Throws<ArgumentException>(() => encoding.EnsureSumFits(2));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task MaskInput_RejectsNaNBeforeStoringShares_SoAFiniteRetrySucceeds()
+    {
+        await Task.Yield();
+        var encoding = new FixedPointRingEncoding();
+        var inputs = SampleInputs(clients: 3, length: 4, seed: 11, magnitude: 2.0);
+        int m = inputs[0].Length;
+        var ids = Enumerable.Range(1, 3).ToArray();
+        var clients = ids.ToDictionary(id => id, id => new SecureAggregationClient<double>(id, m, 3, encoding));
+        var server = new SecureAggregationServer<double>(m, 3, encoding);
+
+        var u1 = server.CollectAdvertisedKeys(ids.Select(id => clients[id].AdvertiseKeys()).ToArray());
+        var inboxes = server.CollectShares(ids.SelectMany(id => clients[id].ShareKeys(u1)).ToArray());
+
+        var poisoned = (double[])inputs[0].Clone();
+        poisoned[2] = double.NaN;
+        Assert.Throws<ArgumentException>(() => clients[1].MaskInput(new Vector<double>(poisoned), inboxes[1]));
+        Assert.Equal(SecureAggregationRound.MaskedInputCollection, clients[1].Round);
+
+        var masked = ids.Select(id => clients[id].MaskInput(new Vector<double>(inputs[id - 1]), inboxes[id])).ToArray();
+        var u3 = server.CollectMaskedInputs(masked);
+        var ring = server.AggregateRingSum(u3.Select(id => clients[id].Unmask(u3)).ToArray());
+
+        Assert.Equal(ExpectedRingSum(encoding, inputs, Enumerable.Range(0, 3)), ring);
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task TamperedShare_AbortsUnmasking()
     {
         await Task.Yield();

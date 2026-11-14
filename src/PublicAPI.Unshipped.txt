@@ -23005,15 +23005,6 @@ AiDotNet.FederatedLearning.Privacy.SecureAggregationAdvertisedKeys.CipherPublicK
 AiDotNet.FederatedLearning.Privacy.SecureAggregationAdvertisedKeys.ClientId.get -> int
 AiDotNet.FederatedLearning.Privacy.SecureAggregationAdvertisedKeys.MaskingPublicKey.get -> byte[]!
 AiDotNet.FederatedLearning.Privacy.SecureAggregationAdvertisedKeys.SecureAggregationAdvertisedKeys(int clientId, byte[]! cipherPublicKey, byte[]! maskingPublicKey) -> void
-AiDotNet.FederatedLearning.Privacy.SecureAggregationClient<T>
-AiDotNet.FederatedLearning.Privacy.SecureAggregationClient<T>.AdvertiseKeys() -> AiDotNet.FederatedLearning.Privacy.SecureAggregationAdvertisedKeys!
-AiDotNet.FederatedLearning.Privacy.SecureAggregationClient<T>.ClientId.get -> int
-AiDotNet.FederatedLearning.Privacy.SecureAggregationClient<T>.Dispose() -> void
-AiDotNet.FederatedLearning.Privacy.SecureAggregationClient<T>.MaskInput(AiDotNet.Tensors.LinearAlgebra.Vector<T>! input, System.Collections.Generic.IReadOnlyList<AiDotNet.FederatedLearning.Privacy.SecureAggregationEncryptedShare!>! sharesForThisClient, double weight = 1) -> AiDotNet.FederatedLearning.Privacy.SecureAggregationMaskedInput!
-AiDotNet.FederatedLearning.Privacy.SecureAggregationClient<T>.Round.get -> AiDotNet.FederatedLearning.Privacy.SecureAggregationRound
-AiDotNet.FederatedLearning.Privacy.SecureAggregationClient<T>.SecureAggregationClient(int clientId, int parameterCount, int threshold, AiDotNet.FederatedLearning.Privacy.FixedPointRingEncoding! encoding, AiDotNet.FederatedLearning.Cryptography.ISecureAggregationPrg? prg = null) -> void
-AiDotNet.FederatedLearning.Privacy.SecureAggregationClient<T>.ShareKeys(System.Collections.Generic.IReadOnlyList<AiDotNet.FederatedLearning.Privacy.SecureAggregationAdvertisedKeys!>! advertisedKeys) -> System.Collections.Generic.IReadOnlyList<AiDotNet.FederatedLearning.Privacy.SecureAggregationEncryptedShare!>!
-AiDotNet.FederatedLearning.Privacy.SecureAggregationClient<T>.Unmask(System.Collections.Generic.IReadOnlyCollection<int>! survivingClientIds) -> AiDotNet.FederatedLearning.Privacy.SecureAggregationUnmaskingResponse!
 AiDotNet.FederatedLearning.Privacy.SecureAggregationEncryptedShare
 AiDotNet.FederatedLearning.Privacy.SecureAggregationEncryptedShare.Ciphertext.get -> byte[]!
 AiDotNet.FederatedLearning.Privacy.SecureAggregationEncryptedShare.RecipientId.get -> int
@@ -23030,18 +23021,6 @@ AiDotNet.FederatedLearning.Privacy.SecureAggregationRound.ConsistencyCheck = 3 -
 AiDotNet.FederatedLearning.Privacy.SecureAggregationRound.MaskedInputCollection = 2 -> AiDotNet.FederatedLearning.Privacy.SecureAggregationRound
 AiDotNet.FederatedLearning.Privacy.SecureAggregationRound.ShareKeys = 1 -> AiDotNet.FederatedLearning.Privacy.SecureAggregationRound
 AiDotNet.FederatedLearning.Privacy.SecureAggregationRound.Unmasking = 4 -> AiDotNet.FederatedLearning.Privacy.SecureAggregationRound
-AiDotNet.FederatedLearning.Privacy.SecureAggregationServer<T>
-AiDotNet.FederatedLearning.Privacy.SecureAggregationServer<T>.AggregateRingSum(System.Collections.Generic.IEnumerable<AiDotNet.FederatedLearning.Privacy.SecureAggregationUnmaskingResponse!>! responses) -> ulong[]!
-AiDotNet.FederatedLearning.Privacy.SecureAggregationServer<T>.AggregateSum(System.Collections.Generic.IEnumerable<AiDotNet.FederatedLearning.Privacy.SecureAggregationUnmaskingResponse!>! responses) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
-AiDotNet.FederatedLearning.Privacy.SecureAggregationServer<T>.CollectAdvertisedKeys(System.Collections.Generic.IEnumerable<AiDotNet.FederatedLearning.Privacy.SecureAggregationAdvertisedKeys!>! advertisedKeys) -> System.Collections.Generic.IReadOnlyList<AiDotNet.FederatedLearning.Privacy.SecureAggregationAdvertisedKeys!>!
-AiDotNet.FederatedLearning.Privacy.SecureAggregationServer<T>.CollectMaskedInputs(System.Collections.Generic.IEnumerable<AiDotNet.FederatedLearning.Privacy.SecureAggregationMaskedInput!>! maskedInputs) -> System.Collections.Generic.IReadOnlyList<int>!
-AiDotNet.FederatedLearning.Privacy.SecureAggregationServer<T>.CollectShares(System.Collections.Generic.IEnumerable<AiDotNet.FederatedLearning.Privacy.SecureAggregationEncryptedShare!>! shares) -> System.Collections.Generic.IReadOnlyDictionary<int, System.Collections.Generic.IReadOnlyList<AiDotNet.FederatedLearning.Privacy.SecureAggregationEncryptedShare!>!>!
-AiDotNet.FederatedLearning.Privacy.SecureAggregationServer<T>.Decode(ulong[]! ringSum, double divisor) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
-AiDotNet.FederatedLearning.Privacy.SecureAggregationServer<T>.Encoding.get -> AiDotNet.FederatedLearning.Privacy.FixedPointRingEncoding!
-AiDotNet.FederatedLearning.Privacy.SecureAggregationServer<T>.Round.get -> AiDotNet.FederatedLearning.Privacy.SecureAggregationRound
-AiDotNet.FederatedLearning.Privacy.SecureAggregationServer<T>.SecureAggregationServer(int parameterCount, int threshold, AiDotNet.FederatedLearning.Privacy.FixedPointRingEncoding! encoding, AiDotNet.FederatedLearning.Cryptography.ISecureAggregationPrg? prg = null) -> void
-AiDotNet.FederatedLearning.Privacy.SecureAggregationServer<T>.SurvivingClientIds.get -> System.Collections.Generic.IReadOnlyList<int>!
-AiDotNet.FederatedLearning.Privacy.SecureAggregationServer<T>.Threshold.get -> int
 AiDotNet.FederatedLearning.Privacy.SecureAggregationUnmaskingResponse
 AiDotNet.FederatedLearning.Privacy.SecureAggregationUnmaskingResponse.ClientId.get -> int
 AiDotNet.FederatedLearning.Privacy.SecureAggregationUnmaskingResponse.MaskingKeyShares.get -> System.Collections.Generic.IReadOnlyDictionary<int, byte[]!>!
@@ -23059,3 +23038,4 @@ const AiDotNet.FederatedLearning.Cryptography.AesCtrSecureAggregationPrg.SeedLen
 const AiDotNet.FederatedLearning.Privacy.FixedPointRingEncoding.DefaultBitWidth = 64 -> int
 const AiDotNet.FederatedLearning.Privacy.FixedPointRingEncoding.DefaultClipBound = 65536 -> double
 const AiDotNet.FederatedLearning.Privacy.FixedPointRingEncoding.DefaultFractionalBits = 24 -> int
+AiDotNet.Models.Options.SecureAggregationOptions.SecureAggregationOptions(AiDotNet.Models.Options.SecureAggregationOptions! other) -> void
