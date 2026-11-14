@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
@@ -204,6 +205,14 @@ public partial class Shikra<T> : VisionLanguageModelBase<T>, IVisualGroundingMod
                 )
             );
             ComputeEncoderDecoderBoundary();
+            // Shikra's language model is LLaMA (Vicuna): causal self-attention with rotary position embeddings (Su et
+            // al. 2021, theta 10000). Without them the default decoder saw the instruction as an unordered set, so
+            // "cat left of dog" and "dog left of cat" decoded alike. A custom architecture keeps its own attention.
+            foreach (var attention in Layers.Skip(_encoderLayerEnd).OfType<MultiHeadAttentionLayer<T>>())
+            {
+                attention.UseCausalMask = true;
+                attention.ConfigurePositionalEncoding(PositionalEncodingType.Rotary);
+            }
         }
         if (_groundingHead is null)
         {
