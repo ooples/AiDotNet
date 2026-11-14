@@ -43,13 +43,15 @@ public class ClosureObjectiveFusedTrainingTests
         => source.Select(t => t.Clone()).ToArray();
 
     /// <summary>
-    /// mean((tanh(x W1) W2 - y)^2) * scale on data built INSIDE the closure from the step index: new tensor objects,
-    /// new values, and a per-step scalar every call. With <paramref name="noise"/> the prediction also gets per-step
-    /// noise drawn through <see cref="CompiledStepRandom{T}"/>, and with <paramref name="dropout"/> the hidden layer
-    /// goes through a seeded dropout layer: randomness owned by the model rather than by the step index.
+    /// mean((tanh(x W1) W2 - y)^2) * scale on data built INSIDE the closure from the step index: new tensor objects
+    /// and new values every call. With <paramref name="noise"/> the prediction also gets per-step noise drawn through
+    /// <see cref="CompiledStepRandom{T}"/>, and with <paramref name="dropout"/> the hidden layer goes through a seeded
+    /// dropout layer: randomness owned by the model rather than by the step index. With
+    /// <paramref name="perStepScale"/> the scale is a host scalar that changes every step; a plan freezes a host
+    /// scalar, so such a step can never replay and compiles from its own trace.
     /// </summary>
     private static Func<Tensor<double>> Objective(Tensor<double>[] weights, Func<int> step, Func<int, int> batchOf,
-        Random? noise = null, DropoutLayer<double>? dropout = null)
+        Random? noise = null, DropoutLayer<double>? dropout = null, bool perStepScale = false)
     {
         var engine = AiDotNetEngine.Current;
         return () =>
@@ -58,7 +60,7 @@ public class ClosureObjectiveFusedTrainingTests
             int batch = batchOf(t);
             var x = Seeded(new[] { batch, Features }, 100 + t);
             var y = Seeded(new[] { batch, 1 }, 200 + t);
-            double scale = 1.0 + 0.25 * t;   // a per-step coefficient, like a diffusion timestep's weight
+            double scale = perStepScale ? 1.0 + 0.25 * t : 1.25;   // per step: like a diffusion timestep's weight
             var h = engine.Tanh(engine.TensorMatMul(x, weights[0]));
             if (dropout is not null)
                 h = dropout.Forward(h);
@@ -83,7 +85,7 @@ public class ClosureObjectiveFusedTrainingTests
         int GeneratorNext = 0);
 
     private static RunResult Run(bool compile, int steps, Func<int, int> batchOf, int? noiseSeed = null,
-        int? dropoutSeed = null)
+        int? dropoutSeed = null, bool perStepScale = false)
     {
         var original = TensorCodecOptions.Current;
         try
@@ -96,7 +98,7 @@ public class ClosureObjectiveFusedTrainingTests
             var noise = noiseSeed is { } n ? new Random(n) : null;
             using var dropout = dropoutSeed is { } d ? new DropoutLayer<double>(0.5) { RandomSeed = d } : null;
             dropout?.SetTrainingMode(true);
-            var objective = Objective(weights, () => step, batchOf, noise, dropout);
+            var objective = Objective(weights, () => step, batchOf, noise, dropout, perStepScale);
             for (step = 0; step < steps; step++)
                 TapeTrainingStepper<double>.EagerObjectiveStep(() => weights, objective, optimizer);
             var stepper = TapeTrainingStepper<double>.ForOwner(optimizer);
@@ -132,6 +134,19 @@ public class ClosureObjectiveFusedTrainingTests
         Assert.Equal(0, eager.FusedSteps);
         Assert.Equal(6, compiled.FusedSteps);
         Assert.Equal(1, compiled.PlanCount);
+        AssertSameWeights(eager.Weights, compiled.Weights);
+    }
+
+    [Fact]
+    public void Per_step_host_scalar_never_replays_and_matches_eager()
+    {
+        // The scalar is frozen into the plan's ops, so every step's signature is new: no step may replay an earlier
+        // step's plan (and coefficient). The objective goes dynamic and each step compiles from its own trace.
+        var eager = Run(compile: false, steps: 6, batchOf: _ => 8, perStepScale: true);
+        var compiled = Run(compile: true, steps: 6, batchOf: _ => 8, perStepScale: true);
+
+        Assert.Equal(6, compiled.FusedSteps);
+        Assert.True(compiled.Dynamic, "a per-step host scalar must stop the objective replaying cached plans");
         AssertSameWeights(eager.Weights, compiled.Weights);
     }
 
