@@ -4991,6 +4991,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// <summary>Gradients retained during a streaming step, or null when retention is off.</summary>
     private Dictionary<Tensor<T>, Tensor<T>>? _retainedStreamingGrads;
 
+    /// <summary>Reusable dictionary instance for <see cref="_retainedStreamingGrads"/> across steps.</summary>
+    private Dictionary<Tensor<T>, Tensor<T>>? _retainedStreamingGradsPool;
+
+    /// <summary>Persistent per-parameter gradient snapshot buffers reused across streaming steps when retention is enabled.</summary>
+    private Dictionary<Tensor<T>, Tensor<T>>? _retainedStreamingGradSnapshots;
     /// <summary>True once a training step deliberately declined to retain gradients.</summary>
     private bool _gradientSurfaceUnavailable;
 
@@ -5012,9 +5017,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     private void BeginStreamingGradientRetention()
     {
         bool affordable = ParameterCount <= MaxRetainedGradientScalars;
-        _retainedStreamingGrads = affordable
-            ? new Dictionary<Tensor<T>, Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance)
-            : null;
+        if (affordable)
+        {
+            var pool = _retainedStreamingGradsPool
+                ??= new Dictionary<Tensor<T>, Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+            pool.Clear();
+            _retainedStreamingGrads = pool;
+        }
+        else
+        {
+            _retainedStreamingGrads = null;
+        }
         _gradientSurfaceUnavailable = !affordable;
     }
 
@@ -5028,7 +5041,29 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         var bag = _retainedStreamingGrads;
         if (bag is null || source is null || grad is null) return;
 
-        bag[source] = AiDotNet.Training.TensorCheckpoint<T>.Capture(new[] { grad })[0];
+        using var suspendScope = TensorScope.Suspend();
+        using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
+        using var noGrad = new NoGradScope<T>();
+        var snapshots = _retainedStreamingGradSnapshots
+            ??= new Dictionary<Tensor<T>, Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        if (!snapshots.TryGetValue(source, out var snap) || !SameRetainedShape(grad, snap))
+        {
+            snap?.Dispose();
+            snap = new Tensor<T>((int[])grad._shape.Clone());
+            snapshots[source] = snap;
+        }
+        Engine.TensorCopy(grad, snap);
+        bag[source] = snap;
+    }
+
+    private static bool SameRetainedShape(Tensor<T> a, Tensor<T> b)
+    {
+        if (a.Rank != b.Rank) return false;
+        for (int i = 0; i < a.Rank; i++)
+        {
+            if (a._shape[i] != b._shape[i]) return false;
+        }
+        return true;
     }
 
     /// <summary>Publishes anything retained during the step, then drops it.</summary>
@@ -5038,8 +5073,33 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         _retainedStreamingGrads = null;
         if (bag is null) return;
 
-        PublishParameterGradients(bag);
+        PublishParameterGradients(bag, sourcesOutliveStep: true);
+        PruneStaleStreamingGradSnapshots(bag);
         bag.Clear();
+    }
+
+    /// <summary>
+    /// Drops the snapshot buffers of tensors this step produced no gradient for. The snapshots are keyed by the
+    /// parameter tensor, so a parameter whose tensor was replaced (weights set from outside, a lazy resize, a
+    /// precision upcast) would otherwise pin its old tensor and a full-size gradient buffer for the model's lifetime.
+    /// Nothing references a pruned buffer: the publish above replaced every layer's surface with this step's bag.
+    /// </summary>
+    private void PruneStaleStreamingGradSnapshots(Dictionary<Tensor<T>, Tensor<T>> liveBag)
+    {
+        var snapshots = _retainedStreamingGradSnapshots;
+        if (snapshots is null || snapshots.Count <= liveBag.Count) return;
+
+        List<Tensor<T>>? stale = null;
+        foreach (var key in snapshots.Keys)
+        {
+            if (!liveBag.ContainsKey(key)) (stale ??= new List<Tensor<T>>()).Add(key);
+        }
+        if (stale is null) return;
+        foreach (var key in stale)
+        {
+            snapshots[key].Dispose();
+            snapshots.Remove(key);
+        }
     }
 
     /// <summary>
@@ -12429,17 +12489,60 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             span[i] = MathHelper.Max(lower, MathHelper.Min(upper, span[i]));
     }
 
+    private delegate bool TryAccumulateSumOfSquaresDelegate(DirectGpuTensorEngine engine, Tensor<T> tensor, ref Tensor<T>? scalarAccumulator);
+    private static readonly TryAccumulateSumOfSquaresDelegate? s_tryAccumulateSumOfSquares = ResolveTryAccumulateSumOfSquares();
+
+    private static TryAccumulateSumOfSquaresDelegate? ResolveTryAccumulateSumOfSquares()
+    {
+        try
+        {
+            foreach (var m in typeof(DirectGpuTensorEngine).GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+            {
+                if (m.Name != "TryAccumulateSumOfSquares"
+                    || !m.IsGenericMethodDefinition
+                    || m.GetGenericArguments().Length != 1
+                    || m.ReturnType != typeof(bool))
+                {
+                    continue;
+                }
+
+                var parameters = m.GetParameters();
+                if (parameters.Length != 2 || !parameters[1].ParameterType.IsByRef)
+                {
+                    continue;
+                }
+
+                var closed = m.MakeGenericMethod(typeof(T));
+                return (TryAccumulateSumOfSquaresDelegate)Delegate.CreateDelegate(typeof(TryAccumulateSumOfSquaresDelegate), closed);
+            }
+        }
+        catch (ArgumentException)
+        {
+            // Signature or generic constraint mismatch against older AiDotNet.Tensors package: fall back to Engine.TensorSumOfSquares.
+        }
+        catch (InvalidOperationException)
+        {
+            // Generic instantiation unsupported on older AiDotNet.Tensors package: fall back to Engine.TensorSumOfSquares.
+        }
+        catch (NotSupportedException)
+        {
+            // Open-instance delegate binding unsupported on this runtime: fall back to Engine.TensorSumOfSquares.
+        }
+        catch (MemberAccessException)
+        {
+            // Target member inaccessible on older AiDotNet.Tensors package: fall back to Engine.TensorSumOfSquares.
+        }
+        return null;
+    }
+
     private double ComputeStreamingGradNormSquared(Tensor<T> grad)
     {
         if (grad.Length == 0) return 0.0;
         if (Engine is DirectGpuTensorEngine)
         {
+            using var suspendScope = TensorScope.Suspend();
             using var noGrad = new NoGradScope<T>();
-            using var scope = TensorScope.Begin();
-            var sq = Engine.TensorMultiply(grad, grad);
-            var axes = Enumerable.Range(0, sq.Rank).ToArray();
-            var sum = Engine.ReduceSum(sq, axes, keepDims: false);
-            double deviceNormSq = NumOps.ToDouble(sum[0]);
+            double deviceNormSq = NumOps.ToDouble(Engine.TensorSumOfSquares(grad));
             if (!double.IsNaN(deviceNormSq) && !double.IsInfinity(deviceNormSq))
                 return deviceNormSq;
             return RescaledStreamingGradNormSquared(grad);
@@ -12487,7 +12590,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Decide up front whether this model can afford to keep its gradients, so every branch
         // below (each of the streaming callbacks, and the non-streaming fallback) agrees.
         BeginStreamingGradientRetention();
-
+        try
+        {
         var loss = LossFunction as LossFunctions.LossFunctionBase<T>
             ?? throw new InvalidOperationException(
                 "LossFunction must derive from LossFunctionBase<T> for tape-based training.");
@@ -12532,6 +12636,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     StreamingGraphRetention = StreamingGraphRetentionMode.RetainUntilTapeDisposal
                 }
                 : null);
+        // Enclose the streaming step in a TensorScope once lazy layer weights have materialized so
+        // GradientCheckpointing's Keep()-detached segment boundary and VJP clones are adopted by
+        // stepGpuScope and deterministically returned + credited to the pool BEFORE tape.Dispose()
+        // runs DeviceMemoryReclaim.CollectIfDueAtStepBoundary().
+        using var stepGpuScope = _firstForwardCompleted && Engine is DirectGpuTensorEngine
+            ? TensorScope.Begin()
+            : null;
         Tensor<T> lossTensor;
         if (FusedReadoutForTraining() is { } fusedStreamingReadout)
         {
@@ -12557,7 +12668,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             lossTensor = ApplyCompositeObjective(lossTensor, input);
         }
 
-        LastLoss = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+        // Defer reading lossTensor[0] until after backward completes so the GPU stream can
+        // overlap forward -> backward without a mid-step DtoH synchronize stall.
         // Sources = layer-owned trainable params + network-level extras
         // (cls/pos tokens, etc.), exactly the set the eager path optimizes.
         var sources = CollectModelTrainableTensors().ToList();
@@ -12567,11 +12679,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             StreamingTraining == StreamingTrainingMode.ForceOn
             && Training.StreamingOptimizerResolver<T>.SupportsFullPrecision(resolvedOptimizer, useStreamingDefaults);
 
-        var streamingOptimizer = GetOrCreateStreamingOptimizer(
-            resolvedOptimizer,
-            useStreamingDefaults,
-            fullPrecisionStreaming);
-        streamingOptimizer.BeginStep();
+        Training.IStreamingOptimizer<T> streamingOptimizer;
+        using (TensorScope.Suspend())
+        {
+            streamingOptimizer = GetOrCreateStreamingOptimizer(
+                resolvedOptimizer,
+                useStreamingDefaults,
+                fullPrecisionStreaming);
+            streamingOptimizer.BeginStep();
+        }
 
         // The optimizer's regularization joins each gradient on the side of the clips its RegularizationOrder chooses,
         // as in the eager path (TapeTrainingStepper.RegularizeAndClip) - streaming used to drop it, so ForceOn trained a
@@ -12593,7 +12709,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 ClampStreamingGradientByValue(grad, optimizerClipValue);
                 if (regularizeAfterClip) grad = Regularize(source, grad);
                 MarkTrainMutationStarted();
-                streamingOptimizer.Apply(source, grad);
+                using (TensorScope.Suspend())
+                {
+                    streamingOptimizer.Apply(source, grad);
+                }
                 if (Engine is DirectGpuTensorEngine _sg && !source.HasPendingGpuData)
                     _sg.InvalidateResidentWeightBuffer(source);
             }
@@ -12670,7 +12789,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     if (regularizeAfterClip) grad = Regularize(source, grad);
                     // Streaming optimizer writes this source's weights in place (#1624 OOM-retry gate).
                     MarkTrainMutationStarted();
-                    streamingOptimizer.Apply(source, grad);
+                    using (TensorScope.Suspend())
+                    {
+                        streamingOptimizer.Apply(source, grad);
+                    }
                     if (Engine is DirectGpuTensorEngine _sg && !source.HasPendingGpuData)
                         _sg.InvalidateResidentWeightBuffer(source);
                 });
@@ -12693,7 +12815,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 : NumOps.One;
 
             double curNormSq = 0.0;
-            bool gpuAccumNorm = Engine is DirectGpuTensorEngine;
+            bool gpuAccumNorm = s_tryAccumulateSumOfSquares is not null && Engine is DirectGpuTensorEngine;
             Tensor<T>? gpuNormSqAcc = null;
             void ApplyFastClipped(Tensor<T> source, Tensor<T> grad)
             {
@@ -12702,24 +12824,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 if (!regularizeAfterClip) grad = Regularize(source, grad);
                 if (clipSet.Contains(source))
                 {
-                    if (gpuAccumNorm)
+                    if (gpuAccumNorm && s_tryAccumulateSumOfSquares is { } accumFn && accumFn((DirectGpuTensorEngine)Engine, grad, ref gpuNormSqAcc))
                     {
-                        using var noGrad = new NoGradScope<T>();
-                        var sq = Engine.TensorMultiply(grad, grad);
-                        var axes = Enumerable.Range(0, sq.Rank).ToArray();
-                        var sum = Engine.ReduceSum(sq, axes, keepDims: false);
-                        sq.Dispose();
-                        if (gpuNormSqAcc is null)
-                        {
-                            gpuNormSqAcc = TensorScope.Detach(sum);
-                        }
-                        else
-                        {
-                            var nextAcc = TensorScope.Detach(Engine.TensorAdd(gpuNormSqAcc, sum));
-                            sum.Dispose();
-                            gpuNormSqAcc.Dispose();
-                            gpuNormSqAcc = nextAcc;
-                        }
                     }
                     else
                     {
@@ -12730,7 +12836,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 ClampStreamingGradientByValue(grad, optimizerClipValue);
                 if (regularizeAfterClip) grad = Regularize(source, grad);
                 MarkTrainMutationStarted();
-                streamingOptimizer.Apply(source, grad);
+                using (TensorScope.Suspend())
+                {
+                    streamingOptimizer.Apply(source, grad);
+                }
                 if (Engine is DirectGpuTensorEngine _sg && !source.HasPendingGpuData)
                     _sg.InvalidateResidentWeightBuffer(source);
             }
@@ -12770,10 +12879,21 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Apply (no-op here); a full-gradient optimizer like streaming L-BFGS buffered the
         // per-parameter gradients above and performs its global two-loop update + parameter
         // write-back now that the whole gradient is available.
-        streamingOptimizer.EndStep();
+        LastLoss = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+        using (TensorScope.Suspend())
+        {
+            streamingOptimizer.EndStep();
+        }
 
         // Publish the retained gradients now the step is complete.
         EndStreamingGradientRetention();
+        }
+        catch
+        {
+            _retainedStreamingGrads?.Clear();
+            _retainedStreamingGrads = null;
+            throw;
+        }
 
         // GPU weight-cache coherence after the in-place parameter mutation. The
         // 8-bit StreamingAdam state already updated source tensors in place; without
@@ -13223,6 +13343,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         List<Tensor<T>>? mpSnapshotTargets = null;
         bool mpFp32Restored = true;
         MixedPrecisionContext? mpCtxForFinally = null;
+        CreditAssignment.LocalObjectiveGradients<T>? localCreditResult = null;
 
         try
         {
@@ -13408,11 +13529,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                         $"Credit rule '{activeCreditRule.Name}' cannot be combined with mixed-precision training yet.");
                 if (activeCreditRule is ILocalObjectiveCreditRule<T> localRule)
                 {
-                    var local = CreditAssignment.LocalObjectiveGradientComputer<T>.Compute(
+                    localCreditResult = CreditAssignment.LocalObjectiveGradientComputer<T>.Compute(
                         this, input, expected, localRule, loss, AlignTargetToOutputShape);
-                    creditGrads = local.Gradients;
-                    output = local.Prediction;
-                    lossTensor = local.OutputLoss;
+                    creditGrads = localCreditResult.Gradients;
+                    output = localCreditResult.Prediction;
+                    lossTensor = localCreditResult.OutputLoss;
                     expected = AlignTargetToOutputShape(output, expected);
                 }
                 else
@@ -13871,6 +13992,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
             allGrads.Clear();
             grads.Clear();
+            localCreditResult?.Dispose();
+            localCreditResult = null;
             // Keep the GPU activation cache across steps by default (its buffers are reused for the next
             // stable-shape step); only drop per-step when the aggressive memory-reclaim knob is opted in.
             // Genuinely-stale caches are already dropped by the fused-plan failure recovery path.
@@ -13879,6 +14002,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         }
         finally
         {
+            localCreditResult?.Dispose();
             // Emergency FP32 master restore: if the happy-path unscale-and-
             // restore block didn't run (an exception inside the try block —
             // ForwardForTraining / ComputeTapeLoss / ComputeGradients —
@@ -20850,7 +20974,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             var lossFn = (lossFunction ?? LossFunction) as LossFunctions.LossFunctionBase<T>
                 ?? throw new NotSupportedException(
                     $"Credit rule '{localObjectiveRule.Name}' needs a tape-capable loss (a LossFunctionBase<T>).");
-            var local = CreditAssignment.LocalObjectiveGradientComputer<T>.Compute(
+            using var local = CreditAssignment.LocalObjectiveGradientComputer<T>.Compute(
                 this, input, target, localObjectiveRule, lossFn, AlignTargetToOutputShape);
             return FlattenParameterChunkGradients(local.Gradients);
         }
@@ -21175,6 +21299,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             (_streamingOptimizerState as IDisposable)?.Dispose();
             _streamingOptimizerState = null;
             _streamingOptimizerKey = null;
+            if (_retainedStreamingGradSnapshots is not null)
+            {
+                foreach (var snap in _retainedStreamingGradSnapshots.Values)
+                    snap.Dispose();
+                _retainedStreamingGradSnapshots.Clear();
+                _retainedStreamingGradSnapshots = null;
+            }
+            _retainedStreamingGrads = null;
+            _retainedStreamingGradsPool?.Clear();
+            _retainedStreamingGradsPool = null;
             // Release inference plans plus training plans/caches before layer disposal.
             // CompiledTapeTrainingStep keeps this model's plan (keyed by the model) and
             // the plan captures the live layer parameter tensors. Leaving that plan alive
