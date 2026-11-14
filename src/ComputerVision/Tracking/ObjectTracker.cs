@@ -154,6 +154,10 @@ public class TrackingOptions<T>
     /// <summary>
     /// Whether to use appearance features for matching.
     /// </summary>
+    /// <remarks>
+    /// <see cref="DeepSORT{T}"/> requires a trained re-identification encoder when this is set (pass it to the
+    /// constructor overload that takes one); there is no built-in untrained fallback.
+    /// </remarks>
     public bool UseAppearance { get; set; } = false;
 
     /// <summary>

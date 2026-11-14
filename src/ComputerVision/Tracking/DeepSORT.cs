@@ -55,7 +55,6 @@ public class DeepSORT<T> : ObjectTrackerBase<T>
     private const double MaxIouDistance = 0.7;
 
     private readonly List<DeepTrack<T>> _deepTracks;
-    private readonly ReIDNetwork<T>? _reidNetwork;
     private readonly Func<Tensor<T>, Tensor<T>>? _appearanceEncoder;
     private readonly XyahKalmanFilter<T> _kalman;
     private readonly Dictionary<int, List<Tensor<T>>> _samples;
@@ -65,10 +64,14 @@ public class DeepSORT<T> : ObjectTrackerBase<T>
     public override string Name => "DeepSORT";
 
     /// <summary>
-    /// Creates a new DeepSORT tracker. With <see cref="TrackingOptions{T}.UseAppearance"/> set, crops are
-    /// described by the built-in fixed (untrained) descriptor; use the overload that takes an encoder to
-    /// supply a trained re-identification network as in the paper.
+    /// Creates a motion-only DeepSORT tracker: the matching cascade uses the gated IoU distance.
     /// </summary>
+    /// <remarks>
+    /// Appearance matching needs a trained re-identification encoder, so this overload rejects
+    /// <see cref="TrackingOptions{T}.UseAppearance"/>; pass the encoder to
+    /// the <c>DeepSORT(options, appearanceEncoder)</c> overload instead.
+    /// </remarks>
+    /// <exception cref="ArgumentException"><see cref="TrackingOptions{T}.UseAppearance"/> is set.</exception>
     public DeepSORT(TrackingOptions<T> options) : this(options, null)
     {
     }
@@ -78,18 +81,31 @@ public class DeepSORT<T> : ObjectTrackerBase<T>
     /// <paramref name="appearanceEncoder"/>, which maps a <c>[1, C, 128, 64]</c> crop to a feature
     /// vector (the paper uses a wide residual network trained for person re-identification).
     /// </summary>
+    /// <remarks>
+    /// With <see cref="TrackingOptions{T}.UseAppearance"/> set the encoder is required: there is no built-in
+    /// fallback, because an untrained descriptor gives meaningless features and would silently degrade the
+    /// association. With appearance matching off (the default) the encoder may be null and the tracker is
+    /// motion-only.
+    /// </remarks>
+    /// <exception cref="ArgumentException">
+    /// <see cref="TrackingOptions{T}.UseAppearance"/> is set and <paramref name="appearanceEncoder"/> is null.
+    /// </exception>
     public DeepSORT(TrackingOptions<T> options, Func<Tensor<T>, Tensor<T>>? appearanceEncoder) : base(options)
     {
+        if (options is not null && options.UseAppearance && appearanceEncoder is null)
+        {
+            throw new ArgumentException(
+                "DeepSORT appearance matching (TrackingOptions.UseAppearance = true) needs a trained "
+                + "re-identification encoder. Pass it to DeepSORT(TrackingOptions<T> options, "
+                + "Func<Tensor<T>, Tensor<T>> appearanceEncoder), or set UseAppearance = false for motion-only tracking.",
+                nameof(appearanceEncoder));
+        }
+
         _deepTracks = new List<DeepTrack<T>>();
         _kalman = new XyahKalmanFilter<T>();
         _samples = new Dictionary<int, List<Tensor<T>>>();
         _maxGallerySize = 100;
         _appearanceEncoder = appearanceEncoder;
-
-        if (appearanceEncoder is null && options.UseAppearance)
-        {
-            _reidNetwork = new ReIDNetwork<T>();
-        }
     }
 
     /// <inheritdoc/>
@@ -113,7 +129,7 @@ public class DeepSORT<T> : ObjectTrackerBase<T>
 
         // Extract appearance features if an encoder is available and an image is provided
         List<Tensor<T>> appearanceFeatures = new();
-        if (image is not null && (_appearanceEncoder is not null || _reidNetwork is not null))
+        if (image is not null && _appearanceEncoder is not null)
         {
             appearanceFeatures = ExtractAppearanceFeatures(image, filteredDetections);
         }
@@ -358,17 +374,14 @@ public class DeepSORT<T> : ObjectTrackerBase<T>
     private List<Tensor<T>> ExtractAppearanceFeatures(Tensor<T> image, List<Detection<T>> detections)
     {
         var features = new List<Tensor<T>>();
+        if (_appearanceEncoder is null)
+        {
+            return features;
+        }
+
         foreach (var det in detections)
         {
-            var crop = CropImage(image, det.Box);
-            if (_appearanceEncoder is not null)
-            {
-                features.Add(_appearanceEncoder(crop));
-            }
-            else if (_reidNetwork is not null)
-            {
-                features.Add(_reidNetwork.Extract(crop));
-            }
+            features.Add(_appearanceEncoder(CropImage(image, det.Box)));
         }
 
         return features;
@@ -543,51 +556,5 @@ internal sealed class DeepTrack<T>
             NumOps.Divide(w, h),
             h
         }, new[] { 4 });
-    }
-}
-
-/// <summary>
-/// A fixed, untrained appearance descriptor: channel means projected onto sinusoids, squashed with
-/// tanh and L2-normalised. It stands in when no trained re-identification encoder is supplied.
-/// </summary>
-/// <typeparam name="T">The numeric type used for calculations.</typeparam>
-internal class ReIDNetwork<T>
-{
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-    private readonly int _featureDim;
-
-    public ReIDNetwork(int featureDim = 128)
-    {
-        _featureDim = featureDim;
-    }
-
-    public Tensor<T> Extract(Tensor<T> crop)
-    {
-        var engine = AiDotNetEngine.Current;
-        int channels = crop.Shape[1];
-
-        // Global average pooling of image 0: [C, 1]
-        var first = engine.TensorSlice(crop, new[] { 0, 0, 0, 0 }, new[] { 1, channels, crop.Shape[2], crop.Shape[3] });
-        var pooled = engine.Reshape(engine.ReduceMean(first, new[] { 2, 3 }, keepDims: false), new[] { channels, 1 });
-
-        var projection = Projection(_featureDim, channels);
-        var feature = engine.Reshape(engine.TensorTanh(engine.TensorMatMul(projection, pooled)), new[] { _featureDim });
-
-        T norm = NumOps.Sqrt(engine.TensorSumOfSquares(feature));
-        return NumOps.GreaterThan(norm, NumOps.Zero) ? engine.TensorDivideScalar(feature, norm) : feature;
-    }
-
-    /// <summary>
-    /// The fixed projection <c>[featureDim, channels]</c>, <c>sin((f + 1) * c * 0.1)</c>. It is a constant
-    /// table, so it is computed in double and rounded to <typeparamref name="T"/> once: forming the angle in
-    /// <typeparamref name="T"/> would round 0.1 and the product first, an angle error that grows with
-    /// <c>(f + 1) * c</c>.
-    /// </summary>
-    internal static Tensor<T> Projection(int featureDim, int channels)
-    {
-        var engine = AiDotNetEngine.Current;
-        var rows = engine.TensorArange<double>(1, featureDim + 1);
-        var cols = engine.TensorArange<double>(0, channels);
-        return engine.TensorSin(engine.TensorMultiplyScalar(engine.TensorOuter(rows, cols), 0.1)).Cast<T>();
     }
 }

@@ -45,26 +45,30 @@ public class TrackingElementTypeTests
     }
 
     [Fact(Timeout = 60000)]
-    public async Task ReIdProjection_Float_IsTheDoubleTableRoundedOnce()
+    public async Task DeepSort_AppearanceWithoutEncoder_IsRejected()
     {
         await Task.CompletedTask;
 
-        // projection[f, c] = sin((f + 1) * c * 0.1). With 64 channels the angle reaches 806; forming it in float
-        // (0.1f, then the product) moves it by about 1e-5, far more than one float rounding of the sine.
-        const int featureDim = 128;
-        const int channels = 64;
-        var projection = ReIDNetwork<float>.Projection(featureDim, channels);
+        // Appearance matching without a trained encoder used to fall back to an untrained fixed descriptor whose
+        // features are meaningless, silently degrading the association. It must be rejected, in both overloads.
+        var options = new TrackingOptions<float> { UseAppearance = true };
 
-        Assert.Equal(new[] { featureDim, channels }, projection.Shape.ToArray());
-        for (int f = 0; f < featureDim; f++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                double expected = Math.Sin((f + 1) * c * 0.1);
-                Assert.True(Math.Abs(expected - projection[f, c]) <= 1.2e-7,
-                    $"projection[{f}, {c}] = {projection[f, c]}, expected {expected}.");
-            }
-        }
+        var single = Assert.Throws<ArgumentException>(() => new DeepSORT<float>(options));
+        Assert.Contains("appearanceEncoder", single.Message);
+        Assert.Throws<ArgumentException>(() => new DeepSORT<float>(options, null));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task DeepSort_AppearanceWithEncoder_OrMotionOnly_IsAccepted()
+    {
+        await Task.CompletedTask;
+
+        var withEncoder = new DeepSORT<float>(
+            new TrackingOptions<float> { UseAppearance = true }, crop => new Tensor<float>(new[] { 4 }));
+        var motionOnly = new DeepSORT<float>(new TrackingOptions<float>());
+
+        Assert.Equal("DeepSORT", withEncoder.Name);
+        Assert.Empty(motionOnly.Update(new List<Detection<float>>()).Tracks);
     }
 
     [Fact(Timeout = 120000)]
