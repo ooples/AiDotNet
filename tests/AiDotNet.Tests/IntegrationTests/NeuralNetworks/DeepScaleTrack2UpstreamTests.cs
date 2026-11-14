@@ -213,6 +213,84 @@ public sealed class DeepScaleTrack2UpstreamTests
         Assert.Equal(3.0, mixedOut.GetFlat(2), 12);
     }
 
+    // The compact WY form must reproduce the reflection ORDER of the sequential chain it replaced, not just some
+    // orthogonal map: x H_0 H_1 ... H_{k-1} forward and x H_{k-1} ... H_0 transposed. Orthogonality and Q^T Q = I hold
+    // for either order, so only a comparison against the one-reflection-at-a-time product catches a swapped T.
+    // Reflectors are deliberately non-unit and, at spread 0.001, nearly parallel (the worst case for the series).
+    [Theory]
+    [InlineData(2, 1.0, false)]
+    [InlineData(2, 1.0, true)]
+    [InlineData(5, 1.0, false)]
+    [InlineData(5, 1.0, true)]
+    [InlineData(32, 1.0, false)]
+    [InlineData(32, 1.0, true)]
+    [InlineData(32, 0.001, false)]
+    [InlineData(32, 0.001, true)]
+    public void HouseholderSubspaceLayer_CompactWy_MatchesSequentialReflectionProduct(int numReflectors, double spread, bool transpose)
+    {
+        const int dim = 24;
+        const int rows = 3;
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(900 + numReflectors);
+        var shared = new double[dim];
+        for (int i = 0; i < dim; i++) shared[i] = rng.NextDouble() * 2.0 - 1.0;
+
+        var reflectors = new double[numReflectors][];
+        for (int j = 0; j < numReflectors; j++)
+        {
+            reflectors[j] = new double[dim];
+            for (int i = 0; i < dim; i++)
+                reflectors[j][i] = (shared[i] + spread * (rng.NextDouble() * 2.0 - 1.0)) * 1.7;
+        }
+
+        var layer = new HouseholderSubspaceLayer<double>(dim, numReflectors, transpose);
+        var layerF = new HouseholderSubspaceLayer<float>(dim, numReflectors, transpose);
+        for (int j = 0; j < numReflectors; j++)
+        {
+            for (int i = 0; i < dim; i++)
+            {
+                layer.Reflectors.SetFlat(j * dim + i, reflectors[j][i]);
+                layerF.Reflectors.SetFlat(j * dim + i, (float)reflectors[j][i]);
+            }
+        }
+
+        var x = new Tensor<double>(new[] { rows, dim });
+        var xF = new Tensor<float>(new[] { rows, dim });
+        var expected = new double[rows * dim];
+        for (int i = 0; i < x.Length; i++)
+        {
+            double v = rng.NextDouble() * 2.0 - 1.0;
+            x.SetFlat(i, v);
+            xF.SetFlat(i, (float)v);
+            expected[i] = v;
+        }
+
+        for (int r = 0; r < rows; r++)
+        {
+            for (int step = 0; step < numReflectors; step++)
+            {
+                var u = reflectors[transpose ? numReflectors - 1 - step : step];
+                double normSq = 0.0, proj = 0.0;
+                for (int i = 0; i < dim; i++)
+                {
+                    normSq += u[i] * u[i];
+                    proj += expected[r * dim + i] * u[i];
+                }
+                for (int i = 0; i < dim; i++)
+                    expected[r * dim + i] -= 2.0 * proj / normSq * u[i];
+            }
+        }
+
+        var y = layer.Forward(x);
+        var yF = layerF.Forward(xF);
+        for (int i = 0; i < expected.Length; i++)
+        {
+            Assert.True(Math.Abs(y.GetFlat(i) - expected[i]) <= 1e-12,
+                $"double mismatch at {i}: sequential={expected[i]}, compact WY={y.GetFlat(i)}");
+            Assert.True(Math.Abs(yF.GetFlat(i) - expected[i]) <= 2e-5,
+                $"float mismatch at {i}: sequential={expected[i]}, compact WY={yF.GetFlat(i)}");
+        }
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
