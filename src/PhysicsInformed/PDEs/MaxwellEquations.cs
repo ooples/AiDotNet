@@ -102,6 +102,22 @@ namespace AiDotNet.PhysicsInformed.PDEs
         }
 
         /// <inheritdoc/>
+        public override int DerivativeOrder => 1;
+
+        /// <inheritdoc/>
+        /// <remarks>The Faraday and two Ampere residuals [N, 3], so the loss is their mean square rather than the square of the point-wise sum of squares.</remarks>
+        public override Tensor<T> ComputeTapeResidual(Tensor<T> inputs, Tensor<T> outputs, PDEDerivatives<T> derivatives)
+        {
+            var e = TapeEngine;
+            T epsilonMu = NumOps.Multiply(_permittivity, _permeability);
+            var faraday = e.TensorAdd(D1(derivatives, 2, 2), e.TensorSubtract(D1(derivatives, 1, 0), D1(derivatives, 0, 1)));
+            var ampereX = e.TensorSubtract(e.TensorMultiplyScalar(D1(derivatives, 0, 2), epsilonMu), D1(derivatives, 2, 1));
+            var ampereY = e.TensorAdd(e.TensorMultiplyScalar(D1(derivatives, 1, 2), epsilonMu), D1(derivatives, 2, 0));
+            return e.TensorStack(new[] { faraday, ampereX, ampereY }, 1);
+        }
+
+
+        /// <inheritdoc/>
         /// <remarks>
         /// Computes three residuals:
         /// - R1 (Faraday): ∂Bz/∂t + (∂Ey/∂x - ∂Ex/∂y) = 0

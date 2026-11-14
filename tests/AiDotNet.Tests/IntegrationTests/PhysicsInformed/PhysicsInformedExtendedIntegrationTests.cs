@@ -784,8 +784,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
         var derivatives = new PDEDerivatives<double>
         {
-            FirstDerivatives = new double[3, 3], // All zero
-            SecondDerivatives = new double[3, 3, 3] // All zero
+            FirstDerivatives = new Tensor<double>(new[] { 3, 3 }), // All zero
+            SecondDerivatives = new Tensor<double>(new[] { 3, 3, 3 }) // All zero
         };
 
         double residual = ns.ComputeResidual(inputs, outputs, derivatives);
@@ -801,8 +801,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
         var derivatives = new PDEDerivatives<double>
         {
-            FirstDerivatives = new double[2, 3],
-            SecondDerivatives = new double[2, 3, 3]
+            FirstDerivatives = new Tensor<double>(new[] { 2, 3 }),
+            SecondDerivatives = new Tensor<double>(new[] { 2, 3, 3 })
         };
 
         Assert.Throws<ArgumentException>(() =>
@@ -818,8 +818,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
         var derivatives = new PDEDerivatives<double>
         {
-            FirstDerivatives = new double[3, 3],
-            SecondDerivatives = new double[3, 3, 3]
+            FirstDerivatives = new Tensor<double>(new[] { 3, 3 }),
+            SecondDerivatives = new Tensor<double>(new[] { 3, 3, 3 })
         };
 
         var gradient = ns.ComputeResidualGradient(inputs, outputs, derivatives);
@@ -870,8 +870,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
         var derivatives = new PDEDerivatives<double>
         {
-            FirstDerivatives = new double[1, 2], // All zero
-            SecondDerivatives = new double[1, 2, 2] // All zero
+            FirstDerivatives = new Tensor<double>(new[] { 1, 2 }), // All zero
+            SecondDerivatives = new Tensor<double>(new[] { 1, 2, 2 }) // All zero
         };
 
         double residual = bs.ComputeResidual(inputs, outputs, derivatives);
@@ -890,8 +890,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
         var derivatives = new PDEDerivatives<double>
         {
-            FirstDerivatives = new double[1, 2],
-            SecondDerivatives = new double[1, 2, 2]
+            FirstDerivatives = new Tensor<double>(new[] { 1, 2 }),
+            SecondDerivatives = new Tensor<double>(new[] { 1, 2, 2 })
         };
 
         var gradient = bs.ComputeResidualGradient(inputs, outputs, derivatives);
@@ -944,8 +944,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
         var derivatives = new PDEDerivatives<double>
         {
-            FirstDerivatives = new double[2, 2], // All zero
-            SecondDerivatives = new double[2, 2, 2] // All zero
+            FirstDerivatives = new Tensor<double>(new[] { 2, 2 }), // All zero
+            SecondDerivatives = new Tensor<double>(new[] { 2, 2, 2 }) // All zero
         };
 
         double residual = se.ComputeResidual(inputs, outputs, derivatives);
@@ -961,8 +961,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
         var derivatives = new PDEDerivatives<double>
         {
-            FirstDerivatives = new double[1, 2],
-            SecondDerivatives = new double[1, 2, 2]
+            FirstDerivatives = new Tensor<double>(new[] { 1, 2 }),
+            SecondDerivatives = new Tensor<double>(new[] { 1, 2, 2 })
         };
 
         Assert.Throws<ArgumentException>(() =>
@@ -1011,8 +1011,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
         var derivatives = new PDEDerivatives<double>
         {
-            FirstDerivatives = new double[1, 2],
-            SecondDerivatives = new double[1, 2, 2]
+            FirstDerivatives = new Tensor<double>(new[] { 1, 2 }),
+            SecondDerivatives = new Tensor<double>(new[] { 1, 2, 2 })
         };
 
         double residual = ade.ComputeResidual(inputs, outputs, derivatives);
@@ -1028,8 +1028,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
         var derivatives = new PDEDerivatives<double>
         {
-            FirstDerivatives = new double[1, 2],
-            SecondDerivatives = new double[1, 2, 2]
+            FirstDerivatives = new Tensor<double>(new[] { 1, 2 }),
+            SecondDerivatives = new Tensor<double>(new[] { 1, 2, 2 })
         };
 
         var gradient = ade.ComputeResidualGradient(inputs, outputs, derivatives);
@@ -1076,8 +1076,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
         var derivatives = new PDEDerivatives<double>
         {
-            FirstDerivatives = new double[2, 2],
-            SecondDerivatives = new double[2, 2, 2]
+            FirstDerivatives = new Tensor<double>(new[] { 2, 2 }),
+            SecondDerivatives = new Tensor<double>(new[] { 2, 2, 2 })
         };
 
         double residual = le.ComputeResidual(inputs, outputs, derivatives);
@@ -1108,8 +1108,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
         var derivatives = new PDEDerivatives<double>
         {
-            FirstDerivatives = new double[3, 3],
-            SecondDerivatives = new double[3, 3, 3]
+            FirstDerivatives = new Tensor<double>(new[] { 3, 3 }),
+            SecondDerivatives = new Tensor<double>(new[] { 3, 3, 3 })
         };
 
         double residual = maxwell.ComputeResidual(inputs, outputs, derivatives);
@@ -1146,8 +1146,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
         var derivatives = new PDEDerivatives<double>
         {
-            FirstDerivatives = new double[1, 2],
-            SecondDerivatives = new double[1, 2, 2]
+            FirstDerivatives = new Tensor<double>(new[] { 1, 2 }),
+            SecondDerivatives = new Tensor<double>(new[] { 1, 2, 2 })
         };
 
         var gradient = ac.ComputeResidualGradient(inputs, outputs, derivatives);
@@ -1182,8 +1182,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
         var derivatives = new PDEDerivatives<double>
         {
-            FirstDerivatives = new double[1, 2] { { 0.5, 0.0 } }, // dudx = 0.5, dudt = 0
-            SecondDerivatives = new double[1, 2, 2]
+            FirstDerivatives = new Tensor<double>(new double[] { 0.5, 0.0 }, new[] { 1, 2 }), // dudx = 0.5, dudt = 0
+            SecondDerivatives = new Tensor<double>(new[] { 1, 2, 2 })
         };
 
         var gradient = burgers.ComputeResidualGradient(inputs, outputs, derivatives);
@@ -1240,8 +1240,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
         var derivatives = new PDEDerivatives<double>
         {
-            FirstDerivatives = new double[1, 2],
-            SecondDerivatives = new double[1, 2, 2]
+            FirstDerivatives = new Tensor<double>(new[] { 1, 2 }),
+            SecondDerivatives = new Tensor<double>(new[] { 1, 2, 2 })
         };
 
         var gradient = wave.ComputeResidualGradient(inputs, outputs, derivatives);
@@ -1266,8 +1266,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
         var derivatives = new PDEDerivatives<double>
         {
-            FirstDerivatives = new double[1, 2],
-            SecondDerivatives = new double[1, 2, 2]
+            FirstDerivatives = new Tensor<double>(new[] { 1, 2 }),
+            SecondDerivatives = new Tensor<double>(new[] { 1, 2, 2 })
         };
 
         var gradient = heat.ComputeResidualGradient(inputs, outputs, derivatives);
@@ -1328,8 +1328,8 @@ public class PhysicsInformedExtendedIntegrationTests
 
         var derivatives = new PDEDerivatives<double>
         {
-            FirstDerivatives = new double[1, 2],
-            SecondDerivatives = new double[1, 2, 2]
+            FirstDerivatives = new Tensor<double>(new[] { 1, 2 }),
+            SecondDerivatives = new Tensor<double>(new[] { 1, 2, 2 })
         };
 
         var gradient = poisson.ComputeResidualGradient(inputs, outputs, derivatives);
@@ -1371,9 +1371,9 @@ public class PhysicsInformedExtendedIntegrationTests
 
         var derivatives = new PDEDerivatives<double>
         {
-            FirstDerivatives = new double[1, 2], // All zero
-            SecondDerivatives = new double[1, 2, 2],
-            ThirdDerivatives = new double[1, 2, 2, 2] // All zero
+            FirstDerivatives = new Tensor<double>(new[] { 1, 2 }), // All zero
+            SecondDerivatives = new Tensor<double>(new[] { 1, 2, 2 }),
+            ThirdDerivatives = new Tensor<double>(new[] { 1, 2, 2, 2 }) // All zero
         };
 
         double residual = kdv.ComputeResidual(inputs, outputs, derivatives);
@@ -1388,7 +1388,7 @@ public class PhysicsInformedExtendedIntegrationTests
     public async Task PDEDerivatives_HigherDerivatives_SetAndGet()
     {
         var derivatives = new PDEDerivatives<double>();
-        var higher = new double[1, 2, 2, 2];
+        var higher = new Tensor<double>(new[] { 1, 2, 2, 2 });
         higher[0, 0, 0, 0] = 1.5;
         derivatives.HigherDerivatives = higher;
 
@@ -1417,15 +1417,15 @@ public class PhysicsInformedExtendedIntegrationTests
         var gradient = new PDEResidualGradient<double>(outputDimension: 3, inputDimension: 4);
 
         Assert.Equal(3, gradient.OutputGradients.Length);
-        Assert.Equal(3, gradient.FirstDerivatives.GetLength(0));
-        Assert.Equal(4, gradient.FirstDerivatives.GetLength(1));
-        Assert.Equal(3, gradient.SecondDerivatives.GetLength(0));
-        Assert.Equal(4, gradient.SecondDerivatives.GetLength(1));
-        Assert.Equal(4, gradient.SecondDerivatives.GetLength(2));
-        Assert.Equal(3, gradient.ThirdDerivatives.GetLength(0));
-        Assert.Equal(4, gradient.ThirdDerivatives.GetLength(1));
-        Assert.Equal(4, gradient.ThirdDerivatives.GetLength(2));
-        Assert.Equal(4, gradient.ThirdDerivatives.GetLength(3));
+        Assert.Equal(3, gradient.FirstDerivatives.Shape[0]);
+        Assert.Equal(4, gradient.FirstDerivatives.Shape[1]);
+        Assert.Equal(3, gradient.SecondDerivatives.Shape[0]);
+        Assert.Equal(4, gradient.SecondDerivatives.Shape[1]);
+        Assert.Equal(4, gradient.SecondDerivatives.Shape[2]);
+        Assert.Equal(3, gradient.ThirdDerivatives.Shape[0]);
+        Assert.Equal(4, gradient.ThirdDerivatives.Shape[1]);
+        Assert.Equal(4, gradient.ThirdDerivatives.Shape[2]);
+        Assert.Equal(4, gradient.ThirdDerivatives.Shape[3]);
     }
 
     #endregion
@@ -1470,8 +1470,8 @@ public class PhysicsInformedExtendedIntegrationTests
         var predictions = new Vector<double>(new double[] { 0.5 });
         var derivatives = new PDEDerivatives<double>
         {
-            FirstDerivatives = new double[1, 2] { { 0.0, 0.1 } }, // dudx=0, dudt=0.1
-            SecondDerivatives = new double[1, 2, 2]
+            FirstDerivatives = new Tensor<double>(new double[] { 0.0, 0.1 }, new[] { 1, 2 }), // dudx=0, dudt=0.1
+            SecondDerivatives = new Tensor<double>(new[] { 1, 2, 2 })
         };
         // d2udx2 = 0, so residual = dudt - alpha * d2udx2 = 0.1 - 0 = 0.1
         // PDE loss = residual^2 = 0.01
