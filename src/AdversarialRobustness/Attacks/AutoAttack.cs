@@ -706,15 +706,22 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
     /// The linearized decision boundary at x: f = z_t - z_y and its input gradient. Untargeted FAB picks the
     /// class whose boundary is closest in the dual norm, |f_c| / ||grad f_c||_q (fab_pt get_diff_logits_grads_batch).
     /// </summary>
+    /// <remarks>
+    /// The boundary is returned scaled so the largest entry of its normal is 1 (see <see cref="ClosestBoundary"/>).
+    /// </remarks>
     private (T Difference, Vector<T> Normal) Hyperplane(AttackPoint point, Vector<T> vector, int target)
     {
         var logits = point.Logits(vector);
         int n = logits.Length;
         int label = point.Label;
+        int d = vector.Length;
         if (target >= 0)
         {
             var weights = Engine.Subtract<T>(Vector<T>.CreateStandardBasis(n, target), Vector<T>.CreateStandardBasis(n, label));
-            return (NumOps.Subtract(At(logits, target), At(logits, label)), InputGradient(point, vector, weights));
+            var difference = new Vector<T>(new[] { NumOps.Subtract(At(logits, target), At(logits, label)) });
+            var gradient = Engine.Reshape(InputGradient(point, vector, weights).AsTensor(), new[] { 1, d });
+            var (scaledDifferences, scaledNormals) = ScaleRows(difference, gradient);
+            return (At(scaledDifferences, 0), scaledNormals.ToVector());
         }
 
         var rows = new Tensor<T>[n];
@@ -723,23 +730,65 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
             rows[c] = InputGradient(point, vector, Vector<T>.CreateStandardBasis(n, c)).AsTensor();
         }
 
-        int d = vector.Length;
         var jacobian = Engine.TensorStack(rows, 0);
         var labelRow = Engine.TensorSlice(jacobian, new[] { label, 0 }, new[] { 1, d });
         var normals = Engine.TensorSubtract(jacobian, Engine.TensorBroadcastTo(labelRow, new[] { n, d }));
         var differences = Engine.Subtract<T>(logits, Engine.Fill<T>(n, At(logits, label)));
+        var closest = ClosestBoundary(differences, normals, label);
+        return (closest.Difference, closest.Normal);
+    }
+
+    /// <summary>
+    /// The boundary c != label closest in the dual norm, |f_c| / ||g_c||_q, with its difference and normal scaled
+    /// by the largest absolute entry of the normal.
+    /// </summary>
+    /// <remarks>
+    /// Scaling a row by a positive factor leaves its hyperplane {z : g . z = g . x - f} and the distance
+    /// |f| / ||g||_q unchanged, and the FAB projections are invariant to it. Unscaled, in Half the squares of
+    /// the L2 dual norm overflow for gradient entries above 256, which made such a boundary look as if it were
+    /// at distance 0, and the offset g . x overflows for large gradients.
+    /// </remarks>
+    internal (int Index, T Difference, Vector<T> Normal) ClosestBoundary(Vector<T> differences, Tensor<T> normals, int label)
+    {
+        int n = normals._shape[0];
+        int d = normals._shape[1];
+        var (scaledDifferences, scaledNormals) = ScaleRows(differences, normals);
         var dualNorms = IsL2
-            ? Engine.TensorNorm(normals, 1, false)
-            : Engine.ReduceSum(Engine.TensorAbs(normals), new[] { 1 }, false);
+            ? Engine.TensorNorm(scaledNormals, 1, false)
+            : Engine.ReduceSum(Engine.TensorAbs(scaledNormals), new[] { 1 }, false);
         var distances = Engine.TensorDivide(
-            Engine.TensorAbs(differences.AsTensor()),
+            Engine.TensorAbs(scaledDifferences.AsTensor()),
             Engine.TensorAddScalar(dualNorms, Tiny(1e-12)));
         var isLabel = Vector<T>.CreateStandardBasis(n, label).AsTensor();
         var excluded = Engine.TensorAddScalar(Engine.TensorZerosLike(distances), NumOps.MaxValue);
         distances = Engine.TensorWhere(isLabel, excluded, distances);
         int closest = Engine.TensorArgMin(distances, 0).ToArray()[0];
-        var normal = Engine.TensorSlice(normals, new[] { closest, 0 }, new[] { 1, d }).ToVector();
-        return (At(differences, closest), normal);
+        var normal = Engine.TensorSlice(scaledNormals, new[] { closest, 0 }, new[] { 1, d }).ToVector();
+        return (closest, At(scaledDifferences, closest), normal);
+    }
+
+    /// <summary>
+    /// Divides each row of the normals, and its difference, by the row's largest absolute entry (rows of zeros
+    /// are left unchanged).
+    /// </summary>
+    private (Vector<T> Differences, Tensor<T> Normals) ScaleRows(Vector<T> differences, Tensor<T> normals)
+    {
+        int n = normals._shape[0];
+        int d = normals._shape[1];
+        var scale = Engine.ReduceMax(Engine.TensorAbs(normals), new[] { 1 }, true);
+        scale = Engine.TensorWhere(Engine.TensorEquals(scale, NumOps.Zero), Engine.TensorOnesLike(scale), scale);
+        var scaledNormals = Engine.TensorDivide(normals, Engine.TensorBroadcastTo(scale, new[] { n, d }));
+        var scaledDifferences = Engine.TensorDivide(differences.AsTensor(), Engine.Reshape(scale, new[] { n })).ToVector();
+        return (scaledDifferences, scaledNormals);
+    }
+
+    /// <summary>
+    /// The same hyperplane {z : normal . z = offset} with the normal scaled so its largest absolute entry is 1.
+    /// </summary>
+    private (Vector<T> Normal, T Offset) ScaledHyperplane(Vector<T> normal, T offset)
+    {
+        var (offsets, normals) = ScaleRows(new Vector<T>(new[] { offset }), Engine.Reshape(normal.AsTensor(), new[] { 1, normal.Length }));
+        return (normals.ToVector(), At(offsets, 0));
     }
 
     /// <summary>
@@ -753,8 +802,13 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
     /// <summary>
     /// Box-constrained L-infinity projection onto a hyperplane (autoattack fab_projections.projection_linf).
     /// </summary>
+    /// <remarks>
+    /// The hyperplane is first scaled to a largest normal entry of 1, which leaves the projection unchanged and
+    /// keeps its sums finite in Half.
+    /// </remarks>
     internal Vector<T> ProjectLInfinityHyperplane(Vector<T> point, Vector<T> normal, T offset)
     {
+        (normal, offset) = ScaledHyperplane(normal, offset);
         int n = point.Length;
         var ones = Engine.Fill<T>(n, NumOps.One);
         T side = NumOps.Subtract(Engine.DotProduct<T>(normal, point), offset);
@@ -840,8 +894,14 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
     /// <summary>
     /// Box-constrained L2 projection onto a hyperplane (autoattack fab_projections.projection_l2).
     /// </summary>
+    /// <remarks>
+    /// The hyperplane is first scaled to a largest normal entry of 1, which leaves the projection unchanged: in
+    /// Half the squared normal entries overflowed above 256. The 1e-8 threshold for a zero entry is therefore
+    /// relative to the largest entry.
+    /// </remarks>
     internal Vector<T> ProjectL2Hyperplane(Vector<T> point, Vector<T> normal, T offset)
     {
+        (normal, offset) = ScaledHyperplane(normal, offset);
         int n = point.Length;
         T c = NumOps.Subtract(Engine.DotProduct<T>(normal, point), offset);
         T sign = NumOps.GreaterThanOrEquals(c, NumOps.Zero) ? NumOps.One : NumOps.Negate(NumOps.One);
