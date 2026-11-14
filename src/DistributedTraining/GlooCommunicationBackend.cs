@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -84,6 +85,8 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
     private Dictionary<int, TcpClient>? _tcpConnections;
     private TcpListener? _tcpListener;
     private readonly object _connectionLock = new object();
+    private object[]? _peerSendLocks;
+    private object[]? _peerReceiveLocks;
 
     // Native Gloo objects (loaded via reflection from GlooSharp package)
     private IDisposable? _nativeGlooContext;
@@ -438,6 +441,14 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             throw new InvalidOperationException($"Invalid AIDOTNET_MASTER_PORT: {masterPortStr}");
         }
 
+        _peerSendLocks = new object[_worldSize];
+        _peerReceiveLocks = new object[_worldSize];
+        for (int r = 0; r < _worldSize; r++)
+        {
+            _peerSendLocks[r] = new object();
+            _peerReceiveLocks[r] = new object();
+        }
+
         // Start TCP listener on this rank's port
         int myPort = basePort + _rank;
         _tcpListener = new TcpListener(IPAddress.Any, myPort);
@@ -511,18 +522,18 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         {
             try
             {
-                var client = new TcpClient();
+                var client = new TcpClient
+                {
+                    NoDelay = true,
+                    SendBufferSize = 1024 * 1024,
+                    ReceiveBufferSize = 1024 * 1024,
+                };
                 client.Connect(masterAddr, targetPort);
 
-                // Send handshake: my rank
-                // IMPORTANT: Do NOT use 'using' here - disposing the stream closes the socket!
-                // We need to keep the connection open for future communication.
+                // Send handshake: my rank (4-byte little-endian int32, without BinaryWriter stream buffering)
                 var stream = client.GetStream();
-                var writer = new BinaryWriter(stream);
-                writer.Write(_rank);
-                writer.Flush();
-                // Leave stream and writer open - they'll be cleaned up when TcpClient is disposed
-
+                WriteInt32LittleEndian(stream, _rank);
+                stream.Flush();
                 lock (_connectionLock)
                 {
                     if (_tcpConnections != null)
@@ -563,15 +574,13 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
 
         // Accept incoming connection from ANY rank
         var client = _tcpListener.AcceptTcpClient();
+        client.NoDelay = true;
+        client.SendBufferSize = 1024 * 1024;
+        client.ReceiveBufferSize = 1024 * 1024;
 
-        // Read handshake to identify the connecting rank
-        // IMPORTANT: Do NOT use 'using' here - disposing the stream closes the socket!
-        // We need to keep the connection open for future communication.
+        // Read handshake to identify the connecting rank (exact 4 bytes, zero read-ahead buffering)
         var stream = client.GetStream();
-        var reader = new BinaryReader(stream);
-        int receivedRank = reader.ReadInt32();
-        // Leave stream and reader open - they'll be cleaned up when TcpClient is disposed
-
+        int receivedRank = ReadInt32LittleEndian(stream);
         // Verify the connecting rank is valid (should be a higher rank than us)
         if (receivedRank <= _rank)
         {
@@ -675,10 +684,12 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
     public override void Barrier()
     {
         EnsureInitialized();
+        DrainAsyncCollectives();
+        long startTicks = Stopwatch.GetTimestamp();
 
         if (_worldSize == 1)
         {
-            // Single-process: barrier is a no-op
+            RecordCollectiveDurationTicks(Stopwatch.GetTimestamp() - startTicks);
             return;
         }
 
@@ -689,6 +700,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
                 throw new InvalidOperationException("Native Gloo Barrier method is not available.");
             }
             _barrierDelegate(_nativeGlooContext);
+            RecordCollectiveDurationTicks(Stopwatch.GetTimestamp() - startTicks);
             return;
         }
 
@@ -697,27 +709,24 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             throw new InvalidOperationException("Barrier requires TCP mode to be initialized");
         }
 
-        // Simple all-to-all barrier implementation
-        // Each rank sends a signal to all other ranks and waits for signals from all
-        var signal = new Vector<T>(new[] { NumOps.One });
-
-        // Send signal to all other ranks
+        var signal = new[] { NumOps.One };
         for (int otherRank = 0; otherRank < _worldSize; otherRank++)
         {
             if (otherRank != _rank)
             {
-                SendData(otherRank, signal);
+                SendArraySlice(otherRank, signal, 0, 1);
             }
         }
 
-        // Receive signal from all other ranks
         for (int otherRank = 0; otherRank < _worldSize; otherRank++)
         {
             if (otherRank != _rank)
             {
-                ReceiveData(otherRank, 1);
+                ReceiveArray(otherRank, expectedLength: 1);
             }
         }
+
+        RecordCollectiveDurationTicks(Stopwatch.GetTimestamp() - startTicks);
     }
 
     /// <inheritdoc/>
@@ -725,16 +734,19 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
     {
         EnsureInitialized();
         ValidateData(data, nameof(data));
+        DrainAsyncCollectives();
+        long startTicks = Stopwatch.GetTimestamp();
 
         if (_worldSize == 1)
         {
-            // Single-process: data already contains the result (no-op)
+            RecordCollectiveDurationTicks(Stopwatch.GetTimestamp() - startTicks);
             return;
         }
 
         if (_useNativeGloo)
         {
             PerformNativeGlooAllReduce(data, operation);
+            RecordCollectiveDurationTicks(Stopwatch.GetTimestamp() - startTicks);
             return;
         }
 
@@ -744,6 +756,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         }
 
         PerformRingAllReduce(data, operation);
+        RecordCollectiveDurationTicks(Stopwatch.GetTimestamp() - startTicks);
     }
 
     /// <inheritdoc/>
@@ -751,15 +764,21 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
     {
         EnsureInitialized();
         ValidateData(sendData, nameof(sendData));
+        DrainAsyncCollectives();
+        long startTicks = Stopwatch.GetTimestamp();
 
         if (_worldSize == 1)
         {
-            return sendData.Clone();
+            var single = sendData.Clone();
+            RecordCollectiveDurationTicks(Stopwatch.GetTimestamp() - startTicks);
+            return single;
         }
 
         if (_useNativeGloo)
         {
-            return PerformNativeGlooAllGather(sendData);
+            var nativeRes = PerformNativeGlooAllGather(sendData);
+            RecordCollectiveDurationTicks(Stopwatch.GetTimestamp() - startTicks);
+            return nativeRes;
         }
 
         if (!_useNativeTCP)
@@ -767,24 +786,36 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             throw new InvalidOperationException("AllGather requires TCP mode to be initialized");
         }
 
-        return PerformRingAllGather(sendData);
+        var gathered = PerformRingAllGather(sendData);
+        RecordCollectiveDurationTicks(Stopwatch.GetTimestamp() - startTicks);
+        return gathered;
     }
 
     /// <inheritdoc/>
     public override Vector<T> Broadcast(Vector<T> data, int root = 0)
     {
         EnsureInitialized();
-        ValidateData(data, nameof(data));
         ValidateRoot(root);
+        if (_rank == root || _worldSize == 1)
+        {
+            ValidateData(data, nameof(data));
+        }
+
+        DrainAsyncCollectives();
+        long startTicks = Stopwatch.GetTimestamp();
 
         if (_worldSize == 1)
         {
-            return data.Clone();
+            var single = data.Clone();
+            RecordCollectiveDurationTicks(Stopwatch.GetTimestamp() - startTicks);
+            return single;
         }
 
         if (_useNativeGloo)
         {
-            return PerformNativeGlooBroadcast(data, root);
+            var nativeRes = PerformNativeGlooBroadcast(data, root);
+            RecordCollectiveDurationTicks(Stopwatch.GetTimestamp() - startTicks);
+            return nativeRes;
         }
 
         if (!_useNativeTCP)
@@ -792,7 +823,9 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             throw new InvalidOperationException("Broadcast requires TCP mode to be initialized");
         }
 
-        return PerformTreeBroadcast(data, root);
+        var broadcasted = PerformTreeBroadcast(data, root);
+        RecordCollectiveDurationTicks(Stopwatch.GetTimestamp() - startTicks);
+        return broadcasted;
     }
 
     /// <inheritdoc/>
@@ -800,21 +833,24 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
     {
         EnsureInitialized();
         ValidateRoot(root);
+        DrainAsyncCollectives();
+        long startTicks = Stopwatch.GetTimestamp();
 
         if (_worldSize == 1)
         {
             if (Rank == root)
             {
                 ValidateData(sendData, nameof(sendData));
-                return sendData.Clone();
+                var single = sendData.Clone();
+                RecordCollectiveDurationTicks(Stopwatch.GetTimestamp() - startTicks);
+                return single;
             }
+            RecordCollectiveDurationTicks(Stopwatch.GetTimestamp() - startTicks);
             return new Vector<T>(Array.Empty<T>());
         }
 
         if (_useNativeGloo)
         {
-            // Gloo has no native Scatter — implement via Broadcast + local extraction
-            // (same pattern as NCCLCommunicationBackend.Scatter)
             int totalLength;
             if (Rank == root)
             {
@@ -831,7 +867,6 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
                 totalLength = 0;
             }
 
-            // 1) Broadcast total length so non-root ranks can allocate a correctly sized buffer
             var lengthVector = PerformNativeGlooBroadcast(
                 new Vector<T>(new[] { NumOps.FromDouble(totalLength) }),
                 root);
@@ -843,13 +878,13 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
                     $"Data length {totalLength} must be divisible by world size {_worldSize}.");
             }
 
-            // 2) Non-root ranks allocate a full-sized buffer; root uses its sendData
             var fullBuffer = Rank == root ? sendData : new Vector<T>(new T[totalLength]);
             var broadcasted = PerformNativeGlooBroadcast(fullBuffer, root);
             int chunkSize = broadcasted.Length / _worldSize;
             var chunk = new T[chunkSize];
             var broadcastedArray = broadcasted.ToArray();
             Array.Copy(broadcastedArray, _rank * chunkSize, chunk, 0, chunkSize);
+            RecordCollectiveDurationTicks(Stopwatch.GetTimestamp() - startTicks);
             return new Vector<T>(chunk);
         }
 
@@ -858,7 +893,9 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             throw new InvalidOperationException("Scatter requires TCP mode to be initialized");
         }
 
-        return PerformTreeScatter(sendData, root);
+        var scattered = PerformTreeScatter(sendData, root);
+        RecordCollectiveDurationTicks(Stopwatch.GetTimestamp() - startTicks);
+        return scattered;
     }
 
     /// <inheritdoc/>
@@ -873,14 +910,21 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
                 $"Data length {data.Length} must be divisible by world size {_worldSize}.");
         }
 
+        DrainAsyncCollectives();
+        long startTicks = Stopwatch.GetTimestamp();
+
         if (_worldSize == 1)
         {
-            return data.Clone();
+            var single = data.Clone();
+            RecordCollectiveDurationTicks(Stopwatch.GetTimestamp() - startTicks);
+            return single;
         }
 
         if (_useNativeGloo)
         {
-            return PerformNativeGlooReduceScatter(data, operation);
+            var nativeRes = PerformNativeGlooReduceScatter(data, operation);
+            RecordCollectiveDurationTicks(Stopwatch.GetTimestamp() - startTicks);
+            return nativeRes;
         }
 
         if (!_useNativeTCP)
@@ -888,7 +932,9 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             throw new InvalidOperationException("ReduceScatter requires TCP mode to be initialized");
         }
 
-        return PerformRingReduceScatter(data, operation);
+        var reducedShard = PerformRingReduceScatter(data, operation);
+        RecordCollectiveDurationTicks(Stopwatch.GetTimestamp() - startTicks);
+        return reducedShard;
     }
 
     #region Native Gloo Collective Implementations
@@ -960,7 +1006,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             throw new InvalidOperationException("Native Gloo Broadcast method is not available.");
         }
 
-        var doubleData = VectorToDoubleArray(data);
+        var doubleData = data is null ? Array.Empty<double>() : VectorToDoubleArray(data);
         _broadcastDelegate(_nativeGlooContext, doubleData, root);
         return DoubleArrayToVector(doubleData);
     }
@@ -1039,12 +1085,12 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
     /// </remarks>
     private void PerformRingAllReduce(Vector<T> data, ReductionOperation operation)
     {
-        if (_worldSize == 1)
+        if (_worldSize == 1 || data.Length == 0)
         {
             return;
         }
 
-        int chunkSize = (data.Length + _worldSize - 1) / _worldSize; // Ceiling division
+        int chunkSize = (data.Length + _worldSize - 1) / _worldSize;
         int nextRank = (_rank + 1) % _worldSize;
         int prevRank = (_rank - 1 + _worldSize) % _worldSize;
 
@@ -1057,23 +1103,17 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             int recvChunkIdx = (_rank - step - 1 + _worldSize) % _worldSize;
 
             int sendStart = sendChunkIdx * chunkSize;
-            int sendCount = Math.Min(chunkSize, data.Length - sendStart);
+            int sendCount = Math.Max(0, Math.Min(chunkSize, data.Length - sendStart));
             int recvStart = recvChunkIdx * chunkSize;
-            int recvCount = Math.Min(chunkSize, data.Length - recvStart);
+            int recvCount = Math.Max(0, Math.Min(chunkSize, data.Length - recvStart));
 
-            // Extract send chunk
-            var sendChunk = new T[sendCount];
-            Array.Copy(dataArray, sendStart, sendChunk, 0, sendCount);
+            var sendTask = System.Threading.Tasks.Task.Run(() => SendArraySlice(nextRank, dataArray, sendStart, sendCount));
+            var recvChunk = ReceiveArray(prevRank, expectedLength: recvCount);
+            sendTask.GetAwaiter().GetResult();
 
-            // Send and receive simultaneously
-            var sendTask = System.Threading.Tasks.Task.Run(() => SendData(nextRank, new Vector<T>(sendChunk)));
-            var recvChunk = ReceiveData(prevRank, recvCount);
-            sendTask.Wait();
-
-            // Reduce received chunk with local chunk
-            for (int i = 0; i < recvCount; i++)
+            if (recvCount > 0)
             {
-                dataArray[recvStart + i] = PerformReduction(dataArray[recvStart + i], recvChunk[i], operation);
+                ReduceArrayInPlace(dataArray, recvStart, recvChunk, recvCount, operation);
             }
         }
 
@@ -1084,36 +1124,113 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             int recvChunkIdx = (_rank - step + _worldSize) % _worldSize;
 
             int sendStart = sendChunkIdx * chunkSize;
-            int sendCount = Math.Min(chunkSize, data.Length - sendStart);
+            int sendCount = Math.Max(0, Math.Min(chunkSize, data.Length - sendStart));
             int recvStart = recvChunkIdx * chunkSize;
-            int recvCount = Math.Min(chunkSize, data.Length - recvStart);
+            int recvCount = Math.Max(0, Math.Min(chunkSize, data.Length - recvStart));
 
-            // Extract send chunk
-            var sendChunk = new T[sendCount];
-            Array.Copy(dataArray, sendStart, sendChunk, 0, sendCount);
+            var sendTask = System.Threading.Tasks.Task.Run(() => SendArraySlice(nextRank, dataArray, sendStart, sendCount));
+            var recvChunk = ReceiveArray(prevRank, expectedLength: recvCount);
+            sendTask.GetAwaiter().GetResult();
 
-            // Send and receive simultaneously
-            var sendTask = System.Threading.Tasks.Task.Run(() => SendData(nextRank, new Vector<T>(sendChunk)));
-            var recvChunk = ReceiveData(prevRank, recvCount);
-            sendTask.Wait();
-
-            // Copy received chunk to local data
-            Array.Copy(recvChunk, 0, dataArray, recvStart, recvCount);
-        }
-
-        // Apply averaging if needed (after all reductions complete)
-        if (operation == ReductionOperation.Average)
-        {
-            for (int i = 0; i < dataArray.Length; i++)
+            if (recvCount > 0)
             {
-                dataArray[i] = NumOps.Divide(dataArray[i], NumOps.FromDouble(_worldSize));
+                Array.Copy(recvChunk, 0, dataArray, recvStart, recvCount);
             }
         }
 
-        // Update original vector with reduced data
-        for (int i = 0; i < dataArray.Length; i++)
+        if (operation == ReductionOperation.Average)
         {
-            data[i] = dataArray[i];
+            ScaleArrayByReciprocalWorldSize(dataArray, _worldSize);
+        }
+
+        dataArray.AsSpan().CopyTo(data.AsWritableSpan());
+    }
+
+    private void ReduceArrayInPlace(T[] dst, int dstOffset, T[] src, int count, ReductionOperation operation)
+    {
+        if (typeof(T) == typeof(float))
+        {
+            var dstF = (float[])(object)dst;
+            var srcF = (float[])(object)src;
+            switch (operation)
+            {
+                case ReductionOperation.Sum:
+                case ReductionOperation.Average:
+                    for (int i = 0; i < count; i++) dstF[dstOffset + i] += srcF[i];
+                    return;
+                case ReductionOperation.Product:
+                    for (int i = 0; i < count; i++) dstF[dstOffset + i] *= srcF[i];
+                    return;
+                case ReductionOperation.Min:
+                    for (int i = 0; i < count; i++) if (srcF[i] < dstF[dstOffset + i]) dstF[dstOffset + i] = srcF[i];
+                    return;
+                case ReductionOperation.Max:
+                    for (int i = 0; i < count; i++) if (srcF[i] > dstF[dstOffset + i]) dstF[dstOffset + i] = srcF[i];
+                    return;
+            }
+        }
+        else if (typeof(T) == typeof(double))
+        {
+            var dstD = (double[])(object)dst;
+            var srcD = (double[])(object)src;
+            switch (operation)
+            {
+                case ReductionOperation.Sum:
+                case ReductionOperation.Average:
+                    for (int i = 0; i < count; i++) dstD[dstOffset + i] += srcD[i];
+                    return;
+                case ReductionOperation.Product:
+                    for (int i = 0; i < count; i++) dstD[dstOffset + i] *= srcD[i];
+                    return;
+                case ReductionOperation.Min:
+                    for (int i = 0; i < count; i++) if (srcD[i] < dstD[dstOffset + i]) dstD[dstOffset + i] = srcD[i];
+                    return;
+                case ReductionOperation.Max:
+                    for (int i = 0; i < count; i++) if (srcD[i] > dstD[dstOffset + i]) dstD[dstOffset + i] = srcD[i];
+                    return;
+            }
+        }
+
+        ReduceArrayInPlaceGeneric(dst, dstOffset, src, count, operation);
+    }
+
+    [AiDotNet.Attributes.ScalarKernel("Generic non-IEEE ring reduction fallback when T is neither float nor double")]
+    private void ReduceArrayInPlaceGeneric(T[] dst, int dstOffset, T[] src, int count, ReductionOperation operation)
+    {
+        for (int i = 0; i < count; i++)
+        {
+            dst[dstOffset + i] = PerformReduction(dst[dstOffset + i], src[i], operation);
+        }
+    }
+
+    private void ScaleArrayByReciprocalWorldSize(T[] dst, int worldSize)
+    {
+        if (typeof(T) == typeof(float))
+        {
+            var dstF = (float[])(object)dst;
+            float inv = 1.0f / worldSize;
+            for (int i = 0; i < dstF.Length; i++) dstF[i] *= inv;
+            return;
+        }
+
+        if (typeof(T) == typeof(double))
+        {
+            var dstD = (double[])(object)dst;
+            double inv = 1.0 / worldSize;
+            for (int i = 0; i < dstD.Length; i++) dstD[i] *= inv;
+            return;
+        }
+
+        ScaleArrayByReciprocalWorldSizeGeneric(dst, worldSize);
+    }
+
+    [AiDotNet.Attributes.ScalarKernel("Generic non-IEEE ring average division fallback")]
+    private void ScaleArrayByReciprocalWorldSizeGeneric(T[] dst, int worldSize)
+    {
+        T divisor = NumOps.FromDouble(worldSize);
+        for (int i = 0; i < dst.Length; i++)
+        {
+            dst[i] = NumOps.Divide(dst[i], divisor);
         }
     }
 
@@ -1133,7 +1250,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
     }
 
     /// <summary>
-    /// Performs ring-based AllGather operation.
+    /// Performs ring-based AllGather operation supporting both uniform and uneven shard sizes across ranks.
     /// </summary>
     private Vector<T> PerformRingAllGather(Vector<T> sendData)
     {
@@ -1142,33 +1259,40 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             return sendData.Clone();
         }
 
-        int chunkSize = sendData.Length;
         int nextRank = (_rank + 1) % _worldSize;
         int prevRank = (_rank - 1 + _worldSize) % _worldSize;
 
-        // Result buffer to hold data from all ranks
-        var result = new T[chunkSize * _worldSize];
+        var chunks = new T[_worldSize][];
+        chunks[_rank] = sendData.ToArray();
 
-        // Copy local data to result buffer
-        Array.Copy(sendData.ToArray(), 0, result, _rank * chunkSize, chunkSize);
-
-        // Ring AllGather: each rank receives chunk from previous rank and forwards it
+        // Ring AllGather: each rank forwards its current chunk while receiving a variable-length chunk from prevRank.
         for (int step = 0; step < _worldSize - 1; step++)
         {
             int sendChunkIdx = (_rank - step + _worldSize) % _worldSize;
             int recvChunkIdx = (_rank - step - 1 + _worldSize) % _worldSize;
 
-            // Extract send chunk from result buffer
-            var sendChunk = new T[chunkSize];
-            Array.Copy(result, sendChunkIdx * chunkSize, sendChunk, 0, chunkSize);
+            var outgoing = chunks[sendChunkIdx];
+            var sendTask = System.Threading.Tasks.Task.Run(() => SendArraySlice(nextRank, outgoing, 0, outgoing.Length));
+            chunks[recvChunkIdx] = ReceiveArray(prevRank, expectedLength: null);
+            sendTask.GetAwaiter().GetResult();
+        }
 
-            // Send and receive simultaneously
-            var sendTask = System.Threading.Tasks.Task.Run(() => SendData(nextRank, new Vector<T>(sendChunk)));
-            var recvChunk = ReceiveData(prevRank, chunkSize);
-            sendTask.Wait();
+        int totalLength = 0;
+        for (int r = 0; r < _worldSize; r++)
+        {
+            totalLength = checked(totalLength + chunks[r].Length);
+        }
 
-            // Copy received chunk to result buffer
-            Array.Copy(recvChunk, 0, result, recvChunkIdx * chunkSize, chunkSize);
+        var result = new T[totalLength];
+        int offset = 0;
+        for (int r = 0; r < _worldSize; r++)
+        {
+            var chunk = chunks[r];
+            if (chunk.Length > 0)
+            {
+                Array.Copy(chunk, 0, result, offset, chunk.Length);
+                offset += chunk.Length;
+            }
         }
 
         return new Vector<T>(result);
@@ -1188,17 +1312,19 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             return data.Clone();
         }
 
-        var dataArray = data.ToArray();
-
         // Adjust ranks relative to root for binary tree calculation
         int relativeRank = (_rank - root + _worldSize) % _worldSize;
 
-        // If not root, receive data from parent
-        if (relativeRank != 0)
+        T[] dataArray;
+        if (relativeRank == 0)
+        {
+            dataArray = data.ToArray();
+        }
+        else
         {
             int parentRelative = (relativeRank - 1) / 2;
             int parentAbsolute = (parentRelative + root) % _worldSize;
-            dataArray = ReceiveData(parentAbsolute, data.Length);
+            dataArray = ReceiveArray(parentAbsolute, expectedLength: null);
         }
 
         // Send data to children in binary tree
@@ -1208,13 +1334,13 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         if (leftChildRelative < _worldSize)
         {
             int leftChildAbsolute = (leftChildRelative + root) % _worldSize;
-            SendData(leftChildAbsolute, new Vector<T>(dataArray));
+            SendArraySlice(leftChildAbsolute, dataArray, 0, dataArray.Length);
         }
 
         if (rightChildRelative < _worldSize)
         {
             int rightChildAbsolute = (rightChildRelative + root) % _worldSize;
-            SendData(rightChildAbsolute, new Vector<T>(dataArray));
+            SendArraySlice(rightChildAbsolute, dataArray, 0, dataArray.Length);
         }
 
         return new Vector<T>(dataArray);
@@ -1331,23 +1457,17 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             int recvChunkIdx = (_rank - step - 1 + _worldSize) % _worldSize;
 
             int sendStart = sendChunkIdx * chunkSize;
-            int sendCount = Math.Min(chunkSize, data.Length - sendStart);
+            int sendCount = Math.Max(0, Math.Min(chunkSize, data.Length - sendStart));
             int recvStart = recvChunkIdx * chunkSize;
-            int recvCount = Math.Min(chunkSize, data.Length - recvStart);
+            int recvCount = Math.Max(0, Math.Min(chunkSize, data.Length - recvStart));
 
-            // Extract send chunk
-            var sendChunk = new T[sendCount];
-            Array.Copy(dataArray, sendStart, sendChunk, 0, sendCount);
+            var sendTask = System.Threading.Tasks.Task.Run(() => SendArraySlice(nextRank, dataArray, sendStart, sendCount));
+            var recvChunk = ReceiveArray(prevRank, expectedLength: recvCount);
+            sendTask.GetAwaiter().GetResult();
 
-            // Send and receive simultaneously
-            var sendTask = System.Threading.Tasks.Task.Run(() => SendData(nextRank, new Vector<T>(sendChunk)));
-            var recvChunk = ReceiveData(prevRank, recvCount);
-            sendTask.Wait();
-
-            // Reduce received chunk with local chunk
-            for (int i = 0; i < recvCount; i++)
+            if (recvCount > 0)
             {
-                dataArray[recvStart + i] = PerformReduction(dataArray[recvStart + i], recvChunk[i], operation);
+                ReduceArrayInPlace(dataArray, recvStart, recvChunk, recvCount, operation);
             }
         }
 
@@ -1358,10 +1478,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         // Apply averaging if needed
         if (operation == ReductionOperation.Average)
         {
-            for (int i = 0; i < myChunk.Length; i++)
-            {
-                myChunk[i] = NumOps.Divide(myChunk[i], NumOps.FromDouble(_worldSize));
-            }
+            ScaleArrayByReciprocalWorldSize(myChunk, _worldSize);
         }
 
         return new Vector<T>(myChunk);
@@ -1426,82 +1543,21 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
     }
 
     /// <summary>
-    /// Sends data to a specific rank via TCP with message tag.
+    /// Sends data to a specific rank via TCP with message tag using bulk binary framing and per-peer directional locks.
     /// </summary>
     private void SendDataWithTag(int destRank, Vector<T> data, int tag)
     {
-        if (_tcpConnections == null || !_tcpConnections.ContainsKey(destRank))
-        {
-            throw new InvalidOperationException(
-                $"No TCP connection to rank {destRank}. Ensure Initialize() was called and connections were established.");
-        }
-
-        lock (_connectionLock)
-        {
-            var client = _tcpConnections[destRank];
-            var stream = client.GetStream();
-            var writer = new BinaryWriter(stream);
-
-            // Send tag
-            writer.Write(tag);
-
-            // Send length header
-            writer.Write(data.Length);
-
-            // Send data elements
-            for (int i = 0; i < data.Length; i++)
-            {
-                double value = NumOps.ToDouble(data[i]);
-                writer.Write(value);
-            }
-            writer.Flush();
-            // Leave stream and writer open - they're reused for the connection lifetime
-        }
+        var arr = data.ToArray();
+        SendArraySliceCore(destRank, arr, 0, arr.Length, hasTag: true, tag: tag);
     }
 
     /// <summary>
-    /// Receives data from a specific rank via TCP with message tag.
+    /// Receives data from a specific rank via TCP with message tag using bulk binary framing and per-peer directional locks.
     /// </summary>
     private Vector<T> ReceiveDataWithTag(int sourceRank, int expectedLength, int expectedTag)
     {
-        if (_tcpConnections == null || !_tcpConnections.ContainsKey(sourceRank))
-        {
-            throw new InvalidOperationException(
-                $"No TCP connection to rank {sourceRank}. Ensure Initialize() was called and connections were established.");
-        }
-
-        lock (_connectionLock)
-        {
-            var client = _tcpConnections[sourceRank];
-            var stream = client.GetStream();
-            var reader = new BinaryReader(stream);
-
-            // Read tag
-            int receivedTag = reader.ReadInt32();
-            if (receivedTag != expectedTag)
-            {
-                throw new InvalidOperationException(
-                    $"Rank {_rank}: Expected tag {expectedTag} from rank {sourceRank}, but received tag {receivedTag}");
-            }
-
-            // Read length header
-            int length = reader.ReadInt32();
-            if (length != expectedLength)
-            {
-                throw new InvalidOperationException(
-                    $"Rank {_rank}: Expected {expectedLength} elements from rank {sourceRank}, but received {length}");
-            }
-
-            // Read data elements into Vector
-            var result = new T[length];
-            for (int i = 0; i < length; i++)
-            {
-                double value = reader.ReadDouble();
-                result[i] = NumOps.FromDouble(value);
-            }
-            // Leave stream and reader open - they're reused for the connection lifetime
-            return new Vector<T>(result);
-        }
+        var result = ReceiveArrayCore(sourceRank, expectedLength, hasTag: true, expectedTag: expectedTag);
+        return new Vector<T>(result);
     }
 
     /// <summary>
@@ -1509,66 +1565,323 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
     /// </summary>
     private void SendData(int destRank, Vector<T> data)
     {
-        if (_tcpConnections == null || !_tcpConnections.ContainsKey(destRank))
-        {
-            throw new InvalidOperationException(
-                $"No TCP connection to rank {destRank}. Ensure Initialize() was called and connections were established.");
-        }
-
-        lock (_connectionLock)
-        {
-            var client = _tcpConnections[destRank];
-            var stream = client.GetStream();
-            var writer = new BinaryWriter(stream);
-
-            // Send length header
-            writer.Write(data.Length);
-
-            // Send data elements
-            for (int i = 0; i < data.Length; i++)
-            {
-                double value = NumOps.ToDouble(data[i]);
-                writer.Write(value);
-            }
-            writer.Flush();
-            // Leave stream and writer open - they're reused for the connection lifetime
-        }
+        var arr = data.ToArray();
+        SendArraySlice(destRank, arr, 0, arr.Length);
     }
 
     /// <summary>
     /// Receives data from a specific rank via TCP.
     /// </summary>
-    private Vector<T> ReceiveData(int sourceRank, int expectedLength)
+    private T[] ReceiveData(int sourceRank, int expectedLength)
     {
-        if (_tcpConnections == null || !_tcpConnections.ContainsKey(sourceRank))
-        {
-            throw new InvalidOperationException(
-                $"No TCP connection to rank {sourceRank}. Ensure Initialize() was called and connections were established.");
-        }
+        return ReceiveArray(sourceRank, expectedLength);
+    }
 
+    private TcpClient GetConnectedPeerClient(int peerRank)
+    {
         lock (_connectionLock)
         {
-            var client = _tcpConnections[sourceRank];
-            var stream = client.GetStream();
-            var reader = new BinaryReader(stream);
-
-            // Read length header
-            int length = reader.ReadInt32();
-            if (length != expectedLength)
+            if (_tcpConnections == null || !_tcpConnections.TryGetValue(peerRank, out var client))
             {
                 throw new InvalidOperationException(
-                    $"Rank {_rank}: Expected {expectedLength} elements from rank {sourceRank}, but received {length}");
+                    $"No TCP connection to rank {peerRank}. Ensure Initialize() was called and connections were established.");
             }
 
-            // Read data elements into Vector
-            var result = new T[length];
-            for (int i = 0; i < length; i++)
-            {
-                double value = reader.ReadDouble();
-                result[i] = NumOps.FromDouble(value);
-            }
-            // Leave stream and reader open - they're reused for the connection lifetime
-            return new Vector<T>(result);
+            return client;
         }
+    }
+
+    private void SendArraySlice(int destRank, T[] data, int offset, int count)
+    {
+        SendArraySliceCore(destRank, data, offset, count, hasTag: false, tag: 0);
+    }
+
+    private void SendArraySliceCore(int destRank, T[] data, int offset, int count, bool hasTag, int tag)
+    {
+        var client = GetConnectedPeerClient(destRank);
+        object sendLock = _peerSendLocks is not null ? _peerSendLocks[destRank] : _connectionLock;
+
+        lock (sendLock)
+        {
+            var stream = client.GetStream();
+            if (hasTag)
+            {
+                WriteInt32LittleEndian(stream, tag);
+            }
+
+            WriteInt32LittleEndian(stream, count);
+            if (count > 0)
+            {
+                WriteElementsBulk(stream, data, offset, count);
+            }
+
+            stream.Flush();
+        }
+    }
+
+    private T[] ReceiveArray(int sourceRank, int? expectedLength)
+    {
+        return ReceiveArrayCore(sourceRank, expectedLength, hasTag: false, expectedTag: 0);
+    }
+
+    private T[] ReceiveArrayCore(int sourceRank, int? expectedLength, bool hasTag, int expectedTag)
+    {
+        var client = GetConnectedPeerClient(sourceRank);
+        object recvLock = _peerReceiveLocks is not null ? _peerReceiveLocks[sourceRank] : _connectionLock;
+
+        lock (recvLock)
+        {
+            var stream = client.GetStream();
+            if (hasTag)
+            {
+                int receivedTag = ReadInt32LittleEndian(stream);
+                if (receivedTag != expectedTag)
+                {
+                    throw new InvalidOperationException(
+                        $"Rank {_rank}: Expected tag {expectedTag} from rank {sourceRank}, but received tag {receivedTag}");
+                }
+            }
+
+            int length = ReadInt32LittleEndian(stream);
+            if (length < 0)
+            {
+                throw new InvalidOperationException(
+                    $"Rank {_rank}: Received negative payload length {length} from rank {sourceRank}");
+            }
+
+            if (expectedLength.HasValue && length != expectedLength.Value)
+            {
+                throw new InvalidOperationException(
+                    $"Rank {_rank}: Expected {expectedLength.Value} elements from rank {sourceRank}, but received {length}");
+            }
+
+            if (length == 0)
+            {
+                return Array.Empty<T>();
+            }
+
+            return ReadElementsBulk(stream, length);
+        }
+    }
+
+    private static void WriteInt32LittleEndian(Stream stream, int value)
+    {
+        byte[] hdr = ArrayPool<byte>.Shared.Rent(4);
+        try
+        {
+            hdr[0] = (byte)value;
+            hdr[1] = (byte)(value >> 8);
+            hdr[2] = (byte)(value >> 16);
+            hdr[3] = (byte)(value >> 24);
+            stream.Write(hdr, 0, 4);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(hdr);
+        }
+    }
+
+    private static int ReadInt32LittleEndian(Stream stream)
+    {
+        byte[] hdr = ArrayPool<byte>.Shared.Rent(4);
+        try
+        {
+            ReadExactBytes(stream, hdr, 4);
+            return hdr[0]
+                | (hdr[1] << 8)
+                | (hdr[2] << 16)
+                | (hdr[3] << 24);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(hdr);
+        }
+    }
+
+    private static void ReadExactBytes(Stream stream, byte[] buffer, int count)
+    {
+        int totalRead = 0;
+        while (totalRead < count)
+        {
+            int read = stream.Read(buffer, totalRead, count - totalRead);
+            if (read <= 0)
+            {
+                throw new EndOfStreamException(
+                    $"Unexpected EOF on Gloo TCP transport after reading {totalRead} of {count} bytes (peer rank closed or crashed).");
+            }
+
+            totalRead += read;
+        }
+    }
+
+    private void WriteElementsBulk(Stream stream, T[] source, int offset, int count)
+    {
+        const int MaxStagingBytes = 256 * 1024;
+        if (typeof(T) == typeof(float))
+        {
+            var srcF = (float[])(object)source;
+            int maxElems = MaxStagingBytes / sizeof(float);
+            byte[] buf = ArrayPool<byte>.Shared.Rent(Math.Min(count, maxElems) * sizeof(float));
+            try
+            {
+                int pos = 0;
+                while (pos < count)
+                {
+                    int batch = Math.Min(maxElems, count - pos);
+                    int bytes = batch * sizeof(float);
+                    Buffer.BlockCopy(srcF, (offset + pos) * sizeof(float), buf, 0, bytes);
+                    stream.Write(buf, 0, bytes);
+                    pos += batch;
+                }
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buf);
+            }
+
+            return;
+        }
+
+        if (typeof(T) == typeof(double))
+        {
+            var srcD = (double[])(object)source;
+            int maxElems = MaxStagingBytes / sizeof(double);
+            byte[] buf = ArrayPool<byte>.Shared.Rent(Math.Min(count, maxElems) * sizeof(double));
+            try
+            {
+                int pos = 0;
+                while (pos < count)
+                {
+                    int batch = Math.Min(maxElems, count - pos);
+                    int bytes = batch * sizeof(double);
+                    Buffer.BlockCopy(srcD, (offset + pos) * sizeof(double), buf, 0, bytes);
+                    stream.Write(buf, 0, bytes);
+                    pos += batch;
+                }
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buf);
+            }
+
+            return;
+        }
+
+        WriteElementsBulkGeneric(stream, source, offset, count);
+    }
+
+    [AiDotNet.Attributes.ScalarKernel("Generic non-IEEE TCP serialization fallback when T is neither float nor double")]
+    private void WriteElementsBulkGeneric(Stream stream, T[] source, int offset, int count)
+    {
+        var tmp = new double[count];
+        for (int i = 0; i < count; i++)
+        {
+            tmp[i] = NumOps.ToDouble(source[offset + i]);
+        }
+
+        int totalBytes = count * sizeof(double);
+        byte[] buf = ArrayPool<byte>.Shared.Rent(Math.Min(totalBytes, 256 * 1024));
+        try
+        {
+            int byteOffset = 0;
+            while (byteOffset < totalBytes)
+            {
+                int batchBytes = Math.Min(buf.Length, totalBytes - byteOffset);
+                Buffer.BlockCopy(tmp, byteOffset, buf, 0, batchBytes);
+                stream.Write(buf, 0, batchBytes);
+                byteOffset += batchBytes;
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buf);
+        }
+    }
+
+    private T[] ReadElementsBulk(Stream stream, int count)
+    {
+        const int MaxStagingBytes = 256 * 1024;
+        if (typeof(T) == typeof(float))
+        {
+            var dstF = new float[count];
+            int maxElems = MaxStagingBytes / sizeof(float);
+            byte[] buf = ArrayPool<byte>.Shared.Rent(Math.Min(count, maxElems) * sizeof(float));
+            try
+            {
+                int pos = 0;
+                while (pos < count)
+                {
+                    int batch = Math.Min(maxElems, count - pos);
+                    int bytes = batch * sizeof(float);
+                    ReadExactBytes(stream, buf, bytes);
+                    Buffer.BlockCopy(buf, 0, dstF, pos * sizeof(float), bytes);
+                    pos += batch;
+                }
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buf);
+            }
+
+            return (T[])(object)dstF;
+        }
+
+        if (typeof(T) == typeof(double))
+        {
+            var dstD = new double[count];
+            int maxElems = MaxStagingBytes / sizeof(double);
+            byte[] buf = ArrayPool<byte>.Shared.Rent(Math.Min(count, maxElems) * sizeof(double));
+            try
+            {
+                int pos = 0;
+                while (pos < count)
+                {
+                    int batch = Math.Min(maxElems, count - pos);
+                    int bytes = batch * sizeof(double);
+                    ReadExactBytes(stream, buf, bytes);
+                    Buffer.BlockCopy(buf, 0, dstD, pos * sizeof(double), bytes);
+                    pos += batch;
+                }
+            }
+            finally
+            {
+                ArrayPool<byte>.Shared.Return(buf);
+            }
+
+            return (T[])(object)dstD;
+        }
+
+        return ReadElementsBulkGeneric(stream, count);
+    }
+
+    [AiDotNet.Attributes.ScalarKernel("Generic non-IEEE TCP deserialization fallback when T is neither float nor double")]
+    private T[] ReadElementsBulkGeneric(Stream stream, int count)
+    {
+        var tmp = new double[count];
+        int totalBytes = count * sizeof(double);
+        byte[] buf = ArrayPool<byte>.Shared.Rent(Math.Min(totalBytes, 256 * 1024));
+        try
+        {
+            int byteOffset = 0;
+            while (byteOffset < totalBytes)
+            {
+                int batchBytes = Math.Min(buf.Length, totalBytes - byteOffset);
+                ReadExactBytes(stream, buf, batchBytes);
+                Buffer.BlockCopy(buf, 0, tmp, byteOffset, batchBytes);
+                byteOffset += batchBytes;
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buf);
+        }
+
+        var dst = new T[count];
+        for (int i = 0; i < count; i++)
+        {
+            dst[i] = NumOps.FromDouble(tmp[i]);
+        }
+
+        return dst;
     }
 }

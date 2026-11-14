@@ -261,6 +261,11 @@ internal sealed class FusedTrainingSession<T>
             return FusedStepOutcome.CommittedFailure;
         }
 
+        if (_owner is NeuralNetworks.NeuralNetworkBase<T> { ActiveMixedPrecisionContext: not null })
+            return Decline("mixed precision active (requires eager tape loss scaling)");
+
+        bool isDistributed = _owner is NeuralNetworks.NeuralNetworkBase<T> { DistributedCoordinator: not null };
+
         if (IsDisabled)
             return Decline("fused path sticky-disabled from a prior fallback");
         if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
@@ -280,7 +285,7 @@ internal sealed class FusedTrainingSession<T>
         // thread-static and stacks on the enclosing arena, so a decline after it would leave it current for the
         // eager fallback and every later step.
         double l2 = 0.0;
-        if (OptimizerRegularizationOf(optimizer) is { } regularization)
+        if (!isDistributed && OptimizerRegularizationOf(optimizer) is { } regularization)
         {
             // The plan adds one L2 strength to every parameter; a model that excludes some (TF EfficientNet decays
             // nothing in batch normalization) trains on the eager tape, which skips them.
@@ -305,13 +310,13 @@ internal sealed class FusedTrainingSession<T>
             : 0.0;
         if (double.IsNaN(optimizerClip))
             return DeclineAndDropCommitted("optimizer clips gradients by value; the fused plan clips only by global norm");
-        if (optimizerClip > 0.0)
+        if (!isDistributed && optimizerClip > 0.0)
             clip = clip > 0.0 ? Math.Min(clip, optimizerClip) : optimizerClip;
         // The plan adds its L2 term on the optimizer's side of the clip; after it is PyTorch's order, the default.
         bool l2AfterClip = optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> { RegularizesAfterClip: true };
 
-        bool verifyPersistence = (!_persistenceVerified && !IsCommitted)
-            || ++_stepsSincePersistenceCheck >= PersistenceRecheckInterval;
+        bool verifyPersistence = !isDistributed && ((!_persistenceVerified && !IsCommitted)
+            || ++_stepsSincePersistenceCheck >= PersistenceRecheckInterval);
         // Once a replay has been seen to update the live tensors, every later replay runs the same plan, so a
         // periodic re-check only has to confirm the plan still trains the model's live tensors -- a host-side
         // comparison (ConfiguredPlanTrainsLiveParameters). The numeric probe below costs a slice, a copy and a
@@ -335,7 +340,8 @@ internal sealed class FusedTrainingSession<T>
 
         // The first replay with new data (the step after the trace) is checked against the eager forward when the
         // caller asks: the eager loss on this batch, and a copy of the trained tensors to undo a disagreeing update.
-        bool checkReplay = request.VerifyReplayAgreement && IsCommitted && !_replayAgreementVerified;
+        // In distributed mode stepLoss is the globally reduced loss across all ranks, whereas eagerLoss is local.
+        bool checkReplay = !isDistributed && request.VerifyReplayAgreement && IsCommitted && !_replayAgreementVerified;
         double eagerLoss = 0.0;
         (Tensor<T> Live, Tensor<T> Saved)[]? snapshot = null;
         if (checkReplay)
@@ -459,7 +465,7 @@ internal sealed class FusedTrainingSession<T>
             // point and wrong for a plan whose trace lost the path from the loss to the parameters: such a plan stepped
             // a VAE forever without moving a weight. Once per plan, ask the eager tape. The plan moved nothing, so
             // dropping it here loses no update; this step then runs on the eager tape.
-            if (!persisted && !detached && gradientsObserved && !gradientNonZero && !_zeroGradientCrossChecked)
+            if (!isDistributed && !persisted && !detached && gradientsObserved && !gradientNonZero && !_zeroGradientCrossChecked)
             {
                 _zeroGradientCrossChecked = true;
                 if (EagerGradientNonZero(request))
@@ -512,7 +518,7 @@ internal sealed class FusedTrainingSession<T>
         // copies and kept predicting with the pre-training weights for every caller but NeuralNetworkBase, which
         // invalidated on its own. One place, so no caller of the session can miss it.
         InvalidateDerivedWeightCaches();
-        if (optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> scheduled)
+        if (!isDistributed && optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> scheduled)
             scheduled.OnBatchEnd();
 
         // Counted here, where every base class's fused step lands, and regardless of the diagnostics level: the hit

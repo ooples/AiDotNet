@@ -22921,3 +22921,113 @@ AiDotNet.Enums.MixtureOfExpertsGatingNoise.SoftplusOfRouterLogits = 1 -> AiDotNe
 AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.Entmax15 = 0 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.SoftmaxSigmoid = 1 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
+AiDotNet.Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>
+AiDotNet.Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>.BatchCount.get -> int
+AiDotNet.Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>.BatchSize.get -> int
+AiDotNet.Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>.BatchSize.set -> void
+AiDotNet.Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>.CurrentBatchIndex.get -> int
+AiDotNet.Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>.CurrentIndex.get -> int
+AiDotNet.Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>.Description.get -> string!
+AiDotNet.Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>.DistributedStreamingDataLoader(AiDotNet.Interfaces.IStreamingDataLoader<T, TInput, TOutput>! innerLoader, AiDotNet.DistributedTraining.ICommunicationBackend<T>! backend, int? localBatchSize = null) -> void
+AiDotNet.Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>.GetBatches(bool shuffle = true, bool dropLast = false, int? seed = null) -> System.Collections.Generic.IEnumerable<(TInput[]! Inputs, TOutput[]! Outputs)>!
+AiDotNet.Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>.GetBatchesAsync(bool shuffle = true, bool dropLast = false, int? seed = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Collections.Generic.IAsyncEnumerable<(TInput[]! Inputs, TOutput[]! Outputs)>!
+AiDotNet.Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>.GlobalBatchSize.get -> int
+AiDotNet.Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>.InnerLoader.get -> AiDotNet.Interfaces.IStreamingDataLoader<T, TInput, TOutput>!
+AiDotNet.Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>.IsLoaded.get -> bool
+AiDotNet.Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>.LastBatchGlobalSampleCount.get -> long
+AiDotNet.Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>.LoadAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+AiDotNet.Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>.Name.get -> string!
+AiDotNet.Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>.NumWorkers.get -> int
+AiDotNet.Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>.PrefetchCount.get -> int
+AiDotNet.Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>.Progress.get -> double
+AiDotNet.Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>.Rank.get -> int
+AiDotNet.Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>.RankBatchSizes.get -> System.Collections.Generic.IReadOnlyList<int>!
+AiDotNet.Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>.Reset() -> void
+AiDotNet.Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>.SampleCount.get -> int
+AiDotNet.Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>.SkipSamplesOnNextEnumeration(long samplesToSkip) -> void
+AiDotNet.Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>.TotalCount.get -> int
+AiDotNet.Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>.Unload() -> void
+AiDotNet.Data.Loaders.DistributedStreamingDataLoader<T, TInput, TOutput>.WorldSize.get -> int
+AiDotNet.DistributedTraining.CommunicationBackendBase<T>.CollectiveCount.get -> long
+AiDotNet.DistributedTraining.CommunicationBackendBase<T>.DrainAsyncCollectives() -> void
+AiDotNet.DistributedTraining.CommunicationBackendBase<T>.RecordCollectiveDurationTicks(long elapsedStopwatchTicks) -> void
+AiDotNet.DistributedTraining.CommunicationBackendBase<T>.TotalCollectiveMilliseconds.get -> double
+AiDotNet.DistributedTraining.IAsyncCollectiveHandle
+AiDotNet.DistributedTraining.IAsyncCollectiveHandle.Elapsed.get -> System.TimeSpan
+AiDotNet.DistributedTraining.IAsyncCollectiveHandle.IsCompleted.get -> bool
+AiDotNet.DistributedTraining.IAsyncCollectiveHandle.Wait() -> void
+AiDotNet.DistributedTraining.IAsyncCollectiveHandle.WaitAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task!
+AiDotNet.DistributedTraining.IAsyncCollectiveResultHandle<T>
+AiDotNet.DistributedTraining.IAsyncCollectiveResultHandle<T>.GetResult() -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.DistributedTraining.IAsyncCommunicationBackend<T>
+AiDotNet.DistributedTraining.IAsyncCommunicationBackend<T>.AllGatherAsync(AiDotNet.Tensors.LinearAlgebra.Vector<T>! sendData) -> AiDotNet.DistributedTraining.IAsyncCollectiveResultHandle<T>!
+AiDotNet.DistributedTraining.IAsyncCommunicationBackend<T>.AllReduceAsync(AiDotNet.Tensors.LinearAlgebra.Vector<T>! data, AiDotNet.DistributedTraining.ReductionOperation operation) -> AiDotNet.DistributedTraining.IAsyncCollectiveHandle!
+AiDotNet.DistributedTraining.IAsyncCommunicationBackend<T>.CollectiveCount.get -> long
+AiDotNet.DistributedTraining.IAsyncCommunicationBackend<T>.ReduceScatterAsync(AiDotNet.Tensors.LinearAlgebra.Vector<T>! data, AiDotNet.DistributedTraining.ReductionOperation operation) -> AiDotNet.DistributedTraining.IAsyncCollectiveResultHandle<T>!
+AiDotNet.DistributedTraining.IAsyncCommunicationBackend<T>.ResetDiagnostics() -> void
+AiDotNet.DistributedTraining.IAsyncCommunicationBackend<T>.TotalCollectiveMilliseconds.get -> double
+AiDotNet.DistributedTraining.ShardingConfiguration<T>.GradientBucketSizeBytes.get -> int
+AiDotNet.DistributedTraining.ShardingConfiguration<T>.GradientBucketSizeBytes.set -> void
+AiDotNet.DistributedTraining.ShardingConfiguration<T>.OverlapCommunication.get -> bool
+AiDotNet.DistributedTraining.ShardingConfiguration<T>.OverlapCommunication.set -> void
+AiDotNet.DistributedTraining.SharedMemoryCommunicationBackend<T>
+AiDotNet.DistributedTraining.SharedMemoryCommunicationBackend<T>.Dispose() -> void
+AiDotNet.DistributedTraining.SharedMemoryCommunicationBackend<T>.SessionName.get -> string!
+AiDotNet.DistributedTraining.SharedMemoryCommunicationBackend<T>.SharedMemoryCommunicationBackend() -> void
+AiDotNet.DistributedTraining.SharedMemoryCommunicationBackend<T>.SharedMemoryCommunicationBackend(int rank, int worldSize, string! sessionName = "aidotnet_shm_default", long slotCapacityBytes = 16777216, int timeoutMilliseconds = 120000) -> void
+AiDotNet.Models.Options.StreamingTrainingOptions<T, TInput, TOutput>.GradientAccumulationSteps.get -> int
+AiDotNet.Models.Options.StreamingTrainingOptions<T, TInput, TOutput>.GradientAccumulationSteps.set -> void
+override AiDotNet.DistributedTraining.SharedMemoryCommunicationBackend<T>.AllGather(AiDotNet.Tensors.LinearAlgebra.Vector<T>! sendData) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+override AiDotNet.DistributedTraining.SharedMemoryCommunicationBackend<T>.AllReduce(AiDotNet.Tensors.LinearAlgebra.Vector<T>! data, AiDotNet.DistributedTraining.ReductionOperation operation) -> void
+override AiDotNet.DistributedTraining.SharedMemoryCommunicationBackend<T>.Barrier() -> void
+override AiDotNet.DistributedTraining.SharedMemoryCommunicationBackend<T>.Broadcast(AiDotNet.Tensors.LinearAlgebra.Vector<T>! data, int root = 0) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+override AiDotNet.DistributedTraining.SharedMemoryCommunicationBackend<T>.Rank.get -> int
+override AiDotNet.DistributedTraining.SharedMemoryCommunicationBackend<T>.Receive(int sourceRank, int count, int tag = 0) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+override AiDotNet.DistributedTraining.SharedMemoryCommunicationBackend<T>.ReduceScatter(AiDotNet.Tensors.LinearAlgebra.Vector<T>! data, AiDotNet.DistributedTraining.ReductionOperation operation) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+override AiDotNet.DistributedTraining.SharedMemoryCommunicationBackend<T>.Scatter(AiDotNet.Tensors.LinearAlgebra.Vector<T>! sendData, int root = 0) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+override AiDotNet.DistributedTraining.SharedMemoryCommunicationBackend<T>.Send(AiDotNet.Tensors.LinearAlgebra.Vector<T>! data, int destinationRank, int tag = 0) -> void
+override AiDotNet.DistributedTraining.SharedMemoryCommunicationBackend<T>.WorldSize.get -> int
+virtual AiDotNet.DistributedTraining.CommunicationBackendBase<T>.AllGatherAsync(AiDotNet.Tensors.LinearAlgebra.Vector<T>! sendData) -> AiDotNet.DistributedTraining.IAsyncCollectiveResultHandle<T>!
+virtual AiDotNet.DistributedTraining.CommunicationBackendBase<T>.AllReduceAsync(AiDotNet.Tensors.LinearAlgebra.Vector<T>! data, AiDotNet.DistributedTraining.ReductionOperation operation) -> AiDotNet.DistributedTraining.IAsyncCollectiveHandle!
+virtual AiDotNet.DistributedTraining.CommunicationBackendBase<T>.ReduceScatterAsync(AiDotNet.Tensors.LinearAlgebra.Vector<T>! data, AiDotNet.DistributedTraining.ReductionOperation operation) -> AiDotNet.DistributedTraining.IAsyncCollectiveResultHandle<T>!
+virtual AiDotNet.DistributedTraining.CommunicationBackendBase<T>.ResetDiagnostics() -> void
+AiDotNet.DistributedTraining.DistributedTapeCoordinator<T>
+AiDotNet.DistributedTraining.DistributedTapeCoordinator<T>.Backend.get -> AiDotNet.DistributedTraining.ICommunicationBackend<T>!
+AiDotNet.DistributedTraining.DistributedTapeCoordinator<T>.BeginBackwardStep(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! trainableParameters, double rankWeight) -> void
+AiDotNet.DistributedTraining.DistributedTapeCoordinator<T>.ConsolidateOptimizerStateBytes(AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! optimizer, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! trainableParameters) -> byte[]!
+AiDotNet.DistributedTraining.DistributedTapeCoordinator<T>.Dispose() -> void
+AiDotNet.DistributedTraining.DistributedTapeCoordinator<T>.DistributedTapeCoordinator(AiDotNet.DistributedTraining.ICommunicationBackend<T>! backend, AiDotNet.Enums.DistributedStrategy strategy, AiDotNet.DistributedTraining.IShardingConfiguration<T>? configuration = null) -> void
+AiDotNet.DistributedTraining.DistributedTapeCoordinator<T>.EnsureInitialParametersSynchronized(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! trainableParameters, System.Action? invalidateCaches = null) -> void
+AiDotNet.DistributedTraining.DistributedTapeCoordinator<T>.GradientBucketSizeBytes.get -> int
+AiDotNet.DistributedTraining.DistributedTapeCoordinator<T>.LastGlobalLoss.get -> double
+AiDotNet.DistributedTraining.DistributedTapeCoordinator<T>.LastGlobalTokenCount.get -> long
+AiDotNet.DistributedTraining.DistributedTapeCoordinator<T>.LastStepCommunicationMilliseconds.get -> double
+AiDotNet.DistributedTraining.DistributedTapeCoordinator<T>.LastStepCommunicationShare.get -> double
+AiDotNet.DistributedTraining.DistributedTapeCoordinator<T>.LastStepExposedCommunicationMilliseconds.get -> double
+AiDotNet.DistributedTraining.DistributedTapeCoordinator<T>.LastStepTotalMilliseconds.get -> double
+AiDotNet.DistributedTraining.DistributedTapeCoordinator<T>.OnParameterGradientReady(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! parameter, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! gradient) -> void
+AiDotNet.DistributedTraining.DistributedTapeCoordinator<T>.OverlapCommunication.get -> bool
+AiDotNet.DistributedTraining.DistributedTapeCoordinator<T>.Rank.get -> int
+AiDotNet.DistributedTraining.DistributedTapeCoordinator<T>.ResetParameterSync() -> void
+AiDotNet.DistributedTraining.DistributedTapeCoordinator<T>.RestoreOptimizerStateFromConsolidatedBytes(AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! optimizer, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! trainableParameters, byte[]? rank0Bytes) -> void
+AiDotNet.DistributedTraining.DistributedTapeCoordinator<T>.Strategy.get -> AiDotNet.Enums.DistributedStrategy
+AiDotNet.DistributedTraining.DistributedTapeCoordinator<T>.SynchronizeStepMetadata(long localTokenCount, double localUnscaledLoss) -> (double RankWeight, double GlobalLoss, long GlobalTokens)
+AiDotNet.DistributedTraining.DistributedTapeCoordinator<T>.SynchronizeUnscaleClipAndStep(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! trainableParameters, System.Collections.Generic.Dictionary<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! gradients, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer, AiDotNet.MixedPrecision.MixedPrecisionContext? mixedPrecisionContext, System.Action? restoreFp32Masters, System.Action? syncFp32MastersFromWorking, System.Action<System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!, System.Collections.Generic.Dictionary<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!>? regularizeGradients, double maxGradNorm, System.Action<AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>!>? executeFullParameterStep, System.Action? invalidateLayerCaches = null) -> bool
+AiDotNet.DistributedTraining.DistributedTapeCoordinator<T>.WorldSize.get -> int
+AiDotNet.DistributedTraining.GradientBucketReducer<T>
+AiDotNet.DistributedTraining.GradientBucketReducer<T>.BeginStep(double rankWeight) -> void
+AiDotNet.DistributedTraining.GradientBucketReducer<T>.BucketCount.get -> int
+AiDotNet.DistributedTraining.GradientBucketReducer<T>.Dispose() -> void
+AiDotNet.DistributedTraining.GradientBucketReducer<T>.FlushAndSynchronize(System.Collections.Generic.IDictionary<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! gradients, out AiDotNet.Tensors.LinearAlgebra.Vector<T>? reducedLocalShard) -> void
+AiDotNet.DistributedTraining.GradientBucketReducer<T>.GradientBucketReducer(AiDotNet.DistributedTraining.ICommunicationBackend<T>! backend, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! parameters, int bucketSizeBytes = 26214400, bool overlapCommunication = true, bool useReduceScatter = false) -> void
+AiDotNet.DistributedTraining.GradientBucketReducer<T>.LastExposedWaitMilliseconds.get -> double
+AiDotNet.DistributedTraining.GradientBucketReducer<T>.LastTotalCollectiveMilliseconds.get -> double
+AiDotNet.DistributedTraining.GradientBucketReducer<T>.NotifyGradientReady(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! parameter, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! gradient) -> void
+static AiDotNet.DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(AiDotNet.Tensors.LinearAlgebra.Tensor<T>? targetBatch) -> long
+AiDotNet.CheckpointManagement.CheckpointManagerBase<T, TInput, TOutput>.AutoCheckpointConfiguration.MinimizeMetric.get -> bool
+AiDotNet.CheckpointManagement.CheckpointManagerBase<T, TInput, TOutput>.AutoCheckpointConfiguration.MinimizeMetric.set -> void
+AiDotNet.CheckpointManagement.CheckpointManagerBase<T, TInput, TOutput>.AutoCheckpointConfiguration.SaveInterval.get -> System.TimeSpan?
+AiDotNet.CheckpointManagement.CheckpointManagerBase<T, TInput, TOutput>.AutoCheckpointConfiguration.SaveInterval.set -> void
+*REMOVED*virtual AiDotNet.CheckpointManagement.CheckpointManagerBase<T, TInput, TOutput>.ConfigureAutoCheckpointing(int saveFrequency, int keepLast = 5, bool saveOnImprovement = true, string? metricName = null) -> void
+virtual AiDotNet.CheckpointManagement.CheckpointManagerBase<T, TInput, TOutput>.ConfigureAutoCheckpointing(int saveFrequency, int keepLast, bool saveOnImprovement, string? metricName) -> void
+virtual AiDotNet.CheckpointManagement.CheckpointManagerBase<T, TInput, TOutput>.ConfigureAutoCheckpointing(int saveFrequency, int keepLast = 5, bool saveOnImprovement = true, string? metricName = null, bool minimizeMetric = true, System.TimeSpan? saveInterval = null) -> void

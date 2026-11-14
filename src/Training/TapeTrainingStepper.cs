@@ -106,7 +106,7 @@ internal sealed class TapeTrainingStepper<T>
         if (!_otherLanes.TryGetValue(key, out var lane))
         {
             // A distinct plan key per further group, so dropping one group's plan never drops another's.
-            lane = new Lane(new FusedTrainingSession<T>(new object(), _onReset));
+            lane = new Lane(new FusedTrainingSession<T>(_owner, _onReset, stateKey: new object()));
             _otherLanes[key] = lane;
         }
 
@@ -142,7 +142,7 @@ internal sealed class TapeTrainingStepper<T>
 
         LastStepFused = false;
         EagerStepCount++;
-        return EagerStep(request);
+        return EagerStep(request, _owner);
     }
 
     /// <summary>
@@ -173,8 +173,13 @@ internal sealed class TapeTrainingStepper<T>
 
     /// <summary>Forward, loss and backward on the tape, then the model's optimizer.</summary>
     public static T EagerStep(FusedTrainingStepRequest<T> request)
+        => EagerStep(request, owner: null);
+
+    /// <summary>Forward, loss and backward on the tape with explicit owner context for distributed/mixed-precision coordination.</summary>
+    internal static T EagerStep(FusedTrainingStepRequest<T> request, object? owner)
     {
         Guard.NotNull(request);
+        owner ??= ResolveOwnerFromDelegates(request.Forward, request.ComputeLoss, request.OnGradients);
         foreach (var layer in request.Layers)
             layer.ZeroGrad();
 
@@ -190,6 +195,7 @@ internal sealed class TapeTrainingStepper<T>
             (predicted, y) => request.ComputeLoss(predicted, y),
             new EagerStepHooks
             {
+                Owner = owner,
                 OnGradients = request.OnGradients,
                 // The fused plan adds the optimizer's L2 on the same side of its clip; the eager step it falls back to
                 // must too, or a model trains on a different objective whenever compilation declines.
@@ -270,6 +276,7 @@ internal sealed class TapeTrainingStepper<T>
         Guard.NotNull(parameters);
         Guard.NotNull(objective);
         Guard.NotNull(optimizer);
+        var owner = ResolveOwnerFromDelegates(parameters, objective, onGradients, beforeUpdate);
         var placeholder = new Tensor<T>(new[] { 1 });
         return EagerTapeStep(
             objective,
@@ -281,6 +288,7 @@ internal sealed class TapeTrainingStepper<T>
             (value, _) => value,
             new EagerStepHooks
             {
+                Owner = owner,
                 OnGradients = onGradients,
                 RegularizeGradients = applyOptimizerRegularization ? OptimizerRegularization(optimizer) : null,
                 ModelGradientClip = modelGradientClip,
@@ -350,6 +358,12 @@ internal sealed class TapeTrainingStepper<T>
         Guard.NotNull(optimizer);
         Guard.Positive(microBatchCount);
 
+        var ownerNet = ResolveOwnerFromDelegates(microObjective, onGradients) as NeuralNetworks.NeuralNetworkBase<T>;
+        if (ownerNet?.DistributedCoordinator is { } preCoord)
+        {
+            preCoord.EnsureInitialParametersSynchronized(parameters, ownerNet.InvalidateLayerWeightCaches);
+        }
+
         var engine = AiDotNetEngine.Current;
         var accumulated = new Dictionary<Tensor<T>, Tensor<T>>(parameters.Count, TensorReferenceComparer<Tensor<T>>.Instance);
         var reached = new List<Tensor<T>>(parameters.Count);
@@ -384,6 +398,21 @@ internal sealed class TapeTrainingStepper<T>
             engine.TensorMultiplyScalarInPlace(sum, inverseCount);
 
         T meanLoss = NumOps.FromDouble(lossSum / microBatchCount);
+        if (ownerNet?.DistributedCoordinator is { } distCoord)
+        {
+            return ExecuteDistributedAccumulatedObjectiveStep(
+                ownerNet,
+                distCoord,
+                parameters,
+                microBatchCount,
+                microObjective,
+                optimizer,
+                onGradients,
+                applyOptimizerRegularization,
+                accumulated,
+                lossSum,
+                inverseCount);
+        }
         onGradients?.Invoke(accumulated);
         RegularizeAndClip(optimizer, reached, accumulated,
             applyOptimizerRegularization ? OptimizerRegularization(optimizer) : null, modelClip: null);
@@ -456,6 +485,9 @@ internal sealed class TapeTrainingStepper<T>
     /// </summary>
     internal sealed class EagerStepHooks
     {
+        /// <summary>Optional model owner whose distributed coordinator or mixed-precision context governs the step.</summary>
+        public object? Owner { get; init; }
+
         /// <summary>
         /// Widens the tensors the backward differentiates beyond the parameters (a diagnostic probe asking whether an
         /// input is reachable). Only the parameters are ever updated. Null differentiates exactly the parameters.
@@ -517,6 +549,19 @@ internal sealed class TapeTrainingStepper<T>
         Guard.NotNull(objective);
         Guard.NotNull(parameterProvider);
         Guard.NotNull(update);
+        if (hooks?.Owner is NeuralNetworks.NeuralNetworkBase<T> { DistributedCoordinator: { } distCoord } distNet)
+        {
+            return ExecuteDistributedEagerTapeStep(
+                distNet, distCoord, objective, parameterProvider, update,
+                input, target, recomputeForward, recomputeLoss, hooks, objectiveTerms);
+        }
+        if (objectiveTerms is null
+            && hooks?.Owner is NeuralNetworks.NeuralNetworkBase<T> { ActiveMixedPrecisionContext: { } mpCtx } mpNet)
+        {
+            return ExecuteMixedPrecisionEagerTapeStep(
+                mpNet, mpCtx, objective, parameterProvider, update,
+                input, target, recomputeForward, recomputeLoss, hooks);
+        }
         if (objectiveTerms is not null)
             return SummedTapeObjective<T>.Step(objectiveTerms, parameterProvider, update,
                 input, target, recomputeForward, recomputeLoss, hooks);
@@ -685,5 +730,370 @@ internal sealed class TapeTrainingStepper<T>
         T scale = NumOps.FromDouble(maxNorm / (norm + 1e-6));
         foreach (var gradient in gradients.Values)
             engine.TensorMultiplyScalarInPlace(gradient, scale);
+    }
+
+    private static object? ResolveOwnerFromDelegates(params Delegate?[] delegates)
+    {
+        for (int i = 0; i < delegates.Length; i++)
+        {
+            var targetObj = delegates[i]?.Target;
+            if (targetObj is null) continue;
+            if (targetObj is NeuralNetworks.NeuralNetworkBase<T>)
+                return targetObj;
+
+            var targetType = targetObj.GetType();
+            if (targetType.Name.StartsWith("<", StringComparison.Ordinal))
+            {
+                var fields = targetType.GetFields(
+                    System.Reflection.BindingFlags.Instance
+                    | System.Reflection.BindingFlags.Public
+                    | System.Reflection.BindingFlags.NonPublic);
+                for (int f = 0; f < fields.Length; f++)
+                {
+                    if (typeof(NeuralNetworks.NeuralNetworkBase<T>).IsAssignableFrom(fields[f].FieldType)
+                        && fields[f].GetValue(targetObj) is NeuralNetworks.NeuralNetworkBase<T> capturedNet)
+                    {
+                        return capturedNet;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private static T ExecuteDistributedAccumulatedObjectiveStep(
+        NeuralNetworks.NeuralNetworkBase<T> ownerNet,
+        DistributedTraining.DistributedTapeCoordinator<T> distCoord,
+        IReadOnlyList<Tensor<T>> parameters,
+        int microBatchCount,
+        Func<int, Tensor<T>> microObjective,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
+        Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? onGradients,
+        bool applyOptimizerRegularization,
+        Dictionary<Tensor<T>, Tensor<T>> accumulated,
+        double lossSum,
+        T inverseCount)
+    {
+        var engine = AiDotNetEngine.Current;
+        double localMeanLoss = lossSum / microBatchCount;
+        var (rankWeight, globalLoss, _) = distCoord.SynchronizeStepMetadata(microBatchCount, localMeanLoss);
+        T globalLossT = NumOps.FromDouble(globalLoss);
+        ownerNet.SetLastLossFromStepper(globalLossT);
+        distCoord.BeginBackwardStep(parameters, rankWeight);
+
+        Tensor<T> MeanObjective()
+        {
+            Tensor<T>? total = null;
+            for (int i = 0; i < microBatchCount; i++)
+            {
+                var loss = microObjective(i);
+                total = total is null ? loss : engine.TensorAdd(total, loss);
+            }
+            return engine.TensorMultiplyScalar(total ?? new Tensor<T>(new[] { 1 }), inverseCount);
+        }
+
+        var regularizer = applyOptimizerRegularization
+            ? (ownerNet.GetDistributedOptimizerRegularizer(optimizer) ?? OptimizerRegularization(optimizer))
+            : null;
+        var placeholder = new Tensor<T>(new[] { 1 });
+
+        ownerNet.MarkDistributedMutationStarted();
+        bool stepped = distCoord.SynchronizeUnscaleClipAndStep(
+            parameters,
+            accumulated,
+            optimizer,
+            ownerNet.ActiveMixedPrecisionContext,
+            restoreFp32Masters: null,
+            syncFp32MastersFromWorking: null,
+            regularizer,
+            ownerNet.MaxGradNormValue,
+            ctx => OptimizerUpdate(optimizer)(new TapeStepContext<T>(
+                ctx.Parameters,
+                ctx.Gradients,
+                globalLossT,
+                placeholder,
+                placeholder,
+                (_, _) => MeanObjective(),
+                (value, _) => value,
+                parameterBuffer: null)),
+            ownerNet.InvalidateLayerWeightCaches);
+
+        onGradients?.Invoke(accumulated);
+        if (stepped && distCoord.Strategy != AiDotNet.Enums.DistributedStrategy.DDP)
+        {
+            ownerNet.FinalizeDistributedStepPostUpdate(optimizer);
+        }
+
+        return globalLossT;
+    }
+
+    private static T ExecuteDistributedEagerTapeStep(
+        NeuralNetworks.NeuralNetworkBase<T> distNet,
+        DistributedTraining.DistributedTapeCoordinator<T> distCoord,
+        Func<Tensor<T>> objective,
+        Func<IReadOnlyList<Tensor<T>>> parameterProvider,
+        Action<TapeStepContext<T>> update,
+        Tensor<T> input,
+        Tensor<T> target,
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> recomputeForward,
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> recomputeLoss,
+        EagerStepHooks hooks,
+        IReadOnlyList<Func<Tensor<T>>>? objectiveTerms)
+    {
+        if (input.Length == 0 || target.Length == 0)
+        {
+            var idleParameters = parameterProvider()
+                ?? throw new InvalidOperationException("A training step's parameter provider returned null.");
+            distCoord.EnsureInitialParametersSynchronized(idleParameters, distNet.InvalidateLayerWeightCaches);
+            var (_, idleGlobalLoss, _) = distCoord.SynchronizeStepMetadata(0L, 0.0);
+            T idleLossT = NumOps.FromDouble(idleGlobalLoss);
+            distNet.SetLastLossFromStepper(idleLossT);
+            distCoord.BeginBackwardStep(idleParameters, 0.0);
+
+            var emptyGrads = new Dictionary<Tensor<T>, Tensor<T>>(idleParameters.Count, TensorReferenceComparer<Tensor<T>>.Instance);
+            hooks.BeforeUpdate?.Invoke();
+            distNet.MarkDistributedMutationStarted();
+            bool idleStepped = distCoord.SynchronizeUnscaleClipAndStep(
+                idleParameters,
+                emptyGrads,
+                hooks.Optimizer,
+                distNet.ActiveMixedPrecisionContext,
+                restoreFp32Masters: null,
+                syncFp32MastersFromWorking: null,
+                hooks.RegularizeGradients,
+                hooks.ModelGradientClip,
+                ctx => update(new TapeStepContext<T>(
+                    ctx.Parameters,
+                    ctx.Gradients,
+                    idleLossT,
+                    input,
+                    target,
+                    recomputeForward,
+                    recomputeLoss,
+                    parameterBuffer: null)),
+                distNet.InvalidateLayerWeightCaches);
+
+            hooks.OnGradients?.Invoke(emptyGrads);
+            if (idleStepped && distCoord.Strategy != AiDotNet.Enums.DistributedStrategy.DDP)
+            {
+                distNet.FinalizeDistributedStepPostUpdate(hooks.Optimizer);
+            }
+            return idleLossT;
+        }
+
+        if (distNet.HasLazyUninitializedLayers())
+        {
+            bool wasTraining = distNet.IsTrainingMode;
+            if (wasTraining) distNet.SetTrainingMode(false);
+            try
+            {
+                using var noGrad = new NoGradScope<T>();
+                recomputeForward(input, target);
+            }
+            catch
+            {
+                // Best-effort warmup; training objective below surfaces actionable failures.
+            }
+            finally
+            {
+                if (wasTraining) distNet.SetTrainingMode(true);
+            }
+        }
+
+        var preParams = parameterProvider()
+            ?? throw new InvalidOperationException("A training step's parameter provider returned null.");
+        distCoord.EnsureInitialParametersSynchronized(preParams, distNet.InvalidateLayerWeightCaches);
+
+        var mpCtx = distNet.ActiveMixedPrecisionContext;
+        List<float[]>? mpSnapshots = null;
+        List<Tensor<T>>? mpTargets = null;
+        bool mpRestored = true;
+
+        try
+        {
+            distNet.PrepareMixedPrecisionWorkingWeights(mpCtx, preParams, out mpSnapshots, out mpTargets, ref mpRestored);
+
+            using var tape = new GradientTape<T>();
+            var loss = objective();
+            if (loss is null)
+                throw new InvalidOperationException("A training objective returned null instead of a scalar loss tensor.");
+
+            var parameters = parameterProvider()
+                ?? throw new InvalidOperationException("A training step's parameter provider returned null.");
+
+            long localTokens = DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(target);
+            if (localTokens <= 0) localTokens = 1L;
+            double localUnscaledLoss = loss.Length > 0 ? NumOps.ToDouble(loss.Data.Span[0]) : 0.0;
+            var lossForBackward = distNet.ScaleLossForMixedPrecision(mpCtx, loss);
+
+            var (rankWeight, globalLoss, _) = distCoord.SynchronizeStepMetadata(localTokens, localUnscaledLoss);
+            T globalLossT = NumOps.FromDouble(globalLoss);
+            distNet.SetLastLossFromStepper(globalLossT);
+            distCoord.BeginBackwardStep(parameters, rankWeight);
+
+            var widenSources = hooks.GradientSources;
+            var gradients = new Dictionary<Tensor<T>, Tensor<T>>(parameters.Count, TensorReferenceComparer<Tensor<T>>.Instance);
+
+            if (widenSources is null
+                && objectiveTerms is null
+                && distCoord is { WorldSize: > 1, OverlapCommunication: true }
+                && !distNet.IsGradientCheckpointingEnabled)
+            {
+                tape.ComputeGradientsStreaming(
+                    lossForBackward,
+                    parameters,
+                    (param, grad) =>
+                    {
+                        if (param is null || grad is null || grad.Length == 0 || gradients.ContainsKey(param))
+                            return;
+                        distCoord.OnParameterGradientReady(param, grad);
+                        gradients[param] = TensorCheckpoint<T>.Capture(new[] { grad })[0];
+                    });
+                hooks.OnTapeGradients?.Invoke(gradients);
+            }
+            else
+            {
+                var sources = widenSources is null ? parameters : widenSources(parameters) ?? parameters;
+                var all = tape.ComputeGradients(lossForBackward, sources);
+                hooks.OnTapeGradients?.Invoke(all);
+                CopySelectedParameterGradients(parameters, all, gradients, out _);
+            }
+
+            hooks.BeforeUpdate?.Invoke();
+            distNet.MarkDistributedMutationStarted();
+            bool stepped = distCoord.SynchronizeUnscaleClipAndStep(
+                parameters,
+                gradients,
+                hooks.Optimizer,
+                mpCtx,
+                () => NeuralNetworks.NeuralNetworkBase<T>.RestoreMixedPrecisionMasterWeights(mpSnapshots, mpTargets, ref mpRestored),
+                syncFp32MastersFromWorking: null,
+                hooks.RegularizeGradients,
+                hooks.ModelGradientClip,
+                ctx => update(new TapeStepContext<T>(
+                    ctx.Parameters,
+                    ctx.Gradients,
+                    globalLossT,
+                    input,
+                    target,
+                    recomputeForward,
+                    recomputeLoss,
+                    parameterBuffer: null)),
+                distNet.InvalidateLayerWeightCaches);
+
+            hooks.OnGradients?.Invoke(gradients);
+            if (stepped && distCoord.Strategy != AiDotNet.Enums.DistributedStrategy.DDP)
+            {
+                distNet.FinalizeDistributedStepPostUpdate(hooks.Optimizer);
+            }
+            return globalLossT;
+        }
+        finally
+        {
+            NeuralNetworks.NeuralNetworkBase<T>.RestoreMixedPrecisionMasterWeights(mpSnapshots, mpTargets, ref mpRestored);
+        }
+    }
+
+    private static T ExecuteMixedPrecisionEagerTapeStep(
+        NeuralNetworks.NeuralNetworkBase<T> mpNet,
+        MixedPrecision.MixedPrecisionContext mpCtx,
+        Func<Tensor<T>> objective,
+        Func<IReadOnlyList<Tensor<T>>> parameterProvider,
+        Action<TapeStepContext<T>> update,
+        Tensor<T> input,
+        Tensor<T> target,
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> recomputeForward,
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> recomputeLoss,
+        EagerStepHooks hooks)
+    {
+        if (input.Length > 0 && mpNet.HasLazyUninitializedLayers())
+        {
+            bool wasTraining = mpNet.IsTrainingMode;
+            if (wasTraining) mpNet.SetTrainingMode(false);
+            try
+            {
+                using var noGrad = new NoGradScope<T>();
+                recomputeForward(input, target);
+            }
+            catch
+            {
+                // Best-effort warmup.
+            }
+            finally
+            {
+                if (wasTraining) mpNet.SetTrainingMode(true);
+            }
+        }
+
+        var preParams = parameterProvider()
+            ?? throw new InvalidOperationException("A training step's parameter provider returned null.");
+        List<float[]>? mpSnapshots = null;
+        List<Tensor<T>>? mpTargets = null;
+        bool mpRestored = true;
+
+        try
+        {
+            mpNet.PrepareMixedPrecisionWorkingWeights(mpCtx, preParams, out mpSnapshots, out mpTargets, ref mpRestored);
+
+            using var tape = new GradientTape<T>();
+            var loss = objective();
+            if (loss is null)
+                throw new InvalidOperationException("A training objective returned null instead of a scalar loss tensor.");
+
+            var parameters = parameterProvider()
+                ?? throw new InvalidOperationException("A training step's parameter provider returned null.");
+            var lossForBackward = mpNet.ScaleLossForMixedPrecision(mpCtx, loss);
+
+            var widenSources = hooks.GradientSources;
+            var sources = widenSources is null ? parameters : widenSources(parameters) ?? parameters;
+            var all = tape.ComputeGradients(lossForBackward, sources);
+            hooks.OnTapeGradients?.Invoke(all);
+
+            var gradients = new Dictionary<Tensor<T>, Tensor<T>>(parameters.Count, TensorReferenceComparer<Tensor<T>>.Instance);
+            CopySelectedParameterGradients(parameters, all, gradients, out var reached);
+
+            T lossValue = loss.Length > 0 ? loss.Data.Span[0] : NumOps.Zero;
+            bool hasOverflow = mpNet.UnscaleAndCheckMixedPrecisionGradients(mpCtx, reached, gradients);
+            NeuralNetworks.NeuralNetworkBase<T>.RestoreMixedPrecisionMasterWeights(mpSnapshots, mpTargets, ref mpRestored);
+
+            if (hasOverflow)
+            {
+                hooks.OnGradients?.Invoke(gradients);
+                return lossValue;
+            }
+
+            hooks.OnGradients?.Invoke(gradients);
+            hooks.RegularizeAndClip(reached, gradients);
+            hooks.BeforeUpdate?.Invoke();
+
+            update(new TapeStepContext<T>(
+                reached, gradients, lossValue, input, target, recomputeForward, recomputeLoss, parameterBuffer: null));
+            return lossValue;
+        }
+        finally
+        {
+            NeuralNetworks.NeuralNetworkBase<T>.RestoreMixedPrecisionMasterWeights(mpSnapshots, mpTargets, ref mpRestored);
+        }
+    }
+
+    private static void CopySelectedParameterGradients(
+        IReadOnlyList<Tensor<T>> parameters,
+        IReadOnlyDictionary<Tensor<T>, Tensor<T>> allGradients,
+        Dictionary<Tensor<T>, Tensor<T>> selectedGradients,
+        out List<Tensor<T>> reached)
+    {
+        reached = new List<Tensor<T>>(parameters.Count);
+        for (int i = 0; i < parameters.Count; i++)
+        {
+            var parameter = parameters[i];
+            if (parameter is not null
+                && !selectedGradients.ContainsKey(parameter)
+                && allGradients.TryGetValue(parameter, out var gradient)
+                && gradient is not null)
+            {
+                selectedGradients[parameter] = gradient;
+                reached.Add(parameter);
+            }
+        }
     }
 }

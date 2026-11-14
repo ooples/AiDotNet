@@ -41,12 +41,24 @@ public class StreamingTrainingOptions<T, TInput, TOutput> : ModelOptions
         : base(other ?? throw new ArgumentNullException(nameof(other)))
     {
         MaxSteps = other.MaxSteps;
+        GradientAccumulationSteps = other.GradientAccumulationSteps;
         ValidationLoader = other.ValidationLoader;
         ValidateEveryNSteps = other.ValidateEveryNSteps;
         ValidationMaxBatches = other.ValidationMaxBatches;
         ResumeFromLatestCheckpoint = other.ResumeFromLatestCheckpoint;
         UseConfiguredSchedulerOnResume = other.UseConfiguredSchedulerOnResume;
     }
+
+    /// <summary>
+    /// Gets or sets the number of micro-batches accumulated before each optimizer step.
+    /// </summary>
+    /// <value>The accumulation factor; defaults to <c>1</c> (step on every micro-batch).</value>
+    /// <remarks>
+    /// In distributed runs, gradient synchronization (<c>AllReduce</c> / <c>ReduceScatter</c>), mixed-precision
+    /// unscaling, and global-norm clipping run once per optimizer step after all <see cref="GradientAccumulationSteps"/>
+    /// micro-batches have been accumulated locally.
+    /// </remarks>
+    public int GradientAccumulationSteps { get; set; } = 1;
 
     /// <summary>
     /// Gets or sets the global optimizer-step budget. Training stops after this many steps even mid-epoch.
@@ -103,6 +115,8 @@ public class StreamingTrainingOptions<T, TInput, TOutput> : ModelOptions
     {
         if (MaxSteps is <= 0)
             throw new ArgumentException("MaxSteps must be positive when set.", nameof(MaxSteps));
+        if (GradientAccumulationSteps <= 0)
+            throw new ArgumentException("GradientAccumulationSteps must be at least 1.", nameof(GradientAccumulationSteps));
         if (ValidateEveryNSteps < 0)
             throw new ArgumentException("ValidateEveryNSteps cannot be negative.", nameof(ValidateEveryNSteps));
         if (ValidationMaxBatches is <= 0)

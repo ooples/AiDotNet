@@ -503,6 +503,15 @@ public static class CompiledTapeTrainingStep<T>
 
     internal static bool? ConfiguredPlanTrainsLiveParameters(IEnumerable<Tensor<T>> liveParameters)
     {
+        if (CurrentState.planOptimizerStep == -2 && _cachedParameters is { Length: > 0 } distributedCached)
+        {
+            var liveSet = new HashSet<Tensor<T>>(liveParameters, Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+            for (int i = 0; i < distributedCached.Length; i++)
+            {
+                if (!liveSet.Contains(distributedCached[i])) return false;
+            }
+            return true;
+        }
         if (CurrentState.planOptimizerStep < 0) return null;
         if (_configuredPlan is not AiDotNet.Tensors.Engines.Compilation.ICompiledTrainingPlanIntrospection<T> plan) return null;
         var live = new HashSet<Tensor<T>>(liveParameters, Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
@@ -654,7 +663,7 @@ public static class CompiledTapeTrainingStep<T>
         try
         {
             _currentState = state;
-            return StepCore(layers, input, target, learningRate, forward, computeLoss);
+            return StepCore(layers, input, target, learningRate, forward, computeLoss, owner);
         }
         finally
         {
@@ -671,13 +680,20 @@ public static class CompiledTapeTrainingStep<T>
         Tensor<T> target,
         T learningRate,
         Func<Tensor<T>, Tensor<T>> forward,
-        Func<Tensor<T>, Tensor<T>, Tensor<T>> computeLoss)
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> computeLoss,
+        object? owner = null)
     {
         if (!TensorCodecOptions.Current.EnableCompilation)
             return TapeTrainingStep<T>.Step(layers, input, target, learningRate, forward, computeLoss);
 
         var numOps = MathHelper.GetNumericOperations<T>();
         var engine = AiDotNetEngine.Current;
+
+        if (owner is NeuralNetworks.NeuralNetworkBase<T> { DistributedCoordinator: { } distCoord } distNet)
+        {
+            return StepDistributedCompiledSgd(
+                distNet, distCoord, layers, input, target, learningRate, forward, computeLoss, numOps, engine);
+        }
 
         try
         {
@@ -1118,7 +1134,7 @@ public static class CompiledTapeTrainingStep<T>
         try
         {
             _currentState = state;
-            return TryStepWithFusedOptimizerCore(layers: layers, input: input, target: target, forward: forward, computeLoss: computeLoss, optimizerType: optimizerType, learningRate: learningRate, beta1: beta1, beta2: beta2, epsilon: epsilon, weightDecay: weightDecay, lossValue: out lossValue, maxGradNorm: maxGradNorm, lrSchedule: lrSchedule, eagerOptimizer: eagerOptimizer, useBf16Moments: useBf16Moments, extraTensors: extraTensors, int8MomentBlockSize: int8MomentBlockSize, int8MinQuantizedLength: int8MinQuantizedLength, fusedExtras: fusedExtras, onGradients: onGradients, trainableSelection: trainableSelection, l2Regularization: l2Regularization, deferredLoss: deferredLoss, l2AfterClip: l2AfterClip);
+            return TryStepWithFusedOptimizerCore(layers: layers, input: input, target: target, forward: forward, computeLoss: computeLoss, optimizerType: optimizerType, learningRate: learningRate, beta1: beta1, beta2: beta2, epsilon: epsilon, weightDecay: weightDecay, lossValue: out lossValue, maxGradNorm: maxGradNorm, lrSchedule: lrSchedule, eagerOptimizer: eagerOptimizer, useBf16Moments: useBf16Moments, extraTensors: extraTensors, int8MomentBlockSize: int8MomentBlockSize, int8MinQuantizedLength: int8MinQuantizedLength, fusedExtras: fusedExtras, onGradients: onGradients, trainableSelection: trainableSelection, l2Regularization: l2Regularization, deferredLoss: deferredLoss, l2AfterClip: l2AfterClip, owner: owner);
         }
         finally
         {
@@ -1160,7 +1176,8 @@ public static class CompiledTapeTrainingStep<T>
         IReadOnlyCollection<Tensor<T>>? trainableSelection = null,
         double l2Regularization = 0.0,
         System.Runtime.CompilerServices.StrongBox<Tensor<T>?>? deferredLoss = null,
-        bool l2AfterClip = false)
+        bool l2AfterClip = false,
+        object? owner = null)
     {
         lossValue = MathHelper.GetNumericOperations<T>().Zero;
         if (deferredLoss is not null) deferredLoss.Value = null;
@@ -1176,6 +1193,25 @@ public static class CompiledTapeTrainingStep<T>
         // overloads + CompiledTrainingPlan.ConfigureOptimizerDouble). Other
         // numeric types still fall through to the eager autograd path.
         if (typeof(T) != typeof(float) && typeof(T) != typeof(double)) { Fd($"type {typeof(T).Name} unsupported"); return false; }
+
+        if (owner is NeuralNetworks.NeuralNetworkBase<T> { DistributedCoordinator: { } distCoord } distNet)
+        {
+            return TryStepDistributedCompiledPlan(
+                distNet,
+                distCoord,
+                layers,
+                input,
+                target,
+                forward,
+                computeLoss,
+                maxGradNorm,
+                eagerOptimizer,
+                extraTensors,
+                onGradients,
+                trainableSelection,
+                deferredLoss,
+                out lossValue);
+        }
         // Allowlist of optimizer kernels wired through ConfigureOptimizer in the
         // linked AiDotNet.Tensors build (0.88.0: ConfigureOptimizerFloat handles
         // all of these on CPU). Only OptimizerTypes an IFusedOptimizerSpec
@@ -2035,6 +2071,411 @@ public static class CompiledTapeTrainingStep<T>
             var gradSpan = gradients[i].AsSpan();
             for (int j = 0; j < paramSpan.Length; j++)
                 paramSpan[j] = numOps.Subtract(paramSpan[j], numOps.Multiply(learningRate, gradSpan[j]));
+        }
+    }
+
+    private static T StepDistributedCompiledSgd(
+        NeuralNetworks.NeuralNetworkBase<T> distNet,
+        DistributedTraining.DistributedTapeCoordinator<T> distCoord,
+        IReadOnlyList<ITrainableLayer<T>> layers,
+        Tensor<T> input,
+        Tensor<T> target,
+        T learningRate,
+        Func<Tensor<T>, Tensor<T>> forward,
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> computeLoss,
+        INumericOperations<T> numOps,
+        AiDotNet.Tensors.Engines.IEngine engine)
+    {
+        bool collectivesStarted = false;
+        try
+        {
+            if (InvalidateIfLayerSetChanged(layers))
+            {
+                _mpPlan = null;
+                _mpAdamPlan = null;
+                _mpGenericPlan = null;
+            }
+            InvalidateIfSelectionChanged(null);
+            var cache = _cache ??= new CompiledModelCache<T>();
+
+            if (input.Length == 0 || target.Length == 0)
+            {
+                var idleParameters = _cachedParameters ?? CollectDeduplicatedParameters(layers);
+                collectivesStarted = true;
+                distCoord.EnsureInitialParametersSynchronized(idleParameters, distNet.InvalidateLayerWeightCaches);
+                var (_, idleGlobalLoss, _) = distCoord.SynchronizeStepMetadata(0L, 0.0);
+                T idleLossT = numOps.FromDouble(idleGlobalLoss);
+                distNet.SetLastLossFromStepper(idleLossT);
+                distCoord.BeginBackwardStep(idleParameters, 0.0);
+
+                var emptyGrads = new Dictionary<Tensor<T>, Tensor<T>>(idleParameters.Length, Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+                distNet.MarkDistributedMutationStarted();
+                bool idleStepped = distCoord.SynchronizeUnscaleClipAndStep(
+                    idleParameters,
+                    emptyGrads,
+                    optimizer: null,
+                    distNet.ActiveMixedPrecisionContext,
+                    restoreFp32Masters: null,
+                    syncFp32MastersFromWorking: null,
+                    regularizeGradients: null,
+                    distNet.MaxGradNormValue,
+                    ctx => ApplyCompiledSgdContextUpdate(ctx, learningRate, engine),
+                    distNet.InvalidateLayerWeightCaches);
+                if (idleStepped)
+                    distNet.FinalizeDistributedStepPostUpdate(null);
+                return idleLossT;
+            }
+
+            bool shapeChanged = EnsurePersistentPairForShape(input._shape, target._shape);
+            input.Contiguous().AsSpan().CopyTo(_persistentInput!.AsWritableSpan());
+            target.Contiguous().AsSpan().CopyTo(_persistentTarget!.AsWritableSpan());
+
+            if (_cachedParameters is null)
+            {
+                WarmupLayersInInferenceMode(layers, _persistentInput!, _persistentTarget!, forward);
+            }
+
+            bool firstCollect = _cachedParameters is null;
+            var parameters = _cachedParameters ??= CollectDeduplicatedParameters(layers);
+            if (firstCollect)
+            {
+                RememberLayerSet(layers);
+                RememberSelection(null);
+            }
+
+            collectivesStarted = true;
+            distCoord.EnsureInitialParametersSynchronized(parameters, distNet.InvalidateLayerWeightCaches);
+            collectivesStarted = false;
+
+            foreach (var layer in layers)
+                layer.ZeroGrad();
+
+            var compositeKey = BuildCompositeShapeKey(input._shape, target._shape);
+            var persistentIn = _persistentInput!;
+            var persistentTgt = _persistentTarget!;
+            ICompiledTrainingPlan<T> plan;
+            Tensor<T> lossOutput;
+            using (var firstCompiledStepAllocations =
+                FirstCompiledStepAllocationScope.Enter(_configuredPlan is null || shapeChanged))
+            {
+                bool compiledNow = false;
+                using (var stepRandom = CompiledStepRandom<T>.BeginRecording())
+                {
+                    plan = cache.GetOrCompileTraining(
+                        compositeKey,
+                        () =>
+                        {
+                            compiledNow = true;
+                            var predicted = forward(persistentIn);
+                            return computeLoss(predicted, persistentTgt);
+                        },
+                        parameters);
+                    if (compiledNow)
+                        CompiledStepRandom<T>.Attach(plan, stepRandom);
+                }
+
+                if (!compiledNow)
+                {
+                    RefreshCompiledStochasticState(layers);
+                    CompiledStepRandom<T>.RedrawFor(plan);
+                }
+
+                lossOutput = plan.Step();
+            }
+
+            double localLoss = lossOutput.Length > 0 ? numOps.ToDouble(lossOutput.Data.Span[0]) : 0.0;
+            long localTokens = DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(target);
+            collectivesStarted = true;
+            var (rankWeight, globalLoss, _) = distCoord.SynchronizeStepMetadata(localTokens, localLoss);
+            T globalLossT = numOps.FromDouble(globalLoss);
+            distNet.SetLastLossFromStepper(globalLossT);
+            distCoord.BeginBackwardStep(parameters, rankWeight);
+
+            var gradMap = BuildPlanGradientDictionary(parameters, plan.Gradients);
+            distNet.MarkDistributedMutationStarted();
+            bool stepped = distCoord.SynchronizeUnscaleClipAndStep(
+                parameters,
+                gradMap,
+                optimizer: null,
+                distNet.ActiveMixedPrecisionContext,
+                restoreFp32Masters: null,
+                syncFp32MastersFromWorking: null,
+                regularizeGradients: null,
+                distNet.MaxGradNormValue,
+                ctx => ApplyCompiledSgdContextUpdate(ctx, learningRate, engine),
+                distNet.InvalidateLayerWeightCaches);
+            if (stepped)
+                distNet.FinalizeDistributedStepPostUpdate(null);
+
+            return globalLossT;
+        }
+        catch when (!collectivesStarted)
+        {
+            return TapeTrainingStepper<T>.EagerSgdObjectiveStep(
+                () => CollectDeduplicatedParameters(layers),
+                () => computeLoss(forward(input), target),
+                learningRate);
+        }
+    }
+
+    private static bool TryStepDistributedCompiledPlan(
+        NeuralNetworks.NeuralNetworkBase<T> distNet,
+        DistributedTraining.DistributedTapeCoordinator<T> distCoord,
+        IReadOnlyList<ITrainableLayer<T>> layers,
+        Tensor<T> input,
+        Tensor<T> target,
+        Func<Tensor<T>, Tensor<T>> forward,
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> computeLoss,
+        double maxGradNorm,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? eagerOptimizer,
+        IReadOnlyList<Tensor<T>>? extraTensors,
+        Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? onGradients,
+        IReadOnlyCollection<Tensor<T>>? trainableSelection,
+        System.Runtime.CompilerServices.StrongBox<Tensor<T>?>? deferredLoss,
+        out T lossValue)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        lossValue = numOps.Zero;
+        if (deferredLoss is not null) deferredLoss.Value = null;
+
+        if (eagerOptimizer is null)
+        {
+            Fd("distributed compiled step requires an eagerOptimizer instance");
+            return false;
+        }
+
+        bool collectivesStarted = false;
+        try
+        {
+            InvalidateIfLayerSetChanged(layers);
+            InvalidateIfSelectionChanged(trainableSelection);
+            var cache = _cache ??= new CompiledModelCache<T>();
+
+            if (input.Length == 0 || target.Length == 0)
+            {
+                var idleParameters = _cachedParameters
+                    ?? CollectDeduplicatedParametersWithExtras(layers, extraTensors, trainableSelection);
+                collectivesStarted = true;
+                distCoord.EnsureInitialParametersSynchronized(idleParameters, distNet.InvalidateLayerWeightCaches);
+                var (_, idleGlobalLoss, _) = distCoord.SynchronizeStepMetadata(0L, 0.0);
+                T idleLossT = numOps.FromDouble(idleGlobalLoss);
+                distNet.SetLastLossFromStepper(idleLossT);
+                distCoord.BeginBackwardStep(idleParameters, 0.0);
+
+                var emptyGrads = new Dictionary<Tensor<T>, Tensor<T>>(idleParameters.Length, Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+                distNet.MarkDistributedMutationStarted();
+                bool idleStepped = distCoord.SynchronizeUnscaleClipAndStep(
+                    idleParameters,
+                    emptyGrads,
+                    eagerOptimizer,
+                    distNet.ActiveMixedPrecisionContext,
+                    restoreFp32Masters: null,
+                    syncFp32MastersFromWorking: null,
+                    distNet.GetDistributedOptimizerRegularizer(eagerOptimizer),
+                    maxGradNorm,
+                    ctx => distNet.ExecuteDistributedOptimizerContextStep(ctx, eagerOptimizer, idleParameters),
+                    distNet.InvalidateLayerWeightCaches);
+                if (idleStepped)
+                    distNet.FinalizeDistributedStepPostUpdate(eagerOptimizer);
+
+                onGradients?.Invoke(emptyGrads);
+                lossValue = idleLossT;
+                CurrentState.planOptimizerStep = -2;
+                _fusedStepCount++;
+                return true;
+            }
+
+            bool shapeChanged = EnsurePersistentPairForShape(input._shape, target._shape);
+            input.Contiguous().AsSpan().CopyTo(_persistentInput!.AsWritableSpan());
+            target.Contiguous().AsSpan().CopyTo(_persistentTarget!.AsWritableSpan());
+
+            if (_cachedParameters is null)
+            {
+                WarmupLayersInInferenceMode(layers, _persistentInput!, _persistentTarget!, forward);
+            }
+
+            bool firstCollectThisLifecycle = _cachedParameters is null;
+            var parameters = _cachedParameters ??=
+                CollectDeduplicatedParametersWithExtras(layers, extraTensors, trainableSelection);
+            if (firstCollectThisLifecycle)
+            {
+                RememberLayerSet(layers);
+                RememberSelection(trainableSelection);
+            }
+
+            collectivesStarted = true;
+            distCoord.EnsureInitialParametersSynchronized(parameters, distNet.InvalidateLayerWeightCaches);
+            collectivesStarted = false;
+
+            foreach (var layer in layers)
+                layer.ZeroGrad();
+
+            var compositeKey = BuildCompositeShapeKey(input._shape, target._shape);
+            var persistentIn = _persistentInput!;
+            var persistentTgt = _persistentTarget!;
+            ICompiledTrainingPlan<T> plan;
+            Tensor<T> lossOutput;
+            using (var firstCompiledStepAllocations =
+                FirstCompiledStepAllocationScope.Enter(_configuredPlan is null || shapeChanged))
+            {
+                bool compiledNow = false;
+                using (var stepRandom = CompiledStepRandom<T>.BeginRecording())
+                {
+                    plan = cache.GetOrCompileTraining(
+                        compositeKey,
+                        () =>
+                        {
+                            compiledNow = true;
+                            var predicted = forward(persistentIn);
+                            return computeLoss(predicted, persistentTgt);
+                        },
+                        parameters);
+                    if (compiledNow)
+                        CompiledStepRandom<T>.Attach(plan, stepRandom);
+                }
+
+                if (!compiledNow)
+                {
+                    RefreshCompiledStochasticState(layers);
+                    CompiledStepRandom<T>.RedrawFor(plan);
+                }
+
+                // Execute compiled forward + backward ONLY (ConfigureOptimizer is intentionally omitted so
+                // per-rank gradients are reduced via DistributedTapeCoordinator ahead of clipping and stepping).
+                lossOutput = plan.Step();
+            }
+
+            double localLoss = lossOutput.Length > 0 ? numOps.ToDouble(lossOutput.Data.Span[0]) : 0.0;
+            long localTokens = DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(target);
+            collectivesStarted = true;
+            var (rankWeight, globalLoss, _) = distCoord.SynchronizeStepMetadata(localTokens, localLoss);
+            T globalLossT = numOps.FromDouble(globalLoss);
+            distNet.SetLastLossFromStepper(globalLossT);
+            distCoord.BeginBackwardStep(parameters, rankWeight);
+
+            var gradMap = BuildPlanGradientDictionary(parameters, plan.Gradients);
+            distNet.MarkDistributedMutationStarted();
+            bool stepped = distCoord.SynchronizeUnscaleClipAndStep(
+                parameters,
+                gradMap,
+                eagerOptimizer,
+                distNet.ActiveMixedPrecisionContext,
+                restoreFp32Masters: null,
+                syncFp32MastersFromWorking: null,
+                distNet.GetDistributedOptimizerRegularizer(eagerOptimizer),
+                maxGradNorm,
+                ctx => distNet.ExecuteDistributedOptimizerContextStep(ctx, eagerOptimizer, parameters),
+                distNet.InvalidateLayerWeightCaches);
+            if (stepped)
+                distNet.FinalizeDistributedStepPostUpdate(eagerOptimizer);
+
+            onGradients?.Invoke(gradMap);
+            _configuredPlan = plan;
+            CurrentState.planOptimizerStep = -2;
+            lossValue = globalLossT;
+            _fusedStepCount++;
+            return true;
+        }
+        catch (Exception ex) when (!collectivesStarted)
+        {
+            _lastFallbackException = ex;
+            Fd($"DISTRIBUTED COMPILED EXCEPTION {ex.GetType().Name}: {ex.Message}");
+            System.Diagnostics.Trace.TraceWarning(
+                $"CompiledTapeTrainingStep.TryStepDistributedCompiledPlan failed, falling back to eager: {ex}");
+            _configuredPlan = null;
+            CurrentState.planOptimizerStep = -1;
+            return false;
+        }
+    }
+
+    private static bool EnsurePersistentPairForShape(int[] inputShape, int[] targetShape)
+    {
+        if (_persistentInput is not null
+            && _persistentTarget is not null
+            && ShapesEqual(_persistentInput._shape, inputShape)
+            && ShapesEqual(_persistentTarget._shape, targetShape))
+        {
+            return false;
+        }
+
+        var list = _persistentByShape ??= new List<(Tensor<T> Input, Tensor<T> Target)>();
+        for (int i = 0; i < list.Count; i++)
+        {
+            var pair = list[i];
+            if (ShapesEqual(pair.Input._shape, inputShape) && ShapesEqual(pair.Target._shape, targetShape))
+            {
+                _persistentInput = pair.Input;
+                _persistentTarget = pair.Target;
+                return false;
+            }
+        }
+
+        var createdIn = new Tensor<T>((int[])inputShape.Clone());
+        var createdTgt = new Tensor<T>((int[])targetShape.Clone());
+        list.Add((createdIn, createdTgt));
+        _persistentInput = createdIn;
+        _persistentTarget = createdTgt;
+        return true;
+    }
+
+    private static void WarmupLayersInInferenceMode(
+        IReadOnlyList<ITrainableLayer<T>> layers,
+        Tensor<T> persistentInput,
+        Tensor<T> persistentTarget,
+        Func<Tensor<T>, Tensor<T>> forward)
+    {
+        for (int li = 0; li < layers.Count; li++)
+            layers[li].SetTrainingMode(false);
+        try
+        {
+            using var noDraws = CompiledStepRandom<T>.SuppressDraws();
+            forward(LazyInitializationSample(persistentInput, persistentTarget, t_leadingAxisIsBatch));
+        }
+        finally
+        {
+            for (int li = 0; li < layers.Count; li++)
+                layers[li].SetTrainingMode(true);
+        }
+    }
+
+    private static int[] BuildCompositeShapeKey(int[] inputShape, int[] targetShape)
+    {
+        var compositeKey = new int[inputShape.Length + 1 + targetShape.Length];
+        Array.Copy(inputShape, 0, compositeKey, 0, inputShape.Length);
+        compositeKey[inputShape.Length] = -1;
+        Array.Copy(targetShape, 0, compositeKey, inputShape.Length + 1, targetShape.Length);
+        return compositeKey;
+    }
+
+    private static Dictionary<Tensor<T>, Tensor<T>> BuildPlanGradientDictionary(
+        Tensor<T>[] parameters,
+        Tensor<T>[]? planGradients)
+    {
+        var gradMap = new Dictionary<Tensor<T>, Tensor<T>>(parameters.Length, Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        if (planGradients is null) return gradMap;
+        int count = Math.Min(parameters.Length, planGradients.Length);
+        for (int i = 0; i < count; i++)
+        {
+            var param = parameters[i];
+            var grad = planGradients[i];
+            if (param is null || grad is null || grad.Length == 0) continue;
+            gradMap[param] = TensorCheckpoint<T>.Capture(new[] { grad })[0];
+        }
+        return gradMap;
+    }
+
+    private static void ApplyCompiledSgdContextUpdate(
+        AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T> ctx,
+        T learningRate,
+        AiDotNet.Tensors.Engines.IEngine engine)
+    {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        for (int i = 0; i < ctx.Parameters.Count; i++)
+        {
+            var param = ctx.Parameters[i];
+            if (param is null || !ctx.Gradients.TryGetValue(param, out var grad) || grad is null || grad.Length == 0)
+                continue;
+            engine.TensorSubtractInPlace(param, engine.TensorMultiplyScalar(grad, learningRate));
         }
     }
 }

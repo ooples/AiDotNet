@@ -50,6 +50,19 @@ public class ShardingConfiguration<T> : IShardingConfiguration<T>
     public bool CpuOffloadParams { get; set; }
 
     /// <summary>
+    /// Gets or sets whether backward gradient computation overlaps with asynchronous bucketed collective
+    /// communication (<c>AllReduceAsync</c> / <c>ReduceScatterAsync</c>). Defaults to <c>true</c>.
+    /// </summary>
+    public bool OverlapCommunication { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the target capacity in bytes of each gradient communication bucket when overlapping
+    /// gradient synchronization with backward propagation. Defaults to 25 MiB (matching PyTorch DDP's
+    /// <c>bucket_cap_mb=25</c>).
+    /// </summary>
+    public int GradientBucketSizeBytes { get; set; } = 25 * 1024 * 1024;
+
+    /// <summary>
     /// Creates a new sharding configuration with the specified communication backend.
     /// </summary>
     /// <remarks>

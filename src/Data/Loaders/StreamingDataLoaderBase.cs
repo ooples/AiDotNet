@@ -270,4 +270,171 @@ public abstract class StreamingDataLoaderBase<T, TInput, TOutput> :
         // For streaming loaders, unloading typically just releases any cached
         // resources. Override if specific cleanup is needed.
     }
+
+    /// <summary>
+    /// Internal zero-redundant-I/O distributed slice iterator used by <see cref="DistributedStreamingDataLoader{T, TInput, TOutput}"/>
+    /// when <see cref="GetBatches"/> is not overridden by a derived class.
+    /// </summary>
+    internal IEnumerable<(TInput[] Inputs, TOutput[] Outputs, int GlobalBatchSamples)> GetDistributedSliceBatchesCore(
+        int rank,
+        int[] rankBatchSizes,
+        int globalBatchSize,
+        long skipSamplesAtStart,
+        bool shuffle,
+        bool dropLast,
+        int? seed)
+    {
+        EnsureLoaded();
+        int[] indices = GetShuffledIndices(shuffle, seed);
+        long cursor = Math.Max(0L, skipSamplesAtStart);
+
+        while (cursor < indices.Length)
+        {
+            int startIdx = (int)cursor;
+            int endIdx = Math.Min(indices.Length, startIdx + globalBatchSize);
+            int globalCount = endIdx - startIdx;
+            cursor = endIdx;
+
+            if (dropLast && globalCount < globalBatchSize)
+            {
+                yield break;
+            }
+
+            DistributedStreamingDataLoader<T, TInput, TOutput>.ComputeRankSlice(
+                globalCount,
+                rankBatchSizes,
+                globalBatchSize,
+                rank,
+                out int rankOffset,
+                out int rankCount);
+
+            if (rankCount <= 0)
+            {
+                yield return (Array.Empty<TInput>(), Array.Empty<TOutput>(), globalCount);
+                continue;
+            }
+
+            var samples = new List<(TInput Input, TOutput Output)>(rankCount);
+            int sliceStart = startIdx + rankOffset;
+            int sliceEnd = sliceStart + rankCount;
+            for (int i = sliceStart; i < sliceEnd; i++)
+            {
+                var sample = ReadSampleAsync(indices[i], CancellationToken.None).GetAwaiter().GetResult();
+                samples.Add(sample);
+            }
+
+            var aggregated = AggregateSamples(samples);
+            yield return (aggregated.Inputs, aggregated.Outputs, globalCount);
+        }
+    }
+
+    /// <summary>
+    /// Internal zero-redundant-I/O async distributed slice iterator with bounded prefetching used by
+    /// <see cref="DistributedStreamingDataLoader{T, TInput, TOutput}"/> when <see cref="GetBatchesAsync"/> is not
+    /// overridden by a derived class.
+    /// </summary>
+    internal async IAsyncEnumerable<(TInput[] Inputs, TOutput[] Outputs, int GlobalBatchSamples)> GetDistributedSliceBatchesAsyncCore(
+        int rank,
+        int[] rankBatchSizes,
+        int globalBatchSize,
+        long skipSamplesAtStart,
+        bool shuffle,
+        bool dropLast,
+        int? seed,
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        EnsureLoaded();
+        int[] indices = GetShuffledIndices(shuffle, seed);
+        long initialCursor = Math.Max(0L, skipSamplesAtStart);
+
+        var channel = Channel.CreateBounded<(TInput[] Inputs, TOutput[] Outputs, int GlobalBatchSamples)>(
+            new BoundedChannelOptions(_prefetchCount)
+            {
+                FullMode = BoundedChannelFullMode.Wait,
+                SingleReader = true,
+                SingleWriter = true,
+            });
+
+        var producerTask = Task.Run(async () =>
+        {
+            using var semaphore = new SemaphoreSlim(_numWorkers, _numWorkers);
+            try
+            {
+                long cursor = initialCursor;
+                while (cursor < indices.Length)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    int startIdx = (int)cursor;
+                    int endIdx = Math.Min(indices.Length, startIdx + globalBatchSize);
+                    int globalCount = endIdx - startIdx;
+                    cursor = endIdx;
+
+                    if (dropLast && globalCount < globalBatchSize)
+                    {
+                        break;
+                    }
+
+                    DistributedStreamingDataLoader<T, TInput, TOutput>.ComputeRankSlice(
+                        globalCount,
+                        rankBatchSizes,
+                        globalBatchSize,
+                        rank,
+                        out int rankOffset,
+                        out int rankCount);
+
+                    if (rankCount <= 0)
+                    {
+                        await channel.Writer.WriteAsync(
+                            (Array.Empty<TInput>(), Array.Empty<TOutput>(), globalCount),
+                            cancellationToken).ConfigureAwait(false);
+                        continue;
+                    }
+
+                    var samples = new (TInput Input, TOutput Output)[rankCount];
+                    var tasks = new Task[rankCount];
+                    int sliceStart = startIdx + rankOffset;
+
+                    for (int localIdx = 0; localIdx < rankCount; localIdx++)
+                    {
+                        int capturedLocal = localIdx;
+                        int sampleIdx = indices[sliceStart + localIdx];
+                        await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
+
+                        tasks[capturedLocal] = Task.Run(async () =>
+                        {
+                            try
+                            {
+                                samples[capturedLocal] = await ReadSampleAsync(sampleIdx, cancellationToken).ConfigureAwait(false);
+                            }
+                            finally
+                            {
+                                semaphore.Release();
+                            }
+                        }, cancellationToken);
+                    }
+
+                    await Task.WhenAll(tasks).ConfigureAwait(false);
+                    var batch = AggregateSamples(samples);
+                    await channel.Writer.WriteAsync(
+                        (batch.Inputs, batch.Outputs, globalCount),
+                        cancellationToken).ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                channel.Writer.Complete();
+            }
+        }, cancellationToken);
+
+        while (await channel.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            while (channel.Reader.TryRead(out var item))
+            {
+                yield return item;
+            }
+        }
+
+        await producerTask.ConfigureAwait(false);
+    }
 }

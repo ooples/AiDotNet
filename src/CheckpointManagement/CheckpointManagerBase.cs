@@ -1,10 +1,12 @@
+using System.Diagnostics;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Tensors.Engines;
 using Newtonsoft.Json;
 
-namespace AiDotNet.CheckpointManagement;
+namespace AiDotNet.CheckpointManagement
+{
 
 /// <summary>
 /// Base class for checkpoint management implementations.
@@ -66,6 +68,12 @@ public abstract class CheckpointManagerBase<T, TInput, TOutput> : ICheckpointMan
     protected double? BestMetricValue;
 
     /// <summary>
+    /// Monotonic <see cref="Stopwatch.GetTimestamp"/> reading captured when auto-checkpointing was configured
+    /// or when the most recent auto-checkpoint was recorded.
+    /// </summary>
+    private long _lastAutoSaveTimestamp;
+
+    /// <summary>
     /// Initializes a new instance of the CheckpointManagerBase class.
     /// </summary>
     /// <param name="checkpointDirectory">Directory to store checkpoints.</param>
@@ -94,6 +102,7 @@ public abstract class CheckpointManagerBase<T, TInput, TOutput> : ICheckpointMan
             CheckpointDirectory = GetSanitizedPath(defaultStorage, baseDir);
         }
 
+        _lastAutoSaveTimestamp = Stopwatch.GetTimestamp();
         EnsureCheckpointDirectoryExists();
     }
 
@@ -181,10 +190,51 @@ public abstract class CheckpointManagerBase<T, TInput, TOutput> : ICheckpointMan
     /// </summary>
     public virtual void ConfigureAutoCheckpointing(
         int saveFrequency,
+        int keepLast,
+        bool saveOnImprovement,
+        string? metricName)
+    {
+        ConfigureAutoCheckpointing(
+            saveFrequency,
+            keepLast,
+            saveOnImprovement,
+            metricName,
+            minimizeMetric: true,
+            saveInterval: null);
+    }
+
+    /// <summary>
+    /// Sets up automatic checkpointing during training with optional monotonic wall-clock interval saving.
+    /// </summary>
+    /// <param name="saveFrequency">
+    /// Number of steps between saves. Set to <c>0</c> to disable step-frequency saving (for example, when using
+    /// pure wall-clock <paramref name="saveInterval"/> or improvement-only checkpointing).
+    /// </param>
+    /// <param name="keepLast">Number of most recent checkpoints to retain when auto-cleaning.</param>
+    /// <param name="saveOnImprovement">Whether to save whenever the tracked metric improves.</param>
+    /// <param name="metricName">Name of the metric to monitor when <paramref name="saveOnImprovement"/> is enabled.</param>
+    /// <param name="minimizeMetric">
+    /// Whether lower values of <paramref name="metricName"/> represent improvement (<c>true</c>) or higher values
+    /// represent improvement (<c>false</c>).
+    /// </param>
+    /// <param name="saveInterval">
+    /// Optional monotonic wall-clock interval measured via <see cref="Stopwatch.GetTimestamp"/> after which the next
+    /// completed step triggers an auto-checkpoint.
+    /// </param>
+    public virtual void ConfigureAutoCheckpointing(
+        int saveFrequency,
         int keepLast = 5,
         bool saveOnImprovement = true,
-        string? metricName = null)
+        string? metricName = null,
+        bool minimizeMetric = true,
+        TimeSpan? saveInterval = null)
     {
+        if (saveFrequency < 0)
+            throw new ArgumentOutOfRangeException(nameof(saveFrequency), "Save frequency cannot be negative.");
+
+        if (saveInterval is { TotalMilliseconds: < 0 })
+            throw new ArgumentOutOfRangeException(nameof(saveInterval), "Save interval cannot be negative.");
+
         lock (SyncLock)
         {
             AutoConfig = new AutoCheckpointConfiguration
@@ -192,12 +242,29 @@ public abstract class CheckpointManagerBase<T, TInput, TOutput> : ICheckpointMan
                 SaveFrequency = saveFrequency,
                 KeepLast = keepLast,
                 SaveOnImprovement = saveOnImprovement,
-                MetricName = metricName
+                MetricName = metricName,
+                MinimizeMetric = minimizeMetric,
+                SaveInterval = saveInterval
             };
 
             // Reset state
             LastAutoSaveStep = 0;
             BestMetricValue = null;
+            _lastAutoSaveTimestamp = Stopwatch.GetTimestamp();
+        }
+    }
+
+    /// <summary>
+    /// Gets the configured metric-improvement settings for training loops that coordinate auto-checkpointing.
+    /// </summary>
+    internal (string? MetricName, bool MinimizeMetric, bool SaveOnImprovement) GetAutoSaveMetricConfig()
+    {
+        lock (SyncLock)
+        {
+            if (AutoConfig == null)
+                return (null, true, false);
+
+            return (AutoConfig.MetricName, AutoConfig.MinimizeMetric, AutoConfig.SaveOnImprovement);
         }
     }
 
@@ -232,6 +299,16 @@ public abstract class CheckpointManagerBase<T, TInput, TOutput> : ICheckpointMan
             if (AutoConfig.SaveFrequency > 0)
             {
                 if ((currentStep - LastAutoSaveStep) >= AutoConfig.SaveFrequency)
+                {
+                    return true;
+                }
+            }
+
+            // Check monotonic wall-clock interval saving
+            if (AutoConfig.SaveInterval is { TotalMilliseconds: > 0 } interval)
+            {
+                double elapsedSeconds = (double)(Stopwatch.GetTimestamp() - _lastAutoSaveTimestamp) / Stopwatch.Frequency;
+                if (elapsedSeconds >= interval.TotalSeconds)
                 {
                     return true;
                 }
@@ -273,6 +350,7 @@ public abstract class CheckpointManagerBase<T, TInput, TOutput> : ICheckpointMan
         lock (SyncLock)
         {
             LastAutoSaveStep = step;
+            _lastAutoSaveTimestamp = Stopwatch.GetTimestamp();
 
             if (metricValue.HasValue)
             {
@@ -457,6 +535,17 @@ public abstract class CheckpointManagerBase<T, TInput, TOutput> : ICheckpointMan
         /// Metric to track for improvement-based saving.
         /// </summary>
         public string? MetricName { get; set; }
+
+        /// <summary>
+        /// Whether lower values of <see cref="MetricName"/> represent improvement (<c>true</c>) or higher values
+        /// represent improvement (<c>false</c>).
+        /// </summary>
+        public bool MinimizeMetric { get; set; } = true;
+
+        /// <summary>
+        /// Optional monotonic wall-clock interval after which the next step triggers an auto-checkpoint.
+        /// </summary>
+        public TimeSpan? SaveInterval { get; set; }
     }
 }
 
@@ -529,4 +618,5 @@ public class AutoCheckpointState
 
         return $"Enabled: freq={SaveFrequency}, improvement={SaveOnImprovement}, keep={KeepLast}, last={LastSaveStep}, best={BestMetricValue:F4}";
     }
+}
 }

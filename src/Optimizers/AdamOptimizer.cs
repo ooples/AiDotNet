@@ -977,14 +977,17 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             // at the real shape — m / v need to be re-allocated to match,
             // otherwise TensorAdd's result has a length larger than m and
             // TensorCopy throws "Destination array was not long enough".
+            bool createStateOnDevice = gpuAdam
+                && param.TryGetGpuBuffer() is not null
+                && (denseGradLookup is null || ((Tensor<T>)denseGradLookup).TryGetGpuBuffer() is not null);
             if (!_tapeM.TryGetValue(param, out var m) || !m._shape.SequenceEqual(param._shape))
             {
-                m = CreateOptimizerStateTensor(param._shape, gpuAdam);
+                m = CreateOptimizerStateTensor(param._shape, createStateOnDevice);
                 _tapeM[param] = m;
             }
             if (!_tapeV.TryGetValue(param, out var v) || !v._shape.SequenceEqual(param._shape))
             {
-                v = CreateOptimizerStateTensor(param._shape, gpuAdam);
+                v = CreateOptimizerStateTensor(param._shape, createStateOnDevice);
                 _tapeV[param] = v;
             }
             // AMSGrad running max of v̂. Initialised to a fresh zero tensor on
@@ -1085,12 +1088,21 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                 // AsWritableSpan which correctly slices into the buffer
                 // at the right offset. Both paths execute the same
                 // numerics — only the destination of writes differs.
-                double[]? paramArr = WritableParameterArray<double>(param);
-                double[]? gradArr = (double[]?)(object?)((Tensor<T>)grad).GetLiveBackingArrayOrNull();
-                double[]? mArr = (double[]?)(object?)m.GetLiveBackingArrayOrNull();
-                double[]? vArr = (double[]?)(object?)v.GetLiveBackingArrayOrNull();
-                double[]? vMaxArr = useAmsgrad ? (double[]?)(object?)(vMax ?? throw new InvalidOperationException("vMax is null where it is required.")).GetLiveBackingArrayOrNull() : null;
-                if (paramArr is not null && gradArr is not null && mArr is not null && vArr is not null
+                bool bypassRawDoubleArrays = AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine
+                    || param.HasPendingGpuData
+                    || grad.HasPendingGpuData
+                    || m.HasPendingGpuData
+                    || v.HasPendingGpuData
+                    || (useAmsgrad && vMax is not null && vMax.HasPendingGpuData);
+                double[]? paramArr = bypassRawDoubleArrays ? null : WritableParameterArray<double>(param);
+                double[]? gradArr = bypassRawDoubleArrays ? null : (double[]?)(object?)((Tensor<T>)grad).GetLiveBackingArrayOrNull();
+                double[]? mArr = bypassRawDoubleArrays ? null : (double[]?)(object?)m.GetLiveBackingArrayOrNull();
+                double[]? vArr = bypassRawDoubleArrays ? null : (double[]?)(object?)v.GetLiveBackingArrayOrNull();
+                double[]? vMaxArr = !bypassRawDoubleArrays && useAmsgrad
+                    ? (double[]?)(object?)(vMax ?? throw new InvalidOperationException("vMax is null where it is required.")).GetLiveBackingArrayOrNull()
+                    : null;
+                if (!bypassRawDoubleArrays
+                    && paramArr is not null && gradArr is not null && mArr is not null && vArr is not null
                     && (!useAmsgrad || vMaxArr is not null))
                 {
                     for (int i = 0; i < n; i++)
@@ -1137,9 +1149,10 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                     ref double mR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(mSpan);
                     ref double vR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(vSpan);
                     ref double vMaxR = ref System.Runtime.CompilerServices.Unsafe.NullRef<double>();
+                    Tensor<double>? vMaxD = null;
                     if (useAmsgrad)
                     {
-                        var vMaxD = (object?)vMax as Tensor<double>
+                        vMaxD = (object?)vMax as Tensor<double>
                             ?? throw new InvalidOperationException("AMSGrad's running maximum of the second moment is not allocated.");
                         System.Span<double> vMaxSpan = vMaxD.AsWritableSpan();
                         vMaxR = ref System.Runtime.InteropServices.MemoryMarshal.GetReference(vMaxSpan);
@@ -1169,20 +1182,47 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                         System.Runtime.CompilerServices.Unsafe.Add(ref paramR, i) -=
                             lr * mHat / (Math.Sqrt(vHatEff) + eps);
                     }
+                    paramD.IncrementVersion();
+                    mD.IncrementVersion();
+                    vD.IncrementVersion();
+                    if (useAmsgrad && vMaxD is not null)
+                    {
+                        vMaxD.IncrementVersion();
+                    }
+                    if (AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine residentGpuD)
+                    {
+                        residentGpuD.InvalidateResidentWeightBuffer(paramD);
+                        residentGpuD.InvalidateResidentWeightBuffer(mD);
+                        residentGpuD.InvalidateResidentWeightBuffer(vD);
+                        if (useAmsgrad && vMaxD is not null)
+                        {
+                            residentGpuD.InvalidateResidentWeightBuffer(vMaxD);
+                        }
+                    }
                 }
             }
             else if (isFloat)
             {
-                float[]? paramArr = WritableParameterArray<float>(param);
-                float[]? gradArr = (float[]?)(object?)((Tensor<T>)grad).GetLiveBackingArrayOrNull();
-                float[]? mArr = (float[]?)(object?)m.GetLiveBackingArrayOrNull();
-                float[]? vArr = (float[]?)(object?)v.GetLiveBackingArrayOrNull();
-                float[]? vMaxArr = useAmsgrad ? (float[]?)(object?)(vMax ?? throw new InvalidOperationException("vMax is null where it is required.")).GetLiveBackingArrayOrNull() : null;
+                bool bypassRawFloatArrays = gpuAdam
+                    || AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine
+                    || param.HasPendingGpuData
+                    || grad.HasPendingGpuData
+                    || m.HasPendingGpuData
+                    || v.HasPendingGpuData
+                    || (useAmsgrad && vMax is not null && vMax.HasPendingGpuData);
+                float[]? paramArr = bypassRawFloatArrays ? null : WritableParameterArray<float>(param);
+                float[]? gradArr = bypassRawFloatArrays ? null : (float[]?)(object?)((Tensor<T>)grad).GetLiveBackingArrayOrNull();
+                float[]? mArr = bypassRawFloatArrays ? null : (float[]?)(object?)m.GetLiveBackingArrayOrNull();
+                float[]? vArr = bypassRawFloatArrays ? null : (float[]?)(object?)v.GetLiveBackingArrayOrNull();
+                float[]? vMaxArr = !bypassRawFloatArrays && useAmsgrad
+                    ? (float[]?)(object?)(vMax ?? throw new InvalidOperationException("vMax is null where it is required.")).GetLiveBackingArrayOrNull()
+                    : null;
                 float fb1 = (float)b1, fb2 = (float)b2;
                 float f1mb1 = (float)oneMinusB1, f1mb2 = (float)oneMinusB2;
                 float fbc1 = (float)bc1, fbc2 = (float)bc2;
                 float feps = (float)eps, flr = (float)lr;
-                if (paramArr is not null && gradArr is not null && mArr is not null && vArr is not null
+                if (!bypassRawFloatArrays
+                    && paramArr is not null && gradArr is not null && mArr is not null && vArr is not null
                     && (!useAmsgrad || vMaxArr is not null))
                 {
                     // SIMD (AVX2/FMA) Adam/AMSGrad step — single source of truth in
@@ -1214,13 +1254,33 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                     System.ReadOnlySpan<float> gradSpan = gradF.AsSpan();
                     System.Span<float> mSpan = mF.AsWritableSpan();
                     System.Span<float> vSpan = vF.AsWritableSpan();
-                    System.Span<float> vMaxSpan = useAmsgrad
+                    Tensor<float>? vMaxF = useAmsgrad
                         ? ((object?)vMax as Tensor<float>
-                            ?? throw new InvalidOperationException("AMSGrad's running maximum of the second moment is not allocated.")).AsWritableSpan()
+                            ?? throw new InvalidOperationException("AMSGrad's running maximum of the second moment is not allocated."))
+                        : null;
+                    System.Span<float> vMaxSpan = vMaxF is not null
+                        ? vMaxF.AsWritableSpan()
                         : System.Span<float>.Empty;
                     AiDotNet.Tensors.Engines.Simd.AdamMomentKernels.AdamStep(
                         paramSpan, gradSpan, mSpan, vSpan, vMaxSpan,
                         fb1, fb2, f1mb1, f1mb2, fbc1, fbc2, flr, feps, useAmsgrad);
+                    paramF.IncrementVersion();
+                    mF.IncrementVersion();
+                    vF.IncrementVersion();
+                    if (useAmsgrad)
+                    {
+                        vMaxF?.IncrementVersion();
+                    }
+                    if (AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine residentGpuF)
+                    {
+                        residentGpuF.InvalidateResidentWeightBuffer(paramF);
+                        residentGpuF.InvalidateResidentWeightBuffer(mF);
+                        residentGpuF.InvalidateResidentWeightBuffer(vF);
+                        if (vMaxF is not null)
+                        {
+                            residentGpuF.InvalidateResidentWeightBuffer(vMaxF);
+                        }
+                    }
                 }
             }
             else
