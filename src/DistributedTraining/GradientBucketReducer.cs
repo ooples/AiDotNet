@@ -384,7 +384,12 @@ public sealed class GradientBucketReducer<T> : IDisposable
             for (int b = 0; b < _buckets.Length; b++)
             {
                 var bucket = _buckets[b];
-                DisposeBucketHandles(bucket);
+
+                // A step that failed after dispatching this bucket (backward threw before
+                // FlushAndSynchronize) leaves its collective running on the backend worker, still
+                // reading and writing bucket.Buffer. Let it settle before the buffer is reused,
+                // otherwise the new step's gradients and the old collective corrupt each other.
+                SettleBucketHandles(bucket);
                 bucket.ReadyCount = 0;
                 bucket.Dispatched = false;
                 bucket.SlotReady.AsSpan().Clear();
@@ -431,7 +436,13 @@ public sealed class GradientBucketReducer<T> : IDisposable
             var bucket = _buckets[slot.BucketIndex];
             if (bucket.Dispatched)
             {
-                return;
+                // The bucket's collective already owns the buffer, so a further contribution cannot be
+                // added. Dropping it silently would make the reduced gradient depend on dispatch
+                // timing (a repeat before dispatch is accumulated below), so report the violation.
+                throw new InvalidOperationException(
+                    "A gradient was reported for a parameter whose bucket has already been dispatched for reduction. " +
+                    "Each parameter's gradient must be final when it is reported in an overlapped step; " +
+                    "accumulate repeated contributions before notifying, or disable communication overlap.");
             }
 
             if (!bucket.SlotReady[slot.EntryIndex])
@@ -1197,6 +1208,40 @@ public sealed class GradientBucketReducer<T> : IDisposable
             bucket.ResultHandle.Dispose();
             bucket.ResultHandle = null;
         }
+    }
+
+    /// <summary>
+    /// Waits for a bucket's in-flight collective (if any) to finish, then releases its handle. The
+    /// outcome is discarded: the step that dispatched it has been abandoned, and only the buffer
+    /// ownership matters to the caller.
+    /// </summary>
+    private static void SettleBucketHandles(Bucket bucket)
+    {
+        if (bucket.Handle is { IsCompleted: false } pending)
+        {
+            try
+            {
+                pending.Wait();
+            }
+            catch (Exception)
+            {
+                // The abandoned step's collective failed; its result is not used.
+            }
+        }
+
+        if (bucket.ResultHandle is { IsCompleted: false } pendingResult)
+        {
+            try
+            {
+                pendingResult.Wait();
+            }
+            catch (Exception)
+            {
+                // The abandoned step's collective failed; its result is not used.
+            }
+        }
+
+        DisposeBucketHandles(bucket);
     }
 
     private void ThrowIfDisposed()

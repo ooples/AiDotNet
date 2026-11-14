@@ -282,14 +282,18 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
             return;
         }
 
-        _syncedParamSnapshot = uniqueParams;
         _lastShardedParamsRef = null;
 
         if (WorldSize <= 1 || totalElements <= 0)
         {
+            _syncedParamSnapshot = uniqueParams;
             return;
         }
 
+        // The list is recorded as synchronized only after the broadcast, the unpack and the cache
+        // invalidation all succeed. Recording it up front would turn a retry after a failed broadcast
+        // into a no-op and leave the ranks with different parameters.
+        _syncedParamSnapshot = null;
         EnsureBackendInitialized();
 
         var flat = new Vector<T>(totalElements);
@@ -308,6 +312,7 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
         flat = Backend.Broadcast(flat, root: 0);
         UnpackVectorIntoParameters(flat.AsSpan().Slice(0, totalElements), uniqueParams, preserveGpuWeightBuffers: false);
         invalidateCaches?.Invoke();
+        _syncedParamSnapshot = uniqueParams;
     }
 
     /// <summary>
@@ -558,6 +563,16 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
         if (gradients is null)
         {
             throw new ArgumentNullException(nameof(gradients));
+        }
+
+        if (optimizer is null && executeFullParameterStep is null)
+        {
+            // Without either mechanism the method would reduce gradients, record a successful scaler
+            // update and return true while leaving every parameter untouched. Reject that before any
+            // collective runs so no rank reports a training step that did not happen.
+            throw new ArgumentException(
+                "Either an optimizer or an executeFullParameterStep callback is required to apply the parameter update.",
+                nameof(optimizer));
         }
 
         if (_stepStartTimestamp == 0L)
@@ -946,16 +961,33 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
         }
 
         var uniqueParams = GetOrDeduplicateParameters(trainableParameters, out int totalElements);
-        if (uniqueParams.Length == 0 ||
-            totalElements <= 0 ||
-            effectiveOptimizer is not GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> gradOpt ||
+        if (uniqueParams.Length == 0 || totalElements <= 0)
+        {
+            // No parameters, so no rank holds sharded optimizer state.
+            return WorldSize <= 1 || Rank == 0
+                ? effectiveOptimizer.Serialize()
+                : Array.Empty<byte>();
+        }
+
+        if (effectiveOptimizer is not GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> gradOpt ||
             TapeParameterIndicesField is null ||
             PendingTapeTensorStatesField is null ||
             TapeStateSyncField is null)
         {
-            return WorldSize <= 1 || Rank == 0
-                ? effectiveOptimizer.Serialize()
-                : Array.Empty<byte>();
+            if (WorldSize <= 1)
+            {
+                // A single rank owns every element, so its serialized state is the complete state.
+                return effectiveOptimizer.Serialize();
+            }
+
+            // Each rank stepped this optimizer on its own parameter shard, so its state is split
+            // across ranks and there is no contract for gathering it. Serializing Rank 0 alone would
+            // write a checkpoint that silently drops every other rank's optimizer state and is then
+            // restored onto all ranks as if it were complete.
+            throw new NotSupportedException(
+                $"Optimizer type '{effectiveOptimizer.GetType().Name}' does not derive from GradientBasedOptimizerBase, so its " +
+                $"per-rank state cannot be consolidated into one checkpoint under DistributedStrategy.{Strategy} with {WorldSize} ranks. " +
+                "Use a GradientBasedOptimizerBase-derived optimizer or a non-sharded strategy (DDP).");
         }
 
         EnsureBackendInitialized();
