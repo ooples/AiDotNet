@@ -1845,6 +1845,10 @@ shard:
       FullyQualifiedName~AiDotNetTests.IntegrationTests.Optimizers.FusedLrScheduleMappingTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.Regularization.RegularizationContractTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.SyntheticData.PrivBayesDifferentialPrivacyTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.Elementwise02bNumericalRegressionTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.MixtureOfExpertsNoisyGatingTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.ObliviousDecisionTreeChoiceFunctionTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SparseLinearLayerManualGradientTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.Training.GradientCheckpointingTransformerIssue1341Tests.|
       FullyQualifiedName~AiDotNetTests.UnitTests.NeuralNetworks.GANs.GenerativeAdversarialNetworkTests.|
       FullyQualifiedName~AiDotNetTests.UnitTests.NeuralNetworks.Layers.PatchEmbeddingLayerTests.|

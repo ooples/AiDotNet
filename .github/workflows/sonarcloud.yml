@@ -1611,6 +1611,10 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
 
       - name: Free runner disk space
+        # GitHub-hosted only: everything below is a hosted-image preinstall that a self-hosted runner does not have,
+        # and its `apt-get clean` takes the apt lock, so on a self-hosted machine it failed the shard (exit 100,
+        # "Could not get lock /var/lib/apt/lists/lock") whenever another runner on that host was running apt.
+        if: runner.environment == 'github-hosted'
         # Narrowed shards still restore the full NuGet cache. Make room before extraction too;
         # otherwise the runner can die before any test starts with ENOSPC.
         # ubuntu-latest images ship with Android SDK, .NET preinstalls, Haskell, CodeQL,
