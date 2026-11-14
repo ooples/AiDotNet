@@ -477,12 +477,15 @@ public partial class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmoti
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         int length = melSpec.Length;
         var flat = AudioEngineOps.Flatten(Engine, melSpec);
-        T mean = NumOps.Divide(Engine.TensorSum(flat), NumOps.FromDouble(length));
-        var deviation = Engine.TensorSubtractScalar(flat, mean);
-        T variance = NumOps.Divide(Engine.TensorSum(Engine.TensorSquare(deviation)), NumOps.FromDouble(length));
-        T stdDev = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-8)));
+        // The statistics stay one-element tensors: a compiled plan recomputes them from each input instead of
+        // freezing the traced input's values, and an inference trace does not have to cross to the host.
+        var mean = Engine.TensorDivideScalar(Engine.ReduceSum(flat, new[] { 0 }, keepDims: true), NumOps.FromDouble(length));
+        var deviation = Engine.TensorSubtract(flat, mean);
+        var variance = Engine.TensorDivideScalar(
+            Engine.ReduceSum(Engine.TensorSquare(deviation), new[] { 0 }, keepDims: true), NumOps.FromDouble(length));
+        var stdDev = Engine.TensorSqrt(Engine.TensorAddScalar(variance, NumOps.FromDouble(1e-8)));
 
-        return Engine.Reshape(Engine.TensorDivideScalar(deviation, stdDev), melSpec.Shape.ToArray());
+        return Engine.Reshape(Engine.TensorDivide(deviation, stdDev), melSpec.Shape.ToArray());
     }
 
     /// <inheritdoc/>

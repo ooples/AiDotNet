@@ -937,27 +937,28 @@ public partial class TSMixer<T> : ForecastingModelBase<T>
 
         if (normalize)
         {
-            // Compute mean and std for this instance (scalar reductions)
-            T mean;
-            T varSum;
+            if (input.Length == 0) return input;
+            // Mean and std for this instance, detached as before: the stats are constants for the affine map below.
+            // The statistics stay one-element tensors: a compiled plan recomputes them from each input instead of
+            // freezing the traced input's values, and an inference trace does not have to cross to the host.
+            Tensor<T> mean;
+            Tensor<T> std;
             using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             {
-                // Detached statistics, as before: the stats are constants for the affine map below.
                 var flat = Engine.Reshape(input.Contiguous(), new[] { input.Length });
-                mean = NumOps.Divide(input.Length > 0 ? Engine.TensorSum(flat) : NumOps.Zero, NumOps.FromDouble(input.Length));
-                varSum = input.Length > 0 ? Engine.TensorSumOfSquares(Engine.TensorSubtractScalar(flat, mean)) : NumOps.Zero;
+                var count = NumOps.FromDouble(input.Length);
+                mean = Engine.TensorDivideScalar(Engine.ReduceSum(flat, new[] { 0 }, keepDims: true), count);
+                var variance = Engine.TensorDivideScalar(
+                    Engine.ReduceSum(Engine.TensorSquare(Engine.TensorSubtract(flat, mean)), new[] { 0 }, keepDims: true), count);
+                std = Engine.TensorAddScalar(Engine.TensorSqrt(variance), eps);
             }
 
-            var std = NumOps.Sqrt(NumOps.Divide(varSum, NumOps.FromDouble(input.Length)));
-            std = NumOps.Add(std, eps);
-
             // Store for de-normalization
-            _instanceMean = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { mean }));
-            _instanceStd = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { std }));
+            _instanceMean = mean;
+            _instanceStd = std;
 
             // Normalize: (input - mean) / std
-            var centered = Engine.TensorSubtractScalar(input, mean);
-            return Engine.TensorDivideScalar(centered, std);
+            return Engine.TensorDivide(Engine.TensorSubtract(input, mean), std);
         }
         else
         {
@@ -967,12 +968,8 @@ public partial class TSMixer<T> : ForecastingModelBase<T>
                 return input;
             }
 
-            var mean = _instanceMean.Data.Span[0];
-            var std = _instanceStd.Data.Span[0];
-
-            // De-normalize: input * std + mean
-            var scaled = Engine.TensorMultiplyScalar(input, std);
-            return Engine.TensorAddScalar(scaled, mean);
+            // De-normalize: input * std + mean, the one-element statistics broadcast over the tensor.
+            return Engine.TensorAdd(Engine.TensorMultiply(input, _instanceStd), _instanceMean);
         }
     }
 

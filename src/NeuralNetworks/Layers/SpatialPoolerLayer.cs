@@ -381,20 +381,18 @@ public partial class SpatialPoolerLayer<T> : LayerBase<T>, IShapeContract
 
         // Normalize activations to [0,1] range for meaningful thresholding.
         // Raw activations scale with input magnitude, making a fixed threshold useless.
-        T maxVal = Engine.TensorMaxValue(activationsFlat);
-        T minVal = Engine.TensorMinValue(activationsFlat);
-        T range = NumOps.Subtract(maxVal, minVal);
-        Tensor<T> normalizedActivations;
-        if (NumOps.GreaterThan(range, NumOps.FromDouble(1e-10)))
-        {
-            var shifted = Engine.TensorSubtractScalar(activationsFlat, minVal);
-            normalizedActivations = Engine.TensorDivideScalar(shifted, range);
-        }
-        else
-        {
-            // All activations identical — produce uniform output
-            normalizedActivations = activationsFlat;
-        }
+        // The extremes stay one-element tensors and the identical-activations case is a selection, so a compiled
+        // plan recomputes them per input and an inference trace does not cross to the host.
+        var maxVal = Engine.ReduceMax(activationsFlat, new[] { 0 }, keepDims: true);
+        var minVal = Engine.TensorNegate(Engine.ReduceMax(Engine.TensorNegate(activationsFlat), new[] { 0 }, keepDims: true));
+        var range = Engine.TensorSubtract(maxVal, minVal);
+        var spread = Engine.TensorGreaterThan(range, NumOps.FromDouble(1e-10));
+        var safeRange = Engine.TensorWhere(spread, range, Tensor<T>.CreateDefault(new[] { 1 }, NumOps.One));
+        // All activations identical: produce uniform output (the activations themselves).
+        var normalizedActivations = Engine.TensorWhere(
+            Engine.TensorBroadcastTo(spread, new[] { ColumnCount }),
+            Engine.TensorDivide(Engine.TensorSubtract(activationsFlat, minVal), safeRange),
+            activationsFlat);
 
         // Apply sparsity threshold on normalized activations
         // SparsityThreshold (default 0.02) means keep top ~2% of columns active

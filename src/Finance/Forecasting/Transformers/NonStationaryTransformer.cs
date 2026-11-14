@@ -990,18 +990,22 @@ public partial class NonStationaryTransformer<T> : ForecastingModelBase<T>
         {
             // Compute mean and std for this instance (population std plus eps), then normalize.
             using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            if (input.Length == 0) return result;
+            // The statistics stay one-element tensors: a compiled plan recomputes them from each input instead of
+            // freezing the traced input's values, and an inference trace does not have to cross to the host.
             var flat = Engine.Reshape(input.Contiguous(), new[] { input.Length });
-            var mean = NumOps.Divide(input.Length > 0 ? Engine.TensorSum(flat) : NumOps.Zero, NumOps.FromDouble(input.Length));
-            var centered = Engine.TensorSubtractScalar(flat, mean);
-            T varSum = input.Length > 0 ? Engine.TensorSumOfSquares(centered) : NumOps.Zero;
-            var std = NumOps.Sqrt(NumOps.Divide(varSum, NumOps.FromDouble(input.Length)));
-            std = NumOps.Add(std, eps); // Prevent division by zero
+            var count = NumOps.FromDouble(input.Length);
+            var mean = Engine.TensorDivideScalar(Engine.ReduceSum(flat, new[] { 0 }, keepDims: true), count);
+            var centered = Engine.TensorSubtract(flat, mean);
+            var variance = Engine.TensorDivideScalar(
+                Engine.ReduceSum(Engine.TensorSquare(centered), new[] { 0 }, keepDims: true), count);
+            var std = Engine.TensorAddScalar(Engine.TensorSqrt(variance), eps); // Prevent division by zero
 
             // Store for de-normalization
-            _instanceMean = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { mean }));
-            _instanceStd = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { std }));
+            _instanceMean = mean;
+            _instanceStd = std;
 
-            result = Engine.Reshape(Engine.TensorDivideScalar(centered, std), input._shape);
+            result = Engine.Reshape(Engine.TensorDivide(centered, std), input._shape);
         }
         else
         {
