@@ -37,10 +37,9 @@ public class TabularResamplingReferenceTests
         {
             var mixed = mixup.Apply(data, new AugmentationContext<double>(seed: seed));
             double lambda = mixup.LastMixingLambda;
-            if (Math.Abs(1 - lambda) < 1e-6)
-            {
-                continue;
-            }
+
+            // A lambda of 1 leaves every row unmixed and would let the partner check pass vacuously.
+            Assert.True(lambda >= 0 && lambda <= 1 - 1e-6, $"seed {seed}: lambda {lambda} cannot validate partner selection");
 
             var partners = new List<int>();
             for (int i = 0; i < rows; i++)
@@ -53,6 +52,20 @@ public class TabularResamplingReferenceTests
 
             Assert.Equal(Enumerable.Range(0, rows), partners.OrderBy(p => p));
         }
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task HalfNearestNeighbors_NeverPickTheRowItself()
+    {
+        await Task.Yield();
+
+        // -40000 and 40000 are 80000 apart, past Half's 65504, so their distance is infinite. Masking the row
+        // itself with Half's largest finite value made it the nearest candidate of each row.
+        var data = new Matrix<Half>(2, 1);
+        data[0, 0] = (Half)(-40000.0);
+        data[1, 0] = (Half)40000.0;
+
+        Assert.Equal(new[] { 1, 0 }, TabularResamplingHelper<Half>.NearestNeighbors(data));
     }
 
     [Fact(Timeout = 60000)]
