@@ -83,8 +83,7 @@ public partial class MetaTaskAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
                 var adaptedParams = Adapted(initParams, task);
 
                 // Eq. 4-5: Z virtual examples mixed from random pairs, one λ ~ Beta(α̌, α̌) per episode.
-                var (first, second) = DrawPairs(task);
-                double lambda = SampleBeta(_algoOptions.InterpolationAlpha, _algoOptions.InterpolationAlpha);
+                var (first, second, lambda) = DrawMix(task);
                 var (mixedX, mixedY) = BuildMixedSet(task, first, second, lambda);
 
                 // Eq. 6-7: the mixed set replaces the query set in the outer objective.
@@ -125,6 +124,16 @@ public partial class MetaTaskAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, 
         }
 
         return adaptedParams;
+    }
+
+    /// <summary>
+    /// One episode's random draws, in MetaTrain's order: the Z example pairs, then lambda ~ Beta(alpha, alpha).
+    /// </summary>
+    internal (int[] First, int[] Second, double Lambda) DrawMix(IMetaLearningTask<T, TInput, TOutput> task)
+    {
+        var (first, second) = DrawPairs(task);
+        double lambda = SampleBeta(_algoOptions.InterpolationAlpha, _algoOptions.InterpolationAlpha);
+        return (first, second, lambda);
     }
 
     /// <summary>

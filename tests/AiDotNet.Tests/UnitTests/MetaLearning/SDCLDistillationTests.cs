@@ -80,6 +80,28 @@ public class SDCLDistillationTests
     }
 
     [Fact]
+    public void FallbackDistillationLoss_ScoresFlattenedOutputsPerRow()
+    {
+        // A model without tape gradients is differentiated by the base fallback, which hands the loss flattened
+        // vectors. Read back as [2, 3] rows they must score what the shaped loss does - the per-row batchmean - not
+        // one softmax over all six entries.
+        const double tau = 2.0;
+        var algorithm = new SDCLAlgorithm<double, Tensor<double>, Tensor<double>>(
+            new SDCLOptions<double, Tensor<double>, Tensor<double>>(new MockFullModel<double>()) { DistillationTemperature = tau });
+        var teacherFlat = new Vector<double>(new[] { 1.0, -0.5, 2.0, 0.0, 0.0, 0.0 });
+        var studentFlat = new Vector<double>(new[] { 0.2, 0.3, 1.1, 3.0, -1.0, 0.0 });
+        var teacher = Tensor<double>.FromVector(teacherFlat, new[] { 2, 3 });
+        var student = Tensor<double>.FromVector(studentFlat, new[] { 2, 3 });
+
+        double shaped = algorithm.DistillationLoss(teacher, student);
+        double fallback = algorithm.FallbackDistillationLoss(studentFlat, teacherFlat, rowWidth: 3);
+        double oneSoftmax = algorithm.FallbackDistillationLoss(studentFlat, teacherFlat, rowWidth: 6);
+
+        Assert.Equal(shaped, fallback, 12);
+        Assert.NotEqual(shaped, oneSoftmax, 6);
+    }
+
+    [Fact]
     public void DistillationLoss_IgnoresAnUnderflowedTeacherClassInHalf()
     {
         // Teacher logits / tau = (0, -50): p_T = (1, e^-50), and e^-50 < 1e-10, so that class is masked out and

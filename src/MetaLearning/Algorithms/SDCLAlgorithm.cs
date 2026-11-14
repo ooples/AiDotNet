@@ -183,8 +183,26 @@ public partial class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// d/d theta of tau^2 KL(softmax(teacher / tau) || softmax(f(x; theta) / tau)) at the current parameters, by
     /// backpropagating the temperature distillation loss through the model (it was a one-sample SPSA estimate).
     /// </summary>
+    /// <remarks>
+    /// A model without tape gradients is differentiated by the base class's fallback, which scores flattened
+    /// vectors; the per-call loss restores the teacher's [rows, classes] layout first, so the softmax stays per row
+    /// instead of spanning the whole batch.
+    /// </remarks>
     private Vector<T> ComputeDistillationGradient(TInput supportInput, TOutput teacherSupport)
-        => ComputeGradients(MetaModel, supportInput, teacherSupport, _distillationLoss);
+    {
+        var teacher = AsTensor(teacherSupport);
+        ILossFunction<T> loss = teacher is { Rank: > 1 }
+            ? new RowShapedLoss(_distillationLoss, teacher.Shape[teacher.Rank - 1])
+            : _distillationLoss;
+        return ComputeGradients(MetaModel, supportInput, teacherSupport, loss);
+    }
+
+    /// <summary>
+    /// The distillation loss the gradient fallback scores: flattened student and teacher outputs read back as rows of
+    /// <paramref name="rowWidth"/> classes.
+    /// </summary>
+    internal T FallbackDistillationLoss(Vector<T> student, Vector<T> teacher, int rowWidth)
+        => new RowShapedLoss(_distillationLoss, rowWidth).CalculateLoss(student, teacher);
 
     /// <summary>queryLoss + w * tau^2 KL(teacher || student) on the query predictions.</summary>
     private T WithDistillation(T queryLoss, TOutput teacherQueryOutput, TOutput studentQueryOutput)
@@ -230,6 +248,30 @@ public partial class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// by 1e-10. The per-row KL is averaged over the leading (batch) axes, PyTorch's <c>reduction='batchmean'</c>, so
     /// the term keeps its scale relative to the mean task loss whatever the batch size.
     /// </summary>
+    private sealed class RowShapedLoss : LossFunctionBase<T>
+    {
+        private readonly LossFunctionBase<T> _inner;
+        private readonly int _rowWidth;
+
+        public RowShapedLoss(LossFunctionBase<T> inner, int rowWidth)
+        {
+            _inner = inner;
+            _rowWidth = Math.Max(1, rowWidth);
+        }
+
+        /// <summary>Scores flattened outputs as [length / rowWidth, rowWidth] rows.</summary>
+        public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
+        {
+            if (predicted.Length != actual.Length || predicted.Length % _rowWidth != 0)
+                return _inner.CalculateLoss(predicted, actual);
+            var shape = new[] { predicted.Length / _rowWidth, _rowWidth };
+            return _inner.ComputeTapeLoss(Tensor<T>.FromVector(predicted, shape), Tensor<T>.FromVector(actual, shape)).GetFlat(0);
+        }
+
+        public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
+            => _inner.ComputeTapeLoss(predicted, target);
+    }
+
     private sealed class TemperatureDistillationLoss : LossFunctionBase<T>
     {
         private readonly double _temperature;
