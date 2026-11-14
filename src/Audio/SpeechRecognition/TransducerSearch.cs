@@ -149,6 +149,21 @@ internal static class TransducerSearch
                     break;
                 }
 
+                // The best hypothesis left in A has no probability (log Pr of negative infinity) or an undefined
+                // one (NaN or positive infinity, from non-finite joint outputs). It cannot be ordered against B,
+                // so the stop test above never fires and the label tree would be expanded to its full depth:
+                // extensions^maxSymbolsPerFrame joint evaluations per frame. Nothing left in A can add
+                // probability, so the frame ends here; the hypothesis is kept only when B would otherwise be empty.
+                if (!IsFiniteScore(numOps, star.Score))
+                {
+                    if (next.Count == 0)
+                    {
+                        next.Add(new Node<T>(star.Labels, engine.TensorAddScalar(Step(star.Labels), star.Score).GetFlat(blank), 0));
+                    }
+
+                    break;
+                }
+
                 open.Remove(star.Key);
 
                 // log Pr(y*) + log Pr(k | y*, t) for every symbol k
@@ -207,6 +222,9 @@ internal static class TransducerSearch
     }
 
     private static string Key(int[] labels) => string.Join(",", labels);
+
+    /// <summary>Whether a log-probability is a number above negative infinity (not NaN, not infinite).</summary>
+    private static bool IsFiniteScore<T>(INumericOperations<T> numOps, T score) => !numOps.IsNaN(score) && !numOps.IsInfinity(score);
 
     private static bool IsPrefix(int[] prefix, int[] sequence)
     {

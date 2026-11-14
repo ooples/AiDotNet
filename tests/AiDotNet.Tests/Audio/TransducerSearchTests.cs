@@ -65,6 +65,46 @@ public class TransducerSearchTests
     }
 
     [Fact]
+    public void BeamSearch_NaNJointOutputs_EndTheFrameInsteadOfExpandingTheLabelTree()
+    {
+        // A NaN score is never "more probable" than anything, so the stop test of Algorithm 1 cannot fire. Without
+        // a guard every frame expands the whole label tree, 4^10 paths deep: 88573 joint evaluations for one frame
+        // of this lattice (each one a prediction-network pass in the model).
+        int calls = 0;
+        Tensor<double> LogProbs(IReadOnlyList<int> labels, int t)
+        {
+            calls++;
+            return new Tensor<double>(Enumerable.Repeat(double.NaN, 6).ToArray(), new[] { 6 });
+        }
+
+        var hypotheses = TransducerSearch.BeamSearch<double>(3, LogProbs, 6, 0, beamWidth: 4, maxSymbolsPerFrame: 10);
+
+        Assert.NotEmpty(hypotheses);
+        Assert.InRange(calls, 3, 12);
+    }
+
+    [Fact]
+    public void BeamSearch_ZeroProbabilityLabels_AreNotExpanded()
+    {
+        // Only the blank has probability, so every label extension has log Pr = -infinity. Those hypotheses can
+        // never enter the beam, yet they are not "less probable than beamWidth kept ones" either while fewer than
+        // beamWidth are kept, so they must not be expanded.
+        int calls = 0;
+        Tensor<double> LogProbs(IReadOnlyList<int> labels, int t)
+        {
+            calls++;
+            return Log(1.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+        }
+
+        var hypotheses = TransducerSearch.BeamSearch<double>(2, LogProbs, 6, 0, beamWidth: 4, maxSymbolsPerFrame: 10);
+
+        Assert.Single(hypotheses);
+        Assert.Empty(hypotheses[0].Labels);
+        Assert.Equal(0.0, hypotheses[0].LogProbability, 9);
+        Assert.InRange(calls, 2, 4);
+    }
+
+    [Fact]
     public void BeamSearch_WithBeamOne_KeepsOneHypothesisPerFrame()
     {
         var hypotheses = TransducerSearch.BeamSearch<double>(2, MergingLattice, 3, 0, beamWidth: 1, maxSymbolsPerFrame: 2);
