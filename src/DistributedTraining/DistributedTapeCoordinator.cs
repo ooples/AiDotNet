@@ -282,11 +282,11 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
             return;
         }
 
-        _syncedParamSnapshot = uniqueParams;
         _lastShardedParamsRef = null;
 
         if (WorldSize <= 1 || totalElements <= 0)
         {
+            _syncedParamSnapshot = uniqueParams;
             return;
         }
 
@@ -308,6 +308,10 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
         flat = Backend.Broadcast(flat, root: 0);
         UnpackVectorIntoParameters(flat.AsSpan().Slice(0, totalElements), uniqueParams, preserveGpuWeightBuffers: false);
         invalidateCaches?.Invoke();
+
+        // Recorded only once every rank holds rank 0's weights: a broadcast, unpack or invalidation that throws leaves
+        // the list unsynchronized, so a retry broadcasts again.
+        _syncedParamSnapshot = uniqueParams;
     }
 
     /// <summary>
@@ -537,6 +541,7 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
     /// <returns><c>true</c> if the optimizer step executed; <c>false</c> if mixed-precision gradient overflow was detected and the step was skipped.</returns>
     /// <exception cref="ObjectDisposedException">Thrown if this coordinator has been disposed.</exception>
     /// <exception cref="ArgumentNullException">Thrown if <paramref name="trainableParameters"/> or <paramref name="gradients"/> is null.</exception>
+    /// <exception cref="ArgumentException">Thrown if both <paramref name="optimizer"/> and <paramref name="executeFullParameterStep"/> are null.</exception>
     public bool SynchronizeUnscaleClipAndStep(
         IReadOnlyList<Tensor<T>> trainableParameters,
         Dictionary<Tensor<T>, Tensor<T>> gradients,
@@ -558,6 +563,14 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
         if (gradients is null)
         {
             throw new ArgumentNullException(nameof(gradients));
+        }
+
+        // Without either, both the replicated and the sharded branch would report a step that changed nothing.
+        if (optimizer is null && executeFullParameterStep is null)
+        {
+            throw new ArgumentException(
+                "An optimizer or an optimizer-step callback is required to apply the synchronized update.",
+                nameof(optimizer));
         }
 
         if (_stepStartTimestamp == 0L)
@@ -921,6 +934,7 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
     /// <returns>Canonical serialized optimizer bytes on Rank 0; empty byte array on non-zero ranks.</returns>
     /// <exception cref="ObjectDisposedException">Thrown if this coordinator has been disposed.</exception>
     /// <exception cref="ArgumentNullException">Thrown if <paramref name="optimizer"/> or <paramref name="trainableParameters"/> is null.</exception>
+    /// <exception cref="NotSupportedException">Thrown on a sharded multi-rank strategy when the optimizer does not derive from <see cref="GradientBasedOptimizerBase{T, TInput, TOutput}"/>, so its shard state cannot be gathered.</exception>
     public byte[] ConsolidateOptimizerStateBytes(
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
         IReadOnlyList<Tensor<T>> trainableParameters)
@@ -946,16 +960,24 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
         }
 
         var uniqueParams = GetOrDeduplicateParameters(trainableParameters, out int totalElements);
-        if (uniqueParams.Length == 0 ||
-            totalElements <= 0 ||
-            effectiveOptimizer is not GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> gradOpt ||
+        if (uniqueParams.Length == 0 || totalElements <= 0 || WorldSize <= 1)
+        {
+            // No parameters to shard, or a single rank whose shard is the whole state.
+            return WorldSize <= 1 || Rank == 0
+                ? effectiveOptimizer.Serialize()
+                : Array.Empty<byte>();
+        }
+
+        if (effectiveOptimizer is not GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> gradOpt ||
             TapeParameterIndicesField is null ||
             PendingTapeTensorStatesField is null ||
             TapeStateSyncField is null)
         {
-            return WorldSize <= 1 || Rank == 0
-                ? effectiveOptimizer.Serialize()
-                : Array.Empty<byte>();
+            // Each rank stepped only its own shard, so rank 0's state alone is not the consolidated state; returning
+            // it as canonical would drop every other rank's moments on restore.
+            throw new NotSupportedException(
+                $"Sharded optimizer-state consolidation requires an optimizer derived from GradientBasedOptimizerBase; " +
+                $"{effectiveOptimizer.GetType().Name} keeps per-rank shard state this coordinator cannot gather.");
         }
 
         EnsureBackendInitialized();
