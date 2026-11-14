@@ -108,7 +108,7 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
     /// model (the default graph is drawn at random) but never trained.
     /// </summary>
     [Buffer]
-    private Tensor<T>? _relationAdjacencies;
+    private readonly Tensor<T>? _relationAdjacencies;
 
     /// <summary>
     /// Per R-GCN layer: the shared bases V_b [numBases, hidden, hidden] under basis decomposition, otherwise the
