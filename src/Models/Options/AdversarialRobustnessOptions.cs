@@ -1,3 +1,4 @@
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.Models.Options;
@@ -13,6 +14,27 @@ namespace AiDotNet.Models.Options;
 /// - Adversarial defenses (training and preprocessing)
 /// - Certified robustness (provable guarantees)
 /// - Content moderation (for LLM applications)
+/// </para>
+/// <para>
+/// Where each group takes effect when passed to <c>AiModelBuilder.ConfigureAdversarialRobustness</c>:
+/// <list type="bullet">
+/// <item><description>Safety filtering (<see cref="EnableSafetyFiltering"/> through <see cref="SafetyLogFilePath"/>):
+/// copied into the <see cref="SafetyFilterOptions{T}"/> of the <c>SafetyFilter</c> that validates every
+/// <c>Predict</c> input and filters every output. <see cref="EnableSafetyFiltering"/> false removes the filter.</description></item>
+/// <item><description>Adversarial defense (<see cref="EnableAdversarialTraining"/> through
+/// <see cref="TrainingAttackMethod"/>): build runs <c>AdversarialTraining</c> on the trained model with these settings
+/// and <see cref="BatchSize"/>, and the result predicts through the defended model.</description></item>
+/// <item><description>Certification (<see cref="EnableCertifiedRobustness"/> through
+/// <see cref="CertificationNormType"/>): build creates the <see cref="CertificationMethod"/> engine with these settings,
+/// reports certified accuracy, and <c>AiModelResult.PredictCertified</c> certifies single predictions.</description></item>
+/// <item><description>Content moderation (<see cref="EnableContentModeration"/> through
+/// <see cref="HallucinationThreshold"/>): fills the text section of the <c>ConfigureSafety</c> pipeline; settings the
+/// caller passed to <c>ConfigureSafety</c> explicitly win.</description></item>
+/// <item><description>Red teaming (<see cref="EnableRedTeaming"/> through <see cref="RedTeamingCategories"/>): build
+/// runs <see cref="RedTeamingPromptCount"/> prompts from the safety benchmarks of the chosen categories through that
+/// pipeline and attaches the report as <c>AiModelResult.RedTeamingReport</c>.</description></item>
+/// <item><description><see cref="VerboseLogging"/> writes a log line per robustness build step.</description></item>
+/// </list>
 /// </para>
 /// <para><b>For Beginners:</b> This is your one-stop shop for all AI safety and robustness settings.
 /// You can configure how strictly inputs are validated, how the model is protected against attacks,
@@ -198,7 +220,7 @@ public class AdversarialRobustnessOptions<T> : ModelOptions
     /// <summary>
     /// Gets or sets the preprocessing method to use.
     /// </summary>
-    public string PreprocessingMethod { get; set; } = "JPEG";
+    public AdversarialPreprocessingMethod PreprocessingMethod { get; set; } = AdversarialPreprocessingMethod.JpegCompression;
 
     /// <summary>
     /// Gets or sets whether to use ensemble defenses.
@@ -213,7 +235,7 @@ public class AdversarialRobustnessOptions<T> : ModelOptions
     /// <summary>
     /// Gets or sets the attack method to use during adversarial training.
     /// </summary>
-    public string TrainingAttackMethod { get; set; } = "PGD";
+    public AdversarialAttackMethod TrainingAttackMethod { get; set; } = AdversarialAttackMethod.Pgd;
 
     // ========================================================================
     // CERTIFIED ROBUSTNESS OPTIONS
@@ -299,13 +321,13 @@ public class AdversarialRobustnessOptions<T> : ModelOptions
     /// <summary>
     /// Gets or sets the types of PII to filter.
     /// </summary>
-    public string[] PIITypes { get; set; } = new[]
+    public PiiType[] PIITypes { get; set; } = new[]
     {
-        "Email",
-        "PhoneNumber",
-        "SocialSecurityNumber",
-        "CreditCardNumber",
-        "Address"
+        PiiType.Email,
+        PiiType.PhoneNumber,
+        PiiType.SocialSecurityNumber,
+        PiiType.CreditCardNumber,
+        PiiType.Address
     };
 
     /// <summary>
@@ -335,13 +357,13 @@ public class AdversarialRobustnessOptions<T> : ModelOptions
     /// <summary>
     /// Gets or sets the red teaming categories to test.
     /// </summary>
-    public string[] RedTeamingCategories { get; set; } = new[]
+    public RedTeamingCategory[] RedTeamingCategories { get; set; } = new[]
     {
-        "Jailbreaking",
-        "HarmfulContent",
-        "Misinformation",
-        "PrivacyViolation",
-        "BiasExploration"
+        RedTeamingCategory.Jailbreaking,
+        RedTeamingCategory.HarmfulContent,
+        RedTeamingCategory.Misinformation,
+        RedTeamingCategory.PrivacyViolation,
+        RedTeamingCategory.BiasExploration
     };
 
     // ========================================================================
@@ -422,7 +444,7 @@ public class AdversarialRobustnessOptions<T> : ModelOptions
             EnableSafetyFiltering = true,
             EnableAdversarialTraining = true,
             AdversarialTrainingRatio = 0.5,
-            TrainingAttackMethod = "PGD",
+            TrainingAttackMethod = AdversarialAttackMethod.Pgd,
             DefenseEpsilon = 0.1,
             EnableRobustnessTesting = true,
             AttackMethods = new[]

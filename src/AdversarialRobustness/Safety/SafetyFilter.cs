@@ -46,7 +46,11 @@ public class SafetyFilter<T> : ISafetyFilter<T>
     /// </summary>
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromMilliseconds(100);
 
+    /// <summary>The confidence of one matched jailbreak pattern.</summary>
+    private const double PatternConfidence = 0.8;
+
     private SafetyFilterOptions<T> options;
+    private readonly IContentClassifier<T>? contentClassifier;
     private readonly List<string> jailbreakPatterns;
     private readonly Dictionary<string, List<string>> harmfulContentPatterns;
 
@@ -55,17 +59,34 @@ public class SafetyFilter<T> : ISafetyFilter<T>
     /// </summary>
     /// <param name="options">The safety filter configuration options.</param>
     public SafetyFilter(SafetyFilterOptions<T> options)
+        : this(options, null)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new safety filter that also scores content with a classifier.
+    /// </summary>
+    /// <param name="options">The safety filter configuration options.</param>
+    /// <param name="classifier">
+    /// The classifier consulted when <see cref="SafetyFilterOptions{T}.UseClassifier"/> is true. Its category scores
+    /// are merged (by maximum) with the pattern scores. Null uses the patterns alone.
+    /// </param>
+    public SafetyFilter(SafetyFilterOptions<T> options, IContentClassifier<T>? classifier)
     {
         Guard.NotNull(options);
         this.options = options;
+        contentClassifier = classifier;
         jailbreakPatterns = new List<string>();
         harmfulContentPatterns = new Dictionary<string, List<string>>();
         InitializePatterns();
     }
 
     /// <summary>
-    /// Initializes the jailbreak and harmful content detection patterns from options.
+    /// True when a ready classifier is configured and <see cref="SafetyFilterOptions{T}.UseClassifier"/> is on, so
+    /// numeric content is scored by more than the length and finiteness checks.
     /// </summary>
+    internal bool HasContentClassifier => options.UseClassifier && contentClassifier is not null && contentClassifier.IsReady();
+
     private void InitializePatterns()
     {
         // Initialize jailbreak detection patterns
@@ -96,6 +117,8 @@ public class SafetyFilter<T> : ISafetyFilter<T>
                 "adultcontent" => new List<string> { @"explicit", @"nsfw", @"adult" },
                 "privateinformation" => new List<string> { @"ssn", @"credit card", @"password", @"private" },
                 "misinformation" => new List<string> { @"fake news", @"conspiracy", @"false" },
+                "selfharm" => new List<string> { @"suicide", @"self[- ]harm", @"kill myself", @"cut myself" },
+                "illegalactivities" => new List<string> { @"launder", @"counterfeit", @"smuggl", @"untraceable" },
                 _ => new List<string>()
             };
         }
@@ -176,7 +199,7 @@ public class SafetyFilter<T> : ISafetyFilter<T>
                 result.DetectedHarmCategories = harmfulResult.DetectedCategories;
                 result.SafetyScore = Math.Min(result.SafetyScore, 1.0 - harmfulResult.HarmScore);
 
-                if (harmfulResult.HarmScore > 0.5)
+                if (harmfulResult.HarmScore > options.SafetyThreshold)
                 {
                     result.IsValid = false;
                 }
@@ -292,7 +315,7 @@ public class SafetyFilter<T> : ISafetyFilter<T>
 
         text = text.ToLowerInvariant();
         var matchedPatterns = 0;
-        var totalPatterns = jailbreakPatterns.Count;
+        double missProbability = 1.0;
 
         foreach (var pattern in jailbreakPatterns)
         {
@@ -301,11 +324,12 @@ public class SafetyFilter<T> : ISafetyFilter<T>
                 if (Regex.IsMatch(text, pattern, RegexOptions.IgnoreCase, RegexTimeout))
                 {
                     matchedPatterns++;
+                    missProbability *= 1.0 - PatternConfidence;
                     result.Indicators.Add(new JailbreakIndicator
                     {
                         Type = "PatternMatch",
                         Description = $"Matched jailbreak pattern: {pattern}",
-                        Confidence = 0.8,
+                        Confidence = PatternConfidence,
                         Location = 0
                     });
                 }
@@ -316,14 +340,15 @@ public class SafetyFilter<T> : ISafetyFilter<T>
             }
         }
 
-        if (matchedPatterns > 0)
+        // The indicators are combined as independent evidence (noisy-OR): one match is 0.8, two 0.96. The attempt
+        // is flagged once that confidence reaches 1 - JailbreakSensitivity, so a sensitivity of 0.7 (the default)
+        // flags a single match and a sensitivity below 0.2 needs two.
+        double confidence = 1.0 - missProbability;
+        result.ConfidenceScore = confidence;
+        if (matchedPatterns > 0 && confidence >= 1.0 - options.JailbreakSensitivity)
         {
             result.JailbreakDetected = true;
-            // Guard against division by zero when totalPatterns is 0
-            result.ConfidenceScore = totalPatterns > 0
-                ? Math.Min(1.0, (double)matchedPatterns / totalPatterns * 2.0)
-                : 1.0; // If no patterns but somehow matched, max confidence
-            result.Severity = result.ConfidenceScore;
+            result.Severity = confidence;
             result.JailbreakType = matchedPatterns > 2 ? "Sophisticated" : "Basic";
             result.RecommendedActions = new[] { "Block", "Log", "Alert" };
         }
@@ -333,6 +358,61 @@ public class SafetyFilter<T> : ISafetyFilter<T>
 
     /// <inheritdoc/>
     public HarmfulContentResult<T> IdentifyHarmfulContent(Vector<T> content)
+    {
+        var result = IdentifyHarmfulPatterns(content);
+        if (HasContentClassifier && contentClassifier is { } classifier)
+        {
+            MergeClassifierScores(result, classifier.Classify(content));
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Merges a classifier verdict into the pattern result: each category keeps the larger of the two scores.
+    /// </summary>
+    private static void MergeClassifierScores(HarmfulContentResult<T> result, ContentClassificationResult<T> classification)
+    {
+        if (!classification.IsHarmful)
+        {
+            return;
+        }
+
+        foreach (var kv in classification.CategoryScores)
+        {
+            double score = MathHelper.Clamp(NumOps.ToDouble(kv.Value), 0.0, 1.0);
+            if (score <= 0.0)
+            {
+                continue;
+            }
+
+            result.CategoryScores[kv.Key] = result.CategoryScores.TryGetValue(kv.Key, out var existing)
+                ? Math.Max(existing, score)
+                : score;
+            result.Findings.Add(new HarmfulContentFinding
+            {
+                Category = kv.Key,
+                Severity = score,
+                Description = $"Content classifier scored {kv.Key} at {score:F3}",
+                Location = 0,
+                Excerpt = classification.Explanation
+            });
+        }
+
+        if (result.CategoryScores.Count == 0)
+        {
+            return;
+        }
+
+        var primary = result.CategoryScores.OrderByDescending(kv => kv.Value).First();
+        result.HarmfulContentDetected = true;
+        result.HarmScore = primary.Value;
+        result.PrimaryHarmCategory = primary.Key;
+        result.DetectedCategories = result.CategoryScores.Keys.ToArray();
+        result.RecommendedAction = result.HarmScore > 0.7 ? "Block" : result.HarmScore > 0.4 ? "Warn" : "Allow";
+    }
+
+    private HarmfulContentResult<T> IdentifyHarmfulPatterns(Vector<T> content)
     {
         var result = new HarmfulContentResult<T>
         {
