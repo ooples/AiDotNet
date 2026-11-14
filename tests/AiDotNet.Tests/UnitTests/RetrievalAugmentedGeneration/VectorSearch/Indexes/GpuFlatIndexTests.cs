@@ -281,6 +281,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
         [Fact(Timeout = 60000)]
         public async Task Scorer_TryScoreBatch_EngineErrorReturnsFalse()
         {
+            await Task.Yield();
             var metric = new DotProductMetric<double>();
             var query = new Vector<double>(new double[] { 1.0, 2.0, 3.0 });
             var docs = GenerateVectors(8, 3, Seed + 7).Select(x => x.Item2).ToList();
@@ -300,6 +301,7 @@ namespace AiDotNetTests.UnitTests.RetrievalAugmentedGeneration.VectorSearch.Inde
         [Fact(Timeout = 60000)]
         public async Task GpuFlatIndex_EngineError_UsesCpuScan()
         {
+            await Task.Yield();
             var metric = new DotProductMetric<double>();
             var data = GenerateVectors(count: 50, dim: 4, seed: Seed + 8);
             var failing = new MatMulFailingEngine();

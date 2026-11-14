@@ -138,8 +138,9 @@ public class MCDropoutLayerTests
     /// (0 or 1/(1-p)). The old element loop built a fresh tensor, so the input got no gradient at all.
     /// </summary>
     [Fact(Timeout = 60000)]
-    public void Forward_InMonteCarloMode_KeepsGradientTape()
+    public async Task Forward_InMonteCarloMode_KeepsGradientTape()
     {
+        await Task.Yield();
         var layer = new MCDropoutLayer<double>(0.5, mcMode: true, randomSeed: 7);
         layer.SetTrainingMode(false);
         var input = new Tensor<double>([16], new Vector<double>(Enumerable.Range(0, 16).Select(i => 1.0 + i)));
