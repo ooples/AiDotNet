@@ -214,7 +214,11 @@ public abstract partial class OpenVocabSegmentationBase<T> : SegmentationModelBa
         int pixels = logits.Shape[1] * logits.Shape[2];
         var probs = independentSigmoid ? engine.TensorSigmoid(logits) : engine.TensorSoftmax(logits, 0);
         var labels = engine.TensorArgMax(logits, 0);
-        var masks = engine.TensorPermute(engine.TensorOneHot<T>(labels, numText), new[] { 2, 0, 1 });
+        // TensorOneHot flattens its indices to [pixels, K], so the map's height and width are restored before the
+        // name axis moves to the front.
+        var masks = engine.TensorPermute(
+            engine.Reshape(engine.TensorOneHot<T>(labels, numText), new[] { logits.Shape[1], logits.Shape[2], numText }),
+            new[] { 2, 0, 1 });
 
         // Every name's pixel count (exact, in int) and each pixel's probability for the name it won.
         var labelIndex = engine.Reshape(labels, new[] { pixels });

@@ -107,8 +107,10 @@ internal static class TextEmbeddingClassifier
         var engine = AiDotNetEngine.Current;
         var flat = engine.Reshape(pixelEmbeddings, new[] { b, d, h * w });
         var normalized = NormalizeAxis(flat, 1);
-        // [K, D] x [B, D, HW] -> [B, K, HW] (batched matmul broadcasts the text matrix over B).
-        var cosine = engine.TensorMatMul(normalizedText, normalized);
+        // [B, K, D] x [B, D, HW] -> [B, K, HW]. The text matrix is broadcast over B explicitly: TensorMatMul has
+        // no 2-D x 3-D form (it supports 2Dx2D, NDx2D and same-rank NDxND) and throws for [K, D] x [B, D, HW].
+        var text = engine.TensorBroadcastTo(engine.Reshape(normalizedText, new[] { 1, k, d }), new[] { b, k, d });
+        var cosine = engine.TensorMatMul(text, normalized);
         var logits = engine.TensorMultiplyScalar(cosine, logitScale);
         return batched
             ? engine.Reshape(logits, new[] { b, k, h, w })
