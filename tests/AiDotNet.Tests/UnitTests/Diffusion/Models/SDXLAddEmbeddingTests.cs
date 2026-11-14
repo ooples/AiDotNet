@@ -130,7 +130,17 @@ public class SDXLAddEmbeddingTests
         for (int i = 0; i < latents.Length; i++)
             latents[i] = Math.Cos(i * 0.11);
 
+        // A freshly built U-Net predicts exactly zero for every input (its output convolution starts at zero, the
+        // usual diffusion initialization), so nothing could move the prediction. Give every weight a fixed non-zero
+        // value so the prediction depends on the time embedding.
+        _ = unet.PredictNoise(latents, 500, null);
+        var weights = unet.GetParameters();
+        for (int i = 0; i < weights.Length; i++)
+            weights[i] = 0.05 * Math.Sin(0.37 * (i + 1));
+        unet.SetParameters(weights);
+
         var plain = unet.PredictNoise(latents, 500, null).ToArray();
+        Assert.Contains(plain, value => value != 0.0);
         var zero = unet.PredictNoiseWithAddedTimeEmbedding(latents, 500, null, new Tensor<double>(new[] { 1, unet.TimeEmbeddingDim })).ToArray();
         var shifted = new Tensor<double>(new[] { 1, unet.TimeEmbeddingDim });
         for (int i = 0; i < shifted.Length; i++)
