@@ -280,6 +280,12 @@ function Get-ChangedPathImpact {
     if (Test-ScriptUsedOnlyByIndependentWorkflows -Path $normalized) {
         return [ChangedPathImpact]::NonRuntime
     }
+    # A version bump of packages that provably reach no product code (Resolve-PackagePropsVerdict). Without a
+    # verdict for this run, and for every other outcome, the shared-infrastructure rule below applies.
+    if ($normalized -ceq $script:PackagePropsPath -and $null -ne $script:PackagePropsVerdict) {
+        if ($script:PackagePropsVerdict.Impact -ceq 'BuildOnly') { return [ChangedPathImpact]::BuildOnly }
+        if ($script:PackagePropsVerdict.Impact -ceq 'TestRoute') { return [ChangedPathImpact]::MapCandidate }
+    }
     if (Test-SharedInfrastructure -Path $normalized) {
         return [ChangedPathImpact]::FullValidation
     }
@@ -542,6 +548,290 @@ function Assert-WorkflowsClassified {
             }
         }
     }
+}
+
+# Directory.Packages.props, at the repository root only. A nested one is another central-package scope and keeps
+# the shared-infrastructure rule.
+$script:PackagePropsPath = 'Directory.Packages.props'
+# Set once per run (Resolve-PackagePropsVerdict) when the change being selected for touches the file. $null, the
+# default, leaves it full validation.
+$script:PackagePropsVerdict = $null
+# Packages whose version change always runs everything, whoever references them.
+#   - AiDotNet.*: the tensor engine, its native kernels and the other ecosystem packages the product is built on.
+#   - The test framework, test host and coverage collector: every test shard runs on them.
+#   - The compiler, analyzer and build packages: they decide what is compiled, generated tests included.
+$script:AlwaysFullPackagePatterns = @(
+    '^AiDotNet\.',
+    '^xunit', '^Microsoft\.NET\.Test\.Sdk$', '^Microsoft\.TestPlatform', '^Microsoft\.Testing\.', '^Microsoft\.CodeCoverage$',
+    '^coverlet\.', '^MSTest', '^NUnit',
+    '^Microsoft\.CodeAnalysis', '^Microsoft\.Build', '^Microsoft\.NET\.', '^Microsoft\.SourceLink'
+)
+
+function Read-PackageVersionFile {
+    # The file as: each plain <PackageVersion Include Version/> entry, the entries that are anything else, and
+    # everything that is left once the entries and the comments are taken out. $null when it is not XML.
+    param([AllowNull()] [AllowEmptyString()] [string] $Text)
+    if ([string]::IsNullOrWhiteSpace($Text)) { return $null }
+    $xml = [xml]::new()
+    try { $xml.LoadXml($Text.TrimStart([char] 0xFEFF)) } catch { return $null }
+    $versions = [System.Collections.Generic.Dictionary[string, string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $unclear = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($node in @($xml.SelectNodes('//*[local-name()="PackageVersion"]'))) {
+        $include = [string] $node.GetAttribute('Include')
+        $version = [string] $node.GetAttribute('Version')
+        $parent = $node.ParentNode
+        $plain = $include -and $version -and $node.Attributes.Count -eq 2 -and -not $node.HasChildNodes -and
+            $include -notmatch '[$@%;*]' -and $version -notmatch '[$@%;]' -and
+            $parent.LocalName -ceq 'ItemGroup' -and $parent.Attributes.Count -eq 0 -and
+            [object]::ReferenceEquals($parent.ParentNode, $xml.DocumentElement)
+        $key = if ($include) { $include } else { $node.OuterXml }
+        if (-not $plain -or $versions.ContainsKey($key)) { [void] $unclear.Add($key) }
+        $versions[$key] = if ($plain) { $version } else { $node.OuterXml }
+        [void] $parent.RemoveChild($node)
+    }
+    foreach ($comment in @($xml.SelectNodes('//comment()'))) { [void] $comment.ParentNode.RemoveChild($comment) }
+    return [pscustomobject]@{ Versions = $versions; Unclear = $unclear; Residual = $xml.OuterXml }
+}
+
+function Get-PackageConsumerClass {
+    # What a project that receives a package is, for routing: Product and Unknown run everything, Test runs that
+    # project's shards, Inert is compiled (or not even that) and executed by no shard.
+    param([Parameter(Mandatory)] [string] $Path)
+    if ($Path.StartsWith('src/', [StringComparison]::OrdinalIgnoreCase)) { return 'Product' }
+    if ($Path.StartsWith('tools/TestImpact/', [StringComparison]::OrdinalIgnoreCase)) { return 'Unknown' }
+    if ($Path.StartsWith('tests/', [StringComparison]::OrdinalIgnoreCase)) { return 'Test' }
+    foreach ($entry in $script:BuildOnlyDirectories) {
+        if ($Path.StartsWith($entry, [StringComparison]::Ordinal)) {
+            return $(if (Test-BuildOnlyDirectoryConsumed -Directory $entry) { 'Unknown' } else { 'Inert' })
+        }
+    }
+    $top = $Path.Split('/')[0]
+    if ($Path.Contains('/') -and -not $top.StartsWith('.') -and -not (Test-ToolDirectoryReferenced -Path $Path)) { return 'Inert' }
+    return 'Unknown'
+}
+
+<#
+.SYNOPSIS
+Decides what a change to the root Directory.Packages.props can reach.
+
+.DESCRIPTION
+Pure: the two file texts, the reference lines of every MSBuild file and the tracked projects come in as arguments.
+The answer is FullValidation unless every one of these is proved:
+  - both versions parse, and nothing differs but the Version of plain <PackageVersion Include Version /> entries
+    (an added or removed entry, a property, a condition, a central-package setting is not a version bump);
+  - central transitive pinning is off, so an entry reaches only the projects that reference the package;
+  - no changed package is on the always-full list (AlwaysFullPackagePatterns);
+  - every reference to a changed package is a single-line <PackageReference Include="..."> in a .csproj, and there
+    is at least one (a package nothing references, or one named in a shared props/targets file, has no bound);
+  - no project that receives the package - the referencing projects and every project that depends on one of them
+    through ProjectReference, followed transitively - is product code or of unknown standing.
+Then: when all receiving projects are inert the change is BuildOnly, and when some are test projects with shards in
+the manifest it is TestRoute, selecting every shard of those projects.
+
+.PARAMETER Lines
+Objects with File and Text: the lines of every MSBuild file that mention a reference, a package or a property used
+as a ProjectReference target.
+#>
+function Get-PackagePropsVerdict {
+    param(
+        [AllowNull()] [AllowEmptyString()] [string] $BaseText,
+        [AllowNull()] [AllowEmptyString()] [string] $HeadText,
+        [AllowEmptyCollection()] [object[]] $Lines = @(),
+        [AllowEmptyCollection()] [string[]] $Projects = @(),
+        [AllowNull()] [object[]] $Manifest = $null,
+        [scriptblock] $ClassifyProject = { param($Path) Get-PackageConsumerClass -Path $Path }
+    )
+
+    $packages = [System.Collections.Generic.List[object]]::new()
+    function New-Verdict([string] $Impact, [string] $Why, [string[]] $Shards = @()) {
+        return [pscustomobject]@{ Impact = $Impact; Why = $Why; Shards = @($Shards | Sort-Object -Unique); Packages = @($packages) }
+    }
+    $base = Read-PackageVersionFile $BaseText
+    $head = Read-PackageVersionFile $HeadText
+    if ($null -eq $base -or $null -eq $head) { return New-Verdict 'FullValidation' 'the file could not be read as XML on both sides of the change' }
+    if ($base.Residual -cne $head.Residual) {
+        return New-Verdict 'FullValidation' 'something other than a PackageVersion entry changed (a property, a condition or the file structure)'
+    }
+    if (@($Lines | Where-Object { $_.Text -match 'CentralPackageTransitivePinningEnabled' }).Count -gt 0) {
+        return New-Verdict 'FullValidation' 'central transitive pinning is configured, so an entry can reach projects that do not reference the package'
+    }
+    $names = [System.Collections.Generic.SortedSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($name in @($base.Versions.Keys) + @($head.Versions.Keys)) {
+        if (-not $base.Versions.ContainsKey($name) -or -not $head.Versions.ContainsKey($name) -or
+            $base.Versions[$name] -cne $head.Versions[$name]) { [void] $names.Add($name) }
+    }
+    if ($names.Count -eq 0) { return New-Verdict 'FullValidation' 'no PackageVersion entry changed, so the change cannot be attributed to a package' }
+
+    # Project graph: who depends on whom. A reference that cannot be resolved makes its project a possible
+    # dependent of anything.
+    $projectByPath = [System.Collections.Generic.Dictionary[string, string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($project in $Projects) { $projectByPath[$project.Replace('\', '/')] = $project.Replace('\', '/') }
+    $dependents = @{}
+    $wild = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $sharedTargets = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $sharedWild = $false
+    function Resolve-ReferenceTargets([string] $Referrer, [string] $Include, [int] $Depth = 0) {
+        # The tracked projects an Include can name, as a list (PowerShell would unroll an empty array to $null);
+        # $null when that cannot be bounded.
+        $none = [System.Collections.Generic.List[string]]::new()
+        $value = $Include.Trim().Replace('\', '/')
+        if ($value -notmatch '\$\(') {
+            $parts = [System.Collections.Generic.List[string]]::new()
+            foreach ($segment in @((Split-Path -Parent $Referrer).Replace('\', '/').Split('/', [StringSplitOptions]::RemoveEmptyEntries)) + @($value.Split('/'))) {
+                if ($segment -eq '.' -or $segment -eq '') { continue }
+                if ($segment -eq '..') { if ($parts.Count -eq 0) { return , $none }; $parts.RemoveAt($parts.Count - 1); continue }
+                [void] $parts.Add($segment)
+            }
+            $resolved = $parts -join '/'
+            if ($projectByPath.ContainsKey($resolved)) { [void] $none.Add($projectByPath[$resolved]) }
+            return , $none   # empty: outside the repository, or not a tracked project
+        }
+        $leaf = $value.Substring($value.LastIndexOf('/') + 1)
+        if ($leaf -notmatch '\$\(' -and $value.Contains('/')) {
+            foreach ($candidate in $projectByPath.Values) { if ([IO.Path]::GetFileName($candidate) -ieq $leaf) { [void] $none.Add($candidate) } }
+            return , $none
+        }
+        if ($Depth -ge 3 -or $value -notmatch '^\$\(([A-Za-z_][A-Za-z0-9_.]*)\)$') { return $null }
+        $property = [regex]::Escape($Matches[1])
+        $definitions = @($Lines | ForEach-Object { [regex]::Matches([string] $_.Text, "<$property\b[^>]*>([^<]+)</$property>") } |
+            ForEach-Object { $_.Groups[1].Value })
+        if ($definitions.Count -eq 0) { return $null }
+        foreach ($definition in $definitions) {
+            $resolved = Resolve-ReferenceTargets $Referrer $definition ($Depth + 1)
+            if ($null -eq $resolved) { return $null }
+            foreach ($target in $resolved) { [void] $none.Add($target) }
+        }
+        return , $none
+    }
+    foreach ($line in $Lines) {
+        $text = [string] $line.Text
+        if ($text -notmatch '<ProjectReference\b') { continue }
+        $file = ([string] $line.File).Replace('\', '/')
+        $isProject = $file.EndsWith('.csproj', [StringComparison]::OrdinalIgnoreCase)
+        $targets = if ($text -match '\bInclude\s*=\s*"([^"]+)"') { Resolve-ReferenceTargets $file $Matches[1] } else { $null }
+        if (-not $isProject) {
+            # A shared props/targets file gives the reference to an unknown set of projects.
+            if ($null -eq $targets) { $sharedWild = $true } else { foreach ($target in $targets) { [void] $sharedTargets.Add($target) } }
+            continue
+        }
+        if ($null -eq $targets) { [void] $wild.Add($file); continue }
+        foreach ($target in $targets) {
+            if (-not $dependents.ContainsKey($target)) { $dependents[$target] = [System.Collections.Generic.List[string]]::new() }
+            [void] $dependents[$target].Add($file)
+        }
+    }
+
+    $routed = [System.Collections.Generic.List[string]]::new()
+    $anyTest = $false
+    foreach ($name in $names) {
+        $from = if ($base.Versions.ContainsKey($name)) { $base.Versions[$name] } else { '' }
+        $to = if ($head.Versions.ContainsKey($name)) { $head.Versions[$name] } else { '' }
+        $record = [pscustomobject]@{ name = $name; from = $from; to = $to; reach = 'full'; why = '' }
+        [void] $packages.Add($record)
+        $full = { param($why) $record.why = $why; New-Verdict 'FullValidation' "$name`: $why" }
+        if (-not $from -or -not $to) { return & $full 'the entry was added or removed, so who consumes it is not established' }
+        if ($base.Unclear.Contains($name) -or $head.Unclear.Contains($name)) {
+            return & $full 'the entry is not a plain Include/Version pair in an unconditional item group, or it is declared twice'
+        }
+        foreach ($pattern in $script:AlwaysFullPackagePatterns) {
+            if ($name -imatch $pattern) { return & $full 'the product, every test host or the compiler depends on this package family' }
+        }
+        $quoted = '"' + $name + '"'
+        $reference = '<PackageReference\b[^>]*\bInclude\s*=\s*"' + [regex]::Escape($name) + '"'
+        $consumers = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+        foreach ($line in $Lines) {
+            $text = [string] $line.Text
+            $file = ([string] $line.File).Replace('\', '/')
+            if ($file -ceq $script:PackagePropsPath) { continue }
+            if ($text -match '<PackageReference\b' -and $text -notmatch '\b(Include|Update)\s*=') {
+                return & $full "$file declares a PackageReference across several lines, so its package cannot be read"
+            }
+            if ($text.IndexOf($quoted, [StringComparison]::OrdinalIgnoreCase) -lt 0) { continue }
+            if (-not $file.EndsWith('.csproj', [StringComparison]::OrdinalIgnoreCase)) {
+                return & $full "$file names it, and a shared MSBuild file applies to an unknown set of projects"
+            }
+            if ($text -inotmatch $reference) { return & $full "$file refers to it in a form other than <PackageReference Include>" }
+            if (-not $projectByPath.ContainsKey($file)) { return & $full "$file references it but is not a tracked project" }
+            [void] $consumers.Add($projectByPath[$file])
+        }
+        if ($consumers.Count -eq 0) { return & $full 'no project references it directly, so what it reaches cannot be bounded' }
+        if ($sharedWild) { return & $full 'a shared MSBuild file adds a project reference that cannot be resolved' }
+
+        $closure = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+        $queue = [System.Collections.Generic.Queue[string]]::new()
+        foreach ($project in @($consumers) + @($wild)) { if ($closure.Add($project)) { $queue.Enqueue($project) } }
+        while ($queue.Count -gt 0) {
+            $project = $queue.Dequeue()
+            if ($dependents.ContainsKey($project)) {
+                foreach ($dependent in $dependents[$project]) { if ($closure.Add($dependent)) { $queue.Enqueue($dependent) } }
+            }
+        }
+        $testProjects = [System.Collections.Generic.List[string]]::new()
+        foreach ($project in ($closure | Sort-Object)) {
+            if ($sharedTargets.Contains($project)) { return & $full "$project receives it, and a shared MSBuild file references that project for an unknown set of projects" }
+            $class = [string] (& $ClassifyProject $project)
+            if ($class -ceq 'Inert') { continue }
+            if ($class -cne 'Test') { return & $full "$project receives it and is product code or of unknown standing" }
+            $shards = @(if ($null -ne $Manifest) {
+                $Manifest | Where-Object { $_.PSObject.Properties['project'] -and ([string] $_.project).Replace('\', '/') -ieq $project } |
+                    ForEach-Object { [string] $_.name }
+            })
+            if ($shards.Count -eq 0) { return & $full "test project $project receives it and no shard in the manifest is known to run that project" }
+            [void] $testProjects.Add($project)
+            foreach ($shard in $shards) { [void] $routed.Add($shard) }
+        }
+        if ($testProjects.Count -gt 0) {
+            $anyTest = $true
+            $record.reach = 'test projects'
+            $record.why = "received only by $($testProjects -join ', ') and projects no shard executes"
+        }
+        else {
+            $record.reach = 'build-only'
+            $record.why = "received only by projects no shard executes: $(($closure | Sort-Object) -join ', ')"
+        }
+    }
+    if ($anyTest) {
+        return New-Verdict 'TestRoute' ("package version change ($($names -join ', ')) reaches only test projects; every shard of those projects runs") @($routed)
+    }
+    return New-Verdict 'BuildOnly' "package version change ($($names -join ', ')) reaches only projects no shard executes"
+}
+
+function Resolve-PackagePropsVerdict {
+    # Get-PackagePropsVerdict over the checkout: the file at the base and at HEAD, and HEAD's MSBuild files.
+    # Any failed read is full validation.
+    param([Parameter(Mandatory)] [string] $BaseSha, [AllowNull()] [object[]] $Manifest = $null)
+    $full = { param($why) [pscustomobject]@{ Impact = 'FullValidation'; Why = $why; Shards = @(); Packages = @() } }
+    try {
+        $baseText = @(& git show "${BaseSha}:$script:PackagePropsPath" 2>$null) -join "`n"
+        if ($LASTEXITCODE -ne 0) { return & $full 'the file does not exist at the base of the change' }
+        $headText = @(& git show "HEAD:$script:PackagePropsPath" 2>$null) -join "`n"
+        if ($LASTEXITCODE -ne 0) { return & $full 'the file does not exist at HEAD' }
+        $buildFiles = @('*.csproj', '*.props', '*.targets', '*.proj', '*.fsproj', '*.vbproj')
+        $read = {
+            param([string] $Pattern)
+            $found = @(& git -c core.quotepath=false grep -n -I -E $Pattern HEAD -- @buildFiles 2>$null)
+            if ($LASTEXITCODE -gt 1) { throw 'the MSBuild files could not be searched' }
+            foreach ($entry in $found) {
+                if ([string] $entry -match '^HEAD:(.+?):\d+:(.*)$') { [pscustomobject]@{ File = $Matches[1]; Text = $Matches[2] } }
+            }
+        }
+        $lines = @(& $read '<[A-Za-z]*(Reference|Package)[A-Za-z]*([[:space:]>/]|$)')
+        $properties = @($lines | Where-Object { $_.Text -match '<ProjectReference\b' } |
+            ForEach-Object { [regex]::Matches([string] $_.Text, '\$\(([A-Za-z_][A-Za-z0-9_.]*)\)') } |
+            ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+        # Twice: a property that names a project may itself be written in terms of another one.
+        for ($pass = 0; $pass -lt 2 -and $properties.Count -gt 0; $pass++) {
+            $definitions = @(& $read ('<(' + (($properties | ForEach-Object { [regex]::Escape($_) }) -join '|') + ')([[:space:]>])'))
+            $lines += $definitions
+            $properties = @($definitions | ForEach-Object { [regex]::Matches([string] $_.Text, '\$\(([A-Za-z_][A-Za-z0-9_.]*)\)') } |
+                ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+        }
+        $projects = @(& git -c core.quotepath=false ls-tree -r --name-only HEAD 2>$null | Where-Object { $_ -like '*.csproj' })
+        if ($LASTEXITCODE -ne 0) { return & $full 'the tracked projects could not be listed' }
+        return Get-PackagePropsVerdict -BaseText $baseText -HeadText $headText -Lines $lines -Projects $projects -Manifest $Manifest
+    }
+    catch { return & $full "package routing failed: $($_.Exception.Message)" }
+    finally { $global:LASTEXITCODE = 0 }
 }
 
 function Test-RangeOverlap {
@@ -1291,7 +1581,7 @@ function Select-ImpactedShards {
                         [void] $selected.Add([string] $shard)
                         [void] $routes.Add("$shard <= runs tests affected by $path ($($route.Why))")
                     }
-                    Add-FileDecision $path 'TestSource' 'routed' @($route.Shards) $route.Why
+                    Add-FileDecision $path $(if ($route.PSObject.Properties['Category']) { [string] $route.Category } else { 'TestSource' }) 'routed' @($route.Shards) $route.Why
                 }
                 elseif ($route.PSObject.Properties['Unassigned'] -and $route.Unassigned) {
                     [void] $routes.Add("(none) <= $path`: $($route.Why); the shard inventory gate fails the build until one does")
@@ -2534,6 +2824,189 @@ if ($SelfTest) {
         Remove-Item -LiteralPath $workflowRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
 
+    # Dependency bumps route by package. A synthetic tree: one product project, two test projects with shards, a
+    # worker test project with none, a benchmark, a standalone tool, a tool the tests reference, and a shared
+    # props file that hands one package to everything.
+    $packageBase = [ordered]@{
+        'AiDotNet.Tensors' = '0.90.2'; 'Newtonsoft.Json' = '13.0.3'; 'Moq' = '4.20.0'; 'TorchSharp' = '0.105.0'
+        'xunit' = '2.9.0'; 'coverlet.collector' = '6.0.0'; 'Microsoft.NET.Test.Sdk' = '17.0.0'; 'Orphan.Package' = '1.0.0'
+        'Shared.Package' = '1.0.0'; 'Tool.Package' = '1.0.0'; 'Lib.Package' = '1.0.0'; 'Serving.TestOnly' = '1.0.0'
+        'Worker.Package' = '1.0.0'; 'Microsoft.CodeAnalysis.CSharp' = '4.14.0'
+    }
+    function New-PackageProps {
+        param([System.Collections.IDictionary] $Versions, [string] $Property = '', [string] $Comment = 'versions', [string] $Extra = '')
+        $entries = @($Versions.GetEnumerator() | ForEach-Object { "    <PackageVersion Include=`"$($_.Key)`" Version=`"$($_.Value)`" />" })
+        return (@('<Project>', '  <PropertyGroup>', '    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>', $Property,
+            '  </PropertyGroup>', '  <ItemGroup>', "    <!-- $Comment -->") + $entries + @($Extra, '  </ItemGroup>', '</Project>')) -join "`n"
+    }
+    function New-Bump {
+        param([hashtable] $Changes)
+        $versions = [ordered]@{}
+        foreach ($entry in $packageBase.GetEnumerator()) { $versions[$entry.Key] = $entry.Value }
+        foreach ($name in $Changes.Keys) { $versions[$name] = $Changes[$name] }
+        return $versions
+    }
+    function New-BuildLine([string] $File, [string] $Text) { [pscustomobject]@{ File = $File; Text = $Text } }
+    $testsProject = 'tests/AiDotNet.Tests/AiDotNetTests.csproj'
+    $servingProject = 'tests/AiDotNet.Serving.Tests/AiDotNet.Serving.Tests.csproj'
+    $packageProjects = @('src/AiDotNet.csproj', $testsProject, $servingProject, 'tests/AiDotNet.Worker/Worker.csproj',
+        'AiDotNetBenchmarkTests/AiDotNetBenchmarkTests.csproj', 'tools/Standalone/Standalone.csproj', 'tools/Referenced/Referenced.csproj')
+    $packageLines = @(
+        (New-BuildLine 'Directory.Packages.props' '    <PackageVersion Include="Moq" Version="4.20.0" />'),
+        (New-BuildLine 'src/AiDotNet.csproj' '    <PackageReference Include="AiDotNet.Tensors" />'),
+        (New-BuildLine 'src/AiDotNet.csproj' '    <PackageReference Include="Newtonsoft.Json" />'),
+        (New-BuildLine 'src/AiDotNet.csproj' '    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" VersionOverride="4.14.0" />'),
+        (New-BuildLine 'src/AiDotNet.csproj' '    <EvolutionProjectPath Condition="''$(EvolutionProjectPath)'' == ''''">$(MSBuildThisFileDirectory)..\..\AiDotNet.Evolution\src\AiDotNet.Evolution.csproj</EvolutionProjectPath>'),
+        (New-BuildLine 'src/AiDotNet.csproj' '    <ProjectReference Include="$(EvolutionProjectPath)" />'),
+        (New-BuildLine $testsProject '    <PackageReference Include="Moq" />'),
+        (New-BuildLine $testsProject '    <PackageReference Include="xunit" />'),
+        (New-BuildLine $testsProject '    <PackageReference Include="coverlet.collector" PrivateAssets="all" />'),
+        (New-BuildLine $testsProject '    <PackageReference Include="Microsoft.NET.Test.Sdk" />'),
+        (New-BuildLine $testsProject '    <ProjectReference Include="..\..\src\AiDotNet.csproj" />'),
+        (New-BuildLine $testsProject '    <ProjectReference Include="..\..\tools\Referenced\Referenced.csproj" />'),
+        (New-BuildLine $servingProject '    <PackageReference Include="Serving.TestOnly" />'),
+        (New-BuildLine $servingProject '    <PackageReference Include="xunit" />'),
+        (New-BuildLine 'tests/AiDotNet.Worker/Worker.csproj' '    <PackageReference Include="Worker.Package" />'),
+        (New-BuildLine 'AiDotNetBenchmarkTests/AiDotNetBenchmarkTests.csproj' '    <PackageReference Include="TorchSharp" />'),
+        (New-BuildLine 'AiDotNetBenchmarkTests/AiDotNetBenchmarkTests.csproj' '    <ProjectReference Include="..\src\AiDotNet.csproj" />'),
+        (New-BuildLine 'tools/Standalone/Standalone.csproj' '    <PackageReference Include="Tool.Package" />'),
+        (New-BuildLine 'tools/Referenced/Referenced.csproj' '    <PackageReference Include="Lib.Package" />'),
+        (New-BuildLine 'Directory.Build.props' '    <PackageReference Include="Shared.Package" PrivateAssets="all" />')
+    )
+    $packageManifest = @(
+        [pscustomobject]@{ name = 'Alpha'; project = $testsProject; filter = 'A' },
+        [pscustomobject]@{ name = 'Beta'; project = $testsProject; filter = 'B' },
+        [pscustomobject]@{ name = 'Serving'; project = $servingProject; filter = 'S' }
+    )
+    $packageClassifier = {
+        param($Path)
+        if ($Path.StartsWith('src/')) { return 'Product' }
+        if ($Path.StartsWith('tests/')) { return 'Test' }
+        if ($Path.StartsWith('AiDotNetBenchmarkTests/') -or $Path.StartsWith('tools/Standalone/')) { return 'Inert' }
+        return 'Unknown'
+    }
+    function Get-TestPackageVerdict {
+        param([string] $Head, [string] $Base = (New-PackageProps $packageBase), [object[]] $Lines = $packageLines,
+            [string[]] $Projects = $packageProjects, $Manifest = $packageManifest)
+        return Get-PackagePropsVerdict -BaseText $Base -HeadText $Head -Lines $Lines -Projects $Projects -Manifest $Manifest `
+            -ClassifyProject $packageClassifier
+    }
+    $v = Get-TestPackageVerdict (New-PackageProps (New-Bump @{ 'TorchSharp' = '0.106.0' }))
+    Assert-True ($v.Impact -ceq 'BuildOnly' -and $v.Shards.Count -eq 0 -and $v.Packages[0].name -ceq 'TorchSharp' -and
+        $v.Packages[0].from -ceq '0.105.0' -and $v.Packages[0].to -ceq '0.106.0') `
+        "a benchmark-only package bump was not build-only: $($v.Why)"
+    $v = Get-TestPackageVerdict (New-PackageProps (New-Bump @{ 'Tool.Package' = '2.0.0' }))
+    Assert-True ($v.Impact -ceq 'BuildOnly') "a standalone-tool package bump was not build-only: $($v.Why)"
+    $v = Get-TestPackageVerdict (New-PackageProps (New-Bump @{ 'TorchSharp' = '0.106.0' }) -Comment 'bumped TorchSharp')
+    Assert-True ($v.Impact -ceq 'BuildOnly') "a comment edited beside a version bump changed the verdict: $($v.Why)"
+    $v = Get-TestPackageVerdict (New-PackageProps (New-Bump @{ 'Moq' = '4.21.0' }))
+    Assert-True ($v.Impact -ceq 'TestRoute' -and ($v.Shards -join ',') -ceq 'Alpha,Beta') `
+        "a test-only package bump did not select exactly its test project's shards: $($v.Impact) $($v.Shards -join ',') $($v.Why)"
+    $v = Get-TestPackageVerdict (New-PackageProps (New-Bump @{ 'Serving.TestOnly' = '1.1.0' }))
+    Assert-True ($v.Impact -ceq 'TestRoute' -and ($v.Shards -join ',') -ceq 'Serving') `
+        "a package of one test project selected another project's shards: $($v.Shards -join ',')"
+    $v = Get-TestPackageVerdict (New-PackageProps (New-Bump @{ 'Moq' = '4.21.0'; 'TorchSharp' = '0.106.0'; 'Serving.TestOnly' = '1.1.0' }))
+    Assert-True ($v.Impact -ceq 'TestRoute' -and ($v.Shards -join ',') -ceq 'Alpha,Beta,Serving') `
+        'a mixed test-only and benchmark-only bump did not select the union of the test shards'
+    $v = Get-TestPackageVerdict (New-PackageProps (New-Bump @{ 'Moq' = '4.21.0' })) -Manifest $null
+    Assert-True ($v.Impact -ceq 'FullValidation') 'a test-only package bump was routed without a shard manifest'
+    $v = Get-TestPackageVerdict (New-PackageProps (New-Bump @{ 'TorchSharp' = '0.106.0' })) -Manifest $null
+    Assert-True ($v.Impact -ceq 'BuildOnly') 'a benchmark-only bump needed a shard manifest'
+    foreach ($case in @(
+        @{ Why = 'a product package bump'; Changes = @{ 'Newtonsoft.Json' = '13.0.4' } },
+        @{ Why = 'a product package bumped beside a benchmark package'; Changes = @{ 'Newtonsoft.Json' = '13.0.4'; 'TorchSharp' = '0.106.0' } },
+        @{ Why = 'AiDotNet.Tensors'; Changes = @{ 'AiDotNet.Tensors' = '0.91.0' } },
+        @{ Why = 'the xunit framework'; Changes = @{ 'xunit' = '2.9.1' } },
+        @{ Why = 'the coverage collector'; Changes = @{ 'coverlet.collector' = '6.0.1' } },
+        @{ Why = 'the test SDK'; Changes = @{ 'Microsoft.NET.Test.Sdk' = '17.1.0' } },
+        @{ Why = 'the compiler package'; Changes = @{ 'Microsoft.CodeAnalysis.CSharp' = '4.15.0' } },
+        @{ Why = 'a package nothing references'; Changes = @{ 'Orphan.Package' = '1.0.1' } },
+        @{ Why = 'a package a shared props file references'; Changes = @{ 'Shared.Package' = '1.0.1' } },
+        @{ Why = 'a package of a test project no shard runs'; Changes = @{ 'Worker.Package' = '1.0.1' } },
+        @{ Why = 'a package of a tool the tests reference'; Changes = @{ 'Lib.Package' = '1.0.1' } },
+        @{ Why = 'a new entry'; Changes = @{ 'Brand.New' = '1.0.0' } }
+    )) {
+        $v = Get-TestPackageVerdict (New-PackageProps (New-Bump $case.Changes))
+        Assert-True ($v.Impact -ceq 'FullValidation' -and $v.Shards.Count -eq 0) "$($case.Why) did not keep the full matrix: $($v.Impact) - $($v.Why)"
+    }
+    # Edits that are not a version bump of a plain entry.
+    $removed = New-Bump @{}
+    $removed.Remove('TorchSharp')
+    $bumped = New-Bump @{ 'TorchSharp' = '0.106.0' }
+    foreach ($case in @(
+        @{ Why = 'a removed entry'; Head = (New-PackageProps $removed) },
+        @{ Why = 'a comment-only edit'; Head = (New-PackageProps $packageBase -Comment 'reworded') },
+        @{ Why = 'a new property'; Head = (New-PackageProps $packageBase -Property '    <CentralPackageVersionOverrideEnabled>false</CentralPackageVersionOverrideEnabled>') },
+        @{ Why = 'a property changed beside a benchmark bump'; Head = (New-PackageProps $bumped -Property '    <NoWarn>NU1507</NoWarn>') },
+        @{ Why = 'a conditional entry'; Head = (New-PackageProps $packageBase).Replace('Include="TorchSharp" Version="0.105.0"', 'Include="TorchSharp" Version="0.106.0" Condition="''$(OS)'' == ''Windows_NT''"') },
+        @{ Why = 'a version taken from a property'; Head = (New-PackageProps (New-Bump @{ 'TorchSharp' = '$(TorchVersion)' })) },
+        @{ Why = 'an entry declared twice'; Head = (New-PackageProps $bumped -Extra '    <PackageVersion Include="TorchSharp" Version="0.107.0" />') },
+        @{ Why = 'a conditional item group'; Head = (New-PackageProps $bumped).Replace('<ItemGroup>', '<ItemGroup Condition="''$(X)'' == ''1''">') },
+        @{ Why = 'a file that is not XML'; Head = '<Project><ItemGroup>' },
+        @{ Why = 'a deleted file'; Head = '' }
+    )) {
+        $v = Get-TestPackageVerdict $case.Head
+        Assert-True ($v.Impact -ceq 'FullValidation') "$($case.Why) did not keep the full matrix: $($v.Impact) - $($v.Why)"
+    }
+    $v = Get-TestPackageVerdict (New-PackageProps $bumped) -Base ''
+    Assert-True ($v.Impact -ceq 'FullValidation') 'a props file absent at the base did not keep the full matrix'
+    # What the tree can add: transitive pinning, a product project depending on the benchmark, a reference that
+    # cannot be resolved, a reference declared over several lines, and a shared file referencing the consumer.
+    foreach ($case in @(
+        @{ Why = 'central transitive pinning'; Line = (New-BuildLine 'Directory.Build.props' '    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>') },
+        @{ Why = 'a product project that depends on the benchmark project'; Line = (New-BuildLine 'src/AiDotNet.csproj' '    <ProjectReference Include="..\AiDotNetBenchmarkTests\AiDotNetBenchmarkTests.csproj" />') },
+        @{ Why = 'a product project reference through an undefined property'; Line = (New-BuildLine 'src/AiDotNet.csproj' '    <ProjectReference Include="$(SomewhereElse)" />') },
+        @{ Why = 'a product project reference by file name through a property'; Line = (New-BuildLine 'src/AiDotNet.csproj' '    <ProjectReference Include="$(Root)/AiDotNetBenchmarkTests.csproj" />') },
+        @{ Why = 'a package reference declared over several lines'; Line = (New-BuildLine 'tools/Standalone/Standalone.csproj' '    <PackageReference') },
+        @{ Why = 'a shared file that references the benchmark project'; Line = (New-BuildLine 'Directory.Build.targets' '    <ProjectReference Include="$(MSBuildThisFileDirectory)AiDotNetBenchmarkTests/AiDotNetBenchmarkTests.csproj" />') },
+        @{ Why = 'a shared file with an unresolvable project reference'; Line = (New-BuildLine 'Directory.Build.targets' '    <ProjectReference Include="$(Anything)" />') },
+        @{ Why = 'a reference to the package in another element'; Line = (New-BuildLine 'tools/Standalone/Standalone.csproj' '    <PackageDownload Include="TorchSharp" Version="[0.105.0]" />') }
+    )) {
+        $v = Get-TestPackageVerdict (New-PackageProps $bumped) -Lines (@($packageLines) + @($case.Line))
+        Assert-True ($v.Impact -ceq 'FullValidation') "$($case.Why) did not keep the full matrix for a benchmark bump: $($v.Impact) - $($v.Why)"
+    }
+    # A property-valued reference whose definition names an untracked project (a sibling repository) is no
+    # dependency on anything here, and an unresolvable reference from an inert project stays inert.
+    $v = Get-TestPackageVerdict (New-PackageProps $bumped) -Lines (@($packageLines) +
+        @(New-BuildLine 'tools/Standalone/Standalone.csproj' '    <ProjectReference Include="$(SomewhereElse)" />'))
+    Assert-True ($v.Impact -ceq 'BuildOnly') "an unresolvable reference from a standalone tool changed a benchmark bump: $($v.Why)"
+
+    # The verdict reaches classification and selection, for the root file only, and only while it is set.
+    try {
+        $script:PackagePropsVerdict = Get-TestPackageVerdict (New-PackageProps $bumped)
+        Assert-True ((Get-ChangedPathImpact -Path 'Directory.Packages.props') -eq [ChangedPathImpact]::BuildOnly) `
+            'a build-only package verdict did not classify the props file as build-only'
+        Assert-True ((Get-ChangedPathImpact -Path 'benchmarks/Directory.Packages.props') -eq [ChangedPathImpact]::FullValidation -and
+            (Get-ChangedPathImpact -Path 'directory.packages.props') -eq [ChangedPathImpact]::FullValidation) `
+            'a package verdict for the root props file reached another props file'
+        $r = Select-ImpactedShards -Map $map -Changed @{ 'Directory.Packages.props' = @(1, 2) }
+        Assert-True (-not $r.Escalate -and $r.Shards.Count -eq 0) 'a build-only package bump selected shards or escalated'
+        $r = Select-ImpactedShards -Map $map -Changed @{ 'Directory.Packages.props' = @(1, 2); 'src/Covered.cs' = @(12, 14) }
+        Assert-True (-not $r.Escalate -and ($r.Shards -join ',') -ceq 'Alpha,HeavyNoCoverage') `
+            'a build-only package bump widened or suppressed a mapped change beside it'
+
+        $script:PackagePropsVerdict = Get-TestPackageVerdict (New-PackageProps (New-Bump @{ 'Moq' = '4.21.0' }))
+        Assert-True ((Get-ChangedPathImpact -Path 'Directory.Packages.props') -eq [ChangedPathImpact]::MapCandidate) `
+            'a test-route package verdict did not make the props file routable'
+        $route = [pscustomobject]@{ Routable = $true; Shards = @($script:PackagePropsVerdict.Shards); Why = $script:PackagePropsVerdict.Why; Category = 'PackageVersion' }
+        $r = Select-ImpactedShards -Map $map -Changed @{ 'Directory.Packages.props' = @(1, 2) } -TestRoutes @{ 'Directory.Packages.props' = $route }
+        Assert-True (-not $r.Escalate -and $r.RequiresValidation -and ($r.Shards -join ',') -ceq 'Alpha,Beta,HeavyNoCoverage') `
+            "a test-only package bump did not run its test project's shards: $($r.Shards -join ',')"
+        Assert-True (@($r.Files | Where-Object { $_.path -ceq 'Directory.Packages.props' -and $_.category -ceq 'PackageVersion' -and $_.outcome -ceq 'routed' }).Count -eq 1) `
+            'the routed package bump was not recorded as a package-version decision'
+        # Routable but with no route supplied (a caller that forgot it): unmapped, so it escalates.
+        $r = Select-ImpactedShards -Map $map -Changed @{ 'Directory.Packages.props' = @(1, 2) }
+        Assert-True $r.Escalate 'a test-route package verdict without its route did not escalate'
+
+        $script:PackagePropsVerdict = Get-TestPackageVerdict (New-PackageProps (New-Bump @{ 'Newtonsoft.Json' = '13.0.4' }))
+        Assert-True ((Get-ChangedPathImpact -Path 'Directory.Packages.props') -eq [ChangedPathImpact]::FullValidation) `
+            'a full-validation package verdict did not keep the props file full validation'
+    } finally {
+        $script:PackagePropsVerdict = $null
+    }
+    Assert-True ((Get-ChangedPathImpact -Path 'Directory.Packages.props') -eq [ChangedPathImpact]::FullValidation) `
+        'without a package verdict the props file is not full validation'
+
     # A build-only directory is trusted only while nothing outside it consumes it. Proved against
     # throwaway repositories: unreferenced, referenced by a test project, named by the shard
     # manifest, read by a test at run time, and merely mentioned in a comment.
@@ -3563,6 +4036,11 @@ if ($ClassifyOnly) {
             $reason = 'changed-path-set-empty'
         }
         else {
+            # No shard manifest here, so only the build-only outcome can be established; a bump that reaches
+            # test projects stays full validation for the test-level stage, which then narrows nothing.
+            if ($changedFiles -ccontains $script:PackagePropsPath) {
+                $script:PackagePropsVerdict = Resolve-PackagePropsVerdict -BaseSha $BaseSha
+            }
             $reviewed = [pscustomobject]@{ Paths = @(); Shards = @() }
             if (Test-Path "$PSScriptRoot/CiPolicyImpact.ps1") {
                 . "$PSScriptRoot/CiPolicyImpact.ps1"
@@ -3758,6 +4236,21 @@ try {
             -GeneratedDependencyProjects @('tests/AiDotNet.Tests/')
     }
 
+    # Dependency bumps route by package. Only for the change being selected for: the same file in the older
+    # map-to-HEAD delta keeps the shared-infrastructure rule.
+    $packageRouting = $null
+    if ($BaseSha -and $currentPaths -ccontains $script:PackagePropsPath) {
+        $verdict = Resolve-PackagePropsVerdict -BaseSha $BaseSha -Manifest $(if ($ShardManifestFile) { $manifest } else { $null })
+        $script:PackagePropsVerdict = $verdict
+        if ($verdict.Impact -ceq 'TestRoute') {
+            $testRoutes[$script:PackagePropsPath] = [pscustomobject]@{
+                Routable = $true; Shards = @($verdict.Shards); Why = $verdict.Why; Category = 'PackageVersion'
+            }
+        }
+        Write-Host "package versions: $($verdict.Impact) - $($verdict.Why)"
+        $packageRouting = [pscustomobject]@{ impact = $verdict.Impact; why = $verdict.Why; packages = @($verdict.Packages) }
+    }
+
     $reviewed = [pscustomobject]@{ Paths = @(); Shards = @() }
     if ($BaseSha -and (Test-Path "$PSScriptRoot/CiPolicyImpact.ps1")) {
         try {
@@ -3869,6 +4362,7 @@ try {
         # wouldSelect is what coverage selected even when an escalation overrides it with the full matrix.
         wouldSelect       = @($selection.Shards)
         files             = @(if ($selection.PSObject.Properties['Files']) { @($selection.Files) })
+        packageRouting    = $packageRouting
         map               = [pscustomobject]@{
             sha = $mapSha; changedSinceMap = $changedSinceMapCount; changedByThisChange = @($currentPaths).Count
         }

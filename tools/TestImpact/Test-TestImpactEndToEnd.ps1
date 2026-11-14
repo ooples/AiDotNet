@@ -724,6 +724,76 @@ try {
         Assert-True ($plan.mode -ceq 'Partial' -and (@($plan.rerun) -join ',') -ceq 'Alpha,Always') `
             "a valid deleted-test delta failed planning after git grep found no referrers: $($plan.why)"
 
+        # Dependency bumps route by package, through real commits and the real project files: a package only
+        # the benchmark references compiles and runs no shard, one only the test project references runs that
+        # project's shards, and a product package, a new entry and a property edit run everything.
+        Invoke-Git checkout --quiet --detach $masterSha
+        $packageProps = {
+            param([string] $Bench = '1.0.0', [string] $Test = '1.0.0', [string] $Product = '1.0.0', [string] $Extra = '', [string] $Property = '')
+            @('<Project>', '  <PropertyGroup>', '    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>', $Property,
+              '  </PropertyGroup>', '  <ItemGroup>',
+              "    <PackageVersion Include=`"Bench.Only`" Version=`"$Bench`" />",
+              "    <PackageVersion Include=`"Test.Only`" Version=`"$Test`" />",
+              "    <PackageVersion Include=`"Product.Lib`" Version=`"$Product`" />", $Extra,
+              '  </ItemGroup>', '</Project>') | Set-Content -LiteralPath Directory.Packages.props -Encoding utf8
+        }
+        & $packageProps
+        New-Item -ItemType Directory -Path benchmarks/Bench, src/Lib, tests/Proj -Force | Out-Null
+        '<Project Sdk="Microsoft.NET.Sdk"><ItemGroup><PackageReference Include="Bench.Only" /><ProjectReference Include="..\..\src\Lib\Lib.csproj" /></ItemGroup></Project>' |
+            Set-Content -LiteralPath benchmarks/Bench/Bench.csproj -Encoding utf8
+        '<Project Sdk="Microsoft.NET.Sdk"><ItemGroup><PackageReference Include="Product.Lib" /></ItemGroup></Project>' |
+            Set-Content -LiteralPath src/Lib/Lib.csproj -Encoding utf8
+        '<Project Sdk="Microsoft.NET.Sdk"><ItemGroup><PackageReference Include="Test.Only" /><ProjectReference Include="..\..\src\Lib\Lib.csproj" /></ItemGroup></Project>' |
+            Set-Content -LiteralPath tests/Proj/Proj.csproj -Encoding utf8
+        Invoke-Git add Directory.Packages.props benchmarks/Bench/Bench.csproj src/Lib/Lib.csproj tests/Proj/Proj.csproj
+        Invoke-Git commit --quiet -m package-routing-base
+        $packageBaseSha = ((Invoke-Git rev-parse HEAD) | Out-String).Trim()
+        $packageBaseTree = ((Invoke-Git rev-parse 'HEAD^{tree}') | Out-String).Trim()
+        foreach ($case in @(
+            @{ Name = 'benchmark-only'; Arguments = @{ Bench = '1.1.0' }; Escalate = $false; Shards = ''; Impact = 'BuildOnly'; Reason = 'build-only' },
+            @{ Name = 'test-only'; Arguments = @{ Test = '1.1.0' }; Escalate = $false; Shards = 'Alpha,Always,Beta'; Impact = 'TestRoute'; Reason = 'selected' },
+            @{ Name = 'product'; Arguments = @{ Product = '1.1.0' }; Escalate = $true; Shards = ''; Impact = 'FullValidation'; Reason = 'impact-unknown' },
+            @{ Name = 'product-beside-benchmark'; Arguments = @{ Bench = '1.1.0'; Product = '1.1.0' }; Escalate = $true; Shards = ''; Impact = 'FullValidation'; Reason = 'impact-unknown' },
+            @{ Name = 'new-entry'; Arguments = @{ Extra = '    <PackageVersion Include="Brand.New" Version="1.0.0" />' }; Escalate = $true; Shards = ''; Impact = 'FullValidation'; Reason = 'impact-unknown' },
+            @{ Name = 'property-edit'; Arguments = @{ Bench = '1.1.0'; Property = '    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>' }; Escalate = $true; Shards = ''; Impact = 'FullValidation'; Reason = 'impact-unknown' }
+        )) {
+            Invoke-Git checkout --quiet --detach $packageBaseSha
+            $packageArguments = $case.Arguments
+            & $packageProps @packageArguments
+            Invoke-Git add Directory.Packages.props
+            Invoke-Git commit --quiet -m "package-$($case.Name)"
+            $packageOut = "package-$($case.Name)-selection.json"
+            & $selector -MapFile certified/shard-map.json -DeltaFromTree $packageBaseTree `
+                -ShardManifestFile shard-manifest.json -ExpectedShards $shardNames -OutFile $packageOut 6>$null
+            Assert-True ($LASTEXITCODE -eq 0) "package routing ($($case.Name)): the selector exited $LASTEXITCODE"
+            $packageSelection = Get-Content $packageOut -Raw | ConvertFrom-Json
+            Assert-True ([bool] $packageSelection.escalate -eq $case.Escalate -and
+                (@($packageSelection.shards | Sort-Object) -join ',') -ceq $case.Shards -and
+                [string] $packageSelection.reason -ceq $case.Reason) `
+                ("package routing ($($case.Name)): expected escalate=$($case.Escalate) shards='$($case.Shards)' reason=$($case.Reason), got " +
+                 "escalate=$($packageSelection.escalate) shards='$(@($packageSelection.shards | Sort-Object) -join ',')' reason=$($packageSelection.reason) " +
+                 "($(@($packageSelection.reasons) -join '; '))")
+            Assert-True ($null -ne $packageSelection.packageRouting -and [string] $packageSelection.packageRouting.impact -ceq $case.Impact) `
+                "package routing ($($case.Name)): the selection did not record the $($case.Impact) verdict"
+            if ($case.Name -ceq 'benchmark-only') {
+                Assert-True (-not [bool] $packageSelection.requiresShards -and [bool] $packageSelection.requiresValidation) `
+                    'a benchmark-only package bump did not stay a compile-only change'
+                # The test-level stage classifies the same commit without a manifest and must agree.
+                & $selector -ClassifyOnly -BaseSha $packageBaseSha -OutFile package-classification.json 6>$null
+                $packageClassification = Get-Content package-classification.json -Raw | ConvertFrom-Json
+                Assert-True ([string] $packageClassification.pathImpacts.'Directory.Packages.props' -ceq 'BuildOnly') `
+                    'path classification did not report the benchmark-only package bump as build-only'
+            }
+            if ($case.Name -ceq 'test-only') {
+                & $selector -ClassifyOnly -BaseSha $packageBaseSha -OutFile package-classification.json 6>$null
+                $packageClassification = Get-Content package-classification.json -Raw | ConvertFrom-Json
+                Assert-True ([string] $packageClassification.pathImpacts.'Directory.Packages.props' -ceq 'FullValidation' -and
+                    [bool] $packageClassification.requiresValidation) `
+                    'path classification let a test-only package bump out of validation'
+            }
+        }
+        Write-Host 'Package routing: benchmark-only bump compiled only; test-only bump ran its project; product, new-entry and property edits ran everything.'
+
         # (b) Master adds only documentation: nothing the pull request certified can have changed.
         Invoke-Git checkout --quiet --detach $masterSha
         New-Item -ItemType Directory -Path docs -Force | Out-Null
