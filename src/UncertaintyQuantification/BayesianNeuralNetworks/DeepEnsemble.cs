@@ -107,6 +107,8 @@ public class DeepEnsemble<T> : IUncertaintyEstimator<T>
     /// variance heads, so for any other output the aleatoric part is zero and all of the spread across
     /// members is epistemic; to estimate it there, make the members output an explicit variance (e.g., a
     /// Gaussian likelihood head, Lakshminarayanan et al. 2017).
+    /// A single sigmoid output ([batch, 1]) has the same shape as a regression output and is treated as one
+    /// (zero aleatoric part); output the two-class distribution [1 - p, p] to get the Bernoulli terms.
     /// </remarks>
     public Tensor<T> EstimateAleatoricUncertainty(Tensor<T> input)
     {

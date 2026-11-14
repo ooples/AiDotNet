@@ -163,4 +163,31 @@ public class UncertaintyQuantificationPaperReferenceTests
         Assert.Equal(1.0, PredictiveSampleStatistics<double>.Variance(samples, mean)[0, 0], 12);
         Assert.Equal(0.0, PredictiveSampleStatistics<double>.AleatoricVariance(samples, mean)[0, 0], 12);
     }
+
+    /// <summary>
+    /// Two-output regression samples [2, -1] and [-1, 2] average to [0.5, 0.5], which looks like a class
+    /// distribution. The layout check ran on the mean alone, so E[p (1 - p)] = -2 was reported as aleatoric
+    /// variance. Each sample is checked, so these stay on the regression path: zero aleatoric part and zero
+    /// entropy metrics, with all of Var = 2.25 epistemic.
+    /// </summary>
+    [Fact]
+    public void PredictiveStatistics_RegressionSamplesWithProbabilityLikeMean_StayRegression()
+    {
+        var samples = new List<Tensor<double>>
+        {
+            new Tensor<double>([1, 2], new Vector<double>(new[] { 2.0, -1.0 })),
+            new Tensor<double>([1, 2], new Vector<double>(new[] { -1.0, 2.0 })),
+        };
+
+        var mean = PredictiveSampleStatistics<double>.Mean(samples);
+        var aleatoric = PredictiveSampleStatistics<double>.AleatoricVariance(samples, mean);
+        var metrics = PredictiveSampleStatistics<double>.Metrics(samples, mean);
+
+        Assert.Equal(0.5, mean[0, 0], 12);
+        Assert.Equal(2.25, PredictiveSampleStatistics<double>.Variance(samples, mean)[0, 0], 12);
+        Assert.Equal(0.0, aleatoric[0, 0], 12);
+        Assert.Equal(0.0, aleatoric[0, 1], 12);
+        Assert.Equal(0.0, metrics["predictive_entropy"][0], 12);
+        Assert.Equal(0.0, metrics["mutual_information"][0], 12);
+    }
 }

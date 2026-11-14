@@ -11,6 +11,10 @@ namespace AiDotNet.UncertaintyQuantification.BayesianNeuralNetworks;
 /// H[E_s p_s] - E_s H[p_s].</para>
 /// <para>For other outputs the network does not predict a noise variance, so the sample variance is all
 /// epistemic (Kendall and Gal 2017), the aleatoric part is zero and the entropy metrics are zero.</para>
+/// <para>The layout is read from the shape and values alone, so a single sigmoid output ([batch, 1]) is
+/// indistinguishable from a one-value regression output and gets the regression path: zero aleatoric part
+/// and zero entropy metrics. Callers that want the Bernoulli decomposition p (1 - p) and
+/// -(p log p + (1 - p) log(1 - p)) for a binary classifier emit the two-class distribution [1 - p, p].</para>
 /// </remarks>
 internal static class PredictiveSampleStatistics<T>
 {
@@ -41,11 +45,11 @@ internal static class PredictiveSampleStatistics<T>
     /// <summary>E_s[p_s (1 - p_s)] for probability outputs; zeros otherwise.</summary>
     internal static Tensor<T> AleatoricVariance(List<Tensor<T>> predictions, Tensor<T> mean)
     {
-        if (!TryGetProbabilityLayout(mean, out _, out _))
+        var stacked = Stack(predictions);
+        if (!IsProbabilityOutput(stacked, mean, out _, out _))
             return new Tensor<T>(mean._shape);
 
         var engine = AiDotNetEngine.Current;
-        var stacked = Stack(predictions);
         var bernoulli = engine.TensorMultiply(stacked, engine.ScalarMinusTensor(NumOps.One, stacked));
         return engine.ReduceMean(bernoulli, new[] { 0 }, keepDims: false);
     }
@@ -54,7 +58,8 @@ internal static class PredictiveSampleStatistics<T>
     internal static IReadOnlyDictionary<string, Tensor<T>> Metrics(List<Tensor<T>> predictions, Tensor<T> mean)
     {
         var engine = AiDotNetEngine.Current;
-        if (!TryGetProbabilityLayout(mean, out int batch, out int classes))
+        var samples = Stack(predictions);
+        if (!IsProbabilityOutput(samples, mean, out int batch, out int classes))
         {
             int rows = mean.Rank <= 1 ? 1 : Math.Max(1, mean.Length / Math.Max(1, mean._shape[mean.Rank - 1]));
             var zeros = new Tensor<T>([rows]);
@@ -66,7 +71,7 @@ internal static class PredictiveSampleStatistics<T>
         }
 
         var predictive = Entropy(engine.Reshape(mean, new[] { batch, classes }));                         // [batch]
-        var stacked = engine.Reshape(Stack(predictions), new[] { predictions.Count * batch, classes });
+        var stacked = engine.Reshape(samples, new[] { predictions.Count * batch, classes });
         var expected = engine.ReduceMean(
             engine.Reshape(Entropy(stacked), new[] { predictions.Count, batch }), new[] { 0 }, keepDims: false); // [batch]
         var mutualInformation = engine.TensorClampMin(engine.TensorSubtract(predictive, expected), NumOps.Zero);
@@ -89,6 +94,14 @@ internal static class PredictiveSampleStatistics<T>
             new Tensor<T>(probabilities._shape));
         return engine.TensorNegate(engine.ReduceSum(plogp, new[] { 1 }, keepDims: false));
     }
+
+    /// <summary>
+    /// True when every sample, not only their mean, holds class probabilities on the last axis. The regression
+    /// samples [2, -1] and [-1, 2] average to the valid distribution [0.5, 0.5], and the Bernoulli formula then
+    /// gave the negative aleatoric variance E[p (1 - p)] = -2.
+    /// </summary>
+    private static bool IsProbabilityOutput(Tensor<T> stacked, Tensor<T> mean, out int batch, out int classes)
+        => TryGetProbabilityLayout(mean, out batch, out classes) && TryGetProbabilityLayout(stacked, out _, out _);
 
     /// <summary>
     /// True when the last axis holds class probabilities: more than one class, every value in [0, 1]

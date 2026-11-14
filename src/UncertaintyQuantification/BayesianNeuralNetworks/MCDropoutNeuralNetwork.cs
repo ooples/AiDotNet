@@ -133,6 +133,8 @@ public class MCDropoutNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator
     /// For class-probability outputs this returns the expected Bernoulli variance E_s[p_s (1 - p_s)] over the
     /// dropout samples (Kwon et al. 2020). For other outputs it is zero: aleatoric uncertainty would require
     /// the network to explicitly model output variance (Kendall and Gal 2017).
+    /// A single sigmoid output ([batch, 1]) has the same shape as a regression output and is treated as one
+    /// (zero aleatoric part); output the two-class distribution [1 - p, p] to get the Bernoulli terms.
     /// </remarks>
     public Tensor<T> EstimateAleatoricUncertainty(Tensor<T> input)
     {
