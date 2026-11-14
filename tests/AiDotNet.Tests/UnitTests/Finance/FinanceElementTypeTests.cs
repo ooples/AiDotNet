@@ -120,7 +120,7 @@ public class FinanceElementTypeTests
 
         // Constant (zero) returns whiten to 0 / (0 + floor) = 0. In Half the 1e-8 floor rounded to zero and the
         // scale 0.5 / sigma^2 / std overflowed, so the weights came out NaN.
-        var rewards = new[] { Half.Zero, Half.Zero, Half.Zero, Half.Zero };
+        var rewards = new[] { (Half)0, (Half)0, (Half)0, (Half)0 };
 
         var weights = PolicyGradientRollout<Half>.LossWeights(rewards, (Half)0.99, 0.2);
 
@@ -251,7 +251,7 @@ public class FinanceElementTypeTests
 
         var targets = FinancialDQNAgent<Half>.TemporalDifferenceTargets(
             currentQ, selection, evaluation, Enumerable.Repeat(true, actions).ToArray(),
-            new Tensor<Half>(new[] { Half.Zero }, new[] { 1 }), new[] { false }, taken, (Half)1);
+            new Tensor<Half>(new[] { (Half)0 }, new[] { 1 }), new[] { false }, taken, (Half)1);
 
         Assert.Equal(7.0, (double)targets[0, 0]);
         for (int a = 1; a < actions; a++)
@@ -411,9 +411,9 @@ public class FinanceElementTypeTests
 
         // gamma = 0: returns (1000, 0), centred (500, -500), std 500, weights +-1 * 0.5 / 0.04 = +-12.5. In Half the
         // sum of squares (500000) overflowed, std became infinite and both weights zero.
-        var rewards = new[] { (Half)1000, Half.Zero };
+        var rewards = new[] { (Half)1000, (Half)0 };
 
-        var weights = PolicyGradientRollout<Half>.LossWeights(rewards, Half.Zero, 0.2);
+        var weights = PolicyGradientRollout<Half>.LossWeights(rewards, (Half)0, 0.2);
 
         Assert.Equal(2, weights.Length);
         Assert.Equal(12.5, (double)weights[0], 1e-2);
@@ -427,7 +427,7 @@ public class FinanceElementTypeTests
 
         // A one-step zero-reward episode whitens to 0. 0.5 / sigma^2 = 500000 is infinite in Half, and 0 * inf
         // made the weight NaN.
-        var weights = PolicyGradientRollout<Half>.LossWeights(new[] { Half.Zero }, (Half)0.99, 0.001);
+        var weights = PolicyGradientRollout<Half>.LossWeights(new[] { (Half)0 }, (Half)0.99, 0.001);
 
         Assert.Equal(1, weights.Length);
         Assert.Equal(0.0, (double)weights[0]);
@@ -441,7 +441,7 @@ public class FinanceElementTypeTests
         // a = mu = 0, logStd = -20: log N = -0 - (-20) - 0.5 log(2 pi) = 19.0811. exp(-20) underflows to zero in
         // Half, and dividing by it gave NaN.
         var value = TradingAgentBase<Half>.GaussianLogDensity(
-            new Vector<Half>(new[] { Half.Zero }), new Vector<Half>(new[] { Half.Zero }),
+            new Vector<Half>(new[] { (Half)0 }), new Vector<Half>(new[] { (Half)0 }),
             new Vector<Half>(new[] { (Half)(-20) }));
 
         Assert.Equal(20.0 - (0.5 * Math.Log(2.0 * Math.PI)), (double)value, 2e-2);
@@ -510,7 +510,7 @@ public class FinanceElementTypeTests
             Enumerable.Range(0, n).Select(i => i % 2 == 0 ? (Half)1 : (Half)(-1)).ToArray(), new[] { n });
         var model = new Garch11Model<Half>();
 
-        var nll = model.NegLogLikelihood(new Vector<Half>(new[] { Half.Zero, Half.One, Half.Zero, Half.Zero }), returns);
+        var nll = model.NegLogLikelihood(new Vector<Half>(new[] { (Half)0, (Half)1, (Half)0, (Half)0 }), returns);
 
         double expected = 0.5 * ((1.8378770664093453 * n) + n);
         Assert.Equal(expected, (double)nll, 32.0);
