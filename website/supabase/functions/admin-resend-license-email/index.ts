@@ -51,7 +51,11 @@ serve(async (req: Request) => {
     global: { headers: { Authorization: authHeader } },
   });
 
-  const { data: { user }, error: authError } = await userClient.auth.getUser();
+  // Pass the token explicitly. esm.sh resolves supabase-js@2.39.3's auth dependency to the
+  // latest gotrue-js, whose argument-less getUser() returns AuthSessionMissingError without a
+  // stored session unless the client sets hasCustomAuthorizationHeader, which 2.39.3 never does.
+  const jwt = authHeader.replace(/^Bearer\s+/i, "");
+  const { data: { user }, error: authError } = await userClient.auth.getUser(jwt);
   if (authError || !user) {
     return json({ success: false, error: "unauthorized", message: "Invalid or expired session." }, 401);
   }

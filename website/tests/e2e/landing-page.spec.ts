@@ -41,9 +41,9 @@ test.describe('Landing Page', () => {
 
   test('industry solutions section renders', async ({ page }) => {
     const bodyText = await page.locator('body').textContent();
-    expect(bodyText).toContain('Finance');
+    expect(bodyText).toContain('Financial Services');
     expect(bodyText).toContain('Healthcare');
-    expect(bodyText).toContain('Document');
+    expect(bodyText).toContain('Document AI');
   });
 
   test('code examples contain AiModelBuilder pattern', async ({ page }) => {
