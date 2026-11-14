@@ -237,18 +237,22 @@ Assert-Contract (-not [Regex]::IsMatch($validation, '(?m)^      - codeql(-traced
     -not $validation.Contains('needs.codeql')) `
     'a validation job still waits for a CodeQL job that no longer exists in that workflow'
 
-$codeqlTriggers = [Regex]::Match($codeql, '(?ms)^on:\s*\r?\n(?<body>.*?)(?=^[A-Za-z][A-Za-z0-9_-]*:)').Groups['body'].Value
-Assert-Contract ([bool] $codeqlTriggers) 'the CodeQL workflow has no trigger block'
+# The trigger policy is checked on the parsed workflow, so a quoted key ('pull_request':) or a flow mapping
+# cannot slip a pull-request trigger past a spelling-sensitive match.
+$codeqlJson = $codeql | & yq -o=json -I=0 '.' '-'
+Assert-Contract ($LASTEXITCODE -eq 0) 'the CodeQL workflow is not valid YAML'
+$codeqlOn = ($codeqlJson | ConvertFrom-Json -AsHashtable)['on']
+Assert-Contract ($codeqlOn -is [System.Collections.IDictionary]) 'the CodeQL workflow has no trigger mapping'
+$codeqlEvents = @($codeqlOn.Keys | ForEach-Object { [string] $_ })
 foreach ($forbiddenTrigger in 'pull_request', 'pull_request_target', 'merge_group') {
-    Assert-Contract (-not [Regex]::IsMatch($codeqlTriggers, "(?m)^  ${forbiddenTrigger}:")) `
-        "CodeQL runs on $forbiddenTrigger again"
+    Assert-Contract ($codeqlEvents -cnotcontains $forbiddenTrigger) "CodeQL runs on $forbiddenTrigger again"
 }
 foreach ($requiredTrigger in 'push', 'schedule', 'workflow_dispatch') {
-    Assert-Contract ([Regex]::IsMatch($codeqlTriggers, "(?m)^  ${requiredTrigger}:")) `
-        "the CodeQL workflow lost its $requiredTrigger trigger"
+    Assert-Contract ($codeqlEvents -ccontains $requiredTrigger) "the CodeQL workflow lost its $requiredTrigger trigger"
 }
-Assert-Contract ([Regex]::IsMatch($codeqlTriggers, '(?m)^      - master\s*\r?$')) `
-    'CodeQL does not run on pushes to master'
+$codeqlPush = $codeqlOn['push']
+$codeqlPushBranches = if ($codeqlPush -is [System.Collections.IDictionary]) { @($codeqlPush['branches']) } else { @() }
+Assert-Contract ($codeqlPushBranches -ccontains 'master') 'CodeQL does not run on pushes to master'
 # A master scan that has started must finish: the validation workflow's master runs are cancelled by the
 # next push, which is why the scan does not live there.
 $codeqlConcurrency = [Regex]::Match($codeql, '(?ms)^concurrency:\s*\r?\n(?<body>(?:  [^\r\n]*\r?\n)+)').Groups['body'].Value
