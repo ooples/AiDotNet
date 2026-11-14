@@ -105,14 +105,23 @@ internal static class TabularResamplingHelper<T>
             return neighbors;
         }
 
+        // The row itself is removed from the candidates rather than masked with the largest value of T: an
+        // infinite distance (a difference past Half's range) or a tie at that value let the row pick itself.
         var points = Tensor<T>.FromMatrix(data);
-        var highest = engine.TensorAddScalar(new Tensor<T>(new[] { rows }), NumOps.MaxValue);
+        var candidates = new int[rows - 1];
         for (int i = 0; i < rows; i++)
         {
+            for (int j = 0, c = 0; j < rows; j++)
+            {
+                if (j != i)
+                {
+                    candidates[c++] = j;
+                }
+            }
+
             var distances = DistancesTo(points, data.GetRow(i).AsTensor());
-            var self = Vector<T>.CreateStandardBasis(rows, i).AsTensor();
-            var others = engine.TensorWhere(self, highest, distances);
-            neighbors[i] = engine.TensorArgMin(others, 0).Data.Span[0];
+            var others = engine.TensorIndexSelect(distances, new Tensor<int>((int[])candidates.Clone(), new[] { rows - 1 }), 0);
+            neighbors[i] = candidates[engine.TensorArgMin(others, 0).Data.Span[0]];
         }
 
         return neighbors;
