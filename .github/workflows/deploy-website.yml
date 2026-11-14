@@ -38,11 +38,22 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
+      # --include-all: a migration merged after a later-dated one was already applied (for example the
+      # 20260921 files, which were still pending when 20261027 was applied) must still be pushed. Without it
+      # db push refuses to insert a migration before the newest remote version.
       - name: Apply Supabase migrations
-        run: supabase db push --password "$SUPABASE_DB_PASSWORD"
+        run: supabase db push --include-all --password "$SUPABASE_DB_PASSWORD"
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+
+      # Edge functions used to be deployed by hand, so production drifted from the repo (the admin
+      # resend-license-email function was never deployed at all). Deploy every function on each run;
+      # per-function verify_jwt comes from supabase/config.toml.
+      - name: Deploy Supabase edge functions
+        run: supabase functions deploy --project-ref yfkqwpgjahoamlgckjib
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
   build-and-deploy:
     name: Build & Deploy Website
@@ -150,7 +161,10 @@ jobs:
           {"scripts":{"build":"echo already built"}}
           PKGJSON
           cd vercel-deploy
-          vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }} --yes
+          # One compressed archive, not a file-by-file upload: the API reference wiki (~10.7K pages) and its
+          # Pagefind index put ~24.7K files in dist, and Vercel rejects an upload of more than 15,000 files
+          # ("`files` should NOT have more than 15000 items"). Every production deploy failed on that since 2026-06.
+          vercel deploy --prod --archive=tgz --token=${{ secrets.VERCEL_TOKEN }} --yes
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
