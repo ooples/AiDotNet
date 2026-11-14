@@ -46919,27 +46919,6 @@
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.Options.RelationalGCNOptions`1.set_Aggregation(System.String)</Target>
-    <Left>lib/net10.0/AiDotNet.dll</Left>
-    <Right>lib/net10.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.Options.RelationalGCNOptions`1.set_Aggregation(System.String)</Target>
-    <Left>lib/net471/AiDotNet.dll</Left>
-    <Right>lib/net471/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.Options.RelationalGCNOptions`1.set_Aggregation(System.String)</Target>
-    <Left>lib/net8.0/AiDotNet.dll</Left>
-    <Right>lib/net8.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.Finance.Graph.RelationalGCN`1.#ctor(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},AiDotNet.Models.Options.RelationalGCNOptions{`0},System.Double[0:,0:][],AiDotNet.Interfaces.IGradientBasedOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},AiDotNet.Interfaces.ILossFunction{`0})</Target>
     <Left>lib/net10.0/AiDotNet.dll</Left>
     <Right>lib/net10.0/AiDotNet.dll</Right>
@@ -47038,27 +47017,6 @@
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Interfaces.IAdaptedMetaModel`1.get_ParameterModulationFactors</Target>
-    <Left>lib/net8.0/AiDotNet.dll</Left>
-    <Right>lib/net8.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0006</DiagnosticId>
-    <Target>M:AiDotNet.Interfaces.IAdaptedMetaModel`1.get_ParameterModulationFactors</Target>
-    <Left>lib/net10.0/AiDotNet.dll</Left>
-    <Right>lib/net10.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0006</DiagnosticId>
-    <Target>M:AiDotNet.Interfaces.IAdaptedMetaModel`1.get_ParameterModulationFactors</Target>
-    <Left>lib/net471/AiDotNet.dll</Left>
-    <Right>lib/net471/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0006</DiagnosticId>
     <Target>M:AiDotNet.Interfaces.IAdaptedMetaModel`1.get_ParameterModulationFactors</Target>
     <Left>lib/net8.0/AiDotNet.dll</Left>
     <Right>lib/net8.0/AiDotNet.dll</Right>
@@ -53612,195 +53570,6 @@
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.CausalInference.CausalForest`1.#ctor(System.Int32,System.Int32,System.Int32,System.Nullable{System.Int32},System.Boolean,System.Double,System.Nullable{System.Int32})</Target>
-    <Left>lib/net8.0/AiDotNet.dll</Left>
-    <Right>lib/net8.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Finance.Evaluation.GIFTEvalBenchmark`1.ComputeCRPS(System.Collections.Generic.IReadOnlyDictionary{System.Double,AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},AiDotNet.Tensors.LinearAlgebra.Tensor{`0})</Target>
-    <Left>lib/net10.0/AiDotNet.dll</Left>
-    <Right>lib/net10.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Finance.Evaluation.GIFTEvalBenchmark`1.ComputeCRPS(System.Collections.Generic.IReadOnlyDictionary{System.Double,AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},AiDotNet.Tensors.LinearAlgebra.Tensor{`0})</Target>
-    <Left>lib/net471/AiDotNet.dll</Left>
-    <Right>lib/net471/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Finance.Evaluation.GIFTEvalBenchmark`1.ComputeCRPS(System.Collections.Generic.IReadOnlyDictionary{System.Double,AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},AiDotNet.Tensors.LinearAlgebra.Tensor{`0})</Target>
-    <Left>lib/net8.0/AiDotNet.dll</Left>
-    <Right>lib/net8.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Finance.Evaluation.GIFTEvalBenchmark`1.ComputeMASE(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32)</Target>
-    <Left>lib/net10.0/AiDotNet.dll</Left>
-    <Right>lib/net10.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Finance.Evaluation.GIFTEvalBenchmark`1.ComputeMASE(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32)</Target>
-    <Left>lib/net471/AiDotNet.dll</Left>
-    <Right>lib/net471/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Finance.Evaluation.GIFTEvalBenchmark`1.ComputeMASE(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32)</Target>
-    <Left>lib/net8.0/AiDotNet.dll</Left>
-    <Right>lib/net8.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Finance.Evaluation.GIFTEvalBenchmark`1.ComputeQuantileLoss(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Double)</Target>
-    <Left>lib/net10.0/AiDotNet.dll</Left>
-    <Right>lib/net10.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Finance.Evaluation.GIFTEvalBenchmark`1.ComputeQuantileLoss(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Double)</Target>
-    <Left>lib/net471/AiDotNet.dll</Left>
-    <Right>lib/net471/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Finance.Evaluation.GIFTEvalBenchmark`1.ComputeQuantileLoss(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Double)</Target>
-    <Left>lib/net8.0/AiDotNet.dll</Left>
-    <Right>lib/net8.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Finance.Evaluation.GIFTEvalBenchmark`1.RunBenchmark(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel{`0},System.Collections.Generic.IReadOnlyList{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Collections.Generic.IReadOnlyList{System.Int32},System.Collections.Generic.IReadOnlyList{System.Int32},System.Double[])</Target>
-    <Left>lib/net10.0/AiDotNet.dll</Left>
-    <Right>lib/net10.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Finance.Evaluation.GIFTEvalBenchmark`1.RunBenchmark(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel{`0},System.Collections.Generic.IReadOnlyList{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Collections.Generic.IReadOnlyList{System.Int32},System.Collections.Generic.IReadOnlyList{System.Int32},System.Double[])</Target>
-    <Left>lib/net471/AiDotNet.dll</Left>
-    <Right>lib/net471/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Finance.Evaluation.GIFTEvalBenchmark`1.RunBenchmark(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel{`0},System.Collections.Generic.IReadOnlyList{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Collections.Generic.IReadOnlyList{System.Int32},System.Collections.Generic.IReadOnlyList{System.Int32},System.Double[])</Target>
-    <Left>lib/net8.0/AiDotNet.dll</Left>
-    <Right>lib/net8.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness`1.EvaluateAnomalyDetection(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel{`0},System.Collections.Generic.IReadOnlyList{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Collections.Generic.IReadOnlyList{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Nullable{System.Double})</Target>
-    <Left>lib/net10.0/AiDotNet.dll</Left>
-    <Right>lib/net10.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness`1.EvaluateAnomalyDetection(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel{`0},System.Collections.Generic.IReadOnlyList{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Collections.Generic.IReadOnlyList{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Nullable{System.Double})</Target>
-    <Left>lib/net471/AiDotNet.dll</Left>
-    <Right>lib/net471/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness`1.EvaluateAnomalyDetection(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel{`0},System.Collections.Generic.IReadOnlyList{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Collections.Generic.IReadOnlyList{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Nullable{System.Double})</Target>
-    <Left>lib/net8.0/AiDotNet.dll</Left>
-    <Right>lib/net8.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness`1.EvaluateClassification(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel{`0},System.Collections.Generic.IReadOnlyList{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Collections.Generic.IReadOnlyList{System.Int32},System.Int32)</Target>
-    <Left>lib/net10.0/AiDotNet.dll</Left>
-    <Right>lib/net10.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness`1.EvaluateClassification(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel{`0},System.Collections.Generic.IReadOnlyList{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Collections.Generic.IReadOnlyList{System.Int32},System.Int32)</Target>
-    <Left>lib/net471/AiDotNet.dll</Left>
-    <Right>lib/net471/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness`1.EvaluateClassification(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel{`0},System.Collections.Generic.IReadOnlyList{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Collections.Generic.IReadOnlyList{System.Int32},System.Int32)</Target>
-    <Left>lib/net8.0/AiDotNet.dll</Left>
-    <Right>lib/net8.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness`1.EvaluateForecasting(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel{`0},System.Collections.Generic.IReadOnlyList{System.ValueTuple{AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0}}})</Target>
-    <Left>lib/net10.0/AiDotNet.dll</Left>
-    <Right>lib/net10.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness`1.EvaluateForecasting(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel{`0},System.Collections.Generic.IReadOnlyList{System.ValueTuple{AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0}}})</Target>
-    <Left>lib/net471/AiDotNet.dll</Left>
-    <Right>lib/net471/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness`1.EvaluateForecasting(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel{`0},System.Collections.Generic.IReadOnlyList{System.ValueTuple{AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0}}})</Target>
-    <Left>lib/net8.0/AiDotNet.dll</Left>
-    <Right>lib/net8.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness`1.EvaluateImputation(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel{`0},System.Collections.Generic.IReadOnlyList{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Collections.Generic.IReadOnlyList{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}})</Target>
-    <Left>lib/net10.0/AiDotNet.dll</Left>
-    <Right>lib/net10.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness`1.EvaluateImputation(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel{`0},System.Collections.Generic.IReadOnlyList{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Collections.Generic.IReadOnlyList{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}})</Target>
-    <Left>lib/net471/AiDotNet.dll</Left>
-    <Right>lib/net471/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness`1.EvaluateImputation(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel{`0},System.Collections.Generic.IReadOnlyList{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Collections.Generic.IReadOnlyList{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}})</Target>
-    <Left>lib/net8.0/AiDotNet.dll</Left>
-    <Right>lib/net8.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness`1.RunFullEvaluation(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel{`0},System.Collections.Generic.IReadOnlyList{System.ValueTuple{AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0}}},System.Nullable{System.ValueTuple{System.Collections.Generic.IReadOnlyList{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Collections.Generic.IReadOnlyList{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Nullable{System.Double}}},System.Nullable{System.ValueTuple{System.Collections.Generic.IReadOnlyList{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Collections.Generic.IReadOnlyList{System.Int32},System.Int32}},System.Nullable{System.ValueTuple{System.Collections.Generic.IReadOnlyList{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Collections.Generic.IReadOnlyList{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}}}})</Target>
-    <Left>lib/net10.0/AiDotNet.dll</Left>
-    <Right>lib/net10.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness`1.RunFullEvaluation(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel{`0},System.Collections.Generic.IReadOnlyList{System.ValueTuple{AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0}}},System.Nullable{System.ValueTuple{System.Collections.Generic.IReadOnlyList{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Collections.Generic.IReadOnlyList{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Nullable{System.Double}}},System.Nullable{System.ValueTuple{System.Collections.Generic.IReadOnlyList{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Collections.Generic.IReadOnlyList{System.Int32},System.Int32}},System.Nullable{System.ValueTuple{System.Collections.Generic.IReadOnlyList{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Collections.Generic.IReadOnlyList{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}}}})</Target>
-    <Left>lib/net471/AiDotNet.dll</Left>
-    <Right>lib/net471/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness`1.RunFullEvaluation(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel{`0},System.Collections.Generic.IReadOnlyList{System.ValueTuple{AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0}}},System.Nullable{System.ValueTuple{System.Collections.Generic.IReadOnlyList{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Collections.Generic.IReadOnlyList{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Nullable{System.Double}}},System.Nullable{System.ValueTuple{System.Collections.Generic.IReadOnlyList{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Collections.Generic.IReadOnlyList{System.Int32},System.Int32}},System.Nullable{System.ValueTuple{System.Collections.Generic.IReadOnlyList{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Collections.Generic.IReadOnlyList{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}}}})</Target>
     <Left>lib/net8.0/AiDotNet.dll</Left>
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
@@ -54127,27 +53896,6 @@
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.InterventionEffect`1.set_Effect(System.Double)</Target>
-    <Left>lib/net10.0/AiDotNet.dll</Left>
-    <Right>lib/net10.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.InterventionEffect`1.set_Effect(System.Double)</Target>
-    <Left>lib/net471/AiDotNet.dll</Left>
-    <Right>lib/net471/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.InterventionEffect`1.set_Effect(System.Double)</Target>
-    <Left>lib/net8.0/AiDotNet.dll</Left>
-    <Right>lib/net8.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.TimeSeries.InterventionAnalysisModel`1.GetInterventionEffects</Target>
     <Left>lib/net10.0/AiDotNet.dll</Left>
     <Right>lib/net10.0/AiDotNet.dll</Right>
@@ -54337,27 +54085,6 @@
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.Options.AdversarialAttackOptions`1.set_NormType(System.String)</Target>
-    <Left>lib/net10.0/AiDotNet.dll</Left>
-    <Right>lib/net10.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.Options.AdversarialAttackOptions`1.set_NormType(System.String)</Target>
-    <Left>lib/net471/AiDotNet.dll</Left>
-    <Right>lib/net471/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.Options.AdversarialAttackOptions`1.set_NormType(System.String)</Target>
-    <Left>lib/net8.0/AiDotNet.dll</Left>
-    <Right>lib/net8.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.Models.Options.AdversarialRobustnessOptions`1.get_AttackNormType</Target>
     <Left>lib/net10.0/AiDotNet.dll</Left>
     <Right>lib/net10.0/AiDotNet.dll</Right>
@@ -54373,27 +54100,6 @@
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.Models.Options.AdversarialRobustnessOptions`1.get_AttackNormType</Target>
-    <Left>lib/net8.0/AiDotNet.dll</Left>
-    <Right>lib/net8.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.Options.AdversarialRobustnessOptions`1.set_AttackNormType(System.String)</Target>
-    <Left>lib/net10.0/AiDotNet.dll</Left>
-    <Right>lib/net10.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.Options.AdversarialRobustnessOptions`1.set_AttackNormType(System.String)</Target>
-    <Left>lib/net471/AiDotNet.dll</Left>
-    <Right>lib/net471/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.Options.AdversarialRobustnessOptions`1.set_AttackNormType(System.String)</Target>
     <Left>lib/net8.0/AiDotNet.dll</Left>
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
@@ -54421,27 +54127,6 @@
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.RobustnessStats`1.set_NormType(System.String)</Target>
-    <Left>lib/net10.0/AiDotNet.dll</Left>
-    <Right>lib/net10.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.RobustnessStats`1.set_NormType(System.String)</Target>
-    <Left>lib/net471/AiDotNet.dll</Left>
-    <Right>lib/net471/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.RobustnessStats`1.set_NormType(System.String)</Target>
-    <Left>lib/net8.0/AiDotNet.dll</Left>
-    <Right>lib/net8.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.Models.RobustnessStats`1.get_AveragePerturbationSize</Target>
     <Left>lib/net10.0/AiDotNet.dll</Left>
     <Right>lib/net10.0/AiDotNet.dll</Right>
@@ -54457,27 +54142,6 @@
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.Models.RobustnessStats`1.get_AveragePerturbationSize</Target>
-    <Left>lib/net8.0/AiDotNet.dll</Left>
-    <Right>lib/net8.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.RobustnessStats`1.set_AveragePerturbationSize(System.Double)</Target>
-    <Left>lib/net10.0/AiDotNet.dll</Left>
-    <Right>lib/net10.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.RobustnessStats`1.set_AveragePerturbationSize(System.Double)</Target>
-    <Left>lib/net471/AiDotNet.dll</Left>
-    <Right>lib/net471/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.RobustnessStats`1.set_AveragePerturbationSize(System.Double)</Target>
     <Left>lib/net8.0/AiDotNet.dll</Left>
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
@@ -54526,27 +54190,6 @@
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.CertifiedPrediction`1.set_Confidence(System.Double)</Target>
-    <Left>lib/net10.0/AiDotNet.dll</Left>
-    <Right>lib/net10.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.CertifiedPrediction`1.set_Confidence(System.Double)</Target>
-    <Left>lib/net471/AiDotNet.dll</Left>
-    <Right>lib/net471/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.CertifiedPrediction`1.set_Confidence(System.Double)</Target>
-    <Left>lib/net8.0/AiDotNet.dll</Left>
-    <Right>lib/net8.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.Models.CertifiedPrediction`1.get_LowerBound</Target>
     <Left>lib/net10.0/AiDotNet.dll</Left>
     <Right>lib/net10.0/AiDotNet.dll</Right>
@@ -54562,27 +54205,6 @@
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.Models.CertifiedPrediction`1.get_LowerBound</Target>
-    <Left>lib/net8.0/AiDotNet.dll</Left>
-    <Right>lib/net8.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.CertifiedPrediction`1.set_LowerBound(System.Double)</Target>
-    <Left>lib/net10.0/AiDotNet.dll</Left>
-    <Right>lib/net10.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.CertifiedPrediction`1.set_LowerBound(System.Double)</Target>
-    <Left>lib/net471/AiDotNet.dll</Left>
-    <Right>lib/net471/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.CertifiedPrediction`1.set_LowerBound(System.Double)</Target>
     <Left>lib/net8.0/AiDotNet.dll</Left>
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
@@ -54610,27 +54232,6 @@
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.CertifiedPrediction`1.set_UpperBound(System.Double)</Target>
-    <Left>lib/net10.0/AiDotNet.dll</Left>
-    <Right>lib/net10.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.CertifiedPrediction`1.set_UpperBound(System.Double)</Target>
-    <Left>lib/net471/AiDotNet.dll</Left>
-    <Right>lib/net471/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.CertifiedPrediction`1.set_UpperBound(System.Double)</Target>
-    <Left>lib/net8.0/AiDotNet.dll</Left>
-    <Right>lib/net8.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.Models.Options.AdversarialRobustnessOptions`1.get_CertificationMethod</Target>
     <Left>lib/net10.0/AiDotNet.dll</Left>
     <Right>lib/net10.0/AiDotNet.dll</Right>
@@ -54646,27 +54247,6 @@
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.Models.Options.AdversarialRobustnessOptions`1.get_CertificationMethod</Target>
-    <Left>lib/net8.0/AiDotNet.dll</Left>
-    <Right>lib/net8.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.Options.AdversarialRobustnessOptions`1.set_CertificationMethod(System.String)</Target>
-    <Left>lib/net10.0/AiDotNet.dll</Left>
-    <Right>lib/net10.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.Options.AdversarialRobustnessOptions`1.set_CertificationMethod(System.String)</Target>
-    <Left>lib/net471/AiDotNet.dll</Left>
-    <Right>lib/net471/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.Options.AdversarialRobustnessOptions`1.set_CertificationMethod(System.String)</Target>
     <Left>lib/net8.0/AiDotNet.dll</Left>
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
@@ -54694,27 +54274,6 @@
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.Options.AdversarialRobustnessOptions`1.set_CertificationNormType(System.String)</Target>
-    <Left>lib/net10.0/AiDotNet.dll</Left>
-    <Right>lib/net10.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.Options.AdversarialRobustnessOptions`1.set_CertificationNormType(System.String)</Target>
-    <Left>lib/net471/AiDotNet.dll</Left>
-    <Right>lib/net471/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.Options.AdversarialRobustnessOptions`1.set_CertificationNormType(System.String)</Target>
-    <Left>lib/net8.0/AiDotNet.dll</Left>
-    <Right>lib/net8.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.Models.Options.CertifiedDefenseOptions`1.get_CertificationMethod</Target>
     <Left>lib/net10.0/AiDotNet.dll</Left>
     <Right>lib/net10.0/AiDotNet.dll</Right>
@@ -54736,27 +54295,6 @@
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.Options.CertifiedDefenseOptions`1.set_CertificationMethod(System.String)</Target>
-    <Left>lib/net10.0/AiDotNet.dll</Left>
-    <Right>lib/net10.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.Options.CertifiedDefenseOptions`1.set_CertificationMethod(System.String)</Target>
-    <Left>lib/net471/AiDotNet.dll</Left>
-    <Right>lib/net471/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.Options.CertifiedDefenseOptions`1.set_CertificationMethod(System.String)</Target>
-    <Left>lib/net8.0/AiDotNet.dll</Left>
-    <Right>lib/net8.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.Models.Options.CertifiedDefenseOptions`1.get_NormType</Target>
     <Left>lib/net10.0/AiDotNet.dll</Left>
     <Right>lib/net10.0/AiDotNet.dll</Right>
@@ -54772,27 +54310,6 @@
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.Models.Options.CertifiedDefenseOptions`1.get_NormType</Target>
-    <Left>lib/net8.0/AiDotNet.dll</Left>
-    <Right>lib/net8.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.Options.CertifiedDefenseOptions`1.set_NormType(System.String)</Target>
-    <Left>lib/net10.0/AiDotNet.dll</Left>
-    <Right>lib/net10.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.Options.CertifiedDefenseOptions`1.set_NormType(System.String)</Target>
-    <Left>lib/net471/AiDotNet.dll</Left>
-    <Right>lib/net471/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.Options.CertifiedDefenseOptions`1.set_NormType(System.String)</Target>
     <Left>lib/net8.0/AiDotNet.dll</Left>
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
@@ -54877,27 +54394,6 @@
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
     <Target>M:AiDotNet.Models.Options.AdversarialRobustnessOptions`1.get_AttackMethods</Target>
-    <Left>lib/net8.0/AiDotNet.dll</Left>
-    <Right>lib/net8.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.Options.AdversarialRobustnessOptions`1.set_AttackMethods(System.String[])</Target>
-    <Left>lib/net10.0/AiDotNet.dll</Left>
-    <Right>lib/net10.0/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.Options.AdversarialRobustnessOptions`1.set_AttackMethods(System.String[])</Target>
-    <Left>lib/net471/AiDotNet.dll</Left>
-    <Right>lib/net471/AiDotNet.dll</Right>
-    <IsBaselineSuppression>true</IsBaselineSuppression>
-  </Suppression>
-  <Suppression>
-    <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:AiDotNet.Models.Options.AdversarialRobustnessOptions`1.set_AttackMethods(System.String[])</Target>
     <Left>lib/net8.0/AiDotNet.dll</Left>
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
