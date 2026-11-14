@@ -90,7 +90,11 @@ public class AdversarialPromptDefense<T, TInput, TOutput> : IAdversarialDefense<
         _promptLength = promptLength;
         _promptLearningRate = promptLearningRate;
         _promptOptimizationSteps = promptOptimizationSteps;
-        _random = RandomHelper.CreateSeededRandom(42);
+        // The options' seed makes the prompt initialization and mini-batches reproducible; without one they are
+        // drawn from a secure generator.
+        _random = options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(options.Seed.Value)
+            : RandomHelper.CreateSecureRandom();
     }
 
     /// <inheritdoc/>
