@@ -80,9 +80,13 @@ public class Elementwise11bRegressionTests
             }
     }
 
-    [Fact]
+    [SkippableFact]
     public void Logistic_DoesNotMaterialiseEveryExamplesKroneckerBlock()
     {
+#if !NETCOREAPP3_0_OR_GREATER
+        // net471 has no per-thread allocation counter, and a process-wide one counts parallel tests too.
+        Skip.If(true, "GC.GetAllocatedBytesForCurrentThread needs .NET Core 3.0 or later.");
+#else
         // The Hessian is [128, 128] doubles (131 KB). Building it from a [n, c, d, c, d] block tensor took
         // n = 64 times that per operand, 180 MB over this solve; at the default 512-wide embedding with 25
         // support examples the same tensor is 1.3 GB per operand.
@@ -95,6 +99,7 @@ public class Elementwise11bRegressionTests
         long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
         Assert.True(allocated < 40_000_000, $"SolveLogistic allocated {allocated / 1e6:F1} MB for a 131 KB Hessian.");
+#endif
     }
 
     /// <summary>The scalar solver the sweep replaced: coordinate descent with a bisected block projection.</summary>

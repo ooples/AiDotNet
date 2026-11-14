@@ -339,7 +339,7 @@ public class GroundingHeadPaperTests
         for (int step = 0; step < 10; step++) model.TrainGrounding(image, "cat", boxes);
         double after = model.EvaluateGroundingLoss(image, "cat", boxes);
 
-        Assert.True(double.IsFinite(before) && before > 0, $"initial loss {before}");
+        Assert.True(!double.IsNaN(before) && !double.IsInfinity(before) && before > 0, $"initial loss {before}");
         Assert.True(after < before, $"the answer loss did not fall: {before} -> {after}");
     }
 
