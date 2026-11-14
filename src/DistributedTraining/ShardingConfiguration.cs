@@ -49,6 +49,12 @@ public class ShardingConfiguration<T> : IShardingConfiguration<T>
     /// <inheritdoc/>
     public bool CpuOffloadParams { get; set; }
 
+    /// <inheritdoc/>
+    public bool OverlapCommunication { get; set; } = true;
+
+    /// <inheritdoc/>
+    public int GradientBucketSizeBytes { get; set; } = 25 * 1024 * 1024;
+
     /// <summary>
     /// Creates a new sharding configuration with the specified communication backend.
     /// </summary>

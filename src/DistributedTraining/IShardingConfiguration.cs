@@ -169,4 +169,30 @@ public interface IShardingConfiguration<T>
     /// and has no shard to offload. Default: false.</para>
     /// </remarks>
     bool CpuOffloadParams { get; }
+
+    /// <summary>
+    /// Gets whether backward gradient computation overlaps with asynchronous bucketed collective
+    /// communication (<c>AllReduceAsync</c> / <c>ReduceScatterAsync</c>).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b>
+    /// When enabled, gradients for later layers start synchronizing across workers while earlier layers are
+    /// still computing their backward pass, hiding communication latency behind computation.
+    /// </para>
+    /// <para>Default: true</para>
+    /// </remarks>
+    bool OverlapCommunication { get; }
+
+    /// <summary>
+    /// Gets the target capacity in bytes of each gradient communication bucket when overlapping
+    /// gradient synchronization with backward propagation.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b>
+    /// Gradients are packed into fixed-size buckets before being sent across workers so communication uses
+    /// fewer, higher-throughput transfers instead of one tiny message per parameter tensor.
+    /// </para>
+    /// <para>Default: 25 MiB (26,214,400 bytes)</para>
+    /// </remarks>
+    int GradientBucketSizeBytes { get; }
 }
