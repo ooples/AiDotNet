@@ -291,4 +291,17 @@ public class MatrixExtensionsReferenceTests
         Assert.True(nearSingular.IsPositiveSemiDefiniteMatrix());
         Assert.False(indefinite.IsPositiveSemiDefiniteMatrix());
     }
+
+    [Fact]
+    public void Determinant_And_IsInvertible_SupportDecimal()
+    {
+        // The tensor kernels only implement float and double; other element types are factorized in double.
+        // [[2, 1], [1, 3]] has determinant 2 * 3 - 1 * 1 = 5; [[1, 2], [2, 4]] is singular (determinant 0).
+        var invertible = new Matrix<decimal>(new decimal[,] { { 2m, 1m }, { 1m, 3m } });
+        var singular = new Matrix<decimal>(new decimal[,] { { 1m, 2m }, { 2m, 4m } });
+
+        Assert.Equal(5.0, (double)invertible.Determinant(), Tolerance);
+        Assert.True(invertible.IsInvertible());
+        Assert.False(singular.IsInvertible());
+    }
 }
