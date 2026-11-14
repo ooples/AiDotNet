@@ -90,19 +90,29 @@ public partial class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
     /// <remarks>
     /// Predict, GetSolution, the PDE residual and training all evaluate this. The correlation networks used to see
     /// only x and add a correction to u_LF; the paper's composite network feeds u_LF(x) to both of them, so the
-    /// cross-fidelity correlation itself is learned. While the low-fidelity network is frozen its output is
-    /// detached from the gradient tape, so joint training updates only the correlation networks.
+    /// cross-fidelity correlation itself is learned. u_LF(x) stays on the gradient tape even while the low-fidelity
+    /// network is frozen: the PDE derivatives of u_HF with respect to x pass through it (for u_LF(x) = x^2 the
+    /// chain rule needs its 2x). Freezing excludes the low-fidelity parameters from the update instead (see
+    /// <see cref="SelectTrainableParametersForTraining"/>); detaching the output dropped every derivative term
+    /// through u_LF from the residual.
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
         var lowFidelity = _lowFidelityNetwork.Forward(input);
-        if (_lowFidelityFrozen)
-        {
-            lowFidelity = Engine.StopGradient(lowFidelity);
-        }
-
         var correlationInput = Engine.TensorConcatenate(new[] { input, lowFidelity }, 1);
         return Engine.TensorAdd(_linearCorrelation.Forward(correlationInput), base.Forward(correlationInput));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>While the low-fidelity network is frozen, joint training updates only the correlation networks: its
+    /// parameters are left out of the step, although its output stays on the tape.</remarks>
+    protected override IReadOnlyList<Tensor<T>> SelectTrainableParametersForTraining(IReadOnlyList<Tensor<T>> parameters)
+    {
+        if (!_lowFidelityFrozen) return parameters;
+        var frozen = new HashSet<Tensor<T>>(
+            AiDotNet.Training.TapeTrainingStep<T>.CollectParameters(_lowFidelityNetwork.Layers, -1),
+            AiDotNet.Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        return parameters.Where(parameter => !frozen.Contains(parameter)).ToList();
     }
 
     /// <summary>
@@ -342,7 +352,7 @@ public partial class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
         // Stage 1: Pretrain low-fidelity network
         if (verbose)
         {
-            Console.WriteLine("Stage 1: Pretraining low-fidelity network...");
+            System.Diagnostics.Trace.TraceInformation("MultiFidelityPINN stage 1: pretraining the low-fidelity network.");
         }
 
         // Train low-fidelity network using tape-based training
@@ -367,14 +377,14 @@ public partial class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
             _lowFidelityFrozen = true;
             if (verbose)
             {
-                Console.WriteLine("Low-fidelity network frozen.");
+                System.Diagnostics.Trace.TraceInformation("MultiFidelityPINN: low-fidelity network frozen.");
             }
         }
 
         // Stage 2: Joint training
         if (verbose)
         {
-            Console.WriteLine("Stage 2: Joint multi-fidelity training...");
+            System.Diagnostics.Trace.TraceInformation("MultiFidelityPINN stage 2: joint multi-fidelity training.");
         }
 
         // Configure optimizer
@@ -414,11 +424,9 @@ public partial class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
 
                 if (verbose && epoch % 100 == 0)
                 {
-                    Console.WriteLine(
-                        $"Epoch {actualPretrainingEpochs + epoch}/{epochs}, " +
-                        $"Total: {totalLoss}, " +
-                        $"LF: {lowFidelityLoss}, " +
-                        $"HF: {highFidelityLoss}");
+                    System.Diagnostics.Trace.TraceInformation(
+                        "MultiFidelityPINN epoch {0}/{1}: total loss {2}, low-fidelity loss {3}, high-fidelity loss {4}",
+                        actualPretrainingEpochs + epoch, epochs, totalLoss, lowFidelityLoss, highFidelityLoss);
                 }
             }
         }
@@ -436,13 +444,21 @@ public partial class MultiFidelityPINN<T> : PhysicsInformedNeuralNetwork<T>
     }
 
     /// <summary>
-    /// Records one joint-training epoch: the monitored total is the low- plus high-fidelity loss, with no separate
-    /// correlation or physics term (both live inside the training objective). Returns the total.
+    /// Records one joint-training epoch: the total is the training objective of the step just taken (the weighted
+    /// fidelity terms plus the physics term), and the physics term is the weighted PDE residual of the composite
+    /// solution at the collocation points after that step. The correlation networks have no separate loss of their
+    /// own. Returns the total.
     /// </summary>
+    /// <remarks>
+    /// The physics entry was a constant zero and the total left out the weights and the physics term, so a run with a
+    /// nonzero residual reported no physics error. The residual is evaluated here, outside the training step, rather
+    /// than read back from inside the objective, where a host read would be frozen into a compiled plan.
+    /// </remarks>
     private T RecordJointEpoch(MultiFidelityTrainingHistory<T> history, T lowFidelityLoss, T highFidelityLoss)
     {
-        T totalLoss = NumOps.Add(lowFidelityLoss, highFidelityLoss);
-        history.AddEpoch(totalLoss, lowFidelityLoss, highFidelityLoss, NumOps.Zero, NumOps.Zero);
+        T totalLoss = GetLastLoss();
+        T physicsLoss = ComputePdeLossAt(CollocationPoints).GetFlat(0);
+        history.AddEpoch(totalLoss, lowFidelityLoss, highFidelityLoss, NumOps.Zero, physicsLoss);
         return totalLoss;
     }
 

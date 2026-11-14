@@ -193,8 +193,21 @@ namespace AiDotNet.PhysicsInformed.PINNs
                 throw new ArgumentException("The inverse problem has no observations.", nameof(inverseProblem));
             }
 
+            if (observations.Any(o => o.location is null || o.value is null))
+            {
+                throw new ArgumentException("Observation location and value arrays must not be null.", nameof(inverseProblem));
+            }
+
+            // Flattening rows of different lengths would silently move coordinates between observations.
             int inputDim = observations[0].location.Length;
             int outputDim = observations[0].value.Length;
+            if (inputDim == 0 || outputDim == 0
+                || observations.Any(o => o.location.Length != inputDim || o.value.Length != outputDim))
+            {
+                throw new ArgumentException(
+                    "Every observation must have the same non-empty location and value dimensions.", nameof(inverseProblem));
+            }
+
             _observationInputs = new Tensor<T>(observations.SelectMany(o => o.location).ToArray(), new[] { observations.Count, inputDim });
             _observationTargets = new Tensor<T>(observations.SelectMany(o => o.value).ToArray(), new[] { observations.Count, outputDim });
 
@@ -295,7 +308,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
                             result.IterationsToConverge = epoch;
                             if (verbose)
                             {
-                                Console.WriteLine($"Converged at epoch {epoch}");
+                                System.Diagnostics.Trace.TraceInformation("InverseProblemPINN converged at epoch {0}.", epoch);
                             }
                             break;
                         }
@@ -308,10 +321,10 @@ namespace AiDotNet.PhysicsInformed.PINNs
 
                     if (verbose && epoch % 50 == 0)
                     {
-                        Console.WriteLine($"Epoch {epoch}/{epochs}:");
-                        Console.WriteLine($"  Data Loss: {dataLoss}, Physics Loss: {physicsLoss}");
-                        Console.WriteLine("  Parameters: " + string.Join(" ",
-                            _inverseProblem.ParameterNames.Zip(_parameters.ToArray(), (name, value) => $"{name}={value:G4}")));
+                        System.Diagnostics.Trace.TraceInformation(
+                            "InverseProblemPINN epoch {0}/{1}: data loss {2}, physics loss {3}, parameters {4}",
+                            epoch, epochs, dataLoss, physicsLoss, string.Join(" ",
+                                _inverseProblem.ParameterNames.Zip(_parameters.ToArray(), (name, value) => $"{name}={value:G4}")));
                     }
                 }
 
@@ -329,9 +342,9 @@ namespace AiDotNet.PhysicsInformed.PINNs
 
                 if (_options.EstimateUncertainty)
                 {
-                    var hessian = ParameterHessian(points, outputs, derivatives);
-                    result.ParameterUncertainties = EstimateParameterUncertainties(hessian);
-                    result.ParameterCorrelations = EstimateParameterCorrelations(hessian);
+                    var covariance = EstimateParameterCovariance(ParameterHessian(points, outputs, derivatives));
+                    result.ParameterUncertainties = EstimateParameterUncertainties(covariance);
+                    result.ParameterCorrelations = EstimateParameterCorrelations(covariance);
                 }
             }
             finally
@@ -546,17 +559,45 @@ namespace AiDotNet.PhysicsInformed.PINNs
         }
 
         /// <summary>
-        /// Laplace-approximation standard deviations 1 / sqrt(|H_ii|); a coefficient with zero curvature is
-        /// unidentified and gets MaxValue.
+        /// The Laplace-approximation covariance C = H^-1 of the coefficients, or null when H is singular.
         /// </summary>
-        private T[] EstimateParameterUncertainties(Tensor<T> hessian)
+        private Tensor<T>? EstimateParameterCovariance(Tensor<T> hessian)
         {
-            var curvature = Engine.TensorAbs(Engine.TensorDiagonal(hessian));
-            var zero = Engine.TensorEquals(curvature, NumOps.Zero);
-            var ones = Tensor<T>.CreateDefault(curvature.Shape.ToArray(), NumOps.One);
-            var deviations = Engine.TensorReciprocal(Engine.TensorSqrt(Engine.TensorWhere(zero, ones, curvature)));
-            var unidentified = Tensor<T>.CreateDefault(curvature.Shape.ToArray(), NumOps.MaxValue);
-            return Engine.TensorWhere(zero, unidentified, deviations).ToArray();
+            try
+            {
+                return Tensor<T>.FromMatrix(hessian.ToMatrix().Inverse());
+            }
+            catch (InvalidOperationException ex)
+            {
+                System.Diagnostics.Trace.TraceWarning($"The coefficient Hessian is singular; no uncertainties or correlations: {ex}");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Laplace-approximation marginal standard deviations sqrt(C_ii), C = H^-1. A coefficient whose variance is not
+        /// a positive finite number (or every coefficient, when H is singular) is unidentified and gets MaxValue.
+        /// </summary>
+        /// <remarks>
+        /// This was 1 / sqrt(|H_ii|), the conditional deviation with every other coefficient held fixed; for coupled
+        /// coefficients it understates the marginal one (H = [[2, 1], [1, 2]] gives 0.7071 against sqrt(2/3) = 0.8165).
+        /// </remarks>
+        private T[] EstimateParameterUncertainties(Tensor<T>? covariance)
+        {
+            int n = _parameters.Length;
+            if (covariance is null)
+            {
+                return Enumerable.Repeat(NumOps.MaxValue, n).ToArray();
+            }
+
+            var variance = Engine.TensorDiagonal(covariance);
+            var valid = Engine.TensorMultiply(
+                Engine.TensorGreaterThan(variance, NumOps.Zero),
+                Engine.TensorLessThan(variance, NumOps.MaxValue));
+            var ones = Tensor<T>.CreateDefault(variance.Shape.ToArray(), NumOps.One);
+            var deviations = Engine.TensorSqrt(Engine.TensorWhere(valid, variance, ones));
+            var unidentified = Tensor<T>.CreateDefault(variance.Shape.ToArray(), NumOps.MaxValue);
+            return Engine.TensorWhere(valid, deviations, unidentified).ToArray();
         }
 
         /// <summary>
@@ -565,20 +606,14 @@ namespace AiDotNet.PhysicsInformed.PINNs
         /// <remarks>
         /// This returned the identity, which claimed every pair of coefficients uncorrelated whatever the data.
         /// </remarks>
-        private Tensor<T>? EstimateParameterCorrelations(Tensor<T> hessian)
+        private Tensor<T>? EstimateParameterCorrelations(Tensor<T>? covariance)
         {
-            int n = hessian.Shape[0];
-            Tensor<T> covariance;
-            try
+            if (covariance is null)
             {
-                covariance = Tensor<T>.FromMatrix(hessian.ToMatrix().Inverse());
-            }
-            catch (InvalidOperationException ex)
-            {
-                System.Diagnostics.Trace.TraceWarning($"The coefficient Hessian is singular; no correlations: {ex}");
                 return null;
             }
 
+            int n = covariance.Shape[0];
             var scale = Engine.TensorSqrt(Engine.TensorAbs(Engine.TensorDiagonal(covariance)));
             var outer = Engine.TensorMultiply(Engine.Reshape(scale, new[] { n, 1 }), Engine.Reshape(scale, new[] { 1, n }));
             return Engine.TensorDivide(covariance, outer);

@@ -11,6 +11,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.PhysicsInformed.Options;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.PhysicsInformed.NeuralOperators
 {
@@ -343,7 +344,8 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         /// For Beginners:
         /// Once you encode the input function via the branch network, you can query the solution at many locations
         /// in one batched pass. The result includes the learned bias b0 of Lu et al. (2021), Eq. 2, exactly as
-        /// Predict does.
+        /// Predict does. The branch network encodes the input function once and its coefficients are broadcast to
+        /// every query; packing the sensors onto each query row ran the branch once per query.
         /// </remarks>
         public Vector<T> EvaluateMultiple(Vector<T> inputFunction, Tensor<T> queryLocations)
         {
@@ -364,9 +366,28 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                 return new Vector<T>(0);
             }
 
-            var sensors = Engine.Reshape(Tensor<T>.FromVector(inputFunction), new[] { 1, _numSensors });
-            var queries = Engine.Reshape(queryLocations, new[] { 1, queryLocations.Shape[0], queryLocations.Shape[1] });
-            return Predict(PackRows(sensors, queries)).ToVector();
+            int trunkInputSize = _trunkNet.Architecture.CalculatedInputSize;
+            if (queryLocations.Shape[1] != trunkInputSize)
+            {
+                throw new ArgumentException(
+                    $"Query locations must have {trunkInputSize} coordinates, got {queryLocations.Shape[1]}.", nameof(queryLocations));
+            }
+
+            int numQueries = queryLocations.Shape[0];
+            bool wasTraining = IsTrainingMode;
+            SetTrainingMode(false);
+            try
+            {
+                using var _ = new NoGradScope<T>();
+                var sensors = Engine.Reshape(Tensor<T>.FromVector(inputFunction), new[] { 1, _numSensors });
+                var coefficients = Engine.Reshape(RunLayers(_branchNet, sensors), new[] { 1, _latentDimension });
+                var basis = RunLayers(_trunkNet, queryLocations);
+                return CombineBranchAndTrunk(Engine.TensorTile(coefficients, new[] { numQueries, 1 }), basis, numQueries).ToVector();
+            }
+            finally
+            {
+                SetTrainingMode(wasTraining);
+            }
         }
 
         /// <summary>
@@ -570,12 +591,19 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             var trunkInput = Engine.TensorSlice(input, new[] { 0, _numSensors }, new[] { batch, trunkInputSize });
 
             var coefficients = RunLayers(_branchNet, branchInput);
-            var basis = RunLayers(_trunkNet, trunkInput);
             if (coefficients.Rank != 2)
             {
                 coefficients = Engine.Reshape(coefficients, new[] { batch, _latentDimension });
             }
 
+            return CombineBranchAndTrunk(coefficients, RunLayers(_trunkNet, trunkInput), batch);
+        }
+
+        /// <summary>
+        /// G(u)(y) = sum_k b_k(u) t_k(y) + b0 (Lu et al. 2021, Eq. 2) for row-aligned coefficients and basis [batch, p].
+        /// </summary>
+        private Tensor<T> CombineBranchAndTrunk(Tensor<T> coefficients, Tensor<T> basis, int batch)
+        {
             if (basis.Rank != 2)
             {
                 basis = Engine.Reshape(basis, new[] { batch, _latentDimension });

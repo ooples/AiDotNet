@@ -154,6 +154,22 @@ namespace AiDotNet.PhysicsInformed.PINNs
             InitializeLayers();
             int dimension = architecture.InputSize;
             int perAxis = Math.Max(2, (int)Math.Floor(Math.Pow(options.NumQuadraturePoints, 1.0 / dimension) + 1e-9));
+
+            // The tensor-product rule has perAxis^dimension points; at least two per axis can exceed the requested
+            // budget (and int) in high dimension, so the expanded count is checked before any grid is allocated.
+            long expandedPoints = 1;
+            for (int d = 0; d < dimension; d++)
+            {
+                expandedPoints *= perAxis;
+                if (expandedPoints > options.NumQuadraturePoints)
+                {
+                    throw new ArgumentException(
+                        $"A {dimension}-dimensional tensor-product rule needs at least {perAxis}^{dimension} quadrature points, " +
+                        $"more than NumQuadraturePoints = {options.NumQuadraturePoints}. Increase the point budget or reduce the input dimension.",
+                        nameof(options));
+                }
+            }
+
             (_quadraturePoints, _quadratureWeights) = BuildQuadrature(perAxis, dimension);
             _numQuadraturePoints = _quadraturePoints.Shape[0];
             (_testValues, _testGradients) = BuildTestFunctions(_quadraturePoints, _numTestFunctions);

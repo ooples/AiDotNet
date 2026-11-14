@@ -219,14 +219,20 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         }
 
         /// <summary>
-        /// Solves M x = b for a batch of systems M [N, n, n], b [N, n] by Gauss-Jordan elimination in engine
-        /// operations, so the solution stays on the gradient tape.
+        /// Solves M x = b for a batch of systems M [N, n, n], b [N, n] by Gauss-Jordan elimination with partial
+        /// pivoting in engine operations, so the solution stays on the gradient tape.
         /// </summary>
         /// <remarks>
-        /// No pivoting: the mass matrix ∇q̇∇q̇ᵀL of a physical Lagrangian is positive definite, so every pivot is
-        /// positive. A singular mass matrix gives non-finite accelerations rather than a silent zero.
+        /// <para>
+        /// The learned mass matrix ∇q̇∇q̇ᵀL is not constrained to be positive definite, so an invertible one can have a
+        /// zero leading pivot: L = v1 v2 - (q1² + q2²)/2 gives M = [[0, 1], [1, 0]], which the unpivoted elimination
+        /// divided by zero instead of returning the acceleration (-2, -1). Each column now takes the row of largest
+        /// magnitude, per system, as its pivot. The choice is a detached one-hot selection (first maximum on ties), so
+        /// the row exchange is a blend of rows on the tape and the solve stays differentiable in M and b.
+        /// </para>
+        /// <para>A singular mass matrix gives non-finite accelerations rather than a silent zero.</para>
         /// </remarks>
-        private Tensor<T> SolveBatched(Tensor<T> matrix, Tensor<T> rhs)
+        internal Tensor<T> SolveBatched(Tensor<T> matrix, Tensor<T> rhs)
         {
             int count = matrix.Shape[0];
             int n = matrix.Shape[1];
@@ -240,6 +246,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
 
             for (int k = 0; k < n; k++)
             {
+                SwapInLargestPivot(rows, k, count);
                 var pivot = Engine.TensorSlice(rows[k], new[] { 0, k }, new[] { count, 1 });
                 rows[k] = Engine.TensorDivide(rows[k], pivot);
                 for (int i = 0; i < n; i++)
@@ -259,6 +266,46 @@ namespace AiDotNet.PhysicsInformed.ScientificML
             }
 
             return Engine.TensorConcatenate(solution, 1);
+        }
+
+        /// <summary>
+        /// Moves, per system, the row among <c>rows[k..n)</c> with the largest |entry| in column <paramref name="k"/>
+        /// into position <paramref name="k"/> (partial pivoting).
+        /// </summary>
+        private void SwapInLargestPivot(Tensor<T>[] rows, int k, int count)
+        {
+            int candidates = rows.Length - k;
+            if (candidates == 1)
+            {
+                return;
+            }
+
+            var magnitudes = Engine.TensorConcatenate(
+                Enumerable.Range(k, candidates)
+                    .Select(i => Engine.TensorAbs(Engine.TensorSlice(rows[i], new[] { 0, k }, new[] { count, 1 })))
+                    .ToArray(),
+                1);
+            var largest = Engine.TensorTile(Engine.ReduceMax(magnitudes, new[] { 1 }, keepDims: true), new[] { 1, candidates });
+            var isLargest = Engine.TensorEquals(magnitudes, largest);
+            var first = Engine.StopGradient(Engine.TensorMultiply(
+                isLargest, Engine.TensorEquals(Engine.TensorCumSum(isLargest, 1), NumOps.One)));
+
+            var current = rows[k];
+            Tensor<T>? pivotRow = null;
+            for (int j = 0; j < candidates; j++)
+            {
+                var select = Engine.TensorSlice(first, new[] { 0, j }, new[] { count, 1 });
+                var contribution = Engine.TensorMultiply(select, rows[k + j]);
+                pivotRow = pivotRow is null ? contribution : Engine.TensorAdd(pivotRow, contribution);
+                if (j > 0)
+                {
+                    // The row the pivot came from receives the old row k; every other row is unchanged.
+                    rows[k + j] = Engine.TensorAdd(
+                        rows[k + j], Engine.TensorMultiply(select, Engine.TensorSubtract(current, rows[k + j])));
+                }
+            }
+
+            rows[k] = pivotRow ?? current;
         }
 
         /// <inheritdoc/>

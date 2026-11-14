@@ -341,8 +341,15 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         /// <param name="numSteps">Number of time steps.</param>
         /// <returns>Trajectory [numSteps + 1, stateDim].</returns>
         /// <remarks>
-        /// Symplectic Euler: p is advanced with -dH/dq at (q, p), then q with dH/dp at (q, p_new), which keeps the
-        /// flow symplectic.
+        /// <para>
+        /// Symplectic Euler: <c>p_new = p - dt * dH/dq(q, p_new)</c>, then <c>q_new = q + dt * dH/dp(q, p_new)</c>. The
+        /// learned Hamiltonian need not be separable, so the momentum update is implicit and is solved by fixed-point
+        /// iteration (see <see cref="HamiltonianNeuralNetworkOptions.SymplecticSolverMaxIterations"/>).
+        /// </para>
+        /// <para>
+        /// The force used to be evaluated at the old momentum, which is symplectic only for a separable H: for
+        /// <c>H = q p</c> the step scaled phase-space area by <c>1 - dt^2</c>.
+        /// </para>
         /// </remarks>
         public Tensor<T> Simulate(Vector<T> initialState, T dt, int numSteps)
         {
@@ -359,8 +366,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
             {
                 var q = Engine.TensorSlice(current, new[] { 0, 0 }, new[] { 1, n });
                 var p = Engine.TensorSlice(current, new[] { 0, n }, new[] { 1, n });
-                var momentumRate = Engine.TensorSlice(SymplecticGradient(current), new[] { 0, n }, new[] { 1, n });
-                p = Engine.TensorAdd(p, Engine.TensorMultiplyScalar(momentumRate, dt));
+                p = SolveImplicitMomentum(q, p, dt, n);
 
                 var half = Engine.TensorConcatenate(new[] { q, p }, 1);
                 var positionRate = Engine.TensorSlice(SymplecticGradient(half), new[] { 0, 0 }, new[] { 1, n });
@@ -371,6 +377,40 @@ namespace AiDotNet.PhysicsInformed.ScientificML
             }
 
             return Engine.TensorConcatenate(trajectory.ToArray(), 0);
+        }
+
+        /// <summary>
+        /// Solves <c>p_new = p - dt * dH/dq(q, p_new)</c> by fixed-point iteration from the explicit estimate.
+        /// </summary>
+        [AiDotNet.Attributes.ScalarKernel("Each iteration reads two scalar reductions (the largest momentum change and magnitude) to test convergence; the arithmetic is engine ops.")]
+        private Tensor<T> SolveImplicitMomentum(Tensor<T> q, Tensor<T> p, T dt, int n)
+        {
+            Tensor<T> MomentumRateAt(Tensor<T> momentum) => Engine.TensorSlice(
+                SymplecticGradient(Engine.TensorConcatenate(new[] { q, momentum }, 1)), new[] { 0, n }, new[] { 1, n });
+
+            var estimate = Engine.TensorAdd(p, Engine.TensorMultiplyScalar(MomentumRateAt(p), dt));
+            double previousChange = double.PositiveInfinity;
+            for (int iteration = 0; iteration < _options.SymplecticSolverMaxIterations; iteration++)
+            {
+                var next = Engine.TensorAdd(p, Engine.TensorMultiplyScalar(MomentumRateAt(estimate), dt));
+                double change = NumOps.ToDouble(Engine.TensorMaxValue(Engine.TensorAbs(Engine.TensorSubtract(next, estimate))));
+                double scale = 1.0 + NumOps.ToDouble(Engine.TensorMaxValue(Engine.TensorAbs(next)));
+                estimate = next;
+                if (double.IsNaN(change) || double.IsInfinity(change))
+                {
+                    throw new InvalidOperationException(
+                        "The implicit symplectic momentum update diverged; use a smaller time step.");
+                }
+
+                if (change <= _options.SymplecticSolverTolerance * scale || change >= previousChange)
+                {
+                    break;
+                }
+
+                previousChange = change;
+            }
+
+            return estimate;
         }
 
         private Tensor<T> AsRow(Vector<T> state)

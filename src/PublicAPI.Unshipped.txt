@@ -23057,3 +23057,8 @@ virtual AiDotNet.PhysicsInformed.PINNs.PhysicsInformedNeuralNetwork<T>.ComputeTr
 *REMOVED*virtual AiDotNet.PhysicsInformed.PDEs.PDESpecificationBase<T>.ComputeTapeResidual(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! prediction, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! coordinates, AiDotNet.Tensors.Engines.IEngine! engine) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.PhysicsInformed.ScientificML.UniversalDifferentialEquation<T>.Simulate(T[]! initialState, T tStart, T tEnd, int numSteps, AiDotNet.PhysicsInformed.ScientificML.OdeIntegrationMethod method = AiDotNet.PhysicsInformed.ScientificML.OdeIntegrationMethod.Euler) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*AiDotNet.PhysicsInformed.ScientificML.UniversalDifferentialEquation<T>.Simulate(T[]! initialState, T tStart, T tEnd, int numSteps, AiDotNet.PhysicsInformed.ScientificML.OdeIntegrationMethod method = AiDotNet.PhysicsInformed.ScientificML.OdeIntegrationMethod.Euler) -> T[,]!
+AiDotNet.PhysicsInformed.Options.HamiltonianNeuralNetworkOptions.SymplecticSolverMaxIterations.get -> int
+AiDotNet.PhysicsInformed.Options.HamiltonianNeuralNetworkOptions.SymplecticSolverMaxIterations.set -> void
+AiDotNet.PhysicsInformed.Options.HamiltonianNeuralNetworkOptions.SymplecticSolverTolerance.get -> double
+AiDotNet.PhysicsInformed.Options.HamiltonianNeuralNetworkOptions.SymplecticSolverTolerance.set -> void
+override AiDotNet.PhysicsInformed.PINNs.MultiFidelityPINN<T>.SelectTrainableParametersForTraining(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! parameters) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!

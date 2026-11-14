@@ -25,9 +25,9 @@ public class DeepRitzMethodOptions : PhysicsInformedOptions
     public void Validate()
     {
         Require(NumQuadraturePoints, nameof(NumQuadraturePoints));
-        if (BoundaryPenalty < 0 || double.IsNaN(BoundaryPenalty))
+        if (BoundaryPenalty < 0 || double.IsNaN(BoundaryPenalty) || double.IsInfinity(BoundaryPenalty))
         {
-            throw new ArgumentOutOfRangeException(nameof(BoundaryPenalty), "Boundary penalty must be non-negative.");
+            throw new ArgumentOutOfRangeException(nameof(BoundaryPenalty), "Boundary penalty must be finite and non-negative.");
         }
     }
 }

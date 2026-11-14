@@ -82,20 +82,25 @@ public class PhysicsInformedPaperReferenceTests
     public void Pinn_TrainingObjective_IncludesThePdeResidual()
     {
         // Raissi et al. (2019): the loss is MSE_u + MSE_f. The old step minimized the data error alone, so the PDE
-        // weight had no effect on the update.
-        double[] UpdatedParameters(double pdeWeight)
+        // weight had no effect on the update. Both networks start from the same seeded weights, so only the objective
+        // can make their updates differ.
+        (double[] Initial, double[] Final) UpdatedParameters(double pdeWeight)
         {
+            var architecture = Architecture(2, 1);
+            architecture.RandomSeed = 42;
             var pinn = new PhysicsInformedNeuralNetwork<double>(
-                Architecture(2, 1), new PoissonEquation<double>(), Array.Empty<IBoundaryCondition<double>>(),
+                architecture, new PoissonEquation<double>(), Array.Empty<IBoundaryCondition<double>>(),
                 options: new PhysicsInformedNeuralNetworkOptions { NumCollocationPoints = 16, PdeWeight = pdeWeight });
             var inputs = new Tensor<double>(new[] { 0.0, 0.0, 1.0, 1.0 }, new[] { 2, 2 });
             var targets = new Tensor<double>(new[] { 0.0, 0.0 }, new[] { 2, 1 });
+            var initial = pinn.GetParameters().ToArray();
             pinn.Train(inputs, targets);
-            return pinn.GetParameters().ToArray();
+            return (initial, pinn.GetParameters().ToArray());
         }
 
-        var dataOnly = UpdatedParameters(0.0);
-        var withPhysics = UpdatedParameters(1.0);
+        var (dataInitial, dataOnly) = UpdatedParameters(0.0);
+        var (physicsInitial, withPhysics) = UpdatedParameters(1.0);
+        Assert.Equal(dataInitial, physicsInitial);
         Assert.True(dataOnly.Zip(withPhysics, (a, b) => Math.Abs(a - b)).Max() > 1e-12);
     }
 
@@ -115,6 +120,11 @@ public class PhysicsInformedPaperReferenceTests
         double predicted = don.Predict(new Tensor<double>(new[] { 0.1, 0.2, 0.3, 0.4, 0.5, 0.6 }, new[] { 1, 6 })).ToArray()[0];
 
         Assert.Equal(predicted, don.Evaluate(sensors, query), Tolerance);
+
+        // The bias itself: removing b0 = 5 lowers the evaluation by exactly 5.
+        parameters[parameters.Length - 1] = 0.0;
+        don.SetParameters(new Vector<double>(parameters));
+        Assert.Equal(5.0, predicted - don.Evaluate(sensors, query), Tolerance);
     }
 
     [Fact]
@@ -158,6 +168,21 @@ public class PhysicsInformedPaperReferenceTests
         {
             Assert.Equal(exact[i], training[i], 1e-12);
         }
+    }
+
+    [Fact]
+    public void Lagrangian_SolvesAnInvertibleMassMatrixWithAZeroLeadingPivot()
+    {
+        // L = v1 v2 - (q1^2 + q2^2) / 2 at q = (1, 2), v = 0: M = [[0, 1], [1, 0]] and dL/dq = (-1, -2), so the
+        // acceleration is M^-1 (-1, -2) = (-2, -1). The unpivoted elimination divided by the zero pivot M_00.
+        var lnn = new LagrangianNeuralNetwork<double>();
+        var mass = new Tensor<double>(new[] { 0.0, 1.0, 1.0, 0.0 }, new[] { 1, 2, 2 });
+        var rhs = new Tensor<double>(new[] { -1.0, -2.0 }, new[] { 1, 2 });
+
+        var acceleration = lnn.SolveBatched(mass, rhs).ToArray();
+
+        Assert.Equal(-2.0, acceleration[0], Tolerance);
+        Assert.Equal(-1.0, acceleration[1], Tolerance);
     }
 
     [Fact]

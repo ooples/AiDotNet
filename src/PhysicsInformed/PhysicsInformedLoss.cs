@@ -301,8 +301,9 @@ namespace AiDotNet.PhysicsInformed
         /// </summary>
         /// <remarks>
         /// The residual is a black-box scalar callback, so its gradient is the central difference of the callback
-        /// along each coordinate direction, one callback pair per entry. The directions are the rows of a scaled
-        /// identity, so the perturbed points are built with engine operations rather than written entry by entry.
+        /// along each coordinate direction, one callback pair per entry. The directions are rows of a scaled
+        /// identity, built a bounded block of rows at a time with engine operations rather than written entry by
+        /// entry.
         /// </remarks>
         private PDEResidualGradient<T> ComputeResidualGradientFallback(
             Func<Vector<T>, Vector<T>, PDEDerivatives<T>, T> residualFunction,
@@ -347,6 +348,9 @@ namespace AiDotNet.PhysicsInformed
             return gradient;
         }
 
+        // The most identity entries CentralDifference materializes at once.
+        private const int DirectionBlockEntries = 1 << 16;
+
         /// <summary>
         /// Central differences of <paramref name="function"/> along every coordinate direction of
         /// <paramref name="point"/>; the result has the point's shape.
@@ -355,16 +359,36 @@ namespace AiDotNet.PhysicsInformed
         {
             int count = point.Length;
             var shape = point.Shape.ToArray();
-            var directions = Engine.TensorMultiplyScalar(Engine.TensorEye<T>(count), eps);
             var flat = Engine.Reshape(point, new[] { count });
             var plusValues = new List<T>(count);
             var minusValues = new List<T>(count);
-            for (int i = 0; i < count; i++)
+
+            // A full count x count identity is count^2 entries: 8192 Hessian entries made 67M. Blocks of at most
+            // DirectionBlockEntries entries keep the scratch bounded whatever the derivative count.
+            int blockRows = Math.Max(1, Math.Min(count, DirectionBlockEntries / count));
+            for (int start = 0; start < count; start += blockRows)
             {
-                var direction = Engine.Reshape(
-                    Engine.TensorSlice(directions, new[] { i, 0 }, new[] { 1, count }), new[] { count });
-                plusValues.Add(function(Engine.Reshape(Engine.TensorAdd(flat, direction), shape)));
-                minusValues.Add(function(Engine.Reshape(Engine.TensorSubtract(flat, direction), shape)));
+                int rows = Math.Min(blockRows, count - start);
+                var parts = new List<Tensor<T>>(3);
+                if (start > 0)
+                {
+                    parts.Add(new Tensor<T>(new[] { rows, start }));
+                }
+
+                parts.Add(Engine.TensorMultiplyScalar(Engine.TensorEye<T>(rows), eps));
+                if (start + rows < count)
+                {
+                    parts.Add(new Tensor<T>(new[] { rows, count - start - rows }));
+                }
+
+                var directions = parts.Count == 1 ? parts[0] : Engine.TensorConcatenate(parts.ToArray(), 1);
+                for (int i = 0; i < rows; i++)
+                {
+                    var direction = Engine.Reshape(
+                        Engine.TensorSlice(directions, new[] { i, 0 }, new[] { 1, count }), new[] { count });
+                    plusValues.Add(function(Engine.Reshape(Engine.TensorAdd(flat, direction), shape)));
+                    minusValues.Add(function(Engine.Reshape(Engine.TensorSubtract(flat, direction), shape)));
+                }
             }
 
             var difference = Engine.TensorSubtract(

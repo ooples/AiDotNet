@@ -8,6 +8,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.PhysicsInformed.Interfaces;
 using AiDotNet.PhysicsInformed.PINNs;
 using AiDotNet.PhysicsInformed.Options;
+using AiDotNet.PhysicsInformed.PDEs;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 using Moq;
@@ -55,15 +56,19 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
             var multiScalePDE = new TwoScaleHeatEquation(coarseDiffusivity: 1.0, fineDiffusivity: 0.01);
             var inputs = new Tensor<double>(new double[] { 0.5, 0.1 }, new[] { 1, 2 }); // x=0.5, t=0.1
             var outputs = new Tensor<double>(new double[] { 1.0 }, new[] { 1, 1 }); // Temperature = 1.0
-            var derivatives = CreateBatchedDerivatives(1, 1, 2);
+            var first = new Tensor<double>(new[] { 1, 1, 2 });
+            var second = new Tensor<double>(new[] { 1, 1, 2, 2 });
+            first[0, 0, 1] = 3.0;      // u_t
+            second[0, 0, 0, 0] = 2.0;  // u_xx
+            var derivatives = new PDEDerivatives<double> { FirstDerivatives = first, SecondDerivatives = second };
 
             // Act
             double coarseResidual = multiScalePDE.ComputeScaleResidual(0, inputs, outputs, derivatives).ToArray()[0];
             double fineResidual = multiScalePDE.ComputeScaleResidual(1, inputs, outputs, derivatives).ToArray()[0];
 
-            // Assert
-            Assert.True(!double.IsNaN(coarseResidual) && !double.IsInfinity(coarseResidual), "Coarse scale residual should be finite");
-            Assert.True(!double.IsNaN(fineResidual) && !double.IsInfinity(fineResidual), "Fine scale residual should be finite");
+            // Assert: u_t - k u_xx with k = 1 and k = 0.01.
+            Assert.Equal(1.0, coarseResidual, 12);
+            Assert.Equal(2.98, fineResidual, 12);
         }
 
         [Fact(Timeout = 60000)]
@@ -81,8 +86,8 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
             double couplingResidual = multiScalePDE.ComputeScaleCoupling(
                 0, 1, inputs, coarseOutputs, fineOutputs, coarseDerivatives, fineDerivatives).ToArray()[0];
 
-            // Assert
-            Assert.True(!double.IsNaN(couplingResidual) && !double.IsInfinity(couplingResidual), "Coupling residual should be finite");
+            // Assert: |u_coarse - u_fine| = |1.0 - 0.1|.
+            Assert.Equal(0.9, couplingResidual, 12);
         }
 
         [Fact(Timeout = 60000)]
@@ -257,6 +262,29 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
             Assert.NotNull(pinn);
             Assert.Equal(2, pinn.NumberOfScales);
             Assert.True(pinn.SupportsTraining);
+        }
+
+        [Fact(Timeout = 60000)]
+        public async Task InverseProblemPINN_RejectsAPdeWithoutATapeResidual()
+        {
+            await Task.Yield();
+            var architecture = new NeuralNetworkArchitecture<double>(
+                inputType: InputType.OneDimensional,
+                taskType: NeuralNetworkTaskType.Regression,
+                inputSize: 2,
+                outputSize: 1);
+            var observations = new List<(double[] location, double[] value)>
+            {
+                (new double[] { 0.25, 0.1 }, new double[] { 0.9 }),
+                (new double[] { 0.50, 0.1 }, new double[] { 0.7 }),
+            };
+
+            var error = Assert.Throws<NotSupportedException>(() => new InverseProblemPINN<double>(
+                architecture,
+                new ScalarOnlyDiffusionIdentification(observations),
+                Array.Empty<IBoundaryCondition<double>>(),
+                options: new InverseProblemOptions<double> { NumCollocationPoints = 16 }));
+            Assert.Contains("scalar-only heat equation", error.Message);
         }
 
         [Fact(Timeout = 60000)]
@@ -523,16 +551,37 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
                 return k > 0 && k >= _lowerBound && k <= _upperBound;
             }
 
-            public IPDESpecification<double> CreateParameterizedPDE(double[] parameters)
+            public virtual IPDESpecification<double> CreateParameterizedPDE(double[] parameters)
             {
                 return new ParameterizedHeatEquation(parameters[0]);
             }
         }
 
         /// <summary>
-        /// Heat equation with parameterized diffusivity.
+        /// The same problem with a PDE that implements only IPDESpecification, so it has no tape residual.
         /// </summary>
-        private class ParameterizedHeatEquation : IPDESpecification<double>
+        private class ScalarOnlyDiffusionIdentification : DiffusionParameterIdentification
+        {
+            public ScalarOnlyDiffusionIdentification(List<(double[] location, double[] value)> observations)
+                : base(observations, 1.0)
+            {
+            }
+
+            public override IPDESpecification<double> CreateParameterizedPDE(double[] parameters)
+            {
+                var pde = new Mock<IPDESpecification<double>>();
+                pde.SetupGet(p => p.Name).Returns("scalar-only heat equation");
+                pde.SetupGet(p => p.InputDimension).Returns(2);
+                pde.SetupGet(p => p.OutputDimension).Returns(1);
+                return pde.Object;
+            }
+        }
+
+        /// <summary>
+        /// Heat equation with parameterized diffusivity, with the batched tape residual u_t - k u_xx that
+        /// InverseProblemPINN trains through.
+        /// </summary>
+        private class ParameterizedHeatEquation : PDESpecificationBase<double>
         {
             private readonly double _diffusivity;
 
@@ -541,11 +590,17 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
                 _diffusivity = diffusivity;
             }
 
-            public int InputDimension => 2;
-            public int OutputDimension => 1;
-            public string Name => $"Heat Equation (k={_diffusivity:G4})";
+            public override int InputDimension => 2;
+            public override int OutputDimension => 1;
+            public override string Name => $"Heat Equation (k={_diffusivity:G4})";
 
-            public double ComputeResidual(Vector<double> inputs, Vector<double> outputs, PDEDerivatives<double> derivatives)
+            public override Tensor<double> ComputeTapeResidual(Tensor<double> inputs, Tensor<double> outputs, PDEDerivatives<double> derivatives)
+            {
+                var e = TapeEngine;
+                return e.TensorSubtract(D1(derivatives, 0, 1), e.TensorMultiplyScalar(D2(derivatives, 0, 0, 0), _diffusivity));
+            }
+
+            public override double ComputeResidual(Vector<double> inputs, Vector<double> outputs, PDEDerivatives<double> derivatives)
             {
                 if (derivatives.FirstDerivatives == null || derivatives.SecondDerivatives == null)
                 {

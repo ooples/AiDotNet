@@ -574,14 +574,15 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             ValidateInputShape(input);
 
             var liftLayer = Layers[0] as NeuralNetworks.Layers.DenseLayer<T>;
+            var hiddenLayer = Layers[Layers.Count - 2] as NeuralNetworks.Layers.DenseLayer<T>;
             var projectLayer = Layers[Layers.Count - 1] as NeuralNetworks.Layers.DenseLayer<T>;
 
-            if (liftLayer == null || projectLayer == null)
+            if (liftLayer == null || hiddenLayer == null || projectLayer == null)
             {
                 throw new InvalidOperationException("FNO requires DenseLayer lift and projection layers.");
             }
 
-            // Lift -> Fourier stack -> project with an MSE objective, as one step on the shared fused session: the
+            // Lift -> Fourier stack -> project (hidden, then output, as in ForwardInternal) with an MSE objective, as one step on the shared fused session: the
             // compiled plan when it applies (CPU or GPU), the eager tape otherwise. Plain SGD at 0.001, the update
             // this step has always applied. _fourierLayers are registered in Layers, so collecting Layers alone
             // trains each Fourier parameter once; collecting both would apply its update twice per step.
@@ -591,7 +592,8 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                 var lifted = UnflattenPointwiseOutput(liftLayer.Forward(FlattenPointwiseInput(inp, spatial)), inp.Shape[0], spatial);
                 Tensor<T> y = lifted;
                 foreach (var fl in _fourierLayers) y = fl.Forward(y);
-                return UnflattenPointwiseOutput(projectLayer.Forward(FlattenPointwiseInput(y, spatial)), inp.Shape[0], spatial);
+                var hidden = UnflattenPointwiseOutput(hiddenLayer.Forward(FlattenPointwiseInput(y, spatial)), inp.Shape[0], spatial);
+                return UnflattenPointwiseOutput(projectLayer.Forward(FlattenPointwiseInput(hidden, spatial)), inp.Shape[0], spatial);
             }
 
             Tensor<T> MeanSquaredError(Tensor<T> pred, Tensor<T> tgt)
@@ -1051,7 +1053,10 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             int[] modeShape = new int[nSpatial];
             for (int d = 0; d < nSpatial; d++)
             {
-                modeShape[d] = Math.Min(_modeSizes[d], spatialShape[d]);
+                // The last axis keeps only the non-negative half spectrum of a real input; more modes than
+                // n/2 + 1 would reach negative frequencies that HermitianWeights doubles as if unpaired.
+                int availableModes = d == nSpatial - 1 ? spatialShape[d] / 2 + 1 : spatialShape[d];
+                modeShape[d] = Math.Min(_modeSizes[d], availableModes);
             }
 
             // Real input: a zero imaginary companion for the split-complex transform.

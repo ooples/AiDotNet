@@ -498,10 +498,29 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                 return double.PositiveInfinity;
             }
 
-            var error = Engine.TensorMultiplyScalar(
-                Engine.TensorSubtract(predictions, outputs), NumOps.FromDouble(1.0 / Math.Sqrt(samples)));
-            T mse = Engine.TensorSum(Engine.TensorMultiply(error, error));
-            double mseValue = NumOps.ToDouble(mse);
+            double mseValue;
+            if (typeof(T) == typeof(double))
+            {
+                var error = Engine.TensorMultiplyScalar(
+                    Engine.TensorSubtract(predictions, outputs), NumOps.FromDouble(1.0 / Math.Sqrt(samples)));
+                mseValue = NumOps.ToDouble(Engine.TensorSum(Engine.TensorMultiply(error, error)));
+            }
+            else
+            {
+                // A narrow T underflows the squares: in Half, a 4096-sample residual below about 0.011 squared to zero,
+                // so a non-exact fit scored MSE 0 and DiscoverEquation accepted it as an exact law. The errors are
+                // widened before squaring and summed in double.
+                var difference = Engine.TensorSubtract(predictions, outputs);
+                var wide = new float[difference.Length];
+                NumOps.ToFloatSpan(difference.AsSpan(), wide);
+                double sum = 0.0;
+                foreach (float value in wide)
+                {
+                    sum += (double)value * value;
+                }
+
+                mseValue = sum / samples;
+            }
 
             return double.IsNaN(mseValue) || double.IsInfinity(mseValue) ? double.PositiveInfinity : mseValue;
         }

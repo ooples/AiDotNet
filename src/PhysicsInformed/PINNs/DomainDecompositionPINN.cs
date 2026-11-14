@@ -298,7 +298,7 @@ public partial class DomainDecompositionPINN<T> : PhysicsInformedNeuralNetwork<T
 
     /// <summary>
     /// Finds the shared boundary between two subdomains: the first axis along which one box's upper face is the
-    /// other's lower face.
+    /// other's lower face and the two faces overlap; the points are sampled on that overlap only.
     /// </summary>
     /// <remarks>
     /// The faces are compared exactly in T. Subdomain bounds are the caller's own values, so a shared face has
@@ -314,19 +314,31 @@ public partial class DomainDecompositionPINN<T> : PhysicsInformedNeuralNetwork<T
 
         var forward = Engine.TensorEquals(upper1, lower2).ToArray();
         var backward = Engine.TensorEquals(upper2, lower1).ToArray();
+
+        // The two faces share only the intersection of the boxes on every other axis: sampling the whole face of
+        // sub1 put points outside sub2, where the interface terms compared the networks off both domains.
+        var overlapLower = Engine.TensorMax(lower1, lower2);
+        var overlapUpper = Engine.TensorMin(upper1, upper2);
+        var comparer = EqualityComparer<T>.Default;
         T zero = NumOps.Zero;
-        int forwardAxis = Array.FindIndex(forward, flag => !NumOps.Equals(flag, zero));
-        int backwardAxis = Array.FindIndex(backward, flag => !NumOps.Equals(flag, zero));
+        var isOpen = Engine.TensorGreaterThan(overlapUpper, overlapLower).ToArray().Select(flag => !comparer.Equals(flag, zero)).ToArray();
+        var isForwardFace = forward.Select(flag => !comparer.Equals(flag, zero)).ToArray();
+        var isBackwardFace = backward.Select(flag => !comparer.Equals(flag, zero)).ToArray();
+        int OpenAxisCount(int faceAxis) => Enumerable.Range(0, dims).Count(d => d != faceAxis && isOpen[d]);
 
         // The original scan checked both directions axis by axis and took the first axis that matched either.
-        if (forwardAxis >= 0 && (backwardAxis < 0 || forwardAxis <= backwardAxis))
+        for (int axis = 0; axis < dims; axis++)
         {
-            return GenerateBoundaryPoints(sub1.UpperBounds[forwardAxis], forwardAxis, sub1, 100);
-        }
+            bool isForward = isForwardFace[axis];
+            bool isBackward = isBackwardFace[axis];
+            if ((!isForward && !isBackward) || OpenAxisCount(axis) != dims - 1)
+            {
+                continue;
+            }
 
-        if (backwardAxis >= 0)
-        {
-            return GenerateBoundaryPoints(sub1.LowerBounds[backwardAxis], backwardAxis, sub1, 100);
+            var face = new SubdomainDefinition<T>(overlapLower.ToArray(), overlapUpper.ToArray());
+            T faceValue = isForward ? sub1.UpperBounds[axis] : sub1.LowerBounds[axis];
+            return GenerateBoundaryPoints(faceValue, axis, face, 100);
         }
 
         return null;
@@ -393,6 +405,7 @@ public partial class DomainDecompositionPINN<T> : PhysicsInformedNeuralNetwork<T
                 "Training data must be set before training. Call SetTrainingData with the boundary/initial data first.");
         }
 
+        UseDefaultOptimizerLearningRate(learningRate);
         var history = new DomainDecompositionTrainingHistory<T>(_subdomains.Count);
         for (int epoch = 0; epoch < epochs; epoch++)
         {
@@ -409,10 +422,9 @@ public partial class DomainDecompositionPINN<T> : PhysicsInformedNeuralNetwork<T
 
             if (verbose && epoch % 100 == 0)
             {
-                Console.WriteLine(
-                    $"Epoch {epoch}/{epochs}, " +
-                    $"Total: {GetLastLoss()}, " +
-                    $"Interface: {_lastInterfaceLoss}");
+                System.Diagnostics.Trace.TraceInformation(
+                    "DomainDecompositionPINN epoch {0}/{1}: total loss {2}, interface loss {3}",
+                    epoch, epochs, GetLastLoss(), _lastInterfaceLoss);
             }
         }
 

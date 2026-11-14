@@ -107,6 +107,9 @@ namespace AiDotNet.PhysicsInformed.PINNs
         private readonly IInitialCondition<T>? _initialCondition;
         private readonly PhysicsInformedLoss<T> _physicsLoss;
 
+        // The boundary and initial-condition terms alone, for their per-point values and gradients.
+        private readonly PhysicsInformedLoss<T> _constraintLoss;
+
         /// <summary>
         /// The weighted PINN loss terms; derived PINNs build their objectives from it.
         /// </summary>
@@ -177,6 +180,14 @@ namespace AiDotNet.PhysicsInformed.PINNs
                 _initialCondition,
                 _options.DataWeight,
                 _options.PdeWeight,
+                _options.BoundaryWeight,
+                _options.InitialWeight);
+            _constraintLoss = new PhysicsInformedLoss<T>(
+                null,
+                _boundaryConditions,
+                _initialCondition,
+                0.0,
+                0.0,
                 _options.BoundaryWeight,
                 _options.InitialWeight);
 
@@ -272,13 +283,33 @@ namespace AiDotNet.PhysicsInformed.PINNs
         /// Raissi et al. (2019), Eq. 4: the loss is MSE_u + MSE_f. MSE_u fits the network to the training data passed
         /// to <c>Train</c> (the paper's initial and boundary samples, and any measurements), and MSE_f is the mean
         /// squared PDE residual at the collocation points, with the derivatives of u taken through the gradient
-        /// tape. Both terms are weighted by the options' DataWeight and PdeWeight.
+        /// tape. Both terms are weighted by the options' DataWeight and PdeWeight. The configured boundary and initial
+        /// conditions add their residual terms, weighted by BoundaryWeight and InitialWeight, at every data or
+        /// collocation point they constrain (see <see cref="ComputeConstraintLoss"/>).
         /// </para>
         /// <para>
         /// The PDE term needs a residual written with engine operations
         /// (<see cref="PDEs.PDESpecificationBase{T}.ComputeTapeResidual"/>); every PDE in the library has one.
         /// </para>
         /// </remarks>
+        /// <summary>
+        /// Replaces the default Adam optimizer with one at <paramref name="learningRate"/>. A caller-supplied optimizer is
+        /// kept unchanged.
+        /// </summary>
+        private protected void UseDefaultOptimizerLearningRate(double learningRate)
+        {
+            if (double.IsNaN(learningRate) || double.IsInfinity(learningRate) || learningRate <= 0.0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(learningRate), "Learning rate must be finite and positive.");
+            }
+
+            if (_usesDefaultOptimizer)
+            {
+                _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                    this, new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = learningRate });
+            }
+        }
+
         protected override IReadOnlyList<Training.TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> input, Tensor<T> target)
         {
             if (_pdeSpecification is not PDEs.PDESpecificationBase<T>)
@@ -305,14 +336,137 @@ namespace AiDotNet.PhysicsInformed.PINNs
         /// <returns>The scalar loss.</returns>
         protected virtual Tensor<T> ComputeTrainingLoss(Tensor<T> dataInputs, Tensor<T> dataTargets, Tensor<T> collocationPoints)
         {
-            var dataLoss = _physicsLoss.ComputeTapeLoss(Forward(dataInputs), dataTargets);
+            var loss = _physicsLoss.ComputeTapeLoss(Forward(dataInputs), dataTargets);
+            var constraints = ComputeConstraintLoss(dataInputs, collocationPoints);
+            if (constraints is not null)
+            {
+                loss = Engine.TensorAdd(loss, Engine.Reshape(constraints, loss.Shape.ToArray()));
+            }
+
             if (_options.PdeWeight == 0.0)
             {
-                return dataLoss;
+                return loss;
             }
 
             var outputs = PinnAutodiff<T>.Evaluate(Forward, collocationPoints, PdeDerivativeOrder, out var derivatives);
-            return Engine.TensorAdd(dataLoss, _physicsLoss.ComputeTapePdeLoss(collocationPoints, outputs, derivatives));
+            return Engine.TensorAdd(loss, _physicsLoss.ComputeTapePdeLoss(collocationPoints, outputs, derivatives));
+        }
+
+        /// <summary>
+        /// The configured boundary and initial-condition terms, BoundaryWeight * mean(r_bc^2) + InitialWeight *
+        /// mean((u - u_0)^2), over the data and collocation points that lie on a boundary or at the initial time, on the
+        /// gradient tape; null when no condition is configured or no point is constrained.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// A condition's residual is a host callback over one point's values (see <see cref="IBoundaryCondition{T}"/>),
+        /// so it cannot be recorded itself. Its value and its gradient with respect to the point's outputs and
+        /// derivatives come from <see cref="PhysicsInformedLoss{T}.ComputePhysicsLossGradients"/> (the condition's
+        /// analytic gradient, or central differences of the callback), and the tape term is the first-order expansion
+        /// <c>sum_p [l_p + g_p . (y_p - y_p*)]</c> around the current values <c>y_p*</c>: its value is the loss, and its
+        /// gradient through the outputs and the tape derivatives reaches the weights. For the Dirichlet, Neumann and
+        /// initial conditions the residual is linear in y, so the expansion is exact.
+        /// </para>
+        /// <para>
+        /// Raissi et al. (2019) fit the initial and boundary data as part of MSE_u; the objective used to drop these
+        /// conditions, so BoundaryWeight and InitialWeight had no effect.
+        /// </para>
+        /// </remarks>
+        private Tensor<T>? ComputeConstraintLoss(Tensor<T> dataInputs, Tensor<T> collocationPoints)
+        {
+            if (_boundaryConditions.Length == 0 && _initialCondition is null)
+            {
+                return null;
+            }
+
+            var candidates = Engine.TensorConcatenate(new[] { dataInputs, collocationPoints }, 0);
+            int inputDim = candidates.Shape[1];
+            var hostPoints = candidates.ToArray();
+            var rows = new List<int>();
+            for (int p = 0; p < candidates.Shape[0]; p++)
+            {
+                var point = new Vector<T>(new ArraySegment<T>(hostPoints, p * inputDim, inputDim).ToArray());
+                if (_boundaryConditions.Any(bc => bc.IsOnBoundary(point))
+                    || (_initialCondition is not null && _initialCondition.IsAtInitialTime(point)))
+                {
+                    rows.Add(p);
+                }
+            }
+
+            if (rows.Count == 0)
+            {
+                return null;
+            }
+
+            var points = Engine.TensorIndexSelect(candidates, Vector<int>.Wrap(rows.ToArray()).AsTensor(), 0);
+            int order = Math.Min(2, Math.Max(1, PdeDerivativeOrder));
+            var outputs = PinnAutodiff<T>.Evaluate(Forward, points, order, out var derivatives);
+            int count = rows.Count;
+            int outputDim = outputs.Shape[1];
+            var first = derivatives.FirstDerivatives;
+            var second = order >= 2 ? derivatives.SecondDerivatives : null;
+
+            var hostInputs = points.ToArray();
+            var hostOutputs = outputs.ToArray();
+            var hostFirst = first?.ToArray();
+            var hostSecond = second?.ToArray();
+            int firstSize = outputDim * inputDim;
+            int secondSize = firstSize * inputDim;
+            var outputGradients = new T[hostOutputs.Length];
+            var firstGradients = hostFirst is null ? null : new T[hostFirst.Length];
+            var secondGradients = hostSecond is null ? null : new T[hostSecond.Length];
+            var losses = new T[count];
+            for (int p = 0; p < count; p++)
+            {
+                var pointDerivatives = new PDEDerivatives<T>
+                {
+                    FirstDerivatives = hostFirst is null ? null : new Tensor<T>(
+                        new ArraySegment<T>(hostFirst, p * firstSize, firstSize).ToArray(), new[] { outputDim, inputDim }),
+                    SecondDerivatives = hostSecond is null ? null : new Tensor<T>(
+                        new ArraySegment<T>(hostSecond, p * secondSize, secondSize).ToArray(),
+                        new[] { outputDim, inputDim, inputDim }),
+                };
+                var gradient = _constraintLoss.ComputePhysicsLossGradients(
+                    new Vector<T>(new ArraySegment<T>(hostOutputs, p * outputDim, outputDim).ToArray()),
+                    null,
+                    pointDerivatives,
+                    new Vector<T>(new ArraySegment<T>(hostInputs, p * inputDim, inputDim).ToArray()));
+                losses[p] = gradient.Loss;
+                gradient.OutputGradients.ToArray().CopyTo(outputGradients, p * outputDim);
+                if (firstGradients is not null)
+                {
+                    gradient.FirstDerivatives.ToArray().CopyTo(firstGradients, p * firstSize);
+                }
+
+                if (secondGradients is not null)
+                {
+                    gradient.SecondDerivatives.ToArray().CopyTo(secondGradients, p * secondSize);
+                }
+            }
+
+            // sum_p g_p . y_p on the tape, and the constant sum_p (l_p - g_p . y_p*) that makes its value the loss.
+            var outputWeights = new Tensor<T>(outputGradients, outputs.Shape.ToArray());
+            var linear = Engine.ReduceSum(Engine.TensorMultiply(outputWeights, outputs), null);
+            var anchor = Engine.ReduceSum(Engine.TensorMultiply(outputWeights, new Tensor<T>(hostOutputs, outputs.Shape.ToArray())), null);
+            if (first is not null && hostFirst is not null && firstGradients is not null)
+            {
+                var weights = new Tensor<T>(firstGradients, first.Shape.ToArray());
+                linear = Engine.TensorAdd(linear, Engine.ReduceSum(Engine.TensorMultiply(weights, first), null));
+                anchor = Engine.TensorAdd(anchor, Engine.ReduceSum(
+                    Engine.TensorMultiply(weights, new Tensor<T>(hostFirst, first.Shape.ToArray())), null));
+            }
+
+            if (second is not null && hostSecond is not null && secondGradients is not null)
+            {
+                var weights = new Tensor<T>(secondGradients, second.Shape.ToArray());
+                linear = Engine.TensorAdd(linear, Engine.ReduceSum(Engine.TensorMultiply(weights, second), null));
+                anchor = Engine.TensorAdd(anchor, Engine.ReduceSum(
+                    Engine.TensorMultiply(weights, new Tensor<T>(hostSecond, second.Shape.ToArray())), null));
+            }
+
+            var lossSum = Engine.ReduceSum(new Tensor<T>(losses, new[] { count }), null);
+            var total = Engine.TensorAdd(linear, Engine.TensorSubtract(lossSum, anchor));
+            return Engine.TensorMultiplyScalar(total, NumOps.FromDouble(1.0 / count));
         }
 
         /// <summary>
