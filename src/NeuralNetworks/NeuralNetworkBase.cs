@@ -14884,9 +14884,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // would freeze is part of that structure. A reachability probe needs the eager tape's gradients.
             if (TapeReachabilityProbe<T>.Current is null)
             {
+                // One session per optimizer, as a declared objective has: a network stepped by two optimizers in turn
+                // (two losses over a shared encoder), or by this entry point between Train calls, would otherwise drop
+                // the other's plan and its moments at every switch.
                 Tensor<T> Objective() => computeLoss(ForwardForTraining(input));
                 return TrainCustomTapeStep(input, input, _ => Objective(), (loss, _) => loss, optimizer,
-                    parameterProvider: null, sessionPerOptimizer: false, closureObjective: Objective);
+                    parameterProvider: null, sessionPerOptimizer: true, closureObjective: Objective);
             }
 
             return StepOnSharedTape(
