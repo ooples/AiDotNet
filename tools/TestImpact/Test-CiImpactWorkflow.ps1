@@ -564,6 +564,14 @@ Assert-Contract ($selectStep.Contains('MAP_LINEAGE_REF: ${{ steps.map.outputs.li
         $selectStep.Contains("`$lineage['MapLineageRef'] = [string] `$env:MAP_LINEAGE_REF") -and
         $selectStep.Contains('@lineage `')) `
     'a stacked pull request selecting with the map on master is scoped to its own diff, which that map has never measured'
+# The Build job's test-level selection diffs against the base branch only, so it must learn of the lineage
+# and keep that selection whole instead of narrowing away what the base branch adds.
+Assert-Contract ($selectorHeader.Contains('map_lineage_ref: ${{ steps.map.outputs.lineage_ref }}') -and
+        $impactStep.Contains('MAP_LINEAGE_REF: ${{ needs.select-shards.outputs.map_lineage_ref }}')) `
+    'test-level selection narrows a stacked pull request against its base branch, dropping tests only the lineage selected'
+$affectedLineageText = Get-Content -LiteralPath 'tools/TestImpact/Select-AffectedTests.ps1' -Raw
+Assert-Contract ($affectedLineageText.Contains('if (-not [string]::IsNullOrWhiteSpace($env:MAP_LINEAGE_REF)) {')) `
+    'Select-AffectedTests does not pass a lineage selection through'
 $selectorLineageText = Get-Content -LiteralPath 'tools/TestImpact/Select-Shards.ps1' -Raw
 Assert-Contract ($selectorLineageText.Contains('& git merge-base --is-ancestor $MapSha HEAD') -and
         $selectorLineageText.Contains('$BaseSha = Resolve-MapLineageBase -LineageRef $MapLineageRef -MapSha $mapSha')) `

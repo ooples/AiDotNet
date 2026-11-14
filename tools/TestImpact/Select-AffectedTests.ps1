@@ -14,6 +14,8 @@
       - the event is not a pull request or a push (schedules, dispatches and the coverage run
         feed the nightly and the map, which need everything);
       - a post-merge push is re-running a delta select-shards computed from the pull request run;
+      - a stacked pull request selected with master's map (MAP_LINEAGE_REF): that selection covers
+        everything the stack adds to master, which the diff against the base branch cannot see;
       - TypeImpact cannot map every changed file (a non-C# file, a generator input, a source with
         no compiled type) or fails in any way. Paths select-shards classifies as NonRuntime or
         BuildOnly (documentation, analyzer and pack baselines, benchmark projects, reference-data
@@ -112,6 +114,13 @@ if ($env:COLLECT_COVERAGE_EVERYWHERE -eq 'true') { Write-Passthrough 'coverage-e
 if ($eventName -notin @('pull_request', 'push')) { Write-Passthrough "event '$eventName' runs the full selection"; return }
 if ($eventName -eq 'push' -and $env:DELTA_MODE -ceq 'Partial') { Write-Passthrough 'post-merge delta re-run'; return }
 if ($env:REQUIRES_SHARDS -ne 'true') { Write-Passthrough 'no test shards were required'; return }
+# A stacked pull request selected with another branch's map (MAP_LINEAGE_REF, Download the shard map): select-shards
+# chose for everything the stack adds to that branch, but the diff below is against this pull request's own base, so
+# TypeImpact would drop the shards only the base branch's changes reach while the rest kept the matrix nonempty.
+if (-not [string]::IsNullOrWhiteSpace($env:MAP_LINEAGE_REF)) {
+    Write-Passthrough "the shard selection used the map of '$($env:MAP_LINEAGE_REF)' for a stacked pull request and covers what the stack adds to it, which a diff against this pull request's base cannot see"
+    return
+}
 
 try {
     # The change is the merge commit against its first parent: for a pull request, refs/pull/N/merge

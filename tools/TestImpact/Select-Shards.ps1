@@ -343,12 +343,49 @@ function Test-ToolDirectoryReferenced {
     $null = & git grep -q -i -E $asPath HEAD -- '*.csproj' '*.props' '*.targets' '*.sln' '*.slnx' '.github/workflows/sonarcloud.yml' 2>$null
     $referenced = $LASTEXITCODE -ne 1
     if (-not $referenced) {
-        $joined = 'Path\.(Combine|Join)\([^)]*["'']' + $name + '["'']'
-        $null = & git grep -q -i -E "($asPath)|($joined)" HEAD -- 'tests/' 2>$null
+        $null = & git grep -q -i -E $asPath HEAD -- 'tests/' 2>$null
         $referenced = $LASTEXITCODE -ne 1
+    }
+    if (-not $referenced) {
+        # A Path.Combine/Path.Join argument can sit on a later line than the call, and git grep matches single
+        # lines, so this reads the candidate files whole.
+        $referenced = Test-HeadTextJoinsDirectory -Name $directory -Pathspec 'tests/'
     }
     $script:ToolReferenceCache[$directory] = $referenced
     return $referenced
+}
+
+<#
+.SYNOPSIS
+Whether a file under a pathspec at HEAD passes a directory name as a Path.Combine/Path.Join argument.
+
+.DESCRIPTION
+git grep matches one line at a time, so `Path.Combine(root,` on one line and `"benchmarks", "data")` on the next was
+never seen. A fixed-string search finds the few files that hold the name as a whole string literal ("benchmarks" or
+'benchmarks'); each is then read whole from HEAD and matched as complete text. The argument may follow others that
+are themselves calls: Path.Combine(GetRoot(), "benchmarks"). A failed search or read counts as a reference.
+#>
+function Test-HeadTextJoinsDirectory {
+    param(
+        [Parameter(Mandatory)] [string] $Name,
+        [Parameter(Mandatory)] [string] $Pathspec
+    )
+    $naming = @(& git -c core.quotepath=false grep -l -i -F -e ('"' + $Name + '"') -e ("'" + $Name + "'") HEAD -- $Pathspec 2>$null)
+    if ($LASTEXITCODE -gt 1) { return $true }
+    if ($LASTEXITCODE -ne 0 -or $naming.Count -eq 0) { return $false }
+    # The argument list before the name: anything but parentheses, or a parenthesised call one level deep.
+    $pattern = 'Path\.(Combine|Join)\s*\((?:[^()]|\([^()]*\))*?["'']' + [regex]::Escape($Name) + '["'']'
+    $regex = [regex]::new($pattern, [Text.RegularExpressions.RegexOptions]::IgnoreCase, [TimeSpan]::FromSeconds(5))
+    foreach ($entry in $naming) {
+        $file = ([string] $entry) -replace '^HEAD:', ''
+        $lines = @(& git show "HEAD:$file" 2>$null)
+        if ($LASTEXITCODE -ne 0) { return $true }
+        try {
+            if ($regex.IsMatch(($lines -join "`n"))) { return $true }
+        }
+        catch [Text.RegularExpressions.RegexMatchTimeoutException] { return $true }
+    }
+    return $false
 }
 
 <#
@@ -358,16 +395,19 @@ Whether a test or product project consumes a directory trusted as build-only.
 .DESCRIPTION
 A build-only directory holds code the solution compiles and no test shard executes. That stops being true when a
 project outside it references it (a ProjectReference, a linked Compile item), the shard manifest names it, or a test
-reads it at run time. Searched at HEAD: every project and MSBuild file outside the build-only directories and the
-shard manifest for the directory as a path, then tests/ for it inside a string literal or as a Path.Combine/Path.Join
-argument. A comment that merely names a benchmark is not a reference. A failed search counts as consumed.
+reads it at run time. Searched at HEAD: every project and MSBuild file outside the directory itself (another
+build-only directory included) and the shard manifest for the directory as a path, then tests/ for it inside a string
+literal or as a Path.Combine/Path.Join argument, the latter read as whole files so a call split across lines counts.
+A comment that merely names a benchmark is not a reference. A failed search counts as consumed.
 #>
 function Test-BuildOnlyDirectoryConsumed {
     param([Parameter(Mandatory)] [string] $Directory)
     $key = 'build-only:' + $Directory
     if ($script:ToolReferenceCache.ContainsKey($key)) { return $script:ToolReferenceCache[$key] }
     $name = [regex]::Escape($Directory.TrimEnd('/'))
-    $excluded = @($script:BuildOnlyDirectories | ForEach-Object { ":(exclude)$_" })
+    # Only the directory itself is left out. A project in another build-only directory that links a file from
+    # this one is a consumer too: a test project may reference that project.
+    $excluded = @(":(exclude)$Directory")
     # POSIX ERE (git grep -E); see Test-ToolDirectoryReferenced for why [:space:] and not \s.
     $asPath = '(^|["''[:space:]=;(,>]|\.\.[/\\])' + $name + '[/\\]'
     $null = & git grep -q -i -E $asPath HEAD -- '*.csproj' '*.props' '*.targets' '.github/test-shards.yml' @excluded 2>$null
@@ -379,14 +419,16 @@ function Test-BuildOnlyDirectoryConsumed {
         if ($LASTEXITCODE -gt 1) { $consumed = $true }
         elseif ($LASTEXITCODE -eq 0 -and $naming.Count -gt 0) {
             $inLiteral = '["''][^"''[:space:]]*' + $name + '[/\\]'
-            $joined = 'Path\.(Combine|Join)\([^)]*["'']' + $name + '["'']'
             $files = @($naming | ForEach-Object { ([string] $_) -replace '^HEAD:', '' })
             for ($i = 0; $i -lt $files.Count -and -not $consumed; $i += 100) {
                 $batch = @($files[$i..([Math]::Min($i + 99, $files.Count - 1))])
-                $null = & git --literal-pathspecs grep -q -i -E "($inLiteral)|($joined)" HEAD -- @batch 2>$null
+                $null = & git --literal-pathspecs grep -q -i -E $inLiteral HEAD -- @batch 2>$null
                 $consumed = $LASTEXITCODE -ne 1
             }
         }
+        # A Path.Combine/Path.Join argument can sit on a later line than the call, and git grep matches single
+        # lines, so this reads the candidate files whole.
+        if (-not $consumed) { $consumed = Test-HeadTextJoinsDirectory -Name $Directory.TrimEnd('/') -Pathspec 'tests/' }
     }
     $script:ToolReferenceCache[$key] = $consumed
     return $consumed
@@ -2390,7 +2432,9 @@ if ($SelfTest) {
 
     # A build-only directory is trusted only while nothing outside it consumes it. Proved against
     # throwaway repositories: unreferenced, referenced by a test project, named by the shard
-    # manifest, read by a test at run time, and merely mentioned in a comment.
+    # manifest, read by a test at run time (a Path.Combine split across lines or after a nested call
+    # included), linked by a project in the other build-only directory, and merely mentioned in a
+    # comment or a non-path string literal.
     $savedReferenceCache = $script:ToolReferenceCache
     $consumerRoot = Join-Path ([IO.Path]::GetTempPath()) ("buildonly-" + [Guid]::NewGuid().ToString('n'))
     try {
@@ -2399,7 +2443,11 @@ if ($SelfTest) {
             @{ Name = 'project reference'; File = 'tests/Proj/Proj.csproj'; Text = '<ProjectReference Include="..\..\benchmarks\AiDotNet.Benchmarks\AiDotNet.Benchmarks.csproj" />'; Consumed = $true },
             @{ Name = 'shard manifest'; File = '.github/test-shards.yml'; Text = '    project: benchmarks/AiDotNet.Benchmarks/AiDotNet.Benchmarks.csproj'; Consumed = $true },
             @{ Name = 'run-time read'; File = 'tests/Proj/ReadsData.cs'; Text = 'var text = File.ReadAllText("../../benchmarks/data/expected.json");'; Consumed = $true },
-            @{ Name = 'run-time join'; File = 'tests/Proj/JoinsData.cs'; Text = 'var path = Path.Combine(root, "benchmarks", "data");'; Consumed = $true }
+            @{ Name = 'run-time join'; File = 'tests/Proj/JoinsData.cs'; Text = 'var path = Path.Combine(root, "benchmarks", "data");'; Consumed = $true },
+            @{ Name = 'run-time join across lines'; File = 'tests/Proj/JoinsSplit.cs'; Text = "var path = Path.Combine(root,`n    `"benchmarks`", `"data`", `"expected.json`");"; Consumed = $true },
+            @{ Name = 'run-time join after a call'; File = 'tests/Proj/JoinsCall.cs'; Text = "var path = Path.Join(`n    GetRoot(), 'benchmarks');"; Consumed = $true },
+            @{ Name = 'literal outside a join'; File = 'tests/Proj/Trait.cs'; Text = "[Trait(`"Category`",`n    `"Benchmarks`")] public void Measures() { var p = Path.Combine(a, b); }"; Consumed = $false },
+            @{ Name = 'linked by another build-only directory'; File = 'AiDotNetBenchmarkTests/Proj/Proj.csproj'; Text = '<Compile Include="..\..\benchmarks\Shared\Harness.cs" />'; Consumed = $true }
         )) {
             $caseRoot = Join-Path $consumerRoot ([Guid]::NewGuid().ToString('n'))
             [void] (New-Item -ItemType Directory -Path (Join-Path $caseRoot (Split-Path -Parent $case.File)) -Force)
