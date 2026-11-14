@@ -278,17 +278,17 @@ public class SonataPaperTests
         // 100 points with MaxViewSize = 1: every local draw U(0.1, 0.4) * 1 truncates to 0, so the crop falls
         // back to its minimum size, which must still be capped at MaxViewSize.
         var scene = PointCloudTestOptions.Cloud(100, 9, seed: 71).ToArray();
-        var (global, local) = SonataPretraining.GenerateViews(scene, 9, RandomHelper.CreateSeededRandom(73),
+        var (globalViews, localViews) = SonataPretraining.GenerateViews(scene, 9, RandomHelper.CreateSeededRandom(73),
             2, 0.4, 1.0, 4, 0.1, 0.4, maxSize: 1);
-        foreach (var views in new[] { global, local })
+        foreach (var views in new[] { globalViews, localViews })
         {
             var perView = new int[views.ViewCount];
             foreach (int v in views.View) perView[v]++;
             Assert.All(perView, size => Assert.Equal(1, size));
         }
 
-        Assert.Equal(2, global.ViewCount);
-        Assert.Equal(4, local.ViewCount);
+        Assert.Equal(2, globalViews.ViewCount);
+        Assert.Equal(4, localViews.ViewCount);
     }
 
     [Fact]
