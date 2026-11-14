@@ -305,7 +305,11 @@ public partial class OrdinalRidgeRegression<T> : OrdinalClassifierBase<T>,
             return ClassIndicesToLabels(new Tensor<int>(new[] { n }));
         }
 
-        var exceeds = engine.TensorGreaterThan(pred, _thresholds.AsTensor().Reshape(1, k - 1));
+        // The comparison does not broadcast (unlike the arithmetic ops), so both sides are expanded to [n, k - 1]
+        var shape = new[] { n, k - 1 };
+        var exceeds = engine.TensorGreaterThan(
+            engine.TensorBroadcastTo(pred, shape),
+            engine.TensorBroadcastTo(_thresholds.AsTensor().Reshape(1, k - 1), shape));
         var ranks = engine.TensorArange<T>(1, k).Reshape(1, k - 1);
         var scores = engine.TensorConcatenate(new[] { baseline, engine.TensorMultiply(exceeds, ranks) }, 1);
         return ClassIndicesToLabels(engine.TensorArgMax(scores, 1));
