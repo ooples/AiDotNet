@@ -212,18 +212,22 @@ public partial class TADAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         // The extractor's gradient: the whole episode - TEN, prototypes, metric - rebuilt from the embeddings on the tape.
         var bodyGradient = EmbeddingGradient(stackedInput, episode, alpha, encoder);
         T auxiliaryLoss = NumOps.Zero;
+        PrototypeEpisode<T>? auxiliaryEpisode = null;
+        Tensor<T>? auxiliaryEmbeddings = null;
+        T auxiliaryWeight = NumOps.FromDouble(_tadamOptions.AuxiliaryLossWeight);
         if (_tadamOptions.UseAuxiliaryCoTraining)
         {
             // Auxiliary co-training: every support example classified against the support prototypes.
-            var auxiliaryEpisode = PrototypeEpisode<T>.Build(supportLabels, supportLabels);
+            auxiliaryEpisode = PrototypeEpisode<T>.Build(supportLabels, supportLabels);
             var auxiliaryInput = ClassifierOutputs<T>.StackRows(task.SupportInput, task.SupportInput);
-            T weight = NumOps.FromDouble(_tadamOptions.AuxiliaryLossWeight);
             bodyGradient = Engine.Add(
-                bodyGradient, Engine.Multiply(EmbeddingGradient(auxiliaryInput, auxiliaryEpisode, alpha, encoder), weight));
+                bodyGradient, Engine.Multiply(EmbeddingGradient(auxiliaryInput, auxiliaryEpisode, alpha, encoder), auxiliaryWeight));
             using (new NoGradScope<T>())
             {
-                auxiliaryLoss = NumOps.Multiply(weight, LossFunction.ComputeTapeLoss(
-                    EpisodeLogits(Embed(auxiliaryInput), auxiliaryEpisode, alpha, encoder), auxiliaryEpisode.QueryTarget).GetFlat(0));
+                // Detached embeddings, reused below where alpha and the task encoder are differentiated.
+                auxiliaryEmbeddings = Embed(auxiliaryInput);
+                auxiliaryLoss = NumOps.Multiply(auxiliaryWeight, LossFunction.ComputeTapeLoss(
+                    EpisodeLogits(auxiliaryEmbeddings, auxiliaryEpisode, alpha, encoder), auxiliaryEpisode.QueryTarget).GetFlat(0));
             }
         }
 
@@ -242,8 +246,17 @@ public partial class TADAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         }
         else
         {
+            // The weighted auxiliary loss trains alpha and the task encoder too, not only the extractor: the
+            // differentiated objective is the same total the step reports.
             loss = AiDotNet.Training.TapeGradients<T>.Of(
-                () => EpisodeObjective(embeddings, episode, alpha, encoder),
+                () =>
+                {
+                    var objective = EpisodeObjective(embeddings, episode, alpha, encoder);
+                    if (auxiliaryEpisode is null || auxiliaryEmbeddings is null) return objective;
+                    var auxiliary = LossFunction.ComputeTapeLoss(
+                        EpisodeLogits(auxiliaryEmbeddings, auxiliaryEpisode, alpha, encoder), auxiliaryEpisode.QueryTarget);
+                    return Engine.TensorAdd(objective, Engine.TensorMultiplyScalar(auxiliary, auxiliaryWeight));
+                },
                 leaves,
                 gradients =>
                 {
@@ -254,6 +267,8 @@ public partial class TADAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
                             encoder.All.Select(leaf => GradientOf(gradients, leaf, leaf.Length)).ToList());
                     }
                 });
+            // The tape objective already holds the weighted auxiliary term; it is counted once.
+            auxiliaryLoss = NumOps.Zero;
         }
 
         // One outer step on everything the episode trains.
@@ -265,12 +280,21 @@ public partial class TADAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         ParamModel.SetParameters(ApplyOuterGradients(ParamModel.GetParameters(), bodyGradient, _options.OuterLearningRate));
         T rate = NumOps.FromDouble(_options.OuterLearningRate);
         if (trainAlpha)
-            _metricScale = Engine.Subtract(_metricScale, Engine.Multiply(alphaGradient, rate));
+        {
+            // alpha is a scale on negative distances; at or below zero it would invert or erase the ranking, so the
+            // step is projected back onto alpha >= MinMetricScale. EpisodeLogits and Adapt read the same value.
+            var stepped = Engine.Subtract(_metricScale, Engine.Multiply(alphaGradient, rate));
+            _metricScale = Engine.TensorClamp(
+                Tensor<T>.FromVector(stepped), NumOps.FromDouble(MinMetricScale), NumOps.MaxValue).ToVector();
+        }
         if (encoder is not null)
             _taskEncoder = Engine.Subtract(_taskEncoder, Engine.Multiply(encoderGradient, rate));
 
         return NumOps.Add(loss, auxiliaryLoss);
     }
+
+    /// <summary>The smallest learned metric scale alpha: strictly positive, and a normal number even in Half.</summary>
+    private const double MinMetricScale = 1e-3;
 
     /// <summary>The extractor's gradient of an episode's query cross-entropy, through prototypes, TEN and metric.</summary>
     private Vector<T> EmbeddingGradient(TInput stackedInput, PrototypeEpisode<T> episode, Tensor<T>? alpha, TaskEncoder? encoder)

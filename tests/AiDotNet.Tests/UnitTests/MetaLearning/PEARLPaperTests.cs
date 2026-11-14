@@ -95,4 +95,34 @@ public class PEARLPaperTests
         Assert.Equal(0.0, (double)(float)mu[0], 6);
         Assert.Equal(-10.0 - Math.Log(4.0), (double)(float)logVar[0], 1);
     }
+
+    [Fact]
+    public void Posterior_MeanStaysFiniteInHalfWhenTheWeightedMeansOverflow()
+    {
+        // Four identical factors with mu_n = 9 * 2222 = 19998: the product's mean is mu_n itself, but summing
+        // mu_n w_n before normalizing reaches 4 * 19998 ~ 80000, past Half's 65504, and gave inf / 4 = inf.
+        var algorithm = new PEARLAlgorithm<Half, Tensor<Half>, Tensor<Half>>(
+            new PEARLOptions<Half, Tensor<Half>, Tensor<Half>>(new MockFullModel<Half>(numParameters: 3))
+            {
+                LatentDim = 1, EncoderHiddenDim = 3, Seed = 21,
+            });
+        // w1 = 1 (hidden = 3 per unit for an all-ones context), wMu = 2222, wLogVar = -2.
+        var encoder = new Half[15];
+        for (int i = 0; i < 9; i++) encoder[i] = (Half)1.0f;
+        for (int i = 9; i < 12; i++) encoder[i] = (Half)2222.0f;
+        for (int i = 12; i < 15; i++) encoder[i] = (Half)(-2.0f);
+        var field = typeof(PEARLAlgorithm<Half, Tensor<Half>, Tensor<Half>>)
+            .GetField("_encoderParams", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(field);
+        field.SetValue(algorithm, new Vector<Half>(encoder));
+
+        var ones = new Half[12];
+        for (int i = 0; i < ones.Length; i++) ones[i] = (Half)1.0f;
+        var (mu, _) = algorithm.Encode(Tensor<Half>.FromVector(new Vector<Half>(ones), new[] { 3, 4 }));
+
+        double value = (double)(float)mu[0];
+        Assert.False(double.IsNaN(value) || double.IsInfinity(value), $"Posterior mean {value} is not finite.");
+        // Half's spacing near 20000 is 16, so mu_n itself is stored to within 16 of 19998.
+        Assert.InRange(value, 19998.0 - 16.0, 19998.0 + 16.0);
+    }
 }
