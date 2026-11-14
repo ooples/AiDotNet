@@ -449,6 +449,23 @@ public class AttackReferenceTests
     }
 
     [Fact(Timeout = 60000)]
+    public async Task HalfOverflowSafeMean_KeepsSmallEntriesNextToALargeOne()
+    {
+        await Task.Yield();
+
+        // One 65504 and 2^20 - 1 entries of 0.0625: mean = (65504 + 65535.9375) / 2^20 = 0.12497. The sum
+        // overflows Half, and the old block scaling divided every entry by 65504 * 64 in Half, where 0.0625
+        // became 1.5e-8 and rounded to zero (as did the scaled mean, 1.5e-8), so the mean came out as 0.
+        const int count = 1 << 20;
+        var data = Enumerable.Repeat((Half)0.0625, count).ToArray();
+        data[0] = (Half)65504.0;
+
+        double mean = (double)AiDotNet.Helpers.OverflowSafeReductions.Mean(new Tensor<Half>(data, new[] { count }));
+
+        Assert.Equal((65504.0 + (count - 1) * 0.0625) / count, mean, 3);
+    }
+
+    [Fact(Timeout = 60000)]
     public async Task HalfMeanSquaredError_StaysFiniteWhenTheSumOfSquaresOverflows()
     {
         // 1000 outputs each 10 from the target: MSE = 100, while the sum of squares is 100000.
