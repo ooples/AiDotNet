@@ -1,4 +1,6 @@
+using AiDotNet.AdversarialRobustness.Attacks;
 using AiDotNet.AdversarialRobustness.Defenses;
+using AiDotNet.AdversarialRobustness.Safety;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
@@ -127,5 +129,65 @@ public class DefenseReferenceTests
         {
             Assert.Equal(0.0, delta[i], 1e-12);
         }
+    }
+
+    /// <summary>Exposes the character-frequency features of the content classifier.</summary>
+    private sealed class FrequencyProbe<TNum> : RuleBasedContentClassifier<TNum>
+    {
+        public Vector<TNum> Frequencies(string text) => TextToVector(text);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ContentClassifier_HalfFrequenciesAreDividedBeforeTheCast()
+    {
+        await Task.Yield();
+
+        // 2049 'a' and one 'b': the frequency of 'a' is 2049 / 2050, which Half holds as 1 - 2^-11. Casting the
+        // counts first made it Half(2048) / Half(2050) = 1 - 2^-10, and a text longer than 65504 divided by
+        // infinity.
+        var probe = new FrequencyProbe<Half>();
+        var frequencies = probe.Frequencies(new string('a', 2049) + "b");
+        Assert.Equal((double)(Half)(2049.0 / 2050.0), (double)frequencies['a'], 1e-12);
+
+        var longText = probe.Frequencies(new string('a', 70000));
+        Assert.Equal(1.0, (double)longText['a'], 1e-12);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task AdversarialTraining_EvaluateRobustnessPropagatesAFailingAttack()
+    {
+        await Task.Yield();
+
+        // A targeted AutoAttack naming class 5 of a two-class model throws. Counting the failure as a successful
+        // defense reported an adversarial accuracy of 1.
+        var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(
+            new AdversarialDefenseOptions<double> { UsePreprocessing = false });
+        var attack = new AutoAttack<double, Vector<double>, Vector<double>>(
+            new AdversarialAttackOptions<double> { Epsilon = 0.1, IsTargeted = true, TargetClass = 5 });
+        var model = new LengthCheckingModel(2);
+        var inputs = new[] { new Vector<double>(new[] { 0.5, 0.25 }) };
+        var labels = new[] { new Vector<double>(new[] { 1.0, 0.0 }) };
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => defense.EvaluateRobustness(model, inputs, labels, attack));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task PromptDefense_UsesTheOptionsSeed()
+    {
+        await Task.Yield();
+
+        // The prompt initialization and mini-batches came from a fixed seed (42) whatever the options said.
+        double[] Prompt(int seed)
+        {
+            var defense = new AdversarialPromptDefense<double, Vector<double>, Vector<double>>(
+                new AdversarialDefenseOptions<double> { Epsilon = 0.05, Seed = seed }, promptLength: 4, promptOptimizationSteps: 1);
+            var inputs = new[] { new Vector<double>(new double[10]) };
+            var labels = new[] { new Vector<double>(new[] { 1.0, 0.0 }) };
+            defense.ApplyDefense(inputs, labels, new LengthCheckingModel(10));
+            return defense.PreprocessInput(inputs[0]).ToArray();
+        }
+
+        Assert.Equal(Prompt(1), Prompt(1));
+        Assert.NotEqual(Prompt(1), Prompt(2));
     }
 }
