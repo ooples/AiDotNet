@@ -9,7 +9,7 @@ the repo).
 ## Status — steps 1–4 DONE (prod-2026a key live, 2026-07-18)
 
 - **DB (applied to `yfkqwpgjahoamlgckjib`):** `public.revocations` table + `public.revoke_license(uuid,text)`
-  (migrations `20260718000000_revocations.sql`, `20260718000100_lock_revoke_license_execute.sql`). Additive
+  (migrations `20260718052704_revocations.sql`, `20260718052732_lock_revoke_license_execute.sql`). Additive
   and locked down (service_role-only; verified via the security advisor). No existing object changed, so the
   live paid customers are unaffected. `validate_license_key` already returns `license_id` (the natural `jti`)
   and per-tier `capabilities` — **no change needed** to that hot-path function.
