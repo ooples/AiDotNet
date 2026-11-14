@@ -1,3 +1,4 @@
+using AiDotNet.Enums;
 using AiDotNet.AdversarialRobustness.Safety;
 using AiDotNet.Interfaces;
 
@@ -222,9 +223,9 @@ public class AdversarialRobustnessConfiguration<T, TInput, TOutput>
     /// <summary>
     /// Creates a configuration with certified robustness guarantees.
     /// </summary>
-    /// <param name="certificationMethod">The certification method: "RandomizedSmoothing", "IBP", or "CROWN".</param>
+    /// <param name="certificationMethod">The certification method.</param>
     public static AdversarialRobustnessConfiguration<T, TInput, TOutput> WithCertification(
-        string certificationMethod = "RandomizedSmoothing")
+        CertifiedDefenseMethod certificationMethod = CertifiedDefenseMethod.RandomizedSmoothing)
     {
         return new AdversarialRobustnessConfiguration<T, TInput, TOutput>
         {

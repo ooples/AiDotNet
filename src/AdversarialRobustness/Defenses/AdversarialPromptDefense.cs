@@ -1,4 +1,5 @@
 using System.Text;
+using AiDotNet.AdversarialRobustness.Attacks;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -89,7 +90,11 @@ public class AdversarialPromptDefense<T, TInput, TOutput> : IAdversarialDefense<
         _promptLength = promptLength;
         _promptLearningRate = promptLearningRate;
         _promptOptimizationSteps = promptOptimizationSteps;
-        _random = RandomHelper.CreateSeededRandom(42);
+        // The options' seed makes the prompt initialization and mini-batches reproducible; without one they are
+        // drawn from a secure generator.
+        _random = options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(options.Seed.Value)
+            : RandomHelper.CreateSecureRandom();
     }
 
     /// <inheritdoc/>
@@ -105,75 +110,99 @@ public class AdversarialPromptDefense<T, TInput, TOutput> : IAdversarialDefense<
             throw new ArgumentException("Number of labels must match number of training samples.", nameof(labels));
 
         // Initialize defense prompt with small random values
-        var promptData = new T[_promptLength];
+        var promptData = new double[_promptLength];
         for (int i = 0; i < _promptLength; i++)
         {
-            promptData[i] = NumOps.FromDouble((_random.NextDouble() - 0.5) * 0.1);
+            promptData[i] = (_random.NextDouble() - 0.5) * 0.1;
         }
-        _defensePrompt = new Vector<T>(promptData);
+        _defensePrompt = new Tensor<double>(promptData, new[] { _promptLength }).Cast<T>().ToVector();
 
-        // Optimize prompt to maximize clean accuracy on adversarial inputs
+        // Chen et al. (2023) train the prompt adversarially: min_delta E max_{||x_adv - x|| <= eps} L(f(x_adv + delta), y).
+        // The inner maximization is FGSM at the prompted input; since the prompt is additive, attacking f at
+        // x + delta and subtracting delta gives the adversarial input. The first AdversarialRatio share of each
+        // mini-batch is adversarial, the rest clean.
+        var attack = new FGSMAttack<T, TInput, TOutput>(new AdversarialAttackOptions<T>
+        {
+            Epsilon = _options.Epsilon,
+            NormType = AdversarialNormType.LInfinity
+        });
+        T delta = NumOps.FromDouble(FiniteDifferenceStep);
+        T learningRate = NumOps.FromDouble(_promptLearningRate);
+        T upperLimit = NumOps.One;
+        T lowerLimit = NumOps.Negate(upperLimit);
+        int batchSize = Math.Min(32, trainingData.Length);
+        T batchDivisor = NumOps.FromDouble(batchSize);
+
+        // Optimize prompt to maximize accuracy on adversarial inputs
         for (int step = 0; step < _promptOptimizationSteps; step++)
         {
             // Sample a mini-batch
-            int batchSize = Math.Min(32, trainingData.Length);
-            var gradientAccumulator = new T[_promptLength];
+            int adversarialCount = (int)Math.Round(_options.AdversarialRatio * batchSize);
+            var gradientAccumulator = new Vector<T>(_promptLength);
 
             for (int b = 0; b < batchSize; b++)
             {
                 int idx = _random.Next(trainingData.Length);
-                var input = trainingData[idx];
-                var label = labels[idx];
-
-                // Get clean prediction with prompt
-                var promptedInput = ApplyPromptToInput(input);
-                var output = model.Predict(promptedInput);
-
-                // Estimate gradient via finite differences
-                for (int p = 0; p < _promptLength; p++)
-                {
-                    T original = _defensePrompt[p];
-                    T delta = NumOps.FromDouble(0.001);
-
-                    // Forward: prompt[p] + delta
-                    _defensePrompt[p] = NumOps.Add(original, delta);
-                    var fwdInput = ApplyPromptToInput(input);
-                    var fwdOutput = model.Predict(fwdInput);
-                    var fwdVec = ConversionsHelper.ConvertToVector<T, TOutput>(fwdOutput);
-                    var labelVec = ConversionsHelper.ConvertToVector<T, TOutput>(label);
-                    double fwdLoss = ComputeLoss(fwdVec, labelVec);
-
-                    // Backward: prompt[p] - delta
-                    _defensePrompt[p] = NumOps.Subtract(original, delta);
-                    var bwdInput = ApplyPromptToInput(input);
-                    var bwdOutput = model.Predict(bwdInput);
-                    var bwdVec = ConversionsHelper.ConvertToVector<T, TOutput>(bwdOutput);
-                    double bwdLoss = ComputeLoss(bwdVec, labelVec);
-
-                    // Gradient estimate
-                    double grad = (fwdLoss - bwdLoss) / (2.0 * 0.001);
-                    gradientAccumulator[p] = NumOps.Add(gradientAccumulator[p], NumOps.FromDouble(grad));
-
-                    // Restore
-                    _defensePrompt[p] = original;
-                }
+                var input = b < adversarialCount
+                    ? AdversarialInput(trainingData[idx], labels[idx], model, attack)
+                    : trainingData[idx];
+                var labelVec = ConversionsHelper.ConvertToVector<T, TOutput>(labels[idx]);
+                gradientAccumulator = Engine.Add<T>(gradientAccumulator, PromptGradient(input, labelVec, model, delta));
             }
 
-            // Update prompt with gradient descent
-            for (int p = 0; p < _promptLength; p++)
-            {
-                double avgGrad = NumOps.ToDouble(gradientAccumulator[p]) / batchSize;
-                double currentVal = NumOps.ToDouble(_defensePrompt[p]);
-                currentVal -= _promptLearningRate * avgGrad;
-                // Clamp prompt values
-                if (currentVal > 1.0) currentVal = 1.0;
-                if (currentVal < -1.0) currentVal = -1.0;
-                _defensePrompt[p] = NumOps.FromDouble(currentVal);
-            }
+            // Gradient descent on the averaged gradient, then clamp prompt values to [-1, 1]
+            var averaged = Engine.Divide<T>(gradientAccumulator, batchDivisor);
+            var current = _defensePrompt ?? new Vector<T>(_promptLength);
+            var updated = Engine.Subtract<T>(current, Engine.Multiply<T>(averaged, learningRate));
+            _defensePrompt = Engine.Clamp<T>(updated, lowerLimit, upperLimit);
         }
 
         // The model itself is unchanged — defense is applied via PreprocessInput
         return model;
+    }
+
+    /// <summary>Central-difference step for the prompt gradient.</summary>
+    private const double FiniteDifferenceStep = 0.001;
+
+    /// <summary>
+    /// The central-difference gradient of the MSE loss with respect to every prompt entry.
+    /// </summary>
+    private Vector<T> PromptGradient(TInput input, Vector<T> labelVec, IFullModel<T, TInput, TOutput> model, T delta)
+    {
+        var prompt = _defensePrompt ?? new Vector<T>(_promptLength);
+        var gradient = new T[_promptLength];
+        T twoDelta = NumOps.Add(delta, delta);
+        for (int p = 0; p < _promptLength; p++)
+        {
+            var direction = Engine.Multiply<T>(Vector<T>.CreateStandardBasis(_promptLength, p), delta);
+            T forward = LossWithPrompt(input, labelVec, model, Engine.Add<T>(prompt, direction));
+            T backward = LossWithPrompt(input, labelVec, model, Engine.Subtract<T>(prompt, direction));
+            gradient[p] = Difference(forward, backward, twoDelta);
+        }
+
+        _defensePrompt = prompt;
+        return new Vector<T>(gradient);
+    }
+
+    private static T Difference(T forward, T backward, T width) => NumOps.Divide(NumOps.Subtract(forward, backward), width);
+
+    private T LossWithPrompt(TInput input, Vector<T> labelVec, IFullModel<T, TInput, TOutput> model, Vector<T> prompt)
+    {
+        _defensePrompt = prompt;
+        var output = ConversionsHelper.ConvertToVector<T, TOutput>(model.Predict(ApplyPromptToInput(input)));
+        return ComputeLoss(output, labelVec);
+    }
+
+    /// <summary>
+    /// FGSM(f, x + delta) - delta: the worst case for the prompted model within the epsilon ball around x.
+    /// </summary>
+    private TInput AdversarialInput(TInput input, TOutput label, IFullModel<T, TInput, TOutput> model, FGSMAttack<T, TInput, TOutput> attack)
+    {
+        var prompted = ApplyPromptToInput(input);
+        var attacked = ConversionsHelper.ConvertToVector<T, TInput>(attack.GenerateAdversarialExample(prompted, label, model));
+        var offset = Engine.Subtract<T>(attacked, ConversionsHelper.ConvertToVector<T, TInput>(prompted));
+        var adversarial = Engine.Add<T>(ConversionsHelper.ConvertToVector<T, TInput>(input), offset);
+        return ConversionsHelper.ConvertVectorToInput<T, TInput>(adversarial, input);
     }
 
     /// <inheritdoc/>
@@ -264,10 +293,7 @@ public class AdversarialPromptDefense<T, TInput, TOutput> : IAdversarialDefense<
             if (state.PromptData.Length != _promptLength)
                 throw new InvalidOperationException(
                     $"Serialized prompt length ({state.PromptData.Length}) does not match expected prompt length ({_promptLength}).");
-            var promptData = new T[state.PromptData.Length];
-            for (int i = 0; i < state.PromptData.Length; i++)
-                promptData[i] = NumOps.FromDouble(state.PromptData[i]);
-            _defensePrompt = new Vector<T>(promptData);
+            _defensePrompt = new Tensor<double>(state.PromptData, new[] { state.PromptData.Length }).Cast<T>().ToVector();
         }
         else
         {
@@ -277,10 +303,7 @@ public class AdversarialPromptDefense<T, TInput, TOutput> : IAdversarialDefense<
 
     private static double[] PromptToDoubleArray(Vector<T> prompt)
     {
-        var result = new double[prompt.Length];
-        for (int i = 0; i < prompt.Length; i++)
-            result[i] = NumOps.ToDouble(prompt[i]);
-        return result;
+        return prompt.AsTensor().Cast<double>().ToArray();
     }
 
     private sealed class PromptDefenseState
@@ -309,48 +332,51 @@ public class AdversarialPromptDefense<T, TInput, TOutput> : IAdversarialDefense<
         Deserialize(File.ReadAllBytes(filePath));
     }
 
+    /// <summary>
+    /// Adds the prompt as a border frame (Chen et al. 2023, an additive padding prompt): the first half of the
+    /// prompt goes on the first entries of the flattened input and the second half on the last ones, so a
+    /// row-major image gets a band at its top and bottom. The input keeps its size, so the frozen model sees
+    /// the shape it was trained on.
+    /// </summary>
     private TInput ApplyPromptToInput(TInput input)
     {
         if (_defensePrompt == null) return input;
 
-        // Convert input to vector, prepend defense prompt, convert back
         var inputVec = ConversionsHelper.ConvertToVector<T, TInput>(input);
-        var combined = new T[_promptLength + inputVec.Length];
+        int n = inputVec.Length;
+        int length = Math.Min(_promptLength, n);
+        int head = (length + 1) / 2;
+        int tail = length - head;
+        var prompt = _defensePrompt.AsTensor();
+        var frame = new Tensor<T>(new[] { n });
+        frame = Engine.TensorSetSlice(frame, Engine.TensorSlice(prompt, new[] { 0 }, new[] { head }), new[] { 0 });
+        if (tail > 0)
+        {
+            frame = Engine.TensorSetSlice(frame, Engine.TensorSlice(prompt, new[] { head }, new[] { tail }), new[] { n - tail });
+        }
 
-        for (int i = 0; i < _promptLength; i++)
-            combined[i] = _defensePrompt[i];
-        for (int i = 0; i < inputVec.Length; i++)
-            combined[_promptLength + i] = inputVec[i];
-
-        var combinedVec = new Vector<T>(combined);
+        var combinedVec = Engine.TensorAdd(inputVec.AsTensor(), frame).ToVector();
         return ConversionsHelper.ConvertVectorToInput<T, TInput>(combinedVec, input);
     }
 
-    private static double ComputeLoss(Vector<T> predicted, Vector<T> target)
+    private static T ComputeLoss(Vector<T> predicted, Vector<T> target)
     {
-        // Simple MSE loss
-        double loss = 0;
+        // Simple MSE loss over the common length
         int len = Math.Min(predicted.Length, target.Length);
-        for (int i = 0; i < len; i++)
+        if (len == 0)
         {
-            double diff = NumOps.ToDouble(predicted[i]) - NumOps.ToDouble(target[i]);
-            loss += diff * diff;
+            return NumOps.Zero;
         }
-        return len > 0 ? loss / len : 0;
+
+        var engine = AiDotNetEngine.Current;
+        var difference = engine.TensorSubtract(
+            engine.TensorSlice(predicted.AsTensor(), new[] { 0 }, new[] { len }),
+            engine.TensorSlice(target.AsTensor(), new[] { 0 }, new[] { len }));
+        return engine.TensorMean(engine.TensorSquare(difference));
     }
 
     private static int ArgMax(Vector<T> vector)
     {
-        int maxIndex = 0;
-        T maxValue = vector[0];
-        for (int i = 1; i < vector.Length; i++)
-        {
-            if (NumOps.GreaterThan(vector[i], maxValue))
-            {
-                maxValue = vector[i];
-                maxIndex = i;
-            }
-        }
-        return maxIndex;
+        return AiDotNetEngine.Current.TensorArgMax(vector.AsTensor(), 0).GetFlat(0);
     }
 }

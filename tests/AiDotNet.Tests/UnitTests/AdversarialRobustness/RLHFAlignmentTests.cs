@@ -189,6 +189,47 @@ public class RLHFAlignmentTests
     }
 
     [Fact(Timeout = 60000)]
+    public async Task EvaluateAlignment_HalfSaturatedOutputUncorrelatedWithTheInputIsNotHonest()
+    {
+        await Task.Yield();
+
+        // Output (32768, 32768, 32768, 32768) is orthogonal to the input (1, -1, 1, -1) and saturated: its largest
+        // magnitude equals its mean magnitude, so the structural check rejects it (as it does in double). In Half
+        // the magnitudes summed to infinity, the mean comparison failed, and the output counted as honest.
+        var alignment = new RLHFAlignment<Half>(new AlignmentMethodOptions<Half>());
+        var evalData = new AlignmentEvaluationData<Half>
+        {
+            TestInputs = new Matrix<Half>(new[,] { { (Half)1.0, (Half)(-1.0), (Half)1.0, (Half)(-1.0) } }),
+            ExpectedOutputs = new Matrix<Half>(new[,] { { (Half)1.0, (Half)(-1.0), (Half)1.0, (Half)(-1.0) } }),
+            EvaluationCriteria = new[] { "honesty" },
+            Labels = new[] { 0 },
+            ReferenceScores = Array.Empty<double>()
+        };
+
+        var metrics = alignment.EvaluateAlignment(new ConstantHalfModel(32768.0), evalData);
+
+        Assert.Equal(0.0, metrics.HonestyScore);
+    }
+
+    /// <summary>A Half model that returns the same value for every output entry.</summary>
+    private sealed class ConstantHalfModel : IPredictiveModel<Half, Vector<Half>, Vector<Half>>
+    {
+        private readonly Half _value;
+
+        public ConstantHalfModel(double value) => _value = (Half)value;
+
+        public Vector<Half> Predict(Vector<Half> input)
+            => new Vector<Half>(Enumerable.Repeat(_value, input.Length).ToArray());
+
+        public ModelMetadata<Half> GetModelMetadata() => new ModelMetadata<Half> { Name = "ConstantHalfModel" };
+
+        public byte[] Serialize() => Array.Empty<byte>();
+        public void Deserialize(byte[] data) { }
+        public void SaveModel(string filePath) { }
+        public void LoadModel(string filePath) { }
+    }
+
+    [Fact(Timeout = 60000)]
     public async Task EvaluateAlignment_HonestyScoreIsOne()
     {
         // The IsHonest method always returns true (placeholder)

@@ -84,15 +84,17 @@ internal sealed class SegmentationVisualizer
         int horizontalStep = Math.Max(1, (int)Math.Ceiling(width / (double)Math.Max(1, maxWidth)));
         int verticalStep = horizontalStep * 2;
 
-        var numOps = MathHelper.GetNumericOperations<T>();
+        var rows = SampledIndices(height, verticalStep);
+        var columns = SampledIndices(width, horizontalStep);
+        var owners = OwnerMap(masks, classMap, rows, columns);
         var builder = new StringBuilder();
 
-        for (int y = 0; y < height; y += verticalStep)
+        for (int r = 0; r < rows.Length; r++)
         {
             builder.Clear();
-            for (int x = 0; x < width; x += horizontalStep)
+            for (int c = 0; c < columns.Length; c++)
             {
-                int owner = OwnerAt(masks, classMap, numOps, y, x);
+                int owner = owners[r * columns.Length + c];
                 builder.Append(owner < 0 ? '.' : (char)('0' + (owner % 10)));
             }
             writer.WriteLine(builder.ToString());
@@ -102,19 +104,59 @@ internal sealed class SegmentationVisualizer
         writer.WriteLine($"{output.NumInstances} instance(s), {output.NumClasses} class(es); '.' = unlabelled.");
     }
 
-    private static int OwnerAt<T>(
-        Tensor<T>? masks, Tensor<T>? classMap, INumericOperations<T> numOps, int y, int x)
+    /// <summary>The indices 0, step, 2 step, ... below <paramref name="extent"/>.</summary>
+    private static int[] SampledIndices(int extent, int step)
     {
+        var indices = new int[(extent + step - 1) / step];
+        for (int i = 0; i < indices.Length; i++) indices[i] = i * step;
+        return indices;
+    }
+
+    /// <summary>
+    /// The owner of every displayed cell (the given rows and columns), row-major: the first instance whose
+    /// mask exceeds 0.5, or the rounded class id (both -1 where unlabelled).
+    /// </summary>
+    /// <remarks>
+    /// Only the displayed rows and columns are selected before thresholding and reducing, so a large mask
+    /// stack downsampled to a console width does not produce full-resolution intermediate tensors.
+    /// </remarks>
+    private static int[] OwnerMap<T>(Tensor<T>? masks, Tensor<T>? classMap, int[] rows, int[] columns)
+    {
+        var engine = AiDotNetEngine.Current;
+        var owners = new int[rows.Length * columns.Length];
+        var rowIndices = new Tensor<int>(rows, new[] { rows.Length });
+        var columnIndices = new Tensor<int>(columns, new[] { columns.Length });
         if (masks is not null)
         {
-            var half = numOps.FromDouble(0.5);
-            for (int m = 0; m < masks.Shape[0]; m++)
-                if (numOps.GreaterThan(masks[m, y, x], half)) return m;
-            return -1;
+            if (masks.Shape[0] == 0)
+            {
+                for (int i = 0; i < owners.Length; i++) owners[i] = -1;
+                return owners;
+            }
+
+            var numOps = MathHelper.GetNumericOperations<T>();
+            var displayed = engine.TensorIndexSelect(engine.TensorIndexSelect(masks, rowIndices, 1), columnIndices, 2);
+            var inside = engine.TensorGreaterThan(displayed, numOps.FromDouble(0.5));
+            var first = engine.TensorArgMax(inside, 0).ToArray();
+            var any = engine.ReduceMax(inside, new[] { 0 }, false).Cast<double>().ToArray();
+            for (int i = 0; i < owners.Length; i++)
+            {
+                owners[i] = any[i] > 0 ? first[i] : -1;
+            }
+
+            return owners;
         }
 
-        int cls = (int)Math.Round(numOps.ToDouble((classMap ?? throw new InvalidOperationException("classMap is null where it is required."))[y, x]));
-        return cls <= 0 ? -1 : cls;
+        var map = classMap ?? throw new InvalidOperationException("classMap is null where it is required.");
+        var displayedClasses = engine.TensorIndexSelect(engine.TensorIndexSelect(map, rowIndices, 0), columnIndices, 1);
+        var classes = engine.TensorRound(displayedClasses).Cast<double>().ToArray();
+        for (int i = 0; i < owners.Length; i++)
+        {
+            int cls = (int)classes[i];
+            owners[i] = cls <= 0 ? -1 : cls;
+        }
+
+        return owners;
     }
 
     /// <summary>
@@ -158,13 +200,15 @@ internal sealed class SegmentationVisualizer
         if (output.InstanceClasses is null || output.InstanceClasses.Length == 0)
             return $"<p>{output.NumClasses} class(es).</p>";
 
-        var numOps = MathHelper.GetNumericOperations<T>();
+        var scores = output.InstanceScores is { Length: > 0 } instanceScores
+            ? new Tensor<T>(instanceScores, new[] { instanceScores.Length }).Cast<double>().ToArray()
+            : Array.Empty<double>();
         var table = new StringBuilder();
         table.AppendLine("<table><tr><th>#</th><th>Class</th><th>Score</th></tr>");
         for (int i = 0; i < output.InstanceClasses.Length; i++)
         {
-            string score = output.InstanceScores is not null && i < output.InstanceScores.Length
-                ? numOps.ToDouble(output.InstanceScores[i]).ToString("0.00", CultureInfo.InvariantCulture)
+            string score = i < scores.Length
+                ? scores[i].ToString("0.00", CultureInfo.InvariantCulture)
                 : "-";
             table.AppendLine($"<tr><td>{i}</td><td>{output.InstanceClasses[i]}</td><td>{score}</td></tr>");
         }
@@ -209,14 +253,23 @@ internal sealed class SegmentationVisualizer
         bmp[28] = 24;                   // bits per pixel
         WriteInt32(bmp, 34, pixelBytes);
 
+        // BMP stores rows bottom-up and pixels as B, G, R: flip the channel and row axes of the scaled
+        // [3, H, W] image and interleave to [H, W, 3].
+        var engine = AiDotNetEngine.Current;
+        var channels = engine.TensorSlice(rgb, new[] { 0, 0, 0 }, new[] { 3, height, width });
+        var scaled = engine.TensorMultiplyScalar(channels, numOps.FromDouble(scale));
+        var bgrBottomUp = engine.TensorPermute(engine.TensorFlip(scaled, new[] { 0, 1 }), new[] { 1, 2, 0 });
+        // The permute is a strided view; Cast walks the backing storage in its own order, so the view is
+        // materialized in logical (interleaved B, G, R) order first.
+        var samples = bgrBottomUp.Contiguous().Cast<double>().ToArray();
+
         int offset = headerSize;
-        for (int y = height - 1; y >= 0; y--)   // BMP rows run bottom-up
+        int sample = 0;
+        for (int y = 0; y < height; y++)
         {
-            for (int x = 0; x < width; x++)
+            for (int x = 0; x < rowBytes; x++)
             {
-                bmp[offset++] = Clamp(numOps.ToDouble(rgb[2, y, x]) * scale);   // B
-                bmp[offset++] = Clamp(numOps.ToDouble(rgb[1, y, x]) * scale);   // G
-                bmp[offset++] = Clamp(numOps.ToDouble(rgb[0, y, x]) * scale);   // R
+                bmp[offset++] = Clamp(samples[sample++]);
             }
             offset += padding;
         }

@@ -1,5 +1,6 @@
 using AiDotNet.AdversarialRobustness.CertifiedRobustness;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
@@ -30,7 +31,7 @@ public class IntervalBoundPropagationTests
         Assert.NotNull(ibp);
         var options = ibp.GetOptions();
         Assert.NotNull(options);
-        Assert.Equal("IBP", options.CertificationMethod);
+        Assert.Equal(CertifiedDefenseMethod.IntervalBoundPropagation, options.CertificationMethod);
     }
 
     [Fact(Timeout = 60000)]
@@ -53,7 +54,7 @@ public class IntervalBoundPropagationTests
         Assert.Equal(0.1, returnedOptions.NoiseSigma, Tolerance);
         Assert.Equal(100, returnedOptions.NumSamples);
         Assert.Equal(0.95, returnedOptions.ConfidenceLevel, Tolerance);
-        Assert.Equal("IBP", returnedOptions.CertificationMethod);
+        Assert.Equal(CertifiedDefenseMethod.IntervalBoundPropagation, returnedOptions.CertificationMethod);
     }
 
     [Fact(Timeout = 60000)]
@@ -113,7 +114,7 @@ public class IntervalBoundPropagationTests
     }
 
     [Fact(Timeout = 60000)]
-    public async Task CertifyPrediction_WithSmallEpsilon_MayCertify()
+    public async Task CertifyPrediction_SampledBoundsOfALayerlessModel_DoNotCertify()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -130,8 +131,11 @@ public class IntervalBoundPropagationTests
 
         // Assert
         Assert.NotNull(result);
-        // With small epsilon and large margin, should be certified
-        Assert.True(result.IsCertified);
+        // The mock exposes no layers, so its bounds come from sampling. A sampled interval is an inner estimate
+        // of the output range, not a certificate: auto_LiRPA rejects operations it can not bound, and the IBP
+        // bounds of Gowal et al. (2018) are sound by construction. So even a large margin does not certify.
+        Assert.False(result.IsCertified);
+        Assert.False((bool)result.CertificationDetails["Sound"]);
     }
 
     [Fact(Timeout = 60000)]
@@ -426,7 +430,7 @@ public class IntervalBoundPropagationTests
             NoiseSigma = 0.15,
             NumSamples = 75,
             ConfidenceLevel = 0.9,
-            NormType = "L2",
+            NormType = AdversarialNormType.L2,
             UseTightBounds = true,
             BatchSize = 32,
             Seed = 42
@@ -443,7 +447,7 @@ public class IntervalBoundPropagationTests
         Assert.Equal(0.15, restoredOptions.NoiseSigma, Tolerance);
         Assert.Equal(75, restoredOptions.NumSamples);
         Assert.Equal(0.9, restoredOptions.ConfidenceLevel, Tolerance);
-        Assert.Equal("L2", restoredOptions.NormType);
+        Assert.Equal(AdversarialNormType.L2, restoredOptions.NormType);
         Assert.True(restoredOptions.UseTightBounds);
         Assert.Equal(32, restoredOptions.BatchSize);
         Assert.Equal(42, restoredOptions.Seed);
@@ -548,7 +552,7 @@ public class IntervalBoundPropagationTests
         var resetOptions = ibp.GetOptions();
 
         // Assert
-        Assert.Equal("IBP", resetOptions.CertificationMethod);
+        Assert.Equal(CertifiedDefenseMethod.IntervalBoundPropagation, resetOptions.CertificationMethod);
     }
 
     #endregion

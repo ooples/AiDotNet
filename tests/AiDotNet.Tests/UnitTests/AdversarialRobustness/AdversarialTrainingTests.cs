@@ -16,6 +16,29 @@ namespace AiDotNet.Tests.UnitTests.AdversarialRobustness;
 /// </summary>
 public class AdversarialTrainingTests
 {
+    [Fact(Timeout = 60000)]
+    public async Task HalfDctMatrix_MatchesTheDoubleBasis()
+    {
+        await Task.Yield();
+
+        // C[k, i] = c_k cos(pi (i + 1/2) k / 32). Computed in Half, the angles up to 95.9 rad have a spacing
+        // of 1/16, which moved some entries by more than 5e-3; built in double, each entry is within half a
+        // Half unit (about 1.2e-4 for |C| <= 0.25).
+        var defense = new AdversarialTraining<Half, Vector<Half>, Vector<Half>>(new AdversarialDefenseOptions<Half>());
+
+        var basis = defense.DctMatrix(32, 32, 0, 32);
+
+        for (int k = 0; k < 32; k++)
+        {
+            double c = k == 0 ? Math.Sqrt(1.0 / 32) : Math.Sqrt(2.0 / 32);
+            for (int i = 0; i < 32; i++)
+            {
+                double expected = c * Math.Cos(Math.PI * (i + 0.5) * k / 32);
+                Assert.Equal(expected, (double)basis[k, i], 3);
+            }
+        }
+    }
+
     #region Mock Model
 
     /// <summary>
