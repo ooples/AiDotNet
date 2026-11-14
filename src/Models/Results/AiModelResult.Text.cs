@@ -422,11 +422,15 @@ public partial class AiModelResult<T, TInput, TOutput>
     private static int SampleTemperatureLogits(Vector<T> logits, double temperature, Random rng)
     {
         // p = softmax(logits / temperature). The largest logit is subtracted before dividing so a small temperature
-        // cannot overflow the scaled logits in low precision.
+        // cannot overflow the scaled logits in low precision. The subtraction runs on halved logits and the factor
+        // of two is restored after the division: l - max itself overflows for logits of opposite sign near the top
+        // of the range (-60000 - 60000 in Half), which zeroed a token the temperature should have kept.
         var numOps = MathHelper.GetNumericOperations<T>();
-        var tensor = Tensor<T>.FromVector(logits);
-        var shifted = ResultEngine.TensorSubtractScalar(tensor, ResultEngine.TensorMaxValue(tensor));
-        var scaled = ResultEngine.TensorDivideScalar(shifted, numOps.FromDouble(Math.Max(1e-6, temperature)));
+        var halved = ResultEngine.TensorMultiplyScalar(Tensor<T>.FromVector(logits), numOps.FromDouble(0.5));
+        var shifted = ResultEngine.TensorSubtractScalar(halved, ResultEngine.TensorMaxValue(halved));
+        var scaled = ResultEngine.TensorMultiplyScalar(
+            ResultEngine.TensorDivideScalar(shifted, numOps.FromDouble(Math.Max(1e-6, temperature))),
+            numOps.FromDouble(2.0));
         var cumulative = ResultEngine.TensorCumSum(ResultEngine.TensorSoftmax(scaled, 0), 0);
 
         // Inverse-CDF sampling: the first token whose cumulative probability reaches r, or the last token when

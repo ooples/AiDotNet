@@ -72,6 +72,84 @@ public class AiModelResultUncertaintyReferenceTests
         Assert.Equal(256.0, (double)variance[0], 1.0);
     }
 
+    [Fact]
+    public void ComputeMeanAndVariance_Half_SmallCoordinateKeepsItsVarianceNextToALargeOne()
+    {
+        // Samples [-128, -0.01] and [128, 0.01]: population variances 128^2 = 16384 and 0.01^2 = 1e-4. One scale
+        // shared by both coordinates (128) made the second one's normalized squares 6.1e-9, which is 0 in Half, so
+        // its variance came back as 0.
+        var samples = new List<Tensor<Half>>
+        {
+            new Tensor<Half>(new[] { (Half)(-128), (Half)(-0.01) }, new[] { 2 }),
+            new Tensor<Half>(new[] { (Half)128, (Half)0.01 }, new[] { 2 })
+        };
+        var method = typeof(AiModelResult<Half, Matrix<Half>, Vector<Half>>).GetMethod("ComputeMeanAndVariance", Private);
+        Assert.NotNull(method);
+
+        var moments = method?.Invoke(null, new object[] { samples });
+        var (_, variance) = Assert.IsType<(Tensor<Half>, Tensor<Half>)>(moments);
+
+        Assert.Equal(16384.0, (double)variance[0], 16.0);
+        Assert.Equal(1e-4, (double)variance[1], 2e-6);
+    }
+
+    [Fact]
+    public void ComputeR2Score_Half_OppositeSignsNearTheTopOfTheRange()
+    {
+        // actual = [-60000, 60000], predicted = [60000, -60000]: SS_res = 2 * 120000^2, SS_tot = 2 * 60000^2, so
+        // R^2 = 1 - 4 = -3. The residual 120000 is not a Half, so subtracting first gave NaN.
+        var actual = new Vector<Half>(new[] { (Half)(-60000), (Half)60000 });
+        var predicted = new Vector<Half>(new[] { (Half)60000, (Half)(-60000) });
+        var method = typeof(AiModelResult<Half, Matrix<Half>, Vector<Half>>).GetMethod("ComputeR2Score", Private);
+        Assert.NotNull(method);
+
+        var score = Assert.IsType<Half>(method?.Invoke(null, new object[] { actual, predicted }));
+
+        Assert.Equal(-3.0, (double)score, 1e-2);
+    }
+
+    [Fact]
+    public void SampleTemperatureLogits_Half_OppositeSignsNearTheTopOfTheRange()
+    {
+        // softmax([-60000, 60000] / 60000) = [0.1192, 0.8808]. The shift -60000 - 60000 is not a Half, so the first
+        // token used to get probability 0 and was never drawn.
+        var logits = new Vector<Half>(new[] { (Half)(-60000), (Half)60000 });
+        var method = typeof(AiModelResult<Half, Matrix<Half>, Vector<Half>>).GetMethod("SampleTemperatureLogits", Private);
+        Assert.NotNull(method);
+        var rng = new Random(7);
+
+        int first = 0;
+        const int draws = 1000;
+        for (int i = 0; i < draws; i++)
+        {
+            first += Assert.IsType<int>(method?.Invoke(null, new object[] { logits, 60000.0, rng })) == 0 ? 1 : 0;
+        }
+
+        // Binomial(1000, 0.1192): mean 119, standard deviation 10.2.
+        Assert.InRange(first, 70, 170);
+    }
+
+    [Fact]
+    public void CalculateStandardDeviation_Half_OppositeSignsNearTheTopOfTheRange()
+    {
+        // Predictions -60000, 60000, 60000: mean 20000, population standard deviation sqrt(3.2e9) = 56568.5. The
+        // deviation -80000 is not a Half, so subtracting the mean first gave NaN.
+        using var model = new VectorModel<Half>(new Vector<Half>(new[] { (Half)1 }));
+        var result = CreateResult(model);
+        var predictions = new List<Vector<Half>>
+        {
+            new Vector<Half>(new[] { (Half)(-60000) }),
+            new Vector<Half>(new[] { (Half)60000 }),
+            new Vector<Half>(new[] { (Half)60000 })
+        };
+        var method = result.GetType().GetMethod("CalculateStandardDeviation", Private);
+        Assert.NotNull(method);
+
+        var deviation = Assert.IsType<double>(method?.Invoke(result, new object[] { predictions }));
+
+        Assert.Equal(56568.5, deviation, 150.0);
+    }
+
     private static AiModelResult<Half, Matrix<Half>, Vector<Half>> CreateResult(VectorModel<Half> model)
     {
         return new AiModelResult<Half, Matrix<Half>, Vector<Half>>(

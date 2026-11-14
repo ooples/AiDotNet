@@ -4952,9 +4952,19 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         // R^2 = 1 - SS_res / SS_tot. The mean is taken from pre-divided values, and both sets of residuals are
         // divided by their common largest magnitude before squaring so neither sum can overflow in low precision;
         // the ratio is unchanged by that scale.
-        var y = Tensor<T>.FromVector(actual);
+        // Both vectors are first divided by their common largest magnitude: y - y_hat itself overflows when the two
+        // have opposite signs near the top of the range (60000 - (-60000) in Half), before any later scaling helps.
+        var rawActual = Tensor<T>.FromVector(actual);
+        var rawPredicted = Tensor<T>.FromVector(predicted);
+        T actualPeak = ResultEngine.TensorMaxValue(ResultEngine.TensorAbs(rawActual));
+        T predictedPeak = ResultEngine.TensorMaxValue(ResultEngine.TensorAbs(rawPredicted));
+        T inputScale = numOps.GreaterThan(predictedPeak, actualPeak) ? predictedPeak : actualPeak;
+        if (!numOps.GreaterThan(inputScale, numOps.Zero) || numOps.IsInfinity(inputScale))
+            inputScale = numOps.One;
+
+        var y = ResultEngine.TensorDivideScalar(rawActual, inputScale);
         T meanActual = ResultEngine.TensorSum(ResultEngine.TensorDivideScalar(y, numOps.FromDouble(actual.Length)));
-        var residuals = ResultEngine.TensorSubtract(y, Tensor<T>.FromVector(predicted));
+        var residuals = ResultEngine.TensorSubtract(y, ResultEngine.TensorDivideScalar(rawPredicted, inputScale));
         var deviations = ResultEngine.TensorSubtractScalar(y, meanActual);
         T residualScale = ResultEngine.TensorMaxValue(ResultEngine.TensorAbs(residuals));
         T deviationScale = ResultEngine.TensorMaxValue(ResultEngine.TensorAbs(deviations));
@@ -4964,7 +4974,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
         T ssRes = ResultEngine.TensorSum(ResultEngine.TensorSquare(ResultEngine.TensorDivideScalar(residuals, scale)));
         T ssTot = ResultEngine.TensorSum(ResultEngine.TensorSquare(ResultEngine.TensorDivideScalar(deviations, scale)));
-        double scaleValue = numOps.ToDouble(scale);
+        // The total-variance cutoff stays in the original units.
+        double scaleValue = numOps.ToDouble(scale) * numOps.ToDouble(inputScale);
         if (numOps.ToDouble(ssTot) * scaleValue * scaleValue < 1e-10)
             return numOps.Zero;
 

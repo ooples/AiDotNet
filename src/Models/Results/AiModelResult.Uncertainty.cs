@@ -1035,22 +1035,22 @@ public partial class AiModelResult<T, TInput, TOutput>
         var mean = ResultEngine.ReduceSum(ResultEngine.TensorDivideScalar(stacked, count), new[] { 0 }, false);
         var deviations = ResultEngine.TensorSubtract(stacked, ResultEngine.TensorBroadcastTo(ResultEngine.Reshape(mean, new[] { 1, length }), new[] { samples.Count, length }));
 
-        // Divide the deviations by their largest finite magnitude before squaring so the squares cannot overflow
-        // (65504 in Half), then restore the scale; NaN deviations still propagate to their own element.
+        // Divide every output coordinate's deviations by that coordinate's largest finite magnitude before squaring
+        // so the squares cannot overflow (65504 in Half), then restore the scale; NaN deviations still propagate to
+        // their own element. The scale is per coordinate: one shared scale lets a large coordinate push a small
+        // one's normalized squares below the smallest value of T, which reported its variance as zero.
         var magnitudes = ResultEngine.TensorAbs(deviations);
         var finite = ResultEngine.TensorWhere(ResultEngine.TensorEquals(magnitudes, magnitudes), magnitudes, ResultEngine.TensorZerosLike(magnitudes));
-        T scale = ResultEngine.TensorMaxValue(finite);
-        Tensor<T> variance;
-        if (numOps.Equals(scale, numOps.Zero) || numOps.IsInfinity(scale))
-        {
-            variance = ResultEngine.TensorDivideScalar(ResultEngine.ReduceSum(ResultEngine.TensorSquare(deviations), new[] { 0 }, false), count);
-        }
-        else
-        {
-            var scaled = ResultEngine.TensorSquare(ResultEngine.TensorDivideScalar(deviations, scale));
-            var scaledVariance = ResultEngine.ReduceSum(ResultEngine.TensorDivideScalar(scaled, count), new[] { 0 }, false);
-            variance = ResultEngine.TensorMultiplyScalar(ResultEngine.TensorMultiplyScalar(scaledVariance, scale), scale);
-        }
+        var columnScale = ResultEngine.ReduceMax(finite, new[] { 0 }, false);
+
+        // A coordinate with no spread, or with an infinite deviation, keeps scale 1 (the plain formula).
+        var ones = ResultEngine.TensorOnesLike(columnScale);
+        var usable = ResultEngine.TensorWhere(ResultEngine.TensorLessThan(columnScale, numOps.MaxValue), columnScale, ones);
+        var safeScale = ResultEngine.TensorWhere(ResultEngine.TensorGreaterThan(columnScale, numOps.Zero), usable, ones);
+        var scaleRows = ResultEngine.TensorBroadcastTo(ResultEngine.Reshape(safeScale, new[] { 1, length }), new[] { samples.Count, length });
+        var scaled = ResultEngine.TensorSquare(ResultEngine.TensorDivide(deviations, scaleRows));
+        var scaledVariance = ResultEngine.ReduceSum(ResultEngine.TensorDivideScalar(scaled, count), new[] { 0 }, false);
+        var variance = ResultEngine.TensorMultiply(ResultEngine.TensorMultiply(scaledVariance, safeScale), safeScale);
 
         return (ResultEngine.Reshape(mean, shape), ResultEngine.Reshape(variance, shape));
     }
