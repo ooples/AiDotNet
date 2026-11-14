@@ -52,7 +52,8 @@ public class DenseNetPersistenceAndMomentumTests
             inputShape: new[] { 1, 8, 4, 4 },
             outputShape: new[] { 1, 16, 4, 4 },
             additionalParams: metadata));
-        Assert.Contains("ConvolutionBias", ex.Message);
+        // The generated factory rebuilds the layer and names the key as the constructor parameter (convolutionBias).
+        Assert.Contains("ConvolutionBias", ex.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
