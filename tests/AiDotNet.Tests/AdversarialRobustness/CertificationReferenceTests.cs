@@ -805,6 +805,42 @@ public class CertificationReferenceTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task SampledBounds_NeverCertify()
+    {
+        await Task.Yield();
+
+        // A model without layers is bounded by sampling. It always predicts class 0 with logits (1, 0), so every
+        // sample has margin 1 and the sampled check certified it at any radius. A sampled interval is an inner
+        // estimate, not a certificate, so it must not certify and its certified radius is 0.
+        var options = new CertifiedDefenseOptions<double>
+        {
+            NoiseSigma = 0.1,
+            NormType = AdversarialNormType.LInfinity,
+            NumSamples = 20,
+            Seed = 1
+        };
+        var input = new Vector<double>(new[] { 0.5, 0.5 });
+        var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>(options);
+        var crown = new CROWNVerification<double, Vector<double>, Vector<double>>(options);
+        foreach (var result in new[]
+        {
+            ibp.CertifyPrediction(input, new ConstantModel<double>(2, 2, _ => 0)),
+            crown.CertifyPrediction(input, new ConstantModel<double>(2, 2, _ => 0))
+        })
+        {
+            Assert.Equal(0, result.PredictedClass);
+            Assert.False((bool)result.CertificationDetails["Sound"]);
+            Assert.False(result.IsCertified);
+            Assert.Equal(0.0, result.CertifiedRadius);
+        }
+
+        var inputs = new[] { input };
+        var labels = new[] { new Vector<double>(new[] { 1.0, 0.0 }) };
+        Assert.Equal(0.0, ibp.EvaluateCertifiedAccuracy(inputs, labels, new ConstantModel<double>(2, 2, _ => 0), 0.05).CertifiedAccuracy);
+        Assert.Equal(0.0, crown.EvaluateCertifiedAccuracy(inputs, labels, new ConstantModel<double>(2, 2, _ => 0), 0.05).CertifiedAccuracy);
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task Ibp_DoesNotCallANetworkWithAnUnknownActivationSound()
     {
         await Task.Yield();
