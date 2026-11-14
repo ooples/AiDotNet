@@ -1156,6 +1156,14 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         for (int i = 0; i < InputSensitivityWarmUpSteps; i++) TrainOn(network, input, target);
     }
 
+    /// <summary>
+    /// One of the two probes the different-inputs invariants compare, at <paramref name="level"/> (0.1 and 0.9).
+    /// Constant by default; a family whose models legitimately map every constant input to the same tensor
+    /// (per-image standardization sends a flat page to zeros) supplies structured probes instead, so the
+    /// invariant still compares two genuinely different legal inputs.
+    /// </summary>
+    protected virtual Tensor<T> CreateDistinctProbe(int[] shape, double level) => CreateConstantTensor(shape, level);
+
     protected virtual Tensor<T> CreateConstantTensor(int[] shape, double value)
     {
         var tensor = new Tensor<T>(shape);
@@ -1594,8 +1602,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var network = CreateNetwork();
         WarmUpForInputSensitivity(network);
 
-        var input1 = CreateConstantTensor(EffectiveInputShape, 0.1);
-        var input2 = CreateConstantTensor(EffectiveInputShape, 0.9);
+        var input1 = CreateDistinctProbe(EffectiveInputShape, 0.1);
+        var input2 = CreateDistinctProbe(EffectiveInputShape, 0.9);
 
         var output1 = network.Predict(input1);
         var output2 = network.Predict(input2);
@@ -1678,8 +1686,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // attributable purely to the network's input sensitivity rather
         // than to any pre-existing structural bias from random tensor
         // values shared between inputs.
-        var input1 = CreateConstantTensor(EffectiveInputShape, 0.1);
-        var input2 = CreateConstantTensor(EffectiveInputShape, 0.9);
+        var input1 = CreateDistinctProbe(EffectiveInputShape, 0.1);
+        var input2 = CreateDistinctProbe(EffectiveInputShape, 0.9);
 
         var output1 = network.Predict(input1);
         var output2 = network.Predict(input2);

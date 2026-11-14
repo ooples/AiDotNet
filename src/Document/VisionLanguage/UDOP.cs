@@ -296,8 +296,8 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
         if (input.Rank == 1 || (input.Rank == 2 && input.Shape[1] == 1))
         {
             int s = input.Shape[0];
-            var packed = new Tensor<T>(new[] { s, 5 });
-            for (int i = 0; i < s; i++) packed[i, 0] = input.Rank == 1 ? input[i] : input[i, 0];
+            var tokens = Engine.Reshape(input, new[] { s, 1 });
+            var packed = Engine.TensorConcatenate(new[] { tokens, new Tensor<T>(new[] { s, 4 }) }, 1);
             return (packed, null);
         }
         throw new ArgumentException(
@@ -401,40 +401,23 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
     /// Decodes from the start token: greedy when <paramref name="temperature"/> is 0, sampled otherwise. Stops
     /// after EOS, which is included in the result.
     /// </summary>
-    private List<(int Token, double Probability)> Generate(Tensor<T> memory, int maxLength, double temperature)
+    private List<(int Token, T Probability)> Generate(Tensor<T> memory, int maxLength, double temperature)
     {
         var transformer = Transformer;
         var ids = new List<int> { DecoderStartTokenId };
-        var generated = new List<(int Token, double Probability)>();
+        var generated = new List<(int Token, T Probability)>();
         var random = RandomHelper.Shared;
+        T scale = NumOps.FromDouble(temperature);
         for (int step = 0; step < maxLength; step++)
         {
             var logits = transformer.Decode(ids.ToArray(), memory);
-            int last = logits.Shape[0] - 1;
-            var row = new double[_vocabSize];
-            double max = double.NegativeInfinity;
-            for (int v = 0; v < _vocabSize; v++)
-            {
-                row[v] = NumOps.ToDouble(logits[last, v]) / (temperature > 0 ? temperature : 1.0);
-                max = Math.Max(max, row[v]);
-            }
-            double total = 0;
-            for (int v = 0; v < _vocabSize; v++) { row[v] = Math.Exp(row[v] - max); total += row[v]; }
-            int pick = 0;
-            if (temperature > 0)
-            {
-                double u = random.NextDouble() * total, running = 0;
-                for (pick = 0; pick < _vocabSize - 1; pick++)
-                {
-                    running += row[pick];
-                    if (running >= u) break;
-                }
-            }
-            else
-            {
-                for (int v = 1; v < _vocabSize; v++) if (row[v] > row[pick]) pick = v;
-            }
-            generated.Add((pick, row[pick] / total));
+            var row = DocumentTensorOps.RowHead(Engine, logits, logits.Shape[0] - 1, _vocabSize);
+            var lastRow = Engine.Reshape(row, new[] { 1, _vocabSize });
+            var (tokens, probabilities) = temperature > 0
+                ? DocumentTensorOps.SampleWithProbabilities(Engine, lastRow, scale, random.Next())
+                : DocumentTensorOps.GreedyWithProbabilities(Engine, lastRow);
+            int pick = tokens[0];
+            generated.Add((pick, probabilities.ToArray()[0]));
             if (pick == EosTokenId) break;
             ids.Add(pick);
         }
@@ -480,40 +463,66 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
 
         int height = documentImage.Shape[documentImage.Rank - 2], width = documentImage.Shape[documentImage.Rank - 1];
         int bins = _options.NumLocationBins, firstLocation = _vocabSize - bins;
-        var regions = new List<LayoutRegion<T>>();
+        // Each region is a label followed by four location tokens (x0, y0, x1, y1 as bins over the page).
+        var labels = new List<LayoutElementType>();
+        var cornerBins = new List<int>();
+        var cornerSteps = new List<int>();
         var label = new List<int>();
-        var corners = new List<(double Value, double Probability)>();
-        foreach (var (token, probability) in generated)
+        int pending = 0;
+        for (int step = 0; step < generated.Count; step++)
         {
+            int token = generated[step].Token;
             if (token == EosTokenId) break;
             if (token >= firstLocation)
             {
-                corners.Add(((double)(token - firstLocation) / (bins - 1), probability));
-                if (corners.Count < 4) continue;
-                double confidence = corners.Average(c => c.Probability);
-                if (confidence >= confidenceThreshold)
-                {
-                    regions.Add(new LayoutRegion<T>
-                    {
-                        ElementType = ParseElementType(label),
-                        Confidence = NumOps.FromDouble(confidence),
-                        ConfidenceValue = confidence,
-                        Index = regions.Count,
-                        BoundingBox = new Vector<T>(new[]
-                        {
-                            NumOps.FromDouble(corners[0].Value * width), NumOps.FromDouble(corners[1].Value * height),
-                            NumOps.FromDouble(corners[2].Value * width), NumOps.FromDouble(corners[3].Value * height)
-                        })
-                    });
-                }
-                corners.Clear();
+                cornerBins.Add(token - firstLocation);
+                cornerSteps.Add(step);
+                if (++pending < 4) continue;
+                labels.Add(ParseElementType(label));
+                pending = 0;
                 label.Clear();
             }
             else
             {
-                if (corners.Count > 0) corners.Clear();
+                if (pending > 0)
+                {
+                    cornerBins.RemoveRange(cornerBins.Count - pending, pending);
+                    cornerSteps.RemoveRange(cornerSteps.Count - pending, pending);
+                    pending = 0;
+                }
                 if (token != DecoderStartTokenId) label.Add(token);
             }
+        }
+        if (pending > 0)
+        {
+            cornerBins.RemoveRange(cornerBins.Count - pending, pending);
+            cornerSteps.RemoveRange(cornerSteps.Count - pending, pending);
+        }
+
+        var regions = new List<LayoutRegion<T>>();
+        int quads = labels.Count;
+        if (quads > 0)
+        {
+            // A region's confidence is the mean probability of its four location tokens.
+            var probabilities = new Tensor<T>(generated.Select(g => g.Probability).ToArray(), new[] { generated.Count });
+            var confidence = Engine.ReduceMean(Engine.Reshape(
+                Engine.TensorIndexSelect(probabilities, new Tensor<int>(cornerSteps.ToArray(), new[] { cornerSteps.Count }), 0),
+                new[] { quads, 4 }), new[] { 1 }, false);
+            int[] kept = DocumentTensorOps.Hits(Engine, DocumentTensorOps.AtLeast(Engine, confidence, NumOps.FromDouble(confidenceThreshold)));
+            T[] keptConfidence = DocumentTensorOps.Pick(Engine, confidence, kept);
+            // bin / (bins - 1) of the page width or height, for x and y corners in turn.
+            var scale = new Tensor<T>(new[] { 1, 4 }, new Vector<T>(new[] { width, height, width, height }
+                .Select(extent => (double)extent / (bins - 1)).Select(NumOps.FromDouble).ToArray()));
+            T[] boxes = Engine.TensorMultiply(
+                Engine.Reshape(DocumentTensorOps.IntTensor<T>(cornerBins.ToArray()), new[] { quads, 4 }),
+                Engine.TensorBroadcastTo(scale, new[] { quads, 4 })).ToArray();
+            regions.AddRange(kept.Select((q, k) => new LayoutRegion<T>
+            {
+                ElementType = labels[q],
+                Confidence = keptConfidence[k],
+                Index = k,
+                BoundingBox = new Vector<T>(new[] { boxes[4 * q], boxes[(4 * q) + 1], boxes[(4 * q) + 2], boxes[(4 * q) + 3] })
+            }));
         }
 
         return new DocumentLayoutResult<T>
@@ -554,13 +563,12 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
         var generated = Generate(memory, Math.Max(0, Math.Min(maxAnswerLength, _options.MaxGenerationLength)), temperature)
             .Where(g => g.Token != EosTokenId && g.Token != DecoderStartTokenId).ToList();
         string answer = generated.Count > 0 ? _tokenizer.Decode(generated.Select(g => g.Token).ToList(), skipSpecialTokens: true).Trim() : string.Empty;
-        double confidence = generated.Count > 0 && answer.Length > 0 ? generated.Average(g => g.Probability) : 0.0;
+        T confidence = answer.Length > 0 ? DocumentTensorOps.Mean(Engine, generated.Select(g => g.Probability).ToArray()) : NumOps.Zero;
 
         return new DocumentQAResult<T>
         {
             Answer = answer.Length > 0 ? answer : "[No answer found]",
-            Confidence = NumOps.FromDouble(confidence),
-            ConfidenceValue = confidence,
+            Confidence = confidence,
             Question = question,
             ProcessingTimeMs = (DateTime.UtcNow - startTime).TotalMilliseconds
         };
@@ -606,24 +614,22 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
         var memory = EncodePrompted(documentImage, ClassificationPrompt);
         var transformer = Transformer;
 
-        var scores = new double[AvailableCategories.Count];
+        // Each category's score is the log-likelihood of its name under the decoder.
+        var scores = new T[AvailableCategories.Count];
         for (int c = 0; c < scores.Length; c++)
         {
             var labels = EncodeText(AvailableCategories[c].Replace('_', ' ')).Select(transformer.ClampToken).Append(EosTokenId).ToArray();
             var log = Engine.TensorLogSoftmax(transformer.Decode(ShiftRight(labels, DecoderStartTokenId), memory), axis: 1);
-            for (int t = 0; t < labels.Length; t++) scores[c] += NumOps.ToDouble(log[t, labels[t]]);
+            scores[c] = DocumentTensorOps.PickedSum(Engine, log, labels);
         }
-        double best = scores.Max();
-        var weights = scores.Select(s => Math.Exp(s - best)).ToArray();
-        double total = weights.Sum();
-        var topPredictions = AvailableCategories.Select((category, i) => (Category: category, Score: weights[i] / total))
-            .OrderByDescending(p => p.Score).Take(Math.Max(1, topK)).ToList();
+        var (order, probabilities) = DocumentTensorOps.RankedSoftmax(Engine, new Tensor<T>(scores, new[] { scores.Length }));
+        var topPredictions = order.Take(Math.Max(1, topK))
+            .Select((i, k) => (Category: AvailableCategories[i], Score: probabilities[k])).ToList();
 
         return new DocumentClassificationResult<T>
         {
             PredictedCategory = topPredictions[0].Category,
-            Confidence = NumOps.FromDouble(topPredictions[0].Score),
-            ConfidenceValue = topPredictions[0].Score,
+            Confidence = topPredictions[0].Score,
             TopPredictions = topPredictions,
             ProcessingTimeMs = (DateTime.UtcNow - startTime).TotalMilliseconds
         };
@@ -675,37 +681,13 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
 
     #region Preprocessing
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Normalizes every channel with mean 0.5 and std 0.5, as UDOP's released processor (the LayoutLMv3 image
+    /// processor) does, rather than with ImageNet statistics.
+    /// </summary>
     protected override Tensor<T> ApplyDefaultPreprocessing(Tensor<T> rawImage)
-    {
-        var image = EnsureBatchDimension(rawImage);
-        int batchSize = image.Shape[0];
-        int channels = image.Shape[1];
-        int height = image.Shape[2];
-        int width = image.Shape[3];
-
-        var normalized = new Tensor<T>(image._shape);
-        double[] means = [0.485, 0.456, 0.406];
-        double[] stds = [0.229, 0.224, 0.225];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                double mean = c < means.Length ? means[c] : 0.5;
-                double std = c < stds.Length ? stds[c] : 0.5;
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        int idx = b * channels * height * width + c * height * width + h * width + w;
-                        normalized.Data.Span[idx] = NumOps.FromDouble((NumOps.ToDouble(image.Data.Span[idx]) - mean) / std);
-                    }
-                }
-            }
-        }
-        return normalized;
-    }
+        => DocumentTensorOps.NormalizeChannels(Engine, EnsureBatchDimension(rawImage),
+            DocumentTensorOps.HalfStatistics, DocumentTensorOps.HalfStatistics);
 
     /// <inheritdoc/>
     protected override Tensor<T> ApplyDefaultPostprocessing(Tensor<T> modelOutput) => modelOutput;

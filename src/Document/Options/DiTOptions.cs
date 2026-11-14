@@ -30,14 +30,38 @@ public class DiTOptions : DocumentNeuralNetworkOptions
         HiddenDim = 768;
         NumLayers = 12;
         NumHeads = 12;
-        ModelSize = "base";
+        ModelSize = DiTModelSize.Base;
     }
 
 
     /// <summary>
-    /// Gets or sets the model size.
+    /// Gets or sets the published DiT variant this configuration describes (Li et al. 2022, Table 1).
     /// </summary>
-    public string ModelSize { get; set; }
+    /// <remarks>
+    /// The label reported by the model; <see cref="UseModelSize"/> sets it together with the variant's
+    /// hidden size, depth and head count so the label and the architecture agree.
+    /// </remarks>
+    public DiTModelSize ModelSize { get; set; }
+
+    /// <summary>
+    /// Configures a published DiT variant (Li et al. 2022, Sec. 3): <see cref="DiTModelSize.Base"/> is ViT-B
+    /// (hidden size 768, 12 layers, 12 heads) and <see cref="DiTModelSize.Large"/> is ViT-L (1024, 24, 16).
+    /// Sets <see cref="ModelSize"/>, <see cref="DocumentNeuralNetworkOptions.HiddenDim"/>,
+    /// <see cref="DocumentNeuralNetworkOptions.NumLayers"/> and <see cref="DocumentNeuralNetworkOptions.NumHeads"/>.
+    /// </summary>
+    /// <param name="size">The variant.</param>
+    /// <returns>These options, for chaining.</returns>
+    public DiTOptions UseModelSize(DiTModelSize size)
+    {
+        (HiddenDim, NumLayers, NumHeads) = size switch
+        {
+            DiTModelSize.Base => (768, 12, 12),
+            DiTModelSize.Large => (1024, 24, 16),
+            _ => throw new ArgumentOutOfRangeException(nameof(size), size, "Unknown DiT model size.")
+        };
+        ModelSize = size;
+        return this;
+    }
 
     /// <summary>
     /// Throws if a value this model requires has been left unset or is not positive.
@@ -53,4 +77,14 @@ public class DiTOptions : DocumentNeuralNetworkOptions
         Require(ImageSize, nameof(ImageSize));
         ValidateCore();
     }
+}
+
+/// <summary>The DiT variants released with the paper (Li et al. 2022, Sec. 3).</summary>
+public enum DiTModelSize
+{
+    /// <summary>DiT-Base: ViT-B, 12 layers, hidden size 768, 12 heads.</summary>
+    Base,
+
+    /// <summary>DiT-Large: ViT-L, 24 layers, hidden size 1024, 16 heads.</summary>
+    Large
 }

@@ -15493,6 +15493,10 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             // The bounded constructor above uses four 16x16 patch tokens and a 64-token head.
             sb.AppendLine("    protected override int[] InputShape => new[] { 3, 32, 32 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 4, 64 };");
+            // The Pix2Struct image processor standardizes each page by its own mean and std (Lee et al. 2023),
+            // so a page scaled 10x is the same page after preprocessing by design: the scaled-input invariant
+            // does not apply.
+            sb.AppendLine("    protected override bool ScaledInputInvariantApplicable => false;");
         }
         else if (model.ClassName == "Donut"
                  && typeName.StartsWith(
@@ -15510,6 +15514,10 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             // 32x32 with 16x16 patches gives four encoder tokens; the reduced vocabulary head is 64.
             sb.AppendLine("    protected override int[] InputShape => new[] { 3, 32, 32 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 4, 64 };");
+            // The Pix2Struct image processor standardizes each page by its own mean and std (Lee et al. 2023),
+            // so a page scaled 10x is the same page after preprocessing by design: the scaled-input invariant
+            // does not apply.
+            sb.AppendLine("    protected override bool ScaledInputInvariantApplicable => false;");
         }
         else if (model.ClassName == "InfographicVQA")
         {

@@ -11163,15 +11163,12 @@ public static partial class LayerHelper<T>
         // Node feature encoder
         yield return new DenseLayer<T>(hiddenDim, reluActivation);
         yield return new LayerNormalizationLayer<T>();
-        // Node-order position. LayoutGraph._positionEmbeddings carried a [maxNodes, dim] table as a model field that nothing
-        // read; it indexes a node by its place in the document's reading order, which is precisely
-        // what a position embedding is, so it belongs in the stack rather than in the bin.
-        yield return new LearnedPositionalEmbeddingLayer<T>(maxNodes, hiddenDim);
 
-        // Graph layers with hierarchical structure
+        // GLAM's graph convolutions (Wang et al. 2023) over the page graph LayoutGraph wires in before each
+        // pass. Node order carries no meaning in a graph, so there is no positional embedding.
         for (int i = 0; i < numGraphLayers; i++)
         {
-            yield return new DenseLayer<T>(hiddenDim, reluActivation);
+            yield return new GraphConvolutionalLayer<T>(hiddenDim, hiddenDim, reluActivation, implicitIdentityWhenUnset: true);
             yield return new LayerNormalizationLayer<T>();
             yield return new DropoutLayer<T>(0.3);
         }

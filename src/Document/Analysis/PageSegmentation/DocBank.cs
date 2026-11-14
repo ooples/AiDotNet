@@ -1,6 +1,7 @@
 using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Document.Interfaces;
+using AiDotNet.Document.LayoutAware;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -316,176 +317,180 @@ public partial class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T
         return ExtractSegmentationMask(output);
     }
 
-    private PageSegmentationResult<T> ParseSegmentationOutput(Tensor<T> output, double threshold)
+    internal PageSegmentationResult<T> ParseSegmentationOutput(Tensor<T> output, double threshold)
     {
         var regions = new List<DocumentRegion<T>>();
 
-        // Output shape: [batch, numClasses, height, width]
-        int height = output.Shape.Length > 2 ? output.Shape[2] : ImageSize;
-        int width = output.Shape.Length > 3 ? output.Shape[3] : ImageSize;
+        // The head emits per-class logits [batch, numClasses, height, width]; the class probabilities are their
+        // softmax over the class axis, and a region's confidence is its mean winning-class probability.
+        var (probabilities, height, width) = FirstImageProbabilities(output);
+        int[] classes = Engine.TensorArgMax(probabilities, 0).ToArray();
+        var mask = Engine.Reshape(DocumentTensorOps.IntTensor<T>(classes), new[] { height, width });
+        var winning = Engine.ReduceMax(probabilities, new[] { 0 }, keepDims: false);
 
-        // Extract segmentation mask (argmax over classes)
-        var mask = ExtractSegmentationMask(output);
-
-        // Find connected components for each class
-        var visited = new bool[height, width];
-
-        for (int startH = 0; startH < height; startH++)
+        // 4-connected components of each foreground class.
+        var visited = new bool[height * width];
+        var components = new List<(int Class, int[] Pixels, int MinH, int MinW, int MaxH, int MaxW)>();
+        var queue = new Queue<int>();
+        for (int start = 0; start < classes.Length; start++)
         {
-            for (int startW = 0; startW < width; startW++)
+            int classIdx = classes[start];
+            if (classIdx <= 0 || visited[start]) continue; // Skip background
+
+            var pixels = new List<int>();
+            int minH = start / width, maxH = minH, minW = start % width, maxW = minW;
+            visited[start] = true;
+            queue.Enqueue(start);
+            while (queue.Count > 0)
             {
-                int classIdx = (int)NumOps.ToDouble(mask[startH, startW]);
-
-                if (classIdx > 0 && !visited[startH, startW]) // Skip background
+                int p = queue.Dequeue();
+                pixels.Add(p);
+                int h = p / width, w = p % width;
+                minH = Math.Min(minH, h);
+                maxH = Math.Max(maxH, h);
+                minW = Math.Min(minW, w);
+                maxW = Math.Max(maxW, w);
+                foreach (int n in new[] { h > 0 ? p - width : -1, h < height - 1 ? p + width : -1, w > 0 ? p - 1 : -1, w < width - 1 ? p + 1 : -1 })
                 {
-                    // BFS to find connected component
-                    var queue = new Queue<(int h, int w)>();
-                    queue.Enqueue((startH, startW));
-                    visited[startH, startW] = true;
-
-                    int minH = startH, maxH = startH;
-                    int minW = startW, maxW = startW;
-                    double sumConfidence = 0;
-                    int pixelCount = 0;
-
-                    while (queue.Count > 0)
-                    {
-                        var (h, w) = queue.Dequeue();
-                        pixelCount++;
-
-                        // Get confidence from class probabilities
-                        if (output.Shape[1] > classIdx)
-                        {
-                            int probIdx = classIdx * height * width + h * width + w;
-                            if (probIdx < output.Data.Length)
-                            {
-                                sumConfidence += NumOps.ToDouble(output.Data.Span[probIdx]);
-                            }
-                        }
-
-                        minH = Math.Min(minH, h);
-                        maxH = Math.Max(maxH, h);
-                        minW = Math.Min(minW, w);
-                        maxW = Math.Max(maxW, w);
-
-                        // Check 4-connected neighbors
-                        int[] dh = [-1, 1, 0, 0];
-                        int[] dw = [0, 0, -1, 1];
-                        for (int d = 0; d < 4; d++)
-                        {
-                            int nh = h + dh[d];
-                            int nw = w + dw[d];
-                            if (nh >= 0 && nh < height && nw >= 0 && nw < width && !visited[nh, nw])
-                            {
-                                int neighborClass = (int)NumOps.ToDouble(mask[nh, nw]);
-                                if (neighborClass == classIdx)
-                                {
-                                    visited[nh, nw] = true;
-                                    queue.Enqueue((nh, nw));
-                                }
-                            }
-                        }
-                    }
-
-                    // Filter by minimum area
-                    int area = (maxH - minH + 1) * (maxW - minW + 1);
-                    double avgConfidence = pixelCount > 0 ? sumConfidence / pixelCount : 0;
-
-                    if (avgConfidence >= threshold && area >= 100) // Minimum 100 pixels
-                    {
-                        var regionType = classIdx < DocBankClasses.Length
-                            ? DocBankClasses[classIdx]
-                            : DocumentRegionType.Other;
-
-                        regions.Add(new DocumentRegion<T>
-                        {
-                            RegionType = regionType,
-                            BoundingBox = new Vector<T>([
-                                NumOps.FromDouble(minW),
-                                NumOps.FromDouble(minH),
-                                NumOps.FromDouble(maxW),
-                                NumOps.FromDouble(maxH)
-                            ]),
-                            Confidence = NumOps.FromDouble(avgConfidence),
-                            ConfidenceValue = avgConfidence,
-                            Index = regions.Count
-                        });
-                    }
+                    if (n < 0 || visited[n] || classes[n] != classIdx) continue;
+                    visited[n] = true;
+                    queue.Enqueue(n);
                 }
             }
+
+            components.Add((classIdx, pixels.ToArray(), minH, minW, maxH, maxW));
+        }
+
+        T[] confidences = components.Select(c => DocumentTensorOps.Mean(Engine, DocumentTensorOps.Pick(Engine, winning, c.Pixels))).ToArray();
+        var passes = confidences.Length == 0
+            ? Array.Empty<int>()
+            : DocumentTensorOps.Hits(Engine, DocumentTensorOps.AtLeast(Engine, new Tensor<T>(confidences, new[] { confidences.Length }), NumOps.FromDouble(threshold)));
+        foreach (int i in passes)
+        {
+            var c = components[i];
+            if ((c.MaxH - c.MinH + 1) * (c.MaxW - c.MinW + 1) < 100) continue; // Minimum 100-pixel box
+
+            regions.Add(new DocumentRegion<T>
+            {
+                RegionType = c.Class < DocBankClasses.Length ? DocBankClasses[c.Class] : DocumentRegionType.Other,
+                BoundingBox = new Vector<T>(DocumentTensorOps.ToT<T>(new[] { c.MinW, c.MinH, c.MaxW, c.MaxH })),
+                Confidence = confidences[i],
+                Index = regions.Count
+            });
         }
 
         return new PageSegmentationResult<T>
         {
             Regions = regions,
             SegmentationMask = mask,
-            ClassProbabilities = output
+            ClassProbabilities = Engine.Softmax(output, output.Shape.Length > 1 ? 1 : 0)
         };
+    }
+
+    /// <summary>The first image's class probabilities as <c>[numClasses, height * width]</c>, with the map size.</summary>
+    private (Tensor<T> Probabilities, int Height, int Width) FirstImageProbabilities(Tensor<T> output)
+    {
+        int numClasses = output.Shape.Length > 1 ? output.Shape[1] : _numClasses;
+        int height = output.Shape.Length > 2 ? output.Shape[2] : ImageSize;
+        int width = output.Shape.Length > 3 ? output.Shape[3] : ImageSize;
+        int plane = height * width;
+        var first = Engine.TensorSlice(Engine.Reshape(output, new[] { output.Length / (numClasses * plane), numClasses, plane }),
+            new[] { 0, 0, 0 }, new[] { 1, numClasses, plane });
+        return (Engine.Softmax(Engine.Reshape(first, new[] { numClasses, plane }), 0), height, width);
     }
 
     private Tensor<T> ExtractSegmentationMask(Tensor<T> output)
     {
-        // Output shape: [batch, numClasses, height, width]
-        int numClasses = output.Shape.Length > 1 ? output.Shape[1] : _numClasses;
-        int height = output.Shape.Length > 2 ? output.Shape[2] : ImageSize;
-        int width = output.Shape.Length > 3 ? output.Shape[3] : ImageSize;
-
-        var mask = new Tensor<T>([height, width]);
-
-        for (int h = 0; h < height; h++)
-        {
-            for (int w = 0; w < width; w++)
-            {
-                double maxProb = double.MinValue;
-                int maxClass = 0;
-
-                for (int c = 0; c < numClasses; c++)
-                {
-                    int idx = c * height * width + h * width + w;
-                    if (idx < output.Data.Length)
-                    {
-                        double prob = NumOps.ToDouble(output.Data.Span[idx]);
-                        if (prob > maxProb)
-                        {
-                            maxProb = prob;
-                            maxClass = c;
-                        }
-                    }
-                }
-
-                mask[h, w] = NumOps.FromDouble(maxClass);
-            }
-        }
-
-        return mask;
+        // Output shape: [batch, numClasses, height, width]; the mask is the first image's per-pixel argmax.
+        var (probabilities, height, width) = FirstImageProbabilities(output);
+        return Engine.Reshape(Engine.TensorArgMax(probabilities, 0).Cast<T>(), new[] { height, width });
     }
 
     private IReadOnlyList<int> ComputeReadingOrder(IReadOnlyList<DocumentRegion<T>> regions)
     {
-        // Simple reading order: top-to-bottom, left-to-right
-        // More sophisticated implementations would use XY-cut or learned models
+        // Simple reading order: top-to-bottom in ~50px rows, then left-to-right.
+        if (regions.Count == 0) return Array.Empty<int>();
+        var boxes = new Tensor<T>(regions.SelectMany(r => r.BoundingBox.ToArray().Take(4)).ToArray(), new[] { regions.Count, 4 });
+        double[] Center(int lo) => Engine.TensorMultiplyScalar(Engine.TensorAdd(
+            Engine.TensorSlice(boxes, new[] { 0, lo }, new[] { regions.Count, 1 }),
+            Engine.TensorSlice(boxes, new[] { 0, lo + 2 }, new[] { regions.Count, 1 })), NumOps.FromDouble(0.5)).Cast<double>().ToArray();
+        double[] centerX = Center(0), centerY = Center(1);
 
-        var indexed = regions.Select((r, i) => new
-        {
-            Index = i,
-            CenterY = (NumOps.ToDouble(r.BoundingBox[1]) + NumOps.ToDouble(r.BoundingBox[3])) / 2,
-            CenterX = (NumOps.ToDouble(r.BoundingBox[0]) + NumOps.ToDouble(r.BoundingBox[2])) / 2
-        }).ToList();
-
-        // Sort by Y first (top to bottom), then X (left to right)
-        var sorted = indexed
-            .OrderBy(r => Math.Round(r.CenterY / 50) * 50) // Group by ~50px rows
-            .ThenBy(r => r.CenterX)
-            .Select(r => r.Index)
+        return Enumerable.Range(0, regions.Count)
+            .OrderBy(i => Math.Round(centerY[i] / 50) * 50)
+            .ThenBy(i => centerX[i])
             .ToList();
+    }
 
-        // Assign reading order positions
-        for (int i = 0; i < sorted.Count; i++)
-        {
-            // Update region's reading order position (would need mutable access)
-        }
+    #endregion
 
-        return sorted;
+    #region Token Classification
+
+    /// <summary>
+    /// DocBank's twelve token labels (Li et al. 2020, Sec. 3), in the order of the token classifier's outputs.
+    /// </summary>
+    public static IReadOnlyList<DocumentRegionType> TokenLabels { get; } =
+    [
+        DocumentRegionType.Abstract,
+        DocumentRegionType.Author,
+        DocumentRegionType.Caption,
+        DocumentRegionType.Equation,
+        DocumentRegionType.Figure,
+        DocumentRegionType.Footer,
+        DocumentRegionType.List,
+        DocumentRegionType.Paragraph,
+        DocumentRegionType.Reference,
+        DocumentRegionType.Section,
+        DocumentRegionType.Table,
+        DocumentRegionType.Title
+    ];
+
+    private LayoutLM<T>? _tokenClassifier;
+
+    /// <summary>
+    /// The paper's baseline (Li et al. 2020, Sec. 4): a LayoutLM token classifier over each token and its
+    /// 2-D box, with one output per <see cref="TokenLabels"/> entry. Built on first use from
+    /// <see cref="DocBankOptions.TokenClassifierOptions"/> (LayoutLM-base when unset) so a pixel-only caller
+    /// never allocates it; train it with its own <c>Train</c> on packed <c>(tokenId, x0, y0, x1, y1)</c> rows.
+    /// </summary>
+    public LayoutLM<T> TokenClassifier => _tokenClassifier ??= CreateTokenClassifier();
+
+    private LayoutLM<T> CreateTokenClassifier()
+    {
+        var options = _options.TokenClassifierOptions ?? new LayoutLMOptions();
+        options.NumClasses = TokenLabels.Count;
+        return new LayoutLM<T>(new NeuralNetworkArchitecture<T>(
+            inputType: InputType.TwoDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: options.MaxSequenceLength,
+            inputWidth: 5,
+            outputSize: TokenLabels.Count), options);
+    }
+
+    /// <summary>
+    /// Labels each token of a page as DocBank's baselines do: <paramref name="packedTokens"/> is
+    /// <c>[seq, 5]</c> rows of <c>(tokenId, x0, y0, x1, y1)</c> with boxes on LayoutLM's 0-1000 grid; each
+    /// token gets the softmax argmax of the <see cref="TokenClassifier"/> and that probability.
+    /// </summary>
+    public IReadOnlyList<(DocumentRegionType Label, T Confidence)> ClassifyTokens(Tensor<T> packedTokens)
+    {
+        if (packedTokens is null)
+            throw new ArgumentNullException(nameof(packedTokens));
+        if (packedTokens.Rank != 2 || packedTokens.Shape[1] != 5)
+            throw new ArgumentException("DocBank token classification expects packed [seq, 5] (tokenId, x0, y0, x1, y1) rows.", nameof(packedTokens));
+        return TokenPredictions(TokenClassifier.Predict(packedTokens));
+    }
+
+    /// <summary>Per-token label (softmax argmax over the <see cref="TokenLabels"/> logits) and its probability.</summary>
+    internal IReadOnlyList<(DocumentRegionType Label, T Confidence)> TokenPredictions(Tensor<T> logits)
+    {
+        int classes = TokenLabels.Count;
+        int rows = logits.Length / classes;
+        if (rows == 0)
+            return Array.Empty<(DocumentRegionType, T)>();
+        var (labels, scores) = DocumentTensorOps.RowMax(Engine, Engine.Softmax(Engine.Reshape(logits, new[] { rows, classes }), 1), classes);
+        T[] confidences = scores.ToArray();
+        return labels.Select((label, i) => (TokenLabels[label], confidences[i])).ToList();
     }
 
     #endregion
@@ -543,41 +548,8 @@ public partial class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T
     /// DocBank uses ImageNet normalization with mean=[0.485, 0.456, 0.406] and std=[0.229, 0.224, 0.225].
     /// </remarks>
     protected override Tensor<T> ApplyDefaultPreprocessing(Tensor<T> rawImage)
-    {
-        var image = EnsureBatchDimension(rawImage);
-
-        int batchSize = image.Shape[0];
-        int channels = image.Shape[1];
-        int height = image.Shape[2];
-        int width = image.Shape[3];
-
-        var normalized = new Tensor<T>(image._shape);
-
-        // ImageNet normalization (industry standard for DocBank)
-        double[] means = [0.485, 0.456, 0.406];
-        double[] stds = [0.229, 0.224, 0.225];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                double mean = c < means.Length ? means[c] : 0.5;
-                double std = c < stds.Length ? stds[c] : 0.5;
-
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        int idx = b * channels * height * width + c * height * width + h * width + w;
-                        double value = NumOps.ToDouble(image.Data.Span[idx]);
-                        normalized.Data.Span[idx] = NumOps.FromDouble((value - mean) / std);
-                    }
-                }
-            }
-        }
-
-        return normalized;
-    }
+        => DocumentTensorOps.NormalizeChannels(Engine, EnsureBatchDimension(rawImage),
+            DocumentTensorOps.ImageNetMean, DocumentTensorOps.ImageNetStd);
 
     /// <summary>
     /// Applies DocBank's industry-standard postprocessing: softmax over class dimension.
@@ -682,6 +654,7 @@ public partial class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T
         if (disposing)
         {
             _onnxSession?.Dispose();
+            _tokenClassifier?.Dispose();
         }
         base.Dispose(disposing);
     }

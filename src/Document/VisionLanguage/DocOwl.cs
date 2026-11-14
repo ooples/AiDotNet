@@ -222,7 +222,6 @@ public partial class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
         MaxSequenceLength = _options.MaxSequenceLength;
 
         InitializeLayers();
-        InitializeEmbeddings();
     }
 
     #endregion
@@ -255,25 +254,6 @@ public partial class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
             maxSequenceLength: MaxSequenceLength));
     }
 
-    private void InitializeEmbeddings()
-    {
-        var random = RandomHelper.CreateSeededRandom(42);
-        int numPatches = (ImageSize / 14) * (ImageSize / 14);
-
-
-    }
-
-    private void InitializeWithSmallRandomValues(Tensor<T> tensor, Random random, double stdDev)
-    {
-        for (int i = 0; i < tensor.Data.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble();
-            double u2 = 1.0 - random.NextDouble();
-            double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-            tensor.Data.Span[i] = NumOps.FromDouble(randStdNormal * stdDev);
-        }
-    }
-
     #endregion
 
     #region IDocumentQA Implementation
@@ -293,13 +273,12 @@ public partial class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
         var preprocessed = PreprocessDocument(documentImage);
         var output = _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
 
-        var answer = DecodeOutput(output, maxAnswerLength);
+        var (answer, confidence) = DecodeOutput(output, maxAnswerLength, temperature);
 
         return new DocumentQAResult<T>
         {
             Answer = answer,
-            Confidence = NumOps.FromDouble(0.88),
-            ConfidenceValue = 0.88,
+            Confidence = confidence,
             Question = question,
             ProcessingTimeMs = (DateTime.UtcNow - startTime).TotalMilliseconds
         };
@@ -321,30 +300,26 @@ public partial class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
         return results;
     }
 
-    private string DecodeOutput(Tensor<T> output, int maxLength)
+    /// <summary>
+    /// Decodes the answer rows: greedy at temperature 0, sampled otherwise. The confidence is the mean softmax
+    /// probability of the tokens kept in the answer (0 when none is).
+    /// </summary>
+    private (string Text, T Confidence) DecodeOutput(Tensor<T> output, int maxLength, double temperature)
     {
         var tokens = new List<int>();
-        int seqLen = Math.Min(output.Shape[0], maxLength);
-
-        for (int t = 0; t < seqLen; t++)
+        var probabilities = new List<T>();
+        var (steps, stepProbabilities) = DocumentTensorOps.DecodeRows(Engine, output, maxLength, temperature, RandomHelper.Shared.Next());
+        for (int step = 0; step < steps.Length; step++)
         {
-            int vocabSize = output.Shape.Length > 1 ? output.Shape[1] : _vocabSize;
-            double maxVal = double.MinValue;
-            int maxIdx = 0;
-
-            for (int v = 0; v < vocabSize; v++)
-            {
-                double val = NumOps.ToDouble(output[t, v]);
-                if (val > maxVal) { maxVal = val; maxIdx = v; }
-            }
-
+            int maxIdx = steps[step];
             // Special tokens: 0=PAD, 1=BOS, 2=EOS
             if (maxIdx == 2) break; // EOS token
             if (maxIdx <= 2) continue; // Skip special tokens
             tokens.Add(maxIdx);
+            probabilities.Add(stepProbabilities[step]);
         }
 
-        return DecodeTokensToText(tokens);
+        return (DecodeTokensToText(tokens), DocumentTensorOps.Mean(Engine, probabilities.ToArray()));
     }
 
     /// <summary>
@@ -401,26 +376,14 @@ public partial class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
 
     private List<LayoutRegion<T>> ParseLayoutOutput(Tensor<T> output, double threshold)
     {
-        var regions = new List<LayoutRegion<T>>();
-        int numDetections = Math.Min(output.Shape[0], 100);
-
-        for (int i = 0; i < numDetections; i++)
+        var (rows, scores) = DocumentTensorOps.RowsAtLeast(Engine, output, 100, 0, NumOps.FromDouble(threshold));
+        return rows.Select((row, k) => new LayoutRegion<T>
         {
-            double conf = NumOps.ToDouble(output[i, 0]);
-            if (conf >= threshold)
-            {
-                regions.Add(new LayoutRegion<T>
-                {
-                    ElementType = LayoutElementType.Text,
-                    Confidence = NumOps.FromDouble(conf),
-                    ConfidenceValue = conf,
-                    Index = i,
-                    BoundingBox = Vector<T>.Empty()
-                });
-            }
-        }
-
-        return regions;
+            ElementType = LayoutElementType.Text,
+            Confidence = scores[k],
+            Index = row,
+            BoundingBox = Vector<T>.Empty()
+        }).ToList();
     }
 
     #endregion
@@ -475,35 +438,8 @@ public partial class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
     /// mean=[0.48145466, 0.4578275, 0.40821073] and std=[0.26862954, 0.26130258, 0.27577711].
     /// </remarks>
     protected override Tensor<T> ApplyDefaultPreprocessing(Tensor<T> rawImage)
-    {
-        var image = EnsureBatchDimension(rawImage);
-        int batchSize = image.Shape[0];
-        int channels = image.Shape[1];
-        int height = image.Shape[2];
-        int width = image.Shape[3];
-
-        var normalized = new Tensor<T>(image._shape);
-        double[] means = [0.48145466, 0.4578275, 0.40821073];
-        double[] stds = [0.26862954, 0.26130258, 0.27577711];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                double mean = c < means.Length ? means[c] : 0.5;
-                double std = c < stds.Length ? stds[c] : 0.5;
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        int idx = b * channels * height * width + c * height * width + h * width + w;
-                        normalized.Data.Span[idx] = NumOps.FromDouble((NumOps.ToDouble(image.Data.Span[idx]) - mean) / std);
-                    }
-                }
-            }
-        }
-        return normalized;
-    }
+        => DocumentTensorOps.NormalizeChannels(Engine, EnsureBatchDimension(rawImage),
+            DocumentTensorOps.ClipMean, DocumentTensorOps.ClipStd);
 
     /// <summary>
     /// Applies DocOwl's industry-standard postprocessing: pass-through (multimodal LLM outputs are already final).

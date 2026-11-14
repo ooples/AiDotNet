@@ -98,24 +98,6 @@ public partial class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetect
     private readonly List<ILayer<T>> _transformerLayers = [];
     private readonly List<ILayer<T>> _classificationLayers = [];
 
-    // Learnable embeddings
-    [AiDotNet.Attributes.TrainableParameter]
-    private Tensor<T>? _position1DEmbeddings;
-    [AiDotNet.Attributes.TrainableParameter]
-    private Tensor<T>? _position2DXEmbeddings;
-    [AiDotNet.Attributes.TrainableParameter]
-    private Tensor<T>? _position2DYEmbeddings;
-    [AiDotNet.Attributes.TrainableParameter]
-    private Tensor<T>? _segmentEmbeddings;
-
-    // Gradient storage
-    [Scratch]
-    private Tensor<T>? _position1DEmbeddingsGradients;
-    [Scratch]
-    private Tensor<T>? _position2DXEmbeddingsGradients;
-    [Scratch]
-    private Tensor<T>? _position2DYEmbeddingsGradients;
-
     #endregion
 
     #region Properties
@@ -263,7 +245,6 @@ public partial class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetect
             new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this));
 
         InitializeLayers();
-        InitializeEmbeddings();
     }
 
     #endregion
@@ -340,41 +321,6 @@ public partial class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetect
         return layer is DenseLayer<T>;
     }
 
-    private void InitializeEmbeddings()
-    {
-        var random = RandomHelper.CreateSeededRandom(42);
-
-        // 1D position embeddings for sequence position
-        _position1DEmbeddings = Tensor<T>.CreateDefault([MaxSequenceLength, _hiddenDim], NumOps.Zero);
-        InitializeWithSmallRandomValues(_position1DEmbeddings, random, 0.02);
-
-        // 2D position embeddings for bounding box coordinates (normalized 0-1000)
-        _position2DXEmbeddings = Tensor<T>.CreateDefault([1001, _hiddenDim], NumOps.Zero);
-        _position2DYEmbeddings = Tensor<T>.CreateDefault([1001, _hiddenDim], NumOps.Zero);
-        InitializeWithSmallRandomValues(_position2DXEmbeddings, random, 0.02);
-        InitializeWithSmallRandomValues(_position2DYEmbeddings, random, 0.02);
-
-        // Segment embeddings (text vs image)
-        _segmentEmbeddings = Tensor<T>.CreateDefault([2, _hiddenDim], NumOps.Zero);
-        InitializeWithSmallRandomValues(_segmentEmbeddings, random, 0.02);
-
-        // Initialize gradient tensors
-        _position1DEmbeddingsGradients = Tensor<T>.CreateDefault([MaxSequenceLength, _hiddenDim], NumOps.Zero);
-        _position2DXEmbeddingsGradients = Tensor<T>.CreateDefault([1001, _hiddenDim], NumOps.Zero);
-        _position2DYEmbeddingsGradients = Tensor<T>.CreateDefault([1001, _hiddenDim], NumOps.Zero);
-    }
-
-    private void InitializeWithSmallRandomValues(Tensor<T> tensor, Random random, double stdDev)
-    {
-        for (int i = 0; i < tensor.Data.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble();
-            double u2 = 1.0 - random.NextDouble();
-            double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-            tensor.Data.Span[i] = NumOps.FromDouble(randStdNormal * stdDev);
-        }
-    }
-
     #endregion
 
     #region ILayoutDetector Implementation
@@ -423,85 +369,44 @@ public partial class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetect
 
     private DocumentLayoutResult<T> ParseLayoutOutput(Tensor<T> output, double threshold)
     {
-        var regions = new List<LayoutRegion<T>>();
-
         // Parse output tensor into layout regions
         // Expected format: [numDetections, numClasses + 4] where last 4 are bbox coords
         // Or: [numDetections, hiddenDim] where we extract class from first numClasses and bbox from last 4
-
         int numDetections = output.Shape[0];
         int numValues = output.Shape.Length > 1 ? output.Shape[1] : _numClasses;
         int numClasses = Math.Max(0, Math.Min(numValues - 4, _numClasses));
-        bool hasBbox = numValues >= 4;
 
-        if (numClasses == 0)
+        if (numClasses == 0 || numDetections == 0)
         {
             return new DocumentLayoutResult<T>
             {
-                Regions = regions
+                Regions = new List<LayoutRegion<T>>()
             };
         }
 
-        for (int i = 0; i < numDetections; i++)
+        // The best class among positive scores (class 0 with score 0 when none is positive).
+        var rows = Engine.Reshape(output, new[] { numDetections, numValues });
+        var (maxClass, rowMax) = DocumentTensorOps.RowMax(Engine, rows, numClasses);
+        var positive = Engine.TensorGreaterThan(rowMax, NumOps.Zero);
+        var maxConf = Engine.TensorMax(rowMax, NumOps.Zero);
+        int[] kept = DocumentTensorOps.Hits(Engine, DocumentTensorOps.AtLeast(Engine, maxConf, NumOps.FromDouble(threshold)));
+        T[] confidence = DocumentTensorOps.Pick(Engine, maxConf, kept);
+        int[] bestClass = Engine.TensorMultiply(positive, DocumentTensorOps.IntTensor<T>(maxClass)).Cast<int>().ToArray();
+
+        // The bounding box is the last 4 values (normalized coordinates) scaled to the page and clipped to it.
+        T size = NumOps.FromDouble(ImageSize);
+        var box = Engine.TensorMultiplyScalar(Engine.TensorSlice(rows, new[] { 0, numValues - 4 }, new[] { numDetections, 4 }), size);
+        var lower = Engine.TensorMax(Engine.TensorSlice(box, new[] { 0, 0 }, new[] { numDetections, 2 }), NumOps.Zero);
+        var upper = Engine.TensorMin(Engine.TensorSlice(box, new[] { 0, 2 }, new[] { numDetections, 2 }), size);
+        T[] corners = Engine.TensorConcatenate(new[] { lower, upper }, 1).ToArray();
+
+        var regions = kept.Select((i, k) => new LayoutRegion<T>
         {
-            // Find the class with highest confidence
-            double maxConf = 0;
-            int maxClass = 0;
-            for (int c = 0; c < numClasses; c++)
-            {
-                double conf = NumOps.ToDouble(output.Data.Span[i * numValues + c]);
-                if (conf > maxConf)
-                {
-                    maxConf = conf;
-                    maxClass = c;
-                }
-            }
-
-            if (maxConf >= threshold)
-            {
-                // Extract bounding box from last 4 values (normalized coordinates)
-                Vector<T> bbox;
-                if (hasBbox && numValues >= 4)
-                {
-                    int bboxOffset = i * numValues + numValues - 4;
-                    double x1 = NumOps.ToDouble(output.Data.Span[bboxOffset]) * ImageSize;
-                    double y1 = NumOps.ToDouble(output.Data.Span[bboxOffset + 1]) * ImageSize;
-                    double x2 = NumOps.ToDouble(output.Data.Span[bboxOffset + 2]) * ImageSize;
-                    double y2 = NumOps.ToDouble(output.Data.Span[bboxOffset + 3]) * ImageSize;
-
-                    bbox = new Vector<T>([
-                        NumOps.FromDouble(Math.Max(0, x1)),
-                        NumOps.FromDouble(Math.Max(0, y1)),
-                        NumOps.FromDouble(Math.Min(ImageSize, x2)),
-                        NumOps.FromDouble(Math.Min(ImageSize, y2))
-                    ]);
-                }
-                else
-                {
-                    // Estimate bbox from detection index (grid-based fallback)
-                    int gridSize = (int)Math.Sqrt(numDetections);
-                    int cellSize = ImageSize / Math.Max(1, gridSize);
-                    int row = i / gridSize;
-                    int col = i % gridSize;
-
-                    bbox = new Vector<T>([
-                        NumOps.FromDouble(col * cellSize),
-                        NumOps.FromDouble(row * cellSize),
-                        NumOps.FromDouble((col + 1) * cellSize),
-                        NumOps.FromDouble((row + 1) * cellSize)
-                    ]);
-                }
-
-                regions.Add(new LayoutRegion<T>
-                {
-                    ElementType = (LayoutElementType)Math.Min(maxClass, (int)LayoutElementType.Other),
-                    Confidence = NumOps.FromDouble(maxConf),
-                    ConfidenceValue = maxConf,
-                    Index = i,
-                    BoundingBox = bbox
-                });
-            }
-        }
+            ElementType = (LayoutElementType)Math.Min(bestClass[i], (int)LayoutElementType.Other),
+            Confidence = confidence[k],
+            Index = i,
+            BoundingBox = new Vector<T>(new[] { corners[4 * i], corners[(4 * i) + 1], corners[(4 * i) + 2], corners[(4 * i) + 3] })
+        }).ToList();
 
         return new DocumentLayoutResult<T>
         {
@@ -555,8 +460,7 @@ public partial class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetect
         return new DocumentQAResult<T>
         {
             Answer = answer,
-            Confidence = NumOps.FromDouble(confidence),
-            ConfidenceValue = confidence
+            Confidence = confidence
         };
     }
 
@@ -573,17 +477,16 @@ public partial class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetect
         return new DocumentQAResult<T>
         {
             Answer = answer,
-            Confidence = NumOps.FromDouble(confidence),
-            ConfidenceValue = confidence
+            Confidence = confidence
         };
     }
 
-    private (string answer, double confidence) ExtractAnswer(Tensor<T> output, int maxAnswerLength, double temperature)
+    private (string answer, T confidence) ExtractAnswer(Tensor<T> output, int maxAnswerLength, double temperature)
     {
         var logits = NormalizeAnswerLogits(output);
         if (logits.Shape.Length < 2)
         {
-            return ("[No answer found]", 0.0);
+            return ("[No answer found]", NumOps.Zero);
         }
 
         int seqLen = logits.Shape[0];
@@ -595,37 +498,26 @@ public partial class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetect
 
         if (seqLen <= 0 || vocabSize <= 0 || maxAnswerLength <= 0)
         {
-            return ("[No answer found]", 0.0);
+            return ("[No answer found]", NumOps.Zero);
         }
 
         int maxLen = Math.Min(seqLen, maxAnswerLength);
         var tokens = new List<int>(maxLen);
-        double confidenceSum = 0.0;
-        int confidenceCount = 0;
+        var answerSteps = new List<int>(maxLen);
 
         int eosId = GetSpecialTokenId(_tokenizer.SpecialTokens.EosToken);
         int sepId = GetSpecialTokenId(_tokenizer.SpecialTokens.SepToken);
         int padId = GetSpecialTokenId(_tokenizer.SpecialTokens.PadToken);
         int clsId = GetSpecialTokenId(_tokenizer.SpecialTokens.ClsToken);
 
-        var random = RandomHelper.Shared;
-        bool sampleTokens = temperature > 0.0;
+        var steps = Engine.TensorSlice(logits, new[] { 0, 0 }, new[] { maxLen, vocabSize });
+        var (stepTokens, probabilities) = temperature > 0.0
+            ? DocumentTensorOps.SampleWithProbabilities(Engine, steps, NumOps.FromDouble(temperature), RandomHelper.Shared.Next())
+            : DocumentTensorOps.GreedyWithProbabilities(Engine, steps);
 
         for (int i = 0; i < maxLen; i++)
         {
-            int offset = i * logits.Shape[1];
-            int tokenId;
-            double tokenProb;
-
-            if (sampleTokens)
-            {
-                tokenId = SampleToken(logits, offset, vocabSize, temperature, random, out tokenProb);
-            }
-            else
-            {
-                tokenId = SelectGreedyToken(logits, offset, vocabSize, out tokenProb);
-            }
-
+            int tokenId = stepTokens[i];
             if ((eosId >= 0 && tokenId == eosId) || (sepId >= 0 && tokenId == sepId))
             {
                 break;
@@ -637,23 +529,21 @@ public partial class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetect
             }
 
             tokens.Add(tokenId);
-            confidenceSum += tokenProb;
-            confidenceCount++;
+            answerSteps.Add(i);
         }
 
         if (tokens.Count == 0)
         {
-            return ("[No answer found]", 0.0);
+            return ("[No answer found]", NumOps.Zero);
         }
 
         string answer = _tokenizer.Decode(tokens, skipSpecialTokens: true).Trim();
         if (string.IsNullOrWhiteSpace(answer))
         {
-            return ("[No answer found]", 0.0);
+            return ("[No answer found]", NumOps.Zero);
         }
 
-        double confidence = confidenceCount > 0 ? confidenceSum / confidenceCount : 0.0;
-        return (answer, confidence);
+        return (answer, DocumentTensorOps.Mean(Engine, DocumentTensorOps.Pick(Engine, probabilities, answerSteps.ToArray())));
     }
 
     private Tensor<T> NormalizeAnswerLogits(Tensor<T> output)
@@ -686,75 +576,6 @@ public partial class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetect
 
         int seqLen = output.Length / lastDim;
         return output.Reshape([seqLen, lastDim]);
-    }
-
-    private int SelectGreedyToken(Tensor<T> logits, int offset, int vocabSize, out double probability)
-    {
-        double maxVal = double.MinValue;
-        int maxIdx = 0;
-
-        for (int v = 0; v < vocabSize; v++)
-        {
-            double val = NumOps.ToDouble(logits.Data.Span[offset + v]);
-            if (val > maxVal)
-            {
-                maxVal = val;
-                maxIdx = v;
-            }
-        }
-
-        double sumExp = 0.0;
-        for (int v = 0; v < vocabSize; v++)
-        {
-            double val = NumOps.ToDouble(logits.Data.Span[offset + v]);
-            sumExp += Math.Exp(val - maxVal);
-        }
-
-        probability = sumExp > 0 ? 1.0 / sumExp : 0.0;
-        return maxIdx;
-    }
-
-    private int SampleToken(Tensor<T> logits, int offset, int vocabSize, double temperature, Random random, out double probability)
-    {
-        double maxVal = double.MinValue;
-        for (int v = 0; v < vocabSize; v++)
-        {
-            double scaled = NumOps.ToDouble(logits.Data.Span[offset + v]) / temperature;
-            if (scaled > maxVal)
-            {
-                maxVal = scaled;
-            }
-        }
-
-        double sumExp = 0.0;
-        for (int v = 0; v < vocabSize; v++)
-        {
-            double scaled = NumOps.ToDouble(logits.Data.Span[offset + v]) / temperature;
-            sumExp += Math.Exp(scaled - maxVal);
-        }
-
-        if (sumExp <= 0.0)
-        {
-            probability = 0.0;
-            return 0;
-        }
-
-        double roll = random.NextDouble() * sumExp;
-        double cumulative = 0.0;
-        for (int v = 0; v < vocabSize; v++)
-        {
-            double scaled = NumOps.ToDouble(logits.Data.Span[offset + v]) / temperature;
-            double expVal = Math.Exp(scaled - maxVal);
-            cumulative += expVal;
-            if (cumulative >= roll)
-            {
-                probability = expVal / sumExp;
-                return v;
-            }
-        }
-
-        probability = 0.0;
-        return vocabSize - 1;
     }
 
     private int GetSpecialTokenId(string token)
@@ -870,100 +691,24 @@ public partial class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetect
     #region Preprocessing
 
     /// <summary>
-    /// Applies LayoutLMv3's industry-standard preprocessing: ImageNet normalization.
+    /// Applies LayoutLMv3's preprocessing: resize to the image size, then mean 0.5 / std 0.5 normalization.
     /// </summary>
     /// <remarks>
-    /// LayoutLMv3 (Microsoft paper) uses ImageNet normalization with mean=[0.485, 0.456, 0.406] and std=[0.229, 0.224, 0.225].
-    /// The unified architecture for multimodal document understanding.
+    /// LayoutLMv3 (Huang et al. 2022) encodes 16x16 image patches; its released image processor normalizes every
+    /// channel with mean 0.5 and std 0.5 (IMAGENET_STANDARD_MEAN/STD), not with ImageNet statistics.
     /// </remarks>
     protected override Tensor<T> ApplyDefaultPreprocessing(Tensor<T> rawImage)
     {
         var image = EnsureBatchDimension(rawImage);
 
-        int batchSize = image.Shape[0];
-        int channels = image.Shape[1];
-        int height = image.Shape[2];
-        int width = image.Shape[3];
-
-        // Resize to model's expected ImageSize if needed (bilinear interpolation)
-        if (height != ImageSize || width != ImageSize)
+        // Resize to the model's expected ImageSize if needed (bilinear, half-pixel centres as in torch).
+        if (image.Shape[2] != ImageSize || image.Shape[3] != ImageSize)
         {
-            image = ResizeBilinear(image, batchSize, channels, height, width, ImageSize, ImageSize);
-            height = ImageSize;
-            width = ImageSize;
+            image = Engine.Interpolate(image, new[] { ImageSize, ImageSize }, InterpolateMode.Bilinear, alignCorners: false);
         }
 
-        // ImageNet normalization: (x - mean) / std
-        var normalized = new Tensor<T>(image._shape);
-        double[] means = [0.485, 0.456, 0.406];
-        double[] stds = [0.229, 0.224, 0.225];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                double mean = c < means.Length ? means[c] : 0.5;
-                double std = c < stds.Length ? stds[c] : 0.5;
-
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        int idx = b * channels * height * width + c * height * width + h * width + w;
-                        double value = NumOps.ToDouble(image.Data.Span[idx]);
-                        normalized.Data.Span[idx] = NumOps.FromDouble((value - mean) / std);
-                    }
-                }
-            }
-        }
-
-        return normalized;
-    }
-
-    private Tensor<T> ResizeBilinear(Tensor<T> image, int batchSize, int channels,
-        int srcH, int srcW, int dstH, int dstW)
-    {
-        var resized = new Tensor<T>([batchSize, channels, dstH, dstW]);
-
-        double scaleH = (double)srcH / dstH;
-        double scaleW = (double)srcW / dstW;
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                int srcBaseIdx = b * channels * srcH * srcW + c * srcH * srcW;
-                int dstBaseIdx = b * channels * dstH * dstW + c * dstH * dstW;
-
-                for (int h = 0; h < dstH; h++)
-                {
-                    double srcY = (h + 0.5) * scaleH - 0.5;
-                    int y0 = Math.Max(0, (int)Math.Floor(srcY));
-                    int y1 = Math.Min(srcH - 1, y0 + 1);
-                    double fy = srcY - y0;
-
-                    for (int w = 0; w < dstW; w++)
-                    {
-                        double srcX = (w + 0.5) * scaleW - 0.5;
-                        int x0 = Math.Max(0, (int)Math.Floor(srcX));
-                        int x1 = Math.Min(srcW - 1, x0 + 1);
-                        double fx = srcX - x0;
-
-                        double v00 = NumOps.ToDouble(image.Data.Span[srcBaseIdx + y0 * srcW + x0]);
-                        double v01 = NumOps.ToDouble(image.Data.Span[srcBaseIdx + y0 * srcW + x1]);
-                        double v10 = NumOps.ToDouble(image.Data.Span[srcBaseIdx + y1 * srcW + x0]);
-                        double v11 = NumOps.ToDouble(image.Data.Span[srcBaseIdx + y1 * srcW + x1]);
-
-                        double val = v00 * (1 - fy) * (1 - fx) + v01 * (1 - fy) * fx
-                                   + v10 * fy * (1 - fx) + v11 * fy * fx;
-
-                        resized.Data.Span[dstBaseIdx + h * dstW + w] = NumOps.FromDouble(val);
-                    }
-                }
-            }
-        }
-
-        return resized;
+        // LayoutLMv3's image processor normalizes every channel with mean 0.5 and std 0.5.
+        return DocumentTensorOps.NormalizeChannels(Engine, image, DocumentTensorOps.HalfStatistics, DocumentTensorOps.HalfStatistics);
     }
 
     /// <summary>
@@ -1014,32 +759,6 @@ public partial class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetect
 
     /// <inheritdoc/>
 
-
-    private void SerializeTensor(BinaryWriter writer, Tensor<T> tensor)
-    {
-        writer.Write(tensor.Rank);
-        foreach (var dim in tensor._shape)
-            writer.Write(dim);
-
-        writer.Write(tensor.Data.Length);
-        foreach (var val in tensor.Data.ToArray())
-            writer.Write(NumOps.ToDouble(val));
-    }
-
-    private Tensor<T> DeserializeTensor(BinaryReader reader)
-    {
-        int rank = reader.ReadInt32();
-        int[] shape = new int[rank];
-        for (int i = 0; i < rank; i++)
-            shape[i] = reader.ReadInt32();
-
-        int length = reader.ReadInt32();
-        var tensor = new Tensor<T>(shape);
-        for (int i = 0; i < length; i++)
-            tensor.Data.Span[i] = NumOps.FromDouble(reader.ReadDouble());
-
-        return tensor;
-    }
 
     #endregion
 
@@ -1178,42 +897,6 @@ public partial class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetect
     /// reading -- ParameterCount and GetParameters -- stays available either way.
     /// </remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
-    private void UpdateEmbeddingGradients(Tensor<T> gradient)
-    {
-        // Update position embedding gradients (simplified)
-        if (_position1DEmbeddingsGradients is not null && gradient.Data.Length > 0)
-        {
-            int gradLen = Math.Min(gradient.Data.Length, _position1DEmbeddingsGradients.Data.Length);
-            for (int i = 0; i < gradLen; i++)
-            {
-                _position1DEmbeddingsGradients.Data.Span[i] = NumOps.Add(
-                    _position1DEmbeddingsGradients.Data.Span[i],
-                    gradient.Data.Span[i % gradient.Data.Length]);
-            }
-        }
-    }
-
-    private Vector<T> CollectParameterGradients()
-    {
-        var gradients = new List<T>();
-
-        // Collect gradients from all layers
-        foreach (var layer in Layers)
-        {
-            var layerGradients = layer.GetParameterGradients();
-            gradients.AddRange(layerGradients);
-        }
-
-        // Add embedding gradients
-        if (_position1DEmbeddingsGradients is not null)
-            gradients.AddRange(_position1DEmbeddingsGradients.Data.ToArray());
-        if (_position2DXEmbeddingsGradients is not null)
-            gradients.AddRange(_position2DXEmbeddingsGradients.Data.ToArray());
-        if (_position2DYEmbeddingsGradients is not null)
-            gradients.AddRange(_position2DYEmbeddingsGradients.Data.ToArray());
-
-        return new Vector<T>([.. gradients]);
-    }
 
     #endregion
 

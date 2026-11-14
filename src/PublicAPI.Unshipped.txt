@@ -22921,3 +22921,22 @@ AiDotNet.Enums.MixtureOfExpertsGatingNoise.SoftplusOfRouterLogits = 1 -> AiDotNe
 AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.Entmax15 = 0 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.SoftmaxSigmoid = 1 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
+*REMOVED*AiDotNet.Document.Interfaces.DocumentClassificationResult<T>.TopPredictions.get -> System.Collections.Generic.IList<(string! Category, double Score)>!
+AiDotNet.Document.Interfaces.DocumentClassificationResult<T>.TopPredictions.get -> System.Collections.Generic.IList<(string! Category, T Score)>!
+*REMOVED*override AiDotNet.Document.LayoutAware.LayoutLMv3<T>.CopyGeneratedTrainableTensorsTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
+*REMOVED*override AiDotNet.Document.LayoutAware.LayoutLMv3<T>.GetExtraTrainableTensors() -> System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+*REMOVED*AiDotNet.Document.LayoutAware.DiT<T>.ModelSize.get -> string!
+AiDotNet.Document.LayoutAware.DiT<T>.ModelSize.get -> AiDotNet.Document.Options.DiTModelSize
+*REMOVED*AiDotNet.Document.Options.DiTOptions.ModelSize.get -> string!
+AiDotNet.Document.Options.DiTOptions.ModelSize.get -> AiDotNet.Document.Options.DiTModelSize
+AiDotNet.Document.Options.DiTModelSize
+AiDotNet.Document.Options.DiTModelSize.Base = 0 -> AiDotNet.Document.Options.DiTModelSize
+AiDotNet.Document.Options.DiTModelSize.Large = 1 -> AiDotNet.Document.Options.DiTModelSize
+AiDotNet.Document.Options.DiTOptions.UseModelSize(AiDotNet.Document.Options.DiTModelSize size) -> AiDotNet.Document.Options.DiTOptions!
+AiDotNet.Document.Analysis.PageSegmentation.DocBank<T>.ClassifyTokens(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! packedTokens) -> System.Collections.Generic.IReadOnlyList<(AiDotNet.Document.DocumentRegionType Label, T Confidence)>!
+AiDotNet.Document.Analysis.PageSegmentation.DocBank<T>.TokenClassifier.get -> AiDotNet.Document.LayoutAware.LayoutLM<T>!
+AiDotNet.Document.Options.DocBankOptions.TokenClassifierOptions.get -> AiDotNet.Document.Options.LayoutLMOptions?
+AiDotNet.Document.Options.DocBankOptions.TokenClassifierOptions.set -> void
+override AiDotNet.Document.Analysis.PageSegmentation.DocBank<T>.GetExtraTrainableTensors() -> System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.Document.Analysis.PageSegmentation.DocBank<T>.GetGeneratedNestedNetworkLayerViews() -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>?>!
+static AiDotNet.Document.Analysis.PageSegmentation.DocBank<T>.TokenLabels.get -> System.Collections.Generic.IReadOnlyList<AiDotNet.Document.DocumentRegionType>!

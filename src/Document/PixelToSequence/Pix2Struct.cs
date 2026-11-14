@@ -284,13 +284,12 @@ public partial class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T
             : RunOnnxInference(preprocessed);
 
         // Decode output to text
-        var answer = DecodeOutput(output, maxAnswerLength, temperature);
+        var (answer, confidence) = DecodeOutput(output, maxAnswerLength, temperature);
 
         return new DocumentQAResult<T>
         {
             Answer = answer,
-            Confidence = NumOps.FromDouble(0.85),
-            ConfidenceValue = 0.85,
+            Confidence = confidence,
             Question = question,
             ProcessingTimeMs = (DateTime.UtcNow - startTime).TotalMilliseconds
         };
@@ -312,28 +311,26 @@ public partial class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T
         return results;
     }
 
-    private string DecodeOutput(Tensor<T> output, int maxLength, double temperature)
+    /// <summary>
+    /// Decodes the answer rows: greedy at temperature 0, sampled otherwise. The confidence is the mean softmax
+    /// probability of the tokens kept in the answer (0 when none is).
+    /// </summary>
+    private (string Text, T Confidence) DecodeOutput(Tensor<T> output, int maxLength, double temperature)
     {
-        // Greedy decoding with token-to-character conversion
         var tokens = new List<int>();
-        for (int i = 0; i < Math.Min(maxLength, output.Shape[0]); i++)
+        var probabilities = new List<T>();
+        var (steps, stepProbabilities) = DocumentTensorOps.DecodeRows(Engine, output, maxLength, temperature, RandomHelper.Shared.Next());
+        for (int step = 0; step < steps.Length; step++)
         {
-            int vocabSize = output.Shape.Length > 1 ? output.Shape[1] : _vocabSize;
-            double maxVal = double.MinValue;
-            int maxIdx = 0;
-            for (int v = 0; v < vocabSize; v++)
-            {
-                double val = NumOps.ToDouble(output[i, v]);
-                if (val > maxVal) { maxVal = val; maxIdx = v; }
-            }
-
+            int maxIdx = steps[step];
             // Special tokens: 0=PAD, 1=EOS
             if (maxIdx == 1) break; // EOS token
             if (maxIdx == 0) continue; // Skip PAD
             tokens.Add(maxIdx);
+            probabilities.Add(stepProbabilities[step]);
         }
 
-        return DecodeTokensToText(tokens);
+        return (DecodeTokensToText(tokens), DocumentTensorOps.Mean(Engine, probabilities.ToArray()));
     }
 
     /// <summary>
@@ -420,43 +417,11 @@ public partial class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T
     #region Preprocessing
 
     /// <summary>
-    /// Applies Pix2Struct's industry-standard preprocessing: ImageNet normalization.
+    /// Applies Pix2Struct's preprocessing: per-image standardization, as the Pix2Struct image processor does
+    /// (Lee et al. 2023; MatCha reuses it): <c>(x - mean) / max(std, 1 / sqrt(N))</c> over each whole page.
     /// </summary>
-    /// <remarks>
-    /// Pix2Struct (Google paper) uses patch-based encoding with ImageNet normalization
-    /// with mean=[0.485, 0.456, 0.406] and std=[0.229, 0.224, 0.225].
-    /// </remarks>
     protected override Tensor<T> ApplyDefaultPreprocessing(Tensor<T> rawImage)
-    {
-        var image = EnsureBatchDimension(rawImage);
-        int batchSize = image.Shape[0];
-        int channels = image.Shape[1];
-        int height = image.Shape[2];
-        int width = image.Shape[3];
-
-        // Normalize with ImageNet stats
-        var normalized = new Tensor<T>(image._shape);
-        double[] means = [0.485, 0.456, 0.406];
-        double[] stds = [0.229, 0.224, 0.225];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                double mean = c < means.Length ? means[c] : 0.5;
-                double std = c < stds.Length ? stds[c] : 0.5;
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        int idx = b * channels * height * width + c * height * width + h * width + w;
-                        normalized.Data.Span[idx] = NumOps.FromDouble((NumOps.ToDouble(image.Data.Span[idx]) - mean) / std);
-                    }
-                }
-            }
-        }
-        return normalized;
-    }
+        => DocumentTensorOps.StandardizePerImage(Engine, EnsureBatchDimension(rawImage));
 
     /// <summary>
     /// Applies Pix2Struct's industry-standard postprocessing: pass-through (patch-to-text outputs are already final).
