@@ -42,12 +42,14 @@ Federated Learning is a privacy-preserving distributed machine learning approach
 - **Reference**: Dwork & Roth (2014) - "The Algorithmic Foundations of Differential Privacy"
 
 #### 2. Secure Aggregation
-- **Location**: `Privacy/SecureAggregation.cs`
+- **Location**: `Privacy/SecureAggregation.cs`, `Privacy/SecureAggregationClient.cs`, `Privacy/SecureAggregationServer.cs`
 - **Description**: Cryptographic protocol to aggregate updates without revealing individual contributions
 - **Features**:
-  - Pairwise secret masking
-  - Server only sees aggregated result
-  - Protection against honest-but-curious server
+  - Rounds 0-2 and 4 of the honest-but-curious protocol (AdvertiseKeys, ShareKeys, MaskedInputCollection, Unmasking)
+  - Fixed-point encoding into Z_{2^b}; pairwise and self masks cancel exactly in modular integer arithmetic
+  - ECDH over NIST P-256 with HKDF-SHA256, Shamir t-of-n sharing of the self-mask seed and masking key
+  - Dropout recovery for up to n - t clients; fewer than t survivors abort the round
+  - AES-256-CTR PRG behind `ISecureAggregationPrg`
 - **Reference**: Bonawitz et al. (2017) - "Practical Secure Aggregation for Privacy-Preserving Machine Learning"
 
 ### Personalization

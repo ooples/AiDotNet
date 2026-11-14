@@ -368,13 +368,7 @@ public sealed class SecureAggregationServer<T> : FederatedLearningComponentBase<
             throw new ArgumentOutOfRangeException(nameof(divisor), "The divisor must be a positive finite number.");
         }
 
-        var values = new T[ringSum.Length];
-        for (int i = 0; i < ringSum.Length; i++)
-        {
-            values[i] = NumOps.FromDouble(_encoding.Decode(ringSum[i]) / divisor);
-        }
-
-        return new Vector<T>(values);
+        return SecureAggregationProtocol.DecodeVector<T>(_encoding, ringSum, divisor);
     }
 
     private byte[] Reconstruct(

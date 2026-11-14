@@ -101,6 +101,41 @@ internal static class SecureAggregationProtocol
     }
 
     /// <summary>
+    /// Encodes <c>weight * x_i</c> for every element: one conversion of <typeparamref name="T"/> to <see cref="double"/>,
+    /// then <see cref="FixedPointRingEncoding.Encode(double)"/>.
+    /// </summary>
+    [AiDotNet.Attributes.ScalarKernel("Fixed-point encoding into Z_(2^b) is per-element rounding and modular integer arithmetic; T appears only at this one conversion to and from double, for which there is no engine op.")]
+    internal static ulong[] EncodeVector<T>(FixedPointRingEncoding encoding, Vector<T> input, double weight)
+    {
+        var numOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        var values = input.ToArray();
+        var encoded = new ulong[values.Length];
+        for (int i = 0; i < values.Length; i++)
+        {
+            encoded[i] = encoding.Encode(numOps.ToDouble(values[i]) * weight);
+        }
+
+        return encoded;
+    }
+
+    /// <summary>
+    /// Decodes a ring vector: each element to <see cref="double"/>, divided by <paramref name="divisor"/> in
+    /// <see cref="double"/>, then rounded once to <typeparamref name="T"/>.
+    /// </summary>
+    [AiDotNet.Attributes.ScalarKernel("Fixed-point encoding into Z_(2^b) is per-element rounding and modular integer arithmetic; T appears only at this one conversion to and from double, for which there is no engine op.")]
+    internal static Vector<T> DecodeVector<T>(FixedPointRingEncoding encoding, ulong[] ringSum, double divisor)
+    {
+        var numOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        var values = new T[ringSum.Length];
+        for (int i = 0; i < ringSum.Length; i++)
+        {
+            values[i] = numOps.FromDouble(encoding.Decode(ringSum[i]) / divisor);
+        }
+
+        return new Vector<T>(values);
+    }
+
+    /// <summary>
     /// Adds (or, when <paramref name="subtract"/> is set, subtracts) <c>PRG(seed)</c> into <paramref name="accumulator"/>
     /// modulo <c>R</c>. <paramref name="scratch"/> must have the accumulator's length.
     /// </summary>

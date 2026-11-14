@@ -22921,3 +22921,141 @@ AiDotNet.Enums.MixtureOfExpertsGatingNoise.SoftplusOfRouterLogits = 1 -> AiDotNe
 AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.Entmax15 = 0 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.SoftmaxSigmoid = 1 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
+*REMOVED*AiDotNet.FederatedLearning.Privacy.SecureAggregation<T>.AggregateSecurely(System.Collections.Generic.Dictionary<int, System.Collections.Generic.Dictionary<string!, T[]!>!>! maskedUpdates, System.Collections.Generic.Dictionary<int, double>! clientWeights) -> System.Collections.Generic.Dictionary<string!, T[]!>!
+*REMOVED*AiDotNet.FederatedLearning.Privacy.SecureAggregation<T>.AggregateSumSecurely(System.Collections.Generic.Dictionary<int, System.Collections.Generic.Dictionary<string!, T[]!>!>! maskedUpdates) -> System.Collections.Generic.Dictionary<string!, T[]!>!
+*REMOVED*AiDotNet.FederatedLearning.Privacy.SecureAggregation<T>.GeneratePairwiseSecrets(System.Collections.Generic.List<int>! clientIds) -> void
+*REMOVED*AiDotNet.FederatedLearning.Privacy.SecureAggregation<T>.GetClientCount() -> int
+*REMOVED*AiDotNet.FederatedLearning.Privacy.SecureAggregation<T>.MaskUpdate(int clientId, System.Collections.Generic.Dictionary<string!, T[]!>! clientUpdate) -> System.Collections.Generic.Dictionary<string!, T[]!>!
+*REMOVED*AiDotNet.FederatedLearning.Privacy.SecureAggregation<T>.MaskUpdate(int clientId, System.Collections.Generic.Dictionary<string!, T[]!>! clientUpdate, double clientWeight) -> System.Collections.Generic.Dictionary<string!, T[]!>!
+*REMOVED*AiDotNet.FederatedLearning.Privacy.SecureAggregation<T>.SecureAggregation(int parameterCount, int? randomSeed = null) -> void
+*REMOVED*AiDotNet.FederatedLearning.Privacy.SecureAggregation<T>.~SecureAggregation() -> void
+*REMOVED*AiDotNet.FederatedLearning.Privacy.SecureAggregationVector<T>
+*REMOVED*AiDotNet.FederatedLearning.Privacy.SecureAggregationVector<T>.AggregateSecurely(System.Collections.Generic.Dictionary<int, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>! maskedUpdates, System.Collections.Generic.Dictionary<int, double>! clientWeights) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+*REMOVED*AiDotNet.FederatedLearning.Privacy.SecureAggregationVector<T>.AggregateSumSecurely(System.Collections.Generic.Dictionary<int, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>! maskedUpdates) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+*REMOVED*AiDotNet.FederatedLearning.Privacy.SecureAggregationVector<T>.ClearSecrets() -> void
+*REMOVED*AiDotNet.FederatedLearning.Privacy.SecureAggregationVector<T>.Dispose() -> void
+*REMOVED*AiDotNet.FederatedLearning.Privacy.SecureAggregationVector<T>.GeneratePairwiseSecrets(System.Collections.Generic.List<int>! clientIds) -> void
+*REMOVED*AiDotNet.FederatedLearning.Privacy.SecureAggregationVector<T>.MaskUpdate(int clientId, AiDotNet.Tensors.LinearAlgebra.Vector<T>! clientUpdate) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+*REMOVED*AiDotNet.FederatedLearning.Privacy.SecureAggregationVector<T>.MaskUpdate(int clientId, AiDotNet.Tensors.LinearAlgebra.Vector<T>! clientUpdate, double clientWeight) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+*REMOVED*AiDotNet.FederatedLearning.Privacy.SecureAggregationVector<T>.SecureAggregationVector(int parameterCount, int? randomSeed = null) -> void
+*REMOVED*AiDotNet.FederatedLearning.Privacy.ThresholdSecureAggregation<T>
+*REMOVED*AiDotNet.FederatedLearning.Privacy.ThresholdSecureAggregation<T>.AggregateSecurely(System.Collections.Generic.Dictionary<int, System.Collections.Generic.Dictionary<string!, T[]!>!>! maskedUpdates, System.Collections.Generic.Dictionary<int, double>! clientWeights) -> System.Collections.Generic.Dictionary<string!, T[]!>!
+*REMOVED*AiDotNet.FederatedLearning.Privacy.ThresholdSecureAggregation<T>.AggregateSecurely(System.Collections.Generic.Dictionary<int, System.Collections.Generic.Dictionary<string!, T[]!>!>! maskedUpdates, System.Collections.Generic.Dictionary<int, double>! clientWeights, System.Collections.Generic.IReadOnlyCollection<int>? unmaskingClientIds) -> System.Collections.Generic.Dictionary<string!, T[]!>!
+*REMOVED*AiDotNet.FederatedLearning.Privacy.ThresholdSecureAggregation<T>.AggregateSumSecurely(System.Collections.Generic.Dictionary<int, System.Collections.Generic.Dictionary<string!, T[]!>!>! maskedUpdates) -> System.Collections.Generic.Dictionary<string!, T[]!>!
+*REMOVED*AiDotNet.FederatedLearning.Privacy.ThresholdSecureAggregation<T>.AggregateSumSecurely(System.Collections.Generic.Dictionary<int, System.Collections.Generic.Dictionary<string!, T[]!>!>! maskedUpdates, System.Collections.Generic.IReadOnlyCollection<int>? unmaskingClientIds) -> System.Collections.Generic.Dictionary<string!, T[]!>!
+*REMOVED*AiDotNet.FederatedLearning.Privacy.ThresholdSecureAggregation<T>.ClearSecrets() -> void
+*REMOVED*AiDotNet.FederatedLearning.Privacy.ThresholdSecureAggregation<T>.Dispose() -> void
+*REMOVED*AiDotNet.FederatedLearning.Privacy.ThresholdSecureAggregation<T>.InitializeRound(System.Collections.Generic.List<int>! clientIds, int minimumUploaderCount = 0, int reconstructionThreshold = 0, double maxDropoutFraction = 0.2) -> void
+*REMOVED*AiDotNet.FederatedLearning.Privacy.ThresholdSecureAggregation<T>.MaskUpdate(int clientId, System.Collections.Generic.Dictionary<string!, T[]!>! clientUpdate) -> System.Collections.Generic.Dictionary<string!, T[]!>!
+*REMOVED*AiDotNet.FederatedLearning.Privacy.ThresholdSecureAggregation<T>.MaskUpdate(int clientId, System.Collections.Generic.Dictionary<string!, T[]!>! clientUpdate, double clientWeight) -> System.Collections.Generic.Dictionary<string!, T[]!>!
+*REMOVED*AiDotNet.FederatedLearning.Privacy.ThresholdSecureAggregation<T>.MinimumUploaderCount.get -> int
+*REMOVED*AiDotNet.FederatedLearning.Privacy.ThresholdSecureAggregation<T>.ReconstructionThreshold.get -> int
+*REMOVED*AiDotNet.FederatedLearning.Privacy.ThresholdSecureAggregation<T>.ThresholdSecureAggregation(int parameterCount, int? randomSeed = null) -> void
+*REMOVED*AiDotNet.FederatedLearning.Privacy.ThresholdSecureAggregationVector<T>
+*REMOVED*AiDotNet.FederatedLearning.Privacy.ThresholdSecureAggregationVector<T>.AggregateSecurely(System.Collections.Generic.Dictionary<int, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>! maskedUpdates, System.Collections.Generic.Dictionary<int, double>! clientWeights) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+*REMOVED*AiDotNet.FederatedLearning.Privacy.ThresholdSecureAggregationVector<T>.AggregateSecurely(System.Collections.Generic.Dictionary<int, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>! maskedUpdates, System.Collections.Generic.Dictionary<int, double>! clientWeights, System.Collections.Generic.IReadOnlyCollection<int>? unmaskingClientIds) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+*REMOVED*AiDotNet.FederatedLearning.Privacy.ThresholdSecureAggregationVector<T>.AggregateSumSecurely(System.Collections.Generic.Dictionary<int, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>! maskedUpdates) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+*REMOVED*AiDotNet.FederatedLearning.Privacy.ThresholdSecureAggregationVector<T>.AggregateSumSecurely(System.Collections.Generic.Dictionary<int, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>! maskedUpdates, System.Collections.Generic.IReadOnlyCollection<int>? unmaskingClientIds) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+*REMOVED*AiDotNet.FederatedLearning.Privacy.ThresholdSecureAggregationVector<T>.ClearSecrets() -> void
+*REMOVED*AiDotNet.FederatedLearning.Privacy.ThresholdSecureAggregationVector<T>.Dispose() -> void
+*REMOVED*AiDotNet.FederatedLearning.Privacy.ThresholdSecureAggregationVector<T>.InitializeRound(System.Collections.Generic.List<int>! clientIds, int minimumUploaderCount = 0, int reconstructionThreshold = 0, double maxDropoutFraction = 0.2) -> void
+*REMOVED*AiDotNet.FederatedLearning.Privacy.ThresholdSecureAggregationVector<T>.MaskUpdate(int clientId, AiDotNet.Tensors.LinearAlgebra.Vector<T>! clientUpdate) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+*REMOVED*AiDotNet.FederatedLearning.Privacy.ThresholdSecureAggregationVector<T>.MaskUpdate(int clientId, AiDotNet.Tensors.LinearAlgebra.Vector<T>! clientUpdate, double clientWeight) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+*REMOVED*AiDotNet.FederatedLearning.Privacy.ThresholdSecureAggregationVector<T>.MinimumUploaderCount.get -> int
+*REMOVED*AiDotNet.FederatedLearning.Privacy.ThresholdSecureAggregationVector<T>.ReconstructionThreshold.get -> int
+*REMOVED*AiDotNet.FederatedLearning.Privacy.ThresholdSecureAggregationVector<T>.ThresholdSecureAggregationVector(int parameterCount, int? randomSeed = null) -> void
+*REMOVED*AiDotNet.Models.Options.SecureAggregationOptions.MaxDropoutFraction.get -> double
+*REMOVED*AiDotNet.Models.Options.SecureAggregationOptions.MaxDropoutFraction.set -> void
+*REMOVED*AiDotNet.Models.Options.SecureAggregationOptions.MinimumUploaderCount.get -> int
+*REMOVED*AiDotNet.Models.Options.SecureAggregationOptions.MinimumUploaderCount.set -> void
+AiDotNet.FederatedLearning.Cryptography.AesCtrSecureAggregationPrg
+AiDotNet.FederatedLearning.Cryptography.AesCtrSecureAggregationPrg.AesCtrSecureAggregationPrg() -> void
+AiDotNet.FederatedLearning.Cryptography.AesCtrSecureAggregationPrg.Expand(byte[]! seed, int bitWidth, ulong[]! destination) -> void
+AiDotNet.FederatedLearning.Cryptography.ISecureAggregationPrg
+AiDotNet.FederatedLearning.Cryptography.ISecureAggregationPrg.Expand(byte[]! seed, int bitWidth, ulong[]! destination) -> void
+AiDotNet.FederatedLearning.Privacy.FixedPointRingEncoding
+AiDotNet.FederatedLearning.Privacy.FixedPointRingEncoding.Add(ulong a, ulong b) -> ulong
+AiDotNet.FederatedLearning.Privacy.FixedPointRingEncoding.AddInPlace(ulong[]! accumulator, ulong[]! addend) -> void
+AiDotNet.FederatedLearning.Privacy.FixedPointRingEncoding.BitWidth.get -> int
+AiDotNet.FederatedLearning.Privacy.FixedPointRingEncoding.ClipBound.get -> double
+AiDotNet.FederatedLearning.Privacy.FixedPointRingEncoding.Decode(ulong ringElement) -> double
+AiDotNet.FederatedLearning.Privacy.FixedPointRingEncoding.Encode(double value) -> ulong
+AiDotNet.FederatedLearning.Privacy.FixedPointRingEncoding.EnsureSumFits(int clientCount) -> void
+AiDotNet.FederatedLearning.Privacy.FixedPointRingEncoding.FixedPointRingEncoding(int bitWidth = 64, int fractionalBits = 24, double clipBound = 65536) -> void
+AiDotNet.FederatedLearning.Privacy.FixedPointRingEncoding.FractionalBits.get -> int
+AiDotNet.FederatedLearning.Privacy.FixedPointRingEncoding.ModulusMask.get -> ulong
+AiDotNet.FederatedLearning.Privacy.FixedPointRingEncoding.Scale.get -> double
+AiDotNet.FederatedLearning.Privacy.FixedPointRingEncoding.Subtract(ulong a, ulong b) -> ulong
+AiDotNet.FederatedLearning.Privacy.FixedPointRingEncoding.SubtractInPlace(ulong[]! accumulator, ulong[]! subtrahend) -> void
+AiDotNet.FederatedLearning.Privacy.FixedPointRingEncoding.ToSignedInteger(ulong ringElement) -> long
+AiDotNet.FederatedLearning.Privacy.SecureAggregation<T>.AggregateRingSum(System.Collections.Generic.IEnumerable<AiDotNet.FederatedLearning.Privacy.SecureAggregationMaskedInput!>! maskedInputs, System.Collections.Generic.IEnumerable<int>? unmaskingClientIds = null) -> ulong[]!
+AiDotNet.FederatedLearning.Privacy.SecureAggregation<T>.AggregateSum(System.Collections.Generic.IEnumerable<AiDotNet.FederatedLearning.Privacy.SecureAggregationMaskedInput!>! maskedInputs, System.Collections.Generic.IEnumerable<int>? unmaskingClientIds = null) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.FederatedLearning.Privacy.SecureAggregation<T>.AggregateWeightedAverage(System.Collections.Generic.IEnumerable<AiDotNet.FederatedLearning.Privacy.SecureAggregationMaskedInput!>! maskedInputs, System.Collections.Generic.IReadOnlyDictionary<int, double>! clientWeights, System.Collections.Generic.IEnumerable<int>? unmaskingClientIds = null) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.FederatedLearning.Privacy.SecureAggregation<T>.ClientIds.get -> System.Collections.Generic.IReadOnlyList<int>!
+AiDotNet.FederatedLearning.Privacy.SecureAggregation<T>.Encoding.get -> AiDotNet.FederatedLearning.Privacy.FixedPointRingEncoding!
+AiDotNet.FederatedLearning.Privacy.SecureAggregation<T>.InitializeRound(System.Collections.Generic.IEnumerable<int>! clientIds) -> void
+AiDotNet.FederatedLearning.Privacy.SecureAggregation<T>.MaskUpdate(int clientId, AiDotNet.Tensors.LinearAlgebra.Vector<T>! update, double weight = 1) -> AiDotNet.FederatedLearning.Privacy.SecureAggregationMaskedInput!
+AiDotNet.FederatedLearning.Privacy.SecureAggregation<T>.SecureAggregation(int parameterCount, AiDotNet.Models.Options.SecureAggregationOptions? options = null) -> void
+AiDotNet.FederatedLearning.Privacy.SecureAggregation<T>.Threshold.get -> int
+AiDotNet.FederatedLearning.Privacy.SecureAggregationAbortedException
+AiDotNet.FederatedLearning.Privacy.SecureAggregationAbortedException.Round.get -> AiDotNet.FederatedLearning.Privacy.SecureAggregationRound
+AiDotNet.FederatedLearning.Privacy.SecureAggregationAbortedException.SecureAggregationAbortedException(AiDotNet.FederatedLearning.Privacy.SecureAggregationRound round, string! message) -> void
+AiDotNet.FederatedLearning.Privacy.SecureAggregationAdvertisedKeys
+AiDotNet.FederatedLearning.Privacy.SecureAggregationAdvertisedKeys.CipherPublicKey.get -> byte[]!
+AiDotNet.FederatedLearning.Privacy.SecureAggregationAdvertisedKeys.ClientId.get -> int
+AiDotNet.FederatedLearning.Privacy.SecureAggregationAdvertisedKeys.MaskingPublicKey.get -> byte[]!
+AiDotNet.FederatedLearning.Privacy.SecureAggregationAdvertisedKeys.SecureAggregationAdvertisedKeys(int clientId, byte[]! cipherPublicKey, byte[]! maskingPublicKey) -> void
+AiDotNet.FederatedLearning.Privacy.SecureAggregationClient<T>
+AiDotNet.FederatedLearning.Privacy.SecureAggregationClient<T>.AdvertiseKeys() -> AiDotNet.FederatedLearning.Privacy.SecureAggregationAdvertisedKeys!
+AiDotNet.FederatedLearning.Privacy.SecureAggregationClient<T>.ClientId.get -> int
+AiDotNet.FederatedLearning.Privacy.SecureAggregationClient<T>.Dispose() -> void
+AiDotNet.FederatedLearning.Privacy.SecureAggregationClient<T>.MaskInput(AiDotNet.Tensors.LinearAlgebra.Vector<T>! input, System.Collections.Generic.IReadOnlyList<AiDotNet.FederatedLearning.Privacy.SecureAggregationEncryptedShare!>! sharesForThisClient, double weight = 1) -> AiDotNet.FederatedLearning.Privacy.SecureAggregationMaskedInput!
+AiDotNet.FederatedLearning.Privacy.SecureAggregationClient<T>.Round.get -> AiDotNet.FederatedLearning.Privacy.SecureAggregationRound
+AiDotNet.FederatedLearning.Privacy.SecureAggregationClient<T>.SecureAggregationClient(int clientId, int parameterCount, int threshold, AiDotNet.FederatedLearning.Privacy.FixedPointRingEncoding! encoding, AiDotNet.FederatedLearning.Cryptography.ISecureAggregationPrg? prg = null) -> void
+AiDotNet.FederatedLearning.Privacy.SecureAggregationClient<T>.ShareKeys(System.Collections.Generic.IReadOnlyList<AiDotNet.FederatedLearning.Privacy.SecureAggregationAdvertisedKeys!>! advertisedKeys) -> System.Collections.Generic.IReadOnlyList<AiDotNet.FederatedLearning.Privacy.SecureAggregationEncryptedShare!>!
+AiDotNet.FederatedLearning.Privacy.SecureAggregationClient<T>.Unmask(System.Collections.Generic.IReadOnlyCollection<int>! survivingClientIds) -> AiDotNet.FederatedLearning.Privacy.SecureAggregationUnmaskingResponse!
+AiDotNet.FederatedLearning.Privacy.SecureAggregationEncryptedShare
+AiDotNet.FederatedLearning.Privacy.SecureAggregationEncryptedShare.Ciphertext.get -> byte[]!
+AiDotNet.FederatedLearning.Privacy.SecureAggregationEncryptedShare.RecipientId.get -> int
+AiDotNet.FederatedLearning.Privacy.SecureAggregationEncryptedShare.SecureAggregationEncryptedShare(int senderId, int recipientId, byte[]! ciphertext) -> void
+AiDotNet.FederatedLearning.Privacy.SecureAggregationEncryptedShare.SenderId.get -> int
+AiDotNet.FederatedLearning.Privacy.SecureAggregationMaskedInput
+AiDotNet.FederatedLearning.Privacy.SecureAggregationMaskedInput.ClientId.get -> int
+AiDotNet.FederatedLearning.Privacy.SecureAggregationMaskedInput.SecureAggregationMaskedInput(int clientId, ulong[]! values) -> void
+AiDotNet.FederatedLearning.Privacy.SecureAggregationMaskedInput.Values.get -> ulong[]!
+AiDotNet.FederatedLearning.Privacy.SecureAggregationRound
+AiDotNet.FederatedLearning.Privacy.SecureAggregationRound.AdvertiseKeys = 0 -> AiDotNet.FederatedLearning.Privacy.SecureAggregationRound
+AiDotNet.FederatedLearning.Privacy.SecureAggregationRound.Completed = 5 -> AiDotNet.FederatedLearning.Privacy.SecureAggregationRound
+AiDotNet.FederatedLearning.Privacy.SecureAggregationRound.ConsistencyCheck = 3 -> AiDotNet.FederatedLearning.Privacy.SecureAggregationRound
+AiDotNet.FederatedLearning.Privacy.SecureAggregationRound.MaskedInputCollection = 2 -> AiDotNet.FederatedLearning.Privacy.SecureAggregationRound
+AiDotNet.FederatedLearning.Privacy.SecureAggregationRound.ShareKeys = 1 -> AiDotNet.FederatedLearning.Privacy.SecureAggregationRound
+AiDotNet.FederatedLearning.Privacy.SecureAggregationRound.Unmasking = 4 -> AiDotNet.FederatedLearning.Privacy.SecureAggregationRound
+AiDotNet.FederatedLearning.Privacy.SecureAggregationServer<T>
+AiDotNet.FederatedLearning.Privacy.SecureAggregationServer<T>.AggregateRingSum(System.Collections.Generic.IEnumerable<AiDotNet.FederatedLearning.Privacy.SecureAggregationUnmaskingResponse!>! responses) -> ulong[]!
+AiDotNet.FederatedLearning.Privacy.SecureAggregationServer<T>.AggregateSum(System.Collections.Generic.IEnumerable<AiDotNet.FederatedLearning.Privacy.SecureAggregationUnmaskingResponse!>! responses) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.FederatedLearning.Privacy.SecureAggregationServer<T>.CollectAdvertisedKeys(System.Collections.Generic.IEnumerable<AiDotNet.FederatedLearning.Privacy.SecureAggregationAdvertisedKeys!>! advertisedKeys) -> System.Collections.Generic.IReadOnlyList<AiDotNet.FederatedLearning.Privacy.SecureAggregationAdvertisedKeys!>!
+AiDotNet.FederatedLearning.Privacy.SecureAggregationServer<T>.CollectMaskedInputs(System.Collections.Generic.IEnumerable<AiDotNet.FederatedLearning.Privacy.SecureAggregationMaskedInput!>! maskedInputs) -> System.Collections.Generic.IReadOnlyList<int>!
+AiDotNet.FederatedLearning.Privacy.SecureAggregationServer<T>.CollectShares(System.Collections.Generic.IEnumerable<AiDotNet.FederatedLearning.Privacy.SecureAggregationEncryptedShare!>! shares) -> System.Collections.Generic.IReadOnlyDictionary<int, System.Collections.Generic.IReadOnlyList<AiDotNet.FederatedLearning.Privacy.SecureAggregationEncryptedShare!>!>!
+AiDotNet.FederatedLearning.Privacy.SecureAggregationServer<T>.Decode(ulong[]! ringSum, double divisor) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.FederatedLearning.Privacy.SecureAggregationServer<T>.Encoding.get -> AiDotNet.FederatedLearning.Privacy.FixedPointRingEncoding!
+AiDotNet.FederatedLearning.Privacy.SecureAggregationServer<T>.Round.get -> AiDotNet.FederatedLearning.Privacy.SecureAggregationRound
+AiDotNet.FederatedLearning.Privacy.SecureAggregationServer<T>.SecureAggregationServer(int parameterCount, int threshold, AiDotNet.FederatedLearning.Privacy.FixedPointRingEncoding! encoding, AiDotNet.FederatedLearning.Cryptography.ISecureAggregationPrg? prg = null) -> void
+AiDotNet.FederatedLearning.Privacy.SecureAggregationServer<T>.SurvivingClientIds.get -> System.Collections.Generic.IReadOnlyList<int>!
+AiDotNet.FederatedLearning.Privacy.SecureAggregationServer<T>.Threshold.get -> int
+AiDotNet.FederatedLearning.Privacy.SecureAggregationUnmaskingResponse
+AiDotNet.FederatedLearning.Privacy.SecureAggregationUnmaskingResponse.ClientId.get -> int
+AiDotNet.FederatedLearning.Privacy.SecureAggregationUnmaskingResponse.MaskingKeyShares.get -> System.Collections.Generic.IReadOnlyDictionary<int, byte[]!>!
+AiDotNet.FederatedLearning.Privacy.SecureAggregationUnmaskingResponse.SecureAggregationUnmaskingResponse(int clientId, System.Collections.Generic.IReadOnlyDictionary<int, byte[]!>! maskingKeyShares, System.Collections.Generic.IReadOnlyDictionary<int, byte[]!>! selfMaskShares) -> void
+AiDotNet.FederatedLearning.Privacy.SecureAggregationUnmaskingResponse.SelfMaskShares.get -> System.Collections.Generic.IReadOnlyDictionary<int, byte[]!>!
+AiDotNet.Models.Options.SecureAggregationOptions.BitWidth.get -> int
+AiDotNet.Models.Options.SecureAggregationOptions.BitWidth.set -> void
+AiDotNet.Models.Options.SecureAggregationOptions.ClipBound.get -> double
+AiDotNet.Models.Options.SecureAggregationOptions.ClipBound.set -> void
+AiDotNet.Models.Options.SecureAggregationOptions.FractionalBits.get -> int
+AiDotNet.Models.Options.SecureAggregationOptions.FractionalBits.set -> void
+AiDotNet.Models.Options.SecureAggregationOptions.Prg.get -> AiDotNet.FederatedLearning.Cryptography.ISecureAggregationPrg?
+AiDotNet.Models.Options.SecureAggregationOptions.Prg.set -> void
+const AiDotNet.FederatedLearning.Cryptography.AesCtrSecureAggregationPrg.SeedLength = 32 -> int
+const AiDotNet.FederatedLearning.Privacy.FixedPointRingEncoding.DefaultBitWidth = 64 -> int
+const AiDotNet.FederatedLearning.Privacy.FixedPointRingEncoding.DefaultClipBound = 65536 -> double
+const AiDotNet.FederatedLearning.Privacy.FixedPointRingEncoding.DefaultFractionalBits = 24 -> int

@@ -253,15 +253,7 @@ public sealed class SecureAggregation<T> : FederatedLearningComponentBase<T>, ID
     }
 
     private Vector<T> Decode(ulong[] ringSum, double divisor)
-    {
-        var values = new T[ringSum.Length];
-        for (int i = 0; i < ringSum.Length; i++)
-        {
-            values[i] = NumOps.FromDouble(Encoding.Decode(ringSum[i]) / divisor);
-        }
-
-        return new Vector<T>(values);
-    }
+        => SecureAggregationProtocol.DecodeVector<T>(Encoding, ringSum, divisor);
 
     private void ThrowIfDisposed()
     {

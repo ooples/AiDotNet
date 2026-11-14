@@ -261,11 +261,7 @@ public sealed class SecureAggregationClient<T> : FederatedLearningComponentBase<
         }
 
         var maskingKeys = RequireKeys(_maskingKeys);
-        var masked = new ulong[_parameterCount];
-        for (int i = 0; i < _parameterCount; i++)
-        {
-            masked[i] = _encoding.Encode(NumOps.ToDouble(input[i]) * weight);
-        }
+        var masked = SecureAggregationProtocol.EncodeVector(_encoding, input, weight);
 
         var scratch = new ulong[_parameterCount];
         SecureAggregationProtocol.ApplyMask(_prg, _encoding, _selfMaskSeed, masked, scratch, subtract: false);
