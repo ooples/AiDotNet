@@ -98,17 +98,19 @@ public class AdaptiveRandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense
     /// <remarks>
     /// <para>
     /// The noise level depends on the input, so the fixed-sigma certificate of Cohen et al. does not apply. The
-    /// smoothed classifier here is the whole two-step mechanism: k probe queries x + N(0, sigma_min^2 I) choose
-    /// sigma from the fraction of probes that change the clean prediction, then one query x + N(0, sigma^2 I) is
-    /// classified. Every Monte Carlo sample runs both steps with fresh noise, so the counts estimate the
-    /// probabilities of that mechanism and not those of one realized sigma.
+    /// smoothed classifier here is the whole two-step mechanism: a reference query and k probe queries
+    /// x + N(0, sigma_min^2 I) choose sigma from the fraction of probes whose class differs from the reference,
+    /// then one query x + N(0, sigma^2 I) is classified. Every Monte Carlo sample runs both steps with fresh
+    /// noise, so the counts estimate the probabilities of that mechanism and not those of one realized sigma.
+    /// The reference is itself a noisy query: comparing the probes with the clean prediction f(x) made sigma
+    /// depend on a noiseless evaluation of the input, which no Gaussian mechanism bound covers.
     /// </para>
     /// <para>
     /// The steps are Gaussian mechanisms whose noise is chosen adaptively, so their composition (Gaussian
     /// differential privacy, Dong et al. 2019) holds only with a bound valid for every probe outcome (fully
-    /// adaptive composition, Smith and Thakurta 2022): sigma is at least sigma_min, so the mechanism is
-    /// r sqrt(k + 1) / sigma_min-GDP for inputs at L2 distance r, which gives the certified radius
-    /// sigma_eff * Phi^-1(p_A_lower) with sigma_eff = sigma_min / sqrt(k + 1). The realized sigma(x) is not a
+    /// adaptive composition, Smith and Thakurta 2022): sigma is at least sigma_min, so the k + 2 queries make the
+    /// mechanism r sqrt(k + 2) / sigma_min-GDP for inputs at L2 distance r, which gives the certified radius
+    /// sigma_eff * Phi^-1(p_A_lower) with sigma_eff = sigma_min / sqrt(k + 2). The realized sigma(x) is not a
     /// sound substitute, because a nearby input can realize a smaller sigma. c_A is chosen from separate
     /// selection samples and p_A_lower is the one-sided Clopper-Pearson bound, as in CERTIFY.
     /// </para>
@@ -119,13 +121,12 @@ public class AdaptiveRandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense
         if (model == null) throw new ArgumentNullException(nameof(model));
 
         var vectorInput = ConversionsHelper.ConvertToVector<T, TInput>(input);
-        int baseClass = ArgMax(ConversionsHelper.ConvertToVector<T, TOutput>(model.Predict(input)));
 
         // CERTIFY over the two-step mechanism: selection samples pick c_A, fresh samples estimate p_A.
-        var selection = SampleMechanism(vectorInput, input, model, baseClass, _options.SelectionSamples);
+        var selection = SampleMechanism(vectorInput, input, model, _options.SelectionSamples);
         int topClassLabel = selection.Counts
             .OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key).Select(kv => kv.Key).FirstOrDefault();
-        var estimation = SampleMechanism(vectorInput, input, model, baseClass, _options.NumSamples);
+        var estimation = SampleMechanism(vectorInput, input, model, _options.NumSamples);
         int topCount = estimation.Counts.TryGetValue(topClassLabel, out int observed) ? observed : 0;
 
         // Bounds and radius in double: counts above 2048 are not exact in Half, and a bound near 1 rounds to 1.
@@ -138,11 +139,11 @@ public class AdaptiveRandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense
         var result = new CertifiedPrediction<T>
         {
             PredictedClass = topClassLabel,
-            CertifiedRadius = NumOps.FromDouble(certifiedRadius),
+            CertifiedRadius = CertificationMath<T>.RoundDown(certifiedRadius),
             IsCertified = certified,
             Confidence = NumOps.FromDouble((double)topCount / _options.NumSamples),
-            LowerBound = NumOps.FromDouble(pALower),
-            UpperBound = NumOps.FromDouble(pAUpper)
+            LowerBound = CertificationMath<T>.RoundDown(pALower),
+            UpperBound = CertificationMath<T>.RoundUp(pAUpper)
         };
 
         result.CertificationDetails["SampleCount"] = _options.NumSamples;
@@ -157,11 +158,11 @@ public class AdaptiveRandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense
     }
 
     /// <summary>
-    /// The single-Gaussian noise level that bounds the probe step (k queries at sigma_min) composed with the
-    /// classification step (one query at a sigma of at least sigma_min) for every probe outcome:
-    /// sigma_min / sqrt(k + 1).
+    /// The single-Gaussian noise level that bounds the probe step (a reference and k probes, k + 1 queries at
+    /// sigma_min) composed with the classification step (one query at a sigma of at least sigma_min) for every
+    /// probe outcome: sigma_min / sqrt(k + 2).
     /// </summary>
-    internal double EffectiveSigma() => _minSigma / Math.Sqrt(_sensitivitySamples + 1.0);
+    internal double EffectiveSigma() => _minSigma / Math.Sqrt(_sensitivitySamples + 2.0);
 
     /// <summary>
     /// Runs the two-step mechanism <paramref name="count"/> times and counts the classes; also returns the mean
@@ -171,7 +172,6 @@ public class AdaptiveRandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense
         Vector<T> vectorInput,
         TInput referenceInput,
         IFullModel<T, TInput, TOutput> model,
-        int baseClass,
         int count)
     {
         // sigma takes one of k + 1 levels, one per number of changed probes: convert them to T once.
@@ -187,7 +187,8 @@ public class AdaptiveRandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense
         double sigmaSum = 0.0;
         for (int i = 0; i < count; i++)
         {
-            int changed = ChangedProbes(vectorInput, referenceInput, model, baseClass, probeSigma);
+            int reference = ClassifyNoisy(vectorInput, referenceInput, model, probeSigma);
+            int changed = ChangedProbes(vectorInput, referenceInput, model, reference, probeSigma);
             sigmaSum += levels[changed];
             int sampledClass = ClassifyNoisy(vectorInput, referenceInput, model, sigmaLevels[changed]);
             counts[sampledClass] = counts.TryGetValue(sampledClass, out int seen) ? seen + 1 : 1;
@@ -358,15 +359,16 @@ public class AdaptiveRandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense
     }
 
     /// <summary>
-    /// The probe step: k queries x + N(0, sigma_min^2 I), counting those whose class differs from the clean
-    /// prediction. sigma grows linearly from sigma_min to sigma_max with that fraction (near a boundary, more noise).
+    /// The probe step: k queries x + N(0, sigma_min^2 I), counting those whose class differs from the noisy
+    /// reference prediction. sigma grows linearly from sigma_min to sigma_max with that fraction (near a boundary,
+    /// more noise).
     /// </summary>
-    private int ChangedProbes(Vector<T> vectorInput, TInput input, IFullModel<T, TInput, TOutput> model, int baseClass, T probeSigma)
+    private int ChangedProbes(Vector<T> vectorInput, TInput input, IFullModel<T, TInput, TOutput> model, int referenceClass, T probeSigma)
     {
         int changedPredictions = 0;
         for (int i = 0; i < _sensitivitySamples; i++)
         {
-            if (ClassifyNoisy(vectorInput, input, model, probeSigma) != baseClass)
+            if (ClassifyNoisy(vectorInput, input, model, probeSigma) != referenceClass)
             {
                 changedPredictions++;
             }
