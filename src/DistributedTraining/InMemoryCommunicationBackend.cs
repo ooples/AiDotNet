@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Validation;
 
@@ -355,6 +356,8 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
     public override void Barrier()
     {
         EnsureInitialized();
+        DrainAsyncCollectives();
+        long startTicks = Stopwatch.GetTimestamp();
 
         lock (_globalLock)
         {
@@ -406,6 +409,8 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
                 }
             }
         }
+
+        RecordCollectiveDurationTicks(Stopwatch.GetTimestamp() - startTicks);
     }
 
     /// <inheritdoc/>
@@ -438,11 +443,14 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
             throw new ArgumentNullException(nameof(data));
         }
 
+        DrainAsyncCollectives();
+        long startTicks = Stopwatch.GetTimestamp();
+
         // For single process, no communication needed - data is already the "reduced" result
         // (e.g., Average of one value is itself, Sum of one value is itself)
         if (_worldSize == 1)
         {
-            // No modification needed - data already contains the correct result
+            RecordCollectiveDurationTicks(Stopwatch.GetTimestamp() - startTicks);
             return;
         }
 
@@ -454,69 +462,68 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
             // Use environment-prefixed buffer ID
             string bufferId = $"{_environmentId}_allreduce_{currentCounter}";
 
-            // Initialize shared buffer
+            // Initialize rank-indexed shared buffer so reductions always execute in canonical rank order 0..W-1
+            // (guaranteeing bit-identical floating-point results independent of OS thread arrival order).
             if (!_sharedBuffers.ContainsKey(bufferId))
             {
-                _sharedBuffers[bufferId] = new List<Vector<T>>();
+                _sharedBuffers[bufferId] = new List<Vector<T>>(new Vector<T>[_worldSize]);
             }
 
-            // Contribute local data
-            _sharedBuffers[bufferId].Add(data.Clone());
-
-            var startTime = DateTime.UtcNow;
-
-            // Initialize pending consumers counter to track how many ranks need to read the result
-            // This prevents race condition where rank 0 removes the buffer before other ranks finish reading
             if (!_pendingConsumers.ContainsKey(bufferId))
             {
                 _pendingConsumers[bufferId] = _worldSize;
             }
 
+            // Contribute local data at deterministic rank slot
+            _sharedBuffers[bufferId][_rank] = data.Clone();
+
+            var startTime = DateTime.UtcNow;
+
             try
             {
                 // Wait until all processes have contributed
-                while (_sharedBuffers.ContainsKey(bufferId) && _sharedBuffers[bufferId].Count < _worldSize)
+                while (_sharedBuffers.ContainsKey(bufferId))
                 {
+                    int contributedCount = _sharedBuffers[bufferId].Count(v => v != null);
+                    if (contributedCount >= _worldSize)
+                    {
+                        break;
+                    }
+
                     Monitor.Wait(_globalLock, 10);
                     if ((DateTime.UtcNow - startTime).TotalMilliseconds > BarrierTimeoutMs)
                     {
-                        throw new TimeoutException($"AllReduce timeout after {BarrierTimeoutMs}ms. Only {_sharedBuffers[bufferId].Count} of {_worldSize} processes contributed.");
+                        throw new TimeoutException($"AllReduce timeout after {BarrierTimeoutMs}ms. Only {contributedCount} of {_worldSize} processes contributed.");
                     }
                 }
 
-                // Perform reduction
+                // Perform reduction in strict rank order 0..WorldSize-1
                 if (_sharedBuffers.ContainsKey(bufferId))
                 {
                     var allData = _sharedBuffers[bufferId];
                     var result = PerformReduction(allData, operation);
-
-                    // Copy result back to input data
-                    for (int i = 0; i < data.Length; i++)
-                    {
-                        data[i] = result[i];
-                    }
+                    result.AsSpan().CopyTo(data.AsWritableSpan());
                 }
             }
             finally
             {
                 // CRITICAL: Decrement consumer count even on exception to prevent buffer leaks
-                // This must happen in finally to ensure cleanup even if reduction or copy operations fail
                 if (_pendingConsumers.ContainsKey(bufferId))
                 {
                     int remaining = --_pendingConsumers[bufferId];
                     if (remaining == 0)
                     {
-                        // All ranks have consumed the result, safe to cleanup
                         _sharedBuffers.Remove(bufferId);
                         _pendingConsumers.Remove(bufferId);
                     }
                 }
 
                 // CRITICAL: PulseAll must happen even on timeout to wake other waiting processes
-                // Without this, a timeout in one process causes deadlock in others waiting at Monitor.Wait
                 Monitor.PulseAll(_globalLock);
             }
         }
+
+        RecordCollectiveDurationTicks(Stopwatch.GetTimestamp() - startTicks);
     }
 
     /// <inheritdoc/>
@@ -529,10 +536,15 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
             throw new ArgumentNullException(nameof(sendData));
         }
 
+        DrainAsyncCollectives();
+        long startTicks = Stopwatch.GetTimestamp();
+
         // For single process, just return a copy
         if (_worldSize == 1)
         {
-            return sendData.Clone();
+            var single = sendData.Clone();
+            RecordCollectiveDurationTicks(Stopwatch.GetTimestamp() - startTicks);
+            return single;
         }
 
         lock (_globalLock)
@@ -594,6 +606,7 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
                     offset += data.Length;
                 }
 
+                RecordCollectiveDurationTicks(Stopwatch.GetTimestamp() - startTicks);
                 return new Vector<T>(result);
             }
             finally
@@ -644,11 +657,16 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
             throw new ArgumentException($"Invalid root {root}. Must be between 0 and {_worldSize - 1}.");
         }
 
+        DrainAsyncCollectives();
+        long startTicks = Stopwatch.GetTimestamp();
+
         // For single process, return a clone (maintains consistency with multi-process behavior)
         if (_worldSize == 1)
         {
             Guard.NotNull(data);
-            return data.Clone();
+            var single = data.Clone();
+            RecordCollectiveDurationTicks(Stopwatch.GetTimestamp() - startTicks);
+            return single;
         }
 
         lock (_globalLock)
@@ -704,6 +722,7 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
                     throw new InvalidOperationException("Broadcast buffer was removed before data could be retrieved.");
                 }
 
+                RecordCollectiveDurationTicks(Stopwatch.GetTimestamp() - startTicks);
                 return result;
             }
             finally
@@ -736,11 +755,16 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
             throw new ArgumentException($"Invalid root {root}. Must be between 0 and {_worldSize - 1}.");
         }
 
+        DrainAsyncCollectives();
+        long startTicks = Stopwatch.GetTimestamp();
+
         // For single process, just return a copy
         if (_worldSize == 1)
         {
             Guard.NotNull(sendData);
-            return sendData.Clone();
+            var single = sendData.Clone();
+            RecordCollectiveDurationTicks(Stopwatch.GetTimestamp() - startTicks);
+            return single;
         }
 
         lock (_globalLock)
@@ -803,6 +827,7 @@ public class InMemoryCommunicationBackend<T> : CommunicationBackendBase<T>
                         throw new InvalidOperationException($"Scatter buffer is null or missing data for rank {_rank} after synchronization.");
                     }
                     result = buffer[_rank].Clone();
+                    RecordCollectiveDurationTicks(Stopwatch.GetTimestamp() - startTicks);
                     return result;
                 }
                 else

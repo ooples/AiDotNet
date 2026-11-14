@@ -290,7 +290,7 @@ public static class TapeTrainingStep<T>
         {
             foreach (var parameter in trainable.GetTrainableParameters())
             {
-                if (materializedOnly && (parameter is null || parameter.Length == 0)) continue;
+                if (parameter is null || (materializedOnly && parameter.Length == 0)) continue;
                 if (seen.Add(parameter)) parameters.Add(parameter);
             }
         }
@@ -314,7 +314,7 @@ public static class TapeTrainingStep<T>
         {
             foreach (var parameter in trainable.GetTrainableParameters())
             {
-                if (materializedOnly && (parameter is null || parameter.Length == 0)) continue;
+                if (parameter is null || (materializedOnly && parameter.Length == 0)) continue;
                 if (seen.Add(parameter)) parameters.Add(parameter);
             }
         }

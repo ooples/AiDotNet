@@ -1,3 +1,5 @@
+using AiDotNet.Models.Options;
+
 namespace AiDotNet.Interfaces;
 
 /// <summary>
@@ -131,6 +133,17 @@ public interface ICheckpointManager<T, TInput, TOutput>
         int keepLast = 5,
         bool saveOnImprovement = true,
         string? metricName = null);
+
+    /// <summary>
+    /// Sets up automatic checkpointing during training using an <see cref="AutoCheckpointingOptions"/> object,
+    /// including optional monotonic wall-clock interval saving and explicit metric optimization direction.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Use this overload when you want to save checkpoints on a time interval
+    /// (for example every 15 minutes) or customize whether higher or lower metric values count as an improvement.</para>
+    /// </remarks>
+    /// <param name="options">The auto-checkpointing options to apply.</param>
+    void ConfigureAutoCheckpointing(AutoCheckpointingOptions options);
 
     /// <summary>
     /// Determines whether an automatic checkpoint should be saved based on current configuration.
