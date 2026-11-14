@@ -4,6 +4,8 @@ using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using Microsoft.ML.OnnxRuntime;
+using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
 namespace AiDotNet.ComputerVision.Segmentation.PointCloud;
 
@@ -128,6 +130,10 @@ public partial class PointTransformerV3<T> : Common.SemanticSegmentationBase<T>
     protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
 
     /// <inheritdoc />
+    /// <remarks>Point clouds, not images: see <see cref="PredictPointCloudOnnx"/>.</remarks>
+    protected override Tensor<T> PredictOnnx(Tensor<T> input) => PredictPointCloudOnnx(_onnxSession, input);
+
+    /// <inheritdoc />
     protected override Tensor<T> Forward(Tensor<T> input)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
@@ -152,15 +158,9 @@ public partial class PointTransformerV3<T> : Common.SemanticSegmentationBase<T>
             return;
         }
 
-        var o = _options;
-        var encoder = new PointTransformerV3Encoder<T>(o.InputChannels, false, o.GridSize, o.Strides, o.EncoderDepths,
-            o.EncoderChannels, o.EncoderNumHeads, o.EncoderPatchSizes, o.DecoderDepths, o.DecoderChannels,
-            o.DecoderNumHeads, o.DecoderPatchSizes, o.MlpRatio, o.DropPathRate, o.EnableConditionalPositionalEncoding,
-            o.PreNorm, o.ShuffleOrders, new SpaceFillingCurveSet(o.SerializationCurves), PointTransformerV3Revision.M1Base, false, false, o.Seed);
-        Layers.Add(encoder);
+        // The PTv3 m1 backbone, then Pointcept's seg_head Linear(dec_channels[0], num_classes).
+        Layers.AddRange(LayerHelper<T>.CreateDefaultPointTransformerV3Layers(_options, _numClasses));
         _encoderLayerEnd = 1;
-        // Pointcept seg_head: Linear(dec_channels[0], num_classes).
-        Layers.Add(new DenseLayer<T>(_numClasses, (IActivationFunction<T>?)null));
     }
 
     /// <inheritdoc />
@@ -191,6 +191,93 @@ public partial class PointTransformerV3<T> : Common.SemanticSegmentationBase<T>
             3 => new[] { new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)), points, logits },
             _ => null
         };
+    }
+
+    /// <summary>
+    /// ONNX inference for the point-cloud models (PTv3 and Sonata). Accepts <c>[points, channels]</c> or
+    /// <c>[batch, points, channels]</c> and feeds the exported graph the rank it declares: a rank-3 export
+    /// (<c>[batch, points, channels]</c>) gets the whole batch at once, and a rank-2 export (one cloud,
+    /// <c>[points, channels]</c>, as Pointcept's single-scene inference is written) gets each cloud in turn,
+    /// with the outputs stacked. The result has the input's leading shape and the graph's per-point width.
+    /// </summary>
+    /// <remarks>
+    /// The image-shaped <see cref="Common.SegmentationModelBase{T}.PredictOnnx"/> is not usable here: it
+    /// requires rank-3 <c>[C, H, W]</c> input and would add a fourth axis to a batched cloud.
+    /// </remarks>
+    internal static Tensor<T> PredictPointCloudOnnx(InferenceSession? session, Tensor<T> input)
+    {
+        if (session is null) throw new InvalidOperationException("ONNX session is not initialized.");
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (input.Rank != 2 && input.Rank != 3)
+            throw new ArgumentException(
+                $"Expected [points, channels] or [batch, points, channels], got rank {input.Rank}.", nameof(input));
+        var metadata = session.InputMetadata.FirstOrDefault();
+        if (metadata.Key is null) throw new InvalidOperationException("The ONNX model declares no input.");
+        int exportedRank = metadata.Value.Dimensions.Length;
+        if (exportedRank != 2 && exportedRank != 3)
+            throw new InvalidOperationException(
+                $"The ONNX model's input '{metadata.Key}' has rank {exportedRank}; a point-cloud model takes "
+                + "[points, channels] or [batch, points, channels].");
+
+        bool batched = input.Rank == 3;
+        int clouds = batched ? input.Shape[0] : 1;
+        int points = input.Shape[input.Rank - 2], width = input.Shape[input.Rank - 1];
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var values = new float[input.Length];
+        numOps.ToFloatSpan(input.ToArray(), values);
+
+        float[] output;
+        int[] perCloudShape;
+        if (exportedRank == 3)
+        {
+            var (data, shape) = RunOnnx(session, metadata.Key, values, new[] { clouds, points, width });
+            if (shape.Length < 2 || shape[0] != clouds)
+                throw new InvalidOperationException(
+                    $"The ONNX model returned [{string.Join(", ", shape)}] for {clouds} cloud(s); expected a leading batch axis.");
+            output = data;
+            perCloudShape = shape.Skip(1).ToArray();
+        }
+        else
+        {
+            int cloudLength = points * width;
+            float[]? stacked = null;
+            perCloudShape = Array.Empty<int>();
+            int perCloudLength = 0;
+            for (int b = 0; b < clouds; b++)
+            {
+                var cloud = new float[cloudLength];
+                Array.Copy(values, b * cloudLength, cloud, 0, cloudLength);
+                var (data, shape) = RunOnnx(session, metadata.Key, cloud, new[] { points, width });
+                if (stacked is null)
+                {
+                    perCloudShape = shape;
+                    perCloudLength = data.Length;
+                    stacked = new float[perCloudLength * clouds];
+                }
+                else if (!shape.SequenceEqual(perCloudShape))
+                {
+                    throw new InvalidOperationException("The ONNX model returned differently shaped outputs for equally sized clouds.");
+                }
+
+                Array.Copy(data, 0, stacked, b * perCloudLength, perCloudLength);
+            }
+
+            output = stacked ?? Array.Empty<float>();
+        }
+
+        var result = new T[output.Length];
+        numOps.FromFloatSpan(output, result);
+        int[] resultShape = batched ? new[] { clouds }.Concat(perCloudShape).ToArray() : perCloudShape;
+        return new Tensor<T>(result, resultShape);
+    }
+
+    private static (float[] Data, int[] Shape) RunOnnx(InferenceSession session, string inputName, float[] values, int[] shape)
+    {
+        var tensor = new OnnxTensors.DenseTensor<float>(values, shape);
+        var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, tensor) };
+        using var results = session.Run(inputs);
+        var first = results.First().AsTensor<float>();
+        return (first.ToArray(), first.Dimensions.ToArray());
     }
 
     /// <summary>Argmax over the last axis, returned in <typeparamref name="T"/>.</summary>

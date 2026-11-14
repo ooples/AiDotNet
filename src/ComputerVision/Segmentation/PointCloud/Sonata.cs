@@ -136,6 +136,11 @@ public partial class Sonata<T> : Common.SemanticSegmentationBase<T>
     protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
 
     /// <inheritdoc />
+    /// <remarks>Point clouds, not images: see <see cref="PointTransformerV3{T}.PredictPointCloudOnnx"/>.</remarks>
+    protected override Tensor<T> PredictOnnx(Tensor<T> input)
+        => PointTransformerV3<T>.PredictPointCloudOnnx(_onnxSession, input);
+
+    /// <inheritdoc />
     protected override Tensor<T> Forward(Tensor<T> input)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
@@ -421,13 +426,7 @@ public partial class Sonata<T> : Common.SemanticSegmentationBase<T>
     }
 
     private PointTransformerV3Encoder<T> CreateEncoder(double dropPath, int? seed, IReadOnlyList<ISpaceFillingCurve> curves)
-    {
-        var o = _options;
-        return new PointTransformerV3Encoder<T>(o.InputChannels, true, o.GridSize, o.Strides, o.EncoderDepths,
-            o.EncoderChannels, o.EncoderNumHeads, o.EncoderPatchSizes, null, null, null, null, o.MlpRatio, dropPath,
-            o.EnableConditionalPositionalEncoding, o.PreNorm, o.ShuffleOrders, new SpaceFillingCurveSet(curves),
-            PointTransformerV3Revision.M2Sonata, true, true, seed);
-    }
+        => LayerHelper<T>.CreateSonataEncoder(_options, dropPath, seed, curves);
 
     private Tensor<T> ToTensor(float[] values, int rows, int columns)
     {
@@ -452,10 +451,10 @@ public partial class Sonata<T> : Common.SemanticSegmentationBase<T>
             return;
         }
 
-        Layers.Add(CreateEncoder(_options.DropPathRate, _options.Seed, _options.SerializationCurves));
+        // The encoder, then the linear probe on the fully up-cast features (Sonata linear probing:
+        // 1232 channels -> classes).
+        Layers.AddRange(LayerHelper<T>.CreateDefaultSonataLayers(_options, _numClasses));
         _encoderLayerEnd = 1;
-        // Linear probe on the fully up-cast features (Sonata linear probing: 1232 channels -> classes).
-        Layers.Add(new DenseLayer<T>(_numClasses, (IActivationFunction<T>?)null));
     }
 
     /// <inheritdoc />
