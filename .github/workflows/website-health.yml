@@ -41,7 +41,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          read -r conclusion url < <(gh run list -R "$GITHUB_REPOSITORY" -w deploy-website.yml -b master -L 1 \
+          read -r conclusion url < <(gh run list -R "$GITHUB_REPOSITORY" -w deploy-website.yml -b master --status completed -L 1 \
             --json conclusion,url --jq '.[0] | "\(.conclusion) \(.url)"')
           echo "Latest deploy-website run on master: $conclusion $url"
           [ "$conclusion" = success ] || { echo "::error::The latest website deploy did not succeed: $url"; exit 1; }
@@ -59,6 +59,16 @@ jobs:
           [ "$rows" -gt 0 ] || { echo "::error::Parsed no migration rows; the list format changed."; exit 1; }
           if [ -n "$bad" ]; then echo "::error::Migration drift:"; echo "$bad"; exit 1; fi
           echo "$rows migrations, repo and production agree."
+
+      - name: Revoke leftover e2e test licenses
+        # The lifecycle spec revokes its key in an afterEach, but a cancelled run (a newer deploy
+        # cancels the running one) never reaches it. Revoking also puts the key on the CRL (trigger).
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          n=$(psql "$(cat supabase/.temp/pooler-url)" -v ON_ERROR_STOP=1 -Atc "with r as (update public.license_keys set status = 'revoked', revoked_at = now() where customer_full_name like 'e2e-test %' and status <> 'revoked' and issued_at < now() - interval '1 hour' returning 1) select count(*) from r")
+          echo "Revoked $n leftover e2e test license(s)."
 
       - name: Edge functions match
         run: |
