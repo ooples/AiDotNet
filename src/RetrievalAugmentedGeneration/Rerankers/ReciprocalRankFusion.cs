@@ -121,8 +121,8 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies
 
             var denominators = Engine.TensorAddScalar(new Tensor<int>(ranks.ToArray(), [m]).Cast<T>(), NumOps.FromDouble(_k));
             var contributions = Engine.TensorDivide(Tensor<T>.CreateDefault([m], NumOps.One), denominators);
-            var membership = Engine.TensorOneHot<T>(new Tensor<int>(occurrences.ToArray(), [m]), index.Count);
-            var totals = Engine.TensorMatMul(Engine.Reshape(contributions, [1, m]), membership);
+            // Segmented sum per document: linear in the occurrences, no [occurrences x documents] membership matrix.
+            var totals = Engine.ScatterAdd(contributions, new Tensor<int>(occurrences.ToArray(), [m]), 0, index.Count);
             return (index, totals.ToArray());
         }
     }

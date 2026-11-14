@@ -212,6 +212,32 @@ public class RetrievalPaperReferenceTests
         Assert.Equal(Math.Exp(6) / z, moderate[2], 1e-9);
     }
 
+    /// <summary>
+    /// RRF over two disjoint 50,000-document rankings. The fused scores are a per-document sum, which must stay
+    /// linear in the hits: the one-hot [occurrences x documents] membership used for it here had 10^10 entries
+    /// and could not be allocated.
+    /// </summary>
+    [Fact]
+    public void Rrf_LargeDisjointRankings_FuseWithLinearMemory()
+    {
+        const int perList = 50000;
+        var lists = new List<List<Document<double>>>();
+        for (int l = 0; l < 2; l++)
+        {
+            var list = new List<Document<double>>(perList);
+            for (int r = 0; r < perList; r++)
+                list.Add(new Document<double>($"l{l}-{r}", "x"));
+            lists.Add(list);
+        }
+
+        var fused = new ReciprocalRankFusion<double>().FuseRankings(lists, topK: 2 * perList);
+
+        Assert.Equal(2 * perList, fused.Count);
+        Assert.Equal(1.0 / 61, fused[0].RelevanceScore, Tolerance);
+        Assert.Equal(1.0 / 61, fused[1].RelevanceScore, Tolerance);
+        Assert.Equal(1.0 / (60 + perList), fused[fused.Count - 1].RelevanceScore, Tolerance);
+    }
+
     private static InMemoryDocumentStore<TNum> Store<TNum>(params string[] contents)
     {
         var store = new InMemoryDocumentStore<TNum>(1);
