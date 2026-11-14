@@ -106,21 +106,18 @@ public class MultiScaleReactionDiffusion<T> : PDESpecificationBase<T>, IMultiSca
         scaleIndex == 0 ? NumOps.One : _fineScaleWeight;
 
     /// <inheritdoc/>
-    public T ComputeScaleResidual(
-        int scaleIndex, T[] inputs, T[] outputs, PDEDerivatives<T> derivatives)
+    public Tensor<T> ComputeScaleResidual(
+        int scaleIndex, Tensor<T> inputs, Tensor<T> outputs, PDEDerivatives<T> derivatives)
     {
         if (derivatives.FirstDerivatives is null || derivatives.SecondDerivatives is null)
         {
-            return NumOps.Zero;
+            throw new ArgumentException("The scale residual needs first and second derivatives.", nameof(derivatives));
         }
 
         T diffusivity = scaleIndex == 0 ? _coarseDiffusivity : _fineDiffusivity;
 
         // ∂u/∂t − k ∂²u/∂x²
-        T dudt = derivatives.FirstDerivatives[0, 1];
-        T d2udx2 = derivatives.SecondDerivatives[0, 0, 0];
-
-        return NumOps.Subtract(dudt, NumOps.Multiply(diffusivity, d2udx2));
+        return TapeEngine.TensorSubtract(D1(derivatives, 0, 1), TapeEngine.TensorMultiplyScalar(D2(derivatives, 0, 0, 0), diffusivity));
     }
 
     /// <inheritdoc/>
@@ -128,16 +125,16 @@ public class MultiScaleReactionDiffusion<T> : PDESpecificationBase<T>, IMultiSca
     /// How far apart the two scales are where they describe the same point. Driving this to zero is
     /// what makes the pair one model rather than two independent ones.
     /// </remarks>
-    public T ComputeScaleCoupling(
+    public Tensor<T> ComputeScaleCoupling(
         int coarseIndex,
         int fineIndex,
-        T[] inputs,
-        T[] coarseOutputs,
-        T[] fineOutputs,
+        Tensor<T> inputs,
+        Tensor<T> coarseOutputs,
+        Tensor<T> fineOutputs,
         PDEDerivatives<T> coarseDerivatives,
         PDEDerivatives<T> fineDerivatives)
     {
-        return NumOps.Abs(NumOps.Subtract(coarseOutputs[0], fineOutputs[0]));
+        return TapeEngine.TensorAbs(TapeEngine.TensorSubtract(Output(coarseOutputs, 0), Output(fineOutputs, 0)));
     }
 
     /// <inheritdoc/>
@@ -145,11 +142,16 @@ public class MultiScaleReactionDiffusion<T> : PDESpecificationBase<T>, IMultiSca
     public override T ComputeResidual(
         Vector<T> inputs, Vector<T> outputs, PDEDerivatives<T> derivatives)
     {
-        var x = inputs.ToArray();
-        var u = outputs.ToArray();
+        return EvaluatePointResidual(inputs, outputs, derivatives);
+    }
 
-        return NumOps.Add(
-            ComputeScaleResidual(0, x, u, derivatives),
-            ComputeScaleResidual(1, x, u, derivatives));
+    /// <inheritdoc/>
+    /// <remarks>Both scale residuals summed, as <see cref="ComputeResidual"/>: 2 u_t - (k_coarse + k_fine) u_xx.</remarks>
+    public override Tensor<T> ComputeTapeResidual(Tensor<T> inputs, Tensor<T> outputs, PDEDerivatives<T> derivatives)
+    {
+        var e = TapeEngine;
+        var time = e.TensorMultiplyScalar(D1(derivatives, 0, 1), NumOps.FromDouble(2.0));
+        var diffusion = e.TensorMultiplyScalar(D2(derivatives, 0, 0, 0), NumOps.Add(_coarseDiffusivity, _fineDiffusivity));
+        return e.TensorSubtract(time, diffusion);
     }
 }

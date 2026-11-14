@@ -46,4 +46,10 @@ public enum TrainingObjectiveKind
     /// train: the target is the second modality's batch, paired row by row with the input.
     /// </summary>
     ContrastiveAlignment,
+
+    /// <summary>
+    /// A scalar Lagrangian is differentiated twice with respect to the state, and the accelerations the
+    /// Euler-Lagrange equation implies are fitted to observed accelerations.
+    /// </summary>
+    LagrangianDynamics,
 }
