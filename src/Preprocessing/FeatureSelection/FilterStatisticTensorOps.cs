@@ -334,8 +334,8 @@ internal static class FilterStatisticTensorOps
         // front factor x^a (1-x)^b / (a B(a, b)), in logs
         var logFront = engine.TensorAdd(
             engine.TensorSubtract(
-                engine.TensorSubtract(engine.TensorLgamma(engine.TensorAdd(aa, bb)), engine.TensorLgamma(aa)),
-                engine.TensorLgamma(bb)),
+                engine.TensorSubtract(LogGamma(engine.TensorAdd(aa, bb)), LogGamma(aa)),
+                LogGamma(bb)),
             engine.TensorAdd(engine.TensorXlogy(aa, xx), engine.TensorXlogy(bb, yy)));
         var partial = engine.TensorDivide(
             engine.TensorMultiply(engine.TensorExp(logFront), BetaContinuedFraction(aa, bb, xx)), aa);
@@ -444,14 +444,56 @@ internal static class FilterStatisticTensorOps
 
     /// <summary>
     /// Upper-tail probability of the chi-squared distribution, <c>P(chi2(df) &gt; x)</c> (scipy.stats.chi2.sf),
-    /// element-wise: the regularized upper incomplete gamma <c>Q(df / 2, x / 2)</c>.
+    /// element-wise: the regularized upper incomplete gamma <c>Q(df / 2, x / 2)</c>. With no degrees of freedom
+    /// (a one-class target or a single bin) there is nothing to test, and every p-value is 1: Q(0, x) is NaN.
     /// </summary>
     public static Tensor<T> ChiSquareSurvival<T>(Tensor<T> x, double df)
     {
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
+        if (!(df > 0))
+            return FilledLike(x, ops.One);
+
         T half = ops.FromDouble(0.5);
         return engine.TensorIgammac(FilledLike(x, ops.FromDouble(df / 2.0)), engine.TensorMultiplyScalar(x, half));
+    }
+
+    /// <summary>
+    /// <c>ln Gamma(x)</c> for positive x, element-wise. The engine's <c>TensorLgamma</c> takes the logarithm of
+    /// Gamma(x), which overflows where Gamma does (x above 9.6 in Half, 35.04 in float, 171.6 in double) and returns
+    /// infinity: ln C(200, 100) for Kernel SHAP's weights in float, or ln n! for Fisher's exact test past 171 rows.
+    /// Past those points the Stirling series
+    /// <c>(x - 1/2) ln x - x + ln(2 pi) / 2 + 1/(12 x) - 1/(360 x^3) + 1/(1260 x^5)</c> is used instead; its first
+    /// omitted term, 1/(1680 x^7), is below 1.3e-10 at x = 9, 1e-14 at x = 35 and 1e-18 at x = 171, under the
+    /// precision of the type each limit belongs to.
+    /// </summary>
+    public static Tensor<T> LogGamma<T>(Tensor<T> x)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        T limit = ops.FromDouble(
+            PreprocessingTensorOps.IsNarrowFloat<T>() ? 9.0 : typeof(T) == typeof(float) ? 35.0 : 171.0);
+        var large = engine.TensorGreaterThan(x, limit);
+        if (engine.TensorCountNonzero(large) == 0)
+            return engine.TensorLgamma(x);
+
+        // the series is evaluated at the limit where the engine op is kept, so it never sees a small argument
+        var z = engine.TensorWhere(large, x, FilledLike(x, limit));
+        var inverse = engine.TensorReciprocal(z);
+        var inverseSquare = engine.TensorSquare(inverse);
+        // 1/(12 z) - 1/(360 z^3) + 1/(1260 z^5) = (1/z) (1/12 - (1/z^2) (1/360 - (1/z^2) / 1260))
+        var inner = engine.TensorAddScalar(
+            engine.TensorNegate(engine.TensorMultiplyScalar(inverseSquare, ops.FromDouble(1.0 / 1260.0))), ops.FromDouble(1.0 / 360.0));
+        var correction = engine.TensorMultiply(
+            inverse,
+            engine.TensorAddScalar(engine.TensorNegate(engine.TensorMultiply(inverseSquare, inner)), ops.FromDouble(1.0 / 12.0)));
+        var series = engine.TensorAdd(
+            engine.TensorAddScalar(
+                engine.TensorSubtract(
+                    engine.TensorMultiply(engine.TensorAddScalar(z, ops.FromDouble(-0.5)), engine.TensorLog(z)), z),
+                ops.FromDouble(0.5 * Math.Log(2.0 * Math.PI))),
+            correction);
+        return engine.TensorWhere(large, series, engine.TensorLgamma(x));
     }
 
     /// <summary>Upper-tail probability of the standard normal, <c>P(Z &gt; z) = erfc(z / sqrt 2) / 2</c> (scipy.stats.norm.sf).</summary>
