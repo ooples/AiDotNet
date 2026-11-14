@@ -163,6 +163,7 @@ public class MPICommunicationBackend<T> : CommunicationBackendBase<T>
     public override void Barrier()
     {
         EnsureInitialized();
+        DrainAsyncCollectives();
 
         if (!_useMPI)
         {
@@ -187,6 +188,7 @@ public class MPICommunicationBackend<T> : CommunicationBackendBase<T>
     {
         EnsureInitialized();
         ValidateData(data, nameof(data));
+        DrainAsyncCollectives();
 
         if (!_useMPI)
         {
@@ -242,6 +244,7 @@ public class MPICommunicationBackend<T> : CommunicationBackendBase<T>
     {
         EnsureInitialized();
         ValidateData(sendData, nameof(sendData));
+        DrainAsyncCollectives();
 
         if (!_useMPI)
         {
@@ -279,6 +282,7 @@ public class MPICommunicationBackend<T> : CommunicationBackendBase<T>
         EnsureInitialized();
         ValidateData(data, nameof(data));
         ValidateRoot(root);
+        DrainAsyncCollectives();
 
         if (!_useMPI)
         {
@@ -316,6 +320,7 @@ public class MPICommunicationBackend<T> : CommunicationBackendBase<T>
     {
         EnsureInitialized();
         ValidateRoot(root);
+        DrainAsyncCollectives();
 
         if (!_useMPI)
         {
@@ -364,6 +369,7 @@ public class MPICommunicationBackend<T> : CommunicationBackendBase<T>
     {
         EnsureInitialized();
         ValidateData(data, nameof(data));
+        DrainAsyncCollectives();
 
         if (!_useMPI)
         {
@@ -428,6 +434,7 @@ public class MPICommunicationBackend<T> : CommunicationBackendBase<T>
         EnsureInitialized();
         ValidateData(data, nameof(data));
         ValidateRank(destinationRank, nameof(destinationRank));
+        DrainAsyncCollectives();
 
         if (tag < 0)
         {
@@ -466,6 +473,7 @@ public class MPICommunicationBackend<T> : CommunicationBackendBase<T>
     {
         EnsureInitialized();
         ValidateRank(sourceRank, nameof(sourceRank));
+        DrainAsyncCollectives();
 
         if (count <= 0)
         {

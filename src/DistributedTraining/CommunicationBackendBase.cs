@@ -266,6 +266,11 @@ public abstract class CommunicationBackendBase<T> : IAsyncCommunicationBackend<T
 
     private static void RunAsyncWorkerLoop(BlockingCollection<Action> queue)
     {
+        // The worker owns the queue's lifetime: it runs every action that was admitted before
+        // CompleteAdding (so every queued handle settles, with a result or with the transport's
+        // failure) and only then disposes the queue. Disposing from the stopping thread instead would
+        // strand admitted actions whenever the worker outlives the stop timeout, leaving their
+        // handles blocked forever in Wait().
         try
         {
             foreach (var item in queue.GetConsumingEnumerable())
@@ -273,9 +278,9 @@ public abstract class CommunicationBackendBase<T> : IAsyncCommunicationBackend<T
                 item();
             }
         }
-        catch (ObjectDisposedException)
+        finally
         {
-            // Normal teardown race when Dispose happens after GetConsumingEnumerable exits.
+            queue.Dispose();
         }
     }
 
@@ -298,18 +303,22 @@ public abstract class CommunicationBackendBase<T> : IAsyncCommunicationBackend<T
 
         try
         {
+            // Stop admission first. The worker still drains everything already queued.
             queue.CompleteAdding();
         }
         catch (ObjectDisposedException)
         {
+            // The worker already drained and disposed the queue.
         }
 
         if (worker is not null && worker.IsAlive && Thread.CurrentThread != worker)
         {
+            // Bounded wait so a peer that never answers cannot hang shutdown. If the worker is still
+            // inside a collective when this expires, the transport teardown that follows makes that
+            // collective and every remaining queued one fail, and each handle settles with that
+            // failure. The queue is disposed by the worker itself once it has drained.
             worker.Join(millisecondsTimeout: 10_000);
         }
-
-        queue.Dispose();
     }
 
     private sealed class CompletedCollectiveResultHandle : IAsyncCollectiveResultHandle<T>

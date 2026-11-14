@@ -486,6 +486,7 @@ public class NCCLCommunicationBackend<T> : CommunicationBackendBase<T>
     public override void Barrier()
     {
         EnsureInitialized();
+        DrainAsyncCollectives();
 
         if (_worldSize == 1)
         {
@@ -510,6 +511,7 @@ public class NCCLCommunicationBackend<T> : CommunicationBackendBase<T>
     {
         EnsureInitialized();
         ValidateData(data, nameof(data));
+        DrainAsyncCollectives();
 
         if (_worldSize == 1)
         {
@@ -611,6 +613,7 @@ public class NCCLCommunicationBackend<T> : CommunicationBackendBase<T>
     {
         EnsureInitialized();
         ValidateData(sendData, nameof(sendData));
+        DrainAsyncCollectives();
 
         if (_worldSize == 1)
         {
@@ -706,6 +709,7 @@ public class NCCLCommunicationBackend<T> : CommunicationBackendBase<T>
         EnsureInitialized();
         ValidateData(data, nameof(data));
         ValidateRoot(root);
+        DrainAsyncCollectives();
 
         if (_worldSize == 1)
         {
@@ -789,6 +793,7 @@ public class NCCLCommunicationBackend<T> : CommunicationBackendBase<T>
     {
         EnsureInitialized();
         ValidateRoot(root);
+        DrainAsyncCollectives();
 
         // NCCL doesn't have native scatter - implement via Broadcast + indexing
         if (_worldSize == 1)
@@ -839,6 +844,7 @@ public class NCCLCommunicationBackend<T> : CommunicationBackendBase<T>
     {
         EnsureInitialized();
         ValidateData(data, nameof(data));
+        DrainAsyncCollectives();
 
         if (data.Length % _worldSize != 0)
         {
