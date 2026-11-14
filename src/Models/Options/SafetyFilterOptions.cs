@@ -20,6 +20,9 @@ public class SafetyFilterOptions<T> : ModelOptions
     /// </summary>
     /// <value>The threshold (0-1), defaulting to 0.8.</value>
     /// <remarks>
+    /// <para>Content whose harm score exceeds this value fails input validation and is filtered on output.</para>
+    /// </remarks>
+    /// <remarks>
     /// <para><b>For Beginners:</b> Content with safety scores below this threshold is flagged.
     /// Higher thresholds (closer to 1) are more strict and filter more content.</para>
     /// </remarks>
@@ -29,6 +32,11 @@ public class SafetyFilterOptions<T> : ModelOptions
     /// Gets or sets the jailbreak detection sensitivity.
     /// </summary>
     /// <value>The sensitivity (0-1), defaulting to 0.7.</value>
+    /// <remarks>
+    /// <para>Each matched jailbreak pattern is 0.8 evidence, combined as a noisy-OR; an attempt is flagged when the
+    /// combined confidence reaches 1 - JailbreakSensitivity. At 0.7 one match is enough; below 0.2 two are needed;
+    /// 0 flags nothing.</para>
+    /// </remarks>
     /// <remarks>
     /// <para><b>For Beginners:</b> How sensitive the system is to jailbreak attempts.
     /// Higher values catch more jailbreaks but might have false positives.</para>
@@ -76,6 +84,12 @@ public class SafetyFilterOptions<T> : ModelOptions
     /// Gets or sets whether to use a classifier for harmful content detection.
     /// </summary>
     /// <value>True to use classifier, false for rule-based detection (default: true).</value>
+    /// <remarks>
+    /// <para>Takes effect when the filter is constructed with an
+    /// <see cref="AiDotNet.AdversarialRobustness.Safety.IContentClassifier{T}"/> (for example through
+    /// <c>AdversarialRobustnessConfiguration.CustomContentClassifier</c>): its category scores are merged with the
+    /// pattern scores, and numeric inputs and outputs are no longer exempt from scoring.</para>
+    /// </remarks>
     /// <remarks>
     /// <para><b>For Beginners:</b> Classifiers use machine learning to detect harmful content
     /// and are generally more accurate than simple rules.</para>
