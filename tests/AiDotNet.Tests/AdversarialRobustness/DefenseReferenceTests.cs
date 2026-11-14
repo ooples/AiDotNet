@@ -139,7 +139,7 @@ public class DefenseReferenceTests
         // Chen et al. (2023) add the visual prompt to the input; prepending it changed the length the frozen
         // model receives.
         var defense = new AdversarialPromptDefense<double, Vector<double>, Vector<double>>(
-            new AdversarialDefenseOptions<double> { Epsilon = 0.05 }, promptLength: 4, promptOptimizationSteps: 1);
+            new AdversarialDefenseOptions<double> { Epsilon = 0.05, Seed = 3 }, promptLength: 4, promptOptimizationSteps: 1);
         var model = new LengthCheckingModel(10);
         var inputs = new[] { new Vector<double>(Enumerable.Repeat(0.5, 10).ToArray()) };
         var labels = new[] { new Vector<double>(new[] { 1.0, 0.0 }) };
@@ -158,6 +158,30 @@ public class DefenseReferenceTests
 
         // A PreprocessInput that returned the input unchanged would pass everything above.
         Assert.Contains(new[] { 0, 1, 8, 9 }, i => Math.Abs(delta[i]) > 0.0);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task Jpeg_ShortInputKeepsItsObservedRangeLikeThe2DPath()
+    {
+        await Task.Yield();
+
+        // Five values have no 8 x 8 factorisation, so JPEG falls back to the 1D DCT path. The 2D path clamps
+        // its reconstruction to the observed [min, max] of the input; clamping the fallback to [0, 1] instead
+        // saturated -0.5 to 0 and 1.5 to 1, so the output range depended on the input length.
+        var input = new[] { -0.5, 0.0, 0.5, 1.0, 1.5 };
+        var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(
+            new AdversarialDefenseOptions<double> { UsePreprocessing = true, PreprocessingMethod = "JPEG" });
+        var output = defense.PreprocessInput(new Vector<double>(input)).ToArray();
+
+        Assert.Equal(5, output.Length);
+        for (int i = 0; i < input.Length; i++)
+        {
+            Assert.InRange(output[i], -0.5, 1.5);
+            Assert.Equal(input[i], output[i], 0.15);
+        }
+
+        Assert.True(output.Min() < -0.3, $"min {output.Min()}");
+        Assert.True(output.Max() > 1.3, $"max {output.Max()}");
     }
 
     /// <summary>Exposes the character-frequency features of the content classifier.</summary>
