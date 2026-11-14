@@ -249,6 +249,7 @@ public class LatentDirichletAllocation<T> : TransformerBase<T, Matrix<T>, Matrix
         var activeOnes = DimensionalityReductionOps.Full(new[] { docs, k }, NumOps.One);
         var alpha = NumOps.FromDouble(_docTopicPrior);
         var tolerance = DimensionalityReductionOps.Tolerance<T>(1e-4);
+        var normFloor = DimensionalityReductionOps.Tolerance<T>(2.220446049250313e-16);
 
         for (int innerIter = 0; innerIter < 20; innerIter++)
         {
@@ -259,7 +260,9 @@ public class LatentDirichletAllocation<T> : TransformerBase<T, Matrix<T>, Matrix
             phiTheta = engine.TensorWhere(activeFull, expElogTheta, phiTheta);
 
             // gamma = alpha + expElogTheta * ((x / norm) expElogBeta^T), norm = expElogTheta expElogBeta
-            var ratio = engine.TensorDivide(x, engine.TensorMatMul(expElogTheta, expElogBeta));
+            // scikit-learn adds machine epsilon to the normaliser: it underflows to 0 for a word no topic supports,
+            // and 0 / 0 would spread NaN through every topic
+            var ratio = engine.TensorDivide(x, engine.TensorAddScalar(engine.TensorMatMul(expElogTheta, expElogBeta), normFloor));
             var newGamma = engine.TensorAddScalar(
                 engine.TensorMultiply(expElogTheta, DimensionalityReductionOps.MatMulTranspose(ratio, expElogBeta)), alpha);
 
@@ -274,7 +277,7 @@ public class LatentDirichletAllocation<T> : TransformerBase<T, Matrix<T>, Matrix
         }
 
         // Sufficient statistics: expElogBeta * (phiTheta^T (x / norm))
-        var lastRatio = engine.TensorDivide(x, engine.TensorMatMul(phiTheta, expElogBeta));
+        var lastRatio = engine.TensorDivide(x, engine.TensorAddScalar(engine.TensorMatMul(phiTheta, expElogBeta), normFloor));
         var sufficientStats = engine.TensorMultiply(expElogBeta, DimensionalityReductionOps.TransposeMatMul(phiTheta, lastRatio));
         return (gamma, sufficientStats);
     }
