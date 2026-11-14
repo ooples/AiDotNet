@@ -97,34 +97,40 @@ public sealed partial class HouseholderSubspaceLayer<T> : LayerBase<T>, IShapeCo
         };
     }
 
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<int, (Tensor<T> StrictUpperTwo, Tensor<T> Identity)> s_compactWyMasks = new();
+    [ThreadStatic]
+    private static Dictionary<int, (Tensor<T> StrictUpperTwo, Tensor<T> Identity)>? t_compactWyMasks;
 
     private static (Tensor<T> StrictUpperTwo, Tensor<T> Identity) GetOrCreateCompactWyMasks(int k)
     {
-        return s_compactWyMasks.GetOrAdd(k, static dim =>
+        var cache = t_compactWyMasks ??= new Dictionary<int, (Tensor<T> StrictUpperTwo, Tensor<T> Identity)>();
+        if (cache.TryGetValue(k, out var existing))
         {
-            using var suspendScope = AiDotNet.Tensors.Engines.TensorScope.Suspend();
-            using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
-            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            return existing;
+        }
 
-            var ops = MathHelper.GetNumericOperations<T>();
-            T zero = ops.Zero;
-            T one = ops.One;
-            T twoVal = ops.FromDouble(2.0);
-            var upperData = new T[dim * dim];
-            var idData = new T[dim * dim];
-            for (int r = 0; r < dim; r++)
+        using var suspendScope = AiDotNet.Tensors.Engines.TensorScope.Suspend();
+        using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+
+        var ops = MathHelper.GetNumericOperations<T>();
+        T zero = ops.Zero;
+        T one = ops.One;
+        T twoVal = ops.FromDouble(2.0);
+        var upperData = new T[k * k];
+        var idData = new T[k * k];
+        for (int r = 0; r < k; r++)
+        {
+            for (int c = 0; c < k; c++)
             {
-                for (int c = 0; c < dim; c++)
-                {
-                    int idx = r * dim + c;
-                    upperData[idx] = r < c ? twoVal : zero;
-                    idData[idx] = r == c ? one : zero;
-                }
+                int idx = r * k + c;
+                upperData[idx] = r < c ? twoVal : zero;
+                idData[idx] = r == c ? one : zero;
             }
+        }
 
-            return (new Tensor<T>([dim, dim], new Vector<T>(upperData)), new Tensor<T>([dim, dim], new Vector<T>(idData)));
-        });
+        var masks = (new Tensor<T>([k, k], new Vector<T>(upperData)), new Tensor<T>([k, k], new Vector<T>(idData)));
+        cache[k] = masks;
+        return masks;
     }
 
     /// <summary>
@@ -147,15 +153,22 @@ public sealed partial class HouseholderSubspaceLayer<T> : LayerBase<T>, IShapeCo
             throw new ArgumentException($"Expected last dimension {d}, got [{string.Join(",", input._shape)}].", nameof(input));
 
         var numOps = MathHelper.GetNumericOperations<T>();
-        T two = numOps.FromDouble(2.0);
-        // The denominator is floored at FP32's smallest normal value instead of having an epsilon added: an added
-        // epsilon changes every reflector whose squared norm is near it (a double reflector [1e-10, 0] has squared norm
-        // 1e-20, and adding 1e-20 halved its reflection, so the chain stopped being orthogonal). A floor leaves every
-        // squared norm at or above it exact, and a zero reflector still yields 0 / floor = 0, the identity. The value
-        // is normal in both FP32 and FP64.
-        T normFloor = numOps.FromDouble(1.1754943508222875e-38);
-
         int rowCount = input.Length / d;
+        if (rowCount == 0)
+        {
+            return engine.TensorMultiplyScalar(input, numOps.One);
+        }
+
+        T two = numOps.FromDouble(2.0);
+        // Floor the squared-norm denominator instead of adding epsilon so every reflector above the floor remains an
+        // exact orthogonal isometry while zero reflectors yield 0 / floor = 0 (identity). Choose a dtype-safe floor so
+        // 1 / denom^2 and 1 / denom^1.5 in DivideBackward/SqrtBackward stay finite (avoiding (-Inf) - (-Inf) = NaN in
+        // ClampMinBackward on zero or subnormal float/Half reflectors).
+        double floorValue = typeof(T) == typeof(float)
+            ? 1e-18
+            : (typeof(T).Name == "Half" ? 1e-2 : 1.1754943508222875e-38);
+        T normFloor = numOps.FromDouble(floorValue);
+
         Tensor<T> current = input.Rank == 2
             ? input
             : engine.Reshape(input, [rowCount, d]);
@@ -174,13 +187,12 @@ public sealed partial class HouseholderSubspaceLayer<T> : LayerBase<T>, IShapeCo
         {
             // Exact Compact WY representation (Schreiber & Van Loan 1989):
             // Normalize rows by sqrt(max(||u_j||_2^2, normFloor)) so H_j = I - 2 * uHat_j * uHat_j^T holds across
-            // normal, subnormal, and identically zero reflectors without overflow. Then H_0 ... H_{k-1} = I - UHat * T * UHat^T
-            // where N = 2 * strict_triu(UHat^T * UHat) is nilpotent (N^k == 0) and T = 2 * sum_{p=0}^{k-1} (-N)^p.
+            // normal, subnormal, and identically zero reflectors without overflow. Then H_0 ... H_{k-1} = I - UHat^T * T * UHat
+            // where N = 2 * strict_triu(UHat * UHat^T) is nilpotent (N^k == 0) and T = 2 * sum_{p=0}^{k-1} (-N)^p.
             var (strictUpperTwo, identityK) = GetOrCreateCompactWyMasks(k);
             Tensor<T> rowSq = engine.ReduceSum(engine.TensorMultiply(reflectors, reflectors), [1], keepDims: true);
             Tensor<T> denom = engine.TensorMax(rowSq, normFloor);
-            Tensor<T> invNorm = engine.TensorReciprocal(engine.TensorSqrt(denom));
-            Tensor<T> uHat = engine.TensorMultiply(reflectors, invNorm);
+            Tensor<T> uHat = engine.TensorDivide(reflectors, engine.TensorSqrt(denom));
             Tensor<T> uHatCol = engine.TensorTranspose(uHat);
             Tensor<T> gram = engine.TensorMatMul(uHat, uHatCol);
             Tensor<T> nilpotent = engine.TensorMultiply(gram, strictUpperTwo);

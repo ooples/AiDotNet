@@ -7709,14 +7709,13 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         var tape = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current;
         foreach (var (parameter, gradient) in sources)
         {
-            if (!buffers.TryGetValue(parameter, out var copy) || copy.Length != gradient.Length)
+            if (!buffers.TryGetValue(parameter, out var copy) || !SamePublishedShape(copy._shape, gradient._shape))
             {
                 copy?.Dispose();
                 copy = new Tensor<T>((int[])gradient._shape.Clone());
                 buffers[parameter] = copy;
             }
-            var srcView = copy._shape.AsSpan().SequenceEqual(gradient._shape) ? gradient : Engine.Reshape(gradient, copy._shape);
-            Engine.TensorCopy(srcView, copy);
+            Engine.TensorCopy(gradient, copy);
             tape?.Retain(copy);
             owned[parameter] = copy;
             matched += gradient.Length;
@@ -7724,6 +7723,16 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
 
         _parameterGradients = null;
         _pendingDeviceGradients = owned;
+        return true;
+    }
+
+    private static bool SamePublishedShape(int[] left, int[] right)
+    {
+        if (left.Length != right.Length) return false;
+        for (int i = 0; i < left.Length; i++)
+        {
+            if (left[i] != right[i]) return false;
+        }
         return true;
     }
 
