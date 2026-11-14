@@ -99,85 +99,54 @@ public class Normalizer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         int numRows = data.Rows;
         int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-
-        for (int i = 0; i < numRows; i++)
+        var mask = ScalerTensorOps.ColumnMask<T>(numColumns, GetColumnsToProcess(numColumns));
+        if (numRows == 0 || numColumns == 0)
         {
-            // Calculate the norm for this row using only the specified columns
-            T norm = CalculateNorm(data, i, columnsToProcess);
-
-            // Handle zero norm case
-            if (NumOps.Compare(norm, NumOps.Zero) == 0)
-            {
-                norm = NumOps.One;
-            }
-
-            // Normalize the row
-            for (int j = 0; j < numColumns; j++)
-            {
-                if (columnsToProcess.Contains(j))
-                {
-                    result[i, j] = NumOps.Divide(data[i, j], norm);
-                }
-                else
-                {
-                    result[i, j] = data[i, j];
-                }
-            }
+            return new Matrix<T>(numRows, numColumns);
         }
 
-        return new Matrix<T>(result);
+        // Row norms over the selected columns; like scikit-learn's normalize, a norm below 10 * eps is treated
+        // as 1 so an all-zero row stays zero.
+        var x = Tensor<T>.FromMatrix(data);
+        // Half is normalized in float (see ScalerTensorOps.ReducesInFloat): the squares of entries past 256 and
+        // row sums past 65504 overflow Half, which zeroed rows whose unit-norm values are representable.
+        var normalized = ScalerTensorOps.ReducesInFloat<T>()
+            ? NormalizeRows(x.Cast<float>(), mask.Cast<float>()).Cast<T>()
+            : NormalizeRows(x, mask);
+        return ScalerTensorOps.MergeColumns(mask, normalized, data);
     }
 
-    private T CalculateNorm(Matrix<T> data, int row, int[] columns)
+    /// <summary>
+    /// Every row of <paramref name="x"/> ([n, p]) divided by its norm over the columns selected by the 0/1
+    /// <paramref name="columnMask"/> ([p]).
+    /// </summary>
+    private Tensor<TW> NormalizeRows<TW>(Tensor<TW> x, Tensor<TW> columnMask)
     {
+        var shape = x.Shape.ToArray();
+        // Unselected entries are replaced by 0, not multiplied by it: NaN * 0 and Inf * 0 are NaN, which would
+        // poison the norm of the selected columns.
+        var selected = Engine.TensorWhere(ScalerTensorOps.BroadcastRow(columnMask, shape[0]), x, new Tensor<TW>(shape));
+        // scikit-learn's _handle_zeros_in_scale with the eps of the data's dtype T, not of the wider TW
+        var norm = ScalerTensorOps.HandleZerosInScale(
+            CalculateRowNorms(selected), null, ScalerTensorOps.MachineEpsilon<T>());
+        return Engine.TensorDivide(x, Engine.TensorBroadcastTo(norm, shape));
+    }
+
+    /// <summary>The <see cref="NormType"/> norm of every row of <paramref name="x"/>, as [n, 1].</summary>
+    private Tensor<TW> CalculateRowNorms<TW>(Tensor<TW> x)
+    {
+        var axis = new[] { 1 };
         switch (_normType)
         {
             case NormType.L1:
-                return CalculateL1Norm(data, row, columns);
+                return Engine.ReduceSum(Engine.TensorAbs(x), axis, true);
             case NormType.L2:
-                return CalculateL2Norm(data, row, columns);
+                return Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorSquare(x), axis, true));
             case NormType.Max:
-                return CalculateMaxNorm(data, row, columns);
+                return Engine.ReduceMax(Engine.TensorAbs(x), axis, true);
             default:
                 throw new ArgumentException($"Unknown norm type: {_normType}");
         }
-    }
-
-    private T CalculateL1Norm(Matrix<T> data, int row, int[] columns)
-    {
-        T sum = NumOps.Zero;
-        foreach (var col in columns)
-        {
-            sum = NumOps.Add(sum, NumOps.Abs(data[row, col]));
-        }
-        return sum;
-    }
-
-    private T CalculateL2Norm(Matrix<T> data, int row, int[] columns)
-    {
-        T sumOfSquares = NumOps.Zero;
-        foreach (var col in columns)
-        {
-            T val = data[row, col];
-            sumOfSquares = NumOps.Add(sumOfSquares, NumOps.Multiply(val, val));
-        }
-        return NumOps.Sqrt(sumOfSquares);
-    }
-
-    private T CalculateMaxNorm(Matrix<T> data, int row, int[] columns)
-    {
-        T maxAbs = NumOps.Zero;
-        foreach (var col in columns)
-        {
-            T absVal = NumOps.Abs(data[row, col]);
-            if (NumOps.Compare(absVal, maxAbs) > 0)
-            {
-                maxAbs = absVal;
-            }
-        }
-        return maxAbs;
     }
 
     /// <summary>

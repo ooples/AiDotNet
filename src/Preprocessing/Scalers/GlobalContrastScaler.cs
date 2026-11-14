@@ -68,54 +68,22 @@ public class GlobalContrastScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     protected override void FitCore(Matrix<T> data)
     {
         int numColumns = data.Columns;
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-
-        // Initialize arrays for all columns
-        var means = new T[numColumns];
-        var stdDevs = new T[numColumns];
-
-        // Default values for columns not processed (no transformation)
-        for (int i = 0; i < numColumns; i++)
+        var mask = ScalerTensorOps.ColumnMask<T>(numColumns, GetColumnsToProcess(numColumns));
+        if (data.Rows == 0 || numColumns == 0)
         {
-            means[i] = NumOps.Zero;
-            stdDevs[i] = NumOps.One;
+            _mean = ScalerTensorOps.FilledVector(numColumns, NumOps.Zero);
+            _stdDev = ScalerTensorOps.FilledVector(numColumns, NumOps.One);
+            return;
         }
 
-        // Compute parameters for specified columns
-        foreach (var colIdx in columnsToProcess)
-        {
-            var column = data.GetColumn(colIdx);
+        // Column mean and population standard deviation (NaN is treated as missing); a zero std becomes 1.
+        var x = Tensor<T>.FromMatrix(data);
+        var (mean, std, _) = ScalerTensorOps.NanColumnMoments(x);
+        var zeroStd = Engine.TensorEquals(std, NumOps.Zero);
+        std = Engine.TensorWhere(zeroStd, PreprocessingTensorOps.Filled(std.Shape.ToArray(), NumOps.One), std);
 
-            // Calculate mean
-            T sum = NumOps.Zero;
-            for (int i = 0; i < column.Length; i++)
-            {
-                sum = NumOps.Add(sum, column[i]);
-            }
-            T mean = NumOps.Divide(sum, NumOps.FromDouble(column.Length));
-
-            // Calculate variance and std dev
-            T varianceSum = NumOps.Zero;
-            for (int i = 0; i < column.Length; i++)
-            {
-                T diff = NumOps.Subtract(column[i], mean);
-                varianceSum = NumOps.Add(varianceSum, NumOps.Multiply(diff, diff));
-            }
-            T variance = NumOps.Divide(varianceSum, NumOps.FromDouble(column.Length));
-            T stdDev = NumOps.Sqrt(variance);
-
-            // Prevent division by zero
-            if (NumOps.Compare(stdDev, NumOps.Zero) == 0)
-            {
-                stdDev = NumOps.One;
-            }
-
-            means[colIdx] = mean;
-            stdDevs[colIdx] = stdDev;
-        }
-
-        _mean = new Vector<T>(means);
-        _stdDev = new Vector<T>(stdDevs);
+        _mean = ScalerTensorOps.MaskedParameters(mask, mean, NumOps.Zero);
+        _stdDev = ScalerTensorOps.MaskedParameters(mask, std, NumOps.One);
     }
 
     /// <summary>
@@ -130,33 +98,17 @@ public class GlobalContrastScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("Scaler has not been fitted.");
         }
 
-        int numRows = data.Rows;
-        int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-        T two = NumOps.FromDouble(2.0);
-        T half = NumOps.FromDouble(0.5);
-
-        for (int i = 0; i < numRows; i++)
+        // (x - mean) / (2 * stdDev) + 0.5 on the processed columns; the other columns pass through.
+        var doubledStd = Engine.TensorMultiplyScalar(Tensor<T>.FromVector(_stdDev), NumOps.FromDouble(2.0)).ToVector();
+        var standardized = ScalerTensorOps.ShiftThenScale(data, _mean, doubledStd);
+        if (data.Rows == 0 || data.Columns == 0)
         {
-            for (int j = 0; j < numColumns; j++)
-            {
-                T value = data[i, j];
-
-                if (processSet.Contains(j))
-                {
-                    // (x - mean) / (2 * stdDev) + 0.5
-                    T centered = NumOps.Subtract(value, _mean[j]);
-                    T scaled = NumOps.Divide(centered, NumOps.Multiply(two, _stdDev[j]));
-                    value = NumOps.Add(scaled, half);
-                }
-
-                result[i, j] = value;
-            }
+            return standardized;
         }
 
-        return new Matrix<T>(result);
+        var shifted = Engine.TensorAddScalar(Tensor<T>.FromMatrix(standardized), NumOps.FromDouble(0.5));
+        var mask = ScalerTensorOps.ColumnMask<T>(data.Columns, GetColumnsToProcess(data.Columns));
+        return ScalerTensorOps.MergeColumns(mask, shifted, data);
     }
 
     /// <summary>
@@ -171,33 +123,18 @@ public class GlobalContrastScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("Scaler has not been fitted.");
         }
 
-        int numRows = data.Rows;
-        int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-        T two = NumOps.FromDouble(2.0);
-        T half = NumOps.FromDouble(0.5);
-
-        for (int i = 0; i < numRows; i++)
+        ScalerTensorOps.EnsureColumnCount(data, _mean.Length);
+        if (data.Rows == 0 || data.Columns == 0)
         {
-            for (int j = 0; j < numColumns; j++)
-            {
-                T value = data[i, j];
-
-                if (processSet.Contains(j))
-                {
-                    // Reverse: (x - 0.5) * 2 * stdDev + mean
-                    T shifted = NumOps.Subtract(value, half);
-                    T unscaled = NumOps.Multiply(shifted, NumOps.Multiply(two, _stdDev[j]));
-                    value = NumOps.Add(unscaled, _mean[j]);
-                }
-
-                result[i, j] = value;
-            }
+            return new Matrix<T>(data.Rows, data.Columns);
         }
 
-        return new Matrix<T>(result);
+        // Reverse: (x - 0.5) * 2 * stdDev + mean
+        var doubledStd = Engine.TensorMultiplyScalar(Tensor<T>.FromVector(_stdDev), NumOps.FromDouble(2.0)).ToVector();
+        var centered = Engine.TensorSubtractScalar(Tensor<T>.FromMatrix(data), NumOps.FromDouble(0.5)).ToMatrix();
+        var restored = ScalerTensorOps.ScaleThenShift(centered, doubledStd, _mean);
+        var mask = ScalerTensorOps.ColumnMask<T>(data.Columns, GetColumnsToProcess(data.Columns));
+        return ScalerTensorOps.MergeColumns(mask, Tensor<T>.FromMatrix(restored), data);
     }
 
     /// <summary>

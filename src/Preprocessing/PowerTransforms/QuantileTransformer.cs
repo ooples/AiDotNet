@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.Scalers;
 
 namespace AiDotNet.Preprocessing.PowerTransforms;
 
@@ -35,7 +36,8 @@ public enum OutputDistributionType
 /// - Normal: Creates a bell curve distribution
 ///
 /// Example with uniform output:
-/// [1, 1, 2, 3, 5, 8, 13, 100, 1000] → [0.0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1.0]
+/// [1, 1, 2, 3, 5, 8, 13, 100, 1000] → [0.0, 0.0, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1.0]
+/// (values equal to the fitted minimum map to 0, as in scikit-learn)
 /// Notice how extreme values (100, 1000) no longer dominate.
 /// </para>
 /// </remarks>
@@ -100,8 +102,15 @@ public class QuantileTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int numColumns = data.Columns;
         var columnsToProcess = GetColumnsToProcess(numColumns);
 
-        _quantiles = new List<T[]>();
+        // scikit-learn: n_quantiles_ = max(1, min(n_quantiles, n_samples)), references_ = linspace(0, 1, n_quantiles_),
+        // quantiles_ = nanpercentile(X, references_ * 100) (linear) made non-decreasing (maximum.accumulate).
+        // All samples are used (subsample=None).
+        int nQuantiles = Math.Max(1, Math.Min(_nQuantiles, data.Rows));
+        var references = ReferencePositions(nQuantiles);
+        var x = data.Rows == 0 ? null : Tensor<T>.FromMatrix(data);
+        T nan = NumOps.FromDouble(double.NaN);
 
+        _quantiles = new List<T[]>();
         for (int col = 0; col < numColumns; col++)
         {
             if (!columnsToProcess.Contains(col))
@@ -110,20 +119,63 @@ public class QuantileTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 continue;
             }
 
-            var column = data.GetColumn(col);
-            var sortedData = column.ToArray();
-            Array.Sort(sortedData, (a, b) => NumOps.Compare(a, b));
-
-            var quantiles = new T[_nQuantiles];
-            for (int i = 0; i < _nQuantiles; i++)
-            {
-                double quantilePosition = (double)i / (_nQuantiles - 1);
-                int index = (int)(quantilePosition * (sortedData.Length - 1));
-                quantiles[i] = sortedData[index];
-            }
-
-            _quantiles.Add(quantiles);
+            var quantiles = x is null
+                ? PreprocessingTensorOps.Filled(new[] { nQuantiles }, nan)
+                : ColumnQuantiles(PreprocessingTensorOps.ColumnVector(x, col), references);
+            _quantiles.Add(quantiles.AsSpan().ToArray());
         }
+    }
+
+    /// <summary>numpy's <c>linspace(0, 1, count)</c> as a [count] tensor.</summary>
+    private Tensor<T> References(int count) => ReferencePositions(count).Cast<T>();
+
+    /// <summary>
+    /// numpy's <c>linspace(0, 1, count)</c> in float64, as numpy computes it. These are positions (they become
+    /// the virtual indices <c>q (n - 1)</c> of the percentiles), so they are not computed in T: for Half the
+    /// integers past 2048 are not exact and <c>q (n - 1)</c> overflows past 65504, giving wrong or invalid
+    /// indices.
+    /// </summary>
+    private Tensor<double> ReferencePositions(int count)
+    {
+        if (count == 1)
+        {
+            return new Tensor<double>(new[] { 1 });
+        }
+
+        var references = Engine.TensorMultiplyScalar(PreprocessingTensorOps.Range<double>(count), 1.0 / (count - 1));
+        return Engine.TensorSetSlice(references, PreprocessingTensorOps.Filled(new[] { 1 }, 1.0), new[] { count - 1 });
+    }
+
+    /// <summary>
+    /// numpy's <c>nanpercentile</c> (method "linear") of a column at the given references, made non-decreasing:
+    /// virtual index <c>h = q (n - 1)</c> over the sorted non-NaN values, interpolated as numpy's <c>_lerp</c>.
+    /// </summary>
+    private Tensor<T> ColumnQuantiles(Tensor<T> column, Tensor<double> references)
+    {
+        var valid = PreprocessingTensorOps.MaskPositions(PreprocessingTensorOps.Not(ScalerTensorOps.NanMask(column)));
+        int count = valid.Length;
+        if (count == 0)
+        {
+            return PreprocessingTensorOps.Filled(new[] { references.Length }, NumOps.FromDouble(double.NaN));
+        }
+
+        var sorted = Engine.TensorSort(
+            Engine.TensorIndexSelect(column, new Tensor<int>(valid, new[] { count }), 0), 0, false).Item1;
+        var position = Engine.TensorMultiplyScalar(references, (double)(count - 1));
+        var below = Engine.TensorFloor(position);
+        var fraction = Engine.TensorSubtract(position, below).Cast<T>();
+        var belowIndex = below.Cast<int>().AsSpan().ToArray();
+        var aboveIndex = belowIndex.Select(index => Math.Min(index + 1, count - 1)).ToArray();
+        var lower = Engine.TensorIndexSelect(sorted, new Tensor<int>(belowIndex, new[] { belowIndex.Length }), 0);
+        var upper = Engine.TensorIndexSelect(sorted, new Tensor<int>(aboveIndex, new[] { aboveIndex.Length }), 0);
+
+        // numpy _lerp: a + (b - a) t, computed as b - (b - a)(1 - t) when t >= 0.5
+        var diff = Engine.TensorSubtract(upper, lower);
+        var fromBelow = Engine.TensorAdd(lower, Engine.TensorMultiply(diff, fraction));
+        var fromAbove = Engine.TensorSubtract(upper, Engine.TensorMultiply(diff, PreprocessingTensorOps.OneMinus(fraction)));
+        var half = PreprocessingTensorOps.Filled(new[] { references.Length }, NumOps.FromDouble(0.5));
+        var quantiles = Engine.TensorWhere(Engine.TensorGreaterEqual(fraction, half), fromAbove, fromBelow);
+        return Engine.TensorCumMax(quantiles, 0);
     }
 
     /// <summary>
@@ -138,105 +190,148 @@ public class QuantileTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("Transformer has not been fitted.");
         }
 
-        int numRows = data.Rows;
-        int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < numColumns; j++)
-            {
-                T value = data[i, j];
-
-                if (processSet.Contains(j) && _quantiles[j].Length > 0)
-                {
-                    value = TransformValue(value, _quantiles[j]);
-                }
-
-                result[i, j] = value;
-            }
-        }
-
-        return new Matrix<T>(result);
+        return MapColumns(data, inverse: false);
     }
 
-    private T TransformValue(T value, T[] quantiles)
+    /// <summary>
+    /// Applies scikit-learn's <c>_transform_col</c> to every processed, fitted column; the other columns pass
+    /// through unchanged.
+    /// </summary>
+    private Matrix<T> MapColumns(Matrix<T> data, bool inverse)
     {
-        // Handle degenerate distribution (constant feature)
-        if (NumOps.Compare(quantiles[0], quantiles[quantiles.Length - 1]) == 0)
+        var fitted = _quantiles ?? new List<T[]>();
+        int numRows = data.Rows;
+        int numColumns = data.Columns;
+        if (numRows == 0 || numColumns == 0)
         {
-            T midpoint = NumOps.FromDouble(0.5);
-            return _outputDistribution == OutputDistributionType.Uniform
-                ? midpoint
-                : InverseNormalCDF(midpoint);
+            return new Matrix<T>(numRows, numColumns);
         }
 
-        // Handle values outside the range
-        if (NumOps.Compare(value, quantiles[0]) <= 0)
+        var x = Tensor<T>.FromMatrix(data);
+        var processSet = new HashSet<int>(GetColumnsToProcess(numColumns));
+        var columns = new List<Tensor<T>>(numColumns);
+        for (int col = 0; col < numColumns; col++)
         {
-            return _outputDistribution == OutputDistributionType.Uniform
-                ? NumOps.Zero
-                : NumOps.FromDouble(-8.0);
-        }
-        if (NumOps.Compare(value, quantiles[quantiles.Length - 1]) >= 0)
-        {
-            return _outputDistribution == OutputDistributionType.Uniform
-                ? NumOps.One
-                : NumOps.FromDouble(8.0);
+            var column = PreprocessingTensorOps.ColumnVector(x, col);
+            bool mapped = processSet.Contains(col) && col < fitted.Count && fitted[col].Length > 0;
+            columns.Add(mapped ? MapColumn(column, fitted[col], inverse) : column);
         }
 
-        // Binary search for position
-        int left = 0;
-        int right = quantiles.Length - 2;
-        int lowerIndex = 0;
-        int upperIndex = quantiles.Length - 1;
+        return PreprocessingTensorOps.StackColumns(columns, numRows);
+    }
 
-        while (left <= right)
+    /// <summary>
+    /// scikit-learn's <c>QuantileTransformer._transform_col</c>. Forward: the mean of the interpolations from
+    /// both ends, <c>0.5 (interp(x, q, r) - interp(-x, -q[::-1], -r[::-1]))</c>, with values at (uniform) or
+    /// within 1e-7 beyond (normal) the bounds set to 0 / 1, then <c>norm.ppf</c> clipped to
+    /// <c>norm.ppf(1e-7 - eps)</c> for normal output. Inverse: <c>norm.cdf</c> for normal output, then
+    /// <c>interp(x, r, q)</c> with the same bound rules. NaN passes through.
+    /// </summary>
+    private Tensor<T> MapColumn(Tensor<T> column, T[] quantileValues, bool inverse)
+    {
+        int count = quantileValues.Length;
+        var quantiles = new Tensor<T>((T[])quantileValues.Clone(), new[] { count });
+        var references = References(count);
+        bool normal = _outputDistribution == OutputDistributionType.Normal;
+
+        var nanMask = ScalerTensorOps.NanMask(column);
+        var x = ScalerTensorOps.FillNan(column, NumOps.Zero);
+        if (inverse && normal)
         {
-            int mid = left + (right - left) / 2;
-            if (NumOps.Compare(value, quantiles[mid + 1]) <= 0)
-            {
-                if (NumOps.Compare(value, quantiles[mid]) > 0)
-                {
-                    lowerIndex = mid;
-                    upperIndex = mid + 1;
-                    break;
-                }
-                else
-                {
-                    right = mid - 1;
-                }
-            }
-            else
-            {
-                left = mid + 1;
-            }
+            // norm.cdf(x) = (1 + erf(x / sqrt(2))) / 2
+            var erf = Engine.TensorErf(Engine.TensorMultiplyScalar(x, NumOps.FromDouble(1.0 / Math.Sqrt(2.0))));
+            x = Engine.TensorMultiplyScalar(Engine.TensorAddScalar(erf, NumOps.One), NumOps.FromDouble(0.5));
         }
 
-        // Linear interpolation
-        T lowerValue = quantiles[lowerIndex];
-        T upperValue = quantiles[upperIndex];
-        T lowerPercentile = NumOps.Divide(NumOps.FromDouble(lowerIndex), NumOps.FromDouble(quantiles.Length - 1));
-        T upperPercentile = NumOps.Divide(NumOps.FromDouble(upperIndex), NumOps.FromDouble(quantiles.Length - 1));
+        T lowerX = inverse ? NumOps.Zero : quantileValues[0];
+        T upperX = inverse ? NumOps.One : quantileValues[count - 1];
+        T lowerY = inverse ? quantileValues[0] : NumOps.Zero;
+        T upperY = inverse ? quantileValues[count - 1] : NumOps.One;
+        var threshold = NumOps.FromDouble(BoundsThreshold);
+        var lowerMask = normal
+            ? Engine.TensorLessThan(Engine.TensorSubtractScalar(x, threshold), lowerX)
+            : Engine.TensorEquals(x, lowerX);
+        var upperMask = normal
+            ? Engine.TensorGreaterThan(Engine.TensorAddScalar(x, threshold), upperX)
+            : Engine.TensorEquals(x, upperX);
 
-        T percentile;
-        if (NumOps.Compare(upperValue, lowerValue) == 0)
+        Tensor<T> y;
+        if (inverse)
         {
-            percentile = NumOps.Divide(NumOps.Add(lowerPercentile, upperPercentile), NumOps.FromDouble(2.0));
+            y = Interp(x, references, quantiles);
         }
         else
         {
-            T fraction = NumOps.Divide(
-                NumOps.Subtract(value, lowerValue),
-                NumOps.Subtract(upperValue, lowerValue));
-            percentile = NumOps.Add(lowerPercentile, NumOps.Multiply(fraction, NumOps.Subtract(upperPercentile, lowerPercentile)));
+            var forward = Interp(x, quantiles, references);
+            var backward = Interp(Engine.TensorNegate(x), Engine.TensorNegate(Reverse(quantiles)), Engine.TensorNegate(Reverse(references)));
+            y = Engine.TensorMultiplyScalar(Engine.TensorSubtract(forward, backward), NumOps.FromDouble(0.5));
         }
 
-        return _outputDistribution == OutputDistributionType.Uniform
-            ? percentile
-            : InverseNormalCDF(percentile);
+        int n = column.Length;
+        y = Engine.TensorWhere(upperMask, PreprocessingTensorOps.Filled(new[] { n }, upperY), y);
+        y = Engine.TensorWhere(lowerMask, PreprocessingTensorOps.Filled(new[] { n }, lowerY), y);
+
+        if (!inverse && normal)
+        {
+            // scikit-learn computes the clip bounds in float64 (+/-5.1993...) and clips the T data to them. In T,
+            // 1 - (1e-7 - eps) rounds to 1 for Half (an infinite upper bound) and to 1 - 2^-23 for float (5.16).
+            var clipBounds = Engine.TensorNdtri(new Tensor<double>(
+                new[] { BoundsThreshold - Float64Spacing, 1 - (BoundsThreshold - Float64Spacing) }, new[] { 2 }))
+                .AsSpan().ToArray();
+            y = Engine.TensorClamp(Engine.TensorNdtri(y), NumOps.FromDouble(clipBounds[0]), NumOps.FromDouble(clipBounds[1]));
+        }
+
+        return Engine.TensorWhere(nanMask, column, y);
+    }
+
+    /// <summary>
+    /// numpy's <c>interp(x, xp, fp)</c> for an increasing <paramref name="xp"/>: <c>fp[0]</c> below the range,
+    /// <c>fp[-1]</c> at or above its end, otherwise the line through the bracketing points
+    /// <c>xp[j] &lt;= x &lt; xp[j + 1]</c>.
+    /// </summary>
+    private Tensor<T> Interp(Tensor<T> x, Tensor<T> xp, Tensor<T> fp)
+    {
+        int n = x.Length;
+        int m = xp.Length;
+        var points = xp.AsSpan().ToArray();
+        var values = fp.AsSpan().ToArray();
+        if (m == 1)
+        {
+            return PreprocessingTensorOps.Filled(new[] { n }, values[0]);
+        }
+
+        var right = Engine.TensorSearchSorted(xp, x, true).AsSpan().ToArray();
+        var lowerIndex = right.Select(index => Math.Min(Math.Max(index - 1, 0), m - 2)).ToArray();
+        var upperIndex = lowerIndex.Select(index => index + 1).ToArray();
+        var lowerTensor = new Tensor<int>(lowerIndex, new[] { n });
+        var upperTensor = new Tensor<int>(upperIndex, new[] { n });
+        var x0 = Engine.TensorIndexSelect(xp, lowerTensor, 0);
+        var x1 = Engine.TensorIndexSelect(xp, upperTensor, 0);
+        var f0 = Engine.TensorIndexSelect(fp, lowerTensor, 0);
+        var f1 = Engine.TensorIndexSelect(fp, upperTensor, 0);
+
+        var dx = Engine.TensorSubtract(x1, x0);
+        var safeDx = Engine.TensorWhere(Engine.TensorEquals(dx, NumOps.Zero), PreprocessingTensorOps.Filled(new[] { n }, NumOps.One), dx);
+        var slope = Engine.TensorDivide(Engine.TensorSubtract(f1, f0), safeDx);
+        var y = Engine.TensorAdd(Engine.TensorMultiply(slope, Engine.TensorSubtract(x, x0)), f0);
+
+        y = Engine.TensorWhere(Engine.TensorLessThan(x, points[0]), PreprocessingTensorOps.Filled(new[] { n }, values[0]), y);
+        var atOrAboveEnd = PreprocessingTensorOps.Not(Engine.TensorLessThan(x, points[m - 1]));
+        return Engine.TensorWhere(atOrAboveEnd, PreprocessingTensorOps.Filled(new[] { n }, values[m - 1]), y);
+    }
+
+    /// <summary>scikit-learn's <c>BOUNDS_THRESHOLD</c>.</summary>
+    private const double BoundsThreshold = 1e-7;
+
+    /// <summary>numpy's <c>spacing(1)</c> (the float64 machine epsilon).</summary>
+    private const double Float64Spacing = 2.220446049250313e-16;
+
+    /// <summary>The elements of a 1-D tensor in reverse order.</summary>
+    private Tensor<T> Reverse(Tensor<T> values)
+    {
+        var reversed = values.AsSpan().ToArray();
+        Array.Reverse(reversed);
+        return new Tensor<T>(reversed, new[] { reversed.Length });
     }
 
     /// <summary>
@@ -251,170 +346,7 @@ public class QuantileTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("Transformer has not been fitted.");
         }
 
-        int numRows = data.Rows;
-        int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < numColumns; j++)
-            {
-                T value = data[i, j];
-
-                if (processSet.Contains(j) && _quantiles[j].Length > 0)
-                {
-                    value = InverseTransformValue(value, _quantiles[j]);
-                }
-
-                result[i, j] = value;
-            }
-        }
-
-        return new Matrix<T>(result);
-    }
-
-    private T InverseTransformValue(T transformedValue, T[] quantiles)
-    {
-        T percentile = _outputDistribution == OutputDistributionType.Uniform
-            ? transformedValue
-            : NormalCDF(transformedValue);
-
-        // Clamp percentile to [0, 1]
-        if (NumOps.Compare(percentile, NumOps.Zero) < 0)
-            percentile = NumOps.Zero;
-        if (NumOps.Compare(percentile, NumOps.One) > 0)
-            percentile = NumOps.One;
-
-        // Map percentile back to original value
-        double percentileDouble = NumOps.ToDouble(percentile);
-        double position = percentileDouble * (quantiles.Length - 1);
-        int lowerIndex = (int)Math.Floor(position);
-        int upperIndex = Math.Min(lowerIndex + 1, quantiles.Length - 1);
-
-        if (lowerIndex == upperIndex)
-        {
-            return quantiles[lowerIndex];
-        }
-
-        T fraction = NumOps.FromDouble(position - lowerIndex);
-        return NumOps.Add(
-            NumOps.Multiply(quantiles[lowerIndex], NumOps.Subtract(NumOps.One, fraction)),
-            NumOps.Multiply(quantiles[upperIndex], fraction));
-    }
-
-    private T InverseNormalCDF(T p)
-    {
-        double pDouble = NumOps.ToDouble(p);
-
-        if (pDouble <= 0.0) return NumOps.FromDouble(-8.0);
-        if (pDouble >= 1.0) return NumOps.FromDouble(8.0);
-
-        // Beasley-Springer-Moro approximation
-        double q = pDouble - 0.5;
-
-        if (Math.Abs(q) <= 0.425)
-        {
-            double r = 0.180625 - q * q;
-            double num = ((((((2.5090809287301226727e3 * r +
-                              3.3430575583588128105e4) * r +
-                             6.7265770927008700853e4) * r +
-                            4.5921953931549871457e4) * r +
-                           1.3731693765509461125e4) * r +
-                          1.9715909503065514427e3) * r +
-                         1.3314166789178437745e2) * r +
-                        3.3871328727963666080e0;
-
-            double den = (((((((5.2264952788528545610e3 * r +
-                               2.8729085735721942674e4) * r +
-                              3.9307895800092710610e4) * r +
-                             2.1213794301586595867e4) * r +
-                            5.3941960214247511077e3) * r +
-                           6.8718700749205790830e2) * r +
-                          4.2313330701600911252e1) * r +
-                         1.0);
-
-            return NumOps.FromDouble(q * num / den);
-        }
-        else
-        {
-            double r = q < 0 ? pDouble : 1.0 - pDouble;
-            r = Math.Sqrt(-Math.Log(r));
-
-            double num, den;
-            if (r <= 5.0)
-            {
-                r = r - 1.6;
-                num = ((((((7.74545014278341407640e-4 * r +
-                           2.27238449892691845833e-2) * r +
-                          2.41780725177450611770e-1) * r +
-                         1.27045825245236838258e0) * r +
-                        3.64784832476320460504e0) * r +
-                       5.76949722146069140550e0) * r +
-                      4.63033784615654529590e0) * r +
-                     1.42343711074968357734e0;
-
-                den = ((((((1.05075007164441684324e-9 * r +
-                           5.47593808499534494600e-4) * r +
-                          1.51986665636164571966e-2) * r +
-                         1.48103976427480074590e-1) * r +
-                        6.89767334985100004550e-1) * r +
-                       1.67638483018380384940e0) * r +
-                      2.05319162663775882187e0) * r +
-                     1.0;
-            }
-            else
-            {
-                r = r - 5.0;
-                num = ((((((2.01033439929228813265e-7 * r +
-                           2.71155556874348757815e-5) * r +
-                          1.24266094738807843860e-3) * r +
-                         2.65321895265761230930e-2) * r +
-                        2.96560571828504891230e-1) * r +
-                       1.78482653991729133580e0) * r +
-                      5.46378491116411436990e0) * r +
-                     6.65790464350110377720e0;
-
-                den = ((((((2.04426310338993978564e-15 * r +
-                           1.42151175831644588870e-7) * r +
-                          1.84631831751005468180e-5) * r +
-                         7.86869131145613259100e-4) * r +
-                        1.48753612908506148525e-2) * r +
-                       1.36929880922735805310e-1) * r +
-                      5.99832206555887937690e-1) * r +
-                     1.0;
-            }
-
-            double result = num / den;
-            if (q < 0) result = -result;
-            return NumOps.FromDouble(result);
-        }
-    }
-
-    private T NormalCDF(T x)
-    {
-        double xDouble = NumOps.ToDouble(x);
-        double result = 0.5 * (1.0 + Erf(xDouble / Math.Sqrt(2.0)));
-        return NumOps.FromDouble(result);
-    }
-
-    private double Erf(double x)
-    {
-        int sign = x < 0 ? -1 : 1;
-        x = Math.Abs(x);
-
-        double a1 = 0.254829592;
-        double a2 = -0.284496736;
-        double a3 = 1.421413741;
-        double a4 = -1.453152027;
-        double a5 = 1.061405429;
-        double p = 0.3275911;
-
-        double t = 1.0 / (1.0 + p * x);
-        double y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.Exp(-x * x);
-
-        return sign * y;
+        return MapColumns(data, inverse: true);
     }
 
     /// <summary>

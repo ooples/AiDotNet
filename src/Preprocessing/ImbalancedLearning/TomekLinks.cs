@@ -56,11 +56,6 @@ namespace AiDotNet.Preprocessing.ImbalancedLearning;
 public class TomekLinks<T> : IResamplingStrategy<T>
 {
     /// <summary>
-    /// Numeric operations helper for generic math.
-    /// </summary>
-    private readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
-    /// <summary>
     /// Statistics about the last resampling operation.
     /// </summary>
     private ResamplingStatistics<T>? _lastStatistics;
@@ -120,17 +115,19 @@ public class TomekLinks<T> : IResamplingStrategy<T>
         var tomekLinksToRemove = new HashSet<int>();
         var minorityIndices = GetClassIndices(y, minorityClass);
         var majorityIndices = GetClassIndices(y, majorityClass);
+        var majoritySet = new HashSet<int>(majorityIndices);
+        var data = Tensor<T>.FromMatrix(x);
 
         foreach (int minIdx in minorityIndices)
         {
             // Find nearest neighbor of this minority sample
-            int nearestNeighbor = FindNearestNeighbor(x, minIdx);
+            int nearestNeighbor = ResamplingTensorOps.NearestOther(data, minIdx);
 
             // Check if it's a majority sample
-            if (majorityIndices.Contains(nearestNeighbor))
+            if (majoritySet.Contains(nearestNeighbor))
             {
                 // Check if the minority sample is also the majority sample's nearest neighbor
-                int majNearestNeighbor = FindNearestNeighbor(x, nearestNeighbor);
+                int majNearestNeighbor = ResamplingTensorOps.NearestOther(data, nearestNeighbor);
 
                 if (majNearestNeighbor == minIdx)
                 {
@@ -140,29 +137,9 @@ public class TomekLinks<T> : IResamplingStrategy<T>
             }
         }
 
-        // Build list of indices to keep
-        var indicesToKeep = new List<int>();
-        for (int i = 0; i < x.Rows; i++)
-        {
-            if (!tomekLinksToRemove.Contains(i))
-            {
-                indicesToKeep.Add(i);
-            }
-        }
-
-        // Build result matrices
-        var resampledX = new Matrix<T>(indicesToKeep.Count, x.Columns);
-        var resampledY = new Vector<T>(indicesToKeep.Count);
-
-        for (int i = 0; i < indicesToKeep.Count; i++)
-        {
-            int originalIdx = indicesToKeep[i];
-            for (int j = 0; j < x.Columns; j++)
-            {
-                resampledX[i, j] = x[originalIdx, j];
-            }
-            resampledY[i] = y[originalIdx];
-        }
+        // Build result matrices from the rows to keep
+        var (resampledX, resampledY) = ResamplingTensorOps.KeepRows(
+            x, y, ResamplingTensorOps.RowsExcept(x.Rows, tomekLinksToRemove));
 
         // Update statistics
         _lastStatistics.TotalResampledSamples = resampledX.Rows;
@@ -176,65 +153,16 @@ public class TomekLinks<T> : IResamplingStrategy<T>
         return (resampledX, resampledY);
     }
 
-    /// <summary>
-    /// Finds the nearest neighbor of a sample.
-    /// </summary>
-    private int FindNearestNeighbor(Matrix<T> x, int sampleIndex)
-    {
-        var sample = x.GetRow(sampleIndex);
-        int nearestIdx = -1;
-        T minDistance = NumOps.MaxValue;
-
-        for (int i = 0; i < x.Rows; i++)
-        {
-            if (i == sampleIndex) continue;
-
-            T distance = VectorHelper.EuclideanDistance(sample, x.GetRow(i));
-            if (NumOps.Compare(distance, minDistance) < 0)
-            {
-                minDistance = distance;
-                nearestIdx = i;
-            }
-        }
-
-        return nearestIdx;
-    }
-
 
     /// <summary>
     /// Gets the count of samples per class.
     /// </summary>
-    private NumericDictionary<T, int> GetClassCounts(Vector<T> y)
-    {
-        var counts = new NumericDictionary<T, int>();
-
-        for (int i = 0; i < y.Length; i++)
-        {
-            if (!counts.TryGetValue(y[i], out int count))
-            {
-                count = 0;
-            }
-            counts[y[i]] = count + 1;
-        }
-
-        return counts;
-    }
+    private NumericDictionary<T, int> GetClassCounts(Vector<T> y) => ResamplingTensorOps.ClassCounts(y);
 
     /// <summary>
     /// Gets the indices of samples belonging to a specific class.
     /// </summary>
-    private List<int> GetClassIndices(Vector<T> y, T targetClass)
-    {
-        var indices = new List<int>();
-        for (int i = 0; i < y.Length; i++)
-        {
-            if (NumOps.Compare(y[i], targetClass) == 0)
-            {
-                indices.Add(i);
-            }
-        }
-        return indices;
-    }
+    private List<int> GetClassIndices(Vector<T> y, T targetClass) => ResamplingTensorOps.ClassIndices(y, targetClass);
 
     /// <summary>
     /// Gets statistics about the last resampling operation.

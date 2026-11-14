@@ -2,6 +2,8 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.Scalers;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.Preprocessing.Imputers;
 
@@ -39,10 +41,8 @@ public class IterativeImputer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly int _randomState;
 
     // Fitted parameters
-    private double[]? _initialValues;
-    private double[,]? _coefficients;
-    private double[]? _intercepts;
-    private bool[]? _hasMissing;
+    private Vector<T>? _initialValues;
+    private List<ImputationStep>? _imputationSequence;
     private int _nFeatures;
 
     /// <summary>
@@ -106,435 +106,329 @@ public class IterativeImputer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     }
 
     /// <summary>
-    /// Fits the imputer by learning the relationships between features.
+    /// One fitted step of the imputation sequence: the feature it imputes and the linear model
+    /// (coefficients over all features, 0 on the imputed feature itself, plus intercept) that predicts it.
     /// </summary>
-    /// <param name="data">The training data with missing values (NaN).</param>
+    private sealed class ImputationStep
+    {
+        public ImputationStep(int feature, Tensor<T> coefficients, T intercept)
+        {
+            Feature = feature;
+            // The step is fitted state replayed by every later Transform, so it owns a garbage-collected copy:
+            // the engine result (a reshaped view) may live in an arena buffer that is reused after the fit.
+            Coefficients = Tensor<T>.FromVector(coefficients.ToVector());
+            Intercept = intercept;
+        }
+
+        public int Feature { get; }
+
+        public Tensor<T> Coefficients { get; }
+
+        public T Intercept { get; }
+    }
+
+    /// <summary>
+    /// Fits scikit-learn's IterativeImputer: initial imputation, then <c>max_iter</c> rounds that model each
+    /// feature in ascending order of missing count from all the other features (rows where the feature is
+    /// observed), immediately replacing its missing entries with the prediction. Stops once the largest
+    /// change of a round is below <c>tol * max|observed value|</c>. Every fitted model is kept, in order, so
+    /// <see cref="TransformCore"/> replays the same sequence.
+    /// </summary>
     protected override void FitCore(Matrix<T> data)
     {
         _nFeatures = data.Columns;
         int nSamples = data.Rows;
-
-        // Convert to double and identify missing values
-        var X = new double[nSamples, _nFeatures];
-        var missingMask = new bool[nSamples, _nFeatures];
-        _hasMissing = new bool[_nFeatures];
-
-        for (int i = 0; i < nSamples; i++)
+        _imputationSequence = new List<ImputationStep>();
+        if (nSamples == 0 || _nFeatures == 0)
         {
-            for (int j = 0; j < _nFeatures; j++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                X[i, j] = val;
-                if (double.IsNaN(val))
-                {
-                    missingMask[i, j] = true;
-                    _hasMissing[j] = true;
-                }
-            }
+            _initialValues = new Vector<T>(_nFeatures);
+            return;
         }
 
-        // Initial imputation
-        _initialValues = ComputeInitialValues(X, missingMask);
+        var x = Tensor<T>.FromMatrix(data);
+        var missing = ScalerTensorOps.NanMask(x);
+        _initialValues = ComputeInitialValues(data, x);
+        var xt = Engine.TensorWhere(missing, ScalerTensorOps.BroadcastRow(_initialValues, nSamples), x);
 
-        // Apply initial imputation
-        var Xt = (double[,])X.Clone();
-        for (int i = 0; i < nSamples; i++)
+        // Like scikit-learn, the models are fitted even when the training data has no missing value (so
+        // transform can impute later), except for a single feature, which has no predictor.
+        var order = ImputationOrder(missing);
+        if (order.Length == 0 || _nFeatures == 1)
         {
-            for (int j = 0; j < _nFeatures; j++)
-            {
-                if (missingMask[i, j])
-                {
-                    Xt[i, j] = _initialValues[j];
-                }
-            }
+            return;
         }
 
-        // Store coefficients for each feature
-        _coefficients = new double[_nFeatures, _nFeatures];
-        _intercepts = new double[_nFeatures];
+        var observed = Engine.TensorWhere(missing, new Tensor<T>(x.Shape.ToArray()), Engine.TensorAbs(x));
+        T normalizedTolerance = NumOps.Multiply(NumOps.FromDouble(_tolerance), Engine.TensorMaxValue(observed));
 
-        // Iterative imputation
         for (int iteration = 0; iteration < _maxIterations; iteration++)
         {
-            var XtOld = (double[,])Xt.Clone();
-
-            for (int targetCol = 0; targetCol < _nFeatures; targetCol++)
+            var previous = xt;
+            foreach (int feature in order)
             {
-                if (!_hasMissing[targetCol]) continue;
-
-                // Build training set from rows without missing values in target
-                var trainRows = new List<int>();
-                for (int i = 0; i < nSamples; i++)
+                var present = PreprocessingTensorOps.MaskPositions(
+                    PreprocessingTensorOps.Not(PreprocessingTensorOps.ColumnVector(missing, feature)));
+                if (present.Length == 0)
                 {
-                    if (!missingMask[i, targetCol])
-                    {
-                        trainRows.Add(i);
-                    }
+                    continue;
                 }
 
-                if (trainRows.Count < 2) continue;
-
-                // Fit a simple linear model: y = X * w + b
-                var (weights, intercept) = FitLinearModel(Xt, trainRows, targetCol);
-
-                // Store coefficients
-                for (int j = 0; j < _nFeatures; j++)
-                {
-                    _coefficients[targetCol, j] = weights[j];
-                }
-                _intercepts[targetCol] = intercept;
-
-                // Predict missing values
-                for (int i = 0; i < nSamples; i++)
-                {
-                    if (missingMask[i, targetCol])
-                    {
-                        double pred = intercept;
-                        for (int j = 0; j < _nFeatures; j++)
-                        {
-                            if (j != targetCol)
-                            {
-                                pred += weights[j] * Xt[i, j];
-                            }
-                        }
-                        Xt[i, targetCol] = pred;
-                    }
-                }
+                var step = FitStep(xt, feature, present);
+                _imputationSequence.Add(step);
+                xt = ApplyStep(xt, missing, step);
             }
 
-            // Check convergence
-            double maxChange = 0;
-            for (int i = 0; i < nSamples; i++)
-            {
-                for (int j = 0; j < _nFeatures; j++)
-                {
-                    if (missingMask[i, j])
-                    {
-                        double change = Math.Abs(Xt[i, j] - XtOld[i, j]);
-                        maxChange = Math.Max(maxChange, change);
-                    }
-                }
-            }
-
-            if (maxChange < _tolerance)
+            // scikit-learn: np.linalg.norm(Xt - Xt_previous, ord=np.inf, axis=None), which for a 2-D array is the
+            // matrix infinity norm, the largest row sum of absolute changes (not the largest single change)
+            var change = Engine.TensorMaxValue(
+                Engine.ReduceSum(Engine.TensorAbs(Engine.TensorSubtract(xt, previous)), new[] { 1 }, false));
+            if (PreprocessingTensorOps.IsBelow(change, normalizedTolerance))
             {
                 break;
             }
         }
     }
 
-    private double[] ComputeInitialValues(double[,] X, bool[,] missingMask)
+    /// <summary>
+    /// The processed features in ascending order of missing count (scikit-learn's default
+    /// <c>imputation_order="ascending"</c>, a stable sort).
+    /// </summary>
+    private int[] ImputationOrder(Tensor<T> missing)
     {
-        int nSamples = X.GetLength(0);
-        int nFeatures = X.GetLength(1);
-        var values = new double[nFeatures];
-
-        for (int j = 0; j < nFeatures; j++)
-        {
-            var nonMissing = new List<double>();
-            for (int i = 0; i < nSamples; i++)
-            {
-                if (!missingMask[i, j])
-                {
-                    nonMissing.Add(X[i, j]);
-                }
-            }
-
-            if (nonMissing.Count == 0)
-            {
-                values[j] = 0;
-                continue;
-            }
-
-            switch (_initialStrategy)
-            {
-                case IterativeImputerInitialStrategy.Mean:
-                    values[j] = nonMissing.Average();
-                    break;
-                case IterativeImputerInitialStrategy.Median:
-                    nonMissing.Sort();
-                    int mid = nonMissing.Count / 2;
-                    values[j] = nonMissing.Count % 2 == 0
-                        ? (nonMissing[mid - 1] + nonMissing[mid]) / 2
-                        : nonMissing[mid];
-                    break;
-                case IterativeImputerInitialStrategy.MostFrequent:
-                    values[j] = nonMissing.GroupBy(v => Math.Round(v, 6))
-                        .OrderByDescending(g => g.Count())
-                        .First().Key;
-                    break;
-                case IterativeImputerInitialStrategy.Constant:
-                    values[j] = 0;
-                    break;
-            }
-        }
-
-        return values;
-    }
-
-    private (double[] Weights, double Intercept) FitLinearModel(
-        double[,] X, List<int> trainRows, int targetCol)
-    {
-        int nFeatures = X.GetLength(1);
-        int nTrain = trainRows.Count;
-
-        // Extract target and features (excluding target column)
-        var y = new double[nTrain];
-        var Xf = new double[nTrain, nFeatures - 1];
-
-        for (int i = 0; i < nTrain; i++)
-        {
-            int row = trainRows[i];
-            y[i] = X[row, targetCol];
-
-            int colIdx = 0;
-            for (int j = 0; j < nFeatures; j++)
-            {
-                if (j != targetCol)
-                {
-                    Xf[i, colIdx++] = X[row, j];
-                }
-            }
-        }
-
-        // Simple ridge regression with regularization
-        double lambda = 1e-3;
-        int p = nFeatures - 1;
-
-        // Center the data
-        double yMean = y.Average();
-        var xMeans = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            double sum = 0;
-            for (int i = 0; i < nTrain; i++)
-            {
-                sum += Xf[i, j];
-            }
-            xMeans[j] = sum / nTrain;
-        }
-
-        // Center
-        for (int i = 0; i < nTrain; i++)
-        {
-            y[i] -= yMean;
-            for (int j = 0; j < p; j++)
-            {
-                Xf[i, j] -= xMeans[j];
-            }
-        }
-
-        // Compute X^T * X + lambda * I
-        var XTX = new double[p, p];
-        for (int i = 0; i < p; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                double sum = 0;
-                for (int k = 0; k < nTrain; k++)
-                {
-                    sum += Xf[k, i] * Xf[k, j];
-                }
-                XTX[i, j] = sum;
-                if (i == j)
-                {
-                    XTX[i, j] += lambda;
-                }
-            }
-        }
-
-        // Compute X^T * y
-        var XTy = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            double sum = 0;
-            for (int i = 0; i < nTrain; i++)
-            {
-                sum += Xf[i, j] * y[i];
-            }
-            XTy[j] = sum;
-        }
-
-        // Solve using Cholesky or simple iteration
-        var weights = SolveLinearSystem(XTX, XTy, p);
-
-        // Expand weights back to full size
-        var fullWeights = new double[nFeatures];
-        int idx = 0;
-        for (int j = 0; j < nFeatures; j++)
-        {
-            if (j != targetCol)
-            {
-                fullWeights[j] = weights[idx++];
-            }
-        }
-
-        // Compute intercept
-        double intercept = yMean;
-        idx = 0;
-        for (int j = 0; j < nFeatures; j++)
-        {
-            if (j != targetCol)
-            {
-                intercept -= fullWeights[j] * xMeans[idx++];
-            }
-        }
-
-        return (fullWeights, intercept);
-    }
-
-    private double[] SolveLinearSystem(double[,] A, double[] b, int n)
-    {
-        // Simple Gaussian elimination with partial pivoting
-        var augmented = new double[n, n + 1];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                augmented[i, j] = A[i, j];
-            }
-            augmented[i, n] = b[i];
-        }
-
-        // Forward elimination
-        for (int col = 0; col < n; col++)
-        {
-            // Find pivot
-            int maxRow = col;
-            for (int row = col + 1; row < n; row++)
-            {
-                if (Math.Abs(augmented[row, col]) > Math.Abs(augmented[maxRow, col]))
-                {
-                    maxRow = row;
-                }
-            }
-
-            // Swap rows
-            for (int j = col; j <= n; j++)
-            {
-                double temp = augmented[col, j];
-                augmented[col, j] = augmented[maxRow, j];
-                augmented[maxRow, j] = temp;
-            }
-
-            // Eliminate
-            if (Math.Abs(augmented[col, col]) > 1e-10)
-            {
-                for (int row = col + 1; row < n; row++)
-                {
-                    double factor = augmented[row, col] / augmented[col, col];
-                    for (int j = col; j <= n; j++)
-                    {
-                        augmented[row, j] -= factor * augmented[col, j];
-                    }
-                }
-            }
-        }
-
-        // Back substitution
-        var x = new double[n];
-        for (int i = n - 1; i >= 0; i--)
-        {
-            x[i] = augmented[i, n];
-            for (int j = i + 1; j < n; j++)
-            {
-                x[i] -= augmented[i, j] * x[j];
-            }
-            if (Math.Abs(augmented[i, i]) > 1e-10)
-            {
-                x[i] /= augmented[i, i];
-            }
-        }
-
-        return x;
+        var processed = new HashSet<int>(GetColumnsToProcess(_nFeatures));
+        return AscendingMissingOrder(missing).Where(processed.Contains).ToArray();
     }
 
     /// <summary>
-    /// Transforms the data by imputing missing values.
+    /// Every column of a 0/1 missing mask ([n, features]) in ascending order of its missing count, ties in
+    /// column order. The mask is counted as int: a sum in T stops counting at 2048 for Half, which would tie
+    /// unequal counts and change the imputation order.
     /// </summary>
-    /// <param name="data">The data to transform.</param>
-    /// <returns>The data with missing values imputed.</returns>
+    internal static int[] AscendingMissingOrder(Tensor<T> missing)
+    {
+        var counts = AiDotNetEngine.Current.ReduceSum(missing.Cast<int>(), new[] { 0 }, false).AsSpan().ToArray();
+        return Enumerable.Range(0, counts.Length).OrderBy(j => counts[j]).ToArray();
+    }
+
+    /// <summary>
+    /// Fits the estimator that predicts <paramref name="feature"/> from all the other features over the
+    /// <paramref name="present"/> rows of the current imputation.
+    /// </summary>
+    private ImputationStep FitStep(Tensor<T> xt, int feature, int[] present)
+    {
+        var rows = Engine.TensorIndexSelect(xt, new Tensor<int>(present, new[] { present.Length }), 0);
+        var y = PreprocessingTensorOps.ColumnVector(rows, feature);
+        var others = Engine.TensorMultiply(rows, ScalerTensorOps.BroadcastRow(OthersMask(feature), present.Length));
+        var (coefficients, intercept) = FitLinearModel(others, y);
+        return new ImputationStep(feature, coefficients, intercept);
+    }
+
+    /// <summary>A 0/1 [features] row that is 0 on <paramref name="feature"/> and 1 elsewhere.</summary>
+    private Tensor<T> OthersMask(int feature)
+    {
+        var all = Enumerable.Range(0, _nFeatures).Where(j => j != feature).ToArray();
+        return ScalerTensorOps.ColumnMask<T>(_nFeatures, all);
+    }
+
+    /// <summary>Replaces the missing entries of the step's feature with the step model's predictions.</summary>
+    private Tensor<T> ApplyStep(Tensor<T> xt, Tensor<T> missing, ImputationStep step)
+    {
+        int rows = xt.Shape[0];
+        var prediction = Engine.TensorAddScalar(
+            Engine.TensorMatMul(xt, Engine.Reshape(step.Coefficients, new[] { _nFeatures, 1 })), step.Intercept);
+        var target = Engine.TensorMultiply(
+            missing, ScalerTensorOps.BroadcastRow(ScalerTensorOps.ColumnMask<T>(_nFeatures, new[] { step.Feature }), rows));
+        return Engine.TensorWhere(target, Engine.TensorBroadcastTo(prediction, new[] { rows, _nFeatures }), xt);
+    }
+
+    /// <summary>
+    /// The initial imputation value of every column from its observed (non-NaN) entries: mean, median, most
+    /// frequent (smallest on ties, as scikit-learn's SimpleImputer) or the constant 0; 0 for a column with no
+    /// observed entry.
+    /// </summary>
+    private Vector<T> ComputeInitialValues(Matrix<T> data, Tensor<T> x)
+    {
+        int nFeatures = data.Columns;
+        Tensor<T> values;
+        switch (_initialStrategy)
+        {
+            case IterativeImputerInitialStrategy.Mean:
+                values = ScalerTensorOps.NanColumnMean(x);
+                break;
+            case IterativeImputerInitialStrategy.Median:
+                values = Engine.TensorNanQuantile(x, 0.5, 0, false, QuantileInterpolation.Linear);
+                break;
+            case IterativeImputerInitialStrategy.MostFrequent:
+                values = ScalerTensorOps.ColumnModes(data, Enumerable.Range(0, nFeatures));
+                break;
+            default:
+                values = new Tensor<T>(new[] { nFeatures });
+                break;
+        }
+
+        var empty = Engine.TensorEquals(ScalerTensorOps.NanColumnCount(x), NumOps.Zero);
+        return Engine.TensorWhere(empty, new Tensor<T>(new[] { nFeatures }), values).ToVector();
+    }
+
+    /// <summary>
+    /// Fits the configured linear estimator with an intercept on centred data:
+    /// <see cref="IterativeImputerEstimator.BayesianRidge"/> as scikit-learn's BayesianRidge (evidence
+    /// maximisation of alpha and lambda, alpha_1 = alpha_2 = lambda_1 = lambda_2 = 1e-6, max_iter 300,
+    /// tol 1e-3), <see cref="IterativeImputerEstimator.Ridge"/> as Ridge(alpha=1) and
+    /// <see cref="IterativeImputerEstimator.LinearRegression"/> as least squares (minimum-norm, singular values
+    /// below eps * max(n, p) * the largest are cut). All solve through the eigendecomposition of X^T X.
+    /// </summary>
+    private (Tensor<T> Coefficients, T Intercept) FitLinearModel(Tensor<T> features, Tensor<T> y)
+    {
+        int n = features.Shape[0];
+        int p = features.Shape[1];
+        var xMean = Engine.ReduceMean(features, new[] { 0 }, false);
+        T yMean = Engine.TensorMean(y);
+        var xc = Engine.TensorSubtract(features, ScalerTensorOps.BroadcastRow(xMean, n));
+        var yc = Engine.TensorSubtractScalar(y, yMean);
+
+        var gram = Engine.TensorMatMul(Engine.TensorTranspose(xc), xc);
+        var xty = Engine.TensorMatMul(Engine.TensorTranspose(xc), Engine.Reshape(yc, new[] { n, 1 }));
+        var (eigenvalues, eigenvectors) = LinalgDispatch<T>.Eigh(gram);
+        eigenvalues = Engine.TensorMax(eigenvalues, NumOps.Zero);
+        var projected = Engine.Reshape(Engine.TensorMatMul(Engine.TensorTranspose(eigenvectors), xty), new[] { p });
+
+        Tensor<T> coefficients;
+        switch (_estimator)
+        {
+            case IterativeImputerEstimator.Ridge:
+                coefficients = SolveSpectral(eigenvectors, projected,
+                    Engine.TensorReciprocal(Engine.TensorAddScalar(eigenvalues, NumOps.One)));
+                break;
+            case IterativeImputerEstimator.LinearRegression:
+                coefficients = SolveLeastSquares(eigenvalues, eigenvectors, projected, Math.Max(n, p));
+                break;
+            default:
+                coefficients = SolveBayesianRidge(xc, yc, eigenvalues, eigenvectors, projected);
+                break;
+        }
+
+        T intercept = NumOps.Subtract(yMean, Engine.TensorSum(Engine.TensorMultiply(xMean, coefficients)));
+        return (coefficients, intercept);
+    }
+
+    /// <summary><c>V diag(weights) V^T X^T y</c>, with <paramref name="projected"/> = <c>V^T X^T y</c>.</summary>
+    private Tensor<T> SolveSpectral(Tensor<T> eigenvectors, Tensor<T> projected, Tensor<T> weights)
+    {
+        int p = projected.Length;
+        var scaled = Engine.Reshape(Engine.TensorMultiply(projected, weights), new[] { p, 1 });
+        return Engine.Reshape(Engine.TensorMatMul(eigenvectors, scaled), new[] { p });
+    }
+
+    /// <summary>
+    /// Minimum-norm least squares (scikit-learn's LinearRegression, scipy <c>lstsq</c>): the directions X^T X
+    /// cannot resolve are dropped.
+    /// </summary>
+    private Tensor<T> SolveLeastSquares(Tensor<T> eigenvalues, Tensor<T> eigenvectors, Tensor<T> projected, int size)
+    {
+        // An eigenvalue of X^T X carries a rounding error of about eps * e_max, so a singular direction (an exactly
+        // collinear feature) comes back as an eigenvalue near eps * e_max, not 0. The cut-off is that noise floor,
+        // eps * max(n, p) * e_max: cutting at the squared singular-value tolerance (eps * size)^2 * e_max instead
+        // kept the noise eigenvalue and blew the coefficients of collinear features up instead of returning
+        // lstsq's minimum-norm solution.
+        double relative = ScalerTensorOps.Float64Epsilon * size;
+        T cutoff = NumOps.Multiply(Engine.TensorMaxValue(eigenvalues), NumOps.FromDouble(relative));
+        var kept = Engine.TensorGreaterThan(eigenvalues, cutoff);
+        var safe = Engine.TensorWhere(kept, eigenvalues, PreprocessingTensorOps.Filled(eigenvalues.Shape.ToArray(), NumOps.One));
+        var weights = Engine.TensorMultiply(kept, Engine.TensorReciprocal(safe));
+        return SolveSpectral(eigenvectors, projected, weights);
+    }
+
+    /// <summary>
+    /// scikit-learn BayesianRidge on centred data: alpha starts at 1 / (var(y) + eps) and lambda at 1; each
+    /// round sets coef = (X^T X + lambda / alpha I)^-1 X^T y, gamma = sum(alpha e / (lambda + alpha e)),
+    /// lambda = (gamma + 2 lambda_1) / (|coef|^2 + 2 lambda_2) and
+    /// alpha = (n - gamma + 2 alpha_1) / (|y - X coef|^2 + 2 alpha_2), until the coefficients move by less than
+    /// tol (L1); the returned coefficients use the final alpha and lambda.
+    /// </summary>
+    private Tensor<T> SolveBayesianRidge(Tensor<T> xc, Tensor<T> yc, Tensor<T> eigenvalues, Tensor<T> eigenvectors, Tensor<T> projected)
+    {
+        const double hyper = 1e-6;
+        const int maxIterations = 300;
+        int n = xc.Shape[0];
+        int p = eigenvalues.Length;
+        T twoHyper = NumOps.FromDouble(2 * hyper);
+        T evidenceCount = NumOps.FromDouble(n + 2 * hyper);
+        T convergence = NumOps.FromDouble(1e-3);
+        var shape = new[] { p };
+
+        T variance = Engine.TensorMean(Engine.TensorSquare(yc));
+        var alpha = PreprocessingTensorOps.Filled(new[] { 1 },
+            NumOps.Divide(NumOps.One, NumOps.Add(variance, NumOps.FromDouble(ScalerTensorOps.Float64Epsilon))));
+        var lambda = PreprocessingTensorOps.Filled(new[] { 1 }, NumOps.One);
+
+        Tensor<T>? previous = null;
+        for (int iteration = 0; iteration < maxIterations; iteration++)
+        {
+            var coefficients = BayesianCoefficients(eigenvalues, eigenvectors, projected, alpha, lambda);
+            var residual = Engine.TensorSubtract(
+                yc, Engine.Reshape(Engine.TensorMatMul(xc, Engine.Reshape(coefficients, new[] { p, 1 })), new[] { n }));
+            var rmse = Engine.ReduceSum(Engine.TensorSquare(residual), new[] { 0 }, true);
+
+            var alphaE = Engine.TensorMultiply(eigenvalues, Engine.TensorBroadcastTo(alpha, shape));
+            var gamma = Engine.ReduceSum(
+                Engine.TensorDivide(alphaE, Engine.TensorAdd(Engine.TensorBroadcastTo(lambda, shape), alphaE)), new[] { 0 }, true);
+            lambda = Engine.TensorDivide(
+                Engine.TensorAddScalar(gamma, twoHyper),
+                Engine.TensorAddScalar(Engine.ReduceSum(Engine.TensorSquare(coefficients), new[] { 0 }, true), twoHyper));
+            alpha = Engine.TensorDivide(
+                Engine.TensorAddScalar(Engine.TensorNegate(gamma), evidenceCount), Engine.TensorAddScalar(rmse, twoHyper));
+
+            if (previous is not null &&
+                PreprocessingTensorOps.IsBelow(Engine.TensorSum(Engine.TensorAbs(Engine.TensorSubtract(previous, coefficients))), convergence))
+            {
+                break;
+            }
+
+            previous = coefficients;
+        }
+
+        return BayesianCoefficients(eigenvalues, eigenvectors, projected, alpha, lambda);
+    }
+
+    /// <summary><c>(X^T X + lambda / alpha I)^-1 X^T y</c> in the eigenbasis.</summary>
+    private Tensor<T> BayesianCoefficients(
+        Tensor<T> eigenvalues, Tensor<T> eigenvectors, Tensor<T> projected, Tensor<T> alpha, Tensor<T> lambda)
+    {
+        var ratio = Engine.TensorBroadcastTo(Engine.TensorDivide(lambda, alpha), eigenvalues.Shape.ToArray());
+        return SolveSpectral(eigenvectors, projected, Engine.TensorReciprocal(Engine.TensorAdd(eigenvalues, ratio)));
+    }
+
+    /// <summary>
+    /// Imputes with the fitted initial values, then replays the fitted imputation sequence (scikit-learn's
+    /// <c>imputation_sequence_</c>) on the missing entries of the processed columns.
+    /// </summary>
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
-        if (_initialValues is null || _coefficients is null || _intercepts is null)
+        if (_initialValues is null || _imputationSequence is null)
         {
             throw new InvalidOperationException("IterativeImputer has not been fitted.");
         }
 
+        ScalerTensorOps.EnsureColumnCount(data, _initialValues.Length);
         int nSamples = data.Rows;
         int nFeatures = data.Columns;
-        var result = new T[nSamples, nFeatures];
-
-        // Convert to double
-        var X = new double[nSamples, nFeatures];
-        var missingMask = new bool[nSamples, nFeatures];
-
-        for (int i = 0; i < nSamples; i++)
+        if (nSamples == 0 || nFeatures == 0)
         {
-            for (int j = 0; j < nFeatures; j++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                X[i, j] = val;
-                if (double.IsNaN(val))
-                {
-                    missingMask[i, j] = true;
-                    X[i, j] = _initialValues[j];
-                }
-            }
+            return new Matrix<T>(nSamples, nFeatures);
         }
 
-        // Apply learned imputations
-        for (int iteration = 0; iteration < _maxIterations; iteration++)
+        var x = Tensor<T>.FromMatrix(data);
+        var missing = ScalerTensorOps.NanMask(x);
+        var xt = Engine.TensorWhere(missing, ScalerTensorOps.BroadcastRow(_initialValues, nSamples), x);
+        foreach (var step in _imputationSequence)
         {
-            var XOld = (double[,])X.Clone();
-
-            for (int targetCol = 0; targetCol < nFeatures; targetCol++)
-            {
-                if (_hasMissing is null || !_hasMissing[targetCol]) continue;
-
-                for (int i = 0; i < nSamples; i++)
-                {
-                    if (missingMask[i, targetCol])
-                    {
-                        double pred = _intercepts[targetCol];
-                        for (int j = 0; j < nFeatures; j++)
-                        {
-                            if (j != targetCol)
-                            {
-                                pred += _coefficients[targetCol, j] * X[i, j];
-                            }
-                        }
-                        X[i, targetCol] = pred;
-                    }
-                }
-            }
-
-            // Check convergence
-            double maxChange = 0;
-            for (int i = 0; i < nSamples; i++)
-            {
-                for (int j = 0; j < nFeatures; j++)
-                {
-                    if (missingMask[i, j])
-                    {
-                        maxChange = Math.Max(maxChange, Math.Abs(X[i, j] - XOld[i, j]));
-                    }
-                }
-            }
-
-            if (maxChange < _tolerance) break;
+            xt = ApplyStep(xt, missing, step);
         }
 
-        // Convert back
-        for (int i = 0; i < nSamples; i++)
-        {
-            for (int j = 0; j < nFeatures; j++)
-            {
-                result[i, j] = NumOps.FromDouble(X[i, j]);
-            }
-        }
-
-        return new Matrix<T>(result);
+        // Only the processed columns are imputed; the others keep their original values.
+        var mask = ScalerTensorOps.ColumnMask<T>(nFeatures, GetColumnsToProcess(nFeatures));
+        return ScalerTensorOps.MergeColumns(mask, xt, data);
     }
 
     /// <summary>

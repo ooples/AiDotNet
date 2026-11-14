@@ -2,6 +2,8 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.Scalers;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.Preprocessing.OutlierHandling;
 
@@ -48,17 +50,24 @@ namespace AiDotNet.Preprocessing.OutlierHandling;
 public class MADClipper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     /// <summary>
-    /// Constant for converting MAD to standard deviation equivalent (1 / 0.6745).
+    /// Constant for converting MAD to a consistent estimate of the standard deviation for normal data:
+    /// 1 / Phi^-1(3/4) = 1.4826022185..., the factor scipy.stats.median_abs_deviation(scale='normal') uses.
     /// </summary>
-    private const double MADScaleFactor = 1.4826;
+    private const double MADScaleFactor = 1.0 / ModifiedZScoreConstant;
+
+    /// <summary>
+    /// The constant of Iglewicz and Hoaglin's modified Z-score: the 0.75 quantile of the standard normal,
+    /// Phi^-1(3/4) (published rounded to 0.6745), so k * (x - median) / MAD is comparable to a Z-score.
+    /// </summary>
+    private const double ModifiedZScoreConstant = 0.6744897501960817;
 
     private readonly double _threshold;
 
     // Fitted parameters
-    private double[]? _medians;
-    private double[]? _mads;
-    private double[]? _lowerBounds;
-    private double[]? _upperBounds;
+    private Vector<T>? _medians;
+    private Vector<T>? _mads;
+    private Vector<T>? _lowerBounds;
+    private Vector<T>? _upperBounds;
     private int _nInputFeatures;
 
     /// <summary>
@@ -69,22 +78,22 @@ public class MADClipper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the computed medians for each feature.
     /// </summary>
-    public double[]? Medians => _medians;
+    public Vector<T>? Medians => _medians;
 
     /// <summary>
     /// Gets the computed MAD values for each feature.
     /// </summary>
-    public double[]? MADs => _mads;
+    public Vector<T>? MADs => _mads;
 
     /// <summary>
     /// Gets the computed lower bounds for each feature.
     /// </summary>
-    public double[]? LowerBounds => _lowerBounds;
+    public Vector<T>? LowerBounds => _lowerBounds;
 
     /// <summary>
     /// Gets the computed upper bounds for each feature.
     /// </summary>
-    public double[]? UpperBounds => _upperBounds;
+    public Vector<T>? UpperBounds => _upperBounds;
 
     /// <summary>
     /// Gets whether this transformer supports inverse transformation.
@@ -114,76 +123,34 @@ public class MADClipper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     protected override void FitCore(Matrix<T> data)
     {
         _nInputFeatures = data.Columns;
-        var columnsToProcess = GetColumnsToProcess(_nInputFeatures);
-        var processSet = new HashSet<int>(columnsToProcess);
+        var mask = ScalerTensorOps.ColumnMask<T>(_nInputFeatures, GetColumnsToProcess(_nInputFeatures));
 
-        _medians = new double[_nInputFeatures];
-        _mads = new double[_nInputFeatures];
-        _lowerBounds = new double[_nInputFeatures];
-        _upperBounds = new double[_nInputFeatures];
-
-        for (int col = 0; col < _nInputFeatures; col++)
+        // Median and MAD = median(|x - median|), ignoring NaN; an empty column gets 0.
+        Tensor<T> median;
+        Tensor<T> mad;
+        if (data.Rows == 0 || _nInputFeatures == 0)
         {
-            if (!processSet.Contains(col))
-            {
-                // Pass-through columns: use extreme bounds
-                _medians[col] = 0;
-                _mads[col] = 1;
-                _lowerBounds[col] = double.MinValue;
-                _upperBounds[col] = double.MaxValue;
-                continue;
-            }
-
-            // Collect all values for this column
-            var values = new List<double>();
-            for (int i = 0; i < data.Rows; i++)
-            {
-                values.Add(NumOps.ToDouble(data[i, col]));
-            }
-
-            // Calculate median
-            double median = CalculateMedian(values);
-            _medians[col] = median;
-
-            // Calculate MAD
-            var absoluteDeviations = values.Select(v => Math.Abs(v - median)).ToList();
-            double mad = CalculateMedian(absoluteDeviations);
-            _mads[col] = mad;
-
-            // Calculate bounds using modified Z-score formula
-            // Modified Z-score = 0.6745 * (x - median) / MAD
-            // Solving for x: x = median + threshold * MAD / 0.6745
-            if (mad > 0)
-            {
-                double scaledMad = mad * MADScaleFactor; // Equivalent to MAD / 0.6745
-                _lowerBounds[col] = median - _threshold * scaledMad;
-                _upperBounds[col] = median + _threshold * scaledMad;
-            }
-            else
-            {
-                // If MAD is 0, all values are the same - no clipping needed
-                _lowerBounds[col] = double.MinValue;
-                _upperBounds[col] = double.MaxValue;
-            }
+            median = new Tensor<T>(new[] { _nInputFeatures });
+            mad = new Tensor<T>(new[] { _nInputFeatures });
         }
-    }
-
-    private static double CalculateMedian(List<double> values)
-    {
-        if (values.Count == 0)
+        else
         {
-            return 0;
+            var x = Tensor<T>.FromMatrix(data);
+            median = Engine.TensorNanQuantile(x, 0.5, 0, false, QuantileInterpolation.Linear);
+            var deviation = Engine.TensorAbs(Engine.TensorSubtract(x, ScalerTensorOps.BroadcastRow(median, data.Rows)));
+            mad = Engine.TensorNanQuantile(deviation, 0.5, 0, false, QuantileInterpolation.Linear);
         }
 
-        var sorted = values.OrderBy(v => v).ToList();
-        int n = sorted.Count;
+        _medians = ScalerTensorOps.MaskedParameters(mask, median, NumOps.Zero);
+        _mads = ScalerTensorOps.MaskedParameters(mask, mad, NumOps.One);
 
-        if (n % 2 == 0)
-        {
-            return (sorted[n / 2 - 1] + sorted[n / 2]) / 2.0;
-        }
-
-        return sorted[n / 2];
+        // Modified Z-score = Phi^-1(3/4) * (x - median) / MAD, so |M| <= threshold means
+        // x in median -/+ threshold * MAD / Phi^-1(3/4). A zero MAD (all values equal) and the pass-through
+        // columns get the widest bounds (no clipping).
+        var spread = Engine.TensorMultiplyScalar(mad, NumOps.FromDouble(_threshold * MADScaleFactor));
+        var clips = Engine.TensorMultiply(mask, Engine.TensorGreaterThan(mad, NumOps.Zero));
+        _lowerBounds = ScalerTensorOps.MaskedParameters(clips, Engine.TensorSubtract(median, spread), NumOps.MinValue);
+        _upperBounds = ScalerTensorOps.MaskedParameters(clips, Engine.TensorAdd(median, spread), NumOps.MaxValue);
     }
 
     /// <summary>
@@ -198,29 +165,16 @@ public class MADClipper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("MADClipper has not been fitted.");
         }
 
-        int numRows = data.Rows;
-        int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        for (int i = 0; i < numRows; i++)
+        ScalerTensorOps.EnsureColumnCount(data, _lowerBounds.Length);
+        if (data.Rows == 0 || data.Columns == 0)
         {
-            for (int j = 0; j < numColumns; j++)
-            {
-                double value = NumOps.ToDouble(data[i, j]);
-
-                if (processSet.Contains(j))
-                {
-                    // Clip to bounds
-                    value = Math.Max(_lowerBounds[j], Math.Min(_upperBounds[j], value));
-                }
-
-                result[i, j] = NumOps.FromDouble(value);
-            }
+            return new Matrix<T>(data.Rows, data.Columns);
         }
 
-        return new Matrix<T>(result);
+        // Clip to bounds on the processed columns; the other columns pass through.
+        var clipped = ScalerTensorOps.ClipColumns(Tensor<T>.FromMatrix(data), _lowerBounds, _upperBounds);
+        var mask = ScalerTensorOps.ColumnMask<T>(data.Columns, GetColumnsToProcess(data.Columns));
+        return ScalerTensorOps.MergeColumns(mask, clipped, data);
     }
 
     /// <summary>
@@ -251,34 +205,26 @@ public class MADClipper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("MADClipper has not been fitted.");
         }
 
+        ScalerTensorOps.EnsureColumnCount(data, _medians.Length);
         int numRows = data.Rows;
         int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        for (int i = 0; i < numRows; i++)
+        if (numRows == 0 || numColumns == 0)
         {
-            for (int j = 0; j < numColumns; j++)
-            {
-                double value = NumOps.ToDouble(data[i, j]);
-                double modifiedZScore;
-
-                if (processSet.Contains(j) && _mads[j] > 0)
-                {
-                    // Modified Z-score = 0.6745 * (x - median) / MAD
-                    modifiedZScore = 0.6745 * (value - _medians[j]) / _mads[j];
-                }
-                else
-                {
-                    modifiedZScore = 0;
-                }
-
-                result[i, j] = NumOps.FromDouble(modifiedZScore);
-            }
+            return new Matrix<T>(numRows, numColumns);
         }
 
-        return new Matrix<T>(result);
+        // Modified Z-score = Phi^-1(3/4) * (x - median) / MAD on processed columns with MAD > 0, otherwise 0.
+        var mad = Tensor<T>.FromVector(_mads);
+        var positive = Engine.TensorGreaterThan(mad, NumOps.Zero);
+        var scored = Engine.TensorMultiply(
+            ScalerTensorOps.ColumnMask<T>(numColumns, GetColumnsToProcess(numColumns)), positive);
+        var safeMad = Engine.TensorWhere(positive, mad, PreprocessingTensorOps.Filled(mad.Shape.ToArray(), NumOps.One));
+        var centered = Engine.TensorSubtract(Tensor<T>.FromMatrix(data), ScalerTensorOps.BroadcastRow(_medians, numRows));
+        var z = Engine.TensorMultiplyScalar(
+            Engine.TensorDivide(centered, ScalerTensorOps.BroadcastRow(safeMad, numRows)),
+            NumOps.FromDouble(ModifiedZScoreConstant));
+        return Engine.TensorWhere(
+            ScalerTensorOps.BroadcastRow(scored, numRows), z, new Tensor<T>(new[] { numRows, numColumns })).ToMatrix();
     }
 
     /// <summary>
@@ -293,24 +239,16 @@ public class MADClipper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("MADClipper has not been fitted.");
         }
 
+        ScalerTensorOps.EnsureColumnCount(data, _lowerBounds.Length);
         int numRows = data.Rows;
         int numColumns = data.Columns;
-        var mask = new bool[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        for (int i = 0; i < numRows; i++)
+        if (numRows == 0 || numColumns == 0)
         {
-            for (int j = 0; j < numColumns; j++)
-            {
-                if (processSet.Contains(j))
-                {
-                    double value = NumOps.ToDouble(data[i, j]);
-                    mask[i, j] = value < _lowerBounds[j] || value > _upperBounds[j];
-                }
-            }
+            return new bool[numRows, numColumns];
         }
 
-        return mask;
+        var outside = ScalerTensorOps.OutsideMask(Tensor<T>.FromMatrix(data), _lowerBounds, _upperBounds);
+        var mask = ScalerTensorOps.ColumnMask<T>(numColumns, GetColumnsToProcess(numColumns));
+        return ScalerTensorOps.ToBoolMatrix(Engine.TensorMultiply(outside, ScalerTensorOps.BroadcastRow(mask, numRows)));
     }
 }

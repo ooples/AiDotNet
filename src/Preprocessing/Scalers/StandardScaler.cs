@@ -88,46 +88,27 @@ public class StandardScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     protected override void FitCore(Matrix<T> data)
     {
         int numColumns = data.Columns;
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-
-        // Initialize arrays for all columns
-        var means = new T[numColumns];
-        var stdDevs = new T[numColumns];
-
-        // Default values for columns not processed
-        for (int i = 0; i < numColumns; i++)
+        var mask = ScalerTensorOps.ColumnMask<T>(numColumns, GetColumnsToProcess(numColumns));
+        if (data.Rows == 0 || numColumns == 0)
         {
-            means[i] = NumOps.Zero;
-            stdDevs[i] = NumOps.One;
+            _mean = ScalerTensorOps.FilledVector(numColumns, NumOps.Zero);
+            _stdDev = ScalerTensorOps.FilledVector(numColumns, NumOps.One);
+            return;
         }
 
-        // Compute mean and std for specified columns
-        foreach (var colIdx in columnsToProcess)
+        // scikit-learn semantics: NaN is missing (ignored by the statistics), the variance is the biased
+        // (ddof = 0) estimator, and a column whose variance is within floating-point error of zero is constant.
+        var x = Tensor<T>.FromMatrix(data);
+        if (!_withStd)
         {
-            var column = data.GetColumn(colIdx);
-
-            if (_withMean || _withStd)
-            {
-                means[colIdx] = StatisticsHelper<T>.CalculateMean(column);
-            }
-
-            if (_withStd)
-            {
-                T variance = StatisticsHelper<T>.CalculateVariance(column, means[colIdx]);
-
-                // A constant/near-constant column can produce a tiny NEGATIVE variance from
-                // floating-point cancellation; Sqrt of that is NaN, which then poisons every
-                // transformed value (and the exact-zero guard below would miss a NaN). Floor the
-                // variance at zero before the sqrt so a degenerate column degrades to "no scaling".
-                T std = NumOps.GreaterThan(variance, NumOps.Zero) ? NumOps.Sqrt(variance) : NumOps.Zero;
-
-                // Prevent division by zero - if std is zero, use 1 (no scaling)
-                stdDevs[colIdx] = NumOps.Compare(std, NumOps.Zero) == 0 ? NumOps.One : std;
-            }
+            _mean = ScalerTensorOps.MaskedParameters(mask, ScalerTensorOps.NanColumnMean(x), NumOps.Zero);
+            _stdDev = ScalerTensorOps.FilledVector(numColumns, NumOps.One);
+            return;
         }
 
-        _mean = new Vector<T>(means);
-        _stdDev = new Vector<T>(stdDevs);
+        var (mean, std, constant) = ScalerTensorOps.NanColumnMoments(x);
+        _mean = ScalerTensorOps.MaskedParameters(mask, mean, NumOps.Zero);
+        _stdDev = ScalerTensorOps.MaskedParameters(mask, ScalerTensorOps.HandleZerosInScale(std, constant), NumOps.One);
     }
 
     /// <summary>
@@ -142,37 +123,10 @@ public class StandardScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("Scaler has not been fitted.");
         }
 
-        int numRows = data.Rows;
-        int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < numColumns; j++)
-            {
-                T value = data[i, j];
-
-                if (processSet.Contains(j))
-                {
-                    // Apply standardization
-                    if (_withMean)
-                    {
-                        value = NumOps.Subtract(value, _mean[j]);
-                    }
-
-                    if (_withStd)
-                    {
-                        value = NumOps.Divide(value, _stdDev[j]);
-                    }
-                }
-
-                result[i, j] = value;
-            }
-        }
-
-        return new Matrix<T>(result);
+        // Unprocessed columns have mean 0 and scale 1, so (x - 0) / 1 leaves them exactly unchanged.
+        var shift = _withMean ? _mean : ScalerTensorOps.FilledVector(_mean.Length, NumOps.Zero);
+        var scale = _withStd ? _stdDev : ScalerTensorOps.FilledVector(_stdDev.Length, NumOps.One);
+        return ScalerTensorOps.ShiftThenScale(data, shift, scale);
     }
 
     /// <summary>
@@ -187,37 +141,10 @@ public class StandardScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("Scaler has not been fitted.");
         }
 
-        int numRows = data.Rows;
-        int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < numColumns; j++)
-            {
-                T value = data[i, j];
-
-                if (processSet.Contains(j))
-                {
-                    // Reverse standardization: x = z * std + mean
-                    if (_withStd)
-                    {
-                        value = NumOps.Multiply(value, _stdDev[j]);
-                    }
-
-                    if (_withMean)
-                    {
-                        value = NumOps.Add(value, _mean[j]);
-                    }
-                }
-
-                result[i, j] = value;
-            }
-        }
-
-        return new Matrix<T>(result);
+        // Reverse standardization: x = z * std + mean
+        var shift = _withMean ? _mean : ScalerTensorOps.FilledVector(_mean.Length, NumOps.Zero);
+        var scale = _withStd ? _stdDev : ScalerTensorOps.FilledVector(_stdDev.Length, NumOps.One);
+        return ScalerTensorOps.ScaleThenShift(data, scale, shift);
     }
 
     /// <summary>

@@ -62,38 +62,16 @@ public class MaxAbsScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     protected override void FitCore(Matrix<T> data)
     {
         int numColumns = data.Columns;
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-
-        // Initialize array for all columns
-        var maxAbsValues = new T[numColumns];
-
-        // Default value for columns not processed (1.0 = no scaling)
-        for (int i = 0; i < numColumns; i++)
+        var mask = ScalerTensorOps.ColumnMask<T>(numColumns, GetColumnsToProcess(numColumns));
+        if (data.Rows == 0 || numColumns == 0)
         {
-            maxAbsValues[i] = NumOps.One;
+            _maxAbs = ScalerTensorOps.FilledVector(numColumns, NumOps.One);
+            return;
         }
 
-        // Compute max absolute value for specified columns
-        foreach (var colIdx in columnsToProcess)
-        {
-            var column = data.GetColumn(colIdx);
-
-            T maxAbs = NumOps.Zero;
-
-            for (int i = 0; i < column.Length; i++)
-            {
-                T absValue = NumOps.Abs(column[i]);
-                if (NumOps.Compare(absValue, maxAbs) > 0)
-                {
-                    maxAbs = absValue;
-                }
-            }
-
-            // Prevent division by zero - if max abs is zero, use 1 (no scaling)
-            maxAbsValues[colIdx] = NumOps.Compare(maxAbs, NumOps.Zero) == 0 ? NumOps.One : maxAbs;
-        }
-
-        _maxAbs = new Vector<T>(maxAbsValues);
+        // scikit-learn: max_abs_ = nanmax(|X|), and scale_ treats a zero (or sub-10-eps) maximum as 1.
+        var maxAbs = ScalerTensorOps.NanColumnMax(Engine.TensorAbs(Tensor<T>.FromMatrix(data)));
+        _maxAbs = ScalerTensorOps.MaskedParameters(mask, ScalerTensorOps.HandleZerosInScale(maxAbs), NumOps.One);
     }
 
     /// <summary>
@@ -108,29 +86,8 @@ public class MaxAbsScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("Scaler has not been fitted.");
         }
 
-        int numRows = data.Rows;
-        int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < numColumns; j++)
-            {
-                T value = data[i, j];
-
-                if (processSet.Contains(j))
-                {
-                    // Scale by dividing by max absolute value
-                    value = NumOps.Divide(value, _maxAbs[j]);
-                }
-
-                result[i, j] = value;
-            }
-        }
-
-        return new Matrix<T>(result);
+        // Unprocessed columns have scale 1, so x / 1 leaves them exactly unchanged.
+        return ScalerTensorOps.ShiftThenScale(data, ScalerTensorOps.FilledVector(_maxAbs.Length, NumOps.Zero), _maxAbs);
     }
 
     /// <summary>
@@ -145,29 +102,7 @@ public class MaxAbsScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("Scaler has not been fitted.");
         }
 
-        int numRows = data.Rows;
-        int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < numColumns; j++)
-            {
-                T value = data[i, j];
-
-                if (processSet.Contains(j))
-                {
-                    // Reverse by multiplying by max absolute value
-                    value = NumOps.Multiply(value, _maxAbs[j]);
-                }
-
-                result[i, j] = value;
-            }
-        }
-
-        return new Matrix<T>(result);
+        return ScalerTensorOps.ScaleThenShift(data, _maxAbs, ScalerTensorOps.FilledVector(_maxAbs.Length, NumOps.Zero));
     }
 
     /// <summary>

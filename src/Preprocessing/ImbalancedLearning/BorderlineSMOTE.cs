@@ -99,10 +99,10 @@ public class BorderlineSMOTE<T> : OversamplingBase<T>
     /// 2. Count how many neighbors are majority class
     /// 3. If half or more are majority → sample is in DANGER zone (borderline)
     /// 4. If ALL are majority → sample is NOISE (outlier), skip it
-    /// 5. Generate synthetic samples only from DANGER samples
+    /// 5. Generate synthetic samples only from DANGER samples (none when there are no DANGER samples)
     ///
     /// For Kind1: Interpolate only with minority neighbors
-    /// For Kind2: Can interpolate with any neighbor (including majority)
+    /// For Kind2: Can interpolate with any neighbor; towards a majority neighbor the gap is drawn from [0, 0.5)
     /// </para>
     /// </remarks>
     protected override List<Vector<T>> GenerateSyntheticSamples(Matrix<T> x, List<int> classIndices, int numSamples)
@@ -114,45 +114,32 @@ public class BorderlineSMOTE<T> : OversamplingBase<T>
             return syntheticSamples;
         }
 
+        var data = Tensor<T>.FromMatrix(x);
         int effectiveM = Math.Min(MNeighbors, x.Rows - 1);
+        var inClass = new HashSet<int>(classIndices);
+        var allIndices = Enumerable.Range(0, x.Rows).ToArray();
 
-        // Find borderline (DANGER) samples
-        var borderlineIndices = new List<int>();
-        var allIndices = Enumerable.Range(0, x.Rows).ToList();
-
-        foreach (int idx in classIndices)
-        {
-            // Find m nearest neighbors from ALL samples
-            var neighbors = FindKNearestNeighbors(x, idx, allIndices, effectiveM);
-
-            // Count majority neighbors
-            int majorityCount = 0;
-            foreach (int neighborIdx in neighbors)
+        // DANGER samples (Han et al., 2005; imbalanced-learn's _in_danger_noise): m/2 <= m' < m, where m' is
+        // the number of the m nearest neighbours (from ALL samples) that belong to another class. NOISE
+        // (m' == m) and SAFE (m' < m/2) samples are not used as bases.
+        var borderlineIndices = classIndices
+            .Where(idx =>
             {
-                if (!classIndices.Contains(neighborIdx))
-                {
-                    majorityCount++;
-                }
-            }
-
-            // Classify the sample
-            // DANGER: m/2 <= majorityCount < m (borderline)
-            // NOISE: majorityCount == m (all majority neighbors)
-            // SAFE: majorityCount < m/2 (mostly minority neighbors)
-            if (majorityCount >= effectiveM / 2 && majorityCount < effectiveM)
-            {
-                borderlineIndices.Add(idx);
-            }
-        }
+                int majorityCount = ResamplingTensorOps.Nearest(data, idx, allIndices, effectiveM)
+                    .Count(neighbor => !inClass.Contains(neighbor));
+                return 2 * majorityCount >= effectiveM && majorityCount < effectiveM;
+            })
+            .ToList();
 
         if (borderlineIndices.Count == 0)
         {
-            // No borderline samples found, fall back to regular SMOTE behavior
-            return GenerateRegularSMOTE(x, classIndices, numSamples);
+            // No borderline samples: like imbalanced-learn, nothing is generated for this class
+            return syntheticSamples;
         }
 
         // Generate synthetic samples from borderline samples
         int effectiveK = Math.Min(KNeighbors, classIndices.Count - 1);
+        var neighborCache = new Dictionary<int, List<int>>();
 
         for (int i = 0; i < numSamples; i++)
         {
@@ -160,25 +147,24 @@ public class BorderlineSMOTE<T> : OversamplingBase<T>
             int baseIdx = borderlineIndices[Random.Next(borderlineIndices.Count)];
             var baseSample = x.GetRow(baseIdx);
 
-            List<int> neighborPool;
-            if (_kind == BorderlineSMOTEKind.Kind1)
+            if (!neighborCache.TryGetValue(baseIdx, out var neighborPool))
             {
-                // Kind1: Only use minority neighbors for interpolation
-                neighborPool = FindKNearestNeighbors(x, baseIdx, classIndices, effectiveK);
-            }
-            else
-            {
-                // Kind2: Can use any neighbor (including majority)
-                neighborPool = FindKNearestNeighbors(x, baseIdx, allIndices, effectiveK);
+                // Kind1: only minority neighbours; Kind2: neighbours from all classes
+                neighborPool = _kind == BorderlineSMOTEKind.Kind1
+                    ? ResamplingTensorOps.Nearest(data, baseIdx, classIndices, effectiveK)
+                    : ResamplingTensorOps.Nearest(data, baseIdx, allIndices, effectiveK);
+                neighborCache[baseIdx] = neighborPool;
             }
 
             if (neighborPool.Count == 0) continue;
 
-            // Select random neighbor and interpolate
+            // Select random neighbor and interpolate. Borderline-SMOTE2 (Han et al., 2005) moves towards a
+            // neighbour of another class by a random gap in [0, 0.5) so the sample stays nearer the minority.
             int neighborIdx = neighborPool[Random.Next(neighborPool.Count)];
             var neighborSample = x.GetRow(neighborIdx);
 
-            var synthetic = InterpolateSamples(baseSample, neighborSample);
+            double stepSize = inClass.Contains(neighborIdx) ? 1.0 : 0.5;
+            var synthetic = InterpolateSamples(baseSample, neighborSample, stepSize);
             syntheticSamples.Add(synthetic);
         }
 
@@ -186,46 +172,13 @@ public class BorderlineSMOTE<T> : OversamplingBase<T>
     }
 
     /// <summary>
-    /// Fallback to regular SMOTE when no borderline samples are found.
+    /// The synthetic sample <c>sample1 + t (sample2 - sample1)</c> with <c>t</c> drawn uniformly from
+    /// [0, <paramref name="stepSize"/>).
     /// </summary>
-    private List<Vector<T>> GenerateRegularSMOTE(Matrix<T> x, List<int> classIndices, int numSamples)
+    private Vector<T> InterpolateSamples(Vector<T> sample1, Vector<T> sample2, double stepSize)
     {
-        var syntheticSamples = new List<Vector<T>>();
-        int effectiveK = Math.Min(KNeighbors, classIndices.Count - 1);
-
-        for (int i = 0; i < numSamples; i++)
-        {
-            int baseIdx = classIndices[Random.Next(classIndices.Count)];
-            var baseSample = x.GetRow(baseIdx);
-
-            var neighbors = FindKNearestNeighbors(x, baseIdx, classIndices, effectiveK);
-            if (neighbors.Count == 0) continue;
-
-            int neighborIdx = neighbors[Random.Next(neighbors.Count)];
-            var neighborSample = x.GetRow(neighborIdx);
-
-            var synthetic = InterpolateSamples(baseSample, neighborSample);
-            syntheticSamples.Add(synthetic);
-        }
-
-        return syntheticSamples;
-    }
-
-    /// <summary>
-    /// Creates a synthetic sample by interpolating between two samples.
-    /// </summary>
-    private Vector<T> InterpolateSamples(Vector<T> sample1, Vector<T> sample2)
-    {
-        T t = NumOps.FromDouble(Random.NextDouble());
-        var synthetic = new Vector<T>(sample1.Length);
-
-        for (int j = 0; j < sample1.Length; j++)
-        {
-            T diff = NumOps.Subtract(sample2[j], sample1[j]);
-            synthetic[j] = NumOps.Add(sample1[j], NumOps.Multiply(t, diff));
-        }
-
-        return synthetic;
+        T t = NumOps.FromDouble(stepSize * Random.NextDouble());
+        return ResamplingTensorOps.Interpolate(sample1, sample2, t);
     }
 }
 
@@ -247,7 +200,8 @@ public enum BorderlineSMOTEKind
     Kind1,
 
     /// <summary>
-    /// Interpolates between borderline samples and any neighbor (including majority class).
+    /// Interpolates between borderline samples and any neighbor (including majority class); towards a
+    /// neighbor of another class the random gap is drawn from [0, 0.5) (Han et al., 2005).
     /// </summary>
     Kind2
 }

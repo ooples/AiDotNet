@@ -20,18 +20,18 @@ namespace AiDotNet.Preprocessing.ImbalancedLearning;
 /// Three versions:
 ///
 /// NearMiss-1: Keep majority samples closest to nearest minority samples
-/// - For each majority sample, find distance to closest minority sample
+/// - For each majority sample, find the average distance to its k closest minority samples
 /// - Keep majority samples with smallest such distances
 /// - Focuses on boundary samples
 ///
 /// NearMiss-2: Keep majority samples closest to farthest minority samples
-/// - For each majority sample, find distance to farthest minority sample
+/// - For each majority sample, find the average distance to its k farthest minority samples
 /// - Keep majority samples with smallest such distances
 /// - Keeps samples that are "in between" the minority class
 ///
 /// NearMiss-3: Keep majority samples closest to each minority sample
-/// - For each minority sample, find k nearest majority neighbors
-/// - Keep those majority samples
+/// - For each minority sample, find k nearest majority neighbors (the short list)
+/// - Of the short list, keep the samples with the largest average distance to their k closest minority samples
 /// - Ensures every minority sample has nearby majority examples
 ///
 /// Visual intuition:
@@ -130,7 +130,8 @@ public class NearMiss<T> : UndersamplingBase<T>
     }
 
     /// <summary>
-    /// NearMiss-1: Keep majority samples closest to their nearest minority neighbors.
+    /// NearMiss-1 (Mani &amp; Zhang, 2003; imbalanced-learn): keeps the majority samples whose average distance
+    /// to their k nearest minority samples is smallest.
     /// </summary>
     private List<int> SelectNearMiss1(
         Matrix<T> x,
@@ -138,37 +139,14 @@ public class NearMiss<T> : UndersamplingBase<T>
         List<int> minorityIndices,
         int targetCount)
     {
-        // For each majority sample, compute distance to nearest minority sample
-        var majorityDistances = new List<(int index, double distance)>();
-
-        foreach (int majIdx in majorityIndices)
-        {
-            var majSample = x.GetRow(majIdx);
-            double minDistance = double.MaxValue;
-
-            foreach (int minIdx in minorityIndices)
-            {
-                var minSample = x.GetRow(minIdx);
-                double dist = NumOps.ToDouble(EuclideanDistance(majSample, minSample));
-                if (dist < minDistance)
-                {
-                    minDistance = dist;
-                }
-            }
-
-            majorityDistances.Add((majIdx, minDistance));
-        }
-
-        // Select majority samples with smallest distance to nearest minority
-        return majorityDistances
-            .OrderBy(d => d.distance)
-            .Take(targetCount)
-            .Select(d => d.index)
-            .ToList();
+        var distances = MajorityToMinorityDistances(x, majorityIndices, minorityIndices);
+        var scores = NeighborDistanceSums(distances, nearest: true);
+        return SelectByScore(majorityIndices, scores, targetCount, largest: false);
     }
 
     /// <summary>
-    /// NearMiss-2: Keep majority samples closest to their farthest minority neighbors.
+    /// NearMiss-2 (Mani &amp; Zhang, 2003; imbalanced-learn): keeps the majority samples whose average distance
+    /// to their k farthest minority samples is smallest.
     /// </summary>
     private List<int> SelectNearMiss2(
         Matrix<T> x,
@@ -176,37 +154,15 @@ public class NearMiss<T> : UndersamplingBase<T>
         List<int> minorityIndices,
         int targetCount)
     {
-        // For each majority sample, compute distance to farthest minority sample
-        var majorityDistances = new List<(int index, double distance)>();
-
-        foreach (int majIdx in majorityIndices)
-        {
-            var majSample = x.GetRow(majIdx);
-            double maxDistance = 0;
-
-            foreach (int minIdx in minorityIndices)
-            {
-                var minSample = x.GetRow(minIdx);
-                double dist = NumOps.ToDouble(EuclideanDistance(majSample, minSample));
-                if (dist > maxDistance)
-                {
-                    maxDistance = dist;
-                }
-            }
-
-            majorityDistances.Add((majIdx, maxDistance));
-        }
-
-        // Select majority samples with smallest distance to farthest minority
-        return majorityDistances
-            .OrderBy(d => d.distance)
-            .Take(targetCount)
-            .Select(d => d.index)
-            .ToList();
+        var distances = MajorityToMinorityDistances(x, majorityIndices, minorityIndices);
+        var scores = NeighborDistanceSums(distances, nearest: false);
+        return SelectByScore(majorityIndices, scores, targetCount, largest: false);
     }
 
     /// <summary>
-    /// NearMiss-3: Keep k nearest majority neighbors for each minority sample.
+    /// NearMiss-3 (Mani &amp; Zhang, 2003; imbalanced-learn): the k nearest majority samples of every minority
+    /// sample are short-listed; of those, keeps the ones whose average distance to their k nearest minority
+    /// samples is largest.
     /// </summary>
     private List<int> SelectNearMiss3(
         Matrix<T> x,
@@ -214,57 +170,78 @@ public class NearMiss<T> : UndersamplingBase<T>
         List<int> minorityIndices,
         int targetCount)
     {
+        if (majorityIndices.Count == 0 || minorityIndices.Count == 0)
+        {
+            return new List<int>();
+        }
+
+        // [majority, minority] distances; column j holds the distances from minority sample j
+        var distances = MajorityToMinorityDistances(x, majorityIndices, minorityIndices);
         int effectiveK = Math.Min(_kNeighbors, majorityIndices.Count);
-        var selectedIndices = new HashSet<int>();
+        var minorityToMajority = Engine.TensorTranspose(distances);
 
-        // For each minority sample, find k nearest majority neighbors
-        foreach (int minIdx in minorityIndices)
+        // Short-list (in ascending majority order, like numpy's unique) the k nearest majority samples of
+        // each minority sample
+        var shortListed = new SortedSet<int>(Enumerable.Range(0, minorityIndices.Count)
+            .SelectMany(j => PreprocessingTensorOps.StableOrder(
+                PreprocessingTensorOps.RowVector(minorityToMajority, j), descending: false).Take(effectiveK)));
+        var candidates = shortListed.ToArray();
+
+        var candidateDistances = Engine.TensorIndexSelect(
+            distances, new Tensor<int>((int[])candidates.Clone(), new[] { candidates.Length }), 0);
+        var scores = NeighborDistanceSums(candidateDistances, nearest: true);
+        var candidateIndices = candidates.Select(c => majorityIndices[c]).ToList();
+        return SelectByScore(candidateIndices, scores, targetCount, largest: true);
+    }
+
+    /// <summary>The engine used for the whole-array distance work.</summary>
+    private static IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>Euclidean distances [majority, minority] between the majority and the minority samples.</summary>
+    private static Tensor<T> MajorityToMinorityDistances(Matrix<T> x, List<int> majorityIndices, List<int> minorityIndices)
+    {
+        var data = Tensor<T>.FromMatrix(x);
+        var minority = minorityIndices.ToArray();
+        var rows = majorityIndices
+            .Select(majIdx => ResamplingTensorOps.Distances(data, majIdx, minority))
+            .ToArray();
+        if (rows.Length == 0)
         {
-            var minSample = x.GetRow(minIdx);
-            var distances = new List<(int index, double distance)>();
-
-            foreach (int majIdx in majorityIndices)
-            {
-                var majSample = x.GetRow(majIdx);
-                double dist = NumOps.ToDouble(EuclideanDistance(minSample, majSample));
-                distances.Add((majIdx, dist));
-            }
-
-            // Add k nearest majority neighbors
-            var nearest = distances
-                .OrderBy(d => d.distance)
-                .Take(effectiveK)
-                .Select(d => d.index);
-
-            foreach (int idx in nearest)
-            {
-                selectedIndices.Add(idx);
-            }
+            return new Tensor<T>(new[] { 0, minority.Length });
         }
 
-        // If we have more than target, take the ones closest overall
-        if (selectedIndices.Count > targetCount)
-        {
-            // Rank by average distance to all minority samples
-            var rankedIndices = selectedIndices
-                .Select(majIdx =>
-                {
-                    var majSample = x.GetRow(majIdx);
-                    double avgDist = minorityIndices
-                        .Select(minIdx => NumOps.ToDouble(EuclideanDistance(majSample, x.GetRow(minIdx))))
-                        .Average();
-                    return (index: majIdx, avgDistance: avgDist);
-                })
-                .OrderBy(d => d.avgDistance)
-                .Take(targetCount)
-                .Select(d => d.index)
-                .ToList();
+        return Engine.TensorStack(rows, 0);
+    }
 
-            return rankedIndices;
+    /// <summary>
+    /// For each row of a [rows, minority] distance tensor, the sum of its k smallest (or k largest) distances,
+    /// k = min(n_neighbors, minority count). The sum ranks rows the same way as the average.
+    /// </summary>
+    private Tensor<T> NeighborDistanceSums(Tensor<T> distances, bool nearest)
+    {
+        int rows = distances.Shape[0];
+        int minority = distances.Shape[1];
+        int k = Math.Min(_kNeighbors, minority);
+        if (rows == 0 || k == 0)
+        {
+            return new Tensor<T>(new[] { rows });
         }
 
-        // If we have fewer, just return what we have
-        return selectedIndices.ToList();
+        var sorted = Engine.TensorSort(distances, 1, false).Item1;
+        var selected = Engine.TensorSlice(sorted, new[] { 0, nearest ? 0 : minority - k }, new[] { rows, k });
+        return Engine.ReduceSum(selected, new[] { 1 }, false);
+    }
+
+    /// <summary>
+    /// The <paramref name="targetCount"/> candidates with the smallest (or largest) scores; equal scores keep
+    /// candidate order (Python's stable sort in imbalanced-learn).
+    /// </summary>
+    private static List<int> SelectByScore(List<int> candidates, Tensor<T> scores, int targetCount, bool largest)
+    {
+        return PreprocessingTensorOps.StableOrder(scores, descending: largest)
+            .Take(targetCount)
+            .Select(i => candidates[i])
+            .ToList();
     }
 }
 
@@ -274,8 +251,8 @@ public class NearMiss<T> : UndersamplingBase<T>
 /// <remarks>
 /// <para>
 /// <b>For Beginners:</b>
-/// - Version1: Keeps majority samples nearest to ANY minority sample
-/// - Version2: Keeps majority samples nearest to the farthest minority sample
+/// - Version1: Keeps majority samples nearest (on average) to their k closest minority samples
+/// - Version2: Keeps majority samples nearest (on average) to their k farthest minority samples
 /// - Version3: Keeps k nearest majority neighbors for EACH minority sample
 /// </para>
 /// </remarks>

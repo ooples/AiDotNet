@@ -68,7 +68,8 @@ public class LogMeanVarianceScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     public LogMeanVarianceScaler(int[]? columnIndices = null)
         : base(columnIndices)
     {
-        _epsilon = NumOps.FromDouble(1e-10);
+        // 1e-10 rounds to 0 in Half, which would leave a constant column with a zero standard deviation
+        _epsilon = PreprocessingTensorOps.Tolerance<T>(1e-10);
     }
 
     /// <summary>
@@ -78,69 +79,35 @@ public class LogMeanVarianceScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     protected override void FitCore(Matrix<T> data)
     {
         int numColumns = data.Columns;
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-
-        // Initialize arrays for all columns
-        var shifts = new T[numColumns];
-        var logMeans = new T[numColumns];
-        var logStdDevs = new T[numColumns];
-
-        // Default values for columns not processed
-        for (int i = 0; i < numColumns; i++)
+        var mask = ScalerTensorOps.ColumnMask<T>(numColumns, GetColumnsToProcess(numColumns));
+        _shift = ScalerTensorOps.FilledVector(numColumns, NumOps.Zero);
+        _logMean = ScalerTensorOps.FilledVector(numColumns, NumOps.Zero);
+        _logStdDev = ScalerTensorOps.FilledVector(numColumns, NumOps.One);
+        if (data.Rows == 0 || numColumns == 0)
         {
-            shifts[i] = NumOps.Zero;
-            logMeans[i] = NumOps.Zero;
-            logStdDevs[i] = NumOps.One;
+            return;
         }
 
-        // Compute parameters for specified columns
-        foreach (var colIdx in columnsToProcess)
-        {
-            var column = data.GetColumn(colIdx);
+        // Shift each column so its minimum (NaN is treated as missing) is at least 1 + epsilon when it is not
+        // already positive, then take the mean and population standard deviation of log(x + shift).
+        var x = Tensor<T>.FromMatrix(data);
+        var min = ScalerTensorOps.NanColumnMin(x);
+        var zeros = new Tensor<T>(min.Shape.ToArray());
+        var shift = Engine.TensorWhere(
+            Engine.TensorGreaterThan(min, NumOps.Zero),
+            zeros,
+            Engine.TensorAddScalar(Engine.TensorNegate(min), NumOps.Add(NumOps.One, _epsilon)));
 
-            // Find minimum value
-            T minValue = column[0];
-            for (int i = 1; i < column.Length; i++)
-            {
-                if (NumOps.Compare(column[i], minValue) < 0)
-                {
-                    minValue = column[i];
-                }
-            }
+        var logValues = Engine.TensorLog(Engine.TensorAdd(x, ScalerTensorOps.BroadcastRow(shift, data.Rows)));
+        // The variance is floored at epsilon: sqrt(variance > eps ? variance : eps) = (std > sqrt(eps) ? std : sqrt(eps))
+        var (logMean, std, _) = ScalerTensorOps.NanColumnMoments(logValues);
+        T stdFloor = NumOps.Sqrt(_epsilon);
+        var logStdDev = Engine.TensorWhere(
+            Engine.TensorGreaterThan(std, stdFloor), std, PreprocessingTensorOps.Filled(std.Shape.ToArray(), stdFloor));
 
-            // Calculate shift to ensure positive values
-            T shift = NumOps.Compare(minValue, NumOps.Zero) > 0
-                ? NumOps.Zero
-                : NumOps.Add(NumOps.Add(NumOps.Negate(minValue), NumOps.One), _epsilon);
-
-            // Compute log-transformed values and their mean
-            var logValues = new T[column.Length];
-            T logSum = NumOps.Zero;
-            for (int i = 0; i < column.Length; i++)
-            {
-                logValues[i] = NumOps.Log(NumOps.Add(column[i], shift));
-                logSum = NumOps.Add(logSum, logValues[i]);
-            }
-            T logMean = NumOps.Divide(logSum, NumOps.FromDouble(column.Length));
-
-            // Calculate variance and std dev of log values
-            T varianceSum = NumOps.Zero;
-            for (int i = 0; i < column.Length; i++)
-            {
-                T diff = NumOps.Subtract(logValues[i], logMean);
-                varianceSum = NumOps.Add(varianceSum, NumOps.Multiply(diff, diff));
-            }
-            T variance = NumOps.Divide(varianceSum, NumOps.FromDouble(column.Length));
-            T logStdDev = NumOps.Sqrt(NumOps.Compare(variance, _epsilon) > 0 ? variance : _epsilon);
-
-            shifts[colIdx] = shift;
-            logMeans[colIdx] = logMean;
-            logStdDevs[colIdx] = logStdDev;
-        }
-
-        _shift = new Vector<T>(shifts);
-        _logMean = new Vector<T>(logMeans);
-        _logStdDev = new Vector<T>(logStdDevs);
+        _shift = ScalerTensorOps.MaskedParameters(mask, shift, NumOps.Zero);
+        _logMean = ScalerTensorOps.MaskedParameters(mask, logMean, NumOps.Zero);
+        _logStdDev = ScalerTensorOps.MaskedParameters(mask, logStdDev, NumOps.One);
     }
 
     /// <summary>
@@ -155,46 +122,25 @@ public class LogMeanVarianceScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("Scaler has not been fitted.");
         }
 
+        ScalerTensorOps.EnsureColumnCount(data, _shift.Length);
         int numRows = data.Rows;
         int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        for (int i = 0; i < numRows; i++)
+        if (numRows == 0 || numColumns == 0)
         {
-            for (int j = 0; j < numColumns; j++)
-            {
-                T value = data[i, j];
-
-                if (processSet.Contains(j))
-                {
-                    // Apply shift, log, then standardize
-                    T shiftedValue = NumOps.Add(value, _shift[j]);
-
-                    // Ensure positive for log
-                    if (NumOps.Compare(shiftedValue, NumOps.Zero) <= 0)
-                    {
-                        value = NumOps.Zero;
-                    }
-                    else
-                    {
-                        T logValue = NumOps.Log(shiftedValue);
-                        value = NumOps.Divide(NumOps.Subtract(logValue, _logMean[j]), _logStdDev[j]);
-
-                        // Handle NaN
-                        if (NumOps.IsNaN(value))
-                        {
-                            value = NumOps.Zero;
-                        }
-                    }
-                }
-
-                result[i, j] = value;
-            }
+            return new Matrix<T>(numRows, numColumns);
         }
 
-        return new Matrix<T>(result);
+        // Apply shift, log, then standardize; 0 where x + shift is not positive or the result is NaN.
+        var shifted = Engine.TensorAdd(Tensor<T>.FromMatrix(data), ScalerTensorOps.BroadcastRow(_shift, numRows));
+        var scaled = Engine.TensorDivide(
+            Engine.TensorSubtract(Engine.TensorLog(shifted), ScalerTensorOps.BroadcastRow(_logMean, numRows)),
+            ScalerTensorOps.BroadcastRow(_logStdDev, numRows));
+        var zeros = new Tensor<T>(shifted.Shape.ToArray());
+        scaled = Engine.TensorWhere(Engine.TensorLessEqual(shifted, zeros), zeros, scaled);
+        scaled = Engine.TensorWhere(Engine.TensorIsNan(scaled), zeros, scaled);
+
+        var mask = ScalerTensorOps.ColumnMask<T>(numColumns, GetColumnsToProcess(numColumns));
+        return ScalerTensorOps.MergeColumns(mask, scaled, data);
     }
 
     /// <summary>
@@ -209,31 +155,22 @@ public class LogMeanVarianceScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("Scaler has not been fitted.");
         }
 
+        ScalerTensorOps.EnsureColumnCount(data, _shift.Length);
         int numRows = data.Rows;
         int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        for (int i = 0; i < numRows; i++)
+        if (numRows == 0 || numColumns == 0)
         {
-            for (int j = 0; j < numColumns; j++)
-            {
-                T value = data[i, j];
-
-                if (processSet.Contains(j))
-                {
-                    // Reverse: un-standardize, exp, then remove shift
-                    T logValue = NumOps.Add(NumOps.Multiply(value, _logStdDev[j]), _logMean[j]);
-                    T expValue = NumOps.Exp(logValue);
-                    value = NumOps.Subtract(expValue, _shift[j]);
-                }
-
-                result[i, j] = value;
-            }
+            return new Matrix<T>(numRows, numColumns);
         }
 
-        return new Matrix<T>(result);
+        // Reverse: un-standardize, exp, then remove shift
+        var logValue = Engine.TensorAdd(
+            Engine.TensorMultiply(Tensor<T>.FromMatrix(data), ScalerTensorOps.BroadcastRow(_logStdDev, numRows)),
+            ScalerTensorOps.BroadcastRow(_logMean, numRows));
+        var restored = Engine.TensorSubtract(Engine.TensorExp(logValue), ScalerTensorOps.BroadcastRow(_shift, numRows));
+
+        var mask = ScalerTensorOps.ColumnMask<T>(numColumns, GetColumnsToProcess(numColumns));
+        return ScalerTensorOps.MergeColumns(mask, restored, data);
     }
 
     /// <summary>

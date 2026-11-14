@@ -106,45 +106,35 @@ public class MinMaxScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     protected override void FitCore(Matrix<T> data)
     {
         int numColumns = data.Columns;
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-
-        // Initialize arrays for all columns
-        var mins = new T[numColumns];
-        var maxs = new T[numColumns];
-
-        // Default values for columns not processed
-        for (int i = 0; i < numColumns; i++)
+        var mask = ScalerTensorOps.ColumnMask<T>(numColumns, GetColumnsToProcess(numColumns));
+        if (data.Rows == 0 || numColumns == 0)
         {
-            mins[i] = NumOps.Zero;
-            maxs[i] = NumOps.One;
+            _dataMin = ScalerTensorOps.FilledVector(numColumns, NumOps.Zero);
+            _dataMax = ScalerTensorOps.FilledVector(numColumns, NumOps.One);
+            return;
         }
 
-        // Compute min and max for specified columns
-        foreach (var colIdx in columnsToProcess)
-        {
-            var column = data.GetColumn(colIdx);
+        // scikit-learn: data_min_ / data_max_ are nanmin / nanmax (NaN is treated as missing).
+        var x = Tensor<T>.FromMatrix(data);
+        _dataMin = ScalerTensorOps.MaskedParameters(mask, ScalerTensorOps.NanColumnMin(x), NumOps.Zero);
+        _dataMax = ScalerTensorOps.MaskedParameters(mask, ScalerTensorOps.NanColumnMax(x), NumOps.One);
+    }
 
-            T min = column[0];
-            T max = column[0];
-
-            for (int i = 1; i < column.Length; i++)
-            {
-                if (NumOps.Compare(column[i], min) < 0)
-                {
-                    min = column[i];
-                }
-                if (NumOps.Compare(column[i], max) > 0)
-                {
-                    max = column[i];
-                }
-            }
-
-            mins[colIdx] = min;
-            maxs[colIdx] = max;
-        }
-
-        _dataMin = new Vector<T>(mins);
-        _dataMax = new Vector<T>(maxs);
+    /// <summary>
+    /// scikit-learn's per-column affine map: <c>scale_ = (max - min) / data_range</c> and
+    /// <c>min_ = min - data_min * scale_</c>, where a zero data range counts as 1, so a constant column maps
+    /// to the bottom of the feature range.
+    /// </summary>
+    private (Vector<T> Scale, Vector<T> Offset) ComputeAffine(Vector<T> dataMin, Vector<T> dataMax)
+    {
+        var low = Tensor<T>.FromVector(dataMin);
+        var range = ScalerTensorOps.HandleZerosInScale(Engine.TensorSubtract(Tensor<T>.FromVector(dataMax), low));
+        var scale = Engine.TensorDivide(
+            PreprocessingTensorOps.Filled(range.Shape.ToArray(), NumOps.Subtract(_featureRangeMax, _featureRangeMin)),
+            range);
+        var offset = Engine.TensorSubtract(
+            PreprocessingTensorOps.Filled(range.Shape.ToArray(), _featureRangeMin), Engine.TensorMultiply(low, scale));
+        return (scale.ToVector(), offset.ToVector());
     }
 
     /// <summary>
@@ -159,50 +149,11 @@ public class MinMaxScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("Scaler has not been fitted.");
         }
 
-        int numRows = data.Rows;
-        int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        // Compute range for feature scaling: (featureMax - featureMin)
-        T featureRange = NumOps.Subtract(_featureRangeMax, _featureRangeMin);
-
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < numColumns; j++)
-            {
-                T value = data[i, j];
-
-                if (processSet.Contains(j))
-                {
-                    T dataRange = NumOps.Subtract(_dataMax[j], _dataMin[j]);
-
-                    // Handle case where min == max (constant column)
-                    if (NumOps.Compare(dataRange, NumOps.Zero) == 0)
-                    {
-                        // If constant, map to middle of feature range
-                        value = NumOps.Divide(
-                            NumOps.Add(_featureRangeMin, _featureRangeMax),
-                            NumOps.FromDouble(2.0));
-                    }
-                    else
-                    {
-                        // X_scaled = (X - X_min) / (X_max - X_min) * (max - min) + min
-                        T normalized = NumOps.Divide(
-                            NumOps.Subtract(value, _dataMin[j]),
-                            dataRange);
-                        value = NumOps.Add(
-                            NumOps.Multiply(normalized, featureRange),
-                            _featureRangeMin);
-                    }
-                }
-
-                result[i, j] = value;
-            }
-        }
-
-        return new Matrix<T>(result);
+        // X_scaled = X * scale_ + min_ on the processed columns; the other columns pass through.
+        var (scale, offset) = ComputeAffine(_dataMin, _dataMax);
+        var scaled = ScalerTensorOps.ScaleThenShift(data, scale, offset);
+        var mask = ScalerTensorOps.ColumnMask<T>(data.Columns, GetColumnsToProcess(data.Columns));
+        return ScalerTensorOps.MergeColumns(mask, Tensor<T>.FromMatrix(scaled), data);
     }
 
     /// <summary>
@@ -217,48 +168,11 @@ public class MinMaxScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("Scaler has not been fitted.");
         }
 
-        int numRows = data.Rows;
-        int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        // Compute range for feature scaling: (featureMax - featureMin)
-        T featureRange = NumOps.Subtract(_featureRangeMax, _featureRangeMin);
-
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < numColumns; j++)
-            {
-                T value = data[i, j];
-
-                if (processSet.Contains(j))
-                {
-                    T dataRange = NumOps.Subtract(_dataMax[j], _dataMin[j]);
-
-                    // Handle case where min == max (constant column)
-                    if (NumOps.Compare(dataRange, NumOps.Zero) == 0)
-                    {
-                        // Return the constant value
-                        value = _dataMin[j];
-                    }
-                    else
-                    {
-                        // X = (X_scaled - min) / (max - min) * (X_max - X_min) + X_min
-                        T normalized = NumOps.Divide(
-                            NumOps.Subtract(value, _featureRangeMin),
-                            featureRange);
-                        value = NumOps.Add(
-                            NumOps.Multiply(normalized, dataRange),
-                            _dataMin[j]);
-                    }
-                }
-
-                result[i, j] = value;
-            }
-        }
-
-        return new Matrix<T>(result);
+        // X = (X_scaled - min_) / scale_ on the processed columns; the other columns pass through.
+        var (scale, offset) = ComputeAffine(_dataMin, _dataMax);
+        var restored = ScalerTensorOps.ShiftThenScale(data, offset, scale);
+        var mask = ScalerTensorOps.ColumnMask<T>(data.Columns, GetColumnsToProcess(data.Columns));
+        return ScalerTensorOps.MergeColumns(mask, Tensor<T>.FromMatrix(restored), data);
     }
 
     /// <summary>

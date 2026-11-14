@@ -20,8 +20,6 @@ namespace AiDotNet.Preprocessing;
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
 public static class TrainTestSplit<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
     /// <summary>
     /// Splits data into training and test sets.
     /// </summary>
@@ -56,32 +54,32 @@ public static class TrainTestSplit<T>
         ValidateInputs(X, y, testSize);
 
         int totalSamples = X.Rows;
-        int testCount = (int)(totalSamples * testSize);
+        int testCount = TestCount(totalSamples, testSize);
         int trainCount = totalSamples - testCount;
 
         var indices = GetIndices(totalSamples, shuffle, randomSeed);
+        var trainRows = indices.Take(trainCount).ToArray();
+        var testRows = indices.Skip(trainCount).ToArray();
 
-        // Create train and test matrices
-        var XTrain = new Matrix<T>(trainCount, X.Columns);
-        var XTest = new Matrix<T>(testCount, X.Columns);
-        var yTrain = new Vector<T>(trainCount);
-        var yTest = new Vector<T>(testCount);
+        return (PreprocessingTensorOps.SelectRows(X, trainRows), PreprocessingTensorOps.SelectRows(X, testRows),
+            PreprocessingTensorOps.SelectElements(y, trainRows), PreprocessingTensorOps.SelectElements(y, testRows));
+    }
 
-        // Copy training data
-        for (int i = 0; i < trainCount; i++)
+    /// <summary>
+    /// scikit-learn's <c>train_test_split</c> test-set size: <c>ceil(test_size * n_samples)</c>; an empty train
+    /// set is rejected.
+    /// </summary>
+    private static int TestCount(int totalSamples, double testSize)
+    {
+        int testCount = (int)Math.Ceiling(testSize * totalSamples);
+        if (totalSamples > 0 && testCount >= totalSamples)
         {
-            XTrain.SetRow(i, X.GetRow(indices[i]));
-            yTrain[i] = y[indices[i]];
+            throw new ArgumentException(
+                $"With {totalSamples} samples and testSize={testSize}, the resulting train set would be empty.",
+                nameof(testSize));
         }
 
-        // Copy test data
-        for (int i = 0; i < testCount; i++)
-        {
-            XTest.SetRow(i, X.GetRow(indices[trainCount + i]));
-            yTest[i] = y[indices[trainCount + i]];
-        }
-
-        return (XTrain, XTest, yTrain, yTest);
+        return testCount;
     }
 
     /// <summary>
@@ -124,40 +122,15 @@ public static class TrainTestSplit<T>
         int totalSamples = X.Rows;
         int trainCount = (int)(totalSamples * trainSize);
         int validationCount = (int)(totalSamples * validationSize);
-        int testCount = totalSamples - trainCount - validationCount;
 
         var indices = GetIndices(totalSamples, shuffle, randomSeed);
+        var trainRows = indices.Take(trainCount).ToArray();
+        var validationRows = indices.Skip(trainCount).Take(validationCount).ToArray();
+        var testRows = indices.Skip(trainCount + validationCount).ToArray();
 
-        // Create matrices
-        var XTrain = new Matrix<T>(trainCount, X.Columns);
-        var XValidation = new Matrix<T>(validationCount, X.Columns);
-        var XTest = new Matrix<T>(testCount, X.Columns);
-        var yTrain = new Vector<T>(trainCount);
-        var yValidation = new Vector<T>(validationCount);
-        var yTest = new Vector<T>(testCount);
-
-        // Copy training data
-        for (int i = 0; i < trainCount; i++)
-        {
-            XTrain.SetRow(i, X.GetRow(indices[i]));
-            yTrain[i] = y[indices[i]];
-        }
-
-        // Copy validation data
-        for (int i = 0; i < validationCount; i++)
-        {
-            XValidation.SetRow(i, X.GetRow(indices[trainCount + i]));
-            yValidation[i] = y[indices[trainCount + i]];
-        }
-
-        // Copy test data
-        for (int i = 0; i < testCount; i++)
-        {
-            XTest.SetRow(i, X.GetRow(indices[trainCount + validationCount + i]));
-            yTest[i] = y[indices[trainCount + validationCount + i]];
-        }
-
-        return (XTrain, XValidation, XTest, yTrain, yValidation, yTest);
+        return (PreprocessingTensorOps.SelectRows(X, trainRows), PreprocessingTensorOps.SelectRows(X, validationRows),
+            PreprocessingTensorOps.SelectRows(X, testRows), PreprocessingTensorOps.SelectElements(y, trainRows),
+            PreprocessingTensorOps.SelectElements(y, validationRows), PreprocessingTensorOps.SelectElements(y, testRows));
     }
 
     /// <summary>
@@ -191,25 +164,12 @@ public static class TrainTestSplit<T>
         }
 
         int totalSamples = X.Rows;
-        int testCount = (int)(totalSamples * testSize);
+        int testCount = TestCount(totalSamples, testSize);
         int trainCount = totalSamples - testCount;
 
         var indices = GetIndices(totalSamples, shuffle, randomSeed);
-
-        var XTrain = new Matrix<T>(trainCount, X.Columns);
-        var XTest = new Matrix<T>(testCount, X.Columns);
-
-        for (int i = 0; i < trainCount; i++)
-        {
-            XTrain.SetRow(i, X.GetRow(indices[i]));
-        }
-
-        for (int i = 0; i < testCount; i++)
-        {
-            XTest.SetRow(i, X.GetRow(indices[trainCount + i]));
-        }
-
-        return (XTrain, XTest);
+        return (PreprocessingTensorOps.SelectRows(X, indices.Take(trainCount).ToArray()),
+            PreprocessingTensorOps.SelectRows(X, indices.Skip(trainCount).ToArray()));
     }
 
     /// <summary>
@@ -270,41 +230,19 @@ public static class TrainTestSplit<T>
         int totalSamples = X.Rows;
         var indices = GetIndices(totalSamples, shuffle, randomSeed);
 
+        // scikit-learn KFold: every fold has n / k samples and the first n % k folds one more
         var folds = new List<(Matrix<T>, Matrix<T>, Vector<T>, Vector<T>)>();
-        int foldSize = totalSamples / k;
-
+        int testStart = 0;
         for (int fold = 0; fold < k; fold++)
         {
-            int testStart = fold * foldSize;
-            int testEnd = (fold == k - 1) ? totalSamples : (fold + 1) * foldSize;
-            int testCount = testEnd - testStart;
-            int trainCount = totalSamples - testCount;
+            int testCount = totalSamples / k + (fold < totalSamples % k ? 1 : 0);
+            int testEnd = testStart + testCount;
+            var testRows = indices.Skip(testStart).Take(testCount).ToArray();
+            var trainRows = indices.Take(testStart).Concat(indices.Skip(testEnd)).ToArray();
 
-            var XTrain = new Matrix<T>(trainCount, X.Columns);
-            var XTest = new Matrix<T>(testCount, X.Columns);
-            var yTrain = new Vector<T>(trainCount);
-            var yTest = new Vector<T>(testCount);
-
-            int trainIdx = 0;
-            int testIdx = 0;
-
-            for (int i = 0; i < totalSamples; i++)
-            {
-                if (i >= testStart && i < testEnd)
-                {
-                    XTest.SetRow(testIdx, X.GetRow(indices[i]));
-                    yTest[testIdx] = y[indices[i]];
-                    testIdx++;
-                }
-                else
-                {
-                    XTrain.SetRow(trainIdx, X.GetRow(indices[i]));
-                    yTrain[trainIdx] = y[indices[i]];
-                    trainIdx++;
-                }
-            }
-
-            folds.Add((XTrain, XTest, yTrain, yTest));
+            folds.Add((PreprocessingTensorOps.SelectRows(X, trainRows), PreprocessingTensorOps.SelectRows(X, testRows),
+                PreprocessingTensorOps.SelectElements(y, trainRows), PreprocessingTensorOps.SelectElements(y, testRows)));
+            testStart = testEnd;
         }
 
         return folds;
