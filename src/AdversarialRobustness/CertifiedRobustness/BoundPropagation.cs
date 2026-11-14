@@ -248,11 +248,15 @@ internal sealed class BoundNetwork<T>
     }
 
     /// <summary>Row-wise dual norm: L1 for an L-infinity ball, L2 for an L2 ball.</summary>
+    /// <remarks>
+    /// The L2 norm is accumulated in double: in Half, the square of a weight above 256 exceeds 65504, so the
+    /// norm (and with it the bound) would be infinite.
+    /// </remarks>
     private static Tensor<T> DualRowNorms(Tensor<T> matrix, AdversarialNormType norm)
     {
         var engine = AiDotNetEngine.Current;
         return norm == AdversarialNormType.L2
-            ? engine.TensorNorm(matrix, 1, false)
+            ? engine.TensorNorm(matrix.Cast<double>(), 1, false).Cast<T>()
             : engine.ReduceSum(engine.TensorAbs(matrix), new[] { 1 }, false);
     }
 
