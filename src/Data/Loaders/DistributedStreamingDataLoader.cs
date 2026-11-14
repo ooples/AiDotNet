@@ -172,12 +172,16 @@ public sealed class DistributedStreamingDataLoader<T, TInput, TOutput> : IStream
             if (_localBatchSize != value)
             {
                 _localBatchSize = value;
-                _batchPlanSynchronized = _backend.WorldSize <= 1;
                 if (_backend.WorldSize <= 1)
                 {
                     _rankBatchSizes = new[] { value };
                     _globalBatchSize = value;
                 }
+
+                // With more than one rank the new size takes effect at the next enumeration, where
+                // every rank exchanges sizes unconditionally. A rank-local "plan is stale" flag must
+                // not decide whether to enter that collective: the rank that changed its size would
+                // gather while its peers went straight on to the seed broadcast or to training.
             }
         }
     }
@@ -224,7 +228,7 @@ public sealed class DistributedStreamingDataLoader<T, TInput, TOutput> : IStream
         bool dropLast = false,
         int? seed = null)
     {
-        EnsureBatchPlanSynchronized();
+        SynchronizeBatchPlan();
         int? resolvedSeed = SynchronizeEpochSeed(shuffle, seed);
         long skipSamples = Interlocked.Exchange(ref _pendingSkipSamples, 0L);
         Volatile.Write(ref _currentBatchIndex, 0);
@@ -262,7 +266,7 @@ public sealed class DistributedStreamingDataLoader<T, TInput, TOutput> : IStream
         int? seed = null,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        EnsureBatchPlanSynchronized();
+        SynchronizeBatchPlan();
         int? resolvedSeed = SynchronizeEpochSeed(shuffle, seed);
         long skipSamples = Interlocked.Exchange(ref _pendingSkipSamples, 0L);
         Volatile.Write(ref _currentBatchIndex, 0);
@@ -374,6 +378,17 @@ public sealed class DistributedStreamingDataLoader<T, TInput, TOutput> : IStream
             return;
         }
 
+        SynchronizeBatchPlan();
+    }
+
+    /// <summary>
+    /// Exchanges per-rank batch sizes with every rank. Called unconditionally at each enumeration
+    /// boundary so all ranks execute the same collective sequence whichever of them changed
+    /// <see cref="BatchSize"/> since the previous enumeration.
+    /// </summary>
+    [AiDotNet.Attributes.ScalarKernel("Per-enumeration WorldSize batch-size metadata unpack")]
+    private void SynchronizeBatchPlan()
+    {
         if (!_backend.IsInitialized)
         {
             _backend.Initialize();

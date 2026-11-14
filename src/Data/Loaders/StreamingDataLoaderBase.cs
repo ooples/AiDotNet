@@ -355,6 +355,13 @@ public abstract class StreamingDataLoaderBase<T, TInput, TOutput> :
                 SingleWriter = true,
             });
 
+        // The producer runs under a token this iterator owns, so that leaving the enumeration early
+        // (a step budget, a validation batch cap, a first-batch-only read) stops it. Under the
+        // caller's token alone it would fill the bounded channel and then wait in WriteAsync forever,
+        // holding the loader and the prefetched batches.
+        using var iteratorCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var producerToken = iteratorCts.Token;
+
         var producerTask = Task.Run(async () =>
         {
             using var semaphore = new SemaphoreSlim(_numWorkers, _numWorkers);
@@ -363,7 +370,7 @@ public abstract class StreamingDataLoaderBase<T, TInput, TOutput> :
                 long cursor = initialCursor;
                 while (cursor < indices.Length)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
+                    producerToken.ThrowIfCancellationRequested();
 
                     int startIdx = (int)cursor;
                     int endIdx = Math.Min(indices.Length, startIdx + globalBatchSize);
@@ -387,54 +394,104 @@ public abstract class StreamingDataLoaderBase<T, TInput, TOutput> :
                     {
                         await channel.Writer.WriteAsync(
                             (Array.Empty<TInput>(), Array.Empty<TOutput>(), globalCount),
-                            cancellationToken).ConfigureAwait(false);
+                            producerToken).ConfigureAwait(false);
                         continue;
                     }
 
                     var samples = new (TInput Input, TOutput Output)[rankCount];
-                    var tasks = new Task[rankCount];
+                    var tasks = new Task?[rankCount];
                     int sliceStart = startIdx + rankOffset;
 
-                    for (int localIdx = 0; localIdx < rankCount; localIdx++)
+                    try
                     {
-                        int capturedLocal = localIdx;
-                        int sampleIdx = indices[sliceStart + localIdx];
-                        await semaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
-
-                        tasks[capturedLocal] = Task.Run(async () =>
+                        for (int localIdx = 0; localIdx < rankCount; localIdx++)
                         {
+                            int capturedLocal = localIdx;
+                            int sampleIdx = indices[sliceStart + localIdx];
+                            await semaphore.WaitAsync(producerToken).ConfigureAwait(false);
+
+                            // Started without a token so the body always runs and returns its
+                            // semaphore slot; the read itself observes the token.
+                            tasks[capturedLocal] = Task.Run(async () =>
+                            {
+                                try
+                                {
+                                    samples[capturedLocal] = await ReadSampleAsync(sampleIdx, producerToken).ConfigureAwait(false);
+                                }
+                                finally
+                                {
+                                    semaphore.Release();
+                                }
+                            });
+                        }
+
+                        await Task.WhenAll(tasks!).ConfigureAwait(false);
+                    }
+                    catch
+                    {
+                        // Let the reads already in flight finish (they release the semaphore) before
+                        // the semaphore is disposed; the exception that ended this batch is rethrown.
+                        for (int t = 0; t < tasks.Length; t++)
+                        {
+                            if (tasks[t] is not { } inFlight)
+                            {
+                                continue;
+                            }
+
                             try
                             {
-                                samples[capturedLocal] = await ReadSampleAsync(sampleIdx, cancellationToken).ConfigureAwait(false);
+                                await inFlight.ConfigureAwait(false);
                             }
-                            finally
+                            catch (Exception)
                             {
-                                semaphore.Release();
+                                // Already represented by the exception being rethrown below.
                             }
-                        }, cancellationToken);
+                        }
+
+                        throw;
                     }
 
-                    await Task.WhenAll(tasks).ConfigureAwait(false);
                     var batch = AggregateSamples(samples);
                     await channel.Writer.WriteAsync(
                         (batch.Inputs, batch.Outputs, globalCount),
-                        cancellationToken).ConfigureAwait(false);
+                        producerToken).ConfigureAwait(false);
                 }
             }
             finally
             {
                 channel.Writer.Complete();
             }
-        }, cancellationToken);
+        }, CancellationToken.None);
 
-        while (await channel.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false))
+        try
         {
-            while (channel.Reader.TryRead(out var item))
+            while (await channel.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false))
             {
-                yield return item;
+                while (channel.Reader.TryRead(out var item))
+                {
+                    yield return item;
+                }
+            }
+
+            // Normal end of the stream: surface a producer failure to the consumer.
+            await producerTask.ConfigureAwait(false);
+        }
+        finally
+        {
+            if (!producerTask.IsCompleted)
+            {
+                // The consumer stopped early (break, exception, or cancellation). Stop the producer
+                // and wait for it so no read or channel write outlives this enumeration.
+                iteratorCts.Cancel();
+                try
+                {
+                    await producerTask.ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    // The cancellation requested by this cleanup.
+                }
             }
         }
-
-        await producerTask.ConfigureAwait(false);
     }
 }
