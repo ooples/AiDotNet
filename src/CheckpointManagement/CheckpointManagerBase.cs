@@ -322,7 +322,7 @@ public abstract class CheckpointManagerBase<T, TInput, TOutput> : ICheckpointMan
                     return true; // First value is always an improvement
                 }
 
-                bool isImprovement = shouldMinimize
+                bool isImprovement = ResolveMinimizeDirection(shouldMinimize)
                     ? metricValue.Value < BestMetricValue.Value
                     : metricValue.Value > BestMetricValue.Value;
 
@@ -334,6 +334,18 @@ public abstract class CheckpointManagerBase<T, TInput, TOutput> : ICheckpointMan
 
             return false;
         }
+    }
+
+    /// <summary>
+    /// Resolves the metric direction used by save decisions and best-value tracking. Both the configured
+    /// <c>minimizeMetric</c> and the per-call <c>shouldMinimize</c> default to minimizing, so a maximize request
+    /// from either one is the explicit choice and wins. Callers that leave the per-call argument at its default
+    /// therefore get the direction passed to <see cref="ConfigureAutoCheckpointing(int, int, bool, string?, bool, TimeSpan?)"/>.
+    /// Must be called with <see cref="SyncLock"/> held.
+    /// </summary>
+    private bool ResolveMinimizeDirection(bool shouldMinimize)
+    {
+        return shouldMinimize && (AutoConfig?.MinimizeMetric ?? true);
     }
 
     /// <summary>
@@ -360,7 +372,7 @@ public abstract class CheckpointManagerBase<T, TInput, TOutput> : ICheckpointMan
                 }
                 else
                 {
-                    bool isImprovement = shouldMinimize
+                    bool isImprovement = ResolveMinimizeDirection(shouldMinimize)
                         ? metricValue.Value < BestMetricValue.Value
                         : metricValue.Value > BestMetricValue.Value;
 
