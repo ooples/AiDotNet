@@ -78,6 +78,31 @@ internal sealed class BoundNetwork<T>
     public List<Operation> Operations { get; }
 
     /// <summary>
+    /// The layer types read here. A subclass can override the forward pass while keeping the inherited weights,
+    /// so only these exact runtime types are bounded; any other layer, subclasses included, has no sound bound.
+    /// </summary>
+    private static readonly Type[] BoundedLayerTypes =
+    {
+        typeof(DenseLayer<T>),
+        typeof(FullyConnectedLayer<T>),
+        typeof(ActivationLayer<T>),
+        typeof(DropoutLayer<T>),
+        typeof(FlattenLayer<T>),
+        typeof(ReshapeLayer<T>),
+        typeof(InputLayer<T>)
+    };
+
+    /// <summary>The activation types read here, matched by exact runtime type for the same reason.</summary>
+    private static readonly Type[] BoundedActivationTypes =
+    {
+        typeof(ReLUActivation<T>),
+        typeof(LeakyReLUActivation<T>),
+        typeof(SigmoidActivation<T>),
+        typeof(TanhActivation<T>),
+        typeof(SoftmaxActivation<T>)
+    };
+
+    /// <summary>
     /// Reads a network from its layers; null when a layer or an activation is not one whose exact function is
     /// known here (see the class remarks), so no sound bound can be computed from the layer list.
     /// </summary>
@@ -87,6 +112,11 @@ internal sealed class BoundNetwork<T>
         int width = inputLength;
         foreach (var layer in layers)
         {
+            if (layer is null || Array.IndexOf(BoundedLayerTypes, layer.GetType()) < 0)
+            {
+                return null;
+            }
+
             Operation? affine;
             switch (layer)
             {
@@ -126,7 +156,7 @@ internal sealed class BoundNetwork<T>
 
             foreach (var activationObject in new object?[] { layerBase.ScalarActivation, layerBase.VectorActivation })
             {
-                if (activationObject is null || activationObject is IdentityActivation<T>)
+                if (activationObject is null || activationObject.GetType() == typeof(IdentityActivation<T>))
                 {
                     continue;
                 }
@@ -150,6 +180,11 @@ internal sealed class BoundNetwork<T>
     /// </summary>
     private static Operation? ActivationOf(object activation)
     {
+        if (Array.IndexOf(BoundedActivationTypes, activation.GetType()) < 0)
+        {
+            return null;
+        }
+
         switch (activation)
         {
             case ReLUActivation<T>:
@@ -348,7 +383,11 @@ internal sealed class BoundNetwork<T>
 
         for (int i = last + 1; i < Operations.Count; i++)
         {
-            requiresPositiveTop |= Operations[i].Activation == ActivationFunction.ReLU;
+            // A LeakyReLU with slope 0 is a ReLU: it also maps every negative logit to 0, so a non-positive
+            // top logit can tie with them.
+            requiresPositiveTop |= Operations[i].Activation == ActivationFunction.ReLU
+                || (Operations[i].Activation == ActivationFunction.LeakyReLU
+                    && !NumOps.GreaterThan(Operations[i].Slope, NumOps.Zero));
         }
 
         return last;
@@ -527,9 +566,14 @@ internal sealed class BoundNetwork<T>
     }
 
     /// <summary>
-    /// CROWN bounds on every output of the network's last affine step (for reporting).
+    /// Bounds on every network output (for reporting): CROWN bounds of the last affine step, carried through
+    /// the activations after it as boxes.
     /// </summary>
-    public (Tensor<T> Lower, Tensor<T> Upper) CrownLogitBounds(Tensor<T> x, T epsilon, AdversarialNormType norm)
+    /// <remarks>
+    /// The reported bounds describe what the network outputs, so a trailing sigmoid, ReLU or softmax is applied
+    /// to the logit box; certification itself still uses the logit margins.
+    /// </remarks>
+    public (Tensor<T> Lower, Tensor<T> Upper) CrownOutputBounds(Tensor<T> x, T epsilon, AdversarialNormType norm)
     {
         int step = LogitStep(out _);
         if (step < 0)
@@ -538,7 +582,13 @@ internal sealed class BoundNetwork<T>
         }
 
         var inputBounds = CrownActivationInputBounds(x, epsilon, norm);
-        return CrownBoundsOf(step, x, epsilon, norm, inputBounds);
+        var (lower, upper) = CrownBoundsOf(step, x, epsilon, norm, inputBounds);
+        for (int i = step + 1; i < Operations.Count; i++)
+        {
+            (lower, upper) = ActivationOverBox(Operations[i], lower, upper);
+        }
+
+        return (lower, upper);
     }
 
     private static Tensor<T> CreateIdentity(int size) => Tensor<T>.CreateIdentity(size);
