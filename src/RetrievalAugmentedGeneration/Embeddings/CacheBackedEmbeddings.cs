@@ -229,6 +229,13 @@ public sealed class CacheBackedEmbeddings<T> : IEmbeddingModel<T>
                 $"Inner model returned {missMatrix.Rows} embeddings for {missKeys.Count} distinct texts.");
         }
 
+        // Checked before anything is cached: a rejected batch must not leave entries that fail every later read.
+        if (missMatrix.Columns != EmbeddingDimension)
+        {
+            throw new InvalidOperationException(
+                $"Inner model returned embeddings of dimension {missMatrix.Columns}; expected {EmbeddingDimension}.");
+        }
+
         for (int m = 0; m < missKeys.Count; m++)
         {
             var vector = GetRow(missMatrix, m);
