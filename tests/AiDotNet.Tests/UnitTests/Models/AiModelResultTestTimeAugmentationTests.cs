@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using AiDotNet.Augmentation;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
@@ -70,6 +71,32 @@ public class AiModelResultTestTimeAugmentationTests
         var tta = result.PredictWithTestTimeAugmentation(input, new FixedPolicy(augmented));
 
         Assert.Equal(33272.7, (double)tta.AggregatedPrediction[0], 64.0);
+    }
+
+    [Fact]
+    public void ComputeMedian_ColumnWithNaN_IsNaN()
+    {
+        // numpy.median([[1, nan], [2, 5], [3, 6]], axis=0) is [2, nan]: any NaN in a column makes that element NaN.
+        // Sorting NaN to one end and taking the middle returned a number (5 or 6) for the second column.
+        using var model = new VectorModel<double>(new Vector<double>(new[] { 1.0 }));
+        var result = new AiModelResult<double, Matrix<double>, Vector<double>>(
+            new AiModelResultOptions<double, Matrix<double>, Vector<double>>
+            {
+                OptimizationResult = new OptimizationResult<double, Matrix<double>, Vector<double>> { BestSolution = model }
+            });
+        var predictions = new List<Vector<double>>
+        {
+            new Vector<double>(new[] { 1.0, double.NaN }),
+            new Vector<double>(new[] { 2.0, 5.0 }),
+            new Vector<double>(new[] { 3.0, 6.0 })
+        };
+        var method = result.GetType().GetMethod("ComputeMedian", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(method);
+
+        var median = Assert.IsType<Vector<double>>(method?.Invoke(result, new object[] { predictions }));
+
+        Assert.Equal(2.0, median[0]);
+        Assert.True(double.IsNaN(median[1]));
     }
 
     /// <summary>An augmentation policy that always returns the same input.</summary>
