@@ -452,8 +452,8 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
         // each) rather than through the element indexer, which made this probe ~10% of VGG-11's first epoch.
         if (a.IsContiguous && b.IsContiguous)
         {
-            var sa = a.AsSpan();
-            var sb = b.AsSpan();
+            var sa = a.AsSpanUnmarked();
+            var sb = b.AsSpanUnmarked();
             for (int i = 0; i < sa.Length; i++)
                 if (!comparer.Equals(sa[i], sb[i])) return false;
             return true;

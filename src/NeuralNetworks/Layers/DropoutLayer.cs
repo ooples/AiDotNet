@@ -335,14 +335,6 @@ public partial class DropoutLayer<T> : LayerBase<T>, IShapeContract
             throw new InvalidOperationException(
                 $"Compiled dropout mask length changed from {_dropoutMask.Length} to {refreshedMask.Length}.");
 
-        if (Engine.SupportsGpu)
-        {
-            // Device to device: the GPU engine's copy writes the mask's resident buffer in place and rebinds it. Copying
-            // through host spans downloaded the new mask (waiting for the whole queued step) and re-uploaded it, every
-            // step for every dropout layer: 18% of VGG-11's first epoch.
-            Engine.TensorCopy(refreshedMask, _dropoutMask);
-            return;
-        }
         refreshedMask.AsSpan().CopyTo(_dropoutMask.AsWritableSpan());
         _dropoutMask.IncrementVersion();
         Engine.InvalidatePersistentTensor(_dropoutMask);
