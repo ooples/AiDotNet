@@ -388,8 +388,8 @@ public class IntervalBoundPropagation<T, TInput, TOutput> : ICertifiedDefense<T,
     /// arithmetic, and the margin specification z_y - z_j is merged into the last affine layer (their Eq. 6) so
     /// the margins are bounded directly instead of from separate logit intervals. With
     /// <see cref="CertifiedDefenseOptions{T}.UseTightBounds"/> the margin bounds are also computed by CROWN and the
-    /// larger (tighter) of the two is kept. Without layer access the bounds come from sampling, which is empirical
-    /// and reported as not sound.
+    /// larger (tighter) of the two is kept. Without layer access the bounds come from sampling, which is empirical,
+    /// reported as not sound, and never certifies.
     /// </remarks>
     private BoundResult ComputeOutputBounds(
         Vector<T> vectorInput,
@@ -427,7 +427,9 @@ public class IntervalBoundPropagation<T, TInput, TOutput> : ICertifiedDefense<T,
             sampledLower,
             sampledUpper,
             sampledMargin,
-            CheckCertification(sampledLower, sampledUpper, predictedClass),
+            // A sampled interval is an inner estimate of the output range, not a certificate: it never certifies
+            // (and so the certified radius is 0). The bounds are kept for diagnostics only.
+            false,
             false);
     }
 
@@ -517,18 +519,6 @@ public class IntervalBoundPropagation<T, TInput, TOutput> : ICertifiedDefense<T,
         }
 
         return CertificationMath<T>.ArgMax(output);
-    }
-
-    /// <summary>
-    /// Checks if the prediction is certifiably robust.
-    /// </summary>
-    /// <remarks>
-    /// A prediction is certified if the lower bound of the predicted class
-    /// is greater than the upper bound of all other classes.
-    /// </remarks>
-    private bool CheckCertification(Vector<T> lowerBounds, Vector<T> upperBounds, int predictedClass)
-    {
-        return NumOps.GreaterThan(ComputeMinimumMargin(lowerBounds, upperBounds, predictedClass), NumOps.Zero);
     }
 
     /// <summary>

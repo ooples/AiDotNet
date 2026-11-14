@@ -391,8 +391,8 @@ public class CROWNVerification<T, TInput, TOutput> : ICertifiedDefense<T, TInput
     /// (adaptive ReLU lower slope, chord and tangent lines for sigmoid and tanh), with the pre-activation bounds
     /// of each hidden layer computed by CROWN itself, and the resulting linear function is bounded over the
     /// ball with the dual norm. A softmax inside the network has no element-wise relaxation, so such networks
-    /// are bounded with IBP. Without layer access the bounds come from sampling, which is empirical and
-    /// reported as not sound.
+    /// are bounded with IBP. Without layer access the bounds come from sampling, which is empirical,
+    /// reported as not sound, and never certifies.
     /// </remarks>
     private BoundResult ComputeCROWNBounds(
         Vector<T> vectorInput,
@@ -426,7 +426,9 @@ public class CROWNVerification<T, TInput, TOutput> : ICertifiedDefense<T, TInput
             sampledLower,
             sampledUpper,
             sampledMargin,
-            CheckCertification(sampledLower, sampledUpper, predictedClass),
+            // A sampled interval is an inner estimate of the output range, not a certificate: it never certifies
+            // (and so the certified radius is 0). The bounds are kept for diagnostics only.
+            false,
             false);
     }
 
@@ -516,18 +518,6 @@ public class CROWNVerification<T, TInput, TOutput> : ICertifiedDefense<T, TInput
         }
 
         return CertificationMath<T>.ArgMax(output);
-    }
-
-    /// <summary>
-    /// Checks if the prediction is certifiably robust.
-    /// </summary>
-    /// <remarks>
-    /// A prediction is certified if the lower bound of the predicted class
-    /// is greater than the upper bound of all other classes.
-    /// </remarks>
-    private bool CheckCertification(Vector<T> lowerBounds, Vector<T> upperBounds, int predictedClass)
-    {
-        return NumOps.GreaterThan(ComputeMinimumMargin(lowerBounds, upperBounds, predictedClass), NumOps.Zero);
     }
 
     /// <summary>
