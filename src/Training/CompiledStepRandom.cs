@@ -93,9 +93,119 @@ public static class CompiledStepRandom<T>
         var tensor = new Tensor<T>(shape);
         if (t_suppressDepth > 0)
             return tensor;
-        fill(tensor);
+        if (t_replay is { } replay && t_replayIndex < replay.Draws.Count && SameShape(replay.Draws[t_replayIndex], shape))
+            replay.Draws[t_replayIndex++].AsSpan().CopyTo(tensor.AsWritableSpan());
+        else
+            fill(tensor);
+        t_captured?.Draws.Add(tensor);
         t_recording?.Add(new RecordedDraw(tensor, fill));
         return tensor;
+    }
+
+    /// <summary>
+    /// A per-step seed counter value for a layer that derives its randomness from one (dropout): normally
+    /// <paramref name="advance"/>'s result. Inside <see cref="ReplayDraws"/> it is the value the probe of the same step
+    /// took, in order, so a retrace does not advance the counter a second time.
+    /// </summary>
+    internal static ulong StepCounter(Func<ulong> advance)
+    {
+        Guard.NotNull(advance);
+        if (t_replay is { } replay && t_replayCounterIndex < replay.Counters.Count)
+            return replay.Counters[t_replayCounterIndex++];
+        ulong value = advance();
+        t_captured?.Counters.Add(value);
+        return value;
+    }
+
+    // What a closure-objective probe drew this step, kept so that a retrace of the same step reuses it.
+    [ThreadStatic]
+    private static CaptureScope? t_captured;
+
+    // What a retrace hands back in order instead of drawing again; the indices are the next entries.
+    [ThreadStatic]
+    private static CaptureScope? t_replay;
+
+    [ThreadStatic]
+    private static int t_replayIndex;
+
+    [ThreadStatic]
+    private static int t_replayCounterIndex;
+
+    private static bool SameShape(Tensor<T> tensor, int[] shape)
+    {
+        var own = tensor._shape;
+        if (own.Length != shape.Length)
+            return false;
+        for (int i = 0; i < shape.Length; i++)
+            if (own[i] != shape[i])
+                return false;
+        return true;
+    }
+
+    /// <summary>
+    /// Keeps the draws made in this scope (a closure-objective probe): when the probe cannot replay a plan and the step
+    /// traces the closure again, <see cref="ReplayDraws"/> hands the trace these values, so one step consumes the
+    /// generator once, as it does on the eager tape.
+    /// </summary>
+    internal static CaptureScope CaptureDraws() => new CaptureScope();
+
+    /// <summary>
+    /// Makes the draws and step counters of this scope return what <paramref name="captured"/> took, in order (draws
+    /// while the shapes agree), instead of consuming the generators; anything past the end draws normally.
+    /// </summary>
+    internal static ReplayScope ReplayDraws(CaptureScope captured) => new ReplayScope(captured);
+
+    /// <summary>The draws and step counters of one probe; restores the enclosing capture when disposed.</summary>
+    internal sealed class CaptureScope : IDisposable
+    {
+        private readonly CaptureScope? _previous;
+        private bool _disposed;
+
+        internal CaptureScope()
+        {
+            _previous = t_captured;
+            t_captured = this;
+        }
+
+        internal List<Tensor<T>> Draws { get; } = new List<Tensor<T>>();
+
+        internal List<ulong> Counters { get; } = new List<ulong>();
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            t_captured = _previous;
+        }
+    }
+
+    /// <summary>A replay of captured draws; restores the enclosing replay when disposed.</summary>
+    internal sealed class ReplayScope : IDisposable
+    {
+        private readonly CaptureScope? _previous;
+        private readonly int _previousIndex;
+        private readonly int _previousCounterIndex;
+        private bool _disposed;
+
+        internal ReplayScope(CaptureScope captured)
+        {
+            Guard.NotNull(captured);
+            _previous = t_replay;
+            _previousIndex = t_replayIndex;
+            _previousCounterIndex = t_replayCounterIndex;
+            t_replay = captured;
+            t_replayIndex = 0;
+            t_replayCounterIndex = 0;
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            t_replay = _previous;
+            t_replayIndex = _previousIndex;
+            t_replayCounterIndex = _previousCounterIndex;
+        }
     }
 
     /// <summary>Suppresses draws on this thread for a forward run only to resolve shapes; dispose to restore.</summary>

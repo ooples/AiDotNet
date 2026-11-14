@@ -171,6 +171,97 @@ internal sealed class TapeTrainingStepper<T>
         return false;
     }
 
+    private bool _closureObjectiveWarmed;
+    private AiDotNet.Optimizers.StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>? _plainSgd;
+    private double _plainSgdLearningRate = double.NaN;
+
+    /// <summary>
+    /// The plain SGD optimizer (no clipping, no regularization, no adaptive rate) this owner's SGD steps map to the
+    /// fused SGD kernel through. A changed rate builds a new one, which the session treats as a new optimizer.
+    /// </summary>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> PlainSgd(T learningRate)
+    {
+        double lr = NumOps.ToDouble(learningRate);
+        if (_plainSgd is null || !_plainSgdLearningRate.Equals(lr))
+        {
+            _plainSgd = new AiDotNet.Optimizers.StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(
+                null,
+                new AiDotNet.Models.Options.StochasticGradientDescentOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = lr,
+                    MinLearningRate = Math.Min(1e-6, lr),
+                    MaxLearningRate = Math.Max(1.0, lr),
+                    UseAdaptiveLearningRate = false,
+                    EnableGradientClipping = false,
+                });
+            _plainSgdLearningRate = lr;
+        }
+        return _plainSgd;
+    }
+
+    /// <summary>
+    /// Runs a closure objective (a loss that builds its per-step data inside itself) on this owner's fused compiled
+    /// plan. The plan replays only when the closure traces to the structure it was compiled from, after this step's
+    /// data is copied in (<see cref="FusedTrainingStepRequest{T}.ClosureObjective"/>). False when the compiled path
+    /// does not apply; the caller then takes its eager step.
+    /// </summary>
+    /// <remarks>
+    /// Before the first compiled step the closure runs once without recording (and without consuming per-step random
+    /// draws) so a lazily shaped layer allocates the weights the plan must train; the trained set is read after it.
+    /// </remarks>
+    private bool TryClosureObjectiveStep(
+        Func<IReadOnlyList<Tensor<T>>> parameters,
+        Func<Tensor<T>> objective,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
+        Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? onGradients,
+        double modelGradientClip,
+        out T loss)
+    {
+        loss = NumOps.Zero;
+        if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
+            return false;
+
+        if (!_closureObjectiveWarmed)
+        {
+            using (new NoGradScope<T>())
+            using (CompiledStepRandom<T>.SuppressDraws())
+                objective();
+            _closureObjectiveWarmed = true;
+        }
+
+        var trained = parameters();
+        if (trained is null || trained.Count == 0)
+            return false;
+
+        var placeholder = new Tensor<T>(new[] { 1 });
+        var request = new FusedTrainingStepRequest<T>
+        {
+            Layers = Array.Empty<ITrainableLayer<T>>(),
+            Input = placeholder,
+            Target = placeholder,
+            // The eager fallback and any verification evaluate the same closure.
+            Forward = _ => objective(),
+            ComputeLoss = (value, _) => value,
+            Optimizer = optimizer,
+            ExtraParameters = trained,
+            Selection = trained,
+            ModelGradientClip = modelGradientClip,
+            OnGradients = onGradients,
+            ClosureObjective = objective,
+        };
+
+        if (!TryFusedStep(request, out loss))
+        {
+            EagerStepCount++;
+            LastStepFused = false;
+            return false;
+        }
+
+        FusedStepCount++;
+        LastStepFused = true;
+        return true;
+    }
+
     /// <summary>Forward, loss and backward on the tape, then the model's optimizer.</summary>
     public static T EagerStep(FusedTrainingStepRequest<T> request)
     {
@@ -270,6 +361,17 @@ internal sealed class TapeTrainingStepper<T>
         Guard.NotNull(parameters);
         Guard.NotNull(objective);
         Guard.NotNull(optimizer);
+        // A compiled plan first (the shared base-class policy: eager only when compilation cannot apply). The plan and
+        // its moments follow the optimizer instance, which every caller keeps for the lifetime of its parameter group.
+        // A beforeUpdate hook (quantization-aware training restores shadow weights between backward and update) has no
+        // place in a fused plan, and an objective that already contains the optimizer's regularization must not get
+        // the plan's L2 on top.
+        if (beforeUpdate is null
+            && (applyOptimizerRegularization || FusedTrainingSession<T>.OptimizerRegularizationOf(optimizer) is null)
+            && ForOwner(optimizer).TryClosureObjectiveStep(parameters, objective, optimizer, onGradients,
+                modelGradientClip, out T compiledLoss))
+            return compiledLoss;
+
         var placeholder = new Tensor<T>(new[] { 1 });
         return EagerTapeStep(
             objective,
@@ -290,17 +392,29 @@ internal sealed class TapeTrainingStepper<T>
     }
 
     /// <summary>
-    /// One eager plain-SGD update (<c>p -= learningRate * grad</c>) of the tensors <paramref name="objective"/>
-    /// reaches, for the trainers that have no optimizer object. Parameters are read after the objective runs.
+    /// One plain-SGD update (<c>p -= learningRate * grad</c>) of the tensors <paramref name="objective"/> reaches, for
+    /// the trainers that have no optimizer object. Parameters are read after the objective runs.
     /// </summary>
+    /// <param name="owner">The model being trained. When given, the step runs on a compiled plan kept for this owner
+    /// (a plain SGD optimizer with this learning rate and no clipping or regularization, so the update is the same
+    /// <c>p -= learningRate * grad</c>); null keeps the eager tape.</param>
     public static T EagerSgdObjectiveStep(
         Func<IReadOnlyList<Tensor<T>>> parameters,
         Func<Tensor<T>> objective,
         T learningRate,
-        Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? onGradients = null)
+        Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? onGradients = null,
+        object? owner = null)
     {
         Guard.NotNull(parameters);
         Guard.NotNull(objective);
+        if (owner is not null)
+        {
+            var stepper = ForOwner(owner);
+            if (stepper.TryClosureObjectiveStep(parameters, objective, stepper.PlainSgd(learningRate), onGradients,
+                    modelGradientClip: 0.0, out T compiledLoss))
+                return compiledLoss;
+        }
+
         var placeholder = new Tensor<T>(new[] { 1 });
         return EagerTapeStep(
             objective,

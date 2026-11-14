@@ -91,6 +91,21 @@ internal sealed class FusedTrainingStepRequest<T>
     /// construction and conservatively stays eager.
     /// </remarks>
     public bool VerifyReplayAgreement { get; init; }
+
+    /// <summary>
+    /// A closure objective: the step's loss as a function that builds its own per-step data (a batch, noise, labels,
+    /// a sampled timestep) inside itself. When set, the compiled step re-probes the closure every step and replays a
+    /// plan only when the closure traces to the same structure, after copying in this step's data (see
+    /// <see cref="AiDotNet.Tensors.Engines.Compilation.ClosureObjectiveGuard{T}"/>). <see cref="Forward"/> and
+    /// <see cref="ComputeLoss"/> must evaluate the same closure (they drive the eager fallback), and
+    /// <see cref="Input"/>/<see cref="Target"/> may be placeholders.
+    /// </summary>
+    /// <remarks>
+    /// The guard checks everything a plan would freeze, so a closure step ignores <see cref="GraphBreakReason"/>'s
+    /// per-step host state reason and <see cref="VerifyReplayAgreement"/>: a changed captured value changes the
+    /// signature and is compiled from its own trace, and a host read of an intermediate is never replayed.
+    /// </remarks>
+    public Func<Tensor<T>>? ClosureObjective { get; init; }
 }
 
 /// <summary>
@@ -252,7 +267,7 @@ internal sealed class FusedTrainingSession<T>
             _lastOptimizer = request.Optimizer;
         }
 
-        if (request.GraphBreakReason is { } graphBreak)
+        if (request.ClosureObjective is null && request.GraphBreakReason is { } graphBreak)
         {
             if (!IsCommitted)
                 return Decline("graph break: " + graphBreak);
@@ -335,7 +350,8 @@ internal sealed class FusedTrainingSession<T>
 
         // The first replay with new data (the step after the trace) is checked against the eager forward when the
         // caller asks: the eager loss on this batch, and a copy of the trained tensors to undo a disagreeing update.
-        bool checkReplay = request.VerifyReplayAgreement && IsCommitted && !_replayAgreementVerified;
+        bool checkReplay = request.ClosureObjective is null
+            && request.VerifyReplayAgreement && IsCommitted && !_replayAgreementVerified;
         double eagerLoss = 0.0;
         (Tensor<T> Live, Tensor<T> Saved)[]? snapshot = null;
         if (checkReplay)
@@ -384,7 +400,8 @@ internal sealed class FusedTrainingSession<T>
                 l2Regularization: l2,
                 deferredLoss: deferredLoss,
                 l2AfterClip: l2AfterClip,
-                stateKey: _stateKey);
+                stateKey: _stateKey,
+                closureObjective: request.ClosureObjective);
         }
         finally
         {
