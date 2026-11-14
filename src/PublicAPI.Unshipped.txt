@@ -549,6 +549,7 @@ virtual AiDotNet.TimeSeries.TimeSeriesModelBase<T>.SetParameterChunks(System.Col
 *REMOVED*override AiDotNet.Safety.Watermarking.WatermarkDetector<T>.EvaluateText(string! text) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
 *REMOVED*override AiDotNet.Safety.Watermarking.WatermarkDetector<T>.RegisterGeneratedParameterComponents(AiDotNet.Models.Parameters.ParameterComponentRegistry<T>! registry) -> void
 *REMOVED*override AiDotNet.Safety.Watermarking.WatermarkDetector<T>.RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
+*REMOVED*override AiDotNet.AdversarialRobustness.Attacks.AutoAttack<T, TInput, TOutput>.RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
 *REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultAutoEncoderLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
 *REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultDeepBeliefNetworkLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
 *REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultDeepBoltzmannMachineLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
