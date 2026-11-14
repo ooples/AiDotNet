@@ -50,23 +50,24 @@ internal sealed class LocalObjectiveGradients<T> : IDisposable
         if (_disposed) return;
         _disposed = true;
 
-        bool IsProtected(Tensor<T>? tensor)
-            => tensor is null || (_protectedTensors is not null && _protectedTensors.Contains(tensor));
+        var seen = _protectedTensors is not null
+            ? new HashSet<Tensor<T>>(_protectedTensors, TensorReferenceComparer<Tensor<T>>.Instance)
+            : new HashSet<Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
 
         foreach (var grad in Gradients.Values)
         {
-            if (!IsProtected(grad))
+            if (grad is not null && seen.Add(grad))
             {
                 grad.Dispose();
             }
         }
 
-        if (!IsProtected(OutputLoss))
+        if (OutputLoss is not null && seen.Add(OutputLoss))
         {
             OutputLoss.Dispose();
         }
 
-        if (!ReferenceEquals(Prediction, OutputLoss) && !IsProtected(Prediction))
+        if (Prediction is not null && seen.Add(Prediction))
         {
             Prediction.Dispose();
         }
@@ -1180,9 +1181,10 @@ internal static class LocalObjectiveGradientComputer<T>
                 }
             }
 
-            if (ownedBlockInput is not null && !ReferenceEquals(ownedBlockInput, input))
+            if (ownedBlockInput is { } prevBlockInput
+                && !TensorReferenceComparer<Tensor<T>>.Instance.Equals(prevBlockInput, input))
             {
-                ownedBlockInput.Dispose();
+                prevBlockInput.Dispose();
             }
             ownedBlockInput = nextOwnedBlockInput;
             if (nextOwnedBlockInput is not null)
@@ -1199,29 +1201,22 @@ internal static class LocalObjectiveGradientComputer<T>
             };
             foreach (var g in grads.Values)
             {
-                if (!protectedOnError.Contains(g)) g.Dispose();
+                DisposeIfUnprotected(g, protectedOnError);
             }
             foreach (var ag in auxGrads.Values)
             {
-                if (!protectedOnError.Contains(ag)) ag.Dispose();
+                DisposeIfUnprotected(ag, protectedOnError);
             }
-            if (finalOutputObjective is not null && !protectedOnError.Contains(finalOutputObjective))
-            {
-                finalOutputObjective.Dispose();
-            }
-            if (finalPrediction is not null
-                && !ReferenceEquals(finalPrediction, finalOutputObjective)
-                && !protectedOnError.Contains(finalPrediction))
-            {
-                finalPrediction.Dispose();
-            }
+            DisposeIfUnprotected(finalOutputObjective, protectedOnError);
+            DisposeIfUnprotected(finalPrediction, protectedOnError);
             throw;
         }
         finally
         {
-            if (ownedBlockInput is not null && !ReferenceEquals(ownedBlockInput, input))
+            if (ownedBlockInput is { } remainingBlockInput
+                && !TensorReferenceComparer<Tensor<T>>.Instance.Equals(remainingBlockInput, input))
             {
-                ownedBlockInput.Dispose();
+                remainingBlockInput.Dispose();
             }
             cachedDetachedSampledWeight?.Dispose();
             cachedDetachedSampledBias?.Dispose();
@@ -1239,31 +1234,24 @@ internal static class LocalObjectiveGradientComputer<T>
         try
         {
             rule.ApplyAuxiliaryGradients(auxGrads);
+            var auxDisposed = new HashSet<Tensor<T>>(protectedTensors, TensorReferenceComparer<Tensor<T>>.Instance);
             foreach (var ag in auxGrads.Values)
             {
-                if (!protectedTensors.Contains(ag)) ag.Dispose();
+                DisposeIfUnprotected(ag, auxDisposed);
             }
         }
         catch
         {
             foreach (var ag in auxGrads.Values)
             {
-                if (!protectedTensors.Contains(ag)) ag.Dispose();
+                DisposeIfUnprotected(ag, protectedTensors);
             }
             foreach (var g in grads.Values)
             {
-                if (!protectedTensors.Contains(g)) g.Dispose();
+                DisposeIfUnprotected(g, protectedTensors);
             }
-            if (finalOutputObjective is not null && !protectedTensors.Contains(finalOutputObjective))
-            {
-                finalOutputObjective.Dispose();
-            }
-            if (finalPrediction is not null
-                && !ReferenceEquals(finalPrediction, finalOutputObjective)
-                && !protectedTensors.Contains(finalPrediction))
-            {
-                finalPrediction.Dispose();
-            }
+            DisposeIfUnprotected(finalOutputObjective, protectedTensors);
+            DisposeIfUnprotected(finalPrediction, protectedTensors);
             throw;
         }
 
@@ -1274,6 +1262,14 @@ internal static class LocalObjectiveGradientComputer<T>
             hiddenCount,
             totalLocals,
             protectedTensors);
+    }
+
+    private static void DisposeIfUnprotected(Tensor<T>? candidate, HashSet<Tensor<T>> seen)
+    {
+        if (candidate is { } tensor && seen.Add(tensor))
+        {
+            tensor.Dispose();
+        }
     }
 
     internal static void BuildSampledCandidates(

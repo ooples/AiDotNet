@@ -163,10 +163,13 @@ public sealed partial class HouseholderSubspaceLayer<T> : LayerBase<T>, IShapeCo
         // Floor the squared-norm denominator instead of adding epsilon so every reflector above the floor remains an
         // exact orthogonal isometry while zero reflectors yield 0 / floor = 0 (identity). Choose a dtype-safe floor so
         // 1 / denom^2 and 1 / denom^1.5 in DivideBackward/SqrtBackward stay finite (avoiding (-Inf) - (-Inf) = NaN in
-        // ClampMinBackward on zero or subnormal float/Half reflectors).
-        double floorValue = typeof(T) == typeof(float)
-            ? 1e-18
-            : (typeof(T).Name == "Half" ? 1e-2 : 1.1754943508222875e-38);
+        // ClampMinBackward on zero or subnormal float/BFloat16/Half/Float8 reflectors).
+        string typeName = typeof(T).Name;
+        double floorValue = (typeof(T) == typeof(double) || typeof(T) == typeof(decimal))
+            ? 1.1754943508222875e-38
+            : (typeName == "Half" || typeName.StartsWith("Float8", StringComparison.Ordinal))
+                ? 1e-2
+                : 1e-18;
         T normFloor = numOps.FromDouble(floorValue);
 
         Tensor<T> current = input.Rank == 2
