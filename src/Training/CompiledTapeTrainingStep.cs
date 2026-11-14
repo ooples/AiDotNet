@@ -1149,11 +1149,13 @@ public static class CompiledTapeTrainingStep<T>
         Func<Tensor<T>> objective,
         Tensor<T>[] parameters,
         out ICompiledTrainingPlan<T>? plan,
-        out bool compiledThisCall)
+        out bool compiledThisCall,
+        out ClosureObjectiveState<T>.Entry? rebound)
     {
         var closure = CurrentState.closureState ??= new ClosureObjectiveState<T>();
         plan = null;
         compiledThisCall = false;
+        rebound = null;
         // Every plan after the first continues the configured one's optimizer; without that a signature change could
         // only restart the moments.
         if (!PlanSupportsContinueOptimizer())
@@ -1174,7 +1176,7 @@ public static class CompiledTapeTrainingStep<T>
         CompiledStepRandom<T>.CaptureScope? probeDraws = null;
         if (configured is null && closure.PlanCount == 0)
         {
-            var first = CompileClosurePlan(objective, parameters, out var firstGuard, out var firstReason);
+            var first = CompileClosurePlan(objective, parameters, out var firstGuard, out var firstLeaves, out var firstReason);
             if (firstGuard is null)
             {
                 first.Dispose();
@@ -1183,7 +1185,7 @@ public static class CompiledTapeTrainingStep<T>
                 ReportClosureFallback(closure, ClosureFallbackReason.Unsignable, why);
                 return false;
             }
-            entry = new ClosureObjectiveState<T>.Entry(first, firstGuard);
+            entry = new ClosureObjectiveState<T>.Entry(first, firstGuard, firstLeaves);
             closure.Add(entry, keepAlive: null);
             closure.RecordStep(failed: false, reason: null);
             compiledThisCall = true;
@@ -1203,7 +1205,12 @@ public static class CompiledTapeTrainingStep<T>
                     entry = closure.Find(signature);
                     if (entry is null)
                         reason = "no cached plan for this signature (" + signature.NodeCount + " ops)";
-                    else if (entry.Guard is { } guard && !guard.TryCopyLeaves(leaves, out reason))
+                    else if (entry.TryRebind(leaves, out reason))
+                    {
+                        // The plan's leaves now hold this step's data; they get their own back after the step.
+                        rebound = entry;
+                    }
+                    else
                     {
                         closure.Remove(entry, keepAlive: configured);
                         entry = null;
@@ -1228,9 +1235,10 @@ public static class CompiledTapeTrainingStep<T>
             {
                 ICompiledTrainingPlan<T> traced;
                 ClosureObjectiveGuard<T>? tracedGuard;
+                object[]? tracedLeaves;
                 using (probeDraws is null ? null : CompiledStepRandom<T>.ReplayDraws(probeDraws))
-                    traced = CompileClosurePlan(objective, parameters, out tracedGuard, out _);
-                entry = new ClosureObjectiveState<T>.Entry(traced, closure.IsDynamic ? null : tracedGuard);
+                    traced = CompileClosurePlan(objective, parameters, out tracedGuard, out tracedLeaves, out _);
+                entry = new ClosureObjectiveState<T>.Entry(traced, closure.IsDynamic ? null : tracedGuard, tracedLeaves);
                 closure.Add(entry, keepAlive: configured);
                 compiledThisCall = true;
             }
@@ -1254,6 +1262,7 @@ public static class CompiledTapeTrainingStep<T>
         Func<Tensor<T>> objective,
         Tensor<T>[] parameters,
         out ClosureObjectiveGuard<T>? guard,
+        out object[]? leaves,
         out string? reason)
     {
         // A compiled plan keeps its traced buffers: they must be fresh and outside any per-step arena.
@@ -1267,6 +1276,11 @@ public static class CompiledTapeTrainingStep<T>
             var loss = objective();
             if (scope.NodeCount == 0)
                 throw new InvalidOperationException("The closure objective recorded no tensor operations.");
+            // The plan's external leaves, in the order the guard copies a later step's data into them: the entry
+            // saves and restores what they hold around every replay (some are the caller's own tensors). Read before
+            // compilation, which may rewrite the node list.
+            var traced = ObjectiveSignature.Build(scope.Nodes, parameters, out var tracedLeaves);
+            leaves = traced.Signable ? tracedLeaves : null;
             plan = scope.CompileTraining(parameters, loss);
         }
         CompiledStepRandom<T>.Attach(plan, stepRandom);
@@ -1384,6 +1398,7 @@ public static class CompiledTapeTrainingStep<T>
         l2AfterClip = l2AfterClip && l2Regularization > 0.0 && maxGradNorm > 0.0;
 
         AiDotNet.Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>>? restoredStateAwaitingStep = null;
+        ClosureObjectiveState<T>.Entry? reboundClosureEntry = null;
         try
         {
             // AiDotNet#1406: drop the cached compiled plan + parameter array
@@ -1684,7 +1699,8 @@ public static class CompiledTapeTrainingStep<T>
             bool compiledThisCall = false;
             if (closureObjective is not null)
             {
-                if (!TrySelectClosurePlan(closureObjective, parameters, out var closurePlan, out compiledThisCall)
+                if (!TrySelectClosurePlan(closureObjective, parameters, out var closurePlan, out compiledThisCall,
+                        out reboundClosureEntry)
                     || closurePlan is null)
                     return false;
                 plan = closurePlan;
@@ -1938,6 +1954,12 @@ public static class CompiledTapeTrainingStep<T>
             _configuredL2 = 0.0;
             _configuredL2AfterClip = false;
             return false;
+        }
+        finally
+        {
+            // A replayed closure plan read this step's data through the tensors it was traced from; they get their
+            // own contents back whether the step ran, declined or threw.
+            reboundClosureEntry?.RestoreLeaves();
         }
     }
 

@@ -40,16 +40,138 @@ internal sealed class ClosureObjectiveState<T>
 
     internal sealed class Entry
     {
-        internal Entry(ICompiledTrainingPlan<T> plan, ClosureObjectiveGuard<T>? guard)
+        // The tensors the plan reads that its trace did not produce, in the guard's order. They are the tensors of the
+        // step the plan was traced from, so the caller may still own them (a pre-built batch it reuses every epoch).
+        private readonly object[] _leaves;
+        private Dictionary<object, int>? _leafIndex;
+        private object?[]? _saved;
+        private bool[]? _overwritten;
+
+        internal Entry(ICompiledTrainingPlan<T> plan, ClosureObjectiveGuard<T>? guard, object[]? leaves = null)
         {
             Plan = plan;
-            Guard = guard;
+            _leaves = leaves ?? Array.Empty<object>();
+            // Without the plan's own leaves a replay could not give the caller's tensors back, so it does not replay.
+            Guard = guard is not null && leaves is not null && guard.LeafCount == leaves.Length ? guard : null;
         }
 
         internal ICompiledTrainingPlan<T> Plan { get; }
 
         /// <summary>Null for a plan traced from one step that cannot be replayed (kept only until evicted).</summary>
         internal ClosureObjectiveGuard<T>? Guard { get; }
+
+        /// <summary>
+        /// Copies this step's leaves (<paramref name="probedLeaves"/>, from a probe whose signature equals the plan's)
+        /// into the plan's leaves, after saving what each overwritten leaf held: <see cref="RestoreLeaves"/> puts it
+        /// back once the step has run.
+        /// </summary>
+        /// <remarks>
+        /// The plan's leaves are the tensors of the step it was traced from. Left overwritten, a caller that reuses
+        /// its batches finds the first one holding the last step's data, and trains on that when the batch comes
+        /// round again (the same tensor is then not copied at all).
+        /// </remarks>
+        /// <returns>False, with nothing changed, when the plan cannot take this step's data; the step then compiles
+        /// from its own trace.</returns>
+        internal bool TryRebind(object[] probedLeaves, out string? reason)
+        {
+            if (probedLeaves is null) throw new ArgumentNullException(nameof(probedLeaves));
+            if (Guard is null)
+            {
+                reason = "the plan is not replayable";
+                return false;
+            }
+
+            if (probedLeaves.Length != _leaves.Length)
+            {
+                reason = $"the probe has {probedLeaves.Length} leaves, the plan {_leaves.Length}";
+                return false;
+            }
+
+            if (_leafIndex is null)
+            {
+                _leafIndex = new Dictionary<object, int>(_leaves.Length, ReferenceComparer.Instance);
+                for (int i = 0; i < _leaves.Length; i++)
+                    _leafIndex[_leaves[i]] = i;
+            }
+
+            // A tensor the plan reads in one position and this step supplies in another (the caller swapped two
+            // batches) cannot be copied in place: the first copy would overwrite the second copy's source.
+            for (int i = 0; i < _leaves.Length; i++)
+            {
+                if (ReferenceEquals(_leaves[i], probedLeaves[i])) continue;
+                if (_leafIndex.TryGetValue(probedLeaves[i], out int other))
+                {
+                    reason = $"leaf {i} of this step is the plan's leaf {other}";
+                    return false;
+                }
+            }
+
+            _saved ??= new object?[_leaves.Length];
+            _overwritten ??= new bool[_leaves.Length];
+            try
+            {
+                for (int i = 0; i < _leaves.Length; i++)
+                {
+                    if (ReferenceEquals(_leaves[i], probedLeaves[i])) continue;   // read live, never written
+                    if (_leaves[i] is not ISignatureTensor leaf)
+                    {
+                        reason = $"leaf {i} is not a tensor";
+                        return false;
+                    }
+
+                    var saved = (ISignatureTensor)(_saved[i] ??= Activator.CreateInstance(
+                        _leaves[i].GetType(), new object[] { (int[])leaf.SignatureShape.Clone() })
+                        ?? throw new InvalidOperationException($"leaf {i} ({_leaves[i].GetType().Name}) cannot be saved"));
+                    saved.CopyLeafFrom(leaf);
+                    _overwritten[i] = true;
+                }
+            }
+            catch (Exception ex) when (ex is MissingMethodException || ex is MemberAccessException
+                || ex is System.Reflection.TargetInvocationException || ex is InvalidOperationException
+                || ex is ArgumentException || ex is ObjectDisposedException || ex is InvalidCastException)
+            {
+                Array.Clear(_overwritten, 0, _overwritten.Length);   // nothing has been written yet
+                reason = $"a leaf of the plan could not be saved ({ex.GetType().Name}: {ex.Message})";
+                return false;
+            }
+
+            if (!Guard.TryCopyLeaves(probedLeaves, out reason))
+            {
+                RestoreLeaves();
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>Gives every leaf <see cref="TryRebind"/> overwrote its own contents back.</summary>
+        internal void RestoreLeaves()
+        {
+            if (_overwritten is null || _saved is null) return;
+            for (int i = 0; i < _overwritten.Length; i++)
+            {
+                if (!_overwritten[i]) continue;
+                _overwritten[i] = false;
+                if (_leaves[i] is ISignatureTensor leaf && _saved[i] is ISignatureTensor saved)
+                {
+                    try
+                    {
+                        leaf.CopyLeafFrom(saved);
+                    }
+                    catch (Exception ex) when (ex is ObjectDisposedException || ex is InvalidOperationException || ex is ArgumentException)
+                    {
+                        // The caller disposed the tensor during the step: there is nothing left to give back.
+                    }
+                }
+            }
+        }
+    }
+
+    private sealed class ReferenceComparer : IEqualityComparer<object>
+    {
+        internal static readonly ReferenceComparer Instance = new();
+        public new bool Equals(object? x, object? y) => ReferenceEquals(x, y);
+        public int GetHashCode(object obj) => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
     }
 
     /// <summary>Steps this objective has taken through the closure path.</summary>
@@ -120,7 +242,8 @@ internal sealed class ClosureObjectiveState<T>
         }
     }
 
-    /// <summary>Drops a plan that can no longer take new data (the caller disposed a leaf it was compiled on).</summary>
+    /// <summary>Drops a plan that can no longer take new data (the caller disposed a leaf it was compiled on, or
+    /// supplies one of its leaves in another position).</summary>
     internal void Remove(Entry entry, object? keepAlive)
     {
         if (entry is null) throw new ArgumentNullException(nameof(entry));
