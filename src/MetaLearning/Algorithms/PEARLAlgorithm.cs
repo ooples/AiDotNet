@@ -109,6 +109,9 @@ public partial class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     }
 
     /// <summary><paramref name="scale"/> times each double draw, rounded to T once.</summary>
+    /// <summary>The posterior draws SPSA's evaluations share within one MetaTrain call, per task then sample.</summary>
+    private Vector<T>[][]? _objectiveDraws;
+
     private Vector<T> ScaledDraws(double[] draws, double scale)
         => Engine.TensorMultiplyScalar(new Tensor<double>(draws, new[] { draws.Length }), scale).Cast<T>().ToVector();
 
@@ -147,9 +150,20 @@ public partial class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         // Outer loop
         ApplyOuterUpdate(initParams, metaGradients, _algoOptions.OuterLearningRate);
 
-        // Update encoder and projection via SPSA
-        UpdateAuxiliaryParamsSPSA(taskBatch, ref _encoderParams, _algoOptions.OuterLearningRate * SpsaLearningRateMultiplier, ComputePEARLLoss);
-        UpdateAuxiliaryParamsSPSA(taskBatch, ref _projectionParams, _algoOptions.OuterLearningRate * SpsaLearningRateMultiplier, ComputePEARLLoss);
+        // Update encoder and projection via SPSA, on one fixed set of posterior draws: the base and the perturbed
+        // evaluations then differ only by the perturbation, not by fresh sampling noise.
+        _objectiveDraws = taskBatch.Tasks
+            .Select(_ => Enumerable.Range(0, _algoOptions.NumPosteriorSamples).Select(_ => DrawEpsilon()).ToArray())
+            .ToArray();
+        try
+        {
+            UpdateAuxiliaryParamsSPSA(taskBatch, ref _encoderParams, _algoOptions.OuterLearningRate * SpsaLearningRateMultiplier, ComputePEARLLoss);
+            UpdateAuxiliaryParamsSPSA(taskBatch, ref _projectionParams, _algoOptions.OuterLearningRate * SpsaLearningRateMultiplier, ComputePEARLLoss);
+        }
+        finally
+        {
+            _objectiveDraws = null;
+        }
 
         return ComputeMean(losses);
     }
@@ -247,8 +261,11 @@ public partial class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         var shift = Engine.ReduceMax(negLogVarN, new[] { 1 }, keepDims: true);
         var weights = Engine.TensorExp(Engine.TensorSubtract(negLogVarN, Engine.TensorBroadcastTo(shift, new[] { _latentDim, negLogVarN.Shape[1] })));
         var weightSum = Engine.ReduceSum(weights, new[] { 1 }, keepDims: false);
-        var weightedMu = Engine.ReduceSum(Engine.TensorMultiply(muN, weights), new[] { 1 }, keepDims: false);
-        var mu = Engine.TensorDivide(weightedMu, weightSum);
+        // The weights are normalized before they scale the means, so mu is a convex combination of the mu_n and its
+        // accumulation stays within their range (summing mu_n w_n first overflowed Half for large means).
+        var normalized = Engine.TensorDivide(
+            weights, Engine.TensorBroadcastTo(weightSum.Reshape(new[] { _latentDim, 1 }), new[] { _latentDim, negLogVarN.Shape[1] }));
+        var mu = Engine.ReduceSum(Engine.TensorMultiply(muN, normalized), new[] { 1 }, keepDims: false);
         var logVar = Engine.TensorNegate(Engine.TensorAdd(shift.Reshape(new[] { _latentDim }), Engine.TensorLog(weightSum)));
         return (mu.ToVector(), logVar.ToVector());
     }
@@ -279,17 +296,37 @@ public partial class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         return Engine.TensorMatMul(w, Tensor<T>.FromVector(z, new[] { _latentDim, 1 })).ToVector();
     }
 
+    /// <summary>One standard-normal draw per latent dimension.</summary>
+    private Vector<T> DrawEpsilon()
+    {
+        var draws = Enumerable.Range(0, _latentDim).Select(_ => SampleNormal()).ToArray();
+        return new Tensor<double>(draws, new[] { _latentDim }).Cast<T>().ToVector();
+    }
+
+    /// <summary>
+    /// The objective MetaTrain optimizes, for SPSA: each task's query loss averaged over NumPosteriorSamples
+    /// reparameterized latents, plus the KL term. It used to score the posterior mean only, which is not what the
+    /// encoder is trained on.
+    /// </summary>
     private double ComputePEARLLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
         var losses = new List<T>();
         var initParams = ParamModel.GetParameters();
+        var draws = _objectiveDraws;
 
-        foreach (var task in taskBatch.Tasks)
+        for (int t = 0; t < taskBatch.Tasks.Length; t++)
         {
+            var task = taskBatch.Tasks[t];
             var (mu, logVar) = Encode(ComputeContext(task.SupportInput, task.SupportOutput, initParams));
-            ParamModel.SetParameters(Infer(initParams, task, mu));
-            var loss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
-            losses.Add(WithKL(loss, mu, logVar));
+            var sampleLosses = new List<T>(_algoOptions.NumPosteriorSamples);
+            for (int s = 0; s < _algoOptions.NumPosteriorSamples; s++)
+            {
+                var eps = draws is not null && t < draws.Length ? draws[t][s] : DrawEpsilon();
+                ParamModel.SetParameters(Infer(initParams, task, Reparameterize(mu, logVar, eps)));
+                sampleLosses.Add(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
+            }
+
+            losses.Add(WithKL(ComputeMean(sampleLosses), mu, logVar));
         }
 
         ParamModel.SetParameters(initParams);
