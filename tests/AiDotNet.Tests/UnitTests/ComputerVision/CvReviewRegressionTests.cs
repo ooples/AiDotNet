@@ -219,10 +219,52 @@ public sealed class CvReviewRegressionTests
         const double sigma = 1.0;
         var mask = SegmentationTensorOps.GaussianMask<Half>(1, 2052, 2050, 0, sigma);
 
+        // Compared by distance, within half a unit in the last place of half precision at this magnitude (2^-12):
+        // exp(-0.5) = 0.60653 converts to 0.60645, and rounding both to three decimals put them on opposite sides
+        // of 0.6065 although the mask holds the nearest representable value.
         double oneAway = Math.Exp(-0.5);
-        Assert.Equal(oneAway, (double)mask[0, 2049], 3);
-        Assert.Equal(1.0, (double)mask[0, 2050], 3);
-        Assert.Equal(oneAway, (double)mask[0, 2051], 3);
+        const double halfUlp = 1.0 / 4096;
+        Assert.Equal(oneAway, (double)mask[0, 2049], halfUlp);
+        Assert.Equal(1.0, (double)mask[0, 2050], halfUlp);
+        Assert.Equal(oneAway, (double)mask[0, 2051], halfUlp);
+    }
+
+    [Fact]
+    public void ArgmaxAlongClassDim_KeepsTheSpatialAndBatchAxes()
+    {
+        // The class map came back as one flat run ([H*W], or [B*H*W] for a batch): every caller reads its height and
+        // width as Shape[0] and Shape[1], so SegmentSlice, SegmentPanoptic and SegmentEverything threw on Shape[1].
+        var single = new Tensor<double>(new[] { 3, 2, 4 });
+        var batch = new Tensor<double>(new[] { 2, 3, 2, 4 });
+        for (int b = 0; b < 2; b++)
+            for (int row = 0; row < 2; row++)
+                for (int col = 0; col < 4; col++)
+                {
+                    int winner = (b + row + (2 * col)) % 3;
+                    batch[b, winner, row, col] = 1;
+                    if (b == 0) single[winner, row, col] = 1;
+                }
+
+        var map = SegmentationTensorOps.ArgmaxAlongClassDim(single);
+        var batchMap = SegmentationTensorOps.ArgmaxAlongClassDim(batch);
+
+        Assert.Equal(new[] { 2, 4 }, map.Shape.ToArray());
+        Assert.Equal(new[] { 2, 2, 4 }, batchMap.Shape.ToArray());
+        for (int b = 0; b < 2; b++)
+            for (int row = 0; row < 2; row++)
+                for (int col = 0; col < 4; col++)
+                {
+                    int winner = (b + row + (2 * col)) % 3;
+                    Assert.Equal(winner, batchMap[b, row, col]);
+                    if (b == 0) Assert.Equal(winner, map[row, col]);
+                }
+
+        // The first maximum wins a tie, and NaN never replaces the best so far, as in the per-pixel scan.
+        var ties = new Tensor<double>(new[] { 3, 1, 2 }, new Vector<double>(new[] { 1.0, double.NaN, 1.0, 5.0, 0.0, 7.0 }));
+        var tieMap = SegmentationTensorOps.ArgmaxAlongClassDim(ties);
+        Assert.Equal(new[] { 1, 2 }, tieMap.Shape.ToArray());
+        Assert.Equal(0.0, tieMap[0, 0]);
+        Assert.Equal(0.0, tieMap[0, 1]);
     }
 
     [Fact]

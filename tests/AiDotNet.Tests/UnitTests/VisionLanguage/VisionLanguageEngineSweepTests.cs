@@ -117,6 +117,8 @@ public class VisionLanguageEngineSweepTests
 
         var logits = model.GenerateCaption(Random(12, 3, 32, 32));
 
+        // One row of vocabulary logits per generated position, as documented: the steps were concatenated as flat
+        // runs, so the result was a rank-1 [MaxCaptionLength * VocabSize] tensor with no step axis to index.
         Assert.Equal(new[] { 3, 40 }, logits.Shape.ToArray());
         Assert.Equal(3 * 40, logits.Length);
         for (int i = 0; i < logits.Length; i++)

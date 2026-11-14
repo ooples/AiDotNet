@@ -66,8 +66,15 @@ public static class SegmentationTensorOps
         // index is returned as a value of T, exactly as the per-pixel scan did.
         int classAxis = logits.Rank - 3;
         int numClasses = logits.Shape[classAxis];
-        var classIndices = AiDotNetEngine.Current.TensorArgMax(logits, classAxis);
-        return CvTensorOps<T>.IndicesAsValues(classIndices, numClasses);
+        var engine = AiDotNetEngine.Current;
+        var classIndices = engine.TensorArgMax(logits, classAxis);
+
+        // The class map keeps the spatial (and batch) axes: [H, W] or [B, H, W]. The gather that turns the indices
+        // into values of T returns them as one flat run, which every caller reading Shape[0] x Shape[1] cannot use.
+        int[] mapShape = logits.Rank == 3
+            ? [logits.Shape[1], logits.Shape[2]]
+            : [logits.Shape[0], logits.Shape[2], logits.Shape[3]];
+        return engine.Reshape(CvTensorOps<T>.IndicesAsValues(classIndices, numClasses), mapShape);
     }
 
     public static Tensor<T> SoftmaxAlongClassDim<T>(Tensor<T> logits)
