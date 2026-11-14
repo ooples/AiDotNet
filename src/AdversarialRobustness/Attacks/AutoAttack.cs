@@ -486,16 +486,10 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
     /// </summary>
     private Vector<T>? ApgdTargeted(AttackPoint point, Vector<T> cleanLogits)
     {
-        foreach (int target in TargetClassesOf(cleanLogits, point.Label, point.Goal))
-        {
-            var adversarial = Apgd(point, LossKind.TargetedDlr, target, 1);
-            if (adversarial is not null)
-            {
-                return adversarial;
-            }
-        }
-
-        return null;
+        // Lazily: the first target that yields an adversarial example ends the search.
+        return TargetClassesOf(cleanLogits, point.Label, point.Goal)
+            .Select(target => Apgd(point, LossKind.TargetedDlr, target, 1))
+            .FirstOrDefault(adversarial => adversarial is not null);
     }
 
     private Vector<T>? RunApgd(AttackPoint point, LossKind loss, int target)
@@ -1125,15 +1119,8 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
     {
         int it = (int)((double)query / Math.Max(totalQueries, 1) * 10000);
         double[] bounds = { 10, 50, 200, 500, 1000, 2000, 4000, 6000, 8000 };
-        double divisor = 1;
-        foreach (double bound in bounds)
-        {
-            if (it > bound)
-            {
-                divisor *= 2;
-            }
-        }
-
+        // The fraction halves once per schedule bound the rescaled iteration has passed.
+        double divisor = Math.Pow(2, bounds.Count(bound => it > bound));
         return initial / divisor;
     }
 
@@ -1322,7 +1309,6 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
 
         public void Iterate(int query)
         {
-            var engine = AiDotNetEngine.Current;
             int h = _point.Height;
             int w = _point.Width;
             double p = SquareFraction(_attack.Settings.SquareInitialFraction, query, _attack.Settings.SquareQueries);

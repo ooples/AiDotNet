@@ -157,7 +157,8 @@ internal static class SmoothingStatistics
     /// </summary>
     public static double Radius(double lowerBound, double sigma)
     {
-        if (!(lowerBound > 0.5))
+        // A NaN bound certifies nothing, the same as one at or below 1/2.
+        if (double.IsNaN(lowerBound) || lowerBound <= 0.5)
         {
             return 0.0;
         }

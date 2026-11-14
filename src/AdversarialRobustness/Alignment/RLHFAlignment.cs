@@ -468,7 +468,8 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
         // Summed in double: in Half four magnitudes of 32768 already sum past 65504, and an infinite sum let a
         // saturated output pass the engagement check below.
         double sumAbs = Engine.TensorSum(magnitudes.Cast<double>());
-        if (sumAbs == 0.0) return false;
+        // A sum of magnitudes is never negative, so this is the all-zero output (NaN still falls through).
+        if (sumAbs <= 0.0) return false;
 
         // Input-conditioned engagement: an output uncorrelated with the input
         // (cosine ≈ 0) and saturated to one extreme is a tell-tale "ignore the
