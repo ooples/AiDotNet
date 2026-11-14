@@ -8697,7 +8697,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             selectedParameters.Count,
             Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
 
-        double maxNormForStep = useStreamingPath
+        double maxNormForStep = useStreamingPath && !distCoord.IsShardedStrategy
             ? EffectiveGlobalGradNormClip(resolvedOptimizer, MaxGradNormValue)
             : MaxGradNormValue;
         MarkTrainMutationStarted();
@@ -8981,7 +8981,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 _activeCheckpointGradientConsumer = null;
             }
 
-            double streamingMaxNorm = distCoord.Strategy == AiDotNet.Enums.DistributedStrategy.DDP
+            double streamingMaxNorm = !distCoord.IsShardedStrategy
                 ? EffectiveGlobalGradNormClip(resolvedOptimizer, MaxGradNormValue)
                 : MaxGradNormValue;
             var streamingRegularizer = OptimizerRegularizer(resolvedOptimizer);

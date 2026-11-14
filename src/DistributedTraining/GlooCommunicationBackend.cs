@@ -102,8 +102,6 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
     private object[]? _peerReceiveLocks;
     private readonly T[] _barrierSendSlot;
     private readonly T[] _barrierReceiveSlot;
-    private readonly T[] _scatterLengthSendSlot;
-    private readonly T[] _scatterLengthReceiveSlot;
     private T[]? _ringRecvScratch;
     private T[]? _reduceScatterWorkScratch;
     private PersistentSendWorker? _sendWorker;
@@ -142,8 +140,6 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         _useNativeTCP = false;
         _barrierSendSlot = new[] { NumOps.One };
         _barrierReceiveSlot = new T[1];
-        _scatterLengthSendSlot = new T[1];
-        _scatterLengthReceiveSlot = new T[1];
     }
 
     /// <inheritdoc/>
@@ -1975,12 +1971,10 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
                     Array.Copy(allData, baseOffset + (root * chunkSize), myChunk, 0, chunkSize);
                 }
 
-                _scatterLengthSendSlot[0] = NumOps.FromDouble(chunkSize);
                 for (int r = 0; r < _worldSize; r++)
                 {
                     if (r != root)
                     {
-                        SendArraySlice(r, _scatterLengthSendSlot, 0, 1);
                         SendArraySlice(r, allData, baseOffset + (r * chunkSize), chunkSize);
                     }
                 }
@@ -1997,10 +1991,7 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
         }
         else
         {
-            ReceiveArrayInto(root, _scatterLengthReceiveSlot, 0, expectedLength: 1);
-            int chunkSize = _scatterLengthReceiveSlot[0] != null ? (int)NumOps.ToDouble(_scatterLengthReceiveSlot[0]) : 0;
-            myChunk = AllocateExactOutputArray(chunkSize);
-            ReceiveArrayInto(root, myChunk, 0, expectedLength: chunkSize);
+            myChunk = ReceiveExactNewArray(root, expectedLength: null, hasTag: false, expectedTag: 0);
         }
 
         return new Vector<T>(myChunk);

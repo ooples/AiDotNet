@@ -737,33 +737,35 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
 
         var numOps = MathHelper.GetNumericOperations<T>();
-        var header = new Vector<T>(19);
+        var header = new Vector<T>(43);
         if (distBackend.Rank == 0)
         {
+            int wireStatus = status < 0 ? 0 : (status == 0 ? 1 : 2);
             Span<T> w = header.AsWritableSpan();
-            w[0] = numOps.FromDouble(status);
-            WriteLongAsU16Chunks(numOps, w, 1, globalStep);
-            WriteIntAsU16Chunks(numOps, w, 5, epoch);
-            WriteIntAsU16Chunks(numOps, w, 7, batchInEpoch);
-            WriteLongAsU16Chunks(numOps, w, 9, samplesInEpoch);
-            w[13] = numOps.FromDouble(hasMpScale ? 1.0 : 0.0);
-            w[14] = numOps.FromDouble(savedFitSeed.HasValue ? 1.0 : 0.0);
-            WriteIntAsU16Chunks(numOps, w, 15, savedFitSeed ?? 0);
-            WriteIntAsU16Chunks(numOps, w, 17, savedFitBatchSize ?? 0);
+            w[0] = numOps.FromDouble(wireStatus);
+            WriteLongAsU7Chunks(numOps, w, 1, globalStep);
+            WriteIntAsU7Chunks(numOps, w, 11, epoch);
+            WriteIntAsU7Chunks(numOps, w, 16, batchInEpoch);
+            WriteLongAsU7Chunks(numOps, w, 21, samplesInEpoch);
+            w[31] = numOps.FromDouble(hasMpScale ? 1.0 : 0.0);
+            w[32] = numOps.FromDouble(savedFitSeed.HasValue ? 1.0 : 0.0);
+            WriteIntAsU7Chunks(numOps, w, 33, savedFitSeed ?? 0);
+            WriteIntAsU7Chunks(numOps, w, 38, savedFitBatchSize ?? 0);
         }
 
         header = distBackend.Broadcast(header, root: 0);
         {
             ReadOnlySpan<T> r = header.AsSpan();
-            status = (int)Math.Round(numOps.ToDouble(r[0]));
-            globalStep = ReadLongFromU16Chunks(numOps, r, 1);
-            epoch = ReadIntFromU16Chunks(numOps, r, 5);
-            batchInEpoch = ReadIntFromU16Chunks(numOps, r, 7);
-            samplesInEpoch = ReadLongFromU16Chunks(numOps, r, 9);
-            hasMpScale = numOps.ToDouble(r[13]) > 0.0;
-            bool hasFitSeed = numOps.ToDouble(r[14]) > 0.0;
-            int fitSeedVal = ReadIntFromU16Chunks(numOps, r, 15);
-            int fitBatchVal = ReadIntFromU16Chunks(numOps, r, 17);
+            int wireStatus = (int)Math.Round(numOps.ToDouble(r[0]));
+            status = wireStatus <= 0 ? -1 : (wireStatus == 1 ? 0 : 1);
+            globalStep = ReadLongFromU7Chunks(numOps, r, 1);
+            epoch = ReadIntFromU7Chunks(numOps, r, 11);
+            batchInEpoch = ReadIntFromU7Chunks(numOps, r, 16);
+            samplesInEpoch = ReadLongFromU7Chunks(numOps, r, 21);
+            hasMpScale = numOps.ToDouble(r[31]) > 0.0;
+            bool hasFitSeed = numOps.ToDouble(r[32]) > 0.0;
+            int fitSeedVal = ReadIntFromU7Chunks(numOps, r, 33);
+            int fitBatchVal = ReadIntFromU7Chunks(numOps, r, 38);
             savedFitSeed = hasFitSeed ? fitSeedVal : null;
             savedFitBatchSize = fitBatchVal > 0 ? fitBatchVal : null;
         }
@@ -785,22 +787,22 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
         if (hasMpScale)
         {
-            var mpVec = new Vector<T>(7);
+            var mpVec = new Vector<T>(25);
             if (distBackend.Rank == 0)
             {
                 Span<T> mpW = mpVec.AsWritableSpan();
-                mpW[0] = numOps.FromDouble(mpScale);
-                WriteIntAsU16Chunks(numOps, mpW, 1, mpGrowthTracker);
-                WriteIntAsU16Chunks(numOps, mpW, 3, mpTotalUpdates);
-                WriteIntAsU16Chunks(numOps, mpW, 5, mpSkippedUpdates);
+                WriteLongAsU7Chunks(numOps, mpW, 0, BitConverter.DoubleToInt64Bits(mpScale));
+                WriteIntAsU7Chunks(numOps, mpW, 10, mpGrowthTracker);
+                WriteIntAsU7Chunks(numOps, mpW, 15, mpTotalUpdates);
+                WriteIntAsU7Chunks(numOps, mpW, 20, mpSkippedUpdates);
             }
 
             mpVec = distBackend.Broadcast(mpVec, root: 0);
             ReadOnlySpan<T> mpR = mpVec.AsSpan();
-            mpScale = numOps.ToDouble(mpR[0]);
-            mpGrowthTracker = ReadIntFromU16Chunks(numOps, mpR, 1);
-            mpTotalUpdates = ReadIntFromU16Chunks(numOps, mpR, 3);
-            mpSkippedUpdates = ReadIntFromU16Chunks(numOps, mpR, 5);
+            mpScale = BitConverter.Int64BitsToDouble(ReadLongFromU7Chunks(numOps, mpR, 0));
+            mpGrowthTracker = ReadIntFromU7Chunks(numOps, mpR, 10);
+            mpTotalUpdates = ReadIntFromU7Chunks(numOps, mpR, 15);
+            mpSkippedUpdates = ReadIntFromU7Chunks(numOps, mpR, 20);
         }
 
         byte[] sharedStateBytes = BroadcastByteArray(distBackend, distBackend.Rank == 0 ? rank0StateBytes : null, root: 0);
@@ -933,19 +935,19 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
 
         var numOps = MathHelper.GetNumericOperations<T>();
-        var planVec = new Vector<T>(4);
+        var planVec = new Vector<T>(10);
         if (distBackend.Rank == 0)
         {
             int rootSeed = seedCandidate ?? RandomHelper.CreateSecureRandom().Next(1, int.MaxValue);
             Span<T> w = planVec.AsWritableSpan();
-            WriteIntAsU16Chunks(numOps, w, 0, rootSeed);
-            WriteIntAsU16Chunks(numOps, w, 2, fitBatchSize);
+            WriteIntAsU7Chunks(numOps, w, 0, rootSeed);
+            WriteIntAsU7Chunks(numOps, w, 5, fitBatchSize);
         }
 
         planVec = distBackend.Broadcast(planVec, root: 0);
         ReadOnlySpan<T> r = planVec.AsSpan();
-        int sharedSeed = ReadIntFromU16Chunks(numOps, r, 0);
-        int sharedBatchSize = Math.Max(1, ReadIntFromU16Chunks(numOps, r, 2));
+        int sharedSeed = ReadIntFromU7Chunks(numOps, r, 0);
+        int sharedBatchSize = Math.Max(1, ReadIntFromU7Chunks(numOps, r, 5));
         return (sharedSeed, sharedBatchSize);
     }
 
@@ -1000,36 +1002,51 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         return true;
     }
 
-    private static void WriteLongAsU16Chunks(INumericOperations<T> numOps, Span<T> dst, int offset, long value)
+    [AiDotNet.Attributes.ScalarKernel("7-bit chunked 64-bit integer metadata pack")]
+    private static void WriteLongAsU7Chunks(INumericOperations<T> numOps, Span<T> dst, int offset, long value)
     {
         ulong u = unchecked((ulong)value);
-        dst[offset] = numOps.FromDouble((ushort)(u & 0xFFFFUL));
-        dst[offset + 1] = numOps.FromDouble((ushort)((u >> 16) & 0xFFFFUL));
-        dst[offset + 2] = numOps.FromDouble((ushort)((u >> 32) & 0xFFFFUL));
-        dst[offset + 3] = numOps.FromDouble((ushort)((u >> 48) & 0xFFFFUL));
+        for (int i = 0; i < 9; i++)
+        {
+            dst[offset + i] = numOps.FromDouble((int)((u >> (i * 7)) & 0x7FUL));
+        }
+
+        dst[offset + 9] = numOps.FromDouble((int)((u >> 63) & 0x01UL));
     }
 
-    private static long ReadLongFromU16Chunks(INumericOperations<T> numOps, ReadOnlySpan<T> src, int offset)
+    [AiDotNet.Attributes.ScalarKernel("7-bit chunked 64-bit integer metadata unpack")]
+    private static long ReadLongFromU7Chunks(INumericOperations<T> numOps, ReadOnlySpan<T> src, int offset)
     {
-        ulong c0 = (ulong)(ushort)Math.Round(numOps.ToDouble(src[offset]));
-        ulong c1 = (ulong)(ushort)Math.Round(numOps.ToDouble(src[offset + 1]));
-        ulong c2 = (ulong)(ushort)Math.Round(numOps.ToDouble(src[offset + 2]));
-        ulong c3 = (ulong)(ushort)Math.Round(numOps.ToDouble(src[offset + 3]));
-        return unchecked((long)(c0 | (c1 << 16) | (c2 << 32) | (c3 << 48)));
+        ulong u = 0UL;
+        for (int i = 0; i < 9; i++)
+        {
+            ulong chunk = (ulong)((int)Math.Round(numOps.ToDouble(src[offset + i])) & 0x7F);
+            u |= chunk << (i * 7);
+        }
+
+        ulong top = (ulong)((int)Math.Round(numOps.ToDouble(src[offset + 9])) & 0x01);
+        u |= top << 63;
+        return unchecked((long)u);
     }
 
-    private static void WriteIntAsU16Chunks(INumericOperations<T> numOps, Span<T> dst, int offset, int value)
+    private static void WriteIntAsU7Chunks(INumericOperations<T> numOps, Span<T> dst, int offset, int value)
     {
         uint u = unchecked((uint)value);
-        dst[offset] = numOps.FromDouble((ushort)(u & 0xFFFFU));
-        dst[offset + 1] = numOps.FromDouble((ushort)((u >> 16) & 0xFFFFU));
+        dst[offset] = numOps.FromDouble((int)(u & 0x7FU));
+        dst[offset + 1] = numOps.FromDouble((int)((u >> 7) & 0x7FU));
+        dst[offset + 2] = numOps.FromDouble((int)((u >> 14) & 0x7FU));
+        dst[offset + 3] = numOps.FromDouble((int)((u >> 21) & 0x7FU));
+        dst[offset + 4] = numOps.FromDouble((int)((u >> 28) & 0x0FU));
     }
 
-    private static int ReadIntFromU16Chunks(INumericOperations<T> numOps, ReadOnlySpan<T> src, int offset)
+    private static int ReadIntFromU7Chunks(INumericOperations<T> numOps, ReadOnlySpan<T> src, int offset)
     {
-        uint c0 = (uint)(ushort)Math.Round(numOps.ToDouble(src[offset]));
-        uint c1 = (uint)(ushort)Math.Round(numOps.ToDouble(src[offset + 1]));
-        return unchecked((int)(c0 | (c1 << 16)));
+        uint c0 = (uint)((int)Math.Round(numOps.ToDouble(src[offset])) & 0x7F);
+        uint c1 = (uint)((int)Math.Round(numOps.ToDouble(src[offset + 1])) & 0x7F);
+        uint c2 = (uint)((int)Math.Round(numOps.ToDouble(src[offset + 2])) & 0x7F);
+        uint c3 = (uint)((int)Math.Round(numOps.ToDouble(src[offset + 3])) & 0x7F);
+        uint c4 = (uint)((int)Math.Round(numOps.ToDouble(src[offset + 4])) & 0x0F);
+        return unchecked((int)(c0 | (c1 << 7) | (c2 << 14) | (c3 << 21) | (c4 << 28)));
     }
 
     [AiDotNet.Attributes.ScalarKernel("One-time lazy layer input shape broadcast")]
@@ -1039,26 +1056,26 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         int root)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var lenVec = new Vector<T>(1);
+        var lenVec = new Vector<T>(5);
         if (backend.Rank == root)
         {
-            lenVec.AsWritableSpan()[0] = numOps.FromDouble(rootShape?.Length ?? 0);
+            WriteIntAsU7Chunks(numOps, lenVec.AsWritableSpan(), 0, rootShape?.Length ?? 0);
         }
 
         lenVec = backend.Broadcast(lenVec, root);
-        int ndim = (int)Math.Round(numOps.ToDouble(lenVec.AsSpan()[0]));
+        int ndim = ReadIntFromU7Chunks(numOps, lenVec.AsSpan(), 0);
         if (ndim <= 0)
         {
             return null;
         }
 
-        var shapeVec = new Vector<T>(ndim);
+        var shapeVec = new Vector<T>(ndim * 5);
         if (backend.Rank == root && rootShape is not null)
         {
             Span<T> w = shapeVec.AsWritableSpan();
             for (int i = 0; i < ndim; i++)
             {
-                w[i] = numOps.FromDouble(rootShape[i]);
+                WriteIntAsU7Chunks(numOps, w, i * 5, rootShape[i]);
             }
         }
 
@@ -1067,7 +1084,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         ReadOnlySpan<T> r = shapeVec.AsSpan();
         for (int i = 0; i < ndim; i++)
         {
-            result[i] = (int)Math.Round(numOps.ToDouble(r[i]));
+            result[i] = ReadIntFromU7Chunks(numOps, r, i * 5);
         }
 
         return result;
@@ -1080,20 +1097,20 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         int root)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        var lenHeader = new Vector<T>(2);
+        var lenHeader = new Vector<T>(5);
         if (backend.Rank == root)
         {
-            WriteIntAsU16Chunks(numOps, lenHeader.AsWritableSpan(), 0, rootBytes?.Length ?? 0);
+            WriteIntAsU7Chunks(numOps, lenHeader.AsWritableSpan(), 0, rootBytes?.Length ?? 0);
         }
 
         lenHeader = backend.Broadcast(lenHeader, root);
-        int byteLen = ReadIntFromU16Chunks(numOps, lenHeader.AsSpan(), 0);
+        int byteLen = ReadIntFromU7Chunks(numOps, lenHeader.AsSpan(), 0);
         if (byteLen <= 0)
         {
             return Array.Empty<byte>();
         }
 
-        const int maxBytesPerChunk = 1024 * 1024;
+        const int maxBytesPerChunk = 512 * 1024;
         var output = backend.Rank == root && rootBytes is not null && rootBytes.Length == byteLen
             ? rootBytes
             : new byte[byteLen];
@@ -1102,13 +1119,15 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         while (offset < byteLen)
         {
             int chunkLen = Math.Min(maxBytesPerChunk, byteLen - offset);
-            var chunkVec = new Vector<T>(chunkLen);
+            var chunkVec = new Vector<T>(chunkLen * 2);
             if (backend.Rank == root && rootBytes is not null)
             {
                 Span<T> w = chunkVec.AsWritableSpan();
                 for (int i = 0; i < chunkLen; i++)
                 {
-                    w[i] = numOps.FromDouble(rootBytes[offset + i]);
+                    byte b = rootBytes[offset + i];
+                    w[i * 2] = numOps.FromDouble(b & 0x7F);
+                    w[(i * 2) + 1] = numOps.FromDouble((b >> 7) & 0x01);
                 }
             }
 
@@ -1118,7 +1137,9 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 ReadOnlySpan<T> r = chunkVec.AsSpan();
                 for (int i = 0; i < chunkLen; i++)
                 {
-                    output[offset + i] = (byte)Math.Round(numOps.ToDouble(r[i]));
+                    int lo = (int)Math.Round(numOps.ToDouble(r[i * 2])) & 0x7F;
+                    int hi = (int)Math.Round(numOps.ToDouble(r[(i * 2) + 1])) & 0x01;
+                    output[offset + i] = (byte)(lo | (hi << 7));
                 }
             }
 

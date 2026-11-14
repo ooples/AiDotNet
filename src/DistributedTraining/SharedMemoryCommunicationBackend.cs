@@ -79,6 +79,7 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
     private const int OpScatterAck = 16;
     private const int OpReduceScatterData = 17;
     private const int OpReduceScatterAck = 18;
+    private const int OpInitAck = 19;
 
     private const int RankStateUninitialized = 0;
     private const int RankStateActive = 1;
@@ -91,6 +92,7 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
     private readonly int _timeoutMilliseconds;
     private readonly long _timeoutStopwatchTicks;
     private readonly long _livenessPollIntervalTicks;
+    private readonly bool _forceFileBacked;
     private readonly object _collectiveLock = new object();
 
     private MemoryMappedFile? _mmf;
@@ -100,6 +102,7 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
     private bool _viewHandleAcquired;
     private FileStream? _backingFileStream;
     private string? _backingFilePath;
+    private bool _backingFileUnlinked;
     private EventWaitHandle? _wakeEvent;
     private Process?[]? _peerProcesses;
     private int[]? _peerExited;
@@ -139,6 +142,17 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
         string sessionName = "aidotnet_shm_default",
         long slotCapacityBytes = 64L * 1024L * 1024L,
         int timeoutMilliseconds = 120_000)
+        : this(rank, worldSize, sessionName, slotCapacityBytes, timeoutMilliseconds, forceFileBacked: false)
+    {
+    }
+
+    internal SharedMemoryCommunicationBackend(
+        int rank,
+        int worldSize,
+        string sessionName,
+        long slotCapacityBytes,
+        int timeoutMilliseconds,
+        bool forceFileBacked)
     {
         if (worldSize < 1 || worldSize > MaxSupportedRanks)
         {
@@ -176,6 +190,7 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
         _timeoutMilliseconds = timeoutMilliseconds;
         _timeoutStopwatchTicks = Math.Max(1L, (long)Math.Ceiling(timeoutMilliseconds * (Stopwatch.Frequency / 1000.0)));
         _livenessPollIntervalTicks = Math.Max(1L, Stopwatch.Frequency / 10); // 100 ms fallback poll interval
+        _forceFileBacked = forceFileBacked;
     }
 
     /// <inheritdoc/>
@@ -203,10 +218,12 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
         _p2pBaseOffset = checked(CollectiveRegionOffset + ((long)_worldSize * _slotCapacityBytes));
         long totalCapacityBytes = checked(_p2pBaseOffset + (pairCount * p2pSlotStride));
 
+        _backingFileUnlinked = false;
+
         try
         {
 #if AIDN_LEGACY_TFM
-            if (Environment.OSVersion.Platform == PlatformID.Win32NT)
+            if (!_forceFileBacked && Environment.OSVersion.Platform == PlatformID.Win32NT)
             {
                 InitializeWindowsSharedMemory(totalCapacityBytes);
             }
@@ -215,7 +232,7 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
                 InitializeFileBackedSharedMemory(totalCapacityBytes);
             }
 #else
-            if (OperatingSystem.IsWindows())
+            if (!_forceFileBacked && OperatingSystem.IsWindows())
             {
                 InitializeWindowsSharedMemory(totalCapacityBytes);
             }
@@ -467,6 +484,19 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
 
             // Initial barrier confirms every rank has bound peer PIDs before any collective begins.
             AdvancePhaseAndWait(OpInit, 0);
+
+            // On POSIX (/dev/shm or tmpfs), unlink the directory entry once every rank holds an open
+            // FD/mapping to the shared inode so a fast rank disposing Session A and opening Session B
+            // with the same sessionName cannot race Rank 0's shutdown unlink onto two split inodes.
+            if (_backingFilePath is not null && !IsWindowsPlatform())
+            {
+                if (_rank == 0 && TryUnlinkBackingFile(_backingFilePath))
+                {
+                    _backingFileUnlinked = true;
+                }
+
+                AdvancePhaseAndWait(OpInitAck, 0);
+            }
         }
         catch
         {
@@ -1668,14 +1698,42 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
             }
         }
 
+        long mapCapacityBytes = Math.Max(_backingFileStream.Length, totalCapacityBytes);
         _mmf = MemoryMappedFile.CreateFromFile(
             _backingFileStream,
             mapName: null,
-            capacity: totalCapacityBytes,
+            capacity: mapCapacityBytes,
             MemoryMappedFileAccess.ReadWrite,
             HandleInheritability.None,
             leaveOpen: true);
         _accessor = _mmf.CreateViewAccessor(0, totalCapacityBytes, MemoryMappedFileAccess.ReadWrite);
+    }
+
+    private static bool IsWindowsPlatform()
+    {
+#if AIDN_LEGACY_TFM
+        return Environment.OSVersion.Platform == PlatformID.Win32NT;
+#else
+        return OperatingSystem.IsWindows();
+#endif
+    }
+
+    private static bool TryUnlinkBackingFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Debug.WriteLine($"Unable to unlink shared-memory backing file '{path}': {ex.Message}");
+            return false;
+        }
     }
 
     private void ReleaseResources()
@@ -1723,20 +1781,13 @@ public sealed class SharedMemoryCommunicationBackend<T> : CommunicationBackendBa
             _backingFileStream = null;
         }
 
-        if (_rank == 0 && _backingFilePath is not null)
+        if (_rank == 0 && _backingFilePath is not null && !_backingFileUnlinked)
         {
-            try
-            {
-                if (File.Exists(_backingFilePath))
-                {
-                    File.Delete(_backingFilePath);
-                }
-            }
-            catch (IOException ex)
-            {
-                Debug.WriteLine($"Unable to unlink shared-memory backing file '{_backingFilePath}': {ex.Message}");
-            }
+            TryUnlinkBackingFile(_backingFilePath);
         }
+
+        _backingFilePath = null;
+        _backingFileUnlinked = false;
     }
 
     private void ValidateSessionHeaderOrAbort(int expectedWireType)

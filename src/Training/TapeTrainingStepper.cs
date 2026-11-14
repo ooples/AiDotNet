@@ -939,7 +939,7 @@ internal sealed class TapeTrainingStepper<T>
             ownerNet.InvalidateLayerWeightCaches);
 
         onGradients?.Invoke(accumulated);
-        if (stepped && distCoord.Strategy != AiDotNet.Enums.DistributedStrategy.DDP)
+        if (stepped && distCoord.IsShardedStrategy)
         {
             ownerNet.FinalizeDistributedStepPostUpdate(optimizer);
         }
@@ -1019,7 +1019,7 @@ internal sealed class TapeTrainingStepper<T>
                 distNet.InvalidateLayerWeightCaches);
 
             hooks.OnGradients?.Invoke(emptyGrads);
-            if (idleStepped && distCoord.Strategy != AiDotNet.Enums.DistributedStrategy.DDP)
+            if (idleStepped && distCoord.IsShardedStrategy)
             {
                 distNet.FinalizeDistributedStepPostUpdate(hooks.Optimizer);
             }
@@ -1090,7 +1090,7 @@ internal sealed class TapeTrainingStepper<T>
                     distNet.InvalidateLayerWeightCaches);
 
                 hooks.OnGradients?.Invoke(termGradients);
-                if (termStepped && distCoord.Strategy != AiDotNet.Enums.DistributedStrategy.DDP)
+                if (termStepped && distCoord.IsShardedStrategy)
                 {
                     distNet.FinalizeDistributedStepPostUpdate(hooks.Optimizer);
                 }
@@ -1165,7 +1165,7 @@ internal sealed class TapeTrainingStepper<T>
                 distNet.InvalidateLayerWeightCaches);
 
             hooks.OnGradients?.Invoke(gradients);
-            if (stepped && distCoord.Strategy != AiDotNet.Enums.DistributedStrategy.DDP)
+            if (stepped && distCoord.IsShardedStrategy)
             {
                 distNet.FinalizeDistributedStepPostUpdate(hooks.Optimizer);
             }
