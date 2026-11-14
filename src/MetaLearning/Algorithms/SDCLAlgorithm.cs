@@ -135,7 +135,12 @@ public partial class SDCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             paramModel.SetParameters(newParams);
 
             // Update teacher via EMA: theta_T <- alpha theta_T + (1 - alpha) theta_S.
-            _teacherParams = Engine.Lerp(newParams, _teacherParams, NumOps.FromDouble(_algoOptions.TeacherEmaDecay));
+            // Each operand is weighted before the sum: Lerp's (teacher - student) intermediate can overflow in Half
+            // when the two sit near opposite ends of the range.
+            T decay = NumOps.FromDouble(_algoOptions.TeacherEmaDecay);
+            _teacherParams = Engine.Add(
+                Engine.Multiply(_teacherParams, decay),
+                Engine.Multiply(newParams, NumOps.Subtract(NumOps.One, decay)));
         }
 
         return ComputeMean(losses);

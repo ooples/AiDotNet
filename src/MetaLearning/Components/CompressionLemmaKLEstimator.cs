@@ -144,9 +144,16 @@ public class CompressionLemmaKLEstimator<T>
     {
         if (samples is null) throw new ArgumentNullException(paramName);
         if (samples.Count == 0) throw new ArgumentException("At least one sample is required.", paramName);
+        // Each sample is checked on its own: lengths 1 and 3 would pass a total-length check for _inputDim 2.
+        for (int i = 0; i < samples.Count; i++)
+        {
+            if (samples[i] is null)
+                throw new ArgumentException($"Sample {i} is null.", paramName);
+            if (samples[i].Length != _inputDim)
+                throw new ArgumentException($"Every sample must have length {_inputDim}; sample {i} has {samples[i].Length}.", paramName);
+        }
+
         var flat = Vector<T>.Concatenate(new List<Vector<T>>(samples));
-        if (flat.Length != samples.Count * _inputDim)
-            throw new ArgumentException($"Every sample must have length {_inputDim}.", paramName);
         return Tensor<T>.FromVector(flat, new[] { samples.Count, _inputDim });
     }
 

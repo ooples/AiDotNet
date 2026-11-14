@@ -135,6 +135,8 @@ public class WarpGradPaperTests
         var reference = new LinearVectorModel(3);
         reference.SetParameters(expected);
         var expectedPrediction = reference.Predict(task.QuerySetX);
+        Assert.Equal(3, prediction.Length);
+        Assert.Equal(expectedPrediction.Length, prediction.Length);
         for (int i = 0; i < prediction.Length; i++)
             Assert.Equal(expectedPrediction[i], prediction[i], 10);
     }

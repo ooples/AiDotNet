@@ -128,7 +128,14 @@ public partial class SparseMAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
     /// Gets the gate for parameter <paramref name="index"/>: 1[m &gt;= 0] for the paper's step gate, or
     /// sigmoid(m) for the relaxation.
     /// </summary>
-    public T Gate(int index) => Gates(_gateLogits)[index];
+    public T Gate(int index)
+    {
+        T logit = _gateLogits[index];
+        if (_algoOptions.GateFunction == SparseMAMLGateFunction.Sigmoid)
+            return NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, NumOps.Exp(NumOps.Negate(logit))));
+
+        return NumOps.LessThan(logit, NumOps.Zero) ? NumOps.Zero : NumOps.One;
+    }
 
     /// <summary>
     /// Gets the fraction of parameters currently gated OFF, i.e. the discovered sparsity.

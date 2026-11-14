@@ -237,8 +237,14 @@ public partial class TETNPAlgorithm<T, TInput, TOutput> : NeuralProcessBase<T, T
 
     /// <summary>queryLoss + EquivarianceRegWeight * the optional regularizer.</summary>
     private T WithRegularizer(T queryLoss, List<Vector<T>> contextReps, List<Vector<T>> refinedReps)
-        => NumOps.Add(queryLoss, NumOps.Multiply(
+    {
+        // Weight 0 (the default) disables the regularizer: skip its stacking, norms and reductions entirely.
+        if (_algoOptions.EquivarianceRegWeight == 0.0)
+            return queryLoss;
+
+        return NumOps.Add(queryLoss, NumOps.Multiply(
             NumOps.FromDouble(_algoOptions.EquivarianceRegWeight), ComputeEquivarianceReg(contextReps, refinedReps)));
+    }
 
     /// <summary>
     /// The SPSA objective for the encoder and the relative-position weights: the training loss of

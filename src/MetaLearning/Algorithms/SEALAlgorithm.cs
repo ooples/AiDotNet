@@ -450,7 +450,11 @@ public partial class SEALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// </summary>
     private Vector<T> ScaledInverse(Tensor<T> root, T baseLr, T epsilon)
     {
-        var rates = Engine.TensorMultiplyScalar(Engine.TensorReciprocal(Engine.TensorAddScalar(root, epsilon)), baseLr);
+        // Divided directly: rounding the reciprocal to T first loses base_lr / (root + eps) in Half before scaling.
+        var denominator = Engine.TensorAddScalar(root, epsilon);
+        var numerator = new Tensor<T>(denominator.Shape.ToArray());
+        Engine.TensorFill(numerator, baseLr);
+        var rates = Engine.TensorDivide(numerator, denominator);
         return Engine.TensorClamp(rates, NumOps.Zero, NumOps.MaxValue).ToVector();
     }
 

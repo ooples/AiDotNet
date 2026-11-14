@@ -248,8 +248,16 @@ public partial class NTMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             _controller = controller;
         }
 
-        // The LSTM controller resolves its input width at its first forward, so the count is read live.
-        public long ParameterCount => _controller()?.GetParameters().Length ?? 0;
+        // The LSTM controller resolves its input width at its first forward, so the count is read live - summed
+        // over the controller's tensors rather than by building the flattened vector.
+        public long ParameterCount
+        {
+            get
+            {
+                var controller = _controller();
+                return controller is null ? 0 : controller.GetParameterTensors().Sum(t => (long)t.Length);
+            }
+        }
 
         public Vector<T> GetParameters() => _controller()?.GetParameters() ?? new Vector<T>(0);
 
@@ -1816,6 +1824,15 @@ internal static class NTMControllerMath<T>
     internal static void AssignParameters(Vector<T> parameters, IReadOnlyList<Tensor<T>> tensors)
     {
         Guard.NotNull(parameters);
+        // The whole length is checked first: an oversized vector would be silently truncated and an undersized one
+        // would update the leading tensors and then throw, leaving the weights half-assigned.
+        long expected = tensors.Sum(t => (long)t.Length);
+        if (parameters.Length != expected)
+        {
+            throw new ArgumentException(
+                $"Expected {expected} parameters but received {parameters.Length}.", nameof(parameters));
+        }
+
         var source = parameters.AsSpan();
         int offset = 0;
         foreach (var tensor in tensors)
