@@ -256,7 +256,7 @@ internal sealed class BoundNetwork<T>
     {
         var engine = AiDotNetEngine.Current;
         return norm == AdversarialNormType.L2
-            ? engine.TensorNorm(matrix.Cast<double>(), 1, false).Cast<T>()
+            ? engine.TensorNorm(matrix.Contiguous().Cast<double>(), 1, false).Cast<T>()
             : engine.ReduceSum(engine.TensorAbs(matrix), new[] { 1 }, false);
     }
 

@@ -2970,7 +2970,8 @@ public sealed class ModelStateRegistry<T>
         w.Write(shape.Length);
         for (int i = 0; i < shape.Length; i++) w.Write(shape[i]);
         w.Write(t.Length);
-        WriteDoubleValues(w, t.Cast<double>().ToArray());
+        // Cast walks the backing storage, which for a strided or offset view is not the logical order.
+        WriteDoubleValues(w, t.Contiguous().Cast<double>().ToArray());
     }
 
     private static Tensor<T>? ReadTensor(BinaryReader r)
