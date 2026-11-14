@@ -176,19 +176,20 @@ public partial class SVTRMixingBlockLayer<T> : LayerBase<T>
     {
         if (_dropPathRate <= 0.0 || !IsTrainingMode) return branch;
         double keepProbability = 1.0 - _dropPathRate;
-        long counter = System.Threading.Interlocked.Increment(ref _dropPathForwardCounter);
-        var random = RandomSeed.HasValue
-            ? RandomHelper.CreateSeededRandom(unchecked((int)((uint)RandomSeed.Value * 2654435761u ^ (uint)counter)))
-            : RandomHelper.CreateSecureRandom();
-        var mask = new Tensor<T>(branch.Shape.ToArray());
-        for (int b = 0; b < batch; b++)
+        T scale = NumOps.FromDouble(1.0 / keepProbability);
+        int sampleSize = branch.Length / batch;
+        // The mask is a per-step draw, so a compiled training plan refills it before every replay. The seed comes
+        // from RandomSeed and a counter that advances per fill: once per eager forward and once per replay alike.
+        var mask = AiDotNet.Training.CompiledStepRandom<T>.Draw(branch.Shape.ToArray(), m =>
         {
-            T value = random.NextDouble() < _dropPathRate
-                ? NumOps.Zero
-                : NumOps.FromDouble(1.0 / keepProbability);
-            int sampleSize = branch.Length / batch;
-            for (int i = 0; i < sampleSize; i++) mask[b * sampleSize + i] = value;
-        }
+            long counter = System.Threading.Interlocked.Increment(ref _dropPathForwardCounter);
+            var random = RandomSeed.HasValue
+                ? RandomHelper.CreateSeededRandom(unchecked((int)((uint)RandomSeed.Value * 2654435761u ^ (uint)counter)))
+                : RandomHelper.CreateSecureRandom();
+            var span = m.AsWritableSpan();
+            for (int b = 0; b < batch; b++)
+                span.Slice(b * sampleSize, sampleSize).Fill(random.NextDouble() < _dropPathRate ? NumOps.Zero : scale);
+        });
         return Engine.TensorMultiply(branch, mask);
     }
 

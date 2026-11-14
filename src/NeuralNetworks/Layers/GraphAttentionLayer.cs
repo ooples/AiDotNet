@@ -641,15 +641,8 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
     /// </summary>
     private Tensor<T> BuildAttentionDropoutMask(int numNodes, double dropoutRate)
     {
-        var mask = new Tensor<T>([numNodes, numNodes]);
-        T zero = NumOps.Zero;
-        T keepScale = NumOps.FromDouble(1.0 / (1.0 - dropoutRate));
-        int total = numNodes * numNodes;
-        for (int i = 0; i < total; i++)
-        {
-            mask.SetFlat(i, _random.NextDouble() < dropoutRate ? zero : keepScale);
-        }
-        return mask;
+        // A per-step draw, so a compiled training plan redraws it on every replay.
+        return AiDotNet.Training.CompiledStepRandom<T>.InvertedDropoutMask([numNodes, numNodes], _random, dropoutRate);
     }
 
     private void ComputeAttentionScores(int b, int h, int numNodes, Tensor<T> selfScores, Tensor<T> neighborScores)

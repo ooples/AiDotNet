@@ -72,10 +72,8 @@ internal sealed class Wav2Vec2CtcStack<T>
         var hidden = Network.Forward(waveform, training, random, freezeFeatureEncoder: freezeFeatureEncoder).Hidden;
         if (training && finalDropout > 0)
         {
-            var mask = new Tensor<T>(hidden._shape);
-            var keep = NumOps.FromDouble(1.0 / (1.0 - finalDropout));
-            for (int i = 0; i < mask.Length; i++) mask[i] = random.NextDouble() < finalDropout ? NumOps.Zero : keep;
-            hidden = _engine.TensorMultiply(hidden, mask);
+            // A per-step draw, so a compiled training plan redraws it on every replay.
+            hidden = _engine.TensorMultiply(hidden, AiDotNet.Training.CompiledStepRandom<T>.InvertedDropoutMask(hidden._shape, random, finalDropout));
         }
 
         int batch = hidden.Shape[0], frames = hidden.Shape[1];

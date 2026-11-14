@@ -575,27 +575,32 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>, IShapeContract
         double keepProb = 1.0 - _dropPathRate;
         T scale = NumOps.FromDouble(1.0 / keepProb);
 
-        // Per-call seed derived from RandomSeed + a forward counter so identically-seeded models
-        // produce bit-identical drop masks at the same step (matches DropoutLayer's determinism
-        // contract). With no seed, fall back to a cryptographically secure RNG (production default).
-        // long (not ulong): .NET Framework 4.7.1 has no Interlocked.Increment(ref ulong) overload.
+        int seqLen = branch.Shape[1];
+        int dim = branch.Shape[2];
+        // The mask is a per-step draw, so a compiled training plan refills it before every replay instead of
+        // replaying the traced step's mask for the whole run.
+        var mask = AiDotNet.Training.CompiledStepRandom<T>.Draw(new[] { batch, seqLen, dim },
+            m => FillDropPathMask(m, batch, seqLen * dim, scale));
+        return Engine.TensorMultiply(branch, mask);
+    }
+
+    // One keep/drop decision per sample: the whole branch survives or vanishes together. The seed is derived from
+    // RandomSeed and a draw counter, so identically seeded models draw bit-identical masks at the same step (the
+    // DropoutLayer determinism contract); with no seed a cryptographically secure generator is used. The counter
+    // advances per fill, which is once per eager forward and once per compiled replay alike.
+    // long (not ulong): .NET Framework 4.7.1 has no Interlocked.Increment(ref ulong) overload.
+    private void FillDropPathMask(Tensor<T> mask, int batch, int perSample, T scale)
+    {
         long counter = System.Threading.Interlocked.Increment(ref _dropPathForwardCounter);
         var rng = RandomSeed.HasValue
             ? RandomHelper.CreateSeededRandom(unchecked((int)((uint)RandomSeed.Value * 2654435761u ^ (uint)counter)))
             : RandomHelper.CreateSecureRandom();
-
-        int seqLen = branch.Shape[1];
-        int dim = branch.Shape[2];
-        var mask = new Tensor<T>([batch, seqLen, dim]);
+        var span = mask.AsWritableSpan();
         for (int b = 0; b < batch; b++)
         {
-            // One keep/drop decision per sample — the whole branch survives or vanishes together.
             T v = rng.NextDouble() < _dropPathRate ? NumOps.Zero : scale;
-            for (int s = 0; s < seqLen; s++)
-                for (int d = 0; d < dim; d++)
-                    mask[b, s, d] = v;
+            span.Slice(b * perSample, perSample).Fill(v);
         }
-        return Engine.TensorMultiply(branch, mask);
     }
 
     /// <summary>

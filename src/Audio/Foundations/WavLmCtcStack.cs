@@ -87,10 +87,8 @@ internal sealed class WavLmCtcStack<T>
             var hidden = Network.HiddenStates(row, regularization)[^1];                                     // [frames, H]
             if (regularization is { } reg && finalDropout > 0)
             {
-                var mask = new Tensor<T>(hidden._shape);
-                var keep = NumOps.FromDouble(1.0 / (1.0 - finalDropout));
-                for (int i = 0; i < mask.Length; i++) mask[i] = reg.Random.NextDouble() < finalDropout ? NumOps.Zero : keep;
-                hidden = _engine.TensorMultiply(hidden, mask);
+                // A per-step draw, so a compiled training plan redraws it on every replay.
+                hidden = _engine.TensorMultiply(hidden, AiDotNet.Training.CompiledStepRandom<T>.InvertedDropoutMask(hidden._shape, reg.Random, finalDropout));
             }
             outputs[r] = Head.Forward(hidden);                                                               // [frames, V]
         }

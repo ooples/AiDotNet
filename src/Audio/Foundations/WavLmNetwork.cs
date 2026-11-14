@@ -169,7 +169,7 @@ internal sealed class WavLmNetwork<T>
             for (int i = 0; i < EncoderLayers.Count; i++)
             {
                 stable.Add(hidden);
-                if (!SkipLayer(i)) hidden = EncodeStable(EncoderLayers[i], hidden, bias);
+                hidden = LayerDrop(i, hidden, h => EncodeStable(EncoderLayers[i], h, bias));
             }
             stable.Add(EncoderNorm.Forward(hidden));
             return stable;
@@ -178,7 +178,7 @@ internal sealed class WavLmNetwork<T>
         var states = new List<Tensor<T>> { hidden };
         for (int i = 0; i < EncoderLayers.Count; i++)
         {
-            if (!SkipLayer(i)) hidden = Encode(EncoderLayers[i], hidden, bias);
+            hidden = LayerDrop(i, hidden, h => Encode(EncoderLayers[i], h, bias));
             states.Add(hidden);
         }
         return states;
@@ -257,18 +257,22 @@ internal sealed class WavLmNetwork<T>
             _engine.TensorMultiply(_engine.TensorTile(embedding, new[] { length, 1 }), _engine.TensorTile(replace, new[] { 1, width })));
     }
 
-    // transformers' LayerDrop: each layer after the first is skipped with probability LayerDrop in train mode.
-    private bool SkipLayer(int index)
-        => _regularization is { } r && index > 0 && r.LayerDrop > 0 && r.Random.NextDouble() < r.LayerDrop;
+    // transformers' LayerDrop: each layer after the first is skipped with probability LayerDrop in train mode. The
+    // skip is a per-step 0/1 gate, so a compiled training plan redraws which layers run instead of baking the traced
+    // step's choice into its graph: gate * layer(h) + (1 - gate) * h, exactly layer(h) or h.
+    private Tensor<T> LayerDrop(int index, Tensor<T> hidden, Func<Tensor<T>, Tensor<T>> encode)
+    {
+        if (_regularization is not { } r || index == 0 || r.LayerDrop <= 0) return encode(hidden);
+        var gate = AiDotNet.Training.CompiledStepRandom<T>.KeepGate(r.Random, r.LayerDrop);
+        return AiDotNet.Training.CompiledStepRandom<T>.Gated(_engine, gate, encode(hidden), hidden);
+    }
 
     // Inverted dropout: zero with probability p, scale the rest by 1 / (1 − p).
     private Tensor<T> Drop(Tensor<T> x, double p)
     {
         if (_regularization is not { } r || p <= 0) return x;
-        var mask = new Tensor<T>(x._shape);
-        var keep = NumOps.FromDouble(1.0 / (1.0 - p));
-        for (int i = 0; i < mask.Length; i++) mask[i] = r.Random.NextDouble() < p ? NumOps.Zero : keep;
-        return _engine.TensorMultiply(x, mask);
+        // The mask is a per-step draw, so a compiled training plan redraws it on every replay.
+        return _engine.TensorMultiply(x, AiDotNet.Training.CompiledStepRandom<T>.InvertedDropoutMask(x._shape, r.Random, p));
     }
 
     private Tensor<T> Heads(DenseLayer<T> projection, Tensor<T> x)

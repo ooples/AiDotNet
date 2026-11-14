@@ -157,9 +157,8 @@ internal sealed class SegNeXtNetwork<T>
     private Tensor<T> DropPath(Tensor<T> x, double rate, bool training, Random random)
     {
         if (!training || rate <= 0) return x;
-        var mask = new Tensor<T>(new[] { x.Shape[0], 1, 1, 1 });
-        for (int b = 0; b < mask.Length; b++)
-            mask[b] = random.NextDouble() < rate ? NumOps.Zero : NumOps.FromDouble(1.0 / (1.0 - rate));
+        // The mask is a per-step draw, so a compiled training plan redraws it on every replay.
+        var mask = AiDotNet.Training.CompiledStepRandom<T>.InvertedDropoutMask(new[] { x.Shape[0], 1, 1, 1 }, random, rate);
         return _engine.TensorMultiply(x, _engine.TensorBroadcastTo(mask, x.Shape.ToArray()));
     }
 
