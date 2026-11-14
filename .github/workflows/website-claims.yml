@@ -29,7 +29,9 @@ jobs:
   claims:
     if: ${{ github.event.pull_request.draft != true }}
     name: Website performance claims
-    runs-on: ubuntu-latest
+    # Same-repo PRs run on the self-hosted aidotnet-cpu pool to relieve the hosted queue; fork PRs
+    # stay on GitHub-hosted runners so untrusted code never runs on a self-hosted machine.
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted", "aidotnet-cpu"]') || 'ubuntu-latest' }}
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
