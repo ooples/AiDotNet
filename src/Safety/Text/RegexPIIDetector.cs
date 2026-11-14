@@ -60,6 +60,37 @@ public class RegexPIIDetector<T> : TextSafetyModuleBase<T>
         _patterns = BuildDefaultPatterns();
     }
 
+    /// <summary>
+    /// Initializes a regex-based PII detector that only looks for the given kinds of PII.
+    /// </summary>
+    /// <remarks>
+    /// Kinds without a regular expression (person names, addresses, organizations) are found by
+    /// <see cref="NERPIIDetector{T}"/> instead and are ignored here.
+    /// </remarks>
+    /// <param name="types">The kinds of PII to detect.</param>
+    public RegexPIIDetector(IReadOnlyCollection<PiiType> types)
+    {
+        if (types is null) throw new ArgumentNullException(nameof(types));
+        var names = new HashSet<string>(types.Select(PatternName).Where(n => n.Length > 0), StringComparer.Ordinal);
+        _patterns = BuildDefaultPatterns().Where(p => names.Contains(p.Item2)).ToList();
+    }
+
+    /// <summary>The pattern name a <see cref="PiiType"/> is registered under, or empty when it has no pattern.</summary>
+    private static string PatternName(PiiType type) => type switch
+    {
+        PiiType.Email => "Email",
+        PiiType.PhoneNumber => "Phone",
+        PiiType.SocialSecurityNumber => "SSN",
+        PiiType.CreditCardNumber => "CreditCard",
+        PiiType.IPAddress => "IPAddress",
+        PiiType.ApiKey => "APIKey",
+        PiiType.AwsAccessKey => "AWSKey",
+        PiiType.Password => "Password",
+        PiiType.PassportNumber => "Passport",
+        PiiType.DriversLicense => "DriversLicense",
+        _ => string.Empty
+    };
+
     /// <inheritdoc />
     public override IReadOnlyList<SafetyFinding> EvaluateText(string text)
     {
