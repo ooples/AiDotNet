@@ -227,6 +227,59 @@ public class MatrixExtensionsReferenceTests
     }
 
     [Fact]
+    public void InverseNewton_Half_NormAboveTheReciprocalRange_Converges()
+    {
+        // ||diag(8192, 8192)||_F = 11585. The scalar 1 / ||A||_F^2 = 7.5e-9 is below the smallest Half (6e-8), so
+        // forming it first made the initial guess 0 and the iteration never converge. A^T / ||A||_F / ||A||_F
+        // = 6.1e-5 is a Half, and so is the inverse diag(2^-13, 2^-13).
+        var matrix = new Matrix<Half>(new[,] { { (Half)8192, (Half)0 }, { (Half)0, (Half)8192 } });
+
+        var inverse = matrix.InverseNewton();
+
+        Assert.Equal(1.0 / 8192, (double)inverse[0, 0], 1e-6);
+        Assert.Equal(1.0 / 8192, (double)inverse[1, 1], 1e-6);
+        Assert.Equal(0.0, (double)inverse[0, 1], 1e-6);
+        Assert.Equal(0.0, (double)inverse[1, 0], 1e-6);
+    }
+
+    [Fact]
+    public void IsInvertible_MatrixWithNaN_IsFalse()
+    {
+        // A NaN pivot is not "below the tolerance", so counting small pivots alone called this 4x4 invertible.
+        var matrix = Matrix<double>.CreateIdentity(4);
+        matrix[2, 2] = double.NaN;
+
+        Assert.False(matrix.IsInvertible());
+        Assert.True(Matrix<double>.CreateIdentity(4).IsInvertible());
+    }
+
+    [Fact]
+    public void MatrixExponential_Half_TermsStayInRangeWhenRawPowersDoNot()
+    {
+        // sum_{k=0..8} 10^k / k! = 7330.84. Every term is a Half (the largest is 10^8 / 8! = 2480), but the raw
+        // power 10^5 is not, so multiplying the power by 1 / k! afterwards returned infinity.
+        var matrix = new Matrix<Half>(new[,] { { (Half)10 } });
+
+        var exponential = matrix.MatrixExponential();
+
+        Assert.Equal(7330.84, (double)exponential[0, 0], 30.0);
+    }
+
+    [Fact]
+    public void MatrixExponential_Double_MatchesTheTruncatedSeries()
+    {
+        // A = [[0, 1], [0, 0]] is nilpotent (A^2 = 0), so e^A = I + A exactly.
+        var matrix = new Matrix<double>(new[,] { { 0.0, 1.0 }, { 0.0, 0.0 } });
+
+        var exponential = matrix.MatrixExponential();
+
+        Assert.Equal(1.0, exponential[0, 0], 12);
+        Assert.Equal(1.0, exponential[0, 1], 12);
+        Assert.Equal(0.0, exponential[1, 0], 12);
+        Assert.Equal(1.0, exponential[1, 1], 12);
+    }
+
+    [Fact]
     public void IsPositiveSemiDefiniteMatrix_EigenvalueWithinRounding_IsTrue()
     {
         // [[1, 1 + 1e-12], [1 + 1e-12, 1]] has eigenvalues 2 + 1e-12 and -1e-12. scipy's PSD check
