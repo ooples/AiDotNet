@@ -130,8 +130,10 @@ public class TimeSeriesForestReferenceTests
     {
         // 1 + 2^-23 and 1 + 2^-22 are adjacent floats; their midpoint rounds (ties to even) onto the upper one, which
         // would send both series left. The threshold falls back to the lower value, as scikit-learn's splitter does.
-        float low = BitConverter.Int32BitsToSingle(BitConverter.SingleToInt32Bits(1f) + 1);
-        float high = BitConverter.Int32BitsToSingle(BitConverter.SingleToInt32Bits(1f) + 2);
+        // BitConverter.Int32BitsToSingle/SingleToInt32Bits do not exist on net471, which this project also targets.
+        int oneBits = BitConverter.ToInt32(BitConverter.GetBytes(1f), 0);
+        float low = BitConverter.ToSingle(BitConverter.GetBytes(oneBits + 1), 0);
+        float high = BitConverter.ToSingle(BitConverter.GetBytes(oneBits + 2), 0);
         const int length = 4;
         var sequences = new Tensor<float>(new[] { 2, length });
         for (int t = 0; t < length; t++)
