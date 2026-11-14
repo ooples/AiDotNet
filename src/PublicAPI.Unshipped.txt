@@ -22921,3 +22921,12 @@ AiDotNet.Enums.MixtureOfExpertsGatingNoise.SoftplusOfRouterLogits = 1 -> AiDotNe
 AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.Entmax15 = 0 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.SoftmaxSigmoid = 1 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
+*REMOVED*AiDotNet.NeuralNetworks.Layers.DenseBlock<T>.DenseBlock(int numLayers, int growthRate, double bnMomentum = 0.1) -> void
+AiDotNet.NeuralNetworks.Layers.DenseBlock<T>.DenseBlock(int numLayers, int growthRate, double bnMomentum) -> void
+AiDotNet.NeuralNetworks.Layers.DenseBlock<T>.DenseBlock(int numLayers, int growthRate, double bnMomentum = 0.1, bool convolutionBias = true) -> void
+*REMOVED*AiDotNet.NeuralNetworks.Layers.DenseBlockLayer<T>.DenseBlockLayer(int growthRate, double bnMomentum = 0.1) -> void
+AiDotNet.NeuralNetworks.Layers.DenseBlockLayer<T>.DenseBlockLayer(int growthRate, double bnMomentum) -> void
+AiDotNet.NeuralNetworks.Layers.DenseBlockLayer<T>.DenseBlockLayer(int growthRate, double bnMomentum = 0.1, bool convolutionBias = true) -> void
+*REMOVED*AiDotNet.NeuralNetworks.Layers.TransitionLayer<T>.TransitionLayer(double compressionFactor = 0.5) -> void
+AiDotNet.NeuralNetworks.Layers.TransitionLayer<T>.TransitionLayer(double compressionFactor) -> void
+AiDotNet.NeuralNetworks.Layers.TransitionLayer<T>.TransitionLayer(double compressionFactor = 0.5, bool convolutionBias = true) -> void

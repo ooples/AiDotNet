@@ -2439,12 +2439,19 @@ public static class DeserializationHelper
             int inputWidth = inputShape.Length > 3 ? inputShape[3] : 1;
             double bnMomentum = TryGetDouble(additionalParams, "BnMomentum") ?? 0.1;
 
-            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(double) });
-            if (ctor is null)
+            // A checkpoint written before ConvolutionBias existed has a bias on every convolution.
+            bool convolutionBias = TryGetBool(additionalParams, "ConvolutionBias") ?? true;
+            var lazyCtor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(double), typeof(bool) });
+            var ctor = lazyCtor is null
+                ? type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(double) })
+                : null;
+            if (lazyCtor is null && ctor is null)
             {
                 throw new MissingLayerCtorException($"Cannot find DenseBlock constructor.");
             }
-            instance = ctor.Invoke(new object[] { inputChannels, numLayers, growthRate, inputHeight, inputWidth, bnMomentum });
+            instance = lazyCtor is not null
+                ? lazyCtor.Invoke(new object[] { numLayers, growthRate, bnMomentum, convolutionBias })
+                : ctor!.Invoke(new object[] { inputChannels, numLayers, growthRate, inputHeight, inputWidth, bnMomentum });
         }
         else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.InvertedResidualBlock<>) ||
                  (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".NeuralNetworks.Layers.InvertedResidualBlock`1")))
@@ -2527,12 +2534,18 @@ public static class DeserializationHelper
             int outputChannels = TryGetInt(additionalParams, "OutputChannels") ?? (outputShape.Length > 1 ? outputShape[1] : outputShape[0]);
             double compressionFactor = inputChannels > 0 ? (double)outputChannels / inputChannels : 0.5;
 
-            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(double) });
-            if (ctor is null)
+            bool convolutionBias = TryGetBool(additionalParams, "ConvolutionBias") ?? true;
+            var lazyCtor = type.GetConstructor(new Type[] { typeof(double), typeof(bool) });
+            var ctor = lazyCtor is null
+                ? type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(double) })
+                : null;
+            if (lazyCtor is null && ctor is null)
             {
                 throw new MissingLayerCtorException($"Cannot find TransitionLayer constructor.");
             }
-            instance = ctor.Invoke(new object[] { inputChannels, inputHeight, inputWidth, compressionFactor });
+            instance = lazyCtor is not null
+                ? lazyCtor.Invoke(new object[] { compressionFactor, convolutionBias })
+                : ctor!.Invoke(new object[] { inputChannels, inputHeight, inputWidth, compressionFactor });
         }
         else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.AdaptiveAveragePoolingLayer<>) ||
                  (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".NeuralNetworks.Layers.AdaptiveAveragePoolingLayer`1")))

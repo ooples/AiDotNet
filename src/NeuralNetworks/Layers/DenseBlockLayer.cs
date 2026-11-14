@@ -1,6 +1,7 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -71,6 +72,7 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
     private readonly ConvolutionalLayer<T> _conv3x3;
     private readonly IActivationFunction<T> _relu;
     private readonly double _bnMomentum;
+    private readonly bool _convolutionBias;
 
     [Scratch]
     private Tensor<T>? _lastInput;
@@ -93,7 +95,22 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
     /// allocated against the resolved <c>_inputChannels</c> in
     /// <see cref="OnFirstForward"/>.
     /// </summary>
-    public DenseBlockLayer(int growthRate, double bnMomentum = 0.1)
+    public DenseBlockLayer(int growthRate, double bnMomentum)
+        : this(growthRate, bnMomentum, convolutionBias: true)
+    {
+    }
+
+    /// <summary>
+    /// Lazy ctor with the convolutions' bias stated.
+    /// </summary>
+    /// <param name="growthRate">The number of channels this layer adds.</param>
+    /// <param name="bnMomentum">Batch normalization momentum.</param>
+    /// <param name="convolutionBias">
+    /// Whether the convolutions carry a bias. Every DenseNet convolution feeds a BatchNorm (directly, or through the
+    /// concatenation or the transition's average pool), whose shift makes a per-channel bias unobservable, so the
+    /// reference architecture (torchvision <c>densenet121</c>) has none; <c>true</c> keeps the historical layout.
+    /// </param>
+    public DenseBlockLayer(int growthRate, double bnMomentum = 0.1, bool convolutionBias = true)
         : base([-1, -1, -1], [growthRate, -1, -1])
     {
         if (growthRate <= 0) throw new ArgumentOutOfRangeException(nameof(growthRate));
@@ -101,6 +118,7 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
         _inputChannels = -1; // resolved in OnFirstForward
         _growthRate = growthRate;
         _bnMomentum = bnMomentum;
+        _convolutionBias = convolutionBias;
         _relu = new ReLUActivation<T>();
 
         int bottleneckChannels = 4 * growthRate;
@@ -111,14 +129,16 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
             kernelSize: 1,
             stride: 1,
             padding: 0,
-            activationFunction: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>(),
+            biasMode: convolutionBias ? BiasMode.Auto : BiasMode.Never);
         _bn2 = new BatchNormalizationLayer<T>(momentum: bnMomentum);
         _conv3x3 = new ConvolutionalLayer<T>(
             outputDepth: growthRate,
             kernelSize: 3,
             stride: 1,
             padding: 1,
-            activationFunction: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>(),
+            biasMode: convolutionBias ? BiasMode.Auto : BiasMode.Never);
 
         RegisterSubLayer(_bn1);
         RegisterSubLayer(_conv1x1);
