@@ -829,10 +829,11 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         }
 
         // Any NaN or infinite gradient makes the sum of squares non-finite. NaN can only come from a NaN
-        // gradient; +Infinity can also be a finite gradient whose square overflowed T, so that case alone
-        // is settled by the exact element check.
+        // gradient; +Infinity can also be a finite gradient whose square overflowed T (a float gradient of
+        // 1e20 does on the element-wise fallback reduction), so that case alone is settled by the exact
+        // element check, for float too. Clipping then recomputes such a norm in double.
         if (guardActive && !IsFiniteDouble(globalNormSq)
-            && (typeof(T) == typeof(float) || double.IsNaN(globalNormSq) || AnyGradientIsAnomalous(context)))
+            && (double.IsNaN(globalNormSq) || AnyGradientIsAnomalous(context)))
         {
             return;
         }

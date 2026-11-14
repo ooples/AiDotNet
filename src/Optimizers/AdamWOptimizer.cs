@@ -671,6 +671,24 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     private readonly ConcurrentDictionary<Tensor<T>, Tensor<T>> _tapeM = new(TensorReferenceComparer<Tensor<T>>.Instance);
     private readonly ConcurrentDictionary<Tensor<T>, Tensor<T>> _tapeV = new(TensorReferenceComparer<Tensor<T>>.Instance);
     private readonly ConcurrentDictionary<Tensor<T>, Tensor<T>> _tapeVMax = new(TensorReferenceComparer<Tensor<T>>.Instance);
+
+    /// <summary>
+    /// The moment kept for <paramref name="param"/>, in the parameter's current shape. A parameter whose shape changed
+    /// but whose element count did not (a [2, 3] weight reshaped to [3, 2]) keeps its moment values, since the step
+    /// count and bias correction carry on; only a parameter with no compatible moment starts from zero.
+    /// </summary>
+    private static Tensor<T> MomentForParameterShape(
+        ConcurrentDictionary<Tensor<T>, Tensor<T>> moments, Tensor<T> param, bool onDevice)
+    {
+        if (moments.TryGetValue(param, out var existing) && existing._shape.SequenceEqual(param._shape))
+            return existing;
+
+        var moment = CreateOptimizerStateTensor(param._shape, onDevice);
+        if (existing is not null && existing.Length == param.Length)
+            existing.AsSpan().CopyTo(moment.AsWritableSpan());
+        moments[param] = moment;
+        return moment;
+    }
     private int _tapeStep;
 
     /// <inheritdoc />
@@ -782,16 +800,8 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
                 continue;
             }
 
-            if (!_tapeM.TryGetValue(param, out var m) || !m._shape.SequenceEqual(param._shape))
-            {
-                m = CreateOptimizerStateTensor(param._shape, gpuAdam);
-                _tapeM[param] = m;
-            }
-            if (!_tapeV.TryGetValue(param, out var v) || !v._shape.SequenceEqual(param._shape))
-            {
-                v = CreateOptimizerStateTensor(param._shape, gpuAdam);
-                _tapeV[param] = v;
-            }
+            var m = MomentForParameterShape(_tapeM, param, gpuAdam);
+            var v = MomentForParameterShape(_tapeV, param, gpuAdam);
 
             // Sparse-embedding scatter path (Tensors#553). Same rationale as the
             // AdamOptimizer path — only the ~16 accessed rows of a 250 002-vocab
@@ -867,11 +877,7 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             Tensor<T> vHatEffective;
             if (_options.UseAMSGrad)
             {
-                if (!_tapeVMax.TryGetValue(param, out var vMax))
-                {
-                    vMax = new Tensor<T>(param._shape);
-                    _tapeVMax[param] = vMax;
-                }
+                var vMax = MomentForParameterShape(_tapeVMax, param, onDevice: false);
                 var vMaxNew = Engine.TensorMax(vMax, v);   // max of the RAW v (PyTorch), corrected at use
                 Engine.TensorCopy(vMaxNew, vMax);
                 vHatEffective = Engine.TensorDivideScalar(vMax, biasCorrection2);
