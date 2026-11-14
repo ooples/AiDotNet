@@ -23133,11 +23133,13 @@ AiDotNet.ComputerVision.Segmentation.Medical.UniverSeg<T>.SetSupportSet(AiDotNet
 AiDotNet.ComputerVision.Segmentation.Medical.UniverSeg<T>.ClearSupportSet() -> void
 override AiDotNet.ComputerVision.Segmentation.Medical.UniverSeg<T>.OutputAxesFor(int inputRank) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.OutputAxisContract>?
 override AiDotNet.ComputerVision.Segmentation.Medical.UniverSeg<T>.ResolveLazyLayerShapes() -> void
+override AiDotNet.ComputerVision.Segmentation.Medical.UniverSeg<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLab<T>.OutputAxesFor(int inputRank) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.OutputAxisContract>?
 override AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLab<T>.ResolveLazyLayerShapes() -> void
 override AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLab<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expected) -> bool
 AiDotNet.ComputerVision.Segmentation.Panoptic.CUPS<T>.TrainPanoptic(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! semanticLabels, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! instanceIds) -> T
 override AiDotNet.ComputerVision.Segmentation.Panoptic.CUPS<T>.ResolveLazyLayerShapes() -> void
+override AiDotNet.ComputerVision.Segmentation.Panoptic.CUPS<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.ComputerVision.Segmentation.Panoptic.CUPS<T>.RegisterComponents() -> void
 override AiDotNet.ComputerVision.Segmentation.Panoptic.ODISE<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expected) -> bool
 override AiDotNet.ComputerVision.Segmentation.Common.OpenVocabSegmentationBase<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!

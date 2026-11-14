@@ -300,6 +300,13 @@ public partial class CUPS<T> : Common.PanopticSegmentationBase<T>
         if (!hasBatch) features = RemoveBatchDimension(features); return features;
     }
 
+    /// <summary>
+    /// The training forward is the semantic forward. The default walks every layer in order, but the layers after the
+    /// semantic head are the FPN and Cascade Mask R-CNN branches, which read the backbone stages and not the head's
+    /// output: chaining them threw "Expected input depth ..." on the first <c>Train</c> call.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
+
     /// <summary>The backbone's output and its stage outputs (finest first) for a batched input.</summary>
     private (Tensor<T> Encoded, List<Tensor<T>> Stages) RunBackbone(Tensor<T> batched)
         => Common.FeaturePyramidOps.RunAndTapStages(Layers, 0, _encoderLayerEnd, batched);
