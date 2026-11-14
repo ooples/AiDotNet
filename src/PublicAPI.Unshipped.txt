@@ -22581,6 +22581,8 @@ override AiDotNet.Diffusion.LatentDiffusionModelBase<T>.IsBatchedTrainingSample(
 virtual AiDotNet.Diffusion.DiffusionModelBase<T>.IsBatchedTrainingSample(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! sample) -> bool
 *REMOVED*AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double
 AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
+override AiDotNet.LearningRateSchedulers.LambdaLRScheduler.Reset() -> void
+override AiDotNet.LearningRateSchedulers.TriStageScheduler.Reset() -> void
 AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.TiedReadoutLocalErrorCreditRule(int readoutLayerCount = 2, double localWeight = 1, bool detachReadoutOnHiddenLayers = false, int layerStride = 1, bool useDepthProgressiveWeight = false) -> void
 AiDotNet.Models.Options.Adam8BitOptimizerOptions<T, TInput, TOutput>.UseDecoupledWeightDecay.get -> bool
 AiDotNet.Models.Options.Adam8BitOptimizerOptions<T, TInput, TOutput>.UseDecoupledWeightDecay.set -> void

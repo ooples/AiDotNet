@@ -77,7 +77,7 @@ public sealed class LayerGradientPublishReuseTests
         var gradients = new System.Collections.Generic.Dictionary<Tensor<float>, Tensor<float>>();
         foreach (var p in parameters) gradients[p] = Filled(p, 1f);
 
-        Assert.True(dense.ScatterParameterGradients(gradients, sourcesOutliveStep: true) > 0);
+        Assert.True(dense.ScatterParameterGradients(gradients, GradientSourceOwnership.Plan) > 0);
 
         // The plan's next backward writes the same buffers; a read now must see what they hold.
         foreach (var g in gradients.Values) Fill(g, 7f);
@@ -87,6 +87,25 @@ public sealed class LayerGradientPublishReuseTests
 
         foreach (var g in gradients.Values) Fill(g, 9f);
         Assert.All(read.ToArray(), v => Assert.Equal(7f, v));
+    }
+
+    [Fact]
+    public void CallerSuppliedGradients_AreASnapshot_WhenTheCallerWritesThemAfterPublication()
+    {
+        // The public scatter cannot know who else holds the tensors it is given, so what it publishes must not change
+        // when the caller writes them afterwards, before the surface is read.
+        var model = Build();
+        var dense = (LayerBase<float>)model.Layers[0];
+        var gradients = new System.Collections.Generic.Dictionary<Tensor<float>, Tensor<float>>();
+        foreach (var p in dense.GetTrainableParameters()) gradients[p] = Filled(p, 3f);
+
+        Assert.True(dense.ScatterParameterGradients(gradients) > 0);
+        foreach (var g in gradients.Values) Fill(g, 5f);
+
+        var published = dense.ScatteredParameterGradients;
+        Assert.NotNull(published);
+        Assert.True(published?.Length > 0);
+        Assert.All(published?.ToArray() ?? Array.Empty<float>(), v => Assert.Equal(3f, v));
     }
 
     private static Tensor<float> Filled(Tensor<float> like, float value)

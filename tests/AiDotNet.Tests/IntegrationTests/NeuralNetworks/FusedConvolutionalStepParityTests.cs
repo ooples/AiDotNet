@@ -105,6 +105,43 @@ public class FusedConvolutionalStepParityTests
             $"{variant}: the fused step diverged from the eager step:{Environment.NewLine}{string.Join(Environment.NewLine, failures)}");
     }
 
+    /// <summary>
+    /// Without a Predict first, the layer walk sizes the Dense after Flatten. Flatten took the walk's per-sample
+    /// [C, H, W] as batched and declared H*W features, so the first real forward re-sized the Dense, after the fused
+    /// step had collected its old weight; the #1822 check then found the plan detached from the live parameters and
+    /// every later step ran on the eager tape.
+    /// </summary>
+    [Theory(Timeout = 180000)]
+    [InlineData(CnnVariant.ConvOnly)]
+    [InlineData(CnnVariant.ConvMaxPool)]
+    [InlineData(CnnVariant.ConvAdaptiveAvgPool)]
+    [InlineData(CnnVariant.ParityHarnessCnn)]
+    public async System.Threading.Tasks.Task FusedStep_StaysEngaged_WhenTheWalkSizesTheHead(CnnVariant variant)
+    {
+        await System.Threading.Tasks.Task.CompletedTask;
+        int side = variant == CnnVariant.ConvAdaptiveAvgPool ? 7 : 14;
+        var input = RandomTensor([4, 1, side, side], seed: 11);
+        var labels = OneHot([3, 0, 7, 9], classes: 10);
+        var network = Build(variant, side);
+        long declaredCount = network.ParameterCount;   // resolved by the walk, no forward yet
+        var original = TensorCodecOptions.Current;
+        try
+        {
+            TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = true });
+            CompiledTapeTrainingStep<float>.Invalidate();
+            CompiledTapeTrainingStep<float>.ResetFusedStepCount();
+            for (int step = 0; step < 3; step++) network.Train(input, labels);
+            Assert.Equal(declaredCount, network.ParameterCount);
+            Assert.Equal(3, CompiledTapeTrainingStep<float>.GetFusedStepCount());
+        }
+        finally
+        {
+            TensorCodecOptions.SetCurrent(original);
+            CompiledTapeTrainingStep<float>.Invalidate();
+            CompiledTapeTrainingStep<float>.ResetFusedStepCount();
+        }
+    }
+
     private static ConvolutionalNeuralNetwork<float> Build(CnnVariant variant, int side)
     {
         IActivationFunction<float> relu = new ReLUActivation<float>();

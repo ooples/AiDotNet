@@ -201,7 +201,7 @@ public partial class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimi
     protected override void InitializeAdaptiveParameters()
     {
         base.InitializeAdaptiveParameters();
-        CurrentLearningRate = NumOps.FromDouble(_options.InitialLearningRate);
+        ResetLearningRateToSchedule();
     }
 
     /// <inheritdoc/>

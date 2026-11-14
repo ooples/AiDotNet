@@ -111,7 +111,7 @@ public partial class ConjugateGradientOptimizer<T, TInput, TOutput> : GradientBa
     protected override void InitializeAdaptiveParameters()
     {
         base.InitializeAdaptiveParameters();
-        CurrentLearningRate = NumOps.FromDouble(_options.InitialLearningRate);
+        ResetLearningRateToSchedule();
         _iteration = 0;
     }
 

@@ -134,7 +134,7 @@ public partial class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : Gra
     protected override void InitializeAdaptiveParameters()
     {
         base.InitializeAdaptiveParameters();
-        CurrentLearningRate = NumOps.FromDouble(_options.InitialLearningRate);
+        ResetLearningRateToSchedule();
     }
 
     /// <summary>

@@ -356,7 +356,7 @@ internal sealed class TapeTrainingStepper<T>
         double lossSum = 0.0;
         for (int i = 0; i < microBatchCount; i++)
         {
-            using var tape = new GradientTape<T>();
+            using var tape = new GradientTape<T>(TrainingTapeOptions.Step);
             var loss = microObjective(i);
             if (loss is null)
                 throw new InvalidOperationException("A training objective returned null instead of a scalar loss tensor.");
@@ -520,7 +520,7 @@ internal sealed class TapeTrainingStepper<T>
         if (objectiveTerms is not null)
             return SummedTapeObjective<T>.Step(objectiveTerms, parameterProvider, update,
                 input, target, recomputeForward, recomputeLoss, hooks);
-        using var tape = new GradientTape<T>();
+        using var tape = new GradientTape<T>(TrainingTapeOptions.Step);
         var loss = objective();
         if (loss is null)
             throw new InvalidOperationException("A training objective returned null instead of a scalar loss tensor.");

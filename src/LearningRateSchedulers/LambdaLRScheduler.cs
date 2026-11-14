@@ -48,6 +48,15 @@ public class LambdaLRScheduler : LearningRateSchedulerBase
     {
         Guard.NotNull(lrLambda);
         _lrLambda = lrLambda;
+        // Batch 1 runs at lambda(0), as in PyTorch's LambdaLR; the base class's default start skipped it.
+        _currentLearningRate = Math.Max(_minLearningRate, _baseLearningRate * _lrLambda(0));
+    }
+
+    /// <inheritdoc/>
+    public override void Reset()
+    {
+        base.Reset();
+        _currentLearningRate = Math.Max(_minLearningRate, _baseLearningRate * _lrLambda(0));
     }
 
     /// <inheritdoc/>

@@ -79,6 +79,8 @@ public class SequentialLRScheduler : LearningRateSchedulerBase
     /// </summary>
     internal IReadOnlyList<ILearningRateScheduler> Schedulers => _schedulers;
 
+    internal IReadOnlyList<int> Milestones => _milestones;
+
     /// <inheritdoc/>
     public override double Step()
     {

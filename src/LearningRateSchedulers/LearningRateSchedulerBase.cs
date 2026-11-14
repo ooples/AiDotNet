@@ -59,6 +59,9 @@ public abstract class LearningRateSchedulerBase : ILearningRateScheduler
     /// <inheritdoc/>
     public double BaseLearningRate => _baseLearningRate;
 
+    /// <summary>The floor every stepped rate is held at or above.</summary>
+    internal double MinLearningRate => _minLearningRate;
+
     /// <inheritdoc/>
     public int CurrentStep => _currentStep;
 
