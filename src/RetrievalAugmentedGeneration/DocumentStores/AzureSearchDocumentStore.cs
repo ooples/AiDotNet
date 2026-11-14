@@ -352,6 +352,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
             EnsureSuccess(info, "search");
 
             var results = new List<Document<T>>();
+            var scores = new List<double>();
             var hits = JObject.Parse(info.Body)["value"] as JArray;
             if (hits == null)
                 return results;
@@ -366,11 +367,11 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
                 var score = scoreToken != null && scoreToken.Type != JTokenType.Null
                     ? Convert.ToDouble(scoreToken, CultureInfo.InvariantCulture)
                     : 0.0;
-                doc.RelevanceScore = NumOps.FromDouble(score);
-                doc.HasRelevanceScore = true;
                 results.Add(doc);
+                scores.Add(score);
             }
 
+            AssignApiScores(results, scores);
             return results;
         }
 

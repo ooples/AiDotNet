@@ -209,16 +209,15 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Quantization
             if (code.Length != _subspaceCount)
                 throw new ArgumentException("Code length does not match the subspace count.", nameof(code));
 
-            var values = new T[_dimension];
+            var codebooks = _codebooks ?? throw new InvalidOperationException("_codebooks is null where it is required.");
+            var values = new double[_dimension];
             for (int m = 0; m < _subspaceCount; m++)
             {
-                int offset = m * _subDimension;
-                var centroid = (_codebooks ?? throw new InvalidOperationException("_codebooks is null where it is required."))[m][code[m]];
-                for (int i = 0; i < _subDimension; i++)
-                    values[offset + i] = _numOps.FromDouble(centroid[i]);
+                Array.Copy(codebooks[m][code[m]], 0, values, m * _subDimension, _subDimension);
             }
 
-            return new Vector<T>(values);
+            // The codebooks are stored in double; convert the reconstruction in one pass.
+            return new Vector<T>(RagScoreConversion<T>.FromDouble(values));
         }
 
         /// <summary>

@@ -19,7 +19,7 @@ public class UncertaintyQuantificationDeepMathIntegrationTests
     public async Task ECE_SingleBin_Overconfident_ExactECE025()
     {
         // 8 samples all with prob=0.75 (exact in IEEE 754), only 4 correct
-        // All go to bin 7 (floor(0.75*10) = 7)
+        // All go to bin 7 (right-closed bins: ceil(0.75*10) - 1 = 7)
         // Accuracy = 4/8 = 0.5, AvgConfidence = 0.75
         // ECE = |0.5 - 0.75| * (8/8) = 0.25
         var ece = new ExpectedCalibrationError<double>(numBins: 10);
@@ -96,10 +96,10 @@ public class UncertaintyQuantificationDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ECE_ProbExactlyZero_GoesToBinZero()
     {
-        // prob=0.0 -> bin 0, prob=0.5 -> bin 5
+        // prob=0.0 -> bin 0 (ceil(0) - 1 = -1, clamped), prob=0.5 -> bin 4 (ceil(5) - 1)
         // Both predictions correct
         // Bin 0: 1 sample, acc=1.0, conf=0.0 -> |1.0 - 0.0| = 1.0
-        // Bin 5: 1 sample, acc=1.0, conf=0.5 -> |1.0 - 0.5| = 0.5
+        // Bin 4: 1 sample, acc=1.0, conf=0.5 -> |1.0 - 0.5| = 0.5
         // ECE = (1/2)*1.0 + (1/2)*0.5 = 0.75
         var ece = new ExpectedCalibrationError<double>(numBins: 10);
         var probs = new Vector<double>(new double[] { 0.0, 0.5 });
@@ -113,9 +113,9 @@ public class UncertaintyQuantificationDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ECE_ProbExactlyOne_GoesToLastBin()
     {
-        // prob=1.0 -> clamped to bin 9 (last bin with numBins=10)
-        // prob=0.5 -> bin 5
-        // Bin 5: 1 sample, wrong -> acc=0.0, conf=0.5 -> |0.0 - 0.5| = 0.5
+        // prob=1.0 -> bin 9 (ceil(10) - 1, the last bin with numBins=10)
+        // prob=0.5 -> bin 4 (ceil(5) - 1)
+        // Bin 4: 1 sample, wrong -> acc=0.0, conf=0.5 -> |0.0 - 0.5| = 0.5
         // Bin 9: 1 sample, correct -> acc=1.0, conf=1.0 -> |1.0 - 1.0| = 0.0
         // ECE = (1/2)*0.5 + (1/2)*0.0 = 0.25
         var ece = new ExpectedCalibrationError<double>(numBins: 10);
@@ -156,7 +156,7 @@ public class UncertaintyQuantificationDeepMathIntegrationTests
     public async Task ECE_AllPredictionsWrong_AtMidConfidence()
     {
         // All predictions wrong at prob=0.5
-        // Bin 5: 4 samples, 0 correct -> acc=0.0, conf=0.5
+        // Bin 4 (ceil(5) - 1): 4 samples, 0 correct -> acc=0.0, conf=0.5
         // ECE = |0.0 - 0.5| = 0.5
         var ece = new ExpectedCalibrationError<double>(numBins: 10);
         var probs = new Vector<double>(new double[] { 0.5, 0.5, 0.5, 0.5 });

@@ -281,6 +281,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
             EnsureSuccess(info, "query");
 
             var results = new List<Document<T>>();
+            var scores = new List<double>();
             var matches = JObject.Parse(info.Body)["matches"] as JArray;
             if (matches == null)
                 return results;
@@ -293,11 +294,11 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
 
                 var doc = ParseMetadata((id ?? throw new InvalidOperationException("id is null where it is required.")), match?["metadata"] as JObject);
                 var score = match?["score"] != null ? Convert.ToDouble(match["score"], CultureInfo.InvariantCulture) : 0.0;
-                doc.RelevanceScore = NumOps.FromDouble(score);
-                doc.HasRelevanceScore = true;
                 results.Add(doc);
+                scores.Add(score);
             }
 
+            AssignApiScores(results, scores);
             return results;
         }
 

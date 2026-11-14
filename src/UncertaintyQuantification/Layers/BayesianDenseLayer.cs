@@ -228,23 +228,12 @@ public partial class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>, IS
         FillWeightMeans();
 
         // Initialize weight log variances to small values (start relatively confident)
-        _weightLogVar = new Tensor<T>([_outputSize, _inputSize]);
-        for (int i = 0; i < _outputSize; i++)
-        {
-            for (int j = 0; j < _inputSize; j++)
-            {
-                _weightLogVar[i, j] = NumOps.FromDouble(-5.0); // exp(-5) ≈ 0.0067
-            }
-        }
+        var initialLogVar = NumOps.FromDouble(-5.0); // exp(-5) ≈ 0.0067
+        _weightLogVar = Tensor<T>.CreateDefault([_outputSize, _inputSize], initialLogVar);
 
         // Initialize bias parameters
         _biasMean = new Tensor<T>([_outputSize]);
-        _biasLogVar = new Tensor<T>([_outputSize]);
-        for (int i = 0; i < _outputSize; i++)
-        {
-            _biasMean[i] = NumOps.Zero;
-            _biasLogVar[i] = NumOps.FromDouble(-5.0);
-        }
+        _biasLogVar = Tensor<T>.CreateDefault([_outputSize], initialLogVar);
     }
 
     /// <inheritdoc/>
@@ -321,56 +310,21 @@ public partial class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>, IS
     /// </remarks>
     public T GetKLDivergence()
     {
-        var kl = NumOps.Zero;
-        var priorVar = NumOps.Multiply(_priorSigma, _priorSigma);
+        // KL(q||p) = 0.5 * (variance/prior_var + mean²/prior_var - 1 - log(variance/prior_var)), summed over
+        // every weight and bias. The ratios are formed before exponentiating / squaring
+        // (exp(logvar - log prior_var), (mean / prior_sigma)^2) so narrow T does not overflow.
+        return NumOps.Add(GaussianKL(_weightMean, _weightLogVar), GaussianKL(_biasMean, _biasLogVar));
+    }
 
-        // KL divergence for weights
-        for (int i = 0; i < _outputSize; i++)
-        {
-            for (int j = 0; j < _inputSize; j++)
-            {
-                var variance = NumOps.Exp(_weightLogVar[i, j]);
-                var meanSquared = NumOps.Multiply(_weightMean[i, j], _weightMean[i, j]);
-
-                // KL(q||p) = 0.5 * (variance/prior_var + mean²/prior_var - 1 - log(variance/prior_var))
-                var term1 = NumOps.Divide(variance, priorVar);
-                var term2 = NumOps.Divide(meanSquared, priorVar);
-                var term3 = _weightLogVar[i, j];
-                var term4 = NumOps.Log(priorVar);
-
-                var klTerm = NumOps.Multiply(
-                    NumOps.FromDouble(0.5),
-                    NumOps.Subtract(
-                        NumOps.Add(NumOps.Add(term1, term2), NumOps.Negate(NumOps.One)),
-                        NumOps.Subtract(term3, term4)
-                    )
-                );
-                kl = NumOps.Add(kl, klTerm);
-            }
-        }
-
-        // KL divergence for biases
-        for (int i = 0; i < _outputSize; i++)
-        {
-            var variance = NumOps.Exp(_biasLogVar[i]);
-            var meanSquared = NumOps.Multiply(_biasMean[i], _biasMean[i]);
-
-            var term1 = NumOps.Divide(variance, priorVar);
-            var term2 = NumOps.Divide(meanSquared, priorVar);
-            var term3 = _biasLogVar[i];
-            var term4 = NumOps.Log(priorVar);
-
-            var klTerm = NumOps.Multiply(
-                NumOps.FromDouble(0.5),
-                NumOps.Subtract(
-                    NumOps.Add(NumOps.Add(term1, term2), NumOps.Negate(NumOps.One)),
-                    NumOps.Subtract(term3, term4)
-                )
-            );
-            kl = NumOps.Add(kl, klTerm);
-        }
-
-        return kl;
+    private T GaussianKL(Tensor<T> mean, Tensor<T> logVar)
+    {
+        var logPriorVar = NumOps.Log(NumOps.Multiply(_priorSigma, _priorSigma));
+        var logRatio = Engine.TensorSubtractScalar(logVar, logPriorVar);
+        var varianceRatio = Engine.TensorExp(logRatio);
+        var meanRatioSquared = Engine.TensorSquare(Engine.TensorDivideScalar(mean, _priorSigma));
+        var terms = Engine.TensorSubtract(
+            Engine.TensorSubtractScalar(Engine.TensorAdd(varianceRatio, meanRatioSquared), NumOps.One), logRatio);
+        return NumOps.Multiply(NumOps.FromDouble(0.5), Engine.TensorSum(terms));
     }
 
     /// <summary>
@@ -460,53 +414,33 @@ public partial class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>, IS
     public void AddKLDivergenceGradients(T klScale)
     {
         var priorVar = NumOps.Multiply(_priorSigma, _priorSigma);
-        var half = NumOps.FromDouble(0.5);
+        var logPriorVar = NumOps.Log(priorVar);
+        var meanScale = NumOps.Divide(klScale, priorVar);
+        var logVarScale = NumOps.Multiply(klScale, NumOps.FromDouble(0.5));
         var gradients = GetParameterGradients();
-        int gradientIndex = 0;
+        if (gradients.Length != ParameterCount)
+            throw new InvalidOperationException(
+                $"BayesianDenseLayer gradient buffer length {gradients.Length} does not match ParameterCount {ParameterCount}.");
 
-        for (int i = 0; i < _outputSize; i++)
+        // dKL/dmean = mean / prior_var; dKL/dlogvar = 0.5 * (variance / prior_var - 1).
+        // The buffer holds [weightMean, weightLogVar, biasMean, biasLogVar], flattened in that order.
+        int weightCount = _outputSize * _inputSize;
+        var delta = Engine.TensorConcatenate(new[]
         {
-            for (int j = 0; j < _inputSize; j++)
-            {
-                var meanGrad = NumOps.Divide(_weightMean[i, j], priorVar);
-                gradients[gradientIndex] = NumOps.Add(
-                    gradients[gradientIndex], NumOps.Multiply(klScale, meanGrad));
-                gradientIndex++;
-            }
-        }
+            Engine.Reshape(Engine.TensorMultiplyScalar(_weightMean, meanScale), [weightCount]),
+            Engine.Reshape(LogVarGradient(_weightLogVar, logPriorVar, logVarScale), [weightCount]),
+            Engine.TensorMultiplyScalar(_biasMean, meanScale),
+            LogVarGradient(_biasLogVar, logPriorVar, logVarScale),
+        }, 0);
 
-        for (int i = 0; i < _outputSize; i++)
-        {
-            for (int j = 0; j < _inputSize; j++)
-            {
-                var variance = NumOps.Exp(_weightLogVar[i, j]);
-                var logVarGrad = NumOps.Multiply(
-                    half,
-                    NumOps.Subtract(NumOps.Divide(variance, priorVar), NumOps.One));
-                gradients[gradientIndex] = NumOps.Add(
-                    gradients[gradientIndex], NumOps.Multiply(klScale, logVarGrad));
-                gradientIndex++;
-            }
-        }
+        var updated = Engine.TensorAdd(Tensor<T>.FromVector(gradients), delta);
+        updated.AsSpan().CopyTo(gradients.AsWritableSpan());
+    }
 
-        for (int i = 0; i < _outputSize; i++)
-        {
-            var meanGradient = NumOps.Divide(_biasMean[i], priorVar);
-            gradients[gradientIndex] = NumOps.Add(
-                gradients[gradientIndex], NumOps.Multiply(klScale, meanGradient));
-            gradientIndex++;
-        }
-
-        for (int i = 0; i < _outputSize; i++)
-        {
-            var variance = NumOps.Exp(_biasLogVar[i]);
-            var logVarGradient = NumOps.Multiply(
-                half,
-                NumOps.Subtract(NumOps.Divide(variance, priorVar), NumOps.One));
-            gradients[gradientIndex] = NumOps.Add(
-                gradients[gradientIndex], NumOps.Multiply(klScale, logVarGradient));
-            gradientIndex++;
-        }
+    private Tensor<T> LogVarGradient(Tensor<T> logVar, T logPriorVar, T scale)
+    {
+        var varianceRatio = Engine.TensorExp(Engine.TensorSubtractScalar(logVar, logPriorVar));
+        return Engine.TensorMultiplyScalar(Engine.TensorSubtractScalar(varianceRatio, NumOps.One), scale);
     }
 
     /// <summary>
@@ -523,12 +457,11 @@ public partial class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>, IS
         int gradientIndex = 0;
         foreach (var parameter in GetTrainableParameters())
         {
-            for (int i = 0; i < parameter.Length; i++)
-            {
-                parameter[i] = NumOps.Subtract(
-                    parameter[i],
-                    NumOps.Multiply(learningRate, ParameterGradients[gradientIndex++]));
-            }
+            // In place, so the tape keeps keying the same parameter tensors.
+            var gradient = Engine.Reshape(
+                Tensor<T>.FromVector(ParameterGradients.GetSubVector(gradientIndex, parameter.Length)), parameter._shape);
+            Engine.TensorSubtractInPlace(parameter, Engine.TensorMultiplyScalar(gradient, learningRate));
+            gradientIndex += parameter.Length;
         }
     }
 

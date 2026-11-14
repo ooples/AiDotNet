@@ -26,6 +26,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
         {
             if (documentStore == null)
                 throw new ArgumentNullException(nameof(documentStore));
+            if (double.IsNaN(k1) || k1 < 0)
+                throw new ArgumentOutOfRangeException(nameof(k1), "k1 must be non-negative.");
+            if (double.IsNaN(b) || b < 0 || b > 1)
+                throw new ArgumentOutOfRangeException(nameof(b), "b must be in [0, 1].");
 
             _documentStore = documentStore;
             _k1 = NumOps.FromDouble(k1);
@@ -35,144 +39,96 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
         /// <inheritdoc />
         protected override IEnumerable<Document<T>> RetrieveCore(string query, int topK, Dictionary<string, object> metadataFilters)
         {
-            var queryTerms = Tokenize(query);
-            var scores = new Dictionary<string, T>();
-
             var candidates = _documentStore.GetAll().ToList();
-            var corpusStats = BuildCorpusStatistics(candidates);
+            if (candidates.Count == 0)
+                return Enumerable.Empty<Document<T>>();
 
-            // Build document lookup dictionary for O(1) access
-            var documentLookup = candidates.ToDictionary(d => d.Id);
+            var scores = ScoreDocuments(Tokenize(query), candidates.Select(d => Tokenize(d.Content)).ToList());
 
-            foreach (var doc in candidates.Where(d => MatchesFilters(d, metadataFilters)))
-            {
-                var score = NumOps.Zero;
-
-                foreach (var term in queryTerms)
-                {
-                    var termScore = CalculateBM25Term(doc.Id, term, corpusStats);
-                    score = NumOps.Add(score, termScore);
-                }
-
-                scores[doc.Id] = score;
-            }
-
-            var results = scores
-                .OrderByDescending(kv => kv.Value)
+            return candidates
+                .Select((doc, index) => (doc, score: scores[index]))
+                .Where(x => MatchesFilters(x.doc, metadataFilters))
+                .OrderByDescending(x => x.score)
                 .Take(topK)
-                .Select(kv =>
+                .Select(x =>
                 {
-                    if (documentLookup.TryGetValue(kv.Key, out var doc))
-                    {
-                        doc.RelevanceScore = kv.Value;
-                        doc.HasRelevanceScore = true;
-                        return doc;
-                    }
-                    return null;
+                    x.doc.RelevanceScore = x.score;
+                    x.doc.HasRelevanceScore = true;
+                    return x.doc;
                 })
-                .Where(d => d != null)
-                .Cast<Document<T>>();
-
-            return results;
+                .ToList();
         }
 
-        private T CalculateBM25Term(string docId, string term, CorpusStatistics corpusStats)
+        /// <summary>
+        /// Okapi BM25 (Robertson and Zaragoza 2009, Eq. 3.15) of every document for the query:
+        /// Σ_t qtf_t · idf_t · tf (k1 + 1) / (tf + k1 (1 - b + b · dl / avgdl)),
+        /// with the Lucene idf_t = ln(1 + (N - df_t + 0.5) / (df_t + 0.5)) and repeated query terms counted per
+        /// occurrence. The Robertson-Sparck Jones idf without the 1 + turns negative once a term is in more than
+        /// half the documents, which ranks the documents that contain a query term below the ones that do not.
+        /// </summary>
+        internal T[] ScoreDocuments(List<string> queryTerms, List<List<string>> documentTerms)
         {
-            if (!corpusStats.TermFrequencies.TryGetValue(docId, out var termFreqs) || !termFreqs.TryGetValue(term, out var tf))
-                return NumOps.Zero;
+            int documents = documentTerms.Count;
+            var vocabulary = queryTerms.Distinct().ToList();
+            int terms = vocabulary.Count;
+            if (documents == 0)
+                return Array.Empty<T>();
+            if (terms == 0)
+                return new T[documents];
 
-            var docLength = corpusStats.DocumentLengths.TryGetValue(docId, out var length) ? length : NumOps.Zero;
-
-            var idf = CalculateIDF(term, corpusStats);
-
-            var numerator = NumOps.Multiply(tf, NumOps.Add(_k1, NumOps.One));
-            var lengthNorm = NumOps.Add(
-                NumOps.Subtract(NumOps.One, _b),
-                NumOps.Multiply(_b, NumOps.Divide(docLength, corpusStats.AvgDocLength)));
-            var denominator = NumOps.Add(tf, NumOps.Multiply(_k1, lengthNorm));
-
-            return NumOps.Multiply(idf, NumOps.Divide(numerator, denominator));
-        }
-
-        private T CalculateIDF(string term, CorpusStatistics corpusStats)
-        {
-            if (!corpusStats.DocumentFrequencies.ContainsKey(term) || corpusStats.TotalDocuments == 0)
-                return NumOps.Zero;
-
-            var df = corpusStats.DocumentFrequencies[term];
-            if (df == 0)
-                return NumOps.Zero;
-
-            var numerator = NumOps.FromDouble(corpusStats.TotalDocuments - df + 0.5);
-            var denominator = NumOps.FromDouble(df + 0.5);
-            var ratio = NumOps.Divide(numerator, denominator);
-
-            return NumOps.FromDouble(Math.Log(Convert.ToDouble(ratio)));
-        }
-
-        private class CorpusStatistics
-        {
-            public Dictionary<string, Dictionary<string, T>> TermFrequencies { get; set; } = new();
-            public Dictionary<string, T> DocumentLengths { get; set; } = new();
-            public Dictionary<string, int> DocumentFrequencies { get; set; } = new();
-            public int TotalDocuments { get; set; }
-            public T AvgDocLength { get; set; }
-
-            public CorpusStatistics()
+            var termIndex = vocabulary.Select((term, i) => (term, i)).ToDictionary(x => x.term, x => x.i);
+            var termCounts = new int[documents * terms];
+            var documentFrequency = new int[terms];
+            var lengths = new int[documents];
+            for (int d = 0; d < documents; d++)
             {
-                AvgDocLength = NumOps.One;
-            }
-        }
-
-        private CorpusStatistics BuildCorpusStatistics(List<Document<T>> documents)
-        {
-            var stats = new CorpusStatistics();
-
-            if (documents == null || documents.Count == 0)
-            {
-                return stats;
-            }
-
-            stats.TotalDocuments = documents.Count;
-
-            var totalLength = NumOps.Zero;
-
-            foreach (var doc in documents)
-            {
-                var terms = Tokenize(doc.Content);
-                var termCounts = new Dictionary<string, T>();
-
-                foreach (var term in terms)
+                lengths[d] = documentTerms[d].Count;
+                foreach (var term in documentTerms[d])
                 {
-                    if (termCounts.TryGetValue(term, out var count))
-                        termCounts[term] = NumOps.Add(count, NumOps.One);
-                    else
-                        termCounts[term] = NumOps.One;
-
-                    if (!stats.DocumentFrequencies.ContainsKey(term))
-                        stats.DocumentFrequencies[term] = 0;
+                    if (termIndex.TryGetValue(term, out var t))
+                    {
+                        if (termCounts[d * terms + t]++ == 0)
+                            documentFrequency[t]++;
+                    }
                 }
-
-                foreach (var term in termCounts.Keys.Distinct())
-                {
-                    stats.DocumentFrequencies[term]++;
-                }
-
-                stats.TermFrequencies[doc.Id] = termCounts;
-                var docLength = NumOps.FromDouble(terms.Count);
-                stats.DocumentLengths[doc.Id] = docLength;
-                totalLength = NumOps.Add(totalLength, docLength);
             }
 
-            stats.AvgDocLength = NumOps.Divide(totalLength, NumOps.FromDouble(stats.TotalDocuments));
+            var queryCounts = new int[terms];
+            foreach (var term in queryTerms)
+                queryCounts[termIndex[term]]++;
 
-            if (!NumOps.GreaterThan(stats.AvgDocLength, NumOps.Zero))
-                stats.AvgDocLength = NumOps.One;
+            // idf_t = ln(1 + (N - df + 0.5) / (df + 0.5)) (Lucene BM25Similarity), skipped (0) for terms no
+            // document contains.
+            var half = NumOps.FromDouble(0.5);
+            var df = new Tensor<int>(documentFrequency, [terms]).Cast<T>();
+            var idf = Engine.TensorLog(Engine.TensorAddScalar(Engine.TensorDivide(
+                Engine.ScalarMinusTensor(NumOps.Add(NumOps.FromDouble(documents), half), df),
+                Engine.TensorAddScalar(df, half)), NumOps.One));
+            idf = Engine.TensorWhere(Engine.TensorGreaterThan(df, NumOps.Zero), idf, new Tensor<T>([terms]));
+            var termWeights = Engine.TensorMultiply(idf, new Tensor<int>(queryCounts, [terms]).Cast<T>());
 
-            return stats;
+            // Length normalisation k1 (1 - b + b dl / avgdl); avgdl falls back to 1 for an all-empty corpus.
+            var dl = new Tensor<int>(lengths, [documents]).Cast<T>();
+            var avgdl = Engine.TensorMean(dl);
+            if (!NumOps.GreaterThan(avgdl, NumOps.Zero))
+                avgdl = NumOps.One;
+            var lengthNorm = Engine.TensorMultiplyScalar(
+                Engine.TensorAddScalar(
+                    Engine.TensorMultiplyScalar(Engine.TensorDivideScalar(dl, avgdl), _b), NumOps.Subtract(NumOps.One, _b)),
+                _k1);
+
+            // The denominator is tf + lengthNorm, which is 0 / 0 for an absent term when lengthNorm is 0 (k1 = 0,
+            // or b = 1 on an empty document). Absent terms saturate to 0, so divide them by 1 instead.
+            var tf = new Tensor<int>(termCounts, [documents, terms]).Cast<T>();
+            var denominator = Engine.TensorAdd(tf, Engine.TensorBroadcastTo(Engine.Reshape(lengthNorm, [documents, 1]), [documents, terms]));
+            denominator = Engine.TensorWhere(
+                Engine.TensorGreaterThan(tf, NumOps.Zero), denominator, Tensor<T>.CreateDefault([documents, terms], NumOps.One));
+            var saturation = Engine.TensorDivide(Engine.TensorMultiplyScalar(tf, NumOps.Add(_k1, NumOps.One)), denominator);
+
+            return Engine.TensorMatMul(saturation, Engine.Reshape(termWeights, [terms, 1])).ToArray();
         }
 
-        private List<string> Tokenize(string text)
+        internal static List<string> Tokenize(string text)
         {
             if (string.IsNullOrWhiteSpace(text))
                 return new List<string>();
