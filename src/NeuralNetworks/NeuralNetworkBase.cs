@@ -5056,7 +5056,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // so the reachability probe is told here. A tensor the step's loss does not reach gets an all-zero
         // gradient from the plan, which the probe counts as unreached.
         TapeReachabilityProbe<T>.Current?.Record(this, grads);
-        PublishParameterGradients(grads, sourcesOutliveStep: true);
+        PublishParameterGradients(grads, GradientSourceOwnership.Plan);
     }
 
     private void ClearPublishedLayerGradientSlices()
@@ -5072,9 +5072,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     }
 
     protected int ScatterParameterGradientsToLayers(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
-        => ScatterParameterGradientsToLayers(grads, sourcesOutliveStep: false);
+        => ScatterParameterGradientsToLayers(grads, GradientSourceOwnership.Tape);
 
-    private int ScatterParameterGradientsToLayers(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads, bool sourcesOutliveStep)
+    private int ScatterParameterGradientsToLayers(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads, GradientSourceOwnership ownership)
     {
         if (grads is null || grads.Count == 0) return 0;
 
@@ -5083,13 +5083,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         {
             if (Layers[i] is LayerBase<T> layer)
             {
-                matched += layer.ScatterParameterGradients(grads, sourcesOutliveStep);
+                matched += layer.ScatterParameterGradients(grads, ownership);
             }
         }
 
         foreach (var layer in GetExtraTrainableLayers())
         {
-            if (layer is not null) matched += layer.ScatterParameterGradients(grads, sourcesOutliveStep);
+            if (layer is not null) matched += layer.ScatterParameterGradients(grads, ownership);
         }
 
         return matched;
@@ -5097,13 +5097,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
     /// <summary>Publishes one backward pass to the public model and layer gradient surfaces.</summary>
     protected int PublishParameterGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
-        => PublishParameterGradients(grads, sourcesOutliveStep: false);
+        => PublishParameterGradients(grads, GradientSourceOwnership.Tape);
 
     /// <summary>
-    /// <see cref="PublishParameterGradients(IReadOnlyDictionary{Tensor{T}, Tensor{T}})"/> for gradients that stay
-    /// valid until the next publish, which layers may then keep by reference.
+    /// <see cref="PublishParameterGradients(IReadOnlyDictionary{Tensor{T}, Tensor{T}})"/> with the gradients' owner
+    /// stated, which decides whether layers may keep them by reference.
     /// </summary>
-    private int PublishParameterGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads, bool sourcesOutliveStep)
+    private int PublishParameterGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads, GradientSourceOwnership ownership)
     {
         _gradientSurfaceUnavailable = false;
         _publishedExtraTensorGradients = null;
@@ -5113,7 +5113,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
         if (grads is null || grads.Count == 0) return 0;
 
-        int matched = ScatterParameterGradientsToLayers(grads, sourcesOutliveStep);
+        int matched = ScatterParameterGradientsToLayers(grads, ownership);
         Dictionary<Tensor<T>, Vector<T>>? extras = null;
         foreach (var tensor in GetExtraTrainableTensors())
         {
