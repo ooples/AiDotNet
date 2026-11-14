@@ -7942,14 +7942,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             if (!mpSkipStep)
             {
                 var fullParams = selectedParameters.ToList();
+                // The gradient and avgLossT cover every micro-batch, so a line search or trust-region ratio test must
+                // re-evaluate all of them, token-weighted the same way, not just the last one. The forward is the
+                // identity; the objective replays the micro-batches itself.
                 var context = new TapeStepContext<T>(
                     fullParams,
                     singleRankGrads,
                     avgLossT,
                     lastMb.Input,
                     lastAlignedTarget,
-                    (inp, _) => ForwardForTraining(inp),
-                    (pred, tgt) => ApplyCompositeObjective(loss.ComputeTapeLoss(pred, AlignTargetToOutputShape(pred, tgt)), pred),
+                    (inp, _) => inp,
+                    (_, _) => TokenWeightedAccumulatedObjective(preparedMicroBatches, loss),
                     parameterBuffer: null);
                 MarkTrainMutationStarted();
                 resolvedOptimizer.Step(context);
@@ -8043,9 +8046,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             using var noGrad = new NoGradScope<T>();
             ForwardForTraining(sampleInput);
         }
-        catch
+        catch (Exception ex) when (ex is not OutOfMemoryException)
         {
-            // Best-effort warmup; training forward surfaces actionable errors.
+            // Best-effort warmup: the training forward that follows raises any error that persists, but the cause seen
+            // here is recorded, since it can explain a later failure or a layout that never materialized.
+            System.Diagnostics.Trace.TraceWarning($"[AiDotNet] Lazy-layer warmup failed for {GetType().Name}: {ex}");
         }
         finally
         {
@@ -8068,6 +8073,40 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         var alignedTarget = AlignTargetToOutputShape(prediction, mbTarget);
         var lossTensor = ApplyCompositeObjective(loss.ComputeTapeLoss(prediction, alignedTarget), mbInput);
         return (lossTensor, alignedTarget);
+    }
+
+    /// <summary>
+    /// The accumulated step's objective at the current parameters: each micro-batch's loss weighted by its share of the
+    /// valid tokens, which is how the step's reported mean loss is formed.
+    /// </summary>
+    private Tensor<T> TokenWeightedAccumulatedObjective(
+        IReadOnlyList<(Tensor<T> Input, Tensor<T> Target)> microBatches,
+        LossFunctions.LossFunctionBase<T> loss)
+    {
+        var terms = new List<(Tensor<T> Loss, long Tokens)>(microBatches.Count);
+        long totalTokens = 0L;
+        foreach (var (mbInput, mbTarget) in microBatches)
+        {
+            var (lossTensor, alignedTarget) = ComputeAccumulationMicroBatchObjective(mbInput, mbTarget, loss);
+            long tokens = DistributedTraining.DistributedTapeCoordinator<T>.CountValidElements(alignedTarget);
+            if (tokens <= 0) continue;
+            terms.Add((lossTensor, tokens));
+            totalTokens += tokens;
+        }
+
+        if (terms.Count == 0)
+        {
+            return new Tensor<T>(new[] { 1 });
+        }
+
+        Tensor<T>? sum = null;
+        foreach (var (lossTensor, tokens) in terms)
+        {
+            var weighted = Engine.TensorMultiplyScalar(lossTensor, NumOps.FromDouble((double)tokens / totalTokens));
+            sum = sum is null ? weighted : Engine.TensorAdd(sum, weighted);
+        }
+
+        return sum ?? new Tensor<T>(new[] { 1 });
     }
 
     private double ReadScalarLossAsDouble(Tensor<T> lossTensor)
@@ -16525,6 +16564,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// <see cref="GenerativeAdversarialNetwork{T,TI,TO}.Train"/>) and should not
     /// appear on the public API surface. (PR #1389 CodeRabbit review.)
     /// </remarks>
+    /// <summary>
+    /// For callers of <see cref="BackwardAndStepOnPrecomputedLoss"/>: broadcasts rank 0's initial parameters before the
+    /// caller records its forward, so the forward, the backward and <see cref="LastLoss"/> all see the synchronized
+    /// weights. Without a distributed coordinator, or once synchronized, this does nothing.
+    /// </summary>
+    internal void SynchronizeDistributedParametersBeforeForward()
+    {
+        _distributedCoordinator?.EnsureInitialParametersSynchronized(CollectModelTrainableTensors(), InvalidateLayerWeightCaches);
+    }
+
     internal T BackwardAndStepOnPrecomputedLoss(
         GradientTape<T> tape,
         Tensor<T> lossTensor,
@@ -16550,8 +16599,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
         if (_distributedCoordinator is { } precompDistCoord)
         {
+            // A no-op when the caller synchronized before recording its forward (SynchronizeDistributedParametersBeforeForward).
             precompDistCoord.EnsureInitialParametersSynchronized(trainableParams, InvalidateLayerWeightCaches);
-            var distGrads = ComputeAndPublishParameterGradients(tape, lossTensor, trainableParams);
+            // The coordinator divides by the active loss scale, so backward must run on the scaled loss, as on the eager,
+            // accumulated and streaming paths. LastLoss still reports the unscaled loss.
+            var lossForBackward = ScaleLossForMixedPrecision(_mixedPrecisionContext, lossTensor);
+            var distGrads = ComputeAndPublishParameterGradients(tape, lossForBackward, trainableParams);
             double localLoss = ReadScalarLossAsDouble(lossTensor);
             var (rankWeight, globalLoss, _) = precompDistCoord.SynchronizeStepMetadata(1L, localLoss);
             T globalLossValue = NumOps.FromDouble(globalLoss);

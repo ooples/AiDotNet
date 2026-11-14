@@ -778,6 +778,7 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
             // softmax cross-entropy for the multinomial-diffused categorical
             // features, Kotelnikov et al. 2023), and backpropagate through the
             // MLP + output heads + timestep projection in one optimizer step.
+            SynchronizeDistributedParametersBeforeForward();
             using var tape = new GradientTape<T>();
             var timeEmbed2 = CreateTimestepEmbeddingTensor(t);
             var (predictedNoise, predictedLogits) = DenoiserForwardTensors(numNoisy, catNoisy, timeEmbed2);
