@@ -108,7 +108,8 @@ public class AdaptiveRandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense
     /// <para>
     /// The steps are Gaussian mechanisms whose noise is chosen adaptively, so their composition (Gaussian
     /// differential privacy, Dong et al. 2019) holds only with a bound valid for every probe outcome (fully
-    /// adaptive composition, Smith and Thakurta 2022): sigma is at least sigma_min, so the k + 2 queries make the
+    /// adaptive composition, Smith and Thakurta 2022; Lyu et al. 2024, Adaptive Randomized Smoothing, Theorem 2.3):
+    /// sigma is at least sigma_min, so the k + 2 queries make the
     /// mechanism r sqrt(k + 2) / sigma_min-GDP for inputs at L2 distance r, which gives the certified radius
     /// sigma_eff * Phi^-1(p_A_lower) with sigma_eff = sigma_min / sqrt(k + 2). The realized sigma(x) is not a
     /// sound substitute, because a nearby input can realize a smaller sigma. c_A is chosen from separate

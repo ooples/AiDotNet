@@ -327,7 +327,11 @@ public class CertificationReferenceTests
 
         // The probe step (a noisy reference and k probes, k + 1 queries at sigma_min) composes with the
         // certification step into one Gaussian mechanism of noise ((k + 1) / sigma_min^2 + 1 / sigma^2)^(-1/2);
-        // the radius uses it, not sigma(x).
+        // the radius uses it, not sigma(x). Lyu et al. 2024, "Adaptive Randomized Smoothing" (arXiv 2406.10427),
+        // Theorem 2.3: k adaptive Gaussian steps are G_mu-DP with mu = r sqrt(sum_i 1 / sigma_i^2), so the radius
+        // uses sigma = 1 / sqrt(sum_i 1 / sigma_i^2) (Corollary 2.2). The constant model changes no probe, so
+        // sigma(x) = sigma_min here and this equals sigma_min / sqrt(k + 2). The old k / sigma_min^2 term left out
+        // the reference query: the probes were compared with the noiseless f(x), which is no Gaussian step.
         var options = new CertifiedDefenseOptions<double> { NumSamples = 100, SelectionSamples = 10, ConfidenceLevel = 0.999, Seed = 7 };
         var adaptive = new AdaptiveRandomizedSmoothing<double, Vector<double>, Vector<double>>(options, 0.1, 1.0, 20);
         var result = adaptive.CertifyPrediction(new Vector<double>(new[] { 0.3 }), ConstantClass(1, 0, 2));
@@ -600,6 +604,15 @@ public class CertificationReferenceTests
         // is sigma_min / sqrt(k + 2), not ((k + 1) / sigma_min^2 + 1 / sigma(x)^2)^(-1/2). Every Monte Carlo
         // sample runs a noisy reference, the k probes and the classification: (n0 + n)(k + 2) noisy calls. The
         // clean call f(x) that the probes used to be compared with is not a Gaussian query, so it is gone.
+        // Source: Lyu et al. 2024, "Adaptive Randomized Smoothing" (arXiv 2406.10427), Theorem 2.3: the adaptive
+        // composition of k Gaussian steps on the input is G_mu-DP with mu = r sqrt(sum_i 1 / sigma_i^2), and its
+        // radius is Corollary 2.2 with sigma = 1 / sqrt(sum_i 1 / sigma_i^2); only work on earlier noisy outputs is
+        // free post-processing, so every read of x must be one of the composed steps. Here the k + 2 steps (the
+        // reference, k probes, the classification) each have sigma_i >= sigma_min, so each is G_{r/sigma_min}-DP
+        // and the adaptive composition (Dong et al. 2022, Gaussian DP, Theorem 3.2 / Corollary 3.3) is
+        // G_{r sqrt(k + 2) / sigma_min}-DP: sigma_eff = sigma_min / sqrt(k + 2). The old k + 1 counted the probes
+        // and the classification only, and the deterministic f(x) they were compared with is G_infinity, so the
+        // old mechanism had no finite bound at all (inputs 2e-6 apart could pick sigma_min or sigma_max).
         const int k = 20;
         var options = new CertifiedDefenseOptions<double> { NumSamples = 200, SelectionSamples = 10, ConfidenceLevel = 0.99, Seed = 9 };
         var adaptive = new AdaptiveRandomizedSmoothing<double, Vector<double>, Vector<double>>(options, 0.1, 1.0, k);
