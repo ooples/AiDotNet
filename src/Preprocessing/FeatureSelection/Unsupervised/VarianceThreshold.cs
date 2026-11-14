@@ -26,12 +26,12 @@ public class VarianceThreshold<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
 {
     private readonly double _threshold;
 
-    private double[]? _variances;
+    private Vector<T>? _variances;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     public double Threshold => _threshold;
-    public double[]? Variances => _variances;
+    public Vector<T>? Variances => _variances;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -53,49 +53,19 @@ public class VarianceThreshold<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
         int n = data.Rows;
         int p = data.Columns;
 
-        _variances = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            // Compute mean
-            double mean = 0;
-            for (int i = 0; i < n; i++)
-                mean += NumOps.ToDouble(data[i, j]);
-            mean /= n;
-
-            // Compute variance
-            double variance = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double diff = NumOps.ToDouble(data[i, j]) - mean;
-                variance += diff * diff;
-            }
-            _variances[j] = variance / n;
-        }
+        // Population variance of every column
+        var variances = Engine.TensorDivideScalar(
+            SelectorTensorOps.ColumnSumOfSquares(FilterStatisticTensorOps.CenterColumns(Tensor<T>.FromMatrix(data))),
+            NumOps.FromDouble(n));
+        _variances = variances.ToVector();
 
         // Select features above threshold
-        _selectedIndices = _variances
-            .Select((v, idx) => (Variance: v, Index: idx))
-            .Where(x => x.Variance > _threshold)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.MaskPositions(
+            Engine.TensorGreaterThan(variances, NumOps.FromDouble(_threshold)));
 
         // If nothing selected, keep highest variance
         if (_selectedIndices.Length == 0)
-        {
-            int maxIdx = 0;
-            double maxVar = _variances[0];
-            for (int j = 1; j < p; j++)
-            {
-                if (_variances[j] > maxVar)
-                {
-                    maxVar = _variances[j];
-                    maxIdx = j;
-                }
-            }
-            _selectedIndices = new[] { maxIdx };
-        }
+            _selectedIndices = new[] { PreprocessingTensorOps.FirstArgMax(variances) };
 
         IsFitted = true;
     }
@@ -112,15 +82,7 @@ public class VarianceThreshold<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
         if (_selectedIndices is null)
             throw new InvalidOperationException("VarianceThreshold has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

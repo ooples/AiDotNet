@@ -26,14 +26,14 @@ public class ANCOVASelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
     private readonly int _nFeaturesToSelect;
     private readonly int _covariateIndex;
 
-    private double[]? _adjustedFStatistics;
+    private Vector<T>? _adjustedFStatistics;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int CovariateIndex => _covariateIndex;
-    public double[]? AdjustedFStatistics => _adjustedFStatistics;
+    public Vector<T>? AdjustedFStatistics => _adjustedFStatistics;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -72,96 +72,67 @@ public class ANCOVASelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         if (_covariateIndex < 0 || _covariateIndex >= p)
             throw new ArgumentException("Covariate index is out of range.");
 
-        var X = new double[n, p];
-        var y = new int[n];
-        for (int i = 0; i < n; i++)
+        // One-way ANCOVA of each feature on the classes with the covariate (common within-class slope):
+        // F = ((RSS_cov - RSS_full) / (k - 1)) / (RSS_full / (n - k - 1)), where RSS_full = Wyy - Wxy^2 / Wxx
+        // uses the within-class sums of squares and RSS_cov = Tyy - Txy^2 / Txx the total ones.
+        PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
+        int k = classes.Length;
+        int dfBetween = k - 1;
+        int dfWithin = n - k - 1; // -1 for covariate
+
+        var scores = PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
+        if (dfWithin > 0 && dfBetween > 0)
         {
-            y[i] = (int)Math.Round(NumOps.ToDouble(target[i]));
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+            var x = Tensor<T>.FromMatrix(data);
+            var membership = PreprocessingTensorOps.ClassOneHot<T>(classIndex, k);
+            var classMeans = SelectorTensorOps.GroupMeans(membership, x, out _);
+            var within = Engine.TensorSubtract(x, Engine.TensorIndexSelect(classMeans, new Tensor<int>(classIndex, new[] { n }), 0));
+            var total = FilterStatisticTensorOps.CenterColumns(x);
+
+            var rssFull = ResidualAfterCovariate(within);
+            var rssCovariate = ResidualAfterCovariate(total);
+            var msBetween = Engine.TensorDivideScalar(
+                Engine.TensorMax(Engine.TensorSubtract(rssCovariate, rssFull), NumOps.Zero), NumOps.FromDouble(dfBetween));
+            var msWithin = Engine.TensorDivideScalar(rssFull, NumOps.FromDouble(dfWithin));
+            scores = SelectorTensorOps.SeparationRatio(msBetween, msWithin, 1e-10);
         }
 
-        // Extract covariate
-        var covariate = new double[n];
-        for (int i = 0; i < n; i++)
-            covariate[i] = X[i, _covariateIndex];
-
-        var classes = y.Distinct().OrderBy(c => c).ToList();
-        int k = classes.Count;
-
-        _adjustedFStatistics = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            if (j == _covariateIndex)
-            {
-                _adjustedFStatistics[j] = 0; // Skip covariate itself
-                continue;
-            }
-
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            // Regress out covariate effect
-            double covMean = covariate.Average();
-            double colMean = col.Average();
-
-            double covVar = covariate.Sum(v => (v - covMean) * (v - covMean));
-            double cov = 0;
-            for (int i = 0; i < n; i++)
-                cov += (covariate[i] - covMean) * (col[i] - colMean);
-
-            double slope = covVar > 1e-10 ? cov / covVar : 0;
-
-            // Adjusted values (residuals)
-            var adjusted = new double[n];
-            for (int i = 0; i < n; i++)
-                adjusted[i] = col[i] - slope * (covariate[i] - covMean);
-
-            // ANOVA on adjusted values
-            double grandMean = adjusted.Average();
-
-            double ssBetween = 0;
-            foreach (var c in classes)
-            {
-                var classIndices = Enumerable.Range(0, n).Where(i => y[i] == c).ToList();
-                double classMean = classIndices.Select(i => adjusted[i]).Average();
-                ssBetween += classIndices.Count * (classMean - grandMean) * (classMean - grandMean);
-            }
-
-            double ssWithin = 0;
-            foreach (var c in classes)
-            {
-                var classIndices = Enumerable.Range(0, n).Where(i => y[i] == c).ToList();
-                double classMean = classIndices.Select(i => adjusted[i]).Average();
-                ssWithin += classIndices.Sum(i => (adjusted[i] - classMean) * (adjusted[i] - classMean));
-            }
-
-            int dfBetween = k - 1;
-            int dfWithin = n - k - 1; // -1 for covariate
-
-            if (dfWithin <= 0 || dfBetween <= 0)
-            {
-                _adjustedFStatistics[j] = 0;
-                continue;
-            }
-
-            double msBetween = ssBetween / dfBetween;
-            double msWithin = ssWithin / dfWithin;
-
-            _adjustedFStatistics[j] = msWithin > 1e-10 ? msBetween / msWithin : 0;
-        }
+        // The covariate itself scores 0 and is never selected
+        // (a one-hot position mask: compared as T, the column indices past 2048 are not exact in Half and
+        // would match the covariate index too)
+        var notCovariate = PreprocessingTensorOps.Not(Engine.Reshape(Engine.TensorOneHot<T>(
+            new Tensor<int>(new[] { _covariateIndex }, new[] { 1 }), p), new[] { p }));
+        scores = SelectorTensorOps.ZeroUnless(notCovariate, scores);
+        _adjustedFStatistics = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p - 1); // Exclude covariate
-        _selectedIndices = Enumerable.Range(0, p)
+        _selectedIndices = PreprocessingTensorOps.StableOrder(scores, descending: true)
             .Where(j => j != _covariateIndex)
-            .OrderByDescending(j => _adjustedFStatistics[j])
             .Take(numToSelect)
-            .OrderBy(x => x)
+            .OrderBy(j => j)
             .ToArray();
 
         IsFitted = true;
+    }
+
+    /// <summary>
+    /// Residual sum of squares of every column of a centred [n, p] tensor after a no-intercept regression on its
+    /// covariate column: <c>Syy - Sxy^2 / Sxx</c>, or <c>Syy</c> when <c>Sxx</c> is not above 1e-10.
+    /// </summary>
+    private Tensor<T> ResidualAfterCovariate(Tensor<T> centered)
+    {
+        int n = centered.Shape[0];
+        int p = centered.Shape[1];
+        var covariate = Engine.TensorSliceAxis(centered, 1, _covariateIndex);
+        var syy = SelectorTensorOps.ColumnSumOfSquares(centered);
+        T sxx = Engine.TensorSumOfSquares(covariate);
+        if (!NumOps.GreaterThan(sxx, PreprocessingTensorOps.Tolerance<T>(1e-10)))
+            return syy;
+
+        var sxy = Engine.Reshape(Engine.TensorMatMul(Engine.TensorTranspose(centered),
+            Engine.Reshape(covariate, new[] { n, 1 })), new[] { p });
+        return Engine.TensorMax(Engine.TensorSubtract(syy,
+            Engine.TensorDivideScalar(Engine.TensorMultiply(sxy, sxy), sxx)), NumOps.Zero);
     }
 
     /// <inheritdoc />
@@ -177,15 +148,7 @@ public class ANCOVASelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         if (_selectedIndices is null)
             throw new InvalidOperationException("ANCOVASelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

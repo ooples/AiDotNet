@@ -29,14 +29,15 @@ public class RandomizedLassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
     private readonly double _alpha;
     private readonly double _sampleFraction;
     private readonly double _weaknessRange;
+    private readonly int? _randomState;
 
-    private double[]? _selectionProbabilities;
+    private Vector<T>? _selectionProbabilities;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? SelectionProbabilities => _selectionProbabilities;
+    public Vector<T>? SelectionProbabilities => _selectionProbabilities;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -48,6 +49,7 @@ public class RandomizedLassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         double alpha = 0.01,
         double sampleFraction = 0.75,
         double weaknessRange = 0.5,
+        int? randomState = null,
         int[]? columnIndices = null)
         : base(columnIndices)
     {
@@ -59,6 +61,7 @@ public class RandomizedLassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         _alpha = alpha;
         _sampleFraction = sampleFraction;
         _weaknessRange = weaknessRange;
+        _randomState = randomState;
     }
 
     /// <inheritdoc />
@@ -78,105 +81,57 @@ public class RandomizedLassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         int n = data.Rows;
         int p = data.Columns;
 
-        var rand = RandomHelper.CreateSecureRandom();
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        // Seeded when a random state is given, so subsamples and weights are reproducible
+        var rand = _randomState.HasValue
+            ? RandomHelper.CreateSeededRandom(_randomState.Value)
+            : RandomHelper.CreateSecureRandom();
 
-        // Normalize features
-        var means = new double[p];
-        var stds = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++) means[j] += X[i, j];
-            means[j] /= n;
-            for (int i = 0; i < n; i++) stds[j] += (X[i, j] - means[j]) * (X[i, j] - means[j]);
-            stds[j] = Math.Sqrt(stds[j] / (n - 1)) + 1e-10;
-            for (int i = 0; i < n; i++) X[i, j] = (X[i, j] - means[j]) / stds[j];
-        }
+        // Normalize features: centre and divide by the sample standard deviation plus 1e-10; centre the target
+        var centered = FilterStatisticTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
+        var std = Engine.TensorAddScalar(Engine.TensorSqrt(Engine.TensorDivideScalar(
+            SelectorTensorOps.ColumnSumOfSquares(centered), NumOps.FromDouble(n - 1))), PreprocessingTensorOps.Tolerance<T>(1e-10));
+        var x = Engine.TensorDivide(centered, Engine.Reshape(std, new[] { 1, p }));
+        var y = SelectorTensorOps.CenteredColumn(target);
 
-        double yMean = y.Average();
-        for (int i = 0; i < n; i++) y[i] -= yMean;
-
-        var selectionCounts = new int[p];
+        var singletons = Enumerable.Range(0, p).ToArray();
+        T nonZero = PreprocessingTensorOps.Tolerance<T>(1e-10);
+        // (counted in int: a 0/1 sum in T stops counting at 2048 for Half)
+        var selectionCounts = new Tensor<int>(new[] { p });
         int sampleSize = (int)(n * _sampleFraction);
 
         for (int iter = 0; iter < _nIterations; iter++)
         {
             // Subsample
-            var indices = Enumerable.Range(0, n).OrderBy(_ => rand.Next()).Take(sampleSize).ToList();
+            var indices = Enumerable.Range(0, n).OrderBy(_ => rand.Next()).Take(sampleSize).ToArray();
+            var rows = new Tensor<int>(indices, new[] { indices.Length });
 
-            // Random weights for features
-            var weights = new double[p];
-            for (int j = 0; j < p; j++)
-                weights[j] = 1 - rand.NextDouble() * _weaknessRange;
+            // Random weights W_k in [1 - weaknessRange, 1) for features (Meinshausen and Buhlmann, 2010)
+            var weights = Engine.TensorUniform<T>(new[] { 1, p }, 1 - _weaknessRange, 1, rand.Next());
 
-            // Run weighted Lasso
-            var beta = RunWeightedLasso(X, y, indices, weights, p, _alpha);
+            // Randomized lasso: alpha sum_k |beta_k| / W_k, i.e. the lasso on the reweighted columns X_k W_k
+            var beta = RunWeightedLasso(Engine.TensorMultiply(Engine.TensorIndexSelect(x, rows, 0),
+                Engine.TensorBroadcastTo(weights, new[] { indices.Length, p })), Engine.TensorIndexSelect(y, rows, 0), singletons);
 
             // Count selected features
-            for (int j = 0; j < p; j++)
-                if (Math.Abs(beta[j]) > 1e-10)
-                    selectionCounts[j]++;
+            selectionCounts = Engine.TensorAdd(
+                selectionCounts, Engine.TensorGreaterThan(Engine.TensorAbs(beta), nonZero).Cast<int>());
         }
 
         // Compute selection probabilities
-        _selectionProbabilities = new double[p];
-        for (int j = 0; j < p; j++)
-            _selectionProbabilities[j] = (double)selectionCounts[j] / _nIterations;
+        var probabilities = Engine.TensorDivideScalar(selectionCounts.Cast<double>(), (double)_nIterations).Cast<T>();
+        _selectionProbabilities = probabilities.ToVector();
 
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _selectionProbabilities[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(probabilities, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }
 
-    private double[] RunWeightedLasso(double[,] X, double[] y, List<int> indices, double[] weights, int p, double alpha)
-    {
-        int n = indices.Count;
-        var beta = new double[p];
-
-        // Coordinate descent
-        for (int iter = 0; iter < 50; iter++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                double rho = 0;
-                for (int idx = 0; idx < n; idx++)
-                {
-                    int i = indices[idx];
-                    double residual = y[i];
-                    for (int k = 0; k < p; k++)
-                        if (k != j)
-                            residual -= beta[k] * X[i, k];
-                    rho += weights[j] * X[i, j] * residual;
-                }
-                rho /= n;
-
-                // Soft thresholding with weighted penalty
-                double effectiveAlpha = alpha / (weights[j] + 1e-10);
-                beta[j] = SoftThreshold(rho, effectiveAlpha);
-            }
-        }
-
-        return beta;
-    }
-
-    private double SoftThreshold(double x, double lambda)
-    {
-        if (x > lambda) return x - lambda;
-        if (x < -lambda) return x + lambda;
-        return 0;
-    }
+    /// <summary>
+    /// The lasso <c>(1/2m) ||y - X b||^2 + alpha ||b||_1</c> on the subsample; b has the support of the
+    /// randomized-lasso coefficients <c>beta = W b</c>.
+    /// </summary>
+    private Tensor<T> RunWeightedLasso(Tensor<T> x, Tensor<T> y, int[] singletons) =>
+        SparseRegressionOps.SparseGroupElasticNet(x, y, singletons, _alpha, 0, 0, 1000, 1e-6);
 
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
@@ -191,15 +146,7 @@ public class RandomizedLassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         if (_selectedIndices is null)
             throw new InvalidOperationException("RandomizedLassoSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

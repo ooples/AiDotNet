@@ -26,14 +26,14 @@ public class GrangerCausalitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
     private readonly int _nFeaturesToSelect;
     private readonly int _maxLag;
 
-    private double[]? _grangerFScores;
+    private Vector<T>? _grangerFScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int MaxLag => _maxLag;
-    public double[]? GrangerFScores => _grangerFScores;
+    public Vector<T>? GrangerFScores => _grangerFScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -70,163 +70,83 @@ public class GrangerCausalitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
-
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
-
-        _grangerFScores = new double[p];
         int effectiveN = n - _maxLag;
 
-        // Compute restricted model RSS (autoregressive model on Y only)
-        double rssRestricted = ComputeARModelRSS(y, _maxLag, effectiveN);
+        if (effectiveN < 0)
+            throw new ArgumentException("Data must have at least maxLag rows.", nameof(data));
 
-        // For each feature, compute unrestricted model RSS
-        for (int j = 0; j < p; j++)
+        // Granger (1969) causality F-test as statsmodels grangercausalitytests ("ssr_ftest"): OLS with a constant of
+        // y_t on its own lags (restricted) and on its own lags plus the feature's lags (unrestricted);
+        // F = ((RSS_r - RSS_u) / lag) / (RSS_u / (nobs - 2 lag - 1)) with nobs = n - lag.
+        var scores = PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
+        int dfUnrestricted = effectiveN - 2 * _maxLag - 1;
+        if (effectiveN > 0 && p > 0)
         {
-            double rssUnrestricted = ComputeGrangerModelRSS(X, y, j, _maxLag, effectiveN);
+            var x = Tensor<T>.FromMatrix(data);
+            var y = Engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 });
+            var response = Engine.TensorSlice(y, new[] { _maxLag, 0 }, new[] { effectiveN, 1 });
 
-            // Granger F-statistic
-            int dfRestricted = effectiveN - _maxLag;
-            int dfUnrestricted = effectiveN - 2 * _maxLag;
-
-            if (dfUnrestricted > 0 && rssUnrestricted > 1e-10)
+            // Compute restricted model RSS (autoregressive model on Y only)
+            var restrictedDesign = Engine.TensorConcatenate(new[]
             {
-                double fStat = ((rssRestricted - rssUnrestricted) / _maxLag) /
-                              (rssUnrestricted / dfUnrestricted);
-                _grangerFScores[j] = Math.Max(0, fStat);
+                PreprocessingTensorOps.Filled(new[] { effectiveN, 1 }, NumOps.One), LagColumns(y, effectiveN)
+            }, 1);
+            T rssRestricted = ComputeRSS(restrictedDesign, response).GetFlat(0);
+
+            // For each feature, compute unrestricted model RSS (Y lags + X_j lags)
+            var rssUnrestricted = new Tensor<T>[p];
+            for (int j = 0; j < p; j++)
+            {
+                var featureLags = LagColumns(Engine.Reshape(Engine.TensorSliceAxis(x, 1, j), new[] { n, 1 }), effectiveN);
+                rssUnrestricted[j] = ComputeRSS(Engine.TensorConcatenate(new[] { restrictedDesign, featureLags }, 1), response);
+            }
+
+            if (dfUnrestricted > 0)
+            {
+                var rss = Engine.TensorConcatenate(rssUnrestricted, 0);
+                var usable = Engine.TensorGreaterThan(rss, PreprocessingTensorOps.Tolerance<T>(1e-10));
+                var safeRss = Engine.TensorWhere(usable, rss, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
+                var numerator = Engine.TensorDivideScalar(
+                    Engine.TensorAddScalar(Engine.TensorNegate(rss), rssRestricted), NumOps.FromDouble(_maxLag));
+                var fStat = Engine.TensorDivide(numerator,
+                    Engine.TensorDivideScalar(safeRss, NumOps.FromDouble(dfUnrestricted)));
+                scores = SelectorTensorOps.ZeroUnless(usable, Engine.TensorMax(fStat, NumOps.Zero));
             }
         }
 
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _grangerFScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _grangerFScores = scores.ToVector();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }
 
-    private double ComputeARModelRSS(double[] y, int lag, int effectiveN)
+    /// <summary>
+    /// The lags 1 .. maxLag of an [n, 1] series aligned with the targets <c>t = maxLag .. n - 1</c>:
+    /// column l holds rows <c>maxLag - l - 1 .. maxLag - l - 2 + effectiveN</c>, as [effectiveN, maxLag].
+    /// </summary>
+    private Tensor<T> LagColumns(Tensor<T> series, int effectiveN)
     {
-        // Build design matrix for AR model
-        int n = y.Length;
-        var X = new double[effectiveN, lag];
-        var yTarget = new double[effectiveN];
-
-        for (int i = 0; i < effectiveN; i++)
-        {
-            yTarget[i] = y[i + lag];
-            for (int l = 0; l < lag; l++)
-                X[i, l] = y[i + lag - l - 1];
-        }
-
-        return ComputeRSS(X, yTarget, effectiveN, lag);
+        var columns = new Tensor<T>[_maxLag];
+        for (int l = 0; l < _maxLag; l++)
+            columns[l] = Engine.TensorSlice(series, new[] { _maxLag - l - 1, 0 }, new[] { effectiveN, 1 });
+        return Engine.TensorConcatenate(columns, 1);
     }
 
-    private double ComputeGrangerModelRSS(double[,] Xall, double[] y, int j, int lag, int effectiveN)
+    /// <summary>
+    /// Residual sum of squares of the least-squares fit of <paramref name="y"/> ([m, 1]) on
+    /// <paramref name="design"/> ([m, k]) as a [1] tensor: <c>y'y - sum_i (u_i' y)^2</c> over the left singular
+    /// vectors whose singular value is above 1e-10 times the largest (a pseudo-inverse fit, so collinear columns
+    /// such as a constant feature are handled like numpy.linalg.lstsq).
+    /// </summary>
+    private Tensor<T> ComputeRSS(Tensor<T> design, Tensor<T> y)
     {
-        // Build design matrix for Granger model (Y lags + X_j lags)
-        int n = y.Length;
-        var X = new double[effectiveN, 2 * lag];
-        var yTarget = new double[effectiveN];
-
-        for (int i = 0; i < effectiveN; i++)
-        {
-            yTarget[i] = y[i + lag];
-            for (int l = 0; l < lag; l++)
-            {
-                X[i, l] = y[i + lag - l - 1];
-                X[i, lag + l] = Xall[i + lag - l - 1, j];
-            }
-        }
-
-        return ComputeRSS(X, yTarget, effectiveN, 2 * lag);
-    }
-
-    private double ComputeRSS(double[,] X, double[] y, int n, int p)
-    {
-        // Solve OLS and compute RSS
-        var XtX = new double[p, p];
-        var Xty = new double[p];
-
-        for (int i = 0; i < p; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                for (int k = 0; k < n; k++)
-                    XtX[i, j] += X[k, i] * X[k, j];
-            }
-            for (int k = 0; k < n; k++)
-                Xty[i] += X[k, i] * y[k];
-        }
-
-        // Regularization
-        for (int i = 0; i < p; i++)
-            XtX[i, i] += 1e-6;
-
-        var beta = SolveSystem(XtX, Xty, p);
-
-        // Compute RSS
-        double rss = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double pred = 0;
-            for (int j = 0; j < p; j++)
-                pred += beta[j] * X[i, j];
-            double residual = y[i] - pred;
-            rss += residual * residual;
-        }
-
-        return rss;
-    }
-
-    private double[] SolveSystem(double[,] A, double[] b, int n)
-    {
-        var aug = new double[n, n + 1];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-                aug[i, j] = A[i, j];
-            aug[i, n] = b[i];
-        }
-
-        for (int col = 0; col < n; col++)
-        {
-            int maxRow = col;
-            for (int row = col + 1; row < n; row++)
-                if (Math.Abs(aug[row, col]) > Math.Abs(aug[maxRow, col]))
-                    maxRow = row;
-
-            for (int j = 0; j <= n; j++)
-                (aug[col, j], aug[maxRow, j]) = (aug[maxRow, j], aug[col, j]);
-
-            if (Math.Abs(aug[col, col]) < 1e-10) continue;
-
-            for (int row = col + 1; row < n; row++)
-            {
-                double factor = aug[row, col] / aug[col, col];
-                for (int j = col; j <= n; j++)
-                    aug[row, j] -= factor * aug[col, j];
-            }
-        }
-
-        var x = new double[n];
-        for (int i = n - 1; i >= 0; i--)
-        {
-            x[i] = aug[i, n];
-            for (int j = i + 1; j < n; j++)
-                x[i] -= aug[i, j] * x[j];
-            x[i] /= (Math.Abs(aug[i, i]) > 1e-10 ? aug[i, i] : 1);
-        }
-
-        return x;
+        var (u, s, _) = PreprocessingTensorOps.Svd(design, false);
+        var kept = Engine.TensorGreaterThan(s,
+            NumOps.Multiply(Engine.TensorMaxValue(s), PreprocessingTensorOps.Tolerance<T>(1e-10)));
+        var projections = Engine.Reshape(Engine.TensorMatMul(Engine.TensorTranspose(u), y), new[] { s.Length });
+        T explained = Engine.TensorSum(Engine.TensorMultiply(kept, Engine.TensorMultiply(projections, projections)));
+        T rss = NumOps.Subtract(Engine.TensorSumOfSquares(y), explained);
+        return PreprocessingTensorOps.Filled(new[] { 1 }, NumOps.GreaterThan(rss, NumOps.Zero) ? rss : NumOps.Zero);
     }
 
     /// <inheritdoc />
@@ -242,15 +162,7 @@ public class GrangerCausalitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         if (_selectedIndices is null)
             throw new InvalidOperationException("GrangerCausalitySelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -28,14 +28,14 @@ public class GroupLassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
     private readonly int _maxIterations;
     private readonly int[]? _groupAssignments;
 
-    private double[]? _coefficients;
+    private Vector<T>? _coefficients;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double Alpha => _alpha;
-    public double[]? Coefficients => _coefficients;
+    public Vector<T>? Coefficients => _coefficients;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -74,115 +74,24 @@ public class GroupLassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
-
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
 
         // Use provided groups or create individual groups
         var groups = _groupAssignments ?? Enumerable.Range(0, p).ToArray();
+        if (groups.Length < p)
+            throw new ArgumentException("Group assignments must have one entry per feature.");
+        groups = groups.Take(p).ToArray();
 
-        // Standardize
-        var means = new double[p];
-        var stds = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            double sum = 0;
-            for (int i = 0; i < n; i++)
-                sum += X[i, j];
-            means[j] = sum / n;
+        // Standardize (population std, 1 for a constant column)
+        var x = SelectorTensorOps.StandardizeColumns(Tensor<T>.FromMatrix(data));
+        var y = Engine.Reshape(Tensor<T>.FromVector(target), new[] { data.Rows, 1 });
 
-            double sumSq = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double diff = X[i, j] - means[j];
-                sumSq += diff * diff;
-            }
-            stds[j] = Math.Sqrt(sumSq / n);
-            if (stds[j] < 1e-10) stds[j] = 1;
+        // Group lasso (Yuan and Lin, 2006): (1/2n) ||y - X b||^2 + alpha sum_g sqrt(p_g) ||b_g||_2
+        var coefficients = SparseRegressionOps.SparseGroupElasticNet(x, y, groups, 0, 0, _alpha, _maxIterations, 1e-6);
+        _coefficients = coefficients.ToVector();
 
-            for (int i = 0; i < n; i++)
-                X[i, j] = (X[i, j] - means[j]) / stds[j];
-        }
-
-        // Group Lasso via block coordinate descent
-        _coefficients = new double[p];
-        var uniqueGroups = groups.Distinct().ToList();
-
-        for (int iter = 0; iter < _maxIterations; iter++)
-        {
-            double maxChange = 0;
-
-            foreach (var g in uniqueGroups)
-            {
-                var groupIndices = Enumerable.Range(0, p).Where(j => groups[j] == g).ToArray();
-                int gSize = groupIndices.Length;
-                if (gSize == 0) continue;
-
-                // Compute gradient for group
-                var gradient = new double[gSize];
-                for (int gi = 0; gi < gSize; gi++)
-                {
-                    int j = groupIndices[gi];
-                    for (int i = 0; i < n; i++)
-                    {
-                        double residual = y[i];
-                        for (int k = 0; k < p; k++)
-                            residual -= X[i, k] * _coefficients[k];
-                        residual += X[i, j] * _coefficients[j];
-                        gradient[gi] += X[i, j] * residual;
-                    }
-                }
-
-                // Group L2 norm
-                double gradNorm = Math.Sqrt(gradient.Sum(g => g * g));
-                double shrinkage = _alpha * n * Math.Sqrt(gSize);
-
-                // Group soft thresholding
-                if (gradNorm > shrinkage)
-                {
-                    double scale = (gradNorm - shrinkage) / gradNorm;
-                    for (int gi = 0; gi < gSize; gi++)
-                    {
-                        int j = groupIndices[gi];
-                        double xNorm = 0;
-                        for (int i = 0; i < n; i++)
-                            xNorm += X[i, j] * X[i, j];
-                        if (xNorm < 1e-10) continue;
-
-                        double oldCoef = _coefficients[j];
-                        _coefficients[j] = gradient[gi] * scale / xNorm;
-                        maxChange = Math.Max(maxChange, Math.Abs(_coefficients[j] - oldCoef));
-                    }
-                }
-                else
-                {
-                    for (int gi = 0; gi < gSize; gi++)
-                    {
-                        int j = groupIndices[gi];
-                        maxChange = Math.Max(maxChange, Math.Abs(_coefficients[j]));
-                        _coefficients[j] = 0;
-                    }
-                }
-            }
-
-            if (maxChange < 1e-6)
-                break;
-        }
-
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => Math.Abs(_coefficients[j]))
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(
+            Engine.TensorAbs(coefficients), Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }
@@ -200,15 +109,7 @@ public class GroupLassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         if (_selectedIndices is null)
             throw new InvalidOperationException("GroupLassoSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

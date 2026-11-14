@@ -24,13 +24,13 @@ public class ANOVASelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _fStatistics;
+    private Vector<T>? _fStatistics;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FStatistics => _fStatistics;
+    public Vector<T>? FStatistics => _fStatistics;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -61,69 +61,12 @@ public class ANOVASelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new int[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = (int)Math.Round(NumOps.ToDouble(target[i]));
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
-
-        var classes = y.Distinct().OrderBy(c => c).ToList();
-        var classIndices = new Dictionary<int, List<int>>();
-        foreach (var c in classes)
-            classIndices[c] = Enumerable.Range(0, n).Where(i => y[i] == c).ToList();
-
-        _fStatistics = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            // Overall mean
-            double grandMean = 0;
-            for (int i = 0; i < n; i++)
-                grandMean += X[i, j];
-            grandMean /= n;
-
-            // Between-group sum of squares
-            double ssb = 0;
-            foreach (var c in classes)
-            {
-                var indices = classIndices[c];
-                double classMean = indices.Average(i => X[i, j]);
-                ssb += indices.Count * (classMean - grandMean) * (classMean - grandMean);
-            }
-
-            // Within-group sum of squares
-            double ssw = 0;
-            foreach (var c in classes)
-            {
-                var indices = classIndices[c];
-                double classMean = indices.Average(i => X[i, j]);
-                foreach (int i in indices)
-                    ssw += (X[i, j] - classMean) * (X[i, j] - classMean);
-            }
-
-            int dfBetween = classes.Count - 1;
-            int dfWithin = n - classes.Count;
-
-            if (dfBetween > 0 && dfWithin > 0 && ssw > 1e-10)
-            {
-                double msBetween = ssb / dfBetween;
-                double msWithin = ssw / dfWithin;
-                _fStatistics[j] = msBetween / msWithin;
-            }
-        }
-
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _fStatistics[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        // scikit-learn f_classif: a feature with no within-class scatter but distinct class means scores +inf
+        var scores = SelectorTensorOps.FClassif(Tensor<T>.FromMatrix(data), target, out _);
+        _fStatistics = scores.ToVector();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }
@@ -141,15 +84,7 @@ public class ANOVASelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         if (_selectedIndices is null)
             throw new InvalidOperationException("ANOVASelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -31,7 +31,7 @@ public class FusedLasso<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
     private readonly int _maxIterations;
     private readonly double _tolerance;
 
-    private double[]? _coefficients;
+    private Vector<T>? _coefficients;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -39,7 +39,7 @@ public class FusedLasso<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double Alpha => _alpha;
     public double FusedPenalty => _fusedPenalty;
-    public double[]? Coefficients => _coefficients;
+    public Vector<T>? Coefficients => _coefficients;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -78,143 +78,85 @@ public class FusedLasso<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
-        // Standardize features
-        var means = new double[p];
-        var stds = new double[p];
-        var X = new double[n, p];
+        // Standardize features (population std, 1 for a constant column) and centre the target
+        var x = SelectorTensorOps.StandardizeColumns(Tensor<T>.FromMatrix(data));
+        var y = SelectorTensorOps.CenteredColumn(target);
 
-        for (int j = 0; j < p; j++)
+        // Fused lasso (Tibshirani et al., 2005): minimise 1/2 ||y - X b||^2 + alpha ||b||_1
+        // + fusedPenalty sum_j |b_j+1 - b_j| by scaled ADMM (Boyd et al., 2011, section 6.4.1) on z = D b,
+        // where D stacks the identity and the first-difference operator.
+        var difference = DifferenceOperator(p);
+        var dt = Engine.TensorTranspose(difference);
+        T rho = NumOps.One; // ADMM penalty parameter
+        var xt = Engine.TensorTranspose(x);
+        var system = Engine.TensorAdd(Engine.TensorMatMul(xt, x),
+            Engine.TensorMultiplyScalar(Engine.TensorMatMul(dt, difference), rho));
+        var inverse = PreprocessingTensorOps.Inverse(system);
+        var xty = Engine.TensorMatMul(xt, y);
+
+        int rows = difference.Shape[0];
+        var thresholds = PreprocessingTensorOps.Filled(new[] { p, 1 }, NumOps.Divide(NumOps.FromDouble(_alpha), rho));
+        if (rows > p)
         {
-            double mean = 0;
-            for (int i = 0; i < n; i++)
-                mean += NumOps.ToDouble(data[i, j]);
-            mean /= n;
-            means[j] = mean;
-
-            double variance = 0;
-            for (int i = 0; i < n; i++)
+            thresholds = Engine.TensorConcatenate(new[]
             {
-                double diff = NumOps.ToDouble(data[i, j]) - mean;
-                variance += diff * diff;
-            }
-            double std = Math.Sqrt(variance / n);
-            stds[j] = std > 1e-10 ? std : 1.0;
-
-            for (int i = 0; i < n; i++)
-                X[i, j] = (NumOps.ToDouble(data[i, j]) - mean) / stds[j];
+                thresholds,
+                PreprocessingTensorOps.Filled(new[] { rows - p, 1 }, NumOps.Divide(NumOps.FromDouble(_fusedPenalty), rho))
+            }, 0);
         }
-
-        // Standardize target
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-            y[i] = NumOps.ToDouble(target[i]) - yMean;
-
-        // Initialize
-        _coefficients = new double[p];
-        var residuals = (double[])y.Clone();
-
-        // ADMM for Fused Lasso
-        var u = new double[p]; // Dual variable for sparsity
-        var v = new double[p - 1]; // Dual variable for fusion
-        var z1 = new double[p]; // Auxiliary for sparsity
-        var z2 = new double[p - 1]; // Auxiliary for fusion
-
-        double rho = 1.0; // ADMM penalty parameter
+        var z = new Tensor<T>(new[] { rows, 1 });
+        var u = new Tensor<T>(new[] { rows, 1 });
+        var coefficients = new Tensor<T>(new[] { p, 1 });
+        T tolerance = NumOps.FromDouble(_tolerance);
 
         for (int iter = 0; iter < _maxIterations; iter++)
         {
-            var oldCoef = (double[])_coefficients.Clone();
+            var oldCoef = coefficients;
 
-            // Update beta (coefficient) - solve least squares with regularization
-            for (int j = 0; j < p; j++)
-            {
-                // Gradient from data
-                double grad = 0;
-                double hess = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    grad += X[i, j] * residuals[i];
-                    hess += X[i, j] * X[i, j];
-                }
+            // b = (X'X + rho D'D)^-1 (X'y + rho D'(z - u))
+            coefficients = Engine.TensorMatMul(inverse, Engine.TensorAdd(xty,
+                Engine.TensorMultiplyScalar(Engine.TensorMatMul(dt, Engine.TensorSubtract(z, u)), rho)));
 
-                // Add ADMM terms
-                double target_val = z1[j] - u[j];
-                if (j < p - 1)
-                    target_val += z2[j] - v[j];
-                if (j > 0)
-                    target_val += _coefficients[j - 1] + z2[j - 1] - v[j - 1];
+            // z = soft-threshold(D b + u): alpha / rho on the coefficients, fusedPenalty / rho on the differences
+            var db = Engine.TensorMatMul(difference, coefficients);
+            var shifted = Engine.TensorAdd(db, u);
+            z = Engine.TensorMultiply(Engine.TensorSign(shifted),
+                Engine.TensorMax(Engine.TensorSubtract(Engine.TensorAbs(shifted), thresholds), NumOps.Zero));
 
-                grad += rho * (_coefficients[j] - target_val);
-                hess += rho * (1 + (j < p - 1 ? 1 : 0) + (j > 0 ? 1 : 0));
-
-                double oldVal = _coefficients[j];
-                _coefficients[j] = hess > 1e-10 ? _coefficients[j] + grad / hess : _coefficients[j];
-
-                // Update residuals
-                for (int i = 0; i < n; i++)
-                    residuals[i] += X[i, j] * (oldVal - _coefficients[j]);
-            }
-
-            // Update z1 (sparsity constraint) with soft thresholding
-            for (int j = 0; j < p; j++)
-            {
-                double val = _coefficients[j] + u[j];
-                double threshold = _alpha / rho;
-                if (val > threshold)
-                    z1[j] = val - threshold;
-                else if (val < -threshold)
-                    z1[j] = val + threshold;
-                else
-                    z1[j] = 0;
-            }
-
-            // Update z2 (fusion constraint) with soft thresholding
-            for (int j = 0; j < p - 1; j++)
-            {
-                double val = _coefficients[j + 1] - _coefficients[j] + v[j];
-                double threshold = _fusedPenalty / rho;
-                if (val > threshold)
-                    z2[j] = val - threshold;
-                else if (val < -threshold)
-                    z2[j] = val + threshold;
-                else
-                    z2[j] = 0;
-            }
-
-            // Update dual variables
-            for (int j = 0; j < p; j++)
-                u[j] += _coefficients[j] - z1[j];
-            for (int j = 0; j < p - 1; j++)
-                v[j] += _coefficients[j + 1] - _coefficients[j] - z2[j];
+            // Update scaled dual variables
+            u = Engine.TensorAdd(u, Engine.TensorSubtract(db, z));
 
             // Check convergence
-            double maxChange = 0;
-            for (int j = 0; j < p; j++)
-                maxChange = Math.Max(maxChange, Math.Abs(_coefficients[j] - oldCoef[j]));
-
-            if (maxChange < _tolerance)
+            if (PreprocessingTensorOps.IsBelow(
+                    Engine.TensorMaxValue(Engine.TensorAbs(Engine.TensorSubtract(coefficients, oldCoef))), tolerance))
                 break;
         }
 
+        var flat = Engine.Reshape(coefficients, new[] { p });
+        _coefficients = flat.ToVector();
+
         // Select features by absolute coefficient magnitude
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _coefficients
-            .Select((c, idx) => (Coef: Math.Abs(c), Index: idx))
-            .OrderByDescending(x => x.Coef)
-            .Take(numToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(Engine.TensorAbs(flat), Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
+    }
+
+    /// <summary>
+    /// The [2p - 1, p] operator D stacking the identity (rows 0 .. p - 1) over the first differences
+    /// (row p + j is <c>e_{j+1} - e_j</c>).
+    /// </summary>
+    private Tensor<T> DifferenceOperator(int p)
+    {
+        var identity = Engine.TensorEye<T>(p);
+        if (p < 2)
+            return identity;
+
+        var differences = Engine.TensorSubtract(
+            Engine.TensorSlice(identity, new[] { 1, 0 }, new[] { p - 1, p }),
+            Engine.TensorSlice(identity, new[] { 0, 0 }, new[] { p - 1, p }));
+        return Engine.TensorConcatenate(new[] { identity, differences }, 0);
     }
 
     /// <inheritdoc />
@@ -230,15 +172,7 @@ public class FusedLasso<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
         if (_selectedIndices is null)
             throw new InvalidOperationException("FusedLasso has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

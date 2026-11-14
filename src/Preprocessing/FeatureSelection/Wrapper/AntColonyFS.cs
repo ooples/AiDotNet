@@ -32,18 +32,18 @@ public class AntColonyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
     private readonly double _alpha; // Pheromone importance
     private readonly double _beta; // Heuristic importance
     private readonly double _evaporationRate;
-    private readonly Func<Matrix<T>, Vector<T>, int[], double>? _scorer;
+    private readonly Func<Matrix<T>, Vector<T>, int[], T>? _scorer;
     private readonly int? _randomState;
 
-    private double[]? _featureScores;
-    private double[]? _pheromones;
+    private Vector<T>? _featureScores;
+    private Vector<T>? _pheromones;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FeatureScores => _featureScores;
-    public double[]? Pheromones => _pheromones;
+    public Vector<T>? FeatureScores => _featureScores;
+    public Vector<T>? Pheromones => _pheromones;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -56,7 +56,7 @@ public class AntColonyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         double alpha = 1.0,
         double beta = 2.0,
         double evaporationRate = 0.1,
-        Func<Matrix<T>, Vector<T>, int[], double>? scorer = null,
+        Func<Matrix<T>, Vector<T>, int[], T>? scorer = null,
         int? randomState = null,
         int[]? columnIndices = null)
         : base(columnIndices)
@@ -88,7 +88,6 @@ public class AntColonyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
         var random = _randomState.HasValue
@@ -98,184 +97,122 @@ public class AntColonyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         var scorer = _scorer ?? DefaultScorer;
 
         // Compute initial heuristic (correlation-based)
-        var heuristic = ComputeHeuristic(data, target, n, p);
+        var heuristic = ComputeHeuristic(data, target, p);
 
         // Initialize pheromones
-        _pheromones = new double[p];
-        for (int j = 0; j < p; j++)
-            _pheromones[j] = 1.0;
+        var pheromones = PreprocessingTensorOps.Filled(new[] { p }, NumOps.One);
 
         int[] bestSolution = Enumerable.Range(0, Math.Min(_nFeaturesToSelect, p)).ToArray();
-        double bestFitness = double.NegativeInfinity;
+        T bestFitness = NumOps.FromDouble(double.NegativeInfinity);
+        T zero = NumOps.Zero;
+        T minimumDeposit = NumOps.FromDouble(0.01);
+        T keep = NumOps.FromDouble(1 - _evaporationRate);
+        T alpha = NumOps.FromDouble(_alpha);
+        T beta = NumOps.FromDouble(_beta);
+        T two = NumOps.FromDouble(2);
+        T minimumElite = NumOps.FromDouble(0.02);
 
         // ACO iterations
         for (int iter = 0; iter < _nIterations; iter++)
         {
             var antSolutions = new List<int[]>();
-            var antFitnesses = new double[_nAnts];
+            var deposits = new T[_nAnts];
 
-            // Each ant constructs a solution
+            // Each ant constructs a solution (tau^alpha eta^beta is fixed while the ants build)
+            var weights = Engine.TensorMultiply(
+                Engine.TensorPower(pheromones, alpha),
+                Engine.TensorPower(heuristic, beta));
             for (int ant = 0; ant < _nAnts; ant++)
             {
-                var solution = ConstructSolution(p, heuristic, random);
+                var solution = ConstructSolution(p, weights, random);
                 antSolutions.Add(solution);
-                antFitnesses[ant] = scorer(data, target, solution);
+                T fitness = scorer(data, target, solution);
+                deposits[ant] = WrapperScoringOps.IsAbove(fitness, zero) ? fitness : minimumDeposit;
 
-                if (antFitnesses[ant] > bestFitness)
+                if (WrapperScoringOps.IsAbove(fitness, bestFitness))
                 {
-                    bestFitness = antFitnesses[ant];
+                    bestFitness = fitness;
                     bestSolution = (int[])solution.Clone();
                 }
             }
 
-            // Update pheromones
-            // Evaporation
-            for (int j = 0; j < p; j++)
-                _pheromones[j] *= (1 - _evaporationRate);
+            // Update pheromones: evaporation, then each ant deposits its fitness (at least 0.01) on its features
+            pheromones = Engine.TensorMultiplyScalar(pheromones, keep);
+            var depositRow = Engine.Reshape(new Tensor<T>(deposits, new[] { _nAnts }), new[] { 1, _nAnts });
+            pheromones = Engine.TensorAdd(pheromones, Engine.Reshape(
+                Engine.TensorMatMul(depositRow, WrapperScoringOps.MembershipRows<T>(antSolutions, p)), new[] { p }));
 
-            // Deposit
-            for (int ant = 0; ant < _nAnts; ant++)
-            {
-                double deposit = antFitnesses[ant] > 0 ? antFitnesses[ant] : 0.01;
-                foreach (int j in antSolutions[ant])
-                    _pheromones[j] += deposit;
-            }
-
-            // Elitist strategy: extra deposit for best solution
-            foreach (int j in bestSolution)
-                _pheromones[j] += bestFitness > 0 ? bestFitness * 2 : 0.02;
+            // Elitist strategy: extra deposit for best solution (2 x its fitness, 0.02 when that is not positive)
+            var bestMembership = WrapperScoringOps.Membership<T>(bestSolution, p);
+            var eliteDeposit = WrapperScoringOps.IsAbove(bestFitness, zero)
+                ? Engine.TensorMultiplyScalar(Engine.TensorMultiplyScalar(bestMembership, bestFitness), two)
+                : Engine.TensorMultiplyScalar(bestMembership, minimumElite);
+            pheromones = Engine.TensorAdd(pheromones, eliteDeposit);
         }
 
-        _featureScores = (double[])_pheromones.Clone();
+        _pheromones = pheromones.ToVector();
+        _featureScores = pheromones.ToVector();
         _selectedIndices = bestSolution.OrderBy(x => x).ToArray();
 
         IsFitted = true;
     }
 
-    private int[] ConstructSolution(int p, double[] heuristic, Random random)
+    private int[] ConstructSolution(int p, Tensor<T> weights, Random random)
     {
         var selected = new HashSet<int>();
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
+        var available = PreprocessingTensorOps.Filled(new[] { p }, NumOps.One);
+        T limit = PreprocessingTensorOps.Tolerance<T>(1e-10);
 
         while (selected.Count < numToSelect)
         {
-            // Compute selection probabilities
-            var probabilities = new double[p];
-            double sum = 0;
+            // Compute selection probabilities tau^alpha eta^beta of the features not yet selected
+            var probabilities = Engine.TensorMultiply(weights, available);
+            T sum = Engine.TensorSum(probabilities);
 
-            for (int j = 0; j < p; j++)
-            {
-                if (selected.Contains(j))
-                    continue;
-
-                var pheromonesLocal = _pheromones ?? throw new InvalidOperationException("Pheromones have not been initialized.");
-                double tau = Math.Pow(pheromonesLocal[j], _alpha);
-                double eta = Math.Pow(heuristic[j], _beta);
-                probabilities[j] = tau * eta;
-                sum += probabilities[j];
-            }
-
-            if (sum < 1e-10)
+            int chosen;
+            if (WrapperScoringOps.IsBelow(sum, limit))
             {
                 // Random selection if all probabilities are zero
                 var remaining = Enumerable.Range(0, p).Where(j => !selected.Contains(j)).ToList();
-                if (remaining.Count > 0)
-                    selected.Add(remaining[random.Next(remaining.Count)]);
-                else
+                if (remaining.Count == 0)
                     break;
-                continue;
+                chosen = remaining[random.Next(remaining.Count)];
             }
-
-            // Roulette wheel selection
-            double threshold = random.NextDouble() * sum;
-            double cumulative = 0;
-
-            for (int j = 0; j < p; j++)
+            else
             {
-                if (selected.Contains(j))
+                // Roulette wheel selection: the first unselected feature whose cumulative probability reaches the
+                // threshold (none when rounding leaves the total just short; the ant then draws again)
+                T threshold = WrapperScoringOps.Multiply(WrapperScoringOps.Scalar<T>(random.NextDouble()), sum);
+                var reached = Engine.TensorMultiply(
+                    PreprocessingTensorOps.AtLeast(Engine.TensorCumSum(probabilities, 0), threshold), available);
+                var positions = PreprocessingTensorOps.MaskPositions(reached);
+                if (positions.Length == 0)
                     continue;
-
-                cumulative += probabilities[j];
-                if (cumulative >= threshold)
-                {
-                    selected.Add(j);
-                    break;
-                }
+                chosen = positions[0];
             }
+
+            selected.Add(chosen);
+            available = Engine.TensorSubtract(available, WrapperScoringOps.Membership<T>(new[] { chosen }, p));
         }
 
         return selected.ToArray();
     }
 
-    private double[] ComputeHeuristic(Matrix<T> data, Vector<T> target, int n, int p)
+    private Tensor<T> ComputeHeuristic(Matrix<T> data, Vector<T> target, int p)
     {
-        var heuristic = new double[p];
-
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        for (int j = 0; j < p; j++)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, j]);
-            xMean /= n;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-                double yDiff = NumOps.ToDouble(target[i]) - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-                syy += yDiff * yDiff;
-            }
-
-            double corr = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
-            heuristic[j] = corr + 0.01; // Add small value to avoid zero
-        }
-
-        return heuristic;
+        // |Pearson r| with the target plus a small value to avoid zero
+        var correlations = WrapperScoringOps.AbsTargetCorrelations(data, target, Enumerable.Range(0, p).ToArray());
+        return Engine.TensorAddScalar(correlations, NumOps.FromDouble(0.01));
     }
 
-    private double DefaultScorer(Matrix<T> data, Vector<T> target, int[] featureIndices)
+    private T DefaultScorer(Matrix<T> data, Vector<T> target, int[] featureIndices)
     {
         if (featureIndices.Length == 0)
-            return double.NegativeInfinity;
+            return NumOps.FromDouble(double.NegativeInfinity);
 
-        // Simple correlation-based score
-        int n = data.Rows;
-        double totalCorr = 0;
-
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        foreach (int j in featureIndices)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, j]);
-            xMean /= n;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-                double yDiff = NumOps.ToDouble(target[i]) - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-                syy += yDiff * yDiff;
-            }
-
-            double corr = (sxx > 1e-10 && syy > 1e-10) ? sxy / Math.Sqrt(sxx * syy) : 0;
-            totalCorr += Math.Abs(corr);
-        }
-
-        return totalCorr / featureIndices.Length;
+        // Simple correlation-based score: mean |Pearson r| with the target
+        return WrapperScoringOps.MeanAbsTargetCorrelation(data, target, featureIndices);
     }
 
     /// <inheritdoc />
@@ -291,15 +228,7 @@ public class AntColonyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
         if (_selectedIndices is null)
             throw new InvalidOperationException("AntColonyFS has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

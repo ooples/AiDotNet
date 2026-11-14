@@ -24,13 +24,13 @@ public class LDABasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _discriminantScores;
+    private Vector<T>? _discriminantScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? DiscriminantScores => _discriminantScores;
+    public Vector<T>? DiscriminantScores => _discriminantScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -64,84 +64,15 @@ public class LDABasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new int[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = (int)Math.Round(NumOps.ToDouble(target[i]));
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
+        int nClasses = classes.Length;
 
-        // Get unique classes
-        var classes = y.Distinct().OrderBy(c => c).ToList();
-        int nClasses = classes.Count;
-
-        // Compute overall mean
-        var overallMean = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++)
-                overallMean[j] += X[i, j];
-            overallMean[j] /= n;
-        }
-
-        // Compute class means and within-class scatter
-        var classMeans = new double[nClasses, p];
-        var classCounts = new int[nClasses];
-        for (int c = 0; c < nClasses; c++)
-        {
-            int classLabel = classes[c];
-            for (int i = 0; i < n; i++)
-            {
-                if (y[i] == classLabel)
-                {
-                    classCounts[c]++;
-                    for (int j = 0; j < p; j++)
-                        classMeans[c, j] += X[i, j];
-                }
-            }
-            for (int j = 0; j < p; j++)
-                classMeans[c, j] /= (classCounts[c] + 1e-10);
-        }
-
-        // Compute discriminant scores for each feature (univariate Fisher ratio)
-        _discriminantScores = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            // Between-class variance
-            double betweenVar = 0;
-            for (int c = 0; c < nClasses; c++)
-            {
-                double diff = classMeans[c, j] - overallMean[j];
-                betweenVar += classCounts[c] * diff * diff;
-            }
-
-            // Within-class variance
-            double withinVar = 0;
-            for (int c = 0; c < nClasses; c++)
-            {
-                int classLabel = classes[c];
-                for (int i = 0; i < n; i++)
-                {
-                    if (y[i] == classLabel)
-                    {
-                        double diff = X[i, j] - classMeans[c, j];
-                        withinVar += diff * diff;
-                    }
-                }
-            }
-
-            _discriminantScores[j] = betweenVar / (withinVar + 1e-10);
-        }
-
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _discriminantScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
-
+        // Univariate Fisher ratio: between-class over within-class sum of squares (+1e-10)
+        var betweenVar = SelectorTensorOps.ClassScatter(
+            Tensor<T>.FromMatrix(data), new Tensor<int>(classIndex, new[] { n }), nClasses, out var withinVar);
+        var scores = Engine.TensorDivide(betweenVar, Engine.TensorAddScalar(withinVar, PreprocessingTensorOps.Tolerance<T>(1e-10)));
+        _discriminantScores = scores.ToVector();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }
 
@@ -158,15 +89,7 @@ public class LDABasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         if (_selectedIndices is null)
             throw new InvalidOperationException("LDABasedSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

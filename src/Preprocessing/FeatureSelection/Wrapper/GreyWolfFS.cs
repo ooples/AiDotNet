@@ -28,19 +28,19 @@ public class GreyWolfFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
     private readonly int _nIterations;
     private readonly int _nFeaturesToSelect;
     private readonly int? _randomState;
-    private readonly Func<Matrix<T>, Vector<T>, bool[], double>? _fitnessFunc;
+    private readonly Func<Matrix<T>, Vector<T>, bool[], T>? _fitnessFunc;
 
-    private double[]? _featureImportances;
+    private Vector<T>? _featureImportances;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
-    private double _bestFitness;
+    private T _bestFitness = MathHelper.GetNumericOperations<T>().Zero;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FeatureImportances => _featureImportances;
+    public Vector<T>? FeatureImportances => _featureImportances;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
-    public double BestFitness => _bestFitness;
+    public T BestFitness => _bestFitness;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
@@ -48,7 +48,7 @@ public class GreyWolfFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
         int nFeaturesToSelect = 10,
         int populationSize = 30,
         int nIterations = 100,
-        Func<Matrix<T>, Vector<T>, bool[], double>? fitnessFunc = null,
+        Func<Matrix<T>, Vector<T>, bool[], T>? fitnessFunc = null,
         int? randomState = null,
         int[]? columnIndices = null)
         : base(columnIndices)
@@ -85,132 +85,128 @@ public class GreyWolfFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        // Initialize wolves (population)
-        var wolves = new List<(double[] Position, double Fitness)>();
+        // Initialize wolves (population): positions uniform on [0, 1), drawn from the selector's generator in
+        // master's order
+        var wolves = new List<(Tensor<T> Position, T Fitness)>();
         for (int i = 0; i < _populationSize; i++)
         {
-            var position = new double[p];
-            for (int j = 0; j < p; j++)
-                position[j] = random.NextDouble();
-
+            var position = WrapperScoringOps.Draws<T>(random, p);
             var solution = PositionToSolution(position);
-            double fitness = EvaluateFitness(data, target, solution);
+            T fitness = EvaluateFitness(data, target, solution);
             wolves.Add((position, fitness));
         }
 
-        _featureImportances = new double[p];
+        var importances = PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
 
         // Sort to get alpha, beta, delta
-        wolves = wolves.OrderByDescending(w => w.Fitness).ToList();
+        wolves = SortByFitness(wolves);
         var alpha = wolves[0];
         var beta = wolves[1];
         var delta = wolves[2];
         _bestFitness = alpha.Fitness;
+        T zero = NumOps.Zero;
+        T one = NumOps.One;
+        T third = NumOps.FromDouble(1.0 / 3);
+        T two = NumOps.FromDouble(2);
 
         // Main GWO loop
         for (int iter = 0; iter < _nIterations; iter++)
         {
             double a = 2 - iter * (2.0 / _nIterations);  // Linearly decreasing from 2 to 0
+            T twoA = WrapperScoringOps.Scalar<T>(2 * a);
+            T minusA = WrapperScoringOps.Scalar<T>(-a);
 
             for (int i = 3; i < _populationSize; i++)
             {
                 var wolf = wolves[i];
-                var newPosition = new double[p];
 
-                for (int j = 0; j < p; j++)
-                {
-                    // Alpha contribution
-                    double r1 = random.NextDouble();
-                    double r2 = random.NextDouble();
-                    double A1 = 2 * a * r1 - a;
-                    double C1 = 2 * r2;
-                    double D_alpha = Math.Abs(C1 * alpha.Position[j] - wolf.Position[j]);
-                    double X1 = alpha.Position[j] - A1 * D_alpha;
-
-                    // Beta contribution
-                    r1 = random.NextDouble();
-                    r2 = random.NextDouble();
-                    double A2 = 2 * a * r1 - a;
-                    double C2 = 2 * r2;
-                    double D_beta = Math.Abs(C2 * beta.Position[j] - wolf.Position[j]);
-                    double X2 = beta.Position[j] - A2 * D_beta;
-
-                    // Delta contribution
-                    r1 = random.NextDouble();
-                    r2 = random.NextDouble();
-                    double A3 = 2 * a * r1 - a;
-                    double C3 = 2 * r2;
-                    double D_delta = Math.Abs(C3 * delta.Position[j] - wolf.Position[j]);
-                    double X3 = delta.Position[j] - A3 * D_delta;
-
-                    // Average position
-                    newPosition[j] = (X1 + X2 + X3) / 3;
-                    newPosition[j] = Math.Max(0, Math.Min(1, newPosition[j]));  // Clamp to [0,1]
-                }
+                // Each leader L pulls the wolf to L - A |C L - x| with A = 2 a r1 - a and C = 2 r2 (r1, r2 uniform on
+                // [0, 1)); the new position is the mean of the three pulls, clamped to [0, 1]. The draws keep master's
+                // order: per dimension, (r1, r2) for alpha, beta, then delta
+                var draws = WrapperScoringOps.Draws<T>(random, 6 * p);
+                var x1 = LeaderPull(alpha.Position, wolf.Position, twoA, minusA, two, draws, 0);
+                var x2 = LeaderPull(beta.Position, wolf.Position, twoA, minusA, two, draws, 1);
+                var x3 = LeaderPull(delta.Position, wolf.Position, twoA, minusA, two, draws, 2);
+                var newPosition = Engine.TensorClamp(
+                    Engine.TensorMultiplyScalar(Engine.TensorAdd(Engine.TensorAdd(x1, x2), x3), third), zero, one);
 
                 var newSolution = PositionToSolution(newPosition);
-                double newFitness = EvaluateFitness(data, target, newSolution);
+                T newFitness = EvaluateFitness(data, target, newSolution);
 
                 // Update feature importances
-                for (int j = 0; j < p; j++)
-                    if (newSolution[j])
-                        _featureImportances[j] += newFitness;
+                importances = Engine.TensorAdd(importances, WrapperScoringOps.ScoreSums(
+                    new[] { WrapperScoringOps.Positions(newSolution) }, WrapperScoringOps.FromList(new[] { newFitness }), p));
 
                 wolves[i] = (newPosition, newFitness);
             }
 
             // Update alpha, beta, delta
-            wolves = wolves.OrderByDescending(w => w.Fitness).ToList();
-            if (wolves[0].Fitness > alpha.Fitness)
+            wolves = SortByFitness(wolves);
+            if (WrapperScoringOps.IsAbove(wolves[0].Fitness, alpha.Fitness))
             {
                 alpha = wolves[0];
                 _bestFitness = alpha.Fitness;
             }
-            if (wolves[1].Fitness > beta.Fitness)
+            if (WrapperScoringOps.IsAbove(wolves[1].Fitness, beta.Fitness))
                 beta = wolves[1];
-            if (wolves[2].Fitness > delta.Fitness)
+            if (WrapperScoringOps.IsAbove(wolves[2].Fitness, delta.Fitness))
                 delta = wolves[2];
         }
 
-        // Select from best (alpha) solution
-        var bestSolution = PositionToSolution(alpha.Position);
-        var selectedList = new List<int>();
-        for (int j = 0; j < p; j++)
-            if (bestSolution[j])
-                selectedList.Add(j);
+        _featureImportances = importances.ToVector();
 
-        if (selectedList.Count > _nFeaturesToSelect)
+        // Select from best (alpha) solution
+        var selectedList = WrapperScoringOps.Positions(PositionToSolution(alpha.Position));
+
+        if (selectedList.Length > _nFeaturesToSelect)
         {
-            selectedList = selectedList
-                .OrderByDescending(j => _featureImportances[j])
-                .Take(_nFeaturesToSelect)
-                .ToList();
+            selectedList = PreprocessingTensorOps.TopKIndicesSorted(
+                WrapperScoringOps.Gather(importances, selectedList), _nFeaturesToSelect)
+                .Select(position => selectedList[position])
+                .ToArray();
         }
-        else if (selectedList.Count == 0)
+        else if (selectedList.Length == 0)
         {
-            selectedList = _featureImportances
-                .Select((imp, idx) => (imp, idx))
-                .OrderByDescending(x => x.imp)
-                .Take(_nFeaturesToSelect)
-                .Select(x => x.idx)
-                .ToList();
+            selectedList = PreprocessingTensorOps.TopKIndicesSorted(importances, Math.Min(_nFeaturesToSelect, p));
         }
 
         _selectedIndices = selectedList.OrderBy(x => x).ToArray();
         IsFitted = true;
     }
 
-    private bool[] PositionToSolution(double[] position)
+    private List<(Tensor<T> Position, T Fitness)> SortByFitness(List<(Tensor<T> Position, T Fitness)> wolves)
     {
-        var solution = new bool[position.Length];
-        double threshold = 0.5;
+        // By decreasing fitness, the earlier wolf first among ties
+        var order = PreprocessingTensorOps.StableOrder(
+            WrapperScoringOps.FromList(wolves.Select(w => w.Fitness).ToList()), descending: true);
+        return order.Select(i => wolves[i]).ToList();
+    }
 
-        // Ensure roughly nFeaturesToSelect features
-        var sorted = position.Select((p, i) => (p, i)).OrderByDescending(x => x.p).ToList();
+    /// <summary>
+    /// <c>L - A |C L - x|</c> with <c>A = 2 a r1 - a</c> and <c>C = 2 r2</c>, where (r1, r2) are the draws at
+    /// <c>6 j + 2 leaderIndex</c> and <c>6 j + 2 leaderIndex + 1</c> of the [6 p] <paramref name="draws"/>.
+    /// </summary>
+    private Tensor<T> LeaderPull(Tensor<T> leader, Tensor<T> position, T twoA, T minusA, T two, Tensor<T> draws, int leaderIndex)
+    {
+        var coefficientA = WrapperScoringOps.Affine(WrapperScoringOps.Strided(draws, 6, 2 * leaderIndex), twoA, minusA);
+        var coefficientC = Engine.TensorMultiplyScalar(WrapperScoringOps.Strided(draws, 6, 2 * leaderIndex + 1), two);
+        var distance = Engine.TensorAbs(Engine.TensorSubtract(Engine.TensorMultiply(coefficientC, leader), position));
+        return Engine.TensorSubtract(leader, Engine.TensorMultiply(coefficientA, distance));
+    }
+
+    private bool[] PositionToSolution(Tensor<T> position)
+    {
+        int length = position.Length;
+        var solution = new bool[length];
+        var above = new HashSet<int>(PreprocessingTensorOps.MaskPositions(
+            Engine.TensorGreaterThan(position, NumOps.FromDouble(0.5))));
+
+        // Ensure roughly nFeaturesToSelect features: by decreasing value, take those above 0.5 and at least the
+        // requested number, at most nFeaturesToSelect + 3
         int count = 0;
-        foreach (var (prob, idx) in sorted)
+        foreach (int idx in PreprocessingTensorOps.StableOrder(position, descending: true))
         {
-            if (prob > threshold || count < Math.Min(_nFeaturesToSelect, position.Length))
+            if (above.Contains(idx) || count < Math.Min(_nFeaturesToSelect, length))
             {
                 solution[idx] = true;
                 count++;
@@ -221,45 +217,18 @@ public class GreyWolfFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
         return solution;
     }
 
-    private double EvaluateFitness(Matrix<T> data, Vector<T> target, bool[] mask)
+    private T EvaluateFitness(Matrix<T> data, Vector<T> target, bool[] mask)
     {
         if (_fitnessFunc is not null)
             return _fitnessFunc(data, target, mask);
 
-        int n = data.Rows;
-        int nSelected = mask.Count(b => b);
-        if (nSelected == 0) return double.NegativeInfinity;
+        var selected = WrapperScoringOps.Positions(mask);
+        int nSelected = selected.Length;
+        if (nSelected == 0) return NumOps.FromDouble(double.NegativeInfinity);
 
-        double totalCorr = 0;
-        for (int j = 0; j < mask.Length; j++)
-        {
-            if (!mask[j]) continue;
-
-            double xMean = 0, yMean = 0;
-            for (int i = 0; i < n; i++)
-            {
-                xMean += NumOps.ToDouble(data[i, j]);
-                yMean += NumOps.ToDouble(target[i]);
-            }
-            xMean /= n;
-            yMean /= n;
-
-            double ssXY = 0, ssXX = 0, ssYY = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double dx = NumOps.ToDouble(data[i, j]) - xMean;
-                double dy = NumOps.ToDouble(target[i]) - yMean;
-                ssXY += dx * dy;
-                ssXX += dx * dx;
-                ssYY += dy * dy;
-            }
-
-            if (ssXX > 1e-10 && ssYY > 1e-10)
-                totalCorr += Math.Abs(ssXY / Math.Sqrt(ssXX * ssYY));
-        }
-
+        // Mean |Pearson r| with the target, penalized for selecting more than the requested number of features
         double penalty = nSelected > _nFeaturesToSelect ? 0.1 * (nSelected - _nFeaturesToSelect) : 0;
-        return totalCorr / nSelected - penalty;
+        return NumOps.Subtract(WrapperScoringOps.MeanAbsTargetCorrelation(data, target, selected), NumOps.FromDouble(penalty));
     }
 
     /// <inheritdoc />
@@ -275,15 +244,7 @@ public class GreyWolfFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervis
         if (_selectedIndices is null)
             throw new InvalidOperationException("GreyWolfFS has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

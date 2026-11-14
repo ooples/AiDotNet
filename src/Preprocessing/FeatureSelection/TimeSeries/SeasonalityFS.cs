@@ -28,14 +28,14 @@ public class SeasonalityFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixed
     private readonly int _nFeaturesToSelect;
     private readonly int[] _seasonalPeriods;
 
-    private double[]? _seasonalityScores;
+    private Vector<T>? _seasonalityScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int[] SeasonalPeriods => _seasonalPeriods;
-    public double[]? SeasonalityScores => _seasonalityScores;
+    public Vector<T>? SeasonalityScores => _seasonalityScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -61,67 +61,30 @@ public class SeasonalityFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixed
         int n = data.Rows;
         int p = data.Columns;
 
-        _seasonalityScores = new double[p];
+        // Centre every column and compute its population variance
+        var centered = FilterStatisticTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
+        var variance = Engine.TensorDivideScalar(SelectorTensorOps.ColumnSumOfSquares(centered), NumOps.FromDouble(n));
+        var varying = PreprocessingTensorOps.AtLeast(variance, PreprocessingTensorOps.Tolerance<T>(1e-10));
+        var safeVariance = Engine.TensorWhere(varying, variance, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
 
-        for (int j = 0; j < p; j++)
+        // Spectral power |sum_t (x_t - mean) e^(-2 pi i t / period)|^2 / n^2 at each usable seasonal period
+        var periods = _seasonalPeriods.Where(period => period >= 2 && period <= n / 2).ToArray();
+        var maxPower = PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
+        if (periods.Length > 0)
         {
-            // Compute mean
-            double mean = 0;
-            for (int i = 0; i < n; i++)
-                mean += NumOps.ToDouble(data[i, j]);
-            mean /= n;
-
-            // Compute variance
-            double variance = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double diff = NumOps.ToDouble(data[i, j]) - mean;
-                variance += diff * diff;
-            }
-            variance /= n;
-
-            if (variance < 1e-10)
-            {
-                _seasonalityScores[j] = 0;
-                continue;
-            }
-
-            // Compute spectral power at each seasonal frequency
-            double maxPower = 0;
-            foreach (int period in _seasonalPeriods)
-            {
-                if (period < 2 || period > n / 2) continue;
-
-                double frequency = 2 * Math.PI / period;
-
-                // Compute Fourier coefficient at this frequency
-                double cosSum = 0, sinSum = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    double val = NumOps.ToDouble(data[i, j]) - mean;
-                    cosSum += val * Math.Cos(frequency * i);
-                    sinSum += val * Math.Sin(frequency * i);
-                }
-
-                // Spectral power at this frequency
-                double power = (cosSum * cosSum + sinSum * sinSum) / ((double)n * n);
-                maxPower = Math.Max(maxPower, power);
-            }
-
-            // Normalize by variance to get proportion of variance explained
-            _seasonalityScores[j] = variance > 0 ? 2 * maxPower / variance : 0;
+            var frequencies = Engine.TensorReciprocal(new Tensor<int>(periods, new[] { periods.Length }).Cast<T>());
+            var power = Engine.TensorDivideScalar(
+                SelectorTensorOps.FrequencyPower(centered, frequencies), NumOps.FromDouble((double)n * n));
+            maxPower = Engine.TensorMax(PreprocessingTensorOps.ColumnMax(power), NumOps.Zero);
         }
 
-        // Select top features by seasonality score
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _seasonalityScores
-            .Select((s, idx) => (Score: s, Index: idx))
-            .OrderByDescending(x => x.Score)
-            .Take(numToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        // Normalize by variance to get proportion of variance explained
+        var scores = SelectorTensorOps.ZeroUnless(varying,
+            Engine.TensorDivide(Engine.TensorMultiplyScalar(maxPower, NumOps.FromDouble(2)), safeVariance));
+        _seasonalityScores = scores.ToVector();
 
+        // Select top features by seasonality score
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }
 
@@ -131,15 +94,7 @@ public class SeasonalityFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixed
         if (_selectedIndices is null)
             throw new InvalidOperationException("SeasonalityFS has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

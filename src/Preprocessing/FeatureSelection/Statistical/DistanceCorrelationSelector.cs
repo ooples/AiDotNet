@@ -26,13 +26,13 @@ public class DistanceCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matr
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _distanceCorrelations;
+    private Vector<T>? _distanceCorrelations;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? DistanceCorrelations => _distanceCorrelations;
+    public Vector<T>? DistanceCorrelations => _distanceCorrelations;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -66,102 +66,75 @@ public class DistanceCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matr
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        // Szekely et al. (2007): dCor = sqrt(dCov^2 / sqrt(dVar_x^2 dVar_y^2)) from double-centred distance matrices.
+        // dCor does not change when either matrix is scaled, so each is divided by its largest magnitude and the
+        // averages are taken as row means then their mean: the n^2-term sums of squares and their product overflow
+        // a narrow T such as Half (300 samples already pass 65504), while every term here stays at most 1.
+        var x = Tensor<T>.FromMatrix(data);
+        var dy = ScaledCenteredDistanceMatrix(Tensor<T>.FromVector(target), out T yScale);
+        T dVarBSqScaled = TotalMean(Engine.TensorMultiply(dy, dy)).GetFlat(0);
+        T dVarBSq = NumOps.Multiply(NumOps.Multiply(dVarBSqScaled, yScale), yScale);
 
-        // Compute centered distance matrix for y
-        var Dy = ComputeCenteredDistanceMatrix(y, n);
-
-        _distanceCorrelations = new double[p];
+        var crossMeans = new Tensor<T>[p];
+        var squareMeans = new Tensor<T>[p];
+        var scales = new T[p];
         for (int j = 0; j < p; j++)
         {
-            var x = new double[n];
-            for (int i = 0; i < n; i++) x[i] = X[i, j];
-            var Dx = ComputeCenteredDistanceMatrix(x, n);
-
-            _distanceCorrelations[j] = ComputeDistanceCorrelation(Dx, Dy, n);
+            var dx = ScaledCenteredDistanceMatrix(Engine.TensorSliceAxis(x, 1, j), out scales[j]);
+            crossMeans[j] = TotalMean(Engine.TensorMultiply(dx, dy));
+            squareMeans[j] = TotalMean(Engine.TensorMultiply(dx, dx));
         }
 
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _distanceCorrelations[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        var scores = PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
+        T eps = PreprocessingTensorOps.Tolerance<T>(1e-10);
+        if (p > 0 && !NumOps.LessThan(dVarBSq, eps))
+        {
+            var dCovSq = Engine.TensorConcatenate(crossMeans, 0);
+            var dVarASq = Engine.TensorConcatenate(squareMeans, 0);
+            var dCor = Engine.TensorSqrt(Engine.TensorDivide(dCovSq, Engine.TensorMultiplyScalar(
+                Engine.TensorSqrt(dVarASq), NumOps.Sqrt(dVarBSqScaled))));
+
+            // The guard compares the unscaled dVar_x^2 (an overflow to infinity still compares as above eps)
+            var scale = new Tensor<T>(scales, new[] { p });
+            var unscaledVarA = Engine.TensorMultiply(Engine.TensorMultiply(dVarASq, scale), scale);
+            scores = SelectorTensorOps.ZeroUnless(PreprocessingTensorOps.AtLeast(unscaledVarA, eps), dCor);
+        }
+
+        _distanceCorrelations = scores.ToVector();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }
 
-    private double[,] ComputeCenteredDistanceMatrix(double[] x, int n)
+    /// <summary>
+    /// The double-centred distance matrix divided by its largest magnitude <paramref name="scale"/> (1 when it is all
+    /// zero), as [n, n].
+    /// </summary>
+    private Tensor<T> ScaledCenteredDistanceMatrix(Tensor<T> values, out T scale)
     {
-        // Compute pairwise distances
-        var D = new double[n, n];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < n; j++)
-                D[i, j] = Math.Abs(x[i] - x[j]);
-
-        // Double-center the distance matrix
-        var rowMeans = new double[n];
-        var colMeans = new double[n];
-        double grandMean = 0;
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                rowMeans[i] += D[i, j];
-                colMeans[j] += D[i, j];
-            }
-            rowMeans[i] /= n;
-        }
-
-        for (int j = 0; j < n; j++)
-        {
-            colMeans[j] /= n;
-            grandMean += colMeans[j];
-        }
-        grandMean /= n;
-
-        // Center
-        var A = new double[n, n];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < n; j++)
-                A[i, j] = D[i, j] - rowMeans[i] - colMeans[j] + grandMean;
-
-        return A;
+        var centered = ComputeCenteredDistanceMatrix(values);
+        T largest = Engine.TensorMaxValue(Engine.TensorAbs(centered));
+        scale = NumOps.GreaterThan(largest, NumOps.Zero) ? largest : NumOps.One;
+        return Engine.TensorDivideScalar(centered, scale);
     }
 
-    private double ComputeDistanceCorrelation(double[,] A, double[,] B, int n)
+    /// <summary>The double-centred pairwise distance matrix <c>|v_i - v_k|</c> of a 1-D tensor, as [n, n].</summary>
+    private Tensor<T> ComputeCenteredDistanceMatrix(Tensor<T> values)
     {
-        // dCov^2 = average of A[i,j] * B[i,j]
-        double dCovSq = 0;
-        double dVarASq = 0;
-        double dVarBSq = 0;
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                dCovSq += A[i, j] * B[i, j];
-                dVarASq += A[i, j] * A[i, j];
-                dVarBSq += B[i, j] * B[i, j];
-            }
-        }
-
-        dCovSq /= (double)n * n;
-        dVarASq /= (double)n * n;
-        dVarBSq /= (double)n * n;
-
-        if (dVarASq < 1e-10 || dVarBSq < 1e-10) return 0;
-
-        return Math.Sqrt(dCovSq / Math.Sqrt(dVarASq * dVarBSq));
+        int n = values.Length;
+        var shape = new[] { n, n };
+        var distances = Engine.TensorAbs(Engine.TensorSubtract(
+            Engine.TensorBroadcastTo(Engine.Reshape(values, new[] { n, 1 }), shape),
+            Engine.TensorBroadcastTo(Engine.Reshape(values, new[] { 1, n }), shape)));
+        var rowMeans = Engine.TensorBroadcastTo(Engine.ReduceMean(distances, new[] { 1 }, true), shape);
+        var colMeans = Engine.TensorBroadcastTo(Engine.ReduceMean(distances, new[] { 0 }, true), shape);
+        return Engine.TensorAddScalar(
+            Engine.TensorSubtract(Engine.TensorSubtract(distances, rowMeans), colMeans), Engine.TensorMean(distances));
     }
+
+    /// <summary>The mean of every element of an [n, n] tensor (the mean of its row means), as a [1] tensor.</summary>
+    private Tensor<T> TotalMean(Tensor<T> values) =>
+        Engine.ReduceMean(Engine.ReduceMean(values, new[] { 1 }, false), new[] { 0 }, true);
 
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
@@ -176,15 +149,7 @@ public class DistanceCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matr
         if (_selectedIndices is null)
             throw new InvalidOperationException("DistanceCorrelationSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

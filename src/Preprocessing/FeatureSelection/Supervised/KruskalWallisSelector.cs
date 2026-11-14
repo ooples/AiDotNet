@@ -24,13 +24,13 @@ public class KruskalWallisSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _hStatistics;
+    private Vector<T>? _hStatistics;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? HStatistics => _hStatistics;
+    public Vector<T>? HStatistics => _hStatistics;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -64,78 +64,37 @@ public class KruskalWallisSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new int[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = (int)Math.Round(NumOps.ToDouble(target[i]));
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
-
-        var classes = y.Distinct().OrderBy(c => c).ToList();
-        int k = classes.Count;
+        PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
+        int k = classes.Length;
 
         if (k < 2)
             throw new InvalidOperationException("At least 2 classes are required.");
 
-        var classCounts = classes.Select(c => y.Count(yi => yi == c)).ToArray();
+        // Rank all values of every feature (average ranks for ties) and sum them per class
+        var ranks = RankTestOps.AverageRanksWithTies(Tensor<T>.FromMatrix(data), out var tieTerm);
+        var membership = PreprocessingTensorOps.ClassOneHot<T>(classIndex, k);
+        // (class sizes counted as int: a 0/1 sum in T stops counting at 2048 for Half)
+        var classCounts = Engine.Reshape(Engine.ReduceSum(
+            membership.Cast<int>(), new[] { 0 }, false).Cast<T>(), new[] { k, 1 });
 
-        _hStatistics = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            // Rank all values
-            var values = Enumerable.Range(0, n)
-                .Select(i => (X[i, j], y[i], i))
-                .OrderBy(t => t.Item1)
-                .ToList();
-
-            var ranks = new double[n];
-            int idx = 0;
-            while (idx < n)
-            {
-                int endIdx = idx;
-                while (endIdx < n - 1 && Math.Abs(values[endIdx + 1].Item1 - values[endIdx].Item1) < 1e-10)
-                    endIdx++;
-
-                double avgRank = (idx + endIdx) / 2.0 + 1;
-                for (int i_r = idx; i_r <= endIdx; i_r++)
-                    ranks[values[i_r].i] = avgRank;
-
-                idx = endIdx + 1;
-            }
-
-            // Compute rank sums for each class
-            var rankSums = new double[k];
-            for (int c = 0; c < k; c++)
-            {
-                int classLabel = classes[c];
-                for (int i = 0; i < n; i++)
-                    if (y[i] == classLabel)
-                        rankSums[c] += ranks[i];
-            }
-
-            // Kruskal-Wallis H statistic
-            double H = 0;
-            for (int c = 0; c < k; c++)
-            {
-                if (classCounts[c] > 0)
-                    H += rankSums[c] * rankSums[c] / classCounts[c];
-            }
-            H = 12.0 / ((double)n * (n + 1)) * H - 3.0 * (n + 1);
-
-            // Tie correction (simplified)
-            _hStatistics[j] = H;
-        }
-
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _hStatistics[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
-
+        // Kruskal-Wallis H = 12 / (n (n + 1)) sum_c R_c^2 / n_c - 3 (n + 1), divided by the tie correction
+        // 1 - sum (t^3 - t) / (n^3 - n) as scipy.stats.kruskal (left as is when every value is tied). Formed as
+        // H = 12 (n + 1) / n sum_c n_c (u_c - 1/2)^2 with u_c the class mean of rank / (n + 1), the same value:
+        // R_c^2 / n_c reaches about n^3 / 4, past Half's 65504 from n = 64, while every term here stays below n.
+        var scaledRanks = Engine.TensorDivideScalar(ranks, NumOps.FromDouble(n + 1.0));
+        var classMeans = Engine.TensorDivide(Engine.TensorMatMul(Engine.TensorTranspose(membership), scaledRanks),
+            Engine.TensorBroadcastTo(Engine.TensorMax(classCounts, NumOps.One), new[] { k, p }));
+        var offset = Engine.TensorSubtractScalar(classMeans, NumOps.FromDouble(0.5));
+        var spread = Engine.ReduceSum(Engine.TensorMultiply(Engine.TensorMultiply(offset, offset),
+            Engine.TensorBroadcastTo(classCounts, new[] { k, p })), new[] { 0 }, false);
+        var h = Engine.TensorMultiplyScalar(spread, NumOps.FromDouble(12.0 * (n + 1) / n));
+        var correction = Engine.TensorSubtractScalar(
+            Engine.TensorNegate(Engine.TensorDivideScalar(tieTerm, (double)n * n * n - n)), -1.0);
+        var corrected = Engine.TensorGreaterThan(correction, 0.0);
+        var divisor = Engine.TensorWhere(corrected, correction, PreprocessingTensorOps.Filled(new[] { p }, 1.0)).Cast<T>();
+        var scores = Engine.TensorDivide(h, divisor);
+        _hStatistics = scores.ToVector();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }
 
@@ -152,15 +111,7 @@ public class KruskalWallisSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         if (_selectedIndices is null)
             throw new InvalidOperationException("KruskalWallisSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

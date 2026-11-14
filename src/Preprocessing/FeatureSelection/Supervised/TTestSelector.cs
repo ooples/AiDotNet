@@ -26,13 +26,13 @@ public class TTestSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
     private readonly int _nFeaturesToSelect;
     private readonly bool _equalVariance;
 
-    private double[]? _tStatistics;
+    private Vector<T>? _tStatistics;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? TStatistics => _tStatistics;
+    public Vector<T>? TStatistics => _tStatistics;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -68,74 +68,43 @@ public class TTestSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new int[n];
-        for (int i = 0; i < n; i++)
-        {
-            double yVal = NumOps.ToDouble(target[i]);
-            y[i] = yVal > 0.5 ? 1 : 0;
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
-
-        int n1 = y.Count(yi => yi == 1);
+        var positive = Engine.TensorGreaterThan(Tensor<T>.FromVector(target), NumOps.FromDouble(0.5));
+        int n1 = PreprocessingTensorOps.CountNonZero(positive);
         int n0 = n - n1;
 
         if (n0 < 2 || n1 < 2)
             throw new InvalidOperationException("Each class must have at least 2 samples.");
 
-        _tStatistics = new double[p];
+        // Means and sample variances of each class ([2, p], class 0 first)
+        var x = Tensor<T>.FromMatrix(data);
+        var membership = Engine.TensorStack(new[] { PreprocessingTensorOps.OneMinus(positive), positive }, 1);
+        var means = SelectorTensorOps.GroupMeans(membership, x, out _);
+        var classOfRow = Engine.TensorIndexSelect(means, positive.Cast<int>(), 0);
+        var squares = Engine.TensorMatMul(Engine.TensorTranspose(membership),
+            Engine.TensorSquare(Engine.TensorSubtract(x, classOfRow)));
+        var ss0 = PreprocessingTensorOps.RowVector(squares, 0);
+        var ss1 = PreprocessingTensorOps.RowVector(squares, 1);
+        var meanDifference = Engine.TensorSubtract(
+            PreprocessingTensorOps.RowVector(means, 1), PreprocessingTensorOps.RowVector(means, 0));
 
-        for (int j = 0; j < p; j++)
+        Tensor<T> se;
+        if (_equalVariance)
         {
-            // Compute means and variances for each class
-            double sum0 = 0, sum1 = 0;
-            for (int i = 0; i < n; i++)
-            {
-                if (y[i] == 0)
-                    sum0 += X[i, j];
-                else
-                    sum1 += X[i, j];
-            }
-            double mean0 = sum0 / n0;
-            double mean1 = sum1 / n1;
-
-            double var0 = 0, var1 = 0;
-            for (int i = 0; i < n; i++)
-            {
-                if (y[i] == 0)
-                    var0 += (X[i, j] - mean0) * (X[i, j] - mean0);
-                else
-                    var1 += (X[i, j] - mean1) * (X[i, j] - mean1);
-            }
-            var0 /= (n0 - 1);
-            var1 /= (n1 - 1);
-
-            double tStat;
-            if (_equalVariance)
-            {
-                // Pooled variance t-test
-                double pooledVar = ((n0 - 1) * var0 + (n1 - 1) * var1) / (n0 + n1 - 2);
-                double se = Math.Sqrt(pooledVar * (1.0 / n0 + 1.0 / n1));
-                tStat = (mean1 - mean0) / (se + 1e-10);
-            }
-            else
-            {
-                // Welch's t-test (unequal variances)
-                double se = Math.Sqrt(var0 / n0 + var1 / n1);
-                tStat = (mean1 - mean0) / (se + 1e-10);
-            }
-
-            _tStatistics[j] = Math.Abs(tStat);
+            // Pooled variance t-test
+            var pooledVar = Engine.TensorDivideScalar(Engine.TensorAdd(ss0, ss1), NumOps.FromDouble(n0 + n1 - 2));
+            se = Engine.TensorSqrt(Engine.TensorMultiplyScalar(pooledVar, NumOps.FromDouble(1.0 / n0 + 1.0 / n1)));
+        }
+        else
+        {
+            // Welch's t-test (unequal variances)
+            se = Engine.TensorSqrt(Engine.TensorAdd(
+                Engine.TensorDivideScalar(ss0, NumOps.FromDouble((double)(n0 - 1) * n0)),
+                Engine.TensorDivideScalar(ss1, NumOps.FromDouble((double)(n1 - 1) * n1))));
         }
 
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _tStatistics[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
-
+        var scores = Engine.TensorAbs(Engine.TensorDivide(meanDifference, Engine.TensorAddScalar(se, PreprocessingTensorOps.Tolerance<T>(1e-10))));
+        _tStatistics = scores.ToVector();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
     }
 
@@ -152,15 +121,7 @@ public class TTestSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         if (_selectedIndices is null)
             throw new InvalidOperationException("TTestSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

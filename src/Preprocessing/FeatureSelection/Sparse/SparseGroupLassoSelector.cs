@@ -28,7 +28,11 @@ public class SparseGroupLassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
     private readonly double _groupRatio;
     private readonly int[]? _groupIndices;
 
-    private double[]? _coefficients;
+    // Proximal-gradient limits for the sparse group lasso fit
+    private const int MaxIterations = 1000;
+    private const double Tolerance = 1e-6;
+
+    private Vector<T>? _coefficients;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -36,7 +40,7 @@ public class SparseGroupLassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double Alpha => _alpha;
     public double GroupRatio => _groupRatio;
-    public double[]? Coefficients => _coefficients;
+    public Vector<T>? Coefficients => _coefficients;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -78,81 +82,27 @@ public class SparseGroupLassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
-
-        // Normalize features
-        var means = new double[p];
-        var stds = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++) means[j] += X[i, j];
-            means[j] /= n;
-            for (int i = 0; i < n; i++) stds[j] += (X[i, j] - means[j]) * (X[i, j] - means[j]);
-            stds[j] = Math.Sqrt(stds[j] / (n - 1)) + 1e-10;
-            for (int i = 0; i < n; i++) X[i, j] = (X[i, j] - means[j]) / stds[j];
-        }
-
-        double yMean = y.Average();
-        var yNorm = y.Select(yi => yi - yMean).ToArray();
+        // Normalize features: centre and divide by the sample standard deviation plus 1e-10
+        var centered = FilterStatisticTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
+        var std = Engine.TensorAddScalar(Engine.TensorSqrt(Engine.TensorDivideScalar(
+            SelectorTensorOps.ColumnSumOfSquares(centered), NumOps.FromDouble(n - 1))), PreprocessingTensorOps.Tolerance<T>(1e-10));
+        var x = Engine.TensorDivide(centered, Engine.Reshape(std, new[] { 1, p }));
+        var y = SelectorTensorOps.CenteredColumn(target);
 
         // Create groups (default: each feature is its own group)
         var groups = CreateGroups(p);
 
-        // Coordinate descent with sparse group penalty
-        _coefficients = new double[p];
-        double l1Penalty = _alpha * (1 - _groupRatio);
-        double groupPenalty = _alpha * _groupRatio;
+        // Sparse group lasso (Simon et al., 2013):
+        // (1/2n) ||y - X b||^2 + alpha (1 - groupRatio) ||b||_1 + alpha groupRatio sum_g sqrt(p_g) ||b_g||_2
+        var coefficients = SparseRegressionOps.SparseGroupElasticNet(x, y, groups,
+            _alpha * (1 - _groupRatio), 0, _alpha * _groupRatio, MaxIterations, Tolerance);
+        _coefficients = coefficients.ToVector();
 
-        int maxIter = 100;
-        for (int iter = 0; iter < maxIter; iter++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                // Compute residual
-                double rho = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    double residual = yNorm[i];
-                    for (int k = 0; k < p; k++)
-                        if (k != j)
-                            residual -= _coefficients[k] * X[i, k];
-                    rho += X[i, j] * residual;
-                }
-                rho /= n;
-
-                // Soft thresholding with group penalty
-                int groupIdx = groups[j];
-                double groupNorm = ComputeGroupNorm(_coefficients, groups, groupIdx, j);
-                double effectivePenalty = l1Penalty + groupPenalty / (Math.Sqrt(groupNorm) + 1e-10);
-
-                _coefficients[j] = SoftThreshold(rho, effectivePenalty);
-            }
-        }
-
-        // Select features with non-zero coefficients
-        var nonZero = Enumerable.Range(0, p)
-            .Where(j => Math.Abs(_coefficients[j]) > 1e-10)
-            .OrderByDescending(j => Math.Abs(_coefficients[j]))
-            .ToList();
-
-        int numToSelect = Math.Min(_nFeaturesToSelect, Math.Max(nonZero.Count, 1));
-        if (nonZero.Count < numToSelect)
-        {
-            var additional = Enumerable.Range(0, p)
-                .Where(j => !nonZero.Contains(j))
-                .OrderByDescending(j => Math.Abs(_coefficients[j]))
-                .Take(numToSelect - nonZero.Count);
-            nonZero.AddRange(additional);
-        }
-
-        _selectedIndices = nonZero.Take(numToSelect).OrderBy(x => x).ToArray();
+        // Features with non-zero coefficients (|b| > 1e-10) by decreasing |b|, padded with the largest of the rest
+        var magnitude = Engine.TensorAbs(coefficients);
+        int nonZero = PreprocessingTensorOps.CountNonZero(Engine.TensorGreaterThan(magnitude, PreprocessingTensorOps.Tolerance<T>(1e-10)));
+        int numToSelect = Math.Min(_nFeaturesToSelect, Math.Max(nonZero, 1));
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(magnitude, numToSelect);
         IsFitted = true;
     }
 
@@ -163,24 +113,6 @@ public class SparseGroupLassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
 
         // Default: each feature is its own group
         return Enumerable.Range(0, p).ToArray();
-    }
-
-    private double ComputeGroupNorm(double[] beta, int[] groups, int targetGroup, int excludeIdx)
-    {
-        double norm = 0;
-        for (int j = 0; j < beta.Length; j++)
-        {
-            if (groups[j] == targetGroup && j != excludeIdx)
-                norm += beta[j] * beta[j];
-        }
-        return norm + 1e-10;
-    }
-
-    private double SoftThreshold(double x, double lambda)
-    {
-        if (x > lambda) return x - lambda;
-        if (x < -lambda) return x + lambda;
-        return 0;
     }
 
     /// <inheritdoc />
@@ -196,15 +128,7 @@ public class SparseGroupLassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         if (_selectedIndices is null)
             throw new InvalidOperationException("SparseGroupLassoSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

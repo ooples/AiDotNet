@@ -28,12 +28,12 @@ public class CorrelationFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
 
     public enum KeepStrategy { KeepFirst, KeepHigherVariance }
 
-    private double[,]? _correlationMatrix;
+    private Matrix<T>? _correlationMatrix;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     public double Threshold => _threshold;
-    public double[,]? CorrelationMatrix => _correlationMatrix;
+    public Matrix<T>? CorrelationMatrix => _correlationMatrix;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -59,77 +59,44 @@ public class CorrelationFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
         int n = data.Rows;
         int p = data.Columns;
 
-        // Compute means and standard deviations
-        var means = new double[p];
-        var stds = new double[p];
-        var variances = new double[p];
+        // Compute population variances and standard deviations (1 for a constant column)
+        var centered = FilterStatisticTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
+        T count = NumOps.FromDouble(n);
+        var variances = Engine.TensorDivideScalar(SelectorTensorOps.ColumnSumOfSquares(centered), count);
+        var stds = Engine.TensorSqrt(variances);
+        stds = Engine.TensorWhere(Engine.TensorLessThan(stds, PreprocessingTensorOps.Tolerance<T>(1e-10)),
+            PreprocessingTensorOps.Filled(new[] { p }, NumOps.One), stds);
 
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++)
-                means[j] += NumOps.ToDouble(data[i, j]);
-            means[j] /= n;
-        }
+        // Compute correlation matrix (unit diagonal)
+        var covariance = Engine.TensorDivideScalar(Engine.TensorMatMul(Engine.TensorTranspose(centered), centered), count);
+        var correlation = Engine.TensorWhere(Engine.TensorEye<T>(p), PreprocessingTensorOps.Filled(new[] { p, p }, NumOps.One),
+            Engine.TensorDivide(covariance, Engine.TensorOuter(stds, stds)));
+        _correlationMatrix = correlation.ToMatrix();
 
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++)
-            {
-                double diff = NumOps.ToDouble(data[i, j]) - means[j];
-                variances[j] += diff * diff;
-            }
-            stds[j] = Math.Sqrt(variances[j] / n);
-            if (stds[j] < 1e-10) stds[j] = 1;
-        }
+        // Pairs (i < j) whose |correlation| exceeds the threshold, in (i, j) order, and the pairs whose first
+        // feature has at least the second's variance
+        var pairs = PreprocessingTensorOps.MaskPositions(Engine.TensorMultiply(
+            Engine.TensorGreaterThan(Engine.TensorAbs(correlation), NumOps.FromDouble(_threshold)),
+            SelectorTensorOps.StrictUpperMask<T>(p)));
+        var shape = new[] { p, p };
+        var firstHasMoreVariance = new HashSet<int>(PreprocessingTensorOps.MaskPositions(PreprocessingTensorOps.Not(
+            Engine.TensorLessThan(
+                Engine.TensorBroadcastTo(Engine.Reshape(variances, new[] { p, 1 }), shape),
+                Engine.TensorBroadcastTo(Engine.Reshape(variances, new[] { 1, p }), shape)))));
 
-        // Compute correlation matrix
-        _correlationMatrix = new double[p, p];
-        for (int i = 0; i < p; i++)
-        {
-            _correlationMatrix[i, i] = 1.0;
-            for (int j = i + 1; j < p; j++)
-            {
-                double cov = 0;
-                for (int k = 0; k < n; k++)
-                {
-                    double di = NumOps.ToDouble(data[k, i]) - means[i];
-                    double dj = NumOps.ToDouble(data[k, j]) - means[j];
-                    cov += di * dj;
-                }
-                cov /= n;
-                double corr = cov / (stds[i] * stds[j]);
-                _correlationMatrix[i, j] = corr;
-                _correlationMatrix[j, i] = corr;
-            }
-        }
-
-        // Find features to drop
+        // Find features to drop: walk the pairs in order; a feature that has been dropped no longer removes others
         var toDrop = new HashSet<int>();
-        for (int i = 0; i < p; i++)
+        foreach (int position in pairs)
         {
-            if (toDrop.Contains(i)) continue;
+            int i = position / p;
+            int j = position % p;
+            if (toDrop.Contains(i) || toDrop.Contains(j)) continue;
 
-            for (int j = i + 1; j < p; j++)
-            {
-                if (toDrop.Contains(j)) continue;
-
-                if (Math.Abs(_correlationMatrix[i, j]) > _threshold)
-                {
-                    // Drop one of the pair
-                    if (_strategy == KeepStrategy.KeepFirst)
-                    {
-                        toDrop.Add(j);
-                    }
-                    else
-                    {
-                        // Keep higher variance
-                        if (variances[i] >= variances[j])
-                            toDrop.Add(j);
-                        else
-                            toDrop.Add(i);
-                    }
-                }
-            }
+            // Drop one of the pair
+            if (_strategy == KeepStrategy.KeepFirst || firstHasMoreVariance.Contains(position))
+                toDrop.Add(j);
+            else
+                toDrop.Add(i); // Keep higher variance
         }
 
         _selectedIndices = Enumerable.Range(0, p)
@@ -154,15 +121,7 @@ public class CorrelationFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
         if (_selectedIndices is null)
             throw new InvalidOperationException("CorrelationFilter has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -25,15 +25,15 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Wrapper;
 public class ForwardSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
-    private readonly Func<Matrix<T>, Vector<T>, int[], double>? _scoringFunction;
+    private readonly Func<Matrix<T>, Vector<T>, int[], T>? _scoringFunction;
 
-    private double[]? _featureScores;
+    private Vector<T>? _featureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FeatureScores => _featureScores;
+    public Vector<T>? FeatureScores => _featureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -41,7 +41,7 @@ public class ForwardSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
 
     public ForwardSelection(
         int nFeaturesToSelect = 10,
-        Func<Matrix<T>, Vector<T>, int[], double>? scoringFunction = null,
+        Func<Matrix<T>, Vector<T>, int[], T>? scoringFunction = null,
         int[]? columnIndices = null)
         : base(columnIndices)
     {
@@ -71,19 +71,19 @@ public class ForwardSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
 
         var selected = new List<int>();
         var remaining = Enumerable.Range(0, p).ToHashSet();
-        _featureScores = new double[p];
+        var scores = new Dictionary<int, T>();
 
         while (selected.Count < nToSelect && remaining.Count > 0)
         {
             int bestFeature = -1;
-            double bestScore = double.MinValue;
+            T bestScore = NumOps.MinValue;
 
             foreach (int candidate in remaining)
             {
                 var testSet = selected.Concat(new[] { candidate }).ToArray();
-                double score = EvaluateSubset(data, target, testSet);
+                T score = EvaluateSubset(data, target, testSet);
 
-                if (score > bestScore)
+                if (WrapperScoringOps.IsAbove(score, bestScore))
                 {
                     bestScore = score;
                     bestFeature = candidate;
@@ -94,7 +94,7 @@ public class ForwardSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
             {
                 selected.Add(bestFeature);
                 remaining.Remove(bestFeature);
-                _featureScores[bestFeature] = bestScore;
+                scores[bestFeature] = bestScore;
             }
             else
             {
@@ -102,11 +102,12 @@ public class ForwardSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
             }
         }
 
+        _featureScores = WrapperScoringOps.ScoresVector(p, NumOps.Zero, scores);
         _selectedIndices = selected.OrderBy(x => x).ToArray();
         IsFitted = true;
     }
 
-    private double EvaluateSubset(Matrix<T> data, Vector<T> target, int[] features)
+    private T EvaluateSubset(Matrix<T> data, Vector<T> target, int[] features)
     {
         if (_scoringFunction is not null)
             return _scoringFunction(data, target, features);
@@ -114,48 +115,16 @@ public class ForwardSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         return DefaultScoring(data, target, features);
     }
 
-    private double DefaultScoring(Matrix<T> data, Vector<T> target, int[] features)
+    private T DefaultScoring(Matrix<T> data, Vector<T> target, int[] features)
     {
-        // Use R-squared as default scoring
+        // R-squared of the least-squares fit (with intercept) of the target on the subset, as scikit-learn's
+        // LinearRegression().fit(X, y).score(X, y); the sum of squared univariate correlations it replaces is only
+        // the R-squared when the features are uncorrelated
         int n = data.Rows;
-        int p = features.Length;
+        if (features.Length == 0 || n <= features.Length)
+            return NumOps.Zero;
 
-        if (p == 0 || n <= p)
-            return 0;
-
-        // Simple linear regression R-squared
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        // Use correlation-based approximation for speed
-        double totalCorr = 0;
-        foreach (int j in features)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, j]);
-            xMean /= n;
-
-            double ssXY = 0, ssXX = 0, ssYY = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double dx = NumOps.ToDouble(data[i, j]) - xMean;
-                double dy = NumOps.ToDouble(target[i]) - yMean;
-                ssXY += dx * dy;
-                ssXX += dx * dx;
-                ssYY += dy * dy;
-            }
-
-            if (ssXX > 1e-10 && ssYY > 1e-10)
-            {
-                double corr = ssXY / Math.Sqrt(ssXX * ssYY);
-                totalCorr += corr * corr;
-            }
-        }
-
-        return totalCorr;
+        return WrapperScoringOps.LinearRegressionRSquared(data, target, features);
     }
 
     /// <inheritdoc />
@@ -171,15 +140,7 @@ public class ForwardSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         if (_selectedIndices is null)
             throw new InvalidOperationException("ForwardSelection has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
