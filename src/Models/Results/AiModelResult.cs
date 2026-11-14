@@ -705,10 +705,10 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// than collecting near-duplicate uncertain samples.
     /// </para>
     /// </remarks>
-    public ActiveLearning.ActiveLearningSelection? ActiveLearningSelection { get; private set; }
+    public ActiveLearning.ActiveLearningSelection<T>? ActiveLearningSelection { get; private set; }
 
     /// <summary>Records the active-learning selection. Called by the builder during Build.</summary>
-    internal void SetActiveLearningSelection(ActiveLearning.ActiveLearningSelection selection)
+    internal void SetActiveLearningSelection(ActiveLearning.ActiveLearningSelection<T> selection)
         => ActiveLearningSelection = selection;
 
     /// <summary>

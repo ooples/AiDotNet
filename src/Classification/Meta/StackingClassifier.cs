@@ -154,32 +154,13 @@ public partial class StackingClassifier<T> : MetaClassifierBase<T>
         NumClasses = ClassLabels.Length;
         TaskType = InferTaskType(y);
 
-        int n = x.Rows;
-        int numEstimators = _estimators.Count;
-
-        // Determine number of meta-features per estimator
-        int metaFeaturesPerEstimator = Options.UseProbabilities ? NumClasses : 1;
-        int totalMetaFeatures = numEstimators * metaFeaturesPerEstimator;
-
-        // If passthrough, include original features
-        if (Options.Passthrough)
-        {
-            totalMetaFeatures += NumFeatures;
-        }
-
-        // Create meta-features using cross-validation
-        var metaFeatures = new Matrix<T>(n, totalMetaFeatures);
-
-        if (Options.CrossValidationFolds > 1)
-        {
-            // Use cross-validation to generate out-of-fold predictions
-            CreateCrossValidatedMetaFeatures(x, y, metaFeatures);
-        }
-        else
-        {
-            // Simple approach: train on all data and predict on all data (prone to overfitting)
-            CreateSimpleMetaFeatures(x, y, metaFeatures);
-        }
+        // Meta-features: numEstimators * (UseProbabilities ? NumClasses : 1) columns, plus the original
+        // features when passthrough is enabled.
+        // Cross-validation generates out-of-fold predictions; the simple approach trains on all data and
+        // predicts on all data (prone to overfitting).
+        var metaFeatures = Options.CrossValidationFolds > 1
+            ? CreateCrossValidatedMetaFeatures(x, y)
+            : CreateSimpleMetaFeatures(x, y);
 
         // Train base estimators on full training data (for prediction time)
         foreach (var estimator in _estimators)
@@ -195,7 +176,7 @@ public partial class StackingClassifier<T> : MetaClassifierBase<T>
     /// <summary>
     /// Creates meta-features using cross-validation.
     /// </summary>
-    private void CreateCrossValidatedMetaFeatures(Matrix<T> x, Vector<T> y, Matrix<T> metaFeatures)
+    private Matrix<T> CreateCrossValidatedMetaFeatures(Matrix<T> x, Vector<T> y)
     {
         int n = x.Rows;
         int numFolds = Options.CrossValidationFolds;
@@ -220,58 +201,37 @@ public partial class StackingClassifier<T> : MetaClassifierBase<T>
             (foldAssignments[i], foldAssignments[j]) = (foldAssignments[j], foldAssignments[i]);
         }
 
+        // Out-of-fold predictions; rows are scattered back to their original positions
+        var engine = Engine;
+        var outOfFold = new Tensor<T>(new[] { n, numEstimators * metaFeaturesPerEstimator });
+
         // Process each fold
         for (int fold = 0; fold < numFolds; fold++)
         {
-            // Count samples in train and test
-            int trainCount = 0;
-            int testCount = 0;
-            for (int i = 0; i < n; i++)
-            {
-                if (foldAssignments[i] == fold)
-                    testCount++;
-                else
-                    trainCount++;
-            }
-
             // Create train and test splits
-            var xTrain = new Matrix<T>(trainCount, NumFeatures);
-            var yTrain = new Vector<T>(trainCount);
-            var xTest = new Matrix<T>(testCount, NumFeatures);
-            var testIndices = new int[testCount];
-
-            int trainIdx = 0;
-            int testIdx = 0;
+            var trainRows = new List<int>(n);
+            var testRows = new List<int>(n / Math.Max(1, numFolds) + 1);
             for (int i = 0; i < n; i++)
             {
                 if (foldAssignments[i] == fold)
-                {
-                    for (int j = 0; j < NumFeatures; j++)
-                    {
-                        xTest[testIdx, j] = x[i, j];
-                    }
-                    testIndices[testIdx] = i;
-                    testIdx++;
-                }
+                    testRows.Add(i);
                 else
-                {
-                    for (int j = 0; j < NumFeatures; j++)
-                    {
-                        xTrain[trainIdx, j] = x[i, j];
-                    }
-                    yTrain[trainIdx] = y[i];
-                    trainIdx++;
-                }
+                    trainRows.Add(i);
             }
+
+            var testIndices = testRows.ToArray();
+            var (xTrainAll, yTrain) = SelectSamples(x, y, trainRows.ToArray());
+            var xTrain = LeadingColumns(xTrainAll, NumFeatures);
+            var xTest = LeadingColumns(SelectSamples(x, y, testIndices).X, NumFeatures);
 
             // Train each estimator and get predictions for test fold
+            var foldEstimators = new IClassifier<T>[numEstimators];
             for (int e = 0; e < numEstimators; e++)
             {
                 // Clone and train estimator on training data
-                IClassifier<T> foldEstimator;
                 if (_estimators[e] is IFullModel<T, Matrix<T>, Vector<T>> fullModel)
                 {
-                    foldEstimator = (IClassifier<T>)fullModel.Clone();
+                    foldEstimators[e] = (IClassifier<T>)fullModel.Clone();
                 }
                 else
                 {
@@ -280,94 +240,85 @@ public partial class StackingClassifier<T> : MetaClassifierBase<T>
                         $"Cross-validation requires clonable estimators to avoid shared state corruption. " +
                         $"Set CrossValidationFolds=1 or use clonable estimators.");
                 }
-                foldEstimator.Train(xTrain, yTrain);
+                foldEstimators[e].Train(xTrain, yTrain);
+            }
 
-                // Get predictions for test fold
-                if (Options.UseProbabilities && foldEstimator is IProbabilisticClassifier<T> probClassifier)
-                {
-                    var probs = probClassifier.PredictProbabilities(xTest);
-                    for (int t = 0; t < testCount; t++)
-                    {
-                        int origIdx = testIndices[t];
-                        for (int c = 0; c < NumClasses; c++)
-                        {
-                            metaFeatures[origIdx, e * metaFeaturesPerEstimator + c] = probs[t, c];
-                        }
-                    }
-                }
-                else
-                {
-                    var preds = foldEstimator.Predict(xTest);
-                    for (int t = 0; t < testCount; t++)
-                    {
-                        int origIdx = testIndices[t];
-                        metaFeatures[origIdx, e * metaFeaturesPerEstimator] = preds[t];
-                    }
-                }
+            // Get predictions for test fold
+            var foldFeatures = BuildMetaFeatures(foldEstimators, xTest, includePassthrough: false);
+            if (testIndices.Length > 0 && foldFeatures.Columns > 0)
+            {
+                outOfFold = engine.TensorScatterAdd(outOfFold,
+                    new Tensor<int>(testIndices, new[] { testIndices.Length }), Tensor<T>.FromMatrix(foldFeatures), 0);
             }
         }
 
         // Add passthrough features if enabled
-        if (Options.Passthrough)
-        {
-            int offset = numEstimators * metaFeaturesPerEstimator;
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < NumFeatures; j++)
-                {
-                    metaFeatures[i, offset + j] = x[i, j];
-                }
-            }
-        }
+        return Options.Passthrough
+            ? ConcatenateColumns(new[] { outOfFold, Tensor<T>.FromMatrix(LeadingColumns(x, NumFeatures)) }, n)
+            : outOfFold.ToMatrix();
     }
 
     /// <summary>
     /// Creates meta-features without cross-validation.
     /// </summary>
-    private void CreateSimpleMetaFeatures(Matrix<T> x, Vector<T> y, Matrix<T> metaFeatures)
+    private Matrix<T> CreateSimpleMetaFeatures(Matrix<T> x, Vector<T> y)
     {
-        int n = x.Rows;
-        int numEstimators = _estimators.Count;
-        int metaFeaturesPerEstimator = Options.UseProbabilities ? NumClasses : 1;
-
         // Train each estimator and get predictions
-        for (int e = 0; e < numEstimators; e++)
+        foreach (var estimator in _estimators)
         {
-            _estimators[e].Train(x, y);
-
-            if (Options.UseProbabilities && _estimators[e] is IProbabilisticClassifier<T> probClassifier)
-            {
-                var probs = probClassifier.PredictProbabilities(x);
-                for (int i = 0; i < n; i++)
-                {
-                    for (int c = 0; c < NumClasses; c++)
-                    {
-                        metaFeatures[i, e * metaFeaturesPerEstimator + c] = probs[i, c];
-                    }
-                }
-            }
-            else
-            {
-                var preds = _estimators[e].Predict(x);
-                for (int i = 0; i < n; i++)
-                {
-                    metaFeatures[i, e * metaFeaturesPerEstimator] = preds[i];
-                }
-            }
+            estimator.Train(x, y);
         }
 
         // Add passthrough features
-        if (Options.Passthrough)
+        return BuildMetaFeatures(_estimators, x, Options.Passthrough);
+    }
+
+    /// <summary>
+    /// Concatenates [rows, k] blocks column-wise (an empty list gives a [rows, 0] matrix).
+    /// </summary>
+    private Matrix<T> ConcatenateColumns(IReadOnlyList<Tensor<T>> blocks, int rows)
+    {
+        if (blocks.Count == 0)
         {
-            int offset = numEstimators * metaFeaturesPerEstimator;
-            for (int i = 0; i < n; i++)
+            return new Matrix<T>(rows, 0);
+        }
+
+        return blocks.Count == 1 ? blocks[0].ToMatrix() : Engine.TensorConcatenate(blocks.ToArray(), 1).ToMatrix();
+    }
+
+    /// <summary>
+    /// Builds the meta-feature matrix from trained estimators: per estimator NumClasses probability
+    /// columns (or its prediction followed by zero columns), then optionally the original features.
+    /// </summary>
+    private Matrix<T> BuildMetaFeatures(IReadOnlyList<IClassifier<T>> estimators, Matrix<T> input, bool includePassthrough)
+    {
+        int n = input.Rows;
+        int metaFeaturesPerEstimator = Options.UseProbabilities ? NumClasses : 1;
+        var blocks = new List<Tensor<T>>(estimators.Count + 1);
+
+        // Get predictions from each estimator
+        foreach (var estimator in estimators)
+        {
+            if (Options.UseProbabilities && estimator is IProbabilisticClassifier<T> probClassifier)
             {
-                for (int j = 0; j < NumFeatures; j++)
+                blocks.Add(Tensor<T>.FromMatrix(LeadingColumns(probClassifier.PredictProbabilities(input), NumClasses)));
+            }
+            else
+            {
+                blocks.Add(estimator.Predict(input).AsTensor().Reshape(n, 1));
+                if (metaFeaturesPerEstimator > 1)
                 {
-                    metaFeatures[i, offset + j] = x[i, j];
+                    blocks.Add(new Tensor<T>(new[] { n, metaFeaturesPerEstimator - 1 }));
                 }
             }
         }
+
+        if (includePassthrough)
+        {
+            blocks.Add(Tensor<T>.FromMatrix(LeadingColumns(input, NumFeatures)));
+        }
+
+        return ConcatenateColumns(blocks, n);
     }
 
     /// <summary>
@@ -375,56 +326,7 @@ public partial class StackingClassifier<T> : MetaClassifierBase<T>
     /// </summary>
     private Matrix<T> CreatePredictionMetaFeatures(Matrix<T> input)
     {
-        int n = input.Rows;
-        int numEstimators = _estimators.Count;
-        int metaFeaturesPerEstimator = Options.UseProbabilities ? NumClasses : 1;
-        int totalMetaFeatures = numEstimators * metaFeaturesPerEstimator;
-
-        if (Options.Passthrough)
-        {
-            totalMetaFeatures += NumFeatures;
-        }
-
-        var metaFeatures = new Matrix<T>(n, totalMetaFeatures);
-
-        // Get predictions from each estimator
-        for (int e = 0; e < numEstimators; e++)
-        {
-            if (Options.UseProbabilities && _estimators[e] is IProbabilisticClassifier<T> probClassifier)
-            {
-                var probs = probClassifier.PredictProbabilities(input);
-                for (int i = 0; i < n; i++)
-                {
-                    for (int c = 0; c < NumClasses; c++)
-                    {
-                        metaFeatures[i, e * metaFeaturesPerEstimator + c] = probs[i, c];
-                    }
-                }
-            }
-            else
-            {
-                var preds = _estimators[e].Predict(input);
-                for (int i = 0; i < n; i++)
-                {
-                    metaFeatures[i, e * metaFeaturesPerEstimator] = preds[i];
-                }
-            }
-        }
-
-        // Add passthrough features
-        if (Options.Passthrough)
-        {
-            int offset = numEstimators * metaFeaturesPerEstimator;
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < NumFeatures; j++)
-                {
-                    metaFeatures[i, offset + j] = input[i, j];
-                }
-            }
-        }
-
-        return metaFeatures;
+        return BuildMetaFeatures(_estimators, input, Options.Passthrough);
     }
 
     /// <inheritdoc/>
@@ -455,45 +357,19 @@ public partial class StackingClassifier<T> : MetaClassifierBase<T>
         }
 
         // Fall back to hard predictions
-        var preds = _finalEstimator.Predict(metaFeatures);
-        var probs = new Matrix<T>(input.Rows, NumClasses);
-
-        for (int i = 0; i < input.Rows; i++)
+        if (ClassLabels is null)
         {
-            for (int c = 0; c < NumClasses; c++)
-            {
-                var classLabels = ClassLabels ?? throw new InvalidOperationException("Model has not been fitted.");
-                if (NumOps.Compare(preds[i], classLabels[c]) == 0)
-                {
-                    probs[i, c] = NumOps.One;
-                }
-            }
+            throw new InvalidOperationException("Model has not been fitted.");
         }
 
-        return probs;
+        return ClassMembership(_finalEstimator.Predict(metaFeatures)).ToMatrix();
     }
 
     /// <inheritdoc/>
     public override Matrix<T> PredictLogProbabilities(Matrix<T> input)
     {
-        var probs = PredictProbabilities(input);
-        var logProbs = new Matrix<T>(input.Rows, NumClasses);
-
-        for (int i = 0; i < input.Rows; i++)
-        {
-            for (int c = 0; c < NumClasses; c++)
-            {
-                T p = probs[i, c];
-                T minP = NumOps.FromDouble(1e-15);
-                if (NumOps.Compare(p, minP) < 0)
-                {
-                    p = minP;
-                }
-                logProbs[i, c] = NumOps.Log(p);
-            }
-        }
-
-        return logProbs;
+        // log(max(p, 1e-15))
+        return base.PredictLogProbabilities(input);
     }
 
     /// <inheritdoc/>

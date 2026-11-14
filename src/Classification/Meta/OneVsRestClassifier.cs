@@ -126,27 +126,15 @@ public partial class OneVsRestClassifier<T> : MetaClassifierBase<T>
         TaskType = ClassificationTaskType.MultiLabel;
 
         // Create class labels (0 to NumClasses-1)
-        ClassLabels = new Vector<T>(NumClasses);
-        for (int c = 0; c < NumClasses; c++)
-        {
-            ClassLabels[c] = NumOps.FromDouble(c);
-        }
+        ClassLabels = NumClasses == 0 ? new Vector<T>(0) : Engine.TensorArange<T>(0, NumClasses, 1).ToVector();
 
         // Train one binary classifier per label
         _estimators = new IClassifier<T>[NumClasses];
 
         for (int c = 0; c < NumClasses; c++)
         {
-            // Get labels for this output
-            var yLabel = new Vector<T>(x.Rows);
-            for (int i = 0; i < x.Rows; i++)
-            {
-                yLabel[i] = yMultiLabel[i, c];
-            }
-
-            // Train binary classifier
             _estimators[c] = CreateBaseEstimator();
-            _estimators[c].Train(x, yLabel);
+            _estimators[c].Train(x, yMultiLabel.GetColumn(c));
         }
     }
 
@@ -165,25 +153,14 @@ public partial class OneVsRestClassifier<T> : MetaClassifierBase<T>
         NumClasses = ClassLabels.Length;
         TaskType = InferTaskType(y);
 
-        // Train one binary classifier per class
+        // Train one binary classifier per class; binary labels are 1 for this class, 0 for all others
         _estimators = new IClassifier<T>[NumClasses];
+        var membership = ClassMembership(y).ToMatrix();
 
         for (int c = 0; c < NumClasses; c++)
         {
-            // Create binary labels: 1 for this class, 0 for all others
-            var binaryLabels = new Vector<T>(y.Length);
-            T classLabel = ClassLabels[c];
-
-            for (int i = 0; i < y.Length; i++)
-            {
-                binaryLabels[i] = NumOps.Compare(y[i], classLabel) == 0
-                    ? NumOps.One
-                    : NumOps.Zero;
-            }
-
-            // Train binary classifier
             _estimators[c] = CreateBaseEstimator();
-            _estimators[c].Train(x, binaryLabels);
+            _estimators[c].Train(x, membership.GetColumn(c));
         }
     }
 
@@ -196,26 +173,7 @@ public partial class OneVsRestClassifier<T> : MetaClassifierBase<T>
         }
 
         var probs = PredictProbabilities(input);
-        var predictions = new Vector<T>(input.Rows);
-
-        for (int i = 0; i < input.Rows; i++)
-        {
-            int bestClass = 0;
-            T bestScore = probs[i, 0];
-
-            for (int c = 1; c < NumClasses; c++)
-            {
-                if (NumOps.Compare(probs[i, c], bestScore) > 0)
-                {
-                    bestScore = probs[i, c];
-                    bestClass = c;
-                }
-            }
-
-            predictions[i] = ClassLabels[bestClass];
-        }
-
-        return predictions;
+        return input.Rows == 0 ? new Vector<T>(0) : ClassIndicesToLabels(ArgMaxRows(probs));
     }
 
     /// <inheritdoc/>
@@ -226,72 +184,15 @@ public partial class OneVsRestClassifier<T> : MetaClassifierBase<T>
             throw new InvalidOperationException("Model has not been trained.");
         }
 
-        var scores = new Matrix<T>(input.Rows, NumClasses);
-
-        // Get decision scores from each binary classifier
-        for (int c = 0; c < NumClasses; c++)
-        {
-            var classProbs = GetEstimatorScores(_estimators[c], input);
-
-            for (int i = 0; i < input.Rows; i++)
-            {
-                scores[i, c] = classProbs[i];
-            }
-        }
-
-        // Normalize to probabilities using softmax
-        for (int i = 0; i < input.Rows; i++)
-        {
-            // Find max for numerical stability
-            T maxScore = scores[i, 0];
-            for (int c = 1; c < NumClasses; c++)
-            {
-                if (NumOps.Compare(scores[i, c], maxScore) > 0)
-                {
-                    maxScore = scores[i, c];
-                }
-            }
-
-            // Compute softmax
-            T sumExp = NumOps.Zero;
-            for (int c = 0; c < NumClasses; c++)
-            {
-                T expVal = NumOps.Exp(NumOps.Subtract(scores[i, c], maxScore));
-                scores[i, c] = expVal;
-                sumExp = NumOps.Add(sumExp, expVal);
-            }
-
-            // Normalize
-            for (int c = 0; c < NumClasses; c++)
-            {
-                scores[i, c] = NumOps.Divide(scores[i, c], sumExp);
-            }
-        }
-
-        return scores;
+        // Decision scores from each binary classifier, normalized to probabilities using softmax
+        return ApplySoftmax(GetAllEstimatorScores(input));
     }
 
     /// <inheritdoc/>
     public override Matrix<T> PredictLogProbabilities(Matrix<T> input)
     {
-        var probs = PredictProbabilities(input);
-        var logProbs = new Matrix<T>(input.Rows, NumClasses);
-
-        for (int i = 0; i < input.Rows; i++)
-        {
-            for (int c = 0; c < NumClasses; c++)
-            {
-                T p = probs[i, c];
-                T minP = NumOps.FromDouble(1e-15);
-                if (NumOps.Compare(p, minP) < 0)
-                {
-                    p = minP;
-                }
-                logProbs[i, c] = NumOps.Log(p);
-            }
-        }
-
-        return logProbs;
+        // log(max(p, 1e-15))
+        return base.PredictLogProbabilities(input);
     }
 
     /// <inheritdoc/>
@@ -302,23 +203,18 @@ public partial class OneVsRestClassifier<T> : MetaClassifierBase<T>
             throw new InvalidOperationException("Model has not been trained.");
         }
 
-        // For multi-label, each classifier's prediction is independent
-        var predictions = new Matrix<T>(input.Rows, NumClasses);
-
-        for (int c = 0; c < NumClasses; c++)
+        // For multi-label, each classifier's prediction is independent; threshold at 0.5
+        var scores = GetAllEstimatorScores(input);
+        if (scores.Rows == 0 || scores.Columns == 0)
         {
-            var classScores = GetEstimatorScores(_estimators[c], input);
-
-            for (int i = 0; i < input.Rows; i++)
-            {
-                // Threshold at 0.5 for binary decision
-                predictions[i, c] = NumOps.Compare(classScores[i], NumOps.FromDouble(0.5)) >= 0
-                    ? NumOps.One
-                    : NumOps.Zero;
-            }
+            return scores;
         }
 
-        return predictions;
+        var engine = Engine;
+        var scoreTensor = Tensor<T>.FromMatrix(scores);
+        var half = new Tensor<T>(new[] { scores.Rows, scores.Columns });
+        engine.TensorFill(half, NumOps.FromDouble(0.5));
+        return engine.TensorGreaterEqual(scoreTensor, half).ToMatrix();
     }
 
     /// <inheritdoc/>
@@ -329,19 +225,26 @@ public partial class OneVsRestClassifier<T> : MetaClassifierBase<T>
             throw new InvalidOperationException("Model has not been trained.");
         }
 
-        var probs = new Matrix<T>(input.Rows, NumClasses);
+        return GetAllEstimatorScores(input);
+    }
 
-        for (int c = 0; c < NumClasses; c++)
+    /// <summary>
+    /// Stacks every estimator's scores into an [input.Rows, NumClasses] matrix.
+    /// </summary>
+    private Matrix<T> GetAllEstimatorScores(Matrix<T> input)
+    {
+        if (_estimators is null || NumClasses == 0)
         {
-            var classScores = GetEstimatorScores(_estimators[c], input);
-
-            for (int i = 0; i < input.Rows; i++)
-            {
-                probs[i, c] = classScores[i];
-            }
+            return new Matrix<T>(input.Rows, NumClasses);
         }
 
-        return probs;
+        var columns = new Vector<T>[NumClasses];
+        for (int c = 0; c < NumClasses; c++)
+        {
+            columns[c] = GetEstimatorScores(_estimators[c], input);
+        }
+
+        return StackColumns(columns);
     }
 
     /// <summary>
@@ -352,26 +255,12 @@ public partial class OneVsRestClassifier<T> : MetaClassifierBase<T>
         // Try to get probabilities if available
         if (estimator is IProbabilisticClassifier<T> probClassifier)
         {
-            var probs = probClassifier.PredictProbabilities(input);
-            var scores = new Vector<T>(input.Rows);
-
             // Get probability of positive class (class 1)
-            int posCol = probs.Columns > 1 ? 1 : 0;
-            for (int i = 0; i < input.Rows; i++)
-            {
-                scores[i] = probs[i, posCol];
-            }
-            return scores;
+            var probs = probClassifier.PredictProbabilities(input);
+            return probs.GetColumn(probs.Columns > 1 ? 1 : 0);
         }
 
         // Fall back to binary predictions
-        var predictions = estimator.Predict(input);
-        var result = new Vector<T>(input.Rows);
-
-        for (int i = 0; i < input.Rows; i++)
-        {
-            result[i] = predictions[i];
-        }
-        return result;
+        return estimator.Predict(input);
     }
 }
