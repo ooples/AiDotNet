@@ -2196,5 +2196,375 @@ public sealed class StreamingDistributedEnablersTests : IDisposable
         }
     }
 
+    [Fact(Timeout = 90000)]
+    public async Task NarrowFloatMetadataAndGlooScatter_PreserveExactLargeIntsSeedsAndShapesAcrossHalfAndFloat()
+    {
+        // 1. DistributedStreamingDataLoader<Half>: odd localBatchSize = 3001 (> Half's 2048 exact-integer ceiling)
+        //    and multi-epoch unseeded shuffle seed synchronization (must never overflow to constant int.MinValue).
+        string halfEnv = "half_meta_" + Guid.NewGuid().ToString("N");
+        var halfBackends = new ICommunicationBackend<Half>[]
+        {
+            new InMemoryCommunicationBackend<Half>(0, 2, halfEnv),
+            new InMemoryCommunicationBackend<Half>(1, 2, halfEnv),
+        };
+        try
+        {
+            const int oddLargeLocalBatch = 3001; // In IEEE-754 Half, 3001 rounds to 3000 without U7 chunking!
+            var globalBatches = new int[2];
+            var batchTasks = Enumerable.Range(0, 2).Select(rank => Task.Run(() =>
+            {
+                var inner = new StreamingDataLoader<Half, int, int>(
+                    sampleCount: 16,
+                    sampleReader: (idx, _) => Task.FromResult((idx, idx)),
+                    batchSize: oddLargeLocalBatch,
+                    prefetchCount: 1,
+                    numWorkers: 1);
+                var distLoader = new DistributedStreamingDataLoader<Half, int, int>(inner, halfBackends[rank]);
+                globalBatches[rank] = distLoader.GlobalBatchSize;
+            })).ToArray();
+            await Task.WhenAll(batchTasks);
+            Assert.Equal(oddLargeLocalBatch * 2, globalBatches[0]);
+            Assert.Equal(oddLargeLocalBatch * 2, globalBatches[1]);
+
+            const int sampleCount = 32;
+            const int epochs = 4;
+            var rankEpochOrders = new int[2][][];
+            var epochTasks = Enumerable.Range(0, 2).Select(rank => Task.Run(async () =>
+            {
+                var inner = new StreamingDataLoader<Half, int, int>(
+                    sampleCount: sampleCount,
+                    sampleReader: (idx, _) => Task.FromResult((idx, idx)),
+                    batchSize: 8,
+                    prefetchCount: 1,
+                    numWorkers: 1);
+                var distLoader = new DistributedStreamingDataLoader<Half, int, int>(inner, halfBackends[rank]);
+                await distLoader.LoadAsync();
+                var perEpoch = new int[epochs][];
+                for (int ep = 0; ep < epochs; ep++)
+                {
+                    var seen = new List<int>(sampleCount / 2);
+                    foreach (var (ins, _) in distLoader.GetBatches(shuffle: true, dropLast: false, seed: null))
+                    {
+                        seen.AddRange(ins);
+                    }
+
+                    perEpoch[ep] = seen.ToArray();
+                }
+
+                rankEpochOrders[rank] = perEpoch;
+            })).ToArray();
+            await Task.WhenAll(epochTasks);
+
+            bool sawDistinctShuffleAcrossEpochs = false;
+            int[]? firstGlobalOrder = null;
+            for (int ep = 0; ep < epochs; ep++)
+            {
+                var combined = rankEpochOrders[0][ep].Concat(rankEpochOrders[1][ep]).ToArray();
+                Assert.Equal(sampleCount, combined.Length);
+                Assert.Equal(sampleCount, combined.Distinct().Count());
+                if (firstGlobalOrder is null)
+                {
+                    firstGlobalOrder = combined;
+                }
+                else if (!firstGlobalOrder.SequenceEqual(combined))
+                {
+                    sawDistinctShuffleAcrossEpochs = true;
+                }
+            }
+
+            Assert.True(
+                sawDistinctShuffleAcrossEpochs,
+                "Unseeded DistributedStreamingDataLoader<Half> produced identical shuffle permutations across all 4 epochs.");
+
+            // 2. DistributedTapeCoordinator<Half>.CoordinateLazyWarmupShapes with dimensions > 65504 (Half max finite)
+            var resolvedInShapes = new int[]?[2];
+            var resolvedTgtShapes = new int[]?[2];
+            var shapeTasks = Enumerable.Range(0, 2).Select(rank => Task.Run(() =>
+            {
+                using var coord = new DistributedTapeCoordinator<Half>(halfBackends[rank], DistributedStrategy.DDP);
+                bool ok = coord.CoordinateLazyWarmupShapes(
+                    localNeedsWarmup: rank == 0,
+                    localInputShape: rank == 1 ? new[] { 3, 100_003 } : null,
+                    localTargetShape: rank == 1 ? new[] { 3, 70_009 } : null,
+                    out var donorIn,
+                    out var donorTgt);
+                Assert.True(ok);
+                resolvedInShapes[rank] = donorIn;
+                resolvedTgtShapes[rank] = donorTgt;
+            })).ToArray();
+            await Task.WhenAll(shapeTasks);
+            for (int r = 0; r < 2; r++)
+            {
+                Assert.Equal(new[] { 3, 100_003 }, resolvedInShapes[r]);
+                Assert.Equal(new[] { 3, 70_009 }, resolvedTgtShapes[r]);
+            }
+        }
+        finally
+        {
+            foreach (var b in halfBackends)
+            {
+                if (b.IsInitialized) b.Shutdown();
+            }
+        }
+
+        // 3. GlooCommunicationBackend<Half>.Scatter with odd chunkSize = 3001 (> Half's 2048 exact-integer ceiling)
+        var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+        listener.Start();
+        int freePort = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
+        listener.Stop();
+
+        string? prevAddr = Environment.GetEnvironmentVariable("AIDOTNET_MASTER_ADDR");
+        string? prevPort = Environment.GetEnvironmentVariable("AIDOTNET_MASTER_PORT");
+        Environment.SetEnvironmentVariable("AIDOTNET_MASTER_ADDR", "127.0.0.1");
+        Environment.SetEnvironmentVariable("AIDOTNET_MASTER_PORT", freePort.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        try
+        {
+            const int scatterChunk = 3001;
+            var fullScatterPayload = new Half[scatterChunk * 2];
+            for (int i = 0; i < fullScatterPayload.Length; i++)
+            {
+                fullScatterPayload[i] = (Half)((i % 97) * 0.25f - 6.0f);
+            }
+
+            var g0 = new GlooCommunicationBackend<Half>(rank: 0, worldSize: 2);
+            var g1 = new GlooCommunicationBackend<Half>(rank: 1, worldSize: 2);
+            try
+            {
+                await Task.WhenAll(Task.Run(() => g0.Initialize()), Task.Run(() => g1.Initialize()));
+                Vector<Half>? sOut0 = null;
+                Vector<Half>? sOut1 = null;
+                await Task.WhenAll(
+                    Task.Run(() => { sOut0 = g0.Scatter(new Vector<Half>(fullScatterPayload), root: 0); }),
+                    Task.Run(() => { sOut1 = g1.Scatter(new Vector<Half>(0), root: 0); }));
+
+                var r0 = Assert.IsType<Vector<Half>>(sOut0);
+                var r1 = Assert.IsType<Vector<Half>>(sOut1);
+                Assert.Equal(scatterChunk, r0.Length);
+                Assert.Equal(scatterChunk, r1.Length);
+                for (int i = 0; i < scatterChunk; i++)
+                {
+                    Assert.Equal(fullScatterPayload[i], r0[i]);
+                    Assert.Equal(fullScatterPayload[scatterChunk + i], r1[i]);
+                }
+            }
+            finally
+            {
+                g0.Shutdown();
+                g1.Shutdown();
+            }
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("AIDOTNET_MASTER_ADDR", prevAddr);
+            Environment.SetEnvironmentVariable("AIDOTNET_MASTER_PORT", prevPort);
+        }
+    }
+
+    [Fact(Timeout = 90000)]
+    public async Task FileBackedShmMismatchCoordinatorDisposalAndNoneStrategyScheduler_BehaveDeterministically()
+    {
+        // 1. File-backed SharedMemoryCommunicationBackend where Rank 0 creates a larger backing file (128 KiB slot)
+        //    and Rank 1 opens with a smaller slotCapacityBytes (64 KiB): Rank 1 must map Math.Max(fileLen, totalCap),
+        //    validate the session header, signal GlobalAbortFlagOffset, and fail fast with InvalidOperationException
+        //    (never ArgumentOutOfRangeException from CreateFromFile, and never stranding Rank 0 until timeout).
+        string fbSession = "fb_mismatch_" + Guid.NewGuid().ToString("N");
+        string shmDir = Directory.Exists("/dev/shm") ? "/dev/shm" : Path.GetTempPath();
+        string expectedFile = Path.Combine(shmDir, $"aidotnet_shm_{fbSession}.bin");
+        using (var fb0 = new SharedMemoryCommunicationBackend<float>(
+            0, 2, fbSession, slotCapacityBytes: 128 * 1024, timeoutMilliseconds: 20_000, forceFileBacked: true))
+        using (var fb1 = new SharedMemoryCommunicationBackend<float>(
+            1, 2, fbSession, slotCapacityBytes: 64 * 1024, timeoutMilliseconds: 20_000, forceFileBacked: true))
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var t0 = Task.Run(() =>
+            {
+                var ex0 = Record.Exception(() => fb0.Initialize());
+                Assert.True(
+                    ex0 is IOException or InvalidOperationException,
+                    $"Expected IOException or InvalidOperationException on Rank 0, got {ex0?.GetType().FullName}: {ex0?.Message}");
+            });
+            while (sw.ElapsedMilliseconds < 2_000 && (!File.Exists(expectedFile) || new FileInfo(expectedFile).Length == 0))
+            {
+                await Task.Delay(5);
+            }
+
+            var t1 = Task.Run(() => Assert.Throws<InvalidOperationException>(() => fb1.Initialize()));
+            await Task.WhenAll(t0, t1);
+            Assert.True(sw.ElapsedMilliseconds < 10_000, $"File-backed SHM abort took too long: {sw.ElapsedMilliseconds} ms.");
+        }
+
+        // 2. ZeRO-2 DistributedTapeCoordinator _ownedParamShard / _shardGradTensor / _persistentGradSlots resize + Dispose
+        var (inputs, targets) = CreateRegressionDataset(sampleCount: 16, seed: 707);
+        var mseLoss = new MeanSquaredErrorLoss<float>();
+        var zeroBackends = CreateBackends(worldSize: 2, useSharedMemory: false);
+        try
+        {
+            var resizeTasks = Enumerable.Range(0, 2).Select(rank => Task.Run(() =>
+            {
+                var coord = new DistributedTapeCoordinator<float>(zeroBackends[rank], DistributedStrategy.ZeRO2);
+                var opt = CreateAdamOptimizer(lr: 0.01);
+                var smallModel = CreateMlp(opt);
+                var largeLayers = new List<ILayer<float>>
+                {
+                    new InputLayer<float>(InDim),
+                    new DenseLayer<float>(outputSize: HiddenDim * 2, activationFunction: new ReLUActivation<float>()),
+                    new DenseLayer<float>(outputSize: OutDim, activationFunction: new IdentityActivation<float>()),
+                };
+                var largeArch = new NeuralNetworkArchitecture<float>(
+                    inputType: InputType.OneDimensional,
+                    taskType: NeuralNetworkTaskType.Regression,
+                    inputSize: InDim,
+                    outputSize: OutDim,
+                    layers: largeLayers);
+                var largeModel = new FeedForwardNeuralNetwork<float>(
+                    largeArch,
+                    optimizer: opt,
+                    lossFunction: mseLoss);
+                _ = largeModel.Predict(new Tensor<float>(new[] { 1, InDim }));
+
+                // Step on smallModel (initializes _ownedParamShard & _shardGradTensor), then largeModel (triggers resize & old shard disposal)
+                foreach (var activeModel in new[] { smallModel, largeModel })
+                {
+                    activeModel.DistributedCoordinator = coord;
+                    TapeTrainingStepper<float>.EagerStep(new FusedTrainingStepRequest<float>
+                    {
+                        Layers = activeModel.Layers.OfType<ITrainableLayer<float>>().ToList(),
+                        Input = StackRows(inputs, rank * 2, 2),
+                        Target = StackRows(targets, rank * 2, 2),
+                        Forward = x => activeModel.ForwardForTraining(x),
+                        ComputeLoss = (pred, y) => mseLoss.ComputeTapeLoss(pred, y),
+                        Optimizer = opt,
+                    }, activeModel);
+                    activeModel.DistributedCoordinator = null;
+                }
+
+                // Exercise _persistentGradSlots resize on a parameter tensor key whose slot is queried before Dispose
+                var pKey = largeModel.Layers.OfType<ITrainableLayer<float>>()
+                    .First(l => l.GetTrainableParameters().Count > 0)
+                    .GetTrainableParameters()[0];
+                var slot = coord.GetOrCreateGradientSlot(pKey);
+                Assert.Equal(pKey.Length, slot.Length);
+
+                coord.Dispose();
+                Assert.Throws<ObjectDisposedException>(() => coord.SynchronizeStepMetadata(1L, 0.5));
+            })).ToArray();
+            await Task.WhenAll(resizeTasks);
+        }
+        finally
+        {
+            ShutdownBackends(zeroBackends);
+        }
+
+        // 3. DistributedStrategy.None in TapeTrainingStepper must step the LR scheduler ONCE per step (never double-step)
+        var init = CreateInitialWeights(seed: 8080);
+        WarmupStableDecayScheduler MakeSched() =>
+            new WarmupStableDecayScheduler(0.08, warmupSteps: 4, decayStartStep: 8, decaySteps: 8);
+
+        var refOpt = CreateAdamOptimizer(lr: 0.08, enableClipping: true, maxGradNorm: 0.5, scheduler: MakeSched());
+        var refModel = CreateMlp(refOpt);
+        refModel.SetParameters(init.Clone());
+        refModel.SetBaseTrainOptimizer(refOpt);
+        var refLayers = refModel.Layers.OfType<ITrainableLayer<float>>().ToList();
+
+        // Step 1 (eager 8 rows), Step 2 (eager 4 rows), Step 3 (accumulated 2x4 rows)
+        TapeTrainingStepper<float>.EagerStep(new FusedTrainingStepRequest<float>
+        {
+            Layers = refLayers,
+            Input = StackRows(inputs, 0, 8),
+            Target = StackRows(targets, 0, 8),
+            Forward = x => refModel.ForwardForTraining(x),
+            ComputeLoss = (pred, y) => mseLoss.ComputeTapeLoss(pred, y),
+            Optimizer = refOpt,
+            ModelGradientClip = 0.5,
+        }, refModel);
+        double expectedLrStep1 = refOpt.GetCurrentLearningRate();
+
+        TapeTrainingStepper<float>.EagerStep(new FusedTrainingStepRequest<float>
+        {
+            Layers = refLayers,
+            Input = StackRows(inputs, 8, 4),
+            Target = StackRows(targets, 8, 4),
+            Forward = x => refModel.ForwardForTraining(x),
+            ComputeLoss = (pred, y) => mseLoss.ComputeTapeLoss(pred, y),
+            Optimizer = refOpt,
+            ModelGradientClip = 0.5,
+        }, refModel);
+        double expectedLrStep2 = refOpt.GetCurrentLearningRate();
+
+        refModel.FusedSession.IsDisabled = true;
+        refModel.TrainWithGradientAccumulation(StackRows(inputs, 0, 8), StackRows(targets, 0, 8), batchSize: 4);
+        double expectedLrStep3 = refOpt.GetCurrentLearningRate();
+
+        var noneBackends = CreateBackends(worldSize: 2, useSharedMemory: false);
+        try
+        {
+            var rankStepLrs = new double[2][];
+            var rankFinalParams = new Vector<float>[2];
+            var noneTasks = Enumerable.Range(0, 2).Select(rank => Task.Run(() =>
+            {
+                using var coord = new DistributedTapeCoordinator<float>(noneBackends[rank], DistributedStrategy.None);
+                var opt = CreateAdamOptimizer(lr: 0.08, enableClipping: true, maxGradNorm: 0.5, scheduler: MakeSched());
+                var model = CreateMlp(opt);
+                model.SetParameters(init.Clone());
+                model.SetBaseTrainOptimizer(opt);
+                model.FusedSession.IsDisabled = true;
+                model.DistributedCoordinator = coord;
+                var layers = model.Layers.OfType<ITrainableLayer<float>>().ToList();
+
+                // Step 1: active on both ranks (4 + 4 = 8 rows)
+                TapeTrainingStepper<float>.EagerStep(new FusedTrainingStepRequest<float>
+                {
+                    Layers = layers,
+                    Input = StackRows(inputs, rank * 4, 4),
+                    Target = StackRows(targets, rank * 4, 4),
+                    Forward = x => model.ForwardForTraining(x),
+                    ComputeLoss = (pred, y) => mseLoss.ComputeTapeLoss(pred, y),
+                    Optimizer = opt,
+                    ModelGradientClip = 0.5,
+                }, model);
+                double lr1 = opt.GetCurrentLearningRate();
+
+                // Step 2: Rank 0 active (4 rows), Rank 1 idle (0 rows — exercises idleStepped path)
+                TapeTrainingStepper<float>.EagerStep(new FusedTrainingStepRequest<float>
+                {
+                    Layers = layers,
+                    Input = rank == 0 ? StackRows(inputs, 8, 4) : new Tensor<float>(new[] { 0, InDim }),
+                    Target = rank == 0 ? StackRows(targets, 8, 4) : new Tensor<float>(new[] { 0, OutDim }),
+                    Forward = x => model.ForwardForTraining(x),
+                    ComputeLoss = (pred, y) => mseLoss.ComputeTapeLoss(pred, y),
+                    Optimizer = opt,
+                    ModelGradientClip = 0.5,
+                }, model);
+                double lr2 = opt.GetCurrentLearningRate();
+
+                // Step 3: Gradient accumulation (2 micro-batches of 2 rows per rank = 8 rows global)
+                model.TrainWithGradientAccumulation(
+                    StackRows(inputs, rank * 4, 4),
+                    StackRows(targets, rank * 4, 4),
+                    batchSize: 2);
+                double lr3 = opt.GetCurrentLearningRate();
+
+                rankStepLrs[rank] = new[] { lr1, lr2, lr3 };
+                rankFinalParams[rank] = model.GetParameters();
+                model.DistributedCoordinator = null;
+            })).ToArray();
+            await Task.WhenAll(noneTasks);
+
+            for (int r = 0; r < 2; r++)
+            {
+                Assert.Equal(expectedLrStep1, rankStepLrs[r][0], 9);
+                Assert.Equal(expectedLrStep2, rankStepLrs[r][1], 9);
+                Assert.Equal(expectedLrStep3, rankStepLrs[r][2], 9);
+            }
+
+            Assert.True(MaxAbsDiff(rankFinalParams[0], rankFinalParams[1]) < 1e-6);
+            Assert.True(MaxAbsDiff(refModel.GetParameters(), rankFinalParams[0]) < 1e-5);
+        }
+        finally
+        {
+            ShutdownBackends(noneBackends);
+        }
+    }
+
     #endregion
 }

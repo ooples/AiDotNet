@@ -186,7 +186,7 @@ internal sealed class DistributedTapeCoordinator<T> : IDisposable
     /// </summary>
     public double LastStepCommunicationShare { get; private set; }
 
-    private bool IsShardedStrategy =>
+    internal bool IsShardedStrategy =>
         Strategy == DistributedStrategy.ZeRO1 ||
         Strategy == DistributedStrategy.ZeRO2 ||
         Strategy == DistributedStrategy.ZeRO3 ||
@@ -265,67 +265,79 @@ internal sealed class DistributedTapeCoordinator<T> : IDisposable
         }
 
         EnsureBackendInitialized();
-        var flags = new Vector<T>(2);
+        var localFlags = new Vector<T>(2);
         {
-            Span<T> flagSpan = flags.AsWritableSpan();
+            Span<T> flagSpan = localFlags.AsWritableSpan();
             flagSpan[0] = NumOps.FromDouble(localNeedsWarmup ? 1.0 : 0.0);
-            flagSpan[1] = NumOps.FromDouble(hasNonEmptyLocal ? (WorldSize - Rank) : 0.0);
+            flagSpan[1] = NumOps.FromDouble(hasNonEmptyLocal ? 1.0 : 0.0);
         }
 
-        Backend.AllReduce(flags, ReductionOperation.Max);
-        ReadOnlySpan<T> flagRead = flags.AsSpan();
-        bool anyNeedsWarmup = NumOps.ToDouble(flagRead[0]) > 0.5;
-        int donorScore = (int)Math.Round(NumOps.ToDouble(flagRead[1]));
-        if (!anyNeedsWarmup || donorScore <= 0)
+        var gatheredFlags = Backend.AllGather(localFlags);
+        ReadOnlySpan<T> flagRead = gatheredFlags.AsSpan();
+        bool anyNeedsWarmup = false;
+        int donorRank = -1;
+        for (int r = 0; r < WorldSize; r++)
+        {
+            if (NumOps.ToDouble(flagRead[r * 2]) > 0.5)
+            {
+                anyNeedsWarmup = true;
+            }
+
+            if (donorRank < 0 && NumOps.ToDouble(flagRead[(r * 2) + 1]) > 0.5)
+            {
+                donorRank = r;
+            }
+        }
+
+        if (!anyNeedsWarmup || donorRank < 0)
         {
             return false;
         }
 
-        int donorRank = WorldSize - donorScore;
-        var rankDims = new Vector<T>(2);
+        var rankDims = new Vector<T>(10);
         if (Rank == donorRank && localInputShape is not null && localTargetShape is not null)
         {
             Span<T> dimSpan = rankDims.AsWritableSpan();
-            dimSpan[0] = NumOps.FromDouble(localInputShape.Length);
-            dimSpan[1] = NumOps.FromDouble(localTargetShape.Length);
+            WriteIntAsU7Chunks(dimSpan, 0, localInputShape.Length);
+            WriteIntAsU7Chunks(dimSpan, 5, localTargetShape.Length);
         }
 
-        Backend.AllReduce(rankDims, ReductionOperation.Max);
+        rankDims = Backend.Broadcast(rankDims, donorRank);
         ReadOnlySpan<T> dimRead = rankDims.AsSpan();
-        int inRank = (int)Math.Round(NumOps.ToDouble(dimRead[0]));
-        int tgtRank = (int)Math.Round(NumOps.ToDouble(dimRead[1]));
+        int inRank = ReadIntFromU7Chunks(dimRead, 0);
+        int tgtRank = ReadIntFromU7Chunks(dimRead, 5);
         if (inRank <= 0 || tgtRank <= 0)
         {
             return false;
         }
 
-        var shapeValues = new Vector<T>(inRank + tgtRank);
+        var shapeValues = new Vector<T>((inRank + tgtRank) * 5);
         if (Rank == donorRank && localInputShape is not null && localTargetShape is not null)
         {
             Span<T> valSpan = shapeValues.AsWritableSpan();
             for (int i = 0; i < inRank; i++)
             {
-                valSpan[i] = NumOps.FromDouble(localInputShape[i]);
+                WriteIntAsU7Chunks(valSpan, i * 5, localInputShape[i]);
             }
 
             for (int i = 0; i < tgtRank; i++)
             {
-                valSpan[inRank + i] = NumOps.FromDouble(localTargetShape[i]);
+                WriteIntAsU7Chunks(valSpan, (inRank + i) * 5, localTargetShape[i]);
             }
         }
 
-        Backend.AllReduce(shapeValues, ReductionOperation.Max);
+        shapeValues = Backend.Broadcast(shapeValues, donorRank);
         ReadOnlySpan<T> valRead = shapeValues.AsSpan();
         var resolvedIn = new int[inRank];
         var resolvedTgt = new int[tgtRank];
         for (int i = 0; i < inRank; i++)
         {
-            resolvedIn[i] = (int)Math.Round(NumOps.ToDouble(valRead[i]));
+            resolvedIn[i] = ReadIntFromU7Chunks(valRead, i * 5);
         }
 
         for (int i = 0; i < tgtRank; i++)
         {
-            resolvedTgt[i] = (int)Math.Round(NumOps.ToDouble(valRead[inRank + i]));
+            resolvedTgt[i] = ReadIntFromU7Chunks(valRead, (inRank + i) * 5);
         }
 
         donorInputShape = resolvedIn;
@@ -517,6 +529,20 @@ internal sealed class DistributedTapeCoordinator<T> : IDisposable
                 slot is null ||
                 slot.Length != parameter.Length)
             {
+                if (slot is not null)
+                {
+                    if (typeof(T) == typeof(float) &&
+                        (object)parameter is Tensor<float> pfKey &&
+                        _persistentGradBuffers is not null &&
+                        _persistentGradBuffers.TryGetValue(pfKey, out var oldBinding))
+                    {
+                        DetachAndDisposeGpuBinding(oldBinding.Buffer, oldBinding.BoundTensor);
+                        _persistentGradBuffers.Remove(pfKey);
+                    }
+
+                    DisposeInternalCoordinatorTensor(slot, invalidateResidentWeight: true);
+                }
+
                 slot = new Tensor<T>(parameter._shape);
                 _persistentGradSlots[parameter] = slot;
             }
@@ -1217,6 +1243,7 @@ internal sealed class DistributedTapeCoordinator<T> : IDisposable
         int myStart = Rank * shardSize;
         int myValidLen = Math.Max(0, Math.Min(shardSize, totalElements - myStart));
 
+        ReleaseOwnedParamShard();
         if (myValidLen > 0)
         {
             // Allocate a fresh shard tensor reference on checkpoint restore so any per-tensor
@@ -1230,6 +1257,26 @@ internal sealed class DistributedTapeCoordinator<T> : IDisposable
         gradOpt.ReshardPendingTapeStatesForLocalSlice(uniqueParams, myStart, myValidLen);
     }
 
+    private static void WriteIntAsU7Chunks(Span<T> dst, int offset, int value)
+    {
+        uint u = unchecked((uint)value);
+        dst[offset] = NumOps.FromDouble((int)(u & 0x7FU));
+        dst[offset + 1] = NumOps.FromDouble((int)((u >> 7) & 0x7FU));
+        dst[offset + 2] = NumOps.FromDouble((int)((u >> 14) & 0x7FU));
+        dst[offset + 3] = NumOps.FromDouble((int)((u >> 21) & 0x7FU));
+        dst[offset + 4] = NumOps.FromDouble((int)((u >> 28) & 0x0FU));
+    }
+
+    private static int ReadIntFromU7Chunks(ReadOnlySpan<T> src, int offset)
+    {
+        uint c0 = (uint)((int)Math.Round(NumOps.ToDouble(src[offset])) & 0x7F);
+        uint c1 = (uint)((int)Math.Round(NumOps.ToDouble(src[offset + 1])) & 0x7F);
+        uint c2 = (uint)((int)Math.Round(NumOps.ToDouble(src[offset + 2])) & 0x7F);
+        uint c3 = (uint)((int)Math.Round(NumOps.ToDouble(src[offset + 3])) & 0x7F);
+        uint c4 = (uint)((int)Math.Round(NumOps.ToDouble(src[offset + 4])) & 0x0F);
+        return unchecked((int)(c0 | (c1 << 7) | (c2 << 14) | (c3 << 21) | (c4 << 28)));
+    }
+
     private byte[] BroadcastBytePayload(byte[]? rank0Bytes, int root)
     {
         if (WorldSize <= 1)
@@ -1240,61 +1287,65 @@ internal sealed class DistributedTapeCoordinator<T> : IDisposable
         EnsureBackendInitialized();
 
         int localLen = Rank == root && rank0Bytes is not null ? rank0Bytes.Length : 0;
-        var header = new Vector<T>(4);
+        var header = new Vector<T>(5);
         if (Rank == root)
         {
-            Span<T> hSpan = header.AsWritableSpan();
-            hSpan[0] = NumOps.FromDouble(localLen & 0xFF);
-            hSpan[1] = NumOps.FromDouble((localLen >> 8) & 0xFF);
-            hSpan[2] = NumOps.FromDouble((localLen >> 16) & 0xFF);
-            hSpan[3] = NumOps.FromDouble((localLen >> 24) & 0xFF);
+            WriteIntAsU7Chunks(header.AsWritableSpan(), 0, localLen);
         }
 
         header = Backend.Broadcast(header, root);
-        ReadOnlySpan<T> hRead = header.AsSpan();
-        int b0 = (int)Math.Round(NumOps.ToDouble(hRead[0])) & 0xFF;
-        int b1 = (int)Math.Round(NumOps.ToDouble(hRead[1])) & 0xFF;
-        int b2 = (int)Math.Round(NumOps.ToDouble(hRead[2])) & 0xFF;
-        int b3 = (int)Math.Round(NumOps.ToDouble(hRead[3])) & 0xFF;
-        int byteLength = b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
+        int byteLength = ReadIntFromU7Chunks(header.AsSpan(), 0);
 
         if (byteLength <= 0)
         {
             return Array.Empty<byte>();
         }
 
-        var encoded = new Vector<T>(byteLength);
-        if (Rank == root && rank0Bytes is not null)
+        const int maxBytesPerChunk = 512 * 1024;
+        var decoded = Rank == root && rank0Bytes is not null && rank0Bytes.Length == byteLength
+            ? rank0Bytes
+            : new byte[byteLength];
+        int offset = 0;
+        while (offset < byteLength)
         {
-            PackBytesIntoSpan(rank0Bytes, encoded.AsWritableSpan());
+            int chunkLen = Math.Min(maxBytesPerChunk, byteLength - offset);
+            var encoded = new Vector<T>(chunkLen * 2);
+            if (Rank == root && rank0Bytes is not null)
+            {
+                PackBytesIntoSpan(rank0Bytes, offset, chunkLen, encoded.AsWritableSpan());
+            }
+
+            encoded = Backend.Broadcast(encoded, root);
+            if (Rank != root)
+            {
+                UnpackBytesFromSpan(encoded.AsSpan(), decoded, offset, chunkLen);
+            }
+
+            offset += chunkLen;
         }
 
-        encoded = Backend.Broadcast(encoded, root);
-        if (Rank == root && rank0Bytes is not null)
-        {
-            return rank0Bytes;
-        }
-
-        var decoded = new byte[byteLength];
-        UnpackBytesFromSpan(encoded.AsSpan(), decoded);
         return decoded;
     }
 
-    [AiDotNet.Attributes.ScalarKernel("One-time checkpoint byte-to-T packing (exact 0..255 integer values across all numeric types).")]
-    private static void PackBytesIntoSpan(byte[] source, Span<T> destination)
+    [AiDotNet.Attributes.ScalarKernel("One-time checkpoint byte-to-T 7-bit packing (exact 0..127 integer values across all numeric types).")]
+    private static void PackBytesIntoSpan(byte[] source, int sourceOffset, int count, Span<T> destination)
     {
-        for (int i = 0; i < source.Length; i++)
+        for (int i = 0; i < count; i++)
         {
-            destination[i] = NumOps.FromDouble(source[i]);
+            byte b = source[sourceOffset + i];
+            destination[i * 2] = NumOps.FromDouble(b & 0x7F);
+            destination[(i * 2) + 1] = NumOps.FromDouble((b >> 7) & 0x01);
         }
     }
 
-    [AiDotNet.Attributes.ScalarKernel("One-time checkpoint T-to-byte unpacking (exact 0..255 integer values across all numeric types).")]
-    private static void UnpackBytesFromSpan(ReadOnlySpan<T> source, byte[] destination)
+    [AiDotNet.Attributes.ScalarKernel("One-time checkpoint T-to-byte 7-bit unpacking (exact 0..127 integer values across all numeric types).")]
+    private static void UnpackBytesFromSpan(ReadOnlySpan<T> source, byte[] destination, int destinationOffset, int count)
     {
-        for (int i = 0; i < destination.Length; i++)
+        for (int i = 0; i < count; i++)
         {
-            destination[i] = (byte)Math.Round(NumOps.ToDouble(source[i]));
+            int lo = (int)Math.Round(NumOps.ToDouble(source[i * 2])) & 0x7F;
+            int hi = (int)Math.Round(NumOps.ToDouble(source[(i * 2) + 1])) & 0x01;
+            destination[destinationOffset + i] = (byte)(lo | (hi << 7));
         }
     }
 
@@ -1796,6 +1847,53 @@ internal sealed class DistributedTapeCoordinator<T> : IDisposable
         return created;
     }
 
+    private void ReleaseOwnedParamShard()
+    {
+        if (_ownedParamShard is { } oldShard)
+        {
+            _ownedParamShard = null;
+            _ownedParamShardList = null;
+            _lastShardedParamsRef = null;
+            DisposeInternalCoordinatorTensor(oldShard, invalidateResidentWeight: true);
+        }
+    }
+
+    private void ReleaseShardGradTensor()
+    {
+        if (_shardGradGpuBinding is { } shardBinding)
+        {
+            DetachAndDisposeGpuBinding(shardBinding.Buffer, shardBinding.BoundTensor);
+            _shardGradGpuBinding = null;
+        }
+
+        if (_shardGradTensor is { } oldGrad)
+        {
+            _shardGradTensor = null;
+            DisposeInternalCoordinatorTensor(oldGrad, invalidateResidentWeight: false);
+        }
+    }
+
+    private static void DisposeInternalCoordinatorTensor(Tensor<T>? tensor, bool invalidateResidentWeight)
+    {
+        if (tensor is null)
+        {
+            return;
+        }
+
+        if (tensor.GetBackingArrayForCacheLookupUnsafe() is { } backing)
+        {
+            AiDotNet.Tensors.Helpers.HostSync.Remove(backing);
+        }
+
+        AiDotNet.Tensors.Helpers.HostSync.Remove(tensor.DataVector);
+        if (invalidateResidentWeight)
+        {
+            (AiDotNetEngine.Current as DirectGpuTensorEngine)?.InvalidateResidentWeightBuffer(tensor);
+        }
+
+        tensor.Dispose();
+    }
+
     private (Tensor<T> Shard, Tensor<T>[] ShardList, bool Created) EnsureOwnedParamShard(int validLength)
     {
         if (_ownedParamShard is { } existingShard &&
@@ -1805,6 +1903,7 @@ internal sealed class DistributedTapeCoordinator<T> : IDisposable
             return (existingShard, existingList, false);
         }
 
+        ReleaseOwnedParamShard();
         var createdShard = new Tensor<T>(new[] { validLength });
         var createdList = new[] { createdShard };
         _ownedParamShard = createdShard;
@@ -1817,6 +1916,7 @@ internal sealed class DistributedTapeCoordinator<T> : IDisposable
     {
         if (_shardGradTensor is null || _shardGradTensor.Length != validLength)
         {
+            ReleaseShardGradTensor();
             _shardGradTensor = new Tensor<T>(new[] { validLength });
         }
 
@@ -2044,6 +2144,7 @@ internal sealed class DistributedTapeCoordinator<T> : IDisposable
             if (ReferenceEquals(boundTensor._gpuBuffer, buffer))
             {
                 boundTensor._gpuBuffer = null;
+                boundTensor._ownsGpuBuffer = false;
                 boundTensor._gpuBackend = null;
                 boundTensor._gpuBufferVersion = -1;
                 boundTensor.Device = AiDotNet.Tensors.TensorDevice.CPU;
@@ -2405,13 +2506,17 @@ internal sealed class DistributedTapeCoordinator<T> : IDisposable
         ReleasePersistentGpuBuffers();
         lock (_slotSync)
         {
+            foreach (var kvp in _persistentGradSlots)
+            {
+                DisposeInternalCoordinatorTensor(kvp.Value, invalidateResidentWeight: true);
+            }
+
             _persistentGradSlots.Clear();
             _slotDownloadScratch = null;
         }
 
-        _ownedParamShard = null;
-        _ownedParamShardList = null;
-        _shardGradTensor = null;
+        ReleaseOwnedParamShard();
+        ReleaseShardGradTensor();
         _shardGradDict = null;
         _shardRegDict = null;
         _lastShardedParamsRef = null;

@@ -375,7 +375,9 @@ public sealed class DistributedStreamingDataLoader<T, TInput, TOutput> : IStream
         SynchronizeBatchPlan();
     }
 
-    [AiDotNet.Attributes.ScalarKernel("One-time WorldSize batch-size metadata unpack")]
+    private const int IntU7SlotCount = 5;
+
+    [AiDotNet.Attributes.ScalarKernel("Per-enumeration WorldSize batch-size metadata unpack")]
     private void SynchronizeBatchPlan()
     {
         if (!_backend.IsInitialized)
@@ -391,14 +393,15 @@ public sealed class DistributedStreamingDataLoader<T, TInput, TOutput> : IStream
             return;
         }
 
-        var localVec = new Vector<T>(new[] { NumOps.FromDouble(_localBatchSize) });
+        var localVec = new Vector<T>(IntU7SlotCount);
+        WriteIntAsU7Chunks(localVec.AsWritableSpan(), 0, _localBatchSize);
         var gathered = _backend.AllGather(localVec);
         var span = gathered.AsSpan();
         var sizes = new int[_backend.WorldSize];
         long total = 0;
         for (int r = 0; r < _backend.WorldSize; r++)
         {
-            int bs = (int)Math.Round(NumOps.ToDouble(span[r]));
+            int bs = ReadIntFromU7Chunks(span, r * IntU7SlotCount);
             if (bs <= 0)
             {
                 throw new InvalidOperationException($"Rank {r} reported non-positive batch size {bs}.");
@@ -413,6 +416,7 @@ public sealed class DistributedStreamingDataLoader<T, TInput, TOutput> : IStream
         _batchPlanSynchronized = true;
     }
 
+    [AiDotNet.Attributes.ScalarKernel("Per-epoch distributed shuffle seed broadcast")]
     private int? SynchronizeEpochSeed(bool shuffle, int? seed)
     {
         if (!shuffle || seed.HasValue || _backend.WorldSize <= 1)
@@ -420,11 +424,35 @@ public sealed class DistributedStreamingDataLoader<T, TInput, TOutput> : IStream
             return seed;
         }
 
-        int generated = _backend.Rank == 0
-            ? RandomHelper.CreateSecureRandom().Next(1, int.MaxValue)
-            : 0;
-        var seedVec = _backend.Broadcast(new Vector<T>(new[] { NumOps.FromDouble(generated) }), root: 0);
-        return (int)Math.Round(NumOps.ToDouble(seedVec[0]));
+        var seedVec = new Vector<T>(IntU7SlotCount);
+        if (_backend.Rank == 0)
+        {
+            int generated = RandomHelper.CreateSecureRandom().Next(1, int.MaxValue);
+            WriteIntAsU7Chunks(seedVec.AsWritableSpan(), 0, generated);
+        }
+
+        seedVec = _backend.Broadcast(seedVec, root: 0);
+        return ReadIntFromU7Chunks(seedVec.AsSpan(), 0);
+    }
+
+    private static void WriteIntAsU7Chunks(Span<T> dst, int offset, int value)
+    {
+        uint u = unchecked((uint)value);
+        dst[offset] = NumOps.FromDouble((int)(u & 0x7FU));
+        dst[offset + 1] = NumOps.FromDouble((int)((u >> 7) & 0x7FU));
+        dst[offset + 2] = NumOps.FromDouble((int)((u >> 14) & 0x7FU));
+        dst[offset + 3] = NumOps.FromDouble((int)((u >> 21) & 0x7FU));
+        dst[offset + 4] = NumOps.FromDouble((int)((u >> 28) & 0x0FU));
+    }
+
+    private static int ReadIntFromU7Chunks(ReadOnlySpan<T> src, int offset)
+    {
+        uint c0 = (uint)((int)Math.Round(NumOps.ToDouble(src[offset])) & 0x7F);
+        uint c1 = (uint)((int)Math.Round(NumOps.ToDouble(src[offset + 1])) & 0x7F);
+        uint c2 = (uint)((int)Math.Round(NumOps.ToDouble(src[offset + 2])) & 0x7F);
+        uint c3 = (uint)((int)Math.Round(NumOps.ToDouble(src[offset + 3])) & 0x7F);
+        uint c4 = (uint)((int)Math.Round(NumOps.ToDouble(src[offset + 4])) & 0x0F);
+        return unchecked((int)(c0 | (c1 << 7) | (c2 << 14) | (c3 << 21) | (c4 << 28)));
     }
 
     private void RecordStepAdvance(int globalSamples)
