@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Interpretability.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
 
@@ -44,8 +45,8 @@ public class FeatureInteractionExplainer<T> : IGlobalExplainer<T, FeatureInterac
     private readonly string[]? _featureNames;
 
     // Cached partial dependence values
-    private readonly Dictionary<int, (T[] grid, T[] pd)> _pdCache = new();
-    private readonly Dictionary<(int, int), T[,]> _pd2DCache = new();
+    private readonly Dictionary<int, (Vector<T> grid, Vector<T> pd)> _pdCache = new();
+    private readonly Dictionary<(int, int), Tensor<T>> _pd2DCache = new();
 
     /// <inheritdoc/>
     public string MethodName => "FeatureInteraction";
@@ -128,8 +129,8 @@ public class FeatureInteractionExplainer<T> : IGlobalExplainer<T, FeatureInterac
         int minIdx = Math.Min(feature1Index, feature2Index);
         int maxIdx = Math.Max(feature1Index, feature2Index);
 
-        var (grid1, pd1) = _pdCache[feature1Index];
-        var (grid2, pd2) = _pdCache[feature2Index];
+        var (_, pd1) = _pdCache[feature1Index];
+        var (_, pd2) = _pdCache[feature2Index];
         var pd2D = _pd2DCache[(minIdx, maxIdx)];
 
         // The 2D PD cache uses canonical ordering (minIdx, maxIdx), where the first dimension
@@ -141,29 +142,20 @@ public class FeatureInteractionExplainer<T> : IGlobalExplainer<T, FeatureInterac
             (pd1, pd2) = (pd2, pd1);
         }
 
-        // Compute H-statistic
-        double numerator = 0;
-        double denominator = 0;
+        // Compute H-statistic: interaction[i, j] = pdJoint[i, j] - pd1[i] - pd2[j]
+        var engine = AiDotNetEngine.Current;
+        var shape = new[] { _gridSize, _gridSize };
+        var pd1Rows = engine.TensorBroadcastTo(pd1.AsTensor().Reshape(new[] { _gridSize, 1 }), shape);
+        var pd2Columns = engine.TensorBroadcastTo(pd2.AsTensor().Reshape(new[] { 1, _gridSize }), shape);
+        var interaction = engine.TensorSubtract(engine.TensorSubtract(pd2D, pd1Rows), pd2Columns);
+        // Both sums pre-scaled by the largest magnitude: the ratio is unchanged and Half squares cannot overflow
+        var (numerator, denominator, negligible) = ExplainerTensorOps<T>.ScaledSumsOfSquares(interaction, pd2D, 1e-10);
 
-        for (int i = 0; i < _gridSize; i++)
-        {
-            for (int j = 0; j < _gridSize; j++)
-            {
-                double pdJoint = NumOps.ToDouble(pd2D[i, j]);
-                double pd1Val = NumOps.ToDouble(pd1[i]);
-                double pd2Val = NumOps.ToDouble(pd2[j]);
-
-                double interaction = pdJoint - pd1Val - pd2Val;
-                numerator += interaction * interaction;
-                denominator += pdJoint * pdJoint;
-            }
-        }
-
-        if (denominator < 1e-10)
+        if (negligible)
             return NumOps.Zero;
 
-        double hSquared = numerator / denominator;
-        return NumOps.FromDouble(Math.Sqrt(Math.Max(0, Math.Min(1, hSquared))));
+        T hSquared = NumOps.Divide(numerator, denominator);
+        return NumOps.Sqrt(MathHelper.Max(NumOps.Zero, MathHelper.Min(NumOps.One, hSquared)));
     }
 
     /// <summary>
@@ -188,25 +180,23 @@ public class FeatureInteractionExplainer<T> : IGlobalExplainer<T, FeatureInterac
             throw new ArgumentOutOfRangeException(nameof(featureIndex));
 
         // Compute H-statistic with all other features
-        double totalHSquared = 0;
-        int count = 0;
+        var hValues = new List<T>(Math.Max(0, numFeatures - 1));
 
         for (int j = 0; j < numFeatures; j++)
         {
             if (j == featureIndex)
                 continue;
 
-            var h = ComputePairwiseHStatistic(featureIndex, j);
-            double hVal = NumOps.ToDouble(h);
-            totalHSquared += hVal * hVal;
-            count++;
+            hValues.Add(ComputePairwiseHStatistic(featureIndex, j));
         }
 
-        if (count == 0)
+        if (hValues.Count == 0)
             return NumOps.Zero;
 
         // Average H-statistic across all pairings
-        return NumOps.FromDouble(Math.Sqrt(totalHSquared / count));
+        var h = new Vector<T>(hValues);
+        T totalHSquared = AiDotNetEngine.Current.DotProduct(h, h);
+        return NumOps.Sqrt(NumOps.Divide(totalHSquared, NumOps.FromDouble(hValues.Count)));
     }
 
     /// <inheritdoc/>
@@ -281,48 +271,21 @@ public class FeatureInteractionExplainer<T> : IGlobalExplainer<T, FeatureInterac
         if (_pdCache.ContainsKey(featureIndex))
             return;
 
-        int n = _data.Rows;
+        var engine = AiDotNetEngine.Current;
+        var column = _data.GetColumn(featureIndex).AsTensor();
+        var grid = engine.TensorLinspace(engine.TensorMinValue(column), engine.TensorMaxValue(column), _gridSize)
+            .ToVector();
 
-        // Compute grid values
-        double minVal = double.MaxValue;
-        double maxVal = double.MinValue;
-
-        for (int i = 0; i < n; i++)
+        // PD value at each grid point: the mean prediction with the feature pinned to that value.
+        var pdValues = new List<T>(_gridSize);
+        foreach (T gridValue in grid)
         {
-            double val = NumOps.ToDouble(_data[i, featureIndex]);
-            minVal = Math.Min(minVal, val);
-            maxVal = Math.Max(maxVal, val);
-        }
-
-        var grid = new T[_gridSize];
-        var pd = new T[_gridSize];
-        double step = (maxVal - minVal) / (_gridSize - 1);
-
-        for (int g = 0; g < _gridSize; g++)
-        {
-            grid[g] = NumOps.FromDouble(minVal + g * step);
-
-            // Compute PD value at this grid point
-            double sum = 0;
-            var modifiedData = _data.Clone();
-            for (int i = 0; i < n; i++)
-            {
-                modifiedData[i, featureIndex] = grid[g];
-            }
-            var predictions = _predictFunction(modifiedData);
-            for (int i = 0; i < n; i++)
-            {
-                sum += NumOps.ToDouble(predictions[i]);
-            }
-            pd[g] = NumOps.FromDouble(sum / n);
+            pdValues.Add(engine.Mean(_predictFunction(WithPinnedColumns(featureIndex, gridValue))));
         }
 
         // Center the PD values
-        double mean = pd.Average(v => NumOps.ToDouble(v));
-        for (int g = 0; g < _gridSize; g++)
-        {
-            pd[g] = NumOps.FromDouble(NumOps.ToDouble(pd[g]) - mean);
-        }
+        var pd = new Vector<T>(pdValues);
+        pd = engine.TensorSubtractScalar(pd.AsTensor(), engine.Mean(pd)).ToVector();
 
         _pdCache[featureIndex] = (grid, pd);
     }
@@ -338,56 +301,45 @@ public class FeatureInteractionExplainer<T> : IGlobalExplainer<T, FeatureInterac
         if (_pd2DCache.ContainsKey((f1, f2)))
             return;
 
-        int n = _data.Rows;
-
         EnsurePDCached(f1);
         EnsurePDCached(f2);
 
         var (grid1, _) = _pdCache[f1];
         var (grid2, _) = _pdCache[f2];
 
-        var pd2D = new T[_gridSize, _gridSize];
-
-        for (int g1 = 0; g1 < _gridSize; g1++)
+        // Row-major [grid1, grid2] mean predictions with both features pinned.
+        var engine = AiDotNetEngine.Current;
+        var pdValues = new List<T>(_gridSize * _gridSize);
+        foreach (T value1 in grid1)
         {
-            for (int g2 = 0; g2 < _gridSize; g2++)
+            foreach (T value2 in grid2)
             {
-                var modifiedData = _data.Clone();
-                for (int i = 0; i < n; i++)
-                {
-                    modifiedData[i, f1] = grid1[g1];
-                    modifiedData[i, f2] = grid2[g2];
-                }
-
-                var predictions = _predictFunction(modifiedData);
-                double sum = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    sum += NumOps.ToDouble(predictions[i]);
-                }
-                pd2D[g1, g2] = NumOps.FromDouble(sum / n);
+                pdValues.Add(engine.Mean(_predictFunction(WithPinnedColumns(f1, value1, f2, value2))));
             }
         }
 
         // Center the 2D PD values
-        double mean = 0;
-        for (int g1 = 0; g1 < _gridSize; g1++)
-        {
-            for (int g2 = 0; g2 < _gridSize; g2++)
-            {
-                mean += NumOps.ToDouble(pd2D[g1, g2]);
-            }
-        }
-        mean /= (_gridSize * _gridSize);
+        var pd2D = new Tensor<T>(new[] { _gridSize, _gridSize }, new Vector<T>(pdValues));
+        _pd2DCache[(f1, f2)] = engine.TensorSubtractScalar(pd2D, engine.TensorMean(pd2D));
+    }
 
-        for (int g1 = 0; g1 < _gridSize; g1++)
-        {
-            for (int g2 = 0; g2 < _gridSize; g2++)
-            {
-                pd2D[g1, g2] = NumOps.FromDouble(NumOps.ToDouble(pd2D[g1, g2]) - mean);
-            }
-        }
+    /// <summary>
+    /// A copy of the background data with one feature column set to a constant.
+    /// </summary>
+    private Matrix<T> WithPinnedColumns(int column, T value)
+    {
+        var modifiedData = _data.Clone();
+        AiDotNetEngine.Current.SetColumn(modifiedData, column, AiDotNetEngine.Current.Fill(_data.Rows, value));
+        return modifiedData;
+    }
 
-        _pd2DCache[(f1, f2)] = pd2D;
+    /// <summary>
+    /// A copy of the background data with two feature columns set to constants.
+    /// </summary>
+    private Matrix<T> WithPinnedColumns(int column1, T value1, int column2, T value2)
+    {
+        var modifiedData = WithPinnedColumns(column1, value1);
+        AiDotNetEngine.Current.SetColumn(modifiedData, column2, AiDotNetEngine.Current.Fill(_data.Rows, value2));
+        return modifiedData;
     }
 }

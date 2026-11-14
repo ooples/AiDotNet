@@ -101,22 +101,13 @@ public class AutodiffGradientHelper<T>
     public Vector<T> ComputeGradient(Vector<T> input, int outputIndex = 0)
     {
         // Convert vector to 2D tensor [1, n]
-        var inputTensor = new Tensor<T>(new[] { 1, input.Length });
-        for (int i = 0; i < input.Length; i++)
-        {
-            inputTensor[0, i] = input[i];
-        }
+        var inputTensor = new Tensor<T>(new[] { 1, input.Length }, input.Clone());
 
         var gradTensor = ComputeGradient(inputTensor, outputIndex);
 
-        // Convert back to vector
-        var gradient = new Vector<T>(input.Length);
-        for (int i = 0; i < input.Length; i++)
-        {
-            gradient[i] = gradTensor[0, i];
-        }
-
-        return gradient;
+        // Convert back to vector: the first input.Length entries of row 0
+        var firstRow = AiDotNetEngine.Current.TensorSliceAxis(gradTensor, 0, 0).ToVector();
+        return firstRow.Length == input.Length ? firstRow : firstRow.GetSubVector(0, input.Length);
     }
 
     /// <summary>
@@ -189,21 +180,16 @@ public class AutodiffGradientHelper<T>
         var grad0 = ComputeGradient(input, outputIndex);
 
         // Compute gradient at x + ε*v
+        var engine = AiDotNetEngine.Current;
         var perturbedShape = input._shape;
-        var perturbed = new Tensor<T>(perturbedShape);
-        for (int i = 0; i < input.Length; i++)
-        {
-            perturbed[i] = numOps2.Add(input[i], numOps2.Multiply(numOps2.FromDouble(eps), vector[i]));
-        }
+        T epsilon = numOps2.FromDouble(eps);
+        var direction = engine.Reshape(vector, perturbedShape);
+        var perturbed = engine.TensorAdd(input, engine.TensorMultiplyScalar(direction, epsilon));
         var grad1 = ComputeGradient(perturbed, outputIndex);
 
         // Hvp ≈ (grad1 - grad0) / ε
-        var result = new Tensor<T>(perturbedShape);
-        for (int i = 0; i < result.Length; i++)
-        {
-            result[i] = numOps2.Divide(numOps2.Subtract(grad1[i], grad0[i]), numOps2.FromDouble(eps));
-        }
-        return result;
+        var difference = engine.TensorSubtract(engine.Reshape(grad1, perturbedShape), engine.Reshape(grad0, perturbedShape));
+        return engine.TensorDivideScalar(difference, epsilon);
     }
 
     /// <summary>
@@ -327,11 +313,7 @@ public static class GradientHelperFactory<T>
         // Fall back to numerical gradients using model's Predict
         Func<Vector<T>, Vector<T>> predict = input =>
         {
-            var tensor = new Tensor<T>(new[] { 1, input.Length });
-            for (int i = 0; i < input.Length; i++)
-            {
-                tensor[0, i] = input[i];
-            }
+            var tensor = new Tensor<T>(new[] { 1, input.Length }, input.Clone());
             var output = model.Predict(tensor);
             return output.ToVector();
         };

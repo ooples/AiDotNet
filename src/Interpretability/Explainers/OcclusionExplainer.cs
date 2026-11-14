@@ -178,25 +178,26 @@ public class OcclusionExplainer<T> : ILocalExplainer<T, OcclusionExplanation<T>>
         // Determine output shape for sensitivity map
         var inputShape = input._shape;
         var outputShape = ComputeOutputShape(inputShape);
-        var sensitivityMap = new Tensor<T>(outputShape);
 
         // Generate all occlusion positions
         var positions = GenerateOcclusionPositions(inputShape);
 
-        // Compute sensitivity for each position
-        int idx = 0;
+        // Predict for each occluded position
+        var occludedPredictions = new List<Vector<T>>(positions.Count);
         foreach (var position in positions)
         {
             var occludedInput = ApplyOcclusion(input, position);
-            var occludedPrediction = _predictFunction(occludedInput);
-            T occludedScore = occludedPrediction.ToVector()[actualTargetClass];
+            occludedPredictions.Add(_predictFunction(occludedInput).ToVector());
+        }
 
-            // Sensitivity = drop in score when occluded
-            T sensitivity = NumOps.Subtract(baseScore, occludedScore);
-
-            // Map back to output position
-            SetSensitivityValue(sensitivityMap, idx, sensitivity);
-            idx++;
+        // Sensitivity = drop in score when occluded, laid out row-major over the output positions
+        var sensitivityMap = new Tensor<T>(outputShape);
+        if (occludedPredictions.Count > 0)
+        {
+            var engine = AiDotNetEngine.Current;
+            var occludedScores = engine.TensorSliceAxis(ExplainerTensorOps<T>.Stack(occludedPredictions), 1, actualTargetClass);
+            var sensitivity = engine.TensorSubtract(engine.TensorFullLike(occludedScores, baseScore), occludedScores);
+            sensitivityMap = new Tensor<T>(outputShape, sensitivity.ToVector());
         }
 
         return new OcclusionExplanation<T>(
@@ -224,155 +225,115 @@ public class OcclusionExplainer<T> : ILocalExplainer<T, OcclusionExplanation<T>>
     /// </summary>
     private Tensor<T> ApplyOcclusion(Tensor<T> input, int[] position)
     {
-        var occluded = input.Clone();
-        var shape = input._shape;
-
         // Apply occlusion based on shape type
-        if (_shape == OcclusionShape.Rectangular)
+        var mask = _shape == OcclusionShape.Rectangular
+            ? RectangularOcclusionMask(input._shape, position)
+            : CircularOcclusionMask(input._shape, position);
+
+        if (mask is null)
         {
-            ApplyRectangularOcclusion(occluded, position);
-        }
-        else
-        {
-            ApplyCircularOcclusion(occluded, position);
+            return input.Clone();
         }
 
-        return occluded;
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorWhere(mask, engine.TensorFullLike(input, _baselineValue), input);
     }
 
     /// <summary>
-    /// Applies rectangular occlusion.
+    /// The 0/1 mask of a rectangular occlusion window, or null when the input shape is not supported.
     /// </summary>
-    private void ApplyRectangularOcclusion(Tensor<T> tensor, int[] position)
+    private Tensor<T>? RectangularOcclusionMask(int[] shape, int[] position)
     {
-        var shape = tensor._shape;
-
         // For 2D (height, width)
         if (shape.Length == 2 && position.Length >= 2 && _windowShape.Length >= 2)
         {
-            for (int h = 0; h < _windowShape[0]; h++)
-            {
-                for (int w = 0; w < _windowShape[1]; w++)
-                {
-                    int ph = position[0] + h;
-                    int pw = position[1] + w;
-
-                    if (ph >= 0 && ph < shape[0] && pw >= 0 && pw < shape[1])
-                    {
-                        tensor[ph, pw] = _baselineValue;
-                    }
-                }
-            }
+            return WindowMask(shape[0], shape[1], position);
         }
         // For 3D (channels, height, width) or (height, width, channels)
         else if (shape.Length == 3)
         {
-            int hDim = 0, wDim = 1, cDim = 2;
             // Assume HWC format; adjust for CHW if first dim is small
-            if (shape[0] <= 4)
-            {
-                cDim = 0; hDim = 1; wDim = 2;
-            }
-
-            for (int h = 0; h < _windowShape[0]; h++)
-            {
-                for (int w = 0; w < _windowShape[1]; w++)
-                {
-                    int ph = position[0] + h;
-                    int pw = position[1] + w;
-
-                    if (ph >= 0 && ph < shape[hDim] && pw >= 0 && pw < shape[wDim])
-                    {
-                        for (int c = 0; c < shape[cDim]; c++)
-                        {
-                            if (cDim == 0)
-                                tensor[c, ph, pw] = _baselineValue;
-                            else
-                                tensor[ph, pw, c] = _baselineValue;
-                        }
-                    }
-                }
-            }
+            return shape[0] <= 4
+                ? ExpandMask(WindowMask(shape[1], shape[2], position), new[] { 1, shape[1], shape[2] }, shape)
+                : ExpandMask(WindowMask(shape[0], shape[1], position), new[] { shape[0], shape[1], 1 }, shape);
         }
         // For 4D (batch, channels, height, width)
         else if (shape.Length == 4 && position.Length >= 2)
         {
-            for (int h = 0; h < _windowShape[0]; h++)
-            {
-                for (int w = 0; w < _windowShape[1]; w++)
-                {
-                    int ph = position[0] + h;
-                    int pw = position[1] + w;
-
-                    if (ph >= 0 && ph < shape[2] && pw >= 0 && pw < shape[3])
-                    {
-                        for (int b = 0; b < shape[0]; b++)
-                        {
-                            for (int c = 0; c < shape[1]; c++)
-                            {
-                                tensor[b, c, ph, pw] = _baselineValue;
-                            }
-                        }
-                    }
-                }
-            }
+            return ExpandMask(WindowMask(shape[2], shape[3], position), new[] { 1, 1, shape[2], shape[3] }, shape);
         }
+
+        return null;
     }
 
     /// <summary>
-    /// Applies circular occlusion.
+    /// A 0/1 [height, width] mask of the occlusion window at <paramref name="position"/>, clipped to the image.
     /// </summary>
-    private void ApplyCircularOcclusion(Tensor<T> tensor, int[] position)
+    private Tensor<T> WindowMask(int height, int width, int[] position)
     {
-        var shape = tensor._shape;
+        var rows = RangeIndicator(height, position[0], position[0] + _windowShape[0]);
+        var columns = RangeIndicator(width, position[1], position[1] + _windowShape[1]);
+        return AiDotNetEngine.Current.TensorOuter(rows, columns);
+    }
 
-        // Compute center and radius
-        double centerH = position[0] + _windowShape[0] / 2.0;
-        double centerW = position[1] + _windowShape[1] / 2.0;
-        double radiusH = _windowShape[0] / 2.0;
-        double radiusW = _windowShape[1] / 2.0;
+    /// <summary>
+    /// A 0/1 vector of length <paramref name="length"/> that is 1 at indices in [start, end).
+    /// </summary>
+    private static Tensor<T> RangeIndicator(int length, int start, int end)
+    {
+        // Indices compared in int (Half cannot hold every index above 2048)
+        return ExplainerTensorOps<T>.RangeIndicator(length, start, end);
+    }
 
+    /// <summary>
+    /// Broadcasts a [height, width] mask over the channel and batch dimensions of <paramref name="shape"/>.
+    /// </summary>
+    private static Tensor<T> ExpandMask(Tensor<T> mask, int[] maskShape, int[] shape)
+    {
+        return AiDotNetEngine.Current.TensorBroadcastTo(mask.Reshape(maskShape), shape);
+    }
+
+    /// <summary>
+    /// The 0/1 mask of a circular (elliptical) occlusion window, or null when the input shape is not supported.
+    /// </summary>
+    private Tensor<T>? CircularOcclusionMask(int[] shape, int[] position)
+    {
         // For 2D (height, width)
         if (shape.Length == 2)
         {
-            for (int h = 0; h < shape[0]; h++)
-            {
-                for (int w = 0; w < shape[1]; w++)
-                {
-                    double dh = (h - centerH) / radiusH;
-                    double dw = (w - centerW) / radiusW;
-                    if (dh * dh + dw * dw <= 1)
-                    {
-                        tensor[h, w] = _baselineValue;
-                    }
-                }
-            }
+            return EllipseMask(shape[0], shape[1], position);
         }
         // For 3D
         else if (shape.Length == 3)
         {
-            int hDim = 0, wDim = 1, cDim = 2;
-            if (shape[0] <= 4) { cDim = 0; hDim = 1; wDim = 2; }
-
-            for (int h = 0; h < shape[hDim]; h++)
-            {
-                for (int w = 0; w < shape[wDim]; w++)
-                {
-                    double dh = (h - centerH) / radiusH;
-                    double dw = (w - centerW) / radiusW;
-                    if (dh * dh + dw * dw <= 1)
-                    {
-                        for (int c = 0; c < shape[cDim]; c++)
-                        {
-                            if (cDim == 0)
-                                tensor[c, h, w] = _baselineValue;
-                            else
-                                tensor[h, w, c] = _baselineValue;
-                        }
-                    }
-                }
-            }
+            return shape[0] <= 4
+                ? ExpandMask(EllipseMask(shape[1], shape[2], position), new[] { 1, shape[1], shape[2] }, shape)
+                : ExpandMask(EllipseMask(shape[0], shape[1], position), new[] { shape[0], shape[1], 1 }, shape);
         }
+
+        return null;
+    }
+
+    /// <summary>
+    /// A 0/1 [height, width] mask of the ellipse inscribed in the occlusion window at <paramref name="position"/>:
+    /// ((h - centerH) / radiusH)^2 + ((w - centerW) / radiusW)^2 &lt;= 1.
+    /// </summary>
+    private Tensor<T> EllipseMask(int height, int width, int[] position)
+    {
+        var engine = AiDotNetEngine.Current;
+
+        // Compute center and radius
+        T centerH = NumOps.FromDouble(position[0] + _windowShape[0] / 2.0);
+        T centerW = NumOps.FromDouble(position[1] + _windowShape[1] / 2.0);
+        T radiusH = NumOps.FromDouble(_windowShape[0] / 2.0);
+        T radiusW = NumOps.FromDouble(_windowShape[1] / 2.0);
+
+        var dh = engine.TensorDivideScalar(engine.TensorSubtractScalar(engine.TensorArange<T>(0, height, 1), centerH), radiusH);
+        var dw = engine.TensorDivideScalar(engine.TensorSubtractScalar(engine.TensorArange<T>(0, width, 1), centerW), radiusW);
+        var distance = engine.TensorAdd(
+            engine.TensorOuter(engine.TensorSquare(dh), engine.TensorFullLike(dw, NumOps.One)),
+            engine.TensorOuter(engine.TensorFullLike(dh, NumOps.One), engine.TensorSquare(dw)));
+        return engine.TensorLessEqual(distance, engine.TensorFullLike(distance, NumOps.One));
     }
 
     /// <summary>
@@ -416,40 +377,11 @@ public class OcclusionExplainer<T> : ILocalExplainer<T, OcclusionExplanation<T>>
     }
 
     /// <summary>
-    /// Sets a sensitivity value in the map.
-    /// </summary>
-    private void SetSensitivityValue(Tensor<T> map, int linearIndex, T value)
-    {
-        int w = map.Shape[1];
-        int h = linearIndex / w;
-        int wPos = linearIndex % w;
-
-        if (h < map.Shape[0] && wPos < map.Shape[1])
-        {
-            map[h, wPos] = value;
-        }
-    }
-
-    /// <summary>
     /// Gets the predicted class from output.
     /// </summary>
     private int GetPredictedClass(Tensor<T> output)
     {
-        var vec = output.ToVector();
-        int maxIdx = 0;
-        double maxVal = NumOps.ToDouble(vec[0]);
-
-        for (int i = 1; i < vec.Length; i++)
-        {
-            double val = NumOps.ToDouble(vec[i]);
-            if (val > maxVal)
-            {
-                maxVal = val;
-                maxIdx = i;
-            }
-        }
-
-        return maxIdx;
+        return ExplainerTensorOps<T>.ArgMax(output.ToVector());
     }
 
     /// <summary>
@@ -458,12 +390,7 @@ public class OcclusionExplainer<T> : ILocalExplainer<T, OcclusionExplanation<T>>
     public OcclusionExplanation<T> Explain(Vector<T> instance)
     {
         // Convert vector to tensor and explain
-        var tensor = new Tensor<T>(new[] { 1, instance.Length });
-        for (int i = 0; i < instance.Length; i++)
-        {
-            tensor[0, i] = instance[i];
-        }
-        return Explain(tensor);
+        return Explain(ExplainerTensorOps<T>.RowTensor(instance));
     }
 
     /// <summary>
@@ -598,19 +525,18 @@ public class OcclusionExplanation<T>
         int targetH = Input.Shape[Input.Shape.Length >= 3 ? (Input.Shape[0] <= 4 ? 1 : 0) : 0];
         int targetW = Input.Shape[Input.Shape.Length >= 3 ? (Input.Shape[0] <= 4 ? 2 : 1) : 1];
 
-        var upsampled = new Tensor<T>(new[] { targetH, targetW });
-
-        for (int h = 0; h < targetH; h++)
+        if (targetH == 0 || targetW == 0)
         {
-            for (int w = 0; w < targetW; w++)
-            {
-                int srcH = Math.Min(h / Strides[0], SensitivityMap.Shape[0] - 1);
-                int srcW = Math.Min(w / Strides[Math.Min(1, Strides.Length - 1)], SensitivityMap.Shape[1] - 1);
-                upsampled[h, w] = SensitivityMap[srcH, srcW];
-            }
+            return new Tensor<T>(new[] { targetH, targetW });
         }
 
-        return upsampled;
+        int strideW = Strides[Math.Min(1, Strides.Length - 1)];
+        var sourceRows = Enumerable.Range(0, targetH).Select(h => Math.Min(h / Strides[0], SensitivityMap.Shape[0] - 1)).ToArray();
+        var sourceColumns = Enumerable.Range(0, targetW).Select(w => Math.Min(w / strideW, SensitivityMap.Shape[1] - 1)).ToArray();
+
+        var engine = AiDotNetEngine.Current;
+        var rows = engine.TensorIndexSelect(SensitivityMap, new Tensor<int>(sourceRows, new[] { targetH }), 0);
+        return engine.TensorIndexSelect(rows, new Tensor<int>(sourceColumns, new[] { targetW }), 1);
     }
 
     /// <summary>
@@ -619,22 +545,13 @@ public class OcclusionExplanation<T>
     public override string ToString()
     {
         var top = GetMostImportantRegions(3).ToList();
-        double maxSens = NumOps.ToDouble(top.FirstOrDefault().Sensitivity);
-        double minSens = double.MaxValue;
-
-        for (int h = 0; h < SensitivityMap.Shape[0]; h++)
-        {
-            for (int w = 0; w < SensitivityMap.Shape[1]; w++)
-            {
-                double val = NumOps.ToDouble(SensitivityMap[h, w]);
-                if (val < minSens) minSens = val;
-            }
-        }
+        T maxSens = top.FirstOrDefault().Sensitivity;
+        T minSens = SensitivityMap.Length > 0 ? AiDotNetEngine.Current.TensorMinValue(SensitivityMap) : NumOps.Zero;
 
         return $"Occlusion Analysis for class {TargetClass}:\n" +
                $"  Base prediction: {BasePrediction}\n" +
                $"  Window: {string.Join("x", WindowShape)}, Stride: {string.Join("x", Strides)}\n" +
                $"  Sensitivity range: [{minSens:F4}, {maxSens:F4}]\n" +
-               $"  Top regions: {string.Join(", ", top.Select(r => $"({r.Position[0]},{r.Position[1]})={NumOps.ToDouble(r.Sensitivity):F4}"))}";
+               $"  Top regions: {string.Join(", ", top.Select(r => $"({r.Position[0]},{r.Position[1]})={r.Sensitivity:F4}"))}";
     }
 }

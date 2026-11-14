@@ -182,47 +182,30 @@ public class LayerAttributionExplainer<T> : IGPUAcceleratedExplainer<T>
     /// </remarks>
     private Vector<T> ComputeIntegratedGradientsAttribution(Vector<T> instance, int targetClass)
     {
+        var engine = AiDotNetEngine.Current;
         var baseline = new Vector<T>(_inputSize); // Zero baseline
-        var attributions = new T[_layerSize];
 
         // Get baseline and actual activations
         var baselineActivations = _layerActivationFunction(baseline);
         var actualActivations = _layerActivationFunction(instance);
 
-        // Integrate gradients along path
-        var integratedGradients = new double[_layerSize];
-
+        // Integrate gradients along path, at the midpoints alpha = (step + 0.5) / steps
+        var alphas = engine.TensorDivideScalar(
+            engine.TensorArange<T>(0.5, _integrationSteps, 1), NumOps.FromDouble(_integrationSteps));
+        var path = ExplainerTensorOps<T>.InterpolationPath(baseline, instance.GetSubVector(0, _inputSize), alphas);
+        var gradients = new List<Vector<T>>(_integrationSteps);
         for (int step = 0; step < _integrationSteps; step++)
         {
-            double alpha = (step + 0.5) / _integrationSteps;
-
-            // Interpolated input
-            var interpolated = new Vector<T>(_inputSize);
-            for (int i = 0; i < _inputSize; i++)
-            {
-                interpolated[i] = NumOps.Add(
-                    baseline[i],
-                    NumOps.Multiply(NumOps.FromDouble(alpha), NumOps.Subtract(instance[i], baseline[i])));
-            }
-
-            // Get gradient at interpolated point
-            var gradient = _layerGradientFunction(interpolated, targetClass);
-
-            for (int i = 0; i < _layerSize && i < gradient.Length; i++)
-            {
-                integratedGradients[i] += NumOps.ToDouble(gradient[i]);
-            }
+            // Get gradient at interpolated point (layer entries past its end count as zero)
+            var interpolated = engine.TensorSliceAxis(path, 0, step).ToVector();
+            gradients.Add(ExplainerTensorOps<T>.PadOrTruncate(_layerGradientFunction(interpolated, targetClass), _layerSize));
         }
 
-        // Scale by activation difference
-        for (int i = 0; i < _layerSize; i++)
-        {
-            double avgGradient = integratedGradients[i] / _integrationSteps;
-            double activationDiff = NumOps.ToDouble(actualActivations[i]) - NumOps.ToDouble(baselineActivations[i]);
-            attributions[i] = NumOps.FromDouble(avgGradient * activationDiff);
-        }
-
-        return new Vector<T>(attributions);
+        // Scale the average gradient by the activation difference
+        var avgGradient = ExplainerTensorOps<T>.Mean(gradients);
+        var activationDiff = engine.Subtract(
+            actualActivations.GetSubVector(0, _layerSize), baselineActivations.GetSubVector(0, _layerSize));
+        return engine.Multiply(avgGradient, activationDiff);
     }
 
     /// <summary>
@@ -241,15 +224,8 @@ public class LayerAttributionExplainer<T> : IGPUAcceleratedExplainer<T>
     /// </remarks>
     private Vector<T> ComputeGradientXActivationAttribution(Vector<T> instance, int targetClass, Vector<T> activations)
     {
-        var gradient = _layerGradientFunction(instance, targetClass);
-        var attributions = new T[_layerSize];
-
-        for (int i = 0; i < _layerSize && i < gradient.Length; i++)
-        {
-            attributions[i] = NumOps.Multiply(activations[i], gradient[i]);
-        }
-
-        return new Vector<T>(attributions);
+        var gradient = ExplainerTensorOps<T>.PadOrTruncate(_layerGradientFunction(instance, targetClass), _layerSize);
+        return AiDotNetEngine.Current.Multiply(activations.GetSubVector(0, _layerSize), gradient);
     }
 
     /// <summary>
@@ -271,6 +247,7 @@ public class LayerAttributionExplainer<T> : IGPUAcceleratedExplainer<T>
     /// </remarks>
     private Vector<T> ComputeDeepLIFTAttribution(Vector<T> instance, int targetClass)
     {
+        var engine = AiDotNetEngine.Current;
         var baseline = new Vector<T>(_inputSize);
 
         // Get activations and predictions for both
@@ -279,38 +256,22 @@ public class LayerAttributionExplainer<T> : IGPUAcceleratedExplainer<T>
         var baselinePrediction = _predictFunction(baseline);
         var actualPrediction = _predictFunction(instance);
 
-        double outputDiff = NumOps.ToDouble(actualPrediction[targetClass]) -
-                           NumOps.ToDouble(baselinePrediction[targetClass]);
+        T outputDiff = NumOps.Subtract(actualPrediction[targetClass], baselinePrediction[targetClass]);
 
-        // Compute activation differences and gradients
-        var activationDiffs = new double[_layerSize];
-        var gradients = new double[_layerSize];
-        double totalWeightedDiff = 0;
-
-        var gradient = _layerGradientFunction(instance, targetClass);
-        for (int i = 0; i < _layerSize && i < gradient.Length; i++)
-        {
-            activationDiffs[i] = NumOps.ToDouble(actualActivations[i]) - NumOps.ToDouble(baselineActivations[i]);
-            gradients[i] = NumOps.ToDouble(gradient[i]);
-            totalWeightedDiff += Math.Abs(activationDiffs[i] * gradients[i]);
-        }
+        // Compute activation differences times gradients (layer entries past the gradient's end count as zero)
+        var gradient = ExplainerTensorOps<T>.PadOrTruncate(_layerGradientFunction(instance, targetClass), _layerSize);
+        var activationDiffs = engine.Subtract(
+            actualActivations.GetSubVector(0, _layerSize), baselineActivations.GetSubVector(0, _layerSize));
+        var contributions = engine.Multiply(activationDiffs, gradient);
+        T totalWeightedDiff = engine.Sum(engine.Abs(contributions));
 
         // Compute attributions (Rescale rule)
-        var attributions = new T[_layerSize];
-        for (int i = 0; i < _layerSize; i++)
+        if (NumOps.GreaterThan(NumOps.Abs(totalWeightedDiff), ExplainerTensorOps<T>.Tolerance(1e-10)))
         {
-            if (Math.Abs(totalWeightedDiff) > 1e-10)
-            {
-                double contribution = activationDiffs[i] * gradients[i];
-                attributions[i] = NumOps.FromDouble((contribution / totalWeightedDiff) * outputDiff);
-            }
-            else
-            {
-                attributions[i] = NumOps.Zero;
-            }
+            return engine.Multiply(engine.Divide(contributions, totalWeightedDiff), outputDiff);
         }
 
-        return new Vector<T>(attributions);
+        return new Vector<T>(_layerSize);
     }
 
     /// <summary>
@@ -341,20 +302,7 @@ public class LayerAttributionExplainer<T> : IGPUAcceleratedExplainer<T>
     /// </summary>
     private static int GetPredictedClass(Vector<T> prediction)
     {
-        int maxIdx = 0;
-        double maxVal = NumOps.ToDouble(prediction[0]);
-
-        for (int i = 1; i < prediction.Length; i++)
-        {
-            double val = NumOps.ToDouble(prediction[i]);
-            if (val > maxVal)
-            {
-                maxVal = val;
-                maxIdx = i;
-            }
-        }
-
-        return maxIdx;
+        return ExplainerTensorOps<T>.ArgMax(prediction);
     }
 }
 
@@ -438,12 +386,7 @@ public class LayerAttributionResult<T>
     /// </remarks>
     public T GetAttributionSum()
     {
-        T sum = NumOps.Zero;
-        for (int i = 0; i < Attributions.Length; i++)
-        {
-            sum = NumOps.Add(sum, Attributions[i]);
-        }
-        return sum;
+        return AiDotNetEngine.Current.Sum(Attributions);
     }
 
     /// <summary>
@@ -471,26 +414,12 @@ public class LayerAttributionResult<T>
     /// into a 3D array matching the layer's spatial structure.
     /// </para>
     /// </remarks>
-    public T[,,] ReshapeSpatial(int height, int width, int channels)
+    public Tensor<T> ReshapeSpatial(int height, int width, int channels)
     {
         if (height * width * channels != Attributions.Length)
             throw new ArgumentException("Dimensions don't match attribution length.");
 
-        var result = new T[channels, height, width];
-        int idx = 0;
-
-        for (int c = 0; c < channels; c++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    result[c, h, w] = Attributions[idx++];
-                }
-            }
-        }
-
-        return result;
+        return new Tensor<T>(new[] { channels, height, width }, Attributions.Clone());
     }
 
     /// <summary>
@@ -510,22 +439,7 @@ public class LayerAttributionResult<T>
     public Vector<T> GetChannelAttributions(int height, int width, int channels)
     {
         var spatial = ReshapeSpatial(height, width, channels);
-        var channelAttr = new T[channels];
-
-        for (int c = 0; c < channels; c++)
-        {
-            double sum = 0;
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    sum += NumOps.ToDouble(spatial[c, h, w]);
-                }
-            }
-            channelAttr[c] = NumOps.FromDouble(sum);
-        }
-
-        return new Vector<T>(channelAttr);
+        return AiDotNetEngine.Current.ReduceSum(spatial, new[] { 1, 2 }, false).ToVector();
     }
 
     /// <summary>
@@ -538,13 +452,13 @@ public class LayerAttributionResult<T>
         {
             $"Layer Attribution ({Method}) for class {TargetClass}:",
             $"Layer size: {Attributions.Length} neurons",
-            $"Attribution sum: {NumOps.ToDouble(GetAttributionSum()):F4}",
+            $"Attribution sum: {GetAttributionSum():F4}",
             "Top 5 neurons:"
         };
 
         foreach (var (idx, attr, act) in top)
         {
-            lines.Add($"  Neuron {idx}: attr={NumOps.ToDouble(attr):F4}, act={NumOps.ToDouble(act):F4}");
+            lines.Add($"  Neuron {idx}: attr={attr:F4}, act={act:F4}");
         }
 
         return string.Join(Environment.NewLine, lines);

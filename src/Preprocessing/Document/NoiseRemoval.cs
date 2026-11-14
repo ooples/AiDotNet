@@ -86,44 +86,11 @@ public class NoiseRemoval<T> : IDisposable
     /// <param name="kernelSize">Size of the filter kernel (should be odd).</param>
     public Tensor<T> MedianFilter(Tensor<T> image, int kernelSize = 3)
     {
-        int channels = image.Shape[0];
-        int height = image.Shape[1];
-        int width = image.Shape[2];
-        int halfKernel = kernelSize / 2;
-
-        var result = new T[channels * height * width];
-        var window = new List<double>(kernelSize * kernelSize);
-
-        for (int c = 0; c < channels; c++)
-        {
-            for (int y = 0; y < height; y++)
-            {
-                for (int x = 0; x < width; x++)
-                {
-                    window.Clear();
-
-                    // Collect neighborhood values
-                    for (int ky = -halfKernel; ky <= halfKernel; ky++)
-                    {
-                        for (int kx = -halfKernel; kx <= halfKernel; kx++)
-                        {
-                            int ny = PreprocessingHelpers.Clamp(y + ky, 0, height - 1);
-                            int nx = PreprocessingHelpers.Clamp(x + kx, 0, width - 1);
-                            window.Add(_numOps.ToDouble(image[c, ny, nx]));
-                        }
-                    }
-
-                    // Find median
-                    window.Sort();
-                    double median = window[window.Count / 2];
-
-                    int idx = c * height * width + y * width + x;
-                    result[idx] = _numOps.FromDouble(median);
-                }
-            }
-        }
-
-        return new Tensor<T>([channels, height, width], new Vector<T>(result));
+        // Every window position (edge-replicated) stacked on a new leading axis, sorted, middle element taken
+        var engine = AiDotNetEngine.Current;
+        var shifts = WindowShifts(image, kernelSize / 2);
+        var (sorted, _) = engine.TensorSort(engine.TensorStack(shifts, 0), 0, false);
+        return engine.Reshape(engine.TensorNarrow(sorted, 0, shifts.Length / 2, 1), image.Shape.ToArray());
     }
 
     /// <summary>
@@ -134,59 +101,25 @@ public class NoiseRemoval<T> : IDisposable
     /// <param name="sigma">Standard deviation of the Gaussian.</param>
     public Tensor<T> GaussianBlur(Tensor<T> image, int kernelSize = 5, double sigma = 1.0)
     {
+        var engine = AiDotNetEngine.Current;
         int channels = image.Shape[0];
         int height = image.Shape[1];
         int width = image.Shape[2];
         int halfKernel = kernelSize / 2;
+        int span = 2 * halfKernel + 1;
 
-        // Generate Gaussian kernel
-        var kernel = new double[kernelSize, kernelSize];
-        double kernelSum = 0;
+        // Normalized Gaussian kernel exp(-(dx^2 + dy^2) / (2 sigma^2)) over the offsets -half..half
+        var offsets = engine.TensorSubtractScalar(Range(span), _numOps.FromDouble(halfKernel));
+        var squared = engine.TensorSquare(offsets);
+        var distance = engine.TensorAdd(
+            engine.Reshape(squared, new[] { span, 1 }), engine.Reshape(squared, new[] { 1, span }));
+        var kernel = engine.TensorExp(engine.TensorMultiplyScalar(distance, _numOps.FromDouble(-1.0 / (2 * sigma * sigma))));
+        kernel = engine.TensorDivideScalar(kernel, engine.TensorSum(kernel));
 
-        for (int i = 0; i < kernelSize; i++)
-        {
-            for (int j = 0; j < kernelSize; j++)
-            {
-                double dx = i - halfKernel;
-                double dy = j - halfKernel;
-                kernel[i, j] = Math.Exp(-(dx * dx + dy * dy) / (2 * sigma * sigma));
-                kernelSum += kernel[i, j];
-            }
-        }
-
-        // Normalize kernel
-        for (int i = 0; i < kernelSize; i++)
-            for (int j = 0; j < kernelSize; j++)
-                kernel[i, j] /= kernelSum;
-
-        // Apply convolution
-        var result = new T[channels * height * width];
-
-        for (int c = 0; c < channels; c++)
-        {
-            for (int y = 0; y < height; y++)
-            {
-                for (int x = 0; x < width; x++)
-                {
-                    double sum = 0;
-
-                    for (int ky = -halfKernel; ky <= halfKernel; ky++)
-                    {
-                        for (int kx = -halfKernel; kx <= halfKernel; kx++)
-                        {
-                            int ny = PreprocessingHelpers.Clamp(y + ky, 0, height - 1);
-                            int nx = PreprocessingHelpers.Clamp(x + kx, 0, width - 1);
-                            sum += _numOps.ToDouble(image[c, ny, nx]) * kernel[ky + halfKernel, kx + halfKernel];
-                        }
-                    }
-
-                    int idx = c * height * width + y * width + x;
-                    result[idx] = _numOps.FromDouble(sum);
-                }
-            }
-        }
-
-        return new Tensor<T>([channels, height, width], new Vector<T>(result));
+        // Correlate every channel of the edge-replicated image with the kernel
+        var padded = engine.Reshape(ReplicatePad(image, halfKernel), new[] { channels, 1, height + 2 * halfKernel, width + 2 * halfKernel });
+        var blurred = engine.Conv2D(padded, engine.Reshape(kernel, new[] { 1, 1, span, span }));
+        return engine.Reshape(blurred, new[] { channels, height, width });
     }
 
     /// <summary>
@@ -198,53 +131,34 @@ public class NoiseRemoval<T> : IDisposable
     /// <param name="sigmaColor">Color/intensity sigma.</param>
     public Tensor<T> BilateralFilter(Tensor<T> image, int kernelSize = 5, double sigmaSpace = 75.0, double sigmaColor = 75.0)
     {
-        int channels = image.Shape[0];
-        int height = image.Shape[1];
-        int width = image.Shape[2];
+        var engine = AiDotNetEngine.Current;
         int halfKernel = kernelSize / 2;
+        var colorScale = _numOps.FromDouble(-1.0 / (2 * sigmaColor * sigmaColor));
+        var sum = new Tensor<T>(image.Shape.ToArray());
+        var weightSum = new Tensor<T>(image.Shape.ToArray());
 
-        var result = new T[channels * height * width];
-
-        for (int c = 0; c < channels; c++)
+        int index = 0;
+        var shifts = WindowShifts(image, halfKernel);
+        for (int ky = -halfKernel; ky <= halfKernel; ky++)
         {
-            for (int y = 0; y < height; y++)
+            for (int kx = -halfKernel; kx <= halfKernel; kx++)
             {
-                for (int x = 0; x < width; x++)
-                {
-                    double centerValue = _numOps.ToDouble(image[c, y, x]);
-                    double sum = 0;
-                    double weightSum = 0;
+                var neighbor = shifts[index++];
 
-                    for (int ky = -halfKernel; ky <= halfKernel; ky++)
-                    {
-                        for (int kx = -halfKernel; kx <= halfKernel; kx++)
-                        {
-                            int ny = PreprocessingHelpers.Clamp(y + ky, 0, height - 1);
-                            int nx = PreprocessingHelpers.Clamp(x + kx, 0, width - 1);
+                // Spatial weight times color/intensity weight
+                T spatialWeight = Constant(Math.Exp(-(ky * ky + kx * kx) / (2 * sigmaSpace * sigmaSpace)));
+                var colorWeight = engine.TensorExp(engine.TensorMultiplyScalar(engine.TensorSquare(engine.TensorSubtract(image, neighbor)), colorScale));
+                var weight = engine.TensorMultiplyScalar(colorWeight, spatialWeight);
 
-                            double neighborValue = _numOps.ToDouble(image[c, ny, nx]);
-
-                            // Spatial weight
-                            double spatialDist = ky * ky + kx * kx;
-                            double spatialWeight = Math.Exp(-spatialDist / (2 * sigmaSpace * sigmaSpace));
-
-                            // Color/intensity weight
-                            double colorDist = (centerValue - neighborValue) * (centerValue - neighborValue);
-                            double colorWeight = Math.Exp(-colorDist / (2 * sigmaColor * sigmaColor));
-
-                            double weight = spatialWeight * colorWeight;
-                            sum += neighborValue * weight;
-                            weightSum += weight;
-                        }
-                    }
-
-                    int idx = c * height * width + y * width + x;
-                    result[idx] = _numOps.FromDouble(weightSum > 0 ? sum / weightSum : centerValue);
-                }
+                sum = engine.TensorAdd(sum, engine.TensorMultiply(neighbor, weight));
+                weightSum = engine.TensorAdd(weightSum, weight);
             }
         }
 
-        return new Tensor<T>([channels, height, width], new Vector<T>(result));
+        // sum / weightSum where the weights are positive, the center value otherwise
+        var positive = engine.TensorGreaterThan(weightSum, _numOps.Zero);
+        var filtered = engine.TensorDivide(sum, engine.TensorWhere(positive, weightSum, engine.TensorOnesLike(weightSum)));
+        return engine.TensorWhere(positive, filtered, image);
     }
 
     /// <summary>
@@ -276,38 +190,9 @@ public class NoiseRemoval<T> : IDisposable
     /// </summary>
     public Tensor<T> Erode(Tensor<T> image, int kernelSize = 3)
     {
-        int channels = image.Shape[0];
-        int height = image.Shape[1];
-        int width = image.Shape[2];
-        int halfKernel = kernelSize / 2;
-
-        var result = new T[channels * height * width];
-
-        for (int c = 0; c < channels; c++)
-        {
-            for (int y = 0; y < height; y++)
-            {
-                for (int x = 0; x < width; x++)
-                {
-                    double minVal = double.MaxValue;
-
-                    for (int ky = -halfKernel; ky <= halfKernel; ky++)
-                    {
-                        for (int kx = -halfKernel; kx <= halfKernel; kx++)
-                        {
-                            int ny = PreprocessingHelpers.Clamp(y + ky, 0, height - 1);
-                            int nx = PreprocessingHelpers.Clamp(x + kx, 0, width - 1);
-                            minVal = Math.Min(minVal, _numOps.ToDouble(image[c, ny, nx]));
-                        }
-                    }
-
-                    int idx = c * height * width + y * width + x;
-                    result[idx] = _numOps.FromDouble(minVal);
-                }
-            }
-        }
-
-        return new Tensor<T>([channels, height, width], new Vector<T>(result));
+        // Window minimum = -(window maximum of -image)
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorNegate(WindowMaximum(engine.TensorNegate(image), kernelSize / 2));
     }
 
     /// <summary>
@@ -315,39 +200,71 @@ public class NoiseRemoval<T> : IDisposable
     /// </summary>
     public Tensor<T> Dilate(Tensor<T> image, int kernelSize = 3)
     {
+        return WindowMaximum(image, kernelSize / 2);
+    }
+
+    /// <summary>Maximum over the edge-replicated (2 half + 1)^2 window of every pixel (max pooling, stride 1).</summary>
+    private static Tensor<T> WindowMaximum(Tensor<T> image, int halfKernel)
+    {
+        var engine = AiDotNetEngine.Current;
         int channels = image.Shape[0];
         int height = image.Shape[1];
         int width = image.Shape[2];
-        int halfKernel = kernelSize / 2;
+        var padded = engine.Reshape(ReplicatePad(image, halfKernel), new[] { channels, 1, height + 2 * halfKernel, width + 2 * halfKernel });
+        var pooled = engine.MaxPool2D(padded, 2 * halfKernel + 1, 1, 0);
+        return engine.Reshape(pooled, new[] { channels, height, width });
+    }
 
-        var result = new T[channels * height * width];
+    /// <summary>The image padded by <paramref name="halfKernel"/> on every side, repeating the edge pixels.</summary>
+    private static Tensor<T> ReplicatePad(Tensor<T> image, int halfKernel)
+    {
+        var engine = AiDotNetEngine.Current;
+        var rows = ClampedIndices(image.Shape[1], halfKernel);
+        var columns = ClampedIndices(image.Shape[2], halfKernel);
+        return engine.TensorIndexSelect(engine.TensorIndexSelect(image, rows, 1), columns, 2);
+    }
 
-        for (int c = 0; c < channels; c++)
+    /// <summary>clamp(i, 0, size - 1) for i = -half .. size - 1 + half.</summary>
+    private static Tensor<int> ClampedIndices(int size, int halfKernel)
+    {
+        var indices = new int[size + 2 * halfKernel];
+        for (int i = 0; i < indices.Length; i++)
         {
-            for (int y = 0; y < height; y++)
+            indices[i] = Math.Max(0, Math.Min(size - 1, i - halfKernel));
+        }
+
+        return new Tensor<int>(indices, new[] { indices.Length });
+    }
+
+    /// <summary>
+    /// The edge-replicated image shifted by every window offset (ky, kx), ky and kx from -half to half with kx
+    /// fastest: element [c, y, x] of shift (ky, kx) is image[c, clamp(y + ky), clamp(x + kx)].
+    /// </summary>
+    private static Tensor<T>[] WindowShifts(Tensor<T> image, int halfKernel)
+    {
+        var engine = AiDotNetEngine.Current;
+        int height = image.Shape[1];
+        int width = image.Shape[2];
+        var padded = ReplicatePad(image, halfKernel);
+        int span = 2 * halfKernel + 1;
+        var shifts = new Tensor<T>[span * span];
+        for (int ky = 0; ky < span; ky++)
+        {
+            for (int kx = 0; kx < span; kx++)
             {
-                for (int x = 0; x < width; x++)
-                {
-                    double maxVal = double.MinValue;
-
-                    for (int ky = -halfKernel; ky <= halfKernel; ky++)
-                    {
-                        for (int kx = -halfKernel; kx <= halfKernel; kx++)
-                        {
-                            int ny = PreprocessingHelpers.Clamp(y + ky, 0, height - 1);
-                            int nx = PreprocessingHelpers.Clamp(x + kx, 0, width - 1);
-                            maxVal = Math.Max(maxVal, _numOps.ToDouble(image[c, ny, nx]));
-                        }
-                    }
-
-                    int idx = c * height * width + y * width + x;
-                    result[idx] = _numOps.FromDouble(maxVal);
-                }
+                shifts[ky * span + kx] = engine.TensorNarrow(engine.TensorNarrow(padded, 1, ky, height), 2, kx, width);
             }
         }
 
-        return new Tensor<T>([channels, height, width], new Vector<T>(result));
+        return shifts;
     }
+
+    /// <summary>0, 1, ..., count - 1 as T.</summary>
+    private static Tensor<T> Range(int count) =>
+        Tensor<int>.FromVector(new Vector<int>(Enumerable.Range(0, count))).Cast<T>();
+
+    /// <summary>A loop-level constant as T (one conversion per window offset, not per pixel).</summary>
+    private T Constant(double value) => _numOps.FromDouble(value);
 
     #endregion
 

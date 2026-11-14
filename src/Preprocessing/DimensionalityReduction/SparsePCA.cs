@@ -37,9 +37,9 @@ public class SparsePCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly int? _randomState;
 
     // Fitted parameters
-    private double[]? _mean;
-    private double[,]? _components;
-    private double[]? _error;
+    private Vector<T>? _mean;
+    private Matrix<T>? _components;
+    private Vector<T>? _error;
     private int _nFeaturesIn;
 
     /// <summary>
@@ -60,17 +60,17 @@ public class SparsePCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the mean of each feature.
     /// </summary>
-    public double[]? Mean => _mean;
+    public Vector<T>? Mean => _mean;
 
     /// <summary>
     /// Gets the sparse components (each row is a component).
     /// </summary>
-    public double[,]? Components => _components;
+    public Matrix<T>? Components => _components;
 
     /// <summary>
     /// Gets the reconstruction error for each iteration.
     /// </summary>
-    public double[]? Error => _error;
+    public Vector<T>? Error => _error;
 
     /// <summary>
     /// Gets whether this transformer supports inverse transformation.
@@ -125,336 +125,107 @@ public class SparsePCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     protected override void FitCore(Matrix<T> data)
     {
+        var engine = Engine;
         _nFeaturesIn = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
         int k = Math.Min(_nComponents, Math.Min(n, p));
 
         // Center the data
-        _mean = new double[p];
-        var centered = new double[n, p];
+        var x = Tensor<T>.FromMatrix(data);
+        var mean = DimensionalityReductionOps.ColumnMeans(x);
+        var centered = DimensionalityReductionOps.SubtractRow(x, mean);
+        _mean = mean.ToVector();
 
-        for (int j = 0; j < p; j++)
-        {
-            double sum = 0;
-            for (int i = 0; i < n; i++)
-            {
-                sum += NumOps.ToDouble(data[i, j]);
-            }
-            _mean[j] = sum / n;
-        }
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                centered[i, j] = NumOps.ToDouble(data[i, j]) - _mean[j];
-            }
-        }
-
-        // Initialize components using SVD-like approach (PCA initialization)
-        _components = new double[k, p];
+        // Initialize components randomly (uniform in [-0.5, 0.5), unit rows)
         var random = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSeededRandom(42);
+        var components = DimensionalityReductionOps.NormalizeRows(
+            engine.TensorSubtractScalar(DimensionalityReductionOps.Uniform<T>(random, k, p), NumOps.FromDouble(0.5)));
 
-        // Initialize with random unit vectors
-        for (int c = 0; c < k; c++)
-        {
-            double norm = 0;
-            for (int j = 0; j < p; j++)
-            {
-                _components[c, j] = random.NextDouble() - 0.5;
-                norm += _components[c, j] * _components[c, j];
-            }
-            norm = Math.Sqrt(norm);
-            if (norm > 1e-10)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    _components[c, j] /= norm;
-                }
-            }
-        }
-
-        // Alternating minimization: solve for codes and dictionary
-        var errorHistory = new List<double>();
-        var codes = new double[n, k];
+        // Alternating optimization
+        var errorHistory = new List<T>();
+        T tol = DimensionalityReductionOps.Tolerance<T>(_tol);
 
         for (int iter = 0; iter < _maxIter; iter++)
         {
-            // Step 1: Update codes (projections) - ridge regression
-            UpdateCodes(centered, codes, n, p, k);
-
-            // Step 2: Update dictionary (components) with L1 regularization
-            double[] oldComponents = new double[k * p];
-            for (int c = 0; c < k; c++)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    oldComponents[c * p + j] = _components[c, j];
-                }
-            }
-
-            UpdateDictionary(centered, codes, n, p, k);
+            // Update codes (ridge regression) and then the dictionary (L1-penalized coordinate descent)
+            var codes = UpdateCodes(centered, components);
+            var oldComponents = components;
+            components = UpdateDictionary(centered, codes, components);
 
             // Compute reconstruction error
-            double error = ComputeReconstructionError(centered, codes, n, p, k);
-            errorHistory.Add(error);
+            errorHistory.Add(ComputeReconstructionError(centered, codes, components));
 
             // Check convergence
-            double maxChange = 0;
-            for (int c = 0; c < k; c++)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    double change = Math.Abs(_components[c, j] - oldComponents[c * p + j]);
-                    maxChange = Math.Max(maxChange, change);
-                }
-            }
-
-            if (maxChange < _tol)
+            if (DimensionalityReductionOps.Below(DimensionalityReductionOps.MaxAbsDifference(components, oldComponents), tol))
             {
                 break;
             }
         }
 
-        _error = errorHistory.ToArray();
+        _components = components.ToMatrix();
+        _error = new Vector<T>(errorHistory);
     }
 
-    private void UpdateCodes(double[,] data, double[,] codes, int n, int p, int k)
+    /// <summary>Ridge codes: X C^T (C C^T + ridge I)^-1.</summary>
+    private Tensor<T> UpdateCodes(Tensor<T> data, Tensor<T> components)
     {
-        // Solve: codes = data * components^T * (components * components^T + ridge*I)^-1
-        // For simplicity, using simple projection with ridge regularization
+        var engine = Engine;
+        int k = components.Shape[0];
 
-        // Compute components * components^T + ridge*I
-        var gram = new double[k, k];
-        for (int i = 0; i < k; i++)
-        {
-            for (int j = 0; j < k; j++)
-            {
-                double sum = 0;
-                for (int f = 0; f < p; f++)
-                {
-                    sum += (_components ?? throw new InvalidOperationException("Components not initialized."))[i, f] * _components[j, f];
-                }
-                gram[i, j] = sum;
-                if (i == j)
-                {
-                    gram[i, j] += _ridge;
-                }
-            }
-        }
+        // Compute C C^T + ridge * I
+        var gram = engine.TensorAdd(
+            DimensionalityReductionOps.MatMulTranspose(components, components),
+            engine.TensorMultiplyScalar(DimensionalityReductionOps.Identity<T>(k), NumOps.FromDouble(_ridge)));
 
-        // Invert gram matrix (simple Gauss-Jordan for small matrices)
-        var gramInv = InvertMatrix(gram, k);
-
-        // Compute data * components^T
-        var dataProj = new double[n, k];
-        for (int i = 0; i < n; i++)
-        {
-            for (int c = 0; c < k; c++)
-            {
-                double sum = 0;
-                for (int j = 0; j < p; j++)
-                {
-                    sum += data[i, j] * (_components ?? throw new InvalidOperationException("Components not initialized."))[c, j];
-                }
-                dataProj[i, c] = sum;
-            }
-        }
-
-        // Compute codes = dataProj * gramInv
-        for (int i = 0; i < n; i++)
-        {
-            for (int c = 0; c < k; c++)
-            {
-                double sum = 0;
-                for (int j = 0; j < k; j++)
-                {
-                    sum += dataProj[i, j] * gramInv[j, c];
-                }
-                codes[i, c] = sum;
-            }
-        }
+        // codes = (X C^T) gram^-1 (gram is symmetric, so solve gram Z^T = (X C^T)^T)
+        var dataProj = DimensionalityReductionOps.MatMulTranspose(data, components);
+        return engine.TensorTranspose(DimensionalityReductionOps.Solve(gram, engine.TensorTranspose(dataProj)));
     }
 
-    private void UpdateDictionary(double[,] data, double[,] codes, int n, int p, int k)
+    /// <summary>
+    /// One sweep of block coordinate descent over the components: each row is refit to its residual with an L1
+    /// soft threshold and renormalized; a component whose codes are all ~0 is left as it was.
+    /// </summary>
+    private Tensor<T> UpdateDictionary(Tensor<T> data, Tensor<T> codes, Tensor<T> components)
     {
-        // Update each component using coordinate descent with L1 regularization
+        var engine = Engine;
+        int k = components.Shape[0];
+        var alpha = DimensionalityReductionOps.Scalar(NumOps.FromDouble(_alpha));
+        var floor = DimensionalityReductionOps.Tolerance<T>(1e-10);
+
         for (int c = 0; c < k; c++)
         {
-            // Compute residual without component c
-            var residual = new double[n, p];
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    residual[i, j] = data[i, j];
-                    for (int cc = 0; cc < k; cc++)
-                    {
-                        if (cc != c)
-                        {
-                            residual[i, j] -= codes[i, cc] * (_components ?? throw new InvalidOperationException("Components not initialized."))[cc, j];
-                        }
-                    }
-                }
-            }
+            var codeColumn = engine.TensorNarrow(codes, 1, c, 1);                // [n, 1]
+            var row = engine.TensorNarrow(components, 0, c, 1);                  // [1, p]
 
-            // Compute sum of squared codes for component c
-            double codesSquared = 0;
-            for (int i = 0; i < n; i++)
-            {
-                codesSquared += codes[i, c] * codes[i, c];
-            }
+            // Residual without this component: X - codes C^T + codes[:, c] C[c, :]
+            var residual = engine.TensorAdd(
+                engine.TensorSubtract(data, engine.TensorMatMul(codes, components)),
+                engine.TensorMatMul(codeColumn, row));
 
-            if (codesSquared < 1e-10)
-            {
-                continue;
-            }
+            // Coordinate update with soft thresholding: S(corr / |code|^2, alpha / |code|^2)
+            var codesSquared = engine.ReduceSum(engine.TensorSquare(codeColumn), new[] { 0 }, true);   // [1, 1]
+            var correlation = DimensionalityReductionOps.TransposeMatMul(codeColumn, residual);       // [1, p]
+            var updated = DimensionalityReductionOps.NormalizeRows(DimensionalityReductionOps.SoftThreshold(
+                engine.TensorDivide(correlation, codesSquared), engine.TensorDivide(alpha, codesSquared)));
 
-            // Update each loading with soft thresholding (L1)
-            for (int j = 0; j < p; j++)
-            {
-                double correlation = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    correlation += codes[i, c] * residual[i, j];
-                }
-
-                // Soft thresholding
-                double newValue = SoftThreshold(correlation / codesSquared, _alpha / codesSquared);
-                (_components ?? throw new InvalidOperationException("Components not initialized."))[c, j] = newValue;
-            }
-
-            // Normalize component
-            double norm = 0;
-            for (int j = 0; j < p; j++)
-            {
-                norm += (_components ?? throw new InvalidOperationException("Components not initialized."))[c, j] * _components[c, j];
-            }
-            norm = Math.Sqrt(norm);
-
-            if (norm > 1e-10)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    (_components ?? throw new InvalidOperationException("Components not initialized."))[c, j] /= norm;
-                }
-            }
+            // Skip components whose codes vanish. TensorWhere does not broadcast its condition, so the [1, 1] flag
+            // is expanded to the [1, p] row first.
+            var keep = engine.TensorBroadcastTo(engine.TensorLessThan(codesSquared, floor), updated.Shape.ToArray());
+            components = DimensionalityReductionOps.WithRow(components, c, engine.TensorWhere(keep, row, updated));
         }
+
+        return components;
     }
 
-    private static double SoftThreshold(double x, double lambda)
+    /// <summary>Mean squared reconstruction error of X ~ codes C.</summary>
+    private T ComputeReconstructionError(Tensor<T> data, Tensor<T> codes, Tensor<T> components)
     {
-        if (x > lambda)
-        {
-            return x - lambda;
-        }
-        else if (x < -lambda)
-        {
-            return x + lambda;
-        }
-        else
-        {
-            return 0;
-        }
-    }
-
-    private double ComputeReconstructionError(double[,] data, double[,] codes, int n, int p, int k)
-    {
-        double error = 0;
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                double reconstructed = 0;
-                for (int c = 0; c < k; c++)
-                {
-                    reconstructed += codes[i, c] * (_components ?? throw new InvalidOperationException("Components not initialized."))[c, j];
-                }
-                double diff = data[i, j] - reconstructed;
-                error += diff * diff;
-            }
-        }
-        return error / ((double)n * p);
-    }
-
-    private static double[,] InvertMatrix(double[,] matrix, int n)
-    {
-        var result = new double[n, n];
-        var temp = new double[n, 2 * n];
-
-        // Create augmented matrix [A | I]
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                temp[i, j] = matrix[i, j];
-                temp[i, j + n] = (i == j) ? 1.0 : 0.0;
-            }
-        }
-
-        // Gauss-Jordan elimination
-        for (int i = 0; i < n; i++)
-        {
-            // Find pivot
-            double maxVal = Math.Abs(temp[i, i]);
-            int maxRow = i;
-            for (int k = i + 1; k < n; k++)
-            {
-                if (Math.Abs(temp[k, i]) > maxVal)
-                {
-                    maxVal = Math.Abs(temp[k, i]);
-                    maxRow = k;
-                }
-            }
-
-            // Swap rows
-            if (maxRow != i)
-            {
-                for (int j = 0; j < 2 * n; j++)
-                {
-                    (temp[i, j], temp[maxRow, j]) = (temp[maxRow, j], temp[i, j]);
-                }
-            }
-
-            // Scale row
-            double pivot = temp[i, i];
-            if (Math.Abs(pivot) < 1e-10)
-            {
-                pivot = 1e-10;
-            }
-
-            for (int j = 0; j < 2 * n; j++)
-            {
-                temp[i, j] /= pivot;
-            }
-
-            // Eliminate column
-            for (int k = 0; k < n; k++)
-            {
-                if (k != i)
-                {
-                    double factor = temp[k, i];
-                    for (int j = 0; j < 2 * n; j++)
-                    {
-                        temp[k, j] -= factor * temp[i, j];
-                    }
-                }
-            }
-        }
-
-        // Extract inverse
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                result[i, j] = temp[i, j + n];
-            }
-        }
-
-        return result;
+        var engine = Engine;
+        return engine.TensorMean(engine.TensorSquare(engine.TensorSubtract(data, engine.TensorMatMul(codes, components))));
     }
 
     /// <summary>
@@ -467,26 +238,8 @@ public class SparsePCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("SparsePCA has not been fitted.");
         }
 
-        int n = data.Rows;
-        int p = data.Columns;
-        int k = _components.GetLength(0);
-        var result = new T[n, k];
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int c = 0; c < k; c++)
-            {
-                double sum = 0;
-                for (int j = 0; j < p; j++)
-                {
-                    double centered = NumOps.ToDouble(data[i, j]) - _mean[j];
-                    sum += centered * _components[c, j];
-                }
-                result[i, c] = NumOps.FromDouble(sum);
-            }
-        }
-
-        return new Matrix<T>(result);
+        var centered = DimensionalityReductionOps.SubtractRow(Tensor<T>.FromMatrix(data), Tensor<T>.FromVector(_mean));
+        return DimensionalityReductionOps.MatMulTranspose(centered, Tensor<T>.FromMatrix(_components)).ToMatrix();
     }
 
     /// <summary>
@@ -499,25 +252,10 @@ public class SparsePCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("SparsePCA has not been fitted.");
         }
 
-        int n = data.Rows;
-        int p = _nFeaturesIn;
-        int k = _components.GetLength(0);
-        var result = new T[n, p];
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                double sum = _mean[j];
-                for (int c = 0; c < k; c++)
-                {
-                    sum += NumOps.ToDouble(data[i, c]) * _components[c, j];
-                }
-                result[i, j] = NumOps.FromDouble(sum);
-            }
-        }
-
-        return new Matrix<T>(result);
+        int k = _components.Rows;
+        var scores = DimensionalityReductionOps.FirstColumns(Tensor<T>.FromMatrix(data), k);
+        var reconstructed = Engine.TensorMatMul(scores, Tensor<T>.FromMatrix(_components));
+        return DimensionalityReductionOps.AddRow(reconstructed, Tensor<T>.FromVector(_mean)).ToMatrix();
     }
 
     /// <summary>
@@ -525,7 +263,7 @@ public class SparsePCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
-        int k = _components?.GetLength(0) ?? _nComponents;
+        int k = _components?.Rows ?? _nComponents;
         var names = new string[k];
         for (int i = 0; i < k; i++)
         {

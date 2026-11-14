@@ -87,49 +87,47 @@ public class Binarization<T> : IDisposable
     /// </summary>
     public Tensor<T> OtsuBinarization(Tensor<T> gray)
     {
-        int height = gray.Shape[1];
-        int width = gray.Shape[2];
+        var engine = AiDotNetEngine.Current;
 
-        // Compute histogram
-        var histogram = new int[256];
-        for (int i = 0; i < gray.Length; i++)
-        {
-            int bin = PreprocessingHelpers.Clamp((int)(_numOps.ToDouble(gray.Data.Span[i]) * 255), 0, 255);
-            histogram[bin]++;
-        }
-
-        // Find optimal threshold using Otsu's method
+        // Compute histogram over 256 bins: bin = clamp((int)(v * 255), 0, 255), with v * 255 taken in double (a
+        // product rounded to T, e.g. Half, can round up across an integer and move the pixel to the next bin)
+        var flat = engine.Reshape(gray, new[] { gray.Length }).Cast<double>();
+        var bins = engine.TensorClamp(engine.TensorFloor(engine.TensorMultiplyScalar(flat, 255.0)), 0.0, 255.0)
+            .Cast<int>();
+        // Histogram counted in int (a running count in Half stops at 2048), then turned into bin probabilities
+        // count / n without materialising a count in T: count = hi * 2048 + lo, p = hi * (2048 / n) + lo / n, so
+        // every value cast to T is below 2048 (exact in Half) as long as n < 2048^2
+        var histogram = engine.TensorBinCount(bins, 256);
         int total = gray.Length;
-        double sum = 0;
-        for (int i = 0; i < 256; i++)
-            sum += (double)i * histogram[i];
+        var counts = histogram.ToArray();
+        var high = new Tensor<int>(counts.Select(count => count / 2048).ToArray(), new[] { 256 });
+        var low = new Tensor<int>(counts.Select(count => count % 2048).ToArray(), new[] { 256 });
+        var probabilities = engine.TensorAdd(
+            engine.TensorMultiplyScalar(high.Cast<T>(), _numOps.FromDouble(2048.0 / total)),
+            engine.TensorMultiplyScalar(low.Cast<T>(), _numOps.FromDouble(1.0 / total)));
 
-        double sumB = 0;
-        int wB = 0;
-        double maxVariance = 0;
-        int threshold = 0;
+        // Otsu between-class variance for every threshold t in class probabilities: wB wF (mB - mF)^2 (the count
+        // form divided by n^2, so the same maximiser), zero where a class is empty; class emptiness is decided on the
+        // int counts
+        var levels = Tensor<int>.FromVector(new Vector<int>(Enumerable.Range(0, 256))).Cast<T>();
+        var wB = engine.TensorCumSum(probabilities, 0);
+        var sumB = engine.TensorCumSum(engine.TensorMultiply(levels, probabilities), 0);
+        T sum = engine.TensorSum(engine.TensorMultiply(levels, probabilities));
+        var wF = engine.TensorSubtract(Tensor<T>.CreateDefault(new[] { 256 }, _numOps.One), wB);
 
-        for (int t = 0; t < 256; t++)
-        {
-            wB += histogram[t];
-            if (wB == 0) continue;
+        var countB = engine.TensorCumSum(histogram, 0);
+        var valid = engine.TensorMultiply(
+            engine.TensorGreaterThan(countB, 0), engine.TensorLessThan(countB, total)).Cast<T>();
+        var ones = engine.TensorOnesLike(wB);
+        var mB = engine.TensorDivide(sumB, engine.TensorWhere(valid, wB, ones));
+        var mF = engine.TensorDivide(
+            engine.TensorSubtract(Tensor<T>.CreateDefault(new[] { 256 }, sum), sumB), engine.TensorWhere(valid, wF, ones));
+        var variance = engine.TensorMultiply(
+            engine.TensorMultiply(engine.TensorMultiply(wB, wF), engine.TensorSquare(engine.TensorSubtract(mB, mF))), valid);
 
-            int wF = total - wB;
-            if (wF == 0) break;
-
-            sumB += (double)t * histogram[t];
-
-            double mB = sumB / wB;
-            double mF = (sum - sumB) / wF;
-
-            double variance = (double)wB * wF * (mB - mF) * (mB - mF);
-
-            if (variance > maxVariance)
-            {
-                maxVariance = variance;
-                threshold = t;
-            }
-        }
+        // First threshold with the largest variance (0 when no split exists); the engine arg max does not promise
+        // the first index on ties
+        int threshold = AiDotNet.AnomalyDetection.AnomalyTensorOps.FirstArgMax(variance);
 
         double normalizedThreshold = threshold / 255.0;
         return ApplyThreshold(gray, normalizedThreshold);
@@ -144,43 +142,15 @@ public class Binarization<T> : IDisposable
     /// <param name="r">Dynamic range parameter (typically 128).</param>
     public Tensor<T> SauvolaBinarization(Tensor<T> gray, int windowSize = 15, double k = 0.2, double r = 128.0)
     {
-        int height = gray.Shape[1];
-        int width = gray.Shape[2];
-        int halfWindow = windowSize / 2;
+        var engine = AiDotNetEngine.Current;
+        var (pixels, mean, stdDev) = LocalStatistics(gray, windowSize);
 
-        var result = new T[height * width];
-
-        // Compute integral images for efficient local mean and variance
-        var integralSum = ComputeIntegralImage(gray);
-        var integralSqSum = ComputeIntegralSqImage(gray);
-
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                int x1 = Math.Max(0, x - halfWindow);
-                int y1 = Math.Max(0, y - halfWindow);
-                int x2 = Math.Min(width - 1, x + halfWindow);
-                int y2 = Math.Min(height - 1, y + halfWindow);
-
-                int area = (x2 - x1 + 1) * (y2 - y1 + 1);
-
-                double sum = GetIntegralSum(integralSum, x1, y1, x2, y2, width);
-                double sqSum = GetIntegralSum(integralSqSum, x1, y1, x2, y2, width);
-
-                double mean = sum / area;
-                double variance = sqSum / area - mean * mean;
-                double stdDev = Math.Sqrt(Math.Max(0, variance));
-
-                // Sauvola threshold: T = mean * (1 + k * (stdDev / r - 1))
-                double threshold = mean * (1.0 + k * (stdDev / r - 1.0));
-
-                double pixelValue = _numOps.ToDouble(gray[0, y, x]) * 255.0;
-                result[y * width + x] = pixelValue > threshold ? _numOps.FromDouble(1.0) : _numOps.FromDouble(0.0);
-            }
-        }
-
-        return new Tensor<T>([1, height, width], new Vector<T>(result));
+        // Sauvola threshold: T = mean * (1 + k * (stdDev / r - 1))
+        var factor = engine.TensorAddScalar(
+            engine.TensorMultiplyScalar(engine.TensorSubtractScalar(engine.TensorDivideScalar(stdDev, _numOps.FromDouble(r)), _numOps.One), _numOps.FromDouble(k)),
+            _numOps.One);
+        var threshold = engine.TensorMultiply(mean, factor);
+        return engine.TensorGreaterThan(pixels, threshold);
     }
 
     /// <summary>
@@ -191,42 +161,12 @@ public class Binarization<T> : IDisposable
     /// <param name="k">Niblack's k parameter (typically -0.2).</param>
     public Tensor<T> NiblackBinarization(Tensor<T> gray, int windowSize = 15, double k = -0.2)
     {
-        int height = gray.Shape[1];
-        int width = gray.Shape[2];
-        int halfWindow = windowSize / 2;
+        var engine = AiDotNetEngine.Current;
+        var (pixels, mean, stdDev) = LocalStatistics(gray, windowSize);
 
-        var result = new T[height * width];
-
-        var integralSum = ComputeIntegralImage(gray);
-        var integralSqSum = ComputeIntegralSqImage(gray);
-
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                int x1 = Math.Max(0, x - halfWindow);
-                int y1 = Math.Max(0, y - halfWindow);
-                int x2 = Math.Min(width - 1, x + halfWindow);
-                int y2 = Math.Min(height - 1, y + halfWindow);
-
-                int area = (x2 - x1 + 1) * (y2 - y1 + 1);
-
-                double sum = GetIntegralSum(integralSum, x1, y1, x2, y2, width);
-                double sqSum = GetIntegralSum(integralSqSum, x1, y1, x2, y2, width);
-
-                double mean = sum / area;
-                double variance = sqSum / area - mean * mean;
-                double stdDev = Math.Sqrt(Math.Max(0, variance));
-
-                // Niblack threshold: T = mean + k * stdDev
-                double threshold = mean + k * stdDev;
-
-                double pixelValue = _numOps.ToDouble(gray[0, y, x]) * 255.0;
-                result[y * width + x] = pixelValue > threshold ? _numOps.FromDouble(1.0) : _numOps.FromDouble(0.0);
-            }
-        }
-
-        return new Tensor<T>([1, height, width], new Vector<T>(result));
+        // Niblack threshold: T = mean + k * stdDev
+        var threshold = engine.TensorAdd(mean, engine.TensorMultiplyScalar(stdDev, _numOps.FromDouble(k)));
+        return engine.TensorGreaterThan(pixels, threshold);
     }
 
     /// <summary>
@@ -244,93 +184,52 @@ public class Binarization<T> : IDisposable
     private Tensor<T> ToGrayscale(Tensor<T> image)
     {
         if (image.Shape[0] == 1)
-            return image;
-
-        int height = image.Shape[1];
-        int width = image.Shape[2];
-        var result = new T[height * width];
-
-        for (int y = 0; y < height; y++)
         {
-            for (int x = 0; x < width; x++)
-            {
-                double r = _numOps.ToDouble(image[0, y, x]);
-                double g = image.Shape[0] > 1 ? _numOps.ToDouble(image[1, y, x]) : r;
-                double b = image.Shape[0] > 2 ? _numOps.ToDouble(image[2, y, x]) : r;
-
-                result[y * width + x] = _numOps.FromDouble(0.299 * r + 0.587 * g + 0.114 * b);
-            }
+            return image;
         }
 
-        return new Tensor<T>([1, height, width], new Vector<T>(result));
+        var engine = AiDotNetEngine.Current;
+        int height = image.Shape[1];
+        int width = image.Shape[2];
+        var r = engine.TensorNarrow(image, 0, 0, 1);
+        var g = image.Shape[0] > 1 ? engine.TensorNarrow(image, 0, 1, 1) : r;
+        var b = image.Shape[0] > 2 ? engine.TensorNarrow(image, 0, 2, 1) : r;
+        var gray = engine.TensorAdd(
+            engine.TensorAdd(engine.TensorMultiplyScalar(r, _numOps.FromDouble(0.299)), engine.TensorMultiplyScalar(g, _numOps.FromDouble(0.587))),
+            engine.TensorMultiplyScalar(b, _numOps.FromDouble(0.114)));
+        return engine.Reshape(gray, new[] { 1, height, width });
     }
 
     private Tensor<T> ApplyThreshold(Tensor<T> gray, double threshold)
     {
         int height = gray.Shape[1];
         int width = gray.Shape[2];
-        var result = new T[height * width];
-
-        for (int i = 0; i < gray.Length; i++)
-        {
-            double value = _numOps.ToDouble(gray.Data.Span[i]);
-            result[i] = value > threshold ? _numOps.FromDouble(1.0) : _numOps.FromDouble(0.0);
-        }
-
-        return new Tensor<T>([1, height, width], new Vector<T>(result));
+        var binary = AiDotNetEngine.Current.TensorGreaterThan(gray, _numOps.FromDouble(threshold));
+        return AiDotNetEngine.Current.Reshape(binary, new[] { 1, height, width });
     }
 
-    private double[] ComputeIntegralImage(Tensor<T> gray)
+    /// <summary>
+    /// Pixel values scaled to [0, 255] with the mean and standard deviation (population, floored at zero variance)
+    /// of the (2 (windowSize / 2) + 1)^2 window clipped to the image, all shaped [1, height, width]. The window
+    /// averages are taken directly over each window (average pooling without padded cells), which is more
+    /// accurate than differencing global integral images.
+    /// </summary>
+    private (Tensor<T> Pixels, Tensor<T> Mean, Tensor<T> StdDev) LocalStatistics(Tensor<T> gray, int windowSize)
     {
+        var engine = AiDotNetEngine.Current;
         int height = gray.Shape[1];
         int width = gray.Shape[2];
-        var integral = new double[(height + 1) * (width + 1)];
+        int halfWindow = windowSize / 2;
+        int pool = 2 * halfWindow + 1;
 
-        for (int y = 1; y <= height; y++)
-        {
-            for (int x = 1; x <= width; x++)
-            {
-                double value = _numOps.ToDouble(gray[0, y - 1, x - 1]) * 255.0;
-                int idx = y * (width + 1) + x;
-                integral[idx] = value
-                    + integral[(y - 1) * (width + 1) + x]
-                    + integral[y * (width + 1) + (x - 1)]
-                    - integral[(y - 1) * (width + 1) + (x - 1)];
-            }
-        }
+        var pixels = engine.TensorMultiplyScalar(
+            engine.Reshape(engine.TensorNarrow(gray, 0, 0, 1), new[] { 1, 1, height, width }), _numOps.FromDouble(255.0));
+        var mean = engine.AvgPool2D(pixels, pool, 1, halfWindow, countIncludePad: false);
+        var meanSquare = engine.AvgPool2D(engine.TensorSquare(pixels), pool, 1, halfWindow, countIncludePad: false);
+        var variance = engine.TensorClampMin(engine.TensorSubtract(meanSquare, engine.TensorSquare(mean)), _numOps.Zero);
 
-        return integral;
-    }
-
-    private double[] ComputeIntegralSqImage(Tensor<T> gray)
-    {
-        int height = gray.Shape[1];
-        int width = gray.Shape[2];
-        var integral = new double[(height + 1) * (width + 1)];
-
-        for (int y = 1; y <= height; y++)
-        {
-            for (int x = 1; x <= width; x++)
-            {
-                double value = _numOps.ToDouble(gray[0, y - 1, x - 1]) * 255.0;
-                int idx = y * (width + 1) + x;
-                integral[idx] = value * value
-                    + integral[(y - 1) * (width + 1) + x]
-                    + integral[y * (width + 1) + (x - 1)]
-                    - integral[(y - 1) * (width + 1) + (x - 1)];
-            }
-        }
-
-        return integral;
-    }
-
-    private double GetIntegralSum(double[] integral, int x1, int y1, int x2, int y2, int width)
-    {
-        int w = width + 1;
-        return integral[(y2 + 1) * w + (x2 + 1)]
-            - integral[y1 * w + (x2 + 1)]
-            - integral[(y2 + 1) * w + x1]
-            + integral[y1 * w + x1];
+        var shape = new[] { 1, height, width };
+        return (engine.Reshape(pixels, shape), engine.Reshape(mean, shape), engine.Reshape(engine.TensorSqrt(variance), shape));
     }
 
     #endregion

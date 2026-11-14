@@ -44,7 +44,7 @@ public class RandomProjection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly int? _randomState;
 
     // Fitted parameters
-    private double[,]? _projectionMatrix;
+    private Matrix<T>? _projectionMatrix;
     private int _nFeaturesIn;
     private int _nComponentsOut;
 
@@ -61,7 +61,7 @@ public class RandomProjection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the projection matrix.
     /// </summary>
-    public double[,]? ProjectionMatrix => _projectionMatrix;
+    public Matrix<T>? ProjectionMatrix => _projectionMatrix;
 
     /// <summary>
     /// Gets whether this transformer supports inverse transformation.
@@ -140,12 +140,12 @@ public class RandomProjection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         // Generate projection matrix
         if (_projectionType == RandomProjectionType.Gaussian)
         {
-            _projectionMatrix = GenerateGaussianMatrix(_nFeaturesIn, _nComponentsOut, random);
+            _projectionMatrix = GenerateGaussianMatrix(_nFeaturesIn, _nComponentsOut, random).ToMatrix();
         }
         else
         {
             double density = _density > 0 ? _density : 1.0 / Math.Sqrt(_nFeaturesIn);
-            _projectionMatrix = GenerateSparseMatrix(_nFeaturesIn, _nComponentsOut, density, random);
+            _projectionMatrix = GenerateSparseMatrix(_nFeaturesIn, _nComponentsOut, density, random).ToMatrix();
         }
     }
 
@@ -159,50 +159,32 @@ public class RandomProjection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return Math.Max(k, 1);
     }
 
-    private static double[,] GenerateGaussianMatrix(int nFeatures, int nComponents, Random random)
+    private Tensor<T> GenerateGaussianMatrix(int nFeatures, int nComponents, Random random)
     {
-        var matrix = new double[nFeatures, nComponents];
-        double scale = 1.0 / Math.Sqrt(nComponents);
-
-        for (int i = 0; i < nFeatures; i++)
-        {
-            for (int j = 0; j < nComponents; j++)
-            {
-                matrix[i, j] = random.NextGaussian() * scale;
-            }
-        }
-
-        return matrix;
+        T scale = NumOps.FromDouble(1.0 / Math.Sqrt(nComponents));
+        return Engine.TensorMultiplyScalar(DimensionalityReductionOps.StandardNormal<T>(random, nFeatures, nComponents), scale);
     }
 
-    private static double[,] GenerateSparseMatrix(int nFeatures, int nComponents, double density, Random random)
+    private Tensor<T> GenerateSparseMatrix(int nFeatures, int nComponents, double density, Random random)
     {
-        var matrix = new double[nFeatures, nComponents];
-        double scale = Math.Sqrt(1.0 / (nComponents * density));
+        var engine = Engine;
+        T scale = NumOps.FromDouble(Math.Sqrt(1.0 / (nComponents * density)));
+        var draws = DimensionalityReductionOps.Uniform<T>(random, nFeatures, nComponents);
+        var zeros = new Tensor<T>(new[] { nFeatures, nComponents });
 
-        // Sparse random projection: +1, 0, -1 with probabilities density/2, 1-density, density/2
-        for (int i = 0; i < nFeatures; i++)
-        {
-            for (int j = 0; j < nComponents; j++)
-            {
-                double r = random.NextDouble();
-                if (r < density / 2)
-                {
-                    matrix[i, j] = scale;
-                }
-                else if (r < density)
-                {
-                    matrix[i, j] = -scale;
-                }
-                // else: 0 (already default)
-            }
-        }
-
-        return matrix;
+        // Sparse random projection: +scale, -scale, 0 with probabilities density/2, density/2, 1-density
+        var negative = engine.TensorWhere(
+            engine.TensorLessThan(draws, NumOps.FromDouble(density)),
+            engine.TensorFullLike(zeros, NumOps.Negate(scale)),
+            zeros);
+        return engine.TensorWhere(
+            engine.TensorLessThan(draws, NumOps.FromDouble(density / 2)),
+            engine.TensorFullLike(zeros, scale),
+            negative);
     }
 
     /// <summary>
-    /// Transforms data by projecting onto the random subspace.
+    /// Transforms data using the random projection.
     /// </summary>
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
@@ -211,25 +193,8 @@ public class RandomProjection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("RandomProjection has not been fitted.");
         }
 
-        int n = data.Rows;
-        int p = data.Columns;
-        var result = new T[n, _nComponentsOut];
-
         // Matrix multiplication: X * R
-        for (int i = 0; i < n; i++)
-        {
-            for (int k = 0; k < _nComponentsOut; k++)
-            {
-                double sum = 0;
-                for (int j = 0; j < p; j++)
-                {
-                    sum += NumOps.ToDouble(data[i, j]) * _projectionMatrix[j, k];
-                }
-                result[i, k] = NumOps.FromDouble(sum);
-            }
-        }
-
-        return new Matrix<T>(result);
+        return Engine.TensorMatMul(Tensor<T>.FromMatrix(data), Tensor<T>.FromMatrix(_projectionMatrix)).ToMatrix();
     }
 
     /// <summary>

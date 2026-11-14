@@ -219,8 +219,7 @@ public class NoiseTunnelExplainer<T, TExplanation>
         if (attributions.Count == 0)
             throw new InvalidOperationException("No attributions to aggregate.");
 
-        int length = attributions[0].Length;
-        var result = new T[length];
+        Vector<T> result;
 
         switch (_noiseTunnelType)
         {
@@ -241,7 +240,7 @@ public class NoiseTunnelExplainer<T, TExplanation>
                 break;
         }
 
-        return new Vector<T>(result);
+        return result;
     }
 
     /// <summary>
@@ -254,23 +253,9 @@ public class NoiseTunnelExplainer<T, TExplanation>
     /// will be high. Random noise cancels out in the average.
     /// </para>
     /// </remarks>
-    private T[] ComputeMean(List<Vector<T>> attributions)
+    private Vector<T> ComputeMean(List<Vector<T>> attributions)
     {
-        int length = attributions[0].Length;
-        var result = new T[length];
-        double n = attributions.Count;
-
-        for (int i = 0; i < length; i++)
-        {
-            double sum = 0;
-            foreach (var attr in attributions)
-            {
-                sum += NumOps.ToDouble(attr[i]);
-            }
-            result[i] = NumOps.FromDouble(sum / n);
-        }
-
-        return result;
+        return AiDotNetEngine.Current.ReduceMean(Stack(attributions), new[] { 0 }, false).ToVector();
     }
 
     /// <summary>
@@ -283,24 +268,11 @@ public class NoiseTunnelExplainer<T, TExplanation>
     /// and de-emphasizes features that fluctuate around zero.
     /// </para>
     /// </remarks>
-    private T[] ComputeSquaredMean(List<Vector<T>> attributions)
+    private Vector<T> ComputeSquaredMean(List<Vector<T>> attributions)
     {
-        int length = attributions[0].Length;
-        var result = new T[length];
-        double n = attributions.Count;
-
-        for (int i = 0; i < length; i++)
-        {
-            double sum = 0;
-            foreach (var attr in attributions)
-            {
-                double val = NumOps.ToDouble(attr[i]);
-                sum += val * val;
-            }
-            result[i] = NumOps.FromDouble(Math.Sqrt(sum / n));
-        }
-
-        return result;
+        // Root mean square, scaled so no square overflows T
+        return AiDotNet.Interpretability.Helpers.ExplainerTensorOps<T>
+            .ColumnRootMeanSquares(Stack(attributions), attributions.Count).ToVector();
     }
 
     /// <summary>
@@ -314,45 +286,27 @@ public class NoiseTunnelExplainer<T, TExplanation>
     /// indicate features at decision boundaries.
     /// </para>
     /// </remarks>
-    private T[] ComputeStandardDeviation(List<Vector<T>> attributions)
+    private Vector<T> ComputeStandardDeviation(List<Vector<T>> attributions)
     {
-        int length = attributions[0].Length;
-        var result = new T[length];
-        double n = attributions.Count;
+        // With only one sample, variance is undefined; use 0 as a fallback
+        if (attributions.Count <= 1)
+            return new Vector<T>(attributions[0].Length);
 
-        for (int i = 0; i < length; i++)
-        {
-            // Compute mean
-            double mean = 0;
-            foreach (var attr in attributions)
-            {
-                mean += NumOps.ToDouble(attr[i]);
-            }
-            mean /= n;
+        // Variance with Bessel's correction
+        var engine = AiDotNetEngine.Current;
+        var stacked = Stack(attributions);
+        var mean = engine.ReduceMean(stacked, new[] { 0 }, true);
+        var centered = engine.TensorSubtract(stacked, engine.TensorBroadcastTo(mean, stacked.Shape.ToArray()));
+        return AiDotNet.Interpretability.Helpers.ExplainerTensorOps<T>
+            .ColumnRootMeanSquares(centered, attributions.Count - 1).ToVector();
+    }
 
-            // Compute variance with Bessel's correction
-            double variance = 0;
-            foreach (var attr in attributions)
-            {
-                double diff = NumOps.ToDouble(attr[i]) - mean;
-                variance += diff * diff;
-            }
-
-            // Apply Bessel's correction only when n > 1 to avoid division by zero
-            if (n > 1)
-            {
-                variance /= (n - 1);
-            }
-            else
-            {
-                // With only one sample, variance is undefined; use 0 as a fallback
-                variance = 0;
-            }
-
-            result[i] = NumOps.FromDouble(Math.Sqrt(variance));
-        }
-
-        return result;
+    /// <summary>
+    /// The attribution vectors as rows of a [samples, features] tensor.
+    /// </summary>
+    private static Tensor<T> Stack(List<Vector<T>> attributions)
+    {
+        return AiDotNetEngine.Current.TensorStack(attributions.Select(a => a.AsTensor()).ToArray(), 0);
     }
 }
 

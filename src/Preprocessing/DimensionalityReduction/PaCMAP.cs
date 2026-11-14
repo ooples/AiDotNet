@@ -48,7 +48,7 @@ public class PaCMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly int? _randomState;
 
     // Fitted parameters
-    private double[,]? _embedding;
+    private Matrix<T>? _embedding;
     private int _nSamples;
 
     /// <summary>
@@ -64,7 +64,7 @@ public class PaCMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the embedding result.
     /// </summary>
-    public double[,]? Embedding => _embedding;
+    public Matrix<T>? Embedding => _embedding;
 
     /// <summary>
     /// Gets whether this transformer supports inverse transformation.
@@ -157,78 +157,53 @@ public class PaCMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSeededRandom(42);
 
-        // Convert to double array
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-            }
-        }
+        var x = Tensor<T>.FromMatrix(data);
 
-        // Step 1: Compute pairwise distances
-        var distances = ComputePairwiseDistances(X, n, p);
-
-        // Step 2: Generate pairs
-        var (nearbyPairs, midNearPairs, furtherPairs) = GeneratePairs(distances, n, random);
+        // Steps 1 and 2: Rank neighbours by pairwise distance and generate pairs
+        var (nearbyPairs, midNearPairs, furtherPairs) = GeneratePairs(x, n, random);
 
         // Step 3: Initialize embedding with PCA
-        var Y = InitializeWithPCA(X, n, p, random);
+        var y = InitializeWithPCA(x, n, random);
 
         // Step 4: Optimize using PaCMAP loss
-        OptimizeEmbedding(Y, nearbyPairs, midNearPairs, furtherPairs, distances, n, random);
-
-        _embedding = Y;
+        _embedding = OptimizeEmbedding(y, nearbyPairs, midNearPairs, furtherPairs).ToMatrix();
     }
 
-    private double[,] ComputePairwiseDistances(double[,] X, int n, int p)
+    /// <summary>
+    /// From the rows of <paramref name="x"/>: nearby pairs (the k nearest neighbours, ties in index order), mid-near pairs (random ranks in [k, 6k) of
+    /// the sorted neighbour list) and further pairs (uniformly random other points), each as (heads, tails).
+    /// </summary>
+    private ((Tensor<int> Heads, Tensor<int> Tails) Nearby, (Tensor<int> Heads, Tensor<int> Tails) MidNear, (Tensor<int> Heads, Tensor<int> Tails) Further)
+        GeneratePairs(Tensor<T> x, int n, Random random)
     {
-        var distances = new double[n, n];
+        // Only the order of the distances is used, so plain distances are ranked: squared distances overflow narrow
+        // types (Half past 256), which would tie every far pair at infinity and order them by index
+        var distances = DimensionalityReductionOps.EuclideanDistances(x, x);
 
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i + 1; j < n; j++)
-            {
-                double dist = 0;
-                for (int k = 0; k < p; k++)
-                {
-                    double diff = X[i, k] - X[j, k];
-                    dist += diff * diff;
-                }
-                distances[i, j] = dist; // Keep squared distances
-                distances[j, i] = dist;
-            }
-        }
-
-        return distances;
-    }
-
-    private (List<(int, int)> nearby, List<(int, int)> midNear, List<(int, int)> further)
-        GeneratePairs(double[,] distances, int n, Random random)
-    {
         int k = Math.Min(_nNeighbors, n - 1);
         int nMidNear = Math.Max(1, (int)(k * _mnRatio));
         int nFurther = Math.Max(1, (int)(k * _fpRatio));
 
-        var nearbyPairs = new List<(int, int)>();
-        var midNearPairs = new List<(int, int)>();
-        var furtherPairs = new List<(int, int)>();
+        // Neighbour ranking of every row (the point itself excluded), copied once for the sequential sampling below
+        int width = n - 1;
+        var sorted = DimensionalityReductionOps.NearestNeighbors(distances, width).AsSpan().ToArray();
 
-        // For each point, find neighbors at different distance scales
+        var nearbyHeads = new List<int>();
+        var nearbyTails = new List<int>();
+        var midHeads = new List<int>();
+        var midTails = new List<int>();
+        var furtherHeads = new List<int>();
+        var furtherTails = new List<int>();
+
         for (int i = 0; i < n; i++)
         {
-            var sortedDistances = new (double dist, int idx)[n];
-            for (int j = 0; j < n; j++)
-            {
-                sortedDistances[j] = (j == i ? double.MaxValue : distances[i, j], j);
-            }
-            Array.Sort(sortedDistances, (a, b) => a.dist.CompareTo(b.dist));
+            int rowStart = i * width;
 
             // Nearby pairs (k nearest neighbors)
             for (int j = 0; j < k && j < n - 1; j++)
             {
-                nearbyPairs.Add((i, sortedDistances[j].idx));
+                nearbyHeads.Add(i);
+                nearbyTails.Add(sorted[rowStart + j]);
             }
 
             // Mid-near pairs (neighbors at moderate distance)
@@ -241,153 +216,67 @@ public class PaCMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                     int idx = random.Next(midStart, midEnd);
                     if (idx < n - 1)
                     {
-                        midNearPairs.Add((i, sortedDistances[idx].idx));
+                        midHeads.Add(i);
+                        midTails.Add(sorted[rowStart + idx]);
                     }
                 }
             }
 
             // Further pairs (random sampling from distant points)
-            // Guard against n == 1 which would cause infinite loop
-            for (int f = 0; f < nFurther && n > 1; f++)
+            for (int f = 0; f < nFurther; f++)
             {
                 int idx = random.Next(n);
                 while (idx == i)
                 {
                     idx = random.Next(n);
                 }
-                furtherPairs.Add((i, idx));
+
+                furtherHeads.Add(i);
+                furtherTails.Add(idx);
             }
         }
 
-        return (nearbyPairs, midNearPairs, furtherPairs);
+        return (
+            (DimensionalityReductionOps.IndexTensor(nearbyHeads.ToArray()), DimensionalityReductionOps.IndexTensor(nearbyTails.ToArray())),
+            (DimensionalityReductionOps.IndexTensor(midHeads.ToArray()), DimensionalityReductionOps.IndexTensor(midTails.ToArray())),
+            (DimensionalityReductionOps.IndexTensor(furtherHeads.ToArray()), DimensionalityReductionOps.IndexTensor(furtherTails.ToArray())));
     }
 
-    private double[,] InitializeWithPCA(double[,] X, int n, int p, Random random)
+    /// <summary>Centered data projected on the top principal axes, scaled by 1e-4.</summary>
+    private Tensor<T> InitializeWithPCA(Tensor<T> x, int n, Random random)
     {
-        // Center data
-        var mean = new double[p];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                mean[j] += X[i, j];
-            }
-        }
-        for (int j = 0; j < p; j++) mean[j] /= n;
-
-        var Xc = new double[n, p];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                Xc[i, j] = X[i, j] - mean[j];
-            }
-        }
-
-        // Compute covariance matrix
-        var C = new double[p, p];
-        for (int i = 0; i < p; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                for (int k = 0; k < n; k++)
-                {
-                    C[i, j] += Xc[k, i] * Xc[k, j];
-                }
-                C[i, j] /= n;
-            }
-        }
-
-        // Power iteration to get top eigenvectors
-        var V = new double[p, _nComponents];
-        var A = (double[,])C.Clone();
-
-        for (int d = 0; d < _nComponents; d++)
-        {
-            var v = new double[p];
-            for (int i = 0; i < p; i++) v[i] = random.NextDouble() - 0.5;
-
-            for (int iter = 0; iter < 50; iter++)
-            {
-                var Av = new double[p];
-                for (int i = 0; i < p; i++)
-                {
-                    for (int j = 0; j < p; j++) Av[i] += A[i, j] * v[j];
-                }
-
-                double norm = 0;
-                for (int i = 0; i < p; i++) norm += Av[i] * Av[i];
-                norm = Math.Sqrt(norm);
-                if (norm < 1e-10) break;
-
-                for (int i = 0; i < p; i++) v[i] = Av[i] / norm;
-            }
-
-            for (int i = 0; i < p; i++) V[i, d] = v[i];
-
-            // Deflate
-            var Av2 = new double[p];
-            double lambda = 0;
-            for (int i = 0; i < p; i++)
-            {
-                for (int j = 0; j < p; j++) Av2[i] += A[i, j] * v[j];
-                lambda += v[i] * Av2[i];
-            }
-
-            for (int i = 0; i < p; i++)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    A[i, j] -= lambda * v[i] * v[j];
-                }
-            }
-        }
-
-        // Project data
-        var Y = new double[n, _nComponents];
-        for (int i = 0; i < n; i++)
-        {
-            for (int d = 0; d < _nComponents; d++)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    Y[i, d] += Xc[i, j] * V[j, d];
-                }
-            }
-        }
-
-        // Scale initial embedding
-        double scale = 0.0001;
-        for (int i = 0; i < n; i++)
-        {
-            for (int d = 0; d < _nComponents; d++)
-            {
-                Y[i, d] *= scale;
-            }
-        }
-
-        return Y;
+        var engine = Engine;
+        var centered = DimensionalityReductionOps.SubtractRow(x, DimensionalityReductionOps.ColumnMeans(x));
+        var covariance = engine.TensorDivideScalar(
+            DimensionalityReductionOps.TransposeMatMul(centered, centered), NumOps.FromDouble(n));
+        var (_, vectors) = DimensionalityReductionOps.SymmetricEigen(covariance, descending: true);
+        // Signs as the original deflated power iteration converges to them from its seeded start vectors
+        vectors = DimensionalityReductionOps.MatchStartSigns(vectors,
+            DimensionalityReductionOps.PowerIterationStarts<T>(random, _nComponents, x.Shape[1], 0.5));
+        var projected = engine.TensorMatMul(centered, DimensionalityReductionOps.FirstColumns(vectors, _nComponents));
+        return engine.TensorMultiplyScalar(projected, NumOps.FromDouble(0.0001));
     }
 
-    private void OptimizeEmbedding(
-        double[,] Y,
-        List<(int, int)> nearbyPairs,
-        List<(int, int)> midNearPairs,
-        List<(int, int)> furtherPairs,
-        double[,] inputDistances,
-        int n,
-        Random random)
+    /// <summary>
+    /// Full-batch gradient steps on the three pair sets with the phase weights of the original schedule, then a
+    /// final re-centering.
+    /// </summary>
+    private Tensor<T> OptimizeEmbedding(
+        Tensor<T> y,
+        (Tensor<int> Heads, Tensor<int> Tails) nearbyPairs,
+        (Tensor<int> Heads, Tensor<int> Tails) midNearPairs,
+        (Tensor<int> Heads, Tensor<int> Tails) furtherPairs)
     {
+        var engine = Engine;
+        int n = y.Shape[0];
         double lr = _learningRate;
 
         // PaCMAP uses three phases with different weight schedules
         // Phase 1: Focus on global structure (further pairs)
         // Phase 2: Balance all pairs
         // Phase 3: Focus on local structure (nearby pairs)
-
         for (int iter = 0; iter < _nIter; iter++)
         {
-            // Compute dynamic weights based on iteration
             double t = (double)iter / _nIter;
             double wNearby, wMidNear, wFurther;
 
@@ -413,81 +302,15 @@ public class PaCMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 wFurther = 0.1;
             }
 
-            var gradients = new double[n, _nComponents];
+            var gradients = new Tensor<T>(new[] { n, _nComponents });
 
-            // Nearby pairs (attractive force)
-            foreach (var (i, j) in nearbyPairs)
-            {
-                double dY = 0;
-                for (int d = 0; d < _nComponents; d++)
-                {
-                    double diff = Y[i, d] - Y[j, d];
-                    dY += diff * diff;
-                }
-
-                // PaCMAP attraction
-                double denom = 10.0 + dY;
-                double grad = 2.0 * wNearby / (denom * denom);
-
-                for (int d = 0; d < _nComponents; d++)
-                {
-                    double diff = Y[i, d] - Y[j, d];
-                    gradients[i, d] -= grad * diff;
-                    gradients[j, d] += grad * diff;
-                }
-            }
-
-            // Mid-near pairs (moderate attraction)
-            foreach (var (i, j) in midNearPairs)
-            {
-                double dY = 0;
-                for (int d = 0; d < _nComponents; d++)
-                {
-                    double diff = Y[i, d] - Y[j, d];
-                    dY += diff * diff;
-                }
-
-                double denom = 10000.0 + dY;
-                double grad = 2.0 * wMidNear * 10000.0 / (denom * denom);
-
-                for (int d = 0; d < _nComponents; d++)
-                {
-                    double diff = Y[i, d] - Y[j, d];
-                    gradients[i, d] -= grad * diff;
-                    gradients[j, d] += grad * diff;
-                }
-            }
-
-            // Further pairs (repulsive force)
-            foreach (var (i, j) in furtherPairs)
-            {
-                double dY = 0;
-                for (int d = 0; d < _nComponents; d++)
-                {
-                    double diff = Y[i, d] - Y[j, d];
-                    dY += diff * diff;
-                }
-
-                // PaCMAP repulsion
-                double denom = 1.0 + dY;
-                double grad = 2.0 * wFurther / (denom * denom);
-
-                for (int d = 0; d < _nComponents; d++)
-                {
-                    double diff = Y[i, d] - Y[j, d];
-                    gradients[i, d] += grad * diff;
-                    gradients[j, d] -= grad * diff;
-                }
-            }
+            // Nearby: attraction 2w / (10 + d)^2; mid-near: attraction 2w 1e4 / (1e4 + d)^2; further: repulsion 2w / (1 + d)^2
+            gradients = AccumulatePairGradient(gradients, y, nearbyPairs, 10.0, 2.0 * wNearby, attract: true);
+            gradients = AccumulatePairGradient(gradients, y, midNearPairs, 10000.0, 2.0 * wMidNear * 10000.0, attract: true);
+            gradients = AccumulatePairGradient(gradients, y, furtherPairs, 1.0, 2.0 * wFurther, attract: false);
 
             // Update embedding
-            for (int i = 0; i < n; i++)
-            {
-                for (int d = 0; d < _nComponents; d++)
-                {
-                    Y[i, d] += lr * gradients[i, d];
-                }
-            }
+            y = engine.TensorAdd(y, engine.TensorMultiplyScalar(gradients, DimensionalityReductionOps.Constant<T>(lr)));
 
             // Decay learning rate
             if (iter > 0 && iter % 50 == 0)
@@ -497,23 +320,33 @@ public class PaCMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         }
 
         // Center the final embedding
-        var mean = new double[_nComponents];
-        for (int i = 0; i < n; i++)
-        {
-            for (int d = 0; d < _nComponents; d++)
-            {
-                mean[d] += Y[i, d];
-            }
-        }
-        for (int d = 0; d < _nComponents; d++) mean[d] /= n;
+        return DimensionalityReductionOps.SubtractRow(y, DimensionalityReductionOps.ColumnMeans(y));
+    }
 
-        for (int i = 0; i < n; i++)
+    /// <summary>
+    /// For every pair (h, t) with diff = y_h - y_t and c = numerator / (offset + |diff|^2)^2, adds -c diff to
+    /// gradient h and +c diff to gradient t when attracting (the opposite signs when repelling).
+    /// </summary>
+    private Tensor<T> AccumulatePairGradient(
+        Tensor<T> gradients, Tensor<T> y, (Tensor<int> Heads, Tensor<int> Tails) pairs, double offset, double numerator, bool attract)
+    {
+        if (pairs.Heads.Length == 0)
         {
-            for (int d = 0; d < _nComponents; d++)
-            {
-                Y[i, d] -= mean[d];
-            }
+            return gradients;
         }
+
+        var engine = Engine;
+        var diff = engine.TensorSubtract(
+            DimensionalityReductionOps.SelectRows(y, pairs.Heads), DimensionalityReductionOps.SelectRows(y, pairs.Tails));
+        var denom = engine.TensorAddScalar(
+            DimensionalityReductionOps.RowSums(engine.TensorSquare(diff)), DimensionalityReductionOps.Constant<T>(offset));
+        var coefficient = engine.TensorDivide(
+            DimensionalityReductionOps.Full(denom.Length, DimensionalityReductionOps.Constant<T>(numerator)), engine.TensorSquare(denom));
+        var step = DimensionalityReductionOps.ScaleRows(diff, coefficient);
+        var headStep = attract ? engine.TensorNegate(step) : step;
+        var tailStep = attract ? step : engine.TensorNegate(step);
+        gradients = engine.TensorIndexAdd(gradients, 0, pairs.Heads, headStep);
+        return engine.TensorIndexAdd(gradients, 0, pairs.Tails, tailStep);
     }
 
     /// <summary>
@@ -533,19 +366,7 @@ public class PaCMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 "Use FitTransform() on the complete dataset.");
         }
 
-        int n = _embedding.GetLength(0);
-        int d = _embedding.GetLength(1);
-        var result = new T[n, d];
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                result[i, j] = NumOps.FromDouble(_embedding[i, j]);
-            }
-        }
-
-        return new Matrix<T>(result);
+        return _embedding.Clone();
     }
 
     /// <summary>

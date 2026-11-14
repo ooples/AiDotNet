@@ -48,7 +48,7 @@ public class TriMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly int? _randomState;
 
     // Fitted parameters
-    private double[,]? _embedding;
+    private Matrix<T>? _embedding;
     private int _nSamples;
 
     /// <summary>
@@ -59,7 +59,7 @@ public class TriMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the embedding result.
     /// </summary>
-    public double[,]? Embedding => _embedding;
+    public Matrix<T>? Embedding => _embedding;
 
     /// <summary>
     /// Gets whether this transformer supports inverse transformation.
@@ -136,7 +136,6 @@ public class TriMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     {
         _nSamples = data.Rows;
         int n = data.Rows;
-        int p = data.Columns;
 
         // TriMAP requires at least 3 samples to form triplets (anchor, positive, negative)
         if (n < 3)
@@ -148,109 +147,67 @@ public class TriMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSeededRandom(42);
 
-        // Convert to double array
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-            }
-        }
+        var x = Tensor<T>.FromMatrix(data);
 
         // Step 1: Compute pairwise distances
-        var distances = ComputePairwiseDistances(X, n, p);
+        var distances = DimensionalityReductionOps.EuclideanDistances(x, x);
 
-        // Step 2: Generate triplets
-        var triplets = GenerateTriplets(distances, n, random);
+        // Step 2: Generate candidate triplets (random ones are filtered by the weights below)
+        var (anchors, positives, negatives, isRandom) = GenerateTriplets(distances, n, random);
 
         // Step 3: Compute triplet weights
-        var weights = ComputeTripletWeights(triplets, distances, n);
+        var weights = ComputeTripletWeights(anchors, positives, negatives, isRandom, distances, n);
 
         // Step 4: Initialize embedding with PCA
-        var Y = InitializeWithPCA(X, n, p, random);
+        var y = InitializeWithPCA(x, n, random);
 
         // Step 5: Optimize using triplet loss
-        OptimizeEmbedding(Y, triplets, weights, n, random);
-
-        _embedding = Y;
+        _embedding = OptimizeEmbedding(y, anchors, positives, negatives, weights).ToMatrix();
     }
 
-    private double[,] ComputePairwiseDistances(double[,] X, int n, int p)
+    /// <summary>
+    /// Inlier triplets (each of the k nearest neighbours as positive with the next-ranked points as negatives)
+    /// and random triplets (random neighbour as positive, random point as negative). Random triplets are only
+    /// kept when the positive is strictly closer than the negative; that test is applied as a zero weight in
+    /// <see cref="ComputeTripletWeights"/>, flagged by the returned 0/1 tensor.
+    /// </summary>
+    private (Tensor<int> Anchors, Tensor<int> Positives, Tensor<int> Negatives, Tensor<T> IsRandom) GenerateTriplets(
+        Tensor<T> distances, int n, Random random)
     {
-        var distances = new double[n, n];
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i + 1; j < n; j++)
-            {
-                double dist = 0;
-                for (int k = 0; k < p; k++)
-                {
-                    double diff = X[i, k] - X[j, k];
-                    dist += diff * diff;
-                }
-                dist = Math.Sqrt(dist);
-                distances[i, j] = dist;
-                distances[j, i] = dist;
-            }
-        }
-
-        return distances;
-    }
-
-    private List<(int anchor, int positive, int negative)> GenerateTriplets(
-        double[,] distances, int n, Random random)
-    {
-        var triplets = new List<(int, int, int)>();
+        var engine = Engine;
         int k = Math.Min(_nInliers, n - 1);
         int nOut = Math.Min(_nOutliers, n - 1);
 
-        // Find k-nearest neighbors for each point
-        var neighbors = new int[n, k];
+        // Full neighbour ranking of every row (the point itself last), ties in index order
+        var masked = distances.Clone();
+        engine.TensorFillDiagonalInPlace(masked, NumOps.FromDouble(double.PositiveInfinity));
+        var sorted = AiDotNet.AnomalyDetection.AnomalyTensorOps.StableSortRows(masked, descending: false).Order.AsSpan().ToArray();
+
+        var anchors = new List<int>();
+        var positives = new List<int>();
+        var negatives = new List<int>();
+        var randomFlags = new List<int>();
+
         for (int i = 0; i < n; i++)
         {
-            var dists = new (double dist, int idx)[n];
-            for (int j = 0; j < n; j++)
-            {
-                dists[j] = (j == i ? double.MaxValue : distances[i, j], j);
-            }
-            Array.Sort(dists, (a, b) => a.dist.CompareTo(b.dist));
-
-            for (int j = 0; j < k; j++)
-            {
-                neighbors[i, j] = dists[j].idx;
-            }
-        }
-
-        // Generate triplets
-        for (int i = 0; i < n; i++)
-        {
-            // Sort distances once per point for mid-range negative selection
-            var sortedDists = new (double dist, int idx)[n];
-            for (int jj = 0; jj < n; jj++)
-            {
-                sortedDists[jj] = (jj == i ? double.MaxValue : distances[i, jj], jj);
-            }
-            Array.Sort(sortedDists, (a, b) => a.dist.CompareTo(b.dist));
+            int rowStart = i * n;
 
             // Inlier triplets (nearest neighbors as positives)
             for (int j = 0; j < k; j++)
             {
-                int positive = neighbors[i, j];
+                int positive = sorted[rowStart + j];
 
                 // Mid-range negatives
                 for (int m = 0; m < Math.Min(nOut, k); m++)
                 {
                     int negIdx = Math.Min(k + m, n - 1);
-
-                    if (negIdx < n)
+                    int negative = sorted[rowStart + negIdx];
+                    if (positive != negative)
                     {
-                        int negative = sortedDists[negIdx].idx;
-                        if (positive != negative)
-                        {
-                            triplets.Add((i, positive, negative));
-                        }
+                        anchors.Add(i);
+                        positives.Add(positive);
+                        negatives.Add(negative);
+                        randomFlags.Add(0);
                     }
                 }
             }
@@ -261,272 +218,151 @@ public class TriMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 if (k > 0)
                 {
                     int posIdx = random.Next(k);
-                    int positive = neighbors[i, posIdx];
+                    int positive = sorted[rowStart + posIdx];
                     int negative = random.Next(n);
                     while (negative == i || negative == positive)
                     {
                         negative = random.Next(n);
                     }
 
-                    if (distances[i, positive] < distances[i, negative])
-                    {
-                        triplets.Add((i, positive, negative));
-                    }
+                    anchors.Add(i);
+                    positives.Add(positive);
+                    negatives.Add(negative);
+                    randomFlags.Add(1);
                 }
             }
         }
 
-        return triplets;
+        return (
+            DimensionalityReductionOps.IndexTensor(anchors.ToArray()),
+            DimensionalityReductionOps.IndexTensor(positives.ToArray()),
+            DimensionalityReductionOps.IndexTensor(negatives.ToArray()),
+            new Tensor<int>(randomFlags.ToArray(), new[] { randomFlags.Count }).Cast<T>());
     }
 
-    private double[] ComputeTripletWeights(
-        List<(int anchor, int positive, int negative)> triplets,
-        double[,] distances,
-        int n)
+    /// <summary>
+    /// w = min(log(1 + dNeg / (dPos + 1e-10)) scale / (dNeg + 1e-10), 10) with scale the largest pairwise
+    /// distance (1 if zero), zero for random triplets whose positive is not strictly closer, normalized to sum one.
+    /// </summary>
+    private Tensor<T> ComputeTripletWeights(
+        Tensor<int> anchors, Tensor<int> positives, Tensor<int> negatives, Tensor<T> isRandom, Tensor<T> distances, int n)
     {
-        var weights = new double[triplets.Count];
+        var engine = Engine;
+        int count = anchors.Length;
+        if (count == 0)
+        {
+            return new Tensor<T>(new[] { 0 });
+        }
+
+        var flat = engine.Reshape(distances, new[] { n * n });
+        var anchorRows = engine.TensorMultiplyScalar(anchors, n);
+        var dPos = engine.TensorIndexSelect(flat, engine.TensorAdd(anchorRows, positives), 0);
+        var dNeg = engine.TensorIndexSelect(flat, engine.TensorAdd(anchorRows, negatives), 0);
 
         // Compute distance scale
-        double maxDist = 0;
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i + 1; j < n; j++)
-            {
-                maxDist = Math.Max(maxDist, distances[i, j]);
-            }
-        }
+        var maxDist = engine.ReduceMax(flat, new[] { 0 }, true);
+        var scale = engine.TensorWhere(engine.TensorGreaterThan(maxDist, NumOps.Zero), maxDist, engine.TensorOnesLike(maxDist));
 
-        double scale = maxDist > 0 ? maxDist : 1.0;
+        var epsilon = DimensionalityReductionOps.Tolerance<T>(1e-10);
+        var ratio = engine.TensorDivide(dNeg, engine.TensorAddScalar(dPos, epsilon));
+        var weights = engine.TensorLog(engine.TensorAddScalar(ratio, NumOps.One));
+        weights = engine.TensorDivide(engine.TensorMultiply(weights, scale), engine.TensorAddScalar(dNeg, epsilon));
+        weights = engine.TensorClampMax(weights, NumOps.FromDouble(10.0));
 
-        for (int t = 0; t < triplets.Count; t++)
-        {
-            var (anchor, positive, negative) = triplets[t];
-
-            // Weight based on distance ratio
-            double dPos = distances[anchor, positive];
-            double dNeg = distances[anchor, negative];
-
-            // Higher weight for triplets where positive is much closer than negative
-            double ratio = dNeg / (dPos + 1e-10);
-            weights[t] = Math.Log(1 + ratio);
-
-            // Normalize by scale
-            weights[t] *= scale / (dNeg + 1e-10);
-            weights[t] = Math.Min(weights[t], 10.0); // Clip weights
-        }
+        // Random triplets only count when d(anchor, positive) < d(anchor, negative)
+        var keep = engine.TensorAdd(
+            engine.TensorSubtract(engine.TensorOnesLike(isRandom), isRandom),
+            engine.TensorMultiply(isRandom, engine.TensorLessThan(dPos, dNeg)));
+        weights = engine.TensorMultiply(weights, keep);
 
         // Normalize weights
-        double sumWeights = 0;
-        for (int t = 0; t < weights.Length; t++) sumWeights += weights[t];
-        if (sumWeights > 0)
-        {
-            for (int t = 0; t < weights.Length; t++) weights[t] /= sumWeights;
-        }
-
-        return weights;
+        var sum = engine.ReduceSum(weights, new[] { 0 }, true);
+        var positive = engine.TensorGreaterThan(sum, NumOps.Zero);
+        return engine.TensorDivide(weights, engine.TensorWhere(positive, sum, engine.TensorOnesLike(sum)));
     }
 
-    private double[,] InitializeWithPCA(double[,] X, int n, int p, Random random)
+    /// <summary>Centered data projected on the top principal axes, each component scaled to unit variance.</summary>
+    private Tensor<T> InitializeWithPCA(Tensor<T> x, int n, Random random)
     {
-        // Center data
-        var mean = new double[p];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                mean[j] += X[i, j];
-            }
-        }
-        for (int j = 0; j < p; j++) mean[j] /= n;
+        var engine = Engine;
+        int p = x.Shape[1];
+        var centered = DimensionalityReductionOps.SubtractRow(x, DimensionalityReductionOps.ColumnMeans(x));
+        var covariance = engine.TensorDivideScalar(
+            DimensionalityReductionOps.TransposeMatMul(centered, centered), NumOps.FromDouble(n));
 
-        var Xc = new double[n, p];
-        for (int i = 0; i < n; i++)
+        // Top eigenvectors (zero columns past the feature count)
+        var (_, vectors) = DimensionalityReductionOps.SymmetricEigen(covariance, descending: true);
+        // Signs as the original deflated power iteration converges to them from its seeded start vectors
+        vectors = DimensionalityReductionOps.MatchStartSigns(vectors,
+            DimensionalityReductionOps.PowerIterationStarts<T>(random, _nComponents, x.Shape[1], 0.5));
+        int available = Math.Min(_nComponents, p);
+        var y = engine.TensorMatMul(centered, DimensionalityReductionOps.FirstColumns(vectors, available));
+        if (available < _nComponents)
         {
-            for (int j = 0; j < p; j++)
-            {
-                Xc[i, j] = X[i, j] - mean[j];
-            }
+            y = engine.TensorConcatenate(new[] { y, new Tensor<T>(new[] { n, _nComponents - available }) }, 1);
         }
 
-        // Compute covariance matrix
-        var C = new double[p, p];
-        for (int i = 0; i < p; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                for (int k = 0; k < n; k++)
-                {
-                    C[i, j] += Xc[k, i] * Xc[k, j];
-                }
-                C[i, j] /= n;
-            }
-        }
-
-        // Power iteration to get top eigenvectors
-        var V = new double[p, _nComponents];
-        var A = (double[,])C.Clone();
-
-        for (int d = 0; d < _nComponents; d++)
-        {
-            var v = new double[p];
-            for (int i = 0; i < p; i++) v[i] = random.NextDouble() - 0.5;
-
-            for (int iter = 0; iter < 50; iter++)
-            {
-                var Av = new double[p];
-                for (int i = 0; i < p; i++)
-                {
-                    for (int j = 0; j < p; j++) Av[i] += A[i, j] * v[j];
-                }
-
-                double norm = 0;
-                for (int i = 0; i < p; i++) norm += Av[i] * Av[i];
-                norm = Math.Sqrt(norm);
-                if (norm < 1e-10) break;
-
-                for (int i = 0; i < p; i++) v[i] = Av[i] / norm;
-            }
-
-            for (int i = 0; i < p; i++) V[i, d] = v[i];
-
-            // Deflate
-            var Av2 = new double[p];
-            double lambda = 0;
-            for (int i = 0; i < p; i++)
-            {
-                for (int j = 0; j < p; j++) Av2[i] += A[i, j] * v[j];
-                lambda += v[i] * Av2[i];
-            }
-
-            for (int i = 0; i < p; i++)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    A[i, j] -= lambda * v[i] * v[j];
-                }
-            }
-        }
-
-        // Project data
-        var Y = new double[n, _nComponents];
-        for (int i = 0; i < n; i++)
-        {
-            for (int d = 0; d < _nComponents; d++)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    Y[i, d] += Xc[i, j] * V[j, d];
-                }
-            }
-        }
-
-        // Scale to unit variance
-        for (int d = 0; d < _nComponents; d++)
-        {
-            double meanD = 0, varD = 0;
-            for (int i = 0; i < n; i++) meanD += Y[i, d];
-            meanD /= n;
-            for (int i = 0; i < n; i++)
-            {
-                Y[i, d] -= meanD;
-                varD += Y[i, d] * Y[i, d];
-            }
-            varD /= n;
-            double stdD = Math.Sqrt(varD);
-            if (stdD > 1e-10)
-            {
-                for (int i = 0; i < n; i++) Y[i, d] /= stdD;
-            }
-        }
-
-        return Y;
+        // Scale to unit variance (components with std <= 1e-10 are only centered)
+        y = DimensionalityReductionOps.SubtractRow(y, DimensionalityReductionOps.ColumnMeans(y));
+        var std = engine.TensorSqrt(DimensionalityReductionOps.ColumnMeans(engine.TensorSquare(y)));
+        var divisor = engine.TensorWhere(
+            engine.TensorGreaterThan(std, DimensionalityReductionOps.Tolerance<T>(1e-10)), std, engine.TensorOnesLike(std));
+        return DimensionalityReductionOps.ScaleColumns(y, engine.TensorReciprocal(divisor));
     }
 
-    private void OptimizeEmbedding(
-        double[,] Y,
-        List<(int anchor, int positive, int negative)> triplets,
-        double[] weights,
-        int n,
-        Random random)
+    /// <summary>
+    /// Full-batch momentum descent on the weighted margin-1 triplet loss max(0, dPos - dNeg + 1) with
+    /// d = sqrt(|.|^2 + 1e-10). The gradient sums every triplet against the same positions, so the original
+    /// per-iteration shuffle only changed the summation order and is not repeated.
+    /// </summary>
+    private Tensor<T> OptimizeEmbedding(
+        Tensor<T> y, Tensor<int> anchors, Tensor<int> positives, Tensor<int> negatives, Tensor<T> weights)
     {
+        var engine = Engine;
+        int n = y.Shape[0];
         double lr = _learningRate;
-
-        // Momentum
-        var velocity = new double[n, _nComponents];
-        double momentum = 0.5;
+        var velocity = new Tensor<T>(new[] { n, _nComponents });
+        var momentum = NumOps.FromDouble(0.5);
+        var lateMomentum = NumOps.FromDouble(0.8);
+        var epsilon = DimensionalityReductionOps.Tolerance<T>(1e-10);
+        var margin = NumOps.FromDouble(1.0);
 
         for (int iter = 0; iter < _nIter; iter++)
         {
-            // Shuffle triplets using Fisher-Yates shuffle
-            for (int i = triplets.Count - 1; i > 0; i--)
+            var gradients = new Tensor<T>(new[] { n, _nComponents });
+
+            if (anchors.Length > 0)
             {
-                int j = random.Next(i + 1);
+                var anchorRows = DimensionalityReductionOps.SelectRows(y, anchors);
+                var diffPos = engine.TensorSubtract(anchorRows, DimensionalityReductionOps.SelectRows(y, positives));
+                var diffNeg = engine.TensorSubtract(anchorRows, DimensionalityReductionOps.SelectRows(y, negatives));
+                var dPos = engine.TensorSqrt(engine.TensorAddScalar(DimensionalityReductionOps.RowSums(engine.TensorSquare(diffPos)), epsilon));
+                var dNeg = engine.TensorSqrt(engine.TensorAddScalar(DimensionalityReductionOps.RowSums(engine.TensorSquare(diffNeg)), epsilon));
 
-                // Swap triplets
-                var tmpTriplet = triplets[i];
-                triplets[i] = triplets[j];
-                triplets[j] = tmpTriplet;
+                // Active triplets: dPos - dNeg + margin > 0
+                var active = engine.TensorGreaterThan(engine.TensorAddScalar(engine.TensorSubtract(dPos, dNeg), margin), NumOps.Zero);
+                var activeWeights = engine.TensorMultiply(weights, active);
 
-                // Swap corresponding weights
-                double tmpWeight = weights[i];
-                weights[i] = weights[j];
-                weights[j] = tmpWeight;
-            }
+                var gradPos = DimensionalityReductionOps.ScaleRows(
+                    diffPos, engine.TensorDivide(activeWeights, engine.TensorAddScalar(dPos, epsilon)));
+                var gradNeg = DimensionalityReductionOps.ScaleRows(
+                    diffNeg, engine.TensorDivide(activeWeights, engine.TensorAddScalar(dNeg, epsilon)));
 
-            var gradients = new double[n, _nComponents];
-
-            // Compute gradients
-            for (int t = 0; t < triplets.Count; t++)
-            {
-                var (anchor, positive, negative) = triplets[t];
-                double w = weights[t];
-
-                // Compute distances in embedding space
-                double dPos = 0, dNeg = 0;
-                for (int d = 0; d < _nComponents; d++)
-                {
-                    double diffPos = Y[anchor, d] - Y[positive, d];
-                    double diffNeg = Y[anchor, d] - Y[negative, d];
-                    dPos += diffPos * diffPos;
-                    dNeg += diffNeg * diffNeg;
-                }
-                dPos = Math.Sqrt(dPos + 1e-10);
-                dNeg = Math.Sqrt(dNeg + 1e-10);
-
-                // Triplet loss gradient: want dPos < dNeg
-                // Loss = max(0, dPos - dNeg + margin)
-                double margin = 1.0;
-                double loss = dPos - dNeg + margin;
-
-                if (loss > 0)
-                {
-                    // Gradient for anchor
-                    for (int d = 0; d < _nComponents; d++)
-                    {
-                        double diffPos = Y[anchor, d] - Y[positive, d];
-                        double diffNeg = Y[anchor, d] - Y[negative, d];
-
-                        double gradPos = diffPos / (dPos + 1e-10);
-                        double gradNeg = diffNeg / (dNeg + 1e-10);
-
-                        gradients[anchor, d] += w * (gradPos - gradNeg);
-                        gradients[positive, d] += w * (-gradPos);
-                        gradients[negative, d] += w * gradNeg;
-                    }
-                }
+                gradients = engine.TensorIndexAdd(gradients, 0, anchors, engine.TensorSubtract(gradPos, gradNeg));
+                gradients = engine.TensorIndexAdd(gradients, 0, positives, engine.TensorNegate(gradPos));
+                gradients = engine.TensorIndexAdd(gradients, 0, negatives, gradNeg);
             }
 
             // Update with momentum
-            if (iter > 100) momentum = 0.8;
-
-            for (int i = 0; i < n; i++)
+            if (iter > 100)
             {
-                for (int d = 0; d < _nComponents; d++)
-                {
-                    velocity[i, d] = momentum * velocity[i, d] - lr * gradients[i, d];
-                    Y[i, d] += velocity[i, d];
-                }
+                momentum = lateMomentum;
             }
+
+            velocity = engine.TensorSubtract(
+                engine.TensorMultiplyScalar(velocity, momentum),
+                engine.TensorMultiplyScalar(gradients, DimensionalityReductionOps.Constant<T>(lr)));
+            y = engine.TensorAdd(y, velocity);
 
             // Decay learning rate
             if (iter > 0 && iter % 100 == 0)
@@ -534,6 +370,8 @@ public class TriMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 lr *= 0.9;
             }
         }
+
+        return y;
     }
 
     /// <summary>
@@ -553,19 +391,7 @@ public class TriMAP<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 "Use FitTransform() on the complete dataset.");
         }
 
-        int n = _embedding.GetLength(0);
-        int d = _embedding.GetLength(1);
-        var result = new T[n, d];
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                result[i, j] = NumOps.FromDouble(_embedding[i, j]);
-            }
-        }
-
-        return new Matrix<T>(result);
+        return _embedding.Clone();
     }
 
     /// <summary>

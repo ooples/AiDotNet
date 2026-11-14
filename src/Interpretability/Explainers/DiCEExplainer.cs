@@ -163,10 +163,9 @@ public class DiCEExplainer<T> : ILocalExplainer<T, DiCEExplanation<T>>, IGPUAcce
         // Get original prediction and determine target
         var instanceMatrix = CreateSingleRowMatrix(instance);
         var originalPred = _predictFunction(instanceMatrix)[0];
-        double originalValue = NumOps.ToDouble(originalPred);
 
         // Target is the opposite class
-        double targetValue = originalValue >= _targetThreshold ? 0.0 : 1.0;
+        T targetValue = NumOps.GreaterThanOrEquals(originalPred, NumOps.FromDouble(_targetThreshold)) ? NumOps.Zero : NumOps.One;
 
         return ExplainWithTarget(instance, targetValue);
     }
@@ -177,7 +176,7 @@ public class DiCEExplainer<T> : ILocalExplainer<T, DiCEExplanation<T>>, IGPUAcce
     /// <param name="instance">The input to explain.</param>
     /// <param name="targetValue">The desired prediction value.</param>
     /// <returns>DiCE explanation with multiple diverse counterfactuals.</returns>
-    public DiCEExplanation<T> ExplainWithTarget(Vector<T> instance, double targetValue)
+    public DiCEExplanation<T> ExplainWithTarget(Vector<T> instance, T targetValue)
     {
         var rand = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
@@ -193,8 +192,8 @@ public class DiCEExplainer<T> : ILocalExplainer<T, DiCEExplanation<T>>, IGPUAcce
         // Genetic algorithm main loop
         for (int gen = 0; gen < _maxGenerations; gen++)
         {
-            // Evaluate fitness of all individuals
-            var fitness = EvaluatePopulation(population, instance, targetValue);
+            // Evaluate fitness of all individuals (ranked: equal fitness, equal rank)
+            var fitness = ExplainerTensorOps<T>.DenseRanks(EvaluatePopulation(population, instance, targetValue));
 
             // Check early stopping: if we have enough valid diverse counterfactuals
             var validCount = CountValidCounterfactuals(population, targetValue);
@@ -202,7 +201,7 @@ public class DiCEExplainer<T> : ILocalExplainer<T, DiCEExplanation<T>>, IGPUAcce
             {
                 // Check if diversity is sufficient
                 var topCfs = SelectTopCounterfactuals(population, fitness, instance, targetValue);
-                if (ComputeSetDiversity(topCfs, instance) > 0.5)
+                if (HasSetDiversityAbove(topCfs, 0.5))
                 {
                     break;
                 }
@@ -222,22 +221,23 @@ public class DiCEExplainer<T> : ILocalExplainer<T, DiCEExplanation<T>>, IGPUAcce
         }
 
         // Select final diverse counterfactuals
-        var finalFitness = EvaluatePopulation(population, instance, targetValue);
+        var finalFitness = ExplainerTensorOps<T>.DenseRanks(EvaluatePopulation(population, instance, targetValue));
         var counterfactuals = SelectDiverseCounterfactuals(population, finalFitness, instance, targetValue);
 
         // Create explanations
         var cfExplanations = new List<SingleCounterfactual<T>>();
-        foreach (var cf in counterfactuals)
+        if (counterfactuals.Count > 0)
         {
-            var cfMatrix = CreateSingleRowMatrix(cf);
-            var cfPred = _predictFunction(cfMatrix);
-            cfExplanations.Add(CreateSingleCounterfactual(instance, cf, cfPred[0]));
+            // The model's first output for each counterfactual (one prediction call each, in order)
+            var cfPredictions = Predict(counterfactuals).ToVector();
+            cfExplanations.AddRange(counterfactuals.Zip(cfPredictions,
+                (cf, prediction) => CreateSingleCounterfactual(instance, cf, prediction)));
         }
 
         return new DiCEExplanation<T>(
             originalInstance: instance,
             originalPrediction: originalPred,
-            targetPrediction: NumOps.FromDouble(targetValue),
+            targetPrediction: targetValue,
             counterfactuals: cfExplanations,
             featureNames: _featureNames);
     }
@@ -290,175 +290,166 @@ public class DiCEExplainer<T> : ILocalExplainer<T, DiCEExplanation<T>>, IGPUAcce
     /// <summary>
     /// Evaluates fitness of all individuals in the population.
     /// </summary>
-    private double[] EvaluatePopulation(List<Vector<T>> population, Vector<T> original, double targetValue)
+    private Tensor<T> EvaluatePopulation(List<Vector<T>> population, Vector<T> original, T targetValue)
     {
-        var fitness = new double[population.Count];
-
-        for (int i = 0; i < population.Count; i++)
+        var engine = AiDotNetEngine.Current;
+        int count = population.Count;
+        if (count == 0)
         {
-            fitness[i] = ComputeFitness(population[i], original, targetValue, population);
+            return new Tensor<T>(new[] { 0 });
         }
 
-        return fitness;
+        // Validity: Does it achieve the target?
+        var validityLoss = ComputeValidityLoss(Predict(population), targetValue);
+
+        // Proximity: Distance from original
+        var proximity = PairwiseDistances(new List<Vector<T>> { original }, population).Reshape(new[] { count });
+
+        // Sparsity: Fraction of mutable features changed
+        var sparsity = ComputeSparsity(original, population);
+
+        // Diversity: Average distance from the other individuals
+        var diversity = count <= 1
+            ? engine.TensorFullLike(proximity, NumOps.One)
+            : engine.TensorDivideScalar(
+                engine.ReduceSum(PairwiseDistances(population, population), new[] { 1 }, false), NumOps.FromDouble(count - 1));
+
+        // Combined fitness (lower is better for losses)
+        var fitness = engine.TensorMultiplyScalar(validityLoss, NumOps.FromDouble(-10)); // Strong penalty for not achieving target
+        fitness = engine.TensorSubtract(fitness, engine.TensorMultiplyScalar(proximity, NumOps.FromDouble(_proximityWeight)));
+        fitness = engine.TensorSubtract(fitness, engine.TensorMultiplyScalar(sparsity, NumOps.FromDouble(_sparsityWeight)));
+        return engine.TensorAdd(fitness, engine.TensorMultiplyScalar(diversity, NumOps.FromDouble(_diversityWeight))); // Reward diversity
     }
 
     /// <summary>
-    /// Computes fitness for a single individual.
+    /// The model's first output for each individual, one prediction call per individual.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Fitness combines multiple objectives:
-    /// - Validity: Does it achieve the target prediction?
-    /// - Proximity: How close is it to the original?
-    /// - Sparsity: How few features changed?
-    /// - Diversity: How different is it from other counterfactuals?
-    /// </para>
-    /// </remarks>
-    private double ComputeFitness(Vector<T> individual, Vector<T> original, double targetValue, List<Vector<T>> population)
+    private Tensor<T> Predict(List<Vector<T>> population)
     {
-        // Validity: Does it achieve the target?
-        var pred = _predictFunction(CreateSingleRowMatrix(individual))[0];
-        double predValue = NumOps.ToDouble(pred);
-        double validityLoss = ComputeValidityLoss(predValue, targetValue);
-
-        // Proximity: Distance from original
-        double proximity = ComputeNormalizedDistance(original, individual);
-
-        // Sparsity: Number of features changed
-        double sparsity = ComputeSparsity(original, individual);
-
-        // Diversity: Average distance from other individuals
-        double diversity = ComputeDiversityScore(individual, population, original);
-
-        // Combined fitness (lower is better for losses)
-        double fitness = -validityLoss * 10  // Strong penalty for not achieving target
-                        - _proximityWeight * proximity
-                        - _sparsityWeight * sparsity
-                        + _diversityWeight * diversity;  // Reward diversity
-
-        return fitness;
+        var predictions = population
+            .Select(individual => _predictFunction(CreateSingleRowMatrix(individual)).GetSubVector(0, 1))
+            .ToList();
+        return AiDotNetEngine.Current.TensorSliceAxis(ExplainerTensorOps<T>.Stack(predictions), 1, 0);
     }
 
     /// <summary>
     /// Computes validity loss (how far from target prediction).
     /// </summary>
-    private double ComputeValidityLoss(double predicted, double target)
+    private Tensor<T> ComputeValidityLoss(Tensor<T> predicted, T target)
     {
-        bool reachedTarget = (target >= _targetThreshold && predicted >= _targetThreshold) ||
-                            (target < _targetThreshold && predicted < _targetThreshold);
+        // Distance from target threshold, zero once the prediction is on the target's side
+        var engine = AiDotNetEngine.Current;
+        T threshold = NumOps.FromDouble(_targetThreshold);
+        var gap = NumOps.GreaterThanOrEquals(target, threshold)
+            ? engine.TensorSubtract(engine.TensorFullLike(predicted, threshold), predicted)
+            : engine.TensorSubtractScalar(predicted, threshold);
+        return engine.TensorMax(gap, NumOps.Zero);
+    }
 
-        if (reachedTarget)
-        {
-            return 0;
-        }
-
-        // Distance from target threshold
-        if (target >= _targetThreshold)
-        {
-            return Math.Max(0, _targetThreshold - predicted);
-        }
-        else
-        {
-            return Math.Max(0, predicted - _targetThreshold);
-        }
+    /// <summary>
+    /// Whether each prediction reaches the target's side of the threshold.
+    /// </summary>
+    private bool[] IsValid(Tensor<T> predicted, T target)
+    {
+        var engine = AiDotNetEngine.Current;
+        T threshold = NumOps.FromDouble(_targetThreshold);
+        var valid = NumOps.GreaterThanOrEquals(target, threshold)
+            ? engine.TensorGreaterEqual(predicted, engine.TensorFullLike(predicted, threshold))
+            : engine.TensorLessThan(predicted, threshold);
+        return valid.Cast<int>().ToArray().Select(flag => flag != 0).ToArray();
     }
 
     /// <summary>
     /// Computes normalized distance from original.
     /// </summary>
-    private double ComputeNormalizedDistance(Vector<T> original, Vector<T> counterfactual)
+    private Tensor<T> PairwiseDistances(List<Vector<T>> first, List<Vector<T>> second)
     {
-        double sumSq = 0;
-        int changed = 0;
+        // sqrt(sum over changed features (|diff| > 1e-6) of (diff / (range + 1e-6))^2), as a [first, second] tensor
+        var engine = AiDotNetEngine.Current;
+        int rows = first.Count;
+        int columns = second.Count;
+        var shape = new[] { rows, columns, _numFeatures };
+        var a = engine.TensorBroadcastTo(ExplainerTensorOps<T>.Stack(first).Reshape(new[] { rows, 1, _numFeatures }), shape);
+        var b = engine.TensorBroadcastTo(ExplainerTensorOps<T>.Stack(second).Reshape(new[] { 1, columns, _numFeatures }), shape);
+        var diff = engine.TensorSubtract(a, b);
 
-        for (int f = 0; f < _numFeatures; f++)
+        var scale = engine.TensorAddScalar(NormalizationRanges().AsTensor(), ExplainerTensorOps<T>.Tolerance(1e-6));
+        var normalized = engine.TensorDivide(diff, engine.TensorBroadcastTo(scale.Reshape(new[] { 1, 1, _numFeatures }), shape));
+        var changed = engine.TensorGreaterThan(engine.TensorAbs(diff), ExplainerTensorOps<T>.Tolerance(1e-6));
+        var sumSq = engine.ReduceSum(engine.TensorMultiply(changed, engine.TensorSquare(normalized)), new[] { 2 }, false);
+        return engine.TensorSqrt(sumSq);
+    }
+
+    /// <summary>
+    /// The normalized distance between two instances.
+    /// </summary>
+    private T ComputeNormalizedDistance(Vector<T> original, Vector<T> counterfactual)
+    {
+        return PairwiseDistances(new List<Vector<T>> { original }, new List<Vector<T>> { counterfactual }).GetFlat(0);
+    }
+
+    /// <summary>
+    /// The per-feature normalization ranges (1 for features without a known range).
+    /// </summary>
+    private Vector<T> NormalizationRanges()
+    {
+        var engine = AiDotNetEngine.Current;
+        if (_featureRanges == null || _featureRanges.Length == 0)
         {
-            double origVal = NumOps.ToDouble(original[f]);
-            double cfVal = NumOps.ToDouble(counterfactual[f]);
-            double range = GetFeatureRange(f);
-
-            if (Math.Abs(origVal - cfVal) > 1e-6)
-            {
-                double normalizedDiff = (origVal - cfVal) / (range + 1e-6);
-                sumSq += normalizedDiff * normalizedDiff;
-                changed++;
-            }
+            return engine.Fill(_numFeatures, NumOps.One);
         }
 
-        return Math.Sqrt(sumSq);
+        var known = new Vector<T>(_featureRanges);
+        if (known.Length >= _numFeatures)
+        {
+            return known.GetSubVector(0, _numFeatures);
+        }
+
+        return engine.TensorConcatenate(
+            new[] { known.AsTensor(), engine.Fill(_numFeatures - known.Length, NumOps.One).AsTensor() }, 0).ToVector();
     }
 
     /// <summary>
     /// Computes sparsity (fraction of features changed).
     /// </summary>
-    private double ComputeSparsity(Vector<T> original, Vector<T> counterfactual)
+    private Tensor<T> ComputeSparsity(Vector<T> original, List<Vector<T>> population)
     {
-        int changed = 0;
-        int mutableCount = 0;
-
-        for (int f = 0; f < _numFeatures; f++)
+        var engine = AiDotNetEngine.Current;
+        var mutable = Enumerable.Range(0, _numFeatures).Select(IsMutable).ToArray();
+        int mutableCount = mutable.Count(isMutable => isMutable);
+        if (mutableCount == 0)
         {
-            if (!IsMutable(f)) continue;
-            mutableCount++;
-
-            double origVal = NumOps.ToDouble(original[f]);
-            double cfVal = NumOps.ToDouble(counterfactual[f]);
-
-            if (Math.Abs(origVal - cfVal) > 1e-6)
-            {
-                changed++;
-            }
+            return new Tensor<T>(new[] { population.Count });
         }
 
-        return mutableCount > 0 ? (double)changed / mutableCount : 0;
-    }
-
-    /// <summary>
-    /// Computes diversity score for an individual.
-    /// </summary>
-    private double ComputeDiversityScore(Vector<T> individual, List<Vector<T>> population, Vector<T> original)
-    {
-        if (population.Count <= 1) return 1.0;
-
-        double totalDist = 0;
-        int count = 0;
-
-        foreach (var other in population)
-        {
-            if (other == individual) continue;
-            totalDist += ComputeNormalizedDistance(individual, other);
-            count++;
-        }
-
-        return count > 0 ? totalDist / count : 0;
+        // Fraction of the mutable features changed by more than 1e-6
+        var individuals = ExplainerTensorOps<T>.Stack(population);
+        var originals = engine.TensorBroadcastTo(ExplainerTensorOps<T>.RowTensor(original.GetSubVector(0, _numFeatures)), individuals.Shape.ToArray());
+        var changed = engine.TensorGreaterThan(engine.TensorAbs(engine.TensorSubtract(originals, individuals)), ExplainerTensorOps<T>.Tolerance(1e-6));
+        var mutableMask = engine.TensorBroadcastTo(
+            new Tensor<int>(mutable.Select(isMutable => isMutable ? 1 : 0).ToArray(), new[] { 1, _numFeatures }).Cast<T>(), individuals.Shape.ToArray());
+        var changedCount = engine.ReduceSum(engine.TensorMultiply(changed, mutableMask), new[] { 1 }, false);
+        return engine.TensorDivideScalar(changedCount, NumOps.FromDouble(mutableCount));
     }
 
     /// <summary>
     /// Computes diversity of a set of counterfactuals.
     /// </summary>
-    private double ComputeSetDiversity(List<Vector<T>> counterfactuals, Vector<T> original)
+    private bool HasSetDiversityAbove(List<Vector<T>> counterfactuals, double threshold)
     {
-        if (counterfactuals.Count <= 1) return 0;
+        int n = counterfactuals.Count;
+        if (n <= 1) return false;
 
-        double totalDist = 0;
-        int pairs = 0;
-
-        for (int i = 0; i < counterfactuals.Count; i++)
-        {
-            for (int j = i + 1; j < counterfactuals.Count; j++)
-            {
-                totalDist += ComputeNormalizedDistance(counterfactuals[i], counterfactuals[j]);
-                pairs++;
-            }
-        }
-
-        return pairs > 0 ? totalDist / pairs : 0;
+        // Mean distance over the pairs i < j (the distance matrix is symmetric with a zero diagonal)
+        T totalDist = NumOps.Divide(AiDotNetEngine.Current.TensorSum(PairwiseDistances(counterfactuals, counterfactuals)), NumOps.FromDouble(2));
+        T meanDist = NumOps.Divide(totalDist, NumOps.FromDouble(n * (n - 1) / 2));
+        return NumOps.GreaterThan(meanDist, NumOps.FromDouble(threshold));
     }
 
     /// <summary>
     /// Tournament selection for genetic algorithm.
     /// </summary>
-    private List<Vector<T>> TournamentSelection(List<Vector<T>> population, double[] fitness, Random rand)
+    private List<Vector<T>> TournamentSelection(List<Vector<T>> population, int[] fitness, Random rand)
     {
         var selected = new List<Vector<T>>();
         int tournamentSize = 3;
@@ -466,7 +457,7 @@ public class DiCEExplainer<T> : ILocalExplainer<T, DiCEExplanation<T>>, IGPUAcce
         for (int i = 0; i < _populationSize; i++)
         {
             int best = rand.Next(population.Count);
-            double bestFitness = fitness[best];
+            int bestFitness = fitness[best];
 
             for (int t = 1; t < tournamentSize; t++)
             {
@@ -516,29 +507,18 @@ public class DiCEExplainer<T> : ILocalExplainer<T, DiCEExplanation<T>>, IGPUAcce
     private (Vector<T>, Vector<T>) SinglePointCrossover(Vector<T> parent1, Vector<T> parent2, Vector<T> original, Random rand)
     {
         int crossoverPoint = rand.Next(1, _numFeatures);
-        var child1 = new T[_numFeatures];
-        var child2 = new T[_numFeatures];
+        var engine = AiDotNetEngine.Current;
 
-        for (int f = 0; f < _numFeatures; f++)
-        {
-            if (!IsMutable(f))
-            {
-                child1[f] = original[f];
-                child2[f] = original[f];
-            }
-            else if (f < crossoverPoint)
-            {
-                child1[f] = parent1[f];
-                child2[f] = parent2[f];
-            }
-            else
-            {
-                child1[f] = parent2[f];
-                child2[f] = parent1[f];
-            }
-        }
+        // Immutable features keep the original value; mutable ones swap parents at the crossover point
+        var immutable = Enumerable.Range(0, _numFeatures).Select(f => !IsMutable(f)).ToArray();
+        var beforePoint = Enumerable.Range(0, _numFeatures).Select(f => f < crossoverPoint).ToArray();
+        var first = parent1.GetSubVector(0, _numFeatures).AsTensor();
+        var second = parent2.GetSubVector(0, _numFeatures).AsTensor();
+        var originalValues = original.GetSubVector(0, _numFeatures).AsTensor();
 
-        return (new Vector<T>(child1), new Vector<T>(child2));
+        var child1 = engine.TensorWhere(immutable, originalValues, engine.TensorWhere(beforePoint, first, second));
+        var child2 = engine.TensorWhere(immutable, originalValues, engine.TensorWhere(beforePoint, second, first));
+        return (child1.ToVector(), child2.ToVector());
     }
 
     /// <summary>
@@ -566,7 +546,7 @@ public class DiCEExplainer<T> : ILocalExplainer<T, DiCEExplanation<T>>, IGPUAcce
     /// <summary>
     /// Combines parents and offspring with elitism.
     /// </summary>
-    private List<Vector<T>> CombineWithElitism(List<Vector<T>> parents, List<Vector<T>> offspring, double[] parentFitness, Vector<T> original, double targetValue)
+    private List<Vector<T>> CombineWithElitism(List<Vector<T>> parents, List<Vector<T>> offspring, int[] parentFitness, Vector<T> original, T targetValue)
     {
         // Keep top 10% of parents (elitism)
         int eliteCount = Math.Max(1, _populationSize / 10);
@@ -582,7 +562,7 @@ public class DiCEExplainer<T> : ILocalExplainer<T, DiCEExplanation<T>>, IGPUAcce
         }
 
         // Fill rest with offspring
-        var offspringFitness = EvaluatePopulation(offspring, original, targetValue);
+        var offspringFitness = ExplainerTensorOps<T>.DenseRanks(EvaluatePopulation(offspring, original, targetValue));
         var offspringIndices = Enumerable.Range(0, offspring.Count)
             .OrderByDescending(i => offspringFitness[i])
             .Take(_populationSize - eliteCount)
@@ -599,35 +579,20 @@ public class DiCEExplainer<T> : ILocalExplainer<T, DiCEExplanation<T>>, IGPUAcce
     /// <summary>
     /// Counts valid counterfactuals that reach the target.
     /// </summary>
-    private int CountValidCounterfactuals(List<Vector<T>> population, double targetValue)
+    private int CountValidCounterfactuals(List<Vector<T>> population, T targetValue)
     {
-        int count = 0;
-        foreach (var individual in population)
-        {
-            var pred = _predictFunction(CreateSingleRowMatrix(individual))[0];
-            double predValue = NumOps.ToDouble(pred);
-            bool valid = (targetValue >= _targetThreshold && predValue >= _targetThreshold) ||
-                        (targetValue < _targetThreshold && predValue < _targetThreshold);
-            if (valid) count++;
-        }
-        return count;
+        if (population.Count == 0) return 0;
+        return IsValid(Predict(population), targetValue).Count(valid => valid);
     }
 
     /// <summary>
     /// Selects top counterfactuals based on fitness.
     /// </summary>
-    private List<Vector<T>> SelectTopCounterfactuals(List<Vector<T>> population, double[] fitness, Vector<T> original, double targetValue)
+    private List<Vector<T>> SelectTopCounterfactuals(List<Vector<T>> population, int[] fitness, Vector<T> original, T targetValue)
     {
         // Filter to valid counterfactuals
-        var validIndices = new List<int>();
-        for (int i = 0; i < population.Count; i++)
-        {
-            var pred = _predictFunction(CreateSingleRowMatrix(population[i]))[0];
-            double predValue = NumOps.ToDouble(pred);
-            bool valid = (targetValue >= _targetThreshold && predValue >= _targetThreshold) ||
-                        (targetValue < _targetThreshold && predValue < _targetThreshold);
-            if (valid) validIndices.Add(i);
-        }
+        var valid = population.Count > 0 ? IsValid(Predict(population), targetValue) : Array.Empty<bool>();
+        var validIndices = Enumerable.Range(0, population.Count).Where(i => valid[i]).ToList();
 
         if (validIndices.Count == 0)
         {
@@ -650,21 +615,11 @@ public class DiCEExplainer<T> : ILocalExplainer<T, DiCEExplanation<T>>, IGPUAcce
     /// <summary>
     /// Selects diverse counterfactuals using greedy selection.
     /// </summary>
-    private List<Vector<T>> SelectDiverseCounterfactuals(List<Vector<T>> population, double[] fitness, Vector<T> original, double targetValue)
+    private List<Vector<T>> SelectDiverseCounterfactuals(List<Vector<T>> population, int[] fitness, Vector<T> original, T targetValue)
     {
         // Get valid counterfactuals sorted by fitness
-        var candidates = new List<(int Index, double Fitness)>();
-        for (int i = 0; i < population.Count; i++)
-        {
-            var pred = _predictFunction(CreateSingleRowMatrix(population[i]))[0];
-            double predValue = NumOps.ToDouble(pred);
-            bool valid = (targetValue >= _targetThreshold && predValue >= _targetThreshold) ||
-                        (targetValue < _targetThreshold && predValue < _targetThreshold);
-            if (valid)
-            {
-                candidates.Add((i, fitness[i]));
-            }
-        }
+        var valid = population.Count > 0 ? IsValid(Predict(population), targetValue) : Array.Empty<bool>();
+        var candidates = Enumerable.Range(0, population.Count).Where(i => valid[i]).ToList();
 
         if (candidates.Count == 0)
         {
@@ -677,40 +632,49 @@ public class DiCEExplainer<T> : ILocalExplainer<T, DiCEExplanation<T>>, IGPUAcce
         }
 
         // Greedy selection for diversity
-        var selected = new List<Vector<T>>();
-        var candidateList = candidates.OrderByDescending(c => c.Fitness).ToList();
+        var candidateList = candidates.OrderByDescending(i => fitness[i]).Select(i => population[i]).ToList();
 
         // Add best one first
-        selected.Add(population[candidateList[0].Index]);
-        candidateList.RemoveAt(0);
-
-        // Greedily add most diverse remaining
-        while (selected.Count < _numCounterfactuals && candidateList.Count > 0)
+        var selected = new List<Vector<T>> { candidateList[0] };
+        var remaining = candidateList.Skip(1).ToList();
+        if (selected.Count >= _numCounterfactuals || remaining.Count == 0)
         {
-            double maxMinDist = -1;
-            int bestIdx = 0;
+            return selected;
+        }
 
-            for (int c = 0; c < candidateList.Count; c++)
+        // Greedily add the remaining candidate farthest from its nearest selected one
+        var engine = AiDotNetEngine.Current;
+        var distances = PairwiseDistances(remaining, candidateList);
+        // Nearest-selected distance per candidate; a NaN distance is skipped (MaxValue until a number arrives)
+        var minDistances = NanSkippingMin(
+            engine.TensorFullLike(engine.TensorSliceAxis(distances, 1, 0), NumOps.MaxValue), engine.TensorSliceAxis(distances, 1, 0));
+        var taken = new bool[remaining.Count];
+        T negativeOne = NumOps.Negate(NumOps.One);
+        var unavailable = engine.TensorFullLike(minDistances, negativeOne);
+        while (selected.Count < _numCounterfactuals && selected.Count < candidateList.Count)
+        {
+            // The farthest untaken candidate (scan seeded with -1); with none above -1, the first untaken one
+            int bestIdx = ExplainerTensorOps<T>.FirstArgMaxAbove(
+                engine.TensorWhere(taken, unavailable, minDistances).ToVector(), negativeOne);
+            if (bestIdx < 0)
             {
-                double minDist = double.MaxValue;
-                foreach (var s in selected)
-                {
-                    double dist = ComputeNormalizedDistance(population[candidateList[c].Index], s);
-                    if (dist < minDist) minDist = dist;
-                }
-
-                if (minDist > maxMinDist)
-                {
-                    maxMinDist = minDist;
-                    bestIdx = c;
-                }
+                bestIdx = Array.IndexOf(taken, false);
             }
-
-            selected.Add(population[candidateList[bestIdx].Index]);
-            candidateList.RemoveAt(bestIdx);
+            selected.Add(remaining[bestIdx]);
+            taken[bestIdx] = true;
+            minDistances = NanSkippingMin(minDistances, engine.TensorSliceAxis(distances, 1, bestIdx + 1));
         }
 
         return selected;
+    }
+
+    /// <summary>
+    /// Element-wise min(running, next) that keeps the running value where next is NaN (running is never NaN).
+    /// </summary>
+    private static Tensor<T> NanSkippingMin(Tensor<T> running, Tensor<T> next)
+    {
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorWhere(engine.TensorIsNan(next), running, engine.TensorMin(running, next));
     }
 
     /// <summary>
@@ -718,22 +682,21 @@ public class DiCEExplainer<T> : ILocalExplainer<T, DiCEExplanation<T>>, IGPUAcce
     /// </summary>
     private SingleCounterfactual<T> CreateSingleCounterfactual(Vector<T> original, Vector<T> counterfactual, T prediction)
     {
-        var changes = new List<FeatureChange<T>>();
+        var engine = AiDotNetEngine.Current;
+        var originalValues = original.GetSubVector(0, _numFeatures);
+        var counterfactualValues = counterfactual.GetSubVector(0, _numFeatures);
+        var diff = engine.Subtract(originalValues, counterfactualValues);
+        var changedFeatures = engine.TensorGreaterThan(engine.Abs(diff).AsTensor(), ExplainerTensorOps<T>.Tolerance(1e-6))
+            .ToVector().NonZeroIndices().ToList();
 
-        for (int f = 0; f < _numFeatures; f++)
-        {
-            double origVal = NumOps.ToDouble(original[f]);
-            double cfVal = NumOps.ToDouble(counterfactual[f]);
-
-            if (Math.Abs(origVal - cfVal) > 1e-6)
-            {
-                changes.Add(new FeatureChange<T>(
-                    featureIndex: f,
-                    featureName: _featureNames?[f] ?? $"Feature_{f}",
-                    originalValue: original[f],
-                    counterfactualValue: counterfactual[f]));
-            }
-        }
+        var changes = changedFeatures
+            .Zip(originalValues.GetElements(changedFeatures), (feature, value) => (feature, value))
+            .Zip(counterfactualValues.GetElements(changedFeatures), (entry, value) => new FeatureChange<T>(
+                featureIndex: entry.feature,
+                featureName: _featureNames?[entry.feature] ?? $"Feature_{entry.feature}",
+                originalValue: entry.value,
+                counterfactualValue: value))
+            .ToList();
 
         return new SingleCounterfactual<T>(
             counterfactualInstance: counterfactual,
@@ -758,19 +721,19 @@ public class DiCEExplainer<T> : ILocalExplainer<T, DiCEExplanation<T>>, IGPUAcce
         return 1.0;
     }
 
-    private T[] ComputeFeatureRanges()
+    private T[]? ComputeFeatureRanges()
     {
+        // Without bounds there is no known range: the null ranges fall back to 1 (GetFeatureRange /
+        // NormalizationRanges). An all-zero array here would zero every perturbation and freeze the search.
         if (_featureMins == null || _featureMaxs == null)
         {
-            return new T[_numFeatures];
+            return null;
         }
 
-        var ranges = new T[_numFeatures];
-        for (int f = 0; f < _numFeatures; f++)
-        {
-            ranges[f] = NumOps.Subtract(_featureMaxs[f], _featureMins[f]);
-        }
-        return ranges;
+        var engine = AiDotNetEngine.Current;
+        var maxs = new Vector<T>(_featureMaxs).GetSubVector(0, _numFeatures);
+        var mins = new Vector<T>(_featureMins).GetSubVector(0, _numFeatures);
+        return engine.Subtract(maxs, mins).ToArray();
     }
 
     private double ClipToRange(double value, int featureIndex)
@@ -853,13 +816,13 @@ public class SingleCounterfactual<T>
     public IReadOnlyList<FeatureChange<T>> Changes { get; }
 
     /// <summary>Normalized distance from original.</summary>
-    public double Distance { get; }
+    public T Distance { get; }
 
     /// <summary>Number of features changed.</summary>
     public int Sparsity => Changes.Count;
 
     /// <summary>Initializes a new single counterfactual.</summary>
-    public SingleCounterfactual(Vector<T> counterfactualInstance, T prediction, List<FeatureChange<T>> changes, double distance)
+    public SingleCounterfactual(Vector<T> counterfactualInstance, T prediction, List<FeatureChange<T>> changes, T distance)
     {
         CounterfactualInstance = counterfactualInstance;
         Prediction = prediction;
@@ -906,8 +869,8 @@ public class DiCEExplanation<T>
         ? Counterfactuals.Average(cf => cf.Sparsity) : 0;
 
     /// <summary>Average distance from original across counterfactuals.</summary>
-    public double AverageDistance => Counterfactuals.Count > 0
-        ? Counterfactuals.Average(cf => cf.Distance) : 0;
+    public T AverageDistance => Counterfactuals.Count > 0
+        ? AiDotNetEngine.Current.Mean(new Vector<T>(Counterfactuals.Select(cf => cf.Distance))) : NumOps.Zero;
 
     /// <summary>Initializes a new DiCE explanation.</summary>
     public DiCEExplanation(

@@ -779,12 +779,12 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             }
 
             int scoreWidth = width;
-            double Score(AiDotNet.Tensors.LinearAlgebra.Vector<T> row)
+            T Score(AiDotNet.Tensors.LinearAlgebra.Vector<T> row)
             {
                 var m = new AiDotNet.Tensors.LinearAlgebra.Matrix<T>(1, scoreWidth);
                 for (int j = 0; j < scoreWidth; j++) m[0, j] = row[j];
                 var output = tabularModel.Predict(m);
-                return output.Length > 0 ? numOps.ToDouble(output[0]) : 0.0;
+                return output.Length > 0 ? output[0] : numOps.Zero;
             }
 
             // Reduce the audit data and attributions to the model's accepted input width, so perturbations,

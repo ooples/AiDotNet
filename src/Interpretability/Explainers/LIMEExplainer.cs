@@ -237,25 +237,17 @@ public class LIMEExplainer<T> : ILocalExplainer<T, LIMEExplanationResult<T>>, IG
     /// </summary>
     private Vector<T> ComputeWeights(Matrix<T> binaryData, Vector<T> instance)
     {
-        var weights = new T[binaryData.Rows];
+        var engine = AiDotNetEngine.Current;
+        var binary = Tensor<T>.FromMatrix(binaryData.GetSubMatrix(0, 0, binaryData.Rows, NumFeatures));
 
-        for (int i = 0; i < binaryData.Rows; i++)
-        {
-            // Compute Euclidean distance in binary space
-            double distance = 0;
-            for (int j = 0; j < NumFeatures; j++)
-            {
-                double diff = 1.0 - NumOps.ToDouble(binaryData[i, j]);
-                distance += diff * diff;
-            }
-            distance = Math.Sqrt(distance);
+        // Squared Euclidean distance in binary space from the all-ones (original) sample: the number of switched-off
+        // features, counted in int (a 0/1 sum in Half stops at 2048)
+        var switchedOff = engine.TensorSubtract(engine.TensorFullLike(binary, NumOps.One), binary).Cast<int>();
+        var squaredDistance = engine.ReduceSum(switchedOff, new[] { 1 }, false).Cast<T>();
 
-            // Exponential kernel
-            double weight = Math.Exp(-distance * distance / (_kernelWidth * _kernelWidth));
-            weights[i] = NumOps.FromDouble(weight);
-        }
-
-        return new Vector<T>(weights);
+        // LIME's exponential kernel sqrt(exp(-d^2 / width^2)) = exp(-d^2 / (2 width^2)) (lime_base / lime_tabular)
+        T scale = NumOps.Negate(NumOps.Divide(NumOps.One, NumOps.FromDouble(2.0 * _kernelWidth * _kernelWidth)));
+        return engine.TensorExp(engine.TensorMultiplyScalar(squaredDistance, scale)).ToVector();
     }
 
     /// <summary>
@@ -428,12 +420,7 @@ public class LIMEExplainer<T> : ILocalExplainer<T, LIMEExplanationResult<T>>, IG
 
     private T PredictSingle(Vector<T> instance)
     {
-        var matrix = new Matrix<T>(1, instance.Length);
-        for (int j = 0; j < instance.Length; j++)
-        {
-            matrix[0, j] = instance[j];
-        }
-        var predictions = _predictFunction(matrix);
+        var predictions = _predictFunction(ExplainerTensorOps<T>.RowMatrix(instance));
         return predictions[0];
     }
 
@@ -566,10 +553,10 @@ public class LIMEExplanationResult<T>
             $"  Top contributing features:"
         };
 
-        foreach (var (index, name, weight) in top)
+        var directions = ExplainerTensorOps<T>.SignPrefixes(top.Select(entry => entry.Weight));
+        foreach (var ((index, name, weight), direction) in top.Zip(directions, (entry, prefix) => (entry, prefix)))
         {
             var featureLabel = name ?? $"Feature {index}";
-            var direction = !NumOps.LessThan(weight, NumOps.Zero) ? "+" : "";
             lines.Add($"    {featureLabel}: {direction}{weight}");
         }
 

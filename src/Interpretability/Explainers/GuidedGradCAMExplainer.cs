@@ -41,8 +41,6 @@ namespace AiDotNet.Interpretability.Explainers;
 /// </remarks>
 public class GuidedGradCAMExplainer<T> : ILocalExplainer<T, GuidedGradCAMExplanation<T>>, IGPUAcceleratedExplainer<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
     private readonly GuidedBackpropExplainer<T> _guidedBackpropExplainer;
     private readonly LayerGradCAMExplainer<T> _gradcamExplainer;
     private readonly int[] _inputShape;
@@ -215,41 +213,33 @@ public class GuidedGradCAMExplainer<T> : ILocalExplainer<T, GuidedGradCAMExplana
     /// </remarks>
     private Vector<T> ComputeGuidedGradCAM(Vector<T> guidedBackprop, Tensor<T> upsampledGradCAM)
     {
-        var result = new T[guidedBackprop.Length];
-
-        // Flatten upsampled GradCAM to match guided backprop
-        var flatGradCAM = upsampledGradCAM.ToVector();
-
-        for (int i = 0; i < guidedBackprop.Length; i++)
+        int n = guidedBackprop.Length;
+        if (n == 0)
         {
-            double gb = NumOps.ToDouble(guidedBackprop[i]);
-            double gc = i < flatGradCAM.Length ? NumOps.ToDouble(flatGradCAM[i]) : 0;
-
-            // For multi-channel images, broadcast GradCAM across channels
-            if (_inputShape.Length == 3 && _inputShape[0] <= 4)
-            {
-                // CHW format - GradCAM is HxW, need to broadcast across C
-                int c = i / (_inputShape[1] * _inputShape[2]);
-                int spatial = i % (_inputShape[1] * _inputShape[2]);
-                if (spatial < flatGradCAM.Length)
-                {
-                    gc = NumOps.ToDouble(flatGradCAM[spatial]);
-                }
-            }
-            else if (_inputShape.Length == 3)
-            {
-                // HWC format
-                int spatial = i / _inputShape[2];
-                if (spatial < flatGradCAM.Length)
-                {
-                    gc = NumOps.ToDouble(flatGradCAM[spatial]);
-                }
-            }
-
-            result[i] = NumOps.FromDouble(gb * gc);
+            return new Vector<T>(0);
         }
 
-        return new Vector<T>(result);
+        // Flatten upsampled GradCAM to match guided backprop (entries past its end count as zero)
+        var flatGradCAM = ExplainerTensorOps<T>.PadOrTruncate(upsampledGradCAM.ToVector(), n);
+
+        // For multi-channel images, broadcast GradCAM across channels
+        IEnumerable<int> sourceIndices = Enumerable.Range(0, n);
+        if (_inputShape.Length == 3 && _inputShape[0] <= 4)
+        {
+            // CHW format - GradCAM is HxW, need to broadcast across C
+            int spatialSize = _inputShape[1] * _inputShape[2];
+            sourceIndices = sourceIndices.Select(i => i % spatialSize);
+        }
+        else if (_inputShape.Length == 3)
+        {
+            // HWC format
+            int channels = _inputShape[2];
+            sourceIndices = sourceIndices.Select(i => i / channels);
+        }
+
+        var engine = AiDotNetEngine.Current;
+        var gradcamPerFeature = engine.TensorIndexSelect(flatGradCAM.AsTensor(), new Tensor<int>(sourceIndices.ToArray(), new[] { n }), 0);
+        return engine.Multiply(guidedBackprop, gradcamPerFeature.ToVector());
     }
 
     /// <summary>
@@ -277,33 +267,7 @@ public class GuidedGradCAMExplainer<T> : ILocalExplainer<T, GuidedGradCAMExplana
             targetW = srcW;
         }
 
-        var upsampled = new Tensor<T>(new[] { targetH, targetW });
-
-        for (int h = 0; h < targetH; h++)
-        {
-            for (int w = 0; w < targetW; w++)
-            {
-                double srcHf = (double)h / targetH * srcH;
-                double srcWf = (double)w / targetW * srcW;
-
-                int h0 = Math.Min((int)Math.Floor(srcHf), srcH - 1);
-                int h1 = Math.Min(h0 + 1, srcH - 1);
-                int w0 = Math.Min((int)Math.Floor(srcWf), srcW - 1);
-                int w1 = Math.Min(w0 + 1, srcW - 1);
-
-                double dh = srcHf - h0;
-                double dw = srcWf - w0;
-
-                double value = NumOps.ToDouble(gradcam[h0, w0]) * (1 - dh) * (1 - dw) +
-                              NumOps.ToDouble(gradcam[h0, w1]) * (1 - dh) * dw +
-                              NumOps.ToDouble(gradcam[h1, w0]) * dh * (1 - dw) +
-                              NumOps.ToDouble(gradcam[h1, w1]) * dh * dw;
-
-                upsampled[h, w] = NumOps.FromDouble(value);
-            }
-        }
-
-        return upsampled;
+        return ExplainerTensorOps<T>.BilinearResize(Tensor<T>.FromMatrix(gradcam), targetH, targetW);
     }
 }
 
@@ -369,34 +333,24 @@ public class GuidedGradCAMExplanation<T>
     /// <summary>Gets normalized Guided GradCAM (0-1 range).</summary>
     public Vector<T> GetNormalizedGuidedGradCAM()
     {
-        double max = 0;
-        for (int i = 0; i < GuidedGradCAM.Length; i++)
+        var engine = AiDotNetEngine.Current;
+        T max = GuidedGradCAM.Length > 0
+            ? engine.TensorMaxValue(engine.TensorMax(GuidedGradCAM.AsTensor(), NumOps.Zero))
+            : NumOps.Zero;
+
+        if (NumOps.GreaterThan(max, ExplainerTensorOps<T>.Tolerance(1e-10)))
         {
-            double val = NumOps.ToDouble(GuidedGradCAM[i]);
-            if (val > max) max = val;
+            return engine.Divide(GuidedGradCAM, max);
         }
 
-        var normalized = new T[GuidedGradCAM.Length];
-        if (max > 1e-10)
-        {
-            for (int i = 0; i < GuidedGradCAM.Length; i++)
-            {
-                normalized[i] = NumOps.FromDouble(NumOps.ToDouble(GuidedGradCAM[i]) / max);
-            }
-        }
-
-        return new Vector<T>(normalized);
+        return new Vector<T>(GuidedGradCAM.Length);
     }
 
     /// <summary>Gets the Guided GradCAM reshaped to input shape.</summary>
     public Tensor<T> GetGuidedGradCAMTensor()
     {
-        var tensor = new Tensor<T>(InputShape);
-        for (int i = 0; i < Math.Min(GuidedGradCAM.Length, tensor.Length); i++)
-        {
-            tensor[GetMultiIndex(i, InputShape)] = GuidedGradCAM[i];
-        }
-        return tensor;
+        int length = InputShape.Aggregate(1, (product, dim) => product * dim);
+        return new Tensor<T>(InputShape, ExplainerTensorOps<T>.PadOrTruncate(GuidedGradCAM, length));
     }
 
     /// <summary>Gets top activated features.</summary>
@@ -408,29 +362,15 @@ public class GuidedGradCAMExplanation<T>
             .Take(k);
     }
 
-    private int[] GetMultiIndex(int linearIndex, int[] shape)
-    {
-        var index = new int[shape.Length];
-        int remaining = linearIndex;
-
-        for (int i = shape.Length - 1; i >= 0; i--)
-        {
-            index[i] = remaining % shape[i];
-            remaining /= shape[i];
-        }
-
-        return index;
-    }
-
     /// <summary>Returns string representation.</summary>
     public override string ToString()
     {
         var top = GetTopFeatures(5).ToList();
-        double maxVal = top.Count > 0 ? NumOps.ToDouble(top[0].Activation) : 0;
+        T maxVal = top.Count > 0 ? top[0].Activation : NumOps.Zero;
 
         return $"GuidedGradCAM for class {TargetClass} (pred={Prediction}):\n" +
                $"  Input shape: {string.Join("x", InputShape)}\n" +
                $"  Max activation: {maxVal:F4}\n" +
-               $"  Top features: {string.Join(", ", top.Select(t => $"[{t.Index}]={NumOps.ToDouble(t.Activation):F4}"))}";
+               $"  Top features: {string.Join(", ", top.Select(t => $"[{t.Index}]={t.Activation:F4}"))}";
     }
 }

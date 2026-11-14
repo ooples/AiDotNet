@@ -31,14 +31,14 @@ namespace AiDotNet.Preprocessing.DimensionalityReduction;
 public class SpectralEmbedding<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 {
     private readonly int _nComponents;
+    private readonly int? _randomState;
     private readonly SpectralAffinity _affinity;
     private readonly double _gamma;
     private readonly int _nNeighbors;
-    private readonly int? _randomState;
 
     // Fitted parameters
-    private double[,]? _embedding;
-    private double[,]? _affinityMatrix;
+    private Matrix<T>? _embedding;
+    private Matrix<T>? _affinityMatrix;
     private int _nSamples;
     private int _nFeaturesIn;
 
@@ -65,12 +65,12 @@ public class SpectralEmbedding<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the affinity matrix.
     /// </summary>
-    public double[,]? AffinityMatrix => _affinityMatrix;
+    public Matrix<T>? AffinityMatrix => _affinityMatrix;
 
     /// <summary>
     /// Gets the embedding result.
     /// </summary>
-    public double[,]? Embedding => _embedding;
+    public Matrix<T>? Embedding => _embedding;
 
     /// <summary>
     /// Gets whether this transformer supports inverse transformation.
@@ -83,7 +83,8 @@ public class SpectralEmbedding<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <param name="nComponents">Target dimensionality. Defaults to 2.</param>
     /// <param name="affinity">How to construct the affinity matrix. Defaults to NearestNeighbors.</param>
     /// <param name="gamma">Kernel coefficient for RBF. If null, uses 1/n_features.</param>
-    /// <param name="nNeighbors">Number of neighbors for NN affinity. Defaults to 10.</param>
+    /// <param name="nNeighbors">Number of neighbors for NN affinity, the sample itself included (scikit-learn's
+    /// kneighbors_graph(include_self=True)). Defaults to 10.</param>
     /// <param name="randomState">Random seed for reproducibility.</param>
     /// <param name="columnIndices">The column indices to use, or null for all columns.</param>
     public SpectralEmbedding(
@@ -106,10 +107,10 @@ public class SpectralEmbedding<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         }
 
         _nComponents = nComponents;
+        _randomState = randomState;
         _affinity = affinity;
         _gamma = gamma ?? 0; // Will be computed during fit
         _nNeighbors = nNeighbors;
-        _randomState = randomState;
     }
 
     /// <summary>
@@ -122,262 +123,91 @@ public class SpectralEmbedding<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int n = data.Rows;
         int p = data.Columns;
 
-        // Convert to double array
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-            }
-        }
-
         // Compute gamma if not provided
-        double gamma = _gamma > 0 ? _gamma : 1.0 / p;
+        T gamma = NumOps.FromDouble(_gamma > 0 ? _gamma : 1.0 / p);
 
         // Step 1: Compute affinity matrix
-        _affinityMatrix = ComputeAffinityMatrix(X, n, p, gamma);
+        var affinity = ComputeAffinityMatrix(Tensor<T>.FromMatrix(data), n, gamma);
+        _affinityMatrix = affinity.ToMatrix();
 
-        // Step 2: Compute normalized graph Laplacian
-        var (L, D) = ComputeNormalizedLaplacian(_affinityMatrix, n);
-
-        // Step 3: Find smallest eigenvectors of Laplacian
-        _embedding = ComputeEmbedding(L, n);
+        // Steps 2 and 3: the bottom eigenvectors of the normalized graph Laplacian (scikit-learn spectral_embedding)
+        _embedding = ComputeEmbedding(affinity, n).ToMatrix();
     }
 
-    private double[,] ComputeAffinityMatrix(double[,] X, int n, int p, double gamma)
+    private Tensor<T> ComputeAffinityMatrix(Tensor<T> x, int n, T gamma)
     {
-        var affinity = new double[n, n];
+        var engine = Engine;
+        Tensor<T> affinity;
 
         switch (_affinity)
         {
             case SpectralAffinity.RBF:
-                // Radial Basis Function (Gaussian) kernel
-                for (int i = 0; i < n; i++)
-                {
-                    for (int j = i; j < n; j++)
-                    {
-                        if (i == j)
-                        {
-                            affinity[i, j] = 1.0;
-                        }
-                        else
-                        {
-                            double dist = 0;
-                            for (int k = 0; k < p; k++)
-                            {
-                                double diff = X[i, k] - X[j, k];
-                                dist += diff * diff;
-                            }
-                            double sim = Math.Exp(-gamma * dist);
-                            affinity[i, j] = sim;
-                            affinity[j, i] = sim;
-                        }
-                    }
-                }
+                // Radial Basis Function (Gaussian) kernel, rbf_kernel(X, gamma) (diagonal 1)
+                affinity = engine.TensorExp(engine.TensorMultiplyScalar(
+                    DimensionalityReductionOps.SquaredDistances(x, x), NumOps.Negate(gamma)));
                 break;
 
             case SpectralAffinity.NearestNeighbors:
-                // First compute distances
-                var distances = new double[n, n];
-                for (int i = 0; i < n; i++)
+                // scikit-learn: A = kneighbors_graph(X, n_neighbors, include_self=True) (0/1 connectivity, the
+                // sample itself counting as one of its n_neighbors), affinity = (A + A^T) / 2
+                var directed = DimensionalityReductionOps.Full(new[] { n, n }, NumOps.Zero);
+                int others = Math.Min(_nNeighbors - 1, n - 1);
+                if (others > 0)
                 {
-                    for (int j = i + 1; j < n; j++)
-                    {
-                        double dist = 0;
-                        for (int k = 0; k < p; k++)
-                        {
-                            double diff = X[i, k] - X[j, k];
-                            dist += diff * diff;
-                        }
-                        distances[i, j] = Math.Sqrt(dist);
-                        distances[j, i] = distances[i, j];
-                    }
+                    var neighbors = DimensionalityReductionOps.NearestNeighbors(
+                        DimensionalityReductionOps.EuclideanDistances(x, x), others);
+                    directed = DimensionalityReductionOps.ScatterRows(
+                        neighbors, DimensionalityReductionOps.Full(new[] { n, others }, NumOps.One), n, NumOps.Zero);
                 }
 
-                // Build symmetric KNN graph
-                for (int i = 0; i < n; i++)
-                {
-                    // Find k nearest neighbors
-                    var neighbors = Enumerable.Range(0, n)
-                        .Where(j => j != i)
-                        .OrderBy(j => distances[i, j])
-                        .Take(_nNeighbors)
-                        .ToList();
-
-                    foreach (int j in neighbors)
-                    {
-                        // Use distance-based weight
-                        double weight = Math.Exp(-distances[i, j] * distances[i, j] * gamma);
-                        affinity[i, j] = Math.Max(affinity[i, j], weight);
-                        affinity[j, i] = affinity[i, j]; // Symmetrize
-                    }
-                }
-
-                // Set diagonal to 1
-                for (int i = 0; i < n; i++)
-                {
-                    affinity[i, i] = 1.0;
-                }
+                affinity = engine.TensorMultiplyScalar(
+                    engine.TensorAdd(directed, engine.TensorTranspose(directed)), NumOps.FromDouble(0.5));
                 break;
 
             case SpectralAffinity.Precomputed:
                 throw new InvalidOperationException(
                     "Precomputed affinity requires passing the affinity matrix directly.");
+
+            default:
+                affinity = DimensionalityReductionOps.Full(new[] { n, n }, NumOps.Zero);
+                break;
         }
 
+        // Every sample is fully similar to itself (rbf_kernel's diagonal, include_self's self connection)
+        engine.TensorFillDiagonalInPlace(affinity, NumOps.One);
         return affinity;
     }
 
-    private (double[,] L, double[] D) ComputeNormalizedLaplacian(double[,] W, int n)
+    /// <summary>
+    /// scikit-learn spectral_embedding(norm_laplacian=True, drop_first=True): the graph Laplacian ignores self loops
+    /// (scipy csgraph.laplacian zeroes the diagonal), L = I - D^(-1/2) W D^(-1/2), its eigenvectors 1 .. nComponents in
+    /// ascending eigenvalue order are divided by sqrt(degree) and each is signed so its largest-magnitude entry is
+    /// positive (_deterministic_vector_sign_flip).
+    /// </summary>
+    private Tensor<T> ComputeEmbedding(Tensor<T> affinity, int n)
     {
-        // Compute degree matrix D
-        var D = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                D[i] += W[i, j];
-            }
-        }
+        var engine = Engine;
+        var w = affinity.Clone();
+        engine.TensorFillDiagonalInPlace(w, NumOps.Zero);
 
-        // Compute D^(-1/2)
-        var Dinv = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            Dinv[i] = D[i] > 1e-10 ? 1.0 / Math.Sqrt(D[i]) : 0;
-        }
+        // D^(-1/2), zero where the degree is at most 1e-10
+        var degree = DimensionalityReductionOps.RowSums(w);
+        var positive = engine.TensorGreaterThan(degree, DimensionalityReductionOps.Tolerance<T>(1e-10));
+        var safeDegree = engine.TensorWhere(positive, degree, DimensionalityReductionOps.Full(n, NumOps.One));
+        var dInv = engine.TensorWhere(
+            positive, engine.TensorRsqrt(safeDegree), DimensionalityReductionOps.Full(n, NumOps.Zero));
 
-        // Compute normalized Laplacian: L = I - D^(-1/2) * W * D^(-1/2)
-        var L = new double[n, n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                double normalized = Dinv[i] * W[i, j] * Dinv[j];
-                L[i, j] = (i == j ? 1.0 : 0.0) - normalized;
-            }
-        }
+        // L = I - D^(-1/2) W D^(-1/2)
+        var normalized = DimensionalityReductionOps.ScaleColumns(DimensionalityReductionOps.ScaleRows(w, dInv), dInv);
+        var laplacian = engine.TensorSubtract(DimensionalityReductionOps.Identity<T>(n), normalized);
 
-        return (L, D);
-    }
-
-    private double[,] ComputeEmbedding(double[,] L, int n)
-    {
-        // Find smallest eigenvectors of Laplacian
-        var (eigenvalues, eigenvectors) = ComputeEigen(L, n);
-
-        // Sort by eigenvalue ascending
-        var indices = Enumerable.Range(0, n)
-            .OrderBy(i => eigenvalues[i])
-            .ToArray();
-
-        // Take eigenvectors 1 to nComponents (skip the first which is constant)
+        // Eigenvectors of L in ascending eigenvalue order (ties in index order); skip the first (trivial) one
+        var (_, eigenvectors) = DimensionalityReductionOps.SymmetricEigen(laplacian, descending: false);
         int nComp = Math.Min(_nComponents, n - 1);
-        var embedding = new double[n, nComp];
+        var selected = engine.TensorNarrow(eigenvectors, 1, 1, nComp);
 
-        for (int d = 0; d < nComp; d++)
-        {
-            // Skip the first (zero) eigenvalue
-            int idx = indices[d + 1];
-
-            for (int i = 0; i < n; i++)
-            {
-                embedding[i, d] = eigenvectors[idx, i];
-            }
-        }
-
-        return embedding;
-    }
-
-    private (double[] Eigenvalues, double[,] Eigenvectors) ComputeEigen(double[,] matrix, int n)
-    {
-        var eigenvalues = new double[n];
-        var eigenvectors = new double[n, n];
-        var A = (double[,])matrix.Clone();
-
-        for (int k = 0; k < n; k++)
-        {
-            var v = new double[n];
-            var random = _randomState.HasValue
-                ? RandomHelper.CreateSeededRandom(_randomState.Value + k)
-                : RandomHelper.CreateSeededRandom(42 + k);
-
-            // Random initialization for better convergence
-            for (int i = 0; i < n; i++)
-            {
-                v[i] = random.NextDouble() - 0.5;
-            }
-
-            // Normalize
-            double initNorm = 0;
-            for (int i = 0; i < n; i++)
-            {
-                initNorm += v[i] * v[i];
-            }
-            initNorm = Math.Sqrt(initNorm);
-            for (int i = 0; i < n; i++)
-            {
-                v[i] /= initNorm;
-            }
-
-            for (int iter = 0; iter < 100; iter++)
-            {
-                var Av = new double[n];
-                for (int i = 0; i < n; i++)
-                {
-                    for (int j = 0; j < n; j++)
-                    {
-                        Av[i] += A[i, j] * v[j];
-                    }
-                }
-
-                double norm = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    norm += Av[i] * Av[i];
-                }
-                norm = Math.Sqrt(norm);
-
-                if (norm < 1e-10) break;
-
-                for (int i = 0; i < n; i++)
-                {
-                    v[i] = Av[i] / norm;
-                }
-            }
-
-            var Av2 = new double[n];
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    Av2[i] += A[i, j] * v[j];
-                }
-            }
-
-            double eigenvalue = 0;
-            for (int i = 0; i < n; i++)
-            {
-                eigenvalue += v[i] * Av2[i];
-            }
-
-            eigenvalues[k] = eigenvalue;
-            for (int i = 0; i < n; i++)
-            {
-                eigenvectors[k, i] = v[i];
-            }
-
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    A[i, j] -= eigenvalue * v[i] * v[j];
-                }
-            }
-        }
-
-        return (eigenvalues, eigenvectors);
+        // Undo the symmetric normalisation (y = D^(-1/2) v), then fix the signs on the scaled vectors
+        return DimensionalityReductionOps.AlignColumnSigns(DimensionalityReductionOps.ScaleRows(selected, dInv));
     }
 
     /// <summary>
@@ -397,19 +227,7 @@ public class SpectralEmbedding<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 "Use FitTransform() on the complete dataset.");
         }
 
-        int n = _embedding.GetLength(0);
-        int k = _embedding.GetLength(1);
-        var result = new T[n, k];
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < k; j++)
-            {
-                result[i, j] = NumOps.FromDouble(_embedding[i, j]);
-            }
-        }
-
-        return new Matrix<T>(result);
+        return _embedding.Clone();
     }
 
     /// <summary>
