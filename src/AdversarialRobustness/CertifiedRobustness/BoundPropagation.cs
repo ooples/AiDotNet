@@ -372,6 +372,7 @@ internal sealed class BoundNetwork<T>
     /// produces (identity, softmax and strictly increasing activations, or ReLU when the top logit stays
     /// positive), else -1.
     /// </summary>
+    [AiDotNet.Attributes.ScalarKernel("Walks the handful of network steps and reads one slope scalar per step, not tensor elements.")]
     private int LogitStep(out bool requiresPositiveTop)
     {
         requiresPositiveTop = false;

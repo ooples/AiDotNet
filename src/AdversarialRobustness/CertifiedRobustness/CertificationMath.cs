@@ -42,6 +42,7 @@ internal static class CertificationMath<T>
     /// <summary>The smallest value of T that is at least <paramref name="value"/> (for upper bounds).</summary>
     public static T RoundUp(double value) => RoundOutward(value, down: false);
 
+    [AiDotNet.Attributes.ScalarKernel("Rounds one scalar bound; the loop searches for its neighbouring value of T.")]
     private static T RoundOutward(double value, bool down)
     {
         T rounded = NumOps.FromDouble(value);
