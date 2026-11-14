@@ -14,8 +14,14 @@
       - the event is not a pull request or a push (schedules, dispatches and the coverage run
         feed the nightly and the map, which need everything);
       - a post-merge push is re-running a delta select-shards computed from the pull request run;
+      - a stacked pull request selected with master's map (MAP_LINEAGE_REF): that selection covers
+        everything the stack adds to master, which the diff against the base branch cannot see;
       - TypeImpact cannot map every changed file (a non-C# file, a generator input, a source with
-        no compiled type) or fails in any way.
+        no compiled type) or fails in any way. Paths select-shards classifies as NonRuntime or
+        BuildOnly (documentation, analyzer and pack baselines, benchmark projects, reference-data
+        scripts) are left out of its input first, so they never cause this; a non-C# file
+        select-shards itself escalates on (a project, props or data file) still does, because
+        narrowing would undo that escalation.
     The nightly full matrix on master is the net for what static reachability cannot see
     (reflection over a type name).
 
@@ -108,6 +114,13 @@ if ($env:COLLECT_COVERAGE_EVERYWHERE -eq 'true') { Write-Passthrough 'coverage-e
 if ($eventName -notin @('pull_request', 'push')) { Write-Passthrough "event '$eventName' runs the full selection"; return }
 if ($eventName -eq 'push' -and $env:DELTA_MODE -ceq 'Partial') { Write-Passthrough 'post-merge delta re-run'; return }
 if ($env:REQUIRES_SHARDS -ne 'true') { Write-Passthrough 'no test shards were required'; return }
+# A stacked pull request selected with another branch's map (MAP_LINEAGE_REF, Download the shard map): select-shards
+# chose for everything the stack adds to that branch, but the diff below is against this pull request's own base, so
+# TypeImpact would drop the shards only the base branch's changes reach while the rest kept the matrix nonempty.
+if (-not [string]::IsNullOrWhiteSpace($env:MAP_LINEAGE_REF)) {
+    Write-Passthrough "the shard selection used the map of '$($env:MAP_LINEAGE_REF)' for a stacked pull request and covers what the stack adds to it, which a diff against this pull request's base cannot see"
+    return
+}
 
 try {
     # The change is the merge commit against its first parent: for a pull request, refs/pull/N/merge
@@ -124,7 +137,8 @@ try {
     $changeLines = @(& git -c core.quotepath=false diff --no-renames --name-status $parents[1] HEAD)
     if ($LASTEXITCODE -ne 0) { throw 'git diff failed' }
     # A path the shard selector proves cannot affect a test (documentation, an unreferenced tool or test project,
-    # a .github file only GitHub reads, .editorconfig) is not a type-impact input: TypeImpact cannot map a non-C#
+    # a .github file only GitHub reads, .editorconfig, a public API or element-wise baseline, a benchmark source) is
+    # not a type-impact input: TypeImpact cannot map a non-C#
     # file, so one such file used to pass the whole decision through. Classification that fails removes nothing.
     $inert = @(Get-InertChangedPaths -Base $parents[1])
     if ($inert.Count -gt 0) {
