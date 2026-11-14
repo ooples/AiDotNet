@@ -7,16 +7,11 @@ namespace AiDotNet.Helpers;
 /// </summary>
 /// <remarks>
 /// In Half every value above 65504 is infinite, so a plain sum overflows long before the mean it feeds does:
-/// 400 pixels of value 200, or 131072 values of 0.5, already sum past the limit. These reductions scale the
-/// values into [-1, 1] and divide them across blocks before summing, then undo the scaling on the result.
+/// 400 pixels of value 200, or 131072 values of 0.5, already sum past the limit. These reductions accumulate
+/// in double and convert only the final result to T.
 /// </remarks>
 internal static class OverflowSafeReductions
 {
-    /// <summary>
-    /// The most scaled values that are summed per block; their sum stays at or below this in magnitude.
-    /// </summary>
-    private const int BlockSize = 16384;
-
     /// <summary>
     /// The mean of all entries of <paramref name="values"/>, computed so the intermediate sum cannot overflow T.
     /// </summary>
@@ -35,17 +30,12 @@ internal static class OverflowSafeReductions
             throw new ArgumentException("Cannot compute the mean of an empty tensor.", nameof(values));
         }
 
+        // The mean is accumulated and divided in double. Scaling by the largest magnitude and
+        // dividing across blocks in T kept the sum finite, but the normalized entries and their mean were held
+        // in T: in Half an entry below 2^-25 of the largest magnitude (and a mean below 2^-24) rounds to zero,
+        // so many small entries next to one large one were lost from the mean.
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
-        T largest = engine.TensorMaxValue(engine.TensorAbs(values));
-        if (ops.IsNaN(largest) || !ops.GreaterThan(largest, ops.Zero))
-        {
-            return ops.IsNaN(largest) ? largest : ops.Zero;
-        }
-
-        // Each scaled entry lies in [-1 / blocks, 1 / blocks], so the running sum stays within BlockSize.
-        T blocks = ops.FromDouble((values.Length + BlockSize - 1) / BlockSize);
-        var scaled = engine.TensorDivideScalar(engine.TensorDivideScalar(values, largest), blocks);
-        return ops.Multiply(ops.Multiply(engine.TensorMean(scaled), blocks), largest);
+        return ops.FromDouble(engine.TensorMean(values.Contiguous().Cast<double>()));
     }
 }
