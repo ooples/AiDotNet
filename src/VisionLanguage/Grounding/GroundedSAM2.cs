@@ -257,6 +257,9 @@ public partial class GroundedSAM2<T> : VisionLanguageModelBase<T>, IVisualGround
     public OpenVocabSegmentationResult<T> SegmentWithPrompt(Tensor<T> image, string prompt)
         => Combine(Engine, image, Segment(image, prompt), new[] { prompt }, _ => 0);
 
+    /// <summary>How many detections' masks <see cref="Combine"/> holds at once.</summary>
+    private const int CombineChunk = 16;
+
     /// <remarks>
     /// The segments are ranked by score, and by logit where scores tie, before the per-pixel argmax: in a narrow
     /// <typeparamref name="T"/> every confident detection's score rounds to 1, and the first such mask would win a
@@ -284,26 +287,43 @@ public partial class GroundedSAM2<T> : VisionLanguageModelBase<T>, IVisualGround
         }
 
         int n = named.Count;
-        var masksOf = engine.Reshape(engine.TensorStack(named.Select(s => s.Segment.Mask).ToArray(), 0), new[] { n, pixels });
         var scoreOf = new Tensor<T>(new[] { n }, Vector<T>.FromArray(named.Select(s => s.Segment.Detection.Score).ToArray()));
         var classIds = new Tensor<int>(new[] { n }, Vector<int>.FromArray(named.Select(s => s.Class).ToArray()));
-        var membership = engine.TensorOneHot<T>(classIds, count);
 
-        // Per class: the union of its masks, and its best detection score (0 when it has none; scores are sigmoids).
-        var union = engine.TensorMin(engine.TensorMatMul(engine.TensorTranspose(membership), masksOf), numOps.One);
-        var scores = engine.ReduceMax(engine.TensorMultiply(membership,
+        // Per class: its best detection score (0 when it has none; scores are sigmoids).
+        var scores = engine.ReduceMax(engine.TensorMultiply(engine.TensorOneHot<T>(classIds, count),
             engine.TensorBroadcastTo(scoreOf.Reshape(new[] { n, 1 }), new[] { n, count })), new[] { 0 }, false);
 
-        // Per pixel: the class of the highest-scoring mask covering it (the first such mask on ties), or -1.
-        var covered = engine.TensorGreaterThan(masksOf, numOps.Zero);
-        var coverScores = engine.TensorWhere(covered, engine.TensorBroadcastTo(scoreOf.Reshape(new[] { n, 1 }), new[] { n, pixels }),
-            Tensor<T>.CreateDefault(new[] { n, pixels }, numOps.MinValue));
-        var winner = engine.TensorArgMax(coverScores, 0);
-        var classValues = engine.TensorIndexSelect(engine.TensorArange<T>(0, count, 1), classIds, 0);
-        var winningClass = engine.TensorIndexSelect(classValues, winner.Reshape(new[] { pixels }), 0);
-        var anyCover = engine.ReduceMax(masksOf, new[] { 0 }, false);
-        var semantic = engine.TensorWhere(engine.TensorGreaterThan(anyCover, numOps.Zero), winningClass,
-            Tensor<T>.CreateDefault(new[] { pixels }, numOps.FromDouble(-1)));
+        // The masks are read CombineChunk detections at a time, so the [detections, pixels] intermediates stay bounded
+        // however many detections there are. Per class: the union of its masks. Per pixel: the class of the
+        // highest-scoring mask covering it, or -1; a later chunk takes a pixel only with a strictly higher score, so
+        // ties still go to the first ranked detection.
+        var classValues = engine.TensorArange<T>(0, count, 1);
+        var unionSum = new Tensor<T>(new[] { count, pixels });
+        var bestScore = Tensor<T>.CreateDefault(new[] { pixels }, numOps.MinValue);
+        var semantic = Tensor<T>.CreateDefault(new[] { pixels }, numOps.FromDouble(-1));
+        for (int start = 0; start < n; start += CombineChunk)
+        {
+            int c = Math.Min(CombineChunk, n - start);
+            var chunk = named.GetRange(start, c);
+            var masks = engine.Reshape(engine.TensorStack(chunk.Select(s => s.Segment.Mask).ToArray(), 0), new[] { c, pixels });
+            var chunkScores = new Tensor<T>(new[] { c }, Vector<T>.FromArray(chunk.Select(s => s.Segment.Detection.Score).ToArray()));
+            var chunkClasses = new Tensor<int>(new[] { c }, Vector<int>.FromArray(chunk.Select(s => s.Class).ToArray()));
+            unionSum = engine.TensorAdd(unionSum,
+                engine.TensorMatMul(engine.TensorTranspose(engine.TensorOneHot<T>(chunkClasses, count)), masks));
+
+            var coverScores = engine.TensorWhere(engine.TensorGreaterThan(masks, numOps.Zero),
+                engine.TensorBroadcastTo(chunkScores.Reshape(new[] { c, 1 }), new[] { c, pixels }),
+                Tensor<T>.CreateDefault(new[] { c, pixels }, numOps.MinValue));
+            var winner = engine.TensorArgMax(coverScores, 0).Reshape(new[] { pixels });
+            var chunkBest = engine.ReduceMax(coverScores, new[] { 0 }, false);
+            var winningClass = engine.TensorIndexSelect(engine.TensorIndexSelect(classValues, chunkClasses, 0), winner, 0);
+            var takes = engine.TensorGreaterThan(chunkBest, bestScore);
+            bestScore = engine.TensorWhere(takes, chunkBest, bestScore);
+            semantic = engine.TensorWhere(takes, winningClass, semantic);
+        }
+
+        var union = engine.TensorMin(unionSum, numOps.One);
         return new OpenVocabSegmentationResult<T>
         {
             Masks = union.Reshape(new[] { count, height, width }), ClassNames = classes, Scores = scores.ToVector(),
