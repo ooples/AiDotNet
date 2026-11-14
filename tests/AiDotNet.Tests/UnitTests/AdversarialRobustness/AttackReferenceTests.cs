@@ -705,6 +705,58 @@ public class AttackReferenceTests
         Assert.Equal(0.0, stats.AttackSuccessRate, 12);
     }
 
+    [Fact(Timeout = 60000)]
+    public async Task EvaluateRobustness_AttacksTheModelThroughTheDefense()
+    {
+        await Task.Yield();
+
+        // logits = x and the defense swaps the features, so the defended classifier scores (x1, x0). At
+        // x = (0.6, 0.4) it predicts class 1 (correct). FGSM through the defense moves x to (0.45, 0.55), which
+        // the defended classifier calls class 0. Against the raw model the step went to (0.75, 0.25), which the
+        // defense maps back to class 1, so the evaluation reported the defended input as robust.
+        var model = new LinearLogitModel(new double[,] { { 1.0, 0.0 }, { 0.0, 1.0 } }, new double[] { 0.0, 0.0 });
+        var result = new AiModelResult<double, Vector<double>, Vector<double>> { Model = model };
+        result.SetAdversarialDefense(new ScriptedDefense(v => new Vector<double>(new[] { v[1], v[0] })));
+        var attack = new FGSMAttack<double, Vector<double>, Vector<double>>(new AdversarialAttackOptions<double> { Epsilon = 0.15 });
+
+        var stats = result.EvaluateRobustness(new[] { new Vector<double>(new[] { 0.6, 0.4 }) }, new[] { OneHot(1, 2) }, attack);
+
+        Assert.Equal(1.0, stats.CleanAccuracy, 12);
+        Assert.Equal(0.0, stats.AdversarialAccuracy, 12);
+        Assert.Equal(1.0, stats.AttackSuccessRate, 12);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task EvaluateRobustness_CarliniWagnerExampleOutsideTheBudgetDoesNotCount()
+    {
+        await Task.Yield();
+
+        // CW flips this model with ||delta||_2 of about 0.035 (see CW_Untargeted_FindsMisclassifiedExampleWithSmallL2).
+        // Within an L2 budget of 0.2 that is a success; with a budget of 0.01 it is not an epsilon-bounded
+        // adversarial example, so the input stays robust. Any distance used to count as a success at the
+        // reported epsilon.
+        var model = new LinearLogitModel(new double[,] { { 1.0, -1.0 }, { -1.0, 1.0 } }, new double[] { 0.1, 0.0 });
+        var result = new AiModelResult<double, Vector<double>, Vector<double>> { Model = model };
+        var inputs = new[] { new Vector<double>(new[] { 0.5, 0.5 }) };
+        var labels = new[] { OneHot(0, 2) };
+
+        RobustnessStats<double> Evaluate(double epsilon) => result.EvaluateRobustness(inputs, labels,
+            new CWAttack<double, Vector<double>, Vector<double>>(new AdversarialAttackOptions<double>
+            {
+                Iterations = 100,
+                CWConstant = 1.0,
+                Epsilon = epsilon,
+                NormType = AdversarialNormType.L2
+            }));
+
+        var generous = Evaluate(0.2);
+        var tight = Evaluate(0.01);
+
+        Assert.Equal(1.0, generous.AttackSuccessRate, 12);
+        Assert.Equal(0.0, tight.AttackSuccessRate, 12);
+        Assert.Equal(1.0, tight.AdversarialAccuracy, 12);
+    }
+
     // ------------------------------------------------------------------------------------------------
     // AdversarialRobustnessOptions attack settings drive the result's robustness methods.
     // ------------------------------------------------------------------------------------------------
