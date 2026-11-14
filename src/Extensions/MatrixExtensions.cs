@@ -1647,7 +1647,12 @@ public static class MatrixExtensions
             // is zero or within the near-zero tolerance of it.
             var (lu, _) = LinalgDispatch<T>.LuFactor(Tensor<T>.FromMatrix(matrix));
             var pivots = Eng.TensorAbs(Eng.TensorDiagonal(lu));
-            return Eng.TensorCountNonzero(Eng.TensorLessThan(pivots, nearZero)) == 0;
+
+            // A NaN pivot compares false with everything, so "no pivot below the tolerance" alone called a matrix
+            // containing NaN invertible; the elimination this replaced failed on a non-finite pivot.
+            bool finite = Eng.TensorCountNonzero(Eng.TensorNotEquals(pivots, pivots)) == 0
+                && Eng.TensorCountNonzero(Eng.TensorGreaterThan(pivots, numOps.MaxValue)) == 0;
+            return finite && Eng.TensorCountNonzero(Eng.TensorLessThan(pivots, nearZero)) == 0;
         }
         catch (Exception)
         {
@@ -2476,9 +2481,10 @@ public static class MatrixExtensions
         var a = Tensor<T>.FromMatrix(A);
         var frobNorm = A.FrobeniusNorm();
 
-        // alpha = (1 / ||A||_F) / ||A||_F: squaring the norm first overflows Half (65504) once it passes 256.
-        var alpha = NumOps.Divide(NumOps.Divide(NumOps.One, frobNorm), frobNorm);
-        var x = Eng.TensorMultiplyScalar(Eng.TensorTranspose(a), alpha);
+        // X_0 = (A^T / ||A||_F) / ||A||_F. Squaring the norm first overflows Half (65504) once it passes 256, and
+        // forming the scalar 1 / ||A||_F^2 first underflows to 0 once the norm passes about 4096 (X_0 = 0 never
+        // converges), while the entries of A^T / ||A||_F are at most 1 and the second quotient stays representable.
+        var x = Eng.TensorDivideScalar(Eng.TensorDivideScalar(Eng.TensorTranspose(a), frobNorm), frobNorm);
         var identity = Eng.TensorEye<T>(n);
 
         for (int k = 0; k < maxIterations; k++)
@@ -3400,29 +3406,21 @@ public static class MatrixExtensions
             return new Matrix<T>(0, 0);
         }
 
-        // Truncated Taylor series: e^A = I + sum_{k=1..order} A^k / k!
-        var inverseFactorials = new double[Math.Max(order, 0)];
-        double factorial = 1.0;
-        for (int k = 1; k <= order; k++)
-        {
-            factorial *= k;
-            inverseFactorials[k - 1] = 1.0 / factorial;
-        }
-
-        T[] coefficients = new Tensor<double>(inverseFactorials, new[] { inverseFactorials.Length }).Cast<T>().ToArray();
+        // Truncated Taylor series: e^A = I + sum_{k=1..order} A^k / k!, built from the recurrence
+        // term_k = term_{k-1} A / k. The raw power A^k leaves the range of a narrow type long before the term
+        // A^k / k! does ([[10]] in Half: 10^5 overflows, 10^5 / 5! = 833 does not), and 1 / k! itself underflows.
+        int terms = Math.Max(order, 0);
+        T[] divisors = terms == 0
+            ? Array.Empty<T>()
+            : Eng.TensorArange<T>(1, terms + 1, 1).ToArray();
         var a = Tensor<T>.FromMatrix(matrix);
         var result = Eng.TensorEye<T>(d);
-        var power = a;
+        var term = Eng.TensorEye<T>(d);
 
         for (int k = 1; k <= order; k++)
         {
-            result = Eng.TensorAdd(result, Eng.TensorMultiplyScalar(power, coefficients[k - 1]));
-
-            // power = power * matrix (for next iteration)
-            if (k < order)
-            {
-                power = Eng.TensorMatMul(power, a);
-            }
+            term = Eng.TensorDivideScalar(Eng.TensorMatMul(term, a), divisors[k - 1]);
+            result = Eng.TensorAdd(result, term);
         }
 
         return result.ToMatrix();
