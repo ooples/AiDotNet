@@ -166,4 +166,76 @@ public class MatrixExtensionsReferenceTests
 
         Assert.False(matrix.IsPositiveDefiniteMatrix());
     }
+
+    [Fact]
+    public void GetRank_IllConditioned_CountsSingularValuesAboveThreshold()
+    {
+        // [[1e-3, 1], [0, 1e-3]] has singular values about 1 and 1e-6, so numpy.linalg.matrix_rank(A, tol=1e-5)
+        // is 1. Gaussian elimination keeps both pivots (1e-3 each), which are far above the threshold, and
+        // reported rank 2.
+        var matrix = new Matrix<double>(new double[,] { { 1e-3, 1 }, { 0, 1e-3 } });
+
+        Assert.Equal(1, matrix.GetRank(1e-5));
+        Assert.Equal(1, matrix.GetNullity(1e-5));
+        Assert.Equal(1, matrix.Nullspace(1e-5).Columns);
+    }
+
+    [Fact]
+    public void GetNullity_DefaultThreshold_IsNumpyMatrixRankTolerance()
+    {
+        // [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6], [0.7, 0.8, 0.9]] has rank 2 (row 2 is the mean of rows 1 and 3);
+        // numpy.linalg.matrix_rank gives 2 with its default tolerance sigma_max * max(m, n) * eps. The omitted
+        // threshold arrived as 0, and elimination left a 1.1e-16 rounding pivot, so the nullity was 0.
+        var matrix = new Matrix<double>(new double[,] { { 0.1, 0.2, 0.3 }, { 0.4, 0.5, 0.6 }, { 0.7, 0.8, 0.9 } });
+
+        Assert.Equal(1, matrix.GetNullity());
+    }
+
+    [Fact]
+    public void Nullspace_NegativeThreshold_UsesMachineEpsilon()
+    {
+        // Numerical Recipes' default threshold is 0.5 * sqrt(m + n + 1) * w_max * eps with eps the machine epsilon
+        // (about 2.5e-16 here), so the singular value 1e-12 of diag(1, 1e-12) is kept and the null space is empty,
+        // as scipy.linalg.null_space also finds. A 1e-10 "eps" put the threshold at 1.1e-10.
+        var matrix = new Matrix<double>(new double[,] { { 1, 0 }, { 0, 1e-12 } });
+
+        Assert.Equal(0, matrix.Nullspace(-1.0).Columns);
+    }
+
+    [Fact]
+    public void FrobeniusNorm_Half_AboveSquareRootOfHalfMax_IsFinite()
+    {
+        // ||diag(300, 300)||_F = 300 * sqrt(2) = 424.26; its sum of squares, 180000, overflows Half (65504).
+        var matrix = new Matrix<Half>(new[,] { { (Half)300, (Half)0 }, { (Half)0, (Half)300 } });
+
+        Assert.Equal(424.26, (double)matrix.FrobeniusNorm(), 0.5);
+    }
+
+    [Fact]
+    public void InverseNewton_Half_LargeNorm_Converges()
+    {
+        // The initial guess is A^T / ||A||_F^2; ||diag(512, 512)||_F^2 = 524288 overflows Half, which made the
+        // guess 0 and the iteration never converge. The inverse is diag(1/512, 1/512), exact in Half.
+        var matrix = new Matrix<Half>(new[,] { { (Half)512, (Half)0 }, { (Half)0, (Half)512 } });
+
+        var inverse = matrix.InverseNewton();
+
+        Assert.Equal(1.0 / 512, (double)inverse[0, 0], 1e-6);
+        Assert.Equal(1.0 / 512, (double)inverse[1, 1], 1e-6);
+        Assert.Equal(0.0, (double)inverse[0, 1], 1e-6);
+        Assert.Equal(0.0, (double)inverse[1, 0], 1e-6);
+    }
+
+    [Fact]
+    public void IsPositiveSemiDefiniteMatrix_EigenvalueWithinRounding_IsTrue()
+    {
+        // [[1, 1 + 1e-12], [1 + 1e-12, 1]] has eigenvalues 2 + 1e-12 and -1e-12. scipy's PSD check
+        // (_eigvalsh_to_eps) treats eigenvalues above -1e6 * eps * max|lambda| (about -4.4e-10) as zero, so this
+        // numerically singular matrix is positive semi-definite. The exact sign test rejected it.
+        var nearSingular = new Matrix<double>(new double[,] { { 1, 1 + 1e-12 }, { 1 + 1e-12, 1 } });
+        var indefinite = new Matrix<double>(new double[,] { { 1, 2 }, { 2, 1 } });
+
+        Assert.True(nearSingular.IsPositiveSemiDefiniteMatrix());
+        Assert.False(indefinite.IsPositiveSemiDefiniteMatrix());
+    }
 }

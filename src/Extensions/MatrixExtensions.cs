@@ -1956,9 +1956,22 @@ public static class MatrixExtensions
             return false; // Positive semi-definite matrices must be symmetric
         }
 
-        // Check if all eigenvalues are non-negative
+        if (matrix.Rows == 0)
+        {
+            return true;
+        }
+
+        // All eigenvalues must be non-negative up to rounding. Computed eigenvalues carry an error of order
+        // eps * max|lambda|, so a singular PSD matrix can return a tiny negative one. As scipy's _PSD
+        // (scipy.stats._multivariate._eigvalsh_to_eps) does, eigenvalues above -cond * max|lambda| count as
+        // non-negative, with cond = 1e6 * eps for double and 1e3 * eps for float. scipy has no half-precision
+        // factor; Half uses 10 * eps, since its own rounding (eps = 2^-10) is already near float's cutoff.
+        var numOps = MathHelper.GetNumericOperations<T>();
         var eigenvalues = Tensor<T>.FromVector(matrix.Eigenvalues());
-        return Eng.TensorCountNonzero(Eng.TensorLessThan(eigenvalues, MathHelper.GetNumericOperations<T>().Zero)) == 0;
+        double factor = typeof(T) == typeof(Half) ? 1e1 : typeof(T) == typeof(float) ? 1e3 : 1e6;
+        T largest = Eng.TensorMaxValue(Eng.TensorAbs(eigenvalues));
+        T cutoff = numOps.Negate(numOps.Multiply(numOps.FromDouble(factor * MachineEpsilon<T>()), largest));
+        return Eng.TensorCountNonzero(Eng.TensorLessThan(eigenvalues, cutoff)) == 0;
     }
 
     /// <summary>
@@ -2230,7 +2243,8 @@ public static class MatrixExtensions
     /// </summary>
     /// <typeparam name="T">The numeric type of the matrix elements.</typeparam>
     /// <param name="matrix">The matrix to analyze.</param>
-    /// <param name="threshold">Optional threshold value for determining when a value is considered zero. If not provided, a default threshold is calculated.</param>
+    /// <param name="threshold">Optional threshold value for determining when a singular value is considered zero. If not provided,
+    /// numpy.linalg.matrix_rank's default sigma_max * max(rows, columns) * eps is used, with eps the machine epsilon of T.</param>
     /// <returns>The nullity of the matrix.</returns>
     /// <remarks>
     /// <para>
@@ -2240,15 +2254,30 @@ public static class MatrixExtensions
     /// </remarks>
     public static int GetNullity<T>(this Matrix<T> matrix, T? threshold = default)
     {
-        var columns = matrix.Columns;
-        var ops = MathHelper.GetNumericOperations<T>();
+        int columns = matrix.Columns;
+        if (matrix.Rows == 0 || columns == 0)
+        {
+            return columns;
+        }
 
-        // Use default threshold if not provided
-        var _threshold = threshold ?? ops.FromDouble(1e-10);
+        // An omitted threshold arrives as default(T) = 0 for value-type T, not null. Then the tolerance is
+        // numpy.linalg.matrix_rank's default, sigma_max * max(m, n) * eps, with eps the machine epsilon of T.
+        T tolerance;
+        if (threshold is not null && !EqualityComparer<T?>.Default.Equals(threshold, default))
+        {
+            tolerance = threshold;
+        }
+        else
+        {
+            var numOps = MathHelper.GetNumericOperations<T>();
+            var (_, singular, _) = LinalgDispatch<T>.Svd(Tensor<T>.FromMatrix(matrix), fullMatrices: false);
+            tolerance = numOps.Multiply(
+                Eng.TensorMaxValue(singular),
+                numOps.FromDouble(Math.Max(matrix.Rows, columns) * MachineEpsilon<T>()));
+        }
 
-        // Nullity = n - rank (dimension of column space minus rank gives dimension of null space)
-        int rank = matrix.GetRank(_threshold);
-        return columns - rank;
+        // Nullity = n - rank (rank-nullity theorem)
+        return columns - matrix.GetRank(tolerance);
     }
 
     /// <summary>
@@ -2279,12 +2308,13 @@ public static class MatrixExtensions
         var (_, singular, vt) = LinalgDispatch<T>.Svd(Tensor<T>.FromMatrix(matrix), fullMatrices: true);
         var weights = PadSingularValues(singular, columns);
 
-        // A negative threshold selects Numerical Recipes' default, 0.5 * sqrt(m + n + 1) * w_max * eps.
+        // A negative threshold selects Numerical Recipes' default (Press et al., 3rd ed., section 2.6),
+        // 0.5 * sqrt(m + n + 1) * w_max * eps, with eps the machine epsilon of T.
         T effectiveThreshold = numOps.GreaterThanOrEquals(threshold, numOps.Zero)
             ? threshold
             : numOps.Multiply(
-                numOps.FromDouble(0.5 * Math.Sqrt(rows + columns + 1)),
-                numOps.Multiply(Eng.TensorMaxValue(weights), SafeTolerance<T>(1e-10)));
+                numOps.FromDouble(0.5 * Math.Sqrt(rows + columns + 1) * MachineEpsilon<T>()),
+                Eng.TensorMaxValue(weights));
 
         var selected = Eng.TensorLessEqual(weights, Eng.TensorFullLike(weights, effectiveThreshold));
         return SelectColumns(Eng.TensorTranspose(vt), selected);
@@ -2377,12 +2407,14 @@ public static class MatrixExtensions
     /// </remarks>
     public static T FrobeniusNorm<T>(this Matrix<T> matrix)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
+        if (matrix.Rows == 0 || matrix.Columns == 0)
+        {
+            return MathHelper.GetNumericOperations<T>().Zero;
+        }
 
-        // Vectorized: Compute sum of squares using SIMD dot product (x · x = sum of x² terms)
-        var span = matrix.AsSpan();
-        T sumOfSquares = numOps.Dot(span, span);
-        return numOps.Sqrt(sumOfSquares);
+        // sqrt(sum of squares), accumulated by the engine's norm in double. A sum of squares formed in T overflows
+        // Half (65504) once the norm passes 256, although the norm itself is representable.
+        return Eng.TensorNorm(Tensor<T>.FromMatrix(matrix))[0];
     }
 
     /// <summary>
@@ -2443,7 +2475,9 @@ public static class MatrixExtensions
         // Initial guess: X_0 = alpha * A^T where alpha = 1 / ||A||_F^2
         var a = Tensor<T>.FromMatrix(A);
         var frobNorm = A.FrobeniusNorm();
-        var alpha = NumOps.Divide(NumOps.One, NumOps.Multiply(frobNorm, frobNorm));
+
+        // alpha = (1 / ||A||_F) / ||A||_F: squaring the norm first overflows Half (65504) once it passes 256.
+        var alpha = NumOps.Divide(NumOps.Divide(NumOps.One, frobNorm), frobNorm);
         var x = Eng.TensorMultiplyScalar(Eng.TensorTranspose(a), alpha);
         var identity = Eng.TensorEye<T>(n);
 
@@ -2591,8 +2625,8 @@ public static class MatrixExtensions
     /// </summary>
     /// <typeparam name="T">The numeric type of the matrix elements.</typeparam>
     /// <param name="matrix">The matrix to calculate the rank for.</param>
-    /// <param name="threshold">The threshold value for determining linearly independent rows/columns.</param>
-    /// <returns>The rank of the matrix.</returns>
+    /// <param name="threshold">Singular values greater than this count toward the rank.</param>
+    /// <returns>The rank of the matrix: the number of singular values greater than <paramref name="threshold"/>.</returns>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> The rank of a matrix tells you how many linearly independent rows or columns it has.
@@ -2602,63 +2636,16 @@ public static class MatrixExtensions
     /// </remarks>
     public static int GetRank<T>(this Matrix<T> matrix, T threshold)
     {
-        var rows = matrix.Rows;
-        var columns = matrix.Columns;
-
-        // Gaussian elimination with partial pivoting to row echelon form, one whole-row engine update per pivot.
-        var work = Tensor<T>.FromMatrix(matrix);
-        var numOps = MathHelper.GetNumericOperations<T>();
-        int rank = 0;
-        int pivotRow = 0;
-
-        for (int col = 0; col < columns && pivotRow < rows; col++)
+        if (matrix.Rows == 0 || matrix.Columns == 0)
         {
-            int remaining = rows - pivotRow;
-
-            // Find the row with the largest absolute value in this column (partial pivoting; first maximum wins).
-            var magnitudes = Eng.Reshape(
-                Eng.TensorAbs(Eng.TensorSlice(work, new[] { pivotRow, col }, new[] { remaining, 1 })), new[] { remaining });
-            int maxOffset = Eng.TensorArgMax(magnitudes, 0).ToArray()[0];
-            var maxVal = Eng.TensorSlice(magnitudes, new[] { maxOffset }, new[] { 1 });
-
-            // If the maximum value is at or below the threshold, skip this column (no pivot)
-            if (Eng.TensorCountNonzero(Eng.TensorLessEqual(maxVal, Eng.TensorFullLike(maxVal, threshold))) > 0)
-                continue;
-
-            // Swap rows to bring the pivot to the current row
-            if (maxOffset != 0)
-            {
-                var order = new int[rows];
-                for (int r = 0; r < rows; r++)
-                    order[r] = r;
-                order[pivotRow] = pivotRow + maxOffset;
-                order[pivotRow + maxOffset] = pivotRow;
-                work = Eng.TensorIndexSelect(work, new Tensor<int>(order, new[] { rows }), 0);
-            }
-
-            // Eliminate entries below the pivot: row -= (row[col] / pivot) * pivotRow, skipping rows already zero.
-            if (remaining > 1)
-            {
-                var pivotRowValues = Eng.TensorSlice(work, new[] { pivotRow, 0 }, new[] { 1, columns });
-                var below = Eng.TensorSlice(work, new[] { pivotRow + 1, 0 }, new[] { remaining - 1, columns });
-                var pivot = Eng.TensorSlice(pivotRowValues, new[] { 0, col }, new[] { 1, 1 });
-                var leading = Eng.TensorSlice(below, new[] { 0, col }, new[] { remaining - 1, 1 });
-                var factors = Eng.TensorDivide(leading, Eng.TensorBroadcastTo(pivot, new[] { remaining - 1, 1 }));
-                var shape = new[] { remaining - 1, columns };
-                var eliminated = Eng.TensorSubtract(
-                    below,
-                    Eng.TensorMultiply(Eng.TensorBroadcastTo(factors, shape), Eng.TensorBroadcastTo(pivotRowValues, shape)));
-                var active = Eng.TensorBroadcastTo(Eng.TensorNotEquals(leading, numOps.Zero), shape);
-                below = Eng.TensorWhere(active, eliminated, below);
-                work = Eng.TensorConcatenate(
-                    new[] { Eng.TensorSlice(work, new[] { 0, 0 }, new[] { pivotRow + 1, columns }), below }, 0);
-            }
-
-            rank++;
-            pivotRow++;
+            return 0;
         }
 
-        return rank;
+        // numpy.linalg.matrix_rank(A, tol): the number of singular values of A greater than tol. Singular values
+        // are the reference for numerical rank; elimination pivots are not, and can stay large for an
+        // ill-conditioned matrix (Golub and Van Loan, Matrix Computations, section 5.4.1).
+        var (_, singular, _) = LinalgDispatch<T>.Svd(Tensor<T>.FromMatrix(matrix), fullMatrices: false);
+        return Eng.TensorCountNonzero(Eng.TensorGreaterThan(singular, threshold));
     }
 
     /// <summary>
@@ -3519,6 +3506,15 @@ public static class MatrixExtensions
 
         return value;
     }
+
+    /// <summary>
+    /// The machine epsilon of <typeparamref name="T"/> (numpy.finfo(dtype).eps): 2^-10 for Half, 2^-23 for float
+    /// and 2^-52 for double and any other type.
+    /// </summary>
+    internal static double MachineEpsilon<T>() =>
+        typeof(T) == typeof(Half) ? 9.765625e-4
+        : typeof(T) == typeof(float) ? 1.1920928955078125e-7
+        : 2.220446049250313e-16;
 
     /// <summary>True when any element of <paramref name="tensor"/> differs from <paramref name="value"/> (NaN always differs).</summary>
     private static bool AnyNotEqual<T>(Tensor<T> tensor, T value) =>
