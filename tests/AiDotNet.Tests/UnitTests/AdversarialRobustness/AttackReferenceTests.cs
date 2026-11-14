@@ -129,6 +129,8 @@ public class AttackReferenceTests
     [Fact(Timeout = 60000)]
     public async Task PGD_L2_StepIsNormalizedGradientNotSign()
     {
+        await Task.Yield();
+
         // torchattacks PGDL2: adv = x + alpha * g / ||g||_2. A sign step would move every coordinate by alpha.
         var model = new LinearLogitModel(
             new double[,] { { 1.0, -2.0, 0.5, 3.0 }, { -1.0, 0.25, 2.0, -0.5 } },
@@ -168,6 +170,8 @@ public class AttackReferenceTests
     [Fact(Timeout = 60000)]
     public async Task PGD_LInfinityRandomStart_IsUniformInEpsilonBall()
     {
+        await Task.Yield();
+
         // Madry et al. / torchattacks PGD: delta ~ U(-eps, eps). P(|delta| > 0.8 eps) = 0.2 for a uniform start,
         // but about 0.42 for a Gaussian with std eps clipped to the ball.
         const int n = 4000;
@@ -202,6 +206,8 @@ public class AttackReferenceTests
     [Fact(Timeout = 60000)]
     public async Task PGD_RandomStart_DiffersAcrossCallsOnOneInstance()
     {
+        await Task.Yield();
+
         // Each call draws a fresh start from the attack's seeded stream instead of reusing the same seed.
         var model = new LinearLogitModel(new double[2, 8], new double[] { 0.0, 0.0 });
         var options = new AdversarialAttackOptions<double>
@@ -223,6 +229,8 @@ public class AttackReferenceTests
     [Fact(Timeout = 60000)]
     public async Task CW_Untargeted_FindsMisclassifiedExampleWithSmallL2()
     {
+        await Task.Yield();
+
         // Class 0 wins by 0.1 at x = (0.5, 0.5). The minimal L2 change that flips it moves the two pixels
         // by 0.025 each in opposite directions (||delta|| ~= 0.035). The paper's loss lowers the true logit.
         var model = new LinearLogitModel(
@@ -243,6 +251,8 @@ public class AttackReferenceTests
     [Fact(Timeout = 60000)]
     public async Task CW_Targeted_ReachesTargetClassAboveEveryOtherLogit()
     {
+        await Task.Yield();
+
         // f = max(max_{i != t} Z_i - Z_t, -kappa): the target must beat every other class, not only
         // the classes other than the true label.
         var model = new LinearLogitModel(
@@ -265,6 +275,8 @@ public class AttackReferenceTests
     [Fact(Timeout = 60000)]
     public async Task ViTPatchAttack_PerturbsOnlyTheMostSalientPatchAlongTheGradientSign()
     {
+        await Task.Yield();
+
         // 1x1 patches: the attack must spend its whole L-inf budget on the coordinate with the largest
         // |dLoss/dx| and move it along sign(dLoss/dx); every other coordinate stays untouched.
         var model = new LinearLogitModel(
@@ -307,6 +319,8 @@ public class AttackReferenceTests
     [Fact(Timeout = 60000)]
     public async Task EvaluateRobustness_UsesRobustBenchAccounting()
     {
+        await Task.Yield();
+
         // logits = x. Sample A (label 0) is correct and the swap attack fools it; sample B (label 1) is
         // already misclassified, so it is not robust even though the swapped input lands on its label.
         var model = new LinearLogitModel(new double[,] { { 1.0, 0.0 }, { 0.0, 1.0 } }, new double[] { 0.0, 0.0 });
@@ -327,6 +341,8 @@ public class AttackReferenceTests
     [Fact(Timeout = 60000)]
     public async Task EvaluateRobustness_FailingAttackIsNotCountedAsDefended()
     {
+        await Task.Yield();
+
         var model = new LinearLogitModel(new double[,] { { 1.0, 0.0 }, { 0.0, 1.0 } }, new double[] { 0.0, 0.0 });
         var result = new AiModelResult<double, Vector<double>, Vector<double>> { Model = model };
         var attack = new ScriptedAttack(_ => throw new InvalidOperationException("attack failed"));
@@ -440,6 +456,8 @@ public class AttackReferenceTests
     [Fact(Timeout = 60000)]
     public async Task HalfL2Norm_StaysFiniteAboveTheSquareRootOfHalfMax()
     {
+        await Task.Yield();
+
         // ||(300, 300, 300, 300)||_2 = 600, but the sum of squares (360000) is past the Half maximum 65504.
         var probe = new HalfNumericsProbe();
 
@@ -468,6 +486,8 @@ public class AttackReferenceTests
     [Fact(Timeout = 60000)]
     public async Task HalfMeanSquaredError_StaysFiniteWhenTheSumOfSquaresOverflows()
     {
+        await Task.Yield();
+
         // 1000 outputs each 10 from the target: MSE = 100, while the sum of squares is 100000.
         var probe = new HalfNumericsProbe();
         var output = HalfVector(Enumerable.Repeat(10.0, 1000).ToArray());
@@ -480,6 +500,8 @@ public class AttackReferenceTests
     [Fact(Timeout = 60000)]
     public async Task HalfFgsm_BlackBoxGradientDoesNotCollapseBelowTheTypeResolution()
     {
+        await Task.Yield();
+
         // In Half, 0.5 + 1e-4 rounds back to 0.5, so a 1e-4 probe step gives a zero gradient and FGSM returns x.
         // The step must stay resolvable; the result is x + eps * sign(dMSE/dx).
         var inner = new LinearLogitModel(
@@ -595,6 +617,8 @@ public class AttackReferenceTests
     [Fact(Timeout = 60000)]
     public async Task HalfCW_AdamStaysBoundedWhenTheSquaredGradientUnderflows()
     {
+        await Task.Yield();
+
         // Pixel 2 barely matters (|g| ~ 1e-3): (1 - beta2) g^2 ~ 1e-9 underflows to 0 in Half, and so does the
         // Adam epsilon 1e-8, so m / (sqrt(v) + eps) became infinite and threw the pixel to the box edge.
         // Adam normalizes the step, so the pixel stays near 0.5 while pixels 0 and 1 flip the class.
@@ -614,6 +638,8 @@ public class AttackReferenceTests
     [Fact(Timeout = 60000)]
     public async Task HalfCW_PixelAtTheBoxEdgeCanStillMove()
     {
+        await Task.Yield();
+
         // Class 0 holds while pixel 0 (at 1.0) stays above 0.95. Half rounds the 0.9999 tanh-space bound to 1,
         // where atanh is infinite and the gradient of the pixel is 0, so it could never decrease.
         var inner = new LinearLogitModel(new double[,] { { 1.0, 0.0 }, { 0.0, 0.0 } }, new double[] { 0.0, 0.95 });
@@ -629,6 +655,8 @@ public class AttackReferenceTests
     [Fact(Timeout = 60000)]
     public async Task CW_TargetedSuccessUsesTheSameClampedTargetAsTheLoss()
     {
+        await Task.Yield();
+
         // TargetClass 7 is clamped to class 2 for the loss; success must be judged against class 2 as well,
         // otherwise no candidate ever counts as successful and the clean input comes back.
         var model = new LinearLogitModel(
@@ -645,6 +673,8 @@ public class AttackReferenceTests
     [Fact(Timeout = 60000)]
     public async Task ViTPatchAttack_TargetedRunsUntilThePredictionReachesTheTarget()
     {
+        await Task.Yield();
+
         // Targeted: the step descends the MSE toward the label (class 1), which the class-0 bias of 10 keeps out
         // of reach. Stopping as soon as the prediction differs from the label ended the attack after one step
         // (0.02); every step must run, spending the whole budget against the gradient sign.
@@ -688,6 +718,8 @@ public class AttackReferenceTests
     [Fact(Timeout = 60000)]
     public async Task EvaluateRobustness_CleanAccuracyIsMeasuredThroughTheDefense()
     {
+        await Task.Yield();
+
         // logits = x and the defense swaps the two features. The clean input (1, 0) with label 0 is correct
         // without the defense but wrong through it, so the defended classifier is not clean-correct on it and
         // there is nothing for the (identity) attack to flip.
@@ -780,6 +812,8 @@ public class AttackReferenceTests
     [Fact(Timeout = 60000)]
     public async Task ConfiguredAttackEpsilon_BoundsTheGeneratedPerturbation()
     {
+        await Task.Yield();
+
         // 10 steps of 0.05 along a consistent gradient sign saturate the L-inf ball, so every coordinate moves
         // exactly AttackEpsilon (0.2). The setting was ignored and the result always used epsilon 0.03.
         var x = new[] { 0.5, 0.5, 0.5, 0.5 };
@@ -799,6 +833,8 @@ public class AttackReferenceTests
     [Fact(Timeout = 60000)]
     public async Task ConfiguredAttackStepSize_SetsThePgdStep()
     {
+        await Task.Yield();
+
         // Two steps of 0.02 inside a 0.5 ball move every coordinate by 0.04.
         var x = new[] { 0.5, 0.5, 0.5, 0.5 };
         var result = ResultWith(SteepModel(), new AdversarialRobustnessOptions<double>
@@ -817,6 +853,8 @@ public class AttackReferenceTests
     [Fact(Timeout = 60000)]
     public async Task ConfiguredAttackIterations_SetsTheNumberOfPgdSteps()
     {
+        await Task.Yield();
+
         // Three steps of 0.05 inside a 0.5 ball move every coordinate by 0.15.
         var x = new[] { 0.5, 0.5, 0.5, 0.5 };
         var result = ResultWith(SteepModel(), new AdversarialRobustnessOptions<double>
@@ -835,6 +873,8 @@ public class AttackReferenceTests
     [Fact(Timeout = 60000)]
     public async Task ConfiguredAttackNormType_L2SelectsTheL2StepAndBall()
     {
+        await Task.Yield();
+
         // L2: one normalized-gradient step of length 1 projected onto the 0.1 ball gives ||delta||_2 = 0.1 along
         // the gradient, so the coordinates move by different amounts. An L-inf step moves all of them equally.
         var x = new[] { 0.5, 0.5, 0.5, 0.5 };
@@ -856,6 +896,8 @@ public class AttackReferenceTests
     [Fact(Timeout = 60000)]
     public async Task ConfiguredTargetedAttack_PushesTowardTheConfiguredTargetClass()
     {
+        await Task.Yield();
+
         // logits = x. Targeted PGD descends the MSE toward the target one-hot; with a 0.2 budget the target class
         // wins whichever class is configured. Untargeted, the true class 0 loses to class 1.
         var model = new LinearLogitModel(
@@ -884,6 +926,8 @@ public class AttackReferenceTests
     [Fact(Timeout = 60000)]
     public async Task ConfiguredTargetedEvaluation_CountsOnlyHitsOnTheTargetAsSuccesses()
     {
+        await Task.Yield();
+
         // Targeted at class 2: the attack lands on class 2, so the success rate is 1 and nothing stays robust.
         var model = new LinearLogitModel(
             new double[,] { { 1.0, 0.0, 0.0 }, { 0.0, 1.0, 0.0 }, { 0.0, 0.0, 1.0 } },
@@ -909,6 +953,8 @@ public class AttackReferenceTests
     [Fact(Timeout = 300000)]
     public async Task ConfiguredTargetedAutoAttack_ReachesTheConfiguredTargetClass()
     {
+        await Task.Yield();
+
         // With targeted attacks configured, AutoAttack runs APGD-T and FAB-T against TargetClass = 2. It ran the
         // untargeted ensemble instead, whose class-1 misclassification is not a targeted success.
         var model = new LinearLogitModel(
@@ -931,6 +977,8 @@ public class AttackReferenceTests
     [Fact(Timeout = 60000)]
     public async Task ConfiguredRandomStart_Disabled_LeavesAZeroGradientInputUnchanged()
     {
+        await Task.Yield();
+
         // With a constant model every gradient is zero, so only the random start can move the input.
         var model = new LinearLogitModel(new double[2, 4], new double[] { 0.0, 0.0 });
         var x = new[] { 0.5, 0.5, 0.5, 0.5 };
@@ -944,6 +992,8 @@ public class AttackReferenceTests
     [Fact(Timeout = 60000)]
     public async Task ConfiguredRobustnessTesting_RunsEachConfiguredAttackMethod()
     {
+        await Task.Yield();
+
         var result = ResultWith(SteepModel(), new AdversarialRobustnessOptions<double>
         {
             EnableRobustnessTesting = true,
@@ -965,6 +1015,8 @@ public class AttackReferenceTests
     [Fact(Timeout = 60000)]
     public async Task ConfiguredRobustnessTesting_DisabledOrUnconfiguredRefusesToRun()
     {
+        await Task.Yield();
+
         var inputs = new[] { new Vector<double>(new[] { 0.5, 0.5, 0.5, 0.5 }) };
         var labels = new[] { OneHot(0, 2) };
         var disabled = ResultWith(SteepModel(), new AdversarialRobustnessOptions<double> { EnableRobustnessTesting = false });
@@ -977,6 +1029,8 @@ public class AttackReferenceTests
     [Fact(Timeout = 60000)]
     public async Task ConfiguredAttackSettings_InvalidValuesAreRejected()
     {
+        await Task.Yield();
+
         var x = new Vector<double>(new[] { 0.5, 0.5, 0.5, 0.5 });
         var label = OneHot(0, 2);
         var inputs = new[] { x };
