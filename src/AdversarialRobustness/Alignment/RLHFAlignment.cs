@@ -385,26 +385,75 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
         }
     }
 
+    /// <summary>
+    /// Fits a Bradley-Terry reward model to the preference pairs (Christiano et al. 2017; Ouyang et al. 2022, eq. 1).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The reward is linear in the response, r(x, y) = w . y, and w maximizes the preference log-likelihood
+    /// sum log sigmoid(r(y_preferred) - r(y_rejected)) by <see cref="AlignmentMethodOptions{T}.TrainingIterations"/>
+    /// full-batch gradient-ascent steps of size <see cref="RewardModelStepSize"/>. Without preference pairs the reward
+    /// is zero, so alignment leaves the model's distribution unchanged.
+    /// </para>
+    /// </remarks>
     private Func<Vector<T>, Vector<T>, double> TrainRewardModel(AlignmentFeedbackData<T> feedbackData)
     {
-        // Train a reward model from human preference comparisons
-        // This is a simplified placeholder - real implementation would use neural networks
+        Guard.NotNull(feedbackData);
+        var pairs = feedbackData.Preferences ?? Array.Empty<(int preferred, int notPreferred)>();
+        int dimension = feedbackData.Outputs.Columns;
+        if (pairs.Length == 0 || dimension == 0)
+        {
+            return (input, output) => 0.0;
+        }
 
+        if (!feedbackData.ValidatePreferences())
+        {
+            throw new ArgumentException("A preference pair indexes a row outside AlignmentFeedbackData.Outputs.", nameof(feedbackData));
+        }
+
+        // D = Y_preferred - Y_rejected, one row per pair.
+        var outputs = Tensor<T>.FromMatrix(feedbackData.Outputs);
+        var preferred = Engine.TensorIndexSelect(outputs, new Tensor<int>(pairs.Select(p => p.preferred).ToArray(), new[] { pairs.Length }), 0);
+        var rejected = Engine.TensorIndexSelect(outputs, new Tensor<int>(pairs.Select(p => p.notPreferred).ToArray(), new[] { pairs.Length }), 0);
+        var differences = Engine.TensorSubtract(preferred, rejected);
+        var differencesT = Engine.TensorTranspose(differences);
+        var weights = new Tensor<T>(new[] { dimension, 1 });
+        T step = NumOps.FromDouble(RewardModelStepSize / pairs.Length);
+
+        for (int iteration = 0; iteration < options.TrainingIterations; iteration++)
+        {
+            // d/dw sum log sigmoid(D w) = D^T (1 - sigmoid(D w)).
+            var margins = Engine.TensorMatMul(differences, weights);
+            var residual = Engine.TensorAddScalar(Engine.TensorNegate(Engine.TensorSigmoid(margins)), NumOps.One);
+            var gradient = Engine.TensorMatMul(differencesT, residual);
+            weights = Engine.TensorAdd(weights, Engine.TensorMultiplyScalar(gradient, step));
+        }
+
+        var w = Engine.Reshape(weights, new[] { dimension });
         return (input, output) =>
         {
-            // Simple reward heuristic based on output characteristics
-            var outputMean = output.Length > 0 ? NumOps.ToDouble(Engine.TensorMean(output.AsTensor())) : 0.0;
+            int length = Math.Min(dimension, output.Length);
+            if (length == 0)
+            {
+                return 0.0;
+            }
 
-            // Higher reward for moderate values (heuristic for "reasonable" outputs)
-            var reward = 1.0 - Math.Abs(outputMean - 0.5);
-            return MathHelper.Clamp(reward, 0.0, 1.0);
+            var y = Engine.TensorSlice(output.AsTensor(), new[] { 0 }, new[] { length });
+            var weightSlice = Engine.TensorSlice(w, new[] { 0 }, new[] { length });
+            T mean = Engine.TensorMean(Engine.TensorMultiply(y, weightSlice));
+            return NumOps.ToDouble(mean) * length;
         };
     }
 
+    /// <summary>The gradient-ascent step of the reward model fit, per unit of mean gradient.</summary>
+    private const double RewardModelStepSize = 1.0;
+
+    /// <summary>
+    /// The aligned policy: the optimum of the KL-regularized RLHF objective, softmax(z + r / KLCoefficient), over the
+    /// reference model's output classes (see <see cref="KlRegularizedPolicy{T}"/>).
+    /// </summary>
     private IPredictiveModel<T, Vector<T>, Vector<T>> FinetuneWithRL(IPredictiveModel<T, Vector<T>, Vector<T>> baseModel, AlignmentFeedbackData<T> feedbackData, Func<Vector<T>, Vector<T>, double> rewardModelFunc)
     {
-        // Simplified PPO-like fine-tuning.
-        // Real implementation would integrate with a RL framework.
         _ = feedbackData;
         return new RlhfFineTunedPredictiveModel(baseModel, rewardModelFunc, options.KLCoefficient);
     }
@@ -580,15 +629,7 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
 
         public Vector<T> Predict(Vector<T> input)
         {
-            var output = _baseModel.Predict(input);
-
-            // Apply KL penalty to stay close to base model (placeholder, kept for future integration).
-            _ = _klCoefficient;
-
-            var reward = _rewardModel(input, output);
-            var adjustment = NumOps.FromDouble(reward * 0.1);
-            var shifted = Engine.TensorAddScalar(output.AsTensor(), adjustment);
-            return Engine.TensorClamp(shifted, NumOps.Zero, NumOps.One).ToVector();
+            return KlRegularizedPolicy<T>.Apply(input, _baseModel.Predict(input), _rewardModel, _klCoefficient);
         }
 
         public ModelMetadata<T> GetModelMetadata()

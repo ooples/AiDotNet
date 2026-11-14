@@ -591,15 +591,9 @@ public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
 
         public Vector<T> Predict(Vector<T> input)
         {
-            var output = _baseModel.Predict(input);
-            var reward = _rewardModel(input, output);
-
-            // Adjust output based on reward signal: push toward higher-reward regions
-            double adjustment = reward * (1.0 - _klCoefficient) * 0.1;
-            var shifted = Engine.TensorAddScalar(output.AsTensor(), NumOps.FromDouble(adjustment));
-            var adjusted = Engine.TensorClamp(shifted, NumOps.Zero, NumOps.One).ToVector();
-
-            return adjusted;
+            // The optimum of the KL-regularized objective over the output classes, softmax(z + r / beta).
+            return AiDotNet.AdversarialRobustness.Alignment.KlRegularizedPolicy<T>.Apply(
+                input, _baseModel.Predict(input), _rewardModel, _klCoefficient);
         }
 
         public ModelMetadata<T> GetModelMetadata() => _baseModel.GetModelMetadata();

@@ -518,7 +518,7 @@ public class AdversarialRobustnessIntegrationTests
         {
             Epsilon = 0.1,
             UsePreprocessing = true,
-            PreprocessingMethod = "jpeg"
+            PreprocessingMethod = AdversarialPreprocessingMethod.JpegCompression
         };
         var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
         var input = CreateTestInput();
@@ -587,7 +587,7 @@ public class AdversarialRobustnessIntegrationTests
         {
             Epsilon = 0.15,
             UsePreprocessing = true,
-            PreprocessingMethod = "jpeg"
+            PreprocessingMethod = AdversarialPreprocessingMethod.JpegCompression
         };
         var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
 
@@ -1518,7 +1518,7 @@ public class AdversarialRobustnessIntegrationTests
         {
             Epsilon = 0.1,
             UsePreprocessing = true,
-            PreprocessingMethod = "denoising"
+            PreprocessingMethod = AdversarialPreprocessingMethod.MedianSmoothing
         };
         var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(defenseOptions);
 

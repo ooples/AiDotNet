@@ -299,6 +299,20 @@ public class SafetyFilter<T> : ISafetyFilter<T>
     /// <inheritdoc/>
     public JailbreakDetectionResult<T> DetectJailbreak(Vector<T> input)
     {
+        return DetectJailbreak(ConvertToText(input));
+    }
+
+    /// <summary>
+    /// Detects jailbreak attempts in text with the filter's patterns and <see cref="SafetyFilterOptions{T}.JailbreakSensitivity"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>The numeric overload stringifies the vector, which suits token text but never matches the English
+    /// patterns on raw numbers; call this overload to screen prompt text directly.</para>
+    /// </remarks>
+    /// <param name="text">The text to screen.</param>
+    /// <returns>The detection result.</returns>
+    public JailbreakDetectionResult<T> DetectJailbreak(string text)
+    {
         var result = new JailbreakDetectionResult<T>
         {
             JailbreakDetected = false,
@@ -307,7 +321,6 @@ public class SafetyFilter<T> : ISafetyFilter<T>
             Indicators = new List<JailbreakIndicator>()
         };
 
-        var text = ConvertToText(input);
         if (string.IsNullOrEmpty(text))
         {
             return result;
@@ -371,6 +384,7 @@ public class SafetyFilter<T> : ISafetyFilter<T>
     /// <summary>
     /// Merges a classifier verdict into the pattern result: each category keeps the larger of the two scores.
     /// </summary>
+    [ScalarKernel("Reads one score per harm category from a dictionary; there is no tensor to vectorize over.")]
     private static void MergeClassifierScores(HarmfulContentResult<T> result, ContentClassificationResult<T> classification)
     {
         if (!classification.IsHarmful)

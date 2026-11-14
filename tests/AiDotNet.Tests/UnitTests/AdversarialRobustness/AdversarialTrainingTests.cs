@@ -1,3 +1,4 @@
+using AiDotNet.Enums;
 using AiDotNet.AdversarialRobustness.Attacks;
 using AiDotNet.AdversarialRobustness.Defenses;
 using AiDotNet.Autodiff;
@@ -230,7 +231,7 @@ public class AdversarialTrainingTests
         var options = new AdversarialDefenseOptions<double>
         {
             UsePreprocessing = true,
-            PreprocessingMethod = "JPEG"
+            PreprocessingMethod = AdversarialPreprocessingMethod.JpegCompression
         };
         var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
         var model = new MockClassificationModel();
@@ -271,7 +272,7 @@ public class AdversarialTrainingTests
         var options = new AdversarialDefenseOptions<double>
         {
             UsePreprocessing = true,
-            PreprocessingMethod = "JPEG"
+            PreprocessingMethod = AdversarialPreprocessingMethod.JpegCompression
         };
         var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
         var input = new Vector<double>(new[] { 0.55, 0.66, 0.77 });
@@ -293,7 +294,7 @@ public class AdversarialTrainingTests
         var options = new AdversarialDefenseOptions<double>
         {
             UsePreprocessing = true,
-            PreprocessingMethod = "bit_depth_reduction"
+            PreprocessingMethod = AdversarialPreprocessingMethod.BitDepthReduction
         };
         var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
         var input = new Vector<double>(new[] { 0.55, 0.66, 0.77 });
@@ -310,7 +311,7 @@ public class AdversarialTrainingTests
         var options = new AdversarialDefenseOptions<double>
         {
             UsePreprocessing = true,
-            PreprocessingMethod = "denoising"
+            PreprocessingMethod = AdversarialPreprocessingMethod.MedianSmoothing
         };
         var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
         var input = new Vector<double>(new[] { 0.5, 0.6, 0.7 });
@@ -322,19 +323,17 @@ public class AdversarialTrainingTests
     }
 
     [Fact(Timeout = 60000)]
-    public async Task PreprocessInput_UnknownMethod_ReturnsOriginal()
+    public async Task PreprocessInput_UndefinedMethod_Throws()
     {
         var options = new AdversarialDefenseOptions<double>
         {
             UsePreprocessing = true,
-            PreprocessingMethod = "unknown_method"
+            PreprocessingMethod = (AdversarialPreprocessingMethod)99
         };
         var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
         var input = new Vector<double>(new[] { 0.5, 0.6, 0.7 });
 
-        var preprocessed = defense.PreprocessInput(input);
-
-        Assert.Same(input, preprocessed);
+        Assert.Throws<InvalidOperationException>(() => defense.PreprocessInput(input));
     }
 
     #endregion
@@ -546,7 +545,7 @@ public class AdversarialTrainingTests
         {
             Epsilon = 0.3,
             UsePreprocessing = true,
-            PreprocessingMethod = "bit_depth_reduction"
+            PreprocessingMethod = AdversarialPreprocessingMethod.BitDepthReduction
         };
         var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
 
@@ -554,7 +553,7 @@ public class AdversarialTrainingTests
 
         Assert.Equal(0.3, retrievedOptions.Epsilon);
         Assert.True(retrievedOptions.UsePreprocessing);
-        Assert.Equal("bit_depth_reduction", retrievedOptions.PreprocessingMethod);
+        Assert.Equal(AdversarialPreprocessingMethod.BitDepthReduction, retrievedOptions.PreprocessingMethod);
     }
 
     #endregion
@@ -692,7 +691,7 @@ public class AdversarialTrainingTests
         var options = new AdversarialDefenseOptions<double>
         {
             UsePreprocessing = true,
-            PreprocessingMethod = "JPEG"
+            PreprocessingMethod = AdversarialPreprocessingMethod.JpegCompression
         };
         var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
         var input = new Vector<double>(new[] { 1.5, -0.5, 2.0 }); // Out of [0,1] range
@@ -711,7 +710,7 @@ public class AdversarialTrainingTests
         var options = new AdversarialDefenseOptions<double>
         {
             UsePreprocessing = true,
-            PreprocessingMethod = "bit_depth_reduction"
+            PreprocessingMethod = AdversarialPreprocessingMethod.BitDepthReduction
         };
         var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(options);
         var input = new Vector<double>(new[] { 1.5, -0.5, 2.0 });

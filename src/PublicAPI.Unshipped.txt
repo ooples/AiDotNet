@@ -25021,3 +25021,71 @@ AiDotNet.Interpretability.Explainers.DiCEExplainer<T>.ExplainWithTarget(AiDotNet
 AiDotNet.Interpretability.Explainers.DiCEExplanation<T>.AverageDistance.get -> T
 AiDotNet.Interpretability.Explainers.SingleCounterfactual<T>.Distance.get -> T
 AiDotNet.Interpretability.Explainers.SingleCounterfactual<T>.SingleCounterfactual(AiDotNet.Tensors.LinearAlgebra.Vector<T>! counterfactualInstance, T prediction, System.Collections.Generic.List<AiDotNet.Interpretability.Explainers.FeatureChange<T>!>! changes, T distance) -> void
+AiDotNet.AdversarialRobustness.Defenses.AdversarialTraining<T, TInput, TOutput>.AdversarialTraining(AiDotNet.Models.Options.AdversarialDefenseOptions<T>! options, AiDotNet.Interfaces.IAdversarialAttack<T, TInput, TOutput>! trainingAttack) -> void
+AiDotNet.AdversarialRobustness.Safety.SafetyFilter<T>.SafetyFilter(AiDotNet.Models.Options.SafetyFilterOptions<T>! options, AiDotNet.AdversarialRobustness.Safety.IContentClassifier<T>? classifier) -> void
+AiDotNet.Enums.AdversarialPreprocessingMethod
+AiDotNet.Enums.AdversarialPreprocessingMethod.BitDepthReduction = 1 -> AiDotNet.Enums.AdversarialPreprocessingMethod
+AiDotNet.Enums.AdversarialPreprocessingMethod.JpegCompression = 0 -> AiDotNet.Enums.AdversarialPreprocessingMethod
+AiDotNet.Enums.AdversarialPreprocessingMethod.MedianSmoothing = 2 -> AiDotNet.Enums.AdversarialPreprocessingMethod
+AiDotNet.Enums.PiiType
+AiDotNet.Enums.PiiType.Address = 11 -> AiDotNet.Enums.PiiType
+AiDotNet.Enums.PiiType.ApiKey = 5 -> AiDotNet.Enums.PiiType
+AiDotNet.Enums.PiiType.AwsAccessKey = 6 -> AiDotNet.Enums.PiiType
+AiDotNet.Enums.PiiType.CreditCardNumber = 3 -> AiDotNet.Enums.PiiType
+AiDotNet.Enums.PiiType.DriversLicense = 9 -> AiDotNet.Enums.PiiType
+AiDotNet.Enums.PiiType.Email = 0 -> AiDotNet.Enums.PiiType
+AiDotNet.Enums.PiiType.IPAddress = 4 -> AiDotNet.Enums.PiiType
+AiDotNet.Enums.PiiType.Organization = 12 -> AiDotNet.Enums.PiiType
+AiDotNet.Enums.PiiType.PassportNumber = 8 -> AiDotNet.Enums.PiiType
+AiDotNet.Enums.PiiType.Password = 7 -> AiDotNet.Enums.PiiType
+AiDotNet.Enums.PiiType.PersonName = 10 -> AiDotNet.Enums.PiiType
+AiDotNet.Enums.PiiType.PhoneNumber = 1 -> AiDotNet.Enums.PiiType
+AiDotNet.Enums.PiiType.SocialSecurityNumber = 2 -> AiDotNet.Enums.PiiType
+AiDotNet.Enums.RedTeamingCategory
+AiDotNet.Enums.RedTeamingCategory.BiasExploration = 4 -> AiDotNet.Enums.RedTeamingCategory
+AiDotNet.Enums.RedTeamingCategory.HarmfulContent = 1 -> AiDotNet.Enums.RedTeamingCategory
+AiDotNet.Enums.RedTeamingCategory.Jailbreaking = 0 -> AiDotNet.Enums.RedTeamingCategory
+AiDotNet.Enums.RedTeamingCategory.Misinformation = 2 -> AiDotNet.Enums.RedTeamingCategory
+AiDotNet.Enums.RedTeamingCategory.PrivacyViolation = 3 -> AiDotNet.Enums.RedTeamingCategory
+AiDotNet.Interfaces.IAdversarialInputPreprocessor<T>
+AiDotNet.Interfaces.IAdversarialInputPreprocessor<T>.Preprocess(AiDotNet.Tensors.LinearAlgebra.Vector<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.Models.Options.AdversarialDefenseOptions<T>.AttackIterations.get -> int
+AiDotNet.Models.Options.AdversarialDefenseOptions<T>.AttackIterations.set -> void
+AiDotNet.Models.Options.AdversarialDefenseOptions<T>.AttackMethod.get -> AiDotNet.Enums.AdversarialAttackMethod
+AiDotNet.Models.Options.AdversarialDefenseOptions<T>.BatchSize.get -> int
+AiDotNet.Models.Options.AdversarialDefenseOptions<T>.BatchSize.set -> void
+AiDotNet.Models.Options.AdversarialDefenseOptions<T>.BitDepth.get -> int
+AiDotNet.Models.Options.AdversarialDefenseOptions<T>.BitDepth.set -> void
+AiDotNet.Models.Options.AdversarialDefenseOptions<T>.CustomPreprocessor.get -> AiDotNet.Interfaces.IAdversarialInputPreprocessor<T>?
+AiDotNet.Models.Options.AdversarialDefenseOptions<T>.CustomPreprocessor.set -> void
+AiDotNet.Models.Options.AdversarialDefenseOptions<T>.LearningRate.get -> double
+AiDotNet.Models.Options.AdversarialDefenseOptions<T>.LearningRate.set -> void
+AiDotNet.Models.Options.AdversarialDefenseOptions<T>.MedianFilterSize.get -> int
+AiDotNet.Models.Options.AdversarialDefenseOptions<T>.MedianFilterSize.set -> void
+AiDotNet.Models.Options.AdversarialDefenseOptions<T>.PreprocessingMethod.get -> AiDotNet.Enums.AdversarialPreprocessingMethod
+AiDotNet.Models.Options.AdversarialRobustnessConfiguration<T, TInput, TOutput>.Logger.get -> Microsoft.Extensions.Logging.ILogger?
+AiDotNet.Models.Options.AdversarialRobustnessConfiguration<T, TInput, TOutput>.Logger.set -> void
+AiDotNet.Models.Options.AdversarialRobustnessOptions<T>.AdversarialTrainingEpochs.get -> int
+AiDotNet.Models.Options.AdversarialRobustnessOptions<T>.AdversarialTrainingEpochs.set -> void
+AiDotNet.Models.Options.AdversarialRobustnessOptions<T>.PIITypes.get -> AiDotNet.Enums.PiiType[]!
+AiDotNet.Models.Options.AdversarialRobustnessOptions<T>.PreprocessingMethod.get -> AiDotNet.Enums.AdversarialPreprocessingMethod
+AiDotNet.Models.Options.AdversarialRobustnessOptions<T>.RedTeamingCategories.get -> AiDotNet.Enums.RedTeamingCategory[]!
+AiDotNet.Models.Options.AdversarialRobustnessOptions<T>.TrainingAttackMethod.get -> AiDotNet.Enums.AdversarialAttackMethod
+AiDotNet.Models.Results.AiModelResult<T, TInput, TOutput>.PredictCertified(TInput input) -> AiDotNet.Models.CertifiedPrediction<T>!
+AiDotNet.Models.Results.AiModelResult<T, TInput, TOutput>.RedTeamingReport.get -> AiDotNet.Safety.Benchmarking.SafetyBenchmarkResult?
+AiDotNet.Models.Results.AiModelResult<T, TInput, TOutput>.RobustnessModelCard.get -> AiDotNet.AdversarialRobustness.Documentation.ModelCard?
+AiDotNet.Safety.Text.CompositePIIDetector<T>.CompositePIIDetector(System.Collections.Generic.IReadOnlyCollection<AiDotNet.Enums.PiiType>! types) -> void
+AiDotNet.Safety.Text.NERPIIDetector<T>.NERPIIDetector(System.Collections.Generic.IReadOnlyCollection<AiDotNet.Enums.PiiType>! types) -> void
+AiDotNet.Safety.Text.RegexPIIDetector<T>.RegexPIIDetector(System.Collections.Generic.IReadOnlyCollection<AiDotNet.Enums.PiiType>! types) -> void
+AiDotNet.Safety.TextSafetyConfig.BlockJailbreaks.get -> bool?
+AiDotNet.Safety.TextSafetyConfig.BlockJailbreaks.set -> void
+AiDotNet.Safety.TextSafetyConfig.HallucinationThreshold.get -> double?
+AiDotNet.Safety.TextSafetyConfig.HallucinationThreshold.set -> void
+AiDotNet.Safety.TextSafetyConfig.PIITypes.get -> AiDotNet.Enums.PiiType[]?
+AiDotNet.Safety.TextSafetyConfig.PIITypes.set -> void
+*REMOVED*AiDotNet.Models.Options.AdversarialDefenseOptions<T>.AttackMethod.get -> string!
+*REMOVED*AiDotNet.Models.Options.AdversarialDefenseOptions<T>.PreprocessingMethod.get -> string!
+*REMOVED*AiDotNet.Models.Options.AdversarialRobustnessOptions<T>.PIITypes.get -> string![]!
+*REMOVED*AiDotNet.Models.Options.AdversarialRobustnessOptions<T>.PreprocessingMethod.get -> string!
+*REMOVED*AiDotNet.Models.Options.AdversarialRobustnessOptions<T>.RedTeamingCategories.get -> string![]!
+*REMOVED*AiDotNet.Models.Options.AdversarialRobustnessOptions<T>.TrainingAttackMethod.get -> string!

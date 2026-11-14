@@ -13,6 +13,7 @@ using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
 
 using Microsoft.Extensions.Logging;
+using LogLevel = AiDotNet.Interfaces.LogLevel;
 
 namespace AiDotNet;
 
