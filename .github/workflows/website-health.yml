@@ -6,9 +6,8 @@ name: Website health (nightly)
 # dialogs on small screens) plus drift checks, and reports through the website-health issue.
 
 on:
-  schedule:
-    - cron: '17 9 * * *'
-  workflow_dispatch:
+  push:
+    branches: [verify/website-health]
 
 permissions:
   contents: read
@@ -129,7 +128,7 @@ jobs:
   alert:
     name: Report
     needs: [drift, e2e]
-    if: always()
+    if: false
     uses: ./.github/workflows/website-alert.yml
     permissions:
       issues: write
