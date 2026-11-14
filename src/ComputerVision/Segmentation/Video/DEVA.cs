@@ -8,6 +8,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines.Autodiff;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -124,6 +125,7 @@ public partial class DEVA<T> : Common.VideoSegmentationBase<T>
             : new CrossEntropyWithLogitsLoss<T>()), (options ??= new DEVAOptions()).NumClasses, maxTrackedObjects: 128)
     {
         _options = options; Options = _options;
+        _options.Validate();
         _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
         (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize, _options);
         InitializeLayers();
@@ -149,6 +151,7 @@ public partial class DEVA<T> : Common.VideoSegmentationBase<T>
         : base(architecture, onnxModelPath, (options ??= new DEVAOptions()).NumClasses, maxTrackedObjects: 128)
     {
         _options = options; Options = _options;
+        _options.Validate();
         _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
         (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize, _options);
         InitializeLayers();
@@ -213,26 +216,12 @@ public partial class DEVA<T> : Common.VideoSegmentationBase<T>
     /// <inheritdoc />
     protected override Tensor<T> Forward(Tensor<T> input)
     {
+        // The image-level segmentation network. (An earlier version added 1e-3 times the input's channel
+        // mean to the logits; that residual is not in Cheng et al. 2023 and is gone.)
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
         var features = input;
         for (int i = 0; i < _encoderLayerEnd; i++) features = Layers[i].Forward(features);
         for (int i = _encoderLayerEnd; i < Layers.Count; i++) features = Layers[i].Forward(features);
-        // Keep the segmentation logits weakly input-conditioned even before the
-        // decoder has learned useful filters. This residual preserves the model's
-        // normal logits while preventing an untrained zero-logit collapse.
-        var signal = new Tensor<T>(features.Shape.ToArray());
-        int hLimit = Math.Min(features.Shape[2], input.Shape[2]);
-        int wLimit = Math.Min(features.Shape[3], input.Shape[3]);
-        for (int b = 0; b < features.Shape[0]; b++)
-            for (int c = 0; c < features.Shape[1]; c++)
-                for (int h = 0; h < hLimit; h++)
-                    for (int w = 0; w < wLimit; w++)
-                    {
-                        T sum = NumOps.Zero;
-                        for (int ic = 0; ic < input.Shape[1]; ic++) sum = NumOps.Add(sum, input[b, ic, h, w]);
-                        signal[b, c, h, w] = NumOps.Divide(sum, NumOps.FromDouble(input.Shape[1]));
-                    }
-        features = Engine.TensorAdd(features, Engine.TensorMultiplyScalar(signal, NumOps.FromDouble(1e-3)));
         if (!hasBatch) features = RemoveBatchDimension(features); return features;
     }
 
@@ -242,14 +231,14 @@ public partial class DEVA<T> : Common.VideoSegmentationBase<T>
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
         var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
+        NumOps.ToFloatSpan(input.Data.Span.Slice(0, input.Length), inputData);
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         string inputName = _onnxSession.InputMetadata.Keys.FirstOrDefault() ?? "images";
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
         using var results = _onnxSession.Run(inputs);
         var outputTensor = results.First().AsTensor<float>();
         var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++) outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span, outputData);
         var result = new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }
@@ -320,88 +309,442 @@ public partial class DEVA<T> : Common.VideoSegmentationBase<T>
     #endregion
 
     #region IVideoSegmentation Implementation
-    // Tracking memory that is genuinely DEVA's own. The frame counter, the tracked-id list, the
-    // initialized flag and the object-count validation now live on VideoSegmentationBase, which
-    // wraps each of these Internal hooks.
+    // DEVA (Cheng et al. 2023) decouples the task: the network above is the image-level segmentation model,
+    // and a class-agnostic temporal propagation (XMem-style memory reading) carries the tracked segments from
+    // frame to frame. Every MergeEvery frames the two are integrated: propagated and new segments are
+    // associated by IoU, matched pairs merge, new segments start new objects, and segments unmatched for
+    // MaxMissedMerges integrations are deleted. The frame counter, tracked-id list and initialized flag live
+    // on VideoSegmentationBase.
     [Scratch]
-    private Tensor<T>? _trackingFeatures;
+    private readonly List<Tensor<T>> _memoryKeys = [];
     [Scratch]
-    private Tensor<T>? _trackingMasks;
-    private int[]? _trackedIds;
+    private readonly List<Tensor<T>> _memoryValues = [];
+    private List<int> _objectIds = [];
+    private List<int> _missedMerges = [];
+    private int _nextObjectId = 1;
+    private int _maskHeight;
+    private int _maskWidth;
     [Scratch]
     private readonly Dictionary<int, Tensor<T>> _corrections = [];
+
+    /// <summary>
+    /// Runs the network once on <paramref name="frame"/>, returning the memory key (the encoder features,
+    /// <c>[Ck, h*w]</c>, or the ONNX output) and the image-level logits <c>[K, h, w]</c>.
+    /// </summary>
+    private (Tensor<T> Key, Tensor<T> Logits, int Height, int Width) EncodeFrame(Tensor<T> frame)
+    {
+        if (frame is null) throw new ArgumentNullException(nameof(frame));
+        var batched = frame.Rank == 4 ? frame : AddBatchDimension(frame);
+        using var noGrad = new NoGradScope<T>();
+        Tensor<T> key, logits;
+        if (_useNativeMode)
+        {
+            var features = batched;
+            for (int i = 0; i < _encoderLayerEnd; i++) features = Layers[i].Forward(features);
+            key = features;
+            for (int i = _encoderLayerEnd; i < Layers.Count; i++) features = Layers[i].Forward(features);
+            logits = features;
+        }
+        else
+        {
+            logits = PredictOnnx(batched);
+            key = logits;
+        }
+
+        int ck = key.Shape[1], h = key.Shape[2], w = key.Shape[3];
+        var unbatchedLogits = Engine.Reshape(logits, new[] { logits.Shape[1], logits.Shape[2], logits.Shape[3] });
+        return (Engine.Reshape(key, new[] { ck, h * w }), unbatchedLogits, h, w);
+    }
 
     /// <inheritdoc/>
     protected override void InitializeTrackingInternal(Tensor<T> frame, Tensor<T> masks, int[] objectIds)
     {
-        _trackingFeatures = Common.SegmentationTensorOps.EnsureUnbatched(Predict(frame));
-        _trackingMasks = masks;
-        _trackedIds = objectIds;
+        _options.Validate(); // the options are mutable after construction
+        var objectMasks = Common.VideoTrackingOps.AsObjectMasks(masks, nameof(masks));
+        if (objectMasks.Shape[0] != objectIds.Length)
+            throw new ArgumentException($"Give one mask per object ({objectIds.Length}).", nameof(masks));
+        _maskHeight = objectMasks.Shape[1];
+        _maskWidth = objectMasks.Shape[2];
+        var (key, _, h, w) = EncodeFrame(frame);
+        _memoryKeys.Clear();
+        _memoryValues.Clear();
         _corrections.Clear();
+        _objectIds = objectIds.ToList();
+        _missedMerges = objectIds.Select(_ => 0).ToList();
+        _nextObjectId = objectIds.Length == 0 ? 1 : objectIds.Max() + 1;
+        AddToMemory(key, objectMasks, h, w);
+    }
+
+    /// <summary>Stores a frame's key and its object masks, downsampled to the key grid, in the working memory.</summary>
+    private void AddToMemory(Tensor<T> key, Tensor<T> objectMasks, int h, int w)
+    {
+        int o = objectMasks.Shape[0];
+        var values = Common.VideoTrackingOps.Resize(objectMasks, h, w, InterpolateMode.Area);
+        _memoryKeys.Add(key);
+        _memoryValues.Add(Engine.Reshape(values, new[] { o, h * w }));
+        // T_max frames at most; the first frame (the user's annotation) is never dropped.
+        if (_memoryKeys.Count > _options.MaxMemoryFrames && _memoryKeys.Count > 1)
+        {
+            _memoryKeys.RemoveAt(1);
+            _memoryValues.RemoveAt(1);
+        }
+    }
+
+    /// <summary>
+    /// XMem memory reading: the affinity of memory pixel <c>i</c> to query pixel <c>j</c> is the negative squared
+    /// L2 distance of their keys, <c>(2 k_i . q_j - |k_i|^2) / sqrt(Ck)</c> (the <c>|q_j|^2</c> term cancels in the
+    /// softmax); each query pixel reads a softmax over its <see cref="DEVAOptions.MemoryTopK"/> highest affinities,
+    /// exactly that many even when affinities tie. Affinities and weights are computed in double.
+    /// </summary>
+    /// <returns>Object probabilities <c>[O, h*w]</c> read from the memory values.</returns>
+    internal static Tensor<T> ReadMemory(Tensor<T> memoryKeys, Tensor<T> memoryValues, Tensor<T> queryKey, int topK)
+    {
+        var engine = AiDotNetEngine.Current;
+        int ck = memoryKeys.Shape[0], m = memoryKeys.Shape[1], hw = queryKey.Shape[1], o = memoryValues.Shape[0];
+        // In double: for Half, a 64-channel key of 32s has a dot product and squared norm of 65536, past Half's range
+        // before the 1/sqrt(Ck) scale applies, so the affinities (and their softmax) would be infinite or NaN.
+        var keys = memoryKeys.Cast<double>();
+        var query = queryKey.Cast<double>();
+        var dot = engine.TensorMatMul(engine.TensorTranspose(keys), query);                                // [M, HW]
+        var keyNorm = engine.Reshape(engine.ReduceSum(engine.TensorSquare(keys), new[] { 0 }, false), new[] { m, 1 });
+        var affinity = engine.TensorMultiplyScalar(
+            engine.TensorSubtract(engine.TensorMultiplyScalar(dot, 2.0), engine.TensorBroadcastTo(keyNorm, new[] { m, hw })),
+            1.0 / Math.Sqrt(ck));
+        // Exactly the k selected memory pixels: thresholding at the kth value would keep every pixel tied with it.
+        int k = Math.Min(topK, m);
+        var top = engine.TensorTopK(affinity, k, 0, out Tensor<int> selected);                               // [k, HW]
+        var weights = engine.TensorSoftmax(top, 0);                                                          // [k, HW]
+        var valuesByPixel = engine.TensorTranspose(memoryValues.Cast<double>());                             // [M, O]
+        var gathered = engine.Reshape(
+            engine.TensorIndexSelect(valuesByPixel, engine.Reshape(selected, new[] { k * hw }), 0), new[] { k, hw, o });
+        var read = engine.ReduceSum(
+            engine.TensorMultiply(gathered, engine.TensorBroadcastTo(engine.Reshape(weights, new[] { k, hw, 1 }), new[] { k, hw, o })),
+            new[] { 0 }, false);                                                                             // [HW, O]
+        return engine.TensorTranspose(read).Cast<T>();                                                       // [O, HW]
+    }
+
+    /// <summary>
+    /// XMem's soft aggregation: the background probability is <c>prod_o (1 - p_o)</c>, and background plus objects
+    /// are renormalized with a softmax over their clamped logits <c>log(p / (1 - p))</c>.
+    /// </summary>
+    /// <returns>Logits <c>[O + 1, h, w]</c>, background first.</returns>
+    internal static Tensor<T> AggregateLogits(Tensor<T> probabilities, int h, int w)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int o = probabilities.Shape[0];
+        // XMem clamps to [1e-7, 1 - 1e-7]. Half rounds 1 - 1e-7 to 1 (and the logit to +inf), so the bounds are the
+        // nearest values T holds strictly inside (0, 1).
+        var low = Common.MaskClassificationOps.PositiveTolerance<T>(1e-7);
+        var high = Common.MaskClassificationOps.BelowOne<T>(1e-7);
+        var clamped = engine.TensorClamp(probabilities, low, high);
+        var background = engine.TensorExp(engine.ReduceSum(engine.TensorLog(engine.ScalarMinusTensor(ops.One, clamped)), new[] { 0 }, true));
+        var all = engine.TensorClamp(engine.TensorConcatenate(new[] { background, clamped }, 0), low, high);
+        var logits = engine.TensorLog(engine.TensorDivide(all, engine.ScalarMinusTensor(ops.One, all)));
+        return engine.Reshape(logits, new[] { o + 1, h, w });
     }
 
     /// <inheritdoc/>
     protected override VideoSegmentationResult<T> PropagateToFrameInternal(Tensor<T> frame, int frameIndex)
     {
-        var currentFeatures = Common.SegmentationTensorOps.EnsureUnbatched(Predict(frame));
-        int h = currentFeatures.Shape[1], w = currentFeatures.Shape[2];
-        var ids = _trackedIds ?? [1];
-        int numObj = ids.Length;
-        Tensor<T> masks;
-        if (_trackingFeatures != null && _trackingMasks != null && _trackingMasks.Rank == 3)
+        _options.Validate();
+        var (key, logits, h, w) = EncodeFrame(frame);
+        int hm = _maskHeight, wm = _maskWidth;
+        int o = _objectIds.Count;
+        using var noGrad = new NoGradScope<T>();
+
+        // Temporal propagation: memory reading, soft aggregation, upsampling to the mask grid.
+        Tensor<T> probabilities;
+        if (o > 0)
         {
-            var affinity = Common.SegmentationTensorOps.PixelAffinity(_trackingFeatures, currentFeatures);
-            masks = Common.SegmentationTensorOps.WarpMasksByAffinity(_trackingMasks, affinity);
+            var read = ReadMemory(
+                Engine.TensorConcatenate(_memoryKeys.ToArray(), 1), Engine.TensorConcatenate(_memoryValues.ToArray(), 1),
+                key, _options.MemoryTopK);
+            var aggregated = Common.VideoTrackingOps.Resize(AggregateLogits(read, h, w), hm, wm, InterpolateMode.Bilinear);
+            var softmax = Engine.TensorSoftmax(aggregated, 0);
+            probabilities = Engine.TensorSlice(softmax, new[] { 1, 0, 0 }, new[] { o, hm, wm });
         }
         else
         {
-            masks = new Tensor<T>([numObj, h, w]);
+            probabilities = new Tensor<T>(new[] { 0, hm, wm });
         }
-        foreach (var kvp in _corrections)
+
+        bool merge = _options.MergeEvery > 0 && frameIndex % _options.MergeEvery == 0;
+        var corrected = ApplyCorrections(ref probabilities);
+        if (merge)
         {
-            int idx = Array.IndexOf(ids, kvp.Key);
-            if (idx >= 0)
-            {
-                int mH = Math.Min(kvp.Value.Shape[0], h), mW = Math.Min(kvp.Value.Shape[1], w);
-                for (int y = 0; y < mH; y++)
-                    for (int x = 0; x < mW; x++)
-                        masks[idx, y, x] = kvp.Value[y, x];
-            }
+            probabilities = Integrate(probabilities, logits, corrected);
         }
-        _corrections.Clear();
-        var confidences = new double[numObj];
-        var isVisible = new bool[numObj];
-        for (int obj = 0; obj < numObj; obj++)
+
+        if (merge || corrected.Count > 0)
         {
-            int area = 0; double confSum = 0;
-            for (int y = 0; y < h; y++)
-                for (int x = 0; x < w; x++)
-                {
-                    double v = NumOps.ToDouble(masks[obj, y, x]);
-                    if (v >= 0.5) { area++; confSum += v; }
-                }
-            confidences[obj] = area > 0 ? confSum / area : 0.0;
-            isVisible[obj] = area >= 4;
+            RemapMemory();
+            AddToMemory(key, probabilities, h, w);
         }
-        _trackingFeatures = currentFeatures;
-        _trackingMasks = masks;
+
+        _trackedObjectIds = [.. _objectIds];
+        var (confidences, visible) = Common.VideoTrackingOps.Statistics(probabilities);
         return new VideoSegmentationResult<T>
         {
-            Masks = masks, ObjectIds = ids, Confidences = confidences,
-            FrameIndex = frameIndex, IsVisible = isVisible
+            Masks = probabilities, ObjectIds = _objectIds.ToArray(), Confidences = confidences,
+            FrameIndex = frameIndex, IsVisible = visible
         };
+    }
+
+    /// <summary>Replaces the masks of corrected objects with their correction masks.</summary>
+    /// <returns>The ids of the objects whose correction was applied this frame.</returns>
+    private HashSet<int> ApplyCorrections(ref Tensor<T> probabilities)
+    {
+        var correctedIds = new HashSet<int>();
+        if (_corrections.Count == 0) return correctedIds;
+        int o = _objectIds.Count, hm = _maskHeight, wm = _maskWidth;
+        var rows = new Tensor<T>[o];
+        for (int i = 0; i < o; i++)
+        {
+            if (_corrections.TryGetValue(_objectIds[i], out var correction))
+            {
+                if (correction.Rank != 2 || correction.Shape[0] != hm || correction.Shape[1] != wm)
+                    throw new ArgumentException($"A correction mask must be [{hm}, {wm}].");
+                rows[i] = Engine.Reshape(correction, new[] { 1, hm, wm });
+                correctedIds.Add(_objectIds[i]);
+            }
+            else
+            {
+                rows[i] = Engine.TensorSlice(probabilities, new[] { i, 0, 0 }, new[] { 1, hm, wm });
+            }
+        }
+
+        _corrections.Clear();
+        if (correctedIds.Count > 0) probabilities = Engine.TensorConcatenate(rows, 0);
+        return correctedIds;
+    }
+
+    // Row of each current object in the memory values: its previous row, or -1 for a new object.
+    private int[] _memoryRows = Array.Empty<int>();
+
+    /// <summary>Rewrites every memory frame's values for the current object list (new objects read zeros).</summary>
+    private void RemapMemory()
+    {
+        if (_memoryRows.Length == 0 && _memoryValues.Count > 0 && _memoryValues[0].Shape[0] == _objectIds.Count) return;
+        int o = _objectIds.Count;
+        for (int f = 0; f < _memoryValues.Count; f++)
+        {
+            var values = _memoryValues[f];
+            int m = values.Shape[1];
+            var rows = new Tensor<T>[o];
+            for (int i = 0; i < o; i++)
+            {
+                rows[i] = i < _memoryRows.Length && _memoryRows[i] >= 0
+                    ? Engine.TensorSlice(values, new[] { _memoryRows[i], 0 }, new[] { 1, m })
+                    : new Tensor<T>(new[] { 1, m });
+            }
+
+            _memoryValues[f] = o == 0 ? new Tensor<T>(new[] { 0, m }) : Engine.TensorConcatenate(rows, 0);
+        }
+
+        _memoryRows = Array.Empty<int>();
+    }
+
+    /// <summary>
+    /// Integrates the propagated segments with the image-level segmentation of this frame (Cheng et al. 2023,
+    /// Sec. 3.3). Propagated hard masks (argmax over background and objects) and new segments (the connected
+    /// components of each class of the image-level argmax, background class 0 excluded; of the sigmoid foreground
+    /// when there is one class) are associated where their IoU exceeds <see cref="DEVAOptions.AssociationIoUThreshold"/>; matched pairs
+    /// become their union, unmatched new segments start new objects, and an object unmatched for
+    /// <see cref="DEVAOptions.MaxMissedMerges"/> integrations in a row is deleted. Overlaps are resolved in
+    /// favour of smaller segments (rendered by descending area). An object corrected on this frame keeps its
+    /// correction mask unchanged: it is not unioned with its matched proposal, its miss count resets, and it is
+    /// painted last so no proposal overwrites it.
+    /// </summary>
+    /// <returns>The integrated hard masks <c>[O', H, W]</c>.</returns>
+    private Tensor<T> Integrate(Tensor<T> probabilities, Tensor<T> logits, HashSet<int> correctedIds)
+    {
+        int hm = _maskHeight, wm = _maskWidth, plane = hm * wm, o = _objectIds.Count, k = logits.Shape[0];
+        var propagated = HardMasks(probabilities, o, plane);                                              // [O, HW] int
+        var proposals = ProposalMasks(Common.VideoTrackingOps.Resize(logits, hm, wm, InterpolateMode.Bilinear), k, plane);
+        int p = proposals.Shape[0];
+
+        var matchOfObject = new int[o];
+        var proposalMatched = new bool[p];
+        for (int i = 0; i < o; i++) matchOfObject[i] = -1;
+        if (o > 0 && p > 0)
+        {
+            int[] matches = Engine.TensorGreaterThan(
+                Iou(propagated, proposals), NumOps.FromDouble(_options.AssociationIoUThreshold)).Cast<int>().ToArray();
+            for (int i = 0; i < o; i++)
+            {
+                for (int j = 0; j < p; j++)
+                {
+                    if (matches[i * p + j] == 0 || proposalMatched[j] || matchOfObject[i] >= 0) continue;
+                    matchOfObject[i] = j;
+                    proposalMatched[j] = true;
+                }
+            }
+        }
+
+        var segments = new List<Tensor<int>>();
+        var ids = new List<int>();
+        var missed = new List<int>();
+        var memoryRows = new List<int>();
+        for (int i = 0; i < o; i++)
+        {
+            var mask = Engine.Reshape(Engine.TensorSlice(propagated, new[] { i, 0 }, new[] { 1, plane }), new[] { plane });
+            int misses = 0;
+            bool isCorrected = correctedIds.Contains(_objectIds[i]); // the correction is authoritative this frame
+            if (!isCorrected && matchOfObject[i] >= 0)
+            {
+                var proposal = Engine.Reshape(Engine.TensorSlice(proposals, new[] { matchOfObject[i], 0 }, new[] { 1, plane }), new[] { plane });
+                mask = Engine.TensorSubtract(Engine.TensorAdd(mask, proposal), Engine.TensorMultiply(mask, proposal));
+            }
+            else if (!isCorrected)
+            {
+                misses = _missedMerges[i] + 1;
+                if (misses >= _options.MaxMissedMerges) continue;
+            }
+
+            segments.Add(mask);
+            ids.Add(_objectIds[i]);
+            missed.Add(misses);
+            memoryRows.Add(i);
+        }
+
+        for (int j = 0; j < p; j++)
+        {
+            if (proposalMatched[j] || ids.Count >= _maxTrackedObjects) continue;
+            segments.Add(Engine.Reshape(Engine.TensorSlice(proposals, new[] { j, 0 }, new[] { 1, plane }), new[] { plane }));
+            ids.Add(_nextObjectId++);
+            missed.Add(0);
+            memoryRows.Add(-1);
+        }
+
+        _objectIds = ids;
+        _missedMerges = missed;
+        _memoryRows = memoryRows.ToArray();
+        if (segments.Count == 0) return new Tensor<T>(new[] { 0, hm, wm });
+
+        // Smaller segments win overlaps: paint in descending area order, corrected objects last so they keep
+        // every pixel of their correction.
+        var stacked = Engine.TensorStack(segments.ToArray(), 0);                                           // [S, HW]
+        int[] byArea = Common.MaskClassificationOps.DescendingOrder(Engine.ReduceSum(stacked, new[] { 1 }, false));
+        var order = byArea.Where(s => !correctedIds.Contains(ids[s])).Concat(byArea.Where(s => correctedIds.Contains(ids[s])));
+        var owner = new Tensor<int>(new[] { plane });
+        foreach (int s in order)
+        {
+            var mask = Engine.Reshape(Engine.TensorSlice(stacked, new[] { s, 0 }, new[] { 1, plane }), new[] { plane });
+            owner = Engine.TensorAdd(Engine.TensorMultiply(owner, Engine.ScalarMinusTensor(1, mask)), Engine.TensorMultiplyScalar(mask, s + 1));
+        }
+
+        int count = segments.Count;
+        var oneHot = Engine.TensorPermute(Engine.TensorOneHot<T>(owner, count + 1), new[] { 1, 0 });
+        return Engine.Reshape(Engine.TensorSlice(oneHot, new[] { 1, 0 }, new[] { count, plane }), new[] { count, hm, wm });
+    }
+
+    /// <summary>Hard object masks <c>[O, HW]</c> (int): each pixel goes to the argmax of background and objects.</summary>
+    private Tensor<int> HardMasks(Tensor<T> probabilities, int o, int plane)
+    {
+        if (o == 0) return new Tensor<int>(new[] { 0, plane });
+        var flat = Engine.Reshape(probabilities, new[] { o, plane });
+        var background = Engine.ScalarMinusTensor(NumOps.One, Engine.ReduceSum(flat, new[] { 0 }, true));
+        var owner = Engine.TensorArgMax(Engine.TensorConcatenate(new[] { background, flat }, 0), 0);     // [HW]
+        var oneHot = Engine.TensorPermute(Engine.TensorOneHot<int>(owner, o + 1), new[] { 1, 0 });
+        return Engine.TensorSlice(oneHot, new[] { 1, 0 }, new[] { o, plane });
+    }
+
+    /// <summary>The image-level segments <c>[P, HW]</c> (int) of upsampled logits <c>[K, H, W]</c>.</summary>
+    /// <remarks>
+    /// One row per 4-connected component of each class region (the sigmoid foreground when there is one class),
+    /// not one row per class: two disjoint objects of one class are separate segments, so each can associate with
+    /// its own tracked object instead of both scoring the IoU of their union.
+    /// </remarks>
+    private Tensor<int> ProposalMasks(Tensor<T> logits, int k, int plane)
+    {
+        var flat = Engine.Reshape(logits, new[] { k, plane });
+        Tensor<int> candidates;
+        if (k == 1)
+        {
+            candidates = Engine.TensorGreaterThan(flat, NumOps.Zero).Cast<int>();
+        }
+        else
+        {
+            var oneHot = Engine.TensorPermute(Engine.TensorOneHot<int>(Engine.TensorArgMax(flat, 0), k), new[] { 1, 0 });
+            candidates = Engine.TensorSlice(oneHot, new[] { 1, 0 }, new[] { k - 1, plane });
+        }
+
+        int classes = candidates.Shape[0];
+        int[] cells = candidates.ToArray();
+        var segments = new List<int[]>();
+        var label = new int[plane];
+        var stack = new Stack<int>();
+        for (int c = 0; c < classes; c++)
+        {
+            Array.Clear(label, 0, plane);
+            int offset = c * plane;
+            for (int start = 0; start < plane; start++)
+            {
+                if (cells[offset + start] == 0 || label[start] != 0) continue;
+                var segment = new int[plane];
+                label[start] = 1;
+                stack.Push(start);
+                while (stack.Count > 0)
+                {
+                    int q = stack.Pop();
+                    segment[q] = 1;
+                    int row = q / _maskWidth, col = q % _maskWidth;
+                    if (row > 0) Visit(q - _maskWidth);
+                    if (row < _maskHeight - 1) Visit(q + _maskWidth);
+                    if (col > 0) Visit(q - 1);
+                    if (col < _maskWidth - 1) Visit(q + 1);
+                }
+
+                segments.Add(segment);
+            }
+
+            void Visit(int q)
+            {
+                if (cells[offset + q] == 0 || label[q] != 0) return;
+                label[q] = 1;
+                stack.Push(q);
+            }
+        }
+
+        var result = new int[segments.Count * plane];
+        for (int i = 0; i < segments.Count; i++) Array.Copy(segments[i], 0, result, i * plane, plane);
+        return new Tensor<int>(result, new[] { segments.Count, plane });
+    }
+
+    /// <summary>IoU matrix <c>[A, B]</c> of binary masks <c>[A, HW]</c> and <c>[B, HW]</c> (int).</summary>
+    /// <remarks>
+    /// Intersections and areas are counted in int and divided in double, converting only the ratio to T: as a
+    /// matrix product, a sum or a division in T, Half stops counting exactly at 2048, so two 3000-pixel masks
+    /// sharing 3000 pixels would score against the wrong counts.
+    /// </remarks>
+    internal static Tensor<T> Iou(Tensor<int> a, Tensor<int> b)
+    {
+        var engine = AiDotNetEngine.Current;
+        int na = a.Shape[0], nb = b.Shape[0];
+        var intersection = engine.TensorMatMul(a, engine.TensorTranspose(b));
+        var areaA = engine.TensorBroadcastTo(engine.ReduceSum(a, new[] { 1 }, true), new[] { na, nb });
+        var areaB = engine.TensorBroadcastTo(engine.Reshape(engine.ReduceSum(b, new[] { 1 }, false), new[] { 1, nb }), new[] { na, nb });
+        var union = engine.TensorClampMin(engine.TensorSubtract(engine.TensorAdd(areaA, areaB), intersection), 1);
+        return engine.TensorDivide(intersection.Cast<double>(), union.Cast<double>()).Cast<T>();
     }
 
     /// <inheritdoc/>
     public override void AddCorrection(int objectId, Tensor<T> correctionMask)
     {
+        if (correctionMask is null) throw new ArgumentNullException(nameof(correctionMask));
         _corrections[objectId] = correctionMask;
     }
 
     /// <inheritdoc/>
     protected override void ResetTrackingInternal()
     {
-        _trackingFeatures = null; _trackingMasks = null; _trackedIds = null;
+        _memoryKeys.Clear();
+        _memoryValues.Clear();
+        _objectIds = [];
+        _missedMerges = [];
+        _memoryRows = Array.Empty<int>();
+        _nextObjectId = 1;
         _corrections.Clear();
     }
     #endregion

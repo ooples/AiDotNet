@@ -6,6 +6,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines.Autodiff;
 using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
@@ -29,7 +30,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Video;
 /// <b>Technical Details:</b>
 /// - Prompts-as-queries unifying VIS, VPS, and VOS
 /// - Target-specific prompt generation
-/// - Temporal KV memory for consistent tracking
+/// - Per-object prompt memory: predicted masks are fed back as visual prompts
 /// - Handles both automatic and prompted segmentation
 /// </para>
 /// <para>
@@ -262,14 +263,14 @@ public partial class UniVS<T> : Common.VideoSegmentationBase<T>
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
         var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
+        NumOps.ToFloatSpan(input.Data.Span.Slice(0, input.Length), inputData);
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         string inputName = _onnxSession.InputMetadata.Keys.FirstOrDefault() ?? "images";
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
         using var results = _onnxSession.Run(inputs);
         var outputTensor = results.First().AsTensor<float>();
         var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++) outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
+        NumOps.FromFloatSpan(outputTensor.ToDenseTensor().Buffer.Span, outputData);
         var result = new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }
@@ -322,88 +323,182 @@ public partial class UniVS<T> : Common.VideoSegmentationBase<T>
     #endregion
 
     #region IVideoSegmentation Implementation
-    // Tracking memory that is genuinely UniVS's own. The frame counter, the tracked-id list, the
-    // initialized flag and the object-count validation now live on VideoSegmentationBase, which
-    // wraps each of these Internal hooks.
+    // UniVS (Li et al. 2024) treats prompts as queries. Every tracked object owns a prompt memory pool: the
+    // visual sampler draws NumPromptPoints points from each visual prompt (the initial mask, then every
+    // predicted mask fed back) and stores their pixel embeddings as prompt tokens. A frame's query for the
+    // object is the mean of its pool's tokens, refined by prompt cross-attention (ProCA) over the same
+    // tokens, and the mask is the query's dot product with the pixel embedding. The frame counter,
+    // tracked-id list and initialized flag live on VideoSegmentationBase.
     [Scratch]
-    private Tensor<T>? _trackingFeatures;
-    [Scratch]
-    private Tensor<T>? _trackingMasks;
-    private int[]? _trackedIds;
+    private readonly Dictionary<int, List<Tensor<T>>> _promptMemory = [];
+    private int[] _objectIds = Array.Empty<int>();
+    private int _maskHeight;
+    private int _maskWidth;
     [Scratch]
     private readonly Dictionary<int, Tensor<T>> _corrections = [];
+
+    /// <summary>The pixel embedding <c>[D, h*w]</c> of <paramref name="frame"/> (the network output).</summary>
+    private (Tensor<T> Embedding, int Height, int Width) EmbedFrame(Tensor<T> frame)
+    {
+        if (frame is null) throw new ArgumentNullException(nameof(frame));
+        var batched = frame.Rank == 4 ? frame : AddBatchDimension(frame);
+        using var noGrad = new NoGradScope<T>();
+        var output = Predict(batched);
+        int d = output.Shape[1], h = output.Shape[2], w = output.Shape[3];
+        return (Engine.Reshape(output, new[] { d, h * w }), h, w);
+    }
+
+    /// <summary>
+    /// The visual sampler: up to <paramref name="count"/> points spread evenly, in raster order, over the pixels
+    /// of <paramref name="mask"/> (<c>[h*w]</c>) at or above 0.5. Null when the mask is empty.
+    /// </summary>
+    internal static Tensor<int>? SamplePromptPoints(Tensor<T> mask, int count)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int[] foreground = engine.TensorGreaterEqual(
+            mask, Tensor<T>.CreateDefault(mask.Shape.ToArray(), ops.FromDouble(0.5))).Cast<int>().ToArray();
+        var positions = new List<int>();
+        for (int i = 0; i < foreground.Length; i++)
+        {
+            if (foreground[i] != 0) positions.Add(i);
+        }
+
+        if (positions.Count == 0) return null;
+        int l = Math.Min(count, positions.Count);
+        var picked = new int[l];
+        for (int j = 0; j < l; j++) picked[j] = positions[(int)((long)j * positions.Count / l)];
+        return new Tensor<int>(picked, new[] { l });
+    }
+
+    /// <summary>
+    /// The object query from its prompt tokens <c>[L, D]</c>: the token mean <c>q0</c> (P-&gt;Q), then prompt
+    /// cross-attention <c>q = q0 + softmax(q0 P^T / sqrt(D)) P</c>.
+    /// </summary>
+    internal static Tensor<T> PromptQuery(Tensor<T> tokens)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int d = tokens.Shape[1];
+        var initial = engine.ReduceMean(tokens, new[] { 0 }, true);                                         // [1, D]
+        // The 1 / sqrt(D) scale is applied to q0 before the product, so the dot products are formed already scaled:
+        // unscaled, a 64-wide product of entries near 32 is 65536 and overflows Half before the scale could apply.
+        var attention = engine.TensorSoftmax(engine.TensorMatMul(
+            engine.TensorMultiplyScalar(initial, ops.FromDouble(1.0 / Math.Sqrt(d))), engine.TensorTranspose(tokens)), 1);
+        return engine.TensorAdd(initial, engine.TensorMatMul(attention, tokens));
+    }
+
+    /// <summary>Adds the prompt tokens of <paramref name="mask"/> (<c>[h*w]</c>) to an object's pool.</summary>
+    private void Remember(int objectId, Tensor<T> embedding, Tensor<T> mask)
+    {
+        var points = SamplePromptPoints(mask, _options.NumPromptPoints);
+        if (points is null) return;
+        var tokens = Engine.TensorTranspose(Engine.TensorIndexSelect(embedding, points, 1));               // [l, D]
+        if (!_promptMemory.TryGetValue(objectId, out var pool))
+        {
+            pool = new List<Tensor<T>>();
+            _promptMemory[objectId] = pool;
+        }
+
+        AppendToMemory(pool, tokens, _options.PromptMemoryLength);
+    }
+
+    /// <summary>
+    /// Appends a visual prompt to an object's memory pool and keeps only the <paramref name="length"/> most recent
+    /// prompts, as the official UniVS code does (<c>prompt_memory[:, -num_prev_frames_memory:]</c> with
+    /// <c>NUM_PREV_FRAMES_MEMORY = 5</c>); no earlier prompt is pinned.
+    /// </summary>
+    internal static void AppendToMemory(List<Tensor<T>> pool, Tensor<T> tokens, int length)
+    {
+        if (pool is null) throw new ArgumentNullException(nameof(pool));
+        if (tokens is null) throw new ArgumentNullException(nameof(tokens));
+        if (length < 1) throw new ArgumentOutOfRangeException(nameof(length), "The prompt memory keeps at least one prompt.");
+        pool.Add(tokens);
+        if (pool.Count > length) pool.RemoveRange(0, pool.Count - length);
+    }
+
+    /// <summary>Feeds the masks <c>[O, H, W]</c> back to the prompt memory as visual prompts.</summary>
+    private void RememberMasks(Tensor<T> embedding, Tensor<T> masks, int h, int w)
+    {
+        var small = Common.VideoTrackingOps.Resize(masks, h, w, InterpolateMode.Area);
+        for (int i = 0; i < _objectIds.Length; i++)
+        {
+            var mask = Engine.Reshape(Engine.TensorSlice(small, new[] { i, 0, 0 }, new[] { 1, h, w }), new[] { h * w });
+            Remember(_objectIds[i], embedding, mask);
+        }
+    }
 
     /// <inheritdoc/>
     protected override void InitializeTrackingInternal(Tensor<T> frame, Tensor<T> masks, int[] objectIds)
     {
-        _trackingFeatures = Common.SegmentationTensorOps.EnsureUnbatched(Predict(frame));
-        _trackingMasks = masks;
-        _trackedIds = objectIds;
+        var objectMasks = Common.VideoTrackingOps.AsObjectMasks(masks, nameof(masks));
+        if (objectMasks.Shape[0] != objectIds.Length)
+            throw new ArgumentException($"Give one mask per object ({objectIds.Length}).", nameof(masks));
+        if (_options.NumPromptPoints < 1) throw new InvalidOperationException("NumPromptPoints must be positive.");
+        if (_options.PromptMemoryLength < 1) throw new InvalidOperationException("PromptMemoryLength must be positive.");
+        _maskHeight = objectMasks.Shape[1];
+        _maskWidth = objectMasks.Shape[2];
+        _objectIds = objectIds.ToArray();
+        _promptMemory.Clear();
         _corrections.Clear();
+        var (embedding, h, w) = EmbedFrame(frame);
+        using var noGrad = new NoGradScope<T>();
+        RememberMasks(embedding, objectMasks, h, w);
     }
 
     /// <inheritdoc/>
     protected override VideoSegmentationResult<T> PropagateToFrameInternal(Tensor<T> frame, int frameIndex)
     {
-        var currentFeatures = Common.SegmentationTensorOps.EnsureUnbatched(Predict(frame));
-        int h = currentFeatures.Shape[1], w = currentFeatures.Shape[2];
-        var ids = _trackedIds ?? [1];
-        int numObj = ids.Length;
-        Tensor<T> masks;
-        if (_trackingFeatures != null && _trackingMasks != null && _trackingMasks.Rank == 3)
+        var (embedding, h, w) = EmbedFrame(frame);
+        int o = _objectIds.Length, hm = _maskHeight, wm = _maskWidth;
+        using var noGrad = new NoGradScope<T>();
+        var rows = new Tensor<T>[o];
+        for (int i = 0; i < o; i++)
         {
-            var affinity = Common.SegmentationTensorOps.PixelAffinity(_trackingFeatures, currentFeatures);
-            masks = Common.SegmentationTensorOps.WarpMasksByAffinity(_trackingMasks, affinity);
-        }
-        else
-        {
-            masks = new Tensor<T>([numObj, h, w]);
-        }
-        foreach (var kvp in _corrections)
-        {
-            int idx = Array.IndexOf(ids, kvp.Key);
-            if (idx >= 0)
+            int id = _objectIds[i];
+            if (_corrections.TryGetValue(id, out var correction))
             {
-                int mH = Math.Min(kvp.Value.Shape[0], h), mW = Math.Min(kvp.Value.Shape[1], w);
-                for (int y = 0; y < mH; y++)
-                    for (int x = 0; x < mW; x++)
-                        masks[idx, y, x] = kvp.Value[y, x];
+                // A corrected object is prompted with its correction mask on this frame.
+                if (correction.Rank != 2 || correction.Shape[0] != hm || correction.Shape[1] != wm)
+                    throw new ArgumentException($"A correction mask must be [{hm}, {wm}].");
+                rows[i] = Engine.Reshape(correction, new[] { 1, hm, wm });
+                continue;
             }
+
+            if (!_promptMemory.TryGetValue(id, out var pool) || pool.Count == 0)
+            {
+                rows[i] = new Tensor<T>(new[] { 1, hm, wm });
+                continue;
+            }
+
+            var query = PromptQuery(Engine.TensorConcatenate(pool.ToArray(), 0));                          // [1, D]
+            var logits = Engine.Reshape(Engine.TensorMatMul(query, embedding), new[] { 1, h, w });
+            rows[i] = Engine.TensorSigmoid(Common.VideoTrackingOps.Resize(logits, hm, wm, InterpolateMode.Bilinear));
         }
+
         _corrections.Clear();
-        var confidences = new double[numObj];
-        var isVisible = new bool[numObj];
-        for (int obj = 0; obj < numObj; obj++)
-        {
-            int area = 0; double confSum = 0;
-            for (int y = 0; y < h; y++)
-                for (int x = 0; x < w; x++)
-                {
-                    double v = NumOps.ToDouble(masks[obj, y, x]);
-                    if (v >= 0.5) { area++; confSum += v; }
-                }
-            confidences[obj] = area > 0 ? confSum / area : 0.0;
-            isVisible[obj] = area >= 4;
-        }
-        _trackingFeatures = currentFeatures;
-        _trackingMasks = masks;
+        var masks = o == 0 ? new Tensor<T>(new[] { 0, hm, wm }) : Engine.TensorConcatenate(rows, 0);
+        RememberMasks(embedding, masks, h, w);
+        var (confidences, visible) = Common.VideoTrackingOps.Statistics(masks);
         return new VideoSegmentationResult<T>
         {
-            Masks = masks, ObjectIds = ids, Confidences = confidences,
-            FrameIndex = frameIndex, IsVisible = isVisible
+            Masks = masks, ObjectIds = _objectIds.ToArray(), Confidences = confidences,
+            FrameIndex = frameIndex, IsVisible = visible
         };
     }
 
     /// <inheritdoc/>
     public override void AddCorrection(int objectId, Tensor<T> correctionMask)
     {
+        if (correctionMask is null) throw new ArgumentNullException(nameof(correctionMask));
         _corrections[objectId] = correctionMask;
     }
 
     /// <inheritdoc/>
     protected override void ResetTrackingInternal()
     {
-        _trackingFeatures = null; _trackingMasks = null; _trackedIds = null;
+        _promptMemory.Clear();
+        _objectIds = Array.Empty<int>();
         _corrections.Clear();
     }
     #endregion

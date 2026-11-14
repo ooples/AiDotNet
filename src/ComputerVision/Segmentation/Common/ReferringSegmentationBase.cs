@@ -1,6 +1,9 @@
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Optimizers;
+using AiDotNet.VisionLanguage.Interfaces;
 
 namespace AiDotNet.ComputerVision.Segmentation.Common;
 
@@ -35,34 +38,191 @@ public abstract partial class ReferringSegmentationBase<T> : SegmentationModelBa
     public virtual bool SupportsVideoInput => false;
 
     /// <summary>
+    /// The CLIP-style text encoder that turns a referring expression into the query embedding.
+    /// </summary>
+    protected readonly ITextEncoder<T> _textEncoder;
+
+    /// <summary>The inverse temperature <c>1 / tau</c> that scales every cosine similarity.</summary>
+    protected readonly T _logitScale;
+
+    /// <summary>The sigmoid probability a pixel must exceed to be in the mask, kept in double so the decision is exact.</summary>
+    protected readonly double _maskThreshold;
+
+    /// <summary>Normalized embeddings <c>[NumClasses, D]</c> of the closed-set vocabulary Predict/Train score against.</summary>
+    private readonly Tensor<T> _vocabularyEmbeddings;
+
+    /// <summary>The expression embedding of an in-flight <see cref="SegmentFromExpression"/> call, or <c>null</c>.</summary>
+    private Tensor<T>? _queryEmbeddings;
+
+    /// <summary>
+    /// Gets the text encoder whose embedding of the expression the pixel embeddings are compared with.
+    /// </summary>
+    public ITextEncoder<T> TextEncoder => _textEncoder;
+
+    /// <summary>
+    /// Gets the width of the pixel embeddings the decoder must produce: the text encoder's embedding dimension.
+    /// </summary>
+    protected int TextEmbeddingDimension => _textEncoder.TextEmbeddingDimension;
+
+    /// <summary>
     /// Initializes the base in native (trainable) mode.
     /// </summary>
     protected ReferringSegmentationBase(
         NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer,
         ILossFunction<T>? lossFunction,
-        int numClasses,
+        ITextEncoder<T> textEncoder,
+        ReferringSegmentationOptions options,
         int maxTextLength = 512)
-        : base(architecture, optimizer, lossFunction, numClasses)
+        : base(architecture, optimizer, lossFunction, RequireOptions(options).NumClasses)
     {
         _maxTextLength = maxTextLength;
+        _textEncoder = textEncoder ?? throw new ArgumentNullException(nameof(textEncoder));
+        (_logitScale, _maskThreshold, _vocabularyEmbeddings) = PrepareVocabulary(textEncoder, options);
     }
 
     /// <summary>
-    /// Initializes the base in ONNX (inference-only) mode.
+    /// Initializes the base in ONNX (inference-only) mode. The ONNX graph must output pixel embeddings
+    /// <c>[B, D, H, W]</c> with <c>D</c> equal to the text encoder's embedding dimension.
     /// </summary>
+    /// <remarks>
+    /// Only the native constructor carries optional parameters (RS0026: two new overloads may not both).
+    /// </remarks>
     protected ReferringSegmentationBase(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int numClasses,
-        int maxTextLength = 512)
-        : base(architecture, onnxModelPath, numClasses)
+        ITextEncoder<T> textEncoder,
+        ReferringSegmentationOptions options,
+        int maxTextLength)
+        : base(architecture, onnxModelPath, RequireOptions(options).NumClasses)
     {
         _maxTextLength = maxTextLength;
+        try
+        {
+            _textEncoder = textEncoder ?? throw new ArgumentNullException(nameof(textEncoder));
+            (_logitScale, _maskThreshold, _vocabularyEmbeddings) = PrepareVocabulary(textEncoder, options);
+        }
+        catch
+        {
+            // The base already opened the ONNX session; a failed constructor leaves the caller nothing to dispose.
+            _onnxSession?.Dispose();
+            _onnxSession = null;
+            throw;
+        }
     }
 
+    private static ReferringSegmentationOptions RequireOptions(ReferringSegmentationOptions options)
+        => options ?? throw new ArgumentNullException(nameof(options));
+
+    private static (T LogitScale, double MaskThreshold, Tensor<T> Vocabulary) PrepareVocabulary(
+        ITextEncoder<T> textEncoder, ReferringSegmentationOptions options)
+    {
+        if (textEncoder is null) throw new ArgumentNullException(nameof(textEncoder));
+        options.ValidateTextQuerySettings();
+        options.ValidateMaskThreshold();
+        return (TextEmbeddingClassifier.LogitScale<T>(options.Temperature),
+            options.MaskThreshold,
+            TextEmbeddingClassifier.EncodeNormalized(textEncoder, options.ResolveClassNames()));
+    }
+
+    /// <summary>
+    /// Scores pixel embeddings <c>[D, H, W]</c> or <c>[B, D, H, W]</c> against the active text
+    /// embeddings (the closed-set class names, or the expression of an in-flight
+    /// <see cref="SegmentFromExpression"/> call), returning <c>cos / tau</c> logits.
+    /// </summary>
+    protected Tensor<T> ClassifyPixels(Tensor<T> pixelEmbeddings)
+        => TextEmbeddingClassifier.Classify(pixelEmbeddings, _queryEmbeddings ?? _vocabularyEmbeddings, _logitScale);
+
+    /// <summary>
+    /// The training forward: the base layer walk (seed wiring, checkpointing and weight streaming included)
+    /// followed by <see cref="ClassifyPixels"/>, so training fits the same per-name logits that Predict returns
+    /// rather than the pixel embeddings the layers end with.
+    /// </summary>
+    /// <remarks>
+    /// Overriding this keeps the public input unchanged before the forward, which these models already do:
+    /// they override PredictCore, so the base would skip the public-input preparation either way.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => ClassifyPixels(base.ForwardForTraining(input));
+
+    /// <summary>
+    /// The GPU-resident forward: the base layer walk followed by <see cref="ClassifyPixels"/>, the same output
+    /// as Forward and Predict instead of the decoder's pixel embeddings.
+    /// </summary>
+    public override Tensor<T> ForwardGpu(Tensor<T> input) => ClassifyPixels(base.ForwardGpu(input));
+
     /// <inheritdoc/>
-    public abstract ReferringSegmentationResult<T> SegmentFromExpression(Tensor<T> image, string expression);
+    /// <remarks>
+    /// The expression is encoded once by the text encoder (LISA's <c>[SEG]</c> embedding, PixelLM's and
+    /// OMG-LLaVA's segmentation token), every pixel is scored by its cosine with that embedding over the
+    /// temperature, and the mask keeps the pixels whose sigmoid probability exceeds the mask threshold.
+    /// The confidence is the mean probability over the mask, and the box is the mask's tight XYXY box.
+    /// </remarks>
+    public virtual ReferringSegmentationResult<T> SegmentFromExpression(Tensor<T> image, string expression)
+    {
+        if (expression is null) throw new ArgumentNullException(nameof(expression));
+        var text = TextEmbeddingClassifier.EncodeNormalized(_textEncoder, new[] { expression });
+        Tensor<T> logits;
+        _queryEmbeddings = text;
+        try
+        {
+            logits = SegmentationTensorOps.EnsureUnbatched(Predict(image));
+        }
+        finally
+        {
+            _queryEmbeddings = null;
+        }
+
+        return BuildResult(Engine, NumOps, logits, _maskThreshold, expression);
+    }
+
+    /// <summary>
+    /// Turns expression logits <c>[1, H, W]</c> into the mask, confidence, box and response.
+    /// </summary>
+    internal static ReferringSegmentationResult<T> BuildResult(
+        IEngine engine, INumericOperations<T> numOps, Tensor<T> logits, double maskThreshold, string expression)
+    {
+        var probs = engine.TensorSigmoid(logits);
+        // Decided on the logit (LISA's logit > 0 at the default 0.5): a sigmoid rounded to T sits exactly on the
+        // threshold for logits near the boundary and would drop pixels that are above it.
+        var mask = MaskStatistics.SigmoidGreaterThan(logits, maskThreshold);
+        // The area is counted in int (a Half sum of the mask rounds above 2048 pixels and overflows above 65504)
+        // and the confidence is the mean over the mask's own pixels, so a NaN logit outside it cannot leak in.
+        int area = MaskStatistics.CountNonZero(mask);
+        T confidence = MaskStatistics.MaskedMean(probs, mask, area);
+        var boxes = engine.MasksToBoxes(mask).Cast<T>();
+        string response = area > 0
+            ? string.Format(CultureInfo.InvariantCulture, "Segmented region matching '{0}' with {1} pixels ({2:F2} confidence)",
+                expression, area, numOps.ToDouble(confidence))
+            : $"No region found matching '{expression}'";
+        return new ReferringSegmentationResult<T> { Masks = mask, TextResponse = response, Confidence = confidence, BoundingBoxes = boxes };
+    }
+
+    /// <summary>
+    /// Segments the expression in each frame of <c>[F, C, H, W]</c> (or one <c>[C, H, W]</c> frame),
+    /// stamping each result with its frame index.
+    /// </summary>
+    protected List<ReferringSegmentationResult<T>> SegmentEachFrame(Tensor<T> frames, string expression)
+    {
+        if (frames is null) throw new ArgumentNullException(nameof(frames));
+        var results = new List<ReferringSegmentationResult<T>>();
+        if (frames.Rank == 3)
+        {
+            var single = SegmentFromExpression(frames, expression);
+            single.FrameIndex = 0;
+            results.Add(single);
+            return results;
+        }
+
+        int numFrames = frames.Shape[0];
+        for (int f = 0; f < numFrames; f++)
+        {
+            var result = SegmentFromExpression(frames.GetSlice(f), expression);
+            result.FrameIndex = f;
+            results.Add(result);
+        }
+
+        return results;
+    }
 
     /// <inheritdoc/>
     public virtual ReferringSegmentationResult<T> SegmentFromConversation(

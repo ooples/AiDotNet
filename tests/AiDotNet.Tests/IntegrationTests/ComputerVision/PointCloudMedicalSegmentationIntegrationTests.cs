@@ -44,8 +44,8 @@ public class PointCloudMedicalSegmentationIntegrationTests
     {
         var model = new PointTransformerV3<double>(Arch(), options: new PointTransformerV3Options { ModelSize = PointTransformerV3ModelSize.Base });
         var output = model.Predict(Rand(1, 3, 32, 32));
-        Assert.NotNull(output);
-        Assert.True(output.Length > 0);
+        Assert.Equal(new[] { 1, 1, 32, 32 }, output.Shape.ToArray());
+        Assert.All(output.ToArray(), v => Assert.True(!double.IsNaN(v) && !double.IsInfinity(v)));
     }
 
     [Fact(Timeout = 120000)]
@@ -72,8 +72,8 @@ public class PointCloudMedicalSegmentationIntegrationTests
     {
         var model = new Sonata<double>(Arch(), options: new SonataOptions { ModelSize = SonataModelSize.Base });
         var output = model.Predict(Rand(1, 3, 32, 32));
-        Assert.NotNull(output);
-        Assert.True(output.Length > 0);
+        Assert.Equal(new[] { 1, 1, 32, 32 }, output.Shape.ToArray());
+        Assert.All(output.ToArray(), v => Assert.True(!double.IsNaN(v) && !double.IsInfinity(v)));
     }
 
     [Fact(Timeout = 120000)]
@@ -100,8 +100,8 @@ public class PointCloudMedicalSegmentationIntegrationTests
     {
         var model = new Concerto<double>(Arch(), options: new ConcertoOptions { ModelSize = ConcertoModelSize.Base });
         var output = model.Predict(Rand(1, 3, 32, 32));
-        Assert.NotNull(output);
-        Assert.True(output.Length > 0);
+        Assert.Equal(new[] { 1, 1, 32, 32 }, output.Shape.ToArray());
+        Assert.All(output.ToArray(), v => Assert.True(!double.IsNaN(v) && !double.IsInfinity(v)));
     }
 
     [Fact(Timeout = 120000)]
@@ -128,8 +128,8 @@ public class PointCloudMedicalSegmentationIntegrationTests
     {
         var model = new MedSAM<double>(Arch(), options: new MedSAMOptions { ModelSize = MedSAMModelSize.ViTBase });
         var output = model.Predict(Rand(1, 3, 32, 32));
-        Assert.NotNull(output);
-        Assert.True(output.Length > 0);
+        Assert.Equal(new[] { 1, 1, 32, 32 }, output.Shape.ToArray());
+        Assert.All(output.ToArray(), v => Assert.True(!double.IsNaN(v) && !double.IsInfinity(v)));
     }
 
     [Fact(Timeout = 120000)]
@@ -175,8 +175,8 @@ public class PointCloudMedicalSegmentationIntegrationTests
     {
         var model = new MedSAM2<double>(Arch(), options: SmallMedSAM2());
         var output = model.Predict(Rand(1, 3, 32, 32));
-        Assert.NotNull(output);
-        Assert.True(output.Length > 0);
+        Assert.Equal(new[] { 1, 1, 32, 32 }, output.Shape.ToArray());
+        Assert.All(output.ToArray(), v => Assert.True(!double.IsNaN(v) && !double.IsInfinity(v)));
     }
 
     [Fact(Timeout = 120000)]
@@ -203,8 +203,8 @@ public class PointCloudMedicalSegmentationIntegrationTests
     {
         var model = new MedNeXt<double>(Arch(), options: new MedNeXtOptions { ModelSize = MedNeXtModelSize.Small });
         var output = model.Predict(Rand(1, 3, 32, 32));
-        Assert.NotNull(output);
-        Assert.True(output.Length > 0);
+        Assert.Equal(new[] { 1, 1, 32, 32 }, output.Shape.ToArray());
+        Assert.All(output.ToArray(), v => Assert.True(!double.IsNaN(v) && !double.IsInfinity(v)));
     }
 
     [Fact(Timeout = 120000)]
@@ -231,8 +231,8 @@ public class PointCloudMedicalSegmentationIntegrationTests
     {
         var model = new NnUNet<double>(Arch(), options: new NnUNetOptions { ModelSize = NnUNetModelSize.UNet2D });
         var output = model.Predict(Rand(1, 3, 32, 32));
-        Assert.NotNull(output);
-        Assert.True(output.Length > 0);
+        Assert.Equal(new[] { 1, 1, 32, 32 }, output.Shape.ToArray());
+        Assert.All(output.ToArray(), v => Assert.True(!double.IsNaN(v) && !double.IsInfinity(v)));
     }
 
     [Fact(Timeout = 120000)]
@@ -259,8 +259,8 @@ public class PointCloudMedicalSegmentationIntegrationTests
     {
         var model = new SwinUNETR<double>(Arch(), options: new SwinUNETROptions { ModelSize = SwinUNETRModelSize.Tiny });
         var output = model.Predict(Rand(1, 3, 32, 32));
-        Assert.NotNull(output);
-        Assert.True(output.Length > 0);
+        Assert.Equal(new[] { 1, 1, 32, 32 }, output.Shape.ToArray());
+        Assert.All(output.ToArray(), v => Assert.True(!double.IsNaN(v) && !double.IsInfinity(v)));
     }
 
     [Fact(Timeout = 120000)]
@@ -287,8 +287,8 @@ public class PointCloudMedicalSegmentationIntegrationTests
     {
         var model = new TransUNet<double>(Arch(), options: new TransUNetOptions { ModelSize = TransUNetModelSize.Base });
         var output = model.Predict(Rand(1, 3, 32, 32));
-        Assert.NotNull(output);
-        Assert.True(output.Length > 0);
+        Assert.Equal(new[] { 1, 1, 32, 32 }, output.Shape.ToArray());
+        Assert.All(output.ToArray(), v => Assert.True(!double.IsNaN(v) && !double.IsInfinity(v)));
     }
 
     [Fact(Timeout = 120000)]
@@ -315,8 +315,8 @@ public class PointCloudMedicalSegmentationIntegrationTests
     {
         var model = new UMamba<double>(Arch());
         var output = model.Predict(Rand(1, 3, 32, 32));
-        Assert.NotNull(output);
-        Assert.True(output.Length > 0);
+        Assert.Equal(new[] { 1, 1, 32, 32 }, output.Shape.ToArray());
+        Assert.All(output.ToArray(), v => Assert.True(!double.IsNaN(v) && !double.IsInfinity(v)));
     }
 
     [Fact(Timeout = 120000)]
@@ -341,15 +341,27 @@ public class PointCloudMedicalSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task UniverSeg_Predict_ReturnsOutput()
     {
+        await Task.Yield();
         var model = new UniverSeg<double>(Arch());
+        // UniverSeg is defined only for a non-empty support set (Butoi et al. 2023).
+        model.SetSupportSet(Rand(2, 3, 32, 32), Rand(2, 32, 32));
         var output = model.Predict(Rand(1, 3, 32, 32));
-        Assert.NotNull(output);
-        Assert.True(output.Length > 0);
+        Assert.Equal(new[] { 1, 1, 32, 32 }, output.Shape.ToArray());
+        Assert.All(output.ToArray(), v => Assert.True(!double.IsNaN(v) && !double.IsInfinity(v)));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task UniverSeg_PredictWithoutSupportSet_Throws()
+    {
+        await Task.Yield();
+        var model = new UniverSeg<double>(Arch());
+        Assert.Throws<System.InvalidOperationException>(() => model.Predict(Rand(1, 3, 32, 32)));
     }
 
     [Fact(Timeout = 120000)]
     public async Task UniverSeg_Dispose_DoesNotThrow()
     {
+        await Task.Yield();
         var model = new UniverSeg<double>(Arch());
         Assert.Null(Record.Exception(() => model.Dispose()));
     }
@@ -371,8 +383,8 @@ public class PointCloudMedicalSegmentationIntegrationTests
     {
         var model = new SegMamba<double>(Arch());
         var output = model.Predict(Rand(1, 3, 32, 32));
-        Assert.NotNull(output);
-        Assert.True(output.Length > 0);
+        Assert.Equal(new[] { 1, 1, 32, 32 }, output.Shape.ToArray());
+        Assert.All(output.ToArray(), v => Assert.True(!double.IsNaN(v) && !double.IsInfinity(v)));
     }
 
     [Fact(Timeout = 120000)]
@@ -399,8 +411,8 @@ public class PointCloudMedicalSegmentationIntegrationTests
     {
         var model = new BiomedParse<double>(Arch());
         var output = model.Predict(Rand(1, 3, 32, 32));
-        Assert.NotNull(output);
-        Assert.True(output.Length > 0);
+        Assert.Equal(new[] { 1, 1, 32, 32 }, output.Shape.ToArray());
+        Assert.All(output.ToArray(), v => Assert.True(!double.IsNaN(v) && !double.IsInfinity(v)));
     }
 
     [Fact(Timeout = 120000)]
@@ -427,8 +439,8 @@ public class PointCloudMedicalSegmentationIntegrationTests
     {
         var model = new MedSegDiffV2<double>(Arch());
         var output = model.Predict(Rand(1, 3, 32, 32));
-        Assert.NotNull(output);
-        Assert.True(output.Length > 0);
+        Assert.Equal(new[] { 1, 1, 32, 32 }, output.Shape.ToArray());
+        Assert.All(output.ToArray(), v => Assert.True(!double.IsNaN(v) && !double.IsInfinity(v)));
     }
 
     [Fact(Timeout = 120000)]

@@ -80,7 +80,7 @@ internal sealed class GroundingDinoDetector<T>
     }
 
     /// <summary>The official <c>predict</c> on one image (a batch of one) and a caption.</summary>
-    public List<GroundingDetection> Ground(Tensor<T> image, string caption)
+    public List<GroundingDetection<T>> Ground(Tensor<T> image, string caption)
     {
         if (image.Shape[0] != 1) throw new ArgumentException("Grounding reads one image at a time.", nameof(image));
         var prompt = GroundingDinoPrompt.Create(caption);
@@ -91,11 +91,23 @@ internal sealed class GroundingDinoDetector<T>
     }
 
     /// <summary>The <see cref="GroundingVLMOptions.MaxDetections"/> highest-scoring detections, in query order.</summary>
-    public List<GroundingDetection> Strongest(IReadOnlyList<GroundingDetection> detections)
+    public List<GroundingDetection<T>> Strongest(IReadOnlyList<GroundingDetection<T>> detections)
+        => Strongest(detections, Options.MaxDetections);
+
+    /// <summary>
+    /// The <paramref name="maxDetections"/> highest-scoring detections, in query order. Scores that tie are ranked by
+    /// their logits: in a narrow <typeparamref name="T"/> every confident query's sigmoid rounds to 1, and ranking those
+    /// by query order would keep the earliest queries instead of the strongest.
+    /// </summary>
+    internal static List<GroundingDetection<T>> Strongest(IReadOnlyList<GroundingDetection<T>> detections, int maxDetections)
     {
-        if (detections.Count <= Options.MaxDetections) return detections.ToList();
-        var keep = new HashSet<GroundingDetection>(detections.OrderByDescending(d => d.Score).Take(Options.MaxDetections));
-        return detections.Where(keep.Contains).ToList();
+        if (detections.Count <= maxDetections) return detections.ToList();
+        var order = Comparer<T>.Default;
+        var keep = new HashSet<int>(Enumerable.Range(0, detections.Count)
+            .OrderByDescending(i => detections[i].Score, order)
+            .ThenByDescending(i => detections[i].Logit, order)
+            .Take(maxDetections));
+        return detections.Where((_, i) => keep.Contains(i)).ToList();
     }
 
     /// <summary>The caption and its boxes as the network and the loss read them.</summary>

@@ -84,9 +84,9 @@ public class OpenVocabSegmentationResult<T>
     public string[] ClassNames { get; set; } = [];
 
     /// <summary>
-    /// Per-class confidence scores.
+    /// Per-class confidence scores: the mean probability of each class over the pixels it labels.
     /// </summary>
-    public double[] Scores { get; set; } = [];
+    public Vector<T> Scores { get; set; } = new Vector<T>(0);
 
     /// <summary>
     /// Per-pixel semantic map [H, W] with class indices.

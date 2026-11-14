@@ -24497,3 +24497,300 @@ AiDotNet.Enums.AdversarialAttackMethod.Fgsm = 0 -> AiDotNet.Enums.AdversarialAtt
 AiDotNet.Enums.AdversarialAttackMethod.Pgd = 1 -> AiDotNet.Enums.AdversarialAttackMethod
 AiDotNet.Enums.AdversarialAttackMethod.CarliniWagner = 2 -> AiDotNet.Enums.AdversarialAttackMethod
 AiDotNet.Enums.AdversarialAttackMethod.AutoAttack = 3 -> AiDotNet.Enums.AdversarialAttackMethod
+AiDotNet.NeuralNetworks.Layers.VarianceTargets
+AiDotNet.NeuralNetworks.Layers.VarianceTargets.VarianceTargets() -> void
+AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.X1.get -> T
+AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.Y1.get -> T
+AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>
+AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.Y1.init -> void
+AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.X1.init -> void
+override AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.ToString() -> string!
+static AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.operator !=(AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>? left, AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>? right) -> bool
+static AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.operator ==(AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>? left, AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>? right) -> bool
+override AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.GetHashCode() -> int
+AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.Y2.get -> T
+override AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.Equals(object? obj) -> bool
+AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.X2.get -> T
+AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.X2.init -> void
+AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.Y2.init -> void
+AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.Equals(AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>? other) -> bool
+AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.<Clone>$() -> AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>!
+AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.Deconstruct(out T X1, out T Y1, out T X2, out T Y2, out T Score, out string! Phrase) -> void
+AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.Phrase.get -> string!
+AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.Score.get -> T
+AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.Score.init -> void
+AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.Phrase.init -> void
+AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>.Detection.get -> AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>!
+AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>.MaskScore.get -> T
+AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>.Deconstruct(out AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>! Detection, out AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Mask, out T MaskScore) -> void
+AiDotNet.Audio.Pitch.WorldPitchDetector<T>.EstimateF0(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, double framePeriodMs) -> (double[]! F0, double[]! TemporalPositions)
+AiDotNet.Audio.Pitch.WorldPitchDetector<T>.EstimateF0(double[]! x, double framePeriodMs) -> (double[]! F0, double[]! TemporalPositions)
+AiDotNet.Audio.Pitch.WorldPitchDetector<T>.Harvest(double[]! x, double framePeriodMs) -> (double[]! F0, double[]! TemporalPositions)
+AiDotNet.Audio.Pitch.WorldPitchDetector<T>.StoneMask(double[]! x, double[]! f0, double[]! temporalPositions) -> double[]!
+AiDotNet.TextToSpeech.TtsTrainingSample<T>.Pitch.get -> double[]?
+AiDotNet.TextToSpeech.TtsTrainingSample<T>.Energy.get -> double[]?
+AiDotNet.TextToSpeech.TacotronSpectrogram.Magnitude(double[]! audio) -> double[,]!
+AiDotNet.TextToSpeech.TacotronSpectrogram.LogMel(double[]! audio) -> double[,]!
+AiDotNet.TextToSpeech.TacotronSpectrogram.LogMel(double[,]! magnitude) -> double[,]!
+AiDotNet.TextToSpeech.TacotronSpectrogram.Energy(double[,]! magnitude) -> double[]!
+AiDotNet.TextToSpeech.AcousticTargets<T>.Pitch.get -> double[]?
+AiDotNet.TextToSpeech.AcousticTargets<T>.Energy.get -> double[]?
+abstract AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.PredictDurations(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! hidden, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? speaker, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? language, System.Random! random) -> double[]!
+override AiDotNet.TextToSpeech.EndToEnd.VITS2<T>.PredictDurations(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! hidden, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? speaker, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? language, System.Random! random) -> double[]!
+override AiDotNet.TextToSpeech.EndToEnd.StochasticDurationVitsBase<T>.PredictDurations(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! hidden, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? speaker, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? language, System.Random! random) -> double[]!
+AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>.GroundingDetection(T X1, T Y1, T X2, T Y2, T Score, string! Phrase) -> void
+AiDotNet.VisionLanguage.Grounding.GroundingDINO<T>.Ground(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, string! caption) -> System.Collections.Generic.IReadOnlyList<AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>!>!
+AiDotNet.VisionLanguage.Grounding.GroundedSAM2<T>.Ground(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, string! caption) -> System.Collections.Generic.IReadOnlyList<AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>!>!
+AiDotNet.VisionLanguage.Grounding.GroundedSegment<T>.GroundedSegment(AiDotNet.VisionLanguage.Grounding.GroundingDetection<T>! Detection, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Mask, T MaskScore) -> void
+AiDotNet.TextToSpeech.Classic.AdaSpeech2<T>.TrainUntranscribed(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! mel, int speakerId, double[]? pitch = null, double[]? energy = null) -> T
+AiDotNet.TextToSpeech.Classic.AdaSpeech2<T>.EvaluateUntranscribed(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! mel, int speakerId, double[]? pitch = null, double[]? energy = null) -> T
+AiDotNet.NeuralNetworks.Layers.VarianceTargets.Durations.get -> int[]?
+AiDotNet.NeuralNetworks.Layers.VarianceTargets.Durations.init -> void
+AiDotNet.NeuralNetworks.Layers.VarianceTargets.Pitch.get -> double[]?
+AiDotNet.NeuralNetworks.Layers.VarianceTargets.Pitch.init -> void
+AiDotNet.NeuralNetworks.Layers.VarianceTargets.Energy.get -> double[]?
+AiDotNet.NeuralNetworks.Layers.VarianceTargets.Energy.init -> void
+AiDotNet.NeuralNetworks.Layers.VarianceAdaptorLayer<T>.Adapt(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! hidden, AiDotNet.NeuralNetworks.Layers.VarianceTargets? targets, double durationScale = 1) -> AiDotNet.NeuralNetworks.Layers.VarianceAdaptation<T>!
+AiDotNet.NeuralNetworks.Layers.VarianceAdaptorLayer<T>.AddFrameVariance(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! frames, double[]? pitch, double[]? energy) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.ComputerVision.Segmentation.OpenVocabulary.CATSeg<T>.CATSeg(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null, AiDotNet.ComputerVision.Segmentation.OpenVocabulary.CATSegOptions? options = null) -> void
+*REMOVED*AiDotNet.ComputerVision.Segmentation.OpenVocabulary.CATSeg<T>.CATSeg(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.ComputerVision.Segmentation.OpenVocabulary.CATSegOptions? options = null) -> void
+*REMOVED*override AiDotNet.ComputerVision.Segmentation.OpenVocabulary.CATSeg<T>.SegmentWithPrompt(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, string! prompt) -> AiDotNet.Interfaces.OpenVocabSegmentationResult<T>!
+*REMOVED*override AiDotNet.ComputerVision.Segmentation.OpenVocabulary.CATSeg<T>.SegmentWithText(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, System.Collections.Generic.IReadOnlyList<string!>! classNames) -> AiDotNet.Interfaces.OpenVocabSegmentationResult<T>!
+*REMOVED*AiDotNet.ComputerVision.Segmentation.OpenVocabulary.SAN<T>.SAN(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null, AiDotNet.ComputerVision.Segmentation.OpenVocabulary.SANOptions? options = null) -> void
+*REMOVED*AiDotNet.ComputerVision.Segmentation.OpenVocabulary.SAN<T>.SAN(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.ComputerVision.Segmentation.OpenVocabulary.SANOptions? options = null) -> void
+*REMOVED*override AiDotNet.ComputerVision.Segmentation.OpenVocabulary.SAN<T>.SegmentWithPrompt(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, string! prompt) -> AiDotNet.Interfaces.OpenVocabSegmentationResult<T>!
+*REMOVED*override AiDotNet.ComputerVision.Segmentation.OpenVocabulary.SAN<T>.SegmentWithText(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, System.Collections.Generic.IReadOnlyList<string!>! classNames) -> AiDotNet.Interfaces.OpenVocabSegmentationResult<T>!
+*REMOVED*AiDotNet.ComputerVision.Segmentation.OpenVocabulary.SED<T>.SED(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null, AiDotNet.ComputerVision.Segmentation.OpenVocabulary.SEDOptions? options = null) -> void
+*REMOVED*AiDotNet.ComputerVision.Segmentation.OpenVocabulary.SED<T>.SED(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.ComputerVision.Segmentation.OpenVocabulary.SEDOptions? options = null) -> void
+*REMOVED*override AiDotNet.ComputerVision.Segmentation.OpenVocabulary.SED<T>.SegmentWithPrompt(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, string! prompt) -> AiDotNet.Interfaces.OpenVocabSegmentationResult<T>!
+*REMOVED*override AiDotNet.ComputerVision.Segmentation.OpenVocabulary.SED<T>.SegmentWithText(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, System.Collections.Generic.IReadOnlyList<string!>! classNames) -> AiDotNet.Interfaces.OpenVocabSegmentationResult<T>!
+*REMOVED*AiDotNet.ComputerVision.Segmentation.OpenVocabulary.MaskAdapter<T>.MaskAdapter(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null, AiDotNet.ComputerVision.Segmentation.OpenVocabulary.MaskAdapterOptions? options = null) -> void
+*REMOVED*AiDotNet.ComputerVision.Segmentation.OpenVocabulary.MaskAdapter<T>.MaskAdapter(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.ComputerVision.Segmentation.OpenVocabulary.MaskAdapterOptions? options = null) -> void
+*REMOVED*override AiDotNet.ComputerVision.Segmentation.OpenVocabulary.MaskAdapter<T>.SegmentWithPrompt(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, string! prompt) -> AiDotNet.Interfaces.OpenVocabSegmentationResult<T>!
+*REMOVED*override AiDotNet.ComputerVision.Segmentation.OpenVocabulary.MaskAdapter<T>.SegmentWithText(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, System.Collections.Generic.IReadOnlyList<string!>! classNames) -> AiDotNet.Interfaces.OpenVocabSegmentationResult<T>!
+*REMOVED*AiDotNet.ComputerVision.Segmentation.OpenVocabulary.OpenVocabSAM<T>.OpenVocabSAM(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null, AiDotNet.ComputerVision.Segmentation.OpenVocabulary.OpenVocabSAMOptions? options = null) -> void
+*REMOVED*AiDotNet.ComputerVision.Segmentation.OpenVocabulary.OpenVocabSAM<T>.OpenVocabSAM(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.ComputerVision.Segmentation.OpenVocabulary.OpenVocabSAMOptions? options = null) -> void
+*REMOVED*override AiDotNet.ComputerVision.Segmentation.OpenVocabulary.OpenVocabSAM<T>.SegmentWithPrompt(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, string! prompt) -> AiDotNet.Interfaces.OpenVocabSegmentationResult<T>!
+*REMOVED*override AiDotNet.ComputerVision.Segmentation.OpenVocabulary.OpenVocabSAM<T>.SegmentWithText(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, System.Collections.Generic.IReadOnlyList<string!>! classNames) -> AiDotNet.Interfaces.OpenVocabSegmentationResult<T>!
+*REMOVED*AiDotNet.ComputerVision.Segmentation.Referring.LISA<T>.LISA(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null, AiDotNet.ComputerVision.Segmentation.Referring.LISAOptions? options = null) -> void
+*REMOVED*AiDotNet.ComputerVision.Segmentation.Referring.LISA<T>.LISA(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.ComputerVision.Segmentation.Referring.LISAOptions? options = null) -> void
+*REMOVED*override AiDotNet.ComputerVision.Segmentation.Referring.LISA<T>.SegmentFromExpression(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, string! expression) -> AiDotNet.Interfaces.ReferringSegmentationResult<T>!
+*REMOVED*AiDotNet.ComputerVision.Segmentation.Referring.OMGLLaVA<T>.OMGLLaVA(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null, AiDotNet.ComputerVision.Segmentation.Referring.OMGLLaVAOptions? options = null) -> void
+*REMOVED*AiDotNet.ComputerVision.Segmentation.Referring.OMGLLaVA<T>.OMGLLaVA(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.ComputerVision.Segmentation.Referring.OMGLLaVAOptions? options = null) -> void
+*REMOVED*override AiDotNet.ComputerVision.Segmentation.Referring.OMGLLaVA<T>.SegmentFromExpression(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, string! expression) -> AiDotNet.Interfaces.ReferringSegmentationResult<T>!
+*REMOVED*AiDotNet.ComputerVision.Segmentation.Referring.PixelLM<T>.PixelLM(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null, AiDotNet.ComputerVision.Segmentation.Referring.PixelLMOptions? options = null) -> void
+*REMOVED*AiDotNet.ComputerVision.Segmentation.Referring.PixelLM<T>.PixelLM(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.ComputerVision.Segmentation.Referring.PixelLMOptions? options = null) -> void
+*REMOVED*override AiDotNet.ComputerVision.Segmentation.Referring.PixelLM<T>.SegmentFromExpression(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, string! expression) -> AiDotNet.Interfaces.ReferringSegmentationResult<T>!
+*REMOVED*AiDotNet.ComputerVision.Segmentation.Referring.VideoLISA<T>.VideoLISA(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null, AiDotNet.ComputerVision.Segmentation.Referring.VideoLISAOptions? options = null) -> void
+*REMOVED*AiDotNet.ComputerVision.Segmentation.Referring.VideoLISA<T>.VideoLISA(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.ComputerVision.Segmentation.Referring.VideoLISAOptions? options = null) -> void
+*REMOVED*override AiDotNet.ComputerVision.Segmentation.Referring.VideoLISA<T>.SegmentFromExpression(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, string! expression) -> AiDotNet.Interfaces.ReferringSegmentationResult<T>!
+*REMOVED*abstract AiDotNet.ComputerVision.Segmentation.Common.OpenVocabSegmentationBase<T>.SegmentWithText(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, System.Collections.Generic.IReadOnlyList<string!>! classNames) -> AiDotNet.Interfaces.OpenVocabSegmentationResult<T>!
+*REMOVED*abstract AiDotNet.ComputerVision.Segmentation.Common.OpenVocabSegmentationBase<T>.SegmentWithPrompt(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, string! prompt) -> AiDotNet.Interfaces.OpenVocabSegmentationResult<T>!
+*REMOVED*AiDotNet.ComputerVision.Segmentation.Common.OpenVocabSegmentationBase<T>.OpenVocabSegmentationBase(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer, AiDotNet.Interfaces.ILossFunction<T>? lossFunction, int numClasses, int maxCategories = 256, int maxPromptLength = 77) -> void
+*REMOVED*AiDotNet.ComputerVision.Segmentation.Common.OpenVocabSegmentationBase<T>.OpenVocabSegmentationBase(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, int numClasses, int maxCategories = 256, int maxPromptLength = 77) -> void
+*REMOVED*abstract AiDotNet.ComputerVision.Segmentation.Common.ReferringSegmentationBase<T>.SegmentFromExpression(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, string! expression) -> AiDotNet.Interfaces.ReferringSegmentationResult<T>!
+*REMOVED*AiDotNet.ComputerVision.Segmentation.Common.ReferringSegmentationBase<T>.ReferringSegmentationBase(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer, AiDotNet.Interfaces.ILossFunction<T>? lossFunction, int numClasses, int maxTextLength = 512) -> void
+*REMOVED*AiDotNet.ComputerVision.Segmentation.Common.ReferringSegmentationBase<T>.ReferringSegmentationBase(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, int numClasses, int maxTextLength = 512) -> void
+*REMOVED*AiDotNet.Interfaces.OpenVocabSegmentationResult<T>.Scores.get -> double[]!
+*REMOVED*AiDotNet.Interfaces.ReferringSegmentationResult<T>.Confidence.get -> double
+AiDotNet.ComputerVision.Segmentation.OpenVocabulary.CATSeg<T>.CATSeg(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.VisionLanguage.Interfaces.ITextEncoder<T>! textEncoder, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null, AiDotNet.ComputerVision.Segmentation.OpenVocabulary.CATSegOptions? options = null) -> void
+AiDotNet.ComputerVision.Segmentation.OpenVocabulary.CATSeg<T>.CATSeg(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.VisionLanguage.Interfaces.ITextEncoder<T>! textEncoder, AiDotNet.ComputerVision.Segmentation.OpenVocabulary.CATSegOptions? options) -> void
+AiDotNet.ComputerVision.Segmentation.OpenVocabulary.SAN<T>.SAN(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.VisionLanguage.Interfaces.ITextEncoder<T>! textEncoder, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null, AiDotNet.ComputerVision.Segmentation.OpenVocabulary.SANOptions? options = null) -> void
+AiDotNet.ComputerVision.Segmentation.OpenVocabulary.SAN<T>.SAN(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.VisionLanguage.Interfaces.ITextEncoder<T>! textEncoder, AiDotNet.ComputerVision.Segmentation.OpenVocabulary.SANOptions? options) -> void
+AiDotNet.ComputerVision.Segmentation.OpenVocabulary.SED<T>.SED(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.VisionLanguage.Interfaces.ITextEncoder<T>! textEncoder, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null, AiDotNet.ComputerVision.Segmentation.OpenVocabulary.SEDOptions? options = null) -> void
+AiDotNet.ComputerVision.Segmentation.OpenVocabulary.SED<T>.SED(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.VisionLanguage.Interfaces.ITextEncoder<T>! textEncoder, AiDotNet.ComputerVision.Segmentation.OpenVocabulary.SEDOptions? options) -> void
+AiDotNet.ComputerVision.Segmentation.OpenVocabulary.MaskAdapter<T>.MaskAdapter(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.VisionLanguage.Interfaces.ITextEncoder<T>! textEncoder, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null, AiDotNet.ComputerVision.Segmentation.OpenVocabulary.MaskAdapterOptions? options = null) -> void
+AiDotNet.ComputerVision.Segmentation.OpenVocabulary.MaskAdapter<T>.MaskAdapter(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.VisionLanguage.Interfaces.ITextEncoder<T>! textEncoder, AiDotNet.ComputerVision.Segmentation.OpenVocabulary.MaskAdapterOptions? options) -> void
+AiDotNet.ComputerVision.Segmentation.OpenVocabulary.OpenVocabSAM<T>.OpenVocabSAM(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.VisionLanguage.Interfaces.ITextEncoder<T>! textEncoder, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null, AiDotNet.ComputerVision.Segmentation.OpenVocabulary.OpenVocabSAMOptions? options = null) -> void
+AiDotNet.ComputerVision.Segmentation.OpenVocabulary.OpenVocabSAM<T>.OpenVocabSAM(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.VisionLanguage.Interfaces.ITextEncoder<T>! textEncoder, AiDotNet.ComputerVision.Segmentation.OpenVocabulary.OpenVocabSAMOptions? options) -> void
+AiDotNet.ComputerVision.Segmentation.Referring.LISA<T>.LISA(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.VisionLanguage.Interfaces.ITextEncoder<T>! textEncoder, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null, AiDotNet.ComputerVision.Segmentation.Referring.LISAOptions? options = null) -> void
+AiDotNet.ComputerVision.Segmentation.Referring.LISA<T>.LISA(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.VisionLanguage.Interfaces.ITextEncoder<T>! textEncoder, AiDotNet.ComputerVision.Segmentation.Referring.LISAOptions? options) -> void
+AiDotNet.ComputerVision.Segmentation.Referring.OMGLLaVA<T>.OMGLLaVA(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.VisionLanguage.Interfaces.ITextEncoder<T>! textEncoder, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null, AiDotNet.ComputerVision.Segmentation.Referring.OMGLLaVAOptions? options = null) -> void
+AiDotNet.ComputerVision.Segmentation.Referring.OMGLLaVA<T>.OMGLLaVA(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.VisionLanguage.Interfaces.ITextEncoder<T>! textEncoder, AiDotNet.ComputerVision.Segmentation.Referring.OMGLLaVAOptions? options) -> void
+AiDotNet.ComputerVision.Segmentation.Referring.PixelLM<T>.PixelLM(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.VisionLanguage.Interfaces.ITextEncoder<T>! textEncoder, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null, AiDotNet.ComputerVision.Segmentation.Referring.PixelLMOptions? options = null) -> void
+AiDotNet.ComputerVision.Segmentation.Referring.PixelLM<T>.PixelLM(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.VisionLanguage.Interfaces.ITextEncoder<T>! textEncoder, AiDotNet.ComputerVision.Segmentation.Referring.PixelLMOptions? options) -> void
+AiDotNet.ComputerVision.Segmentation.Referring.VideoLISA<T>.VideoLISA(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.VisionLanguage.Interfaces.ITextEncoder<T>! textEncoder, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null, AiDotNet.ComputerVision.Segmentation.Referring.VideoLISAOptions? options = null) -> void
+AiDotNet.ComputerVision.Segmentation.Referring.VideoLISA<T>.VideoLISA(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.VisionLanguage.Interfaces.ITextEncoder<T>! textEncoder, AiDotNet.ComputerVision.Segmentation.Referring.VideoLISAOptions? options) -> void
+virtual AiDotNet.ComputerVision.Segmentation.Common.OpenVocabSegmentationBase<T>.SegmentWithText(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, System.Collections.Generic.IReadOnlyList<string!>! classNames) -> AiDotNet.Interfaces.OpenVocabSegmentationResult<T>!
+virtual AiDotNet.ComputerVision.Segmentation.Common.OpenVocabSegmentationBase<T>.SegmentWithPrompt(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, string! prompt) -> AiDotNet.Interfaces.OpenVocabSegmentationResult<T>!
+AiDotNet.ComputerVision.Segmentation.Common.OpenVocabSegmentationBase<T>.OpenVocabSegmentationBase(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer, AiDotNet.Interfaces.ILossFunction<T>? lossFunction, AiDotNet.VisionLanguage.Interfaces.ITextEncoder<T>! textEncoder, AiDotNet.Models.Options.TextQueriedSegmentationOptions! options, int maxCategories = 256, int maxPromptLength = 77) -> void
+AiDotNet.ComputerVision.Segmentation.Common.OpenVocabSegmentationBase<T>.OpenVocabSegmentationBase(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.VisionLanguage.Interfaces.ITextEncoder<T>! textEncoder, AiDotNet.Models.Options.TextQueriedSegmentationOptions! options, int maxCategories, int maxPromptLength) -> void
+AiDotNet.ComputerVision.Segmentation.Common.OpenVocabSegmentationBase<T>.TextEncoder.get -> AiDotNet.VisionLanguage.Interfaces.ITextEncoder<T>!
+AiDotNet.ComputerVision.Segmentation.Common.OpenVocabSegmentationBase<T>.TextEmbeddingDimension.get -> int
+AiDotNet.ComputerVision.Segmentation.Common.OpenVocabSegmentationBase<T>.ClassifyPixels(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! pixelEmbeddings) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+readonly AiDotNet.ComputerVision.Segmentation.Common.OpenVocabSegmentationBase<T>._textEncoder -> AiDotNet.VisionLanguage.Interfaces.ITextEncoder<T>!
+readonly AiDotNet.ComputerVision.Segmentation.Common.OpenVocabSegmentationBase<T>._logitScale -> T
+virtual AiDotNet.ComputerVision.Segmentation.Common.ReferringSegmentationBase<T>.SegmentFromExpression(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, string! expression) -> AiDotNet.Interfaces.ReferringSegmentationResult<T>!
+AiDotNet.ComputerVision.Segmentation.Common.ReferringSegmentationBase<T>.ReferringSegmentationBase(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer, AiDotNet.Interfaces.ILossFunction<T>? lossFunction, AiDotNet.VisionLanguage.Interfaces.ITextEncoder<T>! textEncoder, AiDotNet.Models.Options.ReferringSegmentationOptions! options, int maxTextLength = 512) -> void
+AiDotNet.ComputerVision.Segmentation.Common.ReferringSegmentationBase<T>.ReferringSegmentationBase(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.VisionLanguage.Interfaces.ITextEncoder<T>! textEncoder, AiDotNet.Models.Options.ReferringSegmentationOptions! options, int maxTextLength) -> void
+AiDotNet.ComputerVision.Segmentation.Common.ReferringSegmentationBase<T>.TextEncoder.get -> AiDotNet.VisionLanguage.Interfaces.ITextEncoder<T>!
+AiDotNet.ComputerVision.Segmentation.Common.ReferringSegmentationBase<T>.TextEmbeddingDimension.get -> int
+AiDotNet.ComputerVision.Segmentation.Common.ReferringSegmentationBase<T>.ClassifyPixels(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! pixelEmbeddings) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+readonly AiDotNet.ComputerVision.Segmentation.Common.ReferringSegmentationBase<T>._textEncoder -> AiDotNet.VisionLanguage.Interfaces.ITextEncoder<T>!
+readonly AiDotNet.ComputerVision.Segmentation.Common.ReferringSegmentationBase<T>._logitScale -> T
+readonly AiDotNet.ComputerVision.Segmentation.Common.ReferringSegmentationBase<T>._maskThreshold -> double
+AiDotNet.ComputerVision.Segmentation.Common.ReferringSegmentationBase<T>.SegmentEachFrame(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! frames, string! expression) -> System.Collections.Generic.List<AiDotNet.Interfaces.ReferringSegmentationResult<T>!>!
+AiDotNet.Interfaces.OpenVocabSegmentationResult<T>.Scores.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.Interfaces.ReferringSegmentationResult<T>.Confidence.get -> T
+AiDotNet.Models.Options.TextQueriedSegmentationOptions
+AiDotNet.Models.Options.TextQueriedSegmentationOptions.TextQueriedSegmentationOptions() -> void
+AiDotNet.Models.Options.TextQueriedSegmentationOptions.Temperature.get -> double
+AiDotNet.Models.Options.TextQueriedSegmentationOptions.Temperature.set -> void
+AiDotNet.Models.Options.TextQueriedSegmentationOptions.ClassNames.get -> string![]?
+AiDotNet.Models.Options.TextQueriedSegmentationOptions.ClassNames.set -> void
+AiDotNet.Models.Options.TextQueriedSegmentationOptions.CopyTextQuerySettings(AiDotNet.Models.Options.TextQueriedSegmentationOptions! other) -> void
+AiDotNet.Models.Options.ReferringSegmentationOptions
+AiDotNet.Models.Options.ReferringSegmentationOptions.ReferringSegmentationOptions() -> void
+AiDotNet.Models.Options.ReferringSegmentationOptions.MaskThreshold.get -> double
+AiDotNet.Models.Options.ReferringSegmentationOptions.MaskThreshold.set -> void
+AiDotNet.Models.Options.ReferringSegmentationOptions.CopyReferringSettings(AiDotNet.Models.Options.ReferringSegmentationOptions! other) -> void
+*REMOVED*AiDotNet.Finance.Evaluation.GIFTEvalBenchmark<T>.ComputeCRPS(System.Collections.Generic.IReadOnlyDictionary<double, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! quantileForecasts, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! actuals) -> double
+AiDotNet.Finance.Evaluation.GIFTEvalBenchmark<T>.ComputeCRPS(System.Collections.Generic.IReadOnlyDictionary<double, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! quantileForecasts, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! actuals) -> T
+*REMOVED*AiDotNet.Finance.Evaluation.GIFTEvalBenchmark<T>.ComputeMASE(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! predictions, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! actuals, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! historicalData, int seasonalPeriod = 1) -> double
+AiDotNet.Finance.Evaluation.GIFTEvalBenchmark<T>.ComputeMASE(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! predictions, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! actuals, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! historicalData, int seasonalPeriod = 1) -> T
+*REMOVED*AiDotNet.Finance.Evaluation.GIFTEvalBenchmark<T>.ComputeQuantileLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! predictions, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! actuals, double quantileLevel) -> double
+AiDotNet.Finance.Evaluation.GIFTEvalBenchmark<T>.ComputeQuantileLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! predictions, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! actuals, double quantileLevel) -> T
+*REMOVED*AiDotNet.Finance.Evaluation.GIFTEvalBenchmark<T>.RunBenchmark(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel<T>! model, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! testSeries, System.Collections.Generic.IReadOnlyList<int>! contextLengths, System.Collections.Generic.IReadOnlyList<int>! seasonalPeriods, double[]? quantileLevels = null) -> System.Collections.Generic.Dictionary<string!, double>!
+AiDotNet.Finance.Evaluation.GIFTEvalBenchmark<T>.RunBenchmark(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel<T>! model, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! testSeries, System.Collections.Generic.IReadOnlyList<int>! contextLengths, System.Collections.Generic.IReadOnlyList<int>! seasonalPeriods, double[]? quantileLevels = null) -> System.Collections.Generic.Dictionary<string!, T>!
+*REMOVED*AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness<T>.EvaluateAnomalyDetection(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel<T>! model, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! testSeries, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! groundTruthLabels, double? threshold = null) -> System.Collections.Generic.Dictionary<string!, double>!
+AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness<T>.EvaluateAnomalyDetection(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel<T>! model, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! testSeries, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! groundTruthLabels, double? threshold = null) -> System.Collections.Generic.Dictionary<string!, T>!
+*REMOVED*AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness<T>.EvaluateClassification(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel<T>! model, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! testSeries, System.Collections.Generic.IReadOnlyList<int>! trueLabels, int numClasses) -> System.Collections.Generic.Dictionary<string!, double>!
+AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness<T>.EvaluateClassification(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel<T>! model, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! testSeries, System.Collections.Generic.IReadOnlyList<int>! trueLabels, int numClasses) -> System.Collections.Generic.Dictionary<string!, T>!
+*REMOVED*AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness<T>.EvaluateForecasting(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel<T>! model, System.Collections.Generic.IReadOnlyList<(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Context, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Target)>! testPairs) -> System.Collections.Generic.Dictionary<string!, double>!
+AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness<T>.EvaluateForecasting(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel<T>! model, System.Collections.Generic.IReadOnlyList<(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Context, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Target)>! testPairs) -> System.Collections.Generic.Dictionary<string!, T>!
+*REMOVED*AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness<T>.EvaluateImputation(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel<T>! model, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! completeSeries, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! masks) -> System.Collections.Generic.Dictionary<string!, double>!
+AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness<T>.EvaluateImputation(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel<T>! model, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! completeSeries, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! masks) -> System.Collections.Generic.Dictionary<string!, T>!
+*REMOVED*AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness<T>.RunFullEvaluation(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel<T>! model, System.Collections.Generic.IReadOnlyList<(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Context, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Target)>? forecastingData = null, (System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! Series, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! Labels, double? Threshold)? anomalyData = null, (System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! Series, System.Collections.Generic.IReadOnlyList<int>! Labels, int NumClasses)? classificationData = null, (System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! Series, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! Masks)? imputationData = null) -> System.Collections.Generic.Dictionary<string!, System.Collections.Generic.Dictionary<string!, double>!>!
+AiDotNet.Finance.Evaluation.MultiTaskEvaluationHarness<T>.RunFullEvaluation(AiDotNet.Finance.Interfaces.ITimeSeriesFoundationModel<T>! model, System.Collections.Generic.IReadOnlyList<(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Context, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Target)>? forecastingData = null, (System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! Series, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! Labels, double? Threshold)? anomalyData = null, (System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! Series, System.Collections.Generic.IReadOnlyList<int>! Labels, int NumClasses)? classificationData = null, (System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! Series, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! Masks)? imputationData = null) -> System.Collections.Generic.Dictionary<string!, System.Collections.Generic.Dictionary<string!, T>!>!
+*REMOVED*AiDotNet.ComputerVision.Segmentation.Panoptic.ODISE<T>.ODISE(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null, AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions? options = null) -> void
+*REMOVED*AiDotNet.ComputerVision.Segmentation.Panoptic.ODISE<T>.ODISE(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions? options = null) -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISE<T>.ODISE(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.VisionLanguage.Interfaces.ITextEncoder<T>! textEncoder, AiDotNet.VisionLanguage.Interfaces.IVisualEncoder<T>! clipImageEncoder, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null, AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions? options = null) -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISE<T>.ODISE(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.VisionLanguage.Interfaces.ITextEncoder<T>! textEncoder, AiDotNet.VisionLanguage.Interfaces.IVisualEncoder<T>! clipImageEncoder, AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions? options) -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISE<T>.SegmentPanoptic(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, System.Collections.Generic.IReadOnlyList<string!>! stuffClassNames, System.Collections.Generic.IReadOnlyList<string!>! thingClassNames) -> AiDotNet.Interfaces.PanopticSegmentationResult<T>!
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.NumClusterCenters.get -> int
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.NumClusterCenters.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.PixelEmbeddingDimension.get -> int
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.PixelEmbeddingDimension.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.NumKMeansIterations.get -> int
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.NumKMeansIterations.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.ClassThresholdThing.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.ClassThresholdThing.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.ClassThresholdStuff.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.ClassThresholdStuff.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.PixelConfidenceThreshold.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.PixelConfidenceThreshold.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.OverlapThreshold.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.OverlapThreshold.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.ReorderClassWeight.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.ReorderClassWeight.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.ReorderMaskWeight.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.ReorderMaskWeight.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.QueryDimension.get -> int
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.QueryDimension.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.NumAttentionHeads.get -> int
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.NumAttentionHeads.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.FeedForwardDimension.get -> int
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.FeedForwardDimension.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.PanopticQualityLossWeight.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.PanopticQualityLossWeight.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.MaskIdLossWeight.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.MaskIdLossWeight.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.InstanceDiscriminationLossWeight.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.InstanceDiscriminationLossWeight.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.InstanceDiscriminationTemperature.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.InstanceDiscriminationTemperature.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.InstanceDiscriminationSampleCount.get -> int
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.InstanceDiscriminationSampleCount.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.InstanceDiscriminationSampleTemperature.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.InstanceDiscriminationSampleTemperature.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.SemanticLossWeight.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.SemanticLossWeight.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.SemanticSampleCount.get -> int
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.SemanticSampleCount.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.SemanticSampleTemperature.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.SemanticSampleTemperature.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.PixelHeadDimension.get -> int
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.PixelHeadDimension.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.VoidPriorProbability.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.VoidPriorProbability.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.SemanticAsppDimension.get -> int
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.SemanticAsppDimension.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.SemanticAtrousRates.get -> int[]!
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.SemanticAtrousRates.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.SemanticAsppDropRate.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.SemanticAsppDropRate.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.SemanticDecoderDimension.get -> int
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.SemanticDecoderDimension.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.SemanticLowLevelProjections.get -> int[]!
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.SemanticLowLevelProjections.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.SemanticHeadDimension.get -> int
+AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLabOptions.SemanticHeadDimension.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.ClassNames.get -> string![]?
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.ClassNames.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.InVocabularyClassNames.get -> string![]?
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.InVocabularyClassNames.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.Temperature.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.Temperature.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.InVocabularyClipWeight.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.InVocabularyClipWeight.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.OutOfVocabularyClipWeight.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.OutOfVocabularyClipWeight.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.NumQueries.get -> int
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.NumQueries.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.PixelEmbeddingDimension.get -> int
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.PixelEmbeddingDimension.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.NumDecoderLayers.get -> int
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.NumDecoderLayers.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.NumAttentionHeads.get -> int
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.NumAttentionHeads.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.FeedForwardDimension.get -> int
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.FeedForwardDimension.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.ObjectMaskThreshold.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.ObjectMaskThreshold.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.OverlapThreshold.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.ODISEOptions.OverlapThreshold.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.CUPSOptions.ThingStuffThreshold.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.CUPSOptions.ThingStuffThreshold.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.CUPSOptions.InstanceScoreThreshold.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.CUPSOptions.InstanceScoreThreshold.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.CUPSOptions.OverlapThreshold.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.CUPSOptions.OverlapThreshold.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.CUPSOptions.StuffAreaThreshold.get -> double
+AiDotNet.ComputerVision.Segmentation.Panoptic.CUPSOptions.StuffAreaThreshold.set -> void
+AiDotNet.ComputerVision.Segmentation.Panoptic.CUPS<T>.IsThingClass(int classId) -> bool
+AiDotNet.ComputerVision.Segmentation.Panoptic.CUPS<T>.FitThingStuffSplit(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! semanticPseudoLabels, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! instanceMasks) -> System.Collections.Generic.IReadOnlyList<bool>!
+AiDotNet.ComputerVision.Segmentation.Panoptic.CUPS<T>.GeneratePanopticPseudoLabels(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! semanticPseudoLabels, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! instanceMasks) -> (AiDotNet.Tensors.LinearAlgebra.Tensor<T>! SemanticLabels, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! InstanceIds)
+AiDotNet.ComputerVision.Segmentation.Video.DEVAOptions.MemoryTopK.get -> int
+AiDotNet.ComputerVision.Segmentation.Video.DEVAOptions.MemoryTopK.set -> void
+AiDotNet.ComputerVision.Segmentation.Video.DEVAOptions.MergeEvery.get -> int
+AiDotNet.ComputerVision.Segmentation.Video.DEVAOptions.MergeEvery.set -> void
+AiDotNet.ComputerVision.Segmentation.Video.DEVAOptions.MaxMemoryFrames.get -> int
+AiDotNet.ComputerVision.Segmentation.Video.DEVAOptions.MaxMemoryFrames.set -> void
+AiDotNet.ComputerVision.Segmentation.Video.DEVAOptions.AssociationIoUThreshold.get -> double
+AiDotNet.ComputerVision.Segmentation.Video.DEVAOptions.AssociationIoUThreshold.set -> void
+AiDotNet.ComputerVision.Segmentation.Video.DEVAOptions.MaxMissedMerges.get -> int
+AiDotNet.ComputerVision.Segmentation.Video.DEVAOptions.MaxMissedMerges.set -> void
+AiDotNet.ComputerVision.Segmentation.Video.UniVSOptions.NumPromptPoints.get -> int
+AiDotNet.ComputerVision.Segmentation.Video.UniVSOptions.NumPromptPoints.set -> void
+AiDotNet.ComputerVision.Segmentation.Video.UniVSOptions.PromptMemoryLength.get -> int
+AiDotNet.ComputerVision.Segmentation.Video.UniVSOptions.PromptMemoryLength.set -> void
+AiDotNet.ComputerVision.Segmentation.Medical.UniverSegOptions.EncoderFeatures.get -> int[]!
+AiDotNet.ComputerVision.Segmentation.Medical.UniverSegOptions.EncoderFeatures.set -> void
+AiDotNet.ComputerVision.Segmentation.Medical.UniverSegOptions.DecoderFeatures.get -> int[]!
+AiDotNet.ComputerVision.Segmentation.Medical.UniverSegOptions.DecoderFeatures.set -> void
+AiDotNet.ComputerVision.Segmentation.Medical.UniverSeg<T>.SetSupportSet(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! images, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! labels) -> void
+AiDotNet.ComputerVision.Segmentation.Medical.UniverSeg<T>.ClearSupportSet() -> void
+override AiDotNet.ComputerVision.Segmentation.Medical.UniverSeg<T>.OutputAxesFor(int inputRank) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.OutputAxisContract>?
+override AiDotNet.ComputerVision.Segmentation.Medical.UniverSeg<T>.ResolveLazyLayerShapes() -> void
+override AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLab<T>.OutputAxesFor(int inputRank) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.OutputAxisContract>?
+override AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLab<T>.ResolveLazyLayerShapes() -> void
+override AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLab<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expected) -> bool
+AiDotNet.ComputerVision.Segmentation.Panoptic.CUPS<T>.TrainPanoptic(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! semanticLabels, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! instanceIds) -> T
+override AiDotNet.ComputerVision.Segmentation.Panoptic.CUPS<T>.ResolveLazyLayerShapes() -> void
+override AiDotNet.ComputerVision.Segmentation.Panoptic.CUPS<T>.RegisterComponents() -> void
+override AiDotNet.ComputerVision.Segmentation.Panoptic.ODISE<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expected) -> bool
+override AiDotNet.ComputerVision.Segmentation.Common.OpenVocabSegmentationBase<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.ComputerVision.Segmentation.Common.OpenVocabSegmentationBase<T>.ForwardGpu(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.ComputerVision.Segmentation.Common.ReferringSegmentationBase<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.ComputerVision.Segmentation.Common.ReferringSegmentationBase<T>.ForwardGpu(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLab<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!

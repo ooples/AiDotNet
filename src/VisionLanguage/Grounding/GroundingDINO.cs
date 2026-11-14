@@ -149,7 +149,7 @@ public partial class GroundingDINO<T> : VisionLanguageModelBase<T>, IVisualGroun
     /// </summary>
     /// <param name="image">One RGB image <c>[3, H, W]</c> with values in 0..1.</param>
     /// <param name="caption">Period-separated phrases, such as "cat . remote control .".</param>
-    public IReadOnlyList<GroundingDetection> Ground(Tensor<T> image, string caption)
+    public IReadOnlyList<GroundingDetection<T>> Ground(Tensor<T> image, string caption)
     {
         ThrowIfDisposed();
         return Detector.Ground(GroundingDinoDetector<T>.Batched(Engine, image), caption);
