@@ -184,6 +184,149 @@ public class SonataPaperTests
         Assert.True(after < before, $"loss {before} -> {after}");
     }
 
+    [Fact]
+    public void SinkhornKnopp_StaysFiniteWhenAPrototypeUnderflowsAtLowTemperature()
+    {
+        // Scores [[1, -1], [1, -1]] at temperature 0.01: exp(-200) underflows to 0 in float, so the linear
+        // update divided prototype 2's zero mass by zero. In log space prototype 2 keeps mass 1/k.
+        var scores = new Tensor<float>(new[] { 1f, -1f, 1f, -1f }, new[] { 2, 2 });
+        var targets = SinkhornKnoppCentering<float>.Normalize(scores, 0.01, 3).ToArray();
+        Assert.All(targets, t => Assert.False(float.IsNaN(t) || float.IsInfinity(t), $"non-finite target {t}"));
+        for (int s = 0; s < 2; s++) Assert.Equal(1.0, targets[s * 2] + targets[s * 2 + 1], 5);
+
+        // Both samples are identical, so every Sinkhorn step leaves Q uniform: each target is 1/2.
+        Assert.All(targets, t => Assert.Equal(0.5, t, 5));
+
+        var centered = new SinkhornKnoppCentering<double>(3).Center(new Tensor<double>(new[] { 1.0, -1.0, 1.0, -1.0 }, new[] { 2, 2 }), 0.01);
+        Assert.All(centered.ToArray(), t => Assert.Equal(0.5, t, 5));
+    }
+
+    [Fact]
+    public void KoLeo_TiledNeighbourSearchMatchesTheFullCosineArgMax()
+    {
+        // 11 embeddings with tiles of 3: queries and references span several tiles, and the last tile is short.
+        int n = 11, c = 4;
+        var random = RandomHelper.CreateSeededRandom(67);
+        var values = new double[n * c];
+        for (int i = 0; i < values.Length; i++) values[i] = random.NextDouble() * 2 - 1;
+        var normalized = new double[values.Length];
+        for (int i = 0; i < n; i++)
+        {
+            double norm = Math.Sqrt(Enumerable.Range(0, c).Sum(k => values[i * c + k] * values[i * c + k]));
+            for (int k = 0; k < c; k++) normalized[i * c + k] = values[i * c + k] / norm;
+        }
+
+        // DINOv2 KoLeo: argmax over the full cosine matrix with the diagonal excluded.
+        var expected = new int[n];
+        for (int i = 0; i < n; i++)
+        {
+            double best = double.NegativeInfinity;
+            for (int j = 0; j < n; j++)
+            {
+                if (j == i) continue;
+                double dot = Enumerable.Range(0, c).Sum(k => normalized[i * c + k] * normalized[j * c + k]);
+                if (dot > best)
+                {
+                    best = dot;
+                    expected[i] = j;
+                }
+            }
+        }
+
+        var tiled = new KoLeoRegularizer<double>(blockSize: 3);
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<double>();
+        var actual = tiled.NearestNeighbours(engine, numOps, new Tensor<double>(normalized, new[] { n, c }), n, c);
+        Assert.Equal(expected, actual);
+
+        var embeddings = new Tensor<double>(values, new[] { n, c });
+        double whole = new KoLeoRegularizer<double>().Compute(embeddings).ToArray()[0];
+        double inTiles = tiled.Compute(embeddings).ToArray()[0];
+        Assert.Equal(whole, inTiles, 12);
+        Assert.Throws<ArgumentOutOfRangeException>(() => new KoLeoRegularizer<double>(blockSize: 0));
+    }
+
+    [Fact]
+    public void Validate_RejectsNonFinitePretrainingSettings()
+    {
+        var nanMomentum = PointCloudTestOptions.SmallSonata();
+        nanMomentum.MomentumBase = double.NaN;
+        Assert.Throws<ArgumentException>(() => nanMomentum.Validate());
+
+        var nanFinal = PointCloudTestOptions.SmallSonata();
+        nanFinal.MomentumFinal = double.NaN;
+        Assert.Throws<ArgumentException>(() => nanFinal.Validate());
+
+        var infiniteTemperature = PointCloudTestOptions.SmallSonata();
+        infiniteTemperature.TeacherTemperatureBase = double.PositiveInfinity;
+        Assert.Throws<ArgumentException>(() => infiniteTemperature.Validate());
+
+        var nanJitter = PointCloudTestOptions.SmallSonata();
+        nanJitter.MaskJitter = double.NaN;
+        Assert.Throws<ArgumentException>(() => nanJitter.Validate());
+
+        var infiniteRadius = PointCloudTestOptions.SmallSonata();
+        infiniteRadius.MatchMaxRadius = double.PositiveInfinity;
+        Assert.Throws<ArgumentException>(() => infiniteRadius.Validate());
+
+        PointCloudTestOptions.SmallSonata().Validate();
+    }
+
+    [Fact]
+    public void GenerateViews_NeverExceedsMaxViewSize()
+    {
+        // 100 points with MaxViewSize = 1: every local draw U(0.1, 0.4) * 1 truncates to 0, so the crop falls
+        // back to its minimum size, which must still be capped at MaxViewSize.
+        var scene = PointCloudTestOptions.Cloud(100, 9, seed: 71).ToArray();
+        var (global, local) = SonataPretraining.GenerateViews(scene, 9, RandomHelper.CreateSeededRandom(73),
+            2, 0.4, 1.0, 4, 0.1, 0.4, maxSize: 1);
+        foreach (var views in new[] { global, local })
+        {
+            var perView = new int[views.ViewCount];
+            foreach (int v in views.View) perView[v]++;
+            Assert.All(perView, size => Assert.Equal(1, size));
+        }
+
+        Assert.Equal(2, global.ViewCount);
+        Assert.Equal(4, local.ViewCount);
+    }
+
+    [Fact]
+    public void DefaultLayers_ComeFromTheLayerHelperFactory()
+    {
+        var options = PointCloudTestOptions.SmallSonata(5);
+        var layers = AiDotNet.Helpers.LayerHelper<float>.CreateDefaultSonataLayers(options, 5).ToList();
+        Assert.Equal(2, layers.Count);
+        var encoder = Assert.IsType<PointTransformerV3Encoder<float>>(layers[0]);
+        Assert.True(encoder.IsEncoderOnly);
+        Assert.Equal(PointTransformerV3Revision.M2Sonata, encoder.Revision);
+        Assert.Equal(8 + 16, encoder.OutputChannels);
+        Assert.IsType<AiDotNet.NeuralNetworks.Layers.DenseLayer<float>>(layers[1]);
+
+        var model = new Sonata<float>(Arch(), options: PointCloudTestOptions.SmallSonata(5));
+        Assert.Equal(layers.Select(l => l.GetType()), model.Layers.Select(l => l.GetType()));
+    }
+
+    [Fact]
+    public void Onnx_PredictAcceptsAnUnbatchedCloud()
+    {
+        string directory = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "aidotnet-sonata-onnx-" + Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(directory);
+        try
+        {
+            string path = PointTransformerV3PaperTests.WriteIdentityPointCloudGraph(directory, 3, 9);
+            var model = new Sonata<float>(Arch(), path, PointCloudTestOptions.SmallSonata(9));
+            var cloud = PointCloudTestOptions.Cloud(6, 9, seed: 79);
+            var logits = model.Predict(cloud);
+            Assert.Equal(new[] { 6, 9 }, logits.Shape.ToArray());
+            Assert.Equal(cloud.ToArray(), logits.ToArray());
+        }
+        finally
+        {
+            System.IO.Directory.Delete(directory, recursive: true);
+        }
+    }
+
     private static NeuralNetworkArchitecture<float> Arch()
         => new(InputType.ThreeDimensional, NeuralNetworkTaskType.Regression, NetworkComplexity.Deep, 0, 32, 32, 3, 0);
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using AiDotNet.ComputerVision.Segmentation.PointCloud;
 using AiDotNet.Enums;
@@ -302,6 +303,205 @@ public class PointTransformerV3PaperTests
         Assert.Contains(nameof(SpaceFillingCurves.Register), cause?.Message ?? string.Empty);
     }
 
+    [Fact]
+    public void SerializedAttention_MixedCloudSizesWithTrailingPatch_MatchesIndependentAttention()
+    {
+        // Clouds of 3 and 6 points, patch 4 (Pointcept flash path): the 3-point cloud is one patch of
+        // its own length; the 6-point cloud is its first 4 serialized points plus a final patch of its
+        // last 4, whose outputs only the 2 points not covered by the first patch keep. The two lengths
+        // run as separate groups that are concatenated before the inverse gather.
+        var ctx = new PtContext<double>(RandomHelper.CreateSeededRandom(43), truncatedNormalInit: false);
+        var attention = new SerializedPatchAttention<double>(ctx, 8, 2, 4);
+        var level = RandomBatchedLevel(new[] { 3, 6 }, 8, seed: 47);
+        var output = attention.Forward(level, level.Features, 0).ToArray();
+        var order = level.Serialization.Orders[0];
+        var shortCloud = order.Take(3).ToArray();
+        var longCloud = order.Skip(3).ToArray();
+        Assert.All(shortCloud, i => Assert.Equal(0, level.Batch[i]));
+        Assert.All(longCloud, i => Assert.Equal(1, level.Batch[i]));
+
+        var x = level.Features.ToArray();
+        var expected = new double[9 * 8];
+        void Keep(int[] patch, int firstOwner)
+        {
+            var rows = ReferenceAttention(attention, x, patch, 8, 2);
+            for (int i = firstOwner; i < patch.Length; i++) Array.Copy(rows, patch[i] * 8, expected, patch[i] * 8, 8);
+        }
+
+        Keep(shortCloud, 0);
+        Keep(longCloud.Take(4).ToArray(), 0);
+        Keep(longCloud.Skip(2).ToArray(), 2);
+        AssertClose(expected, output, 9 * 8);
+    }
+
+    [Fact]
+    public void NeighbourTable_DoesNotMergeCloudsWhoseBatchIndicesDifferBy65536()
+    {
+        // 65,537 one-point clouds at grid (0, 0, 0). A key that packs the batch into the top 16 bits makes
+        // clouds 0 and 65536 collide, so cloud 65536's centre tap would read cloud 0's point.
+        const int clouds = 65537;
+        var grid = new int[clouds * 3];
+        var batch = Enumerable.Range(0, clouds).ToArray();
+        var coordinates = new double[clouds * 3];
+        var serialization = PointSerialization.Serialize(grid, batch, PointSerialization.DepthFor(grid), new[] { SpaceFillingCurves.ZOrder });
+        var level = new PointCloudLevel<double>(new Tensor<double>(new[] { clouds, 1 }), coordinates, coordinates, grid,
+            batch, clouds, serialization);
+
+        var table = level.NeighbourTable(3);
+        const int volume = 27, centre = 13;
+        for (int i = 0; i < clouds; i++)
+        {
+            for (int o = 0; o < volume; o++)
+            {
+                int expected = o == centre ? i : clouds;
+                int actual = table[i * volume + o];
+                if (actual != expected) Assert.True(false, $"point {i}, offset {o}: expected {expected}, got {actual}");
+            }
+        }
+    }
+
+    [Fact]
+    public void Encoder_CopiesItsConfigurationArrays()
+    {
+        var encoderChannels = new[] { 8, 16 };
+        var decoderChannels = new[] { 8 };
+        var encoder = new PointTransformerV3Encoder<float>(6, false, 0.05, new[] { 2 }, new[] { 1, 1 }, encoderChannels,
+            new[] { 2, 2 }, new[] { 16, 16 }, new[] { 1 }, decoderChannels, new[] { 2 }, new[] { 16 }, seed: 1);
+        decoderChannels[0] = 16;
+        encoderChannels[0] = 32;
+
+        Assert.Equal(8, encoder.OutputChannels);
+        Assert.Equal(new[] { 8, 16 }, encoder.EncoderChannels);
+        var output = encoder.Forward(PointCloudTestOptions.Cloud(24, 9, seed: 53));
+        Assert.Equal(new[] { 24, 8 }, output.Shape.ToArray());
+    }
+
+    [Fact]
+    public void PrepareInput_ReadsDoubleCoordinatesWithoutFloatRounding()
+    {
+        // 1048576 and 1048576.03125 are one float (its step at 2^20 is 0.125) but 1.5625 voxels of 0.02 m
+        // apart: grid x must be floor(0.03125 / 0.02) = 1 for the second point.
+        var encoder = new PointTransformerV3Encoder<double>(6, false, 0.02, new[] { 2 }, new[] { 1, 1 }, new[] { 8, 16 },
+            new[] { 2, 2 }, new[] { 16, 16 }, new[] { 1 }, new[] { 8 }, new[] { 2 }, new[] { 16 }, seed: 1);
+        var data = new double[2 * 9];
+        data[0] = 1048576.0;
+        data[9] = 1048576.03125;
+        var cloud = new Tensor<double>(data, new[] { 2, 9 });
+        var level = encoder.PrepareInput(cloud, training: false).Level;
+
+        Assert.Equal(1048576.03125, level.Coordinates[3]);
+        Assert.Equal(new[] { 0, 0, 0, 1, 0, 0 }, level.Grid);
+    }
+
+    [Fact]
+    public void Validation_RejectsNonFiniteBackboneSettings()
+    {
+        var nanDropPath = PointCloudTestOptions.SmallPtv3(5);
+        nanDropPath.DropPathRate = double.NaN;
+        Assert.Throws<ArgumentException>(() => nanDropPath.Validate());
+
+        var infiniteMlp = PointCloudTestOptions.SmallPtv3(5);
+        infiniteMlp.MlpRatio = double.PositiveInfinity;
+        Assert.Throws<ArgumentException>(() => infiniteMlp.Validate());
+
+        var nanSonata = PointCloudTestOptions.SmallSonata(5);
+        nanSonata.DropPathRate = double.NaN;
+        Assert.Throws<ArgumentException>(() => nanSonata.Validate());
+
+        Assert.Throws<ArgumentException>(() => new PointTransformerV3Encoder<float>(dropPathRate: double.NaN, seed: 1));
+        Assert.Throws<ArgumentException>(() => new PointTransformerV3Encoder<float>(mlpRatio: double.PositiveInfinity, seed: 1));
+    }
+
+    [Fact]
+    public void BuiltInCurveImplementations_AreInternal()
+    {
+        foreach (var curve in SpaceFillingCurves.PaperOrders())
+            Assert.False(curve.GetType().IsPublic, $"{curve.GetType().Name} should not be public API");
+        Assert.True(typeof(ISpaceFillingCurve).IsPublic);
+    }
+
+    [Fact]
+    public void Register_RejectsADifferentCurveUnderATakenName()
+    {
+        var first = new LexicographicCurve("test-conflicting-name");
+        SpaceFillingCurves.Register(first);
+        // The same instance, or another instance of the same type, is an idempotent registration.
+        SpaceFillingCurves.Register(first);
+        SpaceFillingCurves.Register(new LexicographicCurve("test-conflicting-name"));
+        Assert.Same(first, SpaceFillingCurves.Resolve("test-conflicting-name"));
+
+        Assert.Throws<ArgumentException>(() => SpaceFillingCurves.Register(new ReversedLexicographicCurve("test-conflicting-name")));
+        Assert.Same(first, SpaceFillingCurves.Resolve("test-conflicting-name"));
+
+        // A built-in name cannot be taken over either, so ZOrder's name keeps resolving to Morton.
+        Assert.Throws<ArgumentException>(() => SpaceFillingCurves.Register(new LexicographicCurve("z")));
+        Assert.Same(SpaceFillingCurves.ZOrder, SpaceFillingCurves.Resolve("z"));
+    }
+
+    [Fact]
+    public void DefaultLayers_ComeFromTheLayerHelperFactory()
+    {
+        var options = PointCloudTestOptions.SmallPtv3(5);
+        var layers = AiDotNet.Helpers.LayerHelper<float>.CreateDefaultPointTransformerV3Layers(options, 5).ToList();
+        Assert.Equal(2, layers.Count);
+        var encoder = Assert.IsType<PointTransformerV3Encoder<float>>(layers[0]);
+        Assert.False(encoder.IsEncoderOnly);
+        Assert.Equal(PointTransformerV3Revision.M1Base, encoder.Revision);
+        Assert.Equal(8, encoder.OutputChannels);
+        Assert.IsType<AiDotNet.NeuralNetworks.Layers.DenseLayer<float>>(layers[1]);
+
+        var model = new PointTransformerV3<float>(PointCloudArchitecture(), options: PointCloudTestOptions.SmallPtv3(5));
+        Assert.Equal(layers.Select(l => l.GetType()), model.Layers.Select(l => l.GetType()));
+        var modelEncoder = Assert.IsType<PointTransformerV3Encoder<float>>(model.Layers[0]);
+        Assert.Equal(encoder.GetTrainableParameters().Sum(t => (long)t.Length),
+            modelEncoder.GetTrainableParameters().Sum(t => (long)t.Length));
+    }
+
+    [Theory]
+    [InlineData(3)]
+    [InlineData(2)]
+    public void Onnx_PredictAcceptsUnbatchedAndBatchedCloudsAtTheExportedRank(int exportedRank)
+    {
+        // An identity graph declared [batch, points, 9] or [points, 9]: the logits are the input itself,
+        // so the output must equal every cloud of every input shape.
+        string directory = Path.Combine(Path.GetTempPath(), "aidotnet-ptv3-onnx-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            string path = WriteIdentityPointCloudGraph(directory, exportedRank, 9);
+            var model = new PointTransformerV3<float>(PointCloudArchitecture(), path, PointCloudTestOptions.SmallPtv3(9));
+            Assert.False(model.UseNativeMode);
+
+            var cloud = PointCloudTestOptions.Cloud(5, 9, seed: 59);
+            var single = model.Predict(cloud);
+            Assert.Equal(new[] { 5, 9 }, single.Shape.ToArray());
+            Assert.Equal(cloud.ToArray(), single.ToArray());
+
+            var second = PointCloudTestOptions.Cloud(5, 9, seed: 61);
+            var batch = new Tensor<float>(cloud.ToArray().Concat(second.ToArray()).ToArray(), new[] { 2, 5, 9 });
+            var batched = model.Predict(batch);
+            Assert.Equal(new[] { 2, 5, 9 }, batched.Shape.ToArray());
+            Assert.Equal(batch.ToArray(), batched.ToArray());
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    /// <summary>Writes an ONNX graph <c>logits = Identity(points)</c> with a rank-2 or rank-3 point input.</summary>
+    internal static string WriteIdentityPointCloudGraph(string directory, int rank, int width)
+    {
+        var builder = new AiDotNet.Onnx.OnnxGraphBuilder(new AiDotNet.Onnx.OnnxExportOptions { OpsetVersion = 17 });
+        var shape = rank == 3 ? new[] { -1, -1, width } : new[] { -1, width };
+        builder.AddFloatInput("points", shape);
+        builder.AddOp("Identity", new[] { "points" }, new[] { "logits" });
+        builder.AddFloatOutput("logits", shape);
+        string path = Path.Combine(directory, $"identity-rank{rank}.onnx");
+        using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write)) builder.WriteTo(stream);
+        return path;
+    }
+
     private static IEnumerable<Exception> Unwrap(Exception exception)
     {
         for (Exception? e = exception; e is not null; e = e.InnerException) yield return e;
@@ -318,6 +518,47 @@ public class PointTransformerV3PaperTests
         public string Name { get; }
 
         public long Encode(int x, int y, int z, int depth) => ((long)x << (2 * depth)) | ((long)y << depth) | (long)z;
+    }
+
+    /// <summary>x-major lexicographic order reversed in x: a second type to collide with <see cref="LexicographicCurve"/>.</summary>
+    private sealed class ReversedLexicographicCurve : ISpaceFillingCurve
+    {
+        internal ReversedLexicographicCurve(string name) => Name = name;
+
+        public string Name { get; }
+
+        public long Encode(int x, int y, int z, int depth) => ((long)((1 << depth) - 1 - x) << (2 * depth)) | ((long)y << depth) | (long)z;
+    }
+
+    /// <summary>A batch of clouds of the given sizes, contiguous by cloud, each on distinct 8^3 cells.</summary>
+    private static PointCloudLevel<double> RandomBatchedLevel(int[] sizes, int channels, int seed)
+    {
+        var random = RandomHelper.CreateSeededRandom(seed);
+        int count = sizes.Sum();
+        var grid = new int[count * 3];
+        var coordinates = new double[count * 3];
+        var batch = new int[count];
+        int row = 0;
+        for (int b = 0; b < sizes.Length; b++)
+        {
+            var used = new HashSet<(int, int, int)>();
+            for (int j = 0; j < sizes[b]; j++, row++)
+            {
+                (int, int, int) cell;
+                do cell = (random.Next(8), random.Next(8), random.Next(8)); while (!used.Add(cell));
+                grid[row * 3] = cell.Item1;
+                grid[row * 3 + 1] = cell.Item2;
+                grid[row * 3 + 2] = cell.Item3;
+                for (int a = 0; a < 3; a++) coordinates[row * 3 + a] = (grid[row * 3 + a] + random.NextDouble()) * 0.02;
+                batch[row] = b;
+            }
+        }
+
+        var features = new double[count * channels];
+        for (int i = 0; i < features.Length; i++) features[i] = random.NextDouble() * 2 - 1;
+        var serialization = PointSerialization.Serialize(grid, batch, PointSerialization.DepthFor(grid), SpaceFillingCurves.PaperOrders());
+        return new PointCloudLevel<double>(new Tensor<double>(features, new[] { count, channels }), coordinates, coordinates,
+            grid, batch, sizes.Length, serialization);
     }
 
     private static PointCloudLevel<double> RandomLevel(int count, int channels, int seed)
