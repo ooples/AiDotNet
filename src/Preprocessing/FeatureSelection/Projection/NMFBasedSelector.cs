@@ -91,10 +91,22 @@ public class NMFBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFi
     /// </summary>
     internal static Tensor<T> FactorScores(Tensor<T> x, Tensor<T> w, Tensor<T> h, int iterations)
     {
-        if (PreprocessingTensorOps.IsNarrowFloat<T>())
-            return NMFBasedSelector<float>.FactorScores(x.Cast<float>(), w.Cast<float>(), h.Cast<float>(), iterations).Cast<T>();
-
         var engine = AiDotNetEngine.Current;
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+        {
+            var wide = NMFBasedSelector<float>.FactorScores(x.Cast<float>(), w.Cast<float>(), h.Cast<float>(), iterations);
+
+            // W H is fixed by the data, but how the scale is split between W and H is not: a small W leaves a large
+            // H, and sum H^2 then passes T's range even though the factorization is finite (H = 400 for the 2 x 100
+            // matrix of 100 when W = 0.25, a score of 160000 against Half's 65504). Only the order of the scores is
+            // used, so scores past the range are scaled down together until the largest fits.
+            float peak = engine.TensorMaxValue(wide);
+            float largest = (float)MathHelper.GetNumericOperations<T>().ToDouble(MathHelper.GetNumericOperations<T>().MaxValue);
+            if (peak > largest)
+                wide = engine.TensorMultiplyScalar(wide, largest / peak);
+            return wide.Cast<T>();
+        }
+
         T eps = PopulationSearchOps.Tiny<T>(1e-10);
         for (int iter = 0; iter < iterations; iter++)
         {
