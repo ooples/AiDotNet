@@ -476,22 +476,9 @@ public partial class VAEEncoder<T> : LayerBase<T>, IShapeContract
         var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
         var epsilon = SampleNoise(mean._shape, rng);
 
-        var result = new Tensor<T>(mean._shape);
-        var meanSpan = mean.AsSpan();
-        var logVarSpan = logVar.AsSpan();
-        var epsilonSpan = epsilon.AsSpan();
-        var resultSpan = result.AsWritableSpan();
-
-        var halfOne = NumOps.FromDouble(0.5);
-
-        for (int i = 0; i < resultSpan.Length; i++)
-        {
-            // std = exp(0.5 * logVar), z = mean + std * epsilon
-            var std = NumOps.Exp(NumOps.Multiply(halfOne, logVarSpan[i]));
-            resultSpan[i] = NumOps.Add(meanSpan[i], NumOps.Multiply(std, epsilonSpan[i]));
-        }
-
-        return result;
+        // std = exp(0.5 * logVar), z = mean + std * epsilon
+        var std = Engine.TensorExp(Engine.TensorMultiplyScalar(logVar, NumOps.FromDouble(0.5)));
+        return Engine.TensorAdd(mean, Engine.TensorMultiply(std, epsilon));
     }
 
     /// <summary>
@@ -566,17 +553,11 @@ public partial class VAEEncoder<T> : LayerBase<T>, IShapeContract
 
     private Tensor<T> ApplySiLUDerivative(Tensor<T> input, Tensor<T> gradient)
     {
-        var output = new Tensor<T>(input._shape);
-        var inputSpan = input.AsSpan();
-        var gradSpan = gradient.AsSpan();
-        var outputSpan = output.AsWritableSpan();
-
-        for (int i = 0; i < inputSpan.Length; i++)
-        {
-            outputSpan[i] = NumOps.Multiply(_silu.Derivative(inputSpan[i]), gradSpan[i]);
-        }
-
-        return output;
+        // d/dx [x * sigmoid(x)] = sigmoid(x) * (1 + x * (1 - sigmoid(x))).
+        var sigmoid = Engine.TensorSigmoid(input);
+        var slope = Engine.TensorMultiply(sigmoid,
+            Engine.TensorAddScalar(Engine.TensorMultiply(input, Engine.ScalarMinusTensor(NumOps.One, sigmoid)), NumOps.One));
+        return Engine.TensorMultiply(slope, gradient);
     }
 
     /// <summary>
@@ -612,10 +593,7 @@ public partial class VAEEncoder<T> : LayerBase<T>, IShapeContract
 
     private static void AddParameters(List<T> list, Vector<T> parameters)
     {
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            list.Add(parameters[i]);
-        }
+        list.AddRange(parameters);
     }
 
 
@@ -624,10 +602,9 @@ public partial class VAEEncoder<T> : LayerBase<T>, IShapeContract
         var layerParams = layer.GetParameters();
         var newParams = new Vector<T>(layerParams.Length);
 
-        for (int i = 0; i < layerParams.Length && index < parameters.Length; i++)
-        {
-            newParams[i] = parameters[index++];
-        }
+        int copyCount = Math.Max(0, Math.Min(layerParams.Length, parameters.Length - index));
+        parameters.AsSpan().Slice(index, copyCount).CopyTo(newParams.AsWritableSpan());
+        index += copyCount;
 
         layer.SetParameters(newParams);
     }

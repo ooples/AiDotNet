@@ -279,8 +279,9 @@ public partial class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
             contextDim: MVDREAM_CONTEXT_DIM,
             seed: seed);
 
+        // MVDream adds the camera embedding to the timestep embedding, so it has the U-Net's time-embedding width.
         _cameraEmbedding = new CameraEmbedding<T>(
-            embeddingDim: MVDREAM_CONTEXT_DIM,
+            embeddingDim: _multiViewUNet.BaseUNet.TimeEmbeddingDim,
             seed: seed);
     }
 
@@ -367,11 +368,11 @@ public partial class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
         // Denoising loop with multi-view attention
         foreach (var timestep in Scheduler.Timesteps)
         {
-            // Combine text and camera conditioning for each view
+            // Text conditioning per view; the camera enters through the time embedding
             var combinedConditions = new Tensor<T>[numViews];
             for (int v = 0; v < numViews; v++)
             {
-                combinedConditions[v] = CombineConditions(promptEmbedding, cameraEmbeddings[v]);
+                combinedConditions[v] = promptEmbedding;
             }
 
             Tensor<T> noisePrediction;
@@ -379,20 +380,20 @@ public partial class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
             if (negativeEmbedding != null && guidanceScale > 1.0)
             {
                 // CFG with multi-view
-                var condPred = _multiViewUNet.PredictNoiseMultiView(latents, timestep, combinedConditions);
+                var condPred = _multiViewUNet.PredictNoiseMultiView(latents, timestep, combinedConditions, cameraEmbeddings);
 
                 var negConditions = new Tensor<T>[numViews];
                 for (int v = 0; v < numViews; v++)
                 {
-                    negConditions[v] = CombineConditions(negativeEmbedding, cameraEmbeddings[v]);
+                    negConditions[v] = negativeEmbedding;
                 }
-                var uncondPred = _multiViewUNet.PredictNoiseMultiView(latents, timestep, negConditions);
+                var uncondPred = _multiViewUNet.PredictNoiseMultiView(latents, timestep, negConditions, cameraEmbeddings);
 
                 noisePrediction = ApplyGuidance(uncondPred, condPred, guidanceScale);
             }
             else
             {
-                noisePrediction = _multiViewUNet.PredictNoiseMultiView(latents, timestep, combinedConditions);
+                noisePrediction = _multiViewUNet.PredictNoiseMultiView(latents, timestep, combinedConditions, cameraEmbeddings);
             }
 
             // Scheduler step
@@ -505,10 +506,10 @@ public partial class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
             var combinedConditions = new Tensor<T>[numViews];
             for (int v = 0; v < numViews; v++)
             {
-                combinedConditions[v] = CombineConditions(imageCondition, cameraEmbeddings[v]);
+                combinedConditions[v] = imageCondition;
             }
 
-            var noisePrediction = _multiViewUNet.PredictNoiseMultiView(latents, timestep, combinedConditions);
+            var noisePrediction = _multiViewUNet.PredictNoiseMultiView(latents, timestep, combinedConditions, cameraEmbeddings);
 
             // Scheduler step (skip first view which is fixed)
             var latentVector = latents.ToVector();
@@ -587,30 +588,44 @@ public partial class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
 
         // Generate camera embeddings for the views
         var cameraPositions = GenerateCameraPositions(numViews, 30.0);
-        var combinedCondCond = new Tensor<T>[numViews];
-        var combinedUncondCond = new Tensor<T>[numViews];
+        var cameraEmbeddings = new Tensor<T>[numViews];
+        var condConditions = new Tensor<T>[numViews];
+        var uncondConditions = new Tensor<T>[numViews];
 
         for (int v = 0; v < numViews; v++)
         {
             var (azimuth, elev, radius) = cameraPositions[v];
-            var camEmbed = _cameraEmbedding.Embed(azimuth, elev, radius);
-            combinedCondCond[v] = CombineConditions(promptEmbedding, camEmbed);
-            combinedUncondCond[v] = CombineConditions(uncondEmbedding, camEmbed);
+            cameraEmbeddings[v] = _cameraEmbedding.Embed(azimuth, elev, radius);
+            condConditions[v] = promptEmbedding;
+            uncondConditions[v] = uncondEmbedding;
         }
 
         // Predict noise with and without conditioning
-        var condNoisePred = _multiViewUNet.PredictNoiseMultiView(noisyLatentsTensor, timestep, combinedCondCond);
-        var uncondNoisePred = _multiViewUNet.PredictNoiseMultiView(noisyLatentsTensor, timestep, combinedUncondCond);
+        var condNoisePred = _multiViewUNet.PredictNoiseMultiView(noisyLatentsTensor, timestep, condConditions, cameraEmbeddings);
+        var uncondNoisePred = _multiViewUNet.PredictNoiseMultiView(noisyLatentsTensor, timestep, uncondConditions, cameraEmbeddings);
 
-        // Compute SDS gradient: scale * (cond - uncond)
-        var scaleT = NumOps.FromDouble(guidanceScale);
-        var diff = Engine.TensorSubtract<T>(condNoisePred, uncondNoisePred);
-        return Engine.TensorMultiplyScalar<T>(diff, scaleT);
+        return ScoreDistillationGradient(condNoisePred, uncondNoisePred, noise, guidanceScale,
+            Scheduler.GetAlphaCumulativeProduct(timestep));
     }
 
     #endregion
 
     #region Helper Methods
+
+    /// <summary>
+    /// The SDS gradient of DreamFusion (Poole et al., 2022, eq. 3) used by MVDream's multi-view SDS:
+    /// <c>w(t) (eps_cfg - eps)</c> with <c>eps_cfg = eps_uncond + s (eps_cond - eps_uncond)</c> and
+    /// <c>w(t) = sigma_t^2 = 1 - alpha_bar_t</c>.
+    /// </summary>
+    internal static Tensor<T> ScoreDistillationGradient(
+        Tensor<T> conditional, Tensor<T> unconditional, Tensor<T> noise, double guidanceScale, T alphaCumprod)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        var guided = engine.TensorAdd(unconditional,
+            engine.TensorMultiplyScalar(engine.TensorSubtract(conditional, unconditional), ops.FromDouble(guidanceScale)));
+        return engine.TensorMultiplyScalar(engine.TensorSubtract(guided, noise), ops.Subtract(ops.One, alphaCumprod));
+    }
 
     /// <summary>
     /// Generates uniformly distributed camera positions around the object.
@@ -631,27 +646,6 @@ public partial class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
     }
 
     /// <summary>
-    /// Combines text/image conditioning with camera embedding.
-    /// </summary>
-    private Tensor<T> CombineConditions(Tensor<T> contentCondition, Tensor<T> cameraCondition)
-    {
-        // Concatenate along sequence dimension or add as extra tokens
-        var contentFlat = contentCondition.ToVector();
-        var cameraFlat = cameraCondition.ToVector();
-
-        var combinedLen = contentFlat.Length + cameraFlat.Length;
-        var combined = new Tensor<T>(new[] { 1, combinedLen });
-        var span = combined.AsWritableSpan();
-
-        for (int i = 0; i < contentFlat.Length; i++)
-            span[i] = contentFlat[i];
-        for (int i = 0; i < cameraFlat.Length; i++)
-            span[contentFlat.Length + i] = cameraFlat[i];
-
-        return combined;
-    }
-
-    /// <summary>
     /// Extracts a single view from multi-view tensor.
     /// </summary>
     private Tensor<T> ExtractView(Tensor<T> multiView, int viewIndex)
@@ -664,10 +658,8 @@ public partial class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
         var viewSize = multiView.Shape[1] * multiView.Shape[2] * multiView.Shape[3];
         var viewOffset = viewIndex * viewSize;
 
-        for (int i = 0; i < viewSize && viewOffset + i < multiSpan.Length; i++)
-        {
-            viewSpan[i] = multiSpan[viewOffset + i];
-        }
+        int count = Math.Max(0, Math.Min(viewSize, multiSpan.Length - viewOffset));
+        multiSpan.Slice(viewOffset, count).CopyTo(viewSpan);
 
         return view;
     }
@@ -691,10 +683,8 @@ public partial class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
         var viewSize = multiView.Shape[1] * multiView.Shape[2] * multiView.Shape[3];
         var viewOffset = viewIndex * viewSize;
 
-        for (int i = 0; i < viewSize && i < viewSpan.Length && viewOffset + i < multiSpan.Length; i++)
-        {
-            multiSpan[viewOffset + i] = viewSpan[i];
-        }
+        int count = Math.Max(0, Math.Min(Math.Min(viewSize, viewSpan.Length), multiSpan.Length - viewOffset));
+        viewSpan.Slice(0, count).CopyTo(multiSpan.Slice(viewOffset, count));
     }
 
     /// <summary>
@@ -734,7 +724,6 @@ public partial class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
         {
             var view = views[v];
             var cam = cameras[v];
-            var viewSpan = view.AsSpan();
 
             // Step 1: Estimate depth from this view using gradient-based depth cues
             var depthMap = EstimateDepthFromView(view, imageHeight, imageWidth);
@@ -742,8 +731,8 @@ public partial class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
             // Step 2: Extract silhouette mask (non-background pixels)
             var silhouetteMask = ExtractSilhouette(view, imageHeight, imageWidth);
 
-            // Step 3: Back-project pixels to 3D using camera parameters
-            var cameraMatrix = BuildCameraMatrix(cam.azimuth, cam.elevation, cam.radius);
+            // Grayscale intensity (mean of the colour channels) drives the per-point confidence.
+            var intensity = GrayscaleIntensity(view, imageHeight, imageWidth).Cast<double>().ToArray();
 
             for (int y = 0; y < imageHeight; y++)
             {
@@ -774,16 +763,7 @@ public partial class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
                         camX, camY, camZ,
                         cam.azimuth, cam.elevation, cam.radius);
 
-                    // Compute confidence based on gradient strength
-                    int idx = y * imageWidth + x;
-                    double intensity = 0;
-                    for (int c = 0; c < Math.Min(3, view.Shape[^3]); c++)
-                    {
-                        intensity += NumOps.ToDouble(viewSpan[c * imageHeight * imageWidth + idx]);
-                    }
-                    intensity /= 3.0;
-
-                    double confidence = Math.Min(1.0, Math.Max(0.1, intensity));
+                    double confidence = Math.Min(1.0, Math.Max(0.1, intensity[(y * imageWidth) + x]));
                     allPoints.Add((worldX, worldY, worldZ, confidence));
                 }
             }
@@ -792,146 +772,112 @@ public partial class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
         // Step 4: Filter and downsample point cloud
         var filteredPoints = FilterPointCloud(allPoints, targetCount: DefaultPointCount);
 
-        // Step 5: Convert to tensor
-        var points = new Tensor<T>(new[] { 1, filteredPoints.Count, 3 });
-        var pointSpan = points.AsWritableSpan();
-
+        // Step 5: Convert to tensor (one bulk conversion of the coordinates to T)
+        var coordinates = new double[filteredPoints.Count * 3];
         for (int i = 0; i < filteredPoints.Count; i++)
         {
             var p = filteredPoints[i];
-            pointSpan[i * 3] = NumOps.FromDouble(p.x);
-            pointSpan[i * 3 + 1] = NumOps.FromDouble(p.y);
-            pointSpan[i * 3 + 2] = NumOps.FromDouble(p.z);
+            coordinates[i * 3] = p.x;
+            coordinates[(i * 3) + 1] = p.y;
+            coordinates[(i * 3) + 2] = p.z;
         }
 
+        var points = new Tensor<double>(new[] { 1, filteredPoints.Count, 3 }, new Vector<double>(coordinates)).Cast<T>();
         return PointCloudToMesh(points, SurfaceReconstructionMethod.Poisson);
+    }
+
+    /// <summary>
+    /// The grayscale intensity [height, width] of the first image of <paramref name="view"/>: the mean of its
+    /// first min(3, channels) channels.
+    /// </summary>
+    internal Tensor<T> GrayscaleIntensity(Tensor<T> view, int height, int width)
+    {
+        int channels = view.Shape[^3];
+        int used = Math.Min(3, channels);
+        var images = view.Reshape(new[] { view.Length / (channels * height * width), channels, height, width });
+        var colour = Engine.TensorNarrow(Engine.TensorNarrow(images, 0, 0, 1), 1, 0, used);
+        return Engine.ReduceMean(colour, new[] { 0, 1 }, false).Reshape(new[] { height, width });
     }
 
     /// <summary>
     /// Estimates depth from a single view using gradient-based cues.
     /// Uses a combination of Laplacian-based focus measure and intensity gradients.
     /// </summary>
-    private double[,] EstimateDepthFromView(Tensor<T> view, int height, int width)
+    /// <remarks>
+    /// On the interior pixels: sharpness = min(1, 4 * (|laplacian| + 0.5 * |sobel gradient|) / 2) and
+    /// depth = 0.5 + 1.5 * (1 - sharpness) (sharper = closer); the border copies its nearest interior value.
+    /// </remarks>
+    internal double[,] EstimateDepthFromView(Tensor<T> view, int height, int width)
     {
         var depthMap = new double[height, width];
-        var viewSpan = view.AsSpan();
-        int channels = view.Shape[^3];
-
-        // Compute grayscale intensities
-        var intensity = new double[height, width];
-        for (int y = 0; y < height; y++)
+        if (height < 3 || width < 3)
         {
-            for (int x = 0; x < width; x++)
-            {
-                double sum = 0;
-                for (int c = 0; c < Math.Min(3, channels); c++)
-                {
-                    int idx = c * height * width + y * width + x;
-                    if (idx < viewSpan.Length)
-                    {
-                        sum += NumOps.ToDouble(viewSpan[idx]);
-                    }
-                }
-                intensity[y, x] = sum / Math.Min(3, channels);
-            }
+            // No interior: a flat (fully defocused) depth of 2.
+            var flat = Enumerable.Repeat(2.0, height * width).ToArray();
+            Buffer.BlockCopy(flat, 0, depthMap, 0, flat.Length * sizeof(double));
+            return depthMap;
         }
 
-        // Compute Laplacian (focus measure) and gradient magnitude
-        for (int y = 1; y < height - 1; y++)
+        var intensity = GrayscaleIntensity(view, height, width);
+        Tensor<T> Shifted(int dy, int dx) =>
+            Engine.TensorNarrow(Engine.TensorNarrow(intensity, 0, 1 + dy, height - 2), 1, 1 + dx, width - 2);
+
+        var centre = Shifted(0, 0);
+        var laplacian = Engine.TensorSubtract(
+            Engine.TensorAdd(Engine.TensorAdd(Shifted(-1, 0), Shifted(1, 0)), Engine.TensorAdd(Shifted(0, -1), Shifted(0, 1))),
+            Engine.TensorMultiplyScalar(centre, NumOps.FromDouble(4.0)));
+        var two = NumOps.FromDouble(2.0);
+        var gx = Engine.TensorSubtract(
+            Engine.TensorAdd(Engine.TensorAdd(Shifted(-1, 1), Engine.TensorMultiplyScalar(Shifted(0, 1), two)), Shifted(1, 1)),
+            Engine.TensorAdd(Engine.TensorAdd(Shifted(-1, -1), Engine.TensorMultiplyScalar(Shifted(0, -1), two)), Shifted(1, -1)));
+        var gy = Engine.TensorSubtract(
+            Engine.TensorAdd(Engine.TensorAdd(Shifted(1, -1), Engine.TensorMultiplyScalar(Shifted(1, 0), two)), Shifted(1, 1)),
+            Engine.TensorAdd(Engine.TensorAdd(Shifted(-1, -1), Engine.TensorMultiplyScalar(Shifted(-1, 0), two)), Shifted(-1, 1)));
+        var gradient = Engine.TensorSqrt(Engine.TensorAdd(Engine.TensorSquare(gx), Engine.TensorSquare(gy)));
+
+        // (|laplacian| + 0.5 * gradient) / 2 * 4 = 2 |laplacian| + gradient, capped at 1.
+        var sharpness = Engine.TensorClamp(
+            Engine.TensorAdd(Engine.TensorMultiplyScalar(Engine.TensorAbs(laplacian), two), gradient),
+            NumOps.Zero, NumOps.One);
+        var interior = Engine.ScalarMinusTensor(NumOps.FromDouble(2.0), Engine.TensorMultiplyScalar(sharpness, NumOps.FromDouble(1.5)));
+
+        // Fill borders by replicating the nearest interior column, then row.
+        var columns = Engine.TensorConcatenate(new[]
         {
-            for (int x = 1; x < width - 1; x++)
-            {
-                // Laplacian (second derivative approximation)
-                double laplacian = intensity[y - 1, x] + intensity[y + 1, x] +
-                                   intensity[y, x - 1] + intensity[y, x + 1] -
-                                   4 * intensity[y, x];
-
-                // Sobel gradients
-                double gx = (intensity[y - 1, x + 1] + 2 * intensity[y, x + 1] + intensity[y + 1, x + 1]) -
-                            (intensity[y - 1, x - 1] + 2 * intensity[y, x - 1] + intensity[y + 1, x - 1]);
-                double gy = (intensity[y + 1, x - 1] + 2 * intensity[y + 1, x] + intensity[y + 1, x + 1]) -
-                            (intensity[y - 1, x - 1] + 2 * intensity[y - 1, x] + intensity[y - 1, x + 1]);
-
-                double gradMag = Math.Sqrt(gx * gx + gy * gy);
-                double focusMeasure = Math.Abs(laplacian);
-
-                // Depth estimation heuristic:
-                // - Higher focus measure (sharper) = closer object
-                // - Higher gradient magnitude = edge/surface detail
-                // Map to depth range [0.5, 2.0] - objects assumed to be roughly unit size at distance 1
-                double sharpness = (focusMeasure + gradMag * 0.5) / 2.0;
-                sharpness = Math.Min(1.0, sharpness * 4.0);
-
-                // Inverse relationship: sharper = closer
-                depthMap[y, x] = 0.5 + (1.0 - sharpness) * 1.5;
-            }
-        }
-
-        // Fill borders
-        for (int y = 0; y < height; y++)
+            Engine.TensorNarrow(interior, 1, 0, 1), interior, Engine.TensorNarrow(interior, 1, width - 3, 1)
+        }, 1);
+        var full = Engine.TensorConcatenate(new[]
         {
-            depthMap[y, 0] = depthMap[y, 1];
-            depthMap[y, width - 1] = depthMap[y, width - 2];
-        }
-        for (int x = 0; x < width; x++)
-        {
-            depthMap[0, x] = depthMap[1, x];
-            depthMap[height - 1, x] = depthMap[height - 2, x];
-        }
+            Engine.TensorNarrow(columns, 0, 0, 1), columns, Engine.TensorNarrow(columns, 0, height - 3, 1)
+        }, 0);
 
+        var values = full.Cast<double>().ToArray();
+        Buffer.BlockCopy(values, 0, depthMap, 0, values.Length * sizeof(double));
         return depthMap;
     }
 
     /// <summary>
-    /// Extracts a silhouette mask identifying foreground pixels.
-    /// Uses intensity thresholding and connected component analysis.
+    /// Extracts a silhouette mask identifying foreground pixels: those whose grayscale intensity differs by more
+    /// than 0.15 from the background level estimated on the top-left corner block.
     /// </summary>
-    private bool[,] ExtractSilhouette(Tensor<T> view, int height, int width)
+    internal bool[,] ExtractSilhouette(Tensor<T> view, int height, int width)
     {
         var mask = new bool[height, width];
-        var viewSpan = view.AsSpan();
-        int channels = view.Shape[^3];
+        var intensity = GrayscaleIntensity(view, height, width);
 
-        // Estimate background color from corners
-        double bgIntensity = 0;
-        int cornerPixels = 0;
-        int cornerSize = Math.Max(4, Math.Min(height, width) / 16);
+        // Estimate background color from the corner block
+        int cornerSize = Math.Min(Math.Max(4, Math.Min(height, width) / 16), Math.Min(height, width));
+        T background = Engine.TensorMean(
+            Engine.TensorNarrow(Engine.TensorNarrow(intensity, 0, 0, cornerSize), 1, 0, cornerSize));
 
-        for (int y = 0; y < cornerSize; y++)
-        {
-            for (int x = 0; x < cornerSize; x++)
-            {
-                double sum = 0;
-                for (int c = 0; c < Math.Min(3, channels); c++)
-                {
-                    sum += NumOps.ToDouble(viewSpan[c * height * width + y * width + x]);
-                }
-                bgIntensity += sum / Math.Min(3, channels);
-                cornerPixels++;
-            }
-        }
-        bgIntensity /= cornerPixels;
-
-        // Threshold to create mask
-        double threshold = 0.15;
+        // Mark as foreground if significantly different from background
+        var foreground = Engine.TensorGreaterThan(
+            Engine.TensorAbs(Engine.TensorSubtractScalar(intensity, background)), NumOps.FromDouble(0.15))
+            .Cast<int>().ToArray();
         for (int y = 0; y < height; y++)
         {
             for (int x = 0; x < width; x++)
-            {
-                double intensity = 0;
-                for (int c = 0; c < Math.Min(3, channels); c++)
-                {
-                    int idx = c * height * width + y * width + x;
-                    if (idx < viewSpan.Length)
-                    {
-                        intensity += NumOps.ToDouble(viewSpan[idx]);
-                    }
-                }
-                intensity /= Math.Min(3, channels);
-
-                // Mark as foreground if significantly different from background
-                mask[y, x] = Math.Abs(intensity - bgIntensity) > threshold;
-            }
+                mask[y, x] = foreground[(y * width) + x] != 0;
         }
 
         return mask;
@@ -1235,7 +1181,7 @@ public class MultiViewUNet<T> : IParameterSource<T>, ICloneable<MultiViewUNet<T>
                 contextDim: contextDim,
                 seed: seed),
             new MultiViewAttention<T>(
-                channels: baseChannels * 4, // At bottleneck
+                channels: outputChannels, // Applied to the per-view predictions
                 numViews: numViews,
                 seed: seed))
     {
@@ -1278,7 +1224,7 @@ public class MultiViewUNet<T> : IParameterSource<T>, ICloneable<MultiViewUNet<T>
     // clone and the original shared every base U-Net layer and Clone threw AliasedLayerGraph (#2087).
     public MultiViewUNet<T> Clone()
     {
-        var clonedAttention = new MultiViewAttention<T>(channels: _baseChannels * 4, numViews: _numViews);
+        var clonedAttention = new MultiViewAttention<T>(channels: _outputChannels, numViews: _numViews);
         clonedAttention.SetParameters(_mvAttention.GetParameters());
 
         var clonedBaseUNet = (UNetNoisePredictor<T>)_baseUNet.Clone();
@@ -1343,23 +1289,36 @@ public class MultiViewUNet<T> : IParameterSource<T>, ICloneable<MultiViewUNet<T>
         return CombineViews(attended, multiViewInput._shape);
     }
 
-    private Tensor<T> ExtractView(Tensor<T> multiView, int viewIndex)
+    /// <summary>
+    /// Predicts noise for multiple views with cross-view attention, adding each view's camera embedding to the
+    /// U-Net's time embedding (MVDream's camera conditioning).
+    /// </summary>
+    /// <param name="multiViewInput">The view latents [views, channels, height, width].</param>
+    /// <param name="timestep">The timestep.</param>
+    /// <param name="viewConditions">Per-view cross-attention conditioning.</param>
+    /// <param name="cameraEmbeddings">Per-view camera embeddings of the U-Net's time-embedding width.</param>
+    public Tensor<T> PredictNoiseMultiView(
+        Tensor<T> multiViewInput, int timestep, Tensor<T>[] viewConditions, Tensor<T>[] cameraEmbeddings)
     {
-        var viewShape = new[] { 1, multiView.Shape[1], multiView.Shape[2], multiView.Shape[3] };
-        var view = new Tensor<T>(viewShape);
-        var viewSpan = view.AsWritableSpan();
-        var multiSpan = multiView.AsSpan();
+        var numViews = multiViewInput.Shape[0];
+        if (cameraEmbeddings.Length != numViews)
+            throw new ArgumentException($"Expected {numViews} camera embeddings but received {cameraEmbeddings.Length}.",
+                nameof(cameraEmbeddings));
 
-        var viewSize = multiView.Shape[1] * multiView.Shape[2] * multiView.Shape[3];
-        var viewOffset = viewIndex * viewSize;
-
-        for (int i = 0; i < viewSize && viewOffset + i < multiSpan.Length; i++)
+        var viewPredictions = new Tensor<T>[numViews];
+        for (int v = 0; v < numViews; v++)
         {
-            viewSpan[i] = multiSpan[viewOffset + i];
+            var viewInput = ExtractView(multiViewInput, v);
+            viewPredictions[v] = _baseUNet.PredictNoiseWithAddedTimeEmbedding(viewInput, timestep, viewConditions[v], cameraEmbeddings[v]);
         }
 
-        return view;
+        // Apply multi-view attention for consistency
+        var attended = _mvAttention.Apply(viewPredictions);
+        return CombineViews(attended, multiViewInput._shape);
     }
+
+    private static Tensor<T> ExtractView(Tensor<T> multiView, int viewIndex)
+        => AiDotNetEngine.Current.TensorNarrow(multiView, 0, viewIndex, 1).Clone();
 
     private Tensor<T> CombineViews(Tensor<T>[] views, int[] shape)
     {
@@ -1371,18 +1330,7 @@ public class MultiViewUNet<T> : IParameterSource<T>, ICloneable<MultiViewUNet<T>
     /// </summary>
     public Vector<T> GetParameters()
     {
-        var unetParams = _baseUNet.GetParameters();
-        var mvParams = _mvAttention.GetParameters();
-
-        var total = unetParams.Length + mvParams.Length;
-        var result = new Vector<T>(total);
-
-        for (int i = 0; i < unetParams.Length; i++)
-            result[i] = unetParams[i];
-        for (int i = 0; i < mvParams.Length; i++)
-            result[unetParams.Length + i] = mvParams[i];
-
-        return result;
+        return Vector<T>.Concatenate(_baseUNet.GetParameters(), _mvAttention.GetParameters());
     }
 
     /// <summary>
@@ -1393,16 +1341,8 @@ public class MultiViewUNet<T> : IParameterSource<T>, ICloneable<MultiViewUNet<T>
         int unetCount = checked((int)_baseUNet.ParameterCount);
         int mvCount = checked((int)_mvAttention.ParameterCount);
 
-        var unetParams = new Vector<T>(unetCount);
-        for (int i = 0; i < unetCount; i++)
-            unetParams[i] = parameters[i];
-
-        var mvParams = new Vector<T>(mvCount);
-        for (int i = 0; i < mvCount; i++)
-            mvParams[i] = parameters[unetCount + i];
-
-        _baseUNet.SetParameters(unetParams);
-        _mvAttention.SetParameters(mvParams);
+        _baseUNet.SetParameters(parameters.GetSubVector(0, unetCount));
+        _mvAttention.SetParameters(parameters.GetSubVector(unetCount, mvCount));
     }
 
     /// <summary>
@@ -1415,6 +1355,11 @@ public class MultiViewUNet<T> : IParameterSource<T>, ICloneable<MultiViewUNet<T>
 /// Multi-view attention module for cross-view consistency.
 /// </summary>
 /// <typeparam name="T">Numeric type.</typeparam>
+/// <remarks>
+/// MVDream (Shi et al., 2023) makes the views consistent by letting their tokens attend to one another. Here every
+/// spatial position attends across the views with learned query/key/value/output projections of the channel
+/// vectors it receives: <c>x + W_o softmax(Q K^T / sqrt(C)) V</c>, computed per position over the view axis.
+/// </remarks>
 public class MultiViewAttention<T>
 {
     private readonly INumericOperations<T> _numOps;
@@ -1449,58 +1394,64 @@ public class MultiViewAttention<T>
         InitializeMatrix(_outputWeights, rng, scale);
     }
 
-    private void InitializeMatrix(Matrix<T> matrix, Random rng, double scale)
+    private static void InitializeMatrix(Matrix<T> matrix, Random rng, double scale)
     {
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                matrix[i, j] = _numOps.FromDouble((rng.NextDouble() * 2 - 1) * scale);
-            }
-        }
+        // Row-major uniform draws in [-scale, scale), converted to T in one pass.
+        var draws = new double[matrix.Rows * matrix.Columns];
+        for (int i = 0; i < draws.Length; i++)
+            draws[i] = (rng.NextDouble() * 2 - 1) * scale;
+        new Tensor<double>(new[] { draws.Length }, new Vector<double>(draws)).Cast<T>().AsSpan()
+            .CopyTo(matrix.AsWritableSpan());
     }
 
     /// <summary>
     /// Applies multi-view attention for cross-view consistency.
     /// </summary>
+    /// <param name="views">One [1, channels, height, width] tensor per view.</param>
     public Tensor<T>[] Apply(Tensor<T>[] views)
     {
-        // Simplified: average features across views with learned blending
-        var result = new Tensor<T>[views.Length];
+        if (views.Length == 0)
+            return views;
 
-        for (int v = 0; v < views.Length; v++)
-        {
-            var viewShape = views[v]._shape;
-            result[v] = new Tensor<T>(viewShape);
-            var resultSpan = result[v].AsWritableSpan();
-            var viewSpan = views[v].AsSpan();
+        var engine = AiDotNetEngine.Current;
+        var viewShape = views[0]._shape;
+        int channels = viewShape[1];
+        if (channels != _channels)
+            throw new ArgumentException(
+                $"Multi-view attention was built for {_channels} channels but the views have {channels}.", nameof(views));
 
-            // Weighted average with other views
-            var selfWeight = 0.7; // Self-weight
-            var otherWeight = (1.0 - selfWeight) / Math.Max(1, views.Length - 1);
+        int numViews = views.Length;
+        int positions = views[0].Length / channels;
 
-            for (int i = 0; i < viewSpan.Length; i++)
-            {
-                var sum = _numOps.ToDouble(viewSpan[i]) * selfWeight;
+        // tokens[p, v, c]: the channel vector of view v at position p.
+        var stacked = engine.TensorConcatenate(views, 0).Reshape(new[] { numViews, channels, positions });
+        var tokens = engine.TensorPermute(stacked, new[] { 2, 0, 1 });
+        var flat = tokens.Reshape(new[] { positions * numViews, channels });
 
-                for (int other = 0; other < views.Length; other++)
-                {
-                    if (other != v)
-                    {
-                        var otherSpan = views[other].AsSpan();
-                        if (i < otherSpan.Length)
-                        {
-                            sum += _numOps.ToDouble(otherSpan[i]) * otherWeight;
-                        }
-                    }
-                }
+        var query = Project(engine, flat, _queryWeights).Reshape(new[] { positions, numViews, channels });
+        var key = Project(engine, flat, _keyWeights).Reshape(new[] { positions, numViews, channels });
+        var value = Project(engine, flat, _valueWeights).Reshape(new[] { positions, numViews, channels });
 
-                resultSpan[i] = _numOps.FromDouble(sum);
-            }
-        }
+        var scores = engine.TensorMultiplyScalar(
+            engine.BatchMatMul(query, engine.TensorPermute(key, new[] { 0, 2, 1 })),
+            _numOps.FromDouble(1.0 / Math.Sqrt(channels)));
+        var attended = engine.BatchMatMul(engine.Softmax(scores, 2), value);
+        var projected = Project(engine, attended.Reshape(new[] { positions * numViews, channels }), _outputWeights);
 
+        var updated = engine.TensorAdd(flat, projected).Reshape(new[] { positions, numViews, channels });
+        var perView = engine.TensorPermute(updated, new[] { 1, 2, 0 });
+
+        var result = new Tensor<T>[numViews];
+        for (int v = 0; v < numViews; v++)
+            result[v] = engine.TensorNarrow(perView, 0, v, 1).Reshape(views[v]._shape).Clone();
         return result;
     }
+
+    /// <summary>
+    /// x W^T for row vectors x.
+    /// </summary>
+    private static Tensor<T> Project(IEngine engine, Tensor<T> rows, Matrix<T> weights)
+        => engine.TensorMatMul(rows, engine.TensorTranspose(Tensor<T>.FromMatrix(weights)));
 
     /// <summary>
     /// Gets parameters.
@@ -1519,15 +1470,11 @@ public class MultiViewAttention<T>
         return result;
     }
 
-    private void CopyMatrixToVector(Matrix<T> matrix, Vector<T> vector, ref int idx)
+    private static void CopyMatrixToVector(Matrix<T> matrix, Vector<T> vector, ref int idx)
     {
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                vector[idx++] = matrix[i, j];
-            }
-        }
+        int count = matrix.Rows * matrix.Columns;
+        matrix.AsSpan().CopyTo(vector.AsWritableSpan().Slice(idx, count));
+        idx += count;
     }
 
     /// <summary>
@@ -1542,15 +1489,11 @@ public class MultiViewAttention<T>
         CopyVectorToMatrix(parameters, _outputWeights, ref idx);
     }
 
-    private void CopyVectorToMatrix(Vector<T> vector, Matrix<T> matrix, ref int idx)
+    private static void CopyVectorToMatrix(Vector<T> vector, Matrix<T> matrix, ref int idx)
     {
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                matrix[i, j] = vector[idx++];
-            }
-        }
+        int count = matrix.Rows * matrix.Columns;
+        vector.AsSpan().Slice(idx, count).CopyTo(matrix.AsWritableSpan());
+        idx += count;
     }
 
     /// <summary>
@@ -1560,120 +1503,148 @@ public class MultiViewAttention<T>
 }
 
 /// <summary>
-/// Camera position embedding for view conditioning.
+/// Camera embedding for view conditioning.
 /// </summary>
 /// <typeparam name="T">Numeric type.</typeparam>
+/// <remarks>
+/// As in MVDream (Shi et al., 2023), the camera is described by its flattened 4x4 camera-to-world extrinsic
+/// matrix (16 values) and embedded by a two-layer MLP (linear, SiLU, linear) whose output is added to the U-Net's
+/// timestep embedding.
+/// </remarks>
 public class CameraEmbedding<T> : IParameterSource<T>
 {
-    private readonly INumericOperations<T> _numOps;
+    /// <summary>
+    /// Size of the camera description: the flattened 4x4 extrinsic matrix.
+    /// </summary>
+    public const int CameraDim = 16;
+
     private readonly Matrix<T> _projectionWeights;
     private readonly Vector<T> _projectionBias;
+    private readonly Matrix<T> _outputWeights;
+    private readonly Vector<T> _outputBias;
     private readonly int _embeddingDim;
     private readonly int _inputDim;
 
     /// <summary>
     /// Creates camera embedding.
     /// </summary>
+    /// <param name="embeddingDim">The embedding width; the U-Net's time-embedding width it is added to.</param>
+    /// <param name="seed">Optional random seed.</param>
     public CameraEmbedding(int embeddingDim, int? seed = null)
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
         _embeddingDim = embeddingDim;
-        _inputDim = 12; // Sinusoidal encoding of azimuth, elevation, radius
+        _inputDim = CameraDim;
 
         var rng = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
-        var scale = Math.Sqrt(2.0 / _inputDim);
 
-        _projectionWeights = new Matrix<T>(embeddingDim, _inputDim);
+        _projectionWeights = UniformMatrix(embeddingDim, _inputDim, Math.Sqrt(2.0 / _inputDim), rng);
         _projectionBias = new Vector<T>(embeddingDim);
+        _outputWeights = UniformMatrix(embeddingDim, embeddingDim, Math.Sqrt(2.0 / embeddingDim), rng);
+        _outputBias = new Vector<T>(embeddingDim);
+    }
 
-        for (int i = 0; i < embeddingDim; i++)
-        {
-            for (int j = 0; j < _inputDim; j++)
-            {
-                _projectionWeights[i, j] = _numOps.FromDouble((rng.NextDouble() * 2 - 1) * scale);
-            }
-            _projectionBias[i] = _numOps.Zero;
-        }
+    private static Matrix<T> UniformMatrix(int rows, int columns, double scale, Random rng)
+    {
+        var matrix = new Matrix<T>(rows, columns);
+        var draws = new double[rows * columns];
+        for (int i = 0; i < draws.Length; i++)
+            draws[i] = (rng.NextDouble() * 2 - 1) * scale;
+        new Tensor<double>(new[] { draws.Length }, new Vector<double>(draws)).Cast<T>().AsSpan()
+            .CopyTo(matrix.AsWritableSpan());
+        return matrix;
     }
 
     /// <summary>
-    /// Embeds camera position.
+    /// The flattened (row-major) 4x4 camera-to-world matrix of a camera on a sphere looking at the origin with
+    /// world +Y up: columns right, up, back (-forward) and the camera position, as in the MVDream / Zero123
+    /// camera convention.
     /// </summary>
+    /// <param name="azimuth">Azimuth in radians.</param>
+    /// <param name="elevation">Elevation in radians.</param>
+    /// <param name="radius">Distance from the origin.</param>
+    public static double[] CameraToWorld(double azimuth, double elevation, double radius)
+    {
+        double px = radius * Math.Cos(elevation) * Math.Sin(azimuth);
+        double py = radius * Math.Sin(elevation);
+        double pz = radius * Math.Cos(elevation) * Math.Cos(azimuth);
+
+        double length = Math.Sqrt((px * px) + (py * py) + (pz * pz));
+        double fx = -px / length, fy = -py / length, fz = -pz / length;
+
+        // right = forward x up(0, 1, 0); fall back to up = (0, 0, 1) when looking straight up or down.
+        double rx = -fz, ry = 0.0, rz = fx;
+        double rightLength = Math.Sqrt((rx * rx) + (rz * rz));
+        if (rightLength < 1e-9)
+        {
+            rx = fy; ry = -fx; rz = 0.0;
+            rightLength = Math.Sqrt((rx * rx) + (ry * ry));
+        }
+
+        rx /= rightLength; ry /= rightLength; rz /= rightLength;
+
+        // up = right x forward.
+        double ux = (ry * fz) - (rz * fy);
+        double uy = (rz * fx) - (rx * fz);
+        double uz = (rx * fy) - (ry * fx);
+
+        return new[]
+        {
+            rx, ux, -fx, px,
+            ry, uy, -fy, py,
+            rz, uz, -fz, pz,
+            0.0, 0.0, 0.0, 1.0
+        };
+    }
+
+    /// <summary>
+    /// Embeds a camera position: <c>W_2 SiLU(W_1 vec(E) + b_1) + b_2</c> for its extrinsic matrix E.
+    /// </summary>
+    /// <returns>The embedding [1, embeddingDim].</returns>
     public Tensor<T> Embed(double azimuth, double elevation, double radius)
     {
-        // Create sinusoidal encoding
-        var input = new double[]
-        {
-            Math.Sin(azimuth), Math.Cos(azimuth),
-            Math.Sin(2 * azimuth), Math.Cos(2 * azimuth),
-            Math.Sin(elevation), Math.Cos(elevation),
-            Math.Sin(2 * elevation), Math.Cos(2 * elevation),
-            Math.Sin(radius), Math.Cos(radius),
-            Math.Sin(2 * radius), Math.Cos(2 * radius)
-        };
-
-        // Project through linear layer
-        var output = new Tensor<T>(new[] { 1, _embeddingDim });
-        var outputSpan = output.AsWritableSpan();
-
-        for (int i = 0; i < _embeddingDim; i++)
-        {
-            var sum = _numOps.ToDouble(_projectionBias[i]);
-            for (int j = 0; j < _inputDim; j++)
-            {
-                sum += input[j] * _numOps.ToDouble(_projectionWeights[i, j]);
-            }
-            outputSpan[i] = _numOps.FromDouble(sum);
-        }
-
-        return output;
+        var engine = AiDotNetEngine.Current;
+        var extrinsic = new Tensor<double>(new[] { 1, CameraDim }, new Vector<double>(CameraToWorld(azimuth, elevation, radius)))
+            .Cast<T>();
+        var hidden = engine.TensorAdd(
+            engine.TensorMatMul(extrinsic, engine.TensorTranspose(Tensor<T>.FromMatrix(_projectionWeights))),
+            _projectionBias.AsTensor().Reshape(new[] { 1, _embeddingDim }));
+        hidden = engine.TensorMultiply(hidden, engine.TensorSigmoid(hidden));
+        return engine.TensorAdd(
+            engine.TensorMatMul(hidden, engine.TensorTranspose(Tensor<T>.FromMatrix(_outputWeights))),
+            _outputBias.AsTensor().Reshape(new[] { 1, _embeddingDim }));
     }
 
     /// <summary>
-    /// Gets parameters.
+    /// Gets parameters: first-layer weights (row-major) and bias, then second-layer weights and bias.
     /// </summary>
     public Vector<T> GetParameters()
     {
-        var total = _embeddingDim * _inputDim + _embeddingDim;
-        var result = new Vector<T>(total);
-
-        int idx = 0;
-        for (int i = 0; i < _embeddingDim; i++)
-        {
-            for (int j = 0; j < _inputDim; j++)
-            {
-                result[idx++] = _projectionWeights[i, j];
-            }
-        }
-        for (int i = 0; i < _embeddingDim; i++)
-        {
-            result[idx++] = _projectionBias[i];
-        }
-
-        return result;
+        return Vector<T>.Concatenate(
+            Vector<T>.Concatenate(new Vector<T>(_projectionWeights.AsSpan().ToArray()), _projectionBias),
+            Vector<T>.Concatenate(new Vector<T>(_outputWeights.AsSpan().ToArray()), _outputBias));
     }
 
     /// <summary>
-    /// Sets parameters.
+    /// Sets parameters in the <see cref="GetParameters"/> layout.
     /// </summary>
     public void SetParameters(Vector<T> parameters)
     {
+        if (parameters.Length != ParameterCount)
+            throw new ArgumentException(
+                $"Camera embedding expects {ParameterCount} parameters but received {parameters.Length}.", nameof(parameters));
+        var source = parameters.AsSpan();
         int idx = 0;
-        for (int i = 0; i < _embeddingDim; i++)
-        {
-            for (int j = 0; j < _inputDim; j++)
-            {
-                _projectionWeights[i, j] = parameters[idx++];
-            }
-        }
-        for (int i = 0; i < _embeddingDim; i++)
-        {
-            _projectionBias[i] = parameters[idx++];
-        }
+        source.Slice(idx, _projectionWeights.Rows * _projectionWeights.Columns).CopyTo(_projectionWeights.AsWritableSpan());
+        idx += _projectionWeights.Rows * _projectionWeights.Columns;
+        source.Slice(idx, _embeddingDim).CopyTo(_projectionBias.AsWritableSpan());
+        idx += _embeddingDim;
+        source.Slice(idx, _outputWeights.Rows * _outputWeights.Columns).CopyTo(_outputWeights.AsWritableSpan());
+        idx += _outputWeights.Rows * _outputWeights.Columns;
+        source.Slice(idx, _embeddingDim).CopyTo(_outputBias.AsWritableSpan());
     }
 
     /// <summary>
     /// Gets parameter count.
     /// </summary>
-    public long ParameterCount => _embeddingDim * _inputDim + _embeddingDim;
+    public long ParameterCount => (_embeddingDim * _inputDim) + _embeddingDim + (_embeddingDim * _embeddingDim) + _embeddingDim;
 }

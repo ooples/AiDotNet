@@ -41,18 +41,14 @@ public class ZeroTerminalSNRSchedule<T>
         int len = alphasCumprod.Length;
         if (len == 0) return alphasCumprod;
 
-        var result = new Vector<T>(len);
-        double first = NumOps.ToDouble(alphasCumprod[0]);
-        double last = NumOps.ToDouble(alphasCumprod[len - 1]);
-
-        for (int i = 0; i < len; i++)
-        {
-            double val = NumOps.ToDouble(alphasCumprod[i]);
-            // Rescale: shift and scale so first stays the same and last becomes 0
-            double rescaled = (val - last) / (first - last) * first;
-            result[i] = NumOps.FromDouble(Math.Max(0, rescaled));
-        }
-
-        return result;
+        // Lin et al. (2024), Algorithm 1: rescale sqrt(alpha_cumprod) so the last value is 0 and the first is
+        // unchanged, then square back.
+        var engine = AiDotNetEngine.Current;
+        var sqrtAlphas = engine.Sqrt(alphasCumprod);
+        T first = sqrtAlphas[0];
+        T last = sqrtAlphas[len - 1];
+        var shifted = engine.Subtract(sqrtAlphas, SchedulerTensorOps.Full(len, last));
+        var rescaled = engine.Multiply(shifted, NumOps.Divide(first, NumOps.Subtract(first, last)));
+        return engine.Multiply(rescaled, rescaled);
     }
 }

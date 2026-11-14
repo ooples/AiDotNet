@@ -126,9 +126,8 @@ public class UniVSTMaskPropagation<T>
         for (int f = 0; f < features.Count; f++) normalized[f] = NormalizeRows(features[f], points, channels);
 
         var labels = new bool[features.Count][];
-        labels[0] = new bool[points];
-        for (int p = 0; p < points; p++)
-            labels[0][p] = Convert.ToDouble(NumOps.ToDouble(firstFrameMask[p])) > 0.5;
+        var firstForeground = Engine.TensorGreaterThan(firstFrameMask, NumOps.FromDouble(0.5)).Cast<int>().ToArray();
+        labels[0] = Array.ConvertAll(firstForeground, v => v != 0);
 
         for (int f = 1; f < features.Count; f++)
         {
@@ -139,9 +138,8 @@ public class UniVSTMaskPropagation<T>
         var masks = new List<Tensor<T>>(features.Count);
         for (int f = 0; f < features.Count; f++)
         {
-            var mask = new Tensor<T>(new[] { height, width });
-            for (int p = 0; p < points; p++) mask[p] = labels[f][p] ? NumOps.One : NumOps.Zero;
-            masks.Add(mask);
+            var indicator = new Vector<int>(Array.ConvertAll(labels[f], b => b ? 1 : 0));
+            masks.Add(new Tensor<int>(new[] { height, width }, indicator).Cast<T>());
         }
         return masks;
     }
@@ -171,62 +169,55 @@ public class UniVSTMaskPropagation<T>
         int anchorCount = candidates.Count;
         if (anchorCount == 0) return new bool[points];
 
-        // Gather the candidates into one [channels, anchors] matrix so every point-to-anchor cosine
-        // similarity is a SINGLE matmul: [points, channels] x [channels, anchors] -> [points, anchors].
-        // At paper scale (4096 points, 10 anchor frames) the element-wise form is ~168M dot products
-        // per frame, which is exactly the kind of managed hot loop that has to be profiled out later.
-        var anchorT = new Tensor<T>(new[] { channels, anchorCount });
-        var anchorIsForeground = new bool[anchorCount];
+        // Gather the candidates into one [anchors, channels] matrix (one index select over the anchor frames'
+        // rows) so every point-to-anchor cosine similarity is a SINGLE matmul: [points, channels] x
+        // [channels, anchors] -> [points, anchors].
+        var frameSlots = new Dictionary<int, int>();
+        var anchorFrameRows = new List<Tensor<T>>();
+        var rowIndex = new int[anchorCount];
+        var anchorIsForeground = new int[anchorCount];
         for (int a = 0; a < anchorCount; a++)
         {
             var (anchorFrame, anchorPoint, isForeground) = candidates[a];
-            anchorIsForeground[a] = isForeground;
-            var source = normalized[anchorFrame];
-            int offset = anchorPoint * channels;
-            for (int c = 0; c < channels; c++) anchorT[(c * anchorCount) + a] = source[offset + c];
+            if (!frameSlots.TryGetValue(anchorFrame, out int slot))
+            {
+                slot = anchorFrameRows.Count;
+                frameSlots[anchorFrame] = slot;
+                anchorFrameRows.Add(normalized[anchorFrame]);
+            }
+            rowIndex[a] = (slot * points) + anchorPoint;
+            anchorIsForeground[a] = isForeground ? 1 : 0;
         }
+        var pool = anchorFrameRows.Count == 1 ? anchorFrameRows[0] : Engine.TensorConcatenate(anchorFrameRows.ToArray(), 0);
+        var anchorRows = Engine.TensorIndexSelect(pool, new Tensor<int>(new[] { anchorCount }, new Vector<int>(rowIndex)), 0);
 
         // Nearest neighbour = MAXIMUM cosine similarity. The paper prints "arg min CosSim(...)",
         // which reads as minimising cosine DISTANCE; minimising similarity would select the least
         // similar point and invert the whole scheme.
-        var similarity = Engine.TensorMatMul(normalized[frame], anchorT);
+        var similarity = Engine.TensorMatMul(normalized[frame], Engine.TensorTranspose(anchorRows));
 
-        var result = new bool[points];
-        var bestSim = new double[_neighbors];
-        var bestFg = new bool[_neighbors];
+        // k nearest anchors per point, ties at the k-th similarity resolved toward the earlier anchor (the
+        // first-come order of a running top-k): everything above the k-th value is in, and the remaining slots
+        // go to the first anchors equal to it. Counts stay in int so no element type can overflow them.
+        int k = Math.Min(_neighbors, anchorCount);
+        var grid = new[] { points, anchorCount };
+        var topValues = Engine.TensorTopK(similarity, k, 1, out _);
+        var kth = Engine.TensorBroadcastTo(Engine.TensorSelect(topValues, 1, k - 1).Reshape(new[] { points, 1 }), grid);
+        var above = Engine.TensorGreaterThan(similarity, kth).Cast<int>();
+        var tied = Engine.TensorEquals(similarity, kth).Cast<int>();
+        var foreground = Engine.TensorBroadcastTo(
+            new Tensor<int>(new[] { 1, anchorCount }, new Vector<int>(anchorIsForeground)), grid);
 
-        for (int p = 0; p < points; p++)
-        {
-            int filled = 0;
-            for (int i = 0; i < _neighbors; i++) { bestSim[i] = double.NegativeInfinity; bestFg[i] = false; }
-            int row = p * anchorCount;
+        var openSlots = Engine.ScalarMinusTensor(k + 1, Engine.ReduceSum(above, new[] { 1 }, true));
+        var tieRank = Engine.TensorCumSum(tied, 1);
+        var tiedTaken = Engine.TensorMultiply(tied, Engine.TensorGreaterThan(Engine.TensorBroadcastTo(openSlots, grid), tieRank));
+        var chosen = Engine.TensorAdd(above, tiedTaken);
+        var foregroundVotes = Engine.ReduceSum(Engine.TensorMultiply(chosen, foreground), new[] { 1 }, false);
 
-            // Top-k is a selection, not a matrix product, so it stays here rather than being forced
-            // into the engine.
-            for (int a = 0; a < anchorCount; a++)
-            {
-                double sim = NumOps.ToDouble(similarity[row + a]);
-
-                if (filled < _neighbors)
-                {
-                    bestSim[filled] = sim; bestFg[filled] = anchorIsForeground[a]; filled++;
-                    if (filled == _neighbors) SortDescending(bestSim, bestFg, filled);
-                }
-                else if (sim > bestSim[_neighbors - 1])
-                {
-                    bestSim[_neighbors - 1] = sim; bestFg[_neighbors - 1] = anchorIsForeground[a];
-                    SortDescending(bestSim, bestFg, _neighbors);
-                }
-            }
-
-            int fg = 0;
-            for (int i = 0; i < filled; i++) if (bestFg[i]) fg++;
-            // Strict majority: a tie is left as background so the region cannot creep outward on
-            // ambiguous points.
-            result[p] = filled > 0 && fg * 2 > filled;
-        }
-
-        return result;
+        // Strict majority: a tie is left as background so the region cannot creep outward on
+        // ambiguous points.
+        var majority = Engine.TensorGreaterThan(Engine.TensorMultiplyScalar(foregroundVotes, 2), k).ToArray();
+        return Array.ConvertAll(majority, v => v != 0);
     }
 
     private List<(int Frame, int Point, bool Foreground)> BuildCandidates(
@@ -278,43 +269,28 @@ public class UniVSTMaskPropagation<T>
         }
     }
 
-    private static void SortDescending(double[] sim, bool[] fg, int count)
-    {
-        for (int i = 1; i < count; i++)
-        {
-            double s = sim[i];
-            bool f = fg[i];
-            int j = i - 1;
-            while (j >= 0 && sim[j] < s) { sim[j + 1] = sim[j]; fg[j + 1] = fg[j]; j--; }
-            sim[j + 1] = s; fg[j + 1] = f;
-        }
-    }
-
     /// <summary>
     /// Row-normalizes a [height, width, channels] feature map into a [points, channels] matrix, so a
     /// cosine similarity reduces to a dot product and the comparison can be done as a matmul.
     /// </summary>
-    private static Tensor<T> NormalizeRows(Tensor<T> features, int points, int channels)
+    internal static Tensor<T> NormalizeRows(Tensor<T> features, int points, int channels)
     {
-        var result = new Tensor<T>(new[] { points, channels });
-        for (int p = 0; p < points; p++)
-        {
-            int offset = p * channels;
-            double norm = 0.0;
-            for (int c = 0; c < channels; c++)
-            {
-                double v = NumOps.ToDouble(features[offset + c]);
-                norm += v * v;
-            }
+        var engine = AiDotNetEngine.Current;
+        var rows = features.Reshape(new[] { points, channels });
+        var grid = new[] { points, channels };
+        var ones = Tensor<T>.CreateDefault(new[] { points, 1 }, NumOps.One);
 
-            norm = Math.Sqrt(norm);
-            // A zero-length feature vector has no direction; leaving it zero makes its similarity to
-            // everything 0 rather than NaN, so it simply never wins a vote.
-            if (norm <= 0.0) continue;
+        // Each row is first divided by its largest magnitude, so the squares summed below are at most 1 each:
+        // squaring the raw features overflows Half (65504) once a row's sum of squares passes it. x / |x| is
+        // unchanged by the pre-scaling.
+        var peaks = engine.ReduceMax(engine.TensorAbs(rows), new[] { 1 }, true);
+        var safePeaks = engine.TensorWhere(engine.TensorGreaterThan(peaks, NumOps.Zero), peaks, ones);
+        var scaled = engine.TensorDivide(rows, engine.TensorBroadcastTo(safePeaks, grid));
 
-            for (int c = 0; c < channels; c++)
-                result[offset + c] = NumOps.FromDouble(NumOps.ToDouble(features[offset + c]) / norm);
-        }
-        return result;
+        var norms = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(scaled), new[] { 1 }, true));
+        // A zero-length feature vector has no direction; leaving it zero makes its similarity to
+        // everything 0 rather than NaN, so it simply never wins a vote (its norm is replaced by 1).
+        var safeNorms = engine.TensorWhere(engine.TensorGreaterThan(norms, NumOps.Zero), norms, ones);
+        return engine.TensorDivide(scaled, engine.TensorBroadcastTo(safeNorms, grid));
     }
 }

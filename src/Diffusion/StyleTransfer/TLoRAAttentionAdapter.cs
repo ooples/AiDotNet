@@ -285,17 +285,14 @@ public sealed partial class TLoRAAttentionAdapter<T> : LayerBase<T>, IAttentionB
         var up = _adapter.UpProjection;
         var singular = _adapter.SingularValues;
 
+        // Row-major down projection, then row-major up projection, then the singular values.
         var state = new Vector<T>(AdapterParameterCount);
-        int index = 0;
-        for (int r = 0; r < down.Rows; r++)
-        {
-            for (int c = 0; c < down.Columns; c++) state[index++] = down[r, c];
-        }
-        for (int r = 0; r < up.Rows; r++)
-        {
-            for (int c = 0; c < up.Columns; c++) state[index++] = up[r, c];
-        }
-        for (int s = 0; s < singular.Length; s++) state[index++] = singular[s];
+        var target = state.AsWritableSpan();
+        int downCount = down.Rows * down.Columns;
+        int upCount = up.Rows * up.Columns;
+        down.AsSpan().CopyTo(target.Slice(0, downCount));
+        up.AsSpan().CopyTo(target.Slice(downCount, upCount));
+        singular.AsSpan().CopyTo(target.Slice(downCount + upCount, singular.Length));
         return state;
     }
 
@@ -317,16 +314,12 @@ public sealed partial class TLoRAAttentionAdapter<T> : LayerBase<T>, IAttentionB
         var up = _adapter.UpProjection;
         var singular = _adapter.SingularValues;
 
-        int index = 0;
-        for (int r = 0; r < down.Rows; r++)
-        {
-            for (int c = 0; c < down.Columns; c++) down[r, c] = state[index++];
-        }
-        for (int r = 0; r < up.Rows; r++)
-        {
-            for (int c = 0; c < up.Columns; c++) up[r, c] = state[index++];
-        }
-        for (int s = 0; s < singular.Length; s++) singular[s] = state[index++];
+        var source = state.AsSpan();
+        int downCount = down.Rows * down.Columns;
+        int upCount = up.Rows * up.Columns;
+        source.Slice(0, downCount).CopyTo(down.AsWritableSpan());
+        source.Slice(downCount, upCount).CopyTo(up.AsWritableSpan());
+        source.Slice(downCount + upCount, singular.Length).CopyTo(singular.AsWritableSpan());
 
         _adapter.InvalidateCache();
     }

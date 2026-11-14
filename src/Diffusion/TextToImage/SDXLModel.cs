@@ -117,6 +117,8 @@ public partial class SDXLModel<T> : LatentDiffusionModelBase<T>
     {
         RegisterParameterComponent(_unet);
         RegisterParameterComponent(_vae);
+        RegisterParameterComponent(_addEmbeddingLinear1);
+        RegisterParameterComponent(_addEmbeddingLinear2);
     }
 
     #region Constants
@@ -238,6 +240,34 @@ public partial class SDXLModel<T> : LatentDiffusionModelBase<T>
     /// </summary>
     private int _conditioner1Version;
     private int _conditioner2Version;
+
+    /// <summary>
+    /// First layer of SDXL's learned add-embedding MLP (linear -> SiLU), mapping the pooled text embedding
+    /// concatenated with the Fourier features of the six size/crop conditions to the U-Net's time-embedding width.
+    /// </summary>
+    private readonly AiDotNet.NeuralNetworks.Layers.DenseLayer<T> _addEmbeddingLinear1;
+
+    /// <summary>
+    /// Second layer of the add-embedding MLP (linear), whose output is added to the projected time embedding.
+    /// </summary>
+    private readonly AiDotNet.NeuralNetworks.Layers.DenseLayer<T> _addEmbeddingLinear2;
+
+    /// <summary>
+    /// Fourier features per size/crop condition (SDXL's addition_time_embed_dim: 256 for a 1280-wide time
+    /// embedding, kept at the same 1/5 ratio of the configured width).
+    /// </summary>
+    private readonly int _additionTimeEmbedDim;
+
+    /// <summary>
+    /// Width of the pooled text embedding fed to the add-embedding MLP.
+    /// </summary>
+    private readonly int _pooledTextDim;
+
+    /// <summary>
+    /// The text encoder whose pooled output conditions the add-embedding (OpenCLIP bigG when dual), or null
+    /// when the embedding is mean-pooled over tokens instead.
+    /// </summary>
+    private readonly IConditioningModule<T>? _pooledTextSource;
     private int _unetVersion;
     private int _vaeVersion;
 
@@ -329,6 +359,21 @@ public partial class SDXLModel<T> : LatentDiffusionModelBase<T>
         _conditioner2 = useDualEncoder ? conditioner2 : null;
 
         InitializeLayers(unet, vae, seed);
+
+        // SDXL add-embedding (Podell et al., 2023; diffusers TimestepEmbedding over text_embeds + time_ids),
+        // sized from the U-Net's configured time-embedding width rather than the paper's fixed 1280.
+        var pooledCandidate = _useDualEncoder && _conditioner2 is not null ? _conditioner2 : _conditioner1;
+        _pooledTextSource = pooledCandidate is not null && pooledCandidate.ProducesPooledOutput ? pooledCandidate : null;
+        _pooledTextDim = _pooledTextSource?.EmbeddingDimension ?? _crossAttentionDim;
+        int timeEmbeddingDim = _unet.TimeEmbeddingDim;
+        _additionTimeEmbedDim = AdditionTimeEmbedDim(timeEmbeddingDim);
+        _addEmbeddingLinear1 = new AiDotNet.NeuralNetworks.Layers.DenseLayer<T>(
+            timeEmbeddingDim, (IActivationFunction<T>)new AiDotNet.ActivationFunctions.SiLUActivation<T>(),
+            AiDotNet.Initialization.InitializationStrategies<T>.Lazy);
+        _addEmbeddingLinear1.ResolveShapesOnly(new[] { _pooledTextDim + (MicroConditionCount * _additionTimeEmbedDim) });
+        _addEmbeddingLinear2 = new AiDotNet.NeuralNetworks.Layers.DenseLayer<T>(
+            timeEmbeddingDim, (IActivationFunction<T>?)null, AiDotNet.Initialization.InitializationStrategies<T>.Lazy);
+        _addEmbeddingLinear2.ResolveShapesOnly(new[] { timeEmbeddingDim });
 
         // Allocate the 4-stage chain that mirrors SDXL's
         // {cond1, cond2, unet, vae-decode} pipeline. Each stage's host is
@@ -507,11 +552,8 @@ public partial class SDXLModel<T> : LatentDiffusionModelBase<T>
                 width, height);
 
             // Add micro-conditioning to embeddings
-            promptEmbedding = ApplyMicroCondition(promptEmbedding, microCond);
-            if (negativeEmbedding != null)
-            {
-                negativeEmbedding = ApplyMicroCondition(negativeEmbedding, microCond);
-            }
+            var promptAdded = ComputeAddedTimeEmbedding(promptEmbedding, microCond);
+            var negativeAdded = negativeEmbedding != null ? ComputeAddedTimeEmbedding(negativeEmbedding, microCond) : promptAdded;
 
             // Calculate latent dimensions
             var latentHeight = height / SDXL_VAE_SCALE_FACTOR;
@@ -532,13 +574,13 @@ public partial class SDXLModel<T> : LatentDiffusionModelBase<T>
 
                 if (useCFG && negativeEmbedding != null)
                 {
-                    var condPred = _unet.PredictNoise(latents, timestep, promptEmbedding);
-                    var uncondPred = _unet.PredictNoise(latents, timestep, negativeEmbedding);
+                    var condPred = _unet.PredictNoiseWithAddedTimeEmbedding(latents, timestep, promptEmbedding, promptAdded);
+                    var uncondPred = _unet.PredictNoiseWithAddedTimeEmbedding(latents, timestep, negativeEmbedding, negativeAdded);
                     noisePrediction = ApplyGuidance(uncondPred, condPred, effectiveGuidanceScale);
                 }
                 else
                 {
-                    noisePrediction = _unet.PredictNoise(latents, timestep, promptEmbedding);
+                    noisePrediction = _unet.PredictNoiseWithAddedTimeEmbedding(latents, timestep, promptEmbedding, promptAdded);
                 }
 
                 // Scheduler step
@@ -715,9 +757,8 @@ public partial class SDXLModel<T> : LatentDiffusionModelBase<T>
             originalWidth.Value, originalHeight.Value,
             cropTop, cropLeft,
             width, height);
-        promptEmbedding = ApplyMicroCondition(promptEmbedding, microCond);
-        if (negativeEmbedding != null)
-            negativeEmbedding = ApplyMicroCondition(negativeEmbedding, microCond);
+        var promptAdded = ComputeAddedTimeEmbedding(promptEmbedding, microCond);
+        var negativeAdded = negativeEmbedding != null ? ComputeAddedTimeEmbedding(negativeEmbedding, microCond) : promptAdded;
 
         var latentHeight = height / SDXL_VAE_SCALE_FACTOR;
         var latentWidth = width / SDXL_VAE_SCALE_FACTOR;
@@ -744,17 +785,14 @@ public partial class SDXLModel<T> : LatentDiffusionModelBase<T>
                 // wash, but for GPU engines with separate streams the second
                 // PredictNoise's queue submission overlaps with the first's
                 // tail kernels.
-                var condTask = _unet.PredictNoiseAsync(latents, timestep, promptEmbedding, cancellationToken);
-                var uncondTask = _unet.PredictNoiseAsync(latents, timestep, negativeEmbedding, cancellationToken);
-                var condPred = await condTask.ConfigureAwait(false);
-                var uncondPred = await uncondTask.ConfigureAwait(false);
+                // The add-embedding enters through the synchronous overload, which runs the two branches in turn.
+                var condPred = _unet.PredictNoiseWithAddedTimeEmbedding(latents, timestep, promptEmbedding, promptAdded);
+                var uncondPred = _unet.PredictNoiseWithAddedTimeEmbedding(latents, timestep, negativeEmbedding, negativeAdded);
                 noisePrediction = ApplyGuidance(uncondPred, condPred, effectiveGuidanceScale);
             }
             else
             {
-                noisePrediction = await _unet
-                    .PredictNoiseAsync(latents, timestep, promptEmbedding, cancellationToken)
-                    .ConfigureAwait(false);
+                noisePrediction = _unet.PredictNoiseWithAddedTimeEmbedding(latents, timestep, promptEmbedding, promptAdded);
             }
 
             var latentVector = latents.ToVector();
@@ -822,9 +860,8 @@ public partial class SDXLModel<T> : LatentDiffusionModelBase<T>
             originalWidth.Value, originalHeight.Value,
             cropTop, cropLeft,
             width, height);
-        promptEmbedding = ApplyMicroCondition(promptEmbedding, microCond);
-        if (negativeEmbedding != null)
-            negativeEmbedding = ApplyMicroCondition(negativeEmbedding, microCond);
+        var promptAdded = ComputeAddedTimeEmbedding(promptEmbedding, microCond);
+        var negativeAdded = negativeEmbedding != null ? ComputeAddedTimeEmbedding(negativeEmbedding, microCond) : promptAdded;
 
         var latentHeight = height / SDXL_VAE_SCALE_FACTOR;
         var latentWidth = width / SDXL_VAE_SCALE_FACTOR;
@@ -844,13 +881,13 @@ public partial class SDXLModel<T> : LatentDiffusionModelBase<T>
             Tensor<T> noisePrediction;
             if (useCFG && negativeEmbedding != null)
             {
-                var condPred = _unet.PredictNoise(latents, timestep, promptEmbedding);
-                var uncondPred = _unet.PredictNoise(latents, timestep, negativeEmbedding);
+                var condPred = _unet.PredictNoiseWithAddedTimeEmbedding(latents, timestep, promptEmbedding, promptAdded);
+                var uncondPred = _unet.PredictNoiseWithAddedTimeEmbedding(latents, timestep, negativeEmbedding, negativeAdded);
                 noisePrediction = ApplyGuidance(uncondPred, condPred, effectiveGuidanceScale);
             }
             else
             {
-                noisePrediction = _unet.PredictNoise(latents, timestep, promptEmbedding);
+                noisePrediction = _unet.PredictNoiseWithAddedTimeEmbedding(latents, timestep, promptEmbedding, promptAdded);
             }
 
             var latentVector = latents.ToVector();
@@ -1013,73 +1050,105 @@ public partial class SDXLModel<T> : LatentDiffusionModelBase<T>
     /// <summary>
     /// Creates micro-conditioning vector for aspect ratio handling.
     /// </summary>
-    private Tensor<T> CreateMicroCondition(
+    internal Tensor<T> CreateMicroCondition(
         int originalWidth, int originalHeight,
         int cropTop, int cropLeft,
         int targetWidth, int targetHeight)
     {
         // SDXL micro-conditioning: [original_size, crop_coords, target_size]
-        var microCond = new Tensor<T>(new[] { 1, 6 });
+        var microCond = new Tensor<T>(new[] { 1, MicroConditionCount });
         var span = microCond.AsWritableSpan();
 
-        span[0] = NumOps.FromDouble(originalWidth);
-        span[1] = NumOps.FromDouble(originalHeight);
+        // diffusers _get_add_time_ids: original_size + crops_coords_top_left + target_size, sizes as (height, width).
+        span[0] = NumOps.FromDouble(originalHeight);
+        span[1] = NumOps.FromDouble(originalWidth);
         span[2] = NumOps.FromDouble(cropTop);
         span[3] = NumOps.FromDouble(cropLeft);
-        span[4] = NumOps.FromDouble(targetWidth);
-        span[5] = NumOps.FromDouble(targetHeight);
+        span[4] = NumOps.FromDouble(targetHeight);
+        span[5] = NumOps.FromDouble(targetWidth);
 
         return microCond;
     }
 
     /// <summary>
-    /// Concatenates micro-conditioning to text embedding.
+    /// Number of SDXL size/crop conditions: original (height, width), crop (top, left), target (height, width).
     /// </summary>
-    private Tensor<T> ApplyMicroCondition(Tensor<T> embedding, Tensor<T> microCond)
+    private const int MicroConditionCount = 6;
+
+    /// <summary>
+    /// SDXL's addition_time_embed_dim for a time embedding of <paramref name="timeEmbeddingDim"/> values: the
+    /// paper's 256 per condition for 1280, i.e. one fifth, rounded down to an even count (at least 2).
+    /// </summary>
+    internal static int AdditionTimeEmbedDim(int timeEmbeddingDim) => Math.Max(2, timeEmbeddingDim / 10 * 2);
+
+    /// <summary>
+    /// The SDXL add-embedding for a text embedding and its micro-conditions:
+    /// <c>linear_2(SiLU(linear_1([pooled_text, fourier(time_ids)])))</c>, which the U-Net adds to its projected
+    /// time embedding (Podell et al., 2023, section 2.2).
+    /// </summary>
+    /// <param name="textEmbedding">The text embedding [batch, tokens, width].</param>
+    /// <param name="microCond">The six size/crop conditions [1, 6].</param>
+    internal Tensor<T> ComputeAddedTimeEmbedding(Tensor<T> textEmbedding, Tensor<T> microCond)
     {
-        // SDXL uses micro-conditioning (original_size, crop_coords, target_size) to improve
-        // generation quality at different resolutions. The 6 values are projected through
-        // a learned embedding and added to influence the diffusion process.
-        var shape = embedding._shape;
-        var batch = shape[0];
-        var seqLen = shape[1];
-        var embedDim = shape[2];
+        var pooled = PoolTextEmbedding(textEmbedding);
+        int batch = pooled._shape[0];
+        var timeIds = FourierEmbedConditions(microCond, _additionTimeEmbedDim);
+        if (batch > 1)
+            timeIds = Engine.TensorBroadcastTo(timeIds, new[] { batch, timeIds._shape[1] });
+        var input = Engine.TensorConcatenate(new[] { pooled, timeIds }, 1);
+        return _addEmbeddingLinear2.Forward(_addEmbeddingLinear1.Forward(input));
+    }
 
-        var result = new Tensor<T>(new[] { batch, seqLen, embedDim });
-        var resultSpan = result.AsWritableSpan();
-        var embSpan = embedding.AsSpan();
-        var microSpan = microCond.AsSpan();
+    /// <summary>
+    /// The pooled text embedding [batch, pooledDim]: the pooled output of the text encoder that provides one
+    /// (its columns are the trailing ones of the dual-encoder concatenation), otherwise the token mean.
+    /// </summary>
+    internal Tensor<T> PoolTextEmbedding(Tensor<T> textEmbedding)
+    {
+        var shape = textEmbedding._shape;
+        int width = shape[shape.Length - 1];
+        int batch = shape.Length >= 2 ? shape[0] : 1;
+        int tokens = textEmbedding.Length / (batch * width);
+        if (width < _pooledTextDim || (_pooledTextSource is null && width != _pooledTextDim))
+            throw new ArgumentException(
+                $"The text embedding is {width} wide but the SDXL add-embedding expects {_pooledTextDim}.",
+                nameof(textEmbedding));
 
-        // Project micro-conditioning values (6 values) to embedding dimension
-        // Each micro-cond value is scaled and used as a modulation factor
-        int microLen = microCond.Shape[1]; // Should be 6
-
-        for (int b = 0; b < batch; b++)
+        var sequence = textEmbedding.Reshape(new[] { batch, tokens, width });
+        if (_pooledTextSource is not null)
         {
-            for (int s = 0; s < seqLen; s++)
-            {
-                for (int d = 0; d < embedDim; d++)
-                {
-                    int embIdx = b * seqLen * embedDim + s * embedDim + d;
-                    T embVal = embSpan[embIdx];
-
-                    // Apply micro-conditioning as sinusoidal modulation
-                    // Similar to how timestep embedding works in diffusion models
-                    int microIdx = d % microLen;
-                    T microVal = microSpan[b * microLen + microIdx];
-
-                    // Scale micro-conditioning (normalized to prevent explosion)
-                    double microDouble = NumOps.ToDouble(microVal);
-                    double normalizedMicro = microDouble / 1024.0; // Normalize by typical image size
-                    double modulation = Math.Sin(d * normalizedMicro * 0.01);
-
-                    // Apply additive modulation
-                    resultSpan[embIdx] = NumOps.Add(embVal, NumOps.FromDouble(modulation * 0.1));
-                }
-            }
+            var own = width == _pooledTextDim
+                ? sequence
+                : Engine.TensorNarrow(sequence, 2, width - _pooledTextDim, _pooledTextDim);
+            return _pooledTextSource.GetPooledEmbedding(own).Reshape(new[] { batch, _pooledTextDim });
         }
 
-        return result;
+        return Engine.ReduceMean(sequence, new[] { 1 }, false);
+    }
+
+    /// <summary>
+    /// Sinusoidal features of each condition value, as diffusers' <c>Timesteps(dim, flip_sin_to_cos=True,
+    /// downscale_freq_shift=0)</c>: <c>[cos(v f_i), sin(v f_i)]</c> with <c>f_i = exp(-ln(10000) i / (dim / 2))</c>,
+    /// flattened condition by condition into [1, count * dim].
+    /// </summary>
+    /// <remarks>
+    /// The phases v * f_i reach the image sizes (1024 and more), so they are formed and reduced in double and only
+    /// the features are converted to T, as diffusers computes this projection in float32 whatever the model dtype:
+    /// in Half a phase near 1024 is only resolved to 0.5 rad and the features would be noise.
+    /// </remarks>
+    internal static Tensor<T> FourierEmbedConditions(Tensor<T> conditions, int dim)
+    {
+        var engine = AiDotNetEngine.Current;
+        int half = dim / 2;
+        int count = conditions.Length;
+        var grid = new[] { count, half };
+        var frequencies = engine.TensorExp(engine.TensorArange<double>(0.0, (half - 0.5) * (-Math.Log(10000.0) / half),
+            -Math.Log(10000.0) / half));
+        var arguments = engine.TensorMultiply(
+            engine.TensorBroadcastTo(conditions.Cast<double>().Reshape(new[] { count, 1 }), grid),
+            engine.TensorBroadcastTo(frequencies.Reshape(new[] { 1, half }), grid));
+        var features = engine.TensorConcatenate(new[] { engine.TensorCos(arguments), engine.TensorSin(arguments) }, 1);
+        return features.Reshape(new[] { 1, count * 2 * half }).Cast<T>();
     }
 
     #endregion

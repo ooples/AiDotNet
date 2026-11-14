@@ -51,6 +51,26 @@ public sealed class UniPCScheduler<T> : NoiseSchedulerBase<T>
     private readonly List<Vector<T>> _dataPredictionHistory = new();
 
     /// <summary>
+    /// Lambda values (half log-SNR) of the entries in <see cref="_dataPredictionHistory"/>.
+    /// </summary>
+    private readonly List<T> _lambdaHistory = new();
+
+    /// <summary>
+    /// The sample the last predictor started from (the corrector's x_s0).
+    /// </summary>
+    private Vector<T>? _lastSample;
+
+    /// <summary>
+    /// The order used by the last predictor step (reused by the following corrector).
+    /// </summary>
+    private int _thisOrder = 1;
+
+    /// <summary>
+    /// Number of completed warm-up steps (capped at the solver order).
+    /// </summary>
+    private int _lowerOrderNums;
+
+    /// <summary>
     /// Lambda values (log-SNR) for each inference timestep.
     /// </summary>
     [AiDotNet.Attributes.Scratch]
@@ -127,22 +147,15 @@ public sealed class UniPCScheduler<T> : NoiseSchedulerBase<T>
     }
 
     /// <summary>
-    /// Performs one UniPC predictor-corrector denoising step.
+    /// Performs one UniPC step: the UniC corrector refines the previous predictor output with the new model
+    /// evaluation, then the UniP predictor advances to the next timestep.
     /// </summary>
-    /// <param name="modelOutput">The model's noise prediction.</param>
-    /// <param name="timestep">The current timestep in the diffusion process.</param>
-    /// <param name="sample">The current noisy sample.</param>
-    /// <param name="eta">Stochasticity parameter (0 = deterministic). Included for interface compatibility.</param>
-    /// <param name="noise">Optional noise for stochastic sampling.</param>
-    /// <returns>The denoised sample for the previous timestep.</returns>
     /// <remarks>
-    /// <para>
-    /// UniPC step:
-    /// 1. Convert model output to data prediction (x_0 form)
-    /// 2. Store in history buffer for multi-step method
-    /// 3. Apply predictor step (multi-step extrapolation)
-    /// 4. Optionally apply corrector step (refine using prediction)
-    /// </para>
+    /// Follows Zhao et al. (2023) and diffusers' UniPCMultistepScheduler with data prediction and the B(h) =
+    /// e^{-h} - 1 ("bh2") variant on the VP schedule alpha_t = sqrt(alpha_cumprod), sigma_t = sqrt(1 -
+    /// alpha_cumprod), lambda_t = log(alpha_t / sigma_t). The order warms up over the first steps and drops to 1 at
+    /// the end (lower_order_final), where the step to sigma = 0 returns the data prediction. UniPC is a
+    /// deterministic ODE solver, so <paramref name="eta"/> and <paramref name="noise"/> are not used.
     /// </remarks>
     public override Vector<T> Step(Vector<T> modelOutput, int timestep, Vector<T> sample, T eta, Vector<T>? noise = null)
     {
@@ -152,171 +165,121 @@ public sealed class UniPCScheduler<T> : NoiseSchedulerBase<T>
             throw new InvalidOperationException("Schedule not initialized. Call SetTimesteps() before Step().");
 
         int stepIndex = FindTimestepIndex(timestep);
-
-        // Convert model output to data prediction (x_0 form)
         var dataPred = ConvertModelOutputToDataPrediction(modelOutput, timestep, sample);
 
-        // Store in history (keep last _solverOrder + 1 entries)
-        _dataPredictionHistory.Add(CopyVector(dataPred));
-        while (_dataPredictionHistory.Count > _solverOrder + 1)
+        // UniC: correct the previous step now that the model has been evaluated at its end point.
+        if (_useCorrectorStep && _lastSample is not null && stepIndex > 0 && _dataPredictionHistory.Count > 0)
+        {
+            sample = UniUpdate(_lastSample, stepIndex - 1, stepIndex, _thisOrder, dataPred);
+        }
+
+        _dataPredictionHistory.Add(dataPred);
+        _lambdaHistory.Add(_lambdas[stepIndex]);
+        if (_dataPredictionHistory.Count > _solverOrder)
         {
             _dataPredictionHistory.RemoveAt(0);
+            _lambdaHistory.RemoveAt(0);
         }
 
-        // Last step: return the data prediction directly
-        if (stepIndex >= Timesteps.Length - 1)
-        {
-            _stepCounter++;
-            return dataPred;
-        }
+        int remainingSteps = Timesteps.Length - stepIndex;
+        _thisOrder = Math.Min(Math.Min(_solverOrder, remainingSteps), _lowerOrderNums + 1);
+        _thisOrder = Math.Max(1, Math.Min(_thisOrder, _dataPredictionHistory.Count));
+        _lastSample = sample;
 
-        int nextStepIndex = stepIndex + 1;
+        // The last step goes to sigma = 0 at first order, where the update is the data prediction itself.
+        var prevSample = stepIndex >= Timesteps.Length - 1
+            ? dataPred
+            : UniUpdate(sample, stepIndex, stepIndex + 1, _thisOrder, null);
 
-        // Determine effective order based on available history
-        int effectiveOrder = Math.Min(_stepCounter + 1, _solverOrder);
-        effectiveOrder = Math.Min(effectiveOrder, _dataPredictionHistory.Count);
-
-        // Predictor step
-        var predictedSample = PredictorStep(sample, stepIndex, nextStepIndex, effectiveOrder);
-
-        // Corrector step (optional refinement)
-        if (_useCorrectorStep && effectiveOrder >= 2 && _dataPredictionHistory.Count >= 2)
-        {
-            predictedSample = CorrectorStep(predictedSample, sample, stepIndex, nextStepIndex, effectiveOrder);
-        }
-
-        // Optional stochastic noise injection
-        var etaDouble = NumOps.ToDouble(eta);
-        if (etaDouble > 0 && noise != null)
-        {
-            T lambda_s = _lambdas[stepIndex];
-            T lambda_t = _lambdas[nextStepIndex];
-            T h = NumOps.Subtract(lambda_t, lambda_s);
-            var noiseScale = NumOps.Multiply(eta, NumOps.FromDouble(Math.Abs(NumOps.ToDouble(h))));
-            var stochasticNoise = Engine.Multiply(noise, noiseScale);
-            predictedSample = Engine.Add(predictedSample, stochasticNoise);
-        }
-
+        if (_lowerOrderNums < _solverOrder)
+            _lowerOrderNums++;
         _stepCounter++;
-        return predictedSample;
+        return prevSample;
     }
 
     /// <summary>
-    /// Predictor step: multi-step extrapolation to estimate the next sample.
+    /// The UniP predictor (<paramref name="modelAtTarget"/> null) or UniC corrector update from schedule index
+    /// <paramref name="fromIndex"/> to <paramref name="toIndex"/> (diffusers multistep_uni_p_bh_update /
+    /// multistep_uni_c_bh_update with predict_x0 and bh2).
     /// </summary>
-    /// <param name="sample">The current sample.</param>
-    /// <param name="stepIndex">Current step index in the schedule.</param>
-    /// <param name="nextStepIndex">Next step index in the schedule.</param>
-    /// <param name="order">The effective order to use.</param>
-    /// <returns>The predicted sample at the next timestep.</returns>
-    private Vector<T> PredictorStep(Vector<T> sample, int stepIndex, int nextStepIndex, int order)
+    private Vector<T> UniUpdate(Vector<T> sample, int fromIndex, int toIndex, int order, Vector<T>? modelAtTarget)
     {
-        T lambda_s = _lambdas[stepIndex];
-        T lambda_t = _lambdas[nextStepIndex];
-        T alpha_t = _alphaTs[nextStepIndex];
-        T sigma_t = _sigmaTs[nextStepIndex];
-        T sigma_s = _sigmaTs[stepIndex];
+        int last = _dataPredictionHistory.Count - 1;
+        var m0 = _dataPredictionHistory[last];
+        T lambdaS0 = _lambdas[fromIndex];
+        T lambdaT = _lambdas[toIndex];
+        T alphaT = _alphaTs[toIndex];
+        T sigmaT = _sigmaTs[toIndex];
+        T sigmaS0 = _sigmaTs[fromIndex];
+        T h = NumOps.Subtract(lambdaT, lambdaS0);
+        T hh = NumOps.Negate(h);
+        T hPhi1 = NumOps.Subtract(NumOps.Exp(hh), NumOps.One);
+        T bh = hPhi1;
 
-        T h = NumOps.Subtract(lambda_t, lambda_s);
-        double hVal = NumOps.ToDouble(h);
+        // x_t_ = sigma_t / sigma_s0 * x - alpha_t * h_phi_1 * m0
+        var result = Engine.Subtract(
+            Engine.Multiply(sample, NumOps.Divide(sigmaT, sigmaS0)),
+            Engine.Multiply(m0, NumOps.Multiply(alphaT, hPhi1)));
 
-        T sigmaRatio = NumOps.Divide(sigma_t, sigma_s);
-
-        // First-order term: always present
-        T expNegH = NumOps.FromDouble(Math.Exp(-hVal));
-        T coeff0 = NumOps.Multiply(alpha_t, NumOps.Subtract(expNegH, NumOps.One));
-
-        var d0 = _dataPredictionHistory[^1];
-        var result = Engine.Add(Engine.Multiply(sample, sigmaRatio), Engine.Multiply(d0, coeff0));
-
-        if (order >= 2 && _dataPredictionHistory.Count >= 2)
+        // b_k = h_phi_k * k! / B(h) for k = 1..3 (h_phi_{k+1} = h_phi_k / hh - 1 / (k + 1)!).
+        T hPhiK1 = NumOps.Subtract(NumOps.Divide(hPhi1, hh), NumOps.One);
+        T hPhiK2 = NumOps.Subtract(NumOps.Divide(hPhiK1, hh), NumOps.FromDouble(0.5));
+        T hPhiK3 = NumOps.Subtract(NumOps.Divide(hPhiK2, hh), NumOps.FromDouble(1.0 / 6.0));
+        var b = new Vector<T>(new[]
         {
-            // Second-order correction using Taylor expansion
-            T coeff1 = NumOps.FromDouble(
-                NumOps.ToDouble(alpha_t) * (Math.Exp(-hVal) - 1.0 + hVal) / (2.0 * hVal));
+            NumOps.Divide(hPhiK1, bh),
+            NumOps.Divide(NumOps.Multiply(hPhiK2, NumOps.FromDouble(2.0)), bh),
+            NumOps.Divide(NumOps.Multiply(hPhiK3, NumOps.FromDouble(6.0)), bh)
+        });
+        T scale = NumOps.Multiply(alphaT, bh);
 
-            var d1 = Engine.Subtract(_dataPredictionHistory[^1], _dataPredictionHistory[^2]);
-            result = Engine.Add(result, Engine.Multiply(d1, coeff1));
+        // Earlier data predictions m_1..m_{order-1} (newest first) and r_k = (lambda_{s_k} - lambda_s0) / h.
+        int previous = order - 1;
+        var history = new List<Vector<T>>(previous);
+        var historyLambdas = new List<T>(previous);
+        for (int k = 1; k <= previous; k++)
+        {
+            history.Add(_dataPredictionHistory[last - k]);
+            historyLambdas.Add(_lambdaHistory[last - k]);
         }
 
-        if (order >= 3 && _dataPredictionHistory.Count >= 3)
+        Vector<T> ratios = previous > 0
+            ? Engine.Divide(Engine.Subtract(new Vector<T>(historyLambdas), SchedulerTensorOps.Full(previous, lambdaS0)), h)
+            : new Vector<T>(0);
+
+        Vector<T> rhos;
+        if (modelAtTarget is null)
         {
-            // Third-order correction
-            T coeff2 = NumOps.FromDouble(
-                NumOps.ToDouble(alpha_t) * (Math.Exp(-hVal) - 1.0 + hVal - 0.5 * hVal * hVal) / (6.0 * hVal * hVal));
-
-            var d1 = Engine.Subtract(_dataPredictionHistory[^1], _dataPredictionHistory[^2]);
-            var d1Prev = Engine.Subtract(_dataPredictionHistory[^2], _dataPredictionHistory[^3]);
-            var d2 = Engine.Subtract(d1, d1Prev);
-            result = Engine.Add(result, Engine.Multiply(d2, coeff2));
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Corrector step: refines the predictor output using interpolation error estimation.
-    /// </summary>
-    /// <param name="predictedSample">The sample from the predictor step.</param>
-    /// <param name="currentSample">The original sample before prediction.</param>
-    /// <param name="stepIndex">Current step index in the schedule.</param>
-    /// <param name="nextStepIndex">Next step index in the schedule.</param>
-    /// <param name="order">The effective order to use.</param>
-    /// <returns>The corrected sample.</returns>
-    /// <remarks>
-    /// <para>
-    /// The corrector step in UniPC estimates the local truncation error of the predictor
-    /// and uses it to refine the prediction. This is based on the difference between
-    /// the multi-step predictor output and a single-step estimate at the predicted point.
-    /// </para>
-    /// </remarks>
-    private Vector<T> CorrectorStep(Vector<T> predictedSample, Vector<T> currentSample,
-        int stepIndex, int nextStepIndex, int order)
-    {
-        T lambda_s = _lambdas[stepIndex];
-        T lambda_t = _lambdas[nextStepIndex];
-        T alpha_t = _alphaTs[nextStepIndex];
-        T sigma_t = _sigmaTs[nextStepIndex];
-        T sigma_s = _sigmaTs[stepIndex];
-
-        T h = NumOps.Subtract(lambda_t, lambda_s);
-        double hVal = NumOps.ToDouble(h);
-
-        // Estimate x_0 at the predicted point using the latest and previous data predictions
-        // This approximates what a model evaluation at the predicted point would give
-        var latestPred = _dataPredictionHistory[^1];
-        var prevPred = _dataPredictionHistory[^2];
-
-        // Compute the correction term based on the difference in consecutive predictions
-        // The corrector refines based on the estimated curvature of the data prediction trajectory
-        var predDiff = Engine.Subtract(latestPred, prevPred);
-
-        // Correction coefficient: weight based on step size
-        // c_corr = alpha_t * h * (exp(-h) - 1 + h) / (2 * h^2)
-        // This is the leading error term of the first-order predictor
-        double correctionWeight;
-        if (Math.Abs(hVal) < 1e-8)
-        {
-            correctionWeight = 0; // Avoid division by zero
+            if (previous == 0)
+                return result;
+            // Predictor: rho = 0.5 at order 2, otherwise solve R[:-1, :-1] rho = b[:-1].
+            rhos = order == 2
+                ? SchedulerTensorOps.Full(1, NumOps.FromDouble(0.5))
+                : SchedulerTensorOps.SolveTransposedVandermonde(ratios, b.GetSubVector(0, previous));
         }
         else
         {
-            correctionWeight = NumOps.ToDouble(alpha_t) *
-                (Math.Exp(-hVal) - 1.0 + hVal) / (2.0 * hVal);
+            // Corrector: rho = 0.5 at order 1, otherwise solve R rho = b with the nodes r_1..r_{order-1}, 1.
+            rhos = order == 1
+                ? SchedulerTensorOps.Full(1, NumOps.FromDouble(0.5))
+                : SchedulerTensorOps.SolveTransposedVandermonde(
+                    Vector<T>.Concatenate(ratios, SchedulerTensorOps.Full(1, NumOps.One)), b.GetSubVector(0, order));
+            // rho_last * (m_t - m0)
+            T rhoTarget = rhos[rhos.Length - 1];
+            result = Engine.Subtract(result, Engine.Multiply(Engine.Subtract(modelAtTarget, m0), NumOps.Multiply(scale, rhoTarget)));
+            if (previous == 0)
+                return result;
+            rhos = rhos.GetSubVector(0, previous);
         }
 
-        // Scale correction by the inverse of the order to avoid over-correction
-        correctionWeight /= order;
-
-        var correctionCoeff = NumOps.FromDouble(correctionWeight);
-        var correction = Engine.Multiply(predDiff, correctionCoeff);
-
-        // Apply correction to the predicted sample
-        return Engine.Add(predictedSample, correction);
+        // sum_k rho_k * D1_k with D1_k = (m_k - m0) / r_k.
+        var weights = Engine.Divide(rhos, ratios);
+        result = SchedulerTensorOps.AddWeightedSum(result, Engine.Multiply(weights, NumOps.Negate(scale)), history);
+        return Engine.Add(result, Engine.Multiply(m0, NumOps.Multiply(scale, Engine.Sum(weights))));
     }
 
     /// <summary>
-    /// Converts model output to data prediction (x_0 form) based on prediction type.
+    /// Converts model output to data prediction (x_0) form.
     /// </summary>
     private Vector<T> ConvertModelOutputToDataPrediction(Vector<T> modelOutput, int timestep, Vector<T> sample)
     {
@@ -342,30 +305,17 @@ public sealed class UniPCScheduler<T> : NoiseSchedulerBase<T>
     }
 
     /// <summary>
-    /// Computes lambda (log-SNR), alpha_t, and sigma_t values for the inference schedule.
+    /// Computes alpha_t = sqrt(alpha_cumprod), sigma_t = sqrt(1 - alpha_cumprod) and the half log-SNR
+    /// lambda_t = log(alpha_t / sigma_t) at each inference timestep.
     /// </summary>
     private void ComputeScheduleValues()
     {
-        var timesteps = Timesteps;
-        int len = timesteps.Length;
-
-        _lambdas = new Vector<T>(len);
-        _alphaTs = new Vector<T>(len);
-        _sigmaTs = new Vector<T>(len);
-
-        for (int i = 0; i < len; i++)
-        {
-            T alphaCumprod = AlphasCumulativeProduct[timesteps[i]];
-            T sqrtAlpha = NumOps.Sqrt(alphaCumprod);
-            T oneMinusAlpha = NumOps.Subtract(NumOps.One, alphaCumprod);
-            T sigma = NumOps.Sqrt(NumOps.Divide(oneMinusAlpha, alphaCumprod));
-
-            _alphaTs[i] = sqrtAlpha;
-            _sigmaTs[i] = sigma;
-
-            T ratio = NumOps.Divide(sqrtAlpha, sigma);
-            _lambdas[i] = NumOps.FromDouble(Math.Log(Math.Max(NumOps.ToDouble(ratio), 1e-10)));
-        }
+        var alphaCumprod = SchedulerTensorOps.Gather(AlphasCumulativeProduct, Timesteps);
+        var oneMinusAlphaCumprod = Engine.Subtract(SchedulerTensorOps.Full(alphaCumprod.Length, NumOps.One), alphaCumprod);
+        _alphaTs = Engine.Sqrt(alphaCumprod);
+        _sigmaTs = Engine.Sqrt(oneMinusAlphaCumprod);
+        var logRatio = Engine.TensorSubtract(Engine.TensorLog(alphaCumprod.AsTensor()), Engine.TensorLog(oneMinusAlphaCumprod.AsTensor()));
+        _lambdas = Engine.TensorMultiplyScalar(logRatio, NumOps.FromDouble(0.5)).ToVector();
     }
 
     /// <summary>
@@ -374,6 +324,10 @@ public sealed class UniPCScheduler<T> : NoiseSchedulerBase<T>
     private void ResetState()
     {
         _dataPredictionHistory.Clear();
+        _lambdaHistory.Clear();
+        _lastSample = null;
+        _thisOrder = 1;
+        _lowerOrderNums = 0;
         _stepCounter = 0;
     }
 
@@ -403,19 +357,6 @@ public sealed class UniPCScheduler<T> : NoiseSchedulerBase<T>
         }
 
         return closestIdx;
-    }
-
-    /// <summary>
-    /// Creates a copy of a vector.
-    /// </summary>
-    private static Vector<T> CopyVector(Vector<T> source)
-    {
-        var copy = new Vector<T>(source.Length);
-        for (int i = 0; i < source.Length; i++)
-        {
-            copy[i] = source[i];
-        }
-        return copy;
     }
 
     /// <inheritdoc />

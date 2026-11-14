@@ -553,33 +553,27 @@ public partial class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
     {
         // Weighted combination of embeddings
         // In practice, this would use cross-attention or adapter modules
-        var imageScaleT = NumOps.FromDouble(imageScale);
-        var textScaleT = NumOps.FromDouble(1.0);
-
-        var imageSpan = imageEmbedding.AsSpan();
-        var textSpan = textEmbedding.AsSpan();
-
-        // Select the tensor with more total elements for the combined shape
-        // This ensures we don't lose information from either embedding
-        int imageSize = imageSpan.Length;
-        int textSize = textSpan.Length;
+        // Element i of the result is imageScale * image[i] + text[i] over the flattened embeddings, the shorter
+        // one read as zero past its end; the result takes the shape of the larger embedding.
+        int imageSize = imageEmbedding.Length;
+        int textSize = textEmbedding.Length;
         var combinedShape = imageSize >= textSize ? imageEmbedding._shape : textEmbedding._shape;
+        int combinedSize = Math.Max(imageSize, textSize);
 
-        var combined = new Tensor<T>(combinedShape);
-        var combinedSpan = combined.AsWritableSpan();
+        var scaledImage = Engine.TensorMultiplyScalar(imageEmbedding.Reshape(new[] { imageSize }), NumOps.FromDouble(imageScale));
+        var combined = Engine.TensorAdd(
+            PadFlat(scaledImage, combinedSize),
+            PadFlat(textEmbedding.Reshape(new[] { textSize }), combinedSize));
+        return combined.Reshape(combinedShape);
+    }
 
-        // Combine elements, weighted by their respective scales
-        for (int i = 0; i < combinedSpan.Length; i++)
-        {
-            var imgVal = i < imageSpan.Length ? imageSpan[i] : NumOps.Zero;
-            var txtVal = i < textSpan.Length ? textSpan[i] : NumOps.Zero;
-
-            combinedSpan[i] = NumOps.Add(
-                NumOps.Multiply(imageScaleT, imgVal),
-                NumOps.Multiply(textScaleT, txtVal));
-        }
-
-        return combined;
+    /// <summary>
+    /// Zero-pads a flat tensor to <paramref name="length"/> elements.
+    /// </summary>
+    private Tensor<T> PadFlat(Tensor<T> flat, int length)
+    {
+        int missing = length - flat.Length;
+        return missing <= 0 ? flat : Engine.TensorConcatenate(new[] { flat, new Tensor<T>(new[] { missing }) }, 0);
     }
 
     /// <summary>
@@ -628,30 +622,24 @@ public partial class VideoCrafterModel<T> : VideoDiffusionModelBase<T>
     /// <summary>
     /// Combines image embedding with motion embedding for temporal conditioning.
     /// </summary>
-    private Tensor<T> CombineImageAndMotion(Tensor<T> imageEmbedding, Tensor<T> motionEmbedding)
+    internal static Tensor<T> CombineImageAndMotion(Tensor<T> imageEmbedding, Tensor<T> motionEmbedding)
     {
-        var imageShape = imageEmbedding._shape;
-        var result = new Tensor<T>(imageShape);
-        var resultSpan = result.AsWritableSpan();
-        var imageSpan = imageEmbedding.AsSpan();
-        var motionSpan = motionEmbedding.AsSpan();
+        // Add motion modulation to image embedding: element i gains 0.1 * sin(0.001 * i * motion[i mod L]).
+        var engine = AiDotNetEngine.Current;
+        int size = imageEmbedding.Length;
+        int motionLen = motionEmbedding.Length;
+        if (size == 0 || motionLen == 0)
+            return imageEmbedding.Clone();
 
-        // Add motion modulation to image embedding
-        // Motion bucket affects how much motion/dynamics is applied
-        int motionLen = motionSpan.Length;
-        for (int i = 0; i < resultSpan.Length; i++)
-        {
-            // Modulate image embedding with motion information
-            int motionIdx = i % motionLen;
-            T motionVal = motionSpan[motionIdx];
-            double motionDouble = NumOps.ToDouble(motionVal);
-
-            // Apply motion as sinusoidal modulation (similar to timestep embedding)
-            double modulation = Math.Sin(i * motionDouble * 0.001) * 0.1;
-            resultSpan[i] = NumOps.Add(imageSpan[i], NumOps.FromDouble(modulation));
-        }
-
-        return result;
+        // The phases are formed in double and only the modulation is converted to T. The element index i is not
+        // representable in Half past 2048 and overflows it past 65504 (turning the modulation into NaN), and even
+        // the ramp 0.001 * i is resolved only to 0.06 rad near 70 in Half.
+        var motionFlat = motionEmbedding.Reshape(new[] { motionLen }).Cast<double>();
+        int repeats = (size + motionLen - 1) / motionLen;
+        var motion = engine.TensorNarrow(engine.TensorTile(motionFlat, new[] { repeats }), 0, 0, size);
+        var ramp = engine.TensorArange<double>(0.0, (size - 0.5) * 0.001, 0.001);
+        var modulation = engine.TensorMultiplyScalar(engine.TensorSin(engine.TensorMultiply(ramp, motion)), 0.1);
+        return engine.TensorAdd(imageEmbedding, modulation.Cast<T>().Reshape(imageEmbedding._shape));
     }
 
     /// <summary>

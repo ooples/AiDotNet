@@ -32,6 +32,12 @@ public class LogSNRImportanceSampling<T>
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
+    /// The largest |log-SNR| used for sampling, ln(1e10): the value log(alpha / (1 - alpha)) takes at alpha = 0 and
+    /// alpha = 1 under a 1e-10 guard.
+    /// </summary>
+    internal static readonly double LogSnrBound = Math.Log(1e10);
+
+    /// <summary>
     /// Samples timesteps with importance weighting based on log-SNR distribution.
     /// </summary>
     /// <param name="batchSize">Number of timesteps to sample.</param>
@@ -40,38 +46,33 @@ public class LogSNRImportanceSampling<T>
     /// <returns>Array of sampled timestep indices.</returns>
     public int[] SampleTimesteps(int batchSize, Vector<T> alphasCumprod, Random random)
     {
+        var engine = AiDotNetEngine.Current;
         int numTimesteps = alphasCumprod.Length;
-        var timesteps = new int[batchSize];
 
-        // Compute log-SNR for each timestep
-        var logSNR = new double[numTimesteps];
-        for (int i = 0; i < numTimesteps; i++)
-        {
-            double alpha = NumOps.ToDouble(alphasCumprod[i]);
-            alpha = Math.Max(alpha, 1e-10);
-            logSNR[i] = Math.Log(alpha / (1.0 - alpha + 1e-10));
-        }
+        // log-SNR = log(alpha / (1 - alpha)) per timestep, clamped to +-ln(1e10) so zero-terminal-SNR schedules
+        // (alpha = 0, log-SNR = -inf) and alpha = 1 give a finite range. The bound is the log-SNR the 1e-10 guard
+        // assigns to alpha = 0 and alpha = 1, fixed in value rather than tied to the element type's epsilon, so
+        // the sampled distribution does not change with T.
+        var alphas = alphasCumprod.AsTensor();
+        var logSnr = engine.TensorClamp(
+            engine.TensorSubtract(engine.TensorLog(alphas), engine.TensorLog(engine.ScalarMinusTensor(NumOps.One, alphas))),
+            NumOps.FromDouble(-LogSnrBound), NumOps.FromDouble(LogSnrBound));
 
-        // Sample uniformly in log-SNR space
-        double minLogSNR = logSNR[numTimesteps - 1];
-        double maxLogSNR = logSNR[0];
-
+        // Sample uniformly in log-SNR space. The seeded uniform draws stay one per batch element in master's order
+        // (no engine op consumes a caller Random).
+        var uniform = new Vector<T>(batchSize);
         for (int b = 0; b < batchSize; b++)
-        {
-            double targetLogSNR = minLogSNR + random.NextDouble() * (maxLogSNR - minLogSNR);
+            uniform[b] = NumOps.FromDouble(random.NextDouble());
+        T minLogSnr = logSnr[numTimesteps - 1];
+        T maxLogSnr = logSnr[0];
+        var targets = engine.TensorAddScalar(
+            engine.TensorMultiplyScalar(uniform.AsTensor(), NumOps.Subtract(maxLogSnr, minLogSnr)), minLogSnr);
 
-            // Find closest timestep
-            int bestIdx = 0;
-            double bestDist = double.MaxValue;
-            for (int i = 0; i < numTimesteps; i++)
-            {
-                double dist = Math.Abs(logSNR[i] - targetLogSNR);
-                if (dist < bestDist) { bestDist = dist; bestIdx = i; }
-            }
-
-            timesteps[b] = bestIdx;
-        }
-
-        return timesteps;
+        // Closest timestep per target: argmin over |logSnr[i] - target| (first index on ties).
+        var shape = new[] { batchSize, numTimesteps };
+        var distances = engine.TensorAbs(engine.TensorSubtract(
+            engine.TensorBroadcastTo(logSnr.Reshape(new[] { 1, numTimesteps }), shape),
+            engine.TensorBroadcastTo(targets.Reshape(new[] { batchSize, 1 }), shape)));
+        return engine.TensorArgMin(distances, 1).ToArray();
     }
 }

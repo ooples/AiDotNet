@@ -434,15 +434,7 @@ public partial class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
             var noise = DiffusionNoiseHelper<T>.SampleGaussian(image._shape, rng);
             var scaledNoise = DiffusionNoiseHelper<T>.ScaleNoise(noise, noiseAugStrength);
 
-            augmentedImage = new Tensor<T>(image._shape);
-            var augSpan = augmentedImage.AsWritableSpan();
-            var imgSpan = image.AsSpan();
-            var noiseSpan = scaledNoise.AsSpan();
-
-            for (int i = 0; i < augSpan.Length; i++)
-            {
-                augSpan[i] = NumOps.Add(imgSpan[i], noiseSpan[i]);
-            }
+            augmentedImage = Engine.TensorAdd(image, scaledNoise);
         }
         else
         {
@@ -472,9 +464,6 @@ public partial class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
         var numConditioningValues = 3; // fps, motion_bucket_id, noise_aug_strength
         var totalEmbeddingDim = additionTimeEmbedDim * numConditioningValues;
 
-        var embedding = new Tensor<T>(new[] { 1, totalEmbeddingDim });
-        var span = embedding.AsWritableSpan();
-
         // Create add_time_ids: [fps-1, motion_bucket_id, noise_aug_strength]
         // SVD was trained with fps-1 as per diffusers implementation
         double fpsMinus1 = fps - 1;
@@ -483,35 +472,42 @@ public partial class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
 
         // Each value is projected using sinusoidal timestep embedding (similar to diffusion timestep)
         // then concatenated. This follows the SVD UNet's addition_embed_type architecture
-        ProjectConditioningValue(span, fpsMinus1, 0, additionTimeEmbedDim);
-        ProjectConditioningValue(span, motionBucket, additionTimeEmbedDim, additionTimeEmbedDim);
-        ProjectConditioningValue(span, noiseAugStrength, additionTimeEmbedDim * 2, additionTimeEmbedDim);
+        var embedding = Engine.TensorConcatenate(new[]
+        {
+            ProjectConditioningValue(fpsMinus1, additionTimeEmbedDim),
+            ProjectConditioningValue(motionBucket, additionTimeEmbedDim),
+            ProjectConditioningValue(noiseAugStrength, additionTimeEmbedDim)
+        }, 0);
 
-        return embedding;
+        return embedding.Reshape(new[] { 1, totalEmbeddingDim });
     }
 
     /// <summary>
     /// Projects a single conditioning value into an embedding using sinusoidal timestep projection.
     /// </summary>
-    /// <param name="span">The output span to write to.</param>
     /// <param name="value">The conditioning value.</param>
-    /// <param name="startIdx">Start index in the span.</param>
     /// <param name="embedDim">Embedding dimension for this value.</param>
-    private void ProjectConditioningValue(Span<T> span, double value, int startIdx, int embedDim)
+    /// <returns>
+    /// [cos(value * f_i), sin(value * f_i)] with f_i = exp(-i * ln(10000) / (embedDim / 2)), zero-padded to an odd
+    /// <paramref name="embedDim"/>: diffusers' <c>Timesteps(addition_time_embed_dim, flip_sin_to_cos=True,
+    /// downscale_freq_shift=0)</c> that SVD's <c>add_time_proj</c> applies to each add_time_id.
+    /// </returns>
+    /// <remarks>
+    /// The phases reach the motion bucket id (up to 255), so they are formed in double and only the features are
+    /// converted to T, as diffusers computes this projection in float32 whatever the model dtype.
+    /// </remarks>
+    internal static Tensor<T> ProjectConditioningValue(double value, int embedDim)
     {
-        // Use sinusoidal embedding similar to timestep embedding
-        // This is then typically passed through linear layers in the actual model
+        var engine = AiDotNetEngine.Current;
         int halfDim = embedDim / 2;
-        double embScale = Math.Log(10000.0) / (halfDim - 1);
+        double exponentStep = -Math.Log(10000.0) / halfDim;
 
-        for (int i = 0; i < halfDim; i++)
-        {
-            double freq = Math.Exp(-i * embScale);
-            double phase = value * freq;
-
-            span[startIdx + i] = NumOps.FromDouble(Math.Sin(phase));
-            span[startIdx + halfDim + i] = NumOps.FromDouble(Math.Cos(phase));
-        }
+        var frequencies = engine.TensorExp(engine.TensorArange<double>(0.0, (halfDim - 0.5) * exponentStep, exponentStep));
+        var phase = engine.TensorMultiplyScalar(frequencies, value);
+        var pieces = new List<Tensor<double>> { engine.TensorCos(phase), engine.TensorSin(phase) };
+        if (embedDim > 2 * halfDim)
+            pieces.Add(new Tensor<double>(new[] { embedDim - 2 * halfDim }));
+        return engine.TensorConcatenate(pieces.ToArray(), 0).Cast<T>();
     }
 
     /// <summary>
@@ -627,7 +623,7 @@ public partial class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
             latents = SchedulerStepVideo(latents, noisePrediction, timestep);
 
             // Blend toward end image latent for later frames (soft guidance)
-            latents = ApplyEndImageGuidance(latents, startLatent, endLatent, timestep, numFrames);
+            latents = ApplyEndImageGuidance(latents, startLatent, endLatent, timestep);
         }
 
         return DecodeVideoLatents(latents);
@@ -636,79 +632,60 @@ public partial class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
     /// <summary>
     /// Applies soft guidance toward end image in latent space.
     /// </summary>
-    private Tensor<T> ApplyEndImageGuidance(
+    /// <remarks>
+    /// Frame f of F is pulled toward the start/end interpolation (1 - p) * start + p * end with
+    /// p = f / (F - 1) (p = 0 for a single frame) by weight 0.1 * (timestep / 1000) * p. Every batch item is
+    /// guided, by its own start/end latent when one is given per item and by the first one otherwise.
+    /// </remarks>
+    internal static Tensor<T> ApplyEndImageGuidance(
         Tensor<T> latents,
         Tensor<T> startLatent,
         Tensor<T> endLatent,
-        int timestep,
-        int numFrames)
+        int timestep)
     {
-        var result = new Tensor<T>(latents._shape);
-        var resultSpan = result.AsWritableSpan();
-        var latentSpan = latents.AsSpan();
-        var startSpan = startLatent.AsSpan();
-        var endSpan = endLatent.AsSpan();
-
-        var latentShape = latents._shape;
-        // Video latent shape: [batch, frames, channels, height, width]
-        var videoChannels = latentShape[2];
-        var videoHeight = latentShape[3];
-        var videoWidth = latentShape[4];
-        var frameSize = videoChannels * videoHeight * videoWidth;
-
-        // Start/end latent shape: [batch, channels, height, width] (4D)
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        // Video latent shape: [batch, frames, channels, height, width]; start/end: [batch, channels, height, width].
+        var shape = latents._shape;
         var startShape = startLatent._shape;
-        var startChannels = startShape[1];
-        var startHeight = startShape[2];
-        var startWidth = startShape[3];
-        var startFrameSize = startChannels * startHeight * startWidth;
+        var endShape = endLatent._shape;
+        bool dimensionsMatch = startShape.Length == 4 && endShape.Length == 4 &&
+                               startShape[1] == shape[2] && startShape[2] == shape[3] && startShape[3] == shape[4] &&
+                               endShape[1] == shape[2] && endShape[2] == shape[3] && endShape[3] == shape[4];
 
-        // Verify spatial dimensions match
-        bool dimensionsMatch = startChannels == videoChannels &&
-                               startHeight == videoHeight &&
-                               startWidth == videoWidth;
+        // Dimension mismatch - use generated latent directly
+        int frames = shape[1];
+        if (!dimensionsMatch || frames == 0)
+            return latents;
 
         // Guidance strength decreases as we progress through denoising
-        var timestepRatio = timestep / 1000.0;
-        var baseGuidanceStrength = 0.1 * timestepRatio; // Stronger guidance early
+        var baseGuidanceStrength = 0.1 * (timestep / 1000.0); // Stronger guidance early
 
-        for (int f = 0; f < numFrames; f++)
-        {
-            // Frame progress determines blend toward end
-            var frameProgress = f / (double)(numFrames - 1);
-            var guidanceWeight = NumOps.FromDouble(baseGuidanceStrength * frameProgress);
-            var oneMinusWeight = NumOps.FromDouble(1.0 - baseGuidanceStrength * frameProgress);
+        // Frame progress determines blend toward end
+        var progress = frames == 1
+            ? new Tensor<T>(new[] { 1 })
+            : engine.TensorMultiplyScalar(engine.TensorArange<T>(0, frames, 1), ops.FromDouble(1.0 / (frames - 1)));
+        var frameProgress = engine.TensorBroadcastTo(progress.Reshape(new[] { 1, frames, 1, 1, 1 }), shape);
 
-            for (int i = 0; i < frameSize; i++)
-            {
-                var latentIdx = f * frameSize + i;
+        var start = BroadcastOverFrames(startLatent, shape);
+        var target = engine.TensorAdd(start,
+            engine.TensorMultiply(frameProgress, engine.TensorSubtract(BroadcastOverFrames(endLatent, shape), start)));
 
-                // If dimensions match, use direct indexing; otherwise fall back to generated latent
-                if (dimensionsMatch && i < startFrameSize)
-                {
-                    var spatialIdx = i;
+        // Soft blend with predicted latent: (1 - w) * x + w * target = x + w * (target - x).
+        var weight = engine.TensorMultiplyScalar(frameProgress, ops.FromDouble(baseGuidanceStrength));
+        return engine.TensorAdd(latents, engine.TensorMultiply(weight, engine.TensorSubtract(target, latents)));
+    }
 
-                    // Blend toward target based on frame position (linear interpolation)
-                    var frameT = NumOps.FromDouble(frameProgress);
-                    var oneMinusFrameT = NumOps.FromDouble(1.0 - frameProgress);
-                    var targetLatent = NumOps.Add(
-                        NumOps.Multiply(oneMinusFrameT, startSpan[spatialIdx]),
-                        NumOps.Multiply(frameT, endSpan[spatialIdx]));
-
-                    // Soft blend with predicted latent
-                    resultSpan[latentIdx] = NumOps.Add(
-                        NumOps.Multiply(oneMinusWeight, latentSpan[latentIdx]),
-                        NumOps.Multiply(guidanceWeight, targetLatent));
-                }
-                else
-                {
-                    // Dimension mismatch - use generated latent directly
-                    resultSpan[latentIdx] = latentSpan[latentIdx];
-                }
-            }
-        }
-
-        return result;
+    /// <summary>
+    /// Broadcasts a [batch, channels, height, width] latent over the frame axis of <paramref name="videoShape"/>,
+    /// using the first item when the batch sizes differ.
+    /// </summary>
+    private static Tensor<T> BroadcastOverFrames(Tensor<T> imageLatent, int[] videoShape)
+    {
+        var engine = AiDotNetEngine.Current;
+        var source = imageLatent._shape[0] == videoShape[0] ? imageLatent : engine.TensorNarrow(imageLatent, 0, 0, 1);
+        var s = source._shape;
+        return engine.TensorBroadcastTo(source.Reshape(new[] { s[0], 1, s[1], s[2], s[3] }), videoShape);
     }
 
     /// <summary>

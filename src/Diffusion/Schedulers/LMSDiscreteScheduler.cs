@@ -62,17 +62,7 @@ public sealed class LMSDiscreteScheduler<T> : NoiseSchedulerBase<T>
 
     private void ComputeSigmas()
     {
-        var timesteps = Timesteps;
-        _sigmas = new Vector<T>(timesteps.Length + 1);
-
-        for (int i = 0; i < timesteps.Length; i++)
-        {
-            T alphaCumprod = AlphasCumulativeProduct[timesteps[i]];
-            T oneMinusAlpha = NumOps.Subtract(NumOps.One, alphaCumprod);
-            _sigmas[i] = NumOps.Sqrt(NumOps.Divide(oneMinusAlpha, alphaCumprod));
-        }
-
-        _sigmas[timesteps.Length] = NumOps.Zero;
+        _sigmas = SchedulerTensorOps.KarrasSigmas(AlphasCumulativeProduct, Timesteps);
     }
 
     /// <summary>
@@ -105,107 +95,45 @@ public sealed class LMSDiscreteScheduler<T> : NoiseSchedulerBase<T>
         }
 
         // Determine the effective order (limited by available history)
-        int effectiveOrder = Math.Min(_order, _derivativeHistory.Count);
+        // (and by the sigmas available before this step, as in diffusers' min(step_index + 1, order))
+        int effectiveOrder = Math.Min(Math.Min(_order, _derivativeHistory.Count), stepIndex + 1);
 
-        // Compute LMS coefficients for the current step
+        // Compute LMS coefficients for the current step (index 0 = newest derivative)
         var coefficients = ComputeLMSCoefficients(stepIndex, effectiveOrder);
 
-        // Apply multi-step update: x_{t-1} = x_t + sum(coeff_i * d_i)
-        var prevSample = new Vector<T>(sample.Length);
-        for (int i = 0; i < sample.Length; i++)
+        // Apply multi-step update: x_{t-1} = x_t + sum(coeff_k * d_{t-k}), newest derivative first
+        var newestFirst = new List<Vector<T>>(effectiveOrder);
+        for (int k = 0; k < effectiveOrder; k++)
         {
-            prevSample[i] = sample[i];
+            newestFirst.Add(_derivativeHistory[_derivativeHistory.Count - 1 - k]);
         }
 
-        for (int i = 0; i < effectiveOrder; i++)
-        {
-            int historyIdx = _derivativeHistory.Count - effectiveOrder + i;
-            var d = _derivativeHistory[historyIdx];
-            prevSample = Engine.Add(prevSample, Engine.Multiply(d, coefficients[i]));
-        }
-
-        return prevSample;
+        return SchedulerTensorOps.AddWeightedSum(sample, coefficients, newestFirst);
     }
 
     /// <summary>
-    /// Computes Adams-Bashforth-style coefficients for the LMS method.
+    /// Computes the linear multistep coefficients for the current step.
     /// </summary>
     /// <remarks>
-    /// The coefficients are computed by integrating Lagrange basis polynomials
-    /// over the interval [sigma_t, sigma_{t-1}] in log-sigma space.
+    /// As in k-diffusion and diffusers (<c>get_lms_coefficient</c>), coefficient k is the integral over
+    /// [sigma_t, sigma_{t+1}] of the Lagrange basis polynomial of node sigma_{t-k} built on the nodes
+    /// sigma_t, sigma_{t-1}, ..., sigma_{t-order+1}. Index 0 belongs to the newest derivative.
     /// </remarks>
-    private T[] ComputeLMSCoefficients(int stepIndex, int order)
+    private Vector<T> ComputeLMSCoefficients(int stepIndex, int order)
     {
         if (_sigmas is null)
             throw new InvalidOperationException("Sigmas not initialized. Call SetTimesteps() before Step().");
 
-        var coefficients = new T[order];
-
         T sigmaNext = _sigmas[stepIndex + 1];
         T sigmaCurrent = _sigmas[stepIndex];
 
-        if (order == 1)
-        {
-            // First-order: just Euler step dt = sigma_next - sigma_current
-            coefficients[0] = NumOps.Subtract(sigmaNext, sigmaCurrent);
-        }
-        else
-        {
-            // Higher-order: compute integrated Lagrange basis polynomials
-            // We use a simplified approximation based on equally-weighted derivatives
-            // scaled by the step size
-            T stepSize = NumOps.Subtract(sigmaNext, sigmaCurrent);
-
-            for (int i = 0; i < order; i++)
-            {
-                // Adams-Bashforth weights for different orders:
-                // Order 2: [3/2, -1/2]
-                // Order 3: [23/12, -16/12, 5/12]
-                // Order 4: [55/24, -59/24, 37/24, -9/24]
-                double weight = GetAdamsBashforthWeight(order, i);
-                coefficients[i] = NumOps.Multiply(stepSize, NumOps.FromDouble(weight));
-            }
-        }
-
-        return coefficients;
+        // Nodes newest first: sigma_t, sigma_{t-1}, ...
+        var oldestFirst = _sigmas.GetSubVector(stepIndex - order + 1, order);
+        var nodes = Engine.TensorFlip(oldestFirst.AsTensor(), new[] { 0 }).ToVector();
+        return SchedulerTensorOps.IntegrateLagrangeBasis(nodes, sigmaCurrent, sigmaNext);
     }
 
-    /// <summary>
-    /// Gets the Adams-Bashforth coefficient for a given order and index.
-    /// </summary>
-    private static double GetAdamsBashforthWeight(int order, int index)
-    {
-        // Adams-Bashforth coefficients (most recent derivative has index 0)
-        // Reversed so that index 0 = oldest derivative in our history array
-        return order switch
-        {
-            1 => 1.0,
-            2 => index switch
-            {
-                0 => -0.5,  // older
-                1 => 1.5,   // newer
-                _ => 0.0
-            },
-            3 => index switch
-            {
-                0 => 5.0 / 12.0,    // oldest
-                1 => -16.0 / 12.0,  // middle
-                2 => 23.0 / 12.0,   // newest
-                _ => 0.0
-            },
-            4 => index switch
-            {
-                0 => -9.0 / 24.0,   // oldest
-                1 => 37.0 / 24.0,   //
-                2 => -59.0 / 24.0,  //
-                3 => 55.0 / 24.0,   // newest
-                _ => 0.0
-            },
-            _ => index == order - 1 ? 1.0 : 0.0
-        };
-    }
-
-    private Vector<T> ConvertToPredOriginal(Vector<T> modelOutput, Vector<T> sample, T sigma, int timestep)
+    internal Vector<T> ConvertToPredOriginal(Vector<T> modelOutput, Vector<T> sample, T sigma, int timestep)
     {
         switch (Config.PredictionType)
         {
@@ -213,12 +141,9 @@ public sealed class LMSDiscreteScheduler<T> : NoiseSchedulerBase<T>
                 return modelOutput;
 
             case DiffusionPredictionType.VPrediction:
-                T alphaCumprod = AlphasCumulativeProduct[timestep];
-                T sqrtAlpha = NumOps.Sqrt(alphaCumprod);
-                T sqrtOneMinusAlpha = NumOps.Sqrt(NumOps.Subtract(NumOps.One, alphaCumprod));
-                var vX0 = Engine.Multiply(sample, sqrtAlpha);
-                var vEps = Engine.Multiply(modelOutput, sqrtOneMinusAlpha);
-                return Engine.Subtract(vX0, vEps);
+                // The sample lives in sigma space (x_t / sqrt(alpha_cumprod)), so as in diffusers
+                // x0 = sample / (sigma^2 + 1) - v * sigma / sqrt(sigma^2 + 1), formed without sigma^2.
+                return SchedulerTensorOps.SigmaSpaceVPredictionToSample(modelOutput, sample, sigma);
 
             default: // Epsilon
                 var scaledNoise = Engine.Multiply(modelOutput, sigma);

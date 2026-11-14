@@ -22921,3 +22921,10 @@ AiDotNet.Enums.MixtureOfExpertsGatingNoise.SoftplusOfRouterLogits = 1 -> AiDotNe
 AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.Entmax15 = 0 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.SoftmaxSigmoid = 1 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
+override AiDotNet.Diffusion.Schedulers.FlowDPMSolverScheduler<T>.SetTimesteps(int inferenceSteps) -> void
+override AiDotNet.Diffusion.Schedulers.PeRFlowScheduler<T>.SetTimesteps(int inferenceSteps) -> void
+override AiDotNet.Diffusion.Schedulers.SASolverScheduler<T>.SetTimesteps(int inferenceSteps) -> void
+AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<T>.PredictNoiseWithAddedTimeEmbedding(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! noisySample, int timestep, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? conditioning, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! addedTimeEmbedding) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Diffusion.ThreeD.MultiViewUNet<T>.PredictNoiseMultiView(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! multiViewInput, int timestep, AiDotNet.Tensors.LinearAlgebra.Tensor<T>![]! viewConditions, AiDotNet.Tensors.LinearAlgebra.Tensor<T>![]! cameraEmbeddings) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+const AiDotNet.Diffusion.ThreeD.CameraEmbedding<T>.CameraDim = 16 -> int
+static AiDotNet.Diffusion.ThreeD.CameraEmbedding<T>.CameraToWorld(double azimuth, double elevation, double radius) -> double[]!
