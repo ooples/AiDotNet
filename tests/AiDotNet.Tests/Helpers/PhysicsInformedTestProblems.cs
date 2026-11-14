@@ -42,19 +42,19 @@ public sealed class TwoScalePoissonProblem<T> : IMultiScalePDE<T>
         => _poisson.ComputeResidual(inputs, outputs, derivatives);
 
     /// <inheritdoc/>
-    public T ComputeScaleResidual(int scaleIndex, T[] inputs, T[] outputs, PDEDerivatives<T> derivatives)
-        => _poisson.ComputeResidual(new Vector<T>(inputs), new Vector<T>(outputs), derivatives);
+    public Tensor<T> ComputeScaleResidual(int scaleIndex, Tensor<T> inputs, Tensor<T> outputs, PDEDerivatives<T> derivatives)
+        => _poisson.ComputeTapeResidual(inputs, outputs, derivatives);
 
     /// <inheritdoc/>
-    public T ComputeScaleCoupling(
+    public Tensor<T> ComputeScaleCoupling(
         int coarseIndex,
         int fineIndex,
-        T[] inputs,
-        T[] coarseOutputs,
-        T[] fineOutputs,
+        Tensor<T> inputs,
+        Tensor<T> coarseOutputs,
+        Tensor<T> fineOutputs,
         PDEDerivatives<T> coarseDerivatives,
         PDEDerivatives<T> fineDerivatives)
-        => NumOps.Zero;
+        => new Tensor<T>(new[] { inputs.Shape[0] });
 
     /// <inheritdoc/>
     public T GetScaleLossWeight(int scaleIndex) => NumOps.One;
@@ -113,7 +113,7 @@ public sealed class PoissonSourceInverseProblem<T> : IInverseProblem<T>
     public IPDESpecification<T> CreateParameterizedPDE(T[] parameters)
     {
         T sourceStrength = parameters[0];
-        return new PoissonEquation<T>(_ => sourceStrength);
+        return new PoissonEquation<T>(points => Tensor<T>.CreateDefault(new[] { points.Shape[0] }, sourceStrength));
     }
 
     private static IReadOnlyList<(T[] location, T[] value)> CreateObservations()
@@ -128,5 +128,30 @@ public sealed class PoissonSourceInverseProblem<T> : IInverseProblem<T>
         }
 
         return observations;
+    }
+}
+
+/// <summary>
+/// Builds PDE derivative tensors from the row-major multi-dimensional arrays the tests write by hand.
+/// </summary>
+public static class PdeTestTensors
+{
+    /// <summary>Copies <paramref name="values"/> into a tensor of the same shape.</summary>
+    public static Tensor<double> From(Array values)
+    {
+        var shape = new int[values.Rank];
+        for (int d = 0; d < shape.Length; d++)
+        {
+            shape[d] = values.GetLength(d);
+        }
+
+        var data = new double[values.Length];
+        int i = 0;
+        foreach (double v in values)
+        {
+            data[i++] = v;
+        }
+
+        return new Tensor<double>(data, shape);
     }
 }

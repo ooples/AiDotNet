@@ -158,13 +158,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
 
         private T[] CreateZeroState()
         {
-            var zeros = new T[_stateDim];
-            for (int i = 0; i < _stateDim; i++)
-            {
-                zeros[i] = NumOps.Zero;
-            }
-
-            return zeros;
+            return Enumerable.Repeat(NumOps.Zero, _stateDim).ToArray();
         }
 
         /// <summary>
@@ -202,18 +196,8 @@ namespace AiDotNet.PhysicsInformed.ScientificML
             Array.Copy(state, input, _stateDim);
             input[_stateDim] = time;
 
-            var inputTensor = new Tensor<T>(new int[] { 1, input.Length });
-            for (int i = 0; i < input.Length; i++)
-            {
-                inputTensor[0, i] = input[i];
-            }
-
-            var output = Forward(inputTensor);
-            T[] learnedPart = new T[_stateDim];
-            for (int i = 0; i < _stateDim; i++)
-            {
-                learnedPart[i] = output[0, i];
-            }
+            var output = Forward(new Tensor<T>(input, new[] { 1, input.Length }));
+            T[] learnedPart = output.ToArray();
 
             // Vectorized: total derivative = known + learned
             var knownVec = new Vector<T>(knownPart);
@@ -225,7 +209,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         /// <summary>
         /// Simulates the UDE forward in time.
         /// </summary>
-        public T[,] Simulate(
+        public Tensor<T> Simulate(
             T[] initialState,
             T tStart,
             T tEnd,
@@ -249,34 +233,41 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                 throw new ArgumentOutOfRangeException(nameof(numSteps), "Number of steps must be positive.");
             }
 
-            T dt = NumOps.Divide(NumOps.Subtract(tEnd, tStart), NumOps.FromDouble(numSteps));
-            T[,] trajectory = new T[numSteps + 1, _stateDim];
+            var times = TimeGrid(tStart, tEnd, numSteps, out T dt);
 
-            for (int i = 0; i < _stateDim; i++)
-            {
-                trajectory[0, i] = initialState[i];
-            }
-
+            var states = new List<T[]>(numSteps + 1) { (T[])initialState.Clone() };
             for (int step = 0; step < numSteps; step++)
             {
-                T[] currentState = new T[_stateDim];
-                for (int i = 0; i < _stateDim; i++)
-                {
-                    currentState[i] = trajectory[step, i];
-                }
-
-                T currentTime = NumOps.Add(tStart, NumOps.Multiply(NumOps.FromDouble(step), dt));
-                T[] nextState = method == OdeIntegrationMethod.RungeKutta4
-                    ? StepRungeKutta4(currentState, currentTime, dt)
-                    : StepEuler(currentState, currentTime, dt);
-
-                for (int i = 0; i < _stateDim; i++)
-                {
-                    trajectory[step + 1, i] = nextState[i];
-                }
+                states.Add(method == OdeIntegrationMethod.RungeKutta4
+                    ? StepRungeKutta4(states[step], times[step], dt)
+                    : StepEuler(states[step], times[step], dt));
             }
 
-            return trajectory;
+            return new Tensor<T>(states.SelectMany(state => state).ToArray(), new[] { numSteps + 1, _stateDim });
+        }
+
+        /// <summary>
+        /// The step start times t_k = t0 + k (t1 - t0) / n, k = 0 .. n - 1, and the step dt.
+        /// </summary>
+        /// <remarks>
+        /// The grid is built in double and rounded to T once. It was arange(k) in T times dt in T: the engine's arange
+        /// rounds each k once, and the product rounds again, so in half precision k = 2049 became 2048 and a time
+        /// landed one half-precision step away from the nearest value of the exact time.
+        /// </remarks>
+        internal static T[] TimeGrid(T tStart, T tEnd, int numSteps, out T dt)
+        {
+            if (numSteps <= 0)
+            {
+                throw new ArgumentOutOfRangeException(nameof(numSteps), "Number of steps must be positive.");
+            }
+
+            var numOps = MathHelper.GetNumericOperations<T>();
+            double start = numOps.ToDouble(tStart);
+            double step = (numOps.ToDouble(tEnd) - start) / numSteps;
+            dt = numOps.FromDouble(step);
+            var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+            var grid = engine.TensorAddScalar(engine.TensorMultiplyScalar(engine.TensorArange<double>(0, numSteps, 1), step), start);
+            return grid.Cast<T>().ToArray();
         }
 
         private T[] StepEuler(T[] state, T time, T dt)
@@ -374,11 +365,14 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                 throw new ArgumentException($"Expected output shape [batch, {_stateDim}].", nameof(expectedOutput));
             }
 
-            SetTrainingMode(true);
+            // The UDE is u' = f_known(u, t) + NN(u, t) (Rackauckas et al. 2020, Eq. 2), so the network fits the
+            // part of the observed derivative the known physics leaves: target - f_known. It was trained on the
+            // full target, so its prediction counted the known dynamics twice.
+            var residualTarget = Engine.TensorSubtract(expectedOutput, BuildKnownDynamicsTensor(input));
             SetTrainingMode(true);
             try
             {
-                TrainWithTape(input, expectedOutput, _optimizer);
+                TrainWithTape(input, residualTarget, _optimizer);
             }
             finally
             {
@@ -438,30 +432,25 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         private Tensor<T> BuildKnownDynamicsTensor(Tensor<T> input)
         {
             int batchSize = input.Shape[0];
-            var known = new Tensor<T>(new int[] { batchSize, _stateDim });
+            int width = _stateDim + 1;
+            var rows = input.ToArray();
+            var known = new T[batchSize * _stateDim];
 
+            // The known physics is a caller delegate over one state, so it is called once per row.
             for (int i = 0; i < batchSize; i++)
             {
                 var state = new T[_stateDim];
-                for (int j = 0; j < _stateDim; j++)
-                {
-                    state[j] = input[i, j];
-                }
-
-                T time = input[i, _stateDim];
-                T[] knownPart = _knownDynamics(state, time);
+                Array.Copy(rows, i * width, state, 0, _stateDim);
+                T[] knownPart = _knownDynamics(state, rows[i * width + _stateDim]);
                 if (knownPart == null || knownPart.Length != _stateDim)
                 {
                     throw new InvalidOperationException("Known dynamics must return a vector matching the state dimension.");
                 }
 
-                for (int j = 0; j < _stateDim; j++)
-                {
-                    known[i, j] = knownPart[j];
-                }
+                Array.Copy(knownPart, 0, known, i * _stateDim, _stateDim);
             }
 
-            return known;
+            return new Tensor<T>(known, new[] { batchSize, _stateDim });
         }
     }
 }

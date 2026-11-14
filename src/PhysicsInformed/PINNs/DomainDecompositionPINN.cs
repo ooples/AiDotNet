@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -107,13 +107,23 @@ public partial class DomainDecompositionPINN<T> : PhysicsInformedNeuralNetwork<T
     private readonly List<PhysicsInformedNeuralNetwork<T>> _subdomainNetworks;
     private readonly List<SubdomainDefinition<T>> _subdomains;
     private readonly List<InterfaceDefinition<T>> _interfaces;
-    private readonly List<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>> _subdomainOptimizers;
 
     // Training configuration
     private readonly double _pdeWeight;
     private readonly double _interfaceWeight;
     private readonly double _interfaceGradientWeight;
     private readonly int _schwarzIterations;
+
+    // Caller-supplied boundary/initial training data for SolveWithDecomposition; not model state.
+    [Scratch]
+    private Tensor<T>? _trainingInputs;
+    [Scratch]
+    private Tensor<T>? _trainingOutputs;
+
+    // The loss terms of the most recent training step, for the training history.
+    private T _lastInterfaceLoss;
+    private T _lastPhysicsLoss;
+    private readonly List<T> _lastSubdomainLosses = new List<T>();
 
     /// <summary>
     /// Creates a Domain Decomposition PINN with specified subdomains.
@@ -124,25 +134,15 @@ public partial class DomainDecompositionPINN<T> : PhysicsInformedNeuralNetwork<T
     /// <param name="subdomains">Subdomain definitions specifying bounds for each region.</param>
     /// <param name="subdomainNetworks">Custom networks for each subdomain (null = create defaults).</param>
     /// <param name="initialCondition">Initial condition (optional).</param>
-    /// <param name="numCollocationPointsPerSubdomain">Collocation points per subdomain.</param>
-    /// <param name="optimizer">Base optimizer (subdomain optimizers derived from this).</param>
-    /// <param name="pdeWeight">Weight for PDE residual loss (default: 1.0).</param>
-    /// <param name="boundaryWeight">Weight for boundary condition loss (default: 1.0).</param>
-    /// <param name="interfaceWeight">Weight for interface continuity loss (default: 10.0).</param>
-    /// <param name="interfaceGradientWeight">Weight for interface gradient matching (default: 1.0).</param>
-    /// <param name="schwarzIterations">Number of Schwarz iterations per epoch (default: 1).</param>
+    /// <param name="optimizer">The optimizer for the joint XPINN objective.</param>
+    /// <param name="options">The loss weights and collocation settings.</param>
     /// <remarks>
     /// For Beginners:
     /// Parameters to tune:
     ///
-    /// - interfaceWeight: Higher values enforce stricter continuity
-    /// - interfaceGradientWeight: Important for smooth global solutions
-    /// - schwarzIterations: More iterations = better coupling but slower
-    ///
-    /// The Schwarz method is an iterative approach where:
-    /// 1. Solve each subdomain with current interface values
-    /// 2. Exchange boundary data between subdomains
-    /// 3. Repeat until convergence
+    /// - InterfaceWeight: the weight W_I on the average-solution continuity term at the interfaces
+    /// - InterfaceGradientWeight: the weight W_IF on the residual-continuity term at the interfaces
+    /// - SchwarzIterations: optimizer steps per SolveWithDecomposition epoch
     /// </remarks>
     public DomainDecompositionPINN(
         NeuralNetworkArchitecture<T> architecture,
@@ -180,6 +180,8 @@ public partial class DomainDecompositionPINN<T> : PhysicsInformedNeuralNetwork<T
     {
         _options = options;
         Options = _options;
+        _lastInterfaceLoss = NumOps.Zero;
+        _lastPhysicsLoss = NumOps.Zero;
 
         if (subdomains == null || subdomains.Count == 0)
         {
@@ -193,7 +195,6 @@ public partial class DomainDecompositionPINN<T> : PhysicsInformedNeuralNetwork<T
         _interfaceGradientWeight = options.InterfaceGradientWeight;
         _schwarzIterations = options.SchwarzIterations;
         _subdomainNetworks = new List<PhysicsInformedNeuralNetwork<T>>();
-        _subdomainOptimizers = new List<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>();
 
         // Create or use provided subdomain networks
         if (subdomainNetworks != null && subdomainNetworks.Count != subdomains.Count)
@@ -239,15 +240,33 @@ public partial class DomainDecompositionPINN<T> : PhysicsInformedNeuralNetwork<T
             }
         }
 
-        // Create optimizers for each subdomain
+        // XPINN enforces each subdomain's residual on points inside that subdomain. The sub-networks sample
+        // the unit cube; map each one's points onto its subdomain's box.
         for (int i = 0; i < _subdomainNetworks.Count; i++)
         {
-            var subOptimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(_subdomainNetworks[i]);
-            _subdomainOptimizers.Add(subOptimizer);
+            var network = _subdomainNetworks[i];
+            network.SetCollocationPoints(MapUnitPointsToBox(network.CollocationPoints, _subdomains[i]));
         }
 
         // Automatically detect interfaces between subdomains
         _interfaces = DetectInterfaces(subdomains);
+    }
+
+    /// <summary>
+    /// Maps points of the unit cube [N, d] onto the subdomain's box: lower + u * (upper - lower).
+    /// </summary>
+    private Tensor<T> MapUnitPointsToBox(Tensor<T> unitPoints, SubdomainDefinition<T> subdomain)
+    {
+        int dims = subdomain.LowerBounds.Length;
+        if (unitPoints.Shape[1] != dims)
+        {
+            throw new ArgumentException(
+                $"Subdomain bounds have {dims} dimensions; the PDE has {unitPoints.Shape[1]}.");
+        }
+
+        var lower = new Tensor<T>(subdomain.LowerBounds, new[] { 1, dims });
+        var width = Engine.TensorSubtract(new Tensor<T>(subdomain.UpperBounds, new[] { 1, dims }), lower);
+        return Engine.TensorAdd(Engine.TensorMultiply(unitPoints, width), lower);
     }
 
     /// <summary>
@@ -278,65 +297,75 @@ public partial class DomainDecompositionPINN<T> : PhysicsInformedNeuralNetwork<T
     }
 
     /// <summary>
-    /// Finds the shared boundary between two subdomains.
+    /// Finds the shared boundary between two subdomains: the first axis along which one box's upper face is the
+    /// other's lower face.
     /// </summary>
-    private T[,]? FindSharedBoundary(SubdomainDefinition<T> sub1, SubdomainDefinition<T> sub2)
+    /// <remarks>
+    /// The faces are compared exactly in T. Subdomain bounds are the caller's own values, so a shared face has
+    /// equal coordinates; the old comparison through double with a 1e-10 tolerance was not meaningful for every T.
+    /// </remarks>
+    private Tensor<T>? FindSharedBoundary(SubdomainDefinition<T> sub1, SubdomainDefinition<T> sub2)
     {
-        // Simple check for 1D and 2D axis-aligned boundaries
-        int inputDim = sub1.LowerBounds.Length;
+        int dims = sub1.LowerBounds.Length;
+        var upper1 = new Tensor<T>(sub1.UpperBounds, new[] { dims });
+        var lower1 = new Tensor<T>(sub1.LowerBounds, new[] { dims });
+        var upper2 = new Tensor<T>(sub2.UpperBounds, new[] { dims });
+        var lower2 = new Tensor<T>(sub2.LowerBounds, new[] { dims });
 
-        for (int dim = 0; dim < inputDim; dim++)
+        var forward = Engine.TensorEquals(upper1, lower2).ToArray();
+        var backward = Engine.TensorEquals(upper2, lower1).ToArray();
+        T zero = NumOps.Zero;
+        int forwardAxis = Array.FindIndex(forward, flag => !NumOps.Equals(flag, zero));
+        int backwardAxis = Array.FindIndex(backward, flag => !NumOps.Equals(flag, zero));
+
+        // The original scan checked both directions axis by axis and took the first axis that matched either.
+        if (forwardAxis >= 0 && (backwardAxis < 0 || forwardAxis <= backwardAxis))
         {
-            // Check if sub1's upper bound touches sub2's lower bound in this dimension
-            double upper1 = NumOps.ToDouble(sub1.UpperBounds[dim]);
-            double lower2 = NumOps.ToDouble(sub2.LowerBounds[dim]);
+            return GenerateBoundaryPoints(sub1.UpperBounds[forwardAxis], forwardAxis, sub1, 100);
+        }
 
-            if (Math.Abs(upper1 - lower2) < 1e-10)
-            {
-                // Found shared boundary in dimension 'dim'
-                return GenerateBoundaryPoints(sub1.UpperBounds[dim], dim, sub1, 100);
-            }
-
-            // Check the reverse
-            double upper2 = NumOps.ToDouble(sub2.UpperBounds[dim]);
-            double lower1 = NumOps.ToDouble(sub1.LowerBounds[dim]);
-
-            if (Math.Abs(upper2 - lower1) < 1e-10)
-            {
-                return GenerateBoundaryPoints(sub1.LowerBounds[dim], dim, sub1, 100);
-            }
+        if (backwardAxis >= 0)
+        {
+            return GenerateBoundaryPoints(sub1.LowerBounds[backwardAxis], backwardAxis, sub1, 100);
         }
 
         return null;
     }
 
     /// <summary>
-    /// Generates points along a shared boundary.
+    /// Generates points on a face of a subdomain: uniform in the box, with one coordinate fixed.
     /// </summary>
-    private T[,] GenerateBoundaryPoints(T fixedValue, int fixedDim, SubdomainDefinition<T> subdomain, int numPoints)
+    private Tensor<T> GenerateBoundaryPoints(T fixedValue, int fixedDim, SubdomainDefinition<T> subdomain, int numPoints)
     {
         int inputDim = subdomain.LowerBounds.Length;
-        var points = new T[numPoints, inputDim];
         var random = RandomHelper.CreateSeededRandom(42);
+        var unit = Engine.TensorRandomUniformRange<T>(new[] { numPoints, inputDim }, NumOps.Zero, NumOps.One, random.Next());
+        var inBox = MapUnitPointsToBox(unit, subdomain);
 
-        for (int i = 0; i < numPoints; i++)
+        // Replace column fixedDim by the face coordinate.
+        var faceAxis = Engine.TensorSlice(Engine.TensorEye<T>(inputDim), new[] { fixedDim, 0 }, new[] { 1, inputDim });
+        var keep = Engine.TensorSubtract(Tensor<T>.CreateDefault(new[] { 1, inputDim }, NumOps.One), faceAxis);
+        return Engine.TensorAdd(
+            Engine.TensorMultiply(inBox, keep),
+            Engine.TensorMultiplyScalar(Engine.TensorTile(faceAxis, new[] { numPoints, 1 }), fixedValue));
+    }
+
+    /// <summary>
+    /// Sets the training data for <see cref="SolveWithDecomposition"/>: boundary, initial and measured values.
+    /// </summary>
+    /// <param name="inputs">Input coordinates [numSamples, inputDim].</param>
+    /// <param name="outputs">Solution values [numSamples, outputDim].</param>
+    public void SetTrainingData(Tensor<T> inputs, Tensor<T> outputs)
+    {
+        Guard.NotNull(inputs);
+        Guard.NotNull(outputs);
+        if (inputs.Shape[0] != outputs.Shape[0])
         {
-            for (int j = 0; j < inputDim; j++)
-            {
-                if (j == fixedDim)
-                {
-                    points[i, j] = fixedValue;
-                }
-                else
-                {
-                    double lower = NumOps.ToDouble(subdomain.LowerBounds[j]);
-                    double upper = NumOps.ToDouble(subdomain.UpperBounds[j]);
-                    points[i, j] = NumOps.FromDouble(lower + random.NextDouble() * (upper - lower));
-                }
-            }
+            throw new ArgumentException("Input and output sample counts must match.");
         }
 
-        return points;
+        _trainingInputs = inputs;
+        _trainingOutputs = outputs;
     }
 
     /// <summary>
@@ -345,124 +374,130 @@ public partial class DomainDecompositionPINN<T> : PhysicsInformedNeuralNetwork<T
     /// <param name="epochs">Total number of training epochs.</param>
     /// <param name="learningRate">Learning rate for optimization.</param>
     /// <param name="verbose">Whether to print progress.</param>
-    /// <param name="batchSize">Batch size for training.</param>
+    /// <param name="batchSize">Unused; every step evaluates all collocation and interface points.</param>
     /// <returns>Domain decomposition training history with per-subdomain metrics.</returns>
+    /// <remarks>
+    /// Each epoch takes <c>SchwarzIterations</c> steps of the joint XPINN objective (see
+    /// <see cref="ComputeTrainingLoss"/>) on the data set with <see cref="SetTrainingData"/>. The sub-networks used
+    /// to be trained one by one on a batch of zero inputs with zero targets, with no interface terms at all.
+    /// </remarks>
     public DomainDecompositionTrainingHistory<T> SolveWithDecomposition(
         int epochs = 10000,
         double learningRate = 0.001,
         bool verbose = true,
         int batchSize = 256)
     {
+        if (_trainingInputs is null || _trainingOutputs is null)
+        {
+            throw new InvalidOperationException(
+                "Training data must be set before training. Call SetTrainingData with the boundary/initial data first.");
+        }
+
         var history = new DomainDecompositionTrainingHistory<T>(_subdomains.Count);
-
-        // Configure optimizers
-        for (int i = 0; i < _subdomainOptimizers.Count; i++)
+        for (int epoch = 0; epoch < epochs; epoch++)
         {
-            var options = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            for (int step = 0; step < _schwarzIterations; step++)
             {
-                InitialLearningRate = learningRate
-            };
-            _subdomainOptimizers[i] = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(_subdomainNetworks[i], options);
-        }
-
-        // Set training mode
-        foreach (var network in _subdomainNetworks)
-        {
-            network.SetTrainingMode(true);
-            foreach (var layer in network.Layers)
-            {
-                layer.SetTrainingMode(true);
+                Train(_trainingInputs, _trainingOutputs);
             }
-        }
 
-        try
-        {
-            for (int epoch = 0; epoch < epochs; epoch++)
+            history.AddEpoch(
+                GetLastLoss(),
+                new List<T>(_lastSubdomainLosses),
+                _lastInterfaceLoss,
+                _lastPhysicsLoss);
+
+            if (verbose && epoch % 100 == 0)
             {
-                var epochMetrics = TrainDecompositionEpoch(batchSize);
-
-                history.AddEpoch(
-                    epochMetrics.TotalLoss,
-                    epochMetrics.SubdomainLosses,
-                    epochMetrics.InterfaceLoss,
-                    epochMetrics.PhysicsLoss);
-
-                if (verbose && epoch % 100 == 0)
-                {
-                    Console.WriteLine(
-                        $"Epoch {epoch}/{epochs}, " +
-                        $"Total: {epochMetrics.TotalLoss}, " +
-                        $"Interface: {epochMetrics.InterfaceLoss}");
-                }
-            }
-        }
-        finally
-        {
-            foreach (var network in _subdomainNetworks)
-            {
-                foreach (var layer in network.Layers)
-                {
-                    layer.SetTrainingMode(false);
-                }
-
-                network.SetTrainingMode(false);
+                Console.WriteLine(
+                    $"Epoch {epoch}/{epochs}, " +
+                    $"Total: {GetLastLoss()}, " +
+                    $"Interface: {_lastInterfaceLoss}");
             }
         }
 
         return history;
     }
 
-    private DecompositionEpochMetrics TrainDecompositionEpoch(int batchSize)
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
+    /// The XPINN objective of Jagtap and Karniadakis (2020), Eq. 3.3, summed over the subdomains q: the data misfit
+    /// of the decomposed solution, the residual MSE_F of each sub-network on its own collocation points, and for
+    /// each interface between q and q+ the average-solution continuity
+    /// W_I * (mean |u_q - {{u}}|^2 + mean |u_q+ - {{u}}|^2), {{u}} = (u_q + u_q+) / 2, and the residual continuity
+    /// W_IF * mean |F_q - F_q+|^2. W_I is InterfaceWeight and W_IF is InterfaceGradientWeight.
+    /// </para>
+    /// </remarks>
+    protected override Tensor<T> ComputeTrainingLoss(Tensor<T> dataInputs, Tensor<T> dataTargets, Tensor<T> collocationPoints)
     {
-        var subdomainLosses = new List<T>();
-        T interfaceLoss = NumOps.Zero;
-        T physicsLoss = NumOps.Zero;
+        var diff = Engine.TensorSubtract(Forward(dataInputs), dataTargets);
+        var loss = MeanOf(Engine.TensorMultiply(diff, diff));
 
-        // Schwarz iterations
-        for (int schwarz = 0; schwarz < _schwarzIterations; schwarz++)
+        _lastSubdomainLosses.Clear();
+        Tensor<T>? physics = null;
+        foreach (var network in _subdomainNetworks)
         {
-            // Train each subdomain using tape-based training
-            for (int i = 0; i < _subdomainNetworks.Count; i++)
-            {
-                var subNetwork = _subdomainNetworks[i];
-                // Train the subdomain network on zero-residual PDE target
-                var subInputs = new Tensor<T>([batchSize, subNetwork.Architecture.InputSize]);
-                var subTargets = new Tensor<T>([batchSize, subNetwork.Architecture.OutputSize]);
-                subNetwork.Train(subInputs, subTargets);
-
-                // Use the network's tracked loss for monitoring
-                T subLoss = subNetwork.GetLastLoss();
-
-                if (schwarz == _schwarzIterations - 1) // Record only final iteration
-                {
-                    subdomainLosses.Add(subLoss);
-                }
-
-                physicsLoss = NumOps.Add(physicsLoss, subLoss);
-            }
-
-            // Enforce interface conditions
+            var residualLoss = network.ComputePdeLossAt(network.CollocationPoints);
+            _lastSubdomainLosses.Add(residualLoss.AsSpan()[0]);
+            physics = physics is null ? residualLoss : Engine.TensorAdd(physics, residualLoss);
         }
 
-        T totalLoss = NumOps.Add(physicsLoss, interfaceLoss);
-
-        return new DecompositionEpochMetrics
+        if (physics is not null)
         {
-            TotalLoss = totalLoss,
-            SubdomainLosses = subdomainLosses,
-            InterfaceLoss = interfaceLoss,
-            PhysicsLoss = physicsLoss
-        };
+            _lastPhysicsLoss = physics.AsSpan()[0];
+            loss = Engine.TensorAdd(loss, physics);
+        }
+
+        T interfaceWeight = NumOps.FromDouble(_interfaceWeight);
+        T interfaceGradientWeight = NumOps.FromDouble(_interfaceGradientWeight);
+        Tensor<T>? interfaceLoss = null;
+        T half = NumOps.FromDouble(0.5);
+        foreach (var iface in _interfaces)
+        {
+            if (iface.SharedBoundary is not { } points)
+            {
+                continue;
+            }
+
+            var first = _subdomainNetworks[iface.Subdomain1Index];
+            var second = _subdomainNetworks[iface.Subdomain2Index];
+            var firstResidual = first.ComputeResidualAt(points, out var firstOutputs);
+            var secondResidual = second.ComputeResidualAt(points, out var secondOutputs);
+
+            var average = Engine.TensorMultiplyScalar(Engine.TensorAdd(firstOutputs, secondOutputs), half);
+            var firstGap = Engine.TensorSubtract(firstOutputs, average);
+            var secondGap = Engine.TensorSubtract(secondOutputs, average);
+            var continuity = Engine.TensorAdd(
+                MeanOf(Engine.TensorMultiply(firstGap, firstGap)),
+                MeanOf(Engine.TensorMultiply(secondGap, secondGap)));
+            var residualGap = Engine.TensorSubtract(firstResidual, secondResidual);
+            var term = Engine.TensorAdd(
+                Engine.TensorMultiplyScalar(continuity, interfaceWeight),
+                Engine.TensorMultiplyScalar(MeanOf(Engine.TensorMultiply(residualGap, residualGap)), interfaceGradientWeight));
+            interfaceLoss = interfaceLoss is null ? term : Engine.TensorAdd(interfaceLoss, term);
+        }
+
+        if (interfaceLoss is not null)
+        {
+            _lastInterfaceLoss = interfaceLoss.AsSpan()[0];
+            loss = Engine.TensorAdd(loss, interfaceLoss);
+        }
+
+        return loss;
     }
+
+    private Tensor<T> MeanOf(Tensor<T> values)
+        => Engine.ReduceMean(values, Enumerable.Range(0, values.Rank).ToArray(), keepDims: false);
 
     /// <summary>
     /// Evaluates the decomposed solution: each row is answered by the network of the subdomain that
     /// contains it (the first match, bounds inclusive), exactly as GetGlobalSolution chooses.
     /// </summary>
     /// <remarks>
-    /// Ownership is a constant 0/1 mask per subdomain, so the evaluation stays on the gradient tape and
-    /// training reaches exactly the network that owns each row. Predict, GetSolution and the PDE residual
-    /// all come through here.
+    /// Ownership is decided with engine comparisons against each subdomain's box and applied with a select, so the
+    /// evaluation stays on the gradient tape and training reaches exactly the network that owns each row. Predict,
+    /// GetSolution and the PDE residual all come through here.
     /// </remarks>
     public override Tensor<T> Forward(Tensor<T> input)
     {
@@ -474,57 +509,55 @@ public partial class DomainDecompositionPINN<T> : PhysicsInformedNeuralNetwork<T
         }
 
         int count = rows.Shape[0];
-        int dimensions = rows.Shape[1];
-        var owners = new int[count];
-        var point = new T[dimensions];
-        for (int r = 0; r < count; r++)
-        {
-            for (int j = 0; j < dimensions; j++)
-            {
-                point[j] = rows[r, j];
-            }
-
-            owners[r] = FindContainingSubdomain(point);
-            if (owners[r] < 0)
-            {
-                throw new ArgumentException($"Point {r} lies outside every subdomain.", nameof(input));
-            }
-        }
-
-        Tensor<T>? solution = null;
-        for (int s = 0; s < _subdomainNetworks.Count; s++)
-        {
-            if (Array.IndexOf(owners, s) < 0)
-            {
-                continue;
-            }
-
-            var output = _subdomainNetworks[s].Forward(rows);
-            int width = output.Shape[output.Shape.Length - 1];
-            var ownership = new Tensor<T>(new[] { count, width });
-            for (int r = 0; r < count; r++)
-            {
-                if (owners[r] != s)
-                {
-                    continue;
-                }
-
-                for (int c = 0; c < width; c++)
-                {
-                    ownership[r, c] = NumOps.One;
-                }
-            }
-
-            var owned = Engine.TensorMultiply(output, ownership);
-            solution = solution is null ? owned : Engine.TensorAdd(solution, owned);
-        }
-
-        if (solution is null)
+        if (count == 0)
         {
             throw new ArgumentException("There are no points to evaluate.", nameof(input));
         }
 
+        // Later subdomains first, so the first containing subdomain is the last select applied and wins.
+        Tensor<T>? solution = null;
+        Tensor<T>? covered = null;
+        for (int s = _subdomainNetworks.Count - 1; s >= 0; s--)
+        {
+            var inside = ContainmentMask(rows, _subdomains[s]);
+            var output = _subdomainNetworks[s].Forward(rows);
+            var owner = Engine.TensorTile(inside, new[] { 1, output.Shape[1] });
+            solution = Engine.TensorWhere(owner, output, solution ?? new Tensor<T>(output.Shape.ToArray()));
+            covered = covered is null ? inside : Engine.TensorMax(covered, inside);
+        }
+
+        if (solution is null || covered is null)
+        {
+            throw new ArgumentException("There are no points to evaluate.", nameof(input));
+        }
+
+        if (NumOps.LessThan(Engine.TensorSum(covered), NumOps.FromDouble(count)))
+        {
+            throw new ArgumentException("A point lies outside every subdomain.", nameof(input));
+        }
+
         return singlePoint ? Engine.Reshape(solution, new[] { solution.Length }) : solution;
+    }
+
+    /// <summary>
+    /// 1 for each row inside the subdomain's box (bounds inclusive), 0 otherwise, as [count, 1].
+    /// </summary>
+    private Tensor<T> ContainmentMask(Tensor<T> rows, SubdomainDefinition<T> subdomain)
+    {
+        int count = rows.Shape[0];
+        int dims = rows.Shape[1];
+        if (subdomain.LowerBounds.Length != dims)
+        {
+            throw new ArgumentException($"Points have {dims} dimensions; the subdomain has {subdomain.LowerBounds.Length}.");
+        }
+
+        var lower = Engine.TensorTile(new Tensor<T>(subdomain.LowerBounds, new[] { 1, dims }), new[] { count, 1 });
+        var upper = Engine.TensorTile(new Tensor<T>(subdomain.UpperBounds, new[] { 1, dims }), new[] { count, 1 });
+        var withinAxis = Engine.TensorMultiply(
+            Engine.TensorGreaterEqual(rows, lower),
+            Engine.TensorLessEqual(rows, upper));
+        var axesInside = Engine.ReduceSum(withinAxis, new[] { 1 }, keepDims: true);
+        return Engine.TensorEquals(axesInside, NumOps.FromDouble(dims));
     }
 
     /// <inheritdoc/>
@@ -539,42 +572,10 @@ public partial class DomainDecompositionPINN<T> : PhysicsInformedNeuralNetwork<T
     /// </summary>
     /// <param name="point">Input coordinates.</param>
     /// <returns>Solution value from the containing subdomain network.</returns>
-    public T[] GetGlobalSolution(T[] point)
+    public Vector<T> GetGlobalSolution(Vector<T> point)
     {
-        int subdomainIndex = FindContainingSubdomain(point);
-        if (subdomainIndex < 0)
-        {
-            throw new ArgumentException("Point is outside all subdomains.");
-        }
-
-        return _subdomainNetworks[subdomainIndex].GetSolution(point);
-    }
-
-    private int FindContainingSubdomain(T[] point)
-    {
-        for (int i = 0; i < _subdomains.Count; i++)
-        {
-            bool inside = true;
-            for (int j = 0; j < point.Length; j++)
-            {
-                double p = NumOps.ToDouble(point[j]);
-                double lower = NumOps.ToDouble(_subdomains[i].LowerBounds[j]);
-                double upper = NumOps.ToDouble(_subdomains[i].UpperBounds[j]);
-
-                if (p < lower || p > upper)
-                {
-                    inside = false;
-                    break;
-                }
-            }
-
-            if (inside)
-            {
-                return i;
-            }
-        }
-
-        return -1;
+        Guard.NotNull(point);
+        return GetSolution(point);
     }
 
     /// <summary>
@@ -606,14 +607,6 @@ public partial class DomainDecompositionPINN<T> : PhysicsInformedNeuralNetwork<T
     /// Gets all interface definitions.
     /// </summary>
     public IReadOnlyList<InterfaceDefinition<T>> Interfaces => _interfaces.AsReadOnly();
-
-    private struct DecompositionEpochMetrics
-    {
-        public T TotalLoss;
-        public List<T> SubdomainLosses;
-        public T InterfaceLoss;
-        public T PhysicsLoss;
-    }
 }
 
 /// <summary>
@@ -682,5 +675,5 @@ public class InterfaceDefinition<T>
     /// <summary>
     /// Points on the shared boundary [numPoints, inputDim].
     /// </summary>
-    public T[,]? SharedBoundary { get; set; }
+    public Tensor<T>? SharedBoundary { get; set; }
 }

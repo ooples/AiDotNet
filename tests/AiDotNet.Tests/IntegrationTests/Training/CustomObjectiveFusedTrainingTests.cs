@@ -1,3 +1,4 @@
+using AiDotNet.Tests.Helpers;
 using System.Linq;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
@@ -160,7 +161,9 @@ public class CustomObjectiveFusedTrainingTests
                 targets[s, q] = Math.Sin(functions[s, 0] + locations[s, q, 0]);
             }
         }
-        model.Train(functions, locations, targets, epochs: 2, learningRate: 0.01, verbose: false);
+        model.Train(
+            PdeTestTensors.From(functions), PdeTestTensors.From(locations), PdeTestTensors.From(targets),
+            epochs: 2, learningRate: 0.01, verbose: false);
     }
 
     private const int MqcnnQuantiles = 3;

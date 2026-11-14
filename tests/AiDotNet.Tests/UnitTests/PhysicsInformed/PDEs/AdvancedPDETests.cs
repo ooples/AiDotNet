@@ -2,6 +2,7 @@ using System;
 using AiDotNet.PhysicsInformed.Interfaces;
 using AiDotNet.PhysicsInformed.PDEs;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tests.Helpers;
 using Xunit;
 using System.Threading.Tasks;
 
@@ -215,8 +216,8 @@ public class AdvancedPDETests
 
         var derivatives = new PDEDerivatives<double>
         {
-            FirstDerivatives = firstDerivatives,
-            SecondDerivatives = secondDerivatives
+            FirstDerivatives = PdeTestTensors.From(firstDerivatives),
+            SecondDerivatives = PdeTestTensors.From(secondDerivatives)
         };
 
         double residual = pde.ComputeResidual(inputs, outputs, derivatives);
@@ -247,8 +248,8 @@ public class AdvancedPDETests
 
         var derivatives = new PDEDerivatives<double>
         {
-            FirstDerivatives = firstDerivatives,
-            SecondDerivatives = secondDerivatives
+            FirstDerivatives = PdeTestTensors.From(firstDerivatives),
+            SecondDerivatives = PdeTestTensors.From(secondDerivatives)
         };
 
         double residual = pde.ComputeResidual(inputs, outputs, derivatives);
@@ -381,8 +382,8 @@ public class AdvancedPDETests
 
         var derivatives = new PDEDerivatives<double>
         {
-            FirstDerivatives = firstDerivatives,
-            SecondDerivatives = secondDerivatives
+            FirstDerivatives = PdeTestTensors.From(firstDerivatives),
+            SecondDerivatives = PdeTestTensors.From(secondDerivatives)
         };
 
         double residual = pde.ComputeResidual(inputs, outputs, derivatives);
@@ -624,8 +625,8 @@ public class AdvancedPDETests
     {
         return new PDEDerivatives<double>
         {
-            FirstDerivatives = firstDerivatives,
-            SecondDerivatives = secondDerivatives
+            FirstDerivatives = PdeTestTensors.From(firstDerivatives),
+            SecondDerivatives = PdeTestTensors.From(secondDerivatives)
         };
     }
 
@@ -638,9 +639,9 @@ public class AdvancedPDETests
     {
         return new PDEDerivatives<double>
         {
-            FirstDerivatives = firstDerivatives,
-            SecondDerivatives = secondDerivatives,
-            ThirdDerivatives = thirdDerivatives
+            FirstDerivatives = PdeTestTensors.From(firstDerivatives),
+            SecondDerivatives = PdeTestTensors.From(secondDerivatives),
+            ThirdDerivatives = PdeTestTensors.From(thirdDerivatives)
         };
     }
 

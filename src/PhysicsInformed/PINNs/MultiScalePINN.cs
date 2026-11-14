@@ -101,7 +101,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
         private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
         private readonly bool _usesDefaultOptimizer;
 
-        private T[,]? _collocationPoints;
+        private Tensor<T> _collocationPoints;
         private readonly int _numCollocationPointsPerScale;
         private T[] _scaleWeights;
         private int _currentActiveScales;
@@ -175,6 +175,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
             _currentActiveScales = _trainingOptions.UseSequentialScaleTraining ? 1 : _multiScalePDE.NumberOfScales;
 
             InitializeLayers();
+            _collocationPoints = new Tensor<T>(new[] { 0, _multiScalePDE.InputDimension });
             GenerateCollocationPoints();
         }
 
@@ -238,18 +239,10 @@ namespace AiDotNet.PhysicsInformed.PINNs
         {
             int inputDim = _multiScalePDE.InputDimension;
             int totalPoints = _numCollocationPointsPerScale * _multiScalePDE.NumberOfScales;
-            _collocationPoints = new T[totalPoints, inputDim];
 
-            var random = RandomHelper.CreateSeededRandom(42);
-
-            for (int i = 0; i < totalPoints; i++)
-            {
-                for (int d = 0; d < inputDim; d++)
-                {
-                    // Generate points in [0, 1]^d
-                    _collocationPoints[i, d] = NumOps.FromDouble(random.NextDouble());
-                }
-            }
+            // Points in [0, 1]^d.
+            _collocationPoints = Engine.TensorRandomUniformRange<T>(
+                new[] { totalPoints, inputDim }, NumOps.Zero, NumOps.One, RandomHelper.CreateSeededRandom(42).Next());
         }
 
         /// <summary>
@@ -440,261 +433,104 @@ namespace AiDotNet.PhysicsInformed.PINNs
         /// </summary>
         private T TrainEpoch()
         {
-            T totalLoss = NumOps.Zero;
-
-            if (_collocationPoints == null)
-            {
-                throw new InvalidOperationException("Collocation points not initialized.");
-            }
-
-            int numPoints = _collocationPoints.GetLength(0);
-            int inputDim = _multiScalePDE.InputDimension;
-
-            // Process collocation points in batches
+            int numPoints = _collocationPoints.Shape[0];
+            int inputDim = _collocationPoints.Shape[1];
             int batchSize = Math.Min(256, numPoints);
+            var losses = new List<T>();
 
             for (int batchStart = 0; batchStart < numPoints; batchStart += batchSize)
             {
                 int actualBatchSize = Math.Min(batchSize, numPoints - batchStart);
+                var batch = Engine.TensorSlice(_collocationPoints, new[] { batchStart, 0 }, new[] { actualBatchSize, inputDim });
 
-                // Create input tensor for this batch
-                var inputTensor = new Tensor<T>(new int[] { actualBatchSize, inputDim });
-                for (int i = 0; i < actualBatchSize; i++)
-                {
-                    for (int d = 0; d < inputDim; d++)
-                    {
-                        inputTensor[i, d] = _collocationPoints[batchStart + i, d];
-                    }
-                }
-
-                // Compute loss for this batch
-                T batchLoss = ComputeMultiScaleLoss(inputTensor);
-                totalLoss = NumOps.Add(totalLoss, batchLoss);
-
-                // Update parameters
-                UpdateAllScaleNetworks();
+                // One tape step on the multi-scale loss: the gradient reaches every active scale network. The
+                // step used to call the optimizer with no backward pass, so no network ever trained.
+                losses.Add(TrainCustomTapeStep(
+                    batch, batch, points => points, (points, _) => ComputeMultiScaleLoss(points), _optimizer));
             }
 
-            // Average over the number of batches actually processed (the last one may be partial).
-            return NumOps.Divide(totalLoss, NumOps.FromDouble(Math.Ceiling((double)numPoints / batchSize)));
+            var lossTensor = Tensor<T>.FromVector(Vector<T>.FromList(losses));
+            return Engine.ReduceMean(lossTensor, new[] { 0 }, keepDims: false).AsSpan()[0];
         }
 
         /// <summary>
-        /// Computes the multi-scale physics-informed loss.
+        /// The multi-scale physics-informed loss at a batch of collocation points: sum_s w_s mean(R_s^2) plus
+        /// the coupling weight times mean(C^2) for each adjacent pair of active scales.
         /// </summary>
-        private T ComputeMultiScaleLoss(Tensor<T> input)
+        /// <remarks>
+        /// Every scale network's input derivatives come from the gradient tape, so the loss is differentiable
+        /// in the network weights; they were central differences of Predict, outside the tape, before.
+        /// </remarks>
+        private Tensor<T> ComputeMultiScaleLoss(Tensor<T> points)
         {
-            T totalLoss = NumOps.Zero;
-            int batchSize = input.Shape[0];
-            int inputDim = _multiScalePDE.InputDimension;
-
-            // Get outputs from all active scales
-            var scaleOutputs = new List<Tensor<T>>();
-            var scaleDerivatives = new List<PDEDerivatives<T>[]>();
-
+            int order = _multiScalePDE is PDEs.PDESpecificationBase<T> spec ? Math.Max(1, spec.DerivativeOrder) : 2;
+            var outputs = new Tensor<T>[_currentActiveScales];
+            var derivatives = new PDEDerivatives<T>[_currentActiveScales];
             for (int scale = 0; scale < _currentActiveScales; scale++)
             {
-                var output = _scaleNetworks[scale].ForwardWithMemory(input);
-                scaleOutputs.Add(output);
-
-                // Compute derivatives for each point in the batch
-                var derivatives = new PDEDerivatives<T>[batchSize];
-                for (int b = 0; b < batchSize; b++)
-                {
-                    derivatives[b] = ComputeDerivativesForPoint(input, b, scale);
-                }
-                scaleDerivatives.Add(derivatives);
+                var network = _scaleNetworks[scale];
+                outputs[scale] = PinnAutodiff<T>.Evaluate(x => RunLayers(network, x), points, order, out derivatives[scale]);
             }
 
-            // Compute scale-specific residual losses
+            Tensor<T>? total = null;
             for (int scale = 0; scale < _currentActiveScales; scale++)
             {
-                T scaleLoss = NumOps.Zero;
-
-                for (int b = 0; b < batchSize; b++)
-                {
-                    var inputPoint = ExtractPoint(input, b);
-                    var outputPoint = ExtractOutputPoint(scaleOutputs[scale], b);
-
-                    T residual = _multiScalePDE.ComputeScaleResidual(
-                        scale, inputPoint, outputPoint, scaleDerivatives[scale][b]);
-
-                    scaleLoss = NumOps.Add(scaleLoss, NumOps.Multiply(residual, residual));
-                }
-
-                // Weight and accumulate
-                totalLoss = NumOps.Add(totalLoss, NumOps.Multiply(_scaleWeights[scale], scaleLoss));
+                var residual = _multiScalePDE.ComputeScaleResidual(scale, points, outputs[scale], derivatives[scale]);
+                var term = Engine.TensorMultiplyScalar(MeanSquare(residual), _scaleWeights[scale]);
+                total = total is null ? term : Engine.TensorAdd(total, term);
             }
 
-            // Compute coupling losses between scales
             T couplingWeight = _trainingOptions.CouplingWeight ?? NumOps.One;
-
             for (int coarse = 0; coarse < _currentActiveScales - 1; coarse++)
             {
                 int fine = coarse + 1;
-
-                for (int b = 0; b < batchSize; b++)
-                {
-                    var inputPoint = ExtractPoint(input, b);
-                    var coarseOutput = ExtractOutputPoint(scaleOutputs[coarse], b);
-                    var fineOutput = ExtractOutputPoint(scaleOutputs[fine], b);
-
-                    T couplingResidual = _multiScalePDE.ComputeScaleCoupling(
-                        coarse, fine, inputPoint,
-                        coarseOutput, fineOutput,
-                        scaleDerivatives[coarse][b], scaleDerivatives[fine][b]);
-
-                    totalLoss = NumOps.Add(totalLoss,
-                        NumOps.Multiply(couplingWeight, NumOps.Multiply(couplingResidual, couplingResidual)));
-                }
+                var coupling = _multiScalePDE.ComputeScaleCoupling(
+                    coarse, fine, points, outputs[coarse], outputs[fine], derivatives[coarse], derivatives[fine]);
+                var term = Engine.TensorMultiplyScalar(MeanSquare(coupling), couplingWeight);
+                total = total is null ? term : Engine.TensorAdd(total, term);
             }
 
-            return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
+            if (total is null)
+            {
+                throw new InvalidOperationException("No scale network is active.");
+            }
+
+            return total;
         }
 
-        /// <summary>
-        /// Computes derivatives for a single point using finite differences.
-        /// </summary>
-        private PDEDerivatives<T> ComputeDerivativesForPoint(Tensor<T> input, int batchIndex, int scaleIndex)
+        private Tensor<T> MeanSquare(Tensor<T> values)
         {
-            int inputDim = _multiScalePDE.InputDimension;
-            int outputDim = _multiScalePDE.GetScaleOutputDimension(scaleIndex);
-            T epsilon = NumOps.FromDouble(1e-5);
-
-            var derivatives = new PDEDerivatives<T>
-            {
-                FirstDerivatives = new T[outputDim, inputDim],
-                SecondDerivatives = new T[outputDim, inputDim, inputDim]
-            };
-
-            // Extract the base point
-            var basePoint = ExtractPoint(input, batchIndex);
-            var baseInput = new Tensor<T>(new int[] { 1, inputDim });
-            for (int d = 0; d < inputDim; d++)
-            {
-                baseInput[0, d] = basePoint[d];
-            }
-
-            var baseOutput = _scaleNetworks[scaleIndex].Predict(baseInput);
-
-            // Compute first and second derivatives using central differences
-            for (int d = 0; d < inputDim; d++)
-            {
-                var plusInput = new Tensor<T>(new int[] { 1, inputDim });
-                var minusInput = new Tensor<T>(new int[] { 1, inputDim });
-
-                for (int i = 0; i < inputDim; i++)
-                {
-                    plusInput[0, i] = basePoint[i];
-                    minusInput[0, i] = basePoint[i];
-                }
-
-                plusInput[0, d] = NumOps.Add(basePoint[d], epsilon);
-                minusInput[0, d] = NumOps.Subtract(basePoint[d], epsilon);
-
-                var plusOutput = _scaleNetworks[scaleIndex].Predict(plusInput);
-                var minusOutput = _scaleNetworks[scaleIndex].Predict(minusInput);
-
-                T twoEpsilon = NumOps.Multiply(NumOps.FromDouble(2.0), epsilon);
-
-                for (int o = 0; o < outputDim; o++)
-                {
-                    // First derivative: (f(x+h) - f(x-h)) / 2h
-                    derivatives.FirstDerivatives[o, d] = NumOps.Divide(
-                        NumOps.Subtract(plusOutput[0, o], minusOutput[0, o]),
-                        twoEpsilon);
-
-                    // Second derivative: (f(x+h) - 2*f(x) + f(x-h)) / h^2
-                    T epsilonSq = NumOps.Multiply(epsilon, epsilon);
-                    derivatives.SecondDerivatives[o, d, d] = NumOps.Divide(
-                        NumOps.Subtract(
-                            NumOps.Add(plusOutput[0, o], minusOutput[0, o]),
-                            NumOps.Multiply(NumOps.FromDouble(2.0), baseOutput[0, o])),
-                        epsilonSq);
-                }
-            }
-
-            return derivatives;
-        }
-
-        /// <summary>
-        /// Updates all scale network parameters.
-        /// </summary>
-        private void UpdateAllScaleNetworks()
-        {
-            for (int scale = 0; scale < _currentActiveScales; scale++)
-            {
-                _optimizer.UpdateParameters(_scaleNetworks[scale].Layers);
-            }
+            return Engine.ReduceMean(Engine.TensorMultiply(values, values), Enumerable.Range(0, values.Rank).ToArray(), keepDims: false);
         }
 
         /// <summary>
         /// Updates scale weights adaptively based on gradient magnitudes.
         /// </summary>
+        /// <remarks>
+        /// Inverse magnitude weighting: w_s = sum_r |g_r| / |g_s|, so scales with larger gradients get smaller
+        /// weights. A scale with a zero gradient keeps weight sum_r |g_r| instead of dividing by a fixed epsilon,
+        /// which underflows to zero in low precision.
+        /// </remarks>
         private void UpdateAdaptiveScaleWeights()
         {
-            // Compute gradient magnitudes for each scale
-            var gradientMagnitudes = new T[_currentActiveScales];
-
+            var squaredNorms = new List<T>(_currentActiveScales);
             for (int scale = 0; scale < _currentActiveScales; scale++)
             {
                 var gradients = _scaleNetworks[scale].GetGradients();
-                T magnitude = NumOps.Zero;
-
-                magnitude = NumOps.Add(magnitude, Engine.DotProduct(gradients, gradients));
-
-                gradientMagnitudes[scale] = NumOps.Sqrt(magnitude);
+                squaredNorms.Add(Engine.DotProduct(gradients, gradients));
             }
 
-            // Normalize weights to balance gradient contributions
-            T totalMagnitude = NumOps.Zero;
-            for (int scale = 0; scale < _currentActiveScales; scale++)
+            var magnitudes = Engine.TensorSqrt(Tensor<T>.FromVector(Vector<T>.FromList(squaredNorms)));
+            T totalMagnitude = Engine.ReduceSum(magnitudes, new[] { 0 }, keepDims: false).AsSpan()[0];
+            if (NumOps.Equals(totalMagnitude, NumOps.Zero))
             {
-                totalMagnitude = NumOps.Add(totalMagnitude, gradientMagnitudes[scale]);
+                return;
             }
 
-            if (!NumOps.Equals(totalMagnitude, NumOps.Zero))
-            {
-                for (int scale = 0; scale < _currentActiveScales; scale++)
-                {
-                    // Inverse magnitude weighting: scales with larger gradients get smaller weights
-                    _scaleWeights[scale] = NumOps.Divide(
-                        totalMagnitude,
-                        NumOps.Add(gradientMagnitudes[scale], NumOps.FromDouble(1e-8)));
-                }
-            }
-        }
-
-        /// <summary>
-        /// Extracts a single point from the input tensor.
-        /// </summary>
-        private T[] ExtractPoint(Tensor<T> input, int batchIndex)
-        {
-            int inputDim = input.Shape[1];
-            var point = new T[inputDim];
-
-            for (int d = 0; d < inputDim; d++)
-            {
-                point[d] = input[batchIndex, d];
-            }
-
-            return point;
-        }
-
-        /// <summary>
-        /// Extracts output values for a single point.
-        /// </summary>
-        private T[] ExtractOutputPoint(Tensor<T> output, int batchIndex)
-        {
-            int outputDim = output.Shape[1];
-            var point = new T[outputDim];
-
-            for (int d = 0; d < outputDim; d++)
-            {
-                point[d] = output[batchIndex, d];
-            }
-
-            return point;
+            var ones = Tensor<T>.CreateDefault(magnitudes.Shape.ToArray(), NumOps.One);
+            var safe = Engine.TensorWhere(Engine.TensorEquals(magnitudes, NumOps.Zero), ones, magnitudes);
+            var weights = Engine.TensorMultiplyScalar(Engine.TensorReciprocal(safe), totalMagnitude).ToArray();
+            Array.Copy(weights, _scaleWeights, weights.Length);
         }
 
         /// <inheritdoc/>

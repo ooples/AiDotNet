@@ -80,7 +80,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                             + "decay interval or endpoint is given, so no schedule is declared, and the "
                             + "optimizer is left unspecified because the paper names none -- its single "
                             + "occurrence of Adam is the acknowledgment of Adam Burrows.")]
-    public partial class LagrangianNeuralNetwork<T> : NeuralNetworkBase<T>
+    public partial class LagrangianNeuralNetwork<T> : NeuralNetworkBase<T>, ITrainingObjectiveProvider<T>
     {
         private readonly LagrangianNeuralNetworkOptions _options;
 
@@ -148,100 +148,149 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         /// <summary>
         /// Computes the Lagrangian L(q, q̇) = T - V.
         /// </summary>
-        public T ComputeLagrangian(T[] q, T[] qDot)
+        public T ComputeLagrangian(Vector<T> q, Vector<T> qDot)
         {
-            ValidateStateVectors(q, qDot);
-
-            T[] state = new T[2 * _configurationDim];
-            Array.Copy(q, 0, state, 0, _configurationDim);
-            Array.Copy(qDot, 0, state, _configurationDim, _configurationDim);
-
-            return ComputeLagrangianFromState(state);
+            return Forward(StateRow(q, qDot)).AsSpan()[0];
         }
 
         /// <summary>
         /// Computes acceleration using Euler-Lagrange equation.
         /// </summary>
-        public T[] ComputeAcceleration(T[] q, T[] qDot)
+        public Vector<T> ComputeAcceleration(Vector<T> q, Vector<T> qDot)
+        {
+            return Accelerations(StateRow(q, qDot)).ToVector();
+        }
+
+        /// <inheritdoc />
+        public TrainingObjectiveKind TrainingObjectiveKind => TrainingObjectiveKind.LagrangianDynamics;
+
+        /// <inheritdoc />
+        Tensor<T> ITrainingObjectiveProvider<T>.ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget)
+        {
+            int count = input.Length / (2 * _configurationDim);
+            if (proposedTarget.Length != count * _configurationDim)
+            {
+                throw new ArgumentException(
+                    $"Lagrangian dynamics targets are the accelerations [batch, {_configurationDim}]; " +
+                    $"got [{string.Join(",", proposedTarget.Shape)}].",
+                    nameof(proposedTarget));
+            }
+
+            return Engine.Reshape(proposedTarget, new[] { count, _configurationDim });
+        }
+
+        /// <inheritdoc />
+        T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
+            => EvaluateTrainingObjective(input, target);
+
+        /// <summary>
+        /// The accelerations q̈ [N, n] the learned Lagrangian implies at states [q, q̇] (Cranmer et al. 2020, Eq. 6).
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// The Euler-Lagrange equation gives q̈ = (∇q̇∇q̇ᵀL)⁻¹ [∇qL - (∇q∇q̇ᵀL) q̇]. The gradient and Hessian of L come
+        /// from the gradient tape, so the accelerations stay differentiable in the weights and training fits them
+        /// to observed accelerations, the paper's objective.
+        /// </para>
+        /// <para>
+        /// The old code asked for first derivatives only, so the Hessian was missing and every call fell back to
+        /// finite differences; it added a fixed 1e-6 to the mass matrix and returned zero acceleration when the
+        /// solve failed.
+        /// </para>
+        /// </remarks>
+        private Tensor<T> Accelerations(Tensor<T> states)
+        {
+            int count = states.Shape[0];
+            int n = _configurationDim;
+            PinnAutodiff<T>.Evaluate(Forward, states, 2, out var derivatives);
+            var first = derivatives.FirstDerivatives
+                ?? throw new InvalidOperationException("The tape produced no input gradient.");
+            var second = derivatives.SecondDerivatives
+                ?? throw new InvalidOperationException("The tape produced no input Hessian.");
+
+            var gradient = Engine.Reshape(first, new[] { count, 2 * n });
+            var hessian = Engine.Reshape(second, new[] { count, 2 * n, 2 * n });
+            var dLdq = Engine.TensorSlice(gradient, new[] { 0, 0 }, new[] { count, n });
+            var mass = Engine.TensorSlice(hessian, new[] { 0, n, n }, new[] { count, n, n });
+            var cross = Engine.TensorSlice(hessian, new[] { 0, n, 0 }, new[] { count, n, n });
+            var qDot = Engine.Reshape(Engine.TensorSlice(states, new[] { 0, n }, new[] { count, n }), new[] { count, n, 1 });
+            var coriolis = Engine.Reshape(Engine.TensorBatchMatMul(cross, qDot), new[] { count, n });
+            return SolveBatched(mass, Engine.TensorSubtract(dLdq, coriolis));
+        }
+
+        /// <summary>
+        /// Solves M x = b for a batch of systems M [N, n, n], b [N, n] by Gauss-Jordan elimination in engine
+        /// operations, so the solution stays on the gradient tape.
+        /// </summary>
+        /// <remarks>
+        /// No pivoting: the mass matrix ∇q̇∇q̇ᵀL of a physical Lagrangian is positive definite, so every pivot is
+        /// positive. A singular mass matrix gives non-finite accelerations rather than a silent zero.
+        /// </remarks>
+        private Tensor<T> SolveBatched(Tensor<T> matrix, Tensor<T> rhs)
+        {
+            int count = matrix.Shape[0];
+            int n = matrix.Shape[1];
+            var rows = new Tensor<T>[n];
+            for (int i = 0; i < n; i++)
+            {
+                var row = Engine.Reshape(Engine.TensorSlice(matrix, new[] { 0, i, 0 }, new[] { count, 1, n }), new[] { count, n });
+                var value = Engine.TensorSlice(rhs, new[] { 0, i }, new[] { count, 1 });
+                rows[i] = Engine.TensorConcatenate(new[] { row, value }, 1);
+            }
+
+            for (int k = 0; k < n; k++)
+            {
+                var pivot = Engine.TensorSlice(rows[k], new[] { 0, k }, new[] { count, 1 });
+                rows[k] = Engine.TensorDivide(rows[k], pivot);
+                for (int i = 0; i < n; i++)
+                {
+                    if (i != k)
+                    {
+                        var factor = Engine.TensorSlice(rows[i], new[] { 0, k }, new[] { count, 1 });
+                        rows[i] = Engine.TensorSubtract(rows[i], Engine.TensorMultiply(factor, rows[k]));
+                    }
+                }
+            }
+
+            var solution = new Tensor<T>[n];
+            for (int i = 0; i < n; i++)
+            {
+                solution[i] = Engine.TensorSlice(rows[i], new[] { 0, n }, new[] { count, 1 });
+            }
+
+            return Engine.TensorConcatenate(solution, 1);
+        }
+
+        /// <inheritdoc/>
+        /// <remarks>
+        /// The accelerations the Lagrangian implies, the quantity Cranmer et al. (2020) fit to data. The public
+        /// inference output remains the scalar Lagrangian.
+        /// </remarks>
+        public override Tensor<T> ForwardForTraining(Tensor<T> input)
+        {
+            int width = 2 * _configurationDim;
+            if (input.Rank < 1 || input.Shape[^1] != width)
+            {
+                throw new ArgumentException(
+                    $"The final input dimension must equal the state dimension {width}; got [{string.Join(",", input.Shape)}].",
+                    nameof(input));
+            }
+
+            return Accelerations(Engine.Reshape(input, new[] { input.Length / width, width }));
+        }
+
+        /// <inheritdoc/>
+        /// <remarks>
+        /// The accelerations differentiate L twice with respect to its inputs inside the step, a nested backward
+        /// the compile-once plan cannot replay; the eager tape re-runs it every step.
+        /// </remarks>
+        protected override bool SupportsFusedCompiledTraining => false;
+
+        private Tensor<T> StateRow(Vector<T> q, Vector<T> qDot)
         {
             ValidateStateVectors(q, qDot);
-
-            T[] state = new T[2 * _configurationDim];
-            Array.Copy(q, 0, state, 0, _configurationDim);
-            Array.Copy(qDot, 0, state, _configurationDim, _configurationDim);
-
-            var derivatives = ComputeDerivativesWithFallback(state);
-            if (derivatives.FirstDerivatives == null || derivatives.SecondDerivatives == null)
-            {
-                throw new InvalidOperationException("Failed to compute derivatives for the Lagrangian.");
-            }
-
-            var gradient = derivatives.FirstDerivatives;
-            var hessian = derivatives.SecondDerivatives;
-
-            T[] dLdq = new T[_configurationDim];
-            for (int i = 0; i < _configurationDim; i++)
-            {
-                dLdq[i] = gradient[0, i];
-            }
-
-            T[,] mass = new T[_configurationDim, _configurationDim];
-            T[,] cross = new T[_configurationDim, _configurationDim];
-            for (int i = 0; i < _configurationDim; i++)
-            {
-                for (int j = 0; j < _configurationDim; j++)
-                {
-                    mass[i, j] = hessian[0, _configurationDim + i, _configurationDim + j];
-                    cross[i, j] = hessian[0, _configurationDim + i, j];
-                }
-            }
-
-            T[] coriolis = new T[_configurationDim];
-            for (int i = 0; i < _configurationDim; i++)
-            {
-                T sum = NumOps.Zero;
-                for (int j = 0; j < _configurationDim; j++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(cross[i, j], qDot[j]));
-                }
-                coriolis[i] = sum;
-            }
-
-            // Vectorized: rhs = dLdq - coriolis
-            var rhsVec = (Vector<T>)Engine.Subtract(new Vector<T>(dLdq), new Vector<T>(coriolis));
-            T[] rhs = rhsVec.ToArray();
-
-            var regularization = NumOps.FromDouble(1e-6);
-            for (int i = 0; i < _configurationDim; i++)
-            {
-                mass[i, i] = NumOps.Add(mass[i, i], regularization);
-            }
-
-            var massMatrix = new Matrix<T>(mass);
-            var rhsVector = new Vector<T>(rhs);
-
-            try
-            {
-                var solver = new LuDecomposition<T>(massMatrix);
-                var solution = solver.Solve(rhsVector);
-                var acceleration = new T[_configurationDim];
-                for (int i = 0; i < _configurationDim; i++)
-                {
-                    acceleration[i] = solution[i];
-                }
-
-                return acceleration;
-            }
-            catch (InvalidOperationException)
-            {
-                var acceleration = new T[_configurationDim];
-                for (int i = 0; i < _configurationDim; i++)
-                {
-                    acceleration[i] = NumOps.Zero;
-                }
-
-                return acceleration;
-            }
+            var state = Vector<T>.Concatenate(q, qDot);
+            return Engine.Reshape(Tensor<T>.FromVector(state), new[] { 1, state.Length });
         }
 
         /// <summary>
@@ -316,7 +365,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         /// </summary>
         public override bool SupportsTraining => true;
 
-        private void ValidateStateVectors(T[] q, T[] qDot)
+        private void ValidateStateVectors(Vector<T> q, Vector<T> qDot)
         {
             if (q == null)
             {
@@ -333,111 +382,5 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                 throw new ArgumentException("q and qDot must match the configuration dimension.");
             }
         }
-
-        private T ComputeLagrangianFromState(T[] state)
-        {
-            var inputTensor = new Tensor<T>(new int[] { 1, state.Length });
-            for (int i = 0; i < state.Length; i++)
-            {
-                inputTensor[0, i] = state[i];
-            }
-
-            var output = Forward(inputTensor);
-            return output[0, 0];
-        }
-
-        private PDEDerivatives<T> ComputeDerivativesWithFallback(T[] state)
-        {
-            try
-            {
-                return NeuralNetworkDerivatives<T>.ComputeDerivatives(this, state, 1);
-            }
-            catch (InvalidOperationException)
-            {
-                return ComputeDerivativesFiniteDifference(state);
-            }
-            catch (NotSupportedException)
-            {
-                return ComputeDerivativesFiniteDifference(state);
-            }
-        }
-
-        private PDEDerivatives<T> ComputeDerivativesFiniteDifference(T[] state)
-        {
-            int dim = state.Length;
-            var derivatives = new PDEDerivatives<T>
-            {
-                FirstDerivatives = new T[1, dim],
-                SecondDerivatives = new T[1, dim, dim]
-            };
-
-            T epsilon = NumOps.FromDouble(1e-5);
-            T twoEpsilon = NumOps.FromDouble(2e-5);
-            T epsSquared = NumOps.Multiply(epsilon, epsilon);
-            T fourEpsSquared = NumOps.Multiply(NumOps.FromDouble(4.0), epsSquared);
-
-            var perturbed = new T[dim];
-            Array.Copy(state, perturbed, dim);
-            T baseValue = ComputeLagrangianFromState(state);
-
-            for (int i = 0; i < dim; i++)
-            {
-                T original = perturbed[i];
-                perturbed[i] = NumOps.Add(original, epsilon);
-                T plus = ComputeLagrangianFromState(perturbed);
-                perturbed[i] = NumOps.Subtract(original, epsilon);
-                T minus = ComputeLagrangianFromState(perturbed);
-                derivatives.FirstDerivatives[0, i] = NumOps.Divide(NumOps.Subtract(plus, minus), twoEpsilon);
-
-                T second = NumOps.Divide(
-                    NumOps.Add(NumOps.Subtract(plus, NumOps.Multiply(NumOps.FromDouble(2.0), baseValue)), minus),
-                    epsSquared);
-                derivatives.SecondDerivatives[0, i, i] = second;
-                perturbed[i] = original;
-            }
-
-            for (int i = 0; i < dim; i++)
-            {
-                for (int j = i + 1; j < dim; j++)
-                {
-                    T originalI = perturbed[i];
-                    T originalJ = perturbed[j];
-
-                    perturbed[i] = NumOps.Add(originalI, epsilon);
-                    perturbed[j] = NumOps.Add(originalJ, epsilon);
-                    T plusPlus = ComputeLagrangianFromState(perturbed);
-
-                    perturbed[j] = NumOps.Subtract(originalJ, epsilon);
-                    T plusMinus = ComputeLagrangianFromState(perturbed);
-
-                    perturbed[i] = NumOps.Subtract(originalI, epsilon);
-                    perturbed[j] = NumOps.Add(originalJ, epsilon);
-                    T minusPlus = ComputeLagrangianFromState(perturbed);
-
-                    perturbed[j] = NumOps.Subtract(originalJ, epsilon);
-                    T minusMinus = ComputeLagrangianFromState(perturbed);
-
-                    T cross = NumOps.Divide(
-                        NumOps.Add(NumOps.Subtract(plusPlus, plusMinus), NumOps.Subtract(minusMinus, minusPlus)),
-                        fourEpsSquared);
-
-                    derivatives.SecondDerivatives[0, i, j] = cross;
-                    derivatives.SecondDerivatives[0, j, i] = cross;
-
-                    perturbed[i] = originalI;
-                    perturbed[j] = originalJ;
-                }
-            }
-
-            return derivatives;
-        }
     }
 }
-
-
-
-
-
-
-
-

@@ -37,16 +37,19 @@ namespace AiDotNet.PhysicsInformed.PDEs
     /// </remarks>
     public class PoissonEquation<T> : PDESpecificationBase<T>, IPDEResidualGradient<T>
     {
-        private readonly Func<T[], T> _sourceFunction;
+        private readonly Func<Tensor<T>, Tensor<T>>? _sourceFunction;
         private readonly int _spatialDimension;
         private readonly bool _isLaplace;
 
         /// <summary>
         /// Initializes a new instance of the Poisson Equation.
         /// </summary>
-        /// <param name="sourceFunction">The source term f(x,y,...). Set to null or return zero for Laplace's equation.</param>
+        /// <param name="sourceFunction">
+        /// The source term f, evaluated for a batch of points: it maps coordinates [N, spatialDimension] to source
+        /// values [N] with engine operations. Null gives Laplace's equation (f = 0).
+        /// </param>
         /// <param name="spatialDimension">The number of spatial dimensions (default 2).</param>
-        public PoissonEquation(Func<T[], T>? sourceFunction = null, int spatialDimension = 2)
+        public PoissonEquation(Func<Tensor<T>, Tensor<T>>? sourceFunction = null, int spatialDimension = 2)
         {
             if (spatialDimension < 1 || spatialDimension > 3)
             {
@@ -54,32 +57,50 @@ namespace AiDotNet.PhysicsInformed.PDEs
             }
 
             _isLaplace = sourceFunction == null;
-            _sourceFunction = sourceFunction ?? (_ => NumOps.Zero);
+            _sourceFunction = sourceFunction;
             _spatialDimension = spatialDimension;
         }
 
         /// <inheritdoc/>
         public override T ComputeResidual(Vector<T> inputs, Vector<T> outputs, PDEDerivatives<T> derivatives)
         {
-            var secondDerivs = derivatives.SecondDerivatives;
-            if (secondDerivs is null)
+            if (derivatives.SecondDerivatives is null)
             {
                 throw new ArgumentException("Poisson equation requires second derivatives.");
             }
 
-            // Compute Laplacian: ∇²u = ∂²u/∂x² + ∂²u/∂y² + ∂²u/∂z²
-            T laplacian = NumOps.Zero;
+            return EvaluatePointResidual(inputs, outputs, derivatives);
+        }
 
-            for (int i = 0; i < _spatialDimension; i++)
+        /// <inheritdoc/>
+        /// <remarks>The residual is laplacian(u) - f.</remarks>
+        public override Tensor<T> ComputeTapeResidual(Tensor<T> inputs, Tensor<T> outputs, PDEDerivatives<T> derivatives)
+        {
+            if (derivatives.SecondDerivatives is null)
             {
-                laplacian = NumOps.Add(laplacian, secondDerivs[0, i, i]); // ∂²u/∂xi²
+                throw new ArgumentException("Poisson equation requires second derivatives.");
             }
 
-            T sourceValue = _sourceFunction(inputs);
+            var engine = TapeEngine;
+            var laplacian = D2(derivatives, 0, 0, 0);
+            for (int i = 1; i < _spatialDimension; i++)
+            {
+                laplacian = engine.TensorAdd(laplacian, D2(derivatives, 0, i, i));
+            }
 
-            // PDE: ∇²u - f = 0
-            T residual = NumOps.Subtract(laplacian, sourceValue);
-            return residual;
+            if (_sourceFunction is null)
+            {
+                return laplacian;
+            }
+
+            var source = _sourceFunction(inputs);
+            if (source.Length != laplacian.Length)
+            {
+                throw new InvalidOperationException(
+                    $"The Poisson source must return one value per point ({laplacian.Length}); got {source.Length}.");
+            }
+
+            return engine.TensorSubtract(laplacian, engine.Reshape(source, laplacian.Shape.ToArray()));
         }
 
         /// <inheritdoc/>
@@ -90,12 +111,10 @@ namespace AiDotNet.PhysicsInformed.PDEs
                 throw new ArgumentException("Poisson equation requires second derivatives.");
             }
 
+            // d(laplacian u)/d(u_ii) = 1 on the diagonal of the Hessian.
             var gradient = CreateGradient();
-            for (int i = 0; i < _spatialDimension; i++)
-            {
-                gradient.SecondDerivatives[0, i, i] = NumOps.One;
-            }
-
+            var identity = TapeEngine.TensorEye<T>(_spatialDimension);
+            identity.AsSpan().CopyTo(gradient.SecondDerivatives.AsWritableSpan());
             return gradient;
         }
 

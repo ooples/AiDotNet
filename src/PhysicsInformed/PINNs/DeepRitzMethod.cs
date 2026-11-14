@@ -1,7 +1,6 @@
 #pragma warning disable CS0649, CS0414, CS0169
 using System;
 using System.IO;
-using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;
@@ -64,8 +63,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
     ///     inputType: InputType.OneDimensional,
     ///     taskType: NeuralNetworkTaskType.Regression,
     ///     inputSize: 2, outputSize: 1);
-    /// Func&lt;float[], float[], float[,], float&gt; energy = (u, x, grad) =&gt; 0.5f;
-    /// var deepRitz = new DeepRitzMethod&lt;float&gt;(architecture, energy);
+    /// var deepRitz = new DeepRitzMethod&lt;float&gt;(architecture, DeepRitzEnergy&lt;float&gt;.Poisson());
     /// </code>
     /// </example>
     [ModelDomain(ModelDomain.Science)]
@@ -84,57 +82,53 @@ namespace AiDotNet.PhysicsInformed.PINNs
     {
         private readonly DeepRitzMethodOptions _options;
 
-        private readonly Func<T[], T[], T[,], T> _energyFunctional;
-        private readonly Func<T[], bool>? _boundaryCheck;
-        private readonly Func<T[], T[]>? _boundaryValue;
+        private readonly Func<Tensor<T>, Tensor<T>, Tensor<T>, Tensor<T>> _energyFunctional;
         private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
         private readonly bool _usesDefaultOptimizer;
-        private T[,]? _quadraturePoints;
-        private T[]? _quadratureWeights;
         private readonly int _numQuadraturePoints;
+        private readonly Random _sampler;
+        private Tensor<T> _quadraturePoints;
 
         /// <summary>
         /// Initializes a new instance of the Deep Ritz Method.
         /// </summary>
         /// <param name="architecture">The neural network architecture.</param>
-        /// <param name="energyFunctional">The energy functional to minimize: E(x, u, ∇u).</param>
-        /// <param name="boundaryCheck">Function to check if a point is on the boundary.</param>
-        /// <param name="boundaryValue">Function returning the boundary value at a point.</param>
+        /// <param name="energyFunctional">
+        /// The energy density E(x, u, grad u) for a batch of points: x [N, d], u [N, out] and grad u [N, out, d] to
+        /// the density [N], with engine operations. <see cref="DeepRitzEnergy{T}"/> has the standard ones.
+        /// </param>
+        /// <param name="options">Quadrature and boundary-penalty settings.</param>
         /// <remarks>
         /// For Beginners:
         /// The energy functional should encode the physics of your problem.
         ///
-        /// Example - Poisson Equation (-∇²u = f):
-        /// Energy: E(u) = ½∫|∇u|² dx - ∫fu dx
-        /// Implementation: energyFunctional = (x, u, grad_u) => 0.5 * ||grad_u||² - f(x) * u
+        /// Example - Poisson Equation (-laplacian u = f):
+        /// Energy: E(u) = 1/2 int |grad u|^2 dx - int f u dx
+        /// Implementation: DeepRitzEnergy&lt;T&gt;.Poisson(f)
         ///
-        /// Example - Linear Elasticity:
-        /// Energy: E(u) = ∫ strain_energy(∇u) dx
-        /// Implementation: energyFunctional = (x, u, grad_u) => compute_strain_energy(grad_u)
-        ///
-        /// The method will integrate this over the domain using quadrature points.
+        /// The energy is integrated over the unit cube [0, 1]^d by Monte Carlo, with a fresh batch of points every
+        /// training step, as in E and Yu (2018). The boundary condition is the penalty
+        /// beta * mean |u - g|^2 on the boundary data passed to <c>Train(boundaryPoints, boundaryValues)</c>.
         /// </remarks>
         public DeepRitzMethod(NeuralNetworkArchitecture<T> architecture,
-            Func<T[], T[], T[,], T> energyFunctional,
-            Func<T[], bool>? boundaryCheck = null,
-            Func<T[], T[]>? boundaryValue = null,
+            Func<Tensor<T>, Tensor<T>, Tensor<T>, Tensor<T>> energyFunctional,
             DeepRitzMethodOptions? options = null)
             : base(architecture, NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), 1.0)
         {
             options ??= new DeepRitzMethodOptions();
+            options.Validate();
             _options = options;
             Options = _options;
 
             Guard.NotNull(energyFunctional);
             _energyFunctional = energyFunctional;
-            _boundaryCheck = boundaryCheck;
-            _boundaryValue = boundaryValue;
             _numQuadraturePoints = options.NumQuadraturePoints;
             _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
             _usesDefaultOptimizer = true;
+            _sampler = RandomHelper.CreateSeededRandom(42);
 
             InitializeLayers();
-            GenerateQuadraturePoints(_numQuadraturePoints, architecture.InputSize);
+            _quadraturePoints = SampleQuadraturePoints();
         }
 
         protected override void InitializeLayers()
@@ -151,147 +145,76 @@ namespace AiDotNet.PhysicsInformed.PINNs
         }
 
         /// <summary>
-        /// Generates quadrature points for numerical integration.
+        /// Draws a fresh Monte Carlo batch of quadrature points in the unit cube [0, 1]^d.
         /// </summary>
         /// <remarks>
         /// For Beginners:
-        /// Numerical integration approximates ∫f(x)dx ≈ Σw_i * f(x_i)
-        /// where x_i are quadrature points and w_i are weights.
-        ///
-        /// This method uses Monte Carlo integration:
-        /// - Randomly sample points in the domain
-        /// - Each point has equal weight = volume / numPoints
-        /// - Simple but effective for high-dimensional problems
-        ///
-        /// Advanced users might want to use:
-        /// - Gauss quadrature (for 1D problems)
-        /// - Sparse grids (for moderate dimensions)
-        /// - Quasi-Monte Carlo (better coverage than random)
+        /// Numerical integration approximates int f(x) dx ~ (1/N) sum f(x_i) for uniform x_i in the unit cube,
+        /// simple and effective in high dimensions. E and Yu (2018) redraw the points at every step, which makes
+        /// training stochastic gradient descent on the true energy rather than on one fixed sample.
         /// </remarks>
-        private void GenerateQuadraturePoints(int numPoints, int dimension)
+        private Tensor<T> SampleQuadraturePoints()
         {
-            _quadraturePoints = new T[numPoints, dimension];
-            _quadratureWeights = new T[numPoints];
-
-            var random = RandomHelper.CreateSeededRandom(42);
-            T weight = NumOps.Divide(NumOps.One, NumOps.FromDouble(numPoints)); // Uniform weights
-
-            for (int i = 0; i < numPoints; i++)
-            {
-                for (int j = 0; j < dimension; j++)
-                {
-                    _quadraturePoints[i, j] = NumOps.FromDouble(random.NextDouble());
-                }
-                _quadratureWeights[i] = weight;
-            }
+            return Engine.TensorRandomUniformRange<T>(
+                new[] { _numQuadraturePoints, Architecture.InputSize }, NumOps.Zero, NumOps.One, _sampler.Next());
         }
 
         /// <summary>
-        /// Computes the total energy functional by integrating over the domain.
+        /// The Monte Carlo estimate of the energy integral (1/N) sum_i E(x_i, u(x_i), grad u(x_i)) at the current
+        /// quadrature points, with grad u taken through the gradient tape.
         /// </summary>
         /// <returns>The total energy value.</returns>
         /// <remarks>
         /// For Beginners:
-        /// This is the key method that computes ∫E(u, ∇u)dx numerically.
-        ///
-        /// Steps:
-        /// 1. For each quadrature point x_i:
-        ///    a) Evaluate u(x_i) using the network
-        ///    b) Compute ∇u(x_i) using automatic differentiation
-        ///    c) Evaluate the energy density E(x_i, u(x_i), ∇u(x_i))
-        /// 2. Sum weighted energies: Total = Σ w_i * E_i
-        /// 3. Add boundary penalty if needed
-        ///
-        /// The gradient of this total energy with respect to network parameters
-        /// tells us how to update the network to minimize energy.
+        /// This is the key quantity the method minimizes: the gradient of this energy with respect to the network
+        /// parameters tells us how to update the network.
         /// </remarks>
         public T ComputeTotalEnergy()
         {
-            if (_quadraturePoints == null || _quadratureWeights == null)
-            {
-                throw new InvalidOperationException("Quadrature points not initialized.");
-            }
-
-            T totalEnergy = NumOps.Zero;
-
-            // Integrate energy over the domain
-            for (int i = 0; i < _quadraturePoints.GetLength(0); i++)
-            {
-                T[] point = new T[_quadraturePoints.GetLength(1)];
-                for (int j = 0; j < point.Length; j++)
-                {
-                    point[j] = _quadraturePoints[i, j];
-                }
-
-                // Skip boundary points if boundary conditions are specified
-                if (_boundaryCheck != null && _boundaryCheck(point))
-                {
-                    continue;
-                }
-
-                // Evaluate network
-                T[] u = EvaluateAtPoint(point);
-
-                // Compute gradient
-                var derivs = NeuralNetworkDerivatives<T>.ComputeDerivatives(
-                    this,
-                    point,
-                    Architecture.OutputSize);
-                T[,] gradU = derivs.FirstDerivatives ?? new T[Architecture.OutputSize, point.Length];
-
-                // Evaluate energy density
-                T energyDensity = _energyFunctional(point, u, gradU);
-
-                // Weighted sum
-                totalEnergy = NumOps.Add(totalEnergy, NumOps.Multiply(_quadratureWeights[i], energyDensity));
-            }
-
-            // Add boundary penalty if needed
-            if (_boundaryCheck != null && _boundaryValue != null)
-            {
-                T boundaryPenalty = ComputeBoundaryPenalty();
-                totalEnergy = NumOps.Add(totalEnergy, boundaryPenalty);
-            }
-
-            return totalEnergy;
+            var energy = ComputeEnergy(_quadraturePoints);
+            return energy.AsSpan()[0];
         }
 
-        /// <summary>
-        /// Computes penalty for violating boundary conditions.
-        /// </summary>
-        private T ComputeBoundaryPenalty()
+        private Tensor<T> ComputeEnergy(Tensor<T> points)
         {
-            if (_quadraturePoints == null || _boundaryCheck == null || _boundaryValue == null)
-            {
-                return NumOps.Zero;
-            }
-
-            T penalty = NumOps.Zero;
-            T penaltyWeight = NumOps.FromDouble(100.0); // Large weight to enforce BC
-
-            for (int i = 0; i < _quadraturePoints.GetLength(0); i++)
-            {
-                T[] point = new T[_quadraturePoints.GetLength(1)];
-                for (int j = 0; j < point.Length; j++)
-                {
-                    point[j] = _quadraturePoints[i, j];
-                }
-
-                if (_boundaryCheck(point))
-                {
-                    T[] u = EvaluateAtPoint(point);
-                    T[] uBC = _boundaryValue(point);
-
-                    for (int k = 0; k < u.Length; k++)
-                    {
-                        T error = NumOps.Subtract(u[k], uBC[k]);
-                        penalty = NumOps.Add(penalty, NumOps.Multiply(penaltyWeight, NumOps.Multiply(error, error)));
-                    }
-                }
-            }
-
-            return penalty;
+            var outputs = PinnAutodiff<T>.Evaluate(Forward, points, 1, out var derivatives);
+            var gradients = derivatives.FirstDerivatives
+                ?? throw new InvalidOperationException("The tape produced no input gradient.");
+            var density = _energyFunctional(points, outputs, gradients);
+            return Engine.ReduceMean(density, Enumerable.Range(0, density.Rank).ToArray(), keepDims: false);
         }
+
+        /// <inheritdoc/>
+        /// <remarks>
+        /// The Deep Ritz loss of E and Yu (2018), Eq. 7: the energy integral at a freshly drawn batch of quadrature
+        /// points plus beta * mean |u - g|^2 on the boundary data <paramref name="input"/>, <paramref name="target"/>.
+        /// beta is <see cref="DeepRitzMethodOptions.BoundaryPenalty"/> (500, the paper's Poisson value).
+        /// </remarks>
+        protected override IReadOnlyList<Training.TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> input, Tensor<T> target)
+        {
+            _quadraturePoints = SampleQuadraturePoints();
+            return new[]
+            {
+                new Training.TrainingObjective<T>(
+                    new[] { input, target, _quadraturePoints },
+                    data =>
+                    {
+                        var diff = Engine.TensorSubtract(Forward(data[0]), data[1]);
+                        var squared = Engine.TensorMultiply(diff, diff);
+                        var boundary = Engine.ReduceMean(squared, Enumerable.Range(0, squared.Rank).ToArray(), keepDims: false);
+                        return Engine.TensorAdd(
+                            ComputeEnergy(data[2]),
+                            Engine.TensorMultiplyScalar(boundary, NumOps.FromDouble(_options.BoundaryPenalty)));
+                    })
+            };
+        }
+
+        /// <inheritdoc/>
+        /// <remarks>
+        /// The energy differentiates the network with respect to its inputs inside the step, a nested backward the
+        /// compile-once plan cannot replay; the eager tape re-runs it every step.
+        /// </remarks>
+        protected override bool SupportsFusedCompiledTraining => false;
 
         /// <summary>
         /// Performs a forward pass through the network.
@@ -309,119 +232,13 @@ namespace AiDotNet.PhysicsInformed.PINNs
             return output;
         }
 
-        private Tensor<T> BuildEvaluationTensor(T[,] basePoints, int start, int count, T step)
-        {
-            int inputDim = basePoints.GetLength(1);
-            int evalPerBase = 1 + (2 * inputDim);
-            var tensor = new Tensor<T>(new int[] { count * evalPerBase, inputDim });
-
-            int row = 0;
-            for (int b = 0; b < count; b++)
-            {
-                int baseRow = start + b;
-                CopyPoint(basePoints, baseRow, tensor, row++);
-
-                for (int dim = 0; dim < inputDim; dim++)
-                {
-                    CopyPoint(basePoints, baseRow, tensor, row);
-                    tensor[row, dim] = NumOps.Add(tensor[row, dim], step);
-                    row++;
-
-                    CopyPoint(basePoints, baseRow, tensor, row);
-                    tensor[row, dim] = NumOps.Subtract(tensor[row, dim], step);
-                    row++;
-                }
-            }
-
-            return tensor;
-        }
-
-        private static void CopyPoint(T[,] source, int sourceRow, Tensor<T> target, int targetRow)
-        {
-            int inputDim = source.GetLength(1);
-            for (int dim = 0; dim < inputDim; dim++)
-            {
-                target[targetRow, dim] = source[sourceRow, dim];
-            }
-        }
-
-        private (T Energy, T[] OutputGradients, T[,] GradientGradients) ComputeEnergyGradient(
-            T[] point,
-            T[] outputs,
-            T[,] gradients)
-        {
-            int outputDim = outputs.Length;
-            int inputDim = gradients.GetLength(1);
-
-            var outputGradients = new T[outputDim];
-            var gradientGradients = new T[outputDim, inputDim];
-
-            T energy = _energyFunctional(point, outputs, gradients);
-            T eps = NumOps.FromDouble(1e-4);
-            T invTwoEps = NumOps.Divide(NumOps.One, NumOps.Multiply(NumOps.FromDouble(2.0), eps));
-
-            var outputsCopy = new T[outputDim];
-            Array.Copy(outputs, outputsCopy, outputDim);
-
-            var gradientsCopy = new T[outputDim, inputDim];
-            Array.Copy(gradients, gradientsCopy, gradients.Length);
-
-            for (int outIdx = 0; outIdx < outputDim; outIdx++)
-            {
-                T original = outputsCopy[outIdx];
-                outputsCopy[outIdx] = NumOps.Add(original, eps);
-                T plus = _energyFunctional(point, outputsCopy, gradientsCopy);
-                outputsCopy[outIdx] = NumOps.Subtract(original, eps);
-                T minus = _energyFunctional(point, outputsCopy, gradientsCopy);
-                outputsCopy[outIdx] = original;
-
-                outputGradients[outIdx] = NumOps.Multiply(NumOps.Subtract(plus, minus), invTwoEps);
-            }
-
-            for (int outIdx = 0; outIdx < outputDim; outIdx++)
-            {
-                for (int dim = 0; dim < inputDim; dim++)
-                {
-                    T original = gradientsCopy[outIdx, dim];
-                    gradientsCopy[outIdx, dim] = NumOps.Add(original, eps);
-                    T plus = _energyFunctional(point, outputsCopy, gradientsCopy);
-                    gradientsCopy[outIdx, dim] = NumOps.Subtract(original, eps);
-                    T minus = _energyFunctional(point, outputsCopy, gradientsCopy);
-                    gradientsCopy[outIdx, dim] = original;
-
-                    gradientGradients[outIdx, dim] = NumOps.Multiply(NumOps.Subtract(plus, minus), invTwoEps);
-                }
-            }
-
-            return (energy, outputGradients, gradientGradients);
-        }
-
-        private T[] EvaluateAtPoint(T[] inputs)
-        {
-            var inputTensor = new Tensor<T>(new int[] { 1, inputs.Length });
-            for (int i = 0; i < inputs.Length; i++)
-            {
-                inputTensor[0, i] = inputs[i];
-            }
-
-            var outputTensor = Forward(inputTensor);
-
-            T[] result = new T[outputTensor.Shape[1]];
-            for (int i = 0; i < result.Length; i++)
-            {
-                result[i] = outputTensor[0, i];
-            }
-
-            return result;
-        }
-
-
         /// <summary>
         /// Gets the solution at a specific point.
         /// </summary>
-        public T[] GetSolution(T[] point)
+        public Vector<T> GetSolution(Vector<T> point)
         {
-            return EvaluateAtPoint(point);
+            Guard.NotNull(point);
+            return Forward(Engine.Reshape(Tensor<T>.FromVector(point), new[] { 1, point.Length })).ToVector();
         }
 
         /// <summary>
@@ -459,7 +276,7 @@ namespace AiDotNet.PhysicsInformed.PINNs
                     { "InputSize", Architecture.InputSize },
                     { "OutputSize", Architecture.OutputSize },
                     { "QuadraturePoints", _numQuadraturePoints },
-                    { "HasBoundaryConditions", _boundaryCheck != null && _boundaryValue != null },
+                    { "BoundaryPenalty", _options.BoundaryPenalty },
                     { "ParameterCount", GetParameterCount() }
                 },
                 ModelDataProvider = () => Serialize()

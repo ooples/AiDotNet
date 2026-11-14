@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.PhysicsInformed.Interfaces
 {
@@ -65,23 +66,28 @@ namespace AiDotNet.PhysicsInformed.Interfaces
         /// Computes the PDE residual at a specific scale.
         /// </summary>
         /// <param name="scaleIndex">The index of the scale (0 = coarsest, increasing = finer).</param>
-        /// <param name="inputs">The spatial and temporal coordinates.</param>
-        /// <param name="outputs">The predicted solution values at this scale.</param>
-        /// <param name="derivatives">The derivatives of the solution at this scale.</param>
-        /// <returns>The PDE residual at this scale.</returns>
-        T ComputeScaleResidual(int scaleIndex, T[] inputs, T[] outputs, PDEDerivatives<T> derivatives);
+        /// <param name="inputs">The coordinates of a batch of points [N, inputDim].</param>
+        /// <param name="outputs">The predicted solution values at this scale [N, outputDim].</param>
+        /// <param name="derivatives">The batched derivatives of the solution at this scale (first [N, out, in],
+        /// second [N, out, in, in]).</param>
+        /// <returns>The PDE residual at this scale, one value per point [N].</returns>
+        /// <remarks>
+        /// Built from engine operations on the batched tensors, so the residual stays on the gradient tape and
+        /// MultiScalePINN can train its scale networks on it.
+        /// </remarks>
+        Tensor<T> ComputeScaleResidual(int scaleIndex, Tensor<T> inputs, Tensor<T> outputs, PDEDerivatives<T> derivatives);
 
         /// <summary>
         /// Computes the coupling term between two scales.
         /// </summary>
         /// <param name="coarseIndex">Index of the coarser scale.</param>
         /// <param name="fineIndex">Index of the finer scale.</param>
-        /// <param name="inputs">The coordinates.</param>
-        /// <param name="coarseOutputs">Solution at the coarse scale.</param>
-        /// <param name="fineOutputs">Solution at the fine scale.</param>
-        /// <param name="coarseDerivatives">Derivatives at the coarse scale.</param>
-        /// <param name="fineDerivatives">Derivatives at the fine scale.</param>
-        /// <returns>The coupling residual (should be zero when scales are properly coupled).</returns>
+        /// <param name="inputs">The coordinates of a batch of points [N, inputDim].</param>
+        /// <param name="coarseOutputs">Solution at the coarse scale [N, outputDim].</param>
+        /// <param name="fineOutputs">Solution at the fine scale [N, outputDim].</param>
+        /// <param name="coarseDerivatives">Batched derivatives at the coarse scale.</param>
+        /// <param name="fineDerivatives">Batched derivatives at the fine scale.</param>
+        /// <returns>The coupling residual per point [N] (should be zero when scales are properly coupled).</returns>
         /// <remarks>
         /// For Beginners:
         /// Coupling terms ensure consistency between scales.
@@ -93,12 +99,12 @@ namespace AiDotNet.PhysicsInformed.Interfaces
         /// - Upscaling: Average fine-scale solution matches coarse-scale solution
         /// - Downscaling: Fine-scale boundary conditions come from coarse-scale solution
         /// </remarks>
-        T ComputeScaleCoupling(
+        Tensor<T> ComputeScaleCoupling(
             int coarseIndex,
             int fineIndex,
-            T[] inputs,
-            T[] coarseOutputs,
-            T[] fineOutputs,
+            Tensor<T> inputs,
+            Tensor<T> coarseOutputs,
+            Tensor<T> fineOutputs,
             PDEDerivatives<T> coarseDerivatives,
             PDEDerivatives<T> fineDerivatives);
 

@@ -75,6 +75,18 @@ namespace AiDotNet.PhysicsInformed.PDEs
         }
 
         /// <inheritdoc/>
+        /// <remarks>The residual V_t + 1/2 sigma^2 S^2 V_SS + r S V_S - r V.</remarks>
+        public override Tensor<T> ComputeTapeResidual(Tensor<T> inputs, Tensor<T> outputs, PDEDerivatives<T> derivatives)
+        {
+            var e = TapeEngine;
+            var s = Coordinate(inputs, 0);
+            var gamma = e.TensorMultiplyScalar(e.TensorMultiply(e.TensorMultiply(s, s), D2(derivatives, 0, 0, 0)), _halfVolSquared);
+            var delta = e.TensorMultiplyScalar(e.TensorMultiply(s, D1(derivatives, 0, 0)), _riskFreeRate);
+            var discount = e.TensorMultiplyScalar(Output(outputs, 0), _riskFreeRate);
+            return e.TensorSubtract(e.TensorAdd(e.TensorAdd(D1(derivatives, 0, 1), gamma), delta), discount);
+        }
+
+        /// <inheritdoc/>
         public override T ComputeResidual(Vector<T> inputs, Vector<T> outputs, PDEDerivatives<T> derivatives)
         {
             ValidateSecondDerivatives(derivatives);

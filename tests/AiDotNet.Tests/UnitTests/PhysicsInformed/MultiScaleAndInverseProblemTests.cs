@@ -8,6 +8,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.PhysicsInformed.Interfaces;
 using AiDotNet.PhysicsInformed.PINNs;
 using AiDotNet.PhysicsInformed.Options;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 using Moq;
 using Xunit;
@@ -52,13 +53,13 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
         {
             // Arrange
             var multiScalePDE = new TwoScaleHeatEquation(coarseDiffusivity: 1.0, fineDiffusivity: 0.01);
-            var inputs = new double[] { 0.5, 0.1 }; // x=0.5, t=0.1
-            var outputs = new double[] { 1.0 }; // Temperature = 1.0
-            var derivatives = CreateSimpleDerivatives(1, 2);
+            var inputs = new Tensor<double>(new double[] { 0.5, 0.1 }, new[] { 1, 2 }); // x=0.5, t=0.1
+            var outputs = new Tensor<double>(new double[] { 1.0 }, new[] { 1, 1 }); // Temperature = 1.0
+            var derivatives = CreateBatchedDerivatives(1, 1, 2);
 
             // Act
-            double coarseResidual = multiScalePDE.ComputeScaleResidual(0, inputs, outputs, derivatives);
-            double fineResidual = multiScalePDE.ComputeScaleResidual(1, inputs, outputs, derivatives);
+            double coarseResidual = multiScalePDE.ComputeScaleResidual(0, inputs, outputs, derivatives).ToArray()[0];
+            double fineResidual = multiScalePDE.ComputeScaleResidual(1, inputs, outputs, derivatives).ToArray()[0];
 
             // Assert
             Assert.True(!double.IsNaN(coarseResidual) && !double.IsInfinity(coarseResidual), "Coarse scale residual should be finite");
@@ -70,15 +71,15 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
         {
             // Arrange
             var multiScalePDE = new TwoScaleHeatEquation(coarseDiffusivity: 1.0, fineDiffusivity: 0.01);
-            var inputs = new double[] { 0.5, 0.1 };
-            var coarseOutputs = new double[] { 1.0 };
-            var fineOutputs = new double[] { 0.1 };
-            var coarseDerivatives = CreateSimpleDerivatives(1, 2);
-            var fineDerivatives = CreateSimpleDerivatives(1, 2);
+            var inputs = new Tensor<double>(new double[] { 0.5, 0.1 }, new[] { 1, 2 });
+            var coarseOutputs = new Tensor<double>(new double[] { 1.0 }, new[] { 1, 1 });
+            var fineOutputs = new Tensor<double>(new double[] { 0.1 }, new[] { 1, 1 });
+            var coarseDerivatives = CreateBatchedDerivatives(1, 1, 2);
+            var fineDerivatives = CreateBatchedDerivatives(1, 1, 2);
 
             // Act
             double couplingResidual = multiScalePDE.ComputeScaleCoupling(
-                0, 1, inputs, coarseOutputs, fineOutputs, coarseDerivatives, fineDerivatives);
+                0, 1, inputs, coarseOutputs, fineOutputs, coarseDerivatives, fineDerivatives).ToArray()[0];
 
             // Assert
             Assert.True(!double.IsNaN(couplingResidual) && !double.IsInfinity(couplingResidual), "Coupling residual should be finite");
@@ -389,12 +390,21 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
 
         #region Helper Methods and Test Classes
 
+        private static PDEDerivatives<double> CreateBatchedDerivatives(int points, int outputDim, int inputDim)
+        {
+            return new PDEDerivatives<double>
+            {
+                FirstDerivatives = new Tensor<double>(new[] { points, outputDim, inputDim }),
+                SecondDerivatives = new Tensor<double>(new[] { points, outputDim, inputDim, inputDim })
+            };
+        }
+
         private PDEDerivatives<double> CreateSimpleDerivatives(int outputDim, int inputDim)
         {
             return new PDEDerivatives<double>
             {
-                FirstDerivatives = new double[outputDim, inputDim],
-                SecondDerivatives = new double[outputDim, inputDim, inputDim]
+                FirstDerivatives = new Tensor<double>(new[] { outputDim, inputDim }),
+                SecondDerivatives = new Tensor<double>(new[] { outputDim, inputDim, inputDim })
             };
         }
 
@@ -420,39 +430,47 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
 
             public double ComputeResidual(Vector<double> inputs, Vector<double> outputs, PDEDerivatives<double> derivatives)
             {
-                // Combined residual (coarse + fine)
-                var inputsArr = inputs.ToArray();
-                var outputsArr = outputs.ToArray();
-                double coarse = ComputeScaleResidual(0, inputsArr, outputsArr, derivatives);
-                double fine = ComputeScaleResidual(1, inputsArr, outputsArr, derivatives);
-                return coarse + fine;
-            }
-
-            public double ComputeScaleResidual(int scaleIndex, double[] inputs, double[] outputs, PDEDerivatives<double> derivatives)
-            {
+                // Combined residual (coarse + fine) at one point: derivatives are [out, in] and [out, in, in].
                 if (derivatives.FirstDerivatives == null || derivatives.SecondDerivatives == null)
                 {
                     return 0.0;
                 }
 
-                double diffusivity = scaleIndex == 0 ? _coarseDiffusivity : _fineDiffusivity;
-
-                // Heat equation: ∂u/∂t = k * ∂²u/∂x²
                 double dudt = derivatives.FirstDerivatives[0, 1];
                 double d2udx2 = derivatives.SecondDerivatives[0, 0, 0];
-
-                return dudt - diffusivity * d2udx2;
+                return (dudt - _coarseDiffusivity * d2udx2) + (dudt - _fineDiffusivity * d2udx2);
             }
 
-            public double ComputeScaleCoupling(
+            public Tensor<double> ComputeScaleResidual(
+                int scaleIndex, Tensor<double> inputs, Tensor<double> outputs, PDEDerivatives<double> derivatives)
+            {
+                var engine = AiDotNetEngine.Current;
+                if (derivatives.FirstDerivatives == null || derivatives.SecondDerivatives == null)
+                {
+                    return new Tensor<double>(new[] { inputs.Shape[0] });
+                }
+
+                double diffusivity = scaleIndex == 0 ? _coarseDiffusivity : _fineDiffusivity;
+
+                // Heat equation: du/dt = k * d2u/dx2, per point from [N, out, in] and [N, out, in, in].
+                var dudt = engine.TensorSelect(engine.TensorSelect(derivatives.FirstDerivatives, 1, 0), 1, 1);
+                var d2udx2 = engine.TensorSelect(engine.TensorSelect(engine.TensorSelect(
+                    derivatives.SecondDerivatives, 1, 0), 1, 0), 1, 0);
+
+                return engine.TensorSubtract(dudt, engine.TensorMultiplyScalar(d2udx2, diffusivity));
+            }
+
+            public Tensor<double> ComputeScaleCoupling(
                 int coarseIndex, int fineIndex,
-                double[] inputs,
-                double[] coarseOutputs, double[] fineOutputs,
+                Tensor<double> inputs,
+                Tensor<double> coarseOutputs, Tensor<double> fineOutputs,
                 PDEDerivatives<double> coarseDerivatives, PDEDerivatives<double> fineDerivatives)
             {
                 // Coupling: fine scale average should match coarse scale
                 // For simplicity, just return difference in outputs
-                return Math.Abs(coarseOutputs[0] - fineOutputs[0]);
+                var engine = AiDotNetEngine.Current;
+                return engine.TensorAbs(engine.TensorSubtract(
+                    engine.TensorSelect(coarseOutputs, 1, 0), engine.TensorSelect(fineOutputs, 1, 0)));
             }
 
             public double GetScaleLossWeight(int scaleIndex)

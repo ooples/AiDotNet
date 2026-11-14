@@ -201,10 +201,11 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
         protected override void InitializeLayers()
         {
-            // Lifting layer: embed input to higher dimension
+            // Lifting layer P: a pointwise linear map to the channel width, without an activation, as in Li et al.
+            // (2021), Sec. 4 (fc0 in the reference code). It applied GELU.
             var liftLayer = new NeuralNetworks.Layers.DenseLayer<T>(
                 _width,
-                new GELUActivation<T>() as IActivationFunction<T>);
+                new IdentityActivation<T>() as IActivationFunction<T>);
             Layers.Add(liftLayer);
 
             // Projection layer will be added after Fourier layers
@@ -217,13 +218,19 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         {
             for (int i = 0; i < numLayers; i++)
             {
-                var fourierLayer = new FourierLayer<T>(_width, _modes, _spatialDimensions);
+                // The last Fourier layer has no activation (Li et al. 2021, Eq. 2: sigma acts between layers).
+                IActivationFunction<T>? activation = i == numLayers - 1 ? new IdentityActivation<T>() : null;
+                var fourierLayer = new FourierLayer<T>(_width, _modes, _spatialDimensions, activation);
                 _fourierLayers.Add(fourierLayer);
                 // Also register in base Layers so TrainWithTape discovers their parameters
                 Layers.Add(fourierLayer);
             }
 
-            // Projection layer: map back to output dimension
+            // Projection Q: two pointwise layers, width -> 128 with GELU, then 128 -> output (fc1, fc2 in the
+            // reference code). It was a single dense layer.
+            Layers.Add(new NeuralNetworks.Layers.DenseLayer<T>(
+                ProjectionHiddenWidth,
+                new GELUActivation<T>() as IActivationFunction<T>));
             var projectLayer = new NeuralNetworks.Layers.DenseLayer<T>(
                 Architecture.OutputSize,
                 NeuralNetworkHelper<T>.GetDefaultActivationFunction(Architecture.TaskType));
@@ -285,9 +292,10 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             }
 
             var liftLayer = Layers[0] as NeuralNetworks.Layers.DenseLayer<T>;
+            var hiddenLayer = Layers[Layers.Count - 2] as NeuralNetworks.Layers.DenseLayer<T>;
             var projectLayer = Layers[Layers.Count - 1] as NeuralNetworks.Layers.DenseLayer<T>;
 
-            if (liftLayer == null || projectLayer == null)
+            if (liftLayer == null || hiddenLayer == null || projectLayer == null)
             {
                 throw new InvalidOperationException("FourierNeuralOperator expects DenseLayer lift and projection layers.");
             }
@@ -299,6 +307,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                 x = fourierLayer.Forward(x);
             }
 
+            x = ApplyPointwiseDense(x, hiddenLayer);
             x = ApplyPointwiseDense(x, projectLayer);
 
             return x;
@@ -366,17 +375,14 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             {
                 for (int epoch = 0; epoch < epochs; epoch++)
                 {
-                    T totalLoss = NumOps.Zero;
-
+                    var losses = new List<T>(inputFunctions.Length);
                     for (int i = 0; i < inputFunctions.Length; i++)
                     {
                         Train(inputFunctions[i], outputFunctions[i]);
-                        totalLoss = NumOps.Add(totalLoss, LastLoss ?? NumOps.Zero);
+                        losses.Add(LastLoss ?? NumOps.Zero);
                     }
 
-                    T avgLoss = inputFunctions.Length > 0
-                        ? NumOps.Divide(totalLoss, NumOps.FromDouble(inputFunctions.Length))
-                        : NumOps.Zero;
+                    T avgLoss = MeanOf(losses);
 
                     history.AddEpoch(avgLoss);
                     if (epoch % 10 == 0)
@@ -401,41 +407,20 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             return history;
         }
 
-        private T ComputeAverageLoss(Tensor<T>[] inputFunctions, Tensor<T>[] outputFunctions)
+        /// <summary>
+        /// The hidden width of the two-layer projection Q (128 in Li et al. 2021's reference code).
+        /// </summary>
+        private const int ProjectionHiddenWidth = 128;
+
+        private T MeanOf(List<T> values)
         {
-            T totalLoss = NumOps.Zero;
-
-            for (int i = 0; i < inputFunctions.Length; i++)
+            if (values.Count == 0)
             {
-                Tensor<T> prediction = Forward(inputFunctions[i]);
-                T loss = ComputeMSE(prediction, outputFunctions[i]);
-                totalLoss = NumOps.Add(totalLoss, loss);
+                return NumOps.Zero;
             }
 
-            return inputFunctions.Length > 0
-                ? NumOps.Divide(totalLoss, NumOps.FromDouble(inputFunctions.Length))
-                : NumOps.Zero;
-        }
-
-        private T ComputeMSE(Tensor<T> prediction, Tensor<T> target)
-        {
-            if (!prediction._shape.SequenceEqual(target._shape))
-            {
-                throw new ArgumentException("Prediction and target shapes must match.");
-            }
-
-            T sumSquaredError = NumOps.Zero;
-            int count = prediction.Length;
-
-            for (int i = 0; i < prediction.Length; i++)
-            {
-                T error = NumOps.Subtract(prediction[i], target[i]);
-                sumSquaredError = NumOps.Add(sumSquaredError, NumOps.Multiply(error, error));
-            }
-
-            return count > 0
-                ? NumOps.Divide(sumSquaredError, NumOps.FromDouble(count))
-                : NumOps.Zero;
+            var tensor = Tensor<T>.FromVector(Vector<T>.FromList(values));
+            return Engine.ReduceMean(tensor, new[] { 0 }, keepDims: false).AsSpan()[0];
         }
 
         private void ValidateInputShape(Tensor<T> input)
@@ -546,21 +531,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         /// <inheritdoc />
         public override Vector<T> GetGradients()
         {
-            var gradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-            int index = 0;
-
-            foreach (var layer in Layers)
-            {
-                var layerGradients = layer.GetParameterGradients();
-                for (int i = 0; i < layerGradients.Length; i++)
-                {
-                    gradients[index + i] = layerGradients[i];
-                }
-
-                index += layerGradients.Length;
-            }
-
-            return gradients;
+            return Vector<T>.Concatenate(Layers.Select(layer => layer.GetParameterGradients()).ToArray());
         }
 
         private void ClearGradients()
@@ -776,6 +747,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         private readonly int _modes;
         private readonly int[] _spatialDimensions;
         private readonly int[] _modeSizes;
+        private readonly int _cornerCount;
         private readonly IActivationFunction<T> _activation;
 
         // Split-complex spectral weights stored as two real tensors so they participate directly in the gradient
@@ -805,10 +777,17 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             _width = width;
             _modes = modes;
             _spatialDimensions = spatialDimensions.ToArray();
-            _modeSizes = _spatialDimensions.Select(dim => Math.Min(_modes, dim)).ToArray();
+            // The last axis keeps the non-negative frequencies 0 .. n/2 of a real FFT (rfft in Li et al. 2021), so
+            // at most n/2 + 1 modes; the other axes keep the lowest modes at each end.
+            _modeSizes = _spatialDimensions
+                .Select((dim, axis) => Math.Min(_modes, axis == _spatialDimensions.Length - 1 ? dim / 2 + 1 : dim))
+                .ToArray();
             _activation = activation ?? new GELUActivation<T>();
 
-            var spectralShape = new[] { _width, _width }.Concat(_modeSizes).ToArray();
+            // One weight block per mode corner, [corner, C_out, C_in, m_1, ..., m_N], as the reference code keeps
+            // weights1 and weights2 for the two corners of a 2D spectrum (Li et al. 2021).
+            _cornerCount = 1 << (_spatialDimensions.Length - 1);
+            var spectralShape = new[] { _cornerCount, _width, _width }.Concat(_modeSizes).ToArray();
             _spectralWeightsReal = new Tensor<T>(spectralShape);
             _spectralWeightsImag = new Tensor<T>(spectralShape);
             _pointwiseWeights = new Tensor<T>(new[] { _width, _width });
@@ -879,38 +858,22 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
         private void InitializeSpectralWeights()
         {
+            // scale * U[0, 1) with scale = 1 / (C_in C_out), as the reference code initializes its complex weights
+            // (torch.rand). It drew U[-1, 1) / C.
             var random = RandomHelper.CreateSeededRandom(42);
-            double scale = 1.0 / Math.Max(1, _width);
-            T scaleValue = _numOps.FromDouble(scale);
-
-            var realSpan = _spectralWeightsReal.Data.Span;
-            var imagSpan = _spectralWeightsImag.Data.Span;
-            for (int i = 0; i < realSpan.Length; i++)
-            {
-                realSpan[i] = _numOps.Multiply(_numOps.FromDouble(random.NextDouble() * 2.0 - 1.0), scaleValue);
-                imagSpan[i] = _numOps.Multiply(_numOps.FromDouble(random.NextDouble() * 2.0 - 1.0), scaleValue);
-            }
+            T scale = _numOps.FromDouble(1.0 / Math.Max(1, _width * _width));
+            var shape = _spectralWeightsReal.Shape.ToArray();
+            Engine.TensorRandomUniformRange<T>(shape, _numOps.Zero, scale, random.Next()).AsSpan().CopyTo(_spectralWeightsReal.AsWritableSpan());
+            Engine.TensorRandomUniformRange<T>(shape, _numOps.Zero, scale, random.Next()).AsSpan().CopyTo(_spectralWeightsImag.AsWritableSpan());
         }
 
         private void InitializePointwiseWeights()
         {
             var random = RandomHelper.CreateSeededRandom(1337);
-            double scale = 1.0 / Math.Max(1, _width);
-            T scaleValue = _numOps.FromDouble(scale);
-
-            var weightsSpan = _pointwiseWeights.Data.Span;
-            for (int i = 0; i < weightsSpan.Length; i++)
-            {
-                weightsSpan[i] = _numOps.Multiply(
-                    _numOps.FromDouble(random.NextDouble() * 2.0 - 1.0),
-                    scaleValue);
-            }
-
-            var biasSpan = _pointwiseBias.Data.Span;
-            for (int i = 0; i < biasSpan.Length; i++)
-            {
-                biasSpan[i] = _numOps.Zero;
-            }
+            T scale = _numOps.FromDouble(1.0 / Math.Max(1, _width));
+            Engine.TensorRandomUniformRange<T>(_pointwiseWeights.Shape.ToArray(), _numOps.Negate(scale), scale, random.Next())
+                .AsSpan().CopyTo(_pointwiseWeights.AsWritableSpan());
+            _pointwiseBias.AsWritableSpan().Clear();
         }
 
 
@@ -1020,7 +983,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                 var permShape = rePerm._shape;
                 var reFlat = Engine.Reshape(rePerm, new[] { rows, n });
                 var imFlat = Engine.Reshape(imPerm, new[] { rows, n });
-                var (cos, sin) = DftBasis(n);
+                var (cos, sin, invN) = DftBasis(n);
 
                 var reC = Engine.TensorMatMul(reFlat, cos);
                 var imC = Engine.TensorMatMul(imFlat, cos);
@@ -1029,7 +992,6 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                 Tensor<T> newRe, newIm;
                 if (inverse)
                 {
-                    var invN = _numOps.FromDouble(1.0 / n);
                     newRe = Engine.TensorMultiplyScalar(Engine.TensorSubtract(reC, imS), invN);
                     newIm = Engine.TensorMultiplyScalar(Engine.TensorAdd(imC, reS), invN);
                 }
@@ -1046,34 +1008,38 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             return (re, im);
         }
 
-        // The cosine and sine DFT bases for a length, [N, N], built once per length.
+        // The cosine and sine DFT bases for a length, [N, N], and the inverse scale 1 / N, built once per length.
         [Scratch]
-        private readonly Dictionary<int, (Tensor<T> Cos, Tensor<T> Sin)> _dftBases = new();
+        private readonly Dictionary<int, (Tensor<T> Cos, Tensor<T> Sin, T InvN)> _dftBases = new();
 
-        private (Tensor<T> Cos, Tensor<T> Sin) DftBasis(int n)
+        private (Tensor<T> Cos, Tensor<T> Sin, T InvN) DftBasis(int n)
         {
             if (_dftBases.TryGetValue(n, out var cached))
                 return cached;
-            var cos = new Tensor<T>(new[] { n, n });
-            var sin = new Tensor<T>(new[] { n, n });
+            // The angles in double, with r*k reduced mod N first so they stay small and exact for long axes; one
+            // conversion to T per basis.
+            var cosValues = new double[n * n];
+            var sinValues = new double[n * n];
             for (int r = 0; r < n; r++)
             {
                 for (int k = 0; k < n; k++)
                 {
-                    // Reduce n*k mod N first so the angle stays small and exact for long axes.
                     double angle = 2.0 * Math.PI * ((long)r * k % n) / n;
-                    cos[r, k] = _numOps.FromDouble(Math.Cos(angle));
-                    sin[r, k] = _numOps.FromDouble(Math.Sin(angle));
+                    cosValues[r * n + k] = Math.Cos(angle);
+                    sinValues[r * n + k] = Math.Sin(angle);
                 }
             }
-            var basis = (cos, sin);
+
+            var cos = new Tensor<double>(cosValues, new[] { n, n }).Cast<T>();
+            var sin = new Tensor<double>(sinValues, new[] { n, n }).Cast<T>();
+            var basis = (cos, sin, _numOps.FromDouble(1.0 / n));
             _dftBases[n] = basis;
             return basis;
         }
 
         /// <summary>
         /// Tape-tracked spectral convolution for any spatial rank: the separable DFT of <see cref="ApplySeparableFft"/>
-        /// over each spatial axis, then the <c>2^N</c> mode corners, each sliced out, multiplied by the compact
+        /// over each spatial axis, then the <c>2^(N-1)</c> mode corners, each sliced out, multiplied by its own compact
         /// complex weights (four real matmuls) and scattered back into a zero-filled output spectrum.
         /// </summary>
         private Tensor<T> ApplySpectralConvolutionNDTape(Tensor<T> input)
@@ -1099,11 +1065,18 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             outSpecRe.Fill(_numOps.Zero);
             outSpecIm.Fill(_numOps.Zero);
 
-            // 2^nSpatial mode corners. For each corner a bit i chooses the low
-            // frequencies [0..modes-1] on axis i when 0 or the high frequencies
-            // [dim-modes..dim-1] when 1. This mirrors the legacy BuildModeIndices
-            // behavior exactly — it keeps both positive and negative frequencies.
-            int cornerCount = 1 << nSpatial;
+            // The mode corners of Li et al. (2021): the last axis keeps the non-negative frequencies of a real FFT,
+            // the others the lowest modes at each end, so 2^(nSpatial-1) corners. Keeping both ends of the last
+            // axis too and reading the real part of the inverse made the -k block the conjugate partner of the +k
+            // block with the same weights, so the real part kept only Re(W): the imaginary weights, the phase
+            // shifts, had no effect.
+            // Each corner has its own weights (weights1, weights2 in the reference code); one shared tensor tied
+            // R(k1, k2) to R(k1 - m1, k2).
+            int cornerCount = _cornerCount;
+            var hermitian = HermitianWeights(spatialShape[nSpatial - 1], modeShape[nSpatial - 1], nSpatial);
+            var weightStart = new int[rank + 1];
+            var weightSize = new[] { 1, _width, _width }.Concat(modeShape).ToArray();
+            var blockShape = new[] { _width, _width }.Concat(modeShape).ToArray();
             for (int corner = 0; corner < cornerCount; corner++)
             {
                 int[] sliceStart = new int[rank];
@@ -1118,7 +1091,9 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                 {
                     bool useHigh = ((corner >> d) & 1) == 1;
                     int start = useHigh ? spatialShape[d] - modeShape[d] : 0;
-                    if (start < 0 || start + modeShape[d] > spatialShape[d])
+
+                    // With every frequency of the axis kept, the high block is the low block again.
+                    if (start < 0 || start + modeShape[d] > spatialShape[d] || (useHigh && start == 0))
                     {
                         validCorner = false;
                         break;
@@ -1133,13 +1108,17 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                 var inBlockRe = Engine.TensorSlice(specRe, sliceStart, sliceSize);
                 var inBlockIm = Engine.TensorSlice(specIm, sliceStart, sliceSize);
 
-                var arWr = PerLocationMatMulND(inBlockRe, _spectralWeightsReal, batchSize, _width, _width, modeShape);
-                var aiWi = PerLocationMatMulND(inBlockIm, _spectralWeightsImag, batchSize, _width, _width, modeShape);
-                var arWi = PerLocationMatMulND(inBlockRe, _spectralWeightsImag, batchSize, _width, _width, modeShape);
-                var aiWr = PerLocationMatMulND(inBlockIm, _spectralWeightsReal, batchSize, _width, _width, modeShape);
+                weightStart[0] = corner;
+                var cornerReal = Engine.Reshape(Engine.TensorSlice(_spectralWeightsReal, weightStart, weightSize), blockShape);
+                var cornerImag = Engine.Reshape(Engine.TensorSlice(_spectralWeightsImag, weightStart, weightSize), blockShape);
 
-                var outBlockRe = Engine.TensorSubtract(arWr, aiWi);
-                var outBlockIm = Engine.TensorAdd(arWi, aiWr);
+                var arWr = PerLocationMatMulND(inBlockRe, cornerReal, batchSize, _width, _width, modeShape);
+                var aiWi = PerLocationMatMulND(inBlockIm, cornerImag, batchSize, _width, _width, modeShape);
+                var arWi = PerLocationMatMulND(inBlockRe, cornerImag, batchSize, _width, _width, modeShape);
+                var aiWr = PerLocationMatMulND(inBlockIm, cornerReal, batchSize, _width, _width, modeShape);
+
+                var outBlockRe = Engine.TensorMultiply(Engine.TensorSubtract(arWr, aiWi), hermitian);
+                var outBlockIm = Engine.TensorMultiply(Engine.TensorAdd(arWi, aiWr), hermitian);
 
                 outSpecRe = Engine.TensorSetSlice(outSpecRe, outBlockRe, sliceStart);
                 outSpecIm = Engine.TensorSetSlice(outSpecIm, outBlockIm, sliceStart);
@@ -1147,6 +1126,36 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
             var (spatialRe, _) = ApplySeparableFft(outSpecRe, outSpecIm, inverse: true);
             return spatialRe;
+        }
+
+        /// <summary>
+        /// The irfft weights along the last axis, shaped to broadcast over a mode block: 1 for the DC term and the
+        /// Nyquist term of an even length, 2 for every other kept frequency, whose negative partner the half
+        /// spectrum leaves out. Re(ifft) of the half spectrum times these is irfft of it.
+        /// </summary>
+        /// <remarks>
+        /// The DC and Nyquist positions are integer indices set directly. A frequency ramp in T compared with n / 2
+        /// is not exact in half precision above 2048, where it flagged a neighbour of the Nyquist index as well.
+        /// </remarks>
+        internal static Tensor<T> HermitianWeights(int length, int modes, int nSpatial)
+        {
+            if (modes < 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(modes), "At least one mode must be kept.");
+            }
+
+            var numOps = MathHelper.GetNumericOperations<T>();
+            var weights = Tensor<T>.CreateDefault(new[] { modes }, numOps.FromDouble(2.0));
+            weights[0] = numOps.One;
+            int nyquist = length / 2;
+            if (length % 2 == 0 && nyquist < modes)
+            {
+                weights[nyquist] = numOps.One;
+            }
+
+            var shape = Enumerable.Repeat(1, nSpatial + 2).ToArray();
+            shape[nSpatial + 1] = modes;
+            return AiDotNet.Tensors.Engines.AiDotNetEngine.Current.Reshape(weights, shape);
         }
 
         /// <summary>
