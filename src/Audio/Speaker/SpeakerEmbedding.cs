@@ -32,42 +32,40 @@ public class SpeakerEmbedding<T>
     /// <summary>
     /// Computes cosine similarity with another embedding.
     /// </summary>
+    /// <remarks>
+    /// Only the common prefix of the two vectors is compared (the shorter length). The norms are reduced in
+    /// double (<c>TensorNorm</c>), so squares that overflow <typeparamref name="T"/> (above 65504 in Half,
+    /// above 3.4e38 in float) do not turn the score into NaN; a norm product below 1e-10 returns zero. The
+    /// dot product is taken between the unit vectors, which keeps it inside [-1, 1].
+    /// </remarks>
     public double CosineSimilarity(SpeakerEmbedding<T> other)
     {
-        double dot = 0;
-        double norm1 = 0;
-        double norm2 = 0;
-
         int len = Math.Min(Vector.Length, other.Vector.Length);
-        for (int i = 0; i < len; i++)
+        var a = AiDotNet.Tensors.LinearAlgebra.Vector<T>.Wrap(Vector, 0, len);
+        var b = AiDotNet.Tensors.LinearAlgebra.Vector<T>.Wrap(other.Vector, 0, len);
+        var engine = AiDotNetEngine.Current;
+
+        T normA = engine.TensorNorm(a.AsTensor()).GetFlat(0);
+        T normB = engine.TensorNorm(b.AsTensor()).GetFlat(0);
+        double denominator = NumOps.ToDouble(normA) * NumOps.ToDouble(normB);
+        if (!(denominator >= 1e-10))
         {
-            double v1 = NumOps.ToDouble(Vector[i]);
-            double v2 = NumOps.ToDouble(other.Vector[i]);
-            dot += v1 * v2;
-            norm1 += v1 * v1;
-            norm2 += v2 * v2;
+            return 0.0;
         }
 
-        double denominator = Math.Sqrt(norm1 * norm2);
-        if (denominator < 1e-10) return 0;
-
-        return dot / denominator;
+        return NumOps.ToDouble(engine.DotProduct(engine.Divide(a, normA), engine.Divide(b, normB)));
     }
 
     /// <summary>
     /// Computes Euclidean distance from another embedding.
     /// </summary>
+    /// <remarks>Only the common prefix of the two vectors is compared (the shorter length). The squared
+    /// differences are summed in double (<c>TensorNorm</c>), so they cannot overflow <typeparamref name="T"/>.</remarks>
     public double EuclideanDistance(SpeakerEmbedding<T> other)
     {
-        double sumSquared = 0;
         int len = Math.Min(Vector.Length, other.Vector.Length);
-
-        for (int i = 0; i < len; i++)
-        {
-            double diff = NumOps.ToDouble(Vector[i]) - NumOps.ToDouble(other.Vector[i]);
-            sumSquared += diff * diff;
-        }
-
-        return Math.Sqrt(sumSquared);
+        var engine = AiDotNetEngine.Current;
+        var diff = engine.Subtract(AiDotNet.Tensors.LinearAlgebra.Vector<T>.Wrap(Vector, 0, len), AiDotNet.Tensors.LinearAlgebra.Vector<T>.Wrap(other.Vector, 0, len));
+        return NumOps.ToDouble(engine.TensorNorm(diff.AsTensor()).GetFlat(0));
     }
 }

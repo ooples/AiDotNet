@@ -427,7 +427,7 @@ public class InMemoryFederatedTrainerInternalHelperTests
         Assert.True(dittoState.ContainsKey(5));
         Assert.Equal(trained[5], dittoReturned[5], precision: 12);
 
-        // PFedMe updates theta via repeated meta updates.
+        // PFedMe uploads the local model w unchanged; the personalized model was stored by its own client update.
         var pFedMeState = new Dictionary<int, Vector<double>>();
         var pFedMeUpdated = InvokePrivateInstance<Vector<double>>(
             trainer,
@@ -439,8 +439,9 @@ public class InMemoryFederatedTrainerInternalHelperTests
             trained,
             personalizedIndices,
             pFedMeState);
-        Assert.True(pFedMeState.ContainsKey(9));
+        Assert.Empty(pFedMeState);
         Assert.Equal(trained[0], pFedMeUpdated[0], precision: 12);
+        Assert.Equal(trained[5], pFedMeUpdated[5], precision: 12);
     }
 
     private static InMemoryFederatedTrainer<double, Matrix<double>, Vector<double>> CreateTrainer()

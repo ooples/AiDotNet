@@ -212,9 +212,16 @@ public class AsyncFedEDTrainer<T> : Infrastructure.FederatedLearningComponentBas
         var result = new Dictionary<string, T[]>();
         var template = clientUpdates.Values.First();
 
+        // Per-client weights in T, converted once per client (not per element).
+        var weightsT = new Dictionary<int, T>();
+        foreach (var (clientId, w) in weights)
+        {
+            weightsT[clientId] = NumOps.FromDouble(w);
+        }
+
         foreach (var (layerName, layerParams) in template)
         {
-            var merged = new double[layerParams.Length];
+            Tensor<T>? merged = null;
             double layerWeight = 0;
 
             foreach (var (clientId, update) in clientUpdates)
@@ -227,23 +234,15 @@ public class AsyncFedEDTrainer<T> : Infrastructure.FederatedLearningComponentBas
                             $"Client {clientId} layer '{layerName}' length {clientLayer.Length} differs from expected {layerParams.Length}.");
                     }
 
-                    double w = weights[clientId];
-                    layerWeight += w;
-
-                    for (int i = 0; i < clientLayer.Length; i++)
-                    {
-                        merged[i] += w * NumOps.ToDouble(clientLayer[i]);
-                    }
+                    layerWeight += weights[clientId];
+                    var term = Engine.TensorMultiplyScalar(new Tensor<T>(clientLayer, [clientLayer.Length]), weightsT[clientId]);
+                    merged = merged is null ? term : Engine.TensorAdd(merged, term);
                 }
             }
 
-            var mergedT = new T[layerParams.Length];
-            for (int i = 0; i < mergedT.Length; i++)
-            {
-                mergedT[i] = NumOps.FromDouble(layerWeight > 0 ? merged[i] / layerWeight : 0);
-            }
-
-            result[layerName] = mergedT;
+            result[layerName] = layerWeight > 0 && merged is not null
+                ? Engine.TensorDivideScalar(merged, NumOps.FromDouble(layerWeight)).ToArray()
+                : new Tensor<T>([layerParams.Length]).ToArray();
         }
 
         return result;

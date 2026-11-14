@@ -80,18 +80,17 @@ public abstract partial class SpeakerRecognitionBase<T> : AudioNeuralNetworkBase
             throw new ArgumentException("Embeddings must have the same dimension.");
         }
 
-        T dotProduct = Engine.DotProduct(embedding1, embedding2);
-        T norm1 = Engine.DotProduct(embedding1, embedding1);
-        T norm2 = Engine.DotProduct(embedding2, embedding2);
+        // The norms are reduced in double (TensorNorm), so squares above T's range (65504 in Half) do not
+        // overflow, and the dot product is taken between the unit vectors.
+        T norm1 = Engine.TensorNorm(embedding1.AsTensor()).GetFlat(0);
+        T norm2 = Engine.TensorNorm(embedding2.AsTensor()).GetFlat(0);
 
-        T normProduct = NumOps.Multiply(NumOps.Sqrt(norm1), NumOps.Sqrt(norm2));
-
-        if (NumOps.Equals(normProduct, NumOps.Zero))
+        if (NumOps.Equals(norm1, NumOps.Zero) || NumOps.Equals(norm2, NumOps.Zero))
         {
             return NumOps.Zero;
         }
 
-        return NumOps.Divide(dotProduct, normProduct);
+        return Engine.DotProduct(Engine.Divide(embedding1, norm1), Engine.Divide(embedding2, norm2));
     }
 
     /// <summary>
@@ -122,30 +121,18 @@ public abstract partial class SpeakerRecognitionBase<T> : AudioNeuralNetworkBase
     protected Tensor<T> NormalizeEmbedding(Tensor<T> embedding)
     {
         var data = embedding.ToArray();
-        var dataVec = new Vector<T>(data);
-        T sumSquares = Engine.DotProduct(dataVec, dataVec);
 
-        T norm = NumOps.Sqrt(sumSquares);
+        // L2 norm reduced in double, so the sum of squares cannot overflow T.
+        T norm = Engine.TensorNorm(new Tensor<T>(data, [data.Length])).GetFlat(0);
 
         if (NumOps.Equals(norm, NumOps.Zero))
         {
             // Return a defensive copy to avoid aliasing issues
-            var copy = new Tensor<T>(embedding._shape);
-            for (int i = 0; i < data.Length; i++)
-            {
-                copy[i] = data[i];
-            }
-            return copy;
+            return new Tensor<T>(data, embedding._shape);
         }
 
-        // Create new tensor with same shape and copy normalized values
-        var result = new Tensor<T>(embedding._shape);
-        for (int i = 0; i < data.Length; i++)
-        {
-            result[i] = NumOps.Divide(data[i], norm);
-        }
-
-        return result;
+        // New tensor with the same shape holding the normalized values
+        return Engine.TensorDivideScalar(new Tensor<T>(data, embedding._shape), norm);
     }
 
     /// <summary>
@@ -185,37 +172,16 @@ public abstract partial class SpeakerRecognitionBase<T> : AudioNeuralNetworkBase
             }
         }
 
-        T[] sum = new T[totalSize];
-
-        // Initialize with zeros
-        for (int i = 0; i < totalSize; i++)
+        // Sum all embeddings (flattened, since only the lengths are required to match)
+        var sum = new Tensor<T>(embeddings[0].ToArray(), [totalSize]);
+        for (int e = 1; e < embeddings.Count; e++)
         {
-            sum[i] = NumOps.Zero;
+            sum = Engine.TensorAdd(sum, new Tensor<T>(embeddings[e].ToArray(), [totalSize]));
         }
 
-        // Sum all embeddings
-        foreach (var embedding in embeddings)
-        {
-            var data = embedding.ToArray();
-            for (int i = 0; i < totalSize; i++)
-            {
-                sum[i] = NumOps.Add(sum[i], data[i]);
-            }
-        }
-
-        // Compute mean
-        T count = NumOps.FromDouble(embeddings.Count);
-        for (int i = 0; i < totalSize; i++)
-        {
-            sum[i] = NumOps.Divide(sum[i], count);
-        }
-
-        // Create tensor and copy mean values
-        var meanTensor = new Tensor<T>(firstShape);
-        for (int i = 0; i < totalSize; i++)
-        {
-            meanTensor[i] = sum[i];
-        }
+        // Compute mean and restore the first embedding's shape
+        var mean = Engine.TensorDivideScalar(sum, NumOps.FromDouble(embeddings.Count));
+        var meanTensor = new Tensor<T>(mean.ToArray(), firstShape);
 
         return NormalizeEmbedding(meanTensor);
     }

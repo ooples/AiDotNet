@@ -42257,4 +42257,25 @@
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:AiDotNet.FederatedLearning.Trainers.InMemoryFederatedTrainer`3.#ctor(AiDotNet.Interfaces.IOptimizer{`0,`1,`2},System.Nullable{System.Double},System.Nullable{System.Int32},System.Double,System.Int32,AiDotNet.Models.Options.FederatedLearningOptions,AiDotNet.Interfaces.IPrivacyMechanism{AiDotNet.Tensors.LinearAlgebra.Vector{`0}},AiDotNet.Interfaces.IPrivacyAccountant,AiDotNet.Interfaces.IClientSelectionStrategy,AiDotNet.Interfaces.IFederatedServerOptimizer{`0},AiDotNet.Interfaces.IFederatedHeterogeneityCorrection{`0},AiDotNet.Interfaces.IHomomorphicEncryptionProvider{`0},AiDotNet.FederatedLearning.FederatedAdvancedCapabilities{`0})</Target>
+    <Left>lib/net10.0/AiDotNet.dll</Left>
+    <Right>lib/net10.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:AiDotNet.FederatedLearning.Trainers.InMemoryFederatedTrainer`3.#ctor(AiDotNet.Interfaces.IOptimizer{`0,`1,`2},System.Nullable{System.Double},System.Nullable{System.Int32},System.Double,System.Int32,AiDotNet.Models.Options.FederatedLearningOptions,AiDotNet.Interfaces.IPrivacyMechanism{AiDotNet.Tensors.LinearAlgebra.Vector{`0}},AiDotNet.Interfaces.IPrivacyAccountant,AiDotNet.Interfaces.IClientSelectionStrategy,AiDotNet.Interfaces.IFederatedServerOptimizer{`0},AiDotNet.Interfaces.IFederatedHeterogeneityCorrection{`0},AiDotNet.Interfaces.IHomomorphicEncryptionProvider{`0},AiDotNet.FederatedLearning.FederatedAdvancedCapabilities{`0})</Target>
+    <Left>lib/net471/AiDotNet.dll</Left>
+    <Right>lib/net471/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:AiDotNet.FederatedLearning.Trainers.InMemoryFederatedTrainer`3.#ctor(AiDotNet.Interfaces.IOptimizer{`0,`1,`2},System.Nullable{System.Double},System.Nullable{System.Int32},System.Double,System.Int32,AiDotNet.Models.Options.FederatedLearningOptions,AiDotNet.Interfaces.IPrivacyMechanism{AiDotNet.Tensors.LinearAlgebra.Vector{`0}},AiDotNet.Interfaces.IPrivacyAccountant,AiDotNet.Interfaces.IClientSelectionStrategy,AiDotNet.Interfaces.IFederatedServerOptimizer{`0},AiDotNet.Interfaces.IFederatedHeterogeneityCorrection{`0},AiDotNet.Interfaces.IHomomorphicEncryptionProvider{`0},AiDotNet.FederatedLearning.FederatedAdvancedCapabilities{`0})</Target>
+    <Left>lib/net8.0/AiDotNet.dll</Left>
+    <Right>lib/net8.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
 </Suppressions>

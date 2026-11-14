@@ -424,26 +424,27 @@ public partial class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDet
         // Reset state for fresh analysis
         ResetVadState();
 
-        for (int i = 0; i + _frameSize <= samples.Length; i += _frameSize)
+        // The recurrent state runs frame by frame, so the probabilities come first (same order),
+        // then one engine comparison against the threshold.
+        int frameCount = samples.Length / _frameSize;
+        var frameProbabilities = new T[frameCount];
+        for (int f = 0; f < frameCount; f++)
         {
-            var frame = new T[_frameSize];
-            Array.Copy(samples, i, frame, 0, _frameSize);
-
             // Write directly into the tensor's backing storage, and dispose it per frame.
             // ToVector() returns a COPY, so assigning into that copy left frameTensor ALL ZEROS
             // and every frame reached the model as silence -- the same defect PreprocessAudio
-            // below already documents, surviving here. Speech detection was therefore independent
-            // of the audio. Disposal is safe because PreprocessAudio allocates its own result, so
-            // nothing downstream holds a reference to this tensor once the call returns.
+            // below already documents, surviving here. Disposal is safe because PreprocessAudio
+            // allocates its own result, so nothing downstream holds a reference to this tensor.
             using var frameTensor = new Tensor<T>([_frameSize]);
-            var frameSpan = frameTensor.Data.Span;
-            for (int j = 0; j < _frameSize; j++)
-            {
-                frameSpan[j] = frame[j];
-            }
+            samples.AsSpan(f * _frameSize, _frameSize).CopyTo(frameTensor.Data.Span);
+            frameProbabilities[f] = GetSpeechProbability(frameTensor);
+        }
 
-            var prob = GetSpeechProbability(frameTensor);
-            bool isSpeech = NumOps.ToDouble(prob) >= _threshold;
+        int[] speechMask = VadEngineOps.SpeechMask(frameProbabilities, _threshold);
+        for (int f = 0; f < frameCount; f++)
+        {
+            int i = f * _frameSize;
+            bool isSpeech = speechMask[f] != 0;
 
             if (isSpeech)
             {
@@ -494,18 +495,11 @@ public partial class SileroVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDet
 
         for (int i = 0; i < numFrames; i++)
         {
-            var frame = new T[_frameSize];
-            Array.Copy(samples, i * _frameSize, frame, 0, _frameSize);
-
             // Same direct write and per-frame disposal as DetectSpeechSegments above: assigning
             // into the ToVector() copy left this tensor all zeros, so every probability was
             // computed from silence rather than from the frame.
             using var frameTensor = new Tensor<T>([_frameSize]);
-            var frameSpan = frameTensor.Data.Span;
-            for (int j = 0; j < _frameSize; j++)
-            {
-                frameSpan[j] = frame[j];
-            }
+            samples.AsSpan(i * _frameSize, _frameSize).CopyTo(frameTensor.Data.Span);
 
             probabilities[i] = GetSpeechProbability(frameTensor);
         }

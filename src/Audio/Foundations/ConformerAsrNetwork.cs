@@ -181,6 +181,8 @@ internal sealed record ConformerAsrConfiguration
     public ConformerAsrDecoder Decoder { get; init; } = ConformerAsrDecoder.Ctc;
     public int PredictionDim { get; init; } = 640;
     public int PredictionLayers { get; init; } = 1;
+    /// <summary>The width of the prediction network's label embedding; zero uses <see cref="PredictionDim"/>.</summary>
+    public int PredictionEmbeddingDim { get; init; }
     public int JointDim { get; init; } = 640;
     /// <summary>The durations a token-and-duration joint network chooses among (Parakeet-TDT: 0 to 4).</summary>
     public int[] Durations { get; init; } = { 0, 1, 2, 3, 4 };
@@ -334,7 +336,7 @@ internal sealed class ConformerAsrNetwork<T>
             return;
         }
         // The prediction network reads the previous label, the blank (0) standing for "no label yet".
-        Embedding = Own(new EmbeddingLayer<T>(_o.VocabSize, _o.PredictionDim));
+        Embedding = Own(new EmbeddingLayer<T>(_o.VocabSize, _o.PredictionEmbeddingDim > 0 ? _o.PredictionEmbeddingDim : _o.PredictionDim));
         for (int i = 0; i < _o.PredictionLayers; i++) PredictionLstms.Add(Own(new LSTMLayer<T>(_o.PredictionDim)));
         JointEncoder = Own(new DenseLayer<T>(_o.JointDim, identity));
         JointPrediction = Own(new BiasFreeLinearLayer<T>(_o.PredictionDim, _o.JointDim));
@@ -715,6 +717,38 @@ internal sealed class ConformerAsrNetwork<T>
             for (int t = 0; t < frames; t++) features[t, b] = std > 1e-8 ? (NumOps.ToDouble(mel[t, b]) - mean) / std : 0.0;
         }
         return features;
+    }
+
+    /// <summary>The features of <see cref="Features(IReadOnlyList{double})"/> computed in T on whole tensors: log-mel
+    /// <c>[frames, bins]</c> of a waveform <c>[samples]</c>, each bin normalized over the utterance unless
+    /// <see cref="ConformerAsrConfiguration.FeatureNormalization"/> is <c>None</c> (a bin whose deviation is at most
+    /// 1e-8 becomes zero).</summary>
+    public Tensor<T> FeatureTensor(Tensor<T> waveform)
+    {
+        var samples = waveform.Reshape(new[] { waveform.Length });
+        if (_o.Subsampling == ConformerAsrSubsampling.RawWaveformStem) return samples.Reshape(new[] { waveform.Length, 1 });
+        var mel = _mel.Forward(samples);
+        if (_o.FeatureNormalization == ConformerAsrFeatureNormalization.None) return mel;
+        return NormalizePerBin(_engine, mel);
+    }
+
+    /// <summary>Each bin (column) of <c>[frames, bins]</c> features minus its mean over the frames and divided by its
+    /// population deviation; a bin whose deviation is at most 1e-8 (or, where 1e-8 rounds to zero in T, one unit
+    /// roundoff) becomes zero. Every term is scaled before it is summed or squared - the samples by 1 / frames for
+    /// the mean, the deviations by 1 / sqrt(frames) for the variance - so the sums and squares stay in T's range
+    /// (Half: 65504) as the double reference does.</summary>
+    internal static Tensor<T> NormalizePerBin(IEngine engine, Tensor<T> mel)
+    {
+        int frames = mel.Shape[0], bins = mel.Shape[1];
+        var mean = engine.TensorBroadcastTo(engine.ReduceSum(engine.TensorDivideScalar(mel, NumOps.FromDouble(frames)), new[] { 0 }, true), new[] { frames, bins });
+        var centered = engine.TensorSubtract(mel, mean);
+        var scaled = engine.TensorDivideScalar(centered, NumOps.FromDouble(Math.Sqrt(frames)));
+        var std = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(scaled), new[] { 0 }, true));
+        var spread = engine.TensorBroadcastTo(std, new[] { frames, bins });
+        T floor = NumOps.FromDouble(1e-8);
+        if (NumOps.Equals(floor, NumOps.Zero)) floor = NumOps.FromDouble(Math.Pow(2, -NumOps.PrecisionBits));
+        var usable = engine.TensorGreaterThan(spread, floor);
+        return engine.TensorWhere(usable, engine.TensorDivide(centered, spread), new Tensor<T>(new[] { frames, bins }));
     }
 
     /// <summary>SpecAugment (Park et al. 2019, section 2) as the Conformer paper sets it (section 3.1): frequency masks of

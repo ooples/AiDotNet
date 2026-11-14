@@ -15,6 +15,8 @@ using AiDotNet.Models.Inputs;
 using AiDotNet.Models.Options;
 using AiDotNet.Models.Results;
 using AiDotNet.Validation;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AiDotNet.FederatedLearning.Trainers;
 
@@ -46,6 +48,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
     private readonly FederatedAdvancedCapabilities<T>? _advancedCapabilities;
     private readonly Dictionary<int, double> _clientPerformanceScores = new();
     private readonly Dictionary<int, double[]> _clientEmbeddings = new();
+    private readonly ILogger _logger;
 
     public InMemoryFederatedTrainer(
         IOptimizer<T, TInput, TOutput> optimizerPrototype,
@@ -60,10 +63,12 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         IFederatedServerOptimizer<T>? serverOptimizer = null,
         IFederatedHeterogeneityCorrection<T>? heterogeneityCorrection = null,
         IHomomorphicEncryptionProvider<T>? homomorphicEncryptionProvider = null,
-        FederatedAdvancedCapabilities<T>? advancedCapabilities = null)
+        FederatedAdvancedCapabilities<T>? advancedCapabilities = null,
+        ILogger? logger = null)
     {
         Guard.NotNull(optimizerPrototype);
         _optimizerPrototype = optimizerPrototype;
+        _logger = logger ?? NullLogger.Instance;
         _learningRateOverride = learningRateOverride;
         _advancedCapabilities = advancedCapabilities;
 
@@ -359,27 +364,37 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                     continue;
                 }
 
-                var clientStartModel = usePersonalization && effectivePersonalizationOptions is not null && perClientPersonalState != null
-                    ? CreatePersonalizedStartModel(
-                        personalizationStrategy,
-                        effectivePersonalizationOptions,
-                        clientId,
-                        globalBefore,
-                        globalBeforeParams,
-                        personalizedIndices,
-                        perClientPersonalState,
-                        perClusterPersonalState)
-                    : globalBefore;
-
-                var localModel = CloneModelByParameters(clientStartModel);
-                var localOptimizer = CreateOptimizerForModel(localModel);
                 int effectiveLocalEpochs = useMetaLearning && effectiveMetaLearningOptions is { InnerEpochs: > 0 } ? effectiveMetaLearningOptions.InnerEpochs : localEpochs;
-                ConfigureLocalOptimizer(localOptimizer, effectiveLocalEpochs);
+                IFullModel<T, TInput, TOutput> trainedModel;
+                if (usePersonalization && IsPFedMePersonalization(personalizationStrategy) &&
+                    effectivePersonalizationOptions is { } pFedMeOptions && perClientPersonalState is { } pFedMeState)
+                {
+                    // pFedMe trains with its own bi-level update rather than the local optimizer.
+                    trainedModel = TrainPFedMeClient(globalBefore, globalBeforeParams, dataset, pFedMeOptions, effectiveLocalEpochs, clientId, pFedMeState);
+                }
+                else
+                {
+                    var clientStartModel = usePersonalization && effectivePersonalizationOptions is not null && perClientPersonalState != null
+                        ? CreatePersonalizedStartModel(
+                            personalizationStrategy,
+                            effectivePersonalizationOptions,
+                            clientId,
+                            globalBefore,
+                            globalBeforeParams,
+                            personalizedIndices,
+                            perClientPersonalState,
+                            perClusterPersonalState)
+                        : globalBefore;
 
-                var inputData = CreateLocalOptimizationInputData(dataset, localModel);
-                OptimizationResult<T, TInput, TOutput> localResult = localOptimizer.Optimize(inputData);
+                    var localModel = CloneModelByParameters(clientStartModel);
+                    var localOptimizer = CreateOptimizerForModel(localModel);
+                    ConfigureLocalOptimizer(localOptimizer, effectiveLocalEpochs);
 
-                var trainedModel = localResult.BestSolution ?? localModel;
+                    var inputData = CreateLocalOptimizationInputData(dataset, localModel);
+                    OptimizationResult<T, TInput, TOutput> localResult = localOptimizer.Optimize(inputData);
+
+                    trainedModel = localResult.BestSolution ?? localModel;
+                }
 
                 double weight = Math.Max(1.0, dataset.SampleCount);
                 clientWeights[clientId] = weight;
@@ -538,13 +553,18 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                     encryptedIndices,
                     effectiveHeOptions);
 
-                var merged = InterfaceGuard.Parameterizable(newGlobalModel).GetParameters();
-                foreach (var idx in encryptedIndices)
-                {
-                    merged[idx] = heAggregated[idx];
-                }
+                var merged = ReplaceAt(InterfaceGuard.Parameterizable(newGlobalModel).GetParameters(), heAggregated, encryptedIndices, skipOutOfRange: false);
 
                 newGlobalModel = InterfaceGuard.Parameterizable(newGlobalModel).WithParameters(merged);
+            }
+
+            if (usePersonalization && IsPFedMePersonalization(personalizationStrategy) &&
+                effectivePersonalizationOptions is { } pFedMeServerOptions)
+            {
+                // pFedMe server step: w <- (1 - beta) w + beta * mean of the clients' local models.
+                var averaged = InterfaceGuard.Parameterizable(newGlobalModel).GetParameters();
+                var mixed = ApplyMetaLearningUpdate(globalBeforeParams, averaged, pFedMeServerOptions.PFedMeBeta);
+                newGlobalModel = InterfaceGuard.Parameterizable(globalBefore).WithParameters(mixed);
             }
 
             if (useMetaLearning && effectiveMetaLearningOptions != null)
@@ -671,8 +691,11 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         return _advancedCapabilities.UnlearnClient(clientId, globalParams);
     }
 
-    /// <summary>Hashes each client's sample rows into identity strings for the private-set-intersection overlap check.</summary>
-    private Dictionary<int, IReadOnlyList<string>> ComputeClientSampleIdentities(
+    /// <summary>
+    /// Hashes each client's sample rows into identity strings for the private-set-intersection overlap check. A
+    /// client whose features cannot be read as a matrix is left out of the check, with a warning.
+    /// </summary>
+    internal Dictionary<int, IReadOnlyList<string>> ComputeClientSampleIdentities(
         Dictionary<int, FederatedClientDataset<TInput, TOutput>> clientData)
     {
         var result = new Dictionary<int, IReadOnlyList<string>>();
@@ -699,6 +722,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
+                _logger.LogWarning(ex, "Could not hash the samples of client {ClientId}; it is left out of the private set intersection.", kv.Key);
             }
         }
 
@@ -888,12 +912,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                             heOptions);
 
                         var maskedPlain = MaskEncryptedIndices(update.Parameters, InterfaceGuard.Parameterizable(currentModel).GetParameters(), encryptedIndices);
-                        foreach (var idx in encryptedIndices)
-                        {
-                            maskedPlain[idx] = heAggregated[idx];
-                        }
-
-                        targetParameters = maskedPlain;
+                        targetParameters = ReplaceAt(maskedPlain, heAggregated, encryptedIndices, skipOutOfRange: false);
                     }
 
                     var mixed = MixParameters(InterfaceGuard.Parameterizable(currentModel).GetParameters(), targetParameters, alpha);
@@ -960,11 +979,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                             encryptedIndices,
                             heOptions);
 
-                        var merged = InterfaceGuard.Parameterizable(newGlobalModel).GetParameters();
-                        foreach (var idx in encryptedIndices)
-                        {
-                            merged[idx] = heAggregated[idx];
-                        }
+                        var merged = ReplaceAt(InterfaceGuard.Parameterizable(newGlobalModel).GetParameters(), heAggregated, encryptedIndices, skipOutOfRange: false);
 
                         newGlobalModel = InterfaceGuard.Parameterizable(newGlobalModel).WithParameters(merged);
                     }
@@ -1454,14 +1469,9 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 perClusterState.TryGetValue(clusterId, out clusterVector);
             }
 
-            var start = globalParameters.Clone();
-            if (clusterVector != null && personalizedIndices.Length > 0)
-            {
-                foreach (var idx in personalizedIndices)
-                {
-                    start[idx] = clusterVector[idx];
-                }
-            }
+            var start = clusterVector != null && personalizedIndices.Length > 0
+                ? ReplaceAt(globalParameters, clusterVector, personalizedIndices, skipOutOfRange: false)
+                : globalParameters.Clone();
 
             return InterfaceGuard.Parameterizable(globalModel).WithParameters(start);
         }
@@ -1485,11 +1495,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 perClientState[clientId] = clientVector;
             }
 
-            var start = globalParameters.Clone();
-            foreach (var idx in personalizedIndices)
-            {
-                start[idx] = clientVector[idx];
-            }
+            var start = ReplaceAt(globalParameters, clientVector, personalizedIndices, skipOutOfRange: false);
 
             return InterfaceGuard.Parameterizable(globalModel).WithParameters(start);
         }
@@ -1522,21 +1528,8 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
         if (IsPFedMePersonalization(personalizationStrategy))
         {
-            if (!perClientState.TryGetValue(clientId, out var theta))
-            {
-                theta = globalBaseline.Clone();
-            }
-
-            double mu = Math.Max(0.0, options.PFedMeMu);
-            double alpha = 1.0 / (1.0 + mu);
-            int steps = Math.Max(1, options.PFedMeInnerSteps);
-            for (int k = 0; k < steps; k++)
-            {
-                theta = ApplyMetaLearningUpdate(theta, trainedParameters, alpha);
-            }
-
-            perClientState[clientId] = theta;
-            return theta;
+            // TrainPFedMeClient has stored the personalized model; the local model w is what the server averages.
+            return trainedParameters;
         }
 
         if (IsDittoPersonalization(personalizationStrategy))
@@ -1574,7 +1567,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             }
 
             int clusters = Math.Max(1, options.ClusterCount);
-            var clusterSums = new Dictionary<int, Vector<T>>();
+            var clusterMembers = new Dictionary<int, List<(Vector<T> Parameters, double Weight)>>();
             var clusterWeights = new Dictionary<int, double>();
 
             foreach (var clientId in selectedClientIds)
@@ -1592,38 +1585,30 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 int clusterId = GetClusterId(clientId, clusters);
                 double w = Math.Max(1.0, dataset.SampleCount);
 
-                if (!clusterSums.TryGetValue(clusterId, out var sum))
+                if (!clusterMembers.TryGetValue(clusterId, out var members))
                 {
-                    sum = new Vector<T>(new T[globalAfterAggregation.Length]);
-                    clusterSums[clusterId] = sum;
+                    members = new List<(Vector<T> Parameters, double Weight)>();
+                    clusterMembers[clusterId] = members;
                     clusterWeights[clusterId] = 0.0;
                 }
 
-                foreach (var idx in personalizedIndices)
-                {
-                    sum[idx] = NumOps.Add(sum[idx], NumOps.Multiply(clientParams[idx], NumOps.FromDouble(w)));
-                }
+                members.Add((clientParams, w));
 
                 clusterWeights[clusterId] += w;
             }
 
-            foreach (var kvp in clusterSums)
+            foreach (var kvp in clusterMembers)
             {
                 int clusterId = kvp.Key;
-                var sum = kvp.Value;
                 double totalW = clusterWeights.TryGetValue(clusterId, out var tw) ? tw : 0.0;
                 if (totalW <= 0.0)
                 {
                     continue;
                 }
 
-                var head = globalAfterAggregation.Clone();
-                foreach (var idx in personalizedIndices)
-                {
-                    head[idx] = NumOps.Divide(sum[idx], NumOps.FromDouble(totalW));
-                }
-
-                perClusterState[clusterId] = head;
+                // Only the personalized entries of the mean are read back.
+                perClusterState[clusterId] = ReplaceAt(
+                    globalAfterAggregation, WeightedMean(kvp.Value, totalW), personalizedIndices, skipOutOfRange: false);
             }
         }
 
@@ -1647,14 +1632,8 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 }
 
                 // Proximal-style averaging: argmin_theta ||theta - clientTrained||^2 + lambda||theta - global||^2
-                var personalized = clientTrained.Clone();
-                for (int i = 0; i < personalized.Length; i++)
-                {
-                    var num = NumOps.Add(clientTrained[i], NumOps.Multiply(lambdaT, globalAfterAggregation[i]));
-                    personalized[i] = NumOps.Divide(num, denomT);
-                }
-
-                perClientState[clientId] = personalized;
+                var num = Engine.Add(clientTrained, Engine.Multiply(globalAfterAggregation, lambdaT));
+                perClientState[clientId] = Engine.Divide(num, denomT);
             }
         }
 
@@ -1686,11 +1665,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                     clientParams = globalAfterParams.Clone();
                 }
 
-                var start = globalAfterParams.Clone();
-                foreach (var idx in personalizedIndices)
-                {
-                    start[idx] = clientParams[idx];
-                }
+                var start = ReplaceAt(globalAfterParams, clientParams, personalizedIndices, skipOutOfRange: false);
 
                 var localModel = CloneModelByParameters(InterfaceGuard.Parameterizable(globalModel).WithParameters(start));
                 var localOptimizer = CreateOptimizerForModel(localModel);
@@ -1708,7 +1683,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         if (IsClusteredPersonalization(personalizationStrategy) && perClusterState != null)
         {
             int clusters = Math.Max(1, options.ClusterCount);
-            var clusterSums = new Dictionary<int, Vector<T>>();
+            var clusterMembers = new Dictionary<int, List<(Vector<T> Parameters, double Weight)>>();
             var clusterWeights = new Dictionary<int, double>();
 
             foreach (var clientId in selectedClientIds)
@@ -1724,11 +1699,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                     clusterHead = globalAfterParams.Clone();
                 }
 
-                var start = globalAfterParams.Clone();
-                foreach (var idx in personalizedIndices)
-                {
-                    start[idx] = clusterHead[idx];
-                }
+                var start = ReplaceAt(globalAfterParams, clusterHead, personalizedIndices, skipOutOfRange: false);
 
                 var localModel = CloneModelByParameters(InterfaceGuard.Parameterizable(globalModel).WithParameters(start));
                 var localOptimizer = CreateOptimizerForModel(localModel);
@@ -1738,40 +1709,53 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 var adapted = InterfaceGuard.Parameterizable((result.BestSolution ?? localModel)).GetParameters();
 
                 double w = Math.Max(1.0, dataset.SampleCount);
-                if (!clusterSums.TryGetValue(clusterId, out var sum))
+                if (!clusterMembers.TryGetValue(clusterId, out var members))
                 {
-                    sum = new Vector<T>(new T[globalAfterParams.Length]);
-                    clusterSums[clusterId] = sum;
+                    members = new List<(Vector<T> Parameters, double Weight)>();
+                    clusterMembers[clusterId] = members;
                     clusterWeights[clusterId] = 0.0;
                 }
 
-                foreach (var idx in personalizedIndices)
-                {
-                    sum[idx] = NumOps.Add(sum[idx], NumOps.Multiply(adapted[idx], NumOps.FromDouble(w)));
-                }
+                members.Add((adapted, w));
 
                 clusterWeights[clusterId] += w;
             }
 
-            foreach (var kvp in clusterSums)
+            foreach (var kvp in clusterMembers)
             {
                 int clusterId = kvp.Key;
-                var sum = kvp.Value;
                 double totalW = clusterWeights.TryGetValue(clusterId, out var tw) ? tw : 0.0;
                 if (totalW <= 0.0)
                 {
                     continue;
                 }
 
-                var head = globalAfterParams.Clone();
-                foreach (var idx in personalizedIndices)
-                {
-                    head[idx] = NumOps.Divide(sum[idx], NumOps.FromDouble(totalW));
-                }
-
-                perClusterState[clusterId] = head;
+                // Only the personalized entries of the mean are read back.
+                perClusterState[clusterId] = ReplaceAt(
+                    globalAfterParams, WeightedMean(kvp.Value, totalW), personalizedIndices, skipOutOfRange: false);
             }
         }
+    }
+
+    /// <summary>
+    /// The sample-weighted mean sum_i (w_i / totalWeight) x_i. Each weight is divided by the total before it
+    /// multiplies the parameters: sample counts times parameters overflow T (Half: above 65504).
+    /// </summary>
+    internal static Vector<T> WeightedMean(IReadOnlyList<(Vector<T> Parameters, double Weight)> members, double totalWeight)
+    {
+        var engine = AiDotNetEngine.Current;
+        int count = members.Count, length = members[0].Parameters.Length;
+        var stacked = new T[count * length];
+        var weights = new double[count];
+        for (int i = 0; i < count; i++)
+        {
+            members[i].Parameters.AsSpan().CopyTo(stacked.AsSpan(i * length, length));
+            weights[i] = members[i].Weight / totalWeight;
+        }
+
+        var scale = engine.TensorBroadcastTo(new Tensor<double>(weights, new[] { count, 1 }).Cast<T>(), new[] { count, length });
+        var weighted = engine.TensorMultiply(new Tensor<T>(stacked, new[] { count, length }), scale);
+        return engine.ReduceSum(weighted, new[] { 0 }, false).ToVector();
     }
 
     private static int GetClusterId(int clientId, int clusterCount)
@@ -1779,6 +1763,93 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         clusterCount = Math.Max(1, clusterCount);
         int mod = clientId % clusterCount;
         return mod < 0 ? mod + clusterCount : mod;
+    }
+
+    /// <summary>
+    /// One client's pFedMe round: the local model starts from the global one, <see cref="PFedMeLocalUpdate"/>
+    /// runs over the client's data, the personalized model is stored for the client and the local model is
+    /// returned for aggregation.
+    /// </summary>
+    private IFullModel<T, TInput, TOutput> TrainPFedMeClient(
+        IFullModel<T, TInput, TOutput> globalModel,
+        Vector<T> globalParameters,
+        FederatedClientDataset<TInput, TOutput> dataset,
+        FederatedPersonalizationOptions options,
+        int localRounds,
+        int clientId,
+        Dictionary<int, Vector<T>> perClientState)
+    {
+        var parameterizable = InterfaceGuard.Parameterizable(globalModel);
+        Vector<T> Gradient(Vector<T> theta)
+        {
+            if (parameterizable.WithParameters(theta) is not IGradientComputable<T, TInput, TOutput> differentiable)
+            {
+                throw new InvalidOperationException(
+                    "pFedMe solves each client's personalized problem with gradients of the client loss, so the model must implement IGradientComputable.");
+            }
+
+            return differentiable.ComputeGradients(dataset.Features, dataset.Labels);
+        }
+
+        var local = PFedMeLocalUpdate(Gradient, globalParameters, options, localRounds, out var personalized);
+        perClientState[clientId] = personalized;
+        return parameterizable.WithParameters(local);
+    }
+
+    /// <summary>
+    /// The client update of pFedMe (Dinh, Tran and Nguyen 2020, Algorithm 1). For each of
+    /// <paramref name="localRounds"/> local rounds the personalized model theta approximately solves the
+    /// Moreau-envelope problem min_theta f(theta) + lambda/2 ||theta - w||^2 with K gradient steps of size
+    /// <see cref="FederatedPersonalizationOptions.PFedMePersonalLearningRate"/>, then the local model moves toward it:
+    /// w &lt;- w - eta lambda (w - theta). Theta starts from the global model and carries over between local rounds.
+    /// </summary>
+    /// <param name="gradient">The gradient of the client loss f at a parameter vector.</param>
+    /// <param name="globalParameters">The global model w the round starts from.</param>
+    /// <param name="options">lambda (<see cref="FederatedPersonalizationOptions.PFedMeMu"/>), K, eta and the personal rate.</param>
+    /// <param name="localRounds">The number of local rounds R.</param>
+    /// <param name="personalized">The personalized model theta after the last local round.</param>
+    /// <returns>The local model w after R local rounds.</returns>
+    internal static Vector<T> PFedMeLocalUpdate(
+        Func<Vector<T>, Vector<T>> gradient,
+        Vector<T> globalParameters,
+        FederatedPersonalizationOptions options,
+        int localRounds,
+        out Vector<T> personalized)
+    {
+        if (gradient is null) throw new ArgumentNullException(nameof(gradient));
+        if (options is null) throw new ArgumentNullException(nameof(options));
+
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        double lambda = Math.Max(0.0, options.PFedMeMu);
+        var lambdaT = numOps.FromDouble(lambda);
+        var personalRate = numOps.FromDouble(options.PFedMePersonalLearningRate);
+        var localStep = numOps.FromDouble(options.PFedMeLearningRate * lambda);
+        int innerSteps = Math.Max(1, options.PFedMeInnerSteps);
+        int rounds = Math.Max(1, localRounds);
+
+        var w = globalParameters.Clone();
+        var theta = globalParameters.Clone();
+        for (int r = 0; r < rounds; r++)
+        {
+            for (int k = 0; k < innerSteps; k++)
+            {
+                var g = gradient(theta);
+                if (g.Length != theta.Length)
+                {
+                    throw new InvalidOperationException($"The loss gradient has {g.Length} entries for {theta.Length} parameters.");
+                }
+
+                // gradient of f(theta) + lambda/2 ||theta - w||^2
+                var moreau = engine.Add(g, engine.Multiply(engine.Subtract(theta, w), lambdaT));
+                theta = engine.Subtract(theta, engine.Multiply(moreau, personalRate));
+            }
+
+            w = engine.Subtract(w, engine.Multiply(engine.Subtract(w, theta), localStep));
+        }
+
+        personalized = theta.Clone();
+        return w;
     }
 
     private Vector<T> ApplyMetaLearningUpdate(Vector<T> baseline, Vector<T> averaged, double metaRate)
@@ -1794,14 +1865,48 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         }
 
         var rateT = NumOps.FromDouble(metaRate);
-        var updated = baseline.Clone();
-        for (int i = 0; i < updated.Length; i++)
+        return Engine.Add(baseline, Engine.Multiply(Engine.Subtract(averaged, baseline), rateT));
+    }
+
+    /// <summary>
+    /// A copy of <paramref name="target"/> with the entries at <paramref name="indices"/> taken from
+    /// <paramref name="source"/>. Out-of-range indices are skipped when <paramref name="skipOutOfRange"/>
+    /// is set, otherwise they throw.
+    /// </summary>
+    private static Vector<T> ReplaceAt(Vector<T> target, Vector<T> source, int[] indices, bool skipOutOfRange)
+    {
+        int n = target.Length;
+        var mask = new bool[n];
+        bool any = false;
+        foreach (var idx in indices)
         {
-            var diff = NumOps.Subtract(averaged[i], baseline[i]);
-            updated[i] = NumOps.Add(baseline[i], NumOps.Multiply(diff, rateT));
+            if (idx < 0 || idx >= n || idx >= source.Length)
+            {
+                if (skipOutOfRange)
+                {
+                    continue;
+                }
+
+                throw new ArgumentOutOfRangeException(nameof(indices), $"Index {idx} is outside the parameter vector.");
+            }
+
+            mask[idx] = true;
+            any = true;
         }
 
-        return updated;
+        if (!any)
+        {
+            return target.Clone();
+        }
+
+        var aligned = source;
+        if (source.Length != n)
+        {
+            aligned = new Vector<T>(n);
+            source.AsSpan().Slice(0, Math.Min(n, source.Length)).CopyTo(aligned.AsWritableSpan());
+        }
+
+        return AiDotNetEngine.Current.TensorWhere(mask, aligned.AsTensor(), target.AsTensor()).ToVector();
     }
 
     private static Vector<T> MaskIndices(Vector<T> parameters, Vector<T> baseline, int[] indices)
@@ -1816,13 +1921,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             return parameters;
         }
 
-        var masked = parameters.Clone();
-        foreach (var idx in indices.Where(idx => idx >= 0 && idx < masked.Length))
-        {
-            masked[idx] = baseline[idx];
-        }
-
-        return masked;
+        return ReplaceAt(parameters, baseline, indices, skipOutOfRange: true);
     }
 
     private static int[] ResolveEncryptedIndices(HomomorphicEncryptionOptions options, int parameterCount, HomomorphicEncryptionMode mode)
@@ -1889,13 +1988,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             return parameters;
         }
 
-        var masked = parameters.Clone();
-        foreach (var idx in encryptedIndices.Where(idx => idx >= 0 && idx < masked.Length))
-        {
-            masked[idx] = baseline[idx];
-        }
-
-        return masked;
+        return ReplaceAt(parameters, baseline, encryptedIndices, skipOutOfRange: true);
     }
 
     private Vector<T> ApplyCompressionToParameters(
@@ -1947,25 +2040,12 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             int k = Math.Max(1, (int)Math.Round(ratio * n));
             k = Math.Min(k, n);
 
-            var magnitudes = new double[n];
-            var indices = new int[n];
-            for (int i = 0; i < n; i++)
-            {
-                indices[i] = i;
-                magnitudes[i] = Math.Abs(NumOps.ToDouble(delta[i]));
-            }
-
-            Array.Sort(magnitudes, indices);
-
-            var result = new Vector<T>(n);
-            for (int t = n - k; t < n; t++)
-            {
-                int idx = indices[t];
-                result[idx] = delta[idx];
-            }
+            // Keep the k largest |delta|; NaN ranks below every number, as in Array.Sort.
+            var magnitudes = Engine.TensorNanToNum(Engine.TensorAbs(delta.AsTensor()), -1.0, double.PositiveInfinity, double.NegativeInfinity);
+            Engine.TensorTopK(magnitudes, k, 0, out var topIndices);
 
             uploadRatio = (double)k / n;
-            return result;
+            return ReplaceAt(new Vector<T>(n), delta, topIndices.ToArray(), skipOutOfRange: false);
         }
 
         if (strategy == FederatedCompressionStrategy.RandomK)
@@ -1986,34 +2066,23 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 (indices[i], indices[j]) = (indices[j], indices[i]);
             }
 
-            var result = new Vector<T>(n);
-            for (int i = 0; i < k; i++)
-            {
-                int idx = indices[i];
-                result[idx] = delta[idx];
-            }
+            var chosen = new int[k];
+            Array.Copy(indices, chosen, k);
 
             uploadRatio = (double)k / n;
-            return result;
+            return ReplaceAt(new Vector<T>(n), delta, chosen, skipOutOfRange: false);
         }
 
         if (strategy == FederatedCompressionStrategy.Threshold)
         {
-            double threshold = Math.Abs(options.Threshold);
-            int kept = 0;
-            var result = new Vector<T>(n);
-            for (int i = 0; i < n; i++)
-            {
-                double v = NumOps.ToDouble(delta[i]);
-                if (Math.Abs(v) >= threshold)
-                {
-                    result[i] = delta[i];
-                    kept++;
-                }
-            }
+            var magnitudes = Engine.TensorAbs(delta.AsTensor());
+            var limit = new Tensor<T>([n]);
+            limit.Fill(NumOps.FromDouble(Math.Abs(options.Threshold)));
+            var keep = Engine.TensorGreaterEqual(magnitudes, limit);
+            int kept = Engine.TensorSum(keep.Cast<int>());
 
             uploadRatio = n > 0 ? (double)kept / n : 1.0;
-            return result;
+            return Engine.TensorWhere(keep, delta.AsTensor(), new Tensor<T>([n])).ToVector();
         }
 
         if (strategy == FederatedCompressionStrategy.UniformQuantization ||
@@ -2022,16 +2091,31 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             int bits = Math.Max(1, Math.Min(16, options.QuantizationBits));
             int levels = (1 << bits) - 1;
 
-            double maxAbs = 0.0;
-            for (int i = 0; i < n; i++)
-            {
-                maxAbs = Math.Max(maxAbs, Math.Abs(NumOps.ToDouble(delta[i])));
-            }
+            var absDelta = Engine.TensorAbs(delta.AsTensor());
+            // Any NaN makes maxAbs NaN, as the Math.Max fold did (the sum of |delta| is then NaN too).
+            double maxAbs = double.IsNaN(NumOps.ToDouble(Engine.TensorSum(absDelta)))
+                ? double.NaN
+                : NumOps.ToDouble(Engine.ReduceMax(absDelta, [0], false).GetFlat(0));
 
             if (maxAbs <= 0.0)
             {
                 uploadRatio = ComputeQuantizationRatio(bits);
                 return delta;
+            }
+
+            if (strategy == FederatedCompressionStrategy.UniformQuantization)
+            {
+                // q = round((clamp(v / maxAbs, -1, 1) + 1) / 2 * levels) (half to even, as Math.Round),
+                // dequantized as (q / levels * 2 - 1) * maxAbs.
+                T one = NumOps.One;
+                T levelsT = NumOps.FromDouble(levels);
+                var normalized = Engine.TensorClamp(Engine.TensorDivideScalar(delta.AsTensor(), NumOps.FromDouble(maxAbs)), NumOps.Negate(one), one);
+                var qReal = Engine.TensorMultiplyScalar(Engine.TensorAddScalar(normalized, one), NumOps.FromDouble(0.5 * levels));
+                var q = Engine.TensorClamp(Engine.TensorRound(qReal), NumOps.Zero, levelsT);
+                var deNormalized = Engine.TensorAddScalar(Engine.TensorMultiplyScalar(Engine.TensorDivideScalar(q, levelsT), NumOps.FromDouble(2.0)), NumOps.Negate(one));
+
+                uploadRatio = ComputeQuantizationRatio(bits);
+                return Engine.TensorMultiplyScalar(deNormalized, NumOps.FromDouble(maxAbs)).ToVector();
             }
 
             var result = new Vector<T>(n);
@@ -2042,17 +2126,9 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 normalized = Math.Max(-1.0, Math.Min(1.0, normalized));
                 double qReal = (normalized + 1.0) * 0.5 * levels;
 
-                double q;
-                if (strategy == FederatedCompressionStrategy.StochasticQuantization)
-                {
-                    double floor = Math.Floor(qReal);
-                    double prob = qReal - floor;
-                    q = (random.NextDouble() < prob) ? floor + 1.0 : floor;
-                }
-                else
-                {
-                    q = Math.Round(qReal);
-                }
+                double floor = Math.Floor(qReal);
+                double prob = qReal - floor;
+                double q = (random.NextDouble() < prob) ? floor + 1.0 : floor;
 
                 q = Math.Max(0.0, Math.Min(levels, q));
                 double deNormalized = (q / levels) * 2.0 - 1.0;

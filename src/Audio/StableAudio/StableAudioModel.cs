@@ -487,18 +487,7 @@ public partial class StableAudioModel<T> : AudioNeuralNetworkBase<T>, IAudioGene
         var extensionAudio = DecodeLatentsToAudio(denoisedExtension);
 
         // Concatenate original and extension
-        int totalLength = inputAudio.Length + extensionAudio.Length;
-        var result = new Tensor<T>(new int[] { totalLength });
-        for (int i = 0; i < inputAudio.Length; i++)
-        {
-            result.SetFlat(i, inputAudio.GetFlat(i));
-        }
-        for (int i = 0; i < extensionAudio.Length; i++)
-        {
-            result.SetFlat(inputAudio.Length + i, extensionAudio.GetFlat(i));
-        }
-
-        return result;
+        return ConcatFlat(inputAudio, extensionAudio, new int[] { inputAudio.Length + extensionAudio.Length });
     }
 
     /// <summary>
@@ -538,30 +527,57 @@ public partial class StableAudioModel<T> : AudioNeuralNetworkBase<T>, IAudioGene
         double duration = audio.Length / (double)_options.SampleRate;
         var timingConditioning = CreateTimingConditioning(duration);
 
-        // Initialize with noise where mask is 1
-        var noisyLatents = inputLatents.Clone();
-        for (int i = 0; i < noisyLatents.Length && i < mask.Length; i++)
-        {
-            if (NumOps.ToDouble(mask.GetFlat(i)) > 0.5)
-            {
-                noisyLatents.SetFlat(i, NumOps.FromDouble(random.NextGaussian()));
-            }
-        }
+        // The mask is over waveform samples; the diffusion runs on the VAE latents (Evans et al. 2024), so the
+        // mask is downsampled to the latent time grid and applied there.
+        var latentMask = LatentMask(Engine, mask, inputLatents.Shape.ToArray());
+        var keep = Engine.ScalarMinusTensor(NumOps.One, latentMask);
+
+        // Masked latent frames start from noise, the rest from the encoded input.
+        var noise = new Tensor<T>(inputLatents.Shape.ToArray());
+        Engine.TensorNormalInPlace(noise, 0.0, 1.0, random.Next());
+        var noisyLatents = Engine.TensorAdd(Engine.TensorMultiply(inputLatents, keep), Engine.TensorMultiply(noise, latentMask));
 
         // Run diffusion
         var denoised = RunDiffusionLoop(noisyLatents, conditioning, timingConditioning, null, numInferenceSteps, _options.GuidanceScale, random);
 
-        // Blend based on mask
-        var blendedLatents = inputLatents.Clone();
-        for (int i = 0; i < blendedLatents.Length && i < mask.Length; i++)
-        {
-            double m = NumOps.ToDouble(mask.GetFlat(i));
-            blendedLatents.SetFlat(i, NumOps.Add(
-                NumOps.Multiply(inputLatents.GetFlat(i), NumOps.FromDouble(1.0 - m)),
-                NumOps.Multiply(denoised.GetFlat(i), NumOps.FromDouble(m))));
-        }
+        // Keep the input's latents outside the mask and the generated ones inside it.
+        var blendedLatents = Engine.TensorAdd(Engine.TensorMultiply(inputLatents, keep), Engine.TensorMultiply(denoised, latentMask));
 
         return DecodeLatentsToAudio(blendedLatents);
+    }
+
+    /// <summary>
+    /// A waveform mask (1 = regenerate) on the latent grid: the last latent axis is time, latent frame f covers
+    /// samples [f N / L, (f + 1) N / L), and it is masked when any of its samples is (mask value above 0.5). When
+    /// there are more latent frames than samples each frame reads its nearest sample. The result has the latent
+    /// shape, the same time mask in every channel.
+    /// </summary>
+    internal static Tensor<T> LatentMask(IEngine engine, Tensor<T> mask, int[] latentShape)
+    {
+        if (latentShape.Length == 0) throw new ArgumentException("The latents need a time axis.", nameof(latentShape));
+        int frames = latentShape[latentShape.Length - 1];
+        int samples = mask.Length;
+        if (samples == 0 || frames == 0) return new Tensor<T>(latentShape);
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var masked = engine.TensorGreaterThan(mask.Reshape(new[] { samples }), numOps.FromDouble(0.5));
+
+        var group = new int[Math.Max(samples, frames)];
+        Tensor<T> perFrame;
+        if (frames <= samples)
+        {
+            for (int i = 0; i < samples; i++) group[i] = (int)((long)i * frames / samples);
+            perFrame = engine.ScatterMax(masked, new Tensor<int>(group, new[] { samples }), out _, 0, frames);
+        }
+        else
+        {
+            for (int f = 0; f < frames; f++) group[f] = (int)(((2L * f + 1) * samples) / (2L * frames));
+            perFrame = engine.TensorIndexSelect(masked, new Tensor<int>(group, new[] { frames }), 0);
+        }
+
+        var shape = new int[latentShape.Length];
+        for (int i = 0; i < shape.Length; i++) shape[i] = 1;
+        shape[shape.Length - 1] = frames;
+        return engine.TensorBroadcastTo(perFrame.Reshape(shape), latentShape);
     }
 
     /// <summary>
@@ -733,42 +749,51 @@ public partial class StableAudioModel<T> : AudioNeuralNetworkBase<T>, IAudioGene
             tokens[i] = encoding.TokenIds[i];
         }
 
-        var tensor = new Tensor<T>(new int[] { 1, _options.MaxTextLength });
-        for (int i = 0; i < _options.MaxTextLength; i++)
-        {
-            tensor[0, i] = NumOps.FromDouble(tokens[i]);
-        }
-        return tensor;
+        // Token ids (zero padded) as one [1, MaxTextLength] tensor in T.
+        return new Tensor<int>(tokens, new int[] { 1, _options.MaxTextLength }).Cast<T>();
     }
 
     /// <summary>
     /// Creates timing conditioning for the given duration.
     /// </summary>
-    private Tensor<T> CreateTimingConditioning(double durationSeconds)
+    private Tensor<T> CreateTimingConditioning(double durationSeconds) => TimingEmbedding(Engine, _ditHiddenDim, durationSeconds);
+
+    /// <summary>
+    /// The sinusoidal timing embedding [1, D] of a clip of <paramref name="durationSeconds"/> seconds starting at 0.
+    /// Layout: sin(d f) at [0, q), cos(d f) at [q, 2q), sin((s+e) f) at [D/2, D/2+q), cos((s+e) f) at [3D/4, 3D/4+q),
+    /// with q = D/4 and f_i = 10000^(-2i / (D/2)). The angles are formed and evaluated in double and rounded to
+    /// <typeparamref name="T"/> once: in Half an angle of 47 s has a spacing of 2^-5, so forming it in T moves
+    /// the sinusoids by up to 0.03.
+    /// </summary>
+    internal static Tensor<T> TimingEmbedding(IEngine engine, int embeddingDim, double durationSeconds)
     {
-        // Stable Audio uses sinusoidal embeddings for timing
-        int embeddingDim = _ditHiddenDim;
-        var embedding = new Tensor<T>(new int[] { 1, embeddingDim });
+        int quarter = embeddingDim / 4;
+        if (quarter == 0)
+        {
+            return new Tensor<T>(new int[] { 1, embeddingDim });
+        }
 
         // Encode duration and start/end times
         double startSeconds = 0.0;
         double endSeconds = durationSeconds;
 
         int halfDim = embeddingDim / 2;
-        for (int i = 0; i < embeddingDim / 4; i++)
+        var freqs = SinusoidFrequencies(engine, quarter, halfDim);
+        var durationPhase = engine.TensorMultiplyScalar(freqs, durationSeconds);
+        var spanPhase = engine.TensorMultiplyScalar(freqs, startSeconds + endSeconds);
+
+        int threeQuarter = 3 * embeddingDim / 4;
+        var parts = new List<Tensor<double>>
         {
-            double freq = Math.Pow(10000, -2.0 * i / halfDim);
-
-            // Duration embedding
-            embedding[0, i] = NumOps.FromDouble(Math.Sin(durationSeconds * freq));
-            embedding[0, i + embeddingDim / 4] = NumOps.FromDouble(Math.Cos(durationSeconds * freq));
-
-            // Start/end time embedding
-            embedding[0, i + embeddingDim / 2] = NumOps.FromDouble(Math.Sin(startSeconds * freq + endSeconds * freq));
-            embedding[0, i + 3 * embeddingDim / 4] = NumOps.FromDouble(Math.Cos(startSeconds * freq + endSeconds * freq));
-        }
-
-        return embedding;
+            engine.TensorSin(durationPhase),
+            engine.TensorCos(durationPhase),
+            new Tensor<double>(new int[] { halfDim - 2 * quarter }),
+            engine.TensorSin(spanPhase),
+            new Tensor<double>(new int[] { threeQuarter - halfDim - quarter }),
+            engine.TensorCos(spanPhase),
+            new Tensor<double>(new int[] { embeddingDim - threeQuarter - quarter }),
+        };
+        return engine.Concat(parts, 0).Reshape(new int[] { 1, embeddingDim }).Cast<T>();
     }
 
     /// <summary>
@@ -809,19 +834,38 @@ public partial class StableAudioModel<T> : AudioNeuralNetworkBase<T>, IAudioGene
     /// <summary>
     /// Creates a timestep tensor with sinusoidal embedding.
     /// </summary>
-    private Tensor<T> CreateTimestepTensor(double timestep)
-    {
-        int embeddingDim = _ditHiddenDim;
-        var embedding = new Tensor<T>(new int[] { 1, embeddingDim });
+    private Tensor<T> CreateTimestepTensor(double timestep) => TimestepEmbedding(Engine, _ditHiddenDim, timestep);
 
-        for (int i = 0; i < embeddingDim / 2; i++)
+    /// <summary>
+    /// The sinusoidal timestep embedding [1, D]: sin(1000 t f_i) at [0, D/2), cos(1000 t f_i) at [D/2, D),
+    /// f_i = 10000^(-2i / D). The angles (up to 1000) are formed and evaluated in double and rounded to
+    /// <typeparamref name="T"/> once; in Half their spacing near 1000 is 0.5.
+    /// </summary>
+    internal static Tensor<T> TimestepEmbedding(IEngine engine, int embeddingDim, double timestep)
+    {
+        int half = embeddingDim / 2;
+        if (half == 0)
         {
-            double freq = Math.Pow(10000, -2.0 * i / embeddingDim);
-            embedding[0, i] = NumOps.FromDouble(Math.Sin(timestep * 1000 * freq));
-            embedding[0, i + embeddingDim / 2] = NumOps.FromDouble(Math.Cos(timestep * 1000 * freq));
+            return new Tensor<T>(new int[] { 1, embeddingDim });
         }
 
-        return embedding;
+        var phase = engine.TensorMultiplyScalar(SinusoidFrequencies(engine, half, embeddingDim), timestep * 1000);
+        var parts = new List<Tensor<double>>
+        {
+            engine.TensorSin(phase),
+            engine.TensorCos(phase),
+            new Tensor<double>(new int[] { embeddingDim - 2 * half }),
+        };
+        return engine.Concat(parts, 0).Reshape(new int[] { 1, embeddingDim }).Cast<T>();
+    }
+
+    /// <summary>
+    /// Frequencies 10000^(-2i / <paramref name="denominator"/>) for i in [0, <paramref name="count"/>), in double.
+    /// </summary>
+    private static Tensor<double> SinusoidFrequencies(IEngine engine, int count, int denominator)
+    {
+        var index = engine.TensorArange<double>(0, count, 1);
+        return engine.TensorExp(engine.TensorMultiplyScalar(index, -2.0 * Math.Log(10000) / denominator));
     }
 
     /// <summary>
@@ -839,19 +883,13 @@ public partial class StableAudioModel<T> : AudioNeuralNetworkBase<T>, IAudioGene
     /// </summary>
     private Tensor<T> ApplyCrossAttentionConditioning(Tensor<T> latents, Tensor<T> conditioning)
     {
-        var result = latents.Clone();
         var condScale = NumOps.FromDouble(0.1);
-
-        if (conditioning.Length > 0)
+        if (conditioning.Length == 0)
         {
-            for (int i = 0; i < result.Length; i++)
-            {
-                int condIdx = i % conditioning.Length;
-                result.SetFlat(i, NumOps.Add(result.GetFlat(i), NumOps.Multiply(conditioning.GetFlat(condIdx), condScale)));
-            }
+            return latents.Clone();
         }
 
-        return result;
+        return AddCyclic(latents, conditioning, condScale);
     }
 
     /// <summary>
@@ -859,16 +897,8 @@ public partial class StableAudioModel<T> : AudioNeuralNetworkBase<T>, IAudioGene
     /// </summary>
     private Tensor<T> AddTimingConditioning(Tensor<T> latents, Tensor<T> timingConditioning)
     {
-        var result = latents.Clone();
         var scale = NumOps.FromDouble(_options.TimingConditioningScale * 0.1);
-
-        for (int i = 0; i < result.Length; i++)
-        {
-            int tIdx = i % timingConditioning.Length;
-            result.SetFlat(i, NumOps.Add(result.GetFlat(i), NumOps.Multiply(timingConditioning.GetFlat(tIdx), scale)));
-        }
-
-        return result;
+        return AddCyclic(latents, timingConditioning, scale);
     }
 
     /// <summary>
@@ -876,15 +906,44 @@ public partial class StableAudioModel<T> : AudioNeuralNetworkBase<T>, IAudioGene
     /// </summary>
     private Tensor<T> AddTimestepEmbedding(Tensor<T> latents, Tensor<T> timestep)
     {
-        var result = latents.Clone();
+        return AddCyclic(latents, timestep, NumOps.FromDouble(0.01));
+    }
 
-        for (int i = 0; i < result.Length; i++)
+    /// <summary>
+    /// latents + scale * c, where c repeats <paramref name="conditioning"/> (read flat) cyclically over the latents.
+    /// </summary>
+    private Tensor<T> AddCyclic(Tensor<T> latents, Tensor<T> conditioning, T scale)
+    {
+        int length = latents.Length;
+        if (length == 0)
         {
-            int tIdx = i % timestep.Length;
-            result.SetFlat(i, NumOps.Add(result.GetFlat(i), NumOps.Multiply(timestep.GetFlat(tIdx), NumOps.FromDouble(0.01))));
+            return latents.Clone();
         }
 
-        return result;
+        if (conditioning.Length == 0)
+        {
+            throw new DivideByZeroException("The conditioning tensor is empty.");
+        }
+
+        int period = conditioning.Length;
+        int repeats = (length + period - 1) / period;
+        var flat = conditioning.Reshape(new int[] { period });
+        var cyclic = Engine.TensorSlice(Engine.TensorTile(flat, new int[] { repeats }), new int[] { 0 }, new int[] { length });
+        var scaled = Engine.TensorMultiplyScalar(cyclic, scale).Reshape(latents._shape);
+        return Engine.TensorAdd(latents, scaled);
+    }
+
+    /// <summary>
+    /// The elements of <paramref name="first"/> then <paramref name="second"/> (each read flat) in a new tensor of <paramref name="shape"/>.
+    /// </summary>
+    private Tensor<T> ConcatFlat(Tensor<T> first, Tensor<T> second, int[] shape)
+    {
+        var parts = new List<Tensor<T>>
+        {
+            new Tensor<T>(first.ToArray(), new int[] { first.Length }),
+            new Tensor<T>(second.ToArray(), new int[] { second.Length }),
+        };
+        return Engine.Concat(parts, 0).Reshape(shape);
     }
 
     /// <summary>
@@ -901,18 +960,7 @@ public partial class StableAudioModel<T> : AudioNeuralNetworkBase<T>, IAudioGene
     private Tensor<T> CombineConditionings(Tensor<T> audioLatents, Tensor<T> textConditioning)
     {
         int combinedLength = audioLatents.Length + textConditioning.Length;
-        var combined = new Tensor<T>(new int[] { 1, combinedLength });
-
-        for (int i = 0; i < audioLatents.Length; i++)
-        {
-            combined.SetFlat(i, audioLatents.GetFlat(i));
-        }
-        for (int i = 0; i < textConditioning.Length; i++)
-        {
-            combined.SetFlat(audioLatents.Length + i, textConditioning.GetFlat(i));
-        }
-
-        return combined;
+        return ConcatFlat(audioLatents, textConditioning, new int[] { 1, combinedLength });
     }
 
     /// <summary>
@@ -920,16 +968,10 @@ public partial class StableAudioModel<T> : AudioNeuralNetworkBase<T>, IAudioGene
     /// </summary>
     private Tensor<T> ApplyGuidance(Tensor<T> uncondPred, Tensor<T> condPred, double scale)
     {
-        var result = new Tensor<T>(condPred._shape);
+        // uncond + scale * (cond - uncond), shaped like the conditional prediction
         var scaleT = NumOps.FromDouble(scale);
-
-        for (int i = 0; i < result.Length; i++)
-        {
-            var diff = NumOps.Subtract(condPred.GetFlat(i), uncondPred.GetFlat(i));
-            result.SetFlat(i, NumOps.Add(uncondPred.GetFlat(i), NumOps.Multiply(diff, scaleT)));
-        }
-
-        return result;
+        var uncond = uncondPred.Reshape(condPred._shape);
+        return Engine.TensorAdd(uncond, Engine.TensorMultiplyScalar(Engine.TensorSubtract(condPred, uncond), scaleT));
     }
 
     /// <summary>
@@ -941,20 +983,9 @@ public partial class StableAudioModel<T> : AudioNeuralNetworkBase<T>, IAudioGene
         double sigma = timestep; // sigma schedule proportional to timestep
         double dt = 1.0 / numSteps;
 
-        var result = new Tensor<T>(latents._shape);
-
-        for (int i = 0; i < result.Length; i++)
-        {
-            double x_t = NumOps.ToDouble(latents.GetFlat(i));
-            double noise = NumOps.ToDouble(noisePred.GetFlat(i));
-
-            // Euler step: x_{t-dt} = x_t - sigma * noise * dt
-            double x_prev = x_t - sigma * noise * dt;
-
-            result.SetFlat(i, NumOps.FromDouble(x_prev));
-        }
-
-        return result;
+        // Euler step: x_{t-dt} = x_t - sigma * noise * dt
+        var noise = noisePred.Reshape(latents._shape);
+        return Engine.TensorSubtract(latents, Engine.TensorMultiplyScalar(noise, NumOps.FromDouble(sigma * dt)));
     }
 
     #endregion

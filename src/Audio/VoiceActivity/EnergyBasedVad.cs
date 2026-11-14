@@ -1,4 +1,3 @@
-using System.Numerics;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 
@@ -137,68 +136,76 @@ public class EnergyBasedVad<T> : VoiceActivityDetectorBase<T>
 
     #region Feature Computation
 
-    private double ComputeEnergy(T[] frame)
+    internal double ComputeEnergy(T[] frame)
     {
-        double sum = 0;
-        for (int i = 0; i < frame.Length; i++)
-        {
-            double val = NumOps.ToDouble(frame[i]);
-            sum += val * val;
-        }
-        return sum / frame.Length;
+        // Mean square, reduced in double: in T the squares and their sum overflow (Half: above 65504), and the
+        // energy feeds the double-valued threshold logic.
+        var samples = new Tensor<T>(frame, [frame.Length]);
+        return Engine.TensorSum(Engine.TensorSquare(samples.Cast<double>())) / frame.Length;
     }
 
     private double ComputeZeroCrossingRate(T[] frame)
     {
         int crossings = 0;
-        for (int i = 1; i < frame.Length; i++)
+        int pairs = frame.Length - 1;
+        if (pairs > 0)
         {
-            double prev = NumOps.ToDouble(frame[i - 1]);
-            double curr = NumOps.ToDouble(frame[i]);
-            if ((prev >= 0 && curr < 0) || (prev < 0 && curr >= 0))
-            {
-                crossings++;
-            }
+            // A crossing is (prev >= 0 and curr < 0) or (prev < 0 and curr >= 0); NaN is neither sign.
+            var signal = new Tensor<T>((T[])frame.Clone(), [frame.Length]);
+            var zeros = new Tensor<T>([frame.Length]);
+            var negative = Engine.TensorLessThan(signal, NumOps.Zero);
+            var nonNegative = Engine.TensorGreaterEqual(signal, zeros);
+            var prevNegative = Engine.TensorSlice(negative, [0], [pairs]);
+            var prevNonNegative = Engine.TensorSlice(nonNegative, [0], [pairs]);
+            var currNegative = Engine.TensorSlice(negative, [1], [pairs]);
+            var currNonNegative = Engine.TensorSlice(nonNegative, [1], [pairs]);
+            var crossing = Engine.TensorAdd(
+                Engine.TensorMultiply(prevNonNegative, currNegative),
+                Engine.TensorMultiply(prevNegative, currNonNegative));
+            // The 0/1 crossing mask is counted as ints.
+            crossings = Engine.TensorSum(crossing.Cast<int>());
         }
         return (double)crossings / (frame.Length - 1);
     }
 
-    private double ComputeSpectralFlatness(T[] frame)
+    internal double ComputeSpectralFlatness(T[] frame)
     {
         // Simple spectral flatness using FFT magnitudes
         int fftSize = 256;
 
-        // Prepare frame data for FFT (zero-padded if needed)
-        var frameData = new double[fftSize];
+        // Prepare frame data for FFT (zero-padded or truncated to fftSize), in T
+        var frameData = new Tensor<T>([fftSize]);
         int copyLen = Math.Min(frame.Length, fftSize);
-        for (int i = 0; i < copyLen; i++)
-        {
-            frameData[i] = NumOps.ToDouble(frame[i]);
-        }
+        frame.AsSpan(0, copyLen).CopyTo(frameData.AsWritableSpan());
 
-        // Use FftSharp for O(N log N) FFT
-        Complex[] spectrum = FftSharp.FFT.Forward(frameData);
+        // Engine FFT, then the magnitude spectrum of the positive frequencies
+        Engine.FFT(frameData, new Tensor<T>([fftSize]), out var spectrumReal, out var spectrumImag);
+        int bins = fftSize / 2;
+        // |X| = N sqrt((re/N)^2 + (im/N)^2): squaring |X| itself overflows T (Half: a full-scale 256-sample
+        // frame has |X| = 256, and 256^2 > 65504), while |X| / N is at most the largest sample magnitude.
+        T size = NumOps.FromDouble(fftSize);
+        var real = Engine.TensorDivideScalar(Engine.TensorSlice(spectrumReal, [0], [bins]), size);
+        var imag = Engine.TensorDivideScalar(Engine.TensorSlice(spectrumImag, [0], [bins]), size);
+        var magnitudes = Engine.TensorAddScalar(
+            Engine.TensorMultiplyScalar(Engine.TensorSqrt(Engine.ComplexMagnitudeSquared(real, imag)), size), MagnitudeFloor());
 
-        // Extract magnitude spectrum for positive frequencies
-        var magnitudes = new double[fftSize / 2];
-        for (int k = 0; k < fftSize / 2; k++)
-        {
-            magnitudes[k] = spectrum[k].Magnitude + 1e-10;
-        }
+        // Spectral flatness = geometric mean / arithmetic mean. The arithmetic mean is taken of the magnitudes
+        // divided by the largest one (each at most 1), so their sum cannot overflow T either.
+        T count = NumOps.FromDouble(bins);
+        T largest = Engine.ReduceMax(magnitudes, [0], false).GetFlat(0);
+        double logGeometricMean = NumOps.ToDouble(Engine.TensorSum(Engine.TensorLog(magnitudes))) / bins;
+        double relativeMean = NumOps.ToDouble(NumOps.Divide(Engine.TensorSum(Engine.TensorDivideScalar(magnitudes, largest)), count));
 
-        // Spectral flatness = geometric mean / arithmetic mean
-        double logSum = 0;
-        double sum = 0;
-        for (int i = 0; i < magnitudes.Length; i++)
-        {
-            logSum += Math.Log(magnitudes[i]);
-            sum += magnitudes[i];
-        }
+        return Math.Exp(logGeometricMean - Math.Log(NumOps.ToDouble(largest))) / relativeMean;
+    }
 
-        double geometricMean = Math.Exp(logSum / magnitudes.Length);
-        double arithmeticMean = sum / magnitudes.Length;
-
-        return geometricMean / arithmeticMean;
+    /// <summary>
+    /// The 1e-10 magnitude floor, or the type's machine epsilon where 1e-10 underflows to zero (Half).
+    /// </summary>
+    private T MagnitudeFloor()
+    {
+        T floor = NumOps.FromDouble(1e-10);
+        return NumOps.Equals(floor, NumOps.Zero) ? NumOps.FromDouble(Math.Pow(2, -NumOps.PrecisionBits)) : floor;
     }
 
     #endregion

@@ -458,17 +458,7 @@ public class VerticalFederatedTrainer<T> : FederatedLearningComponentBase<T>, IV
                 var (_, lossGradient) = labelHolder.ComputeLoss(predictions, labels);
 
                 // Negate gradients (gradient ascent = reverse direction)
-                int totalElements = 1;
-                for (int d = 0; d < lossGradient.Rank; d++)
-                {
-                    totalElements *= lossGradient.Shape[d];
-                }
-
-                var negatedGradient = new Tensor<T>(lossGradient._shape);
-                for (int i = 0; i < totalElements; i++)
-                {
-                    negatedGradient[i] = NumOps.FromDouble(-NumOps.ToDouble(lossGradient[i]));
-                }
+                var negatedGradient = Engine.TensorNegate(lossGradient);
 
                 // Update top model in reverse direction
                 _splitModel.UpdateFromGradient(negatedGradient, _options.Unlearning.UnlearningLearningRate);

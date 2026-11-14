@@ -173,8 +173,7 @@ public partial class WebRTCVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDet
         ResetVadState();
         for (int i = 0; i + FrameSize <= audio.Length; i += FrameSize)
         {
-            var frame = new Tensor<T>([FrameSize]);
-            for (int j = 0; j < FrameSize; j++) frame[j] = audio[i + j];
+            var frame = VadEngineOps.Frame(audio, i, FrameSize);
             bool isSpeech = DetectSpeech(frame);
 
             if (isSpeech)
@@ -209,8 +208,7 @@ public partial class WebRTCVad<T> : AudioNeuralNetworkBase<T>, IVoiceActivityDet
         ResetVadState();
         for (int i = 0; i < numFrames; i++)
         {
-            var frame = new Tensor<T>([FrameSize]);
-            for (int j = 0; j < FrameSize; j++) frame[j] = audio[i * FrameSize + j];
+            var frame = VadEngineOps.Frame(audio, i * FrameSize, FrameSize);
             probs[i] = GetSpeechProbability(frame);
         }
         return probs;

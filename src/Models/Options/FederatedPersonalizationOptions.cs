@@ -102,14 +102,33 @@ public sealed class FederatedPersonalizationOptions
     public double DittoLambda { get; set; } = 0.1;
 
     /// <summary>
-    /// Gets or sets the pFedMe proximal strength (mu).
+    /// Gets or sets the pFedMe regularization strength (lambda in Dinh et al. 2020): how strongly each client's
+    /// personalized model is pulled toward its local model in the Moreau-envelope problem. Default: 15, the
+    /// paper's setting (with eta = 0.005 a smaller lambda makes the local step eta * lambda vanish).
     /// </summary>
-    public double PFedMeMu { get; set; } = 0.1;
+    public double PFedMeMu { get; set; } = 15.0;
 
     /// <summary>
-    /// Gets or sets the number of inner proximal steps for pFedMe (K).
+    /// Gets or sets the number of gradient steps (K) that approximately solve each client's personalized problem.
+    /// Default: 5, the paper's setting.
     /// </summary>
-    public int PFedMeInnerSteps { get; set; } = 1;
+    public int PFedMeInnerSteps { get; set; } = 5;
+
+    /// <summary>
+    /// Gets or sets the step size of the K inner steps on the personalized model. Default: 0.09, the paper's setting.
+    /// </summary>
+    public double PFedMePersonalLearningRate { get; set; } = 0.09;
+
+    /// <summary>
+    /// Gets or sets the local learning rate (eta) of the update w &lt;- w - eta * lambda * (w - theta). Default: 0.005.
+    /// </summary>
+    public double PFedMeLearningRate { get; set; } = 0.005;
+
+    /// <summary>
+    /// Gets or sets the server mixing weight (beta): w &lt;- (1 - beta) w + beta * mean of the clients' local models.
+    /// Default: 1.0, plain averaging.
+    /// </summary>
+    public double PFedMeBeta { get; set; } = 1.0;
 
     /// <summary>
     /// Gets or sets the number of clusters used for clustered personalization.

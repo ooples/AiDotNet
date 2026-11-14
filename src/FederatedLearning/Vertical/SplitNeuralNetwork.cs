@@ -95,11 +95,7 @@ public class SplitNeuralNetwork<T> : FederatedLearningComponentBase<T>, ISplitMo
             _options.AggregationMode == VflAggregationMode.Gating)
         {
             _attentionWeights = new Tensor<T>(new[] { numberOfParties });
-            double initVal = 1.0 / numberOfParties;
-            for (int i = 0; i < numberOfParties; i++)
-            {
-                _attentionWeights[i] = NumOps.FromDouble(initVal);
-            }
+            _attentionWeights.Fill(NumOps.FromDouble(1.0 / numberOfParties));
         }
     }
 
@@ -138,19 +134,14 @@ public class SplitNeuralNetwork<T> : FederatedLearningComponentBase<T>, ISplitMo
         int hiddenDim = _topWeights1.Shape[1];
 
         // Layer 1: h = ReLU(input * W1 + b1)
-        var hidden = new Tensor<T>(new[] { batchSize, hiddenDim });
-        MatMul(combinedEmbeddings, _topWeights1, hidden, batchSize, inputDim, hiddenDim);
-        AddBias(hidden, _topBias1, batchSize, hiddenDim);
-        ApplyRelu(hidden, batchSize * hiddenDim);
+        var hidden = VerticalEngineOps.MatMul(combinedEmbeddings, _topWeights1, batchSize, inputDim, hiddenDim);
+        hidden = VerticalEngineOps.Relu(VerticalEngineOps.AddBias(hidden, _topBias1, batchSize, hiddenDim));
 
         _lastTopHidden = hidden;
 
         // Layer 2: output = h * W2 + b2 (linear output)
-        var output = new Tensor<T>(new[] { batchSize, _outputDimension });
-        MatMul(hidden, _topWeights2, output, batchSize, hiddenDim, _outputDimension);
-        AddBias(output, _topBias2, batchSize, _outputDimension);
-
-        return output;
+        var output = VerticalEngineOps.MatMul(hidden, _topWeights2, batchSize, hiddenDim, _outputDimension);
+        return VerticalEngineOps.AddBias(output, _topBias2, batchSize, _outputDimension);
     }
 
     /// <inheritdoc/>
@@ -171,13 +162,11 @@ public class SplitNeuralNetwork<T> : FederatedLearningComponentBase<T>, ISplitMo
         int inputDim = _topWeights1.Shape[0];
 
         // Backward through layer 2
-        var gradHidden = new Tensor<T>(new[] { batchSize, hiddenDim });
-        MatMulTransposeB(lossGradient, _topWeights2, gradHidden, batchSize, _outputDimension, hiddenDim);
-        ApplyReluGradient(gradHidden, _lastTopHidden, batchSize * hiddenDim);
+        var gradHidden = VerticalEngineOps.MatMulTransposeB(lossGradient, _topWeights2, batchSize, _outputDimension, hiddenDim);
+        gradHidden = VerticalEngineOps.ReluGradient(gradHidden, _lastTopHidden, zeroWhereActivationIsNaN: true);
 
         // Backward through layer 1 to get gradient w.r.t. input (combined embeddings)
-        var gradInput = new Tensor<T>(new[] { batchSize, inputDim });
-        MatMulTransposeB(gradHidden, _topWeights1, gradInput, batchSize, hiddenDim, inputDim);
+        var gradInput = VerticalEngineOps.MatMulTransposeB(gradHidden, _topWeights1, batchSize, hiddenDim, inputDim);
 
         // Split gradient back to individual party embeddings
         return SplitGradientToParties(gradInput, partyEmbeddings);
@@ -243,27 +232,24 @@ public class SplitNeuralNetwork<T> : FederatedLearningComponentBase<T>, ISplitMo
         int hiddenDim = _topWeights1.Shape[1];
 
         // Gradient for W2 and b2
-        var gradW2 = new Tensor<T>(new[] { hiddenDim, _outputDimension });
-        MatMulTransposeA(_lastTopHidden, lossGradient, gradW2, batchSize, hiddenDim, _outputDimension);
-        var gradB2 = SumOverBatch(lossGradient, batchSize, _outputDimension);
+        var gradW2 = VerticalEngineOps.MatMulTransposeA(_lastTopHidden, lossGradient, batchSize, hiddenDim, _outputDimension);
+        var gradB2 = VerticalEngineOps.SumOverBatch(lossGradient, batchSize, _outputDimension);
 
         // Gradient through layer 2 to hidden
-        var gradHidden = new Tensor<T>(new[] { batchSize, hiddenDim });
-        MatMulTransposeB(lossGradient, _topWeights2, gradHidden, batchSize, _outputDimension, hiddenDim);
-        ApplyReluGradient(gradHidden, _lastTopHidden, batchSize * hiddenDim);
+        var gradHidden = VerticalEngineOps.MatMulTransposeB(lossGradient, _topWeights2, batchSize, _outputDimension, hiddenDim);
+        gradHidden = VerticalEngineOps.ReluGradient(gradHidden, _lastTopHidden, zeroWhereActivationIsNaN: true);
 
         // Gradient for W1 and b1
         int inputDim = _topWeights1.Shape[0];
-        var gradW1 = new Tensor<T>(new[] { inputDim, hiddenDim });
-        MatMulTransposeA(_lastTopInput, gradHidden, gradW1, batchSize, inputDim, hiddenDim);
-        var gradB1 = SumOverBatch(gradHidden, batchSize, hiddenDim);
+        var gradW1 = VerticalEngineOps.MatMulTransposeA(_lastTopInput, gradHidden, batchSize, inputDim, hiddenDim);
+        var gradB1 = VerticalEngineOps.SumOverBatch(gradHidden, batchSize, hiddenDim);
 
         // SGD update
         double lr = learningRate / batchSize;
-        UpdateTensor(_topWeights2, gradW2, lr);
-        UpdateTensor(_topBias2, gradB2, lr);
-        UpdateTensor(_topWeights1, gradW1, lr);
-        UpdateTensor(_topBias1, gradB1, lr);
+        VerticalEngineOps.UpdateInPlace(_topWeights2, gradW2, lr);
+        VerticalEngineOps.UpdateInPlace(_topBias2, gradB2, lr);
+        VerticalEngineOps.UpdateInPlace(_topWeights1, gradW1, lr);
+        VerticalEngineOps.UpdateInPlace(_topBias1, gradB1, lr);
     }
 
     private int ComputeTopModelInputDimension(int numParties, int embDimPerParty)
@@ -275,116 +261,84 @@ public class SplitNeuralNetwork<T> : FederatedLearningComponentBase<T>, ISplitMo
         };
     }
 
+    /// <summary>
+    /// Batch size and width of an embedding: a 1-D embedding <c>[N]</c> is one sample of width N,
+    /// a 2-D embedding <c>[B, N]</c> is B samples of width N.
+    /// </summary>
+    private static (int BatchSize, int Dim) EmbeddingLayout(Tensor<T> embedding)
+    {
+        return embedding.Rank == 1
+            ? (1, embedding.Shape[0])
+            : (embedding.Shape[0], embedding.Shape[1]);
+    }
+
     private static Tensor<T> ConcatenateEmbeddings(IReadOnlyList<Tensor<T>> embeddings)
     {
         // For 1D embeddings (shape [N]), treat as single-sample batch (batchSize=1, dim=N)
         // For 2D embeddings (shape [B, N]), batchSize=B, dim=N
-        bool is1D = embeddings[0].Rank == 1;
-        int batchSize = is1D ? 1 : embeddings[0].Shape[0];
-        int totalDim = 0;
-        for (int p = 0; p < embeddings.Count; p++)
-        {
-            totalDim += embeddings[p].Rank > 1 ? embeddings[p].Shape[1] : embeddings[p].Shape[0];
-        }
+        int batchSize = EmbeddingLayout(embeddings[0]).BatchSize;
+        var blocks = embeddings
+            .Select(e => VerticalEngineOps.Rows(e, batchSize, e.Rank > 1 ? e.Shape[1] : e.Shape[0]))
+            .ToList();
 
-        var result = new Tensor<T>(new[] { batchSize, totalDim });
-        int offset = 0;
-        for (int p = 0; p < embeddings.Count; p++)
-        {
-            int dim = embeddings[p].Rank > 1 ? embeddings[p].Shape[1] : embeddings[p].Shape[0];
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int d = 0; d < dim; d++)
-                {
-                    result[b * totalDim + offset + d] = embeddings[p][b * dim + d];
-                }
-            }
-
-            offset += dim;
-        }
-
-        return result;
+        return Engine.Concat(blocks, 1);
     }
 
     private static Tensor<T> SumEmbeddings(IReadOnlyList<Tensor<T>> embeddings)
     {
-        int batchSize = embeddings[0].Shape[0];
-        int dim = embeddings[0].Rank > 1 ? embeddings[0].Shape[1] : embeddings[0].Shape[0];
-
-        var result = new Tensor<T>(new[] { batchSize, dim });
-        for (int p = 0; p < embeddings.Count; p++)
-        {
-            for (int i = 0; i < batchSize * dim; i++)
-            {
-                double val = NumOps.ToDouble(result[i]) + NumOps.ToDouble(embeddings[p][i]);
-                result[i] = NumOps.FromDouble(val);
-            }
-        }
-
-        return result;
+        var ones = new Tensor<T>(new[] { embeddings.Count });
+        ones.Fill(NumOps.One);
+        return WeightedSum(embeddings, ones);
     }
 
     private Tensor<T> AttentionEmbeddings(IReadOnlyList<Tensor<T>> embeddings)
     {
-        int batchSize = embeddings[0].Shape[0];
-        int dim = embeddings[0].Rank > 1 ? embeddings[0].Shape[1] : embeddings[0].Shape[0];
-
         // Softmax over attention weights
-        var weights = new double[embeddings.Count];
-        double maxWeight = double.MinValue;
-        for (int p = 0; p < embeddings.Count; p++)
-        {
-            weights[p] = _attentionWeights is not null
-                ? NumOps.ToDouble(_attentionWeights[p])
-                : 1.0 / embeddings.Count;
-            if (weights[p] > maxWeight) maxWeight = weights[p];
-        }
-
-        double sumExp = 0.0;
-        for (int p = 0; p < embeddings.Count; p++)
-        {
-            weights[p] = Math.Exp(weights[p] - maxWeight);
-            sumExp += weights[p];
-        }
-
-        for (int p = 0; p < embeddings.Count; p++)
-        {
-            weights[p] /= sumExp;
-        }
-
-        // Weighted sum
-        var result = new Tensor<T>(new[] { batchSize, dim });
-        for (int p = 0; p < embeddings.Count; p++)
-        {
-            for (int i = 0; i < batchSize * dim; i++)
-            {
-                double val = NumOps.ToDouble(result[i]) + weights[p] * NumOps.ToDouble(embeddings[p][i]);
-                result[i] = NumOps.FromDouble(val);
-            }
-        }
-
-        return result;
+        return WeightedSum(embeddings, AttentionSoftmax(embeddings.Count));
     }
 
     private Tensor<T> GatingEmbeddings(IReadOnlyList<Tensor<T>> embeddings)
     {
-        int batchSize = embeddings[0].Shape[0];
-        int dim = embeddings[0].Rank > 1 ? embeddings[0].Shape[1] : embeddings[0].Shape[0];
+        // Sigmoid gate per party
+        return WeightedSum(embeddings, GatingSigmoid(embeddings.Count));
+    }
+
+    /// <summary>softmax of the first <paramref name="parties"/> attention weights (uniform when there are none).</summary>
+    private Tensor<T> AttentionSoftmax(int parties)
+    {
+        Tensor<T> raw;
+        if (_attentionWeights is not null)
+        {
+            raw = Engine.TensorSlice(_attentionWeights, new[] { 0 }, new[] { parties });
+        }
+        else
+        {
+            raw = new Tensor<T>(new[] { parties });
+            raw.Fill(NumOps.FromDouble(1.0 / parties));
+        }
+
+        return Engine.TensorSoftmax(raw, 0);
+    }
+
+    /// <summary>sigmoid of the first <paramref name="parties"/> gating weights (sigmoid(0) = 0.5 when there are none).</summary>
+    private Tensor<T> GatingSigmoid(int parties)
+    {
+        var raw = _attentionWeights is not null
+            ? Engine.TensorSlice(_attentionWeights, new[] { 0 }, new[] { parties })
+            : new Tensor<T>(new[] { parties });
+        return Engine.Sigmoid(raw);
+    }
+
+    /// <summary>sum over parties of weights[p] * embeddings[p], laid out as <c>[batchSize, dim]</c> of the first party.</summary>
+    private static Tensor<T> WeightedSum(IReadOnlyList<Tensor<T>> embeddings, Tensor<T> weights)
+    {
+        var (batchSize, dim) = EmbeddingLayout(embeddings[0]);
 
         var result = new Tensor<T>(new[] { batchSize, dim });
         for (int p = 0; p < embeddings.Count; p++)
         {
-            double rawWeight = _attentionWeights is not null
-                ? NumOps.ToDouble(_attentionWeights[p])
-                : 0.0;
-            // Sigmoid gate
-            double gate = 1.0 / (1.0 + Math.Exp(-rawWeight));
-
-            for (int i = 0; i < batchSize * dim; i++)
-            {
-                double val = NumOps.ToDouble(result[i]) + gate * NumOps.ToDouble(embeddings[p][i]);
-                result[i] = NumOps.FromDouble(val);
-            }
+            var scaled = Engine.TensorMultiplyScalar(VerticalEngineOps.Rows(embeddings[p], batchSize, dim), weights.GetFlat(p));
+            result = Engine.TensorAdd(result, scaled);
         }
 
         return result;
@@ -398,49 +352,38 @@ public class SplitNeuralNetwork<T> : FederatedLearningComponentBase<T>, ISplitMo
         if (_options.AggregationMode == VflAggregationMode.Concatenation)
         {
             int totalDim = gradInput.Rank > 1 ? gradInput.Shape[1] : gradInput.Shape[0];
+            var rows = VerticalEngineOps.Rows(gradInput, batchSize, totalDim);
             int offset = 0;
             for (int p = 0; p < partyEmbeddings.Count; p++)
             {
                 int dim = partyEmbeddings[p].Rank > 1 ? partyEmbeddings[p].Shape[1] : partyEmbeddings[p].Shape[0];
-                var grad = new Tensor<T>(new[] { batchSize, dim });
-                for (int b = 0; b < batchSize; b++)
-                {
-                    for (int d = 0; d < dim; d++)
-                    {
-                        grad[b * dim + d] = gradInput[b * totalDim + offset + d];
-                    }
-                }
-
-                gradients.Add(grad);
+                gradients.Add(Engine.TensorSlice(rows, new[] { 0, offset }, new[] { batchSize, dim }));
                 offset += dim;
             }
         }
         else
         {
-            // For Sum/Attention/Gating, each party gets the full gradient
-            // (scaled by its weight for Attention/Gating)
+            // For Sum/Attention/Gating, each party gets the full gradient scaled by d(aggregate)/d(embedding):
+            // 1 for Sum, the softmax weight for Attention and the sigmoid gate for Gating.
+            Tensor<T> scales;
+            if (_options.AggregationMode == VflAggregationMode.Attention && _attentionWeights is not null)
+            {
+                scales = AttentionSoftmax(partyEmbeddings.Count);
+            }
+            else if (_options.AggregationMode == VflAggregationMode.Gating && _attentionWeights is not null)
+            {
+                scales = GatingSigmoid(partyEmbeddings.Count);
+            }
+            else
+            {
+                scales = new Tensor<T>(new[] { partyEmbeddings.Count });
+                scales.Fill(NumOps.One);
+            }
+
             for (int p = 0; p < partyEmbeddings.Count; p++)
             {
                 int dim = partyEmbeddings[p].Rank > 1 ? partyEmbeddings[p].Shape[1] : partyEmbeddings[p].Shape[0];
-                var grad = new Tensor<T>(new[] { batchSize, dim });
-
-                double scale = 1.0;
-                if (_options.AggregationMode == VflAggregationMode.Attention && _attentionWeights is not null)
-                {
-                    scale = NumOps.ToDouble(_attentionWeights[p]);
-                }
-                else if (_options.AggregationMode == VflAggregationMode.Gating && _attentionWeights is not null)
-                {
-                    double rawWeight = NumOps.ToDouble(_attentionWeights[p]);
-                    scale = 1.0 / (1.0 + Math.Exp(-rawWeight));
-                }
-
-                for (int i = 0; i < batchSize * dim; i++)
-                {
-                    grad[i] = NumOps.FromDouble(NumOps.ToDouble(gradInput[i]) * scale);
-                }
-
-                gradients.Add(grad);
+                gradients.Add(Engine.TensorMultiplyScalar(VerticalEngineOps.Rows(gradInput, batchSize, dim), scales.GetFlat(p)));
             }
         }
 
@@ -457,118 +400,5 @@ public class SplitNeuralNetwork<T> : FederatedLearningComponentBase<T>, ISplitMo
         }
 
         return tensor;
-    }
-
-    private static void MatMul(Tensor<T> a, Tensor<T> b, Tensor<T> result, int m, int k, int n)
-    {
-        for (int i = 0; i < m; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                double sum = 0.0;
-                for (int p = 0; p < k; p++)
-                {
-                    sum += NumOps.ToDouble(a[i * k + p]) * NumOps.ToDouble(b[p * n + j]);
-                }
-
-                result[i * n + j] = NumOps.FromDouble(sum);
-            }
-        }
-    }
-
-    private static void MatMulTransposeA(Tensor<T> a, Tensor<T> b, Tensor<T> result, int m, int k, int n)
-    {
-        for (int i = 0; i < k; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                double sum = 0.0;
-                for (int p = 0; p < m; p++)
-                {
-                    sum += NumOps.ToDouble(a[p * k + i]) * NumOps.ToDouble(b[p * n + j]);
-                }
-
-                result[i * n + j] = NumOps.FromDouble(sum);
-            }
-        }
-    }
-
-    private static void MatMulTransposeB(Tensor<T> a, Tensor<T> b, Tensor<T> result, int m, int k, int n)
-    {
-        for (int i = 0; i < m; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                double sum = 0.0;
-                for (int p = 0; p < k; p++)
-                {
-                    sum += NumOps.ToDouble(a[i * k + p]) * NumOps.ToDouble(b[j * k + p]);
-                }
-
-                result[i * n + j] = NumOps.FromDouble(sum);
-            }
-        }
-    }
-
-    private static void AddBias(Tensor<T> tensor, Tensor<T> bias, int batchSize, int dim)
-    {
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int d = 0; d < dim; d++)
-            {
-                double val = NumOps.ToDouble(tensor[b * dim + d]) + NumOps.ToDouble(bias[d]);
-                tensor[b * dim + d] = NumOps.FromDouble(val);
-            }
-        }
-    }
-
-    private static void ApplyRelu(Tensor<T> tensor, int totalElements)
-    {
-        for (int i = 0; i < totalElements; i++)
-        {
-            if (NumOps.LessThan(tensor[i], NumOps.FromDouble(0.0)))
-            {
-                tensor[i] = NumOps.FromDouble(0.0);
-            }
-        }
-    }
-
-    private static void ApplyReluGradient(Tensor<T> grad, Tensor<T> activation, int totalElements)
-    {
-        for (int i = 0; i < totalElements; i++)
-        {
-            if (!NumOps.GreaterThan(activation[i], NumOps.FromDouble(0.0)))
-            {
-                grad[i] = NumOps.FromDouble(0.0);
-            }
-        }
-    }
-
-    private static Tensor<T> SumOverBatch(Tensor<T> tensor, int batchSize, int dim)
-    {
-        var result = new Tensor<T>(new[] { dim });
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int d = 0; d < dim; d++)
-            {
-                result[d] = NumOps.FromDouble(NumOps.ToDouble(result[d]) + NumOps.ToDouble(tensor[b * dim + d]));
-            }
-        }
-
-        return result;
-    }
-
-    private static void UpdateTensor(Tensor<T> param, Tensor<T> grad, double lr)
-    {
-        int total = 1;
-        for (int d = 0; d < param.Rank; d++)
-        {
-            total *= param.Shape[d];
-        }
-
-        for (int i = 0; i < total; i++)
-        {
-            param[i] = NumOps.FromDouble(NumOps.ToDouble(param[i]) - lr * NumOps.ToDouble(grad[i]));
-        }
     }
 }

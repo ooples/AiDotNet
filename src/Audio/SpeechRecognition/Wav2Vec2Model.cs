@@ -587,11 +587,10 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         int field = ReceptiveField();
         if (waveform.Shape[^1] < field)
         {
-            var padded = new Tensor<T>(waveform.Rank == 1 ? new[] { field } : new[] { waveform.Shape[0], field });
-            int length = waveform.Shape[^1], rows = waveform.Rank == 1 ? 1 : waveform.Shape[0];
-            for (int r = 0; r < rows; r++)
-                for (int i = 0; i < length; i++) padded[r * field + i] = waveform[r * length + i];
-            waveform = padded;
+            // Right-pad every row with zeros up to the receptive field.
+            int length = waveform.Shape[^1];
+            var zeros = new Tensor<T>(waveform.Rank == 1 ? new[] { field - length } : new[] { waveform.Shape[0], field - length });
+            waveform = Engine.TensorConcatenate(new[] { waveform, zeros }, waveform.Rank - 1);
         }
         var output = _network.Forward(waveform, training, _random, freezeFeatureEncoder: training && _options.FreezeFeatureEncoder);
         var hidden = output.Hidden;
@@ -685,8 +684,6 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
 
     private List<int> CTCGreedyDecode(Tensor<T> logits)
     {
-        var tokens = new List<int>();
-        int prevToken = -1;
         int blankIdx = 0; // Blank token is first in vocabulary
 
         if (logits.Rank == 3)
@@ -694,36 +691,8 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
             if (logits.Shape[0] != 1) throw new ArgumentException("Greedy CTC decoding takes one utterance's logits.", nameof(logits));
             logits = Engine.Reshape(logits, new[] { logits.Shape[1], logits.Shape[2] });
         }
-        int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1;
-        int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0];
-
-        for (int t = 0; t < numFrames; t++)
-        {
-            // Find argmax
-            int maxIdx = 0;
-            double maxVal = double.NegativeInfinity;
-
-            for (int v = 0; v < vocabSize; v++)
-            {
-                double val = logits.Rank >= 2
-                    ? NumOps.ToDouble(logits[t, v])
-                    : NumOps.ToDouble(logits[v]);
-                if (val > maxVal)
-                {
-                    maxVal = val;
-                    maxIdx = v;
-                }
-            }
-
-            // CTC decoding: collapse repeated tokens and remove blanks
-            if (maxIdx != blankIdx && maxIdx != prevToken)
-            {
-                tokens.Add(maxIdx);
-            }
-            prevToken = maxIdx;
-        }
-
-        return tokens;
+        int[] frameTokens = SpeechRecognitionEngineOps.FrameArgMax(logits);
+        return SpeechRecognitionEngineOps.CollapseCtcFrames(frameTokens, blankIdx);
     }
 
     private string TokensToText(List<int> tokens)

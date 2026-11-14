@@ -197,13 +197,11 @@ public partial class Conformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
             var frames = Engine.Reshape(target, new[] { target.Length / _options.VocabSize, _options.VocabSize });
             return ConformerAsrNetwork<T>.GreedyCtc(frames).ToArray();
         }
-        var labels = new int[target.Length];
-        var span = target.Data.Span;
-        for (int i = 0; i < labels.Length; i++)
+        // Round in T, convert the whole tensor to ids once, then validate the ids as ints.
+        var labels = Engine.TensorRound(target).Cast<int>().ToArray();
+        foreach (int value in labels)
         {
-            double value = Math.Round(NumOps.ToDouble(span[i]));
             if (value <= 0 || value >= _options.VocabSize) throw new ArgumentException($"Label {value} is the blank or outside the vocabulary.", nameof(target));
-            labels[i] = (int)value;
         }
         return labels;
     }
@@ -248,15 +246,17 @@ public partial class Conformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
         var network = _network ?? throw new NotSupportedException("The objective is defined on the native network.");
         using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
         int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows, perRow = target.Length / rows;
-        double total = 0;
+        Tensor<T>? total = null;
         for (int r = 0; r < rows; r++)
         {
             var row = rows == 1 ? target : Engine.Reshape(Engine.TensorSlice(Engine.Reshape(target, new[] { rows, perRow }), new[] { r, 0 }, new[] { 1, perRow }),
                 target.Rank >= 3 ? target.Shape.ToArray().Skip(1).ToArray() : new[] { perRow });
             var features = network.Features(Samples(input, r * samples, samples));
-            total += NumOps.ToDouble(network.TransducerLoss(network.Encode(features, training: false), Labels(row))[0]);
+            var loss = network.TransducerLoss(network.Encode(features, training: false), Labels(row));
+            total = total is null ? loss.Clone() : Engine.TensorAdd(total, loss);
         }
-        return NumOps.FromDouble(total / rows);
+        var mean = Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / rows));
+        return mean.GetFlat(0);
     }
 
     /// <inheritdoc />

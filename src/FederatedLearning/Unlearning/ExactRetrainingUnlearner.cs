@@ -92,21 +92,8 @@ public class ExactRetrainingUnlearner<T> : FederatedLearningComponentBase<T>, IF
             if (roundUpdates.Count == 0) continue;
 
             // Weighted average of updates (equal weight since we don't have sizes)
-            for (int i = 0; i < modelSize; i++)
-            {
-                double sum = 0;
-                foreach (var update in roundUpdates)
-                {
-                    if (i < update.Shape[0])
-                    {
-                        sum += NumOps.ToDouble(update[i]);
-                    }
-                }
-
-                double avg = sum / roundUpdates.Count;
-                double current = NumOps.ToDouble(retrainedModel[i]);
-                retrainedModel[i] = NumOps.FromDouble(current + avg);
-            }
+            var sum = UnlearningEngineOps.SumFitted(roundUpdates, modelSize);
+            retrainedModel = Engine.TensorAdd(retrainedModel, Engine.TensorDivideScalar(sum, NumOps.FromDouble(roundUpdates.Count)));
         }
 
         stopwatch.Stop();
@@ -138,16 +125,7 @@ public class ExactRetrainingUnlearner<T> : FederatedLearningComponentBase<T>, IF
 
     private double ComputeL2Distance(Tensor<T> a, Tensor<T> b)
     {
-        int size = Math.Min(a.Shape[0], b.Shape[0]);
-        double sumSq = 0;
-
-        for (int i = 0; i < size; i++)
-        {
-            double diff = NumOps.ToDouble(a[i]) - NumOps.ToDouble(b[i]);
-            sumSq += diff * diff;
-        }
-
-        return Math.Sqrt(sumSq);
+        return UnlearningEngineOps.L2Distance(a, b);
     }
 
     private double ComputeMembershipInferenceScore(
@@ -177,29 +155,14 @@ public class ExactRetrainingUnlearner<T> : FederatedLearningComponentBase<T>, IF
 
         // Cosine similarity between model difference and client's aggregate update
         int size = Math.Min(model1.Shape[0], model2.Shape[0]);
-        var diff = new double[size];
-        var update = new double[size];
+        if (size <= 0) return 0;
 
-        for (int i = 0; i < size; i++)
-        {
-            diff[i] = NumOps.ToDouble(model1[i]) - NumOps.ToDouble(model2[i]);
-        }
+        var diff = Engine.TensorSubtract(UnlearningEngineOps.FitLength(model1, size), UnlearningEngineOps.FitLength(model2, size));
+        var update = UnlearningEngineOps.SumFitted(updates, size);
 
-        foreach (var u in updates)
-        {
-            for (int i = 0; i < size && i < u.Shape[0]; i++)
-            {
-                update[i] += NumOps.ToDouble(u[i]);
-            }
-        }
-
-        double dot = 0, normA = 0, normB = 0;
-        for (int i = 0; i < diff.Length; i++)
-        {
-            dot += diff[i] * update[i];
-            normA += diff[i] * diff[i];
-            normB += update[i] * update[i];
-        }
+        double dot = UnlearningEngineOps.Dot(diff, update);
+        double normA = UnlearningEngineOps.Dot(diff, diff);
+        double normB = UnlearningEngineOps.Dot(update, update);
         double denom = Math.Sqrt(normA) * Math.Sqrt(normB);
         return denom > CosineEpsilon ? dot / denom : 0;
     }

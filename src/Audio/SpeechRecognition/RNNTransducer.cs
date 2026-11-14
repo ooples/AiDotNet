@@ -1,5 +1,6 @@
 using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
+using AiDotNet.Audio.Foundations;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -54,7 +55,7 @@ namespace AiDotNet.Audio.SpeechRecognition;
 [ResearchPaper("Sequence Transduction with Recurrent Neural Networks", "https://arxiv.org/abs/1211.3711", Year = 2012, Authors = "Alex Graves")]
 [PaperOptimizer(OptimizerKind.SgdMomentum, LearningRate = 1e-4, Momentum = 0.9,
                 Source = "Graves 2012: a learning rate of 1e-4 and a momentum of 0.9 with steepest descent.")]
-public partial class RNNTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class RNNTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITrainingObjectiveProvider<T>
 {
     /// <inheritdoc />
     /// <remarks>
@@ -73,6 +74,18 @@ public partial class RNNTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
+
+    // The transducer on the native path: transcription (encoder), prediction and joint networks. Null in ONNX
+    // mode or with custom layers.
+    private ConformerAsrNetwork<T>? _network;
+
+    // Dropout on the transcription network's output while training (null when DropoutRate is zero).
+    private DropoutLayer<T>? _encoderDropout;
+
+    // At most this many labels are emitted at one frame before the search moves on.
+    private const int MaxSymbolsPerFrame = 10;
+
+    internal ConformerAsrNetwork<T>? Network => _network;
 
     #endregion
 
@@ -145,21 +158,57 @@ public partial class RNNTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     #region ISpeechRecognizer
 
     /// <inheritdoc />
+    /// <remarks>Greedy transducer decoding (Graves 2012, section 2.2): at each frame the most likely symbol is emitted
+    /// and fed back to the prediction network until the blank moves to the next frame.</remarks>
     public TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool? includeTimestamps = null)
+        => Decode(audio, beamWidth: 1, language, includeTimestamps);
+
+    /// <summary>
+    /// Transcribes audio with the transducer beam search of Graves 2012 (Algorithm 1): hypotheses over the
+    /// (frame, label) lattice merged across alignments, keeping <paramref name="beamWidth"/> per frame and
+    /// returning the one with the highest log-probability per label.
+    /// </summary>
+    /// <param name="audio">The waveform.</param>
+    /// <param name="beamWidth">The hypotheses kept per frame; 1 is greedy decoding.</param>
+    /// <param name="language">The language reported in the result.</param>
+    /// <param name="includeTimestamps">Whether to return segments.</param>
+    /// <returns>The transcription.</returns>
+    public TranscriptionResult<T> TranscribeWithBeamSearch(Tensor<T> audio, int beamWidth, string? language = null, bool? includeTimestamps = null)
+    {
+        if (beamWidth < 1) throw new ArgumentOutOfRangeException(nameof(beamWidth), "The beam must keep at least one hypothesis.");
+        return Decode(audio, beamWidth, language, includeTimestamps);
+    }
+
+    private TranscriptionResult<T> Decode(Tensor<T> audio, int beamWidth, string? language, bool? includeTimestamps)
     {
         ThrowIfDisposed();
-        var features = PreprocessAudio(audio);
-        var logits = IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(features) : Predict(features);
-        var tokens = GreedyDecode(logits);
+        List<int> tokens;
+        if (_network is null)
+        {
+            // An ONNX graph or custom layers carry no separate prediction network to step, so their frame
+            // outputs are read per frame from the log-mel features.
+            var features = PreprocessAudio(audio);
+            var logits = IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(features) : Predict(features);
+            tokens = SpeechRecognitionEngineOps.CollapseCtcFrames(SpeechRecognitionEngineOps.FrameArgMax(logits), 0);
+        }
+        else
+        {
+            // The transcription network computes its own log-mel features from the waveform.
+            tokens = DecodeTransducer(_network, audio, beamWidth);
+        }
+
         var text = TokensToText(tokens);
-        double duration = audio.Length > 0 ? (double)audio.Shape[0] / SampleRate : 0;
+        // The input is a waveform [samples] or a batch [batch, samples] whose first row is decoded, so the time
+        // axis is the last one: Shape[0] of a batch is the batch size.
+        int samples = audio.Rank >= 2 && audio.Shape[0] > 0 ? audio.Length / audio.Shape[0] : audio.Length;
+        double duration = samples > 0 ? (double)samples / SampleRate : 0;
         return new TranscriptionResult<T>
         {
             Text = text,
             Language = language ?? _options.Language,
             Confidence = NumOps.FromDouble(tokens.Count > 0 ? 0.9 : 0.0),
             DurationSeconds = duration,
-            Segments = ResolveReturnTimestamps(includeTimestamps) ? ExtractSegments(tokens, text, audio.Shape[0]) : Array.Empty<TranscriptionSegment<T>>()
+            Segments = ResolveReturnTimestamps(includeTimestamps) ? ExtractSegments(tokens, text, samples) : Array.Empty<TranscriptionSegment<T>>()
         };
     }
 
@@ -186,21 +235,67 @@ public partial class RNNTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers);
-        else Layers.AddRange(LayerHelper<T>.CreateDefaultRNNTransducerLayers(
-            encoderDim: _options.EncoderDim, numEncoderLayers: _options.NumEncoderLayers,
-            numEncoderHeads: _options.NumEncoderHeads, predictionDim: _options.PredictionDim,
-            numPredictionLayers: _options.NumPredictionLayers, embeddingDim: _options.EmbeddingDim,
-            jointDim: _options.JointDim, numMels: _options.NumMels, vocabSize: _options.VocabSize,
-            dropoutRate: _options.DropoutRate));
+        _network = null;
+        _encoderDropout = null;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); return; }
+
+        // Graves 2012, section 2: a transcription network over log-mel frames, a prediction network (label
+        // embedding then LSTMs) over the labels emitted so far, and a joint network combining the two into
+        // Pr(k | t, u). The transcription network is a Conformer stack after 4x convolutional subsampling.
+        var layers = new List<LayerBase<T>>();
+        _network = new ConformerAsrNetwork<T>(Engine, layers, new ConformerAsrConfiguration
+        {
+            SampleRate = _options.SampleRate, NumMels = _options.NumMels, EncoderDim = _options.EncoderDim,
+            NumEncoderLayers = _options.NumEncoderLayers, NumAttentionHeads = _options.NumEncoderHeads,
+            Decoder = ConformerAsrDecoder.Transducer, PredictionDim = _options.PredictionDim,
+            PredictionLayers = _options.NumPredictionLayers, PredictionEmbeddingDim = _options.EmbeddingDim,
+            JointDim = _options.JointDim, VocabSize = _options.VocabSize, FrequencyMasks = 0, TimeMasks = 0,
+        });
+        Layers.AddRange(layers);
+        if (_options.DropoutRate > 0)
+        {
+            _encoderDropout = new DropoutLayer<T>(_options.DropoutRate);
+            Layers.Add(_encoderDropout);
+        }
     }
 
     /// <inheritdoc />
+    /// <remarks>Native: the joint network's log-probabilities <c>[frames, VocabSize]</c> before any label is emitted
+    /// (u = 0), for a waveform <c>[samples]</c>, or <c>[batch, frames, VocabSize]</c> for <c>[batch, samples]</c>.</remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
-        if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
+        return Logits(input, training: false);
+    }
+
+    /// <inheritdoc />
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => _network is null ? base.ForwardForTraining(input) : Logits(input, training: true);
+
+    /// <inheritdoc />
+    /// <remarks>The transducer loss (Graves 2012, section 2.1): the negative log-probability of the target labels summed
+    /// over every alignment of the lattice, averaged over the batch.</remarks>
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> target)
+    {
+        var network = _network;
+        if (network is null) return false;
+        int rows = input.Rank == 1 ? 1 : input.Shape[0];
+        var labels = RowLabels(target, rows);
+        TrainWithCustomLoss(input, _ => MeanTransducerLoss(network, input, labels, training: true), _optimizer);
+        return true;
+    }
+
+    TrainingObjectiveKind ITrainingObjectiveProvider<T>.TrainingObjectiveKind => TrainingObjectiveKind.Supervised;
+
+    Tensor<T> ITrainingObjectiveProvider<T>.ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget) => proposedTarget;
+
+    /// <inheritdoc />
+    /// <remarks>The objective <see cref="TryApplyLearningRule"/> minimizes, in inference mode.</remarks>
+    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
+    {
+        var network = _network ?? throw new NotSupportedException("The objective is defined on the native network.");
+        using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
+        int rows = input.Rank == 1 ? 1 : input.Shape[0];
+        return MeanTransducerLoss(network, input, RowLabels(target, rows), training: false).GetFlat(0);
     }
 
     /// <inheritdoc />
@@ -237,25 +332,102 @@ public partial class RNNTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
 
     #region Private Helpers
 
-    private List<int> GreedyDecode(Tensor<T> logits)
+    // One waveform row of the input: [samples] for a single utterance, row r of [batch, samples] otherwise.
+    private Tensor<T> Row(Tensor<T> input, int row, int rows)
     {
-        var tokens = new List<int>();
-        int prevToken = -1;
-        int blankIdx = 0;
-        int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1;
-        int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0];
-        for (int t = 0; t < numFrames; t++)
+        int samples = input.Length / rows;
+        return rows == 1 && input.Rank == 1
+            ? input
+            : Engine.Reshape(Engine.TensorSlice(Engine.Reshape(input, new[] { rows, samples }), new[] { row, 0 }, new[] { 1, samples }), new[] { samples });
+    }
+
+    // The joint network's log-probabilities before any label, per frame.
+    private Tensor<T> Logits(Tensor<T> input, bool training)
+    {
+        if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
+        if (_network is null) { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
+        var network = _network;
+        int rows = input.Rank == 1 ? 1 : input.Shape[0];
+        var outputs = new Tensor<T>[rows];
+        for (int r = 0; r < rows; r++)
         {
-            int maxIdx = 0; double maxVal = double.NegativeInfinity;
-            for (int v = 0; v < vocabSize; v++)
-            {
-                double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]);
-                if (val > maxVal) { maxVal = val; maxIdx = v; }
-            }
-            if (maxIdx != blankIdx && maxIdx != prevToken) tokens.Add(maxIdx);
-            prevToken = maxIdx;
+            var encoded = Encoded(network, Row(input, r, rows), training);
+            var joint = network.Joint(encoded, network.Predict(Array.Empty<int>()));
+            outputs[r] = Engine.Reshape(joint, new[] { encoded.Shape[0], _options.VocabSize });
         }
-        return tokens;
+        return rows == 1 && input.Rank == 1 ? outputs[0] : Engine.TensorStack(outputs, 0);
+    }
+
+    // The transcription network's output [frames, EncoderDim], with dropout while training.
+    private Tensor<T> Encoded(ConformerAsrNetwork<T> network, Tensor<T> waveform, bool training)
+    {
+        var encoded = network.Encode(network.FeatureTensor(waveform), training);
+        return training && _encoderDropout is not null ? _encoderDropout.Forward(encoded) : encoded;
+    }
+
+    private Tensor<T> MeanTransducerLoss(ConformerAsrNetwork<T> network, Tensor<T> input, int[][] labels, bool training)
+    {
+        int rows = labels.Length;
+        Tensor<T>? total = null;
+        for (int r = 0; r < rows; r++)
+        {
+            var loss = network.TransducerLoss(Encoded(network, Row(input, r, rows), training), labels[r]);
+            total = total is null ? loss : Engine.TensorAdd(total, loss);
+        }
+        return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / rows));
+    }
+
+    private int[][] RowLabels(Tensor<T> target, int rows)
+    {
+        int perRow = target.Length / rows;
+        var labels = new int[rows][];
+        for (int r = 0; r < rows; r++)
+        {
+            var row = rows == 1 ? target : Engine.Reshape(Engine.TensorSlice(Engine.Reshape(target, new[] { rows, perRow }), new[] { r, 0 }, new[] { 1, perRow }),
+                target.Rank >= 3 ? target.Shape.ToArray().Skip(1).ToArray() : new[] { perRow });
+            labels[r] = Labels(row);
+        }
+        return labels;
+    }
+
+    // Target labels: label ids [length], or one distribution per frame [frames, VocabSize] read as a CTC alignment.
+    private int[] Labels(Tensor<T> target)
+    {
+        if (target.Rank >= 2 && target.Shape[^1] == _options.VocabSize)
+        {
+            var frames = Engine.Reshape(target, new[] { target.Length / _options.VocabSize, _options.VocabSize });
+            return SpeechRecognitionEngineOps.CollapseCtcFrames(SpeechRecognitionEngineOps.FrameArgMax(frames), 0).ToArray();
+        }
+
+        // Round in T, convert the whole tensor to ids once, then validate the ids as ints.
+        var labels = Engine.TensorRound(target).Cast<int>().ToArray();
+        foreach (int value in labels)
+        {
+            if (value <= 0 || value >= _options.VocabSize) throw new ArgumentException($"Label {value} is the blank or outside the vocabulary.", nameof(target));
+        }
+        return labels;
+    }
+
+    // Greedy or beam transducer decoding over the encoded utterance (Graves 2012, section 2.2).
+    private List<int> DecodeTransducer(ConformerAsrNetwork<T> network, Tensor<T> waveform, int beamWidth)
+    {
+        using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
+        int rows = waveform.Rank == 1 ? 1 : waveform.Shape[0];
+        var encoded = Encoded(network, Row(waveform, 0, rows), training: false);
+        int frames = encoded.Shape[0], width = encoded.Shape[1], vocabulary = _options.VocabSize;
+
+        // log Pr(k | t, u) after the prediction network has read the labels.
+        Tensor<T> LogProbs(IReadOnlyList<int> history, int t)
+        {
+            var predicted = network.Predict(history);
+            var last = Engine.TensorSlice(predicted, new[] { history.Count, 0 }, new[] { 1, predicted.Shape[1] });
+            var frame = Engine.TensorSlice(encoded, new[] { t, 0 }, new[] { 1, width });
+            return Engine.Reshape(network.Joint(frame, last), new[] { vocabulary });
+        }
+
+        if (beamWidth <= 1) return TransducerSearch.Greedy<T>(frames, LogProbs, 0, MaxSymbolsPerFrame);
+        var hypotheses = TransducerSearch.BeamSearch<T>(frames, LogProbs, vocabulary, 0, beamWidth, MaxSymbolsPerFrame);
+        return hypotheses.Count > 0 ? hypotheses[0].Labels.ToList() : new List<int>();
     }
 
     private string TokensToText(List<int> tokens)
@@ -301,10 +473,7 @@ public partial class RNNTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         {
             if (_disposed) throw new ObjectDisposedException(nameof(RNNTStreamingSession));
             if (_chunks.Count == 0) return new TranscriptionResult<T> { Language = _language };
-            int totalLen = 0; foreach (var ch in _chunks) totalLen += ch.Length;
-            var combined = new Tensor<T>(new[] { totalLen });
-            int offset = 0;
-            foreach (var ch in _chunks) { for (int i = 0; i < ch.Length; i++) combined[offset + i] = ch[i]; offset += ch.Length; }
+            var combined = SpeechRecognitionEngineOps.ConcatFlat(_chunks);
             return _model.Transcribe(combined, _language);
         }
 

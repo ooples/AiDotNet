@@ -135,29 +135,29 @@ public class VerticalFederatedBenchmark<T> : FederatedLearningComponentBase<T>
             // Extract party features
             var partyColumns = featurePartition[p];
             int partyFeatures = partyColumns.Count;
-            var partyData = new Tensor<T>(new[] { entityIndices.Count, partyFeatures });
-
             var partyEntityIds = new string[entityIndices.Count];
             for (int row = 0; row < entityIndices.Count; row++)
             {
-                int globalRow = entityIndices[row];
-                partyEntityIds[row] = allEntityIds[globalRow];
-                for (int c = 0; c < partyFeatures; c++)
-                {
-                    int srcCol = partyColumns[c];
-                    partyData[row * partyFeatures + c] = fullFeatures[globalRow * totalFeatures + srcCol];
-                }
+                partyEntityIds[row] = allEntityIds[entityIndices[row]];
             }
+
+            // Party rows (entities) and columns (its features) gathered from the full dataset
+            bool hasRows = entityIndices.Count > 0;
+            var rowIndices = new Tensor<int>(entityIndices.ToArray(), new[] { entityIndices.Count });
+            var partyData = hasRows && partyFeatures > 0
+                ? Engine.TensorIndexSelect(
+                    Engine.TensorIndexSelect(fullFeatures, rowIndices, 0),
+                    new Tensor<int>(partyColumns.ToArray(), new[] { partyFeatures }),
+                    1)
+                : new Tensor<T>(new[] { entityIndices.Count, partyFeatures });
 
             // Label holder is the last party
             Tensor<T>? partyLabels = null;
             if (p == numberOfParties - 1)
             {
-                partyLabels = new Tensor<T>(new[] { entityIndices.Count });
-                for (int row = 0; row < entityIndices.Count; row++)
-                {
-                    partyLabels[row] = allLabels[entityIndices[row]];
-                }
+                partyLabels = hasRows
+                    ? Engine.TensorIndexSelect(allLabels, rowIndices, 0)
+                    : new Tensor<T>(new[] { 0 });
             }
 
             partyDatasets.Add(new VflPartyDataset<T>

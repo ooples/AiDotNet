@@ -115,7 +115,7 @@ internal class OneShotFederatedTrainer<T> : Infrastructure.FederatedLearningComp
 
         foreach (var (layerName, layerParams) in template)
         {
-            var merged = new double[layerParams.Length];
+            var merged = new Vector<T>(layerParams.Length);
 
             foreach (var (clientId, model) in clientModels)
             {
@@ -131,20 +131,12 @@ internal class OneShotFederatedTrainer<T> : Infrastructure.FederatedLearningComp
                             $"Client {clientId} layer '{layerName}' length {clientLayer.Length} differs from expected {merged.Length}.");
                     }
 
-                    for (int i = 0; i < clientLayer.Length; i++)
-                    {
-                        merged[i] += weight * NumOps.ToDouble(clientLayer[i]);
-                    }
+                    // One weight conversion per client, then a whole-layer multiply-add.
+                    merged = Engine.Add(merged, Engine.Multiply(Vector<T>.Wrap(clientLayer), NumOps.FromDouble(weight)));
                 }
             }
 
-            var mergedT = new T[layerParams.Length];
-            for (int i = 0; i < mergedT.Length; i++)
-            {
-                mergedT[i] = NumOps.FromDouble(merged[i]);
-            }
-
-            result[layerName] = mergedT;
+            result[layerName] = merged.ToArray();
         }
 
         return result;
@@ -171,13 +163,15 @@ internal class OneShotFederatedTrainer<T> : Infrastructure.FederatedLearningComp
         // Ensemble distillation initialization: weighted average as starting point.
         var initial = AggregateWeightedAverage(clientModels, clientSampleCounts);
 
-        // Compute ensemble diversity metric.
-        double totalDiversity = 0;
-        int layerCount = 0;
+        // Compute ensemble diversity metric: the mean over layers of each layer's mean squared
+        // client-to-average difference. The squared distances and the per-layer element counts are reduced in
+        // double: in T the squares overflow and the counts lose integers (Half: 65504, and spacing 2 above 2048).
+        var pairSums = new List<double>();
+        var pairLayer = new List<int>();
+        var layerCounts = new List<int>();
 
         foreach (var (layerName, globalLayer) in initial)
         {
-            double layerVariance = 0;
             int count = 0;
 
             foreach (var (_, model) in clientModels)
@@ -185,23 +179,36 @@ internal class OneShotFederatedTrainer<T> : Infrastructure.FederatedLearningComp
                 if (model.TryGetValue(layerName, out var clientLayer))
                 {
                     int len = Math.Min(clientLayer.Length, globalLayer.Length);
-                    for (int i = 0; i < len; i++)
-                    {
-                        double diff = NumOps.ToDouble(clientLayer[i]) - NumOps.ToDouble(globalLayer[i]);
-                        layerVariance += diff * diff;
-                        count++;
-                    }
+                    var diff = Engine.Subtract(Vector<T>.Wrap(clientLayer, 0, len), Vector<T>.Wrap(globalLayer, 0, len));
+                    var diffDouble = diff.AsTensor().Cast<double>();
+                    pairSums.Add(Engine.TensorSum(Engine.TensorSquare(diffDouble)));
+                    pairLayer.Add(layerCounts.Count);
+                    count += len;
                 }
             }
 
-            if (count > 0)
-            {
-                totalDiversity += layerVariance / count;
-                layerCount++;
-            }
+            layerCounts.Add(count);
         }
 
-        LastEnsembleDiversity = layerCount > 0 ? totalDiversity / layerCount : 0;
+        var included = Enumerable.Range(0, layerCounts.Count).Where(l => layerCounts[l] > 0).ToArray();
+        if (included.Length == 0 || pairSums.Count == 0)
+        {
+            LastEnsembleDiversity = 0;
+        }
+        else
+        {
+            var layerSums = Engine.ScatterAdd(
+                new Tensor<double>(pairSums.ToArray(), [pairSums.Count]),
+                new Tensor<int>(pairLayer.ToArray(), [pairLayer.Count]),
+                0,
+                layerCounts.Count);
+            var counts = new Tensor<int>(layerCounts.ToArray(), [layerCounts.Count]).Cast<double>();
+            var includedIndex = new Tensor<int>(included, [included.Length]);
+            var layerVariances = Engine.TensorDivide(
+                Engine.TensorIndexSelect(layerSums, includedIndex, 0),
+                Engine.TensorIndexSelect(counts, includedIndex, 0));
+            LastEnsembleDiversity = Engine.TensorMean(layerVariances);
+        }
 
         return initial;
     }
