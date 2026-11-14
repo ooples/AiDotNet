@@ -216,19 +216,6 @@ public partial class CubicSplineInterpolation<T> : IInterpolation<T>
     /// <returns>The index of the interval containing the x-value.</returns>
     private int FindInterval(T x)
     {
-        int low = 0;
-        int high = _x.Length - 1;
-
-        // Binary search to find the interval
-        while (low < high - 1)
-        {
-            int mid = (low + high) / 2;
-            if (_numOps.LessThanOrEquals(_x[mid], x))
-                low = mid;
-            else
-                high = mid;
-        }
-
-        return low;
+        return InterpolationSearch.LastKnotAtOrBelow(_x, x, 0, _x.Length - 2);
     }
 }

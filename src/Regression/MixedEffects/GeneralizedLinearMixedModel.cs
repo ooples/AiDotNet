@@ -269,10 +269,7 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
         if (_fixedEffects is not null && _fixedEffects.Length > 0)
         {
             int featureCount = _fixedEffects.Length - 1;
-            var coefficients = new Vector<T>(featureCount);
-            for (int j = 0; j < featureCount; j++) coefficients[j] = _fixedEffects[j];
-
-            Coefficients = coefficients;
+            Coefficients = _fixedEffects.GetSubVector(0, featureCount);
             Intercept = _fixedEffects[featureCount];
         }
         else
@@ -310,58 +307,151 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
             throw new InvalidOperationException("Model must be trained before making predictions.");
         }
 
-        int n = input.Rows;
-        var linearPred = new Vector<T>(n);
         var fixedX = ExtractFixedEffectsMatrix(input);
 
-        for (int i = 0; i < n; i++)
+        // Fixed effects contribution
+        var linearPred = FixedPredictions(fixedX, _fixedEffects);
+
+        // Add random effects (BLUPs) if available
+        foreach (var re in _randomEffects)
         {
-            // Fixed effects contribution
-            T eta = NumOps.Zero;
-            for (int j = 0; j < _nFixedParams; j++)
+            if (re.GroupColumnIndex < input.Columns)
             {
-                eta = NumOps.Add(eta, NumOps.Multiply(fixedX[i, j], _fixedEffects[j]));
+                linearPred = Engine.Add(linearPred, RandomEffectContributions(input, fixedX, re));
             }
-
-            // Add random effects (BLUPs) if available
-            foreach (var re in _randomEffects)
-            {
-                int groupCol = re.GroupColumnIndex;
-                if (groupCol < input.Columns)
-                {
-                    double groupId = NumOps.ToDouble(input[i, groupCol]);
-                    var groupEffect = re.GetGroupEffect(groupId);
-
-                    // Random intercept
-                    if (re.IsRandomIntercept && groupEffect.Length > 0)
-                    {
-                        eta = NumOps.Add(eta, groupEffect[0]);
-                    }
-
-                    // Random slopes
-                    if (re.RandomSlopeColumns != null)
-                    {
-                        int offset = re.IsRandomIntercept ? 1 : 0;
-                        for (int s = 0; s < re.RandomSlopeColumns.Length; s++)
-                        {
-                            if (offset + s < groupEffect.Length)
-                            {
-                                int slopeCol = re.RandomSlopeColumns[s];
-                                if (slopeCol < fixedX.Columns)
-                                {
-                                    eta = NumOps.Add(eta,
-                                        NumOps.Multiply(fixedX[i, slopeCol], groupEffect[offset + s]));
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            linearPred[i] = eta;
         }
 
         return linearPred;
+    }
+
+    /// <summary>
+    /// fixedX * fixedEffects over the first _nFixedParams columns.
+    /// </summary>
+    private Vector<T> FixedPredictions(Matrix<T> fixedX, Vector<T> fixedEffects)
+    {
+        if (fixedX.Rows == 0 || _nFixedParams == 0)
+        {
+            return new Vector<T>(fixedX.Rows);
+        }
+
+        var design = fixedX.Columns == _nFixedParams ? fixedX : fixedX.GetSubMatrix(0, 0, fixedX.Rows, _nFixedParams);
+        return Engine.MatrixVectorMultiply(design, fixedEffects.GetSubVector(0, _nFixedParams));
+    }
+
+    /// <summary>
+    /// Per-row contribution of one random effect: the group's intercept plus its slopes times the
+    /// matching fixed-design columns (0 for rows whose group has no effect).
+    /// </summary>
+    private Vector<T> RandomEffectContributions(Matrix<T> input, Matrix<T> fixedX, RandomEffect<T> re)
+    {
+        int n = input.Rows;
+        var allRows = new List<int>(n);
+        var contributions = new List<Vector<T>>();
+        foreach (var kvp in GroupObservations(input, re.GroupColumnIndex))
+        {
+            int[] rows = kvp.Value.ToArray();
+            var groupEffect = re.GetGroupEffect(kvp.Key);
+            var contribution = Engine.FillZero<T>(rows.Length);
+
+            // Random intercept
+            if (re.IsRandomIntercept && groupEffect.Length > 0)
+            {
+                contribution = Engine.Add(contribution, Engine.Fill(rows.Length, FirstElement(groupEffect)));
+            }
+
+            // Random slopes
+            if (re.RandomSlopeColumns != null)
+            {
+                int offset = re.IsRandomIntercept ? 1 : 0;
+                var effectIndices = new List<int>();
+                var slopeColumns = new List<Vector<T>>();
+                var groupRows = fixedX.GetRows(rows);
+                for (int s = 0; s < re.RandomSlopeColumns.Length; s++)
+                {
+                    int slopeCol = re.RandomSlopeColumns[s];
+                    if (offset + s < groupEffect.Length && slopeCol < fixedX.Columns)
+                    {
+                        effectIndices.Add(offset + s);
+                        slopeColumns.Add(Engine.GetColumn(groupRows, slopeCol));
+                    }
+                }
+
+                if (effectIndices.Count > 0 && rows.Length > 0)
+                {
+                    var slopeDesign = Engine.TensorConcatenate(
+                        slopeColumns.Select(column => new Tensor<T>(new[] { rows.Length, 1 }, column)).ToArray(), 1).ToMatrix();
+                    contribution = Engine.Add(contribution, Engine.MatrixVectorMultiply(
+                        slopeDesign, RegressionEngineOps.Gather(groupEffect, effectIndices.ToArray())));
+                }
+            }
+
+            allRows.AddRange(rows);
+            contributions.Add(contribution);
+        }
+
+        return ScatterRows(n, allRows, contributions);
+    }
+
+    /// <summary>
+    /// A length-<paramref name="n"/> vector holding each block of values at its rows (0 elsewhere).
+    /// </summary>
+    private Vector<T> ScatterRows(int n, List<int> rows, List<Vector<T>> values)
+    {
+        var result = Engine.FillZero<T>(n);
+        if (rows.Count == 0)
+        {
+            return result;
+        }
+
+        return Engine.TensorScatterAdd(
+            Tensor<T>.FromVector(result),
+            new Tensor<int>(rows.ToArray(), new[] { rows.Count }),
+            Tensor<T>.FromVector(Vector<T>.Concatenate(values)),
+            0).ToVector();
+    }
+
+    /// <summary>
+    /// Per-row random intercept (first effect component) of one random effect.
+    /// </summary>
+    private Vector<T> RowInterceptEffects(Matrix<T> fullX, RandomEffect<T> re)
+    {
+        var allRows = new List<int>(fullX.Rows);
+        var values = new List<Vector<T>>();
+        foreach (var kvp in GroupObservations(fullX, re.GroupColumnIndex))
+        {
+            var blup = re.GetGroupEffect(kvp.Key);
+            if (blup.Length > 0)
+            {
+                allRows.AddRange(kvp.Value);
+                values.Add(Engine.Fill(kvp.Value.Count, FirstElement(blup)));
+            }
+        }
+
+        return ScatterRows(fullX.Rows, allRows, values);
+    }
+
+    /// <summary>
+    /// The first component of an effect vector.
+    /// </summary>
+    private static T FirstElement(Vector<T> values)
+    {
+        return values[0];
+    }
+
+    /// <summary>
+    /// The [0, 0] entry of a covariance matrix.
+    /// </summary>
+    private static T FirstDiagonal(Matrix<T> covariance)
+    {
+        return covariance[0, 0];
+    }
+
+    /// <summary>
+    /// Sets the [0, 0] entry of a covariance matrix.
+    /// </summary>
+    private static void SetFirstDiagonal(Matrix<T> covariance, T value)
+    {
+        covariance[0, 0] = value;
     }
 
     /// <summary>
@@ -383,91 +473,91 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
     /// </summary>
     private Vector<T> ApplyInverseLink(Vector<T> eta)
     {
-        var result = new Vector<T>(eta.Length);
-
-        for (int i = 0; i < eta.Length; i++)
+        int n = eta.Length;
+        var ones = Engine.Fill(n, NumOps.One);
+        T minusOne = NumOps.Negate(NumOps.One);
+        return _options.LinkFunction switch
         {
-            double etaVal = NumOps.ToDouble(eta[i]);
-            double mu = _options.LinkFunction switch
-            {
-                GLMMLinkFunction.Identity => etaVal,
-                GLMMLinkFunction.Logit => 1.0 / (1.0 + Math.Exp(-etaVal)),
-                GLMMLinkFunction.Log => Math.Exp(etaVal),
-                GLMMLinkFunction.Probit => NormalCDF(etaVal),
-                GLMMLinkFunction.CLogLog => 1.0 - Math.Exp(-Math.Exp(etaVal)),
-                GLMMLinkFunction.Inverse => 1.0 / etaVal,
-                GLMMLinkFunction.Sqrt => etaVal * etaVal,
-                _ => etaVal
-            };
-            result[i] = NumOps.FromDouble(mu);
-        }
-
-        return result;
+            GLMMLinkFunction.Identity => new Vector<T>(eta),
+            GLMMLinkFunction.Logit => Engine.Reciprocal(Engine.Add(ones, Engine.Exp(Engine.Multiply(eta, minusOne)))),
+            GLMMLinkFunction.Log => Engine.Exp(eta),
+            GLMMLinkFunction.Probit => NormalCDF(eta),
+            GLMMLinkFunction.CLogLog => Engine.Subtract(ones, Engine.Exp(Engine.Multiply(Engine.Exp(eta), minusOne))),
+            GLMMLinkFunction.Inverse => Engine.Reciprocal(eta),
+            GLMMLinkFunction.Sqrt => Engine.Multiply(eta, eta),
+            _ => new Vector<T>(eta)
+        };
     }
 
     /// <summary>
     /// Applies the link function to transform from mean to linear predictor.
     /// </summary>
-    private T ApplyLink(T mu)
+    private Vector<T> ApplyLink(Vector<T> mu)
     {
-        double muVal = NumOps.ToDouble(mu);
-
         // Prevent extreme values
-        muVal = Math.Max(1e-10, Math.Min(1 - 1e-10, muVal));
-
-        double eta = _options.LinkFunction switch
+        mu = ClampUnit(mu);
+        var ones = Engine.Fill(mu.Length, NumOps.One);
+        return _options.LinkFunction switch
         {
-            GLMMLinkFunction.Identity => muVal,
-            GLMMLinkFunction.Logit => Math.Log(muVal / (1.0 - muVal)),
-            GLMMLinkFunction.Log => Math.Log(muVal),
-            GLMMLinkFunction.Probit => NormalQuantile(muVal),
-            GLMMLinkFunction.CLogLog => Math.Log(-Math.Log(1.0 - muVal)),
-            GLMMLinkFunction.Inverse => 1.0 / muVal,
-            GLMMLinkFunction.Sqrt => Math.Sqrt(muVal),
-            _ => muVal
+            GLMMLinkFunction.Identity => mu,
+            GLMMLinkFunction.Logit => Engine.Log(Engine.Divide(mu, Engine.Subtract(ones, mu))),
+            GLMMLinkFunction.Log => Engine.Log(mu),
+            GLMMLinkFunction.Probit => NormalQuantile(mu),
+            GLMMLinkFunction.CLogLog => Engine.Log(Engine.Multiply(Engine.Log(Engine.Subtract(ones, mu)), NumOps.Negate(NumOps.One))),
+            GLMMLinkFunction.Inverse => Engine.Reciprocal(mu),
+            GLMMLinkFunction.Sqrt => Engine.Sqrt(mu),
+            _ => mu
         };
+    }
 
-        return NumOps.FromDouble(eta);
+    /// <summary>
+    /// Clamps every value into [1e-10, 1 - 1e-10].
+    /// </summary>
+    private Vector<T> ClampUnit(Vector<T> values)
+    {
+        return Engine.Clamp(values, NumOps.FromDouble(1e-10), NumOps.FromDouble(1 - 1e-10));
     }
 
     /// <summary>
     /// Computes the derivative of the link function.
     /// </summary>
-    private double LinkDerivative(double mu)
+    private Vector<T> LinkDerivative(Vector<T> mu)
     {
         // Prevent extreme values
-        mu = Math.Max(1e-10, Math.Min(1 - 1e-10, mu));
-
+        mu = ClampUnit(mu);
+        int n = mu.Length;
+        var ones = Engine.Fill(n, NumOps.One);
+        var oneMinusMu = Engine.Subtract(ones, mu);
         return _options.LinkFunction switch
         {
-            GLMMLinkFunction.Identity => 1.0,
-            GLMMLinkFunction.Logit => 1.0 / (mu * (1.0 - mu)),
-            GLMMLinkFunction.Log => 1.0 / mu,
-            GLMMLinkFunction.Probit => 1.0 / NormalPDF(NormalQuantile(mu)),
-            GLMMLinkFunction.CLogLog => 1.0 / ((1.0 - mu) * Math.Log(1.0 - mu)),
-            GLMMLinkFunction.Inverse => -1.0 / (mu * mu),
-            GLMMLinkFunction.Sqrt => 0.5 / Math.Sqrt(mu),
-            _ => 1.0
+            GLMMLinkFunction.Identity => ones,
+            GLMMLinkFunction.Logit => Engine.Reciprocal(Engine.Multiply(mu, oneMinusMu)),
+            GLMMLinkFunction.Log => Engine.Reciprocal(mu),
+            GLMMLinkFunction.Probit => Engine.Reciprocal(NormalPDF(NormalQuantile(mu))),
+            GLMMLinkFunction.CLogLog => Engine.Reciprocal(Engine.Multiply(oneMinusMu, Engine.Log(oneMinusMu))),
+            GLMMLinkFunction.Inverse => Engine.Divide(Engine.Fill(n, NumOps.Negate(NumOps.One)), Engine.Multiply(mu, mu)),
+            GLMMLinkFunction.Sqrt => Engine.Divide(Engine.Fill(n, NumOps.FromDouble(0.5)), Engine.Sqrt(mu)),
+            _ => ones
         };
     }
 
     /// <summary>
     /// Computes the variance function for the specified family.
     /// </summary>
-    private double VarianceFunction(double mu)
+    private Vector<T> VarianceFunction(Vector<T> mu)
     {
         // Prevent extreme values
-        mu = Math.Max(1e-10, Math.Min(1 - 1e-10, mu));
-
+        mu = ClampUnit(mu);
+        var ones = Engine.Fill(mu.Length, NumOps.One);
         return _options.Family switch
         {
-            GLMMFamily.Gaussian => 1.0,
-            GLMMFamily.Binomial => mu * (1.0 - mu),
+            GLMMFamily.Gaussian => ones,
+            GLMMFamily.Binomial => Engine.Multiply(mu, Engine.Subtract(ones, mu)),
             GLMMFamily.Poisson => mu,
-            GLMMFamily.Gamma => mu * mu,
-            GLMMFamily.InverseGaussian => mu * mu * mu,
-            GLMMFamily.NegativeBinomial => mu + mu * mu / NumOps.ToDouble(_options.NegBinomialTheta),
-            _ => 1.0
+            GLMMFamily.Gamma => Engine.Multiply(mu, mu),
+            GLMMFamily.InverseGaussian => Engine.Multiply(Engine.Multiply(mu, mu), mu),
+            GLMMFamily.NegativeBinomial => Engine.Add(mu, Engine.Divide(Engine.Multiply(mu, mu), _options.NegBinomialTheta)),
+            _ => ones
         };
     }
 
@@ -479,77 +569,54 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
         // PQL iterates between:
         // 1. Computing working response and weights
         // 2. Fitting a linear mixed model to the working response
+        T tolerance = NumOps.FromDouble(_options.Tolerance);
+        var observedY = y.GetSubVector(0, _nObservations);
 
         for (int outerIter = 0; outerIter < _options.MaxIterations; outerIter++)
         {
-            // Compute linear predictor
+            // Compute linear predictor: fixed effects plus each random intercept
             var eta = new Vector<T>(_nObservations);
             if (_fixedEffects != null)
             {
-                for (int i = 0; i < _nObservations; i++)
+                eta = FixedPredictions(fixedX, _fixedEffects).GetSubVector(0, _nObservations);
+                foreach (var re in _randomEffects)
                 {
-                    T pred = NumOps.Zero;
-                    for (int j = 0; j < _nFixedParams; j++)
-                    {
-                        pred = NumOps.Add(pred, NumOps.Multiply(fixedX[i, j], _fixedEffects[j]));
-                    }
-
-                    // Add random effects
-                    foreach (var re in _randomEffects)
-                    {
-                        double groupId = NumOps.ToDouble(fullX[i, re.GroupColumnIndex]);
-                        var blup = re.GetGroupEffect(groupId);
-                        if (blup.Length > 0)
-                        {
-                            pred = NumOps.Add(pred, blup[0]);
-                        }
-                    }
-
-                    eta[i] = pred;
+                    eta = Engine.Add(eta, RowInterceptEffects(fullX, re).GetSubVector(0, _nObservations));
                 }
             }
 
             // Compute fitted values
             var mu = ApplyInverseLink(eta);
 
-            // Compute working response and weights
-            var workingY = new Vector<T>(_nObservations);
-            var weights = new Vector<T>(_nObservations);
-
-            for (int i = 0; i < _nObservations; i++)
-            {
-                double muVal = NumOps.ToDouble(mu[i]);
-                double yVal = NumOps.ToDouble(y[i]);
-                double etaVal = NumOps.ToDouble(eta[i]);
-
-                double gPrime = LinkDerivative(muVal);
-                double v = VarianceFunction(muVal);
-
-                // Working response: z = eta + (y - mu) * g'(mu)
-                double z = etaVal + (yVal - muVal) * gPrime;
-
-                // Working weight: w = 1 / (g'(mu)^2 * V(mu))
-                double w = 1.0 / (gPrime * gPrime * v);
-
-                workingY[i] = NumOps.FromDouble(z);
-                weights[i] = NumOps.FromDouble(w);
-            }
+            // Working response z = eta + (y - mu) g'(mu) and weight w = 1 / (g'(mu)^2 V(mu))
+            var gPrime = LinkDerivative(mu);
+            var v = VarianceFunction(mu);
+            var workingY = Engine.Add(eta, Engine.Multiply(Engine.Subtract(observedY, mu), gPrime));
+            var weights = Engine.Reciprocal(Engine.Multiply(Engine.Multiply(gPrime, gPrime), v));
 
             // Fit weighted linear mixed model
             FitWeightedLME(fixedX, fullX, workingY, weights);
 
             // Compute log-likelihood
-            double newLogLik = ComputeLogLikelihood(y, mu);
+            T newLogLik = ComputeLogLikelihood(y, mu);
 
             // Check convergence
-            if (outerIter > 0 && Math.Abs(newLogLik - NumOps.ToDouble(_logLikelihood)) < _options.Tolerance)
+            if (outerIter > 0 && ChangedLessThan(newLogLik, _logLikelihood, tolerance))
             {
-                _logLikelihood = NumOps.FromDouble(newLogLik);
+                _logLikelihood = newLogLik;
                 break;
             }
 
-            _logLikelihood = NumOps.FromDouble(newLogLik);
+            _logLikelihood = newLogLik;
         }
+    }
+
+    /// <summary>
+    /// Whether |current - previous| is below the tolerance.
+    /// </summary>
+    private bool ChangedLessThan(T current, T previous, T tolerance)
+    {
+        return NumOps.LessThan(NumOps.Abs(NumOps.Subtract(current, previous)), tolerance);
     }
 
     /// <summary>
@@ -567,26 +634,17 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
     /// </summary>
     private void FitWeightedLME(Matrix<T> fixedX, Matrix<T> fullX, Vector<T> workingY, Vector<T> weights)
     {
-        // Apply weights by transforming the problem
-        var sqrtW = new Vector<T>(weights.Length);
-        for (int i = 0; i < weights.Length; i++)
-        {
-            sqrtW[i] = NumOps.Sqrt(weights[i]);
-        }
+        // Apply weights by transforming the problem: rows of X and y scaled by sqrt(w)
+        var sqrtW = Engine.Sqrt(weights);
 
         // Weight-transform the design matrix and response
-        var wX = new Matrix<T>(fixedX.Rows, fixedX.Columns);
-        var wY = new Vector<T>(workingY.Length);
-
-        for (int i = 0; i < fixedX.Rows; i++)
-        {
-            double w = NumOps.ToDouble(sqrtW[i]);
-            for (int j = 0; j < fixedX.Columns; j++)
-            {
-                wX[i, j] = NumOps.FromDouble(NumOps.ToDouble(fixedX[i, j]) * w);
-            }
-            wY[i] = NumOps.FromDouble(NumOps.ToDouble(workingY[i]) * w);
-        }
+        var wX = fixedX.Rows == 0 || fixedX.Columns == 0
+            ? new Matrix<T>(fixedX.Rows, fixedX.Columns)
+            : Engine.TensorMultiply(
+                Tensor<T>.FromMatrix(fixedX),
+                Engine.TensorBroadcastTo(new Tensor<T>(new[] { fixedX.Rows, 1 }, sqrtW.GetSubVector(0, fixedX.Rows)),
+                    new[] { fixedX.Rows, fixedX.Columns })).ToMatrix();
+        var wY = Engine.Multiply(workingY, sqrtW);
 
         // Compute BLUPs
         ComputeBLUPs(wX, fullX, wY, weights);
@@ -606,49 +664,32 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
         if (_fixedEffects == null) return;
 
         // Compute weighted residuals from fixed effects
-        var residuals = new Vector<T>(_nObservations);
-        for (int i = 0; i < _nObservations; i++)
-        {
-            T pred = NumOps.Zero;
-            for (int j = 0; j < _nFixedParams; j++)
-            {
-                pred = NumOps.Add(pred, NumOps.Multiply(wX[i, j], _fixedEffects[j]));
-            }
-            residuals[i] = NumOps.Subtract(wY[i], pred);
-        }
+        var residuals = Engine.Subtract(
+            wY.GetSubVector(0, _nObservations), FixedPredictions(wX, _fixedEffects).GetSubVector(0, _nObservations));
 
         foreach (var re in _randomEffects)
         {
             var groups = GroupObservations(fullX, re.GroupColumnIndex);
-
-            double sigmaU = re.CovarianceMatrix != null ? NumOps.ToDouble(re.CovarianceMatrix[0, 0]) : 1.0;
+            T sigmaU = re.CovarianceMatrix != null ? FirstDiagonal(re.CovarianceMatrix) : NumOps.One;
 
             foreach (var kvp in groups)
             {
-                double groupId = kvp.Key;
-                var indices = kvp.Value;
+                int[] indices = kvp.Value.ToArray();
+                var groupWeights = RegressionEngineOps.Gather(weights, indices);
 
-                // Compute weighted sum of residuals
-                double sumWResid = 0;
-                double sumW = 0;
-                foreach (int idx in indices)
-                {
-                    double w = NumOps.ToDouble(weights[idx]);
-                    sumWResid += w * NumOps.ToDouble(residuals[idx]);
-                    sumW += w;
-                }
-
-                // BLUP with shrinkage
-                double shrinkage = sigmaU / (sigmaU + 1.0 / sumW);
-                double blup = shrinkage * sumWResid / sumW;
+                // Weighted BLUP: shrinkage * sum(w r) / sum(w), shrinkage = sigmaU / (sigmaU + 1 / sum(w))
+                T sumWResid = Engine.DotProduct(groupWeights, RegressionEngineOps.Gather(residuals, indices));
+                T sumW = Engine.Sum(groupWeights);
+                T shrinkage = NumOps.Divide(sigmaU, NumOps.Add(sigmaU, NumOps.Divide(NumOps.One, sumW)));
+                T blup = NumOps.Divide(NumOps.Multiply(shrinkage, sumWResid), sumW);
 
                 var blupVector = new Vector<T>(re.Dimension);
-                if (re.IsRandomIntercept)
+                if (re.IsRandomIntercept && re.Dimension > 0)
                 {
-                    blupVector[0] = NumOps.FromDouble(blup);
+                    blupVector = Vector<T>.Concatenate(new[] { Engine.Fill(1, blup), new Vector<T>(re.Dimension - 1) });
                 }
 
-                re.SetGroupEffect(groupId, blupVector);
+                re.SetGroupEffect(kvp.Key, blupVector);
             }
 
             CentreRandomIntercepts(re, groups);
@@ -678,33 +719,22 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
     {
         if (!re.IsRandomIntercept || groups.Count == 0) return;
 
-        double total = 0.0;
-        int counted = 0;
+        // Mean random intercept over the groups that have one
+        var effects = groups.Keys
+            .Select(groupId => (groupId, blup: re.GetGroupEffect(groupId)))
+            .Where(entry => entry.blup.Length > 0)
+            .ToList();
+        if (effects.Count == 0) return;
 
-        foreach (double groupId in groups.Keys)
+        var intercepts = Vector<T>.Concatenate(effects.Select(entry => entry.blup.GetSubVector(0, 1)).ToList());
+        T mean = NumOps.Divide(Engine.Sum(intercepts), NumOps.FromDouble(effects.Count));
+        if (NumOps.Equals(mean, NumOps.Zero)) return;
+
+        // Subtract the mean from every intercept (the slopes are left as they are)
+        foreach (var (groupId, blup) in effects)
         {
-            var blup = re.GetGroupEffect(groupId);
-            if (blup.Length == 0) continue;
-
-            total += NumOps.ToDouble(blup[0]);
-            counted++;
-        }
-
-        if (counted == 0) return;
-
-        double mean = total / counted;
-        if (mean == 0.0) return;
-
-        foreach (double groupId in groups.Keys)
-        {
-            var blup = re.GetGroupEffect(groupId);
-            if (blup.Length == 0) continue;
-
-            var centred = new Vector<T>(blup.Length);
-            for (int j = 0; j < blup.Length; j++) centred[j] = blup[j];
-            centred[0] = NumOps.Subtract(centred[0], NumOps.FromDouble(mean));
-
-            re.SetGroupEffect(groupId, centred);
+            var shift = Vector<T>.Concatenate(new[] { Engine.Fill(1, mean), new Vector<T>(blup.Length - 1) });
+            re.SetGroupEffect(groupId, Engine.Subtract(blup, shift));
         }
     }
 
@@ -713,26 +743,14 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
     /// </summary>
     private void UpdateFixedEffects(Matrix<T> wX, Matrix<T> fullX, Vector<T> wY, Vector<T> weights)
     {
-        // Adjust working response for random effects
-        var adjustedY = new Vector<T>(wY.Length);
-        for (int i = 0; i < wY.Length; i++)
+        // Adjust y for random effects (on the sqrt(w) scale of the working response)
+        var sqrtW = Engine.Sqrt(weights);
+        var adjustedY = new Vector<T>(wY);
+        foreach (var re in _randomEffects)
         {
-            adjustedY[i] = wY[i];
-
-            T sqrtW = NumOps.Sqrt(weights[i]);
-            foreach (var re in _randomEffects)
-            {
-                double groupId = NumOps.ToDouble(fullX[i, re.GroupColumnIndex]);
-                var blup = re.GetGroupEffect(groupId);
-                if (blup.Length > 0)
-                {
-                    adjustedY[i] = NumOps.Subtract(adjustedY[i],
-                        NumOps.Multiply(blup[0], sqrtW));
-                }
-            }
+            adjustedY = Engine.Subtract(adjustedY, Engine.Multiply(RowInterceptEffects(fullX, re), sqrtW));
         }
 
-        // Update fixed effects using weighted OLS
         _fixedEffects = SolveOLS(wX, adjustedY);
     }
 
@@ -741,32 +759,38 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
     /// </summary>
     private void UpdateVarianceComponents(Matrix<T> wX, Matrix<T> fullX, Vector<T> wY, Vector<T> weights)
     {
+        // Update random effect variances: mean squared random intercept over the groups
         foreach (var re in _randomEffects)
         {
             var groups = GroupObservations(fullX, re.GroupColumnIndex);
-            double sumSqBlup = 0;
-
-            foreach (var kvp in groups)
+            var intercepts = groups.Keys
+                .Select(key => re.GetGroupEffect(key))
+                .Where(blup => blup.Length > 0)
+                .Select(blup => blup.GetSubVector(0, 1))
+                .ToList();
+            if (groups.Count == 0)
             {
-                var blup = re.GetGroupEffect(kvp.Key);
-                if (blup.Length > 0)
-                {
-                    double b = NumOps.ToDouble(blup[0]);
-                    sumSqBlup += b * b;
-                }
+                continue;
             }
 
-            double newVar = sumSqBlup / groups.Count;
-
-            // Bound variance to be non-negative
-            if (_options.BoundVarianceComponents && newVar < 0)
+            // Groups without an intercept contribute zero, so the mean runs over every group.
+            if (intercepts.Count < groups.Count)
             {
-                newVar = 0;
+                intercepts.Add(new Vector<T>(groups.Count - intercepts.Count));
             }
+
+            var interceptVector = Vector<T>.Concatenate(intercepts);
+            var squares = Engine.Multiply(interceptVector, interceptVector);
+            if (_options.BoundVarianceComponents)
+            {
+                squares = RegressionEngineOps2.ClampMin(squares, NumOps.Zero);
+            }
+
+            T newVar = Engine.Mean(squares);
 
             if (re.CovarianceMatrix != null && re.CovarianceMatrix.Rows > 0)
             {
-                re.CovarianceMatrix[0, 0] = NumOps.FromDouble(newVar);
+                SetFirstDiagonal(re.CovarianceMatrix, newVar);
             }
         }
     }
@@ -774,28 +798,33 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
     /// <summary>
     /// Computes the log-likelihood.
     /// </summary>
-    private double ComputeLogLikelihood(Vector<T> y, Vector<T> mu)
+    private T ComputeLogLikelihood(Vector<T> y, Vector<T> mu)
     {
-        double logLik = 0;
-
-        for (int i = 0; i < _nObservations; i++)
+        int n = _nObservations;
+        if (n == 0)
         {
-            double yVal = NumOps.ToDouble(y[i]);
-            double muVal = NumOps.ToDouble(mu[i]);
-
-            // Prevent extreme values
-            muVal = Math.Max(1e-10, Math.Min(1 - 1e-10, muVal));
-
-            logLik += _options.Family switch
-            {
-                GLMMFamily.Gaussian => -0.5 * (yVal - muVal) * (yVal - muVal),
-                GLMMFamily.Binomial => yVal * Math.Log(muVal) + (1 - yVal) * Math.Log(1 - muVal),
-                GLMMFamily.Poisson => yVal * Math.Log(muVal) - muVal - LogGamma(yVal + 1),
-                _ => -0.5 * (yVal - muVal) * (yVal - muVal)
-            };
+            return NumOps.Zero;
         }
 
-        return logLik;
+        var yVal = y.GetSubVector(0, n);
+        var muVal = ClampUnit(mu.GetSubVector(0, n));
+        var ones = Engine.Fill(n, NumOps.One);
+        var diff = Engine.Subtract(yVal, muVal);
+        var gaussian = Engine.Multiply(Engine.Multiply(diff, NumOps.FromDouble(-0.5)), diff);
+
+        var terms = _options.Family switch
+        {
+            GLMMFamily.Gaussian => gaussian,
+            GLMMFamily.Binomial => Engine.Add(
+                Engine.Multiply(yVal, Engine.Log(muVal)),
+                Engine.Multiply(Engine.Subtract(ones, yVal), Engine.Log(Engine.Subtract(ones, muVal)))),
+            GLMMFamily.Poisson => Engine.Subtract(
+                Engine.Subtract(Engine.Multiply(yVal, Engine.Log(muVal)), muVal),
+                LogGamma(Engine.Add(yVal, ones))),
+            _ => gaussian
+        };
+
+        return Engine.Sum(terms);
     }
 
     /// <summary>
@@ -815,7 +844,7 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
         {
             var vc = new VarianceComponent<T>(re.Name)
             {
-                Variance = re.CovarianceMatrix != null ? re.CovarianceMatrix[0, 0] : NumOps.Zero,
+                Variance = re.CovarianceMatrix != null ? FirstDiagonal(re.CovarianceMatrix) : NumOps.Zero,
                 CovarianceMatrix = re.CovarianceMatrix
             };
             decomp.RandomEffectVariances.Add(vc);
@@ -865,36 +894,25 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
             groupCols.Add(re.GroupColumnIndex);
         }
 
-        // One extra column holds a constant 1, giving the model an INTERCEPT. Without it the linear
-        // predictor is forced through the origin, so a constant response could only be reproduced
-        // when the features happened to span the constant direction: fitting y = 7.5 under a log
-        // link returned exp(0) = 1 for every row. Every standard mixed-model implementation (lme4,
-        // statsmodels) includes an intercept by default.
-        //
-        // The constant is appended LAST rather than prepended so the existing column indices —
-        // which RandomSlopeColumns refers to — keep their meaning.
-        int nCols = x.Columns - groupCols.Count;
-        var fixedX = new Matrix<T>(x.Rows, nCols + 1);
-
-        int colIdx = 0;
+        // The non-group feature columns in order, then the intercept column of ones LAST
+        var columns = new List<Vector<T>>();
         for (int j = 0; j < x.Columns; j++)
         {
             if (!groupCols.Contains(j))
             {
-                for (int i = 0; i < x.Rows; i++)
-                {
-                    fixedX[i, colIdx] = x[i, j];
-                }
-                colIdx++;
+                columns.Add(Engine.GetColumn(x, j));
             }
         }
 
-        for (int i = 0; i < x.Rows; i++)
+        columns.Add(Engine.Fill(x.Rows, NumOps.One));
+
+        if (x.Rows == 0)
         {
-            fixedX[i, nCols] = NumOps.One;
+            return new Matrix<T>(0, columns.Count);
         }
 
-        return fixedX;
+        return Engine.TensorConcatenate(
+            columns.Select(column => new Tensor<T>(new[] { x.Rows, 1 }, column)).ToArray(), 1).ToMatrix();
     }
 
     /// <summary>
@@ -904,26 +922,14 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
     {
         _nFixedParams = fixedX.Columns;
 
-        // Initialize fixed effects using GLM (without random effects)
-        // Transform y to linear predictor scale
-        var etaY = new Vector<T>(y.Length);
-        for (int i = 0; i < y.Length; i++)
-        {
-            etaY[i] = ApplyLink(y[i]);
-        }
-
-        // Initialize fixed effects using OLS on transformed response
+        // Initial fixed effects: OLS on the link-transformed response
+        var etaY = ApplyLink(y);
         _fixedEffects = SolveOLS(fixedX, etaY);
 
-        // Initialize variance components
+        // Initial random effect covariances: identity
         foreach (var re in _randomEffects)
         {
-            int dim = re.Dimension;
-            re.CovarianceMatrix = new Matrix<T>(dim, dim);
-            for (int d = 0; d < dim; d++)
-            {
-                re.CovarianceMatrix[d, d] = NumOps.One;
-            }
+            re.CovarianceMatrix = Matrix<T>.CreateDiagonal(Engine.Fill(re.Dimension, NumOps.One));
         }
     }
 
@@ -952,91 +958,126 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
     /// <summary>
     /// Solves ordinary least squares.
     /// </summary>
-    private static Vector<T> SolveOLS(Matrix<T> x, Vector<T> y)
+    private Vector<T> SolveOLS(Matrix<T> x, Vector<T> y)
     {
-        // X'X
         var xtx = x.Transpose().Multiply(x);
-
-        // X'y
         var xty = x.Transpose().Multiply(y);
 
-        // Add small ridge for numerical stability
-        for (int i = 0; i < xtx.Rows; i++)
-        {
-            xtx[i, i] = NumOps.Add(xtx[i, i], NumOps.FromDouble(1e-10));
-        }
+        // Small ridge on the diagonal for stability
+        xtx = Engine.MatrixAdd(xtx, Matrix<T>.CreateDiagonal(Engine.Fill(xtx.Rows, NumOps.FromDouble(1e-10))));
 
-        // Solve (X'X)^-1 X'y
         return xtx.Inverse().Multiply(xty);
     }
 
     /// <summary>
     /// Standard normal CDF approximation.
     /// </summary>
-    private static double NormalCDF(double x)
+    private Vector<T> NormalCDF(Vector<T> x)
     {
-        // Approximation using error function
-        return 0.5 * (1.0 + Erf(x / Math.Sqrt(2)));
+        // 0.5 * (1 + erf(x / sqrt(2)))
+        var erf = Erf(Engine.Divide(x, NumOps.FromDouble(Math.Sqrt(2))));
+        return Engine.Multiply(Engine.Add(Engine.Fill(x.Length, NumOps.One), erf), NumOps.FromDouble(0.5));
     }
 
     /// <summary>
     /// Standard normal PDF.
     /// </summary>
-    private static double NormalPDF(double x)
+    private Vector<T> NormalPDF(Vector<T> x)
     {
-        return Math.Exp(-0.5 * x * x) / Math.Sqrt(2 * Math.PI);
+        // exp(-0.5 x x) / sqrt(2 pi)
+        var exponent = Engine.Multiply(Engine.Multiply(x, NumOps.FromDouble(-0.5)), x);
+        return Engine.Divide(Engine.Exp(exponent), NumOps.FromDouble(Math.Sqrt(2 * Math.PI)));
     }
 
     /// <summary>
     /// Standard normal quantile (inverse CDF) approximation.
     /// </summary>
-    private static double NormalQuantile(double p)
+    private Vector<T> NormalQuantile(Vector<T> p)
     {
-        // Abramowitz and Stegun approximation
-        if (p <= 0) return double.NegativeInfinity;
-        if (p >= 1) return double.PositiveInfinity;
+        // Abramowitz and Stegun approximation; -inf at p <= 0, +inf at p >= 1
+        int n = p.Length;
+        var ones = Engine.Fill(n, NumOps.One);
+        var pTensor = Tensor<T>.FromVector(p);
+        var lowerTail = Engine.TensorLessThan(pTensor, NumOps.FromDouble(0.5));
+        var tail = Engine.TensorWhere(lowerTail, pTensor, Tensor<T>.FromVector(Engine.Subtract(ones, p))).ToVector();
+        var t = Engine.Sqrt(Engine.Multiply(Engine.Log(tail), NumOps.FromDouble(-2.0)));
 
-        double t = Math.Sqrt(-2.0 * Math.Log(p < 0.5 ? p : 1 - p));
-        double c0 = 2.515517;
-        double c1 = 0.802853;
-        double c2 = 0.010328;
-        double d1 = 1.432788;
-        double d2 = 0.189269;
-        double d3 = 0.001308;
+        T c0 = NumOps.FromDouble(2.515517), c1 = NumOps.FromDouble(0.802853), c2 = NumOps.FromDouble(0.010328);
+        T d1 = NumOps.FromDouble(1.432788), d2 = NumOps.FromDouble(0.189269), d3 = NumOps.FromDouble(0.001308);
 
-        double result = t - (c0 + c1 * t + c2 * t * t) / (1 + d1 * t + d2 * t * t + d3 * t * t * t);
-        return p < 0.5 ? -result : result;
+        var numerator = Engine.Add(
+            Engine.Add(Engine.Fill(n, c0), Engine.Multiply(t, c1)),
+            Engine.Multiply(Engine.Multiply(t, c2), t));
+        var denominator = Engine.Add(
+            Engine.Add(Engine.Add(ones, Engine.Multiply(t, d1)), Engine.Multiply(Engine.Multiply(t, d2), t)),
+            Engine.Multiply(Engine.Multiply(Engine.Multiply(t, d3), t), t));
+
+        var result = Tensor<T>.FromVector(Engine.Subtract(t, Engine.Divide(numerator, denominator)));
+        var signed = Engine.TensorWhere(lowerTail, Engine.TensorNegate(result), result);
+
+        var negativeInfinity = Tensor<T>.FromVector(Engine.Fill(n, NumOps.FromDouble(double.NegativeInfinity)));
+        var positiveInfinity = Tensor<T>.FromVector(Engine.Fill(n, NumOps.FromDouble(double.PositiveInfinity)));
+        signed = Engine.TensorWhere(Engine.TensorGreaterEqual(pTensor, Tensor<T>.FromVector(ones)), positiveInfinity, signed);
+        signed = Engine.TensorWhere(
+            Engine.TensorLessEqual(pTensor, Tensor<T>.FromVector(Engine.FillZero<T>(n))), negativeInfinity, signed);
+        return signed.ToVector();
     }
 
     /// <summary>
     /// Error function approximation.
     /// </summary>
-    private static double Erf(double x)
+    private Vector<T> Erf(Vector<T> x)
     {
-        // Abramowitz and Stegun approximation
-        double t = 1.0 / (1.0 + 0.5 * Math.Abs(x));
-        double tau = t * Math.Exp(-x * x - 1.26551223 +
-            t * (1.00002368 +
-            t * (0.37409196 +
-            t * (0.09678418 +
-            t * (-0.18628806 +
-            t * (0.27886807 +
-            t * (-1.13520398 +
-            t * (1.48851587 +
-            t * (-0.82215223 +
-            t * 0.17087277)))))))));
-        return x >= 0 ? 1 - tau : tau - 1;
+        // Abramowitz and Stegun / Numerical Recipes erfc approximation
+        int n = x.Length;
+        var t = Engine.Reciprocal(Engine.Add(Engine.Fill(n, NumOps.One), Engine.Multiply(Engine.Abs(x), NumOps.FromDouble(0.5))));
+
+        // Horner from the innermost coefficient outwards: c_k + t * (...)
+        T[] coefficients =
+        {
+            NumOps.FromDouble(-0.82215223), NumOps.FromDouble(1.48851587), NumOps.FromDouble(-1.13520398),
+            NumOps.FromDouble(0.27886807), NumOps.FromDouble(-0.18628806), NumOps.FromDouble(0.09678418),
+            NumOps.FromDouble(0.37409196), NumOps.FromDouble(1.00002368)
+        };
+        var horner = Engine.Multiply(t, NumOps.FromDouble(0.17087277));
+        for (int k = 0; k < coefficients.Length; k++)
+        {
+            var level = Engine.Add(Engine.Fill(n, coefficients[k]), horner);
+            horner = k == coefficients.Length - 1 ? level : Engine.Multiply(t, level);
+        }
+
+        // tau = t * exp(-x x - 1.26551223 + t * horner)
+        var exponent = Engine.Subtract(
+            Engine.Multiply(Engine.Multiply(x, NumOps.Negate(NumOps.One)), x), Engine.Fill(n, NumOps.FromDouble(1.26551223)));
+        exponent = Engine.Add(exponent, Engine.Multiply(t, horner));
+        var tau = Engine.Multiply(t, Engine.Exp(exponent));
+
+        // x >= 0 ? 1 - tau : tau - 1
+        var ones = Engine.Fill(n, NumOps.One);
+        var nonNegative = Engine.TensorGreaterEqual(Tensor<T>.FromVector(x), Tensor<T>.FromVector(Engine.FillZero<T>(n)));
+        return Engine.TensorWhere(
+            nonNegative,
+            Tensor<T>.FromVector(Engine.Subtract(ones, tau)),
+            Tensor<T>.FromVector(Engine.Subtract(tau, ones))).ToVector();
     }
 
     /// <summary>
     /// Log-gamma function approximation.
     /// </summary>
-    private static double LogGamma(double x)
+    private Vector<T> LogGamma(Vector<T> x)
     {
-        if (x <= 0) return 0;
+        // Stirling's approximation; 0 for x <= 0
+        int n = x.Length;
+        var series = Engine.Subtract(
+            Engine.Multiply(Engine.Subtract(x, Engine.Fill(n, NumOps.FromDouble(0.5))), Engine.Log(x)), x);
+        series = Engine.Add(series, Engine.Fill(n, NumOps.FromDouble(0.5 * Math.Log(2 * Math.PI))));
+        series = Engine.Add(series, Engine.Reciprocal(Engine.Multiply(x, NumOps.FromDouble(12.0))));
+        series = Engine.Subtract(series, Engine.Reciprocal(
+            Engine.Multiply(Engine.Multiply(Engine.Multiply(x, NumOps.FromDouble(360.0)), x), x)));
 
-        // Stirling's approximation
-        return (x - 0.5) * Math.Log(x) - x + 0.5 * Math.Log(2 * Math.PI) +
-               1.0 / (12.0 * x) - 1.0 / (360.0 * x * x * x);
+        return Engine.TensorWhere(
+            RegressionEngineOps.LessOrEqualMask(x, NumOps.Zero),
+            Tensor<T>.FromVector(Engine.FillZero<T>(n)),
+            Tensor<T>.FromVector(series)).ToVector();
     }
 }

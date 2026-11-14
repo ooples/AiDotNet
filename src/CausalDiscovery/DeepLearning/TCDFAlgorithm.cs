@@ -48,6 +48,12 @@ namespace AiDotNet.CausalDiscovery.DeepLearning;
 [ResearchPaper("Causal Discovery with Attention-Based Convolutional Neural Networks", "https://doi.org/10.3390/make1010019", Year = 2019, Authors = "Meike Nauta, Doina Bucur, Christin Seifert")]
 public class TCDFAlgorithm<T> : DeepCausalBase<T>
 {
+    /// <summary>
+    /// Maximum number of entries of one [rows, d, d, kernelSize] convolution-product block in a training
+    /// epoch; training samples are processed in blocks of at most this many entries.
+    /// </summary>
+    private const int MaxSampleBlockElements = 1 << 22;
+
     /// <inheritdoc/>
     public override string Name => "TCDF";
 
@@ -109,19 +115,13 @@ public class TCDFAlgorithm<T> : DeepCausalBase<T>
         var cov = ComputeCovarianceMatrix(standardised);
         T eps = NumOps.FromDouble(1e-10);
 
-        // Per-target attention logits: attn[j] has d values (one per input variable)
-        var attnLogits = new Matrix<T>(d, d);
+        // Per-target attention logits: attnLogits[i, j] for input variable i predicting variable j
+        var attnLogits = new Tensor<T>(new[] { d, d });
 
-        // Per-target 1D convolution filters: filter[j][i] has kernelSize weights
-        // filter[j][i][k] = weight for input variable i, lag k, predicting variable j
-        var filters = new Matrix<T>[d];
-        for (int j = 0; j < d; j++)
-        {
-            filters[j] = new Matrix<T>(d, kernelSize);
-            for (int i = 0; i < d; i++)
-                for (int k = 0; k < kernelSize; k++)
-                    filters[j][i, k] = NumOps.Multiply(scale, NumOps.FromDouble(rng.NextDouble() - 0.5));
-        }
+        // Per-target 1D convolution filters: filters[j, i, k] = weight for input variable i, lag k,
+        // predicting variable j (drawn in that row-major order)
+        var filters = Engine.TensorMultiplyScalar(
+            Engine.TensorSubtractScalar(Tensor<T>.CreateRandom(rng, d, d, kernelSize), NumOps.FromDouble(0.5)), scale);
 
         // Nauta 2019 §4 trains TCDF with Adam(1e-2) — Adam's per-parameter
         // step normalisation gives effective LR magnitudes that plain SGD at
@@ -142,162 +142,117 @@ public class TCDFAlgorithm<T> : DeepCausalBase<T>
             lr,
             NumOps.FromDouble(d * d * _attentionLearningRateMultiplier));
         int trainSamples = n - kernelSize;
+        T invN = NumOps.FromDouble(1.0 / trainSamples);
+
+        // Causal windows: windows[t, i, k] = x_i(t + k) for t = 0..trainSamples-1 (the kernelSize values before
+        // target row t + kernelSize), and the targets x_j(t + kernelSize).
+        var x = Tensor<T>.FromMatrix(standardised);
+        var windows = Engine.TensorStack(Enumerable.Range(0, kernelSize)
+            .Select(k => Engine.TensorSlice(x, new[] { k, 0 }, new[] { trainSamples, d }))
+            .ToArray(), 2);                                                                   // [N, d, K]
+        var targets = Engine.TensorSlice(x, new[] { kernelSize, 0 }, new[] { trainSamples, d }); // [N, d]
+
+        // Training samples are processed in blocks so the [rows, d, d, K] convolution product stays bounded
+        // (MaxSampleBlockElements); the gradients accumulate across blocks with the full-sample 1/N scale.
+        int blockRows = Math.Max(1, Math.Min(trainSamples, MaxSampleBlockElements / Math.Max(1, d * d * kernelSize)));
 
         for (int epoch = 0; epoch < MaxEpochs; epoch++)
         {
             // Compute attention weights via softmax of sigmoid(logits)
-            var attn = new Matrix<T>(d, d);
-            for (int j = 0; j < d; j++)
+            var attn = AttentionWeights(attnLogits, eps);
+            var attnT = Engine.TensorTranspose(attn);                                         // [j, i]
+            var filtersRow = filters.Reshape(new[] { 1, d, d, kernelSize });
+
+            var residualWindowsFlat = new Tensor<T>(new[] { d, d * kernelSize });
+            var jacobianTimesDAttnSum = new Tensor<T>(new[] { d, d });                         // [j, i]
+            for (int b0 = 0; b0 < trainSamples; b0 += blockRows)
             {
-                // Softmax over sigmoid(attnLogits[i,j]) for i in [0..d)
-                T maxVal = NumOps.FromDouble(double.MinValue);
-                for (int i = 0; i < d; i++)
-                {
-                    double sv = NumOps.ToDouble(attnLogits[i, j]);
-                    T sigVal = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
-                    attn[i, j] = sigVal;
-                    if (NumOps.GreaterThan(sigVal, maxVal)) maxVal = sigVal;
-                }
-                T sumExp = NumOps.Zero;
-                for (int i = 0; i < d; i++)
-                {
-                    T expVal = NumOps.FromDouble(Math.Exp(
-                        Math.Min(20, NumOps.ToDouble(NumOps.Subtract(attn[i, j], maxVal)))));
-                    attn[i, j] = expVal;
-                    sumExp = NumOps.Add(sumExp, expVal);
-                }
-                for (int i = 0; i < d; i++)
-                    attn[i, j] = NumOps.Divide(attn[i, j], NumOps.Add(sumExp, eps));
+                int rows = Math.Min(blockRows, trainSamples - b0);
+                var convShape = new[] { rows, d, d, kernelSize };
+                var tji = new[] { rows, d, d };
+                var windowBlock = Engine.TensorSlice(windows, new[] { b0, 0, 0 }, new[] { rows, d, kernelSize });
+                var targetBlock = Engine.TensorSlice(targets, new[] { b0, 0 }, new[] { rows, d });
+                var attnSpread = Engine.TensorBroadcastTo(attnT.Reshape(new[] { 1, d, d }), tji);
+
+                // Forward through causal convolution: conv[t, j, i] = Σ_k filters[j, i, k] · x_i(t + k)
+                var windowsSpread = Engine.TensorBroadcastTo(windowBlock.Reshape(new[] { rows, 1, d, kernelSize }), convShape);
+                var filtersSpread = Engine.TensorBroadcastTo(filtersRow, convShape);
+                var conv = Engine.ReduceSum(Engine.TensorMultiply(filtersSpread, windowsSpread), new[] { 3 }, false); // [rows, j, i]
+                var pred = Engine.ReduceSum(Engine.TensorMultiply(attnSpread, conv), new[] { 2 }, false);           // [rows, j]
+                var residual = Engine.TensorMultiplyScalar(Engine.TensorSubtract(pred, targetBlock), invN);          // [rows, j]
+
+                // Σ_t residual[t, j] · x_i(t + k), the filter-gradient sum
+                residualWindowsFlat = Engine.TensorAdd(residualWindowsFlat, Engine.TensorMatMul(
+                    Engine.TensorTranspose(residual), windowBlock.Reshape(new[] { rows, d * kernelSize })));
+
+                // Attention-logit gradients via the FULL softmax Jacobian (see below), summed over samples.
+                var dAttn = Engine.TensorMultiply(Engine.TensorBroadcastTo(residual.Reshape(new[] { rows, d, 1 }), tji), conv);
+                var weightedMeanDAttn = Engine.ReduceSum(Engine.TensorMultiply(attnSpread, dAttn), new[] { 2 }, true);
+                var jacobianTimesDAttn = Engine.TensorMultiply(attnSpread,
+                    Engine.TensorSubtract(dAttn, Engine.TensorBroadcastTo(weightedMeanDAttn, tji)));
+                jacobianTimesDAttnSum = Engine.TensorAdd(jacobianTimesDAttnSum,
+                    Engine.ReduceSum(jacobianTimesDAttn, new[] { 0 }, false));
             }
 
-            var gAttnLogits = new Matrix<T>(d, d);
-            var gFilters = new Matrix<T>[d];
-            for (int j = 0; j < d; j++)
-                gFilters[j] = new Matrix<T>(d, kernelSize);
+            // Filter gradients: gFilters[j, i, k] = attn[i, j] · Σ_t residual[t, j] · x_i(t + k)
+            var residualWindows = residualWindowsFlat.Reshape(new[] { d, d, kernelSize });
+            var gFilters = Engine.TensorMultiply(residualWindows,
+                Engine.TensorBroadcastTo(attnT.Reshape(new[] { d, d, 1 }), new[] { d, d, kernelSize }));
 
-            T invN = NumOps.FromDouble(1.0 / trainSamples);
-
-            // Forward and backward through causal convolution
-            for (int t = kernelSize; t < n; t++)
-            {
-                for (int j = 0; j < d; j++)
-                {
-                    // Prediction: sum over input variables and kernel positions
-                    T pred = NumOps.Zero;
-                    // Cache the per-i conv contributions so we can reuse them
-                    // in the attention gradient pass without recomputing.
-                    var convOutI = new T[d];
-                    for (int i = 0; i < d; i++)
-                    {
-                        T conv = NumOps.Zero;
-                        for (int k = 0; k < kernelSize; k++)
-                        {
-                            T xVal = standardised[t - kernelSize + k, i];
-                            conv = NumOps.Add(conv, NumOps.Multiply(filters[j][i, k], xVal));
-                        }
-                        convOutI[i] = conv;
-                        pred = NumOps.Add(pred, NumOps.Multiply(attn[i, j], conv));
-                    }
-
-                    T residual = NumOps.Multiply(NumOps.Subtract(pred, standardised[t, j]), invN);
-
-                    // Filter gradients (per-i, per-k)
-                    for (int i = 0; i < d; i++)
-                        for (int k = 0; k < kernelSize; k++)
-                        {
-                            T xVal = standardised[t - kernelSize + k, i];
-                            gFilters[j][i, k] = NumOps.Add(gFilters[j][i, k],
-                                NumOps.Multiply(residual, NumOps.Multiply(attn[i, j], xVal)));
-                        }
-
-                    // Attention-logit gradients via the FULL softmax Jacobian.
-                    // The previous implementation kept only the diagonal term
-                    //   d attn[i,j] / d L[i,j] ≈ attn[i,j]·(1 − attn[i,j])
-                    // and dropped the cross-input terms
-                    //   d attn[k,j] / d L[i,j] = −attn[k,j]·attn[i,j]   for k ≠ i.
-                    // Dropping the cross terms broke the competition between
-                    // parents: each L[i,j] only learnt from "increasing me lowers
-                    // MY loss contribution", never from "increasing me lowers the
-                    // loss contribution of other parents I'm taking attention
-                    // away from". Net effect on a symmetric init: every L[i,j]
-                    // receives the same balanced gradient → softmax stays exactly
-                    // uniform (1/d) for the entire training, no parent ever wins,
-                    // and BuildFinalAdjacency's threshold rejects every edge.
-                    //
-                    // The fix: compute dLoss/dattn[k,j] = residual · convOutI[k]
-                    // for every k once, then assemble each gAttnLogits[i,j] via
-                    //   gL[i,j] = sig'(L[i,j]) · Σ_k J[k,i] · dLoss/dattn[k,j]
-                    //         = sig'(L[i,j]) · attn[i,j] · ( dLoss/dattn[i,j] −
-                    //              Σ_k attn[k,j] · dLoss/dattn[k,j] )
-                    // which is the standard softmax-Jacobian-times-vector
-                    // identity (see Bishop 2006 §4.3.4) — gives each parent
-                    // attention a gradient relative to the WEIGHTED-MEAN dLoss
-                    // across parents, the actual competition signal.
-                    T weightedMeanDAttn = NumOps.Zero;
-                    for (int k = 0; k < d; k++)
-                    {
-                        T dAttnK = NumOps.Multiply(residual, convOutI[k]);
-                        weightedMeanDAttn = NumOps.Add(weightedMeanDAttn,
-                            NumOps.Multiply(attn[k, j], dAttnK));
-                    }
-
-                    for (int i = 0; i < d; i++)
-                    {
-                        T dAttnI = NumOps.Multiply(residual, convOutI[i]);
-                        T jacobianTimesDAttn = NumOps.Multiply(attn[i, j],
-                            NumOps.Subtract(dAttnI, weightedMeanDAttn));
-
-                        double sv = NumOps.ToDouble(attnLogits[i, j]);
-                        double sigVal = sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv));
-                        T sigDeriv = NumOps.FromDouble(sigVal * (1.0 - sigVal));
-
-                        gAttnLogits[i, j] = NumOps.Add(gAttnLogits[i, j],
-                            NumOps.Multiply(jacobianTimesDAttn, sigDeriv));
-                    }
-                }
-            }
+            // Attention-logit gradients via the FULL softmax Jacobian.
+            // The previous implementation kept only the diagonal term
+            //   d attn[i,j] / d L[i,j] ≈ attn[i,j]·(1 − attn[i,j])
+            // and dropped the cross-input terms
+            //   d attn[k,j] / d L[i,j] = −attn[k,j]·attn[i,j]   for k ≠ i.
+            // Dropping the cross terms broke the competition between
+            // parents: each L[i,j] only learnt from "increasing me lowers
+            // MY loss contribution", never from "increasing me lowers the
+            // loss contribution of other parents I'm taking attention
+            // away from". Net effect on a symmetric init: every L[i,j]
+            // receives the same balanced gradient → softmax stays exactly
+            // uniform (1/d) for the entire training, no parent ever wins,
+            // and BuildFinalAdjacency's threshold rejects every edge.
+            //
+            // The fix: compute dLoss/dattn[k,j] = residual · convOutI[k]
+            // for every k once, then assemble each gAttnLogits[i,j] via
+            //   gL[i,j] = sig'(L[i,j]) · Σ_k J[k,i] · dLoss/dattn[k,j]
+            //         = sig'(L[i,j]) · attn[i,j] · ( dLoss/dattn[i,j] −
+            //              Σ_k attn[k,j] · dLoss/dattn[k,j] )
+            // which is the standard softmax-Jacobian-times-vector
+            // identity (see Bishop 2006 §4.3.4) — gives each parent
+            // attention a gradient relative to the WEIGHTED-MEAN dLoss
+            // across parents, the actual competition signal.
+            // (computed per sample block above as jacobianTimesDAttnSum)
+            var sig = ClampedSigmoid(attnLogits, 1.0);
+            var sigDeriv = Engine.TensorMultiply(sig, Engine.TensorSubtract(Engine.TensorOnesLike(sig), sig));
+            var gAttnLogits = Engine.TensorMultiply(Engine.TensorTranspose(jacobianTimesDAttnSum), sigDeriv);
 
             // Apply gradients — use the dampening-compensated LR for the
             // attention logits, default LR for the convolution filters.
-            for (int j = 0; j < d; j++)
-            {
-                for (int i = 0; i < d; i++)
-                {
-                    attnLogits[i, j] = NumOps.Subtract(attnLogits[i, j],
-                        NumOps.Multiply(attentionLr, gAttnLogits[i, j]));
-                    for (int k = 0; k < kernelSize; k++)
-                        filters[j][i, k] = NumOps.Subtract(filters[j][i, k],
-                            NumOps.Multiply(lr, gFilters[j][i, k]));
-                }
-            }
+            attnLogits = Engine.TensorSubtract(attnLogits, Engine.TensorMultiplyScalar(gAttnLogits, attentionLr));
+            filters = Engine.TensorSubtract(filters, Engine.TensorMultiplyScalar(gFilters, lr));
         }
 
-        // Final: compute attention weights as learned edge probabilities
-        var learnedP = new double[d, d];
-        for (int j = 0; j < d; j++)
-        {
-            double maxVal = double.MinValue;
-            var finalAttn = new double[d];
-            for (int i = 0; i < d; i++)
-            {
-                double sv = NumOps.ToDouble(attnLogits[i, j]);
-                finalAttn[i] = sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv));
-                if (finalAttn[i] > maxVal) maxVal = finalAttn[i];
-            }
-            double sumExp = 0;
-            for (int i = 0; i < d; i++)
-            {
-                finalAttn[i] = Math.Exp(Math.Min(20, finalAttn[i] - maxVal));
-                sumExp += finalAttn[i];
-            }
-            for (int i = 0; i < d; i++)
-            {
-                if (i == j) continue;
-                learnedP[i, j] = finalAttn[i] / (sumExp + 1e-10);
-            }
-        }
+        // Final: compute attention weights as learned edge probabilities (no self-edges)
+        var finalAttn = AttentionWeights(attnLogits, eps);
+        var learnedP = Engine.TensorWhere(OffDiagonalMask(d), finalAttn, Engine.TensorZerosLike(finalAttn));
 
         return BuildFinalAdjacency(learnedP, cov, d);
+    }
+
+    /// <summary>
+    /// attn[i, j] = softmax over i of sigmoid(logits[i, j]) (sigmoid saturated beyond ±20), stabilised by
+    /// the column max with each exponent capped at 20 and the denominator offset by <paramref name="eps"/>.
+    /// </summary>
+    private Tensor<T> AttentionWeights(Tensor<T> logits, T eps)
+    {
+        int d = logits.Shape[0];
+        var shape = new[] { d, d };
+        var sig = ClampedSigmoid(logits, 1.0);
+        var maxVal = Engine.TensorBroadcastTo(Engine.ReduceMax(sig, new[] { 0 }, true), shape);
+        var expVal = Engine.TensorExp(Engine.TensorMin(Engine.TensorSubtract(sig, maxVal), NumOps.FromDouble(20)));
+        var sumExp = Engine.TensorAddScalar(Engine.ReduceSum(expVal, new[] { 0 }, true), eps);
+        return Engine.TensorDivide(expVal, Engine.TensorBroadcastTo(sumExp, shape));
     }
 
     /// <summary>
@@ -309,29 +264,10 @@ public class TCDFAlgorithm<T> : DeepCausalBase<T>
     {
         int n = data.Rows;
         int d = data.Columns;
-        var result = new Matrix<T>(n, d);
-        T nT = NumOps.FromDouble(n);
-
-        for (int j = 0; j < d; j++)
-        {
-            T mean = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-                mean = NumOps.Add(mean, data[i, j]);
-            mean = NumOps.Divide(mean, nT);
-
-            T variance = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                T diff = NumOps.Subtract(data[i, j], mean);
-                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-            }
-            variance = NumOps.Divide(variance, nT);
-            T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-15)));
-
-            for (int i = 0; i < n; i++)
-                result[i, j] = NumOps.Divide(NumOps.Subtract(data[i, j], mean), std);
-        }
-
-        return result;
+        // (x - mean) / sqrt(var + 1e-15) with the population variance
+        var centered = CenterColumns(Tensor<T>.FromMatrix(data));
+        var std = Engine.TensorSqrt(Engine.TensorAddScalar(
+            Engine.ReduceMean(Engine.TensorMultiply(centered, centered), new[] { 0 }, true), NumOps.FromDouble(1e-15)));
+        return Engine.TensorDivide(centered, Engine.TensorBroadcastTo(std, new[] { n, d })).ToMatrix();
     }
 }

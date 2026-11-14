@@ -225,79 +225,28 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
     /// </summary>
     private (Matrix<T> W, int ActualIterations) SolveInnerProblem(Matrix<T> X, Matrix<T> W, double mu, double s, int d, int maxIter, ref double learningRate)
     {
-        // Flatten W to double[] for Adam state management
-        int vecLen = d * d;
-        double[] w = FlattenMatrix(W, d);
+        var w = Tensor<T>.FromMatrix(W);
 
         // Adam state
-        double[] m = new double[vecLen]; // First moment
-        double[] v = new double[vecLen]; // Second moment
+        var m = new Tensor<T>(new[] { d, d }); // First moment
+        var v = new Tensor<T>(new[] { d, d }); // Second moment
+        var offDiagonal = OffDiagonalMask(d);
 
         double prevObj = double.MaxValue;
         int actualIter = 0;
 
         for (int iter = 1; iter <= maxIter; iter++)
         {
-            var currentW = UnflattenMatrix(w, d);
+            // Objective, gradient and Adam moments at the current weights
+            var (obj, direction) = ComputeDagmaAdamDirection(X, w, offDiagonal, mu, s, d, iter, ref m, ref v);
 
-            // Compute gradients
-            var (loss, lossGrad) = ComputeL2Loss(X, currentW);
-            var (h, hGrad) = ComputeLogDetConstraint(currentW, s, d);
-
-            // Per DAGMA reference: obj = mu*score + h (score weighted by mu, NOT h)
-            double obj = mu * (loss + Lambda1 * ComputeL1Norm(currentW)) + h;
-
-            // Per reference: grad = mu*G_score + mu*lambda1*sign(W) + G_h
-            double[] grad = new double[vecLen];
-            for (int i = 0; i < d; i++)
-            {
-                for (int j = 0; j < d; j++)
-                {
-                    int idx = i * d + j;
-                    // mu weights the score gradient, h gradient is unweighted
-                    grad[idx] = mu * NumOps.ToDouble(lossGrad[i, j]) + NumOps.ToDouble(hGrad[i, j]);
-
-                    if (i != j)
-                    {
-                        grad[idx] += mu * Lambda1 * Math.Sign(w[idx]);
-                    }
-                }
-            }
-
-            // Adam update
-            for (int i = 0; i < vecLen; i++)
-            {
-                m[i] = ADAM_BETA1 * m[i] + (1 - ADAM_BETA1) * grad[i];
-                v[i] = ADAM_BETA2 * v[i] + (1 - ADAM_BETA2) * grad[i] * grad[i];
-
-                double mHat = m[i] / (1 - Math.Pow(ADAM_BETA1, iter));
-                double vHat = v[i] / (1 - Math.Pow(ADAM_BETA2, iter));
-
-                w[i] -= learningRate * mHat / (Math.Sqrt(vHat) + 1e-8);
-            }
-
-            // Zero diagonal
-            for (int i = 0; i < d; i++)
-            {
-                w[i * d + i] = 0;
-            }
+            // Adam update, then zero diagonal
+            w = ApplyDagmaStep(w, direction, learningRate, offDiagonal);
 
             // M-matrix domain check (per DAGMA reference implementation):
             // Verify sI - W⊙W is still an M-matrix (inverse has no negative entries).
             // If violated, halve the learning rate and retry the step.
-            var checkW = UnflattenMatrix(w, d);
-            var checkM = new Matrix<T>(d, d);
-            T sCheck = NumOps.FromDouble(s);
-            for (int ci = 0; ci < d; ci++)
-            {
-                checkM[ci, ci] = sCheck;
-                for (int cj = 0; cj < d; cj++)
-                    checkM[ci, cj] = NumOps.Subtract(checkM[ci, cj],
-                        NumOps.Multiply(checkW[ci, cj], checkW[ci, cj]));
-            }
-
-            var invCheck = InvertMatrix(checkM, d);
-            if (invCheck is null || HasNegativeEntry(invCheck, d))
+            if (!IsInMMatrixDomain(w, s, d))
             {
                 // Stepped outside the M-matrix domain. RETRY UNTIL THE STEP IS VALID, rather than
                 // halving once and hoping: the single replacement step was never itself checked, so
@@ -313,37 +262,15 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
                 while (learningRate >= MIN_LEARNING_RATE)
                 {
                     // Undo whatever rate produced the current (invalid) position.
-                    for (int i = 0; i < vecLen; i++)
-                    {
-                        double mHat2 = m[i] / (1 - Math.Pow(ADAM_BETA1, iter));
-                        double vHat2 = v[i] / (1 - Math.Pow(ADAM_BETA2, iter));
-                        w[i] += appliedRate * mHat2 / (Math.Sqrt(vHat2) + 1e-8);
-                    }
+                    w = UndoDagmaStep(w, direction, appliedRate);
 
                     learningRate *= 0.5;
                     if (learningRate < MIN_LEARNING_RATE) break;
 
-                    for (int i = 0; i < vecLen; i++)
-                    {
-                        double mHat2 = m[i] / (1 - Math.Pow(ADAM_BETA1, iter));
-                        double vHat2 = v[i] / (1 - Math.Pow(ADAM_BETA2, iter));
-                        w[i] -= learningRate * mHat2 / (Math.Sqrt(vHat2) + 1e-8);
-                    }
-                    for (int ci = 0; ci < d; ci++) w[ci * d + ci] = 0;
+                    w = ApplyDagmaStep(w, direction, learningRate, offDiagonal);
                     appliedRate = learningRate;
 
-                    var retryW = UnflattenMatrix(w, d);
-                    var retryM = new Matrix<T>(d, d);
-                    for (int ci = 0; ci < d; ci++)
-                    {
-                        retryM[ci, ci] = NumOps.FromDouble(s);
-                        for (int cj = 0; cj < d; cj++)
-                            retryM[ci, cj] = NumOps.Subtract(retryM[ci, cj],
-                                NumOps.Multiply(retryW[ci, cj], retryW[ci, cj]));
-                    }
-
-                    var retryInv = InvertMatrix(retryM, d);
-                    if (retryInv is not null && !HasNegativeEntry(retryInv, d))
+                    if (IsInMMatrixDomain(w, s, d))
                     {
                         recovered = true;
                         break;
@@ -370,8 +297,77 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
             }
         }
 
-        return (UnflattenMatrix(w, d), actualIter);
+        return (w.ToMatrix(), actualIter);
     }
+
+    /// <summary>
+    /// Evaluates the DAGMA objective and gradient at <paramref name="w"/>, advances the Adam moments, and
+    /// returns the bias-corrected Adam direction mHat / (sqrt(vHat) + 1e-8).
+    /// </summary>
+    private (double Objective, (Tensor<T> MHat, Tensor<T> Denominator) Direction) ComputeDagmaAdamDirection(
+        Matrix<T> X, Tensor<T> w, Tensor<T> offDiagonal, double mu, double s, int d, int iter,
+        ref Tensor<T> m, ref Tensor<T> v)
+    {
+        var currentW = w.ToMatrix();
+
+        // Compute gradients
+        var (loss, lossGrad) = ComputeL2Loss(X, currentW);
+        var (h, hGrad) = ComputeLogDetConstraint(currentW, s, d);
+
+        // Per DAGMA reference: obj = mu*score + h (score weighted by mu, NOT h)
+        double obj = mu * (loss + Lambda1 * ComputeL1Norm(currentW)) + h;
+
+        // Per reference: grad = mu*G_score + mu*lambda1*sign(W) + G_h
+        // (mu weights the score gradient, h gradient is unweighted; no L1 term on the diagonal)
+        var grad = Engine.TensorAdd(
+            Engine.TensorMultiplyScalar(Tensor<T>.FromMatrix(lossGrad), NumOps.FromDouble(mu)),
+            Tensor<T>.FromMatrix(hGrad));
+        var l1 = Engine.TensorMultiplyScalar(Engine.TensorSign(w), NumOps.FromDouble(mu * Lambda1));
+        grad = Engine.TensorAdd(grad, Engine.TensorWhere(offDiagonal, l1, Engine.TensorZerosLike(w)));
+
+        // Adam moments
+        m = Engine.TensorAdd(Engine.TensorMultiplyScalar(m, NumOps.FromDouble(ADAM_BETA1)),
+            Engine.TensorMultiplyScalar(grad, NumOps.FromDouble(1 - ADAM_BETA1)));
+        v = Engine.TensorAdd(Engine.TensorMultiplyScalar(v, NumOps.FromDouble(ADAM_BETA2)),
+            Engine.TensorMultiplyScalar(Engine.TensorSquare(grad), NumOps.FromDouble(1 - ADAM_BETA2)));
+
+        var mHat = Engine.TensorDivideScalar(m, NumOps.FromDouble(1 - Math.Pow(ADAM_BETA1, iter)));
+        var vHat = Engine.TensorDivideScalar(v, NumOps.FromDouble(1 - Math.Pow(ADAM_BETA2, iter)));
+        var denominator = Engine.TensorAddScalar(Engine.TensorSqrt(vHat), NumOps.FromDouble(1e-8));
+        return (obj, (mHat, denominator));
+    }
+
+    /// <summary>w - rate * mHat / (sqrt(vHat) + eps), with the diagonal set to zero.</summary>
+    private Tensor<T> ApplyDagmaStep(Tensor<T> w, (Tensor<T> MHat, Tensor<T> Denominator) direction, double rate,
+        Tensor<T> offDiagonal)
+    {
+        var step = Engine.TensorDivide(Engine.TensorMultiplyScalar(direction.MHat, NumOps.FromDouble(rate)),
+            direction.Denominator);
+        var moved = Engine.TensorSubtract(w, step);
+        return Engine.TensorWhere(offDiagonal, moved, Engine.TensorZerosLike(moved));
+    }
+
+    /// <summary>w + rate * mHat / (sqrt(vHat) + eps) on every entry (the inverse of a step taken at that rate).</summary>
+    private Tensor<T> UndoDagmaStep(Tensor<T> w, (Tensor<T> MHat, Tensor<T> Denominator) direction, double rate)
+    {
+        var step = Engine.TensorDivide(Engine.TensorMultiplyScalar(direction.MHat, NumOps.FromDouble(rate)),
+            direction.Denominator);
+        return Engine.TensorAdd(w, step);
+    }
+
+    /// <summary>
+    /// Whether sI - W⊙W is an M-matrix: invertible with no inverse entry below -1e-10.
+    /// </summary>
+    private bool IsInMMatrixDomain(Tensor<T> w, double s, int d)
+    {
+        var inverse = InvertSmallMatrix(ShiftedSquareComplement(w, s, d).ToMatrix());
+        return inverse is not null && !HasNegativeEntry(inverse);
+    }
+
+    /// <summary>sI - W∘W.</summary>
+    private Tensor<T> ShiftedSquareComplement(Tensor<T> w, double s, int d)
+        => Engine.TensorSubtract(Engine.TensorMultiplyScalar(Engine.TensorEye<T>(d), NumOps.FromDouble(s)),
+            Engine.TensorMultiply(w, w));
 
     #endregion
 
@@ -385,134 +381,35 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
     private (double H, Matrix<T> Gradient) ComputeLogDetConstraint(Matrix<T> W, double s, int d)
     {
         // M = sI - W∘W
-        var M = new Matrix<T>(d, d);
-        T sT = NumOps.FromDouble(s);
-        for (int i = 0; i < d; i++)
-        {
-            M[i, i] = sT;
-            for (int j = 0; j < d; j++)
-                M[i, j] = NumOps.Subtract(M[i, j], NumOps.Multiply(W[i, j], W[i, j]));
-        }
+        var w = Tensor<T>.FromMatrix(W);
+        var M = ShiftedSquareComplement(w, s, d);
 
         // Log-determinant via LU decomposition
-        double logDet = ComputeLogDeterminant(M, d);
+        double logDet = LogAbsDeterminant(M);
 
         // h = -logDet + d * log(s)
         double h = -logDet + d * Math.Log(s);
 
         // Gradient: 2 * W ∘ inv(M)^T
-        var invM = InvertMatrix(M, d);
-        var gradient = new Matrix<T>(d, d);
+        var invM = InvertSmallMatrix(M.ToMatrix());
+        T two = NumOps.FromDouble(2.0);
+        Tensor<T> gradient;
 
         if (invM != null)
         {
             // Normal case: inversion succeeded
-            T two = NumOps.FromDouble(2.0);
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                    // Note: for symmetric M, inv(M)^T = inv(M)
-                    gradient[i, j] = NumOps.Multiply(two, NumOps.Multiply(W[i, j], invM[j, i]));
+            // Note: for symmetric M, inv(M)^T = inv(M)
+            gradient = Engine.TensorMultiplyScalar(
+                Engine.TensorMultiply(w, Engine.TensorTranspose(Tensor<T>.FromMatrix(invM))), two);
         }
         else
         {
             // Singular matrix: use identity-scaled fallback gradient to avoid stalling
             System.Diagnostics.Trace.TraceWarning("DAGMA: M matrix is singular; using fallback gradient.");
-            T two = NumOps.FromDouble(2.0);
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                    gradient[i, j] = NumOps.Multiply(two, W[i, j]);
+            gradient = Engine.TensorMultiplyScalar(w, two);
         }
 
-        return (h, gradient);
-    }
-
-    /// <summary>
-    /// Computes log-determinant using LU decomposition.
-    /// </summary>
-    private double ComputeLogDeterminant(Matrix<T> matrix, int d)
-    {
-        // LU decomposition (partial pivoting) on a copy
-        var LU = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                LU[i, j] = matrix[i, j];
-
-        for (int k = 0; k < d; k++)
-        {
-            // Find pivot
-            int maxRow = k;
-            for (int i = k + 1; i < d; i++)
-                if (NumOps.GreaterThan(NumOps.Abs(LU[i, k]), NumOps.Abs(LU[maxRow, k])))
-                    maxRow = i;
-
-            if (maxRow != k)
-                for (int j = 0; j < d; j++)
-                    (LU[k, j], LU[maxRow, j]) = (LU[maxRow, j], LU[k, j]);
-
-            if (NumOps.LessThan(NumOps.Abs(LU[k, k]), NumOps.FromDouble(1e-15)))
-                return double.NegativeInfinity; // Singular
-
-            for (int i = k + 1; i < d; i++)
-            {
-                LU[i, k] = NumOps.Divide(LU[i, k], LU[k, k]);
-                for (int j = k + 1; j < d; j++)
-                    LU[i, j] = NumOps.Subtract(LU[i, j], NumOps.Multiply(LU[i, k], LU[k, j]));
-            }
-        }
-
-        double logDet = 0;
-        for (int i = 0; i < d; i++)
-            logDet += Math.Log(Math.Abs(NumOps.ToDouble(LU[i, i])));
-        return logDet;
-    }
-
-    /// <summary>
-    /// Inverts a matrix using Gauss-Jordan elimination. Returns null if singular.
-    /// </summary>
-    private Matrix<T>? InvertMatrix(Matrix<T> matrix, int d)
-    {
-        var aug = new Matrix<T>(d, 2 * d);
-        for (int i = 0; i < d; i++)
-        {
-            for (int j = 0; j < d; j++)
-                aug[i, j] = matrix[i, j];
-            aug[i, i + d] = NumOps.One;
-        }
-
-        for (int col = 0; col < d; col++)
-        {
-            int maxRow = col;
-            for (int row = col + 1; row < d; row++)
-                if (NumOps.GreaterThan(NumOps.Abs(aug[row, col]), NumOps.Abs(aug[maxRow, col])))
-                    maxRow = row;
-
-            if (NumOps.LessThan(NumOps.Abs(aug[maxRow, col]), NumOps.FromDouble(1e-12)))
-                return null;
-
-            if (maxRow != col)
-                for (int j = 0; j < 2 * d; j++)
-                    (aug[col, j], aug[maxRow, j]) = (aug[maxRow, j], aug[col, j]);
-
-            T pivot = aug[col, col];
-            for (int j = 0; j < 2 * d; j++)
-                aug[col, j] = NumOps.Divide(aug[col, j], pivot);
-
-            for (int row = 0; row < d; row++)
-            {
-                if (row != col)
-                {
-                    T factor = aug[row, col];
-                    for (int j = 0; j < 2 * d; j++)
-                        aug[row, j] = NumOps.Subtract(aug[row, j], NumOps.Multiply(factor, aug[col, j]));
-                }
-            }
-        }
-
-        var result = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                result[i, j] = aug[i, j + d];
-        return result;
+        return (h, gradient.ToMatrix());
     }
 
     #endregion
@@ -527,34 +424,13 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
         return (_lastIterations, _lastH, _lastLoss);
     }
 
-    private double[] FlattenMatrix(Matrix<T> matrix, int d)
-    {
-        var result = new double[d * d];
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                result[i * d + j] = NumOps.ToDouble(matrix[i, j]);
-        return result;
-    }
-
-    private Matrix<T> UnflattenMatrix(double[] vector, int d)
-    {
-        var result = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                result[i, j] = NumOps.FromDouble(vector[i * d + j]);
-        return result;
-    }
-
     /// <summary>
     /// Checks if any entry of the matrix is negative (M-matrix violation).
     /// </summary>
-    private bool HasNegativeEntry(Matrix<T> matrix, int d)
+    private bool HasNegativeEntry(Matrix<T> matrix)
     {
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                if (NumOps.ToDouble(matrix[i, j]) < -1e-10)
-                    return true;
-        return false;
+        var values = Tensor<T>.FromMatrix(matrix);
+        return Engine.TensorCountNonzero(Engine.TensorLessThan(values, NumOps.FromDouble(-1e-10))) > 0;
     }
 
     #endregion

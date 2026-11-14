@@ -445,12 +445,11 @@ public partial class ConjugateGradientOptimizer<T, TInput, TOutput> : GradientBa
             // direction, which can produce an ascent direction. Clamping is exactly a restart.
             if (numOps.LessThan(beta, numOps.Zero)) beta = numOps.Zero;
 
-            var direction = new Vector<T>(_size);
-            for (int i = 0; i < _size; i++)
-            {
-                direction[i] = numOps.Add(
-                    numOps.Negate(gradient[i]), numOps.Multiply(beta, (_previousDirection ?? throw new InvalidOperationException("_previousDirection is null where it is required."))[i]));
-            }
+            // d = -g + beta * d_previous
+            var engine = _owner.Engine;
+            var previousDirection = _previousDirection ?? throw new InvalidOperationException("_previousDirection is null where it is required.");
+            var direction = (Vector<T>)engine.Add(
+                engine.Negate(gradient), engine.Multiply(previousDirection, beta));
 
             _previousDirection = direction;
             _previousGradient = gradient.Clone();

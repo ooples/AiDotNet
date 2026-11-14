@@ -200,6 +200,60 @@ public class LuDecompositionIntegrationTests
 
     #region Linear System Solving Tests
 
+    [Fact]
+    public void LuDecomposition_CompletePivoting_SolvesPermutationMatrix()
+    {
+        // The first maximum of [[0,1],[1,0]] is at (0,1), so the columns are swapped and U = I.
+        // Solve must back-substitute on the triangular factor and map x[Q[j]] = z[j].
+        var A = new Matrix<double>(2, 2);
+        A[0, 0] = 0; A[0, 1] = 1;
+        A[1, 0] = 1; A[1, 1] = 0;
+
+        var x = new LuDecomposition<double>(A, LuAlgorithmType.CompletePivoting)
+            .Solve(new Vector<double>(new[] { 2.0, 3.0 }));
+
+        Assert.Equal(3.0, x[0], 1e-12);
+        Assert.Equal(2.0, x[1], 1e-12);
+    }
+
+    [Theory]
+    [InlineData(LuAlgorithmType.CompletePivoting)]
+    [InlineData(LuAlgorithmType.PartialPivoting)]
+    public void LuDecomposition_PivotingSolve_RandomDenseSystem_MatchesKnownSolution(LuAlgorithmType algorithm)
+    {
+        var A = CreateTestMatrix(5, seed: 314);
+        var expected = new Vector<double>(new[] { 1.0, -2.0, 0.5, 3.0, -1.5 });
+        var b = A.Multiply(expected);
+
+        var x = new LuDecomposition<double>(A, algorithm).Solve(b);
+
+        for (int i = 0; i < expected.Length; i++)
+        {
+            Assert.Equal(expected[i], x[i], 1e-9);
+        }
+    }
+
+    [Fact]
+    public void LuDecomposition_PartialPivoting_ThreeCyclePermutation_RowOrderFollowsPaEqualsLu()
+    {
+        // A = [[0,0,1],[1,0,0],[0,1,0]] needs the non-symmetric 3-cycle row order [1, 2, 0]
+        // (P A = L U with (P A)[i] = A[P[i]]); its transpose [2, 0, 1] would be wrong.
+        var A = new Matrix<double>(3, 3);
+        A[0, 2] = 1;
+        A[1, 0] = 1;
+        A[2, 1] = 1;
+
+        var lu = new LuDecomposition<double>(A, LuAlgorithmType.PartialPivoting);
+        var x = lu.Solve(new Vector<double>(new[] { 3.0, 1.0, 2.0 }));
+
+        Assert.Equal(1, lu.P[0]);
+        Assert.Equal(2, lu.P[1]);
+        Assert.Equal(0, lu.P[2]);
+        Assert.Equal(1.0, x[0], 1e-12);
+        Assert.Equal(2.0, x[1], 1e-12);
+        Assert.Equal(3.0, x[2], 1e-12);
+    }
+
 
 
 

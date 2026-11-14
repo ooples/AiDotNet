@@ -1,6 +1,7 @@
 name: TTS paper contracts
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - '.github/workflows/tts-paper-contracts.yml'
       - 'src/TextToSpeech/**'
@@ -32,6 +33,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   contracts:
+    if: ${{ github.event.pull_request.draft != true }}
     runs-on: windows-latest
     timeout-minutes: 45
     env:
@@ -41,8 +43,8 @@ jobs:
       AIDOTNET_DISABLE_GPU: '1'
       TTS_FAMILY: ${{ inputs.family || 'All' }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
       - name: Build the focused contract assembly
@@ -67,7 +69,7 @@ jobs:
           dotnet test tests/AiDotNet.TtsPaperContracts/AiDotNet.TtsPaperContracts.csproj `
             -c Release --no-build --no-restore `
             --filter $filter --logger trx --results-directory TestResults/tts-paper-contracts
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: tts-paper-contracts

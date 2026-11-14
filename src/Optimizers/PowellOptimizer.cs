@@ -213,7 +213,7 @@ public partial class PowellOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInp
             var extrapolatedStepData = EvaluateSolution(extrapolatedPoint, inputData);
             var currentStepData = EvaluateSolution(currentSolution, inputData);
 
-            if (NumOps.GreaterThan(extrapolatedStepData.FitnessScore, currentStepData.FitnessScore))
+            if (IsHigher(extrapolatedStepData.FitnessScore, currentStepData.FitnessScore))
             {
                 currentSolution = extrapolatedPoint;
                 currentStepData = extrapolatedStepData;
@@ -274,14 +274,9 @@ public partial class PowellOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInp
     /// </remarks>
     private List<Vector<T>> GenerateDirections(int n)
     {
-        var directions = new List<Vector<T>>();
-        for (int i = 0; i < n; i++)
-        {
-            var direction = new Vector<T>(n);
-            direction[i] = NumOps.One;
-            directions.Add(direction);
-        }
-        return directions;
+        // The coordinate axes: the rows of the identity.
+        var identity = Matrix<T>.CreateIdentity(n);
+        return Enumerable.Range(0, n).Select(i => identity.GetRow(i)).ToList();
     }
 
     /// <summary>
@@ -308,21 +303,33 @@ public partial class PowellOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInp
     /// This process helps find the best position along a single direction before moving to the next direction.
     /// </para>
     /// </remarks>
+    /// <summary>True when <paramref name="value"/> is strictly higher than <paramref name="other"/>.</summary>
+    private bool IsHigher(T value, T other) => NumOps.GreaterThan(value, other);
+
+    /// <summary>True when the interval [a, b] is wider than <paramref name="width"/>.</summary>
+    private bool IsWiderThan(T a, T b, T width) => NumOps.GreaterThan(NumOps.Subtract(b, a), width);
+
+    /// <summary>The two interior golden-section points b - r(b - a) and a + r(b - a).</summary>
+    private (T Lower, T Upper) GoldenSectionPoints(T a, T b, T ratio)
+    {
+        var reach = NumOps.Multiply(ratio, NumOps.Subtract(b, a));
+        return (NumOps.Subtract(b, reach), NumOps.Add(a, reach));
+    }
+
     private (IFullModel<T, TInput, TOutput> OptimalSolution, T OptimalStep) LineSearch(IFullModel<T, TInput, TOutput> currentSolution, Vector<T> direction, OptimizationInputData<T, TInput, TOutput> inputData)
     {
         var a = NumOps.FromDouble(-1.0);
         var b = NumOps.One;
         var goldenRatio = NumOps.FromDouble((Math.Sqrt(5) - 1) / 2);
 
-        while (NumOps.GreaterThan(NumOps.Subtract(b, a), _adaptiveStepSize))
+        while (IsWiderThan(a, b, _adaptiveStepSize))
         {
-            var c = NumOps.Subtract(b, NumOps.Multiply(goldenRatio, NumOps.Subtract(b, a)));
-            var d = NumOps.Add(a, NumOps.Multiply(goldenRatio, NumOps.Subtract(b, a)));
+            var (c, d) = GoldenSectionPoints(a, b, goldenRatio);
 
             var fc = EvaluateSolution(MoveInDirection(currentSolution, direction, c), inputData).FitnessScore;
             var fd = EvaluateSolution(MoveInDirection(currentSolution, direction, d), inputData).FitnessScore;
 
-            if (NumOps.GreaterThan(fc, fd))
+            if (IsHigher(fc, fd))
             {
                 b = d;
             }
