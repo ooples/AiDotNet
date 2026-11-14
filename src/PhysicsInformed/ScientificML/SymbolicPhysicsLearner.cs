@@ -475,7 +475,12 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         /// The mean squared error of an expression over every sample at once; +infinity when a variable index is out
         /// of range or the error is not finite (a NaN or infinite prediction makes the sum NaN or infinite).
         /// </summary>
-        private double ComputeMse(SymbolicExpression<T> expression, Tensor<T> inputs, Tensor<T> outputs)
+        /// <remarks>
+        /// The error is scaled by 1 / sqrt(n) before it is squared, so the sum of the squares is the mean itself. Squaring
+        /// first overflowed half precision for any error above 256 (256^2 &gt; 65504) and the count n in T rounded
+        /// above 2048, so a candidate with a representable mean scored +infinity.
+        /// </remarks>
+        internal double ComputeMse(SymbolicExpression<T> expression, Tensor<T> inputs, Tensor<T> outputs)
         {
             int samples = inputs.Shape[0];
             if (samples == 0)
@@ -493,8 +498,9 @@ namespace AiDotNet.PhysicsInformed.ScientificML
                 return double.PositiveInfinity;
             }
 
-            var error = Engine.TensorSubtract(predictions, outputs);
-            T mse = NumOps.Divide(Engine.TensorSum(Engine.TensorMultiply(error, error)), NumOps.FromDouble(samples));
+            var error = Engine.TensorMultiplyScalar(
+                Engine.TensorSubtract(predictions, outputs), NumOps.FromDouble(1.0 / Math.Sqrt(samples)));
+            T mse = Engine.TensorSum(Engine.TensorMultiply(error, error));
             double mseValue = NumOps.ToDouble(mse);
 
             return double.IsNaN(mseValue) || double.IsInfinity(mseValue) ? double.PositiveInfinity : mseValue;
