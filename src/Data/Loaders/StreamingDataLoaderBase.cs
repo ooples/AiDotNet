@@ -157,6 +157,11 @@ public abstract class StreamingDataLoaderBase<T, TInput, TOutput> :
             });
 
         // Start producer task with bounded parallelism
+        // The producer runs on an iterator-owned token: a consumer that stops early (MaxSteps, a validation batch
+        // cap, a one-batch probe) disposes this iterator, and the producer must stop rather than block forever on a
+        // full channel nobody reads.
+        using var producerCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var producerToken = producerCancellation.Token;
         var producerTask = Task.Run(async () =>
         {
             // Use semaphore to limit concurrent sample reads to _numWorkers
@@ -166,7 +171,7 @@ public abstract class StreamingDataLoaderBase<T, TInput, TOutput> :
             {
                 for (int b = 0; b < numBatches; b++)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
+                    producerToken.ThrowIfCancellationRequested();
 
                     int startIdx = b * BatchSize;
                     int endIdx = Math.Min(startIdx + BatchSize, indices.Length);
@@ -180,49 +185,72 @@ public abstract class StreamingDataLoaderBase<T, TInput, TOutput> :
                     var samples = new (TInput Input, TOutput Output)[endIdx - startIdx];
                     var tasks = new Task[endIdx - startIdx];
 
-                    for (int i = startIdx; i < endIdx; i++)
+                    try
                     {
-                        int localIdx = i - startIdx;
-                        int sampleIdx = indices[i];
-
-                        // Wait for semaphore slot before starting task
-                        await semaphore.WaitAsync(cancellationToken);
-
-                        tasks[localIdx] = Task.Run(async () =>
+                        for (int i = startIdx; i < endIdx; i++)
                         {
-                            try
+                            int localIdx = i - startIdx;
+                            int sampleIdx = indices[i];
+
+                            // Wait for semaphore slot before starting task
+                            await semaphore.WaitAsync(producerToken);
+
+                            tasks[localIdx] = Task.Run(async () =>
                             {
-                                samples[localIdx] = await ReadSampleAsync(sampleIdx, cancellationToken);
-                            }
-                            finally
-                            {
-                                semaphore.Release();
-                            }
-                        }, cancellationToken);
+                                try
+                                {
+                                    samples[localIdx] = await ReadSampleAsync(sampleIdx, producerToken);
+                                }
+                                finally
+                                {
+                                    semaphore.Release();
+                                }
+                            }, producerToken);
+                        }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        // Reads already started still release the semaphore; let them finish before the
+                        // producer disposes it.
+                        await AwaitStartedReads(tasks).ConfigureAwait(false);
+                        throw;
                     }
 
                     await Task.WhenAll(tasks);
 
                     var batch = AggregateSamples(samples);
-                    await channel.Writer.WriteAsync(batch, cancellationToken);
+                    await channel.Writer.WriteAsync(batch, producerToken);
                 }
             }
             finally
             {
                 channel.Writer.Complete();
             }
-        }, cancellationToken);
+        }, producerToken);
 
         // Consume batches from channel
-        while (await channel.Reader.WaitToReadAsync(cancellationToken))
+        try
         {
-            while (channel.Reader.TryRead(out var batch))
+            while (await channel.Reader.WaitToReadAsync(cancellationToken))
             {
-                yield return batch;
+                while (channel.Reader.TryRead(out var batch))
+                {
+                    yield return batch;
+                }
             }
         }
-
-        await producerTask;
+        finally
+        {
+            producerCancellation.Cancel();
+            try
+            {
+                await producerTask;
+            }
+            catch (OperationCanceledException) when (producerToken.IsCancellationRequested)
+            {
+                // The cleanup above (or the caller's own cancellation) stopped the producer; nothing was lost.
+            }
+        }
     }
 
     /// <summary>
@@ -329,6 +357,23 @@ public abstract class StreamingDataLoaderBase<T, TInput, TOutput> :
     }
 
     /// <summary>
+    /// Waits for the sample reads a cancelled batch had already started. Their own cancellation is expected; any
+    /// other read failure propagates.
+    /// </summary>
+    private static async Task AwaitStartedReads(Task?[] tasks)
+    {
+        var started = tasks.OfType<Task>().ToArray();
+        try
+        {
+            await Task.WhenAll(started).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // The batch is being abandoned because of cancellation; a read stopped by it is not a failure.
+        }
+    }
+
+    /// <summary>
     /// Internal zero-redundant-I/O async distributed slice iterator with bounded prefetching used by
     /// <see cref="DistributedStreamingDataLoader{T, TInput, TOutput}"/> when <see cref="GetBatchesAsync"/> is not
     /// overridden by a derived class.
@@ -355,13 +400,11 @@ public abstract class StreamingDataLoaderBase<T, TInput, TOutput> :
                 SingleWriter = true,
             });
 
-        // The producer runs under a token this iterator owns, so that leaving the enumeration early
-        // (a step budget, a validation batch cap, a first-batch-only read) stops it. Under the
-        // caller's token alone it would fill the bounded channel and then wait in WriteAsync forever,
-        // holding the loader and the prefetched batches.
-        using var iteratorCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        var producerToken = iteratorCts.Token;
-
+        // The producer runs on an iterator-owned token: a consumer that stops early (MaxSteps, a validation batch
+        // cap, a one-batch probe) disposes this iterator, and the producer must stop rather than block forever on a
+        // full channel nobody reads.
+        using var producerCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var producerToken = producerCancellation.Token;
         var producerTask = Task.Run(async () =>
         {
             using var semaphore = new SemaphoreSlim(_numWorkers, _numWorkers);
@@ -399,7 +442,7 @@ public abstract class StreamingDataLoaderBase<T, TInput, TOutput> :
                     }
 
                     var samples = new (TInput Input, TOutput Output)[rankCount];
-                    var tasks = new Task?[rankCount];
+                    var tasks = new Task[rankCount];
                     int sliceStart = startIdx + rankOffset;
 
                     try
@@ -410,8 +453,6 @@ public abstract class StreamingDataLoaderBase<T, TInput, TOutput> :
                             int sampleIdx = indices[sliceStart + localIdx];
                             await semaphore.WaitAsync(producerToken).ConfigureAwait(false);
 
-                            // Started without a token so the body always runs and returns its
-                            // semaphore slot; the read itself observes the token.
                             tasks[capturedLocal] = Task.Run(async () =>
                             {
                                 try
@@ -422,35 +463,18 @@ public abstract class StreamingDataLoaderBase<T, TInput, TOutput> :
                                 {
                                     semaphore.Release();
                                 }
-                            });
+                            }, producerToken);
                         }
-
-                        await Task.WhenAll(tasks!).ConfigureAwait(false);
                     }
-                    catch
+                    catch (OperationCanceledException)
                     {
-                        // Let the reads already in flight finish (they release the semaphore) before
-                        // the semaphore is disposed; the exception that ended this batch is rethrown.
-                        for (int t = 0; t < tasks.Length; t++)
-                        {
-                            if (tasks[t] is not { } inFlight)
-                            {
-                                continue;
-                            }
-
-                            try
-                            {
-                                await inFlight.ConfigureAwait(false);
-                            }
-                            catch (Exception)
-                            {
-                                // Already represented by the exception being rethrown below.
-                            }
-                        }
-
+                        // Reads already started still release the semaphore; let them finish before the
+                        // producer disposes it.
+                        await AwaitStartedReads(tasks).ConfigureAwait(false);
                         throw;
                     }
 
+                    await Task.WhenAll(tasks).ConfigureAwait(false);
                     var batch = AggregateSamples(samples);
                     await channel.Writer.WriteAsync(
                         (batch.Inputs, batch.Outputs, globalCount),
@@ -461,7 +485,7 @@ public abstract class StreamingDataLoaderBase<T, TInput, TOutput> :
             {
                 channel.Writer.Complete();
             }
-        }, CancellationToken.None);
+        }, producerToken);
 
         try
         {
@@ -472,25 +496,17 @@ public abstract class StreamingDataLoaderBase<T, TInput, TOutput> :
                     yield return item;
                 }
             }
-
-            // Normal end of the stream: surface a producer failure to the consumer.
-            await producerTask.ConfigureAwait(false);
         }
         finally
         {
-            if (!producerTask.IsCompleted)
+            producerCancellation.Cancel();
+            try
             {
-                // The consumer stopped early (break, exception, or cancellation). Stop the producer
-                // and wait for it so no read or channel write outlives this enumeration.
-                iteratorCts.Cancel();
-                try
-                {
-                    await producerTask.ConfigureAwait(false);
-                }
-                catch (OperationCanceledException)
-                {
-                    // The cancellation requested by this cleanup.
-                }
+                await producerTask.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (producerToken.IsCancellationRequested)
+            {
+                // The cleanup above (or the caller's own cancellation) stopped the producer; nothing was lost.
             }
         }
     }

@@ -1072,30 +1072,27 @@ public class GlooCommunicationBackend<T> : CommunicationBackendBase<T>
             throw new InvalidOperationException("Native Gloo Broadcast method is not available.");
         }
 
-        // The native call fills the array it is handed in place and cannot resize it. Non-root ranks
-        // may pass null (or a buffer of another length), so every rank first takes part in a
-        // one-element broadcast of the root's payload length and sizes its receive array from that.
-        var lengthBuffer = new double[1];
+        // Non-root ranks may pass no buffer, and the native call fills the array it is given in place, so the root's
+        // length goes first and every other rank sizes its receive buffer from it.
+        double[] doubleData;
         if (_rank == root)
         {
-            lengthBuffer[0] = data.Length;
-        }
+            if (data is null)
+            {
+                throw new ArgumentNullException(nameof(data), "The broadcast root must supply the data to send.");
+            }
 
-        _broadcastDelegate(_nativeGlooContext, lengthBuffer, root);
-        double announcedLength = lengthBuffer[0];
-        if (double.IsNaN(announcedLength) || announcedLength < 0 || announcedLength > int.MaxValue)
+            _broadcastDelegate(_nativeGlooContext, new double[] { data.Length }, root);
+            doubleData = VectorToDoubleArray(data);
+        }
+        else
         {
-            throw new InvalidOperationException(
-                $"Native Gloo Broadcast announced an invalid payload length ({announcedLength}) from root {root}.");
+            var length = new double[1];
+            _broadcastDelegate(_nativeGlooContext, length, root);
+            doubleData = new double[checked((int)length[0])];
         }
 
-        int payloadLength = (int)announcedLength;
-        var doubleData = _rank == root ? VectorToDoubleArray(data) : new double[payloadLength];
-        if (payloadLength > 0)
-        {
-            _broadcastDelegate(_nativeGlooContext, doubleData, root);
-        }
-
+        _broadcastDelegate(_nativeGlooContext, doubleData, root);
         return DoubleArrayToVector(doubleData);
     }
 

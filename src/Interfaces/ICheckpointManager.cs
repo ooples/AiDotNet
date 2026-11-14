@@ -137,17 +137,17 @@ public interface ICheckpointManager<T, TInput, TOutput>
     /// </summary>
     /// <param name="currentStep">The current training step.</param>
     /// <param name="metricValue">Optional metric value for improvement-based checkpointing.</param>
-    /// <param name="shouldMinimize">Whether the metric should be minimized (true) or maximized (false).</param>
+    /// <param name="shouldMinimize">Whether the metric should be minimized (true) or maximized (false); null uses the configured AutoCheckpointConfiguration.MinimizeMetric.</param>
     /// <returns>True if a checkpoint should be saved.</returns>
-    bool ShouldAutoSaveCheckpoint(int currentStep, double? metricValue = null, bool shouldMinimize = true);
+    bool ShouldAutoSaveCheckpoint(int currentStep, double? metricValue = null, bool? shouldMinimize = null);
 
     /// <summary>
     /// Updates the auto-save state after a checkpoint is saved.
     /// </summary>
     /// <param name="step">The step at which the checkpoint was saved.</param>
     /// <param name="metricValue">Optional metric value for improvement tracking.</param>
-    /// <param name="shouldMinimize">Whether the metric should be minimized.</param>
-    void UpdateAutoSaveState(int step, double? metricValue = null, bool shouldMinimize = true);
+    /// <param name="shouldMinimize">Whether the metric should be minimized (true) or maximized (false); null uses the configured AutoCheckpointConfiguration.MinimizeMetric.</param>
+    void UpdateAutoSaveState(int step, double? metricValue = null, bool? shouldMinimize = null);
 
     /// <summary>
     /// Attempts to save a checkpoint automatically based on configured auto-checkpoint settings.
@@ -160,7 +160,7 @@ public interface ICheckpointManager<T, TInput, TOutput>
     /// <param name="step">The current training step.</param>
     /// <param name="metrics">Training metrics to store with the checkpoint.</param>
     /// <param name="metricValue">Optional metric value for improvement-based checkpointing.</param>
-    /// <param name="shouldMinimize">Whether the metric should be minimized (true) or maximized (false).</param>
+    /// <param name="shouldMinimize">Whether the metric should be minimized (true) or maximized (false); null uses the configured AutoCheckpointConfiguration.MinimizeMetric.</param>
     /// <param name="metadata">Optional additional metadata.</param>
     /// <returns>The checkpoint ID if saved, or null if no checkpoint was saved.</returns>
     string? TryAutoSaveCheckpoint<TMetadata>(
@@ -170,6 +170,6 @@ public interface ICheckpointManager<T, TInput, TOutput>
         int step,
         Dictionary<string, T> metrics,
         double? metricValue = null,
-        bool shouldMinimize = true,
+        bool? shouldMinimize = null,
         Dictionary<string, object>? metadata = null) where TMetadata : class;
 }

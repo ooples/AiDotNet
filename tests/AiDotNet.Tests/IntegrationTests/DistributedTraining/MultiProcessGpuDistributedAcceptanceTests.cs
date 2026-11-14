@@ -40,6 +40,8 @@ namespace AiDotNet.Tests.IntegrationTests.DistributedTraining;
 /// (<c>GPU 0 = RTX 3080</c> 12 GB, <c>GPU 1 = RTX 3090</c> 24 GB).
 /// </summary>
 [Collection("SequentialMultiProcessGpuDistributed")]
+// The multi-process child-host suite runs on net8.0+ only; the legacy target compiles no part of it.
+#if NET8_0_OR_GREATER
 public sealed class MultiProcessGpuDistributedAcceptanceTests : IDisposable
 {
     private readonly ITestOutputHelper _output;
@@ -70,7 +72,6 @@ public sealed class MultiProcessGpuDistributedAcceptanceTests : IDisposable
         }
     }
 
-#if NET8_0_OR_GREATER
 
     #region Worker Specification & Result DTOs
 
@@ -795,32 +796,33 @@ public static class Program
                 return Array.Empty<string>();
             }
 
-            // Read both pipes asynchronously: a synchronous ReadToEnd blocks until stdout closes, so a hung
-            // nvidia-smi would never reach the exit deadline (and an unread stderr pipe can fill and stall it).
-            Task<string> stdoutTask = proc.StandardOutput.ReadToEndAsync();
-            Task<string> stderrTask = proc.StandardError.ReadToEndAsync();
+            // Both streams are drained asynchronously so a hung nvidia-smi that keeps stdout open cannot outlast the
+            // deadline; on timeout the process is killed and the streams finish when it exits.
+            var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+            var stderrTask = proc.StandardError.ReadToEndAsync();
             if (!proc.WaitForExit(5000))
             {
                 try
                 {
-                    proc.Kill();
+                    proc.Kill(entireProcessTree: true);
                 }
                 catch (InvalidOperationException)
                 {
-                    // Exited between the deadline and the kill.
+                    // The process exited between the timeout and the kill.
                 }
 
-                proc.WaitForExit(2000);
-                Task.WaitAll(new Task[] { stdoutTask, stderrTask }, 2000);
+                proc.WaitForExit();
+                Task.WaitAll(stdoutTask, stderrTask);
                 return Array.Empty<string>();
             }
 
-            if (!Task.WaitAll(new Task[] { stdoutTask, stderrTask }, 5000) || proc.ExitCode != 0)
+            proc.WaitForExit();
+            string output = stdoutTask.GetAwaiter().GetResult();
+            stderrTask.GetAwaiter().GetResult();
+            if (proc.ExitCode != 0)
             {
                 return Array.Empty<string>();
             }
-
-            string output = stdoutTask.Result;
 
             return output
                 .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
@@ -1991,6 +1993,5 @@ public static class Program
     }
 
     #endregion
-
-#endif
 }
+#endif
