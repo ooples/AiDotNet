@@ -179,8 +179,10 @@ public partial class MLkNNClassifier<T> : MultiLabelClassifierBase<T>
     private Tensor<T> SmoothedConditional(Tensor<int> counts, Tensor<int> totals, double s, int width)
     {
         var engine = Engine;
-        var numerator = engine.TensorAddScalar(counts.Cast<double>().Reshape(NumLabels, width), s);
-        var denominator = engine.TensorAddScalar(totals.Cast<double>(), s * width).Reshape(NumLabels, 1);
+        // Contiguous first: Tensor.Cast reads a sliced view from the start of its storage, so the "without the
+        // label" table (the second half of the shared bin count) came out as a copy of the "with the label" one
+        var numerator = engine.TensorAddScalar(counts.Contiguous().Cast<double>().Reshape(NumLabels, width), s);
+        var denominator = engine.TensorAddScalar(totals.Contiguous().Cast<double>(), s * width).Reshape(NumLabels, 1);
         return engine.TensorDivide(numerator, engine.TensorBroadcastTo(denominator, new[] { NumLabels, width })).Cast<T>();
     }
 

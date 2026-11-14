@@ -539,7 +539,9 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
         }
 
         var shifted = Engine.TensorAddScalar(GetClassIndexTensor(y), 1);
-        return Engine.TensorBinCount(shifted, NumClasses + 1).Slice(0, 1, NumClasses + 1);
+        // Contiguous: Tensor.Cast reads a sliced view from the start of its storage (the dropped "unknown" bin),
+        // which shifted every count by one class and made the first class's prior 0
+        return Engine.TensorBinCount(shifted, NumClasses + 1).Slice(0, 1, NumClasses + 1).Contiguous();
     }
 
     /// <summary>
@@ -609,7 +611,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     /// <summary>
     /// Integer counts as T values.
     /// </summary>
-    private protected static Tensor<T> CountsToValues(Tensor<int> counts) => counts.Cast<T>();
+    private protected static Tensor<T> CountsToValues(Tensor<int> counts) => counts.Contiguous().Cast<T>();
 
     /// <summary>
     /// counts / total as T, with the division done in double so large counts and totals keep their ratio.
@@ -620,7 +622,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     private protected static Tensor<T> CountFractions(Tensor<int> counts, int total)
     {
         var engine = AiDotNetEngine.Current;
-        return engine.TensorDivideScalar(counts.Cast<double>(), (double)total).Cast<T>();
+        return engine.TensorDivideScalar(counts.Contiguous().Cast<double>(), (double)total).Cast<T>();
     }
 
     /// <summary>
