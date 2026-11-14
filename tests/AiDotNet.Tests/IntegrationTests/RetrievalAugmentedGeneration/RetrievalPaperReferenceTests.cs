@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.Enums;
 using AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
+using AiDotNet.RetrievalAugmentedGeneration.Generators;
 using AiDotNet.RetrievalAugmentedGeneration.Models;
 using AiDotNet.RetrievalAugmentedGeneration.Rerankers;
 using AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies;
@@ -189,6 +190,26 @@ public class RetrievalPaperReferenceTests
         var shortDistances = JObject.Parse(
             "{\"ids\":[[\"a\",\"b\"]],\"documents\":[[\"x\",\"y\"]],\"distances\":[[0.25]]}");
         Assert.Throws<InvalidOperationException>(() => ChromaDBDocumentStore<double>.ParseQueryResponse(shortDistances));
+    }
+
+    /// <summary>
+    /// Temperature sampling uses softmax(z / τ). With τ = 0.001 the Half logits 70 and 69 scale to 70000 and
+    /// 69000, beyond the Half maximum 65504; dividing in Half made both +inf and the softmax NaN. In double the
+    /// distribution is [1, e^-1000] = [1, 0].
+    /// </summary>
+    [Fact]
+    public void NeuralGenerator_TemperatureSoftmax_DoesNotOverflowForHalf()
+    {
+        var probabilities = NeuralGenerator<Half>.ApplyTemperatureAndSoftmax(new[] { (Half)70, (Half)69 }, 0.001);
+
+        Assert.Equal(1.0, probabilities[0], Tolerance);
+        Assert.Equal(0.0, probabilities[1], Tolerance);
+
+        // A moderate temperature still matches softmax([1, 2, 3] / 0.5) computed directly.
+        var moderate = NeuralGenerator<Half>.ApplyTemperatureAndSoftmax(new[] { (Half)1, (Half)2, (Half)3 }, 0.5);
+        double z = Math.Exp(2) + Math.Exp(4) + Math.Exp(6);
+        Assert.Equal(Math.Exp(2) / z, moderate[0], 1e-9);
+        Assert.Equal(Math.Exp(6) / z, moderate[2], 1e-9);
     }
 
     private static InMemoryDocumentStore<TNum> Store<TNum>(params string[] contents)

@@ -439,12 +439,18 @@ public class NeuralGenerator<T> : IGenerator<T>
         return SampleFromDistribution(probabilities, random);
     }
 
-    private double[] ApplyTemperatureAndSoftmax(T[] logits, double temperature)
+    /// <summary>
+    /// softmax(logits / temperature) for the sampler, which draws in double.
+    /// </summary>
+    /// <remarks>
+    /// The logits are widened to double once, before scaling: in Half, 70 / 0.001 overflows 65504 to +inf,
+    /// two such logits tie at +inf and the softmax of infinities is NaN.
+    /// </remarks>
+    internal static double[] ApplyTemperatureAndSoftmax(T[] logits, double temperature)
     {
-        // softmax(logits / temperature); the sampler draws from it in double.
         var engine = AiDotNetEngine.Current;
-        var scaled = engine.TensorDivideScalar(new Tensor<T>(logits, [logits.Length]), NumOps.FromDouble(temperature));
-        return engine.TensorSoftmax(scaled, 0).Cast<double>().ToArray();
+        var scaled = engine.TensorDivideScalar(new Tensor<T>(logits, [logits.Length]).Cast<double>(), temperature);
+        return engine.TensorSoftmax(scaled, 0).ToArray();
     }
 
     private int SampleFromDistribution(double[] probabilities, Random random)
