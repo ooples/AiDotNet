@@ -22937,3 +22937,4 @@ AiDotNet.NeuralNetworks.Layers.GRULayer<T>.GRULayer(int hiddenSize, AiDotNet.Int
 AiDotNet.NeuralNetworks.Layers.GRULayer<T>.GRULayer(int hiddenSize, AiDotNet.Interfaces.IVectorActivationFunction<T>! vectorActivation, bool returnSequences = false, AiDotNet.Interfaces.IVectorActivationFunction<T>? vectorRecurrentActivation = null, bool stateful = false, bool resetAfter = true) -> void
 AiDotNet.NeuralNetworks.Layers.GRULayer<T>.ResetAfter.get -> bool
 *REMOVED*override AiDotNet.NeuralNetworks.Layers.LSTMLayer<T>.SetTrainingMode(bool isTraining) -> void
+override AiDotNet.NeuralNetworks.MobileNetV2Network<T>.ReleasesInferenceIntermediates.get -> bool
