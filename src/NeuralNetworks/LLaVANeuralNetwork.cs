@@ -812,7 +812,7 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
             throw new ArgumentException($"ONNX image must have shape [3,{_imageSize},{_imageSize}] with an optional batch of one.", nameof(image));
 
         // The [C, H, W] pixels (or the single batch image's) in row-major order, as floats
-        float[] pixels = image.Cast<float>().ToArray();
+        float[] pixels = image.Contiguous().Cast<float>().ToArray();
         return new OnnxTensors.DenseTensor<float>(pixels, [1, channels, height, width]);
     }
 
@@ -861,7 +861,7 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
         int hiddenDim = input.Shape[1];
 
         var onnxTensor = new OnnxTensors.DenseTensor<float>(
-            input.Cast<float>().ToArray().AsSpan(0, seqLen * hiddenDim).ToArray(), [1, seqLen, hiddenDim]);
+            input.Contiguous().Cast<float>().ToArray().AsSpan(0, seqLen * hiddenDim).ToArray(), [1, seqLen, hiddenDim]);
 
         var inputs = new List<NamedOnnxValue>
         {
@@ -1298,7 +1298,7 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
 
         int length = tensor.Length;
         writer.Write(length);
-        foreach (double value in tensor.Cast<double>().ToArray())
+        foreach (double value in tensor.Contiguous().Cast<double>().ToArray())
         {
             writer.Write(value);
         }
