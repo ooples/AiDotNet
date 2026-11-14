@@ -133,9 +133,12 @@ public partial class ComplementNaiveBayes<T> : NaiveBayesBase<T>
         T alpha = NumOps.FromDouble(Options.Alpha);
 
         // For CNB, feature counts over all OTHER classes = all counts - this class's counts
-        var totalCounts = engine.ReduceSum(features, new[] { 0 }, true);
-        var classCounts = engine.TensorMatMul(engine.TensorTranspose(ClassMembership(y)), features);
-        var complementCounts = engine.TensorSubtract(totalCounts, classCounts);
+        // Summed directly over the samples outside the class, as the scalar loop did. total - class cancels when
+        // one class holds most of a feature's mass (float: 16777216 + 1 - 16777216 = 0 instead of 1) and can even
+        // go negative, which turns the log below into NaN for a small alpha.
+        var membership = ClassMembership(y);
+        var complementCounts = engine.TensorMatMul(
+            engine.TensorTranspose(engine.ScalarMinusTensor(NumOps.One, membership)), features);
         var complementTotals = engine.ReduceSum(complementCounts, new[] { 1 }, true);
 
         // Compute log probabilities with smoothing
