@@ -182,7 +182,27 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch
                     return false; // inconsistent dimensions -> CPU fallback
             }
 
-            var engine = AiDotNetEngine.Current;
+            try
+            {
+                scores = ScoreOnEngine(AiDotNetEngine.Current, kind, query, docs, n, dim).ToArray();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                // A GPU failure signals the CPU fallback, as documented. It is recorded on the GPU
+                // diagnostics channel rather than swallowed.
+                AiDotNet.Configuration.GpuDiagnosticsConfig.Emit(
+                    AiDotNet.Configuration.GpuDiagnosticLevel.Minimal,
+                    $"[GpuVectorScorer] batched {kind} scoring failed ({ex.GetType().Name}): {ex.Message}; using the CPU path");
+                scores = Array.Empty<T>();
+                return false;
+            }
+        }
+
+        /// <summary>One score per document for a supported metric, as whole-tensor engine operations.</summary>
+        private static Tensor<T> ScoreOnEngine<T>(
+            IEngine engine, MetricKind kind, Vector<T> query, IReadOnlyList<Vector<T>> docs, int n, int dim)
+        {
             var matrix = engine.TensorStack(docs.Select(v => Tensor<T>.FromVector(v)).ToArray(), 0);
             var queryRow = Tensor<T>.FromVector(query);
 
@@ -205,11 +225,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch
                     break;
 
                 default:
-                    return false;
+                    throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unsupported metric kind.");
             }
 
-            scores = result.ToArray();
-            return true;
+            return result;
         }
 
         /// <summary>Euclidean norm of every row, computed on rows pre-divided by their largest magnitude.</summary>
