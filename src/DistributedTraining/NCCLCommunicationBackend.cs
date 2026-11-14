@@ -486,6 +486,7 @@ public class NCCLCommunicationBackend<T> : CommunicationBackendBase<T>
     public override void Barrier()
     {
         EnsureInitialized();
+        DrainAsyncCollectives();
 
         if (_worldSize == 1)
         {
@@ -509,6 +510,7 @@ public class NCCLCommunicationBackend<T> : CommunicationBackendBase<T>
     public override void AllReduce(Vector<T> data, ReductionOperation operation)
     {
         EnsureInitialized();
+        DrainAsyncCollectives();
         ValidateData(data, nameof(data));
 
         if (_worldSize == 1)
@@ -610,6 +612,7 @@ public class NCCLCommunicationBackend<T> : CommunicationBackendBase<T>
     public override Vector<T> AllGather(Vector<T> sendData)
     {
         EnsureInitialized();
+        DrainAsyncCollectives();
         ValidateData(sendData, nameof(sendData));
 
         if (_worldSize == 1)
@@ -704,6 +707,7 @@ public class NCCLCommunicationBackend<T> : CommunicationBackendBase<T>
     public override Vector<T> Broadcast(Vector<T> data, int root = 0)
     {
         EnsureInitialized();
+        DrainAsyncCollectives();
         ValidateData(data, nameof(data));
         ValidateRoot(root);
 
@@ -788,6 +792,7 @@ public class NCCLCommunicationBackend<T> : CommunicationBackendBase<T>
     public override Vector<T> Scatter(Vector<T> sendData, int root = 0)
     {
         EnsureInitialized();
+        DrainAsyncCollectives();
         ValidateRoot(root);
 
         // NCCL doesn't have native scatter - implement via Broadcast + indexing
@@ -838,6 +843,7 @@ public class NCCLCommunicationBackend<T> : CommunicationBackendBase<T>
     public override Vector<T> ReduceScatter(Vector<T> data, ReductionOperation operation)
     {
         EnsureInitialized();
+        DrainAsyncCollectives();
         ValidateData(data, nameof(data));
 
         if (data.Length % _worldSize != 0)

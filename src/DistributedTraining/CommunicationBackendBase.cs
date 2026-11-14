@@ -42,8 +42,9 @@ public abstract class CommunicationBackendBase<T> : IAsyncCommunicationBackend<T
     private long _totalCollectiveStopwatchTicks;
     private long _collectiveCount;
     private readonly object _asyncWorkerLock = new object();
-    private BlockingCollection<Action>? _asyncQueue;
+    private BlockingCollection<AsyncWorkItem>? _asyncQueue;
     private Thread? _asyncWorkerThread;
+    private AsyncWorkerState? _asyncWorkerState;
     private int _asyncPendingCount;
 
     /// <inheritdoc/>
@@ -184,17 +185,29 @@ public abstract class CommunicationBackendBase<T> : IAsyncCommunicationBackend<T
         Interlocked.Increment(ref _asyncPendingCount);
         try
         {
-            queue.Add(() =>
-            {
-                try
+            queue.Add(new AsyncWorkItem(
+                () =>
                 {
-                    handle.Execute();
-                }
-                finally
+                    try
+                    {
+                        handle.Execute();
+                    }
+                    finally
+                    {
+                        Interlocked.Decrement(ref _asyncPendingCount);
+                    }
+                },
+                reason =>
                 {
-                    Interlocked.Decrement(ref _asyncPendingCount);
-                }
-            });
+                    try
+                    {
+                        handle.Abandon(reason);
+                    }
+                    finally
+                    {
+                        Interlocked.Decrement(ref _asyncPendingCount);
+                    }
+                }));
         }
         catch
         {
@@ -217,7 +230,7 @@ public abstract class CommunicationBackendBase<T> : IAsyncCommunicationBackend<T
             return;
         }
 
-        BlockingCollection<Action>? queue;
+        BlockingCollection<AsyncWorkItem>? queue;
         Thread? worker;
         lock (_asyncWorkerLock)
         {
@@ -230,19 +243,20 @@ public abstract class CommunicationBackendBase<T> : IAsyncCommunicationBackend<T
             return;
         }
 
+        // Released whether the worker reaches the marker or a timed-out shutdown abandons it.
         using var barrier = new ManualResetEventSlim(false);
         try
         {
-            queue.Add(() => barrier.Set());
+            queue.Add(new AsyncWorkItem(() => barrier.Set(), _ => barrier.Set()));
             barrier.Wait();
         }
-        catch (InvalidOperationException)
+        catch (Exception ex) when (ex is InvalidOperationException or ObjectDisposedException)
         {
-            // Queue completed or disposed during shutdown.
+            // Queue completed during shutdown, or disposed by the worker after it drained: nothing is left to wait for.
         }
     }
 
-    private BlockingCollection<Action> EnsureAsyncWorkerStarted()
+    private BlockingCollection<AsyncWorkItem> EnsureAsyncWorkerStarted()
     {
         lock (_asyncWorkerLock)
         {
@@ -251,44 +265,60 @@ public abstract class CommunicationBackendBase<T> : IAsyncCommunicationBackend<T
                 return _asyncQueue;
             }
 
-            var queue = new BlockingCollection<Action>();
-            var worker = new Thread(() => RunAsyncWorkerLoop(queue))
+            var queue = new BlockingCollection<AsyncWorkItem>();
+            var state = new AsyncWorkerState();
+            var worker = new Thread(() => RunAsyncWorkerLoop(queue, state))
             {
                 IsBackground = true,
                 Name = $"AiDotNet-CollectiveWorker-Rank{Rank}",
             };
             _asyncQueue = queue;
             _asyncWorkerThread = worker;
+            _asyncWorkerState = state;
             worker.Start();
             return queue;
         }
     }
 
-    private static void RunAsyncWorkerLoop(BlockingCollection<Action> queue)
+    // The worker owns the queue: it disposes it on exit, so a shutdown that stops waiting for a blocked collective
+    // never disposes a queue the worker still reads.
+    private static void RunAsyncWorkerLoop(BlockingCollection<AsyncWorkItem> queue, AsyncWorkerState state)
     {
         try
         {
             foreach (var item in queue.GetConsumingEnumerable())
             {
-                item();
+                if (Volatile.Read(ref state.Abandoned))
+                {
+                    item.Abandon(new ObjectDisposedException(
+                        nameof(CommunicationBackendBase<T>),
+                        "The communication backend was shut down before this queued collective ran."));
+                }
+                else
+                {
+                    item.Run();
+                }
             }
         }
-        catch (ObjectDisposedException)
+        finally
         {
-            // Normal teardown race when Dispose happens after GetConsumingEnumerable exits.
+            queue.Dispose();
         }
     }
 
     private void StopAsyncWorker()
     {
-        BlockingCollection<Action>? queue;
+        BlockingCollection<AsyncWorkItem>? queue;
         Thread? worker;
+        AsyncWorkerState? state;
         lock (_asyncWorkerLock)
         {
             queue = _asyncQueue;
             worker = _asyncWorkerThread;
+            state = _asyncWorkerState;
             _asyncQueue = null;
             _asyncWorkerThread = null;
+            _asyncWorkerState = null;
         }
 
         if (queue is null)
@@ -296,20 +326,43 @@ public abstract class CommunicationBackendBase<T> : IAsyncCommunicationBackend<T
             return;
         }
 
-        try
+        // No new work is admitted; work already queued still runs on the live transport.
+        queue.CompleteAdding();
+
+        if (worker is null || Thread.CurrentThread == worker)
         {
-            queue.CompleteAdding();
-        }
-        catch (ObjectDisposedException)
-        {
+            return;
         }
 
-        if (worker is not null && worker.IsAlive && Thread.CurrentThread != worker)
+        if (!worker.Join(millisecondsTimeout: 10_000) && state is not null)
         {
-            worker.Join(millisecondsTimeout: 10_000);
+            // A collective is still blocked (a peer stopped participating). Every handle queued behind it fails with
+            // a shutdown error instead of never completing; the blocked one fails when OnShutdown tears the
+            // transport down under it, and the worker then disposes the queue itself.
+            Volatile.Write(ref state.Abandoned, true);
+        }
+    }
+
+    /// <summary>One queued unit of collective work, and how to release its waiter if it will never run.</summary>
+    private sealed class AsyncWorkItem
+    {
+        private readonly Action _run;
+        private readonly Action<Exception> _abandon;
+
+        public AsyncWorkItem(Action run, Action<Exception> abandon)
+        {
+            _run = run;
+            _abandon = abandon;
         }
 
-        queue.Dispose();
+        public void Run() => _run();
+
+        public void Abandon(Exception reason) => _abandon(reason);
+    }
+
+    private sealed class AsyncWorkerState
+    {
+        public bool Abandoned;
     }
 
     private sealed class CompletedCollectiveResultHandle : IAsyncCollectiveResultHandle<T>
@@ -383,6 +436,9 @@ public abstract class CommunicationBackendBase<T> : IAsyncCommunicationBackend<T
             }
         }
 
+        /// <summary>Faults a handle whose work will never run, so its waiters are released.</summary>
+        public void Abandon(Exception reason) => _tcs.TrySetException(reason);
+
         public void Wait()
         {
             try
@@ -400,7 +456,7 @@ public abstract class CommunicationBackendBase<T> : IAsyncCommunicationBackend<T
             if (cancellationToken.CanBeCanceled)
             {
                 var cancelTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-                using (cancellationToken.Register(static s => ((TaskCompletionSource<bool>)s!).TrySetResult(true), cancelTcs))
+                using (cancellationToken.Register(static s => (s as TaskCompletionSource<bool>)?.TrySetResult(true), cancelTcs))
                 {
                     var completed = await Task.WhenAny(_tcs.Task, cancelTcs.Task).ConfigureAwait(false);
                     if (completed == cancelTcs.Task)
