@@ -110,8 +110,7 @@ public abstract partial class ReferringSegmentationBase<T> : SegmentationModelBa
         if (textEncoder is null) throw new ArgumentNullException(nameof(textEncoder));
         options.ValidateTextQuerySettings();
         options.ValidateMaskThreshold();
-        var numOps = MathHelper.GetNumericOperations<T>();
-        return (numOps.FromDouble(1.0 / options.Temperature),
+        return (TextEmbeddingClassifier.LogitScale<T>(options.Temperature),
             options.MaskThreshold,
             TextEmbeddingClassifier.EncodeNormalized(textEncoder, options.ResolveClassNames()));
     }

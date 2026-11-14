@@ -112,8 +112,7 @@ public abstract partial class OpenVocabSegmentationBase<T> : SegmentationModelBa
     {
         if (textEncoder is null) throw new ArgumentNullException(nameof(textEncoder));
         options.ValidateTextQuerySettings();
-        var numOps = MathHelper.GetNumericOperations<T>();
-        return (numOps.FromDouble(1.0 / options.Temperature),
+        return (TextEmbeddingClassifier.LogitScale<T>(options.Temperature),
             TextEmbeddingClassifier.EncodeNormalized(textEncoder, options.ResolveClassNames()));
     }
 
@@ -136,6 +135,9 @@ public abstract partial class OpenVocabSegmentationBase<T> : SegmentationModelBa
     public virtual OpenVocabSegmentationResult<T> SegmentWithText(Tensor<T> image, IReadOnlyList<string> classNames)
     {
         if (classNames is null) throw new ArgumentNullException(nameof(classNames));
+        if (classNames.Count > _maxCategories)
+            throw new ArgumentException(
+                $"At most {_maxCategories} categories can be queried at once; got {classNames.Count}.", nameof(classNames));
         var text = TextEmbeddingClassifier.EncodeNormalized(_textEncoder, classNames);
         Tensor<T> logits;
         _queryEmbeddings = text;

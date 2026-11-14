@@ -31,6 +31,23 @@ internal static class TextEmbeddingClassifier
     private const double SmallestHalfNormal = 6.103515625e-05;
 
     /// <summary>
+    /// The logit scale <c>1 / temperature</c> converted to T, rejected when it is not finite in T: the options
+    /// validator is not generic, so a temperature like 1e-6 passes it yet its reciprocal overflows Half, and every
+    /// logit would then be infinite or NaN.
+    /// </summary>
+    /// <exception cref="ArgumentException">The reciprocal of <paramref name="temperature"/> is not finite in T.</exception>
+    internal static T LogitScale<T>(double temperature)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var scale = numOps.FromDouble(1.0 / temperature);
+        if (numOps.IsNaN(scale) || numOps.IsInfinity(scale))
+            throw new ArgumentException(
+                $"The temperature {temperature} gives a logit scale that is not finite in {typeof(T).Name}.",
+                nameof(temperature));
+        return scale;
+    }
+
+    /// <summary>
     /// Encodes each text with <paramref name="encoder"/> and returns the L2-normalized embeddings as
     /// rows of a <c>[K, D]</c> tensor.
     /// </summary>

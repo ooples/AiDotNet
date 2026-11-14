@@ -124,8 +124,9 @@ public class TextQueriedSegmentationReferenceTests
                NetworkComplexity.Deep, 0, 64, 64, 3, 3);
 
     [Fact(Timeout = 120000)]
-    public void SegmentWithText_ScoresTheEncodersEmbeddingsNotAHashOfTheText()
+    public async System.Threading.Tasks.Task SegmentWithText_ScoresTheEncodersEmbeddingsNotAHashOfTheText()
     {
+        await System.Threading.Tasks.Task.Yield();
         // Two encoders that swap the embeddings of "cat" and "dog" must swap the two names' maps:
         // the model only ever sees the encoder's vectors, never the characters of the names.
         var a = new DeterministicTextEncoder<double>(4).With("cat", 1, 0, 0, 0).With("dog", 0, 1, 0, 0);
@@ -154,8 +155,9 @@ public class TextQueriedSegmentationReferenceTests
     }
 
     [Fact(Timeout = 120000)]
-    public void Predict_HasOneChannelPerClosedSetName_AndTemperatureScalesTheLogits()
+    public async System.Threading.Tasks.Task Predict_HasOneChannelPerClosedSetName_AndTemperatureScalesTheLogits()
     {
+        await System.Threading.Tasks.Task.Yield();
         var encoder = new DeterministicTextEncoder<double>(8);
         using var sharp = new LISA<double>(Arch(), encoder,
             options: new LISAOptions { NumClasses = 3, DropRate = 0.0, Seed = 11, Temperature = 0.01 });
@@ -379,8 +381,9 @@ public class TextQueriedSegmentationReferenceTests
         => new DeterministicTextEncoder<double>(4).With("cat", 1, 0, 0, 0).With("dog", 0, 1, 0, 0);
 
     [Fact(Timeout = 120000)]
-    public void CATSeg_ScoresEachNameByItsSigmoid_AsTheOfficialInference()
+    public async System.Threading.Tasks.Task CATSeg_ScoresEachNameByItsSigmoid_AsTheOfficialInference()
     {
+        await System.Threading.Tasks.Task.Yield();
         // CAT-Seg trains with binary cross-entropy and reads outputs.sigmoid(); the closed-set names equal the query
         // names, so Predict's logits are the ones SegmentWithText classifies.
         using var model = new CATSeg<double>(Arch(), CatDog(),
@@ -389,16 +392,18 @@ public class TextQueriedSegmentationReferenceTests
     }
 
     [Fact(Timeout = 120000)]
-    public void SED_ScoresEachNameByItsSigmoid_AsTheOfficialInference()
+    public async System.Threading.Tasks.Task SED_ScoresEachNameByItsSigmoid_AsTheOfficialInference()
     {
+        await System.Threading.Tasks.Task.Yield();
         using var model = new SED<double>(Arch(), CatDog(),
             options: new SEDOptions { NumClasses = 2, ClassNames = new[] { "cat", "dog" }, DropRate = 0.0, Seed = 7 });
         AssertScoresFollowThePaper(model, sigmoid: true);
     }
 
     [Fact(Timeout = 120000)]
-    public void SAN_ScoresTheNamesBySoftmax()
+    public async System.Threading.Tasks.Task SAN_ScoresTheNamesBySoftmax()
     {
+        await System.Threading.Tasks.Task.Yield();
         using var model = new SAN<double>(Arch(), CatDog(),
             options: new SANOptions { NumClasses = 2, ClassNames = new[] { "cat", "dog" }, DropRate = 0.0, Seed = 7 });
         AssertScoresFollowThePaper(model, sigmoid: false);
