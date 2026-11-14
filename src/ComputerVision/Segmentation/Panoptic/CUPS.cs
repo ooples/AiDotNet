@@ -78,7 +78,8 @@ public partial class CUPS<T> : Common.PanopticSegmentationBase<T>
     private readonly double _dropRate;
     // Which pseudo classes are things. Starts from the base's stuff-first split and is replaced by the
     // paper's psi_ts rule once FitThingStuffSplit has seen pseudo labels.
-    private readonly bool[] _isThingClass;
+    // Not readonly: the fitted thing/stuff split is model state, persisted by the declared-state envelope.
+    private bool[] _isThingClass;
     // The Cascade Mask R-CNN instance head (native mode only) and the FPN that feeds it: four lateral 1x1 and four
     // output 3x3 convolutions in Layers after the semantic decoder, which ends at _decoderLayerEnd.
     private readonly CascadeMaskRCNNHead<T>? _instanceHead;
@@ -119,6 +120,7 @@ public partial class CUPS<T> : Common.PanopticSegmentationBase<T>
             Math.Max(1, options.NumClasses / 3), options.NumClasses - Math.Max(1, options.NumClasses / 3))
     {
         _options = options; Options = _options;
+        _options.Validate();
         _dropRate = _options.DropRate;
         if (_options.ChannelDimensions.Length != 4 || _options.StageDepths.Length != 4)
             throw new ArgumentException("CUPS requires exactly four encoder stage widths and depths.", nameof(options));
@@ -157,6 +159,7 @@ public partial class CUPS<T> : Common.PanopticSegmentationBase<T>
             Math.Max(1, options.NumClasses / 3), options.NumClasses - Math.Max(1, options.NumClasses / 3))
     {
         _options = options; Options = _options;
+        _options.Validate();
         _dropRate = _options.DropRate;
         _channelDims = [96, 192, 384, 768];
         _depths = [2, 2, 6, 2];
@@ -451,6 +454,7 @@ public partial class CUPS<T> : Common.PanopticSegmentationBase<T>
         if (instanceMasks is null) throw new ArgumentNullException(nameof(instanceMasks));
         if (semanticPseudoLabels.Count != instanceMasks.Count)
             throw new ArgumentException("Give one instance-mask set per semantic pseudo label map.", nameof(instanceMasks));
+        _options.Validate(); // the thresholds are mutable after construction
 
         var total = new long[_numClasses];
         var inside = new long[_numClasses];
@@ -580,6 +584,7 @@ public partial class CUPS<T> : Common.PanopticSegmentationBase<T>
     public override PanopticSegmentationResult<T> SegmentPanoptic(Tensor<T> image)
     {
         if (image is null) throw new ArgumentNullException(nameof(image));
+        _options.Validate(); // the merge thresholds are mutable after construction
         var head = _instanceHead;
         if (!_useNativeMode || head is null)
             throw new NotSupportedException("CUPS panoptic inference needs the native Cascade Mask R-CNN head; ONNX mode exports the semantic head only.");
