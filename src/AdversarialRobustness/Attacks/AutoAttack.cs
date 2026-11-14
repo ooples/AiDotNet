@@ -49,7 +49,11 @@ namespace AiDotNet.AdversarialRobustness.Attacks;
 [ResearchPaper("Reliable Evaluation of Adversarial Robustness with an Ensemble of Diverse Parameter-Free Attacks", "https://arxiv.org/abs/2003.01690", Year = 2020, Authors = "Francesco Croce, Matthias Hein")]
 public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, TOutput>
 {
-    private readonly AutoAttackOptions<T> _settings;
+    /// <summary>
+    /// The attack's settings: the options object that GetOptions returns and that persistence writes, so a
+    /// change made through either is the one the attack runs with.
+    /// </summary>
+    private AutoAttackOptions<T> Settings => Options as AutoAttackOptions<T> ?? AsAutoAttackOptions(Options);
 
     /// <summary>
     /// Initializes a new instance of AutoAttack.
@@ -59,9 +63,22 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
     /// per-attack budgets; plain attack options use the paper's budgets with their epsilon, norm, iteration
     /// count and seed.
     /// </param>
-    public AutoAttack(AdversarialAttackOptions<T> options) : base(options)
+    public AutoAttack(AdversarialAttackOptions<T> options) : base(AsAutoAttackOptions(options))
     {
-        _settings = options as AutoAttackOptions<T> ?? new AutoAttackOptions<T>
+    }
+
+    /// <summary>
+    /// The options as AutoAttack options: the same object when they already are, otherwise one copy, made once
+    /// at construction, with the paper's budgets and every shared attack setting of <paramref name="options"/>.
+    /// </summary>
+    private static AutoAttackOptions<T> AsAutoAttackOptions(AdversarialAttackOptions<T> options)
+    {
+        if (options is null)
+        {
+            throw new ArgumentNullException(nameof(options));
+        }
+
+        return options as AutoAttackOptions<T> ?? new AutoAttackOptions<T>
         {
             Epsilon = options.Epsilon,
             StepSize = options.StepSize,
@@ -70,7 +87,10 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
             IsTargeted = options.IsTargeted,
             TargetClass = options.TargetClass,
             UseRandomStart = options.UseRandomStart,
-            RandomSeed = options.RandomSeed
+            RandomSeed = options.RandomSeed,
+            CWConstant = options.CWConstant,
+            CWConfidence = options.CWConfidence,
+            CWLearningRate = options.CWLearningRate
         };
     }
 
@@ -116,17 +136,21 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
         int label = GetClassIndex(ConversionsHelper.ConvertToVector<T, TOutput>(trueLabel));
         var point = new AttackPoint(vectorInput, label, input, targetModel, input as Tensor<T>);
         var cleanLogits = point.Logits(vectorInput);
-        if (_settings.IsTargeted)
+        if (Settings.IsTargeted)
         {
-            if (_settings.TargetClass < 0 || _settings.TargetClass >= cleanLogits.Length)
+            if (Settings.TargetClass < 0 || Settings.TargetClass >= cleanLogits.Length)
             {
                 throw new ArgumentOutOfRangeException(
                     nameof(AdversarialAttackOptions<T>.TargetClass),
-                    _settings.TargetClass,
+                    Settings.TargetClass,
                     "The target class must be a class index of the model output.");
             }
 
-            point.Goal = _settings.TargetClass;
+            // The targeted losses compare the target with the source class. Callers that follow the targeted
+            // convention of the other attacks pass the target as the label, which made APGD-T's z_y - z_t and
+            // FAB-T's boundary normal identically zero; the source class is the clean prediction.
+            point.Label = ArgMaxIndex(cleanLogits);
+            point.Goal = Settings.TargetClass;
         }
 
         if (Fools(cleanLogits, point))
@@ -152,12 +176,12 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
     /// </summary>
     private Stage[] Schedule()
     {
-        if (_settings.IsTargeted)
+        if (Settings.IsTargeted)
         {
             return new[] { Stage.ApgdTargeted, Stage.FabTargeted };
         }
 
-        return _settings.Version == AutoAttackVersion.Plus
+        return Settings.Version == AutoAttackVersion.Plus
             ? new[] { Stage.ApgdCrossEntropy, Stage.ApgdDlr, Stage.Fab, Stage.Square, Stage.ApgdTargeted, Stage.FabTargeted }
             : new[] { Stage.ApgdCrossEntropy, Stage.ApgdTargeted, Stage.FabTargeted, Stage.Square };
     }
@@ -168,7 +192,7 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
     private Vector<T>? RunStage(Stage stage, AttackPoint point, Vector<T> cleanLogits)
     {
         // Restarts as configured by autoattack.py: 5 for the untargeted APGD/FAB in the plus version, else 1.
-        int restarts = _settings.Version == AutoAttackVersion.Plus ? 5 : 1;
+        int restarts = Settings.Version == AutoAttackVersion.Plus ? 5 : 1;
         switch (stage)
         {
             case Stage.ApgdCrossEntropy:
@@ -201,7 +225,7 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
             return new[] { goal };
         }
 
-        return RankDescending(cleanLogits).Where(c => c != label).Take(Math.Max(_settings.TargetClasses, 0)).ToArray();
+        return RankDescending(cleanLogits).Where(c => c != label).Take(Math.Max(Settings.TargetClasses, 0)).ToArray();
     }
 
     #region Shared helpers
@@ -236,7 +260,8 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
 
         public Vector<T> Clean { get; }
 
-        public int Label { get; }
+        /// <summary>The source class: the true label, or the clean prediction in a targeted run.</summary>
+        public int Label { get; set; }
 
         /// <summary>The target class of a targeted run, or -1.</summary>
         public int Goal { get; set; } = -1;
@@ -257,9 +282,9 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
             => ConversionsHelper.ConvertToVector<T, TOutput>(Model.Predict(ToInput(vector)));
     }
 
-    private T Epsilon => NumOps.FromDouble(_settings.Epsilon);
+    private T Epsilon => NumOps.FromDouble(Settings.Epsilon);
 
-    private bool IsL2 => _settings.NormType == AdversarialNormType.L2;
+    private bool IsL2 => Settings.NormType == AdversarialNormType.L2;
 
     /// <summary>
     /// A small positive constant of T: the requested value, or the library's stability epsilon where the
@@ -306,9 +331,13 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
     /// <summary>
     /// v / (||v|| + 1e-12) in the threat-model norm (autoattack normalize).
     /// </summary>
-    private Vector<T> NormalizeThreat(Vector<T> vector)
+    /// <remarks>
+    /// The components are divided by the guarded norm; its reciprocal is not formed first. In Half the guard is
+    /// 1e-7, whose reciprocal is infinite, so a zero vector became 0 * infinity = NaN instead of zero.
+    /// </remarks>
+    internal Vector<T> NormalizeThreat(Vector<T> vector)
     {
-        return Engine.Multiply<T>(vector, NumOps.Divide(NumOps.One, NumOps.Add(ThreatNorm(vector), Tiny(1e-12))));
+        return Engine.Divide<T>(vector, NumOps.Add(ThreatNorm(vector), Tiny(1e-12)));
     }
 
     /// <summary>
@@ -471,8 +500,8 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
 
     private Vector<T>? RunApgd(AttackPoint point, LossKind loss, int target)
     {
-        var run = new ApgdRun(this, point, loss, target, _settings.Iterations);
-        for (int iteration = 0; iteration < _settings.Iterations; iteration++)
+        var run = new ApgdRun(this, point, loss, target, Settings.Iterations);
+        for (int iteration = 0; iteration < Settings.Iterations; iteration++)
         {
             run.Iterate(iteration);
         }
@@ -550,7 +579,7 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
             _lossSteps = new Vector<T>(_iterations);
 
             // autoattack APGDAttack use_rs: a random start in the ball, or the clean input.
-            _current = attack._settings.UseRandomStart ? attack.ApgdRandomStart(point.Clean) : point.Clean;
+            _current = attack.Settings.UseRandomStart ? attack.ApgdRandomStart(point.Clean) : point.Clean;
             var logits = point.Logits(_current);
             var (value, logitGradient) = attack.Loss(logits, loss, point.Label, target);
             _gradient = attack.InputGradient(point, _current, logitGradient);
@@ -688,7 +717,7 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
     private Vector<T> RunFab(AttackPoint point, int target, bool randomStart)
     {
         var run = new FabRun(this, point, target, randomStart);
-        for (int iteration = 0; iteration < _settings.Iterations; iteration++)
+        for (int iteration = 0; iteration < Settings.Iterations; iteration++)
         {
             run.Iterate();
         }
@@ -1005,9 +1034,9 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
             _attack = attack;
             _point = point;
             _target = target;
-            _alphaMax = NumOps.FromDouble(attack._settings.FabAlphaMax);
-            _eta = NumOps.FromDouble(attack._settings.FabEta);
-            _beta = NumOps.FromDouble(attack._settings.FabBeta);
+            _alphaMax = NumOps.FromDouble(attack.Settings.FabAlphaMax);
+            _eta = NumOps.FromDouble(attack.Settings.FabEta);
+            _beta = NumOps.FromDouble(attack.Settings.FabBeta);
             _bestDistance = NumOps.Zero;
             Result = point.Clean;
             _x = randomStart ? attack.FabRandomStart(point.Clean) : point.Clean;
@@ -1071,7 +1100,7 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
     private Vector<T>? Square(AttackPoint point)
     {
         var run = new SquareRun(this, point);
-        for (int query = 0; query < _settings.SquareQueries && !run.Fooled; query++)
+        for (int query = 0; query < Settings.SquareQueries && !run.Fooled; query++)
         {
             run.Iterate(query);
         }
@@ -1124,6 +1153,20 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
         }
 
         return (Math.Min(height == 1 ? 1 : size, height), Math.Min(size, width));
+    }
+
+    /// <summary>
+    /// A uniformly random first row (or column) of a window of <paramref name="size"/> cells along an axis of
+    /// <paramref name="extent"/> cells: one of 0 .. extent - size, both ends included.
+    /// </summary>
+    /// <remarks>
+    /// The Square Attack paper (Andriushchenko et al. 2020, Alg. 2 and 3) draws the window position uniformly
+    /// from {0, ..., w - h}. Random.Next excludes its upper bound, so the bound is extent - size + 1; with
+    /// extent - size the last position, and with one-cell windows the last coordinate, was never updated.
+    /// </remarks>
+    internal static int SquareWindowStart(Random random, int extent, int size)
+    {
+        return random.Next(0, Math.Max(extent - size, 0) + 1);
     }
 
     /// <summary>
@@ -1265,8 +1308,12 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
             }
 
             Best = engine.TensorClamp(start, NumOps.Zero, NumOps.One).ToVector();
-            _bestMargin = attack.Margin(point.Logits(Best), point.Label);
-            Fooled = !NumOps.GreaterThan(_bestMargin, NumOps.Zero);
+            var logits = point.Logits(Best);
+            _bestMargin = attack.Margin(logits, point.Label);
+
+            // A zero margin can be a correctly classified tie (the label wins the argmax), so the search stops
+            // only once the retained candidate is misclassified; the margin only ranks the candidates.
+            Fooled = attack.Fools(logits, point);
         }
 
         public Vector<T> Best { get; private set; }
@@ -1278,24 +1325,24 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
             var engine = AiDotNetEngine.Current;
             int h = _point.Height;
             int w = _point.Width;
-            double p = SquareFraction(_attack._settings.SquareInitialFraction, query, _attack._settings.SquareQueries);
+            double p = SquareFraction(_attack.Settings.SquareInitialFraction, query, _attack.Settings.SquareQueries);
             var (rows, cols) = SquareWindow(p, h, w, _attack.IsL2);
             var best = Tensor<T>.FromVector(Best, _shape);
-            int row = _attack.Random.Next(0, h - rows);
-            int col = _attack.Random.Next(0, w - cols);
+            int row = SquareWindowStart(_attack.Random, h, rows);
+            int col = SquareWindowStart(_attack.Random, w, cols);
             Tensor<T> candidate = _attack.IsL2
                 ? L2Candidate(best, row, col, rows, cols)
                 : LInfinityCandidate(best, row, col, rows, cols);
 
             var vector = candidate.ToVector();
-            T margin = _attack.Margin(_point.Logits(vector), _point.Label);
+            var logits = _point.Logits(vector);
+            T margin = _attack.Margin(logits, _point.Label);
             if (NumOps.LessThan(margin, _bestMargin))
             {
                 _bestMargin = margin;
                 Best = vector;
+                Fooled = _attack.Fools(logits, _point);
             }
-
-            Fooled = !NumOps.GreaterThan(_bestMargin, NumOps.Zero);
         }
 
         private Tensor<T> LInfinityCandidate(Tensor<T> best, int row, int col, int rows, int cols)
@@ -1321,8 +1368,8 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
             T eps = _attack.Epsilon;
             var delta = engine.TensorSubtract(best, _clean);
             var windowNorms = ChannelNorms(_attack.Window(delta, row, col, rows, cols));
-            int row2 = _attack.Random.Next(0, h - rows);
-            int col2 = _attack.Random.Next(0, w - cols);
+            int row2 = SquareWindowStart(_attack.Random, h, rows);
+            int col2 = SquareWindowStart(_attack.Random, w, cols);
 
             var ones = Tensor<T>.CreateOnes(new[] { c, rows, cols });
             var mask = _attack.SetWindow(_attack.SetWindow(new Tensor<T>(_shape), ones, row, col), ones, row2, col2);
@@ -1357,10 +1404,13 @@ public partial class AutoAttack<T, TInput, TOutput> : AdversarialAttackBase<T, T
     /// <summary>
     /// delta / (||delta||_2 + 1e-12) * epsilon.
     /// </summary>
-    private Tensor<T> ScaleToEpsilon(Tensor<T> delta)
+    /// <remarks>
+    /// Divided before it is scaled: epsilon / 1e-7 (the Half guard) overflows, which turned a zero delta into NaN.
+    /// </remarks>
+    internal Tensor<T> ScaleToEpsilon(Tensor<T> delta)
     {
         T norm = Engine.Norm<T>(delta.ToVector());
-        return Engine.TensorMultiplyScalar(delta, NumOps.Divide(Epsilon, NumOps.Add(norm, Tiny(1e-12))));
+        return Engine.TensorMultiplyScalar(Engine.TensorDivideScalar(delta, NumOps.Add(norm, Tiny(1e-12))), Epsilon);
     }
 
     #endregion
