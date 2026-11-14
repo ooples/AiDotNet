@@ -611,7 +611,9 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
         if (!_useNativeMode) { _lazyShapesResolved = true; return; }
         using (InferenceMode.Enter())
         {
-            Forward(new Tensor<T>([1, _channels, _height, _width]));
+            // The auxiliary semantic decoder is included: inference skips it, so a probe through Forward left its
+            // lazy convolutions unsized, and the parameter vector grew on the first training step.
+            Decode(new Tensor<T>([1, _channels, _height, _width]), includeSemantic: true);
         }
         _lazyShapesResolved = true;
     }

@@ -291,6 +291,13 @@ public partial class UniverSeg<T> : Common.MedicalSegmentationBase<T>
         if (!hasBatch) output = RemoveBatchDimension(output); return output;
     }
 
+    /// <summary>
+    /// The training forward is the CrossBlock network. The default walks the layers in order, but each CrossBlock's
+    /// convolutions read the concatenated (target, support) streams, so chaining them threw "Expected input depth ..."
+    /// on the first <c>Train</c> call.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
+
     /// <summary>The CrossBlock U-Net on a batched query and its support pairs (images <c>[S, C, H, W]</c>, labels
     /// <c>[S, 1, H, W]</c>).</summary>
     private Tensor<T> CrossBlockNetwork(Tensor<T> input, Tensor<T> images, Tensor<T> labels)
