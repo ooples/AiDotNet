@@ -55,6 +55,25 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
+      # Supabase's built-in mailer only delivers to project team members (2/hour), so without this
+      # customers never receive sign-up confirmation or password-reset email. Re-applied on every
+      # deploy so a dashboard edit can't silently revert it; the nightly health check verifies it.
+      - name: Configure Supabase Auth email (SMTP via Resend)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+        run: |
+          set -euo pipefail
+          : "${RESEND_API_KEY:?Missing RESEND_API_KEY secret}"
+          jq -n --arg pass "$RESEND_API_KEY" '{smtp_host: "smtp.resend.com", smtp_port: "465", smtp_user: "resend",
+            smtp_pass: $pass, smtp_admin_email: "noreply@aidotnet.dev", smtp_sender_name: "AiDotNet", rate_limit_email_sent: 30}' > "$RUNNER_TEMP/smtp.json"
+          code=$(curl -s -o "$RUNNER_TEMP/smtp-resp.json" -w '%{http_code}' -X PATCH \
+            -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H 'content-type: application/json' \
+            --data @"$RUNNER_TEMP/smtp.json" https://api.supabase.com/v1/projects/yfkqwpgjahoamlgckjib/config/auth)
+          rm -f "$RUNNER_TEMP/smtp.json"
+          [ "$code" = 200 ] || { echo "::error::Auth SMTP update failed: HTTP $code"; jq -c '{message}' "$RUNNER_TEMP/smtp-resp.json"; exit 1; }
+          echo "Auth email goes through smtp.resend.com."
+
   build-and-deploy:
     name: Build & Deploy Website
     runs-on: ubuntu-latest

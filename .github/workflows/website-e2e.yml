@@ -62,6 +62,23 @@ jobs:
         # cheaper than flaky first-run failures on the live smoke pass.
         run: sleep 15
 
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@689adcfb80d947100a1eab127289b97d1fb07b13 # v1
+        with:
+          version: 2.84.4
+
+      - name: Fetch the service-role key for the journeys
+        # The real-backend journeys create and delete throwaway users and read their rows. The key
+        # is fetched at run time (never stored as a repo secret) and masked in the log.
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          key=$(supabase projects api-keys --project-ref yfkqwpgjahoamlgckjib -o json | jq -r '.[] | select(.name == "service_role") | .api_key')
+          [ -n "$key" ] && [ "$key" != null ] || { echo "::error::No service_role key returned"; exit 1; }
+          echo "::add-mask::$key"
+          echo "SUPABASE_SERVICE_ROLE_KEY=$key" >> "$GITHUB_ENV"
+
       - name: Run Playwright E2E smoke tests
         run: npx playwright test
         env:
@@ -70,6 +87,8 @@ jobs:
           PLAYWRIGHT_USER_PASSWORD: ${{ secrets.PLAYWRIGHT_USER_PASSWORD }}
           PLAYWRIGHT_ADMIN_EMAIL: ${{ secrets.PLAYWRIGHT_ADMIN_EMAIL }}
           PLAYWRIGHT_ADMIN_PASSWORD: ${{ secrets.PLAYWRIGHT_ADMIN_PASSWORD }}
+          SUPABASE_URL: ${{ secrets.PUBLIC_SUPABASE_URL }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
           CI: '1'
 
       - name: Upload Playwright report
