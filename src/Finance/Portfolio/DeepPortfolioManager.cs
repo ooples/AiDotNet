@@ -182,11 +182,10 @@ public partial class DeepPortfolioManager<T> : PortfolioOptimizerBase<T>
         if (_maxWeight < 1.0)
         {
             // Simple clipping logic (would need re-normalization in real implementation)
-            for (int i = 0; i < weights.Length; i++)
-            {
-                if (NumOps.ToDouble(weights[i]) > _maxWeight)
-                    weights[i] = NumOps.FromDouble(_maxWeight);
-            }
+            var cap = NumOps.FromDouble(_maxWeight);
+            var raw = Tensor<T>.FromVector(weights);
+            weights = Engine.TensorWhere(
+                Engine.TensorGreaterThan(raw, cap), Engine.TensorFullLike(raw, cap), raw).ToVector();
         }
 
         return weights;

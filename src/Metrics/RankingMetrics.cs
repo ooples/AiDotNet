@@ -65,63 +65,46 @@ public static class RankingMetrics<T>
 
         int cutoff = (k <= 0 || k > n) ? n : k;
 
-        var pred = new double[n];
-        var rel = new double[n];
-        for (int i = 0; i < n; i++)
+        var engine = AiDotNetEngine.Current;
+        var relevance = trueRelevance.AsTensor();
+        var gain = useExponentialGain
+            ? engine.TensorAddScalar(engine.TensorExp2(relevance), NumOps.FromDouble(-1.0))
+            : relevance;
+
+        // Discount 1 / log2(rank + 1) for ranks 1..cutoff and zero beyond the cutoff, plus its
+        // cumulative sum with a leading zero so any rank range sums by two lookups.
+        var discounts = engine.TensorReciprocal(engine.TensorLog2(
+            engine.TensorLinspace(NumOps.FromDouble(2.0), NumOps.FromDouble(cutoff + 1.0), cutoff)));
+        if (cutoff < n)
         {
-            pred[i] = NumOps.ToDouble(predictedScores[i]);
-            rel[i] = NumOps.ToDouble(trueRelevance[i]);
+            discounts = engine.TensorConcatenate(new[] { discounts, Tensor<T>.CreateDefault(new[] { n - cutoff }, NumOps.Zero) }, 0);
         }
 
-        // Order item indices by predicted score (descending). Stable on ties via index tiebreak.
-        var byPredicted = StableArgsortDescending(pred);
-        // Ideal order: by true relevance (descending).
-        var byIdeal = StableArgsortDescending(rel);
+        var cumulativeDiscounts = engine.TensorConcatenate(
+            new[] { Tensor<T>.CreateDefault(new[] { 1 }, NumOps.Zero), engine.TensorCumSum(discounts, 0) }, 0);
 
-        double dcg = Dcg(byPredicted, rel, cutoff, useExponentialGain);
-        double idcg = Dcg(byIdeal, rel, cutoff, useExponentialGain);
+        // Ideal DCG: gains in descending order (tied relevances have equal gains, so order within ties is irrelevant).
+        var idealGains = engine.TensorSort(gain, -1, descending: true).Values;
+        T idcg = engine.TensorSum(engine.TensorMultiply(idealGains, discounts));
+        if (NumOps.Equals(idcg, NumOps.Zero)) return NumOps.Zero;
 
-        if (idcg == 0.0) return NumOps.Zero;
-        return NumOps.FromDouble(dcg / idcg);
-    }
+        // DCG with tied predicted scores averaged, as scikit-learn's ndcg_score (ignore_ties=False):
+        // every tie group contributes mean(gain over the group) * sum(discounts over the ranks it spans).
+        var (_, inverse, counts) = engine.TensorUniqueWithInfo(predictedScores.AsTensor(), sorted: true, returnInverse: true, returnCounts: true);
+        if (inverse is null || counts is null)
+            throw new InvalidOperationException("Unique with inverse and counts returned no inverse or counts.");
 
-    /// <summary>
-    /// Discounted Cumulative Gain over the first <paramref name="cutoff"/> positions of an ordering.
-    /// </summary>
-    private static double Dcg(int[] order, double[] relevance, int cutoff, bool useExponentialGain)
-    {
-        double dcg = 0.0;
-        int limit = Math.Min(cutoff, order.Length);
-        for (int r = 0; r < limit; r++)
-        {
-            double gain = useExponentialGain
-                ? Math.Pow(2.0, relevance[order[r]]) - 1.0
-                : relevance[order[r]];
+        // Unique values are ascending; ranks run in descending score order.
+        var countsDescending = engine.TensorFlip(counts, new[] { 0 });
+        var groupEnds = engine.TensorCumSum(countsDescending, 0);
+        var groupStarts = engine.TensorSubtract(groupEnds, countsDescending);
+        var groupDiscounts = engine.TensorFlip(
+            engine.TensorSubtract(engine.TensorGather(cumulativeDiscounts, groupEnds, 0), engine.TensorGather(cumulativeDiscounts, groupStarts, 0)),
+            new[] { 0 });
 
-            // Position r is rank r+1; discount is log2(rank + 1) = log2(r + 2).
-            double discount = Math.Log(r + 2.0) / Math.Log(2.0);
-            dcg += gain / discount;
-        }
+        var groupMeanGains = engine.TensorDivide(engine.ScatterAdd(gain, inverse, 0, counts.Length), counts.Cast<T>());
+        T dcg = engine.TensorSum(engine.TensorMultiply(groupMeanGains, groupDiscounts));
 
-        return dcg;
-    }
-
-    /// <summary>
-    /// Returns indices that sort <paramref name="values"/> in descending order, breaking ties by
-    /// original index (so the result is deterministic).
-    /// </summary>
-    private static int[] StableArgsortDescending(double[] values)
-    {
-        int n = values.Length;
-        var idx = new int[n];
-        for (int i = 0; i < n; i++) idx[i] = i;
-
-        Array.Sort(idx, (a, b) =>
-        {
-            int cmp = values[b].CompareTo(values[a]); // descending
-            return cmp != 0 ? cmp : a.CompareTo(b);    // stable tiebreak
-        });
-
-        return idx;
+        return NumOps.Divide(dcg, idcg);
     }
 }

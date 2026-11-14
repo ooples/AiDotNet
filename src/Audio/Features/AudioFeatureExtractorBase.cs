@@ -78,28 +78,12 @@ public abstract class AudioFeatureExtractorBase<T> : IAudioFeatureExtractor<T>
     /// <inheritdoc/>
     public virtual Matrix<T> Extract(Vector<T> audio)
     {
-        var audioTensor = new Tensor<T>([audio.Length]);
-        for (int i = 0; i < audio.Length; i++)
-        {
-            audioTensor[i] = audio[i];
-        }
+        var audioTensor = new Tensor<T>([audio.Length], audio);
 
         var features = Extract(audioTensor);
 
-        // Convert to Matrix
-        int frames = features.Shape[0];
-        int featureDim = features.Shape[1];
-        var matrix = new Matrix<T>(frames, featureDim);
-
-        for (int f = 0; f < frames; f++)
-        {
-            for (int d = 0; d < featureDim; d++)
-            {
-                matrix[f, d] = features[f, d];
-            }
-        }
-
-        return matrix;
+        // Convert to Matrix [frames, featureDim]
+        return features.ToMatrix();
     }
 
     /// <inheritdoc/>
@@ -130,15 +114,7 @@ public abstract class AudioFeatureExtractorBase<T> : IAudioFeatureExtractor<T>
     /// <returns>The Hann window coefficients.</returns>
     protected T[] CreateHannWindow(int length)
     {
-        var window = new T[length];
-
-        for (int i = 0; i < length; i++)
-        {
-            double coefficient = 0.5 * (1 - Math.Cos(2 * Math.PI * i / (length - 1)));
-            window[i] = NumOps.FromDouble(coefficient);
-        }
-
-        return window;
+        return AudioEngineOps.SymmetricHannWindow<T>(Engine, length).ToArray();
     }
 
     /// <summary>
@@ -148,15 +124,12 @@ public abstract class AudioFeatureExtractorBase<T> : IAudioFeatureExtractor<T>
     /// <returns>The Hamming window coefficients.</returns>
     protected T[] CreateHammingWindow(int length)
     {
-        var window = new T[length];
-
-        for (int i = 0; i < length; i++)
-        {
-            double coefficient = 0.54 - 0.46 * Math.Cos(2 * Math.PI * i / (length - 1));
-            window[i] = NumOps.FromDouble(coefficient);
-        }
-
-        return window;
+        // 0.54 - 0.46 cos(2 pi i / (length - 1)); a one-sample window is defined as [1] (NumPy/SciPy
+        // hamming(1)), not the 0/0 the formula would give.
+        if (length < 0) throw new OverflowException("Window length must be non-negative.");
+        if (length == 0) return new T[0];
+        if (length == 1) return new[] { NumOps.One };
+        return Engine.TensorHammingWindow<T>(length, periodic: false).ToArray();
     }
 
     /// <summary>
@@ -168,23 +141,23 @@ public abstract class AudioFeatureExtractorBase<T> : IAudioFeatureExtractor<T>
     /// <returns>The windowed frame.</returns>
     protected T[] ExtractFrame(T[] audio, int startIndex, T[] window)
     {
-        var frame = new T[window.Length];
+        // window[i] * audio[startIndex + i] where the sample exists, else zero.
+        int length = window.Length;
+        int first = Math.Max(0, startIndex);
+        int last = Math.Min(audio.Length, startIndex + length);
+        if (last <= first)
+            return new T[length];
 
-        for (int i = 0; i < window.Length; i++)
-        {
-            int sampleIndex = startIndex + i;
+        int count = last - first;
+        var product = Engine.TensorMultiply(
+            Engine.TensorSlice(new Tensor<T>(audio, [audio.Length]), [first], [count]),
+            Engine.TensorSlice(new Tensor<T>(window, [length]), [first - startIndex], [count]));
 
-            if (sampleIndex >= 0 && sampleIndex < audio.Length)
-            {
-                frame[i] = NumOps.Multiply(audio[sampleIndex], window[i]);
-            }
-            else
-            {
-                frame[i] = NumOps.Zero;
-            }
-        }
-
-        return frame;
+        var parts = new List<Tensor<T>>(3);
+        if (first > startIndex) parts.Add(new Tensor<T>([first - startIndex]));
+        parts.Add(product);
+        if (startIndex + length > last) parts.Add(new Tensor<T>([startIndex + length - last]));
+        return (parts.Count == 1 ? product : Engine.Concat(parts, 0)).ToArray();
     }
 
     /// <summary>
@@ -248,41 +221,53 @@ public abstract class AudioFeatureExtractorBase<T> : IAudioFeatureExtractor<T>
         double melMin = HzToMel(fMin);
         double melMax = HzToMel(maxFreq);
 
-        // Create evenly spaced mel points
-        var melPoints = new double[numMels + 2];
-        for (int i = 0; i < melPoints.Length; i++)
+        // Create evenly spaced mel points, convert to Hz and then to FFT bin indices
+        var binIndices = new int[numMels + 2];
+        for (int i = 0; i < binIndices.Length; i++)
         {
-            melPoints[i] = melMin + (melMax - melMin) * i / (numMels + 1);
-        }
-
-        // Convert to Hz and then to FFT bin indices
-        var binIndices = new int[melPoints.Length];
-        for (int i = 0; i < melPoints.Length; i++)
-        {
-            double hz = MelToHz(melPoints[i]);
+            double melPoint = melMin + (melMax - melMin) * i / (numMels + 1);
+            double hz = MelToHz(melPoint);
             binIndices[i] = (int)Math.Floor((fftSize + 1) * hz / sampleRate);
         }
 
-        // Create triangular filters
+        if (numMels <= 0 || numBins <= 0)
+            return filterbank;
+
+        // Triangular filters: rising (k - start) / (center - start) on [start, center), falling
+        // (end - k) / (end - center) on [center, end).
+        var edges = new int[numMels * 3];
         for (int m = 0; m < numMels; m++)
         {
-            int fStart = binIndices[m];
-            int fCenter = binIndices[m + 1];
-            int fEnd = binIndices[m + 2];
+            edges[m * 3] = binIndices[m];
+            edges[m * 3 + 1] = binIndices[m + 1];
+            edges[m * 3 + 2] = binIndices[m + 2];
+        }
+        var edgeTensor = new Tensor<int>(edges, [numMels, 3]).Cast<T>();
+        var shape = new[] { numMels, numBins };
+        var start = Engine.TensorBroadcastTo(Engine.TensorSlice(edgeTensor, [0, 0], [numMels, 1]), shape);
+        var center = Engine.TensorBroadcastTo(Engine.TensorSlice(edgeTensor, [0, 1], [numMels, 1]), shape);
+        var end = Engine.TensorBroadcastTo(Engine.TensorSlice(edgeTensor, [0, 2], [numMels, 1]), shape);
+        var bin = Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorArange<T>(0, numBins, 1), [1, numBins]), shape);
 
-            // Rising slope
-            for (int k = fStart; k < fCenter && k < numBins; k++)
-            {
-                double weight = (double)(k - fStart) / (fCenter - fStart);
-                filterbank[m, k] = NumOps.FromDouble(weight);
-            }
+        var zero = new Tensor<T>(shape);
+        var rising = Engine.TensorMultiply(
+            Engine.TensorGreaterEqual(bin, start), Engine.TensorLessThan(bin, center));
+        var falling = Engine.TensorMultiply(
+            Engine.TensorGreaterEqual(bin, center), Engine.TensorLessThan(bin, end));
+        var weights = Engine.TensorWhere(
+            falling,
+            Engine.TensorDivide(Engine.TensorSubtract(end, bin), Engine.TensorSubtract(end, center)),
+            Engine.TensorWhere(
+                rising,
+                Engine.TensorDivide(Engine.TensorSubtract(bin, start), Engine.TensorSubtract(center, start)),
+                zero));
 
-            // Falling slope
-            for (int k = fCenter; k < fEnd && k < numBins; k++)
-            {
-                double weight = (double)(fEnd - k) / (fEnd - fCenter);
-                filterbank[m, k] = NumOps.FromDouble(weight);
-            }
+        var flat = weights.ToArray();
+        int offset = 0;
+        for (int m = 0; m < numMels; m++)
+        {
+            for (int k = 0; k < numBins; k++)
+                filterbank[m, k] = flat[offset++];
         }
 
         return filterbank;

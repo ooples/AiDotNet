@@ -313,4 +313,73 @@ public class UduDecompositionIntegrationTests
     }
 
     #endregion
+
+    #region Solve Tests
+
+    // Known SPD system, computed by hand:
+    //   A = [[4, 2, 2], [2, 5, 3], [2, 3, 6]] (symmetric; leading minors 4, 16, 64 > 0),
+    //   x = [1, -2, 3], b = A x = [4 - 4 + 6, 2 - 10 + 9, 2 - 6 + 18] = [6, 1, 14].
+    private static Matrix<double> KnownSpdMatrix()
+    {
+        var a = new Matrix<double>(3, 3);
+        double[,] values = { { 4, 2, 2 }, { 2, 5, 3 }, { 2, 3, 6 } };
+        for (int i = 0; i < 3; i++)
+        {
+            for (int j = 0; j < 3; j++)
+            {
+                a[i, j] = values[i, j];
+            }
+        }
+
+        return a;
+    }
+
+    [Theory]
+    [InlineData(UduAlgorithmType.Crout)]
+    [InlineData(UduAlgorithmType.Doolittle)]
+    public void UduDecomposition_Solve_KnownSpdSystem_ReturnsExactSolution(UduAlgorithmType algorithm)
+    {
+        // Arrange
+        var A = KnownSpdMatrix();
+        var b = new Vector<double>(new double[] { 6, 1, 14 });
+        double[] expected = { 1, -2, 3 };
+
+        // Act
+        var udu = new UduDecomposition<double>(A, algorithm);
+        var x = udu.Solve(b);
+
+        // Assert - x matches the hand-computed solution and A x = b
+        for (int i = 0; i < 3; i++)
+        {
+            Assert.Equal(expected[i], x[i], Tolerance);
+        }
+
+        var ax = A.Multiply(x);
+        for (int i = 0; i < 3; i++)
+        {
+            Assert.Equal(b[i], ax[i], Tolerance);
+        }
+    }
+
+    [Fact]
+    public void UduDecomposition_Invert_KnownSpdMatrix_GivesIdentityProduct()
+    {
+        // Arrange
+        var A = KnownSpdMatrix();
+
+        // Act
+        var inverse = new UduDecomposition<double>(A).Invert();
+        var product = A.Multiply(inverse);
+
+        // Assert - A * A^-1 = I
+        for (int i = 0; i < 3; i++)
+        {
+            for (int j = 0; j < 3; j++)
+            {
+                Assert.Equal(i == j ? 1.0 : 0.0, product[i, j], Tolerance);
+            }
+        }
+    }
+
+    #endregion
 }

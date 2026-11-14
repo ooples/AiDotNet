@@ -205,7 +205,7 @@ public class SignatureInformedTransformerComponentTests
         // (At alpha = 0.8 the tail is a single observation and CVaR collapses onto the worst loss,
         // which is correct but shows nothing about averaging.)
         var obj = new CVaRPortfolioObjective<double>(0.6);
-        var losses = new[] { -0.05, -0.01, 0.0, 0.02, 0.30 };   // one severe loss
+        var losses = new Vector<double>(new[] { -0.05, -0.01, 0.0, 0.02, 0.30 });   // one severe loss
 
         double var60 = obj.ValueAtRisk(losses);
         double cvar60 = obj.ConditionalValueAtRisk(losses);
@@ -224,8 +224,8 @@ public class SignatureInformedTransformerComponentTests
         // Make the worst outcome far worse and leave everything else alone: VaR does not move, CVaR
         // does. Any objective that fails this is not measuring tail risk.
         var obj = new CVaRPortfolioObjective<double>(0.8);
-        var mild = new[] { -0.05, -0.01, 0.0, 0.02, 0.10 };
-        var severe = new[] { -0.05, -0.01, 0.0, 0.02, 5.00 };
+        var mild = new Vector<double>(new[] { -0.05, -0.01, 0.0, 0.02, 0.10 });
+        var severe = new Vector<double>(new[] { -0.05, -0.01, 0.0, 0.02, 5.00 });
 
         Assert.Equal(obj.ValueAtRisk(mild), obj.ValueAtRisk(severe), 10);
         Assert.True(obj.ConditionalValueAtRisk(severe) > obj.ConditionalValueAtRisk(mild) + 0.5,
@@ -239,7 +239,7 @@ public class SignatureInformedTransformerComponentTests
         // hinge is differentiable almost everywhere, whereas sorting for a quantile is not. The
         // minimum value must equal the CVaR computed directly, or the two formulations disagree.
         var obj = new CVaRPortfolioObjective<double>(0.8);
-        var losses = new[] { -0.05, -0.01, 0.0, 0.02, 0.30 };
+        var losses = new Vector<double>(new[] { -0.05, -0.01, 0.0, 0.02, 0.30 });
 
         double nuStar = obj.OptimalNu(losses);
         double atOptimum = obj.DualObjective(losses, nuStar);

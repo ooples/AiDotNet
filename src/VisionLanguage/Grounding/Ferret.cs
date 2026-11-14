@@ -73,6 +73,8 @@ public partial class Ferret<T> : VisionLanguageModelBase<T>, IVisualGroundingMod
     private bool _useNativeMode;
     private bool _disposed;
     private int _encoderLayerEnd;
+    private readonly List<ILayer<T>> _groundingHeadLayers = new();
+    private CoordinateTokenDecoder<T>? _groundingHead;
 
     public Ferret(
         NeuralNetworkArchitecture<T> architecture,
@@ -155,176 +157,16 @@ public partial class Ferret<T> : VisionLanguageModelBase<T>, IVisualGroundingMod
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(PreprocessImage(image));
 
-        var p = PreprocessImage(image);
-        double confThreshold = _options.ConfidenceThreshold;
-        double nmsThreshold = _options.NmsThreshold;
-
-        // Step 1: Visual encoder (CLIP ViT)
-        var visualFeatures = p;
+        // Backbone: the image tokens the grounding head reads.
+        var visualFeatures = PreprocessImage(image);
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
 
-        // Step 2: Text-conditioned feature fusion via ConcatenateTensors
-        var textTokens = TokenizeText(textQuery);
-        var fusedInput = visualFeatures.ConcatenateTensors(textTokens);
-
-        // Run through decoder layers for text-conditioned spatial features
-        var decoderOut = fusedInput;
-        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
-            decoderOut = Layers[i].Forward(decoderOut);
-
-        int outDim = decoderOut.Length;
-
-        // Step 3: Spatial attention from text-conditioned features
-        int gridSize = (int)Math.Sqrt(outDim);
-        if (gridSize < 2)
-            gridSize = 2;
-        int featsPerCell = Math.Max(1, outDim / (gridSize * gridSize));
-
-        var spatialAttention = new double[gridSize * gridSize];
-        double attnSum = 0;
-        for (int cell = 0; cell < gridSize * gridSize; cell++)
-        {
-            int cellStart = (cell * featsPerCell) % outDim;
-            double cellFeat = 0;
-            for (int d = 0; d < Math.Min(featsPerCell, 4); d++)
-                cellFeat += NumOps.ToDouble(decoderOut[(cellStart + d) % outDim]);
-
-            spatialAttention[cell] = Math.Exp(cellFeat * 0.1);
-            attnSum += spatialAttention[cell];
-        }
-
-        // Step 4: Extract region proposals from spatial attention peaks
-        int maxDet = _options.MaxDetections;
-        int fieldsPerDet = 5;
-        var rawDetections = new double[maxDet, fieldsPerDet];
-        int validCount = 0;
-
-        // Find attention peaks and grow bounding boxes around them
-        double threshold = attnSum / ((double)gridSize * gridSize) * 1.5;
-        var visited = new bool[gridSize * gridSize];
-
-        for (int cell = 0; cell < gridSize * gridSize && validCount < maxDet; cell++)
-        {
-            if (visited[cell] || spatialAttention[cell] < threshold)
-                continue;
-
-            int row = cell / gridSize;
-            int col = cell % gridSize;
-
-            // Flood-fill to find connected high-attention region
-            int minR = row,
-                maxR = row,
-                minC = col,
-                maxC = col;
-            double regionConf = 0;
-            int regionSize = 0;
-            var stack = new Stack<int>();
-            stack.Push(cell);
-            visited[cell] = true;
-
-            while (stack.Count > 0)
-            {
-                int cur = stack.Pop();
-                int cr = cur / gridSize;
-                int cc = cur % gridSize;
-                regionConf += spatialAttention[cur];
-                regionSize++;
-                if (cr < minR)
-                    minR = cr;
-                if (cr > maxR)
-                    maxR = cr;
-                if (cc < minC)
-                    minC = cc;
-                if (cc > maxC)
-                    maxC = cc;
-
-                // 4-connected neighbors
-                int[] dr = { -1, 1, 0, 0 };
-                int[] dc = { 0, 0, -1, 1 };
-                for (int n = 0; n < 4; n++)
-                {
-                    int nr = cr + dr[n];
-                    int nc = cc + dc[n];
-                    if (nr >= 0 && nr < gridSize && nc >= 0 && nc < gridSize)
-                    {
-                        int nIdx = nr * gridSize + nc;
-                        if (!visited[nIdx] && spatialAttention[nIdx] >= threshold * 0.7)
-                        {
-                            visited[nIdx] = true;
-                            stack.Push(nIdx);
-                        }
-                    }
-                }
-            }
-
-            // Convert grid region to normalized coordinates
-            double x1 = (double)minC / gridSize;
-            double y1 = (double)minR / gridSize;
-            double x2 = (double)(maxC + 1) / gridSize;
-            double y2 = (double)(maxR + 1) / gridSize;
-            double conf = Math.Min(
-                1.0,
-                regionConf / (regionSize * attnSum / ((double)gridSize * gridSize))
-            );
-            conf = 1.0 / (1.0 + Math.Exp(-conf + 1.0));
-
-            if (conf >= confThreshold && x2 > x1 && y2 > y1 && regionSize >= 1)
-            {
-                rawDetections[validCount, 0] = x1;
-                rawDetections[validCount, 1] = y1;
-                rawDetections[validCount, 2] = x2;
-                rawDetections[validCount, 3] = y2;
-                rawDetections[validCount, 4] = conf;
-                validCount++;
-            }
-        }
-
-        // Step 5: NMS
-        var kept = new bool[validCount];
-        for (int i = 0; i < validCount; i++)
-            kept[i] = true;
-        for (int i = 0; i < validCount; i++)
-        {
-            if (!kept[i])
-                continue;
-            for (int j = i + 1; j < validCount; j++)
-            {
-                if (!kept[j])
-                    continue;
-                double iou = ComputeIoU(
-                    rawDetections[i, 0],
-                    rawDetections[i, 1],
-                    rawDetections[i, 2],
-                    rawDetections[i, 3],
-                    rawDetections[j, 0],
-                    rawDetections[j, 1],
-                    rawDetections[j, 2],
-                    rawDetections[j, 3]
-                );
-                if (iou > nmsThreshold)
-                    kept[j] = false;
-            }
-        }
-
-        int finalCount = 0;
-        for (int i = 0; i < validCount; i++)
-            if (kept[i])
-                finalCount++;
-        if (finalCount == 0)
-            return new Tensor<T>([fieldsPerDet]);
-
-        var result = new Tensor<T>([finalCount * fieldsPerDet]);
-        int idx = 0;
-        for (int i = 0; i < validCount; i++)
-        {
-            if (!kept[i])
-                continue;
-            for (int f = 0; f < fieldsPerDet; f++)
-                result[idx * fieldsPerDet + f] = NumOps.FromDouble(rawDetections[i, f]);
-            idx++;
-        }
-        return result;
+        // Ferret (You et al. 2023): the language model writes each box as discrete coordinates in [0, 999].
+        var head = _groundingHead ?? throw new InvalidOperationException("The grounding head is not initialized.");
+        var (boxes, scores) = head.Ground(visualFeatures, TokenIds(textQuery), RunLanguageModel, _options.MaxDetections);
+        return GroundingDetections<T>.Ranked(Engine, boxes, scores, _options.ConfidenceThreshold, _options.MaxDetections,
+            _options.NmsThreshold);
     }
 
     /// <inheritdoc />
@@ -333,30 +175,6 @@ public partial class Ferret<T> : VisionLanguageModelBase<T>, IVisualGroundingMod
         ThrowIfDisposed();
         string combined = string.Join(". ", categories) + ".";
         return GroundText(image, combined);
-    }
-
-    private static double ComputeIoU(
-        double x1a,
-        double y1a,
-        double x2a,
-        double y2a,
-        double x1b,
-        double y1b,
-        double x2b,
-        double y2b
-    )
-    {
-        double ix1 = Math.Max(x1a, x1b),
-            iy1 = Math.Max(y1a, y1b);
-        double ix2 = Math.Min(x2a, x2b),
-            iy2 = Math.Min(y2a, y2b);
-        double iw = Math.Max(0, ix2 - ix1),
-            ih = Math.Max(0, iy2 - iy1);
-        double inter = iw * ih;
-        double areaA = (x2a - x1a) * (y2a - y1a);
-        double areaB = (x2b - x1b) * (y2b - y1b);
-        double union = areaA + areaB - inter;
-        return union > 1e-8 ? inter / union : 0;
     }
 
     protected override void InitializeLayers()
@@ -383,6 +201,12 @@ public partial class Ferret<T> : VisionLanguageModelBase<T>, IVisualGroundingMod
             );
             ComputeEncoderDecoderBoundary();
         }
+        if (_groundingHead is null)
+        {
+            _groundingHead = new CoordinateTokenDecoder<T>(Engine, _groundingHeadLayers, new CoordinateTokenDecoderConfiguration(
+                _options.DecoderDim, _options.VocabSize, _options.MaxSequenceLength, Bins: 1000, Divisor: 1000, CoordinateSpelling.Integer));
+            RegisterAuxiliaryEncoderStream(_groundingHeadLayers);
+        }
     }
 
     private void ComputeEncoderDecoderBoundary()
@@ -391,16 +215,22 @@ public partial class Ferret<T> : VisionLanguageModelBase<T>, IVisualGroundingMod
         _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb + 3;
     }
 
-    private Tensor<T> TokenizeText(string text)
+    private List<int> TokenIds(string text)
     {
         if (_tokenizer is null)
             throw new InvalidOperationException("Tokenizer not initialized.");
-        var encoding = _tokenizer.Encode(text);
-        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
-        var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++)
-            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
-        return tokens;
+        if (text is null) throw new ArgumentNullException(nameof(text));
+        var ids = _tokenizer.Encode(text).TokenIds;
+        return ids.Count > 0 ? ids : throw new ArgumentException("The text query has no tokens.", nameof(text));
+    }
+
+    /// <summary>The language model (the decoder layers after the image projector) on <c>[n, DecoderDim]</c> rows.</summary>
+    private Tensor<T> RunLanguageModel(Tensor<T> rows)
+    {
+        var hidden = Engine.Reshape(rows, new[] { 1, rows.Shape[0], rows.Shape[1] });
+        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
+            hidden = Layers[i].Forward(hidden);
+        return hidden;
     }
 
     /// <inheritdoc />

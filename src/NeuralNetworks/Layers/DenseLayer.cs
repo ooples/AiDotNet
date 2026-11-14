@@ -80,7 +80,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Features,
     Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShapeContract, IFusedReadoutLossLayer<T>
+public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShapeContract, IDetachableFusedReadoutLossLayer<T>
 {
 
     /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
@@ -296,7 +296,24 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     /// <summary>Fused readout losses this thread has computed; tests read it to see that the fused path ran.</summary>
     [ThreadStatic] internal static long FusedReadoutLossCount;
 
-    private static void CountFusedReadoutLoss() => FusedReadoutLossCount++;
+    internal static void CountFusedReadoutLoss() => FusedReadoutLossCount++;
+
+    [Scratch]
+    private Tensor<T>? _cachedZeroBias;
+
+    private Tensor<T> GetZeroBias(int outputSize)
+    {
+        if (_cachedZeroBias is null || _cachedZeroBias.Length != outputSize)
+            _cachedZeroBias = new Tensor<T>(new[] { outputSize });
+        return _cachedZeroBias;
+    }
+
+    private bool IsEligibleForFusedReadout()
+    {
+        if (GetType() != typeof(DenseLayer<T>) || !_isInitialized || LowPrecisionResident) return false;
+        object? activation = ScalarActivation ?? (object?)VectorActivation;
+        return activation is null || activation is IdentityActivation<T>;
+    }
 
     /// <summary>
     /// This layer as an LM head fused with <see cref="AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss{T}"/>:
@@ -316,31 +333,93 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
         if (input is null) throw new ArgumentNullException(nameof(input));
         if (target is null) throw new ArgumentNullException(nameof(target));
         if (loss is null) throw new ArgumentNullException(nameof(loss));
-        if (GetType() != typeof(DenseLayer<T>) || !_isInitialized || LowPrecisionResident) return null;
-        object? activation = ScalarActivation ?? (object?)VectorActivation;
-        if (activation is not null && activation is not IdentityActivation<T>) return null;
+
+        var ids = ((IDetachableFusedReadoutLossLayer<T>)this).TryPrepareClassIndexTarget(
+            target, loss, input.Rank, input.Shape.ToArray(), out _);
+        if (ids is null) return null;
+
+        FusedReadoutPreparedState<T> unusedState = default;
+        return ((IDetachableFusedReadoutLossLayer<T>)this).TryComputeFusedLossPrepared(
+            input, ids, detachParameters: false, ref unusedState);
+    }
+
+    Tensor<int>? IDetachableFusedReadoutLossLayer<T>.TryPrepareClassIndexTarget(
+        Tensor<T> target, ILossFunction<T> loss, int inputRank, int[] inputShape, out int vocabularySize)
+    {
+        vocabularySize = 0;
+        if (!IsEligibleForFusedReadout()) return null;
         if (loss.GetType() != typeof(AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>)
-            || !((AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>)loss).ReadsClassIndexTargetsOverLastAxis(input.Rank))
+            || !((AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>)loss).ReadsClassIndexTargetsOverLastAxis(inputRank))
             return null;
 
         int inputSize = _weights.Shape[0], outputSize = _weights.Shape[1];
-        if (input.Rank < 2 || input.Shape[^1] != inputSize || outputSize < 2 || target.Rank != input.Rank - 1) return null;
+        if (inputRank < 2 || inputShape.Length != inputRank || inputShape[inputRank - 1] != inputSize
+            || outputSize < 2 || target.Rank != inputRank - 1)
+            return null;
         for (int axis = 0; axis < target.Rank; axis++)
-            if (target.Shape[axis] != input.Shape[axis]) return null;
+            if (target.Shape[axis] != inputShape[axis]) return null;
 
-        int rows = target.Length;
-        var ids = new Tensor<int>(new[] { rows });
-        for (int r = 0; r < rows; r++)
-        {
-            double id = NumOps.ToDouble(target.GetFlat(r));
-            if (!(id >= 0 && id < outputSize) || Math.Floor(id) < id) return null;
-            ids.SetFlat(r, (int)id);
-        }
+        var ids = FusedReadoutClassIndices.TryRead(target, outputSize);
+        if (ids is null) return null;
+
+        vocabularySize = outputSize;
+        return ids;
+    }
+
+    Tensor<T>? IDetachableFusedReadoutLossLayer<T>.TryComputeFusedLossPrepared(
+        Tensor<T> input,
+        Tensor<int> ids,
+        bool detachParameters,
+        ref FusedReadoutPreparedState<T> preparedState)
+    {
+        if (!IsEligibleForFusedReadout()) return null;
+        int inputSize = _weights.Shape[0], outputSize = _weights.Shape[1];
+        int rows = ids.Length;
+        if (input.Rank < 2 || input.Shape[input.Rank - 1] != inputSize || input.Length != rows * inputSize)
+            return null;
+
+        if (IsTrainingMode || AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
+            || AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+            DropQuantizedWeights();
 
         var hidden = input.Rank == 2 ? input : Engine.Reshape(input, new[] { rows, inputSize });
-        var bias = UseBias ? _biases : new Tensor<T>(new[] { outputSize });
+        Tensor<T> weightToUse;
+        Tensor<T> biasToUse;
+        if (detachParameters)
+        {
+            preparedState.DetachedWeight ??= Engine.StopGradient(_weights);
+            preparedState.DetachedBias ??= UseBias ? Engine.StopGradient(_biases) : GetZeroBias(outputSize);
+            weightToUse = preparedState.DetachedWeight;
+            biasToUse = preparedState.DetachedBias;
+        }
+        else
+        {
+            preparedState.TracedWeight ??= _weights;
+            weightToUse = preparedState.TracedWeight;
+            biasToUse = UseBias ? _biases : GetZeroBias(outputSize);
+        }
+
         CountFusedReadoutLoss();
-        return Engine.FusedLinearCrossEntropyWithLogits(hidden, _weights, bias, ids);
+        return Engine.FusedLinearCrossEntropyWithLogits(hidden, weightToUse, biasToUse, ids);
+    }
+
+    bool IDetachableFusedReadoutLossLayer<T>.TryGetVocabularyRowsForSampling(
+        out Tensor<T> vocabRows, out Tensor<T>? bias, out bool vocabRowsAreInputMajor)
+    {
+        if (!IsEligibleForFusedReadout() || _weights.Shape[1] < 2)
+        {
+            vocabRows = _weights;
+            bias = null;
+            vocabRowsAreInputMajor = true;
+            return false;
+        }
+        if (IsTrainingMode || AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
+            || AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+            DropQuantizedWeights();
+        vocabRows = _weights;
+        bias = UseBias ? _biases : null;
+        vocabRowsAreInputMajor = true;
+        return true;
     }
 
     /// <summary>
@@ -423,6 +502,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     // block-Q8_0 GEMM instead of expanding to fp32 — ~3.76× less weight memory + int8 dot throughput.
     private sbyte[]? _weightsQ8;
     private float[]? _weightScalesQ8;
+    internal bool HasCachedQ8Weights => _weightsQ8 is not null || _weightScalesQ8 is not null;
     private int _q8In;
     private int _q8Out;
 

@@ -178,14 +178,7 @@ public partial class TFGridNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 
         // Apply spectral subtraction if noise profile is available (per-bin comparison)
         if (_noiseProfile is not null)
-        {
-            int len = Math.Min(stft.Length, _noiseProfile.Length);
-            for (int i = 0; i < len; i++)
-            {
-                T subtracted = NumOps.Subtract(stft[i], _noiseProfile[i]);
-                stft[i] = NumOps.GreaterThan(subtracted, NumOps.Zero) ? subtracted : NumOps.Zero;
-            }
-        }
+            stft = AudioEngineOps.SubtractNoiseClampPrefix(Engine, stft, _noiseProfile);
 
         Tensor<T> output;
         if (IsOnnxMode && OnnxEncoder is not null)
@@ -200,10 +193,7 @@ public partial class TFGridNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
         {
             T s = NumOps.FromDouble(strength);
             T inv = NumOps.FromDouble(1.0 - strength);
-            for (int i = 0; i < result.Length && i < audio.Length; i++)
-            {
-                result[i] = NumOps.Add(NumOps.Multiply(s, result[i]), NumOps.Multiply(inv, audio[i]));
-            }
+            result = AudioEngineOps.BlendPrefix(Engine, result, audio, s, inv);
         }
 
         return result;
@@ -221,11 +211,10 @@ public partial class TFGridNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     {
         ThrowIfDisposed();
         _streamingBuffer ??= [];
-        for (int i = 0; i < audioChunk.Length; i++) _streamingBuffer.Add(audioChunk[i]);
+        _streamingBuffer.AddRange(audioChunk.ToArray());
         int frameSize = _options.FftSize;
         if (_streamingBuffer.Count < frameSize) return new Tensor<T>([0]);
-        var frame = new Tensor<T>([frameSize]);
-        for (int i = 0; i < frameSize; i++) frame[i] = _streamingBuffer[i];
+        var frame = new Tensor<T>(_streamingBuffer.GetRange(0, frameSize).ToArray(), [frameSize]);
         _streamingBuffer.RemoveRange(0, _options.HopLength);
         return Enhance(frame);
     }
@@ -320,14 +309,10 @@ public partial class TFGridNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     /// </summary>
     private double ComputeRms(Tensor<T> input)
     {
-        double sumSq = 0.0;
         int n = input.Length;
-        for (int i = 0; i < n; i++)
-        {
-            double v = NumOps.ToDouble(input[i]);
-            sumSq += v * v;
-        }
-        return n > 0 ? Math.Sqrt(sumSq / n) : 0.0;
+        if (n == 0) return 0.0;
+        double sumSq = NumOps.ToDouble(Engine.TensorSumOfSquares(input));
+        return Math.Sqrt(sumSq / n);
     }
 
     /// <inheritdoc />

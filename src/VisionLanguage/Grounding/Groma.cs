@@ -84,6 +84,8 @@ public partial class Groma<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
     private bool _useNativeMode;
     private bool _disposed;
     private int _encoderLayerEnd;
+    private readonly List<ILayer<T>> _groundingHeadLayers = new();
+    private GromaRegionGrounder<T>? _groundingHead;
 
     public Groma(
         NeuralNetworkArchitecture<T> architecture,
@@ -167,190 +169,16 @@ public partial class Groma<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(PreprocessImage(image));
 
-        var p = PreprocessImage(image);
-        int dim = _options.DecoderDim;
-        double confThreshold = _options.ConfidenceThreshold;
-        double nmsThreshold = _options.NmsThreshold;
-
-        // Step 1: Visual encoder
-        var visualFeatures = p;
+        // Backbone: the image tokens the grounding head reads.
+        var visualFeatures = PreprocessImage(image);
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
 
-        int visDim = visualFeatures.Length;
-
-        // Step 2: Region proposal network with learned region queries
-        int numRegionQueries = 64;
-        int gridSize = (int)Math.Sqrt(visDim);
-        if (gridSize < 4)
-            gridSize = 4;
-
-        // Each region query attends to the visual features to propose a region
-        var regionProposals = new double[numRegionQueries][];
-        var regionScores = new double[numRegionQueries];
-
-        for (int q = 0; q < numRegionQueries; q++)
-        {
-            regionProposals[q] = new double[4]; // cx, cy, w, h
-
-            // Query-specific attention over visual features to determine region
-            double attnCx = 0,
-                attnCy = 0,
-                attnW = 0,
-                attnH = 0;
-            double attnSum = 0;
-
-            int stride = Math.Max(1, visDim / numRegionQueries);
-            int qStart = q * stride;
-            int qEnd = Math.Min(qStart + stride, visDim);
-
-            for (int d = qStart; d < qEnd; d++)
-            {
-                double val = NumOps.ToDouble(visualFeatures[d]);
-                double spatialX = (double)(d % gridSize) / gridSize;
-                int row = d / gridSize;   // the feature's integer grid row
-                double spatialY = (double)row / gridSize;
-                double weight = Math.Abs(val);
-                attnCx += spatialX * weight;
-                attnCy += spatialY * weight;
-                attnSum += weight;
-            }
-
-            if (attnSum > 1e-8)
-            {
-                attnCx /= attnSum;
-                attnCy /= attnSum;
-            }
-            else
-            {
-                attnCx = 0.5;
-                attnCy = 0.5;
-            }
-
-            // Predict width/height from feature variance
-            double varX = 0,
-                varY = 0;
-            for (int d = qStart; d < qEnd; d++)
-            {
-                double val = NumOps.ToDouble(visualFeatures[d]);
-                double spatialX = (double)(d % gridSize) / gridSize;
-                int row = d / gridSize;   // the feature's integer grid row
-                double spatialY = (double)row / gridSize;
-                double weight = Math.Abs(val);
-                varX += weight * (spatialX - attnCx) * (spatialX - attnCx);
-                varY += weight * (spatialY - attnCy) * (spatialY - attnCy);
-            }
-            if (attnSum > 1e-8)
-            {
-                varX /= attnSum;
-                varY /= attnSum;
-            }
-            attnW = Math.Max(0.05, Math.Sqrt(varX) * 4);
-            attnH = Math.Max(0.05, Math.Sqrt(varY) * 4);
-
-            regionProposals[q][0] = attnCx;
-            regionProposals[q][1] = attnCy;
-            regionProposals[q][2] = Math.Min(1.0, attnW);
-            regionProposals[q][3] = Math.Min(1.0, attnH);
-            regionScores[q] = attnSum / stride;
-        }
-
-        // Step 3: Text-conditioned region scoring via ConcatenateTensors
-        var textTokens = TokenizeText(textQuery);
-        var fusedFeatures = visualFeatures.ConcatenateTensors(textTokens);
-
-        // Run through decoder layers for text-conditioned scoring
-        var decoderOut = fusedFeatures;
-        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
-            decoderOut = Layers[i].Forward(decoderOut);
-
-        int outDim = decoderOut.Length;
-
-        // Score each region against text-conditioned features
-        int fieldsPerDet = 5;
-        int maxDet = _options.MaxDetections;
-        var rawDetections = new double[maxDet, fieldsPerDet];
-        int validCount = 0;
-
-        for (int q = 0; q < numRegionQueries && validCount < maxDet; q++)
-        {
-            double cx = regionProposals[q][0];
-            double cy = regionProposals[q][1];
-            double rw = regionProposals[q][2];
-            double rh = regionProposals[q][3];
-
-            // Score region using text-conditioned decoder features
-            int roiStart = (int)(cx * outDim) % outDim;
-            int roiSpan = Math.Max(1, (int)(rw * outDim * 0.5));
-            double roiFeatSum = 0;
-            for (int d = 0; d < roiSpan; d++)
-                roiFeatSum += NumOps.ToDouble(decoderOut[(roiStart + d) % outDim]);
-
-            double conf = 1.0 / (1.0 + Math.Exp(-roiFeatSum / Math.Max(1, roiSpan)));
-            conf = conf * regionScores[q];
-            conf = 1.0 / (1.0 + Math.Exp(-conf * 5.0 + 2.0));
-
-            double x1 = Math.Max(0, cx - rw / 2);
-            double y1 = Math.Max(0, cy - rh / 2);
-            double x2 = Math.Min(1, cx + rw / 2);
-            double y2 = Math.Min(1, cy + rh / 2);
-
-            if (conf >= confThreshold && x2 > x1 && y2 > y1)
-            {
-                rawDetections[validCount, 0] = x1;
-                rawDetections[validCount, 1] = y1;
-                rawDetections[validCount, 2] = x2;
-                rawDetections[validCount, 3] = y2;
-                rawDetections[validCount, 4] = conf;
-                validCount++;
-            }
-        }
-
-        // Step 4: NMS
-        var kept = new bool[validCount];
-        for (int i = 0; i < validCount; i++)
-            kept[i] = true;
-        for (int i = 0; i < validCount; i++)
-        {
-            if (!kept[i])
-                continue;
-            for (int j = i + 1; j < validCount; j++)
-            {
-                if (!kept[j])
-                    continue;
-                double iou = ComputeIoU(
-                    rawDetections[i, 0],
-                    rawDetections[i, 1],
-                    rawDetections[i, 2],
-                    rawDetections[i, 3],
-                    rawDetections[j, 0],
-                    rawDetections[j, 1],
-                    rawDetections[j, 2],
-                    rawDetections[j, 3]
-                );
-                if (iou > nmsThreshold)
-                    kept[j] = false;
-            }
-        }
-
-        int finalCount = 0;
-        for (int i = 0; i < validCount; i++)
-            if (kept[i])
-                finalCount++;
-        if (finalCount == 0)
-            return new Tensor<T>([fieldsPerDet]);
-
-        var result = new Tensor<T>([finalCount * fieldsPerDet]);
-        int idx = 0;
-        for (int i = 0; i < validCount; i++)
-        {
-            if (!kept[i])
-                continue;
-            for (int f = 0; f < fieldsPerDet; f++)
-                result[idx * fieldsPerDet + f] = NumOps.FromDouble(rawDetections[i, f]);
-            idx++;
-        }
-        return result;
+        // Region proposer, region tokens, and the language model referring to them (Ma et al. 2024, section 3).
+        var head = _groundingHead ?? throw new InvalidOperationException("The grounding head is not initialized.");
+        var (boxes, scores) = head.Ground(visualFeatures, TokenIds(textQuery), RunLanguageModel, _options.MaxDetections);
+        return GroundingDetections<T>.Ranked(Engine, boxes, scores, _options.ConfidenceThreshold, _options.MaxDetections,
+            _options.NmsThreshold);
     }
 
     /// <inheritdoc />
@@ -359,30 +187,6 @@ public partial class Groma<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
         ThrowIfDisposed();
         string combined = string.Join(". ", categories) + ".";
         return GroundText(image, combined);
-    }
-
-    private static double ComputeIoU(
-        double x1a,
-        double y1a,
-        double x2a,
-        double y2a,
-        double x1b,
-        double y1b,
-        double x2b,
-        double y2b
-    )
-    {
-        double ix1 = Math.Max(x1a, x1b),
-            iy1 = Math.Max(y1a, y1b);
-        double ix2 = Math.Min(x2a, x2b),
-            iy2 = Math.Min(y2a, y2b);
-        double iw = Math.Max(0, ix2 - ix1),
-            ih = Math.Max(0, iy2 - iy1);
-        double inter = iw * ih;
-        double areaA = (x2a - x1a) * (y2a - y1a);
-        double areaB = (x2b - x1b) * (y2b - y1b);
-        double union = areaA + areaB - inter;
-        return union > 1e-8 ? inter / union : 0;
     }
 
     protected override void InitializeLayers()
@@ -409,6 +213,14 @@ public partial class Groma<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
             );
             ComputeEncoderDecoderBoundary();
         }
+        if (_groundingHead is null)
+        {
+            // Groma's proposer is a Deformable DETR (width 256, 8 heads, 6 decoder layers) proposing 300 regions.
+            _groundingHead = new GromaRegionGrounder<T>(Engine, _groundingHeadLayers, new GromaRegionGrounderConfiguration(
+                _options.DecoderDim, ProposerWidth: 256, ProposerHeads: 8, ProposerLayers: 6, Proposals: 300,
+                _options.VocabSize, _options.MaxSequenceLength));
+            RegisterAuxiliaryEncoderStream(_groundingHeadLayers);
+        }
     }
 
     private void ComputeEncoderDecoderBoundary()
@@ -417,16 +229,22 @@ public partial class Groma<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
         _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb + 3;
     }
 
-    private Tensor<T> TokenizeText(string text)
+    private List<int> TokenIds(string text)
     {
         if (_tokenizer is null)
             throw new InvalidOperationException("Tokenizer not initialized.");
-        var encoding = _tokenizer.Encode(text);
-        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
-        var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++)
-            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
-        return tokens;
+        if (text is null) throw new ArgumentNullException(nameof(text));
+        var ids = _tokenizer.Encode(text).TokenIds;
+        return ids.Count > 0 ? ids : throw new ArgumentException("The text query has no tokens.", nameof(text));
+    }
+
+    /// <summary>The language model (the decoder layers after the image projector) on <c>[n, DecoderDim]</c> rows.</summary>
+    private Tensor<T> RunLanguageModel(Tensor<T> rows)
+    {
+        var hidden = Engine.Reshape(rows, new[] { 1, rows.Shape[0], rows.Shape[1] });
+        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
+            hidden = Layers[i].Forward(hidden);
+        return hidden;
     }
 
     /// <inheritdoc />

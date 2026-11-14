@@ -55,7 +55,7 @@ public class ARDKernel<T> : IKernelFunction<T>
     /// - Features with large length scales contribute little to predictions
     /// </para>
     /// </remarks>
-    private readonly double[] _lengthScales;
+    private readonly Vector<T> _lengthScales;
 
     /// <summary>
     /// The signal variance (overall scale of the kernel).
@@ -88,7 +88,7 @@ public class ARDKernel<T> : IKernelFunction<T>
     /// <b>For Beginners:</b> Creates an ARD kernel with explicit per-dimension length scales.
     ///
     /// Example for 3D input:
-    /// var kernel = new ARDKernel&lt;double&gt;(new[] { 1.0, 2.0, 0.5 }, variance: 1.0);
+    /// var kernel = new ARDKernel&lt;double&gt;(new Vector&lt;double&gt;(new[] { 1.0, 2.0, 0.5 }), variance: 1.0);
     ///
     /// This means:
     /// - Dimension 0: Medium relevance (length scale 1.0)
@@ -99,19 +99,29 @@ public class ARDKernel<T> : IKernelFunction<T>
     /// and optimize them using gradient descent on the log marginal likelihood.
     /// </para>
     /// </remarks>
-    public ARDKernel(double[] lengthScales, double variance = 1.0)
+    public ARDKernel(Vector<T> lengthScales)
+        : this(lengthScales, 1.0)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new ARD kernel with per-dimension length scales and a signal variance.
+    /// </summary>
+    /// <param name="lengthScales">The length scale for each input dimension.</param>
+    /// <param name="variance">The signal variance (output scale).</param>
+    public ARDKernel(Vector<T> lengthScales, double variance)
     {
         if (lengthScales is null || lengthScales.Length == 0)
             throw new ArgumentException("Length scales array must not be empty.", nameof(lengthScales));
         if (variance <= 0)
             throw new ArgumentException("Variance must be positive.", nameof(variance));
 
-        if (lengthScales.Any(ls => ls <= 0))
+        _numOps = MathHelper.GetNumericOperations<T>();
+        if (_numOps.LessThanOrEquals(AiDotNetEngine.Current.TensorMinValue(lengthScales.AsTensor()), _numOps.Zero))
             throw new ArgumentException("All length scales must be positive.", nameof(lengthScales));
 
-        _lengthScales = (double[])lengthScales.Clone();
+        _lengthScales = lengthScales.Clone();
         _variance = variance;
-        _numOps = MathHelper.GetNumericOperations<T>();
     }
 
     /// <summary>
@@ -140,13 +150,9 @@ public class ARDKernel<T> : IKernelFunction<T>
         if (variance <= 0)
             throw new ArgumentException("Variance must be positive.", nameof(variance));
 
-        _lengthScales = new double[numDimensions];
-        for (int i = 0; i < numDimensions; i++)
-        {
-            _lengthScales[i] = lengthScale;
-        }
-        _variance = variance;
         _numOps = MathHelper.GetNumericOperations<T>();
+        _lengthScales = Vector<T>.CreateDefault(numDimensions, _numOps.FromDouble(lengthScale));
+        _variance = variance;
     }
 
     /// <summary>
@@ -182,16 +188,12 @@ public class ARDKernel<T> : IKernelFunction<T>
         if (x1.Length != _lengthScales.Length)
             throw new ArgumentException($"Vector length ({x1.Length}) must match the number of configured dimensions ({_lengthScales.Length}).");
 
-        double scaledSqDist = 0.0;
-        for (int i = 0; i < x1.Length; i++)
-        {
-            double diff = _numOps.ToDouble(x1[i]) - _numOps.ToDouble(x2[i]);
-            double scaledDiff = diff / _lengthScales[i];
-            scaledSqDist += scaledDiff * scaledDiff;
-        }
+        var engine = AiDotNetEngine.Current;
+        var scaledDiff = engine.Divide(engine.Subtract(x1, x2), _lengthScales);
+        T scaledSqDist = engine.DotProduct(scaledDiff, scaledDiff);
 
-        double result = _variance * Math.Exp(-0.5 * scaledSqDist);
-        return _numOps.FromDouble(result);
+        return _numOps.Multiply(_numOps.FromDouble(_variance),
+            _numOps.Exp(_numOps.Multiply(_numOps.FromDouble(-0.5), scaledSqDist)));
     }
 
     /// <summary>
@@ -209,7 +211,7 @@ public class ARDKernel<T> : IKernelFunction<T>
     /// You can use this for feature selection: remove features with very large length scales.
     /// </para>
     /// </remarks>
-    public double[] GetLengthScales() => (double[])_lengthScales.Clone();
+    public Vector<T> GetLengthScales() => _lengthScales.Clone();
 
     /// <summary>
     /// Gets the signal variance.

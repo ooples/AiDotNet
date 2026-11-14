@@ -210,153 +210,109 @@ public partial class SceneLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLang
         int voxelRes = _options.VoxelResolution;
         int encoderDim = _options.PointEncoderDim;
 
-        // Step 1: Compute scene bounding box for voxelization
-        double minX = double.MaxValue,
-            minY = double.MaxValue,
-            minZ = double.MaxValue;
-        double maxX = double.MinValue,
-            maxY = double.MinValue,
-            maxZ = double.MinValue;
-
-        for (int p = 0; p < numPoints; p++)
-        {
-            int baseIdx = p * channels;
-            if (baseIdx + 2 >= totalValues)
-                break;
-            double x = NumOps.ToDouble(pointCloud[baseIdx]);
-            double y = NumOps.ToDouble(pointCloud[baseIdx + 1]);
-            double z = NumOps.ToDouble(pointCloud[baseIdx + 2]);
-            if (x < minX)
-                minX = x;
-            if (x > maxX)
-                maxX = x;
-            if (y < minY)
-                minY = y;
-            if (y > maxY)
-                maxY = y;
-            if (z < minZ)
-                minZ = z;
-            if (z > maxZ)
-                maxZ = z;
-        }
-
-        double rangeX = maxX - minX + 1e-8;
-        double rangeY = maxY - minY + 1e-8;
-        double rangeZ = maxZ - minZ + 1e-8;
-
-        // Step 2: Coarse voxelization - global scene structure
+        var engine = Engine;
+        // Points p < numPoints with p * channels + 2 < totalValues are read (the scan stops at the
+        // first point that is not).
+        int readPoints = ReadablePointCount(numPoints, channels, totalValues);
         int totalVoxels = voxelRes * voxelRes * voxelRes;
         int maxTrackedVoxels = Math.Min(totalVoxels, 4096);
-        var voxelFeatures = new double[maxTrackedVoxels][];
-        var voxelCounts = new int[maxTrackedVoxels];
-        for (int v = 0; v < maxTrackedVoxels; v++)
-            voxelFeatures[v] = new double[encoderDim];
+        if (maxTrackedVoxels < 0)
+            throw new OverflowException("The voxel resolution gives a negative number of tracked voxels.");
 
-        for (int p = 0; p < numPoints; p++)
+        Tensor<T> sceneTokens;
+        if (readPoints == 0)
         {
-            int baseIdx = p * channels;
-            if (baseIdx + 2 >= totalValues)
-                break;
-            double x = NumOps.ToDouble(pointCloud[baseIdx]);
-            double y = NumOps.ToDouble(pointCloud[baseIdx + 1]);
-            double z = NumOps.ToDouble(pointCloud[baseIdx + 2]);
-
-            int vx = Math.Min(voxelRes - 1, (int)((x - minX) / rangeX * voxelRes));
-            int vy = Math.Min(voxelRes - 1, (int)((y - minY) / rangeY * voxelRes));
-            int vz = Math.Min(voxelRes - 1, (int)((z - minZ) / rangeZ * voxelRes));
-            int voxelIdx = (vx * voxelRes * voxelRes + vy * voxelRes + vz) % maxTrackedVoxels;
-
-            voxelCounts[voxelIdx]++;
-            for (int c = 0; c < channels && baseIdx + c < totalValues; c++)
+            sceneTokens = new Tensor<T>([encoderDim]);
+        }
+        else
+        {
+            if (maxTrackedVoxels == 0)
+                throw new DivideByZeroException("Points cannot be assigned to zero tracked voxels.");
+            var pointFeatures = FoldedPointChannels(pointCloud, readPoints, channels, encoderDim);
+            if (encoderDim == 0)
             {
-                double val = NumOps.ToDouble(pointCloud[baseIdx + c]);
-                voxelFeatures[voxelIdx][c % encoderDim] += val;
+                sceneTokens = new Tensor<T>([0]);
+            }
+            else
+            {
+                // Step 1: Compute scene bounding box for voxelization (NaN coordinates never move a bound;
+                // the bounds start at double.MaxValue / double.MinValue).
+                var coords = PointCoordinates(pointCloud, readPoints, channels);
+                var isNan = engine.TensorIsNan(coords);
+                T highestStart = NumOps.FromDouble(double.MinValue);
+                T lowestStart = NumOps.FromDouble(double.MaxValue);
+                var lowest = engine.TensorMin(
+                    engine.TensorNegate(engine.ReduceMax(
+                        engine.TensorNegate(engine.TensorWhere(isNan, Tensor<T>.CreateDefault([readPoints, 3], lowestStart), coords)),
+                        [0], true)),
+                    lowestStart);
+                var highest = engine.TensorMax(
+                    engine.ReduceMax(engine.TensorWhere(isNan, Tensor<T>.CreateDefault([readPoints, 3], highestStart), coords), [0], true),
+                    highestStart);
+                var range = engine.TensorAddScalar(engine.TensorSubtract(highest, lowest), NumOps.FromDouble(1e-8));
+
+                // Step 2: Coarse voxelization - global scene structure:
+                // v = min(res - 1, (int)((x - min) / range * res)) per axis,
+                // voxel = (vx res^2 + vy res + vz) % maxTrackedVoxels.
+                var cells = engine.TensorMin(
+                    engine.TensorTrunc(engine.TensorMultiplyScalar(
+                        engine.TensorDivide(
+                            engine.TensorSubtract(coords, engine.TensorBroadcastTo(lowest, [readPoints, 3])),
+                            engine.TensorBroadcastTo(range, [readPoints, 3])),
+                        NumOps.FromDouble(voxelRes))).Cast<int>(),
+                    voxelRes - 1);
+                var linear = engine.TensorAdd(
+                    engine.TensorAdd(
+                        engine.TensorMultiplyScalar(engine.TensorSlice(cells, [0, 0], [readPoints, 1]), voxelRes * voxelRes),
+                        engine.TensorMultiplyScalar(engine.TensorSlice(cells, [0, 1], [readPoints, 1]), voxelRes)),
+                    engine.TensorSlice(cells, [0, 2], [readPoints, 1])).Reshape([readPoints]);
+                var voxelIds = engine.TensorRemainder(linear, Tensor<int>.CreateDefault([readPoints], maxTrackedVoxels));
+
+                // Normalize voxel features
+                var voxelCounts = engine.TensorBinCount(voxelIds, maxTrackedVoxels).Cast<T>().Reshape([maxTrackedVoxels, 1]);
+                var countsWide = engine.TensorBroadcastTo(voxelCounts, [maxTrackedVoxels, encoderDim]);
+                var voxelSums = engine.ScatterAdd(
+                    pointFeatures,
+                    engine.TensorBroadcastTo(voxelIds.Reshape([readPoints, 1]), [readPoints, encoderDim]),
+                    0,
+                    maxTrackedVoxels);
+                var voxelFeatures = engine.TensorDivide(voxelSums, engine.TensorMax(countsWide, NumOps.One));
+
+                // Step 3: Fine-grained octree encoding for ego-centric region
+                // Focus on the scene centroid as the ego-center
+                var center = engine.TensorDivideScalar(engine.TensorAdd(lowest, highest), NumOps.FromDouble(2.0));
+                var offset = engine.TensorSubtract(coords, engine.TensorBroadcastTo(center, [readPoints, 3]));
+                // Distance from ego-center → octree level weight
+                var dist = engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(offset, offset), [1], false));
+                var weight = engine.TensorExp(engine.TensorMultiplyScalar(dist, NumOps.FromDouble(-2.0))); // Exponential falloff
+                var fineWeight = engine.TensorBroadcastTo(engine.ReduceSum(weight, [0], false), [encoderDim]);
+                var fineSum = engine.TensorMatMul(weight.Reshape([1, readPoints]), pointFeatures).Reshape([encoderDim]);
+                var fineFeatures = engine.TensorWhere(
+                    engine.TensorGreaterThan(fineWeight, NumOps.FromDouble(1e-8)),
+                    engine.TensorDivide(fineSum, fineWeight),
+                    fineSum);
+
+                // Step 4: Hierarchical aggregation (coarse + fine): the point-count weighted mean of the
+                // occupied voxels (the total weight is the number of read points).
+                var weighted = engine.TensorWhere(
+                    engine.TensorGreaterThan(countsWide, NumOps.Zero),
+                    engine.TensorMultiply(voxelFeatures, countsWide),
+                    new Tensor<T>([maxTrackedVoxels, encoderDim]));
+                var coarseAgg = engine.TensorDivideScalar(engine.ReduceSum(weighted, [0], false), NumOps.FromDouble(readPoints));
+
+                // Combine: coarse (global context) + fine (local detail)
+                sceneTokens = engine.TensorAdd(
+                    engine.TensorMultiplyScalar(coarseAgg, NumOps.FromDouble(0.4)),
+                    engine.TensorMultiplyScalar(fineFeatures, NumOps.FromDouble(0.6)));
             }
         }
-
-        // Normalize voxel features
-        for (int v = 0; v < maxTrackedVoxels; v++)
-        {
-            if (voxelCounts[v] > 0)
-                for (int d = 0; d < encoderDim; d++)
-                    voxelFeatures[v][d] /= voxelCounts[v];
-        }
-
-        // Step 3: Fine-grained octree encoding for ego-centric region
-        // Focus on the scene centroid as the ego-center
-        double centerX = (minX + maxX) / 2;
-        double centerY = (minY + maxY) / 2;
-        double centerZ = (minZ + maxZ) / 2;
-
-        var fineFeatures = new double[encoderDim];
-        double fineWeight = 0;
-
-        for (int p = 0; p < numPoints; p++)
-        {
-            int baseIdx = p * channels;
-            if (baseIdx + 2 >= totalValues)
-                break;
-            double x = NumOps.ToDouble(pointCloud[baseIdx]);
-            double y = NumOps.ToDouble(pointCloud[baseIdx + 1]);
-            double z = NumOps.ToDouble(pointCloud[baseIdx + 2]);
-
-            // Distance from ego-center → octree level weight
-            double dist = Math.Sqrt(
-                (x - centerX) * (x - centerX)
-                    + (y - centerY) * (y - centerY)
-                    + (z - centerZ) * (z - centerZ)
-            );
-            double weight = Math.Exp(-dist * 2.0); // Exponential falloff
-            fineWeight += weight;
-
-            for (int c = 0; c < channels && baseIdx + c < totalValues; c++)
-            {
-                double val = NumOps.ToDouble(pointCloud[baseIdx + c]);
-                fineFeatures[c % encoderDim] += val * weight;
-            }
-        }
-        if (fineWeight > 1e-8)
-            for (int d = 0; d < encoderDim; d++)
-                fineFeatures[d] /= fineWeight;
-
-        // Step 4: Hierarchical aggregation (coarse + fine)
-        var coarseAgg = new double[encoderDim];
-        double coarseTotal = 0;
-        for (int v = 0; v < maxTrackedVoxels; v++)
-        {
-            if (voxelCounts[v] == 0)
-                continue;
-            double w = voxelCounts[v];
-            coarseTotal += w;
-            for (int d = 0; d < encoderDim; d++)
-                coarseAgg[d] += voxelFeatures[v][d] * w;
-        }
-        if (coarseTotal > 1e-8)
-            for (int d = 0; d < encoderDim; d++)
-                coarseAgg[d] /= coarseTotal;
-
-        // Combine: coarse (global context) + fine (local detail)
-        var sceneTokens = new Tensor<T>([encoderDim]);
-        for (int d = 0; d < encoderDim; d++)
-            sceneTokens[d] = NumOps.FromDouble(coarseAgg[d] * 0.4 + fineFeatures[d] * 0.6);
 
         // Step 5: Process through encoder and LLM decoder
         var encoded = sceneTokens;
         for (int i = 0; i < _encoderLayerEnd && i < Layers.Count; i++)
             encoded = Layers[i].Forward(encoded);
 
-        var promptTokens = TokenizeText(prompt);
-        int promptLen = promptTokens.Length;
-        for (int d = 0; d < encoded.Length; d++)
-        {
-            if (promptLen > 0)
-            {
-                double pVal = NumOps.ToDouble(promptTokens[d % promptLen]);
-                double eVal = NumOps.ToDouble(encoded[d]);
-                double gate = 1.0 / (1.0 + Math.Exp(-pVal / 100.0));
-                encoded[d] = NumOps.FromDouble(eVal * (0.5 + gate));
-            }
-        }
+        encoded = PromptGated(encoded, TokenizeText(prompt));
 
         var output = encoded;
         for (int i = _encoderLayerEnd; i < Layers.Count; i++)
@@ -405,10 +361,7 @@ public partial class SceneLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLang
             throw new InvalidOperationException("Tokenizer not initialized.");
         var encoding = _tokenizer.Encode(text);
         int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
-        var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++)
-            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
-        return tokens;
+        return TokenIdsToTensor(encoding.TokenIds, seqLen);
     }
 
     /// <inheritdoc />

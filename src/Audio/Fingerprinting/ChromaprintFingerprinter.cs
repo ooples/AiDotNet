@@ -91,19 +91,17 @@ public class ChromaprintFingerprinter<T> : AudioFingerprinterBase<T>
         int numChroma = chroma.Shape[1];
 
         var hashes = new List<uint>();
-        var fpData = new List<T>();
 
         // Process overlapping frames to create hash sequence
         for (int i = 0; i < numFrames - _options.ContextSize + 1; i += _options.HashStep)
         {
             uint hash = ComputeFrameHash(chroma, i, numChroma);
             hashes.Add(hash);
-            fpData.Add(NumOps.FromDouble(hash));
         }
 
         return new AudioFingerprint<T>
         {
-            Data = [.. fpData],
+            Data = HashesAsData(hashes),
             Hash = [.. hashes],
             Duration = (double)audioLength / _options.SampleRate,
             SampleRate = _options.SampleRate,
@@ -112,24 +110,26 @@ public class ChromaprintFingerprinter<T> : AudioFingerprinterBase<T>
         };
     }
 
+    /// <summary>The hash values converted to <typeparamref name="T"/> in one bulk cast.</summary>
+    private static T[] HashesAsData(List<uint> hashes) =>
+        hashes.Count == 0 ? new T[0] : new Tensor<uint>(hashes.ToArray(), [hashes.Count]).Cast<T>().ToArray();
+
     private AudioFingerprint<T> ComputeFingerprintFromMatrix(Matrix<T> chroma, int audioLength)
     {
         int numFrames = chroma.Rows;
         int numChroma = chroma.Columns;
 
         var hashes = new List<uint>();
-        var fpData = new List<T>();
 
         for (int i = 0; i < numFrames - _options.ContextSize + 1; i += _options.HashStep)
         {
             uint hash = ComputeFrameHashFromMatrix(chroma, i, numChroma);
             hashes.Add(hash);
-            fpData.Add(NumOps.FromDouble(hash));
         }
 
         return new AudioFingerprint<T>
         {
-            Data = [.. fpData],
+            Data = HashesAsData(hashes),
             Hash = [.. hashes],
             Duration = (double)audioLength / _options.SampleRate,
             SampleRate = _options.SampleRate,
@@ -141,14 +141,7 @@ public class ChromaprintFingerprinter<T> : AudioFingerprinterBase<T>
     private uint ComputeFrameHash(Tensor<T> chroma, int startFrame, int numChroma)
     {
         // Collect context frames
-        var context = new double[_options.ContextSize, numChroma];
-        for (int f = 0; f < _options.ContextSize; f++)
-        {
-            for (int c = 0; c < numChroma; c++)
-            {
-                context[f, c] = NumOps.ToDouble(chroma[startFrame + f, c]);
-            }
-        }
+        var context = Engine.TensorSlice(chroma, [startFrame, 0], [_options.ContextSize, numChroma]);
 
         // Compute gray codes from chroma differences
         return ComputeGrayCode(context, numChroma);
@@ -156,42 +149,32 @@ public class ChromaprintFingerprinter<T> : AudioFingerprinterBase<T>
 
     private uint ComputeFrameHashFromMatrix(Matrix<T> chroma, int startFrame, int numChroma)
     {
-        var context = new double[_options.ContextSize, numChroma];
-        for (int f = 0; f < _options.ContextSize; f++)
-        {
-            for (int c = 0; c < numChroma; c++)
-            {
-                context[f, c] = NumOps.ToDouble(chroma[startFrame + f, c]);
-            }
-        }
+        var context = Engine.TensorSlice(Tensor<T>.FromMatrix(chroma), [startFrame, 0], [_options.ContextSize, numChroma]);
 
         return ComputeGrayCode(context, numChroma);
     }
 
-    private uint ComputeGrayCode(double[,] context, int numChroma)
+    private uint ComputeGrayCode(Tensor<T> context, int numChroma)
     {
         uint hash = 0;
-        int bitPos = 0;
+        int frames = context.Shape[0] - 1;
+        int bins = numChroma - 1;
+        if (frames <= 0 || bins <= 0)
+            return hash;
 
-        // Compare adjacent chroma bins across time
-        for (int f = 0; f < context.GetLength(0) - 1 && bitPos < 32; f++)
-        {
-            for (int c = 0; c < numChroma - 1 && bitPos < 32; c++)
-            {
-                // Compare current bin to next bin
-                double diff1 = context[f, c] - context[f, c + 1];
-                // Compare current time to next time
-                double diff2 = context[f, c] - context[f + 1, c];
+        // For each (frame, bin), in order: bit "current bin > next bin", then bit
+        // "current time > next time" (32 bits at most)
+        var current = Engine.TensorSlice(context, [0, 0], [frames, bins]);
+        var nextBin = Engine.TensorSlice(context, [0, 1], [frames, bins]);
+        var nextTime = Engine.TensorSlice(context, [1, 0], [frames, bins]);
+        var binBits = Engine.TensorGreaterThan(Engine.TensorSubtract(current, nextBin), NumOps.Zero);
+        var timeBits = Engine.TensorGreaterThan(Engine.TensorSubtract(current, nextTime), NumOps.Zero);
+        var bits = AudioEngineOps.Flatten(Engine, Engine.TensorStack([binBits, timeBits], 2));
+        if (bits.Length > 32)
+            bits = Engine.TensorSlice(bits, [0], [32]);
 
-                // Encode as bits
-                if (diff1 > 0) hash |= (1u << bitPos);
-                bitPos++;
-                if (bitPos >= 32) break;
-
-                if (diff2 > 0) hash |= (1u << bitPos);
-                bitPos++;
-            }
-        }
+        foreach (int bitPos in Engine.TensorNonzero(bits).ToArray())
+            hash |= 1u << bitPos;
 
         return hash;
     }
@@ -250,20 +233,18 @@ public class ChromaprintFingerprinter<T> : AudioFingerprinterBase<T>
 
     private double ComputeDataSimilarity(T[] data1, T[] data2)
     {
-        // Compute correlation
+        // Compute correlation over the common prefix: sum(a b) / sqrt(sum(a^2) sum(b^2))
         int minLen = Math.Min(data1.Length, data2.Length);
-        double sum = 0;
-        double norm1 = 0;
-        double norm2 = 0;
+        if (minLen == 0) return 0;
 
-        for (int i = 0; i < minLen; i++)
-        {
-            double v1 = NumOps.ToDouble(data1[i]);
-            double v2 = NumOps.ToDouble(data2[i]);
-            sum += v1 * v2;
-            norm1 += v1 * v1;
-            norm2 += v2 * v2;
-        }
+        var a = new Tensor<T>(data1, [data1.Length]);
+        var b = new Tensor<T>(data2, [data2.Length]);
+        if (data1.Length != minLen) a = Engine.TensorSlice(a, [0], [minLen]);
+        if (data2.Length != minLen) b = Engine.TensorSlice(b, [0], [minLen]);
+
+        double sum = NumOps.ToDouble(Engine.TensorSum(Engine.TensorMultiply(a, b)));
+        double norm1 = NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(a)));
+        double norm2 = NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(b)));
 
         double denominator = Math.Sqrt(norm1 * norm2);
         if (denominator < 1e-10) return 0;

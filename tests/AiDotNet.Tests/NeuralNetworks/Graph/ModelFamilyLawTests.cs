@@ -150,10 +150,21 @@ public class ModelFamilyLawTests
             return await ModelShapeConformanceProcess.ObserveAsync(closed, observationProfiles, memberTimeout);
         }
 
-        foreach (var family in selected.OrderByDescending(f => f.Value.Count))
+        // The sweep's wall-clock budget, shared out over the families still to probe. It sits below the xUnit
+        // Timeout by one member timeout (a batch already in flight can run that long) and a minute's margin: a
+        // family whose members mostly cannot take the profiles - TtsModelBase's 112 waveform models, measured
+        // past 17 minutes - otherwise ran the whole sweep into the timeout, which reports nothing at all.
+        var sweepClock = System.Diagnostics.Stopwatch.StartNew();
+        var sweepBudget = TimeSpan.FromSeconds(EnvInt("ADNSHAPE_SWEEP_BUDGET_SECONDS",
+            Math.Max(60, 1800 - (int)memberTimeout.TotalSeconds - 60), 1));
+        var orderedFamilies = selected.OrderByDescending(f => f.Value.Count).ToList();
+        for (int familyIndex = 0; familyIndex < orderedFamilies.Count; familyIndex++)
         {
+            var family = orderedFamilies[familyIndex];
             _out.WriteLine("");
             _out.WriteLine($"=== {family.Key}  ({family.Value.Count} models) ===");
+            var remaining = sweepBudget - sweepClock.Elapsed;
+            var familyBudget = TimeSpan.FromTicks(Math.Max(0, remaining.Ticks) / (orderedFamilies.Count - familyIndex));
 
             var rows = new List<(string Model, int[][] In, int[][] Out)>();
             var skipped = new List<string>();
@@ -167,8 +178,15 @@ public class ModelFamilyLawTests
             // members that produce a complete profile set - the same selection the sequential
             // in-process loop made - regardless of which worker finished first. A batch can only
             // observe a few members past the budget; those extra results are discarded unread.
+            bool outOfTime = false;
             for (int next = 0; next < members.Count && rows.Count < PerFamilyBudget; next += workers)
             {
+                if (familyClock.Elapsed >= familyBudget)
+                {
+                    outOfTime = true;
+                    break;
+                }
+
                 var batchMembers = members.Skip(next).Take(workers).ToList();
                 var observations = await Task.WhenAll(batchMembers.Select(ObserveMemberAsync));
 
@@ -205,6 +223,8 @@ public class ModelFamilyLawTests
 
             _out.WriteLine($"  observed {attempted}/{members.Count} members in {familyClock.Elapsed.TotalSeconds:F0} s "
                 + $"(workers={workers}, per-member timeout={memberTimeout.TotalSeconds:F0} s)");
+            if (outOfTime)
+                _out.WriteLine($"  stopped at the family's {familyBudget.TotalSeconds:F0} s share of the sweep budget");
 
             if (rows.Count == 0)
             {

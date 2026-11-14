@@ -70,7 +70,7 @@ namespace AiDotNet.Metrics
         /// <summary>
         /// Initializes a new instance of Inception Score calculator.
         /// </summary>
-        /// <param name="inceptionNetwork">Pre-trained Inception network for classification (optional)</param>
+        /// <param name="inceptionNetwork">Pre-trained Inception network for classification. Required to compute a score; scoring without one throws.</param>
         /// <param name="numClasses">Number of classes in the classifier (default 1000 for ImageNet)</param>
         /// <param name="numSplits">Number of splits for computing mean/std (default 10)</param>
         public InceptionScore(
@@ -89,7 +89,7 @@ namespace AiDotNet.Metrics
         /// </summary>
         /// <param name="generatedImages">Tensor of generated images</param>
         /// <returns>Inception Score (higher is better, typical range 1-15+)</returns>
-        public double ComputeIS(Tensor<T> generatedImages)
+        public T ComputeIS(Tensor<T> generatedImages)
         {
             var (mean, _) = ComputeISWithUncertainty(generatedImages);
             return mean;
@@ -101,7 +101,7 @@ namespace AiDotNet.Metrics
         /// </summary>
         /// <param name="generatedImages">Tensor of generated images</param>
         /// <returns>Tuple of (mean IS, standard deviation)</returns>
-        public (double mean, double std) ComputeISWithUncertainty(Tensor<T> generatedImages)
+        public (T mean, T std) ComputeISWithUncertainty(Tensor<T> generatedImages)
         {
             var numImages = generatedImages.Shape[0];
             var splitSize = numImages / NumSplits;
@@ -111,7 +111,7 @@ namespace AiDotNet.Metrics
                 throw new ArgumentException($"Not enough images for {NumSplits} splits. Need at least {NumSplits} images.");
             }
 
-            var scores = new double[NumSplits];
+            var scores = new T[NumSplits];
 
             // Compute IS for each split
             for (int split = 0; split < NumSplits; split++)
@@ -128,9 +128,11 @@ namespace AiDotNet.Metrics
             }
 
             // Compute mean and standard deviation
-            var mean = scores.Average();
-            var variance = scores.Select(s => Math.Pow(s - mean, 2)).Average();
-            var std = Math.Sqrt(variance);
+            var engine = AiDotNetEngine.Current;
+            var scoreTensor = new Tensor<T>(scores, new[] { NumSplits });
+            var mean = engine.TensorMean(scoreTensor);
+            var deviations = engine.TensorAddScalar(scoreTensor, NumOps.Negate(mean));
+            var std = NumOps.Sqrt(engine.TensorMean(engine.TensorMultiply(deviations, deviations)));
 
             return (mean, std);
         }
@@ -138,7 +140,7 @@ namespace AiDotNet.Metrics
         /// <summary>
         /// Computes Inception Score for a single split of images.
         /// </summary>
-        private double ComputeISForSplit(Tensor<T> images)
+        private T ComputeISForSplit(Tensor<T> images)
         {
             // Get predicted class probabilities for all images
             var predictions = GetPredictions(images);
@@ -147,17 +149,17 @@ namespace AiDotNet.Metrics
             var marginal = ComputeMarginalDistribution(predictions);
 
             // Compute KL divergence for each image and take mean
-            var klDivergences = new double[predictions.Rows];
-            for (int i = 0; i < predictions.Rows; i++)
-            {
-                klDivergences[i] = ComputeKLDivergence(predictions, i, marginal);
-            }
-
-            var meanKL = klDivergences.Average();
+            // KL(p(y|x) || p(y)) = sum_j (p(y_j|x) + eps) * log((p(y_j|x) + eps) / (p(y_j) + eps)), eps = 1e-10
+            var engine = AiDotNetEngine.Current;
+            var epsilon = NumOps.FromDouble(1e-10);
+            int numImages = predictions.Rows;
+            var conditional = engine.TensorAddScalar(Tensor<T>.FromMatrix(predictions), epsilon);
+            var marginalRow = engine.TensorAddScalar(engine.Reshape(marginal.AsTensor(), new[] { 1, NumClasses }), epsilon);
+            var logRatio = engine.TensorLog(engine.TensorDivide(conditional, engine.TensorBroadcastTo(marginalRow, new[] { numImages, NumClasses })));
+            var meanKL = NumOps.Divide(engine.TensorSum(engine.TensorMultiply(conditional, logRatio)), NumOps.FromDouble(numImages));
 
             // IS = exp(E[KL(p(y|x) || p(y))])
-            var inceptionScore = Math.Exp(meanKL);
-
+            var inceptionScore = NumOps.Exp(meanKL);
             return inceptionScore;
         }
 
@@ -171,10 +173,11 @@ namespace AiDotNet.Metrics
             var numImages = images.Shape[0];
             var predictions = new Matrix<T>(numImages, NumClasses);
 
-            if (InceptionNetwork == null)
+            if (InceptionNetwork is null)
             {
-                // No network provided, return dummy predictions
-                return CreateDummyPredictions(numImages);
+                // Scoring without a classifier would report a number unrelated to the images.
+                throw new InvalidOperationException(
+                    "Inception Score needs a classification network: pass one to the InceptionScore constructor.");
             }
 
             InceptionNetwork.SetTrainingMode(false);
@@ -182,12 +185,8 @@ namespace AiDotNet.Metrics
             for (int i = 0; i < numImages; i++)
             {
                 // Extract single image
-                var imageSize = images.Length / numImages;
-                var singleImage = new Tensor<T>(new[] { 1, images.Shape[1], images.Shape[2], images.Shape[3] });
-                for (int idx = 0; idx < imageSize; idx++)
-                {
-                    singleImage.SetFlat(idx, images.GetFlat(i * imageSize + idx));
-                }
+                var singleImage = AiDotNetEngine.Current.TensorSlice(images, new[] { i, 0, 0, 0 },
+                    new[] { 1, images.Shape[1], images.Shape[2], images.Shape[3] });
 
                 // Forward pass
                 var output = InceptionNetwork.Predict(singleImage);
@@ -196,10 +195,7 @@ namespace AiDotNet.Metrics
                 var probs = Softmax(output);
 
                 // Store predictions
-                for (int j = 0; j < Math.Min(probs.Length, NumClasses); j++)
-                {
-                    predictions[i, j] = probs.GetFlat(j);
-                }
+                AiDotNetEngine.Current.SetRow(predictions, i, FrechetDistanceHelper<T>.FeatureRow(probs, NumClasses));
             }
 
             return predictions;
@@ -214,76 +210,15 @@ namespace AiDotNet.Metrics
         }
 
         /// <summary>
-        /// Creates dummy predictions for testing when no Inception network is available.
-        /// </summary>
-        private Matrix<T> CreateDummyPredictions(int numSamples)
-        {
-            var random = RandomHelper.ThreadSafeRandom;
-            var predictions = new Matrix<T>(numSamples, NumClasses);
-
-            for (int i = 0; i < numSamples; i++)
-            {
-                // Create random probabilities that sum to 1
-                var sum = 0.0;
-                var values = new double[NumClasses];
-
-                for (int j = 0; j < NumClasses; j++)
-                {
-                    values[j] = random.NextDouble();
-                    sum += values[j];
-                }
-
-                // Normalize
-                for (int j = 0; j < NumClasses; j++)
-                {
-                    predictions[i, j] = NumOps.FromDouble(values[j] / sum);
-                }
-            }
-
-            return predictions;
-        }
-
-        /// <summary>
         /// Computes the marginal distribution p(y) by averaging over all images.
         /// p(y) = (1/N) * Σ p(y|x_i)
         /// </summary>
         private Vector<T> ComputeMarginalDistribution(Matrix<T> predictions)
         {
-            var numImages = predictions.Rows;
-            var marginal = new Vector<T>(NumClasses);
-
-            for (int j = 0; j < NumClasses; j++)
-            {
-                var sum = NumOps.Zero;
-                for (int i = 0; i < numImages; i++)
-                {
-                    sum = NumOps.Add(sum, predictions[i, j]);
-                }
-                marginal[j] = NumOps.Divide(sum, NumOps.FromDouble(numImages));
-            }
-
-            return marginal;
-        }
-
-        /// <summary>
-        /// Computes KL divergence between conditional p(y|x) and marginal p(y).
-        /// KL(p(y|x) || p(y)) = Σ p(y|x) * log(p(y|x) / p(y))
-        /// </summary>
-        private double ComputeKLDivergence(Matrix<T> predictions, int imageIdx, Vector<T> marginal)
-        {
-            var kl = 0.0;
-            var epsilon = 1e-10; // Small value to avoid log(0)
-
-            for (int j = 0; j < NumClasses; j++)
-            {
-                var pYgivenX = Convert.ToDouble(predictions[imageIdx, j]) + epsilon;
-                var pY = Convert.ToDouble(marginal[j]) + epsilon;
-
-                // KL divergence: p(y|x) * log(p(y|x) / p(y))
-                kl += pYgivenX * Math.Log(pYgivenX / pY);
-            }
-
-            return kl;
+            // p(y) = mean over images of p(y|x)
+            var engine = AiDotNetEngine.Current;
+            var mean = engine.ReduceMean(Tensor<T>.FromMatrix(predictions), new[] { 0 }, keepDims: false);
+            return mean.ToVector();
         }
 
         /// <summary>
@@ -291,21 +226,12 @@ namespace AiDotNet.Metrics
         /// </summary>
         private Tensor<T> ExtractImageSubset(Tensor<T> images, int startIdx, int count)
         {
-            var imageSize = images.Length / images.Shape[0];
-            var subsetShape = new int[images.Shape.Length];
-            subsetShape[0] = count;
-            for (int i = 1; i < images.Shape.Length; i++)
-            {
-                subsetShape[i] = images.Shape[i];
-            }
+            var start = new int[images.Shape.Length];
+            start[0] = startIdx;
+            var length = images.Shape.ToArray();
+            length[0] = count;
 
-            var subset = new Tensor<T>(subsetShape);
-            for (int idx = 0; idx < count * imageSize; idx++)
-            {
-                subset.SetFlat(idx, images.GetFlat(startIdx * imageSize + idx));
-            }
-
-            return subset;
+            return AiDotNetEngine.Current.TensorSlice(images, start, length);
         }
 
         /// <summary>
@@ -314,21 +240,21 @@ namespace AiDotNet.Metrics
         /// </summary>
         /// <param name="generatedImages">Generated images to evaluate</param>
         /// <param name="realImages">Real images for FID comparison (optional)</param>
-        /// <returns>Tuple of (IS mean, IS std, FID score if real images provided)</returns>
-        public (double isMean, double isStd, double? fid) ComputeComprehensiveMetrics(
+        /// <returns>Tuple of (IS mean, IS std, FID score, whether FID was computed); FID is zero and hasFid is false
+        /// when no real images or no Inception network are available.</returns>
+        public (T isMean, T isStd, T fid, bool hasFid) ComputeComprehensiveMetrics(
             Tensor<T> generatedImages,
             Tensor<T>? realImages = null)
         {
             var (isMean, isStd) = ComputeISWithUncertainty(generatedImages);
 
-            double? fid = null;
             if (realImages != null && InceptionNetwork != null)
             {
                 var fidCalculator = new FrechetInceptionDistance<T>(InceptionNetwork);
-                fid = fidCalculator.ComputeFID(realImages, generatedImages);
+                return (isMean, isStd, fidCalculator.ComputeFID(realImages, generatedImages), true);
             }
 
-            return (isMean, isStd, fid);
+            return (isMean, isStd, NumOps.Zero, false);
         }
     }
 }
