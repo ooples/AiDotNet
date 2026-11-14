@@ -174,13 +174,22 @@ public class AdaptiveRandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense
         int baseClass,
         int count)
     {
+        // sigma takes one of k + 1 levels, one per number of changed probes: convert them to T once.
+        var levels = new double[_sensitivitySamples + 1];
+        for (int changed = 0; changed <= _sensitivitySamples; changed++)
+        {
+            levels[changed] = _minSigma + (double)changed / _sensitivitySamples * (_maxSigma - _minSigma);
+        }
+
+        var sigmaLevels = new Tensor<double>(levels, new[] { levels.Length }).Cast<T>().ToArray();
+        T probeSigma = NumOps.FromDouble(_minSigma);
         var counts = new Dictionary<int, int>();
         double sigmaSum = 0.0;
         for (int i = 0; i < count; i++)
         {
-            double sigma = ProbeSigma(vectorInput, referenceInput, model, baseClass);
-            sigmaSum += sigma;
-            int sampledClass = ClassifyNoisy(vectorInput, referenceInput, model, NumOps.FromDouble(sigma));
+            int changed = ChangedProbes(vectorInput, referenceInput, model, baseClass, probeSigma);
+            sigmaSum += levels[changed];
+            int sampledClass = ClassifyNoisy(vectorInput, referenceInput, model, sigmaLevels[changed]);
             counts[sampledClass] = counts.TryGetValue(sampledClass, out int seen) ? seen + 1 : 1;
         }
 
@@ -349,13 +358,12 @@ public class AdaptiveRandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense
     }
 
     /// <summary>
-    /// The probe step: k queries x + N(0, sigma_min^2 I); sigma grows linearly from sigma_min to sigma_max with the
-    /// fraction of probes whose class differs from the clean prediction (near a boundary, more noise).
+    /// The probe step: k queries x + N(0, sigma_min^2 I), counting those whose class differs from the clean
+    /// prediction. sigma grows linearly from sigma_min to sigma_max with that fraction (near a boundary, more noise).
     /// </summary>
-    private double ProbeSigma(Vector<T> vectorInput, TInput input, IFullModel<T, TInput, TOutput> model, int baseClass)
+    private int ChangedProbes(Vector<T> vectorInput, TInput input, IFullModel<T, TInput, TOutput> model, int baseClass, T probeSigma)
     {
         int changedPredictions = 0;
-        var probeSigma = NumOps.FromDouble(_minSigma);
         for (int i = 0; i < _sensitivitySamples; i++)
         {
             if (ClassifyNoisy(vectorInput, input, model, probeSigma) != baseClass)
@@ -364,8 +372,7 @@ public class AdaptiveRandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense
             }
         }
 
-        double sensitivity = (double)changedPredictions / _sensitivitySamples;
-        return _minSigma + sensitivity * (_maxSigma - _minSigma);
+        return changedPredictions;
     }
 
     private Vector<T> AddGaussianNoise(Vector<T> input, T sigma)
