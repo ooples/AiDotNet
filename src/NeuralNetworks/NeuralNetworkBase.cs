@@ -21078,8 +21078,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // for the IGradientComputable contract.
         // Walk the complete tape, then filter by the canonical trainable references below.
         // Restricting sources here drops legitimate leaves reached through view operations such
-        // as recurrent-weight permutes. The normal training funnel already uses this full-walk
-        // pattern for the same reason, so ComputeGradients must not implement a weaker derivative.
+        // as recurrent-weight permutes on Tensors builds without the view-aware source walk. The
+        // training funnel (TrainWithTape, TrainWithGradientAccumulation) does restrict its sources,
+        // to release intermediate gradients early; this path keeps the full walk, so ComputeGradients
+        // never implements a weaker derivative than that funnel.
         var allGrads = ComputeAndPublishParameterGradients(tape, lossTensor, sources: null);
         var grads = allGrads;
 
