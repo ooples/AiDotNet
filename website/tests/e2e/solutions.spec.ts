@@ -11,9 +11,9 @@ test.describe('Solutions Hub', () => {
   test('solutions index contains all 3 solution types', async ({ page }) => {
     await page.goto(`${BASE}/solutions/`);
     const bodyText = await page.locator('body').textContent() || '';
-    expect(bodyText).toContain('Finance');
+    expect(bodyText).toContain('Financial Services');
     expect(bodyText).toContain('Healthcare');
-    expect(bodyText).toContain('Document');
+    expect(bodyText).toContain('Document AI');
   });
 
   test('solution links navigate to detail pages', async ({ page }) => {
