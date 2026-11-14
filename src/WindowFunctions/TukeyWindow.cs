@@ -138,44 +138,46 @@ public class TukeyWindow<T> : IWindowFunction<T>
     /// </remarks>
     public Vector<T> Create(int windowSize)
     {
-        Vector<T> window = new Vector<T>(windowSize);
-
-        // Special case: alpha = 0 is a rectangular window (all ones)
-        if (_numOps.Equals(_alpha, _numOps.Zero))
+        if (WindowFunctionHelper.TryCreateDegenerate(windowSize, out Vector<T> degenerate))
         {
-            for (int n = 0; n < windowSize; n++)
-            {
-                window[n] = _numOps.One;
-            }
-            return window;
+            return degenerate;
         }
 
+        // scipy.signal.windows.tukey: alpha <= 0 is the rectangular window, alpha >= 1 is the Hann window.
+        if (_numOps.LessThanOrEquals(_alpha, _numOps.Zero))
+        {
+            return Vector<T>.CreateDefault(windowSize, _numOps.One);
+        }
+
+        if (_numOps.GreaterThanOrEquals(_alpha, _numOps.One))
+        {
+            return WindowFunctionHelper.GeneralCosine<T>(windowSize, 0.5, 0.5);
+        }
+
+        var engine = AiDotNetEngine.Current;
         T N = _numOps.FromDouble(windowSize - 1);
         T halfAlphaN = _numOps.Multiply(_alpha, _numOps.Divide(N, _numOps.FromDouble(2)));
+        Tensor<T> n = WindowFunctionHelper.SampleIndices<T>(windowSize);
 
-        for (int n = 0; n < windowSize; n++)
-        {
-            T nT = _numOps.FromDouble(n);
-            if (_numOps.LessThanOrEquals(nT, halfAlphaN))
-            {
-                // Left taper region: 0.5 * (1 + cos(π * (2n/(αN) - 1)))
-                T x = _numOps.Subtract(_numOps.Divide(_numOps.Multiply(_numOps.FromDouble(2), nT), _numOps.Multiply(_alpha, N)), _numOps.One);
-                window[n] = _numOps.Multiply(_numOps.FromDouble(0.5), _numOps.Add(_numOps.One, MathHelper.Cos(_numOps.Multiply(_numOps.FromDouble(Math.PI), x))));
-            }
-            else if (_numOps.LessThan(nT, _numOps.Subtract(N, halfAlphaN)))
-            {
-                // Flat region
-                window[n] = _numOps.One;
-            }
-            else
-            {
-                // Right taper region: 0.5 * (1 + cos(π * (2n/(αN) - 2/α + 1)))
-                T x = _numOps.Add(_numOps.Subtract(_numOps.Divide(_numOps.Multiply(_numOps.FromDouble(2), nT), _numOps.Multiply(_alpha, N)), _numOps.Divide(_numOps.FromDouble(2), _alpha)), _numOps.One);
-                window[n] = _numOps.Multiply(_numOps.FromDouble(0.5), _numOps.Add(_numOps.One, MathHelper.Cos(_numOps.Multiply(_numOps.FromDouble(Math.PI), x))));
-            }
-        }
+        // 2n/(alpha N), shared by both tapers
+        Tensor<T> scaled = engine.TensorDivideScalar(engine.TensorMultiplyScalar(n, _numOps.FromDouble(2)), _numOps.Multiply(_alpha, N));
+        T pi = _numOps.FromDouble(Math.PI);
+        T half = _numOps.FromDouble(0.5);
 
-        return window;
+        // Left taper region: 0.5 * (1 + cos(pi * (2n/(alpha N) - 1)))
+        Tensor<T> left = engine.TensorMultiplyScalar(engine.TensorAddScalar(engine.TensorCos(
+            engine.TensorMultiplyScalar(engine.TensorSubtractScalar(scaled, _numOps.One), pi)), _numOps.One), half);
+
+        // Right taper region: 0.5 * (1 + cos(pi * (2n/(alpha N) - 2/alpha + 1)))
+        T rightShift = _numOps.Subtract(_numOps.One, _numOps.Divide(_numOps.FromDouble(2), _alpha));
+        Tensor<T> right = engine.TensorMultiplyScalar(engine.TensorAddScalar(engine.TensorCos(
+            engine.TensorMultiplyScalar(engine.TensorAddScalar(scaled, rightShift), pi)), _numOps.One), half);
+
+        // Flat region: n < N - alpha N / 2 (and past the left taper)
+        Tensor<T> flat = Tensor<T>.CreateDefault(new[] { windowSize }, _numOps.One);
+        Tensor<T> beforeRight = engine.TensorLessThan(n, _numOps.Subtract(N, halfAlphaN));
+        Tensor<T> afterLeft = engine.TensorGreaterThan(n, halfAlphaN);
+        return engine.TensorWhere(afterLeft, engine.TensorWhere(beforeRight, flat, right), left).ToVector();
     }
 
     /// <summary>

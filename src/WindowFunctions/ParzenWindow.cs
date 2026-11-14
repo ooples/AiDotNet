@@ -83,26 +83,24 @@ public class ParzenWindow<T> : IWindowFunction<T>
     /// </remarks>
     public Vector<T> Create(int windowSize)
     {
-        Vector<T> window = new Vector<T>(windowSize);
-        T N = _numOps.FromDouble(windowSize - 1);
-        T halfN = _numOps.Divide(N, _numOps.FromDouble(2));
-        for (int n = 0; n < windowSize; n++)
+        if (WindowFunctionHelper.TryCreateDegenerate(windowSize, out Vector<T> degenerate))
         {
-            T nT = _numOps.FromDouble(n);
-            T absN = _numOps.Abs(_numOps.Subtract(nT, halfN));
-            if (_numOps.LessThanOrEquals(absN, _numOps.Divide(N, _numOps.FromDouble(4))))
-            {
-                T term = _numOps.Divide(_numOps.Multiply(_numOps.FromDouble(2), absN), N);
-                window[n] = _numOps.Subtract(_numOps.One, _numOps.Multiply(_numOps.FromDouble(6), _numOps.Add(_numOps.Square(term), _numOps.Multiply(_numOps.FromDouble(-1), _numOps.Power(term, _numOps.FromDouble(3))))));
-            }
-            else
-            {
-                T term = _numOps.Divide(_numOps.Multiply(_numOps.FromDouble(2), absN), N);
-                window[n] = _numOps.Multiply(_numOps.FromDouble(2), _numOps.Power(_numOps.Subtract(_numOps.One, term), _numOps.FromDouble(3)));
-            }
+            return degenerate;
         }
 
-        return window;
+        // scipy.signal.windows.parzen (Harris 1978): with n centred on (M-1)/2 and a = |n| / (M/2),
+        // w = 1 - 6a^2(1 - a) for |n| <= (M-1)/4, and w = 2(1 - a)^3 otherwise.
+        var engine = AiDotNetEngine.Current;
+        Tensor<T> absN = engine.TensorAbs(engine.TensorSubtractScalar(
+            WindowFunctionHelper.SampleIndices<T>(windowSize), _numOps.FromDouble((windowSize - 1) / 2.0)));
+        Tensor<T> a = engine.TensorDivideScalar(absN, _numOps.FromDouble(windowSize / 2.0));
+        Tensor<T> oneMinusA = engine.ScalarMinusTensor(_numOps.One, a);
+        Tensor<T> inner = engine.ScalarMinusTensor(_numOps.One,
+            engine.TensorMultiplyScalar(engine.TensorMultiply(engine.TensorSquare(a), oneMinusA), _numOps.FromDouble(6.0)));
+        Tensor<T> outer = engine.TensorMultiplyScalar(
+            engine.TensorMultiply(engine.TensorSquare(oneMinusA), oneMinusA), _numOps.FromDouble(2.0));
+        Tensor<T> isOuter = engine.TensorGreaterThan(absN, _numOps.FromDouble((windowSize - 1) / 4.0));
+        return engine.TensorWhere(isOuter, outer, inner).ToVector();
     }
 
     /// <summary>

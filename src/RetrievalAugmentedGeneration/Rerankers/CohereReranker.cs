@@ -187,8 +187,9 @@ public class CohereReranker<T> : RerankerBase<T>
 
         var queryTerms = ExtractTerms(query);
         var scoredDocuments = new List<(Document<T> doc, double score)>();
+        var originalScores = RagScoreConversion<T>.ToDouble(documents.Select(d => d.RelevanceScore));
 
-        foreach (var doc in documents)
+        foreach (var (doc, originalScore) in documents.Zip(originalScores, (d, o) => (d, o)))
         {
             var docTerms = ExtractTerms(doc.Content);
 
@@ -203,7 +204,6 @@ public class CohereReranker<T> : RerankerBase<T>
             // Blend with original score if available
             if (doc.HasRelevanceScore)
             {
-                var originalScore = Convert.ToDouble(doc.RelevanceScore);
                 rerankScore = rerankScore * 0.7 + originalScore * 0.3;
             }
 
@@ -211,14 +211,16 @@ public class CohereReranker<T> : RerankerBase<T>
         }
 
         // Return reranked documents
-        return scoredDocuments
-            .OrderByDescending(x => x.score)
-            .Select(x =>
+        var ordered = scoredDocuments.OrderByDescending(x => x.score).ToList();
+        var newScores = RagScoreConversion<T>.FromDouble(ordered.Select(x => x.score));
+        return ordered
+            .Select((x, i) =>
             {
-                x.doc.RelevanceScore = NumOps.FromDouble(x.score);
+                x.doc.RelevanceScore = newScores[i];
                 x.doc.HasRelevanceScore = true;
                 return x.doc;
-            });
+            })
+            .ToList();
     }
 
     private HashSet<string> ExtractTerms(string text)
