@@ -306,6 +306,19 @@ internal sealed class TapeTrainingStepper<T>
         Func<Tensor<T>> objective,
         T learningRate,
         Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? onGradients = null)
+        => EagerSgdObjectiveStep(parameters, objective, learningRate, onGradients, owner: null);
+
+    /// <summary>
+    /// <see cref="EagerSgdObjectiveStep(Func{IReadOnlyList{Tensor{T}}}, Func{Tensor{T}}, T, Action{IReadOnlyDictionary{Tensor{T}, Tensor{T}}})"/>
+    /// governed by <paramref name="owner"/>: a model with a distributed coordinator runs it as a coordinated step
+    /// (the same collectives as its other ranks), and a mixed-precision context scales and unscales it.
+    /// </summary>
+    internal static T EagerSgdObjectiveStep(
+        Func<IReadOnlyList<Tensor<T>>> parameters,
+        Func<Tensor<T>> objective,
+        T learningRate,
+        Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? onGradients,
+        object? owner)
     {
         Guard.NotNull(parameters);
         Guard.NotNull(objective);
@@ -324,7 +337,7 @@ internal sealed class TapeTrainingStepper<T>
             placeholder,
             (_, _) => objective(),
             (value, _) => value,
-            new EagerStepHooks { OnGradients = onGradients });
+            new EagerStepHooks { OnGradients = onGradients, Owner = owner });
     }
 
     /// <summary>

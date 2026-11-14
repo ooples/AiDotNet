@@ -693,6 +693,18 @@ public static class CompiledTapeTrainingStep<T>
 
         if (owner is NeuralNetworks.NeuralNetworkBase<T> { DistributedCoordinator: { } distCoord } distNet)
         {
+            // The compiled plan differentiates the unscaled loss, but the coordinator divides the gradients by the
+            // active loss scale and the plan has no working-weight preparation. The owner-aware eager step does both.
+            if (distNet.ActiveMixedPrecisionContext is not null)
+            {
+                return TapeTrainingStepper<T>.EagerSgdObjectiveStep(
+                    () => CollectDeduplicatedParameters(layers),
+                    () => computeLoss(forward(input), target),
+                    learningRate,
+                    onGradients: null,
+                    owner: distNet);
+            }
+
             return StepDistributedCompiledSgd(
                 distNet, distCoord, layers, input, target, learningRate, forward, computeLoss, numOps, engine);
         }
@@ -2133,6 +2145,8 @@ public static class CompiledTapeTrainingStep<T>
             }
 
             bool shapeChanged = EnsurePersistentPairForShape(input._shape, target._shape);
+            // A shape past the lifecycle bound retires the plan cache, so take the current one.
+            cache = _cache ??= new CompiledModelCache<T>();
             input.Contiguous().AsSpan().CopyTo(_persistentInput!.AsWritableSpan());
             target.Contiguous().AsSpan().CopyTo(_persistentTarget!.AsWritableSpan());
 
@@ -2215,12 +2229,17 @@ public static class CompiledTapeTrainingStep<T>
 
             return globalLossT;
         }
-        catch when (!collectivesStarted)
+        catch (Exception ex) when (!collectivesStarted)
         {
+            // Compilation or the plan's step failed before this step's collectives. The fallback must still run the
+            // coordinated step, or this rank would update alone while the others wait in its collectives.
+            System.Diagnostics.Trace.TraceWarning($"[AiDotNet] Distributed compiled SGD step failed; running the coordinated eager step: {ex}");
             return TapeTrainingStepper<T>.EagerSgdObjectiveStep(
                 () => CollectDeduplicatedParameters(layers),
                 () => computeLoss(forward(input), target),
-                learningRate);
+                learningRate,
+                onGradients: null,
+                owner: distNet);
         }
     }
 
@@ -2294,6 +2313,8 @@ public static class CompiledTapeTrainingStep<T>
             }
 
             bool shapeChanged = EnsurePersistentPairForShape(input._shape, target._shape);
+            // A shape past the lifecycle bound retires the plan cache, so take the current one.
+            cache = _cache ??= new CompiledModelCache<T>();
             input.Contiguous().AsSpan().CopyTo(_persistentInput!.AsWritableSpan());
             target.Contiguous().AsSpan().CopyTo(_persistentTarget!.AsWritableSpan());
 
@@ -2416,6 +2437,15 @@ public static class CompiledTapeTrainingStep<T>
                 _persistentTarget = pair.Target;
                 return false;
             }
+        }
+
+        // Bounded like SwitchPersistentShape: variable batch shapes (streaming sequence lengths) would otherwise keep
+        // every batch-sized pair, and the plans compiled against them, alive until an explicit invalidation.
+        if (list.Count >= MaxBatchShapesPerLifecycle)
+        {
+            _cache?.Invalidate();
+            _cache = null;
+            list.Clear();
         }
 
         var createdIn = new Tensor<T>((int[])inputShape.Clone());

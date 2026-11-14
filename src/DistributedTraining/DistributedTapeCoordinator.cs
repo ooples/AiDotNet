@@ -284,13 +284,35 @@ public sealed class DistributedTapeCoordinator<T> : IDisposable
 
         _lastShardedParamsRef = null;
 
-        if (WorldSize <= 1 || totalElements <= 0)
+        if (WorldSize <= 1)
         {
             _syncedParamSnapshot = uniqueParams;
             return;
         }
 
         EnsureBackendInitialized();
+
+        // Every rank enters this agreement, so a rank that cannot broadcast (an idle rank whose lazy layers never
+        // materialized holds zero elements) fails together with the others instead of skipping the broadcast its
+        // peers are waiting in.
+        var layout = new Vector<T>(new[] { NumOps.FromDouble(totalElements), NumOps.FromDouble(-totalElements) });
+        Backend.AllReduce(layout, ReductionOperation.Max);
+        double maxElements = NumOps.ToDouble(layout[0]);
+        double minElements = -NumOps.ToDouble(layout[1]);
+        if (maxElements != minElements)
+        {
+            throw new InvalidOperationException(
+                $"Ranks disagree on the trainable parameter layout before the first synchronization: rank {Rank} has " +
+                $"{totalElements} elements, while the ranks range from {minElements} to {maxElements}. A rank whose first " +
+                "batch is empty cannot materialize lazily sized layers; give every rank a non-empty first batch, or build " +
+                "the model's layers before distributed training starts.");
+        }
+
+        if (totalElements <= 0)
+        {
+            _syncedParamSnapshot = uniqueParams;
+            return;
+        }
 
         var flat = new Vector<T>(totalElements);
         if (Rank == 0)
