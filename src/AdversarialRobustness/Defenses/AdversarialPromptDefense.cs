@@ -196,7 +196,8 @@ public class AdversarialPromptDefense<T, TInput, TOutput> : IAdversarialDefense<
     /// <summary>
     /// FGSM(f, x + delta) - delta: the worst case for the prompted model within the epsilon ball around x.
     /// </summary>
-    private TInput AdversarialInput(TInput input, TOutput label, IFullModel<T, TInput, TOutput> model, FGSMAttack<T, TInput, TOutput> attack)
+    /// <remarks>Internal so the reference tests can pin the epsilon-ball bound of the transferred offset.</remarks>
+    internal TInput AdversarialInput(TInput input, TOutput label, IFullModel<T, TInput, TOutput> model, FGSMAttack<T, TInput, TOutput> attack)
     {
         var prompted = ApplyPromptToInput(input);
         var attacked = ConversionsHelper.ConvertToVector<T, TInput>(attack.GenerateAdversarialExample(prompted, label, model));
