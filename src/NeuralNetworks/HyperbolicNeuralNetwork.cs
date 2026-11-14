@@ -164,14 +164,15 @@ public partial class HyperbolicNeuralNetwork<T> : VectorModelLayoutBase<T>
             }
             else
             {
-                Layers.Add(new HyperbolicLinearLayer<T>(inputFeatures, hiddenSizes[0], NumOps.ToDouble(_curvature)));
+                double curvature = NumOps.ToDouble(_curvature);
+                Layers.Add(new HyperbolicLinearLayer<T>(inputFeatures, hiddenSizes[0], curvature));
 
                 for (int i = 0; i < hiddenSizes.Length - 1; i++)
                 {
-                    Layers.Add(new HyperbolicLinearLayer<T>(hiddenSizes[i], hiddenSizes[i + 1], NumOps.ToDouble(_curvature)));
+                    Layers.Add(new HyperbolicLinearLayer<T>(hiddenSizes[i], hiddenSizes[i + 1], curvature));
                 }
 
-                Layers.Add(new HyperbolicLinearLayer<T>(hiddenSizes[^1], outputFeatures, NumOps.ToDouble(_curvature)));
+                Layers.Add(new HyperbolicLinearLayer<T>(hiddenSizes[^1], outputFeatures, curvature));
             }
         }
     }

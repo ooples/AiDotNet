@@ -491,24 +491,9 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
         var result = new Vector<T>(targetSize);
         var frameData = frame.ToVector();
 
-        if (frameData.Length >= targetSize)
-        {
-            for (int i = 0; i < targetSize; i++)
-            {
-                result[i] = frameData[i];
-            }
-        }
-        else
-        {
-            for (int i = 0; i < frameData.Length; i++)
-            {
-                result[i] = frameData[i];
-            }
-            for (int i = frameData.Length; i < targetSize; i++)
-            {
-                result[i] = _numOps.Zero;
-            }
-        }
+        // The frame's values in order, truncated or zero-padded to targetSize
+        int kept = Math.Min(frameData.Length, targetSize);
+        frameData.AsSpan().Slice(0, kept).CopyTo(result.AsWritableSpan());
 
         return result;
     }
@@ -529,17 +514,8 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
     private Tensor<T> SplitFrameIntoPatches(Tensor<T> frame)
     {
         var flattened = FlattenFrame(frame, VISUAL_PATCH_COUNT * VISUAL_PATCH_DIMENSION);
-        var patches = new Tensor<T>(new[] { VISUAL_PATCH_COUNT, VISUAL_PATCH_DIMENSION });
-
-        for (int patch = 0; patch < VISUAL_PATCH_COUNT; patch++)
-        {
-            for (int i = 0; i < VISUAL_PATCH_DIMENSION; i++)
-            {
-                patches[patch, i] = flattened[patch * VISUAL_PATCH_DIMENSION + i];
-            }
-        }
-
-        return patches;
+        // One patch per row, in order
+        return new Tensor<T>(flattened.ToArray(), new[] { VISUAL_PATCH_COUNT, VISUAL_PATCH_DIMENSION });
     }
 
     /// <summary>
@@ -565,11 +541,8 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
             var flat = tensor.ToVector();
             int width = Math.Min(_embeddingDimension, Math.Max(flat.Length, 1));
             var single = new Vector<T>(width);
-
-            for (int i = 0; i < width && i < flat.Length; i++)
-            {
-                single[i] = flat[i];
-            }
+            int kept = Math.Min(width, flat.Length);
+            flat.AsSpan().Slice(0, kept).CopyTo(single.AsWritableSpan());
 
             return single;
         }
@@ -580,17 +553,18 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
 
         var data = tensor.ToVector();
         var result = new Vector<T>(outputSize);
+        if (outputSize <= 0) return result;
 
-        for (int feature = 0; feature < outputSize; feature++)
-        {
-            T sum = _numOps.Zero;
-            for (int step = 0; step < steps; step++)
-            {
-                sum = _numOps.Add(sum, data[step * features + feature]);
-            }
-
-            result[feature] = _numOps.Divide(sum, _numOps.FromDouble(steps));
-        }
+        // Feature i is the mean of feature i over the steps of the [steps, features] layout
+        var engine = Engine;
+        var sums = steps > 0
+            ? engine.ReduceSum(
+                engine.TensorSlice(
+                    new Tensor<T>(data.AsSpan().Slice(0, steps * features).ToArray(), new[] { steps, features }),
+                    new[] { 0, 0 }, new[] { steps, outputSize }),
+                new[] { 0 }, keepDims: false)
+            : new Tensor<T>(new[] { outputSize });
+        engine.TensorDivideScalar(sums, _numOps.FromDouble(steps)).CopyTo(result.AsWritableSpan());
 
         return result;
     }
@@ -602,21 +576,38 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
             return new Vector<T>(_embeddingDimension);
         }
 
-        var result = new Vector<T>(vectors[0].Length);
+        return MeanOfPrefixes(vectors);
+    }
+
+    /// <summary>
+    /// The mean of the vectors over the first vector's length: each vector adds its common prefix, in
+    /// list order, and the sums are divided by the vector count.
+    /// </summary>
+    private Vector<T> MeanOfPrefixes(List<Vector<T>> vectors)
+    {
+        int length = vectors[0].Length;
+        var result = new Vector<T>(length);
+        if (length == 0) return result;
+
+        var engine = Engine;
+        var sum = new Tensor<T>(new[] { length });
         foreach (var vec in vectors)
         {
-            for (int i = 0; i < result.Length && i < vec.Length; i++)
-            {
-                result[i] = _numOps.Add(result[i], vec[i]);
-            }
+            int common = Math.Min(length, vec.Length);
+            if (common == 0) continue;
+            var prefix = common == length
+                ? Tensor<T>.FromVector(vec.GetSubVector(0, length))
+                : engine.TensorConcatenate(
+                    new[] { Tensor<T>.FromVector(vec.GetSubVector(0, common)), new Tensor<T>(new[] { length - common }) }, 0);
+            var added = engine.TensorAdd(sum, prefix);
+            // Entries past this vector's length keep their exact value (x + 0 would turn -0 into +0)
+            sum = common == length
+                ? added
+                : engine.TensorConcatenate(
+                    new[] { engine.TensorSlice(added, new[] { 0 }, new[] { common }), engine.TensorSlice(sum, new[] { common }, new[] { length - common }) }, 0);
         }
 
-        var divisor = _numOps.FromDouble(vectors.Count);
-        for (int i = 0; i < result.Length; i++)
-        {
-            result[i] = _numOps.Divide(result[i], divisor);
-        }
-
+        engine.TensorDivideScalar(sum, _numOps.FromDouble(vectors.Count)).CopyTo(result.AsWritableSpan());
         return result;
     }
 
@@ -1155,28 +1146,14 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
         int audioLen = audioFeatures.Length;
         int visualLen = visualFeatures.Length;
 
-        var audioToVisual = new T[audioLen * visualLen];
-        var visualToAudio = new T[visualLen * audioLen];
-
-        // Compute attention weights
-        for (int i = 0; i < audioLen; i++)
-        {
-            for (int j = 0; j < visualLen; j++)
-            {
-                var product = _numOps.Multiply(audioFeatures[i], visualFeatures[j]);
-                audioToVisual[i * visualLen + j] = product;
-                visualToAudio[j * audioLen + i] = product;
-            }
-        }
-
-        // Apply softmax normalization - convert arrays to vectors
-        var a2vVector = new Vector<T>(audioToVisual.Length);
-        for (int i = 0; i < audioToVisual.Length; i++) a2vVector[i] = audioToVisual[i];
-        var a2vTensor = new Tensor<T>(new[] { audioLen, visualLen }, a2vVector);
-
-        var v2aVector = new Vector<T>(visualToAudio.Length);
-        for (int i = 0; i < visualToAudio.Length; i++) v2aVector[i] = visualToAudio[i];
-        var v2aTensor = new Tensor<T>(new[] { visualLen, audioLen }, v2aVector);
+        // Compute attention weights: the outer product a_i * v_j and its transpose
+        var engine = Engine;
+        var a2vTensor = audioLen == 0 || visualLen == 0
+            ? new Tensor<T>(new[] { audioLen, visualLen })
+            : engine.TensorOuter(Tensor<T>.FromVector(audioFeatures), Tensor<T>.FromVector(visualFeatures));
+        var v2aTensor = audioLen == 0 || visualLen == 0
+            ? new Tensor<T>(new[] { visualLen, audioLen })
+            : engine.TensorTranspose(a2vTensor).Clone();
 
         return (SoftmaxTensor(a2vTensor, axis: 1), SoftmaxTensor(v2aTensor, axis: 1));
     }
@@ -1200,10 +1177,9 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
 
         int audioLength = Math.Max(1, endSample - startSample);
         var segmentAudioVector = new Vector<T>(audioLength);
-        for (int i = 0; i < audioLength && (startSample + i) < audioData.Length; i++)
-        {
-            segmentAudioVector[i] = audioData[startSample + i];
-        }
+        int available = Math.Max(0, Math.Min(audioLength, audioData.Length - startSample));
+        if (available > 0)
+            audioData.AsSpan().Slice(startSample, available).CopyTo(segmentAudioVector.AsWritableSpan());
 
         // Extract frame segment
         int startFrame = Math.Max(0, (int)(startTime * frameRate));
@@ -1228,15 +1204,9 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
         // Concatenate features
         int totalLength = audioFeatures.Length + visualFeatures.Length;
         var fused = new Vector<T>(totalLength);
-
-        for (int i = 0; i < audioFeatures.Length; i++)
-        {
-            fused[i] = audioFeatures[i];
-        }
-        for (int i = 0; i < visualFeatures.Length; i++)
-        {
-            fused[audioFeatures.Length + i] = visualFeatures[i];
-        }
+        var fusedSpan = fused.AsWritableSpan();
+        audioFeatures.AsSpan().CopyTo(fusedSpan);
+        visualFeatures.AsSpan().CopyTo(fusedSpan.Slice(audioFeatures.Length));
 
         // Apply cross-modal attention
         var fusedTensor = Tensor<T>.FromVector(fused);
@@ -1292,11 +1262,7 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
 
     private T ComputeEnergy(Vector<T> signal)
     {
-        T sum = _numOps.Zero;
-        for (int i = 0; i < signal.Length; i++)
-        {
-            sum = _numOps.Add(sum, _numOps.Multiply(signal[i], signal[i]));
-        }
+        T sum = signal.Length == 0 ? _numOps.Zero : Engine.DotProduct(signal, signal);
         return _numOps.Sqrt(_numOps.Divide(sum, _numOps.FromDouble(Math.Max(1, signal.Length))));
     }
 
@@ -1307,19 +1273,23 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
             return _numOps.Zero;
         }
 
-        T totalDiff = _numOps.Zero;
+        // Sum of |frame_i - frame_(i-1)| over each pair's common prefix
+        var engine = Engine;
+        var pairSums = new List<T>(frames.Count - 1);
         for (int i = 1; i < frames.Count; i++)
         {
             var curr = frames[i].ToVector();
             var prev = frames[i - 1].ToVector();
 
             int minLen = Math.Min(curr.Length, prev.Length);
-            for (int j = 0; j < minLen; j++)
-            {
-                var diff = _numOps.Abs(_numOps.Subtract(curr[j], prev[j]));
-                totalDiff = _numOps.Add(totalDiff, diff);
-            }
+            if (minLen == 0) continue;
+            pairSums.Add(engine.TensorSum(engine.TensorAbs(engine.TensorSubtract(
+                Tensor<T>.FromVector(curr.GetSubVector(0, minLen)), Tensor<T>.FromVector(prev.GetSubVector(0, minLen))))));
         }
+
+        T totalDiff = pairSums.Count == 0
+            ? _numOps.Zero
+            : engine.TensorSum(new Tensor<T>(pairSums.ToArray(), new[] { pairSums.Count }));
 
         return _numOps.Divide(totalDiff, _numOps.FromDouble((double)frames.Count * frames[0].ToVector().Length));
     }
@@ -1330,12 +1300,16 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
         var result = new Vector<T>(_embeddingDimension);
         var words = description.ToLowerInvariant().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
 
-        foreach (var word in words)
+        // Use deterministic FNV-1a hash instead of string.GetHashCode()
+        // which is not deterministic across .NET versions or processes; each word adds one to its bucket
+        var buckets = words.Select(word => Math.Abs(GetDeterministicHashCode(word)) % _embeddingDimension).ToArray();
+        if (buckets.Length > 0)
         {
-            // Use deterministic FNV-1a hash instead of string.GetHashCode()
-            // which is not deterministic across .NET versions or processes
-            int hash = Math.Abs(GetDeterministicHashCode(word)) % _embeddingDimension;
-            result[hash] = _numOps.Add(result[hash], _numOps.One);
+            var ones = new Tensor<T>(new[] { buckets.Length });
+            ones.Fill(_numOps.One);
+            Engine.TensorScatterAdd(
+                new Tensor<T>(new[] { _embeddingDimension }), new Tensor<int>(buckets, new[] { buckets.Length }), ones, 0)
+                .CopyTo(result.AsWritableSpan());
         }
 
         // L2 normalize
@@ -1365,39 +1339,25 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
 
     private T ComputeAverageScore(List<T> scores, int start, int end)
     {
-        T sum = _numOps.Zero;
-        for (int i = start; i < end; i++)
-        {
-            sum = _numOps.Add(sum, scores[i]);
-        }
+        T sum = end > start
+            ? Engine.TensorSum(new Tensor<T>(scores.Skip(start).Take(end - start).ToArray(), new[] { end - start }))
+            : _numOps.Zero;
         return _numOps.Divide(sum, _numOps.FromDouble(end - start));
     }
 
     private Vector<T> Softmax(Vector<T> logits)
     {
-        var result = new Vector<T>(logits.Length);
-        T maxVal = logits[0];
-        for (int i = 1; i < logits.Length; i++)
-        {
-            if (_numOps.Compare(logits[i], maxVal) > 0)
-            {
-                maxVal = logits[i];
-            }
-        }
+        // The max as the scan found it: the first strictly larger value under Compare, which orders NaN
+        // below every number (so a NaN start is replaced and NaN is never taken).
+        var engine = Engine;
+        var values = Tensor<T>.FromVector(logits);
+        var floor = new Tensor<T>(new[] { logits.Length });
+        floor.Fill(_numOps.FromDouble(double.NegativeInfinity));
+        int maxIndex = engine.TensorArgMax(engine.TensorWhere(engine.TensorIsNan(values), floor, values), 0)[0];
+        T maxVal = logits[maxIndex];
 
-        T sum = _numOps.Zero;
-        for (int i = 0; i < logits.Length; i++)
-        {
-            result[i] = _numOps.Exp(_numOps.Subtract(logits[i], maxVal));
-            sum = _numOps.Add(sum, result[i]);
-        }
-
-        for (int i = 0; i < logits.Length; i++)
-        {
-            result[i] = _numOps.Divide(result[i], sum);
-        }
-
-        return result;
+        var exps = engine.TensorExp(engine.TensorSubtractScalar(values, maxVal));
+        return engine.TensorDivideScalar(exps, engine.TensorSum(exps)).ToVector();
     }
 
     private Tensor<T> SoftmaxTensor(Tensor<T> tensor, int axis)
@@ -1477,22 +1437,7 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
             return new Vector<T>(_embeddingDimension * 2);
         }
 
-        var result = new Vector<T>(vectors[0].Length);
-        foreach (var vec in vectors)
-        {
-            for (int i = 0; i < result.Length && i < vec.Length; i++)
-            {
-                result[i] = _numOps.Add(result[i], vec[i]);
-            }
-        }
-
-        var divisor = _numOps.FromDouble(vectors.Count);
-        for (int i = 0; i < result.Length; i++)
-        {
-            result[i] = _numOps.Divide(result[i], divisor);
-        }
-
-        return result;
+        return MeanOfPrefixes(vectors);
     }
 
 

@@ -502,13 +502,8 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
         // Use the minimum length to avoid out-of-range access when embeddings have different dimensions
         int length = Math.Min(textEmbedding.Length, imageEmbedding.Length);
 
-        T similarity = NumOps.Zero;
-        for (int i = 0; i < length; i++)
-        {
-            similarity = NumOps.Add(similarity,
-                NumOps.Multiply(textEmbedding[i], imageEmbedding[i]));
-        }
-        return similarity;
+        if (length == 0) return NumOps.Zero;
+        return Engine.DotProduct(textEmbedding.GetSubVector(0, length), imageEmbedding.GetSubVector(0, length));
     }
 
     /// <inheritdoc/>
@@ -673,11 +668,8 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
             int seqLen = output.Shape[0];
             int hiddenDim = output.Shape[1];
 
-            var lastHidden = Tensor<T>.CreateDefault([1, hiddenDim], NumOps.Zero);
-            for (int i = 0; i < hiddenDim; i++)
-            {
-                lastHidden[0, i] = output[seqLen - 1, i];
-            }
+            // A fresh [1, hidden] copy of the last position
+            var lastHidden = new Tensor<T>(output.ToArray().AsSpan((seqLen - 1) * hiddenDim, hiddenDim).ToArray(), [1, hiddenDim]);
 
             var bbox = _groundingHead.Forward(lastHidden);
 
@@ -819,21 +811,9 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
         if (channels != 3 || height != _imageSize || width != _imageSize)
             throw new ArgumentException($"ONNX image must have shape [3,{_imageSize},{_imageSize}] with an optional batch of one.", nameof(image));
 
-        var onnxTensor = new OnnxTensors.DenseTensor<float>([1, channels, height, width]);
-
-        for (int c = 0; c < channels; c++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    T value = is3D ? image[c, h, w] : image[0, c, h, w];
-                    onnxTensor[0, c, h, w] = (float)NumOps.ToDouble(value);
-                }
-            }
-        }
-
-        return onnxTensor;
+        // The [C, H, W] pixels (or the single batch image's) in row-major order, as floats
+        float[] pixels = image.Contiguous().Cast<float>().ToArray();
+        return new OnnxTensors.DenseTensor<float>(pixels, [1, channels, height, width]);
     }
 
     private Tensor<T> EmbedTextTokens(IList<int> tokenIds)
@@ -841,11 +821,7 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
         if (_textTokenEmbedding is null)
             throw new InvalidOperationException("Text embedding layer not initialized.");
 
-        var inputTensor = Tensor<T>.CreateDefault([tokenIds.Count], NumOps.Zero);
-        for (int i = 0; i < tokenIds.Count; i++)
-        {
-            inputTensor[i] = NumOps.FromDouble(tokenIds[i]);
-        }
+        var inputTensor = new Tensor<int>(tokenIds.ToArray(), [tokenIds.Count]).Cast<T>();
 
         var embedded = _textTokenEmbedding.Forward(inputTensor);
 
@@ -884,14 +860,8 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
         int seqLen = input.Shape[0];
         int hiddenDim = input.Shape[1];
 
-        var onnxTensor = new OnnxTensors.DenseTensor<float>([1, seqLen, hiddenDim]);
-        for (int i = 0; i < seqLen; i++)
-        {
-            for (int j = 0; j < hiddenDim; j++)
-            {
-                onnxTensor[0, i, j] = (float)NumOps.ToDouble(input[i, j]);
-            }
-        }
+        var onnxTensor = new OnnxTensors.DenseTensor<float>(
+            input.Contiguous().Cast<float>().ToArray().AsSpan(0, seqLen * hiddenDim).ToArray(), [1, seqLen, hiddenDim]);
 
         var inputs = new List<NamedOnnxValue>
         {
@@ -902,16 +872,10 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
         var outputTensor = results.First().AsTensor<float>();
 
         var outputShape = outputTensor.Dimensions.ToArray();
-        var output = Tensor<T>.CreateDefault([outputShape[1], outputShape[2]], NumOps.Zero);
-        for (int i = 0; i < outputShape[1]; i++)
-        {
-            for (int j = 0; j < outputShape[2]; j++)
-            {
-                output[i, j] = NumOps.FromDouble(outputTensor[0, i, j]);
-            }
-        }
-
-        return output;
+        // The first batch's [seq, hidden] block, converted from the model's floats
+        int outputCount = outputShape[1] * outputShape[2];
+        return new Tensor<float>(outputTensor.ToDenseTensor().Buffer.Span.Slice(0, outputCount).ToArray(), [outputShape[1], outputShape[2]])
+            .Cast<T>();
     }
 
     private Tensor<T> ConcatenateSequences(Tensor<T> seq1, Tensor<T> seq2)
@@ -931,27 +895,22 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
         int seqLen = output.Shape[0];
         int hiddenDim = output.Shape[1];
 
-        var lastHidden = new Vector<T>(hiddenDim);
-        for (int i = 0; i < hiddenDim; i++)
-        {
-            lastHidden[i] = output[seqLen - 1, i];
-        }
-
         if (_outputProjection is not null)
         {
-            var inputTensor = Tensor<T>.CreateDefault([1, hiddenDim], NumOps.Zero);
-            for (int i = 0; i < hiddenDim; i++)
-            {
-                inputTensor[0, i] = lastHidden[i];
-            }
+            // A fresh [1, hidden] copy of the last position
+            var inputTensor = new Tensor<T>(output.ToArray().AsSpan((seqLen - 1) * hiddenDim, hiddenDim).ToArray(), [1, hiddenDim]);
 
             var logitsTensor = _outputProjection.Forward(inputTensor);
 
             var logits = new Vector<T>(_vocabularySize);
-            for (int i = 0; i < _vocabularySize; i++)
+            if (_vocabularySize > 0)
             {
-                var logit = logitsTensor[0, i];
-                logits[i] = NumOps.Divide(logit, NumOps.FromDouble(temperature));
+                using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+                {
+                    Engine.TensorDivideScalar(
+                        Engine.TensorSlice(logitsTensor, [0, 0], [1, _vocabularySize]), NumOps.FromDouble(temperature))
+                        .CopyTo(logits.AsWritableSpan());
+                }
             }
             return logits;
         }
@@ -1041,17 +1000,10 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
         int cropWidth = x2 - x1;
         int cropHeight = y2 - y1;
 
-        var cropped = Tensor<T>.CreateDefault([channels, cropHeight, cropWidth], NumOps.Zero);
-
-        for (int c = 0; c < channels; c++)
+        Tensor<T> cropped;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            for (int y = 0; y < cropHeight; y++)
-            {
-                for (int x = 0; x < cropWidth; x++)
-                {
-                    cropped[c, y, x] = image[c, y1 + y, x1 + x];
-                }
-            }
+            cropped = Engine.TensorSlice(image, [0, y1, x1], [channels, cropHeight, cropWidth]);
         }
 
         return ResizeImage(cropped, _imageSize, _imageSize);
@@ -1063,25 +1015,23 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
         int srcHeight = image.Shape[1];
         int srcWidth = image.Shape[2];
 
-        var result = Tensor<T>.CreateDefault([channels, targetHeight, targetWidth], NumOps.Zero);
+        if (channels == 0 || targetHeight == 0 || targetWidth == 0)
+            return Tensor<T>.CreateDefault([channels, targetHeight, targetWidth], NumOps.Zero);
 
         double scaleY = (double)srcHeight / targetHeight;
         double scaleX = (double)srcWidth / targetWidth;
 
-        for (int c = 0; c < channels; c++)
-        {
-            for (int y = 0; y < targetHeight; y++)
-            {
-                for (int x = 0; x < targetWidth; x++)
-                {
-                    int srcY = Math.Min((int)(y * scaleY), srcHeight - 1);
-                    int srcX = Math.Min((int)(x * scaleX), srcWidth - 1);
-                    result[c, y, x] = image[c, srcY, srcX];
-                }
-            }
-        }
+        // Nearest-neighbour: output row y reads source row srcY[y], output column x reads srcX[x]
+        var srcY = new int[targetHeight];
+        for (int y = 0; y < targetHeight; y++) srcY[y] = Math.Min((int)(y * scaleY), srcHeight - 1);
+        var srcX = new int[targetWidth];
+        for (int x = 0; x < targetWidth; x++) srcX[x] = Math.Min((int)(x * scaleX), srcWidth - 1);
 
-        return result;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            var rows = Engine.TensorGather(image, new Tensor<int>(srcY, [targetHeight]), 1);
+            return Engine.TensorGather(rows, new Tensor<int>(srcX, [targetWidth]), 2);
+        }
     }
 
     private Tensor<T> PrependClsToken(Tensor<T> sequence, Tensor<T> clsToken)
@@ -1135,15 +1085,13 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
 
         var result = new Vector<T>(hiddenDim);
 
-        for (int j = 0; j < hiddenDim; j++)
-        {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < seqLen; i++)
-            {
-                sum = NumOps.Add(sum, tensor[i, j]);
-            }
-            result[j] = NumOps.Divide(sum, NumOps.FromDouble(seqLen));
-        }
+        if (hiddenDim == 0) return result;
+
+        // Column sums over the sequence, divided by its length.
+        var sums = seqLen > 0
+            ? Engine.ReduceSum(Engine.TensorSlice(tensor, [0, 0], [seqLen, hiddenDim]), new[] { 0 }, keepDims: false)
+            : new Tensor<T>([hiddenDim]);
+        Engine.TensorDivideScalar(sums, NumOps.FromDouble(seqLen)).CopyTo(result.AsWritableSpan());
 
         return result;
     }
@@ -1155,10 +1103,18 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
 
     private List<T> Softmax(List<T> values)
     {
-        double maxVal = values.Max(v => NumOps.ToDouble(v));
-        var expValues = values.Select(v => Math.Exp(NumOps.ToDouble(v) - maxVal)).ToList();
-        double sumExp = expValues.Sum();
-        return expValues.Select(e => NumOps.FromDouble(e / sumExp)).ToList();
+        if (values.Count == 0)
+            throw new InvalidOperationException("Sequence contains no elements");
+
+        // Keep the maximum, exponentials and reduction wide, including for Half and decimal.
+        var logits = new Tensor<T>(values.ToArray(), [values.Count]).Cast<double>();
+        var isNaN = Engine.TensorIsNan(logits);
+        var floor = new Tensor<double>([values.Count]);
+        floor.Fill(double.NegativeInfinity);
+        var numbers = Engine.TensorWhere(isNaN, floor, logits);
+        double max = numbers.GetFlat(Engine.TensorArgMax(numbers, 0)[0]);
+        var exps = Engine.TensorExp(Engine.TensorSubtractScalar(logits, max));
+        return Engine.TensorDivideScalar(exps, Engine.TensorSum(exps)).Cast<T>().ToArray().ToList();
     }
 
     #endregion
@@ -1342,9 +1298,9 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
 
         int length = tensor.Length;
         writer.Write(length);
-        for (int i = 0; i < length; i++)
+        foreach (double value in tensor.Contiguous().Cast<double>().ToArray())
         {
-            writer.Write(NumOps.ToDouble(tensor[i]));
+            writer.Write(value);
         }
     }
 
@@ -1394,12 +1350,9 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
         writer.Write(true);
         writer.Write(matrix.Rows);
         writer.Write(matrix.Columns);
-        for (int i = 0; i < matrix.Rows; i++)
+        foreach (double value in Tensor<T>.FromMatrix(matrix).Cast<double>().ToArray())
         {
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                writer.Write(NumOps.ToDouble(matrix[i, j]));
-            }
+            writer.Write(value);
         }
     }
 
@@ -1509,12 +1462,16 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
         }
 
         var matrix = new Matrix<T>(embeddings.Count, embeddings[0].Length);
+        int width = embeddings[0].Length;
+        var destination = matrix.AsWritableSpan();
         for (int i = 0; i < embeddings.Count; i++)
         {
-            for (int j = 0; j < embeddings[i].Length; j++)
-            {
-                matrix[i, j] = embeddings[i][j];
-            }
+            // Row i holds embedding i; a shorter embedding leaves the rest of its row zero.
+            var source = embeddings[i].AsSpan();
+            if (source.Length > width)
+                throw new ArgumentOutOfRangeException(nameof(embeddings),
+                    $"Embedding {i} has {source.Length} values but the batch width is {width}.");
+            source.CopyTo(destination.Slice(i * width, width));
         }
         return matrix;
     }
@@ -1538,12 +1495,16 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
         }
 
         var matrix = new Matrix<T>(embeddings.Count, embeddings[0].Length);
+        int width = embeddings[0].Length;
+        var destination = matrix.AsWritableSpan();
         for (int i = 0; i < embeddings.Count; i++)
         {
-            for (int j = 0; j < embeddings[i].Length; j++)
-            {
-                matrix[i, j] = embeddings[i][j];
-            }
+            // Row i holds embedding i; a shorter embedding leaves the rest of its row zero.
+            var source = embeddings[i].AsSpan();
+            if (source.Length > width)
+                throw new ArgumentOutOfRangeException(nameof(embeddings),
+                    $"Embedding {i} has {source.Length} values but the batch width is {width}.");
+            source.CopyTo(destination.Slice(i * width, width));
         }
         return matrix;
     }

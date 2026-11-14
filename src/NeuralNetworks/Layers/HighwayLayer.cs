@@ -423,9 +423,7 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ISh
         InitializeLayerBiases(_transformBias);
 
         // Gate bias initialized to -1.0 (not zero) to allow information flow initially
-        var gateBiasSpan = _gateBias.AsWritableSpan();
-        for (int i = 0; i < gateBiasSpan.Length; i++)
-            gateBiasSpan[i] = NumOps.FromDouble(-1.0);
+        _gateBias.Fill(NumOps.FromDouble(-1.0));
     }
 
     /// <summary>

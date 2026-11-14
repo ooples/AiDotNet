@@ -199,7 +199,7 @@ public partial class BiaffineSpanScorerLayer<T> : LayerBase<T>, IShapeContract
         // (juntaoy/biaffine-ner, util.py: bilinear_map is created with tf.zeros_initializer();
         // only the boundary FFNNs get a random init there). Every span's score therefore begins as
         // the additive term plus bias, and the interaction is learned from there.
-        for (int i = 0; i < _bilinear.Length; i++) _bilinear[i] = NumOps.Zero;
+        _bilinear.Fill(NumOps.Zero);
         InitializeParameter(_additive, 2 * spanDim);
 
         // Register so the tape and ParameterBuffer see these tensors. Omitting this is silent:

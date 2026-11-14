@@ -264,10 +264,7 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         halfTensor.Fill(NumOps.FromDouble(0.5));
         var shiftedAttn = Engine.TensorSubtract(randomAttn, halfTensor);
         var scaledAttn = Engine.TensorMultiplyScalar(shiftedAttn, attentionScale);
-        for (int i = 0; i < _attentionWeights.Length; i++)
-        {
-            _attentionWeights[i] = scaledAttn.GetFlat(i);
-        }
+        scaledAttn.CopyTo(_attentionWeights.AsWritableSpan());
 
         // Initialize bias to zero
         _bias.Fill(NumOps.Zero);
@@ -392,6 +389,7 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
 
             output = TensorAllocator.Rent<T>([batchSize, numNodes, _combinedOutputFeatures]);
             output.Fill(NumOps.Zero);
+            double alpha = NumOps.ToDouble(_alpha);
 
             for (int b = 0; b < batchSize; b++)
             {
@@ -406,7 +404,7 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
                     _weights,
                     attnWeightsSource,
                     attnWeightsTarget,
-                    NumOps.ToDouble(_alpha),
+                    alpha,
                     concatenate: _concatenateHeads,
                     out var batchAttnCoeffs);
 
@@ -579,15 +577,13 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
 
     private Tensor<T> ExtractHeadWeight(int h)
     {
-        var headWeight = new Tensor<T>([_inputFeatures, _outputFeatures]);
-        for (int i = 0; i < _inputFeatures; i++)
+        // A plain copy of head h's [inputFeatures, outputFeatures] block.
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            for (int j = 0; j < _outputFeatures; j++)
-            {
-                headWeight[i, j] = _weights[h, i, j];
-            }
+            return Engine.Reshape(
+                Engine.TensorSlice(_weights, [h, 0, 0], [1, _inputFeatures, _outputFeatures]),
+                [_inputFeatures, _outputFeatures]).Clone();
         }
-        return headWeight;
     }
 
     /// <summary>
@@ -620,17 +616,18 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
     /// </summary>
     private Tensor<T> BuildAttentionMask(Tensor<T> adjacency, bool adjacency2D, int b, int numNodes, T negInf)
     {
-        var mask = new Tensor<T>([numNodes, numNodes]);
-        T zero = NumOps.Zero;
-        for (int i = 0; i < numNodes; i++)
+        if (numNodes == 0) return new Tensor<T>([0, 0]);
+
+        // negInf where the adjacency entry equals zero (NaN is not zero), else 0. Constant data, off the tape.
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            for (int j = 0; j < numNodes; j++)
-            {
-                T a = adjacency2D ? adjacency[i, j] : adjacency[b, i, j];
-                mask[i, j] = NumOps.Equals(a, zero) ? negInf : zero;
-            }
+            var graph = adjacency2D
+                ? Engine.TensorSlice(adjacency, [0, 0], [numNodes, numNodes])
+                : Engine.Reshape(Engine.TensorSlice(adjacency, [b, 0, 0], [1, numNodes, numNodes]), [numNodes, numNodes]);
+            var blocked = new Tensor<T>([numNodes, numNodes]);
+            blocked.Fill(negInf);
+            return Engine.TensorWhere(Engine.TensorEquals(graph, NumOps.Zero), blocked, new Tensor<T>([numNodes, numNodes]));
         }
-        return mask;
     }
 
     /// <summary>

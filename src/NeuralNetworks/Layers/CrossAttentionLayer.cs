@@ -695,21 +695,16 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>, IShapeContract
 
     private void UpdateWeight(Tensor<T> weight, Tensor<T> gradient, T learningRate)
     {
-        var wSpan = weight.AsWritableSpan();
-        var gSpan = gradient.AsSpan();
-        for (int i = 0; i < wSpan.Length; i++)
-        {
-            wSpan[i] = NumOps.Subtract(wSpan[i], NumOps.Multiply(gSpan[i], learningRate));
-        }
+        // w -= g * lr, written back into the same tensor so its handle is unchanged.
+        var updated = Engine.TensorSubtract(
+            weight, Engine.TensorMultiplyScalar(Engine.Reshape(gradient, weight._shape), learningRate));
+        updated.CopyTo(weight.AsWritableSpan());
     }
 
     private void CopyToTensor(Vector<T> source, int offset, Tensor<T> dest)
     {
         var span = dest.AsWritableSpan();
-        for (int i = 0; i < span.Length; i++)
-        {
-            span[i] = source[offset + i];
-        }
+        source.GetSubVector(offset, span.Length).AsSpan().CopyTo(span);
     }
 
     /// <inheritdoc />

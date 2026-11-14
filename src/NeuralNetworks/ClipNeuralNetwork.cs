@@ -182,20 +182,11 @@ public partial class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMulti
         if (input == null)
             throw new ArgumentNullException(nameof(input));
 
-        var imageData = new double[input.Length];
-        for (int i = 0; i < input.Length; i++)
-        {
-            imageData[i] = NumOps.ToDouble(input.Data.Span[i]);
-        }
-
-        var embedding = EncodeImage(imageData);
-        var result = new AiDotNet.Tensors.LinearAlgebra.Tensor<T>(new[] { 1, _embeddingDimension });
-        for (int i = 0; i < _embeddingDimension; i++)
-        {
-            result[0, i] = embedding[i];
-        }
-
-        return result;
+        // The ONNX image encoder takes float pixels, so convert the tensor once in bulk.
+        var embedding = EncodeImagePixels(input.Contiguous().Cast<float>().ToVector().ToArray());
+        return new AiDotNet.Tensors.LinearAlgebra.Tensor<T>(
+            new[] { 1, _embeddingDimension },
+            embedding.GetSubVector(0, _embeddingDimension));
     }
 
     /// <inheritdoc />
@@ -256,8 +247,7 @@ public partial class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMulti
         var result = new Matrix<T>(textList.Count, _embeddingDimension);
         for (int i = 0; i < textList.Count; i++)
         {
-            var emb = EncodeText(textList[i]);
-            for (int j = 0; j < _embeddingDimension; j++) result[i, j] = emb[j];
+            result.SetRow(i, EncodeText(textList[i]).GetSubVector(0, _embeddingDimension));
         }
         return result;
     }
@@ -275,6 +265,14 @@ public partial class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMulti
         if (imageData == null || imageData.Length == 0)
             throw new ArgumentException("Image data cannot be null or empty", nameof(imageData));
 
+        return EncodeImagePixels(imageData.Select(d => (float)d).ToArray());
+    }
+
+    private Vector<T> EncodeImagePixels(float[] imageData)
+    {
+        if (imageData.Length == 0)
+            throw new ArgumentException("Image data cannot be null or empty", nameof(imageData));
+
         int expectedSize = 3 * _imageSize * _imageSize;
         if (imageData.Length != expectedSize)
             throw new ArgumentException($"Image data has {imageData.Length} elements but expected {expectedSize}", nameof(imageData));
@@ -290,15 +288,13 @@ public partial class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMulti
         var imageList = imageDataBatch.ToList();
         if (imageList.Count == 0) return new Matrix<T>(0, _embeddingDimension);
 
-        var embeddings = new T[imageList.Count, _embeddingDimension];
+        var embeddings = new Matrix<T>(imageList.Count, _embeddingDimension);
         for (int i = 0; i < imageList.Count; i++)
         {
-            var embedding = EncodeImage(imageList[i]);
-            for (int j = 0; j < _embeddingDimension; j++)
-                embeddings[i, j] = embedding[j];
+            embeddings.SetRow(i, EncodeImage(imageList[i]).GetSubVector(0, _embeddingDimension));
         }
 
-        return new Matrix<T>(embeddings);
+        return embeddings;
     }
 
     /// <inheritdoc />
@@ -327,17 +323,13 @@ public partial class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMulti
         var imageEmbedding = EncodeImage(imageData);
         var textEmbeddings = labelList.Select(l => EncodeText($"a photo of a {l}")).ToList();
 
-        var similarities = new double[labelList.Count];
-        for (int i = 0; i < labelList.Count; i++)
-        {
-            similarities[i] = NumOps.ToDouble(ComputeSimilarity(imageEmbedding, textEmbeddings[i]));
-        }
+        var similarities = new Vector<T>(textEmbeddings.Select(t => ComputeSimilarity(imageEmbedding, t)));
 
-        var probabilities = Softmax(similarities);
+        var probabilities = ScaledSoftmax(similarities).ToArray();
         var result = new Dictionary<string, T>();
-        for (int i = 0; i < labelList.Count; i++)
+        foreach (var (label, probability) in labelList.Zip(probabilities, (l, p) => (l, p)))
         {
-            result[labelList[i]] = NumOps.FromDouble(probabilities[i]);
+            result[label] = probability;
         }
 
         return result;
@@ -359,9 +351,8 @@ public partial class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMulti
         return OnnxEmbeddingContract.Read<T>(output, _embeddingDimension, EmbeddingLayouts, OnnxModelRole.TextEncoder);
     }
 
-    private Vector<T> GenerateImageEmbedding(double[] imageData)
+    private Vector<T> GenerateImageEmbedding(float[] floatData)
     {
-        var floatData = imageData.Select(d => (float)d).ToArray();
         var shape = new[] { 1, 3, _imageSize, _imageSize };
         var inputs = new List<NamedOnnxValue>
         {
@@ -380,13 +371,14 @@ public partial class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMulti
         return result;
     }
 
-    private static double[] Softmax(double[] scores)
+    private Vector<T> ScaledSoftmax(Vector<T> scores)
     {
-        double temperature = 100.0;
-        double max = scores.Max();
-        var expScores = scores.Select(s => Math.Exp((s - max) * temperature)).ToArray();
-        double sumExp = expScores.Sum();
-        return expScores.Select(e => e / sumExp).ToArray();
+        // CLIP's logit scale of 100: exp((s - max) * 100) / sum.
+        var scoreTensor = AiDotNet.Tensors.LinearAlgebra.Tensor<T>.FromVector(scores).Cast<double>();
+        double max = Engine.TensorMaxValue(scoreTensor);
+        var expScores = Engine.TensorExp(
+            Engine.TensorMultiplyScalar(Engine.TensorSubtractScalar(scoreTensor, max), 100.0));
+        return Engine.TensorDivideScalar(expScores, Engine.TensorSum(expScores)).Cast<T>().ToVector();
     }
 
     /// <inheritdoc />

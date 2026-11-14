@@ -741,29 +741,10 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
         if (_numKVHeads == _numHeads)
             return expandedGrad; // No aggregation needed (standard MHA)
 
-        var aggregated = TensorAllocator.Rent<T>(new[] { batchSize, _numKVHeads, seqLen, _headDimension });
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int kvh = 0; kvh < _numKVHeads; kvh++)
-            {
-                for (int g = 0; g < _headsPerGroup; g++)
-                {
-                    int qh = kvh * _headsPerGroup + g;
-                    for (int s = 0; s < seqLen; s++)
-                    {
-                        for (int d = 0; d < _headDimension; d++)
-                        {
-                            aggregated[new[] { b, kvh, s, d }] = NumOps.Add(
-                                aggregated[new[] { b, kvh, s, d }],
-                                expandedGrad[new[] { b, qh, s, d }]);
-                        }
-                    }
-                }
-            }
-        }
-
-        return aggregated;
+        // Query head qh = kvh * headsPerGroup + g feeds KV head kvh: sum each group's heads.
+        var grouped = Engine.Reshape(
+            expandedGrad, new[] { batchSize, _numKVHeads, _headsPerGroup, seqLen, _headDimension });
+        return Engine.ReduceSum(grouped, new[] { 2 }, false);
     }
 
     /// <inheritdoc />

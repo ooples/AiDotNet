@@ -107,13 +107,14 @@ public static class AiModelResultGraphExtensions
         T dot = numOps.Zero;
         T normA = numOps.Zero;
         T normB = numOps.Zero;
-        for (int d = 0; d < dim; d++)
+        if (dim > 0)
         {
-            var a = predictions[sourceNode, d];
-            var b = predictions[targetNode, d];
-            dot = numOps.Add(dot, numOps.Multiply(a, b));
-            normA = numOps.Add(normA, numOps.Multiply(a, a));
-            normB = numOps.Add(normB, numOps.Multiply(b, b));
+            var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+            var a = engine.TensorSlice(predictions, new[] { sourceNode, 0 }, new[] { 1, dim }).ToVector();
+            var b = engine.TensorSlice(predictions, new[] { targetNode, 0 }, new[] { 1, dim }).ToVector();
+            dot = engine.DotProduct(a, b);
+            normA = engine.DotProduct(a, a);
+            normB = engine.DotProduct(b, b);
         }
 
         switch (scorer)

@@ -668,15 +668,8 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
     /// </remarks>
     private void InitializeMemory()
     {
-        for (int i = 0; i < _memorySize; i++)
-        {
-            for (int j = 0; j < _memoryWordSize; j++)
-            {
-                _memory[i, j] = NumOps.Zero;
-            }
-
-            _usageFree[i] = NumOps.FromDouble(1.0);
-        }
+        _memory.AsWritableSpan().Slice(0, _memorySize * _memoryWordSize).Fill(NumOps.Zero);
+        _usageFree.AsWritableSpan().Slice(0, _memorySize).Fill(NumOps.FromDouble(1.0));
     }
 
     /// <summary>
@@ -1031,19 +1024,33 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
     /// </summary>
     private void PinElements(Tensor<T> t)
     {
-        for (int i = 0; i < t.Length; i++)
-            if (NumOps.IsNaN(t.GetFlat(i)))
-                throw new InvalidOperationException(
-                    $"Lazy tensor produced NaN at index {i} during pin (#1332 cluster 2).");
+        int i = FirstNaNIndex(new Tensor<T>(t.ToArray(), new[] { t.Length }));
+        if (i >= 0)
+            throw new InvalidOperationException(
+                $"Lazy tensor produced NaN at index {i} during pin (#1332 cluster 2).");
     }
 
     private void PinElements(Matrix<T> m)
     {
-        for (int i = 0; i < m.Rows; i++)
-            for (int j = 0; j < m.Columns; j++)
-                if (NumOps.IsNaN(m[i, j]))
-                    throw new InvalidOperationException(
-                        $"Lazy matrix produced NaN at [{i},{j}] during pin (#1332 cluster 2).");
+        int flat = FirstNaNIndex(new Tensor<T>(m.AsSpan().Slice(0, m.Rows * m.Columns).ToArray(), new[] { m.Rows * m.Columns }));
+        if (flat >= 0)
+            throw new InvalidOperationException(
+                $"Lazy matrix produced NaN at [{flat / m.Columns},{flat % m.Columns}] during pin (#1332 cluster 2).");
+    }
+
+    /// <summary>The first (row-major) index of a NaN in a 1-D tensor, or -1 when there is none.</summary>
+    private int FirstNaNIndex(Tensor<T> flat)
+    {
+        if (flat.Length == 0) return -1;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            var ones = new Tensor<T>(new[] { flat.Length });
+            ones.Fill(NumOps.One);
+            var isNaN = Engine.TensorWhere(Engine.TensorIsNan(flat), ones, new Tensor<T>(new[] { flat.Length }));
+            // ArgMax takes the first of the ties, so this is the first NaN when there is one
+            int first = Engine.TensorArgMax(isNaN, 0)[0];
+            return NumOps.IsNaN(flat.GetFlat(first)) ? first : -1;
+        }
     }
 
     private Tensor<T> ProcessInput(Tensor<T> input, bool isTraining)
@@ -1171,19 +1178,21 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
 
         // ---- write addressing: usage → allocation (detached bookkeeping, Graves §2.1.1–2.1.2) ----
         // Retention ψ_t = ∏_i (1 − f^i_t w^{r,i}_{t-1});  u_t = (u_{t-1} + w^w_{t-1} − u_{t-1}∘w^w_{t-1}) ∘ ψ_t.
-        var usage = new T[n];
-        for (int k = 0; k < n; k++)
+        T[] usage;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            T retention = NumOps.One;
+            var onesN = new Tensor<T>(new[] { n });
+            onesN.Fill(NumOps.One);
+            var retention = onesN;
             for (int i = 0; i < r; i++)
             {
-                T wr = i < _readWeightings.Count ? _readWeightings[i][k] : NumOps.Zero;
-                retention = NumOps.Multiply(retention, NumOps.Subtract(NumOps.One, NumOps.Multiply(freeGateVals[i], wr)));
+                var wr = i < _readWeightings.Count ? PrefixTensor(_readWeightings[i], n) : new Tensor<T>(new[] { n });
+                retention = Engine.TensorMultiply(retention, Engine.TensorSubtract(onesN, Engine.TensorMultiplyScalar(wr, freeGateVals[i])));
             }
-            T uPrev = NumOps.Subtract(NumOps.One, _usageFree[k]);                     // u_{t-1} = 1 − free
-            T ww = _writeWeighting[k];                                                // w^w_{t-1}
-            T u = NumOps.Add(uPrev, NumOps.Subtract(ww, NumOps.Multiply(uPrev, ww)));
-            usage[k] = NumOps.Multiply(u, retention);
+            var uPrev = Engine.TensorSubtract(onesN, PrefixTensor(_usageFree, n));      // u_{t-1} = 1 − free
+            var ww = PrefixTensor(_writeWeighting, n);                                  // w^w_{t-1}
+            var u = Engine.TensorAdd(uPrev, Engine.TensorSubtract(ww, Engine.TensorMultiply(uPrev, ww)));
+            usage = Engine.TensorMultiply(u, retention).ToArray();
         }
         Tensor<T> allocation = ColumnToLeaf(ComputeAllocation(usage));                // a_t [N,1] detached
 
@@ -1204,21 +1213,30 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
         // ---- precedence + temporal links (detached bookkeeping, Graves §2.2) ----
         var wwNew = writeWeight.ToArray();                                            // w^w_t values [N]
         var precPrev = _precedenceWeighting;
-        T wwSum = NumOps.Zero;
-        for (int k = 0; k < n; k++) wwSum = NumOps.Add(wwSum, wwNew[k]);
-        T precScale = NumOps.Subtract(NumOps.One, wwSum);
         var precNew = new Vector<T>(n);
-        for (int k = 0; k < n; k++) precNew[k] = NumOps.Add(NumOps.Multiply(precScale, precPrev[k]), wwNew[k]);
         var linkNew = new Matrix<T>(n, n);
-        for (int i = 0; i < n; i++)
+        if (n > 0)
         {
-            for (int j = 0; j < n; j++)
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             {
-                if (i == j) { linkNew[i, j] = NumOps.Zero; continue; }
-                T scale = NumOps.Subtract(NumOps.One, NumOps.Add(wwNew[i], wwNew[j]));
-                linkNew[i, j] = NumOps.Add(
-                    NumOps.Multiply(scale, _temporalLinkMatrix[i, j]),
-                    NumOps.Multiply(wwNew[i], precPrev[j]));
+                var wwT = new Tensor<T>(wwNew, new[] { n });
+                var precT = PrefixTensor(precPrev, n);
+                T precScale = NumOps.Subtract(NumOps.One, Engine.TensorSum(wwT));
+                Engine.TensorAdd(Engine.TensorMultiplyScalar(precT, precScale), wwT).CopyTo(precNew.AsWritableSpan());
+
+                // L_t[i,j] = (1 − (w_i + w_j)) L_{t-1}[i,j] + w_i p_{t-1}[j], with a zero diagonal
+                var pairSum = Engine.TensorAdd(
+                    Engine.TensorBroadcastTo(Engine.Reshape(wwT, new[] { n, 1 }), new[] { n, n }),
+                    Engine.TensorBroadcastTo(Engine.Reshape(wwT, new[] { 1, n }), new[] { n, n }));
+                var onesNN = new Tensor<T>(new[] { n, n });
+                onesNN.Fill(NumOps.One);
+                var linkPrev = new Tensor<T>(_temporalLinkMatrix.AsSpan().Slice(0, n * n).ToArray(), new[] { n, n });
+                var updated = Engine.TensorAdd(
+                    Engine.TensorMultiply(Engine.TensorSubtract(onesNN, pairSum), linkPrev),
+                    Engine.TensorOuter(wwT, precT));
+                var diagonal = new bool[n * n];
+                for (int i = 0; i < n; i++) diagonal[i * n + i] = true;
+                Engine.TensorWhere(diagonal, new Tensor<T>(new[] { n, n }), updated).CopyTo(linkNew.AsWritableSpan());
             }
         }
 
@@ -1250,9 +1268,8 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
             Tensor<T> readVec = Engine.TensorMatMul(Engine.Reshape(readWeight, [1, n]), memoryAfter);
             readVecs.Add(readVec);
 
-            var wrVals = readWeight.ToArray();
             var wrVec = new Vector<T>(n);
-            for (int k = 0; k < n; k++) wrVec[k] = wrVals[k];
+            readWeight.ToArray().AsSpan(0, n).CopyTo(wrVec.AsWritableSpan());
             readWeightVals.Add(wrVec);
         }
 
@@ -1272,27 +1289,41 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
     {
         int n = usage.Length;
         var order = Enumerable.Range(0, n).OrderBy(i => Convert.ToDouble(usage[i])).ToArray();
-        var allocation = new T[n];
-        T product = NumOps.One;
-        for (int j = 0; j < n; j++)
+        if (n == 0) return Array.Empty<T>();
+
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            int idx = order[j];
-            allocation[idx] = NumOps.Multiply(NumOps.Subtract(NumOps.One, usage[idx]), product);
-            product = NumOps.Multiply(product, usage[idx]);
+            // Sorted usage u[φ_j]; the running product ∏_{k<j} u[φ_k] is the cumulative product of
+            // [1, u[φ_0], ..., u[φ_(n-2)]], taken in sort order exactly as the scan multiplied it.
+            var sorted = Engine.TensorGather(new Tensor<T>(usage, new[] { n }), new Tensor<int>(order, new[] { n }), 0);
+            var one = new Tensor<T>(new[] { 1 });
+            one.Fill(NumOps.One);
+            var exclusive = n == 1
+                ? one
+                : Engine.TensorCumProd(Engine.TensorConcatenate(
+                    new[] { one, Engine.TensorSlice(sorted, new[] { 0 }, new[] { n - 1 }) }, 0), 0);
+            var onesN = new Tensor<T>(new[] { n });
+            onesN.Fill(NumOps.One);
+            var sortedAllocation = Engine.TensorMultiply(Engine.TensorSubtract(onesN, sorted), exclusive);
+
+            // Back to location order: location order[j] takes sorted entry j
+            var rank = new int[n];
+            for (int j = 0; j < n; j++) rank[order[j]] = j;
+            return Engine.TensorGather(sortedAllocation, new Tensor<int>(rank, new[] { n }), 0).ToArray();
         }
-        return allocation;
     }
 
     /// <summary>Builds a detached [N, W] tape leaf from the carried memory matrix <c>_memory</c>.</summary>
     private Tensor<T> MemoryToLeaf()
     {
         int n = _memorySize, w = _memoryWordSize;
-        var data = new T[n * w];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < w; j++)
-                data[i * w + j] = _memory[i, j];
-        return new Tensor<T>(data, [n, w]);
+        // A copy, so later writes to _memory never change the leaf
+        return new Tensor<T>(_memory.AsSpan().Slice(0, n * w).ToArray(), [n, w]);
     }
+
+    /// <summary>The first <paramref name="length"/> entries of a vector as a fresh 1-D tensor.</summary>
+    private static Tensor<T> PrefixTensor(Vector<T> vector, int length)
+        => new Tensor<T>(vector.AsSpan().Slice(0, length).ToArray(), new[] { length });
 
     /// <summary>Builds a detached [N, 1] column tape leaf from an [N] array.</summary>
     private Tensor<T> ColumnToLeaf(T[] column) => new Tensor<T>(column, [column.Length, 1]);
@@ -1303,18 +1334,9 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
     private T[] LinkMatVec(Matrix<T> link, Vector<T> v, bool transpose)
     {
         int n = link.Rows;
-        var result = new T[n];
-        for (int i = 0; i < n; i++)
-        {
-            T sum = NumOps.Zero;
-            for (int j = 0; j < n; j++)
-            {
-                T lij = transpose ? link[j, i] : link[i, j];
-                sum = NumOps.Add(sum, NumOps.Multiply(lij, v[j]));
-            }
-            result[i] = sum;
-        }
-        return result;
+        if (n == 0) return Array.Empty<T>();
+        var operand = v.Length == n ? v : new Vector<T>(v.AsSpan().Slice(0, n).ToArray());
+        return Engine.MatrixVectorMultiply(transpose ? Engine.MatrixTranspose(link) : link, operand).ToArray();
     }
 
     /// <summary>
@@ -1326,13 +1348,18 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
     {
         int n = _memorySize, w = _memoryWordSize;
         var md = memoryAfter.ToArray();
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < w; j++)
-                _memory[i, j] = md[i * w + j];
-        for (int k = 0; k < n; k++)
+        md.AsSpan(0, n * w).CopyTo(_memory.AsWritableSpan());
+        if (n > 0)
         {
-            _usageFree[k] = NumOps.Subtract(NumOps.One, usage[k]); // store free = 1 − usage
-            _writeWeighting[k] = writeWeighting[k];
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+            {
+                // store free = 1 − usage
+                var onesN = new Tensor<T>(new[] { n });
+                onesN.Fill(NumOps.One);
+                Engine.TensorSubtract(onesN, new Tensor<T>(usage.AsSpan(0, n).ToArray(), new[] { n }))
+                    .CopyTo(_usageFree.AsWritableSpan());
+            }
+            writeWeighting.AsSpan(0, n).CopyTo(_writeWeighting.AsWritableSpan());
         }
         _precedenceWeighting = precedence;
         _temporalLinkMatrix = link;
@@ -1370,7 +1397,7 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
         {
             var span = rv.ToArray();
             var v = new Vector<T>(_memoryWordSize);
-            for (int j = 0; j < _memoryWordSize && j < span.Length; j++) v[j] = span[j];
+            span.AsSpan(0, Math.Min(_memoryWordSize, span.Length)).CopyTo(v.AsWritableSpan());
             _readVectors.Add(v);
         }
     }
@@ -1404,11 +1431,9 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
             // Initialize read vectors with zeros if this is the first step
             for (int i = 0; i < _readHeads; i++)
             {
-                _readVectors.Add(new Vector<T>(_memoryWordSize));
-                for (int j = 0; j < _memoryWordSize; j++)
-                {
-                    _readVectors[i][j] = NumOps.Zero;
-                }
+                var zeroRead = new Vector<T>(_memoryWordSize);
+                zeroRead.AsWritableSpan().Fill(NumOps.Zero);
+                _readVectors.Add(zeroRead);
             }
         }
 
@@ -1429,13 +1454,10 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
         // axis. Issue #1332 cluster 2 / #2 in the work plan.
         int readVecLen = _readHeads * _memoryWordSize;
         Tensor<T> readVecTensor = new Tensor<T>([1, readVecLen]);
-        int offset = 0;
+        var readVecSpan = readVecTensor.AsWritableSpan();
         for (int i = 0; i < _readHeads; i++)
         {
-            for (int j = 0; j < _memoryWordSize; j++)
-            {
-                readVecTensor[0, offset++] = _readVectors[i][j];
-            }
+            _readVectors[i].AsSpan().Slice(0, _memoryWordSize).CopyTo(readVecSpan.Slice(i * _memoryWordSize, _memoryWordSize));
         }
 
         // [x_t ; r_{t-1} ; h_{t-1}] -- the recurrent controller reads its own previous hidden state,
@@ -1658,52 +1680,28 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
         _controllerCell = null;
 
         // Reset memory matrix
-        for (int i = 0; i < _memorySize; i++)
-        {
-            for (int j = 0; j < _memoryWordSize; j++)
-            {
-                _memory[i, j] = NumOps.Zero;
-            }
-        }
+        _memory.AsWritableSpan().Slice(0, _memorySize * _memoryWordSize).Fill(NumOps.Zero);
 
         // Reset usage free vector
-        for (int i = 0; i < _memorySize; i++)
-        {
-            _usageFree[i] = NumOps.FromDouble(1.0);
-        }
+        _usageFree.AsWritableSpan().Slice(0, _memorySize).Fill(NumOps.FromDouble(1.0));
 
         // Reset write weighting
-        for (int i = 0; i < _memorySize; i++)
-        {
-            _writeWeighting[i] = NumOps.Zero;
-        }
+        _writeWeighting.AsWritableSpan().Slice(0, _memorySize).Fill(NumOps.Zero);
 
         // Reset read weightings
         _readWeightings.Clear();
         for (int i = 0; i < _readHeads; i++)
         {
             var readWeighting = new Vector<T>(_memorySize);
-            for (int j = 0; j < _memorySize; j++)
-            {
-                readWeighting[j] = NumOps.Zero;
-            }
+            readWeighting.AsWritableSpan().Fill(NumOps.Zero);
             _readWeightings.Add(readWeighting);
         }
 
         // Reset precedence weighting
-        for (int i = 0; i < _memorySize; i++)
-        {
-            _precedenceWeighting[i] = NumOps.Zero;
-        }
+        _precedenceWeighting.AsWritableSpan().Slice(0, _memorySize).Fill(NumOps.Zero);
 
         // Reset temporal link matrix
-        for (int i = 0; i < _memorySize; i++)
-        {
-            for (int j = 0; j < _memorySize; j++)
-            {
-                _temporalLinkMatrix[i, j] = NumOps.Zero;
-            }
-        }
+        _temporalLinkMatrix.AsWritableSpan().Slice(0, _memorySize * _memorySize).Fill(NumOps.Zero);
 
         // Reset read vectors
         _readVectors.Clear();

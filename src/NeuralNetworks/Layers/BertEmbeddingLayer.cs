@@ -175,26 +175,36 @@ public partial class BertEmbeddingLayer<T> : LayerBase<T>, IShapeContract
         if (tokenTypeIds is not null)
             ValidateMatchingShape(inputIds, tokenTypeIds);
 
-        var positionIds = new Tensor<T>(inputIds._shape);
-        if (_paddingTokenId < 0)
+        Tensor<T> positionIds;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            for (int i = 0; i < positionIds.Length; i++)
-                positionIds.SetFlat(i, NumOps.FromDouble(i % sequenceLength));
-        }
-        else
-        {
-            // create_position_ids_from_input_ids: count the non-padding tokens of each row.
-            int rows = positionIds.Length / sequenceLength;
-            for (int r = 0; r < rows; r++)
+            // Position ids are constant data, built off the tape as the old fresh tensor was.
+            // An empty sequence has no rows; the padding-aware path divided by the length, as before.
+            int rows = _paddingTokenId < 0 && sequenceLength == 0 ? 0 : inputIds.Length / sequenceLength;
+            if (rows == 0)
             {
-                int counted = 0;
-                for (int s = 0; s < sequenceLength; s++)
-                {
-                    int flat = r * sequenceLength + s;
-                    bool padding = (int)Math.Round(NumOps.ToDouble(inputIds.GetFlat(flat))) == _paddingTokenId;
-                    if (!padding) counted++;
-                    positionIds.SetFlat(flat, NumOps.FromDouble(padding ? _paddingTokenId : _paddingTokenId + counted));
-                }
+                positionIds = new Tensor<T>(inputIds._shape);
+            }
+            else if (_paddingTokenId < 0)
+            {
+                // 0..sequenceLength-1 in every row.
+                var row = Engine.Reshape(Engine.TensorArange<T>(0, sequenceLength), new[] { 1, sequenceLength });
+                positionIds = Engine.Reshape(Engine.TensorTile(row, new[] { rows, 1 }), inputIds._shape);
+            }
+            else
+            {
+                // create_position_ids_from_input_ids: count the non-padding tokens of each row.
+                // A token is padding when its id rounds (half to even) to the padding id; NaN never does.
+                var ids = Engine.Reshape(inputIds, new[] { rows, sequenceLength }).Contiguous().Cast<double>();
+                double pad = _paddingTokenId;
+                var isPadding = Engine.TensorEquals(Engine.TensorRound(ids), pad);
+                var ones = new Tensor<double>(new[] { rows, sequenceLength });
+                ones.Fill(1.0);
+                var counted = Engine.TensorCumSum(Engine.TensorSubtract(ones, isPadding), 1);
+                var padIds = new Tensor<double>(new[] { rows, sequenceLength });
+                padIds.Fill(pad);
+                positionIds = Engine.Reshape(
+                    Engine.TensorWhere(isPadding, padIds, Engine.TensorAddScalar(counted, pad)), inputIds._shape).Cast<T>();
             }
         }
 

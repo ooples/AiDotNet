@@ -750,16 +750,7 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
         var qformerOutput = ExtractQFormerFeatures(image);
 
         // Average over query dimension
-        var embedding = new Vector<T>(_embeddingDimension);
-        for (int i = 0; i < _embeddingDimension; i++)
-        {
-            T sum = NumOps.Zero;
-            for (int q = 0; q < _numQueryTokens; q++)
-            {
-                sum = NumOps.Add(sum, qformerOutput[q, i]);
-            }
-            embedding[i] = NumOps.Divide(sum, NumOps.FromDouble(_numQueryTokens));
-        }
+        var embedding = QueryMean(qformerOutput, _numQueryTokens, _embeddingDimension, _embeddingDimension);
 
         return VectorHelper.Normalize(embedding);
     }
@@ -1019,16 +1010,8 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
         {
             // Get image embedding from Q-Former features
             var qformerOutput = featuresList[i];
-            var embedding = new Vector<T>(_embeddingDimension);
-            for (int j = 0; j < _embeddingDimension; j++)
-            {
-                T sum = NumOps.Zero;
-                for (int q = 0; q < Math.Min(_numQueryTokens, qformerOutput.Shape[0]); q++)
-                {
-                    sum = NumOps.Add(sum, qformerOutput[q, j]);
-                }
-                embedding[j] = NumOps.Divide(sum, NumOps.FromDouble(_numQueryTokens));
-            }
+            var embedding = QueryMean(
+                qformerOutput, Math.Min(_numQueryTokens, qformerOutput.Shape[0]), _embeddingDimension, _embeddingDimension);
             embedding = VectorHelper.Normalize(embedding);
 
             var score = ComputeSimilarity(textEmbedding, embedding);
@@ -1178,6 +1161,27 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
     }
 
     /// <summary>
+    /// Column sums of the first rowCount rows over the first width columns, each divided by the
+    /// query-token count, zero-padded to length.
+    /// </summary>
+    private Vector<T> QueryMean(Tensor<T> features, int rowCount, int width, int length)
+    {
+        var mean = new Vector<T>(length);
+        if (width <= 0) return mean;
+
+        var divisor = NumOps.FromDouble(_numQueryTokens);
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            var sums = rowCount > 0
+                ? Engine.ReduceSum(Engine.TensorSlice(features, [0, 0], [rowCount, width]), new[] { 0 }, keepDims: false)
+                : new Tensor<T>([width]);
+            Engine.TensorDivideScalar(sums, divisor).CopyTo(mean.AsWritableSpan().Slice(0, width));
+        }
+
+        return mean;
+    }
+
+    /// <summary>
     /// Projects vision features to Q-Former dimension.
     /// </summary>
     private Tensor<T> ProjectVisionToQformer(Tensor<T> visionFeatures)
@@ -1215,56 +1219,25 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
         // We'll use queries as input and provide keyValues as context
 
         // Simple implementation: attend queries to keyValues
-        var output = Tensor<T>.CreateDefault([queryLen, hiddenDim], NumOps.Zero);
-
         // Compute attention weights
         double scale = 1.0 / Math.Sqrt(hiddenDim);
+        if (queryLen == 0 || hiddenDim == 0)
+            return Tensor<T>.CreateDefault([queryLen, hiddenDim], NumOps.Zero);
+        if (kvLen == 0)
+            throw new ArgumentException("Cross attention needs at least one key/value row.", nameof(keyValues));
 
-        for (int q = 0; q < queryLen; q++)
+        // softmax(Q K^T * scale) V + Q (residual), row by row; a plain value (off the tape), as before.
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            // Compute attention scores
-            var scores = new T[kvLen];
-            for (int k = 0; k < kvLen; k++)
-            {
-                T dot = NumOps.Zero;
-                for (int d = 0; d < hiddenDim; d++)
-                {
-                    dot = NumOps.Add(dot, NumOps.Multiply(queries[q, d], keyValues[k, d]));
-                }
-                scores[k] = NumOps.Multiply(dot, NumOps.FromDouble(scale));
-            }
-
-            // Softmax
-            T maxScore = scores[0];
-            for (int k = 1; k < kvLen; k++)
-            {
-                if (NumOps.GreaterThan(scores[k], maxScore))
-                    maxScore = scores[k];
-            }
-
-            T sumExp = NumOps.Zero;
-            var expScores = new Vector<T>(kvLen);
-            for (int k = 0; k < kvLen; k++)
-            {
-                expScores[k] = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(NumOps.Subtract(scores[k], maxScore))));
-                sumExp = NumOps.Add(sumExp, expScores[k]);
-            }
-
-            for (int k = 0; k < kvLen; k++)
-            {
-                expScores[k] = NumOps.Divide(expScores[k], sumExp);
-            }
-
-            // Weighted sum of values
-            for (int d = 0; d < hiddenDim; d++)
-            {
-                T weighted = NumOps.Zero;
-                { var _z0 = new Vector<T>(kvLen); for (int _i = 0; _i < kvLen; _i++) _z0[_i] = keyValues[_i, d]; weighted = NumOps.Add(weighted, Engine.DotProduct(expScores, _z0)); }
-                output[q, d] = NumOps.Add(queries[q, d], weighted); // Residual connection
-            }
+            var q2 = Engine.TensorSlice(queries, [0, 0], [queryLen, hiddenDim]);
+            var kv = Engine.TensorSlice(keyValues, [0, 0], [kvLen, hiddenDim]);
+            var scores = Engine.TensorMultiplyScalar(
+                Engine.TensorMatMul(q2, Engine.TensorTranspose(kv)), NumOps.FromDouble(scale));   // [queryLen, kvLen]
+            var maxScore = Engine.ReduceMax(scores, new[] { 1 }, keepDims: true);
+            var expScores = Engine.TensorExp(Engine.TensorSubtract(scores, maxScore));
+            var weights = Engine.TensorDivide(expScores, Engine.ReduceSum(expScores, new[] { 1 }, keepDims: true));
+            return Engine.TensorAdd(q2, Engine.TensorMatMul(weights, kv));
         }
-
-        return output;
     }
 
     /// <summary>
@@ -1280,16 +1253,8 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
 
         // Combine for ITM head
         // Use mean of query features
-        var queryMean = new Vector<T>(_qformerHiddenDim);
-        for (int d = 0; d < Math.Min(_qformerHiddenDim, qformerFeatures.Shape[1]); d++)
-        {
-            T sum = NumOps.Zero;
-            for (int q = 0; q < _numQueryTokens; q++)
-            {
-                sum = NumOps.Add(sum, qformerFeatures[q, d]);
-            }
-            queryMean[d] = NumOps.Divide(sum, NumOps.FromDouble(_numQueryTokens));
-        }
+        var queryMean = QueryMean(
+            qformerFeatures, _numQueryTokens, Math.Min(_qformerHiddenDim, qformerFeatures.Shape[1]), _qformerHiddenDim);
 
         // Pass through ITM head
         if (_itmHead is not null)
@@ -1471,18 +1436,20 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
         int numQueries = qformerFeatures.Shape[0];
         var projected = Tensor<T>.CreateDefault([numQueries, _lmHiddenDim], NumOps.Zero);
 
+        int featureWidth = qformerFeatures.Shape[1];
         for (int q = 0; q < numQueries; q++)
         {
-            var queryVec = Tensor<T>.CreateDefault([qformerFeatures.Shape[1]], NumOps.Zero);
-            for (int d = 0; d < qformerFeatures.Shape[1]; d++)
+            // Each query row goes through the projection on its own (a fresh copy, as before).
+            Tensor<T> queryVec;
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             {
-                queryVec[d] = qformerFeatures[q, d];
+                queryVec = Engine.Reshape(Engine.TensorSlice(qformerFeatures, [q, 0], [1, featureWidth]), [featureWidth]).Clone();
             }
 
             var projVec = _languageModelProjection.Forward(queryVec);
-            for (int d = 0; d < _lmHiddenDim; d++)
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             {
-                projected[q, d] = projVec[d];
+                projected.SetSlice(0, q, Engine.TensorSlice(Engine.Reshape(projVec, [projVec.Length]), [0], [_lmHiddenDim]));
             }
         }
 
@@ -1923,17 +1890,55 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
 
         // Accumulate gradients to query tokens
         // Since query tokens are added with positional embeddings, both receive the same gradient
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                T gradValue = gradient.Shape.Length > 1 ? gradient[i, j] : gradient[i];
+        if (rows <= 0 || cols <= 0)
+            return;
 
-                // Accumulate (add to existing gradients for mini-batch accumulation)
-                _queryTokensGradients[i, j] = NumOps.Add(_queryTokensGradients[i, j], gradValue);
-                _queryPositionalEmbeddingsGradients[i, j] = NumOps.Add(_queryPositionalEmbeddingsGradients[i, j], gradValue);
-            }
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            // gradient[i, j], or gradient[i] for every j of a 1D gradient
+            var block = gradient.Shape.Length > 1
+                ? Engine.TensorSlice(gradient, [0, 0], [rows, cols])
+                : Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorSlice(gradient, [0], [rows]), [rows, 1]), [rows, cols]);
+
+            // Accumulate (add to existing gradients for mini-batch accumulation)
+            AddIntoTopLeft(_queryTokensGradients, block, rows, cols);
+            AddIntoTopLeft(_queryPositionalEmbeddingsGradients, block, rows, cols);
         }
+    }
+
+    /// <summary>Adds a [rows, cols] block into the top-left corner of a 2D tensor, in place.</summary>
+    private void AddIntoTopLeft(Tensor<T> target, Tensor<T> block, int rows, int cols)
+    {
+        int targetRows = target.Shape[0];
+        int targetCols = target.Shape[1];
+        if (rows == targetRows && cols == targetCols)
+        {
+            Engine.TensorAddInPlace(target, block);
+            return;
+        }
+
+        // Untouched entries keep their exact values (x + 0 would turn -0 into +0).
+        var updated = Engine.TensorAdd(target, PadToShape(block, rows, cols, targetRows, targetCols));
+        var touched = PadToShape(OnesBlock(rows, cols), rows, cols, targetRows, targetCols);
+        Engine.TensorWhere(touched, updated, target).CopyTo(target.AsWritableSpan());
+    }
+
+    /// <summary>Zero-pads a [rows, cols] block on the right and bottom to [targetRows, targetCols].</summary>
+    private Tensor<T> PadToShape(Tensor<T> block, int rows, int cols, int targetRows, int targetCols)
+    {
+        var padded = block;
+        if (cols < targetCols)
+            padded = Engine.TensorConcatenate(new[] { padded, new Tensor<T>([rows, targetCols - cols]) }, 1);
+        if (rows < targetRows)
+            padded = Engine.TensorConcatenate(new[] { padded, new Tensor<T>([targetRows - rows, targetCols]) }, 0);
+        return padded;
+    }
+
+    private Tensor<T> OnesBlock(int rows, int cols)
+    {
+        var ones = new Tensor<T>([rows, cols]);
+        ones.Fill(NumOps.One);
+        return ones;
     }
 
     // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
@@ -2151,12 +2156,16 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
         }
 
         var matrix = new Matrix<T>(embeddings.Count, embeddings[0].Length);
+        int width = embeddings[0].Length;
+        var destination = matrix.AsWritableSpan();
         for (int i = 0; i < embeddings.Count; i++)
         {
-            for (int j = 0; j < embeddings[i].Length; j++)
-            {
-                matrix[i, j] = embeddings[i][j];
-            }
+            // Row i holds embedding i; a shorter embedding leaves the rest of its row zero.
+            var source = embeddings[i].AsSpan();
+            if (source.Length > width)
+                throw new ArgumentOutOfRangeException(nameof(embeddings),
+                    $"Embedding {i} has {source.Length} values but the batch width is {width}.");
+            source.CopyTo(destination.Slice(i * width, width));
         }
         return matrix;
     }
@@ -2186,12 +2195,16 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
         }
 
         var matrix = new Matrix<T>(embeddings.Count, embeddings[0].Length);
+        int width = embeddings[0].Length;
+        var destination = matrix.AsWritableSpan();
         for (int i = 0; i < embeddings.Count; i++)
         {
-            for (int j = 0; j < embeddings[i].Length; j++)
-            {
-                matrix[i, j] = embeddings[i][j];
-            }
+            // Row i holds embedding i; a shorter embedding leaves the rest of its row zero.
+            var source = embeddings[i].AsSpan();
+            if (source.Length > width)
+                throw new ArgumentOutOfRangeException(nameof(embeddings),
+                    $"Embedding {i} has {source.Length} values but the batch width is {width}.");
+            source.CopyTo(destination.Slice(i * width, width));
         }
         return matrix;
     }

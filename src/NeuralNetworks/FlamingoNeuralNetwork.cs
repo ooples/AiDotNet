@@ -344,14 +344,32 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
 
     private void InitializePositionalEmbeddings(Tensor<T> embeddings)
     {
-        for (int i = 0; i < embeddings.Shape[0]; i++)
+        int positions = embeddings.Shape[0];
+        int dim = embeddings.Shape[1];
+        if (positions == 0 || dim == 0) return;
+
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            for (int j = 0; j < embeddings.Shape[1]; j++)
+            // angle[i, j] = i / 10000^(2*(j/2) / dim): column j uses its sin/cos pair index. The table is
+            // a constant built in double (angles reach the position count in radians, beyond what float or
+            // Half carries to sin/cos) and rounded to T once, as the per-element double math was.
+            var pairStart = Engine.TensorSlice(
+                Engine.TensorRepeatInterleave(Engine.TensorArange<double>(0, dim, 2), 2, 0), [0], [dim]);
+            var tenThousands = new Tensor<double>([dim]);
+            tenThousands.Fill(10000.0);
+            var denominator = Engine.TensorPower(tenThousands, Engine.TensorDivideScalar(pairStart, (double)dim));
+            var angle = Engine.TensorDivide(
+                Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorArange<double>(0, positions), [positions, 1]), [positions, dim]),
+                Engine.TensorBroadcastTo(Engine.Reshape(denominator, [1, dim]), [positions, dim]));
+
+            // Even columns take sin, odd columns cos
+            var evenColumn = new bool[positions * dim];
+            for (int k = 0; k < evenColumn.Length; k++)
             {
-                double angle = i / Math.Pow(10000, (double)(j - j % 2) / embeddings.Shape[1]);   // 2*(j/2): the sin/cos pair index
-                double value = j % 2 == 0 ? Math.Sin(angle) : Math.Cos(angle);
-                embeddings[i, j] = NumOps.FromDouble(value);
+                evenColumn[k] = (k % dim) % 2 == 0;
             }
+            Engine.TensorWhere(evenColumn, Engine.TensorSin(angle), Engine.TensorCos(angle)).Cast<T>()
+                .CopyTo(embeddings.AsWritableSpan());
         }
     }
 
@@ -437,16 +455,31 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
             return embeddings;
         }
 
+        if (seqLen == 0 || _lmHiddenDim == 0)
+        {
+            return embeddings;
+        }
+
+        var ids = new Tensor<int>(tokenIds.ToArray(), [seqLen]).Cast<T>();
+        var tokenRows = new Tensor<T>[seqLen];
         for (int i = 0; i < seqLen; i++)
         {
-            var tokenInput = Tensor<T>.CreateDefault([1], NumOps.FromDouble(tokenIds[i]));
-            var tokenEmb = _textTokenEmbedding.Forward(tokenInput);
+            var tokenEmb = _textTokenEmbedding.Forward(Engine.TensorSlice(ids, [i], [1]));
+            tokenRows[i] = Engine.TensorSlice(tokenEmb, [0, 0], [1, _lmHiddenDim]);
+        }
 
-            for (int j = 0; j < _lmHiddenDim; j++)
-            {
-                T posEmb = i < _textPositionalEmbeddings.Shape[0] ? _textPositionalEmbeddings[i, j] : NumOps.Zero;
-                embeddings[i, j] = NumOps.Add(tokenEmb[0, j], posEmb);
-            }
+        // token row + position row (zero past the table), as fresh values off the tape
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            int withPosition = Math.Min(seqLen, _textPositionalEmbeddings.Shape[0]);
+            var positions = withPosition == seqLen
+                ? Engine.TensorSlice(_textPositionalEmbeddings, [0, 0], [seqLen, _lmHiddenDim])
+                : Engine.TensorConcatenate(new[]
+                {
+                    Engine.TensorSlice(_textPositionalEmbeddings, [0, 0], [withPosition, _lmHiddenDim]),
+                    new Tensor<T>([seqLen - withPosition, _lmHiddenDim])
+                }, 0);
+            Engine.TensorAdd(Engine.TensorConcatenate(tokenRows, 0), positions).CopyTo(embeddings.AsWritableSpan());
         }
 
         return embeddings;
@@ -458,15 +491,13 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
         int hiddenDim = features.Shape[1];
         var result = new Vector<T>(hiddenDim);
 
-        for (int j = 0; j < hiddenDim; j++)
-        {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < seqLen; i++)
-            {
-                sum = NumOps.Add(sum, features[i, j]);
-            }
-            result[j] = NumOps.Divide(sum, NumOps.FromDouble(seqLen));
-        }
+        if (hiddenDim == 0) return result;
+
+        // Column sums over the sequence, divided by its length.
+        var sums = seqLen > 0
+            ? Engine.ReduceSum(Engine.TensorSlice(features, [0, 0], [seqLen, hiddenDim]), new[] { 0 }, keepDims: false)
+            : new Tensor<T>([hiddenDim]);
+        Engine.TensorDivideScalar(sums, NumOps.FromDouble(seqLen)).CopyTo(result.AsWritableSpan());
 
         return result;
     }
@@ -483,11 +514,15 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
         T norm1 = NumOps.Zero;
         T norm2 = NumOps.Zero;
 
-        for (int i = 0; i < embedding1.Length && i < embedding2.Length; i++)
+        // Over the common prefix of the two embeddings.
+        int length = Math.Min(embedding1.Length, embedding2.Length);
+        if (length > 0)
         {
-            dotProduct = NumOps.Add(dotProduct, NumOps.Multiply(embedding1[i], embedding2[i]));
-            norm1 = NumOps.Add(norm1, NumOps.Multiply(embedding1[i], embedding1[i]));
-            norm2 = NumOps.Add(norm2, NumOps.Multiply(embedding2[i], embedding2[i]));
+            var first = embedding1.GetSubVector(0, length);
+            var second = embedding2.GetSubVector(0, length);
+            dotProduct = Engine.DotProduct(first, second);
+            norm1 = Engine.DotProduct(first, first);
+            norm2 = Engine.DotProduct(second, second);
         }
 
         T normProduct = NumOps.Multiply(NumOps.Sqrt(norm1), NumOps.Sqrt(norm2));
@@ -708,12 +743,24 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
         int numPatches = patchFeatures.Shape[0];
         int hiddenDim = patchFeatures.Shape.Length > 1 ? patchFeatures.Shape[1] : _visionHiddenDim;
 
+        // patch + position over the block both cover, zero elsewhere, as fresh values off the tape
         var features = Tensor<T>.CreateDefault([numPatches, hiddenDim], NumOps.Zero);
-        for (int i = 0; i < numPatches && i < _visionPositionalEmbeddings.Shape[0]; i++)
+        int blockRows = Math.Min(numPatches, _visionPositionalEmbeddings.Shape[0]);
+        int blockCols = Math.Min(hiddenDim, _visionPositionalEmbeddings.Shape[1]);
+        if (blockRows > 0 && blockCols > 0)
         {
-            for (int j = 0; j < hiddenDim && j < _visionPositionalEmbeddings.Shape[1]; j++)
+            T[] block;
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             {
-                features[i, j] = NumOps.Add(patchFeatures[i, j], _visionPositionalEmbeddings[i, j]);
+                block = Engine.TensorAdd(
+                    Engine.TensorSlice(patchFeatures, [0, 0], [blockRows, blockCols]),
+                    Engine.TensorSlice(_visionPositionalEmbeddings, [0, 0], [blockRows, blockCols])).ToArray();
+            }
+
+            var featureSpan = features.AsWritableSpan();
+            for (int i = 0; i < blockRows; i++)
+            {
+                block.AsSpan(i * blockCols, blockCols).CopyTo(featureSpan.Slice(i * hiddenDim, blockCols));
             }
         }
 
@@ -733,12 +780,14 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
             throw new InvalidOperationException("Perceiver queries not initialized.");
         }
 
+        // A fresh copy of the leading [tokens, hidden] block of the learned queries
         var current = Tensor<T>.CreateDefault([_numPerceiverTokens, _lmHiddenDim], NumOps.Zero);
-        for (int i = 0; i < _numPerceiverTokens; i++)
+        if (_numPerceiverTokens > 0 && _lmHiddenDim > 0)
         {
-            for (int j = 0; j < _lmHiddenDim; j++)
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             {
-                current[i, j] = _perceiverQueries[i, j];
+                Engine.TensorSlice(_perceiverQueries, [0, 0], [_numPerceiverTokens, _lmHiddenDim])
+                    .CopyTo(current.AsWritableSpan());
             }
         }
 
@@ -804,25 +853,30 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
         var queryEmbeddings = queryList.Select(img => GetImageEmbedding(img)).ToList();
         var avgQueryEmbedding = new Vector<T>(_embeddingDimension);
 
-        for (int j = 0; j < _embeddingDimension; j++)
+        if (_embeddingDimension > 0)
         {
-            T sum = NumOps.Zero;
+            // Each query adds over its common prefix, in order; the sums are divided by the query count
+            var sum = new Tensor<T>([_embeddingDimension]);
             foreach (var emb in queryEmbeddings)
             {
-                if (j < emb.Length)
-                    sum = NumOps.Add(sum, emb[j]);
+                sum = AddToPrefix(sum, emb);
             }
-            avgQueryEmbedding[j] = NumOps.Divide(sum, NumOps.FromDouble(queryEmbeddings.Count));
+            Engine.TensorDivideScalar(sum, NumOps.FromDouble(queryEmbeddings.Count)).CopyTo(avgQueryEmbedding.AsWritableSpan());
         }
 
         if (queryDescription is not null && queryDescription.Length > 0)
         {
             var textEmbedding = GetTextEmbedding(queryDescription);
-            for (int j = 0; j < _embeddingDimension && j < textEmbedding.Length; j++)
+            int common = Math.Min(_embeddingDimension, textEmbedding.Length);
+            if (common > 0)
             {
-                avgQueryEmbedding[j] = NumOps.Divide(
-                    NumOps.Add(avgQueryEmbedding[j], textEmbedding[j]),
+                // (average + text) / 2 over the common prefix
+                var blended = Engine.TensorDivideScalar(
+                    Engine.TensorAdd(
+                        Tensor<T>.FromVector(avgQueryEmbedding.GetSubVector(0, common)),
+                        Tensor<T>.FromVector(textEmbedding.GetSubVector(0, common))),
                     NumOps.FromDouble(2.0));
+                blended.CopyTo(avgQueryEmbedding.AsWritableSpan().Slice(0, common));
             }
         }
 
@@ -903,16 +957,15 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
                     current = _languageModelLayers[layer].Forward(current);
                 }
 
-                var lastPosition = Tensor<T>.CreateDefault([1, _lmHiddenDim], NumOps.Zero);
-                for (int j = 0; j < _lmHiddenDim; j++)
-                {
-                    lastPosition[0, j] = current[seqLen - 1, j];
-                }
+                // A fresh copy of the last position's first _lmHiddenDim features
+                int currentColumns = current.Shape[1];
+                var lastPosition = new Tensor<T>(
+                    current.ToArray().AsSpan((seqLen - 1) * currentColumns, _lmHiddenDim).ToArray(), [1, _lmHiddenDim]);
 
                 var logits = _outputProjection.Forward(lastPosition);
                 int vocab = logits.Shape[1];
                 var v = new Vector<T>(vocab);
-                for (int i = 0; i < vocab; i++) v[i] = logits[0, i];
+                logits.ToArray().AsSpan(0, vocab).CopyTo(v.AsWritableSpan());
                 return v;
             },
             maxNewTokens: maxLength,
@@ -933,21 +986,39 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
         int hiddenDim = imageFeatures[0].Shape[1];
 
         var combined = Tensor<T>.CreateDefault([totalTokens, hiddenDim], NumOps.Zero);
+        var combinedSpan = combined.AsWritableSpan();
         int offset = 0;
 
         foreach (var features in imageFeatures)
         {
-            for (int i = 0; i < features.Shape[0]; i++)
+            // Each image's rows, first hiddenDim columns, stacked in order
+            int rows = features.Shape[0];
+            int columns = features.Shape[1];
+            var values = features.ToArray();
+            for (int i = 0; i < rows; i++)
             {
-                for (int j = 0; j < hiddenDim; j++)
-                {
-                    combined[offset + i, j] = features[i, j];
-                }
+                values.AsSpan(i * columns, hiddenDim).CopyTo(combinedSpan.Slice((offset + i) * hiddenDim, hiddenDim));
             }
-            offset += features.Shape[0];
+            offset += rows;
         }
 
         return combined;
+    }
+
+    /// <summary>
+    /// Adds <paramref name="vector"/> to the leading entries of <paramref name="sum"/> they share; the
+    /// rest of the sum keeps its exact value.
+    /// </summary>
+    private Tensor<T> AddToPrefix(Tensor<T> sum, Vector<T> vector)
+    {
+        int length = sum.Length;
+        int common = Math.Min(length, vector.Length);
+        if (common == 0) return sum;
+        var part = Tensor<T>.FromVector(vector.Length == common ? vector : vector.GetSubVector(0, common));
+        var added = Engine.TensorAdd(common == length ? sum : Engine.TensorSlice(sum, [0], [common]), part);
+        return common == length
+            ? added
+            : Engine.TensorConcatenate(new[] { added, Engine.TensorSlice(sum, [common], [length - common]) }, 0);
     }
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
@@ -1054,12 +1125,16 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
         }
 
         var matrix = new Matrix<T>(embeddings.Count, embeddings[0].Length);
+        int width = embeddings[0].Length;
+        var destination = matrix.AsWritableSpan();
         for (int i = 0; i < embeddings.Count; i++)
         {
-            for (int j = 0; j < embeddings[i].Length; j++)
-            {
-                matrix[i, j] = embeddings[i][j];
-            }
+            // Row i holds embedding i; a shorter embedding leaves the rest of its row zero.
+            var source = embeddings[i].AsSpan();
+            if (source.Length > width)
+                throw new ArgumentOutOfRangeException(nameof(embeddings),
+                    $"Embedding {i} has {source.Length} values but the batch width is {width}.");
+            source.CopyTo(destination.Slice(i * width, width));
         }
         return matrix;
     }
@@ -1083,12 +1158,16 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
         }
 
         var matrix = new Matrix<T>(embeddings.Count, embeddings[0].Length);
+        int width = embeddings[0].Length;
+        var destination = matrix.AsWritableSpan();
         for (int i = 0; i < embeddings.Count; i++)
         {
-            for (int j = 0; j < embeddings[i].Length; j++)
-            {
-                matrix[i, j] = embeddings[i][j];
-            }
+            // Row i holds embedding i; a shorter embedding leaves the rest of its row zero.
+            var source = embeddings[i].AsSpan();
+            if (source.Length > width)
+                throw new ArgumentOutOfRangeException(nameof(embeddings),
+                    $"Embedding {i} has {source.Length} values but the batch width is {width}.");
+            source.CopyTo(destination.Slice(i * width, width));
         }
         return matrix;
     }

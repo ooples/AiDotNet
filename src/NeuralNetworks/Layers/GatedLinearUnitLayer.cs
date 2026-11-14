@@ -545,10 +545,10 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>, IShapeContract
         var updGW = Engine.TensorSubtract(_gateWeights, scaledGateWeightsGrad);
         var updLB = Engine.TensorSubtract(_linearBias, scaledLinearBiasGrad);
         var updGB = Engine.TensorSubtract(_gateBias, scaledGateBiasGrad);
-        for (int i = 0; i < _linearWeights.Length; i++) _linearWeights[i] = updLW[i];
-        for (int i = 0; i < _gateWeights.Length; i++) _gateWeights[i] = updGW[i];
-        for (int i = 0; i < _linearBias.Length; i++) _linearBias[i] = updLB[i];
-        for (int i = 0; i < _gateBias.Length; i++) _gateBias[i] = updGB[i];
+        updLW.CopyTo(_linearWeights.AsWritableSpan());
+        updGW.CopyTo(_gateWeights.AsWritableSpan());
+        updLB.CopyTo(_linearBias.AsWritableSpan());
+        updGB.CopyTo(_gateBias.AsWritableSpan());
 
         // Notify engine that parameters have changed (for GPU cache invalidation)
         Engine.InvalidatePersistentTensor(_linearWeights);

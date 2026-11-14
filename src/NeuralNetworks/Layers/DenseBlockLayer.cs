@@ -243,15 +243,12 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
 
     private Tensor<T> ApplyReluDerivative(Tensor<T> input, Tensor<T> grad)
     {
-        var result = new T[grad.Data.Length];
-        for (int i = 0; i < grad.Data.Length; i++)
-        {
-            // ReLU derivative: 1 if x > 0, else 0
-            result[i] = NumOps.GreaterThan(input.Data.Span[i], NumOps.Zero)
-                ? grad.Data.Span[i]
-                : NumOps.Zero;
-        }
-        return new Tensor<T>(grad._shape, new Vector<T>(result));
+        // ReLU derivative: pass the gradient where x > 0 (NaN counts as not positive), else 0.
+        var passed = Engine.TensorWhere(
+            Engine.TensorGreaterThan(Engine.Reshape(input, grad._shape), NumOps.Zero),
+            grad,
+            new Tensor<T>(grad._shape));
+        return new Tensor<T>(grad._shape, passed.ToVector());
     }
 
     /// <inheritdoc />

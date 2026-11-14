@@ -1572,13 +1572,9 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
         var resizedWeights = new Tensor<T>([actualInputSize, outputSize]);
 
         int sharedInputSize = Math.Min(existingInputSize, actualInputSize);
-        for (int i = 0; i < sharedInputSize; i++)
-        {
-            for (int o = 0; o < outputSize; o++)
-            {
-                resizedWeights[i, o] = _weights[i, o];
-            }
-        }
+        // The overlapping rows, copied in row-major order into the heap tensor.
+        Engine.TensorSlice(_weights, new[] { 0, 0 }, new[] { sharedInputSize, outputSize })
+            .CopyTo(resizedWeights.AsWritableSpan().Slice(0, sharedInputSize * outputSize));
 
         if (actualInputSize > sharedInputSize)
         {
@@ -1877,20 +1873,11 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
         // A = [batch, inputSize], B = [inputSize, outputSize], C = [outputSize] (broadcast).
         // AiDotNet stores weights as [inputSize, outputSize] — same layout as B,
         // so no transpose is needed.
-        var weightsFlat = new float[inputSize * outputSize];
-        for (int i = 0; i < inputSize; i++)
-        {
-            for (int j = 0; j < outputSize; j++)
-            {
-                weightsFlat[i * outputSize + j] = (float)NumOps.ToDouble(_weights[i, j]);
-            }
-        }
-
-        var biasFlat = new float[outputSize];
-        for (int j = 0; j < outputSize; j++)
-        {
-            biasFlat[j] = UseBias ? (float)NumOps.ToDouble(_biases[j]) : 0f;
-        }
+        // ONNX initializers are float: bulk casts of the [inputSize, outputSize] weights and the bias.
+        var weightsFlat = _weights.Contiguous().Cast<float>().ToVector().ToArray();
+        var biasFlat = UseBias
+            ? _biases.Contiguous().Cast<float>().ToVector().GetSubVector(0, outputSize).ToArray()
+            : new float[outputSize];
 
         var weightsName = builder.AddFloatInitializer(
             "dense_W", weightsFlat, new[] { inputSize, outputSize });

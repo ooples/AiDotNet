@@ -119,13 +119,12 @@ public partial class ClozeAttentionLayer<T> : LayerBase<T>, IShapeContract
         // Cloze mask: a large negative on the diagonal only, so softmax drives self-attention to
         // zero while every other position stays available in both directions. Built as a
         // constant, so it contributes no gradient of its own.
-        var mask = new Tensor<T>(new[] { B, S, S });
+        var mask = new Tensor<T>(new[] { S, S });
         T blocked = NumOps.FromDouble(-1e9);
-        for (int b = 0; b < B; b++)
-            for (int i = 0; i < S; i++)
-                mask[b, i, i] = blocked;
+        Engine.TensorFillDiagonalInPlace(mask, blocked);
 
-        scores = Engine.TensorAdd(scores, mask);
+        // The same [S, S] mask broadcasts over the batch.
+        scores = Engine.TensorAdd(scores, Engine.Reshape(mask, new[] { 1, S, S }));
 
         var weights = Engine.TensorSoftmax(scores, axis: scores.Shape.Length - 1);
         var attended = Engine.TensorBatchMatMul<T>(weights, v);

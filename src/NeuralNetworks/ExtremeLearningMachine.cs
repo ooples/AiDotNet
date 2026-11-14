@@ -442,9 +442,12 @@ public partial class ExtremeLearningMachine<T> : VectorModelLayoutBase<T>
 
         // Apply regularization: hTh + λI (add λ to diagonal)
         T regFactor = NumOps.FromDouble(regularizationFactor);
-        for (int i = 0; i < hTh.Rows; i++)
+        if (hTh.Rows > 0)
         {
-            hTh[i, i] = NumOps.Add(hTh[i, i], regFactor);
+            // Only the diagonal changes; off-diagonal entries keep their exact values.
+            var gram = Tensor<T>.FromMatrix(hTh);
+            var diagonal = Engine.TensorEye<T>(hTh.Rows);
+            hTh = Engine.TensorWhere(diagonal, Engine.TensorAddScalar(gram, regFactor), gram).ToMatrix();
         }
 
         // Calculate inverse of regularized matrix

@@ -411,18 +411,15 @@ public partial class HTMNetwork<T> : VectorModelLayoutBase<T>
             result[0] = anomalyScore;
 
             // Set active columns (from spatial pooler output)
-            for (int i = 0; i < _columnCount && i < spatialPoolerOutput.Length; i++)
-            {
-                result[1 + i] = spatialPoolerOutput[i];
-            }
+            var resultSpan = result.AsWritableSpan();
+            int activeCount = Math.Min(_columnCount, spatialPoolerOutput.Length);
+            if (activeCount > 0)
+                spatialPoolerOutput.AsSpan().Slice(0, activeCount).CopyTo(resultSpan.Slice(1, activeCount));
 
             // Set predicted columns (if available)
             if (predictedCells != null && predictedCells.Length >= _columnCount)
             {
-                for (int i = 0; i < _columnCount; i++)
-                {
-                    result[1 + _columnCount + i] = predictedCells[i];
-                }
+                predictedCells.AsSpan().Slice(0, _columnCount).CopyTo(resultSpan.Slice(1 + _columnCount, _columnCount));
             }
 
             return result;
@@ -504,11 +501,9 @@ public partial class HTMNetwork<T> : VectorModelLayoutBase<T>
             for (int i = 0; i < batchSize; i++)
             {
                 // Extract the i-th input from the batch
-                var singleInput = new Vector<T>(input.Shape[1]);
-                for (int j = 0; j < input.Shape[1]; j++)
-                {
-                    singleInput[j] = input[i, j];
-                }
+                var singleInput = input.Shape[1] == 0
+                    ? new Vector<T>(0)
+                    : Engine.Reshape(Engine.TensorSlice(input, [i, 0], [1, input.Shape[1]]), [input.Shape[1]]).ToVector();
 
                 // Learn from this input
                 Learn(singleInput);
@@ -599,18 +594,16 @@ public partial class HTMNetwork<T> : VectorModelLayoutBase<T>
                 int matches = 0;
                 int total = 0;
 
-                for (int i = 0; i < Math.Min(predictedCells.Length, temporalMemoryLayer2.PreviousState.Length); i++)
+                int overlap = Math.Min(predictedCells.Length, temporalMemoryLayer2.PreviousState.Length);
+                if (overlap > 0)
                 {
-                    if (!NumOps.Equals(predictedCells[i], NumOps.Zero) &&
-                        !NumOps.Equals(temporalMemoryLayer2.PreviousState[i], NumOps.Zero))
-                    {
-                        matches++;
-                    }
-                    if (!NumOps.Equals(predictedCells[i], NumOps.Zero) ||
-                        !NumOps.Equals(temporalMemoryLayer2.PreviousState[i], NumOps.Zero))
-                    {
-                        total++;
-                    }
+                    // Cells active (non-zero) in both (matches) and in either (total)
+                    var predictedActive = Engine.TensorNotEquals(
+                        Tensor<T>.FromVector(predictedCells.GetSubVector(0, overlap)), NumOps.Zero);
+                    var actualActive = Engine.TensorNotEquals(
+                        Tensor<T>.FromVector(temporalMemoryLayer2.PreviousState.GetSubVector(0, overlap)), NumOps.Zero);
+                    matches = Engine.TensorSum(Engine.TensorMin(predictedActive, actualActive).Cast<int>());
+                    total = Engine.TensorSum(Engine.TensorMax(predictedActive, actualActive).Cast<int>());
                 }
 
                 // Calculate error rate (1.0 - match rate)

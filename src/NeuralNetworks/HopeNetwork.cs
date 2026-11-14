@@ -253,6 +253,7 @@ public partial class HopeNetwork<T> : VectorModelLayoutBase<T>
         }
 
         // Process through context flow at multiple levels for richer representations
+        T contextBlend = _numOps.FromDouble(0.2);
         for (int level = 0; level < _inContextLearningLevels; level++)
         {
             // Propagate context flow at this level
@@ -263,7 +264,7 @@ public partial class HopeNetwork<T> : VectorModelLayoutBase<T>
             var compressed = _contextFlow.CompressContext(contextVec, level);
 
             // Blend with current state for unbounded in-context learning
-            current = BlendTensors(current, contextTensor, _numOps.FromDouble(0.2));
+            current = BlendTensors(current, contextTensor, contextBlend);
         }
 
         // Process through recurrent layers (looped learning levels)
@@ -294,34 +295,29 @@ public partial class HopeNetwork<T> : VectorModelLayoutBase<T>
     /// </summary>
     private static bool IsMetaStateZero(Vector<T> metaState)
     {
-        for (int i = 0; i < metaState.Length; i++)
-        {
-            if (!_numOps.Equals(metaState[i], _numOps.Zero))
-                return false;
-        }
-        return true;
+        // Every entry equals zero (NaN does not).
+        if (metaState.Length == 0) return true;
+        var engine = AiDotNetEngine.Current;
+        var zeros = engine.TensorEquals(Tensor<T>.FromVector(metaState), _numOps.Zero);
+        return _numOps.Equals(engine.TensorMinValue(zeros), _numOps.One);
     }
 
     private Tensor<T> ApplySelfModification(Tensor<T> input, Vector<T> metaState)
     {
         var inputVec = input.ToVector();
         var modified = new Vector<T>(inputVec.Length);
+        inputVec.AsSpan().CopyTo(modified.AsWritableSpan());
 
         int minLen = Math.Min(inputVec.Length, metaState.Length);
-
-        for (int i = 0; i < inputVec.Length; i++)
+        if (minLen > 0)
         {
-            if (i < minLen)
-            {
-                // Modulate input with meta-state (self-modification)
-                T modulationFactor = _numOps.Add(_numOps.One,
-                    _numOps.Multiply(metaState[i], _selfModificationRate));
-                modified[i] = _numOps.Multiply(inputVec[i], modulationFactor);
-            }
-            else
-            {
-                modified[i] = inputVec[i];
-            }
+            // Modulate the first minLen inputs with the meta-state (self-modification): x * (1 + m * rate)
+            var engine = AiDotNetEngine.Current;
+            var modulationFactor = engine.TensorAddScalar(
+                engine.TensorMultiplyScalar(Tensor<T>.FromVector(metaState.GetSubVector(0, minLen)), _selfModificationRate),
+                _numOps.One);
+            engine.TensorMultiply(Tensor<T>.FromVector(inputVec.GetSubVector(0, minLen)), modulationFactor)
+                .CopyTo(modified.AsWritableSpan().Slice(0, minLen));
         }
 
         return new Tensor<T>(input._shape, modified);
@@ -344,18 +340,14 @@ public partial class HopeNetwork<T> : VectorModelLayoutBase<T>
         T adaptationRate = _numOps.FromDouble(0.001); // Very slow for stability
 
         int minLen = Math.Min(_metaState.Length, recalled.Length);
+        if (minLen == 0) return;
 
-        for (int i = 0; i < minLen; i++)
-        {
-            T current = _metaState[i];
-            T target = recalled[i];
-
-            // Self-optimization: model adjusts its own parameters
-            T delta = _numOps.Subtract(target, current);
-            T update = _numOps.Multiply(delta, adaptationRate);
-
-            _metaState[i] = _numOps.Add(current, update);
-        }
+        // Self-optimization: m += (target - m) * rate over the common prefix
+        var engine = AiDotNetEngine.Current;
+        var current = Tensor<T>.FromVector(_metaState.GetSubVector(0, minLen));
+        var delta = engine.TensorSubtract(Tensor<T>.FromVector(recalled.GetSubVector(0, minLen)), current);
+        engine.TensorAdd(current, engine.TensorMultiplyScalar(delta, adaptationRate))
+            .CopyTo(_metaState.AsWritableSpan().Slice(0, minLen));
     }
 
     private Tensor<T> BlendTensors(Tensor<T> a, Tensor<T> b, T blendFactor)
@@ -366,11 +358,15 @@ public partial class HopeNetwork<T> : VectorModelLayoutBase<T>
 
         T oneMinusBlend = _numOps.Subtract(_numOps.One, blendFactor);
 
-        for (int i = 0; i < Math.Min(vecA.Length, vecB.Length); i++)
+        // a * (1 - blend) + b * blend over the common prefix; the rest stays zero
+        int length = Math.Min(vecA.Length, vecB.Length);
+        if (length > 0)
         {
-            T partA = _numOps.Multiply(vecA[i], oneMinusBlend);
-            T partB = _numOps.Multiply(vecB[i], blendFactor);
-            blended[i] = _numOps.Add(partA, partB);
+            var engine = AiDotNetEngine.Current;
+            engine.TensorAdd(
+                engine.TensorMultiplyScalar(Tensor<T>.FromVector(vecA.GetSubVector(0, length)), oneMinusBlend),
+                engine.TensorMultiplyScalar(Tensor<T>.FromVector(vecB.GetSubVector(0, length)), blendFactor))
+                .CopyTo(blended.AsWritableSpan().Slice(0, length));
         }
 
         return new Tensor<T>(a._shape, blended);
