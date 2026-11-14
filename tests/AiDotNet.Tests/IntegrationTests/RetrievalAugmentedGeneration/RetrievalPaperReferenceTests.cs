@@ -142,6 +142,29 @@ public class RetrievalPaperReferenceTests
         Assert.Equal((Half)Math.Log(3.0), tfidf[0].RelevanceScore);
     }
 
+    /// <summary>
+    /// The TF-IDF statistics are cached per corpus. Replacing a document without changing the count must
+    /// rebuild them: the cache used to be keyed on the count alone and kept scoring the old text, so
+    /// "cherry" matched nothing after d1 became "cherry".
+    /// </summary>
+    [Fact]
+    public void Tfidf_ReplacedDocument_InvalidatesCachedStatistics()
+    {
+        var store = Store<double>("apple", "banana");
+        var retriever = new TFIDFRetriever<double>(store);
+        Assert.Equal(0.0, retriever.Retrieve("cherry", topK: 2).Max(d => d.RelevanceScore), Tolerance);
+
+        store.Clear();
+        store.Add(new VectorDocument<double>(new Document<double>("d0", "apple"), new Vector<double>(1)));
+        store.Add(new VectorDocument<double>(new Document<double>("d1", "cherry"), new Vector<double>(1)));
+
+        var results = retriever.Retrieve("cherry", topK: 2).ToList();
+
+        // tf = 1 / max count 1, idf = ln(2 / 1)
+        Assert.Equal("d1", results[0].Id);
+        Assert.Equal(Math.Log(2.0), results[0].RelevanceScore, Tolerance);
+    }
+
     private static InMemoryDocumentStore<TNum> Store<TNum>(params string[] contents)
     {
         var store = new InMemoryDocumentStore<TNum>(1);

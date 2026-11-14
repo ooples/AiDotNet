@@ -16,14 +16,15 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
     /// <remarks>
     /// <para>
     /// Implements production-ready TF-IDF retrieval with intelligent caching to avoid recomputing
-    /// statistics on every query. The cache is automatically invalidated when the document count changes,
-    /// ensuring accuracy while maximizing performance.
+    /// statistics on every query. The cache is automatically invalidated when the corpus changes (a document
+    /// added, removed or replaced, even when the document count stays the same), ensuring accuracy while
+    /// maximizing performance.
     /// </para>
     /// <para><b>For Beginners:</b> TF-IDF ranks documents by how unique and frequent terms are.
     ///
     /// This implementation uses a cache to avoid recalculating term statistics on every search,
     /// dramatically improving performance for repeated queries. The cache is automatically refreshed
-    /// when documents are added or removed.
+    /// when documents are added, removed or changed.
     /// </para>
     /// </remarks>
     [ComponentType(ComponentType.Retriever)]
@@ -34,7 +35,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
         private readonly object _cacheLock = new object();
 
         private TermIndex? _cachedIndex;
-        private int _cachedDocumentCount;
 
         public TFIDFRetriever(IDocumentStore<T> documentStore, int defaultTopK = 5) : base(defaultTopK)
         {
@@ -118,12 +118,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
 
         private TermIndex GetOrBuildIndex(List<Document<T>> documents)
         {
-            var currentDocCount = documents.Count;
-
             lock (_cacheLock)
             {
-                // Return cached statistics if document count hasn't changed
-                if (_cachedIndex != null && _cachedDocumentCount == currentDocCount)
+                // Return cached statistics if the corpus is unchanged
+                if (_cachedIndex != null && _cachedIndex.Indexes(documents))
                 {
                     return _cachedIndex;
                 }
@@ -131,7 +129,6 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
                 // Build new statistics and cache them
                 var index = BuildIndex(documents);
                 _cachedIndex = index;
-                _cachedDocumentCount = currentDocCount;
 
                 return index;
             }
@@ -155,6 +152,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
                 }
 
                 index.DocumentIds.Add(doc.Id);
+                index.Contents.Add(doc.Content);
                 index.TermCounts.Add(termCounts);
                 index.MaxTermCount.Add(termCounts.Count == 0 ? 0 : termCounts.Values.Max());
             }
@@ -166,9 +164,30 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
         internal sealed class TermIndex
         {
             public List<string> DocumentIds { get; } = new List<string>();
+            public List<string> Contents { get; } = new List<string>();
             public List<Dictionary<string, int>> TermCounts { get; } = new List<Dictionary<string, int>>();
             public List<int> MaxTermCount { get; } = new List<int>();
             public Dictionary<string, int> DocumentFrequency { get; } = new Dictionary<string, int>();
+
+            /// <summary>
+            /// True when these statistics were built from exactly <paramref name="documents"/>: the same ids
+            /// with the same content in the same order. A count check alone kept serving the old statistics
+            /// after a document was replaced.
+            /// </summary>
+            public bool Indexes(List<Document<T>> documents)
+            {
+                if (documents.Count != DocumentIds.Count)
+                    return false;
+
+                for (int i = 0; i < documents.Count; i++)
+                {
+                    if (!string.Equals(documents[i].Id, DocumentIds[i], StringComparison.Ordinal)
+                        || !string.Equals(documents[i].Content, Contents[i], StringComparison.Ordinal))
+                        return false;
+                }
+
+                return true;
+            }
         }
 
         private bool MatchesFilters(Document<T> document, Dictionary<string, object> filters)
