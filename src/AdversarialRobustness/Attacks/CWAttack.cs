@@ -103,6 +103,17 @@ public class CWAttack<T, TInput, TOutput> : AdversarialAttackBase<T, TInput, TOu
             }
         }
 
+        // Each iteration scores the candidate before its Adam step, so the candidate of the last step was never
+        // checked (with one iteration the attack could only return the clean input). Score it as well.
+        if (Options.Iterations > 0)
+        {
+            var finalCandidate = state.CurrentInput();
+            var finalOutput = ConversionsHelper.ConvertToVector<T, TOutput>(
+                targetModel.Predict(ConversionsHelper.ConvertVectorToInput<T, TInput>(finalCandidate, input)));
+            int finalRealIndex = RealClassIndex(finalOutput.Length, trueLabelIndex);
+            state.TrackBest(finalCandidate, IsSuccessfulAttack(finalOutput, trueLabelIndex, finalRealIndex));
+        }
+
         return ConversionsHelper.ConvertVectorToInput<T, TInput>(state.BestAdversarial, input);
     }
 
