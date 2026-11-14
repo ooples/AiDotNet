@@ -13,17 +13,59 @@ internal static class CertificationMath<T>
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
-    /// Index of the largest entry (first one on ties), or 0 for an empty vector.
+    /// Index of the largest entry (first one on ties).
     /// </summary>
+    /// <exception cref="ArgumentException">The vector is empty: a model output without class scores names no
+    /// class, and counting it as class 0 would let the smoothing votes and abstention treat it as a prediction.
+    /// </exception>
     public static int ArgMax(Vector<T> values)
     {
+        if (values is null)
+        {
+            throw new ArgumentNullException(nameof(values));
+        }
+
         if (values.Length == 0)
         {
-            return 0;
+            throw new ArgumentException("The class-score vector is empty, so it names no class.", nameof(values));
         }
 
         return AiDotNetEngine.Current.TensorArgMax(values.AsTensor(), 0).ToArray()[0];
     }
+
+    /// <summary>
+    /// The largest value of T that is at most <paramref name="value"/>: a lower bound or a radius stays a valid
+    /// lower bound after the conversion (round-to-nearest can move it up by half a unit in the last place).
+    /// </summary>
+    public static T RoundDown(double value) => RoundOutward(value, down: true);
+
+    /// <summary>The smallest value of T that is at least <paramref name="value"/> (for upper bounds).</summary>
+    public static T RoundUp(double value) => RoundOutward(value, down: false);
+
+    private static T RoundOutward(double value, bool down)
+    {
+        T rounded = NumOps.FromDouble(value);
+        if (double.IsNaN(value) || double.IsInfinity(value) || IsOnSide(NumOps.ToDouble(rounded), value, down))
+        {
+            return rounded;
+        }
+
+        // Step away from the value until the nearest T lands on the required side; the first such step is the
+        // neighbouring representable value of T. The step doubles, so this ends after at most ~2100 tries.
+        double step = Math.Max(Math.Abs(value) * 1e-17, double.Epsilon);
+        while (true)
+        {
+            rounded = NumOps.FromDouble(down ? value - step : value + step);
+            if (IsOnSide(NumOps.ToDouble(rounded), value, down))
+            {
+                return rounded;
+            }
+
+            step *= 2;
+        }
+    }
+
+    private static bool IsOnSide(double converted, double value, bool down) => down ? converted <= value : converted >= value;
 
     /// <summary>
     /// Builds the certified-accuracy metrics from per-input counts and the radii of certified inputs.

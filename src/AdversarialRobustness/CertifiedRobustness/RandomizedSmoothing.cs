@@ -116,11 +116,13 @@ public class RandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense<T, TInp
         var result = new CertifiedPrediction<T>
         {
             PredictedClass = topClass,
-            CertifiedRadius = NumOps.FromDouble(certifiedRadius),
+            // Converted outward: rounding to nearest could lift the lower bound or the radius above the value
+            // that was proven (Half has only 11 significant bits) or drop the upper bound below it.
+            CertifiedRadius = CertificationMath<T>.RoundDown(certifiedRadius),
             IsCertified = certified,
             Confidence = NumOps.FromDouble((double)topCount / options.NumSamples),
-            LowerBound = NumOps.FromDouble(lowerBound),
-            UpperBound = NumOps.FromDouble(upperBound)
+            LowerBound = CertificationMath<T>.RoundDown(lowerBound),
+            UpperBound = CertificationMath<T>.RoundUp(upperBound)
         };
 
         result.CertificationDetails["SampleCount"] = options.NumSamples;
