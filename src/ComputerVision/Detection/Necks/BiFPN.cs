@@ -145,8 +145,7 @@ public class BiFPN<T> : NeckBase<T>
             var fusionWeights = new List<Tensor<T>>();
             for (int j = 0; j < 2; j++)
             {
-                var weight = new Tensor<T>(new[] { 1 });
-                weight[0] = NumOps.FromDouble(1.0); // Initialize to equal contribution
+                var weight = CvTensorOps<T>.Fill(new[] { 1 }, 1.0); // Initialize to equal contribution
                 fusionWeights.Add(weight);
             }
             _topDownFusionWeights.Add(fusionWeights);
@@ -171,8 +170,7 @@ public class BiFPN<T> : NeckBase<T>
             var fusionWeights = new List<Tensor<T>>();
             for (int j = 0; j < numInputs; j++)
             {
-                var weight = new Tensor<T>(new[] { 1 });
-                weight[0] = NumOps.FromDouble(1.0);
+                var weight = CvTensorOps<T>.Fill(new[] { 1 }, 1.0);
                 fusionWeights.Add(weight);
             }
             _bottomUpFusionWeights.Add(fusionWeights);
@@ -562,9 +560,6 @@ public class BiFPN<T> : NeckBase<T>
                     $"dst=[{string.Join(",", dst._shape)}].");
             }
         }
-        for (int i = 0; i < src.Length; i++)
-        {
-            dst[i] = src[i];
-        }
+        src.AsSpan().CopyTo(dst.AsWritableSpan());
     }
 }
