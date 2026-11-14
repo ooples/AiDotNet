@@ -190,16 +190,17 @@ public partial class Sonata<T> : Common.SemanticSegmentationBase<T>
             _options.TeacherTemperatureStart, (int)(total * _options.TeacherTemperatureWarmupRatio));
         var momentum = new SonataCosineSchedule(_options.MomentumBase, _options.MomentumFinal, total);
 
-        T lastEpochLoss = NumOps.Zero;
+        // Step losses of the current epoch; the last epoch's mean is reduced once after training.
+        var epochLosses = new T[scenes.Count];
         int step = 0;
         SetTrainingMode(true);
         try
         {
             for (int epoch = 0; epoch < _options.PretrainingEpochs; epoch++)
             {
-                double epochLoss = 0.0;
-                foreach (var scene in scenes)
+                for (int sceneIndex = 0; sceneIndex < scenes.Count; sceneIndex++)
                 {
+                    var scene = scenes[sceneIndex];
                     var settings = new StepSettings(maskSize.Get(step), maskRatio.Get(step), teacherTemperature.Get(step));
                     var batch = PrepareStep(scene, settings, random);
                     T loss = AiDotNet.Training.TapeTrainingStepper<T>.EagerObjectiveStep(
@@ -210,11 +211,9 @@ public partial class Sonata<T> : Common.SemanticSegmentationBase<T>
                         beforeUpdate: MarkTrainMutationStarted);
                     InvalidateWeightCachesAfterSuccessfulWeightUpdate();
                     UpdateTeacher(momentum.Get(step));
-                    epochLoss += NumOps.ToDouble(loss);
+                    epochLosses[sceneIndex] = loss;
                     step++;
                 }
-
-                lastEpochLoss = NumOps.FromDouble(epochLoss / scenes.Count);
             }
         }
         finally
@@ -222,7 +221,14 @@ public partial class Sonata<T> : Common.SemanticSegmentationBase<T>
             SetTrainingMode(false);
         }
 
-        return lastEpochLoss;
+        if (_options.PretrainingEpochs <= 0) return NumOps.Zero;
+
+        // Averaged in double so a Half model does not lose precision summing step losses.
+        var asFloat = new float[epochLosses.Length];
+        NumOps.ToFloatSpan(epochLosses, asFloat);
+        double sum = 0.0;
+        foreach (float value in asFloat) sum += value;
+        return NumOps.FromDouble(sum / asFloat.Length);
     }
 
     /// <summary>

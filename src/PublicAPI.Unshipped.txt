@@ -22937,3 +22937,184 @@ AiDotNet.Enums.ObliviousTreeChoiceFunction.SoftmaxSigmoid = 1 -> AiDotNet.Enums.
 *REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreatePointTransformerV3EncoderLayers(int inputChannels, int inputHeight, int inputWidth, int[]! channelDims, int[]! depths, double dropRate) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
 *REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateSonataDecoderLayers(int encoderOutputChannels, int decoderDim, int numClasses, int featureHeight, int featureWidth) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
 *REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateSonataEncoderLayers(int inputChannels, int inputHeight, int inputWidth, int[]! channelDims, int[]! depths, double dropRate) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+AiDotNet.ComputerVision.Segmentation.PointCloud.HilbertCurve
+AiDotNet.ComputerVision.Segmentation.PointCloud.HilbertCurve.Encode(int x, int y, int z, int depth) -> long
+AiDotNet.ComputerVision.Segmentation.PointCloud.HilbertCurve.HilbertCurve() -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.HilbertCurve.Name.get -> string!
+AiDotNet.ComputerVision.Segmentation.PointCloud.ISonataDistillationLoss<T>
+AiDotNet.ComputerVision.Segmentation.PointCloud.ISonataDistillationLoss<T>.Compute(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! studentScores, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! targets, double studentTemperature, int[]! sampleOfMatch) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.ComputerVision.Segmentation.PointCloud.ISonataFeatureRegularizer<T>
+AiDotNet.ComputerVision.Segmentation.PointCloud.ISonataFeatureRegularizer<T>.Compute(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! embeddings) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.ComputerVision.Segmentation.PointCloud.ISonataTargetCentering<T>
+AiDotNet.ComputerVision.Segmentation.PointCloud.ISonataTargetCentering<T>.Center(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! teacherScores, double temperature) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.ComputerVision.Segmentation.PointCloud.ISpaceFillingCurve
+AiDotNet.ComputerVision.Segmentation.PointCloud.ISpaceFillingCurve.Encode(int x, int y, int z, int depth) -> long
+AiDotNet.ComputerVision.Segmentation.PointCloud.ISpaceFillingCurve.Name.get -> string!
+AiDotNet.ComputerVision.Segmentation.PointCloud.KoLeoRegularizer<T>
+AiDotNet.ComputerVision.Segmentation.PointCloud.KoLeoRegularizer<T>.Compute(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! embeddings) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.ComputerVision.Segmentation.PointCloud.KoLeoRegularizer<T>.KoLeoRegularizer() -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3Encoder<T>
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3Encoder<T>.InputChannels.get -> int
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3Encoder<T>.InputWidthChannels.get -> int
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3Encoder<T>.IsEncoderOnly.get -> bool
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3Encoder<T>.OutputAxesFor(int inputRank) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.OutputAxisContract>?
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3Encoder<T>.OutputChannels.get -> int
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3Encoder<T>.PointTransformerV3Encoder(int inputChannels = 6, bool coordinatesAsFeatures = false, double gridSize = 0.02, int[]? strides = null, int[]? encoderDepths = null, int[]? encoderChannels = null, int[]? encoderNumHeads = null, int[]? encoderPatchSizes = null, int[]? decoderDepths = null, int[]? decoderChannels = null, int[]? decoderNumHeads = null, int[]? decoderPatchSizes = null, double mlpRatio = 4, double dropPathRate = 0.3, bool enableConditionalPositionalEncoding = true, bool preNorm = true, bool shuffleOrders = true, string![]? serializationOrders = null, AiDotNet.Enums.PointTransformerV3Revision revision = AiDotNet.Enums.PointTransformerV3Revision.M1Base, bool encoderOnly = false, bool maskToken = false, int? seed = null) -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.DecoderChannels.get -> int[]!
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.DecoderChannels.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.DecoderDepths.get -> int[]!
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.DecoderDepths.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.DecoderNumHeads.get -> int[]!
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.DecoderNumHeads.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.DecoderPatchSizes.get -> int[]!
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.DecoderPatchSizes.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.DropPathRate.get -> double
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.DropPathRate.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.EnableConditionalPositionalEncoding.get -> bool
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.EnableConditionalPositionalEncoding.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.EncoderChannels.get -> int[]!
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.EncoderChannels.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.EncoderDepths.get -> int[]!
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.EncoderDepths.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.EncoderNumHeads.get -> int[]!
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.EncoderNumHeads.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.EncoderPatchSizes.get -> int[]!
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.EncoderPatchSizes.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.GridSize.get -> double
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.GridSize.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.InputChannels.get -> int
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.InputChannels.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.MlpRatio.get -> double
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.MlpRatio.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.PointTransformerV3EncoderOptions() -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.PointTransformerV3EncoderOptions(AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions! other) -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.PreNorm.get -> bool
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.PreNorm.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.SerializationOrders.get -> AiDotNet.Enums.PointSerializationOrder[]!
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.SerializationOrders.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.ShuffleOrders.get -> bool
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.ShuffleOrders.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.Strides.get -> int[]!
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.Strides.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3EncoderOptions.ValidateBackbone(bool encoderOnly) -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SinkhornKnoppCentering<T>
+AiDotNet.ComputerVision.Segmentation.PointCloud.SinkhornKnoppCentering<T>.Center(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! teacherScores, double temperature) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.ComputerVision.Segmentation.PointCloud.SinkhornKnoppCentering<T>.Iterations.get -> int
+AiDotNet.ComputerVision.Segmentation.PointCloud.SinkhornKnoppCentering<T>.SinkhornKnoppCentering(int iterations = 3) -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.Sonata<T>.Pretrain(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! scenes, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.ComputerVision.Segmentation.PointCloud.ISonataDistillationLoss<T>? distillationLoss = null, AiDotNet.ComputerVision.Segmentation.PointCloud.ISonataTargetCentering<T>? targetCentering = null, AiDotNet.ComputerVision.Segmentation.PointCloud.ISonataFeatureRegularizer<T>? featureRegularizer = null) -> T
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataClusterCrossEntropyLoss<T>
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataClusterCrossEntropyLoss<T>.Compute(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! studentScores, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! targets, double studentTemperature, int[]! sampleOfMatch) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataClusterCrossEntropyLoss<T>.SonataClusterCrossEntropyLoss() -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.GlobalViewCount.get -> int
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.GlobalViewCount.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.GlobalViewScaleMax.get -> double
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.GlobalViewScaleMax.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.GlobalViewScaleMin.get -> double
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.GlobalViewScaleMin.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.GradientClip.get -> double
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.GradientClip.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.HeadEmbedChannels.get -> int
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.HeadEmbedChannels.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.HeadHiddenChannels.get -> int
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.HeadHiddenChannels.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.KoLeoWeight.get -> double
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.KoLeoWeight.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.LearningRate.get -> double
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.LearningRate.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.LocalViewCount.get -> int
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.LocalViewCount.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.LocalViewScaleMax.get -> double
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.LocalViewScaleMax.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.LocalViewScaleMin.get -> double
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.LocalViewScaleMin.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.MaskJitter.get -> double
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.MaskJitter.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.MaskLossWeight.get -> double
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.MaskLossWeight.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.MaskRatioBase.get -> double
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.MaskRatioBase.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.MaskRatioStart.get -> double
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.MaskRatioStart.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.MaskRatioWarmupRatio.get -> double
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.MaskRatioWarmupRatio.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.MaskSizeBase.get -> double
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.MaskSizeBase.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.MaskSizeStart.get -> double
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.MaskSizeStart.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.MaskSizeWarmupRatio.get -> double
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.MaskSizeWarmupRatio.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.MatchMaxRadius.get -> double
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.MatchMaxRadius.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.MaxViewSize.get -> int
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.MaxViewSize.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.MomentumBase.get -> double
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.MomentumBase.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.MomentumFinal.get -> double
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.MomentumFinal.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.PretrainingEpochs.get -> int
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.PretrainingEpochs.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.PrototypeCount.get -> int
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.PrototypeCount.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.RollMaskLossWeight.get -> double
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.RollMaskLossWeight.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.SinkhornIterations.get -> int
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.SinkhornIterations.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.StudentTemperature.get -> double
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.StudentTemperature.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.TeacherTemperatureBase.get -> double
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.TeacherTemperatureBase.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.TeacherTemperatureStart.get -> double
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.TeacherTemperatureStart.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.TeacherTemperatureWarmupRatio.get -> double
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.TeacherTemperatureWarmupRatio.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.UnmaskLossWeight.get -> double
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.UnmaskLossWeight.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.UpCastLevel.get -> int
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.UpCastLevel.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.WeightDecay.get -> double
+AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions.WeightDecay.set -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.SpaceFillingCurves
+AiDotNet.ComputerVision.Segmentation.PointCloud.TransposedSpaceFillingCurve
+AiDotNet.ComputerVision.Segmentation.PointCloud.TransposedSpaceFillingCurve.Encode(int x, int y, int z, int depth) -> long
+AiDotNet.ComputerVision.Segmentation.PointCloud.TransposedSpaceFillingCurve.Name.get -> string!
+AiDotNet.ComputerVision.Segmentation.PointCloud.TransposedSpaceFillingCurve.TransposedSpaceFillingCurve(AiDotNet.ComputerVision.Segmentation.PointCloud.ISpaceFillingCurve! inner) -> void
+AiDotNet.ComputerVision.Segmentation.PointCloud.ZOrderCurve
+AiDotNet.ComputerVision.Segmentation.PointCloud.ZOrderCurve.Encode(int x, int y, int z, int depth) -> long
+AiDotNet.ComputerVision.Segmentation.PointCloud.ZOrderCurve.Name.get -> string!
+AiDotNet.ComputerVision.Segmentation.PointCloud.ZOrderCurve.ZOrderCurve() -> void
+AiDotNet.Enums.PointSerializationOrder
+AiDotNet.Enums.PointSerializationOrder.Hilbert = 2 -> AiDotNet.Enums.PointSerializationOrder
+AiDotNet.Enums.PointSerializationOrder.HilbertTransposed = 3 -> AiDotNet.Enums.PointSerializationOrder
+AiDotNet.Enums.PointSerializationOrder.ZOrder = 0 -> AiDotNet.Enums.PointSerializationOrder
+AiDotNet.Enums.PointSerializationOrder.ZOrderTransposed = 1 -> AiDotNet.Enums.PointSerializationOrder
+AiDotNet.Enums.PointTransformerV3Revision
+AiDotNet.Enums.PointTransformerV3Revision.M1Base = 0 -> AiDotNet.Enums.PointTransformerV3Revision
+AiDotNet.Enums.PointTransformerV3Revision.M2Sonata = 1 -> AiDotNet.Enums.PointTransformerV3Revision
+override AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3<T>.CopyGeneratedLayerAliasesTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
+override AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3<T>.GetClassMap(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3<T>.GetExtraTrainableLayers() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.Layers.LayerBase<T>?>!
+override AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3<T>.GetGeneratedAdditionalLayerGroups() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.GeneratedAdditionalLayerGroup!>!
+override AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3<T>.GetProbabilityMap(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3<T>.OutputAxesFor(int inputRank) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.OutputAxisContract>?
+override AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3<T>.RebindLayerAliases(System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! previousLayers, System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! replacementLayers) -> void
+override AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3<T>.SupportsFusedCompiledTraining.get -> bool
+override AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3Encoder<T>.ResetState() -> void
+override AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3Encoder<T>.SupportsTraining.get -> bool
+override AiDotNet.ComputerVision.Segmentation.PointCloud.Sonata<T>.CopyGeneratedLayerAliasesTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
+override AiDotNet.ComputerVision.Segmentation.PointCloud.Sonata<T>.GetClassMap(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.ComputerVision.Segmentation.PointCloud.Sonata<T>.GetExtraTrainableLayers() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.Layers.LayerBase<T>?>!
+override AiDotNet.ComputerVision.Segmentation.PointCloud.Sonata<T>.GetGeneratedAdditionalLayerGroups() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.GeneratedAdditionalLayerGroup!>!
+override AiDotNet.ComputerVision.Segmentation.PointCloud.Sonata<T>.GetProbabilityMap(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.ComputerVision.Segmentation.PointCloud.Sonata<T>.OutputAxesFor(int inputRank) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.OutputAxisContract>?
+override AiDotNet.ComputerVision.Segmentation.PointCloud.Sonata<T>.RebindLayerAliases(System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! previousLayers, System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! replacementLayers) -> void
+override AiDotNet.ComputerVision.Segmentation.PointCloud.Sonata<T>.SupportsFusedCompiledTraining.get -> bool
+static AiDotNet.ComputerVision.Segmentation.PointCloud.SpaceFillingCurves.Get(AiDotNet.Enums.PointSerializationOrder order) -> AiDotNet.ComputerVision.Segmentation.PointCloud.ISpaceFillingCurve!
+static AiDotNet.ComputerVision.Segmentation.PointCloud.SpaceFillingCurves.Hilbert.get -> AiDotNet.ComputerVision.Segmentation.PointCloud.ISpaceFillingCurve!
+static AiDotNet.ComputerVision.Segmentation.PointCloud.SpaceFillingCurves.HilbertTransposed.get -> AiDotNet.ComputerVision.Segmentation.PointCloud.ISpaceFillingCurve!
+static AiDotNet.ComputerVision.Segmentation.PointCloud.SpaceFillingCurves.NamesOf(System.Collections.Generic.IReadOnlyList<AiDotNet.Enums.PointSerializationOrder>! orders) -> string![]!
+static AiDotNet.ComputerVision.Segmentation.PointCloud.SpaceFillingCurves.PaperOrders() -> AiDotNet.ComputerVision.Segmentation.PointCloud.ISpaceFillingCurve![]!
+static AiDotNet.ComputerVision.Segmentation.PointCloud.SpaceFillingCurves.Register(AiDotNet.ComputerVision.Segmentation.PointCloud.ISpaceFillingCurve! curve) -> void
+static AiDotNet.ComputerVision.Segmentation.PointCloud.SpaceFillingCurves.Resolve(string! name) -> AiDotNet.ComputerVision.Segmentation.PointCloud.ISpaceFillingCurve!
+static AiDotNet.ComputerVision.Segmentation.PointCloud.SpaceFillingCurves.ZOrder.get -> AiDotNet.ComputerVision.Segmentation.PointCloud.ISpaceFillingCurve!
+static AiDotNet.ComputerVision.Segmentation.PointCloud.SpaceFillingCurves.ZOrderTransposed.get -> AiDotNet.ComputerVision.Segmentation.PointCloud.ISpaceFillingCurve!
