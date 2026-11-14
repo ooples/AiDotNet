@@ -77,8 +77,13 @@ public class TabularPaperDefaultsTests
     public void GhostBatchNorm_ScaleAndShiftAreRegisteredAndGetTapeGradients()
     {
         var bn = new GhostBatchNormalization<double>(2, virtualBatchSize: 128);
-        Assert.Equal(4, bn.ParameterCount);
+        // Two features: gamma and beta (2 each) are trainable; the running mean and variance (2 each) are
+        // [Buffer] state, which the layer contract counts and serializes but never trains (as
+        // BatchNormalizationLayer does), so the count and the parameter vector hold 8 and the tape sees 2 tensors.
+        Assert.Equal(8, bn.ParameterCount);
+        Assert.Equal(8, bn.GetParameters().Length);
         Assert.Equal(2, bn.GetTrainableParameters().Count);
+        Assert.Equal(4, bn.GetTrainableParameters().Sum(tensor => tensor.Length));
         var gamma = bn.GetTrainableParameters()[0];
         var beta = bn.GetTrainableParameters()[1];
 
@@ -111,7 +116,9 @@ public class TabularPaperDefaultsTests
         prior.Fill(1.0);
         _ = layer.Forward(processed, prior);
 
-        // The 3 -> 4 projection (12 weights, 4 biases) plus the norm's gamma and beta (4 each).
-        Assert.Equal(16 + 8, layer.ParameterCount);
+        // The 3 -> 4 projection (12 weights, 4 biases) plus the norm's gamma and beta (4 each) and its
+        // running mean and variance buffers (4 each), which the layer contract counts and serializes.
+        Assert.Equal(16 + 8 + 8, layer.ParameterCount);
+        Assert.Equal(16 + 8 + 8, layer.GetParameters().Length);
     }
 }

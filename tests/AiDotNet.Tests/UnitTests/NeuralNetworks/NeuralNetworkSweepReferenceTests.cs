@@ -162,10 +162,14 @@ public class NeuralNetworkSweepReferenceTests
         var input = HalfTensor(new[] { 4, 8 }, inputValues);
         var targets = HalfTensor(new[] { 4, 1 }, 0.3, -0.8, 0.5, 1.1);
 
+        // Sparsemax masks hold exact zeros, whose 0 * log(0 + eps) with eps = 0 in Half was NaN. TrainStep
+        // resets the model state when it returns, which clears the cached masks, so the zeros are read from a
+        // forward pass over the same batch and parameters before the step.
+        _ = model.Forward(input);
+        Assert.Contains(model.GetStepAttentionMasks().Skip(1).SelectMany(m => m.ToArray()), m => (double)m == 0.0);
+
         Half loss = model.TrainStep(input, targets, (Half)0.01);
 
-        // Sparsemax masks hold exact zeros, whose 0 * log(0 + eps) with eps = 0 in Half was NaN.
-        Assert.Contains(model.GetStepAttentionMasks().Skip(1).SelectMany(m => m.ToArray()), m => (double)m == 0.0);
         Assert.True(IsFinite((double)loss), $"Loss {(double)loss} must be finite.");
         Assert.All(model.GetParameters().ToArray(), p => Assert.True(IsFinite((double)p)));
     }

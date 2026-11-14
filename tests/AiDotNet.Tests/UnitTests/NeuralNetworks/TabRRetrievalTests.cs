@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using AiDotNet.Distributions;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Tabular;
 using Xunit;
@@ -135,7 +136,10 @@ public class TabRRetrievalTests
     public void PredictWithConfidence_IsTheRetrievalWeightedSpreadOfNeighbourTargets()
     {
         // Two candidates with targets 0 and 2, both retrieved: var = w0 (0 - m)^2 + w1 (2 - m)^2 with
-        // m = 2 w1, which is 4 w0 w1; the 95% half-width is z * 2 sqrt(w0 w1) with z = 1.959963984540054.
+        // m = 2 w1, which is 4 w0 w1; the 95% half-width is z * 2 sqrt(w0 w1) with z the two-sided normal
+        // quantile. The model takes z from the library's shared normal inverse CDF, the Abramowitz and Stegun
+        // 26.2.23 rational approximation (absolute error below 4.5e-4), so z is held to the exact
+        // 1.959963984540054 within that bound and the interval to 9 decimals with the quantile the library gives.
         var index = new Tensor<double>(new[] { 2, 2 }, new Vector<double>(new[] { 0.4, 0.7, 1.1, 0.2 }));
         var model = new TabRRegression<double>(2, 1, SmallOptions(neighbors: 2));
         model.BuildIndex(index, new Tensor<double>(new[] { 2, 1 }, new Vector<double>(new[] { 0.0, 2.0 })));
@@ -149,7 +153,10 @@ public class TabRRetrievalTests
         double w0 = weights[0];
         double w1 = weights[1];
         Assert.Equal(1.0, w0 + w1, 12);
-        double halfWidth = 1.959963984540054 * 2.0 * Math.Sqrt(w0 * w1);
+        double z = new NormalDistribution<double>().InverseCdf(0.975);
+        Assert.InRange(z, 1.959963984540054 - 4.5e-4, 1.959963984540054 + 4.5e-4);
+        double halfWidth = z * 2.0 * Math.Sqrt(w0 * w1);
+        Assert.True(halfWidth > 0.1, "Both neighbours must carry weight for the interval to test anything.");
         Assert.Equal(predictions[0] - halfWidth, lower[0], 9);
         Assert.Equal(predictions[0] + halfWidth, upper[0], 9);
     }
