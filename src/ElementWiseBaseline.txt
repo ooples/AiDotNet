@@ -4612,7 +4612,6 @@
 1	ADNELEM001|AiDotNet.NeuralNetworks.Blip2NeuralNetwork<T>.GetTextEmbeddingOnnx(string)
 4	ADNELEM001|AiDotNet.NeuralNetworks.Blip2NeuralNetwork<T>.InitializeWeights()
 2	ADNELEM001|AiDotNet.NeuralNetworks.Blip2NeuralNetwork<T>.PrepareImageForOnnx(AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
-2	ADNELEM001|AiDotNet.NeuralNetworks.Blip2NeuralNetwork<T>.ProjectVisionToQformer(AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
 2	ADNELEM001|AiDotNet.NeuralNetworks.Blip2NeuralNetwork<T>.ScoreCaption(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, string)
 1	ADNELEM001|AiDotNet.NeuralNetworks.BlipNeuralNetwork<T>.AnswerQuestionNative(AiDotNet.Tensors.LinearAlgebra.Tensor<T>, string, int)
 2	ADNELEM001|AiDotNet.NeuralNetworks.BlipNeuralNetwork<T>.ComputeSimilarity(AiDotNet.Tensors.LinearAlgebra.Vector<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>)
