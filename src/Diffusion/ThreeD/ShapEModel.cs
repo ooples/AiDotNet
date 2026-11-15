@@ -623,7 +623,7 @@ public partial class ShapEModel<T> : ThreeDDiffusionModelBase<T>
     /// </para>
     /// <para>
     /// The latent's implicit MLP is evaluated on a [-1, 1]^3 grid and its zero level set is extracted by marching
-    /// tetrahedra (a crack-free marching-cubes variant). With no surface in the grid both tensors hold one zero row.
+    /// tetrahedra (a crack-free marching-cubes variant). With no surface in the grid both tensors have zero rows.
     /// </para>
     /// </remarks>
     public virtual (Tensor<T> Vertices, Tensor<T> Faces) ExtractMesh(
@@ -635,7 +635,7 @@ public partial class ShapEModel<T> : ThreeDDiffusionModelBase<T>
     }
 
     /// <summary>
-    /// The faces [max(count, 1), 3] of the flat triangle index list as T (one zero row when empty).
+    /// The faces [count, 3] of the flat triangle index list as T (zero rows when there is no surface).
     /// </summary>
     /// <exception cref="InvalidOperationException">
     /// An index is too large for T to hold exactly (above 2048 for Half): the face tensor would silently point at
@@ -646,11 +646,11 @@ public partial class ShapEModel<T> : ThreeDDiffusionModelBase<T>
         // Exactness is checked by round trip rather than from INumericOperations.PrecisionBits: that property is the
         // storage width (16 for Half), not the significand width (11), so 2^PrecisionBits never rejects anything.
         int faceCount = triangles.Count / 3;
-        var faceValues = new double[Math.Max(faceCount, 1) * 3];
+        var faceValues = new double[faceCount * 3];
         for (int i = 0; i < triangles.Count; i++)
             faceValues[i] = triangles[i];
 
-        var faces = new Tensor<double>(new[] { Math.Max(faceCount, 1), 3 }, new Vector<double>(faceValues)).Cast<T>();
+        var faces = new Tensor<double>(new[] { faceCount, 3 }, new Vector<double>(faceValues)).Cast<T>();
         double[] stored = faces.Cast<double>().ToArray();
         for (int i = 0; i < triangles.Count; i++)
         {
@@ -663,10 +663,10 @@ public partial class ShapEModel<T> : ThreeDDiffusionModelBase<T>
         return faces;
     }
 
-    /// <summary>The vertices [max(count, 1), 3] of the flat coordinate list (one zero row when empty).</summary>
+    /// <summary>The vertices [count, 3] of the flat coordinate list (zero rows when there is no surface).</summary>
     private static Tensor<T> VertexTensor(List<double> coordinates)
     {
-        int vertexCount = Math.Max(coordinates.Count / 3, 1);
+        int vertexCount = coordinates.Count / 3;
         var values = new double[vertexCount * 3];
         coordinates.CopyTo(values);
         return new Tensor<double>(new[] { vertexCount, 3 }, new Vector<double>(values)).Cast<T>();
@@ -712,8 +712,8 @@ public partial class ShapEModel<T> : ThreeDDiffusionModelBase<T>
         var latent = GenerateLatent(prompt, negativePrompt, numInferenceSteps, guidanceScale, seed);
         var (coordinates, triangles) = ExtractSurface(latent, resolution);
 
-        // Faces as int[faceCount, 3] straight from the integer triangle list (one zero row when empty).
-        var faceIndices = new int[Math.Max(triangles.Count / 3, 1) * 3];
+        // Faces as int[faceCount, 3] straight from the integer triangle list (zero rows when there is no surface).
+        var faceIndices = new int[(triangles.Count / 3) * 3];
         triangles.CopyTo(faceIndices);
         var faceArray = new int[faceIndices.Length / 3, 3];
         Buffer.BlockCopy(faceIndices, 0, faceArray, 0, faceIndices.Length * sizeof(int));
@@ -735,8 +735,12 @@ public partial class ShapEModel<T> : ThreeDDiffusionModelBase<T>
     /// <remarks>
     /// Rejection sampling of uniform points in [-1, 1]^3 with SDF &lt; 0, coloured by the implicit MLP. Candidates
     /// are drawn (three draws each, in order) and evaluated in blocks and accepted in draw order, up to
-    /// <c>numPoints * 100</c> candidates; rows past the accepted count stay zero.
+    /// <c>numPoints * 100</c> candidates.
     /// </remarks>
+    /// <exception cref="InvalidOperationException">
+    /// Fewer than <paramref name="numPoints"/> candidates fell inside the shape within the attempt budget (for
+    /// example a latent whose SDF is nowhere negative); a partially filled cloud would pass zero rows off as points.
+    /// </exception>
     public virtual Tensor<T> SamplePointCloud(
         Tensor<T> latent,
         int? numPoints = null,
@@ -774,6 +778,11 @@ public partial class ShapEModel<T> : ThreeDDiffusionModelBase<T>
                 sampledCount++;
             }
         }
+
+        if (sampledCount < effectiveNumPoints)
+            throw new InvalidOperationException(
+                $"Rejection sampling accepted only {sampledCount} of {effectiveNumPoints} points in {attempts} candidates: " +
+                "the latent's shape covers too little (or none) of [-1, 1]^3.");
 
         return new Tensor<double>(new[] { 1, effectiveNumPoints, 6 }, new Vector<double>(cloud)).Cast<T>();
     }

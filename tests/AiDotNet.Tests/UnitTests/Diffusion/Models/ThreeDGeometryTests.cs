@@ -79,6 +79,24 @@ public class ThreeDGeometryTests
     }
 
     [Fact]
+    public void MarchingTetrahedra_CollapsedCrossingsEmitNoFaces()
+    {
+        // grid = x + y + z at threshold 0: only the origin corner is outside and lies exactly on the threshold, so
+        // every crossing interpolates to the origin and each tetrahedron's triangle has zero area. Such faces
+        // carry no surface and must not be emitted (they used to give six collapsed triangles).
+        var grid = new double[2, 2, 2];
+        for (int x = 0; x < 2; x++)
+            for (int y = 0; y < 2; y++)
+                for (int z = 0; z < 2; z++)
+                    grid[x, y, z] = x + y + z;
+
+        var (coordinates, triangles) = MarchingTetrahedra.Extract(grid, 0.0, 0.0, 1.0);
+
+        Assert.Empty(triangles);
+        Assert.Empty(coordinates);
+    }
+
+    [Fact]
     public void MarchingTetrahedra_PlaneCrossingIsInterpolatedExactly()
     {
         const int resolution = 4;
@@ -496,6 +514,61 @@ public class ThreeDGeometryTests
         }
 
         Assert.Equal(values, model.SamplePointCloud(PlaneLatent(), numPoints: 50, seed: 4).ToArray());
+    }
+
+    [Fact]
+    public void ShapE_NoSurface_GivesEmptyMeshesAndRejectsAnUnfillableCloud()
+    {
+        // A zero latent has SDF 0 everywhere: no grid value is inside, so there is no surface and no candidate
+        // point is accepted. The mesh must be empty (it used to hold one fabricated (0, 0, 0) vertex and face) and
+        // the point cloud must fail instead of returning zero rows as if they were sampled points.
+        var model = SmallShapE();
+        var empty = new Tensor<double>(new[] { 1, 1, 1024 });
+
+        var (vertices, faces) = model.ExtractMesh(empty, resolution: 4);
+        Assert.Equal(new[] { 0, 3 }, vertices.Shape.ToArray());
+        Assert.Equal(new[] { 0, 3 }, faces.Shape.ToArray());
+
+        Assert.Throws<InvalidOperationException>(() => model.SamplePointCloud(empty, numPoints: 8, seed: 2));
+    }
+
+    private sealed class ReconstructionProbe : ShapEModel<double>
+    {
+        public ReconstructionProbe()
+            : base(latentPredictor: new DiTNoisePredictor<double>(
+                inputChannels: 1024, hiddenSize: 32, numLayers: 1, numHeads: 2,
+                patchSize: 1, contextDim: 1024, latentSpatialSize: 1, seed: 1))
+        {
+        }
+
+        public void Reconstruct(Tensor<double>[] views, (double azimuth, double elevation)[] angles)
+            => ReconstructFromViews(views, angles);
+    }
+
+    [Fact]
+    public void ReconstructFromViews_WithoutAReconstructionRejectsInsteadOfReturningRandomGeometry()
+    {
+        // The former default ignored the views and angles and meshed random sphere points.
+        var views = new[] { new Tensor<double>(new[] { 1, 3, 4, 4 }) };
+        var angles = new[] { (0.0, 0.5) };
+        Assert.Throws<NotSupportedException>(() => new ReconstructionProbe().Reconstruct(views, angles));
+    }
+
+    [Fact]
+    public async Task DreamFusion_GenerateWithoutAConditioner_Rejects()
+    {
+        // A hash of the prompt is not a text embedding; without a conditioner generation must fail rather than
+        // distil towards an arbitrary target.
+        var prior = new AiDotNet.Diffusion.DDPMModel<double>(
+            unet: new UNetNoisePredictor<double>(
+                inputChannels: 4, outputChannels: 4,
+                baseChannels: 32, channelMultipliers: [1, 2],
+                numResBlocks: 1, attentionResolutions: [1],
+                contextDim: 0, numHeads: 2, inputHeight: 8, seed: 3),
+            seed: 3);
+        var model = new DreamFusionModel<double>(diffusionPrior: prior, seed: 3);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => model.GenerateAsync("a chair", numIterations: 1));
     }
 
     [Fact]

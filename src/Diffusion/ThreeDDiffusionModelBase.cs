@@ -457,35 +457,17 @@ public abstract partial class ThreeDDiffusionModelBase<T> : LatentDiffusionModel
     }
 
     /// <summary>
-    /// Reconstructs a 3D mesh from multiple view images.
+    /// Reconstructs a 3D mesh from multiple view images. Models with a calibrated multi-view reconstruction
+    /// override this (or <see cref="ImageTo3D"/>).
     /// </summary>
+    /// <exception cref="NotSupportedException">
+    /// The model has no multi-view reconstruction. The former default returned a mesh of random sphere points that
+    /// ignored the views and angles, which would pass unrelated geometry off as a reconstruction.
+    /// </exception>
     protected virtual Mesh3D<T> ReconstructFromViews(Tensor<T>[] views, (double azimuth, double elevation)[] angles)
     {
-        // Simplified multi-view reconstruction
-        // Real implementation would use structure from motion or neural reconstruction
-        var numPoints = DefaultPointCount;
-
-        // Random points on the unit sphere. The seeded (theta, phi) uniform draws stay interleaved per point in
-        // master's order (no engine op consumes a caller Random); the trigonometry runs as engine ops.
-        var rng = RandomGenerator;
-        var uniforms = new Tensor<T>(new[] { numPoints, 2 });
-        var uniformSpan = uniforms.AsWritableSpan();
-        for (int i = 0; i < numPoints; i++)
-        {
-            uniformSpan[i * 2] = NumOps.FromDouble(rng.NextDouble());
-            uniformSpan[i * 2 + 1] = NumOps.FromDouble(rng.NextDouble());
-        }
-
-        var theta = Engine.TensorMultiplyScalar(Engine.TensorSelect(uniforms, 1, 0), NumOps.FromDouble(2.0 * Math.PI));
-        var phi = Engine.TensorAcos(Engine.TensorSubtractScalar(
-            Engine.TensorMultiplyScalar(Engine.TensorSelect(uniforms, 1, 1), NumOps.FromDouble(2.0)), NumOps.One));
-        var sinPhi = Engine.TensorSin(phi);
-        var x = Engine.TensorMultiply(sinPhi, Engine.TensorCos(theta));
-        var y = Engine.TensorMultiply(sinPhi, Engine.TensorSin(theta));
-        var z = Engine.TensorCos(phi);
-        var points = Engine.TensorStack(new[] { x, y, z }, 1).Reshape(new[] { 1, numPoints, 3 });
-
-        return PointCloudToMesh(points, SurfaceReconstructionMethod.Poisson);
+        throw new NotSupportedException(
+            $"{GetType().Name} does not implement multi-view reconstruction, so ImageTo3D is not available for it.");
     }
 
     /// <summary>

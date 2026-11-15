@@ -35,8 +35,13 @@ internal static class MarchingTetrahedra
         var triangles = new List<int>();
         int nx = grid.GetLength(0), ny = grid.GetLength(1), nz = grid.GetLength(2);
         var values = new double[4];
-        var points = new double[4][];
+        // One coordinate buffer per tetrahedron corner, refilled in place: Interpolate copies what it keeps.
+        var points = new[] { new double[3], new double[3], new double[3], new double[3] };
         var crossing = new List<double[]>(4);
+        var crossingIndex = new int[4];
+        // Twice-area squared below which a crossing triangle counts as collapsed (all three crossings on one point
+        // or one line, e.g. a surface through grid vertices); such faces carry no surface and are dropped.
+        double minimumNormalSquared = 1e-24 * step * step * step * step;
 
         for (int x = 0; x < nx - 1; x++)
         {
@@ -52,7 +57,9 @@ internal static class MarchingTetrahedra
                             var corner = CubeCorners[tetrahedron[k]];
                             int cx = x + corner[0], cy = y + corner[1], cz = z + corner[2];
                             values[k] = grid[cx, cy, cz];
-                            points[k] = new[] { origin + (cx * step), origin + (cy * step), origin + (cz * step) };
+                            points[k][0] = origin + (cx * step);
+                            points[k][1] = origin + (cy * step);
+                            points[k][2] = origin + (cz * step);
                             if (values[k] > threshold)
                                 insideCount++;
                         }
@@ -100,23 +107,16 @@ internal static class MarchingTetrahedra
                             }
                         }
 
-                        // Wind every triangle counter-clockwise seen from outside, so its normal points from the
-                        // inside corners to the outside ones (the direction the field decreases through the surface).
-                        if (!FacesOutward(crossing, values, points, threshold))
-                            crossing.Reverse();
-
-                        int baseIndex = coordinates.Count / 3;
-                        foreach (var point in crossing)
-                            coordinates.AddRange(point);
-                        triangles.Add(baseIndex);
-                        triangles.Add(baseIndex + 1);
-                        triangles.Add(baseIndex + 2);
+                        // Each triangle (one, or two for a quad) is emitted on its own: a collapsed one is dropped,
+                        // and each is wound counter-clockwise seen from outside, so its normal points from the inside
+                        // corners to the outside ones (the direction the field decreases through the surface).
+                        // Crossing vertices are stored only once a kept triangle uses them.
+                        var outward = InsideToOutside(values, points, threshold);
+                        for (int k = 0; k < crossing.Count; k++)
+                            crossingIndex[k] = -1;
+                        EmitTriangle(crossing, crossingIndex, 0, 1, 2, outward, minimumNormalSquared, coordinates, triangles);
                         if (crossing.Count == 4)
-                        {
-                            triangles.Add(baseIndex);
-                            triangles.Add(baseIndex + 2);
-                            triangles.Add(baseIndex + 3);
-                        }
+                            EmitTriangle(crossing, crossingIndex, 0, 2, 3, outward, minimumNormalSquared, coordinates, triangles);
                     }
                 }
             }
@@ -126,10 +126,9 @@ internal static class MarchingTetrahedra
     }
 
     /// <summary>
-    /// True when the normal (p1 - p0) x (p2 - p0) of the first crossing triangle points from the mean of the inside
-    /// corners towards the mean of the outside corners.
+    /// The direction from the mean of the inside corners to the mean of the outside corners.
     /// </summary>
-    private static bool FacesOutward(List<double[]> crossing, double[] values, double[][] points, double threshold)
+    private static double[] InsideToOutside(double[] values, double[][] points, double threshold)
     {
         var inside = new double[3];
         var outside = new double[3];
@@ -143,18 +142,48 @@ internal static class MarchingTetrahedra
             if (isInside) insideCount++; else outsideCount++;
         }
 
-        var p0 = crossing[0];
-        var p1 = crossing[1];
-        var p2 = crossing[2];
+        return new[]
+        {
+            (outside[0] / outsideCount) - (inside[0] / insideCount),
+            (outside[1] / outsideCount) - (inside[1] / insideCount),
+            (outside[2] / outsideCount) - (inside[2] / insideCount)
+        };
+    }
+
+    /// <summary>
+    /// Appends the crossing triangle (i0, i1, i2) wound so its normal (p1 - p0) x (p2 - p0) points along
+    /// <paramref name="outward"/>, unless it has (numerically) zero area.
+    /// </summary>
+    private static void EmitTriangle(
+        List<double[]> crossing, int[] crossingIndex, int i0, int i1, int i2, double[] outward,
+        double minimumNormalSquared, List<double> coordinates, List<int> triangles)
+    {
+        var p0 = crossing[i0];
+        var p1 = crossing[i1];
+        var p2 = crossing[i2];
         double ux = p1[0] - p0[0], uy = p1[1] - p0[1], uz = p1[2] - p0[2];
         double vx = p2[0] - p0[0], vy = p2[1] - p0[1], vz = p2[2] - p0[2];
         double nx = (uy * vz) - (uz * vy);
         double ny = (uz * vx) - (ux * vz);
         double nz = (ux * vy) - (uy * vx);
-        double dx = (outside[0] / outsideCount) - (inside[0] / insideCount);
-        double dy = (outside[1] / outsideCount) - (inside[1] / insideCount);
-        double dz = (outside[2] / outsideCount) - (inside[2] / insideCount);
-        return (nx * dx) + (ny * dy) + (nz * dz) >= 0.0;
+        if ((nx * nx) + (ny * ny) + (nz * nz) <= minimumNormalSquared)
+            return;
+
+        bool facesOutward = (nx * outward[0]) + (ny * outward[1]) + (nz * outward[2]) >= 0.0;
+        triangles.Add(VertexIndex(crossing, crossingIndex, i0, coordinates));
+        triangles.Add(VertexIndex(crossing, crossingIndex, facesOutward ? i1 : i2, coordinates));
+        triangles.Add(VertexIndex(crossing, crossingIndex, facesOutward ? i2 : i1, coordinates));
+    }
+
+    private static int VertexIndex(List<double[]> crossing, int[] crossingIndex, int i, List<double> coordinates)
+    {
+        if (crossingIndex[i] < 0)
+        {
+            crossingIndex[i] = coordinates.Count / 3;
+            coordinates.AddRange(crossing[i]);
+        }
+
+        return crossingIndex[i];
     }
 
     private static double[] Interpolate(double[] p0, double v0, double[] p1, double v1, double threshold)

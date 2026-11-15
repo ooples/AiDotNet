@@ -582,6 +582,8 @@ public partial class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
     /// Frame f of an n-frame window is weighted 1 - 0.5 * |f / (n - 1) - 0.5| (1 in the middle, 0.75 at the
     /// edges); a one-frame window sits at the middle and gets weight 1 rather than the 0 / 0 position.
     /// <paramref name="weights"/> holds one accumulated weight per frame, shaped [1, frames, 1, 1, 1].
+    /// Only the window's frame range of both accumulators is updated, in place (the returned tensors are the
+    /// ones passed in): padding each window to the full video made every denoising step quadratic in its length.
     /// </remarks>
     internal static (Tensor<T> Accumulated, Tensor<T> Weights) BlendWindowNoise(
         Tensor<T> accumulated,
@@ -609,35 +611,30 @@ public partial class AnimateDiffModel<T> : VideoDiffusionModelBase<T>
         var window = engine.TensorNarrow(windowNoise, 1, 0, frames);
         var weighted = engine.TensorMultiply(window, engine.TensorBroadcastTo(frameWeights, window._shape));
 
-        return (engine.TensorAdd(accumulated, PadFrames(weighted, startFrame, totalFrames)),
-                engine.TensorAdd(weights, PadFrames(frameWeights, startFrame, totalFrames)));
+        AddIntoFrames(accumulated, weighted, startFrame);
+        AddIntoFrames(weights, frameWeights, startFrame);
+        return (accumulated, weights);
     }
 
     /// <summary>
-    /// Zero-pads <paramref name="block"/> along the frame axis so it starts at <paramref name="startFrame"/>
-    /// of a <paramref name="totalFrames"/>-frame tensor.
+    /// Adds <paramref name="block"/> ([batch, n, ...]) into frames startFrame .. startFrame + n - 1 of
+    /// <paramref name="target"/> ([batch, totalFrames, ...]) in place, touching only that frame range.
     /// </summary>
-    private static Tensor<T> PadFrames(Tensor<T> block, int startFrame, int totalFrames)
+    private static void AddIntoFrames(Tensor<T> target, Tensor<T> block, int startFrame)
     {
         var engine = AiDotNetEngine.Current;
-        int after = totalFrames - startFrame - block._shape[1];
-        if (startFrame == 0 && after == 0)
-            return block;
-
-        var pieces = new List<Tensor<T>>(3);
-        if (startFrame > 0)
-            pieces.Add(new Tensor<T>(FrameShape(block._shape, startFrame)));
-        pieces.Add(block);
-        if (after > 0)
-            pieces.Add(new Tensor<T>(FrameShape(block._shape, after)));
-        return engine.TensorConcatenate(pieces.ToArray(), 1);
-    }
-
-    private static int[] FrameShape(int[] shape, int frames)
-    {
-        var result = (int[])shape.Clone();
-        result[1] = frames;
-        return result;
+        var shape = target._shape;
+        int batch = shape[0];
+        int totalFrames = shape[1];
+        int frames = block._shape[1];
+        int frameSize = target.Length / (batch * totalFrames);
+        var sum = engine.TensorAdd(engine.TensorNarrow(target, 1, startFrame, frames), block).ToArray();
+        var destination = target.AsWritableSpan();
+        for (int b = 0; b < batch; b++)
+        {
+            new ReadOnlySpan<T>(sum, b * frames * frameSize, frames * frameSize)
+                .CopyTo(destination.Slice(((b * totalFrames) + startFrame) * frameSize, frames * frameSize));
+        }
     }
 
     /// <summary>

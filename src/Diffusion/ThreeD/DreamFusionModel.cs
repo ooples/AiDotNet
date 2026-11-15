@@ -332,32 +332,21 @@ public partial class DreamFusionModel<T> : LatentDiffusionModelBase<T>
     }
 
     /// <summary>
-    /// Encodes text to embedding.
+    /// Encodes text to embedding with the conditioning module.
     /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// No conditioning module was supplied: a hash of the prompt is not a text embedding, so score distillation would
+    /// optimize towards an arbitrary target while reporting a text-to-3D result.
+    /// </exception>
     private Tensor<T> EncodeTextInternal(string text)
     {
-        // Use conditioner if available
-        if (_conditioner != null)
-        {
-            var tokens = _conditioner.Tokenize(text);
-            return _conditioner.EncodeText(tokens);
-        }
+        if (_conditioner is null)
+            throw new InvalidOperationException(
+                "DreamFusion text-to-3D generation needs a text conditioning module; construct the model with a " +
+                "conditioner (e.g. a CLIP text conditioner).");
 
-        // Fallback: Create a simple embedding
-        var embedDim = _config.TextEmbeddingDim;
-
-        // Simple hash-based embedding for fallback
-        // A stable hash: string.GetHashCode() changes per process (#2361).
-        int hash = AiDotNet.Helpers.StableHash.Seed(text);
-        var rng = RandomHelper.CreateSeededRandom(hash);
-
-        var values = new double[embedDim];
-        for (int i = 0; i < values.Length; i++)
-        {
-            values[i] = (rng.NextDouble() * 2 - 1) * 0.1;
-        }
-
-        return new Tensor<double>(new[] { 1, embedDim }, new Vector<double>(values)).Cast<T>();
+        var tokens = _conditioner.Tokenize(text);
+        return _conditioner.EncodeText(tokens);
     }
 
     /// <summary>

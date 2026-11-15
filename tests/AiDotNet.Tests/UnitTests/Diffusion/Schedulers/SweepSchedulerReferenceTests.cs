@@ -828,6 +828,24 @@ public class SweepSchedulerReferenceTests
     }
 
     [Fact]
+    public void AnimateDiff_BlendWindowNoise_UpdatesOnlyTheWindowFramesInPlace()
+    {
+        // A window adds into its own frame range of the accumulators; padding it to the whole video made each
+        // denoising step quadratic in the video length. Frames outside the window keep their values.
+        var accumulated = new Tensor<double>(new[] { 1, 5, 2, 1, 1 }, Vec(1, 1, 2, 2, 3, 3, 4, 4, 5, 5));
+        var weights = new Tensor<double>(new[] { 1, 5, 1, 1, 1 }, Vec(1, 1, 1, 1, 1));
+        var window = new Tensor<double>(new[] { 1, 2, 2, 1, 1 }, Vec(10, 20, 30, 40));
+
+        var (blended, blendedWeights) = AnimateDiffModel<double>.BlendWindowNoise(accumulated, weights, window, 2, 2);
+
+        Assert.Same(accumulated, blended);
+        Assert.Same(weights, blendedWeights);
+        // A two-frame window weighs both frames 0.75.
+        AssertClose(new[] { 1.0, 1.0, 2.0, 2.0, 10.5, 18.0, 26.5, 34.0, 5.0, 5.0 }, blended.ToVector());
+        AssertClose(new[] { 1.0, 1.0, 1.75, 1.75, 1.0 }, blendedWeights.ToVector());
+    }
+
+    [Fact]
     public void StableVideoDiffusion_EndImageGuidance_GuidesEveryBatchItem()
     {
         // Batch 2, 3 frames, one latent value per frame.
@@ -862,6 +880,18 @@ public class SweepSchedulerReferenceTests
 
         // Progress is 0 for the only frame, so the guidance weight is 0 and the latent is unchanged.
         AssertClose(new[] { 2.5 }, result.ToVector());
+    }
+
+    [Fact]
+    public void StableVideoDiffusion_EndImageGuidance_RejectsLatentsOfAnotherSize()
+    {
+        // An 8x8 start/end latent cannot guide 16x16 video latents; the guidance used to be skipped silently, so
+        // the generated video ignored the end image without any error.
+        var latents = new Tensor<double>(new[] { 1, 2, 4, 16, 16 });
+        var start = new Tensor<double>(new[] { 1, 4, 8, 8 });
+        var end = new Tensor<double>(new[] { 1, 4, 8, 8 });
+        Assert.Throws<ArgumentException>(
+            () => StableVideoDiffusion<double>.ApplyEndImageGuidance(latents, start, end, 500));
     }
 
     #endregion

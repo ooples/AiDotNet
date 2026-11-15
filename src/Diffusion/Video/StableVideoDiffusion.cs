@@ -590,6 +590,14 @@ public partial class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
         int numInferenceSteps = 25,
         int? seed = null)
     {
+        if (startImage is null) throw new ArgumentNullException(nameof(startImage));
+        if (endImage is null) throw new ArgumentNullException(nameof(endImage));
+        if (!startImage._shape.SequenceEqual(endImage._shape))
+            throw new ArgumentException(
+                $"The end image [{string.Join(", ", endImage._shape)}] must have the start image's shape " +
+                $"[{string.Join(", ", startImage._shape)}]: the video interpolates between their latents.",
+                nameof(endImage));
+
         // Encode both images
         var startLatent = EncodeToLatent(startImage, sampleMode: false);
         var endLatent = EncodeToLatent(endImage, sampleMode: false);
@@ -637,6 +645,10 @@ public partial class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
     /// p = f / (F - 1) (p = 0 for a single frame) by weight 0.1 * (timestep / 1000) * p. Every batch item is
     /// guided, by its own start/end latent when one is given per item and by the first one otherwise.
     /// </remarks>
+    /// <exception cref="ArgumentException">
+    /// The start or end latent is not [batch, channels, height, width] with the video's channels and size; the
+    /// guidance would otherwise be skipped silently and the end image ignored.
+    /// </exception>
     internal static Tensor<T> ApplyEndImageGuidance(
         Tensor<T> latents,
         Tensor<T> startLatent,
@@ -653,9 +665,14 @@ public partial class StableVideoDiffusion<T> : VideoDiffusionModelBase<T>
                                startShape[1] == shape[2] && startShape[2] == shape[3] && startShape[3] == shape[4] &&
                                endShape[1] == shape[2] && endShape[2] == shape[3] && endShape[3] == shape[4];
 
-        // Dimension mismatch - use generated latent directly
+        if (!dimensionsMatch)
+            throw new ArgumentException(
+                $"The start [{string.Join(", ", startShape)}] and end [{string.Join(", ", endShape)}] latents must be " +
+                $"[batch, {shape[2]}, {shape[3]}, {shape[4]}] to guide the [{string.Join(", ", shape)}] video latents.",
+                nameof(endLatent));
+
         int frames = shape[1];
-        if (!dimensionsMatch || frames == 0)
+        if (frames == 0)
             return latents;
 
         // Guidance strength decreases as we progress through denoising
