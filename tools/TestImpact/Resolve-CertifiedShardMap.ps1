@@ -365,8 +365,13 @@ if (Test-Path -LiteralPath $ResultFile) {
     throw "refusing to overwrite existing result file $ResultFile"
 }
 
+# The map workflow runs on every master push, so the window is counted in merges, not days. A run
+# that finds no coverage source to harvest completes green and publishes nothing; at 20, that many
+# merges after the source expired would have scrolled the last certified map out of sight and put
+# every pull request on the full matrix while its artifact was still retained. 60 is about a week
+# of merges. Only runs newer than the first certified one are ever inspected.
 $runsJson = & gh run list --repo $Repository --workflow test-impact-map.yml --branch $MapBranch `
-    --status completed --limit 20 --json databaseId,conclusion,createdAt,workflowName,status 2>$null
+    --status completed --limit 60 --json databaseId,conclusion,createdAt,workflowName,status 2>$null
 if ($LASTEXITCODE -ne 0) { throw 'could not query completed Test impact map workflow runs' }
 $runs = @($runsJson | ConvertFrom-Json)
 $decisionRoot = Join-Path ([IO.Path]::GetTempPath()) ("aidotnet-map-decisions-" + [guid]::NewGuid().ToString('N'))

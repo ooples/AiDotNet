@@ -30,6 +30,9 @@ public class Stl10DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
     private const int NumClasses = 10;
     private const int PixelsPerImage = ImageSize * ImageSize * 3;
 
+    // Images read per chunk: the staging buffer is 32 * 27,648 bytes (about 0.9 MB) whatever the file size.
+    private const int ImagesPerChunk = 32;
+
     private static readonly string DownloadUrl =
         "http://ai.stanford.edu/~acoates/stl10/stl10_binary.tar.gz";
 
@@ -87,8 +90,7 @@ public class Stl10DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
         if (!File.Exists(xFile))
             throw new FileNotFoundException($"STL-10 image binary not found: {xFile}");
 
-        byte[] xBytes = File.ReadAllBytes(xFile);
-        int totalImagesInFile = xBytes.Length / PixelsPerImage;
+        int totalImagesInFile = (int)(new FileInfo(xFile).Length / PixelsPerImage);
         int totalSamples = totalImagesInFile;
         if (_options.MaxSamples.HasValue && _options.MaxSamples.Value < totalSamples)
             totalSamples = _options.MaxSamples.Value;
@@ -109,46 +111,74 @@ public class Stl10DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
                     $"STL-10 label binary {yFile} is truncated: got {labelBytes.Length} bytes, expected {totalImagesInFile}.");
         }
 
-        var featuresData = new T[totalSamples * PixelsPerImage];
-        var labelsData = new T[totalSamples * NumClasses];
+        var labelsData = new int[totalSamples * NumClasses];
 
         // STL-10 storage: per-image, the bytes are organized as 3 channels of
         // 96×96 each, stored column-major within the channel. We transpose to
         // (h, w, c) row-major HWC for the output tensor.
+        // Images are streamed ImagesPerChunk at a time through one reused buffer and written straight into the
+        // output through the byte-to-T table, so peak memory is the output plus one chunk rather than whole-file
+        // byte, int and T copies.
         const int Channel = ImageSize * ImageSize;
-        bool normalize = _options.Normalize;
+        T[] lookup = PixelByteLookup.Create<T>(_options.Normalize);
+        var featuresData = new T[totalSamples * PixelsPerImage];
+        var chunk = new byte[Math.Min(ImagesPerChunk, Math.Max(totalSamples, 1)) * PixelsPerImage];
+        int chunkImages = chunk.Length / PixelsPerImage;
+        using (var stream = new FileStream(xFile, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 1))
+        {
+            for (int first = 0; first < totalSamples; first += chunkImages)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                int count = Math.Min(chunkImages, totalSamples - first);
+                ReadExactly(stream, chunk, count * PixelsPerImage, xFile);
+                for (int k = 0; k < count; k++)
+                {
+                    int srcBase = k * PixelsPerImage;
+                    int dstBase = (first + k) * PixelsPerImage;
+                    for (int c = 0; c < 3; c++)
+                    {
+                        for (int col = 0; col < ImageSize; col++)
+                        {
+                            int src = srcBase + c * Channel + col * ImageSize;
+                            int dst = dstBase + col * 3 + c;
+                            for (int row = 0; row < ImageSize; row++)
+                            {
+                                featuresData[dst + row * ImageSize * 3] = lookup[chunk[src + row]];
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         for (int i = 0; i < totalSamples; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            int srcBase = i * PixelsPerImage;
-            int dstBase = i * PixelsPerImage;
-            for (int c = 0; c < 3; c++)
-            {
-                int chSrc = srcBase + c * Channel;
-                for (int col = 0; col < ImageSize; col++)
-                    for (int row = 0; row < ImageSize; row++)
-                    {
-                        int srcIdx = chSrc + col * ImageSize + row;
-                        int dstIdx = dstBase + (row * ImageSize + col) * 3 + c;
-                        byte b = xBytes[srcIdx];
-                        featuresData[dstIdx] = normalize
-                            ? NumOps.FromDouble(b / 255.0)
-                            : NumOps.FromDouble(b);
-                    }
-            }
             if (labelBytes is not null)
             {
                 int label = labelBytes[i] - 1; // STL-10 labels are 1..10
                 if (label < 0 || label >= NumClasses)
                     throw new InvalidDataException(
                         $"STL-10 {yFile} contains out-of-range label {labelBytes[i]} at index {i}. Expected 1..{NumClasses}.");
-                labelsData[i * NumClasses + label] = NumOps.One;
+                labelsData[i * NumClasses + label] = 1;
             }
         }
 
         LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, ImageSize, ImageSize, 3 });
-        LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, NumClasses });
+        LoadedLabels = new Tensor<int>(labelsData, new[] { totalSamples, NumClasses }).Cast<T>();
         InitializeIndices(totalSamples);
+    }
+
+    private static void ReadExactly(Stream stream, byte[] buffer, int count, string path)
+    {
+        int offset = 0;
+        while (offset < count)
+        {
+            int read = stream.Read(buffer, offset, count - offset);
+            if (read <= 0)
+                throw new InvalidDataException($"STL-10 image binary {path} ended before {count} bytes of the chunk were read.");
+            offset += read;
+        }
     }
 
     /// <inheritdoc/>

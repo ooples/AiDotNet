@@ -25946,3 +25946,12 @@ override AiDotNet.Document.Analysis.PageSegmentation.DocBank<T>.GetExtraTrainabl
 override AiDotNet.Document.Analysis.PageSegmentation.DocBank<T>.GetGeneratedNestedNetworkLayerViews() -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>?>!
 static AiDotNet.Document.Analysis.PageSegmentation.DocBank<T>.TokenLabels.get -> System.Collections.Generic.IReadOnlyList<AiDotNet.Document.DocumentRegionType>!
 AiDotNet.Document.LayoutRegion<T>.HasBoundingBox.get -> bool
+AiDotNet.Data.Sampling.WeightedSamplerBase<T>.CumulativeProbabilities -> AiDotNet.Tensors.LinearAlgebra.Tensor<double>!
+*REMOVED*AiDotNet.Data.Transforms.Numeric.MinMaxScaleTransform<T>.MinMaxScaleTransform(double[]! min, double[]! max, double targetMin = 0, double targetMax = 1) -> void
+*REMOVED*AiDotNet.Data.Transforms.Numeric.StandardScaleTransform<T>.StandardScaleTransform(double[]! mean, double[]! std) -> void
+AiDotNet.Data.Transforms.Numeric.MinMaxScaleTransform<T>.MinMaxScaleTransform(T[]! min, T[]! max) -> void
+AiDotNet.Data.Transforms.Numeric.MinMaxScaleTransform<T>.MinMaxScaleTransform(T[]! min, T[]! max, double targetMin, double targetMax) -> void
+AiDotNet.Data.Transforms.Numeric.StandardScaleTransform<T>.StandardScaleTransform(T[]! mean, T[]! std) -> void
+*REMOVED*AiDotNet.Data.Transforms.Numeric.MinMaxScaleTransform<T>.MinMaxScaleTransform(T[]![]! referenceData, double targetMin = 0, double targetMax = 1) -> void
+AiDotNet.Data.Transforms.Numeric.MinMaxScaleTransform<T>.MinMaxScaleTransform(T[]![]! referenceData) -> void
+AiDotNet.Data.Transforms.Numeric.MinMaxScaleTransform<T>.MinMaxScaleTransform(T[]![]! referenceData, double targetMin, double targetMax) -> void
