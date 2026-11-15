@@ -336,8 +336,9 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
     /// <summary>
     /// Greedy autoregressive decoding: the sequence is a start-of-sequence embedding followed by the
     /// embedding of every token generated so far. Each step cross-attends the whole sequence to the vision
-    /// tokens, runs the decoder, and takes the last position's logits; their argmax is the next token,
-    /// embedded with the vocabulary projection's weights (tied input/output embeddings).
+    /// tokens, runs the decoder blocks, and applies the vocabulary projection to the last position only (the
+    /// projection is per position, so the other positions' logits would be discarded); their argmax is the next
+    /// token, embedded with the vocabulary projection's weights (tied input/output embeddings).
     /// </summary>
     /// <param name="visionFeatures">Vision tokens, read as rows of <c>CaptioningDecoderDim</c> values.</param>
     /// <returns>The <c>[MaxCaptionLength * VocabSize]</c> logits of every step.</returns>
@@ -353,10 +354,11 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
         for (int step = 0; step < maxLen; step++)
         {
             int positions = sequence.Shape[0];
-            var decoderOutput = ForwardCaptioningDecoder(CrossAttend(sequence, visionFeatures));
-            int perPosition = decoderOutput.Length / positions;
-            var last = Engine.TensorSlice(decoderOutput.Reshape([positions, perPosition]),
+            var hidden = ForwardCaptioningDecoderBlocks(CrossAttend(sequence, visionFeatures));
+            int perPosition = hidden.Length / positions;
+            var lastHidden = Engine.TensorSlice(hidden.Reshape([positions, perPosition]),
                 [positions - 1, 0], [1, perPosition]);
+            var last = ProjectCaptionVocabulary(lastHidden);
             stepLogits[step] = FitLength(last, _options.VocabSize);
 
             if (step + 1 < maxLen)
@@ -759,6 +761,34 @@ public partial class SigLIP2<T> : VisionLanguageModelBase<T>, IContrastiveVision
         for (int i = start; i < end; i++)
             current = Layers[i].Forward(current);
         return current;
+    }
+
+    /// <summary>
+    /// Forwards through the captioning decoder blocks, every decoder layer except the final vocabulary projection.
+    /// </summary>
+    private Tensor<T> ForwardCaptioningDecoderBlocks(Tensor<T> input)
+    {
+        if (!_options.IncludeCaptioningDecoder)
+            return input;
+
+        int start = _textEncoderEnd;
+        int end = Math.Min(_captioningDecoderEnd, Layers.Count) - 1;
+        var current = input;
+        for (int i = start; i < end; i++)
+            current = Layers[i].Forward(current);
+        return current;
+    }
+
+    /// <summary>
+    /// Applies the captioning decoder's final vocabulary projection to decoder hidden states.
+    /// </summary>
+    private Tensor<T> ProjectCaptionVocabulary(Tensor<T> hidden)
+    {
+        if (!_options.IncludeCaptioningDecoder)
+            return hidden;
+
+        int projectionIndex = Math.Min(_captioningDecoderEnd, Layers.Count) - 1;
+        return projectionIndex >= _textEncoderEnd ? Layers[projectionIndex].Forward(hidden) : hidden;
     }
 
     /// <summary>
