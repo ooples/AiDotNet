@@ -144,10 +144,13 @@ $script:SelectionControlPaths = @(
 # Workflows that take part in the validation pipeline without choosing shards: full validation.
 #   - resume-deferred-ci.yml re-runs the deferred jobs of a Build & SonarCloud run once the pull request run it
 #     waits for completes, so it decides when post-merge validation executes.
+#   - shard-timing-table.yml builds the timing table the Build job packs shard slices from (ShardPacking.ps1,
+#     repository variable TEST_IMPACT_REPACK), so it shapes which job each selected slice runs in.
 # Every file under .github/workflows is in exactly one of SelectionControlPaths, this list and
 # NonRuntimeWorkflowPaths; Assert-WorkflowsClassified fails the self-test for a file in none of them.
 $script:PipelineWorkflowPaths = @(
-    '.github/workflows/resume-deferred-ci.yml'
+    '.github/workflows/resume-deferred-ci.yml',
+    '.github/workflows/shard-timing-table.yml'
 )
 # Build-time code: the source generators the test project loads as an analyzer. It runs inside the
 # compiler, so runtime coverage never records it, yet one edit can rewrite thousands of generated

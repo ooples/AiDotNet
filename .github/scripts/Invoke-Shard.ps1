@@ -27,7 +27,7 @@ if ($packedSegments -and $packedSegments -cne 'null') {
   $packStarted = [DateTime]::UtcNow
   $packMinutes = 0
   [void] [int]::TryParse("$($env:SHARD_PACK_TIMEOUT)", [ref] $packMinutes)
-  $packDeadline = if ($packMinutes -gt 0) { $packStarted.AddMinutes([Math]::Max(5, $packMinutes - 12)) } else { [DateTime]::MaxValue }
+  $packDeadline = if ($packMinutes -gt 0) { $packStarted.AddMinutes([Math]::Max(0, $packMinutes - 12)) } else { [DateTime]::MaxValue }
 
   $slots = for ($slot = 0; $slot -lt $segments.Count; $slot++) {
     $segment = $segments[$slot]
@@ -77,7 +77,8 @@ if ($packedSegments -and $packedSegments -cne 'null') {
     $segment = $entry.Segment
     Write-Host "::group::Packed slice $($entry.Slot + 1) of $($slots.Count): $($entry.Name)"
     try {
-      if ([DateTime]::UtcNow -gt $packDeadline) {
+      # The first slice always starts: a job that runs nothing would only hide its slices.
+      if ($entry.Slot -gt 0 -and [DateTime]::UtcNow -gt $packDeadline) {
         Write-Host "::error::Packed slice '$($entry.Name)' was not started: the job is within 12 minutes of its $packMinutes-minute timeout. It is recorded as cancelled."
         continue
       }

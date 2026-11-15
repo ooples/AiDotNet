@@ -26,6 +26,12 @@
     (reflection over a type name).
 
     Writes matrix, ledger_matrix, skipped and impact_mode to GITHUB_OUTPUT.
+
+    Layer 2 (ShardPacking.ps1, repository variable TEST_IMPACT_REPACK). With `on`, a pull request or merge
+    queue run's slices - narrowed or passed through - are packed into time-balanced jobs and the matrix
+    output holds the packed jobs; ledger_matrix and skipped still list shards. With `report` the packing
+    is computed and written to -PackPlanFile and the matrix is untouched. Unset or `off`, none of it runs.
+    Any failure while packing leaves the matrix one job per shard.
 #>
 [CmdletBinding()]
 param(
@@ -58,6 +64,8 @@ function Get-RepackedMatrix {
         does not fit a job output beside -OtherOutputCharacters, or anything at all goes wrong.
     #>
     param([object[]] $Slices, [hashtable] $PlanShards = @{}, [int] $OtherOutputCharacters = 0)
+    # Unset or off: nothing below runs, not even loading the packing code.
+    if ("$($env:TEST_IMPACT_REPACK)".Trim().ToLowerInvariant() -cnotin @('report', 'on')) { return $null }
     try {
         . (Join-Path $PSScriptRoot 'ShardPacking.ps1')
         $mode = Get-ShardRepackMode $env:TEST_IMPACT_REPACK
@@ -81,7 +89,16 @@ function Get-RepackedMatrix {
                 Write-Host "::warning::the packed matrix ($($candidate.Length) characters) does not fit a job output - one job per shard"
                 $applied = 'run unpacked (the packed matrix does not fit a job output), but would run as'
             }
-            else { $json = $candidate; $applied = 'run as' }
+            else {
+                # A packed matrix is trusted only after the packing rules pass their own known-answer checks here,
+                # as narrowing is trusted only after TypeImpact passes its own.
+                & pwsh -NoProfile -File (Join-Path $PSScriptRoot 'Test-ShardPacking.ps1') -RulesOnly | Out-Host
+                $rules = $LASTEXITCODE
+                $global:LASTEXITCODE = 0
+                if ($rules -ne 0) { throw 'the packing rules failed their self-test' }
+                $json = $candidate
+                $applied = 'run as'
+            }
         }
         $plan['applied'] = [bool] $json
         ConvertTo-Json -InputObject $plan -Depth 8 | Set-Content -LiteralPath (Join-Path $Repository $PackPlanFile) -Encoding utf8
