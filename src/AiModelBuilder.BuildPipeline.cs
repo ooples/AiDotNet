@@ -5543,6 +5543,11 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             _model = curriculumLearner.BaseModel;
         }
 
+        // Adversarial training (EnableAdversarialTraining) is the last training stage: it fits the defended model on
+        // the training split as the model sees it (after data preparation, preprocessing and augmentation), never on
+        // the validation or test rows, so the result predicts through the defended model.
+        optimizationResult.BestSolution = ApplyConfiguredAdversarialDefense(optimizationResult.BestSolution, XTrain, yTrain);
+
         var trainingEndTime = DateTime.UtcNow;
         var trainingDuration = trainingEndTime - trainingStartTime;
 
@@ -5852,7 +5857,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             finalResult.SetSelfSupervisedLearningPretrainingResult(_selfSupervisedLearningPretrainingResult);
         }
         ComputeExplanationFaithfulness(finalResult, preparedX, optimizationResult);
-        ApplyConfiguredAdversarialDefense(finalResult, preparedX, preparedY);
         ComputeAdversarialRobustness(finalResult, preparedX, preparedY, optimizationResult);
         ComputeCertifiedRobustness(finalResult, preparedX, preparedY, optimizationResult);
         ComputeModelCompression(finalResult, preparedX, preparedY, optimizationResult);
