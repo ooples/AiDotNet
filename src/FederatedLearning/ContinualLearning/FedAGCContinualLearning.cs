@@ -173,9 +173,10 @@ public class FedAGCContinualLearning<T> : Infrastructure.FederatedLearningCompon
             return NumOps.Zero;
         }
 
-        var diff = Engine.Subtract(currentParameters, referenceParameters);
-        T penalty = Engine.Sum(Engine.Multiply(importanceWeights, Engine.Multiply(diff, diff)));
-        return NumOps.Multiply(penalty, NumOps.FromDouble(regularizationStrength * 0.5));
+        // Formed and scaled in double: a Half difference of 300 squares past 65504.
+        double penalty = Infrastructure.FederatedTensorMath<T>.WeightedSquaredDistance(
+            currentParameters, referenceParameters, importanceWeights);
+        return NumOps.FromDouble(penalty * regularizationStrength * 0.5);
     }
 
     /// <inheritdoc/>
@@ -196,12 +197,14 @@ public class FedAGCContinualLearning<T> : Infrastructure.FederatedLearningCompon
         if (NumOps.GreaterThan(maxImportance, NumOps.Zero))
         {
             var unit = Engine.Divide(importanceWeights, maxImportance);
-            T dot = Engine.DotProduct(gradient, unit);
-            T importNorm2 = Engine.DotProduct(unit, unit);
-            if (NumOps.LessThan(dot, NumOps.Zero))
+            // Both reductions are taken in double: normalizing the importance does not bound g . u, and two
+            // Half gradient entries of -40000 already sum past -65504.
+            double dot = Infrastructure.FederatedTensorMath<T>.Dot(gradient, unit);
+            double importNorm2 = Infrastructure.FederatedTensorMath<T>.Dot(unit, unit);
+            if (dot < 0)
             {
                 // Conflict detected: project out the conflicting component.
-                T scale = NumOps.Multiply(NumOps.FromDouble(_correctionStrength), NumOps.Divide(dot, importNorm2));
+                T scale = NumOps.FromDouble(_correctionStrength * dot / importNorm2);
                 return Engine.Subtract(gradient, Engine.Multiply(unit, scale));
             }
         }
@@ -281,7 +284,8 @@ public class FedAGCContinualLearning<T> : Infrastructure.FederatedLearningCompon
             Engine.TensorMultiply(Engine.TensorSign(gradient.AsTensor()), Engine.TensorSign(importance.AsTensor())), NumOps.Zero);
 
         // Adaptive strength = base * normalizedImportance * conflictIndicator
-        var normalized = Engine.Multiply(absImportance, NumOps.Divide(baseStrength, maxImportance));
+        // (divided before it is scaled: base / max overflows narrow T for a tiny maximum)
+        var normalized = Engine.Multiply(Engine.Divide(absImportance, maxImportance), baseStrength);
         return Engine.TensorMultiply(normalized.AsTensor(), conflict).ToVector();
     }
 

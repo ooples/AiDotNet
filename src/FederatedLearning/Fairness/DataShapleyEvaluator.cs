@@ -192,13 +192,13 @@ public class DataShapleyEvaluator<T> : FederatedLearningComponentBase<T>, IClien
             return 0;
         }
 
-        var diff = Engine.TensorSubtract(
-            Engine.TensorSlice(candidateModel, new[] { 0 }, new[] { size }),
-            Engine.TensorSlice(referenceModel, new[] { 0 }, new[] { size }));
+        var candidate = Engine.TensorSlice(candidateModel, new[] { 0 }, new[] { size });
+        var reference = Engine.TensorSlice(referenceModel, new[] { 0 }, new[] { size });
 
         // ‖diff‖ = m · ‖diff / m‖ with m = max |diff|, the scaled sum of squares accumulated in double for narrow
         // T: it reaches the entry count, which passes Half's 65504 for a model of 65,505 equal differences.
-        return -Infrastructure.FederatedTensorMath<T>.ScaledNorm(diff.ToVector());
+        // The difference itself is formed in double for narrow T: 40000 minus -40000 is out of Half's range.
+        return -Infrastructure.FederatedTensorMath<T>.Distance(candidate, reference);
     }
 
     /// <summary>
@@ -215,10 +215,12 @@ public class DataShapleyEvaluator<T> : FederatedLearningComponentBase<T>, IClien
         }
 
         var head = Engine.TensorSlice(average, new[] { 0 }, new[] { covered });
-        var delta = Engine.TensorDivideScalar(
-            Engine.TensorSubtract(Engine.TensorSlice(clientModel, new[] { 0 }, new[] { covered }), head),
-            NumOps.FromDouble(count));
-        var updatedHead = Engine.TensorAdd(head, delta);
+
+        // mean_k = mean_{k-1} * (k - 1) / k + x_k / k. Both terms stay within the inputs' range; the difference
+        // x_k - mean_{k-1} does not (40000 minus -40000 overflows Half before the division).
+        var updatedHead = Engine.TensorAdd(
+            Engine.TensorMultiplyScalar(head, NumOps.FromDouble((count - 1.0) / count)),
+            Engine.TensorDivideScalar(Engine.TensorSlice(clientModel, new[] { 0 }, new[] { covered }), NumOps.FromDouble(count)));
         if (covered == modelSize)
         {
             return updatedHead;

@@ -96,17 +96,24 @@ public class DataFreeFCL<T> : Infrastructure.FederatedLearningComponentBase<T>, 
         // Compute per-parameter sensitivity: parameters with larger magnitude relative
         // to layer statistics are considered more important (proxy for Fisher information).
         // The norm is taken pre-scaled in double: squaring Half entries overflows long before the RMS does.
-        T rms = paramCount > 0
-            ? NumOps.FromDouble(Infrastructure.FederatedTensorMath<T>.ScaledNorm(modelParameters) / Math.Sqrt(paramCount))
-            : NumOps.Zero;
+        double rmsValue = paramCount > 0
+            ? Infrastructure.FederatedTensorMath<T>.ScaledNorm(modelParameters) / Math.Sqrt(paramCount)
+            : 0;
+        T rms = NumOps.FromDouble(rmsValue);
+
+        // Half and BFloat16 divide in double: a positive RMS below the smallest Half would round to zero and
+        // every parameter would get importance 1.
+        bool wide = Infrastructure.FederatedTensorMath<T>.IsNarrow && rmsValue > 0 && !double.IsInfinity(rmsValue);
 
         // Importance proportional to how far parameter is from zero relative to RMS, capped at 10 to
         // avoid outliers.
         Vector<T> importanceVector;
-        if (NumOps.GreaterThan(rms, NumOps.Zero))
+        if (wide || NumOps.GreaterThan(rms, NumOps.Zero))
         {
-            var relative = Engine.Divide(Engine.Abs(modelParameters), rms);
-            importanceVector = Engine.TensorMin(relative.AsTensor(), NumOps.FromDouble(10.0)).ToVector();
+            var relative = wide
+                ? Infrastructure.FederatedTensorMath<T>.Scale(Engine.Abs(modelParameters).AsTensor(), 1.0 / rmsValue)
+                : Engine.Divide(Engine.Abs(modelParameters), rms).AsTensor();
+            importanceVector = Engine.TensorMin(relative, NumOps.FromDouble(10.0)).ToVector();
         }
         else
         {
@@ -147,15 +154,15 @@ public class DataFreeFCL<T> : Infrastructure.FederatedLearningComponentBase<T>, 
         int len = Math.Min(currentParameters.Length,
             Math.Min(referenceParameters.Length, importanceWeights.Length));
 
-        T penalty = NumOps.Zero;
-        if (len > 0)
-        {
-            var diff = Engine.Subtract(Prefix(currentParameters, len), Prefix(referenceParameters, len));
-            penalty = Engine.Sum(Engine.Multiply(Prefix(importanceWeights, len), Engine.Multiply(diff, diff)));
-        }
+        // The weighted squared distance is formed and scaled in double: a Half difference of 300 squares past
+        // 65504 although the scaled penalty is in range.
+        double penalty = len > 0
+            ? Infrastructure.FederatedTensorMath<T>.WeightedSquaredDistance(
+                Prefix(currentParameters, len), Prefix(referenceParameters, len), Prefix(importanceWeights, len))
+            : 0;
 
         // Scale by distillation weight and regularization strength.
-        return NumOps.Multiply(penalty, NumOps.FromDouble(_distillationWeight * regularizationStrength / Math.Max(len, 1)));
+        return NumOps.FromDouble(penalty * (_distillationWeight * regularizationStrength / Math.Max(len, 1)));
     }
 
     /// <inheritdoc/>
@@ -215,12 +222,24 @@ public class DataFreeFCL<T> : Infrastructure.FederatedLearningComponentBase<T>, 
         }
 
         double totalWeight = 0;
-        var aggregated = new Vector<T>(maxLen);
+        foreach (var clientId in clientImportances.Keys)
+        {
+            totalWeight += clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
+        }
+
+        if (totalWeight <= 0)
+        {
+            // All weights were zero or negative — fall back to uniform averaging.
+            totalWeight = clientImportances.Count;
+        }
+
+        // Weights are divided by their total in double before they touch T: two weights of 40000 overflow
+        // both the weighted sum and the total in Half.
+        var aggregated = new Infrastructure.FederatedTensorMath<T>.Accumulator(maxLen);
 
         foreach (var (clientId, importance) in clientImportances)
         {
             double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
-            totalWeight += w;
 
             // Shorter importance vectors contribute zeros past their end.
             var padded = importance;
@@ -230,16 +249,10 @@ public class DataFreeFCL<T> : Infrastructure.FederatedLearningComponentBase<T>, 
                 importance.AsSpan().CopyTo(padded.AsWritableSpan());
             }
 
-            aggregated = Engine.Add(aggregated, Engine.Multiply(padded, NumOps.FromDouble(w)));
+            aggregated.Add(padded.AsTensor(), w / totalWeight);
         }
 
-        if (totalWeight <= 0)
-        {
-            // All weights were zero or negative — fall back to uniform averaging.
-            totalWeight = clientImportances.Count;
-        }
-
-        return Engine.Divide(aggregated, NumOps.FromDouble(totalWeight));
+        return aggregated.ToTensor().ToVector();
     }
 
     /// <summary>The first <paramref name="length"/> entries (the vector itself when it is that long).</summary>

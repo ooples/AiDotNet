@@ -83,19 +83,9 @@ public class FederatedPromptTuning<T> : Infrastructure.FederatedLearningComponen
             throw new ArgumentException("No client adapters provided.", nameof(clientAdapters));
 
         int promptSize = clientAdapters.Values.First().Length;
-        var aggregated = new Vector<T>(promptSize);
-        double totalWeight = 0;
 
-        foreach (var (clientId, prompts) in clientAdapters)
-        {
-            double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
-            totalWeight += w;
-
-            // Only the first promptSize entries of a longer prompt vector take part.
-            var clientPrompt = prompts.Length == promptSize ? prompts : prompts.GetSubVector(0, promptSize);
-            aggregated = Engine.Add(aggregated, Engine.Multiply(clientPrompt, NumOps.FromDouble(w)));
-        }
-
-        return Engine.Multiply(aggregated, NumOps.FromDouble(1.0 / totalWeight));
+        // Only the first promptSize entries of a longer prompt vector take part. Weights are normalized
+        // before they touch T, so a raw sample-count weight cannot overflow Half.
+        return Infrastructure.FederatedTensorMath<T>.WeightedAverage(clientAdapters, clientWeights, promptSize);
     }
 }

@@ -111,18 +111,10 @@ public class FederatedLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>
             throw new ArgumentException("No client adapters provided.", nameof(clientAdapters));
 
         int adapterLen = clientAdapters.Values.First().Length;
-        var aggregated = new Vector<T>(adapterLen);
-        double totalWeight = 0;
 
-        // FedEx-LoRA: A and B are each the weighted average of the clients' factors.
-        foreach (var (clientId, adapters) in clientAdapters)
-        {
-            double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
-            totalWeight += w;
-            aggregated = Engine.Add(aggregated, Engine.Multiply(adapters, NumOps.FromDouble(w)));
-        }
-
-        return Engine.Multiply(aggregated, NumOps.FromDouble(1.0 / totalWeight));
+        // FedEx-LoRA: A and B are each the weighted average of the clients' factors (weights normalized
+        // before they touch T, so a raw sample-count weight cannot overflow Half).
+        return Infrastructure.FederatedTensorMath<T>.WeightedAverage(clientAdapters, clientWeights, adapterLen);
     }
 
     /// <summary>

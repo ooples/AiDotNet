@@ -184,37 +184,51 @@ public class DPFedLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IF
         }
 
         // Steps 1-2: clip each client's adapters to clipNorm, then take the weighted average.
-        var aggregated = new Vector<T>(adapterLen);
         double totalWeight = 0;
         double maxWeight = 0;
+        foreach (var clientId in clientAdapters.Keys)
+        {
+            // A negative or non-finite weight breaks the noise calibration: weights [10, -10] average with
+            // coefficients [5, -5] while the noise below would cover a share of 0.5.
+            double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
+            if (double.IsNaN(w) || double.IsInfinity(w) || w < 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(clientWeights), $"Client {clientId} weight must be finite and non-negative.");
+            }
+
+            totalWeight += w;
+            maxWeight = Math.Max(maxWeight, w);
+        }
+
+        int n = clientAdapters.Count;
+        if (double.IsInfinity(totalWeight))
+        {
+            throw new ArgumentException("Client weights must have a finite sum.", nameof(clientWeights));
+        }
+
+        // The clip scale and the normalized weight are applied as one coefficient, in double for Half: a clip
+        // scale below the smallest Half would zero the update and a raw weight above 65504 would overflow it.
+        double normalizer = totalWeight > 0 ? totalWeight : n;
+        var sum = new Infrastructure.FederatedTensorMath<T>.Accumulator(adapterLen);
         foreach (var (clientId, adapters) in clientAdapters)
         {
             // The norm is taken pre-scaled and kept in double: squaring a Half entry above 256 overflows, and an
             // infinite norm would clip the client's update to zero.
             double norm = Infrastructure.FederatedTensorMath<T>.ScaledNorm(adapters);
             double clipScale = norm > _clipNorm ? _clipNorm / norm : 1.0;
-            var clippedAdapter = Engine.Multiply(adapters, NumOps.FromDouble(clipScale));
-
             double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
-            totalWeight += w;
-            maxWeight = Math.Max(maxWeight, Math.Abs(w));
-            aggregated = Engine.Add(aggregated, Engine.Multiply(clippedAdapter, NumOps.FromDouble(w)));
+            sum.Add(adapters.AsTensor(), clipScale * w / normalizer);
         }
 
-        int n = clientAdapters.Count;
+        var aggregated = sum.ToTensor().ToVector();
 
         // The largest share any one client has of the average: max_k |w_k| / W (1 / n for equal weights).
         double largestShare = 1.0 / n;
-        if (totalWeight <= 0)
-        {
-            totalWeight = clientAdapters.Count;
-        }
-        else
+        if (totalWeight > 0)
         {
             largestShare = maxWeight / totalWeight;
         }
-
-        aggregated = Engine.Multiply(aggregated, NumOps.FromDouble(1.0 / totalWeight));
 
         // Step 3: Gaussian mechanism on the weighted average of n clipped vectors. Every client's whole adapter
         // vector is clipped to clipNorm, so replacing client k moves the average by at most

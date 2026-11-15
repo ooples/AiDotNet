@@ -151,7 +151,8 @@ public class GraphNeighborhoodPrivacy<T> : FederatedLearningComponentBase<T>
         double sigma = clipNorm * Math.Sqrt(2 * Math.Log(1.25 / _delta)) / _epsilon;
         var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
 
-        var clipped = Engine.TensorMultiplyScalar(features, NumOps.FromDouble(clipFactor));
+        // (scaled in double for Half: a clip factor near 1e-8 rounds to zero as a Half scalar)
+        var clipped = Infrastructure.FederatedTensorMath<T>.Scale(features, clipFactor);
         return Engine.TensorAdd(clipped, SampleGaussianTensor(rng, dim, sigma));
     }
 

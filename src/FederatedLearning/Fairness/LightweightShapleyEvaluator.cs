@@ -81,7 +81,10 @@ public class LightweightShapleyEvaluator<T> : Infrastructure.FederatedLearningCo
         }
 
         var unit = Engine.Divide(globalVector, globalMax);
-        double unitNorm2 = NumOps.ToDouble(Engine.DotProduct(unit, unit));
+
+        // Both dot products are reduced in double: the operands are bounded but their sum is not (two Half
+        // products of 40000 pass 65504, and so do 65,536 squared unit entries).
+        double unitNorm2 = Infrastructure.FederatedTensorMath<T>.Dot(unit, unit);
         double globalScale = NumOps.ToDouble(globalMax);
 
         foreach (var (clientId, clientModel) in clientModels)
@@ -92,7 +95,7 @@ public class LightweightShapleyEvaluator<T> : Infrastructure.FederatedLearningCo
                     $"Client {clientId} model length {clientModel.Length} does not match global model length {globalModel.Length}.");
             }
 
-            double dot = NumOps.ToDouble(Engine.DotProduct(clientModel.ToVector(), unit));
+            double dot = Infrastructure.FederatedTensorMath<T>.Dot(clientModel.ToVector(), unit);
             scores[clientId] = Math.Max(0, dot) / (globalScale * unitNorm2);
         }
 

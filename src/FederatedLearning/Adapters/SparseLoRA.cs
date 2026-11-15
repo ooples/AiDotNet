@@ -159,7 +159,8 @@ public class SparseLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, I
         }
 
         // Each element is averaged over the clients that sent it (non-zero). Weights are normalized by
-        // their total first so the per-element weight sums stay within [0, 1] for narrow T.
+        // their total first so the per-element weight sums stay within [0, 1] for narrow T, and Half sums in
+        // double: a weighted value below 2^-24 would round to zero before it was added.
         double totalWeight = 0;
         foreach (var clientId in clientAdapters.Keys)
         {
@@ -167,16 +168,20 @@ public class SparseLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, I
         }
 
         double weightScale = totalWeight > 0 ? 1.0 / totalWeight : 1.0;
-        var aggregated = new Tensor<T>(new[] { adapterLen });
-        var counts = new Tensor<T>(new[] { adapterLen }); // Weight of the clients that sent each element.
+        var aggregatedSum = new Infrastructure.FederatedTensorMath<T>.Accumulator(adapterLen);
+        var countSum = new Infrastructure.FederatedTensorMath<T>.Accumulator(adapterLen); // Weight of the clients that sent each element.
+        var zero = NumOps.Zero;
 
         foreach (var (clientId, adapters) in clientAdapters)
         {
-            var wT = NumOps.FromDouble((clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0) * weightScale);
-            var sent = Engine.TensorNotEquals(adapters.AsTensor(), NumOps.Zero); // Sparse: only non-zero elements were sent.
-            aggregated = Engine.TensorAdd(aggregated, Engine.TensorMultiplyScalar(adapters.AsTensor(), wT));
-            counts = Engine.TensorAdd(counts, Engine.TensorMultiplyScalar(sent, wT));
+            double w = (clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0) * weightScale;
+            var sent = Engine.TensorNotEquals(adapters.AsTensor(), zero); // Sparse: only non-zero elements were sent.
+            aggregatedSum.Add(adapters.AsTensor(), w);
+            countSum.Add(sent, w);
         }
+
+        var aggregated = aggregatedSum.ToTensor();
+        var counts = countSum.ToTensor();
 
         // Normalize by the weight of contributing clients per element.
         var normalized = Engine.TensorDivide(aggregated, counts);
@@ -311,6 +316,11 @@ public class SparseLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, I
         var aggregated = new Tensor<T>(new[] { len });
         var weightSums = new Tensor<T>(new[] { len });
 
+        // Half and BFloat16 accumulate in double, as AggregateAdapters does.
+        bool wide = Infrastructure.FederatedTensorMath<T>.IsNarrow;
+        var wideAggregated = new Tensor<double>(new[] { wide ? len : 0 });
+        var wideWeightSums = new Tensor<double>(new[] { wide ? len : 0 });
+
         foreach (var (clientId, sparse) in sparseUpdates)
         {
             int nnz = sparse.Indices.Length;
@@ -319,11 +329,26 @@ public class SparseLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, I
                 continue;
             }
 
-            var wT = NumOps.FromDouble((clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0) * weightScale);
             var indices = new Tensor<int>(sparse.Indices, new[] { nnz });
             var values = new Tensor<T>(sparse.Values, new[] { nnz });
+            if (wide)
+            {
+                double w = (clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0) * weightScale;
+                var wideValues = values.Cast<double>();
+                wideAggregated = Engine.TensorIndexAdd(wideAggregated, 0, indices, Engine.TensorMultiplyScalar(wideValues, w));
+                wideWeightSums = Engine.TensorIndexAdd(wideWeightSums, 0, indices, Engine.TensorFullLike(wideValues, w));
+                continue;
+            }
+
+            var wT = NumOps.FromDouble((clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0) * weightScale);
             aggregated = Engine.TensorIndexAdd(aggregated, 0, indices, Engine.TensorMultiplyScalar(values, wT));
             weightSums = Engine.TensorIndexAdd(weightSums, 0, indices, Engine.TensorFullLike(values, wT));
+        }
+
+        if (wide)
+        {
+            aggregated = wideAggregated.Cast<T>();
+            weightSums = wideWeightSums.Cast<T>();
         }
 
         var normalized = Engine.TensorDivide(aggregated, weightSums);

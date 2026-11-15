@@ -161,17 +161,9 @@ public class FedPETuning<T> : Infrastructure.FederatedLearningComponentBase<T>, 
                     $"Client {clientId} adapter length {adapters.Length} differs from expected {adapterLen}.");
             }
         }
-        var aggregated = new Vector<T>(adapterLen);
-        double totalWeight = 0;
 
-        foreach (var (clientId, adapters) in clientAdapters)
-        {
-            double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
-            totalWeight += w;
-            aggregated = Engine.Add(aggregated, Engine.Multiply(adapters, NumOps.FromDouble(w)));
-        }
-
-        return Engine.Multiply(aggregated, NumOps.FromDouble(1.0 / totalWeight));
+        // Weights are normalized before they touch T: a raw weight of 32768 times an entry of 4 overflows Half.
+        return Infrastructure.FederatedTensorMath<T>.WeightedAverage(clientAdapters, clientWeights, adapterLen);
     }
 
     /// <summary>
@@ -216,18 +208,7 @@ public class FedPETuning<T> : Infrastructure.FederatedLearningComponentBase<T>, 
 
         // FedPETuning aggregates the LoRA factors with FedAvg: the weighted average of every B and A entry
         // of every layer. Entries past the per-layer layout are averaged too rather than dropped.
-        var aggregated = new Vector<T>(adapterLenLora);
-        double totalWeight = 0;
-
-        foreach (var (clientId, adapters) in clientAdapters)
-        {
-            double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
-            totalWeight += w;
-            aggregated = Engine.Add(aggregated, Engine.Multiply(adapters, NumOps.FromDouble(w)));
-        }
-
-        double invTotal = totalWeight > 0 ? 1.0 / totalWeight : 0;
-        return Engine.Multiply(aggregated, NumOps.FromDouble(invTotal));
+        return Infrastructure.FederatedTensorMath<T>.WeightedAverage(clientAdapters, clientWeights, adapterLenLora);
     }
 
     /// <summary>

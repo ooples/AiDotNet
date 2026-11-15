@@ -272,7 +272,8 @@ public class FedDTCompressor<T> : Infrastructure.FederatedLearningComponentBase<
 
         foreach (var (layerName, template) in templateDelta)
         {
-            var merged = new Tensor<T>(new[] { template.Length });
+            // Half and BFloat16 accumulate in double: with 4096 equal clients a Half sum stops at 0.5.
+            var merged = new Infrastructure.FederatedTensorMath<T>.Accumulator(template.Length);
 
             foreach (var (clientId, decompressed) in decompressedClients)
             {
@@ -281,14 +282,12 @@ public class FedDTCompressor<T> : Infrastructure.FederatedLearningComponentBase<
 
                 if (decompressed.TryGetValue(layerName, out var layerVals))
                 {
-                    merged = Engine.TensorAdd(
-                        merged,
-                        Engine.TensorMultiplyScalar(new Tensor<T>(layerVals, new[] { layerVals.Length }), NumOps.FromDouble(w)));
+                    merged.Add(new Tensor<T>(layerVals, new[] { layerVals.Length }), w);
                 }
             }
 
             result[layerName] = totalWeight > 0
-                ? merged.ToArray()
+                ? merged.ToTensor().ToArray()
                 : new Tensor<T>(new[] { template.Length }).ToArray();
         }
 

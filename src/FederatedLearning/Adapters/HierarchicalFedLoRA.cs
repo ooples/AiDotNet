@@ -172,14 +172,10 @@ public class HierarchicalFedLoRA<T> : Infrastructure.FederatedLearningComponentB
             }
         }
 
-        var aggregated = new Vector<T>(adapterLen);
         double totalWeight = 0;
-
-        foreach (var (clientId, adapters) in clientAdapters)
+        foreach (var clientId in clientAdapters.Keys)
         {
-            double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
-            totalWeight += w;
-            aggregated = Engine.Add(aggregated, Engine.Multiply(adapters, NumOps.FromDouble(w)));
+            totalWeight += clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
         }
 
         if (totalWeight <= 0)
@@ -187,7 +183,8 @@ public class HierarchicalFedLoRA<T> : Infrastructure.FederatedLearningComponentB
             throw new InvalidOperationException("Total client weight must be positive.");
         }
 
-        return Engine.Multiply(aggregated, NumOps.FromDouble(1.0 / totalWeight));
+        // Weights are normalized before they touch T: a raw sample-count weight times an entry overflows Half.
+        return Infrastructure.FederatedTensorMath<T>.WeightedAverage(clientAdapters, clientWeights, adapterLen);
     }
 
     /// <summary>

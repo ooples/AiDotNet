@@ -188,6 +188,12 @@ public class FLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IFeder
             // ΔW is [out_dim x in_dim]; B_k is [out_dim x rank] and A_k is [rank x in_dim], row-major.
             var deltaW = new Tensor<T>(new[] { _layerOutputDim, _layerInputDim });
 
+            // Half and BFloat16 form the products, their sum and the SVD in double: B_k A_k passes 65504 for
+            // factors of 300 although the sqrt(S)-balanced factors of the average are back in range.
+            Tensor<double>? deltaWide = Infrastructure.FederatedTensorMath<T>.IsNarrow
+                ? new Tensor<double>(new[] { _layerOutputDim, _layerInputDim })
+                : null;
+
             foreach (var (clientId, adapters) in clientAdapters)
             {
                 double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
@@ -195,13 +201,32 @@ public class FLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IFeder
 
                 var bK = new Tensor<T>(new[] { _layerOutputDim, _rank }, adapters.GetSubVector(layerOffset, bSize));
                 var aK = new Tensor<T>(new[] { _rank, _layerInputDim }, adapters.GetSubVector(layerOffset + bSize, aSize));
+                if (deltaWide is not null)
+                {
+                    deltaWide = Engine.TensorAdd(
+                        deltaWide,
+                        Engine.TensorMultiplyScalar(Engine.TensorMatMul(bK.Cast<double>(), aK.Cast<double>()), normalizedW));
+                    continue;
+                }
+
                 deltaW = Engine.TensorAdd(
                     deltaW,
                     Engine.TensorMultiplyScalar(Engine.TensorMatMul(bK, aK), NumOps.FromDouble(normalizedW)));
             }
 
             // Step 2: Truncated SVD of ΔW re-decomposes it into rank-r factors.
-            var (newB, newA) = TruncatedSVD(deltaW, _layerOutputDim, _layerInputDim, _rank);
+            Tensor<T> newB;
+            Tensor<T> newA;
+            if (deltaWide is not null)
+            {
+                var (wideB, wideA) = TruncatedSVD(deltaWide, _layerOutputDim, _layerInputDim, _rank);
+                newB = wideB.Cast<T>();
+                newA = wideA.Cast<T>();
+            }
+            else
+            {
+                (newB, newA) = TruncatedSVD(deltaW, _layerOutputDim, _layerInputDim, _rank);
+            }
 
             // Step 3: Write B_new and A_new back to the aggregated adapter vector.
             var aggregatedSpan = aggregated.AsWritableSpan();
@@ -218,9 +243,9 @@ public class FLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IFeder
     /// Singular values are split evenly: B absorbs sqrt(sigma), A absorbs sqrt(sigma).
     /// Components beyond min(rows, cols) are zero.
     /// </summary>
-    private static (Tensor<T> B, Tensor<T> A) TruncatedSVD(Tensor<T> matrix, int rows, int cols, int rank)
+    private static (Tensor<TV> B, Tensor<TV> A) TruncatedSVD<TV>(Tensor<TV> matrix, int rows, int cols, int rank)
     {
-        var (u, s, vh) = LinalgDispatch<T>.Svd(matrix, fullMatrices: false);
+        var (u, s, vh) = LinalgDispatch<TV>.Svd(matrix, fullMatrices: false);
         int kept = Math.Min(rank, s.Length);
 
         var sqrtSigma = Engine.TensorSqrt(Engine.TensorSlice(s, new[] { 0 }, new[] { kept }));
@@ -231,8 +256,8 @@ public class FLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IFeder
 
         if (kept < rank)
         {
-            b = Engine.TensorConcatenate(new[] { b, new Tensor<T>(new[] { rows, rank - kept }) }, 1);
-            a = Engine.TensorConcatenate(new[] { a, new Tensor<T>(new[] { rank - kept, cols }) }, 0);
+            b = Engine.TensorConcatenate(new[] { b, new Tensor<TV>(new[] { rows, rank - kept }) }, 1);
+            a = Engine.TensorConcatenate(new[] { a, new Tensor<TV>(new[] { rank - kept, cols }) }, 0);
         }
 
         return (b, a);

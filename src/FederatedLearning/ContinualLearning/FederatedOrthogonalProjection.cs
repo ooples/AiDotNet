@@ -57,16 +57,19 @@ public class FederatedOrthogonalProjection<T> : Infrastructure.FederatedLearning
 
         // Gradient covariance diagonal as importance estimate: the pseudo-gradient of parameter j on sample i
         // is theta_j * x_{i, j mod C}, so its mean square is theta_j^2 * mean_i(x_{i, j mod C}^2).
-        var columnMeanSquares = Engine.ReduceMean(Engine.TensorSquare(Tensor<T>.FromMatrix(taskData)), new[] { 0 }, false);
-
         var featureIndex = new int[d];
         for (int j = 0; j < d; j++)
         {
             featureIndex[j] = j % columns;
         }
 
-        var perParameter = Engine.TensorGather(columnMeanSquares, new Tensor<int>(featureIndex, new[] { d }), 0);
-        return Engine.TensorMultiply(Engine.TensorSquare(modelParameters.AsTensor()), perParameter).ToVector();
+        // Half and BFloat16 square in float: a feature of 300 squares to infinity and 0 * infinity is NaN.
+        var samples = Tensor<T>.FromMatrix(taskData);
+        var parameters = modelParameters.AsTensor();
+        var importance = Infrastructure.FederatedTensorMath<T>.IsNarrow
+            ? Infrastructure.FederatedTensorMath<T>.PseudoFisherDiagonal(samples.Cast<float>(), parameters.Cast<float>(), featureIndex).Cast<T>()
+            : Infrastructure.FederatedTensorMath<T>.PseudoFisherDiagonal(samples, parameters, featureIndex);
+        return importance.ToVector();
     }
 
     /// <inheritdoc/>
@@ -104,7 +107,11 @@ public class FederatedOrthogonalProjection<T> : Infrastructure.FederatedLearning
         }
 
         var unit = Engine.TensorDivideScalar(direction, maxDirection).ToVector();
-        T projScale = NumOps.Divide(Engine.DotProduct(gradient, unit), Engine.DotProduct(unit, unit));
+
+        // Both reductions are taken in double: e . e is bounded after the scaling, but g . e is not (two Half
+        // gradient entries of 40000 sum past 65504).
+        T projScale = NumOps.FromDouble(
+            Infrastructure.FederatedTensorMath<T>.Dot(gradient, unit) / Infrastructure.FederatedTensorMath<T>.Dot(unit, unit));
         return Engine.Subtract(gradient, Engine.Multiply(unit, projScale));
     }
 

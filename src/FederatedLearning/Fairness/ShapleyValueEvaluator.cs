@@ -250,10 +250,14 @@ public class ShapleyValueEvaluator<T> : FederatedLearningComponentBase<T>, IClie
         // Lower distance = higher performance
         int count = rows.Shape[0];
         var shape = new[] { count, rows.Shape[1] };
-        var diff = Engine.TensorSubtract(rows, Engine.TensorBroadcastTo(reference, shape));
 
-        // max|d| * ||d / max|d||| is formed in double: the product can exceed the range of T.
-        var norms = Infrastructure.FederatedTensorMath<T>.NormalizeRows(diff).Norms;
+        // max|d| * ||d / max|d||| is formed in double: the product can exceed the range of T. Half and BFloat16
+        // also subtract in double: 40000 minus -40000 is out of range before any scaling.
+        var norms = Infrastructure.FederatedTensorMath<T>.IsNarrow
+            ? Infrastructure.FederatedTensorMath<double>.NormalizeRows(
+                Engine.TensorSubtract(rows.Cast<double>(), Engine.TensorBroadcastTo(reference.Cast<double>(), shape))).Norms
+            : Infrastructure.FederatedTensorMath<T>.NormalizeRows(
+                Engine.TensorSubtract(rows, Engine.TensorBroadcastTo(reference, shape))).Norms;
         var distances = new double[count];
         for (int i = 0; i < count; i++)
         {

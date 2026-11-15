@@ -217,20 +217,31 @@ public class SubgraphFederatedTrainer<T> : FederatedLearningComponentBase<T>, IF
         var adjacency = Engine.TensorSlice(expanded.Adjacency.Reshape(new[] { expanded.Adjacency.Length }), new[] { 0 }, new[] { numNodes * numNodes })
             .Reshape(new[] { numNodes, numNodes });
         var neighborMask = Engine.TensorGreaterThan(adjacency, NumOps.Zero);
-        var featureSums = featureDim == 0
-            ? new Tensor<T>(new[] { numNodes, 1 })
-            : Engine.ReduceSum(
-                Engine.TensorSlice(expanded.NodeFeatures.Reshape(new[] { expanded.NodeFeatures.Length }), new[] { 0 }, new[] { numNodes * featureDim })
-                    .Reshape(new[] { numNodes, featureDim }),
-                new[] { 1 }, true);
-        var sums = Engine.TensorMatMul(neighborMask, featureSums).Reshape(new[] { numNodes });
+        if (featureDim == 0)
+        {
+            return new Tensor<T>(new[] { numNodes });
+        }
+
+        var features = Engine.TensorSlice(expanded.NodeFeatures.Reshape(new[] { expanded.NodeFeatures.Length }), new[] { 0 }, new[] { numNodes * featureDim })
+            .Reshape(new[] { numNodes, featureDim });
 
         // Neighbor counts are formed in int: a 0/1 sum in Half stops increasing at 2048.
-        var counts = new Tensor<int>(Infrastructure.FederatedTensorMath<T>.CountNonzeroPerRow(neighborMask), new[] { numNodes })
-            .Cast<T>();
+        var neighborCounts = FederatedTensorMath<T>.CountNonzeroPerRow(neighborMask);
 
-        // Mean aggregation (nodes without neighbors embed to 0)
-        var hasNeighbors = Engine.TensorGreaterThan(counts, NumOps.Zero);
+        // Half and BFloat16 sum and divide in float: two neighbor features of 40000 sum past 65504 although
+        // their mean is in range.
+        return FederatedTensorMath<T>.IsNarrow
+            ? MeanNeighborFeatures(neighborMask.Cast<float>(), features.Cast<float>(), neighborCounts).Cast<T>()
+            : MeanNeighborFeatures(neighborMask, features, neighborCounts);
+    }
+
+    /// <summary>Per-node mean over its neighbors of their summed features; nodes without neighbors embed to 0.</summary>
+    private static Tensor<TV> MeanNeighborFeatures<TV>(Tensor<TV> neighborMask, Tensor<TV> features, int[] neighborCounts)
+    {
+        int numNodes = neighborCounts.Length;
+        var sums = Engine.TensorMatMul(neighborMask, Engine.ReduceSum(features, new[] { 1 }, true)).Reshape(new[] { numNodes });
+        var counts = new Tensor<int>(neighborCounts, new[] { numNodes }).Cast<TV>();
+        var hasNeighbors = Engine.TensorGreaterThan(counts, AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<TV>().Zero);
         var safeCounts = Engine.TensorWhere(hasNeighbors, counts, Engine.TensorOnesLike(counts));
         return Engine.TensorMultiply(Engine.TensorDivide(sums, safeCounts), hasNeighbors);
     }

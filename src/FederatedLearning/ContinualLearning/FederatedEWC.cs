@@ -58,7 +58,6 @@ public class FederatedEWC<T> : Infrastructure.FederatedLearningComponentBase<T>,
         // parameter j on sample i is theta_j * x_{i, j mod C}, so the average of its square factors into
         // theta_j^2 * mean_i(x_{i, j mod C}^2).
         var samples = Engine.TensorSlice(Tensor<T>.FromMatrix(taskData), new[] { 0, 0 }, new[] { n, columns });
-        var columnMeanSquares = Engine.ReduceMean(Engine.TensorSquare(samples), new[] { 0 }, false); // [C]
 
         var featureIndex = new int[d];
         for (int j = 0; j < d; j++)
@@ -66,8 +65,12 @@ public class FederatedEWC<T> : Infrastructure.FederatedLearningComponentBase<T>,
             featureIndex[j] = j % columns;
         }
 
-        var perParameter = Engine.TensorGather(columnMeanSquares, new Tensor<int>(featureIndex, new[] { d }), 0);
-        return Engine.TensorMultiply(Engine.TensorSquare(modelParameters.AsTensor()), perParameter).ToVector();
+        // Half and BFloat16 square in float: a feature of 300 squares to infinity and 0 * infinity is NaN.
+        var parameters = modelParameters.AsTensor();
+        var importance = Infrastructure.FederatedTensorMath<T>.IsNarrow
+            ? Infrastructure.FederatedTensorMath<T>.PseudoFisherDiagonal(samples.Cast<float>(), parameters.Cast<float>(), featureIndex).Cast<T>()
+            : Infrastructure.FederatedTensorMath<T>.PseudoFisherDiagonal(samples, parameters, featureIndex);
+        return importance.ToVector();
     }
 
     /// <inheritdoc/>
@@ -85,10 +88,10 @@ public class FederatedEWC<T> : Infrastructure.FederatedLearningComponentBase<T>,
 
         var reference = referenceParameters.Length == d ? referenceParameters : referenceParameters.GetSubVector(0, d);
         var importance = importanceWeights.Length == d ? importanceWeights : importanceWeights.GetSubVector(0, d);
-        var diff = Engine.Subtract(currentParameters, reference);
-        T penalty = Engine.Sum(Engine.Multiply(importance, Engine.Multiply(diff, diff)));
 
-        return NumOps.Multiply(penalty, NumOps.FromDouble(0.5 * regularizationStrength));
+        // Formed and scaled in double: a Half difference of 300 squares past 65504.
+        double penalty = Infrastructure.FederatedTensorMath<T>.WeightedSquaredDistance(currentParameters, reference, importance);
+        return NumOps.FromDouble(penalty * 0.5 * regularizationStrength);
     }
 
     /// <inheritdoc/>

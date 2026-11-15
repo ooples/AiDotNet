@@ -241,15 +241,17 @@ public partial class GraphNodeGenerator<T> : FederatedLearningComponentBase<T>
         }
 
         var selected = new Tensor<int>(withNeighbors.ToArray(), new[] { withNeighbors.Count });
-        var sums = Engine.TensorGather(Engine.TensorMatMul(neighborMask, features), selected, 0);
         var counts = new double[withNeighbors.Count];
         for (int k = 0; k < counts.Length; k++)
         {
             counts[k] = degreeCounts[withNeighbors[k]];
         }
 
-        var countTensor = new Tensor<double>(counts, new[] { counts.Length, 1 }).Cast<T>();
-        var means = Engine.TensorDivide(sums, Engine.TensorBroadcastTo(countTensor, new[] { counts.Length, featureDim }));
+        // Half and BFloat16 sum and divide in float: two neighbor features of 40000 sum past 65504 although
+        // their mean is in range.
+        var means = FederatedTensorMath<T>.IsNarrow
+            ? NeighborMeans(neighborMask.Cast<float>(), features.Cast<float>(), selected, counts).Cast<T>()
+            : NeighborMeans(neighborMask, features, selected, counts);
 
         // Targets: the node's own first min(F, outputDim) features, masked where the feature tensor ended.
         int targetWidth = Math.Min(featureDim, _outputDim);
@@ -279,5 +281,13 @@ public partial class GraphNodeGenerator<T> : FederatedLearningComponentBase<T>
         }
 
         return new Tensor<double>(values, new[] { size }).Cast<T>();
+    }
+
+    /// <summary>Mean neighbor features (A F) / degree of the selected nodes.</summary>
+    private static Tensor<TV> NeighborMeans<TV>(Tensor<TV> neighborMask, Tensor<TV> features, Tensor<int> selected, double[] counts)
+    {
+        var sums = Engine.TensorGather(Engine.TensorMatMul(neighborMask, features), selected, 0);
+        var countTensor = new Tensor<double>(counts, new[] { counts.Length, 1 }).Cast<TV>();
+        return Engine.TensorDivide(sums, Engine.TensorBroadcastTo(countTensor, new[] { counts.Length, features.Shape[1] }));
     }
 }
