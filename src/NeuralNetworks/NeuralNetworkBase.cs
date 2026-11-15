@@ -12809,6 +12809,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     // The custom-objective forwards that have already resolved their lazily shaped layers.
     private readonly HashSet<System.Reflection.MethodInfo> _warmedCustomForwards = new();
 
+    // The optimizer a custom step trains with: an explicitly configured one wins over the one the model passes in.
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> ResolveCustomStepOptimizer(
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
+        => _externalStepOptimizer
+            ?? (_baseTrainOptimizerExplicitlyConfigured && _baseTrainOptimizer is not null
+                ? _baseTrainOptimizer
+                : optimizer ?? TrainingOptimizer ?? _baseTrainOptimizer)
+            ?? GetOrCreateBaseOptimizer();
+
     /// <summary>
     /// One training step with the caller's own forward and objective: the fused compiled plan when it applies (CPU or
     /// GPU), the eager tape with the optimizer otherwise.
@@ -12829,15 +12838,6 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// <param name="parameterProvider">The tensors to train, when not the network's own trainable set; read again after
     /// the first forward resolves lazily shaped layers.</param>
     /// <returns>The step's loss.</returns>
-    // The optimizer a custom step trains with: an explicitly configured one wins over the one the model passes in.
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> ResolveCustomStepOptimizer(
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
-        => _externalStepOptimizer
-            ?? (_baseTrainOptimizerExplicitlyConfigured && _baseTrainOptimizer is not null
-                ? _baseTrainOptimizer
-                : optimizer ?? TrainingOptimizer ?? _baseTrainOptimizer)
-            ?? GetOrCreateBaseOptimizer();
-
     protected internal T TrainCustomTapeStep(
         Tensor<T> input,
         Tensor<T> target,
@@ -12893,6 +12893,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             {
                 session.Disable("the objective's shape warm-up (one no-grad forward to size lazy layers) failed, so it "
                     + "trains on its eager step: " + ex.GetType().Name + ": " + ex.Message);
+                // The full exception for the developer trace, as the library's other fused declines report theirs: the
+                // miss reason above keeps only the message, and this decline is sticky for the session.
+                System.Diagnostics.Trace.TraceWarning("[AiDotNet] " + GetType().Name
+                    + ": a custom objective's shape warm-up failed; it trains on its eager step. " + ex);
                 SetTrainingMode(wasTraining);
                 CustomEagerStepCount++;
                 var fallbackLoss = eagerFallback();
