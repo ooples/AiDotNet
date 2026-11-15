@@ -71,26 +71,22 @@ public class UniVSTAdaInStylization<T>
 
         // Per-channel population mean and standard deviation (Huang and Belongie, 2017):
         // AdaIN(x, y) = sigma(y) * (x - mu(x)) / (sigma(x) + eps) + mu(y).
+        // The statistics and the result are formed in double and rounded to T once (master's precision): the
+        // engine reduces in T, and a Half running sum stops absorbing values once it passes 2048, so a channel of
+        // a few thousand elements would get the wrong mean and deviation.
         var engine = AiDotNetEngine.Current;
-        var axis = new[] { 1 };
-        var contentRows = content.Reshape(new[] { channels, contentPer });
-        var styleRows = style.Reshape(new[] { channels, stylePer });
-        var contentMean = engine.ReduceMean(contentRows, axis, true);
-        var centered = engine.TensorSubtract(contentRows, engine.TensorBroadcastTo(contentMean, new[] { channels, contentPer }));
-        var contentStd = PopulationStd(engine, centered, channels, contentPer);
-        var styleMean = engine.ReduceMean(styleRows, axis, true);
-        var styleCentered = engine.TensorSubtract(styleRows, engine.TensorBroadcastTo(styleMean, new[] { channels, stylePer }));
-        var styleStd = PopulationStd(engine, styleCentered, channels, stylePer);
+        var contentRows = content.Reshape(new[] { channels, contentPer }).Cast<double>();
+        var styleRows = style.Reshape(new[] { channels, stylePer }).Cast<double>();
+        var (contentMean, contentStd) = MeanAndPopulationStd(engine, contentRows, channels, contentPer);
+        var (styleMean, styleStd) = MeanAndPopulationStd(engine, styleRows, channels, stylePer);
 
-        // Epsilon in T; if 1e-8 underflows the element type, the smallest relative step of T is used instead.
-        T epsilon = NumOps.FromDouble(Epsilon);
-        if (!NumOps.GreaterThan(epsilon, NumOps.Zero))
-            epsilon = NumOps.FromDouble(Math.Pow(2.0, -NumOps.PrecisionBits));
-        var scale = engine.TensorDivide(styleStd, engine.TensorAddScalar(contentStd, epsilon));
+        var grid = new[] { channels, contentPer };
+        var scale = engine.TensorDivide(styleStd, engine.TensorAddScalar(contentStd, Epsilon));
+        var centered = engine.TensorSubtract(contentRows, engine.TensorBroadcastTo(contentMean, grid));
         var stylized = engine.TensorAdd(
-            engine.TensorMultiply(centered, engine.TensorBroadcastTo(scale, new[] { channels, contentPer })),
-            engine.TensorBroadcastTo(styleMean, new[] { channels, contentPer }));
-        return stylized.Reshape(content.Shape.ToArray());
+            engine.TensorMultiply(centered, engine.TensorBroadcastTo(scale, grid)),
+            engine.TensorBroadcastTo(styleMean, grid));
+        return stylized.Cast<T>().Reshape(content.Shape.ToArray());
     }
 
     /// <summary>
@@ -202,19 +198,17 @@ public class UniVSTAdaInStylization<T>
     }
 
     /// <summary>
-    /// The per-row population standard deviation [rows, 1] of the mean-centred rows [rows, width]:
-    /// <c>peak * sqrt(mean((x / peak)^2))</c> with <c>peak = max |x|</c> per row, so no square exceeds 1
-    /// (squaring a centred value above 255 overflows Half and would make the deviation infinite).
+    /// The per-row mean and population standard deviation [rows, 1] of <paramref name="rows"/> [rows, width],
+    /// in double.
     /// </summary>
-    private static Tensor<T> PopulationStd(IEngine engine, Tensor<T> centered, int rows, int width)
+    private static (Tensor<double> Mean, Tensor<double> Std) MeanAndPopulationStd(
+        IEngine engine, Tensor<double> rows, int count, int width)
     {
-        var grid = new[] { rows, width };
-        var peaks = engine.ReduceMax(engine.TensorAbs(centered), new[] { 1 }, true);
-        var safePeaks = engine.TensorWhere(engine.TensorGreaterThan(peaks, NumOps.Zero), peaks,
-            Tensor<T>.CreateDefault(new[] { rows, 1 }, NumOps.One));
-        var scaled = engine.TensorDivide(centered, engine.TensorBroadcastTo(safePeaks, grid));
-        var unitStd = engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(scaled), new[] { 1 }, true));
-        return engine.TensorMultiply(unitStd, peaks);
+        var axis = new[] { 1 };
+        var mean = engine.ReduceMean(rows, axis, true);
+        var centered = engine.TensorSubtract(rows, engine.TensorBroadcastTo(mean, new[] { count, width }));
+        var std = engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(centered), axis, true));
+        return (mean, std);
     }
 
     /// <summary>

@@ -545,6 +545,25 @@ public class UniVSTComponentTests
     }
 
     [Fact]
+    public void AdaIn_Half_ChannelLongerThan2048KeepsItsMeanAndDeviation()
+    {
+        // 2048 ones then 2048 threes: mu = 2, sigma = 1. A Half running sum is 2048 after the ones and then rounds
+        // every +3 up to +4, so a mean reduced in Half came out as 2.5 and the deviation as about 1.06.
+        const int count = 4096;
+        var values = new double[count];
+        for (int i = 0; i < count; i++)
+            values[i] = i < count / 2 ? 1.0 : 3.0;
+        var content = HalfTensor(new[] { 1, count }, values);
+        var style = HalfTensor(new[] { 1, 2 }, -1.0, 1.0);
+
+        var result = new UniVSTAdaInStylization<Half>().AdaIn(content, style);
+
+        // mu(y) = 0, sigma(y) = 1: (x - 2) / (1 + 1e-8), i.e. -1 and +1, both exact in Half.
+        for (int i = 0; i < count; i++)
+            Assert.Equal(i < count / 2 ? -1.0 : 1.0, HalfOps.ToDouble(result[i]), tolerance: 1e-3);
+    }
+
+    [Fact]
     public void MaskPropagation_Half_NormalizesRowsWhoseSquaredNormOverflows()
     {
         // 256 channels of magnitude 20: the squared norm 102,400 overflows Half, which used to zero the whole row.
