@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.Helpers;
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Tabular;
@@ -218,12 +219,15 @@ public class NeuralNetworkSweepReferenceTests
 
     private static TabROptions<double> SmallTabROptions(int neighbors) => new TabROptions<double>
     {
+        // The reference architecture at its smallest: one encoder block and one predictor block (the old fixture's
+        // one encoder layer and one context layer), d_block = d_main, and no normalization layers (the old
+        // UseLayerNorm = false).
         EmbeddingDimension = 2,
-        NumAttentionHeads = 1,
-        NumLayers = 1,
-        NumContextLayers = 1,
+        BlockWidthMultiplier = 1.0,
+        EncoderNumBlocks = 1,
+        PredictorNumBlocks = 1,
         NumNeighbors = neighbors,
-        UseLayerNorm = false,
+        Normalization = TabRNormalization.Identity,
         NormalizeEmbeddings = false,
         DropoutRate = 0,
         ContextDropoutRate = 0
