@@ -1503,7 +1503,8 @@ public class NeuralNetworkArchitecture<T> : IConfigurationCloneable
 
     private static string DescriptorKey(System.Reflection.FieldInfo field)
     {
-        var declaring = field.DeclaringType!;
+        // A field reached through Type.GetFields always has a declaring type; the reflected type is the same one here.
+        var declaring = field.DeclaringType ?? field.ReflectedType ?? typeof(object);
         var definition = declaring.IsGenericType ? declaring.GetGenericTypeDefinition() : declaring;
         return (definition.FullName ?? definition.Name) + "::" + field.Name;
     }
@@ -1563,9 +1564,21 @@ public class NeuralNetworkArchitecture<T> : IConfigurationCloneable
                 continue;
             }
 
-            object converted = targetType.IsEnum
-                ? Enum.ToObject(targetType, value)
-                : Convert.ChangeType(value, targetType, System.Globalization.CultureInfo.InvariantCulture);
+            object converted;
+            try
+            {
+                converted = targetType.IsEnum
+                    ? Enum.ToObject(targetType, value)
+                    : Convert.ChangeType(value, targetType, System.Globalization.CultureInfo.InvariantCulture);
+            }
+            catch (Exception ex) when (ex is InvalidCastException or FormatException or OverflowException or ArgumentException)
+            {
+                // A corrupt or hand-edited payload: a value of the wrong kind, or one the field's type cannot hold.
+                // Report it as the bad data it is, like every other malformed part of the network payload.
+                throw new InvalidDataException(
+                    $"Serialized architecture descriptor value for '{key}' ({value.GetType().Name} {value}) "
+                    + $"does not fit the field's type {targetType.Name}.", ex);
+            }
             // Write only what differs: a clone restores into an architecture that already matches, and
             // must not touch an instance another model may be reading.
             if (!Equals(field.GetValue(this), converted)) field.SetValue(this, converted);

@@ -38,6 +38,19 @@ internal sealed class CompiledNeuralPredictor<T>
     private Tensor<T>? _example;
 
     private readonly CompiledModelCache<T> _cache = new();
+
+    // The model's own invalidation keys, as last seen by the compiled tiers: NeuralNetworkBase.LayerStructureVersion
+    // (layers added, removed or rebuilt, as Deserialize does) and LayerBase.ParameterSurfaceEpoch (a parameter tensor
+    // registered, replaced or adopted anywhere). The program binds the model's parameter TENSORS, so an in-place weight
+    // update reaches it for free, but a replaced tensor does not: when either key moves, the program is rebound to the
+    // model's current tensors (or re-traced when they no longer match it) and the graph-capture plans are dropped.
+    private int _seenStructureVersion = int.MinValue;
+    private int _seenParameterEpoch = int.MinValue;
+    private Tensor<T>[] _boundParameters = Array.Empty<Tensor<T>>();
+    private readonly object _graphGate = new();
+    private int _graphStructureVersion = int.MinValue;
+    private int _graphParameterEpoch = int.MinValue;
+    private Tensor<T>[] _graphParameters = Array.Empty<Tensor<T>>();
     private readonly ConcurrentDictionary<TensorShape, JitValueStability<T>> _stabilityByShape = new();
 
     /// <summary>How far a replayed graph-capture plan may sit from the eager forward before it is not value-stable.</summary>
@@ -78,6 +91,7 @@ internal sealed class CompiledNeuralPredictor<T>
         lock (_programGate)
         {
             var sample = _example ?? example;
+            if (_package is { } bound && !EnsureBoundToCurrentParameters(bound)) _package = null;
             if (_package is null && sample is not null) TryTrace(sample);
             if (_package is null || sample is null) return _package;
             try
@@ -99,8 +113,9 @@ internal sealed class CompiledNeuralPredictor<T>
         {
             if (_programDisabled) return false;
             _example ??= input.Clone();
+            if (_package is { } bound && !EnsureBoundToCurrentParameters(bound)) _package = null;
             if (_package is null && !TryTrace(input)) return false;
-            var package = _package!;
+            if (_package is not { } package) return false;
             if (package.Program.InputDimensions[0].Count != input.Rank) return false;
             try
             {
@@ -128,14 +143,35 @@ internal sealed class CompiledNeuralPredictor<T>
 
     private bool TryTrace(Tensor<T> example)
     {
-        var chunks = _model.GetParameterStateChunks().ToList();
-        var names = new Dictionary<object, string>(ReferenceComparer.Instance);
-        foreach (var chunk in chunks) names[chunk.Tensor] = chunk.StableId;
         try
         {
-            var program = TensorProgram.Trace(x => CaptureCompatiblePredict(_model, x), example.Clone(),
-                new AiDotNet.Tensors.Engines.Export.TraceOptions { Parameters = chunks.Select(c => (object)c.Tensor), Names = names });
-            _package = new ProgramPackage(program);
+            // The parameters are named before the forward runs, but a lazily sized model materializes its weights IN
+            // that first forward: the trace then saw tensors it was never told were parameters and baked them in as
+            // constants, so training never reached the program. Such a forward moves the parameter-surface keys, so
+            // the trace is repeated once over the materialized tensors.
+            TensorProgram program;
+            int attempt = 0;
+            while (true)
+            {
+                int structure = _model.LayerStructureVersion;
+                int epoch = AiDotNet.NeuralNetworks.Layers.LayerBase<T>.ParameterSurfaceEpoch;
+                var chunks = _model.GetParameterStateChunks().ToList();
+                var names = new Dictionary<object, string>(ReferenceComparer.Instance);
+                foreach (var chunk in chunks) names[chunk.Tensor] = chunk.StableId;
+                program = TensorProgram.Trace(x => CaptureCompatiblePredict(_model, x), example.Clone(),
+                    new AiDotNet.Tensors.Engines.Export.TraceOptions { Parameters = chunks.Select(c => (object)c.Tensor), Names = names });
+                bool stable = structure == _model.LayerStructureVersion
+                              && epoch == AiDotNet.NeuralNetworks.Layers.LayerBase<T>.ParameterSurfaceEpoch;
+                if (stable || ++attempt >= 2) break;
+            }
+            var package = new ProgramPackage(program);
+            if (ResolveParameters(package) is not { } traced)
+            {
+                // Every traced parameter is named by stable id, so this only fails if the trace and the model disagree.
+                throw new InvalidOperationException("the traced program names parameters the model does not have.");
+            }
+            _package = package;
+            RecordBinding(traced);
             return true;
         }
         catch (Exception ex) when (ex is TraceException or NotSupportedException or InvalidOperationException or ArgumentException)
@@ -150,22 +186,16 @@ internal sealed class CompiledNeuralPredictor<T>
     // A loaded package's parameters were saved by stable id and shape only; attach the model's live tensors.
     private bool TryBind(ProgramPackage package)
     {
-        var byId = _model.GetParameterStateChunks().ToDictionary(c => c.StableId, c => c.Tensor, StringComparer.Ordinal);
-        var bound = new List<Tensor<T>>();
-        foreach (var id in package.Program.ParameterIds)
+        if (ResolveParameters(package) is not { } bound)
         {
-            var name = package.Program.Values[id].Name;
-            if (name is null || !byId.TryGetValue(name, out var tensor))
-            {
-                System.Diagnostics.Trace.TraceWarning(
-                    $"The saved compiled program does not match {_model.GetType().Name}'s parameters ('{name}'); it will be re-traced.");
-                return false;
-            }
-            bound.Add(tensor);
+            System.Diagnostics.Trace.TraceWarning(
+                $"The saved compiled program does not match {_model.GetType().Name}'s parameters; it will be re-traced.");
+            return false;
         }
         try
         {
             package.Program.BindParameters(bound);
+            RecordBinding(bound);
             return true;
         }
         catch (ArgumentException ex)
@@ -175,10 +205,87 @@ internal sealed class CompiledNeuralPredictor<T>
         }
     }
 
+    // The model's current tensor for each of the program's parameters (matched by stable id), or null when the program
+    // names a parameter the model no longer has.
+    private Tensor<T>[]? ResolveParameters(ProgramPackage package)
+    {
+        var byId = new Dictionary<string, Tensor<T>>(StringComparer.Ordinal);
+        foreach (var chunk in _model.GetParameterStateChunks()) byId[chunk.StableId] = chunk.Tensor;
+        var ids = package.Program.ParameterIds.ToArray();
+        var resolved = new Tensor<T>[ids.Length];
+        for (int i = 0; i < ids.Length; i++)
+        {
+            var name = package.Program.Values[ids[i]].Name;
+            if (name is null || !byId.TryGetValue(name, out var tensor)) return null;
+            resolved[i] = tensor;
+        }
+        return resolved;
+    }
+
+    private void RecordBinding(Tensor<T>[] bound)
+    {
+        _boundParameters = bound;
+        _seenStructureVersion = _model.LayerStructureVersion;
+        _seenParameterEpoch = AiDotNet.NeuralNetworks.Layers.LayerBase<T>.ParameterSurfaceEpoch;
+    }
+
+    /// <summary>
+    /// Keeps <paramref name="package"/> bound to the model's current parameter tensors. False when the program no longer
+    /// fits the model (its parameters changed identity in a way a rebind cannot express), so the caller re-traces.
+    /// </summary>
+    private bool EnsureBoundToCurrentParameters(ProgramPackage package)
+    {
+        if (_seenStructureVersion == _model.LayerStructureVersion
+            && _seenParameterEpoch == AiDotNet.NeuralNetworks.Layers.LayerBase<T>.ParameterSurfaceEpoch)
+            return true;
+
+        if (ResolveParameters(package) is not { } current) return false;
+        bool same = current.Length == _boundParameters.Length;
+        for (int i = 0; same && i < current.Length; i++) same = ReferenceEquals(current[i], _boundParameters[i]);
+        if (!same)
+        {
+            try
+            {
+                package.Program.BindParameters(current);
+            }
+            catch (ArgumentException ex)
+            {
+                // A replaced tensor of a new shape: the program's shapes are stale, so it is traced again.
+                System.Diagnostics.Trace.TraceWarning(
+                    $"Re-tracing the compiled program for {_model.GetType().Name}: its parameters changed shape ({ex.Message}).");
+                return false;
+            }
+        }
+        RecordBinding(current);
+        return true;
+    }
+
     // ── Graph-capture tier (with value-stability guard) ──────────────────────────────────────────────────
 
     private Tensor<T>[] GraphCapturePredict(Tensor<T> input)
     {
+        lock (_graphGate)
+        {
+            int structure = _model.LayerStructureVersion;
+            int epoch = AiDotNet.NeuralNetworks.Layers.LayerBase<T>.ParameterSurfaceEpoch;
+            if (structure != _graphStructureVersion || epoch != _graphParameterEpoch)
+            {
+                // The epoch is process-wide, so compare the tensors themselves: only a real replacement in THIS model
+                // drops the plans. A captured plan holds the tensors it was traced over and would keep answering with
+                // the old weights, so every plan and every value-stability verdict starts again.
+                var current = _model.GetParameterStateChunks().Select(c => c.Tensor).ToArray();
+                bool same = current.Length == _graphParameters.Length;
+                for (int i = 0; same && i < current.Length; i++) same = ReferenceEquals(current[i], _graphParameters[i]);
+                if (!same && _graphStructureVersion != int.MinValue)
+                {
+                    _cache.Invalidate();
+                    _stabilityByShape.Clear();
+                }
+                _graphParameters = current;
+                _graphStructureVersion = structure;
+                _graphParameterEpoch = epoch;
+            }
+        }
         var stability = _stabilityByShape.GetOrAdd(input.Shape, static _ => new JitValueStability<T>());
         try
         {

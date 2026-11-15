@@ -259,7 +259,9 @@ public class QuantumStateEncodingRegressionTests
             AiDotNetEngine.Current = gpu;
             using var host = new Tensor<float>([1, RowWidth]);
             host.Fill(float.Epsilon);
-            using var subnormal = GpuTensorHelper.UploadToGpu(gpu.GetBackend()!, host, GpuTensorRole.Input);
+            var backend = gpu.GetBackend()
+                ?? throw new InvalidOperationException("The GPU engine has no backend to probe.");
+            using var subnormal = GpuTensorHelper.UploadToGpu(backend, host, GpuTensorRole.Input);
             using var quotient = gpu.TensorDivide(subnormal, subnormal);
             return quotient.ToArray()[0] == 1f;
         }

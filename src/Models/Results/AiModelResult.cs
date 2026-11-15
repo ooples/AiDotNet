@@ -2860,10 +2860,10 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
         // Compilation is on by default for neural models: the compiled predictor serves the inference-optimized
         // network when there is one, so compilation composes with those optimizations instead of replacing them.
-        if (JitCompilationConfig is { Enabled: true } && Model is NeuralNetworkBase<T> compiledModel
+        if (JitCompilationConfig is { Enabled: true } compilation && Model is NeuralNetworkBase<T> compiledModel
             && normalizedNewData is Tensor<T> compiledInput)
         {
-            var predictor = EnsureCompiledPredictor(compiledModel);
+            var predictor = EnsureCompiledPredictor(compiledModel, compilation);
             var compiledResult = predictor.Predict(new[] { compiledInput });
             if (compiledResult.Length > 0 && compiledResult[0] is TOutput typedCompiled) return typedCompiled;
             return PredictViaModelOrThrow(normalizedNewData);
@@ -2886,7 +2886,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         return PredictViaModelOrThrow(normalizedNewData);
     }
 
-    private AiDotNet.Inference.CompiledNeuralPredictor<T> EnsureCompiledPredictor(NeuralNetworkBase<T> neuralModel)
+    private AiDotNet.Inference.CompiledNeuralPredictor<T> EnsureCompiledPredictor(
+        NeuralNetworkBase<T> neuralModel, AiDotNet.Configuration.JitCompilationConfig compilation)
     {
         var existing = _compiledPredictor;
         if (existing is not null) return existing;
@@ -2897,7 +2898,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 ? EnsureStatelessInferenceOptimizationsInitialized(neuralModel) ?? neuralModel
                 : neuralModel;
             _compiledPredictor = new AiDotNet.Inference.CompiledNeuralPredictor<T>(
-                effective, JitCompilationConfig!, _loadedProgram);
+                effective, compilation, _loadedProgram);
             _loadedProgram = null;
             return _compiledPredictor;
         }
@@ -2922,9 +2923,10 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     // The package a save embeds: the compiled predictor's program and plans, traced from a prediction already made.
     private byte[] ExportCompiledProgram()
     {
-        if (JitCompilationConfig is not { Enabled: true, PersistCompiledProgram: true } || Model is not NeuralNetworkBase<T> nn)
+        if (JitCompilationConfig is not { Enabled: true, PersistCompiledProgram: true } compilation
+            || Model is not NeuralNetworkBase<T> nn)
             return [];
-        var package = EnsureCompiledPredictor(nn).Export(example: null);
+        var package = EnsureCompiledPredictor(nn, compilation).Export(example: null);
         if (package is null) return CompiledProgram; // nothing new to add; keep what the model was loaded with
         using var ms = new MemoryStream();
         package.Save(ms, includeParameterValues: false);
@@ -3796,6 +3798,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         }
 
         InterfaceGuard.GradientComputable(Model).ApplyGradients(gradients, learningRate);
+        ReleaseInferenceCopyAfterWeightChange();
     }
 
     /// <summary>
@@ -3925,6 +3928,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 Model.Train(supportX, supportY);
             }
         }
+
+        ReleaseInferenceCopyAfterWeightChange();
     }
 
     /// <summary>
@@ -4025,6 +4030,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 // Would require loss calculation on validation set and stopping criteria
             }
         }
+
+        ReleaseInferenceCopyAfterWeightChange();
     }
 
     /// <summary>
@@ -7895,6 +7902,31 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <summary>
     /// Releases the stateless inference-optimized copy when this result made it, then forgets it.
     /// </summary>
+    /// <summary>
+    /// Called after this result changed its model's weights (Adapt, FineTune, ApplyGradients).
+    /// </summary>
+    /// <remarks>
+    /// The compiled predictor follows the network it serves on its own (it rebinds when parameter tensors are
+    /// replaced). The stateless inference-optimized network is a separate COPY made from the weights at its first
+    /// prediction, so after the model trains it, and the compiled predictor built over it, would keep answering with
+    /// the old weights. Both are dropped here and rebuilt from the current weights on the next prediction, exactly as
+    /// a load resets them.
+    /// </remarks>
+    private void ReleaseInferenceCopyAfterWeightChange()
+    {
+        lock (_compiledPredictorGate)
+        {
+            lock (_inferenceOptimizationLock)
+            {
+                if (_inferenceOptimizedNeuralModel is null || ReferenceEquals(_inferenceOptimizedNeuralModel, Model)) return;
+                _compiledPredictor = null;
+                _inferenceOptimizer = null;
+                ReleaseInferenceOptimizedModel();
+                _inferenceOptimizationsInitialized = false;
+            }
+        }
+    }
+
     private void ReleaseInferenceOptimizedModel()
     {
         var copy = _inferenceOptimizedNeuralModel;
