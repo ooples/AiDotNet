@@ -34,10 +34,12 @@ internal sealed class AutoformerNetwork<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IEngine _engine;
+    private readonly SequenceNetworkOps<T> _ops;
 
     public AutoformerNetwork(IEngine engine, List<LayerBase<T>> layers, AutoformerConfiguration configuration)
     {
         _engine = engine;
+        _ops = new SequenceNetworkOps<T>(engine);
         Configuration = configuration;
         var c = configuration;
         if (c.ModelDim % c.Heads != 0)
@@ -140,18 +142,12 @@ internal sealed class AutoformerNetwork<T>
         return _engine.Reshape(y, new[] { batch, length, y.Shape[1] });
     }
 
+    // Inverted dropout; the engine draws the mask, and a compiled training plan redraws it on every replay.
     private Tensor<T> Drop(Tensor<T> x, bool training, Random random)
     {
         double rate = Configuration.Dropout;
         if (!training || rate <= 0) return x;
-        // The mask is a per-step draw, so a compiled training plan redraws it on every replay.
-        var keep = NumOps.FromDouble(1.0 / (1.0 - rate));
-        var mask = AiDotNet.Training.CompiledStepRandom<T>.Draw(x._shape, m =>
-        {
-            var span = m.AsWritableSpan();
-            for (int i = 0; i < span.Length; i++) span[i] = random.NextDouble() < rate ? NumOps.Zero : keep;
-        });
-        return _engine.TensorMultiply(x, mask);
+        return _engine.TensorMultiply(x, SequenceNetworkOps<T>.DropoutMask(x, rate, random));
     }
 
     private Tensor<T> Activation(Tensor<T> x) => Configuration.Gelu ? ActivationHelper.ExactGelu(x, _engine) : _engine.ReLU(x);
@@ -183,15 +179,17 @@ internal sealed class AutoformerNetwork<T>
     private (Tensor<T> Seasonal, Tensor<T> Trend) Decompose(Tensor<T> x)
     {
         int batch = x.Shape[0], length = x.Shape[1], k = Configuration.MovingAverage, half = (k - 1) / 2;
-        var average = new Tensor<T>(new[] { 1, length, length });
-        var weight = NumOps.FromDouble(1.0 / k);
-        for (int t = 0; t < length; t++)
-            for (int j = t - half; j <= t + half; j++)
-            {
-                int source = Math.Min(Math.Max(j, 0), length - 1);
-                average[0, t, source] = NumOps.Add(average[0, t, source], weight);
-            }
-        var trend = _engine.BatchMatMul(_engine.TensorTile(average, new[] { batch, 1, 1 }), x);
+        var average = _ops.Constant($"average:{batch}x{length}", () =>
+        {
+            var pattern = new double[length * length];
+            for (int t = 0; t < length; t++)
+                for (int j = t - half; j <= t + half; j++)
+                    pattern[t * length + Math.Min(Math.Max(j, 0), length - 1)] += 1.0 / k;
+            var tiled = new double[batch * pattern.Length];
+            for (int b = 0; b < batch; b++) Array.Copy(pattern, 0, tiled, b * pattern.Length, pattern.Length);
+            return SequenceNetworkOps<T>.FromDoubles(tiled, new[] { batch, length, length });
+        });
+        var trend = _engine.BatchMatMul(average, x);
         return (_engine.TensorSubtract(x, trend), trend);
     }
 
@@ -223,91 +221,66 @@ internal sealed class AutoformerNetwork<T>
             v = _engine.TensorSlice(v, new[] { 0, 0, 0 }, new[] { batch, length, d });
         }
 
-        // The mean autocorrelation of every lag: R̄(τ) = Σ_t Σ_c q[(t+τ) mod L, c]·k[t, c] / D.
+        // The mean autocorrelation of every lag: R̄(τ) = Σ_t Σ_c q[(t+τ) mod L, c]·k[t, c] / D, the sums of the
+        // wrapped diagonals of Q Kᵀ, read by one product with a constant [L·L, L] diagonal selector.
         var products = _engine.BatchMatMul(q, _engine.TensorPermute(k, new[] { 0, 2, 1 }));                    // [B, L, L]
-        var diagonals = new int[length * length];
-        for (int tau = 0; tau < length; tau++)
-            for (int t = 0; t < length; t++) diagonals[tau * length + t] = ((t + tau) % length) * length + t;
-        var picked = _engine.TensorGather(_engine.Reshape(products, new[] { batch, length * length }),
-            new Tensor<int>(new[] { length * length }, new Vector<int>(diagonals)), axis: 1);
+        var diagonals = _ops.Constant($"diagonals:{length}", () =>
+        {
+            var selector = new double[length * length * length];
+            for (int tau = 0; tau < length; tau++)
+                for (int t = 0; t < length; t++) selector[(((t + tau) % length) * length + t) * length + tau] = 1.0;
+            return SequenceNetworkOps<T>.FromDoubles(selector, new[] { length * length, length });
+        });
         var mean = _engine.TensorMultiplyScalar(
-            _engine.ReduceSum(_engine.Reshape(picked, new[] { batch, length, length }), new[] { 2 }, keepDims: false),
+            _engine.TensorMatMul(_engine.Reshape(products, new[] { batch, length * length }), diagonals),
             NumOps.FromDouble(1.0 / d));                                                                       // [B, L]
 
         // k = ⌊c·ln L⌋, which is zero for very short inputs: then nothing is aggregated, as in the reference.
         int top = Math.Min((int)(Configuration.Factor * Math.Log(length)), length);
-        Tensor<T> aggregated;
-        if (top <= 0)
-            aggregated = _engine.TensorMultiplyScalar(v, NumOps.Zero);
-        else if (training)
-            aggregated = AggregateSharedLags(mean, v, top);
-        else
-        {
-            var host = mean.GetCpuData();
-            // Each series' own strongest lags.
-            var rows = new Tensor<T>[batch];
-            for (int b = 0; b < batch; b++)
-            {
-                int row = b;
-                var lags = Enumerable.Range(0, length).OrderByDescending(tau => NumOps.ToDouble(host[row * length + tau])).Take(top).ToArray();
-                var meanRow = _engine.TensorSlice(mean, new[] { b, 0 }, new[] { 1, length });
-                var weights = _engine.Softmax(_engine.TensorGather(meanRow, new Tensor<int>(new[] { top }, new Vector<int>(lags)), axis: 1), axis: 1);
-                var series = _engine.TensorSlice(v, new[] { b, 0, 0 }, new[] { 1, length, d });
-                var sum = new Tensor<T>(new[] { 1, length, d });
-                for (int i = 0; i < top; i++)
-                {
-                    var rolled = _engine.TensorRoll(series, new[] { -lags[i] }, new[] { 1 });
-                    var w = _engine.Reshape(_engine.TensorSlice(weights, new[] { 0, i }, new[] { 1, 1 }), new[] { 1, 1, 1 });
-                    sum = _engine.TensorAdd(sum, _engine.TensorMultiply(rolled, _engine.TensorTile(w, new[] { 1, length, d })));
-                }
-                rows[b] = sum;
-            }
-            aggregated = batch == 1 ? rows[0] : _engine.TensorConcatenate(rows, 0);
-        }
+        Tensor<T> aggregated = top <= 0
+            ? _engine.TensorMultiplyScalar(v, NumOps.Zero)
+            : AggregateLags(mean, v, top, shared: training);
         return Dense(a.Output, aggregated);
     }
 
-    // Training's time-delay aggregation: the top lags strongest on average over the batch, shared by every series,
-    // Σ_i softmax(R̄(τ_i)) · Roll(V, −τ_i) (time_delay_agg_training). The lags are chosen from the step's own
-    // correlations, as one-hot matrices a compiled training plan recomputes on every replay: a selector [L, u] that
-    // picks R̄(τ_i) (so the weights stay differentiable) and the shift operators [u, L·L] whose weighted sum rolls V.
-    private Tensor<T> AggregateSharedLags(Tensor<T> mean, Tensor<T> v, int top)
+    // Time-delay aggregation Σ_i softmax(R̄(τ_i)) · Roll(V, −τ_i) over the top lags: in training the lags strongest on
+    // average over the batch, shared by every series (time_delay_agg_training); in inference each series' own
+    // (time_delay_agg_inference). The choice is one-hot rows made of comparisons, so it runs on the device and a
+    // compiled plan chooses again on every replay; the weights stay differentiable through R̄. The weighted rolls are
+    // one circulant operator per series: W[b, τ] (each chosen lag's weight) times the constant shift operators
+    // [L, L·L] whose row τ rolls by τ.
+    private Tensor<T> AggregateLags(Tensor<T> mean, Tensor<T> v, int top, bool shared)
     {
         int batch = v.Shape[0], length = v.Shape[1];
-        var selector = AiDotNet.Training.CompiledStepHostValue<T>.Compute("AutoformerLagSelector", new[] { mean },
-            new[] { length, top }, (inputs, result) =>
-            {
-                var lags = SharedLags(inputs[0], top);
-                var span = result.AsWritableSpan();
-                span.Clear();
-                for (int i = 0; i < top; i++) span[lags[i] * top + i] = NumOps.One;
-                result.IncrementVersion();
-            });
-        var shifts = AiDotNet.Training.CompiledStepHostValue<T>.Compute("AutoformerLagShifts", new[] { mean },
-            new[] { top, length * length }, (inputs, result) =>
-            {
-                var lags = SharedLags(inputs[0], top);
-                var span = result.AsWritableSpan();
-                span.Clear();
-                // Roll(V, −τ)[t] = V[(t + τ) mod L]: row t of the operator picks column (t + τ) mod L.
-                for (int i = 0; i < top; i++)
-                    for (int t = 0; t < length; t++) span[i * length * length + t * length + (t + lags[i]) % length] = NumOps.One;
-                result.IncrementVersion();
-            });
-
-        var weights = _engine.Softmax(_engine.TensorMatMul(mean, selector), axis: 1);                                    // [B, u]
-        var operators = _engine.Reshape(_engine.TensorMatMul(weights, shifts), new[] { batch, length, length });         // [B, L, L]
-        return _engine.BatchMatMul(operators, v);                                                                         // [B, L, D]
-    }
-
-    // The u lags whose autocorrelation summed over the batch is largest (ties keep the smaller lag).
-    private static int[] SharedLags(Tensor<T> mean, int top)
-    {
-        var host = mean.GetCpuData();
-        int rows = mean.Shape[0], steps = mean.Shape[1];
-        return Enumerable.Range(0, steps)
-            .OrderByDescending(tau => Enumerable.Range(0, rows).Sum(b => NumOps.ToDouble(host[b * steps + tau])))
-            .Take(top).ToArray();
+        Tensor<T> lagWeights;                                                                                  // [B, L]
+        if (shared)
+        {
+            Tensor<T> selector;                                                                                // [1, u, L]
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+                selector = _ops.TopRows(_engine.ReduceSum(mean, new[] { 0 }, keepDims: true), 1, length, top);
+            var chosen = _engine.Reshape(selector, new[] { top, length });
+            var weights = _engine.Softmax(_engine.TensorMatMul(mean, _engine.TensorPermute(chosen, new[] { 1, 0 })), axis: 1); // [B, u]
+            lagWeights = _engine.TensorMatMul(weights, chosen);
+        }
+        else
+        {
+            Tensor<T> selector;                                                                                // [B, u, L]
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+                selector = _ops.TopRows(mean, batch, length, top);
+            var picked = _engine.Reshape(_engine.BatchMatMul(selector, _engine.Reshape(mean, new[] { batch, length, 1 })), new[] { batch, top });
+            var weights = _engine.Reshape(_engine.Softmax(picked, axis: 1), new[] { batch, 1, top });
+            lagWeights = _engine.Reshape(_engine.BatchMatMul(weights, selector), new[] { batch, length });
+        }
+        var shifts = _ops.Constant($"shifts:{length}", () =>
+        {
+            // Roll(V, −τ)[t] = V[(t + τ) mod L]: row t of operator τ picks column (t + τ) mod L.
+            var operators = new double[length * length * length];
+            for (int tau = 0; tau < length; tau++)
+                for (int t = 0; t < length; t++) operators[tau * length * length + t * length + (t + tau) % length] = 1.0;
+            return SequenceNetworkOps<T>.FromDoubles(operators, new[] { length, length * length });
+        });
+        var circulant = _engine.Reshape(_engine.TensorMatMul(lagWeights, shifts), new[] { batch, length, length });  // [B, L, L]
+        return _engine.BatchMatMul(circulant, v);                                                             // [B, L, D]
     }
 
     private Tensor<T> FeedForward(BiasFreeLinearLayer<T> conv1, BiasFreeLinearLayer<T> conv2, Tensor<T> x, bool training, Random random)

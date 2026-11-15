@@ -45,6 +45,7 @@ internal sealed class InformerNetwork<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IEngine _engine;
+    private readonly SequenceNetworkOps<T> _ops;
 
     /// <summary>The seeds an owner uses for the initialization and for ProbSparse key sampling and dropout, so every
     /// owner configured with the same seed builds and runs the same network.</summary>
@@ -60,6 +61,7 @@ internal sealed class InformerNetwork<T>
     public InformerNetwork(IEngine engine, List<LayerBase<T>> layers, InformerConfiguration configuration)
     {
         _engine = engine;
+        _ops = new SequenceNetworkOps<T>(engine);
         Configuration = configuration;
         var c = configuration;
         if (c.ModelDim % c.Heads != 0)
@@ -174,18 +176,12 @@ internal sealed class InformerNetwork<T>
         return _engine.Reshape(y, new[] { batch, length, y.Shape[1] });
     }
 
-    // Inverted dropout; the mask is a per-step draw, so a compiled training plan redraws it on every replay.
+    // Inverted dropout; the engine draws the mask, and a compiled training plan redraws it on every replay.
     private Tensor<T> Drop(Tensor<T> x, bool training, Random random)
     {
         double rate = Configuration.Dropout;
         if (!training || rate <= 0) return x;
-        var keep = NumOps.FromDouble(1.0 / (1.0 - rate));
-        var mask = AiDotNet.Training.CompiledStepRandom<T>.Draw(x._shape, m =>
-        {
-            var span = m.AsWritableSpan();
-            for (int i = 0; i < span.Length; i++) span[i] = random.NextDouble() < rate ? NumOps.Zero : keep;
-        });
-        return _engine.TensorMultiply(x, mask);
+        return _engine.TensorMultiply(x, SequenceNetworkOps<T>.DropoutMask(x, rate, random));
     }
 
     private Tensor<T> Activation(Tensor<T> x) => Configuration.Gelu ? ActivationHelper.ExactGelu(x, _engine) : _engine.ReLU(x);
@@ -201,26 +197,31 @@ internal sealed class InformerNetwork<T>
         return _engine.TensorConcatenate(new[] { previous, x, next }, 2);
     }
 
-    // The fixed sinusoidal position embedding [L, D] (PositionalEmbedding: sin on even, cos on odd features).
-    private Tensor<T> Positions(int length)
+    // The fixed sinusoidal position embedding (PositionalEmbedding: sin on even, cos on odd features), tiled to
+    // [B, L, D]; built once per shape.
+    private Tensor<T> Positions(int batch, int length)
     {
         int d = Configuration.ModelDim;
-        var table = new Tensor<T>(new[] { 1, length, d });
-        for (int p = 0; p < length; p++)
-            for (int i = 0; i < d; i += 2)
-            {
-                double angle = p * Math.Exp(i * -(Math.Log(10000.0) / d));
-                table[0, p, i] = NumOps.FromDouble(Math.Sin(angle));
-                table[0, p, i + 1] = NumOps.FromDouble(Math.Cos(angle));
-            }
-        return table;
+        return _ops.Constant($"positions:{batch}x{length}", () =>
+        {
+            var table = new double[length * d];
+            for (int p = 0; p < length; p++)
+                for (int i = 0; i < d; i += 2)
+                {
+                    double angle = p * Math.Exp(i * -(Math.Log(10000.0) / d));
+                    table[p * d + i] = Math.Sin(angle);
+                    table[p * d + i + 1] = Math.Cos(angle);
+                }
+            var tiled = new double[batch * length * d];
+            for (int b = 0; b < batch; b++) Array.Copy(table, 0, tiled, b * table.Length, table.Length);
+            return SequenceNetworkOps<T>.FromDoubles(tiled, new[] { batch, length, d });
+        });
     }
 
     private Tensor<T> Embed(Embedding e, Tensor<T> x, Tensor<T>? marks, bool training, Random random)
     {
         int batch = x.Shape[0], length = x.Shape[1];
-        var sum = _engine.TensorAdd(Dense(e.Token, CircularNeighbours(x)),
-            _engine.TensorTile(Positions(length), new[] { batch, 1, 1 }));
+        var sum = _engine.TensorAdd(Dense(e.Token, CircularNeighbours(x)), Positions(batch, length));
         if (e.Time is not null)
         {
             if (marks is null || marks.Shape[1] != length || marks.Shape[2] != Configuration.TimeFeatures)
@@ -242,10 +243,12 @@ internal sealed class InformerNetwork<T>
     private Tensor<T> Attend(Attention a, Tensor<T> queries, Tensor<T> keys, bool prob, bool masked, bool mix, bool training, Random random)
     {
         int batch = queries.Shape[0], lq = queries.Shape[1], heads = Configuration.Heads, e = Configuration.ModelDim / heads;
+        if (prob)
+            return Dense(a.Output, ProbAttention(Dense(a.Query, queries), Dense(a.Key, keys), Dense(a.Value, keys), masked, mix, random));
         var q = Heads(a.Query, queries);
         var k = Heads(a.Key, keys);
         var v = Heads(a.Value, keys);
-        var context = prob ? ProbAttention(q, k, v, masked, random) : FullAttention(q, k, v, masked, training, random);   // [B·H, Lq, E]
+        var context = FullAttention(q, k, v, masked, training, random);                                       // [B·H, Lq, E]
         var perHead = _engine.Reshape(context, new[] { batch, heads, lq, e });
         // The inner attention returns [B, L, H, E]; mix transposes it back to [B, H, L, E] before the flat view.
         var merged = mix
@@ -254,136 +257,115 @@ internal sealed class InformerNetwork<T>
         return Dense(a.Output, merged);
     }
 
-    private static Tensor<T> CausalMask(int rows, int columns, Func<int, int> position)
-    {
-        var mask = new Tensor<T>(new[] { 1, rows, columns });
-        var blocked = NumOps.FromDouble(double.NegativeInfinity);
-        for (int i = 0; i < rows; i++)
-            for (int j = position(i) + 1; j < columns; j++) mask[0, i, j] = blocked;
-        return mask;
-    }
+    private Tensor<T> Tiled(string name, int count, int rows, int columns, Func<int, int, double> value)
+        => _ops.Tiled(name, count, rows, columns, value);
+
+    // An additive causal mask: a large negative number on the keys after each query's position. Finite, so a
+    // product with a one-hot selection stays exact (0 * -inf would be NaN); exp underflows to zero all the same. It
+    // must stay finite in the element type too: -1e30 is -inf in Half, so Half uses its own large finite value.
+    private static readonly double Blocked = typeof(T) == typeof(Half) ? -6.0e4 : -1e30;
+
+    private Tensor<T> CausalMask(int count, int rows, int columns) => Tiled("causal", count, rows, columns, (i, j) => j > i ? Blocked : 0.0);
 
     // FullAttention: softmax(scale · Q Kᵀ), causal when masked, with attention dropout.
     private Tensor<T> FullAttention(Tensor<T> q, Tensor<T> k, Tensor<T> v, bool masked, bool training, Random random)
     {
         int bh = q.Shape[0], lq = q.Shape[1], lk = k.Shape[1];
-        var scores = _engine.BatchMatMul(q, _engine.TensorPermute(k, new[] { 0, 2, 1 }));
-        if (masked) scores = _engine.TensorAdd(scores, _engine.TensorTile(CausalMask(lq, lk, i => i), new[] { bh, 1, 1 }));
-        var weights = _engine.Softmax(_engine.TensorMultiplyScalar(scores, NumOps.FromDouble(1.0 / Math.Sqrt(q.Shape[2]))), axis: 2);
+        var scores = _engine.TensorMultiplyScalar(_engine.BatchMatMul(q, _engine.TensorPermute(k, new[] { 0, 2, 1 })),
+            NumOps.FromDouble(1.0 / Math.Sqrt(q.Shape[2])));
+        if (masked) scores = _engine.TensorAdd(scores, CausalMask(bh, lq, lk));
+        var weights = _engine.Softmax(scores, axis: 2);
         return _engine.BatchMatMul(Drop(weights, training, random), v);
     }
 
-    // ProbAttention (no attention dropout, as in the reference).
-    private Tensor<T> ProbAttention(Tensor<T> q, Tensor<T> k, Tensor<T> v, bool masked, Random random)
+    // ProbAttention (no attention dropout, as in the reference) over projected [B, L, D] queries, keys and values,
+    // returning the merged heads [B, Lq, D] (mixed as the reference's AttentionLayer mixes them). The u queries with
+    // the largest sparsity measurement take their full attention output, every other query the lazy initial context.
+    // Computed as: full attention for every query (one fused kernel, no score matrix kept for the backward), the
+    // initial context, and a 0/1 mask of the chosen queries; output = initial + mask * (full - initial). For the
+    // chosen rows that is exactly the reference's update, for the rest its initial context. The measurement and the
+    // choice are engine ops too (no host round trip), with no gradient, as in the reference. A query tied with the
+    // u-th largest measurement is chosen with it (the reference keeps exactly u); with continuous scores ties do not
+    // occur in practice.
+    private Tensor<T> ProbAttention(Tensor<T> q, Tensor<T> k, Tensor<T> v, bool masked, bool mix, Random random)
     {
-        int bh = q.Shape[0], lq = q.Shape[1], lk = k.Shape[1], e = q.Shape[2];
+        int batch = q.Shape[0], lq = q.Shape[1], lk = k.Shape[1], d = q.Shape[2];
+        int heads = Configuration.Heads, e = d / heads, bh = batch * heads;
         int factor = Configuration.Factor;
         int samples = Math.Min(factor * (int)Math.Ceiling(Math.Log(lk)), lk);
         int top = Math.Min(factor * (int)Math.Ceiling(Math.Log(lq)), lq);
         if (masked && lq != lk) throw new InvalidOperationException("Masked ProbSparse attention is self-attention: L_Q must equal L_K.");
 
-        // The sampled keys per query, shared by every batch row and head (torch.randint(L_K, (L_Q, U))): a per-step
-        // draw, so a compiled training plan samples new keys on every replay.
-        var sampled = SampledKeys(lq, samples, lk, random);
+        // The sampled keys per query, shared by every batch row and head (torch.randint(L_K, (L_Q, U))), as the
+        // multiplicity of each key among a query's samples: a per-step draw, redrawn on every compiled replay.
+        var counts = SampledKeyCounts(lq, samples, lk, random);                                                // [Lq, Lk]
 
-        // The sparsity measurement and the top-u queries per row, chosen from the step's own queries and keys (the
-        // selection is not differentiated); a compiled plan chooses again on every replay.
-        var select = AiDotNet.Training.CompiledStepHostValue<T>.Compute("InformerProbSparseQueries", new[] { q, k, sampled },
-            new[] { bh, top, lq }, (inputs, result) => SelectActiveQueries(inputs[0], inputs[1], inputs[2], top, result));
+        // Every query's attention (masked: to keys at or before its own position): [B, Lq, D], heads interleaved.
+        var full = _engine.MultiHeadAttentionCore(q, k, v, heads, 1.0 / Math.Sqrt(e), masked);
+        // The initial context: the mean of V over the keys, or masked, its cumulative sum, per channel.
+        var lazy = Tiled(masked ? "cumulative" : "mean", batch, lq, lk, (i, j) => masked ? (j <= i ? 1.0 : 0.0) : 1.0 / lk);
+        var initial = _engine.BatchMatMul(lazy, v);                                                            // [B, Lq, D]
 
-        // The chosen queries attend to every key (masked: to keys at or before their own position).
-        var reduced = _engine.BatchMatMul(select, q);                                                          // [BH, u, E]
-        var scores = _engine.TensorMultiplyScalar(_engine.BatchMatMul(reduced, _engine.TensorPermute(k, new[] { 0, 2, 1 })),
-            NumOps.FromDouble(1.0 / Math.Sqrt(e)));
-        if (masked)
+        Tensor<T> chosen;                                                                                      // [B, Lq, D]
+        using (new NoGradScope<T>())
         {
-            // Each chosen query sees the keys at or before its own position.
-            var mask = AiDotNet.Training.CompiledStepHostValue<T>.Compute("InformerProbSparseCausalMask", new[] { select },
-                new[] { bh, top, lk }, (inputs, result) => CausalMaskOfChosen(inputs[0], lk, result));
-            scores = _engine.TensorAdd(scores, mask);
-        }
-        var updated = _engine.BatchMatMul(_engine.Softmax(scores, axis: 2), v);                                // [BH, u, E]
+            // M(q_i) = max_s q_i·k_{j_s} − Σ_s q_i·k_{j_s} / L_K over the sampled keys j_s, per batch row and head.
+            var qh = _engine.Reshape(_engine.TensorPermute(_engine.Reshape(_engine.StopGradient(q), new[] { batch, lq, heads, e }), new[] { 0, 2, 1, 3 }), new[] { bh, lq, e });
+            var khT = _engine.Reshape(_engine.TensorPermute(_engine.Reshape(_engine.StopGradient(k), new[] { batch, lk, heads, e }), new[] { 0, 2, 3, 1 }), new[] { bh, e, lk });
+            var scores = _engine.BatchMatMul(qh, khT);                                                         // [BH, Lq, Lk]
+            // The max over the sampled keys: the unsampled keys pushed to −1e30 first.
+            var unsampled = _engine.TensorMultiplyScalar(
+                _engine.TensorSubtractScalar(_engine.TensorGreaterThan(counts, NumOps.Zero), NumOps.One), NumOps.FromDouble(-Blocked));
+            var sampledMax = _engine.ReduceMax(_engine.TensorAdd(scores,
+                _engine.TensorTile(_engine.Reshape(unsampled, new[] { 1, lq, lk }), new[] { bh, 1, 1 })), new[] { 2 }, keepDims: false);
+            // The sum over the samples (with multiplicity): q_i · (C K)_i, the counts applied to the keys first.
+            var sampledKeySums = _engine.TensorMatMul(khT, _engine.TensorPermute(counts, new[] { 1, 0 }));     // [BH, E, Lq]
+            var sampledSum = _engine.ReduceSum(_engine.TensorMultiply(qh, _engine.TensorPermute(sampledKeySums, new[] { 0, 2, 1 })), new[] { 2 }, keepDims: false);
+            var measure = _engine.TensorSubtract(sampledMax, _engine.TensorMultiplyScalar(sampledSum, NumOps.FromDouble(1.0 / lk))); // [BH, Lq]
 
-        // Every other query keeps the initial context: mean(V), or masked, the cumulative sum of V.
-        var lazy = new Tensor<T>(new[] { 1, lq, lk });
-        for (int i = 0; i < lq; i++)
-            for (int j = 0; j < lk; j++)
-                if (masked ? j <= i : true) lazy[0, i, j] = masked ? NumOps.One : NumOps.FromDouble(1.0 / lk);
-        var initial = _engine.BatchMatMul(_engine.TensorTile(lazy, new[] { bh, 1, 1 }), v);                    // [BH, Lq, E]
-        var selectT = _engine.TensorPermute(select, new[] { 0, 2, 1 });
-        return _engine.TensorAdd(initial, _engine.BatchMatMul(selectT, _engine.TensorSubtract(updated, _engine.BatchMatMul(select, initial))));
+            // Chosen: the queries whose measurement reaches the u-th largest of their row.
+            var largest = _engine.TensorTopK(measure, top, 1, out _);                                         // [BH, u]
+            var threshold = _engine.TensorTile(_engine.TensorSlice(largest, new[] { 0, top - 1 }, new[] { bh, 1 }), new[] { 1, lq });
+            var keep = _engine.TensorSubtract(_ops.Constant($"ones:{bh}x{lq}", () => SequenceNetworkOps<T>.Ones(new[] { bh, lq })),
+                _engine.TensorGreaterThan(threshold, measure));                                                // [BH, Lq]: 1 chosen
+            // To the [B, Lq, H, E] layout of the context.
+            var perQuery = _engine.Reshape(_engine.TensorPermute(_engine.Reshape(keep, new[] { batch, heads, lq }), new[] { 0, 2, 1 }), new[] { batch, lq, heads, 1 });
+            chosen = _engine.Reshape(_engine.TensorTile(perQuery, new[] { 1, 1, 1, e }), new[] { batch, lq, d });
+        }
+
+        var context = _engine.TensorAdd(initial, _engine.TensorMultiply(chosen, _engine.TensorSubtract(full, initial)));   // [B, Lq, H, E]
+        // The reference returns [B, L, H, E]; mix views its [B, H, L, E] transpose as [B, L, H·E].
+        return mix
+            ? _engine.Reshape(_engine.TensorPermute(_engine.Reshape(context, new[] { batch, lq, heads, e }), new[] { 0, 2, 1, 3 }), new[] { batch, lq, d })
+            : context;
     }
 
-    // The sampled key of every (query, sample) as a [L_Q, U] tensor of indices: KeySampler's when set, otherwise a
-    // per-step draw in the reference's order.
-    private Tensor<T> SampledKeys(int queries, int samples, int keys, Random random)
+    // The multiplicity [L_Q, L_K] of each key among each query's U sampled keys: KeySampler's draw when set,
+    // otherwise a per-step draw in the reference's order.
+    private Tensor<T> SampledKeyCounts(int queries, int samples, int keys, Random random)
     {
+        void Count(int[] sampled, Tensor<T> t)
+        {
+            var histogram = new double[queries * keys];
+            for (int i = 0; i < queries; i++)
+                for (int s = 0; s < samples; s++) histogram[i * keys + sampled[i * samples + s]] += 1;
+            SequenceNetworkOps<T>.FromDoubles(histogram, new[] { queries, keys }).AsSpan().CopyTo(t.AsWritableSpan());
+        }
         if (KeySampler is not null)
         {
             var fixedKeys = KeySampler(queries, samples, keys);
-            var tensor = new Tensor<T>(new[] { queries, samples });
-            for (int i = 0; i < queries; i++)
-                for (int s = 0; s < samples; s++) tensor[i, s] = NumOps.FromDouble(fixedKeys[i, s]);
+            var flat = new int[queries * samples];
+            Buffer.BlockCopy(fixedKeys, 0, flat, 0, flat.Length * sizeof(int));
+            var tensor = new Tensor<T>(new[] { queries, keys });
+            Count(flat, tensor);
             return tensor;
         }
-        return AiDotNet.Training.CompiledStepRandom<T>.Draw(new[] { queries, samples }, t =>
+        return AiDotNet.Training.CompiledStepRandom<T>.Draw(new[] { queries, keys }, t =>
         {
-            var span = t.AsWritableSpan();
-            for (int i = 0; i < span.Length; i++) span[i] = NumOps.FromDouble(random.Next(keys));
+            var drawn = new int[queries * samples];
+            for (int i = 0; i < drawn.Length; i++) drawn[i] = random.Next(keys);
+            Count(drawn, t);
         });
-    }
-
-    // The one-hot rows [BH, u, L_Q] of the u queries with the largest sparsity measurement
-    // M(q_i) = max_s q_i·k_{j_s} − Σ_s q_i·k_{j_s} / L_K over the sampled keys j_s (ties keep the earlier query).
-    private static void SelectActiveQueries(Tensor<T> q, Tensor<T> k, Tensor<T> sampledKeys, int top, Tensor<T> result)
-    {
-        int bh = q.Shape[0], lq = q.Shape[1], e = q.Shape[2], lk = k.Shape[1], samples = sampledKeys.Shape[1];
-        var qd = q.GetCpuData();
-        var kd = k.GetCpuData();
-        var sd = sampledKeys.GetCpuData();
-        var keys = new int[lq * samples];
-        for (int i = 0; i < keys.Length; i++) keys[i] = (int)Math.Round(NumOps.ToDouble(sd[i]));
-        var span = result.AsWritableSpan();
-        span.Clear();
-        var measure = new double[lq];
-        for (int r = 0; r < bh; r++)
-        {
-            for (int i = 0; i < lq; i++)
-            {
-                double max = double.NegativeInfinity, sum = 0;
-                for (int s = 0; s < samples; s++)
-                {
-                    int j = keys[i * samples + s];
-                    double dot = 0;
-                    for (int t = 0; t < e; t++)
-                        dot += NumOps.ToDouble(qd[(r * lq + i) * e + t]) * NumOps.ToDouble(kd[(r * lk + j) * e + t]);
-                    max = Math.Max(max, dot);
-                    sum += dot;
-                }
-                measure[i] = max - sum / lk;
-            }
-            var chosen = Enumerable.Range(0, lq).OrderByDescending(i => measure[i]).Take(top).ToArray();
-            for (int u = 0; u < top; u++) span[(r * top + u) * lq + chosen[u]] = NumOps.One;
-        }
-        result.IncrementVersion();
-    }
-
-    // −∞ on the keys after each chosen query's position, from the one-hot choice [BH, u, L_Q].
-    private static void CausalMaskOfChosen(Tensor<T> select, int keys, Tensor<T> result)
-    {
-        int bh = select.Shape[0], top = select.Shape[1], lq = select.Shape[2];
-        var sd = select.GetCpuData();
-        var span = result.AsWritableSpan();
-        span.Clear();
-        var blocked = NumOps.FromDouble(double.NegativeInfinity);
-        for (int r = 0; r < bh; r++)
-            for (int u = 0; u < top; u++)
-            {
-                int position = 0;
-                while (position < lq - 1 && NumOps.ToDouble(sd[(r * top + u) * lq + position]) == 0) position++;
-                for (int j = position + 1; j < keys; j++) span[(r * top + u) * keys + j] = blocked;
-            }
-        result.IncrementVersion();
     }
 
     private Tensor<T> FeedForward(DenseLayer<T> conv1, DenseLayer<T> conv2, Tensor<T> x, bool training, Random random)
@@ -412,20 +394,22 @@ internal sealed class InformerNetwork<T>
         l.Norm.SetTrainingMode(training);
         var normed = _engine.Reshape(l.Norm.Forward(_engine.Reshape(conv, new[] { batch * length, d })), new[] { batch, length, d });
         var activated = _engine.ELU(normed);
+        // MaxPool1d(3, 2, padding 1) over time: with one padding step on each side, the window of output i is padded
+        // steps 2i, 2i+1, 2i+2, the union of the pairs (2i, 2i+1) and (2i+1, 2i+2) that two strided views give.
         int pooled = (length - 1) / 2 + 1;
-        // Padding never wins the max: ELU outputs are above −1. It has to be finite in every element type, because
-        // the one-hot pick below multiplies it by 0: −1e30 is −∞ in Half, and 0 · −∞ made every pooled value NaN.
-        var padding = new Tensor<T>(new[] { batch, 1, d });
-        padding.Fill(NumOps.FromDouble(-2.0));
-        var padded = _engine.TensorConcatenate(new[] { padding, activated, padding }, 1);                       // [B, L + 2, D]
-        var windows = new Tensor<T>[3];
-        for (int w = 0; w < 3; w++)
+        // Padding never wins the max: ELU outputs are above −1. It stays finite in every element type (−1e30 is −∞ in
+        // Half).
+        var padding = _ops.Constant($"distilpad:{batch}x{d}", () =>
         {
-            var pick = new Tensor<T>(new[] { 1, pooled, length + 2 });
-            for (int i = 0; i < pooled; i++) pick[0, i, 2 * i + w] = NumOps.One;
-            windows[w] = _engine.Reshape(_engine.BatchMatMul(_engine.TensorTile(pick, new[] { batch, 1, 1 }), padded), new[] { batch, pooled, 1, d });
-        }
-        return _engine.ReduceMax(_engine.TensorConcatenate(windows, 2), new[] { 2 }, false, out _);
+            var p = new Tensor<T>(new[] { batch, 1, d });
+            p.Fill(NumOps.FromDouble(-2.0));
+            return p;
+        });
+        var padded = _engine.TensorConcatenate(new[] { padding, activated, padding }, 1);                       // [B, L + 2, D]
+        Tensor<T> Pairs(int start) => _engine.Reshape(
+            _engine.TensorSlice(padded, new[] { 0, start, 0 }, new[] { batch, 2 * pooled, d }), new[] { batch, pooled, 2, d });
+        // The overload without host indices: its argmax stays on the device.
+        return _engine.ReduceMax(_engine.TensorConcatenate(new[] { Pairs(0), Pairs(1) }, 2), new[] { 2 }, keepDims: false);
     }
 
     // ------------------------------------------------------------------ initialization and loading
