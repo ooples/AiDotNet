@@ -332,11 +332,10 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     private bool _scatterVectorHandedOut;
 
     // On a GPU engine a training step's gradients live on the device. Publishing them used to download every one,
-    // every step (one sync per tensor: 35 per LSTM step, 65 per Transformer step). The layer now keeps OWNED device
-    // copies (an async device-to-device copy each, no sync) and downloads only if something reads the gradients.
-    // Owned, not referenced: the step's own gradient buffers are reclaimed when it returns. A compiled plan's buffers,
-    // device or host, persist until its next step republishes them, so those are referenced instead
-    // (TryPublishDeviceGradients, TryReferenceHostGradients).
+    // every step (one sync per tensor: 35 per LSTM step, 65 per Transformer step). The layer now keeps them on the
+    // device and downloads only if something reads them (TryPublishDeviceGradients, TryReferenceHostGradients). A
+    // compiled plan's buffers persist until its next step republishes them, so those are referenced. A tape step's
+    // are copied into the device tensors below, because the step clips its own in place after publishing them.
     private Dictionary<Tensor<T>, Tensor<T>>? _pendingDeviceGradients;
     private Dictionary<Tensor<T>, Tensor<T>>? _publishedDeviceGradBuffers;
 
@@ -7732,6 +7731,8 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 buffers[parameter] = copy;
             }
             Engine.TensorCopy(gradient, copy);
+            // The copy's device buffer is written inside the step, so the tape would release it with the step's
+            // intermediates when it ends.
             tape?.Retain(copy);
             owned[parameter] = copy;
             matched += gradient.Length;
@@ -7959,6 +7960,11 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             return deviceMatched;
         if (sourcesOutliveStep && TryReferenceHostGradients(grads, out int hostMatched))
             return hostMatched;
+
+        // Withdraw the previous publish before anything is written. A reused buffer below is that publish's storage, so
+        // a fill that throws partway would otherwise leave a surface mixing this step's slots with the last step's, and
+        // a step with nothing keyed to this layer would leave the last step's surface zeroed by the fill.
+        ParameterGradients = null;
 
         int ignored = 0;
         int total = FillParameterGradients(null, 0, grads, ref ignored);
