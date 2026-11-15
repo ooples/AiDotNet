@@ -12,9 +12,11 @@ namespace AiDotNet.Safety.Benchmarking;
 /// <para>
 /// Both red-teaming entry points go through here. The builder's <c>EnableRedTeaming</c> screens the prompts with the
 /// result's safety pipeline (<see cref="ScreenPrompts{T}"/>: recall over the adversarial prompts, false-positive rate
-/// over the benign controls). <see cref="AiDotNet.Interfaces.IAlignmentMethod{T}.PerformRedTeaming"/> sends the same prompts to
-/// the model and judges each response with the pipeline (<c>RedTeamModel</c>), as HarmBench (Mazeika et
-/// al., 2024) judges a model's completions with a classifier: an attack succeeds when the response is unsafe.
+/// over the benign controls). <see cref="AiDotNet.Interfaces.IAlignmentMethod{T}.PerformRedTeaming"/> sends the adversarial
+/// prompts of the same benchmarks to the model and judges each response with the pipeline (<c>RedTeamModel</c>), as
+/// HarmBench (Mazeika et al., 2024) judges a model's completions with a classifier: an attack succeeds when the
+/// response is unsafe, and the attack success rate is taken over the adversarial prompts only, since a benign control
+/// is not an attack.
 /// </para>
 /// <para>
 /// Prompts are taken round-robin over the categories' benchmarks (case 0 of each, then case 1 of each, ...) until the
@@ -31,12 +33,14 @@ internal static class SafetyRedTeamer
     /// <param name="promptCount">The number of prompts.</param>
     /// <param name="countOption">The option that set the count, for error messages.</param>
     /// <param name="categoriesOption">The option that set the categories, for error messages.</param>
+    /// <param name="adversarialOnly">True to skip the benign controls (cases not expected to be unsafe).</param>
     /// <exception cref="InvalidOperationException">The count is below 1, or no category is named, or one is undefined.</exception>
     internal static IReadOnlyList<SafetyBenchmarkCase> SelectPrompts<T>(
         IReadOnlyCollection<RedTeamingCategory>? categories,
         int promptCount,
         string countOption,
-        string categoriesOption)
+        string categoriesOption,
+        bool adversarialOnly = false)
     {
         if (promptCount < 1)
         {
@@ -49,14 +53,16 @@ internal static class SafetyRedTeamer
             throw new InvalidOperationException($"{categoriesOption} must name at least one category.");
         }
 
-        var pools = distinct.Select(c => Benchmark<T>(c, categoriesOption).TestCases).ToArray();
+        var pools = distinct
+            .Select(c => Benchmark<T>(c, categoriesOption).TestCases.Where(t => !adversarialOnly || t.ExpectedUnsafe).ToArray())
+            .ToArray();
         var prompts = new List<SafetyBenchmarkCase>(promptCount);
         for (int round = 0; prompts.Count < promptCount; round++)
         {
             bool any = false;
             foreach (var pool in pools)
             {
-                if (round < pool.Count && prompts.Count < promptCount)
+                if (round < pool.Length && prompts.Count < promptCount)
                 {
                     prompts.Add(pool[round]);
                     any = true;
@@ -91,7 +97,7 @@ internal static class SafetyRedTeamer
     /// <param name="pipeline">The pipeline that judges each response.</param>
     /// <param name="options">
     /// <see cref="AlignmentMethodOptions{T}.EnableRedTeaming"/> must be on;
-    /// <see cref="AlignmentMethodOptions{T}.RedTeamingAttempts"/> prompts are drawn from
+    /// <see cref="AlignmentMethodOptions{T}.RedTeamingAttempts"/> adversarial prompts are drawn from
     /// <see cref="AlignmentMethodOptions{T}.RedTeamingCategories"/>.
     /// </param>
     /// <exception cref="InvalidOperationException">Red teaming is disabled, or the options are invalid.</exception>
@@ -113,7 +119,8 @@ internal static class SafetyRedTeamer
             options.RedTeamingCategories,
             options.RedTeamingAttempts,
             "AlignmentMethodOptions.RedTeamingAttempts",
-            "AlignmentMethodOptions.RedTeamingCategories");
+            "AlignmentMethodOptions.RedTeamingCategories",
+            adversarialOnly: true);
         return RedTeamModel(model, pipeline, prompts);
     }
 
