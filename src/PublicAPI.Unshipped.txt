@@ -25140,4 +25140,6 @@ AiDotNet.AdversarialRobustness.Alignment.RLHFAlignment<T>.PerformRedTeaming(Syst
 AiDotNet.AdversarialRobustness.Defenses.AdversarialPreferenceAlignment<T>.PerformRedTeaming(System.Func<string!, string!>! model, AiDotNet.Safety.SafetyPipeline<T>! pipeline) -> AiDotNet.Models.RedTeamingResults!
 AiDotNet.Models.Options.AlignmentMethodOptions<T>.RedTeamingCategories.get -> AiDotNet.Enums.RedTeamingCategory[]!
 AiDotNet.Models.Options.AlignmentMethodOptions<T>.RedTeamingCategories.set -> void
+AiDotNet.Models.Options.AlignmentMethodOptions<T>.RewardModelLearningRate.get -> double
+AiDotNet.Models.Options.AlignmentMethodOptions<T>.RewardModelLearningRate.set -> void
 AiDotNet.AdversarialRobustness.Safety.SafetyFilter<T>.SafetyFilter(AiDotNet.Models.Options.SafetyFilterOptions<T>! options, AiDotNet.AdversarialRobustness.Safety.IContentClassifier<T>? classifier, Microsoft.Extensions.Logging.ILogger? logger) -> void

@@ -36,6 +36,19 @@ public class AlignmentMethodOptions<T> : ModelOptions
     public int TrainingIterations { get; set; } = 1000;
 
     /// <summary>
+    /// Gets or sets the gradient-ascent step size of the Bradley-Terry reward model fit.
+    /// </summary>
+    /// <value>The step size, per unit of mean gradient over the preference pairs, defaulting to 1.0.</value>
+    /// <remarks>
+    /// <para><c>RLHFAlignment</c> fits a linear reward r(y) = w . y to the preference pairs by
+    /// <see cref="TrainingIterations"/> full-batch steps w += RewardModelLearningRate * mean(D^T (1 - sigmoid(D w))),
+    /// D the preferred-minus-rejected responses. Must be positive and finite.</para>
+    /// <para><b>For Beginners:</b> How far each step of learning the reward from the preferences moves. Larger
+    /// values learn the preferences in fewer iterations; too large can overshoot.</para>
+    /// </remarks>
+    public double RewardModelLearningRate { get; set; } = 1.0;
+
+    /// <summary>
     /// Gets or sets the discount factor for reward modeling.
     /// </summary>
     /// <value>The gamma value (0-1), defaulting to 0.99.</value>
