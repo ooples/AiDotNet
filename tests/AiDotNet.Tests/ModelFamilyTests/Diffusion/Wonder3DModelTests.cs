@@ -1,29 +1,54 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Diffusion.ThreeD;
-using AiDotNet.Diffusion.NoisePredictors;
-using AiDotNet.Diffusion.VAE;
 using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
+/// <summary>
+/// The generic diffusion contract on a tiny Wonder3D: one object's joint batch, its six normal views then its six
+/// color views (12 latents of 4 channels at 8x8), denoised through the unconditional cross-domain branch.
+/// </summary>
 public class Wonder3DModelTests : DiffusionModelTestBase<float>
 {
-    protected override int[] InputShape => [1, 4, 16, 16];
-    protected override int[] OutputShape => [1, 4, 16, 16];
+    protected override int[] InputShape => [12, 4, 8, 8];
+    protected override int[] OutputShape => [12, 4, 8, 8];
 
-    protected override IDiffusionModel<float> CreateModel()
+    internal static Wonder3DOptions TinyOptions(int seed = 42) => new()
     {
-        var unet = new UNetNoisePredictor<float>(
-            inputChannels: 4, outputChannels: 4,
-            baseChannels: 64, channelMultipliers: [1, 2, 4],
-            numResBlocks: 1, attentionResolutions: [1, 2],
-            contextDim: 0, numHeads: 4, inputHeight: 16, seed: 42);
+        ImageSize = 16,
+        BaseChannels = 32,
+        ChannelMultipliers = [1, 2],
+        ResBlocksPerLevel = 1,
+        AttentionLevels = [0, 1],
+        AttentionHeads = 4,
+        CrossAttentionDim = 16,
+        VaeBaseChannels = 32,
+        VaeChannelMultipliers = [1, 2],
+        VaeResBlocksPerLevel = 1,
+        InferenceSteps = 2,
+        ReconstructionIterations = 2,
+        ReconstructionBatchSize = 32,
+        ReconstructionMaxBatchSize = 64,
+        SamplesPerRayBudget = 8,
+        HashGridLevels = 2,
+        HashGridLog2TableSize = 8,
+        HashGridBaseResolution = 4,
+        HashGridPerLevelScale = 1.5,
+        HashGridStartLevel = 1,
+        HashGridUpdateIterations = 1,
+        ConstantLearningRateIterations = 1,
+        SdfHiddenDim = 16,
+        SdfHiddenLayers = 1,
+        SdfFeatureDim = 4,
+        ColorHiddenDim = 16,
+        ColorHiddenLayers = 1,
+        ViewFrequencies = 1,
+        RaySamples = 8,
+        ImportanceSamples = 0,
+        UpSampleSteps = 1,
+        MeshResolution = 12,
+        Seed = seed,
+    };
 
-        var vae = new StandardVAE<float>(
-            inputChannels: 3, latentChannels: 4,
-            baseChannels: 32, channelMultipliers: [1, 2, 4],
-            numResBlocksPerLevel: 1, latentScaleFactor: 0.18215, seed: 42);
-
-        return new Wonder3DModel<float>(unet: unet, vae: vae, seed: 42);
-    }
+    protected override IDiffusionModel<float> CreateModel() => new Wonder3DModel<float>(TinyOptions());
 }

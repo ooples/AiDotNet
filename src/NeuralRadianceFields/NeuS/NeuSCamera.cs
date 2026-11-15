@@ -2,8 +2,21 @@ using AiDotNet.NeuralRadianceFields.Data;
 
 namespace AiDotNet.NeuralRadianceFields.NeuS;
 
+/// <summary>How a <see cref="NeuSCamera"/> maps pixels to rays.</summary>
+internal enum NeuSProjection
+{
+    /// <summary>A pinhole camera: every ray starts at the camera center (NeuS, SparseNeuS).</summary>
+    Perspective,
+
+    /// <summary>
+    /// An orthographic camera: every ray runs along the optical axis from its own point on the image plane through
+    /// the camera center (Wonder3D's <c>get_ortho_ray_directions_origins</c>).
+    /// </summary>
+    Orthographic,
+}
+
 /// <summary>
-/// A pinhole camera in the OpenCV convention NeuS and SparseNeuS use: x right, y down, z forward, a camera-to-world
+/// A pinhole or orthographic camera in the OpenCV convention NeuS and SparseNeuS use: x right, y down, z forward, a camera-to-world
 /// rotation and a camera center in world space.
 /// </summary>
 /// <remarks>
@@ -12,6 +25,14 @@ namespace AiDotNet.NeuralRadianceFields.NeuS;
 /// NeuS's <c>gen_random_rays_at</c> builds rays, and a world point projects to <c>K · Rᵀ (p − C)</c>, as SparseNeuS's
 /// <c>back_project_sparse_type</c> projects voxels. This is the same convention as <see cref="ImageView{T}"/> with the
 /// principal point given explicitly.
+/// </para>
+/// <para>
+/// An orthographic camera (<see cref="Orthographic"/>) keeps the same axes, but <see cref="FocalX"/> and
+/// <see cref="FocalY"/> are pixels per world unit: pixel (x, y) is the ray from
+/// <c>C + R · [(x − cx) / fx, (y − cy) / fy, 0]</c> along <c>R · [0, 0, 1]</c>, and a world point projects to
+/// <c>(fx · x_c + cx, fy · y_c + cy)</c> with <c>(x_c, y_c, z_c) = Rᵀ (p − C)</c>. Wonder3D's views are of this kind:
+/// a <c>W</c>-pixel image spanning <c>[−1, 1]</c> on the image plane is <c>fx = W / 2</c> with the principal point at
+/// <c>(W − 1) / 2</c>, which puts pixel i's ray at <c>((i + 0.5) / W − 0.5) · 2</c> as its reference does.
 /// </para>
 /// <para><b>For Beginners:</b> The camera says where the photo was taken from and which way it was pointing, plus
 /// the lens (focal length and image center). Both NeuS and SparseNeuS expect the scene to have been scaled so the
@@ -28,7 +49,23 @@ internal sealed class NeuSCamera
     /// <param name="center">The camera center in world space (3 values).</param>
     public NeuSCamera(double focalX, double focalY, double principalX, double principalY, double[] cameraToWorld,
         double[] center)
+        : this(focalX, focalY, principalX, principalY, cameraToWorld, center, NeuSProjection.Perspective)
     {
+    }
+
+    /// <summary>Creates a camera of either projection.</summary>
+    /// <param name="focalX">The horizontal focal length in pixels, or pixels per world unit when orthographic.</param>
+    /// <param name="focalY">The vertical focal length in pixels, or pixels per world unit when orthographic.</param>
+    /// <param name="principalX">The principal point's x in pixels.</param>
+    /// <param name="principalY">The principal point's y in pixels.</param>
+    /// <param name="cameraToWorld">The camera-to-world rotation, 3×3 row-major (9 values).</param>
+    /// <param name="center">The camera center in world space (3 values).</param>
+    /// <param name="projection">The projection.</param>
+    public NeuSCamera(double focalX, double focalY, double principalX, double principalY, double[] cameraToWorld,
+        double[] center, NeuSProjection projection)
+    {
+        if (projection != NeuSProjection.Perspective && projection != NeuSProjection.Orthographic)
+            throw new ArgumentOutOfRangeException(nameof(projection), "Unknown projection.");
         if (!(focalX > 0) || !(focalY > 0)) throw new ArgumentOutOfRangeException(nameof(focalX), "Focal lengths must be positive.");
         if (cameraToWorld is null || cameraToWorld.Length != 9)
             throw new ArgumentException("The rotation must have 9 values (3×3 row-major).", nameof(cameraToWorld));
@@ -39,7 +76,11 @@ internal sealed class NeuSCamera
         PrincipalY = principalY;
         Rotation = (double[])cameraToWorld.Clone();
         Center = (double[])center.Clone();
+        Projection = projection;
     }
+
+    /// <summary>The projection.</summary>
+    public NeuSProjection Projection { get; }
 
     /// <summary>The horizontal focal length in pixels.</summary>
     public double FocalX { get; }
@@ -81,12 +122,46 @@ internal sealed class NeuSCamera
         return new NeuSCamera(focal, focal, (view.Width - 1) * 0.5, (view.Height - 1) * 0.5, rotation, center);
     }
 
-    /// <summary>The unit world direction of the ray through pixel (x, y).</summary>
+    /// <summary>
+    /// The ray through pixel (x, y): its world origin and unit world direction. A perspective ray starts at the
+    /// camera center; an orthographic ray starts at the pixel's point on the image plane through the center.
+    /// </summary>
+    /// <param name="x">The pixel column.</param>
+    /// <param name="y">The pixel row.</param>
+    /// <param name="origin">Receives the origin (3 values).</param>
+    /// <param name="direction">Receives the direction (3 values).</param>
+    public void Ray(double x, double y, double[] origin, double[] direction)
+    {
+        if (origin is null) throw new ArgumentNullException(nameof(origin));
+        RayDirection(x, y, direction);
+        if (Projection == NeuSProjection.Perspective)
+        {
+            for (int r = 0; r < 3; r++) origin[r] = Center[r];
+            return;
+        }
+
+        double px = (x - PrincipalX) / FocalX;
+        double py = (y - PrincipalY) / FocalY;
+        for (int r = 0; r < 3; r++)
+            origin[r] = Center[r] + Rotation[r * 3] * px + Rotation[r * 3 + 1] * py;
+    }
+
+    /// <summary>
+    /// The unit world direction of the ray through pixel (x, y); the optical axis for every pixel of an orthographic
+    /// camera.
+    /// </summary>
     /// <param name="x">The pixel column.</param>
     /// <param name="y">The pixel row.</param>
     /// <param name="direction">Receives the direction (3 values).</param>
     public void RayDirection(double x, double y, double[] direction)
     {
+        if (direction is null) throw new ArgumentNullException(nameof(direction));
+        if (Projection == NeuSProjection.Orthographic)
+        {
+            for (int r = 0; r < 3; r++) direction[r] = Rotation[r * 3 + 2];
+            return;
+        }
+
         double px = (x - PrincipalX) / FocalX;
         double py = (y - PrincipalY) / FocalY;
         double norm = Math.Sqrt(px * px + py * py + 1.0);
@@ -109,6 +184,8 @@ internal sealed class NeuSCamera
         double cx = Rotation[0] * dx + Rotation[3] * dy + Rotation[6] * dz;
         double cy = Rotation[1] * dx + Rotation[4] * dy + Rotation[7] * dz;
         double cz = Rotation[2] * dx + Rotation[5] * dy + Rotation[8] * dz;
+        if (Projection == NeuSProjection.Orthographic)
+            return (FocalX * cx + PrincipalX, FocalY * cy + PrincipalY, cz);
         if (cz == 0.0) return (double.NaN, double.NaN, 0.0);
         return (FocalX * cx / cz + PrincipalX, FocalY * cy / cz + PrincipalY, cz);
     }
@@ -137,6 +214,29 @@ internal sealed class NeuSCamera
             right[2], down[2], forward[2],
         };
         return new NeuSCamera(focal, focal, (width - 1) * 0.5, (height - 1) * 0.5, rotation, center);
+    }
+
+    /// <summary>
+    /// An orthographic camera at <paramref name="center"/> looking at <paramref name="target"/> with world
+    /// <paramref name="up"/> (OpenCV axes, as <see cref="LookAt"/>), whose <paramref name="width"/>-pixel-wide image
+    /// spans <c>[−halfExtent, halfExtent]</c> horizontally on the image plane, with square pixels.
+    /// </summary>
+    /// <param name="center">The camera center; the image plane passes through it.</param>
+    /// <param name="target">The point the optical axis passes through.</param>
+    /// <param name="up">The world up direction.</param>
+    /// <param name="halfExtent">Half the image plane's width in world units (Wonder3D: 1).</param>
+    /// <param name="width">The image width.</param>
+    /// <param name="height">The image height.</param>
+    public static NeuSCamera Orthographic(double[] center, double[] target, double[] up, double halfExtent, int width,
+        int height)
+    {
+        if (!(halfExtent > 0) || double.IsInfinity(halfExtent))
+            throw new ArgumentOutOfRangeException(nameof(halfExtent), "The half extent must be positive and finite.");
+        if (width <= 0 || height <= 0) throw new ArgumentOutOfRangeException(nameof(width), "The image must be non-empty.");
+        var axes = LookAt(center, target, up, 1.0, width, height);
+        double pixelsPerUnit = width / (2.0 * halfExtent);
+        return new NeuSCamera(pixelsPerUnit, pixelsPerUnit, (width - 1) * 0.5, (height - 1) * 0.5, axes.Rotation,
+            axes.Center, NeuSProjection.Orthographic);
     }
 
     private static double[] Cross(double[] a, double[] b)

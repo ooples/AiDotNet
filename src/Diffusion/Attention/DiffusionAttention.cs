@@ -267,6 +267,45 @@ public partial class DiffusionAttention<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
+    /// The same block with the tokens of every <paramref name="groupSize"/> consecutive batch items attending to one
+    /// another: each item is normalized on its own, then the items of a group are joined into one sequence of
+    /// <c>groupSize · H · W</c> tokens for the attention, and split back before the residual.
+    /// </summary>
+    /// <param name="input">Image-format input, <c>[B, C, H, W]</c> with <c>B</c> a multiple of the group size.</param>
+    /// <param name="groupSize">How many consecutive batch items share one attention.</param>
+    /// <returns>The output, the input's shape.</returns>
+    /// <remarks>
+    /// <para>
+    /// This is the multi-view self-attention of MVDream and Wonder3D (Wonder3D's <c>MVAttnProcessor</c>): a query of
+    /// view v reads the keys and values of every view, <c>rearrange(key, "(b t) d c -&gt; b (t d) c")</c>, with the
+    /// block's own projections. Joining the views' tokens into one sequence computes exactly that, because every
+    /// token of the joint sequence is a query over the whole sequence. A group of one is the ordinary <c>Forward</c>.
+    /// </para>
+    /// </remarks>
+    internal Tensor<T> ForwardJointTokens(Tensor<T> input, int groupSize)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (input.Shape.Length != 4)
+            throw new ArgumentException($"Joint-token attention takes [batch, channels, height, width]; got rank {input.Shape.Length}.",
+                nameof(input));
+        int batchSize = input.Shape[0];
+        if (groupSize <= 0 || batchSize % groupSize != 0)
+            throw new ArgumentException($"The batch of {batchSize} does not split into groups of {groupSize}.", nameof(groupSize));
+        if (groupSize == 1) return Forward(input);
+
+        int channels = input.Shape[1];
+        int height = input.Shape[2];
+        int width = input.Shape[3];
+        var normalized = _norm is not null ? _norm.Forward(input) : input;
+        var permuted = Engine.TensorPermute(normalized, new[] { 0, 2, 3, 1 });
+        var joint = Engine.Reshape(permuted, new[] { batchSize / groupSize, groupSize * height * width, channels });
+        var attended = _flashAttention.Forward(joint);
+        var reshaped = Engine.Reshape(attended, new[] { batchSize, height, width, channels });
+        var output = Engine.TensorPermute(reshaped, new[] { 0, 3, 1, 2 });
+        return _norm is not null ? Engine.TensorAdd(input, output) : output;
+    }
+
+    /// <summary>
     /// Propagates eval/training mode to the nested Flash / standard attention sublayers.
     /// Without this override the private sublayers never see model.SetTrainingMode(false),
     /// keeping their internal Dense projections on the allocating tape/training Forward

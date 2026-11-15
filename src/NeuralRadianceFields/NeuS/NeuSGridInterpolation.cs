@@ -37,6 +37,26 @@ internal sealed class NeuSGridInterpolation<T>
     public int Count => _count;
 
     /// <summary>
+    /// An interpolation from precomputed corners: per corner, each position's row index, weight and (optionally) the
+    /// weight's derivatives with respect to x, y and z. Lets a grid with its own indexing (a hash grid's levels) reuse
+    /// the gathers.
+    /// </summary>
+    /// <param name="count">The number of positions.</param>
+    /// <param name="indices">Per corner, the row of each position.</param>
+    /// <param name="weights">Per corner, the weight of each position.</param>
+    /// <param name="derivatives">Per axis, per corner, the weight's derivative at each position; or null.</param>
+    public static NeuSGridInterpolation<T> FromCorners(int count, int[][] indices, double[][] weights, double[][][]? derivatives)
+    {
+        if (indices is null) throw new ArgumentNullException(nameof(indices));
+        if (weights is null) throw new ArgumentNullException(nameof(weights));
+        if (indices.Length == 0 || indices.Length != weights.Length)
+            throw new ArgumentException("Every corner needs indices and weights.", nameof(weights));
+        if (derivatives is not null && derivatives.Length != 3)
+            throw new ArgumentException("The derivatives need three axes.", nameof(derivatives));
+        return new NeuSGridInterpolation<T>(count, indices, weights, derivatives);
+    }
+
+    /// <summary>
     /// Trilinear interpolation of a <c>[X, Y, Z]</c> grid (flattened x-slowest) at continuous grid coordinates.
     /// </summary>
     /// <param name="gridCoordinates">Positions in voxel units, <c>[N, 3]</c> (index i at coordinate i).</param>

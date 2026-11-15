@@ -21,8 +21,12 @@ internal sealed class NeuSView<T>
     /// <param name="camera">The camera.</param>
     /// <param name="mask">The foreground mask, <c>[H, W]</c>, or null.</param>
     /// <param name="normals">World-space normals, <c>[H, W, 3]</c>, or null.</param>
-    public NeuSView(Tensor<T> image, NeuSCamera camera, Tensor<T>? mask = null, Tensor<T>? normals = null)
+    /// <param name="weight">The view's weight in the mask and normal terms (Wonder3D's <c>view_weights</c>; 1 in NeuS).</param>
+    public NeuSView(Tensor<T> image, NeuSCamera camera, Tensor<T>? mask = null, Tensor<T>? normals = null,
+        double weight = 1.0)
     {
+        if (!(weight >= 0) || double.IsInfinity(weight))
+            throw new ArgumentOutOfRangeException(nameof(weight), "The view weight must be non-negative and finite.");
         if (image is null) throw new ArgumentNullException(nameof(image));
         if (camera is null) throw new ArgumentNullException(nameof(camera));
         if (image.Shape.Length != 3 || image.Shape[2] != 3)
@@ -37,7 +41,11 @@ internal sealed class NeuSView<T>
         Camera = camera;
         Mask = mask;
         Normals = normals;
+        Weight = weight;
     }
+
+    /// <summary>The view's weight in the mask and normal terms.</summary>
+    public double Weight { get; }
 
     /// <summary>The image, <c>[H, W, 3]</c>.</summary>
     public Tensor<T> Image { get; }

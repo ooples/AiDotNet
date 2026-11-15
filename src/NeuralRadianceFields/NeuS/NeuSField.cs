@@ -1,3 +1,5 @@
+using AiDotNet.NeuralRadianceFields.Encodings;
+
 namespace AiDotNet.NeuralRadianceFields.NeuS;
 
 /// <summary>
@@ -24,6 +26,7 @@ internal sealed class NeuSField<T> : ISignedDistanceField<T>
     private const string SdfPrefix = "sdf_network_fine.";
     private const string ColorPrefix = "color_network_fine.";
     private const string VarianceName = "variance_network_fine.variance";
+    private const string HashGridPrefix = "sdf_network_fine.hash_grid.";
 
     private readonly IEngine _engine;
 
@@ -37,9 +40,23 @@ internal sealed class NeuSField<T> : ISignedDistanceField<T>
         if (random is null) throw new ArgumentNullException(nameof(random));
         options.Validate();
         _engine = engine ?? AiDotNetEngine.Current;
-        SdfNetwork = NeuSSdfMlp<T>.CreateNeuS(options.SdfHiddenDim, options.SdfHiddenLayers, options.SdfFeatureDim + 1,
-            options.SdfSkipLayers, options.SdfFrequencies, options.SdfInitialSphereRadius, options.SdfScale,
-            options.GeometricInit, options.WeightNorm, options.InsideOutside, options.SoftplusBeta, random);
+        if (options.SdfBackbone == NeuSSdfBackbone.HashGrid)
+        {
+            var grid = new MultiresolutionHashGrid<T>(options.HashGridLevels, options.HashGridFeaturesPerLevel,
+                options.HashGridLog2TableSize, options.HashGridBaseResolution, options.HashGridPerLevelScale, random);
+            HashGrid = grid;
+            SdfNetwork = NeuSSdfMlp<T>.CreateHashGrid(options.SdfHiddenDim, options.SdfHiddenLayers, options.SdfFeatureDim + 1,
+                grid.OutputDims, options.SdfInitialSphereRadius, options.GeometricInit, options.WeightNorm,
+                options.InsideOutside, options.SoftplusBeta, random);
+            UpdateHashGridLevels(0);
+        }
+        else
+        {
+            SdfNetwork = NeuSSdfMlp<T>.CreateNeuS(options.SdfHiddenDim, options.SdfHiddenLayers, options.SdfFeatureDim + 1,
+                options.SdfSkipLayers, options.SdfFrequencies, options.SdfInitialSphereRadius, options.SdfScale,
+                options.GeometricInit, options.WeightNorm, options.InsideOutside, options.SoftplusBeta, random);
+        }
+
         ColorNetwork = new NeuSRenderingNetwork<T>(options.SdfFeatureDim, options.RenderingMode, options.ColorHiddenDim,
             options.ColorHiddenLayers, options.ViewFrequencies, options.WeightNorm, options.SqueezeColor, random);
         Variance = NeuSHost<T>.FromDoubles(new[] { options.InitialVariance }, 1);
@@ -54,19 +71,74 @@ internal sealed class NeuSField<T> : ISignedDistanceField<T>
     /// <summary>The color network.</summary>
     public NeuSRenderingNetwork<T> ColorNetwork { get; }
 
+    /// <summary>The hash grid encoding the SDF network's input, or null for NeuS's frequency embedding.</summary>
+    public MultiresolutionHashGrid<T>? HashGrid { get; }
+
+    /// <summary>The geometry's trainable tensors: the hash grid's tables (if any) and the SDF network.</summary>
+    public IReadOnlyList<Tensor<T>> GeometryParameters
+        => (HashGrid?.Tables ?? Array.Empty<Tensor<T>>()).Concat(SdfNetwork.Parameters).ToList();
+
+    /// <summary>
+    /// Sets the hash grid's active levels for <paramref name="iteration"/> (instant-nsr-pl's progressive band):
+    /// <c>min(start + max(iteration − startIteration, 0) / updateIterations, levels)</c>. No effect without a grid.
+    /// </summary>
+    /// <param name="iteration">The training iteration.</param>
+    public void UpdateHashGridLevels(int iteration)
+    {
+        if (HashGrid is not { } grid) return;
+        var o = Options;
+        if (o.HashGridStartLevel is not int start)
+        {
+            grid.ActiveLevels = grid.Levels;
+            return;
+        }
+
+        int grown = Math.Max(iteration - o.HashGridStartIteration, 0) / o.HashGridUpdateIterations;
+        grid.ActiveLevels = (int)Math.Min((long)start + grown, grid.Levels);
+    }
+
+    /// <summary>
+    /// The SDF network at <c>[N, 3]</c> points with whatever encodes them: NeuS's embedding, or the hash grid over the
+    /// unit cube <c>[−1, 1]³</c> (instant-nsr-pl's <c>contract_to_unisphere</c> with radius 1, then
+    /// <c>include_xyz</c>), whose spatial Jacobian enters the SDF gradient.
+    /// </summary>
+    /// <param name="engine">The engine.</param>
+    /// <param name="points">The points.</param>
+    /// <param name="withGradient">Whether to compute ∇ₓ SDF.</param>
+    public NeuSSdfOutput<T> QueryNetwork(IEngine engine, Tensor<T> points, bool withGradient)
+    {
+        if (points is null) throw new ArgumentNullException(nameof(points));
+        if (HashGrid is not { } grid) return SdfNetwork.Forward(engine, points, null, null, withGradient);
+        var host = NeuSHost<T>.ToDoubles(points);
+        var unit = new double[host.Length];
+        for (int i = 0; i < host.Length; i++) unit[i] = (host[i] + 1.0) * 0.5;
+        var (features, jacobian) = grid.Encode(engine, unit, withGradient);
+        Tensor<T>[]? spatial = null;
+        if (jacobian is not null)
+        {
+            // d(unit)/dx = 1/2.
+            spatial = new Tensor<T>[3];
+            for (int d = 0; d < 3; d++) spatial[d] = engine.TensorMultiplyScalar(jacobian[d], NeuSHost<T>.Scalar(0.5));
+        }
+
+        return SdfNetwork.Forward(engine, points, features, spatial, withGradient);
+    }
+
     /// <summary>The variance parameter v, one element; the sharpness is <c>exp(10·v)</c>.</summary>
     public Tensor<T> Variance { get; private set; }
 
     /// <summary>The trainable tensors: SDF network, color network, variance.</summary>
     public IReadOnlyList<Tensor<T>> Parameters
-        => SdfNetwork.Parameters.Concat(ColorNetwork.Parameters).Concat(new[] { Variance }).ToList();
+        => GeometryParameters.Concat(ColorNetwork.Parameters).Concat(new[] { Variance }).ToList();
 
     /// <summary>The trainable parameter count.</summary>
-    public int ParameterCount => SdfNetwork.ParameterCount + ColorNetwork.ParameterCount + 1;
+    public int ParameterCount => (HashGrid?.ParameterCount ?? 0) + SdfNetwork.ParameterCount + ColorNetwork.ParameterCount + 1;
 
     /// <summary>The parameters under the reference checkpoint's names.</summary>
     public IEnumerable<KeyValuePair<string, Tensor<T>>> NamedParameters()
     {
+        if (HashGrid is not null)
+            foreach (var p in HashGrid.NamedParameters(HashGridPrefix)) yield return p;
         foreach (var p in SdfNetwork.NamedParameters()) yield return new KeyValuePair<string, Tensor<T>>(SdfPrefix + p.Key, p.Value);
         foreach (var p in ColorNetwork.NamedParameters()) yield return new KeyValuePair<string, Tensor<T>>(ColorPrefix + p.Key, p.Value);
         yield return new KeyValuePair<string, Tensor<T>>(VarianceName, Variance);
@@ -82,7 +154,9 @@ internal sealed class NeuSField<T> : ISignedDistanceField<T>
         if (parameters is null) throw new ArgumentNullException(nameof(parameters));
         foreach (var entry in parameters)
         {
-            bool loaded = entry.Key.StartsWith(SdfPrefix, StringComparison.Ordinal)
+            bool loaded = HashGrid is not null && entry.Key.StartsWith(HashGridPrefix, StringComparison.Ordinal)
+                ? HashGrid.TryLoad(HashGridPrefix, entry.Key, entry.Value)
+                : entry.Key.StartsWith(SdfPrefix, StringComparison.Ordinal)
                 ? SdfNetwork.TryLoad(entry.Key.Substring(SdfPrefix.Length), entry.Value)
                 : entry.Key.StartsWith(ColorPrefix, StringComparison.Ordinal)
                     ? ColorNetwork.TryLoad(entry.Key.Substring(ColorPrefix.Length), entry.Value)
@@ -95,7 +169,7 @@ internal sealed class NeuSField<T> : ISignedDistanceField<T>
     public Tensor<T> QuerySdf(Tensor<T> points)
     {
         if (points is null) throw new ArgumentNullException(nameof(points));
-        var sdf = SdfNetwork.Forward(_engine, points, null, null, withGradient: false).Sdf;
+        var sdf = QueryNetwork(_engine, points, withGradient: false).Sdf;
         return _engine.Reshape(sdf, new[] { points.Shape[0] });
     }
 
@@ -108,7 +182,7 @@ internal sealed class NeuSField<T> : ISignedDistanceField<T>
     public Tensor<T> QueryNormals(Tensor<T> points)
     {
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        var gradient = SdfNetwork.Forward(_engine, points, null, null, withGradient: true).Gradient
+        var gradient = QueryNetwork(_engine, points, withGradient: true).Gradient
             ?? throw new InvalidOperationException("The SDF network returned no gradient.");
         return _engine.TensorDivide(gradient, NeuSRenderer<T>.Norm(_engine, gradient));
     }
@@ -123,7 +197,7 @@ internal sealed class NeuSField<T> : ISignedDistanceField<T>
     public Tensor<T> QueryColor(Tensor<T> points, Tensor<T> viewDirections)
     {
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        var output = SdfNetwork.Forward(_engine, points, null, null, withGradient: true);
+        var output = QueryNetwork(_engine, points, withGradient: true);
         var gradient = output.Gradient ?? throw new InvalidOperationException("The SDF network returned no gradient.");
         return ColorNetwork.Forward(_engine, points, gradient, viewDirections, output.Features);
     }
@@ -194,7 +268,7 @@ internal sealed class NeuSField<T> : ISignedDistanceField<T>
         var e = _engine;
         var points = NeuSHost<T>.FromDoubles(pointsHost, n, 3);
         var dirs = NeuSHost<T>.FromDoubles(dirsHost, n, 3);
-        var output = SdfNetwork.Forward(e, points, null, null, withGradient: true);
+        var output = QueryNetwork(e, points, withGradient: true);
         var gradients = output.Gradient ?? throw new InvalidOperationException("The SDF network returned no gradient.");
         // SyncDreamer's color network reads -dirs (color_network(points, gradients, -dirs, feature_vector)).
         var sampledColor = ColorNetwork.Forward(e, points, gradients, syncDreamer ? e.TensorNegate(dirs) : dirs, output.Features);
@@ -240,6 +314,7 @@ internal sealed class NeuSField<T> : ISignedDistanceField<T>
         if (raysPerBatch <= 0) throw new ArgumentOutOfRangeException(nameof(raysPerBatch));
         int total = width * height;
         var pixels = new double[total * 3];
+        var origin = new double[3];
         var direction = new double[3];
         using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
@@ -251,10 +326,10 @@ internal sealed class NeuSField<T> : ISignedDistanceField<T>
                 for (int k = 0; k < count; k++)
                 {
                     int p = start + k;
-                    camera.RayDirection(p % width, p / width, direction);
+                    camera.Ray(p % width, p / width, origin, direction);
                     for (int c = 0; c < 3; c++)
                     {
-                        origins[k * 3 + c] = camera.Center[c];
+                        origins[k * 3 + c] = origin[c];
                         directions[k * 3 + c] = direction[c];
                     }
                 }

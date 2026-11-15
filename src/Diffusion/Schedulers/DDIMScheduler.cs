@@ -103,11 +103,14 @@ public sealed class DDIMScheduler<T> : NoiseSchedulerBase<T>
         int t = timestep;
         // Calculate step size for non-uniform inference schedules (e.g., 50 steps on 1000 training steps)
         int stepSize = Timesteps.Length > 0 ? Config.TrainTimesteps / Timesteps.Length : 1;
-        int prevT = Math.Max(t - stepSize, 0);
+        int prevT = t - stepSize;
 
-        // Get alpha cumulative products for current and previous timesteps
+        // Get alpha cumulative products for current and previous timesteps; past the first training step diffusers
+        // uses final_alpha_cumprod: 1 with set_alpha_to_one, otherwise alphas_cumprod[0].
         T alphaCumprod = AlphasCumulativeProduct[t];
-        T alphaCumprodPrev = AlphasCumulativeProduct[prevT];
+        T alphaCumprodPrev = prevT >= 0
+            ? AlphasCumulativeProduct[prevT]
+            : Config.SetAlphaToOne ? NumOps.One : AlphasCumulativeProduct[0];
 
         // Compute useful quantities
         T sqrtAlphaCumprod = NumOps.Sqrt(alphaCumprod);
