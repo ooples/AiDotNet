@@ -1,6 +1,7 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -71,6 +72,7 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
     private readonly ConvolutionalLayer<T> _conv3x3;
     private readonly IActivationFunction<T> _relu;
     private readonly double _bnMomentum;
+    private readonly bool _convolutionBias;
 
     [Scratch]
     private Tensor<T>? _lastInput;
@@ -93,7 +95,26 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
     /// allocated against the resolved <c>_inputChannels</c> in
     /// <see cref="OnFirstForward"/>.
     /// </summary>
-    public DenseBlockLayer(int growthRate, double bnMomentum = 0.1)
+    public DenseBlockLayer(int growthRate, double bnMomentum)
+        : this(growthRate, bnMomentum, convolutionBias: true)
+    {
+    }
+
+    /// <summary>
+    /// Lazy ctor with the convolutions' bias stated.
+    /// </summary>
+    /// <param name="growthRate">The number of channels this layer adds.</param>
+    /// <param name="bnMomentum">
+    /// Batch normalization momentum in PyTorch's convention: the weight of the new batch in the running statistics
+    /// (torchvision DenseNet's 0.1). <see cref="BatchNormalizationLayer{T}"/> takes the weight kept from the prior
+    /// statistics instead, so its layers receive <c>1 - bnMomentum</c>.
+    /// </param>
+    /// <param name="convolutionBias">
+    /// Whether the convolutions carry a bias. Every DenseNet convolution feeds a BatchNorm (directly, or through the
+    /// concatenation or the transition's average pool), whose shift makes a per-channel bias unobservable, so the
+    /// reference architecture (torchvision <c>densenet121</c>) has none; <c>true</c> keeps the historical layout.
+    /// </param>
+    public DenseBlockLayer(int growthRate, double bnMomentum = 0.1, bool convolutionBias = true)
         : base([-1, -1, -1], [growthRate, -1, -1])
     {
         if (growthRate <= 0) throw new ArgumentOutOfRangeException(nameof(growthRate));
@@ -101,24 +122,31 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
         _inputChannels = -1; // resolved in OnFirstForward
         _growthRate = growthRate;
         _bnMomentum = bnMomentum;
+        _convolutionBias = convolutionBias;
         _relu = new ReLUActivation<T>();
 
-        int bottleneckChannels = 4 * growthRate;
+        if (!(bnMomentum >= 0.0 && bnMomentum <= 1.0))
+            throw new ArgumentOutOfRangeException(nameof(bnMomentum), bnMomentum, "Batch normalization momentum must be in [0, 1].");
 
-        _bn1 = new BatchNormalizationLayer<T>(momentum: bnMomentum);
+        int bottleneckChannels = 4 * growthRate;
+        double runningStatisticsRetention = 1.0 - bnMomentum;
+
+        _bn1 = new BatchNormalizationLayer<T>(momentum: runningStatisticsRetention);
         _conv1x1 = new ConvolutionalLayer<T>(
             outputDepth: bottleneckChannels,
             kernelSize: 1,
             stride: 1,
             padding: 0,
-            activationFunction: new IdentityActivation<T>());
-        _bn2 = new BatchNormalizationLayer<T>(momentum: bnMomentum);
+            activationFunction: new IdentityActivation<T>(),
+            biasMode: convolutionBias ? BiasMode.Auto : BiasMode.Never);
+        _bn2 = new BatchNormalizationLayer<T>(momentum: runningStatisticsRetention);
         _conv3x3 = new ConvolutionalLayer<T>(
             outputDepth: growthRate,
             kernelSize: 3,
             stride: 1,
             padding: 1,
-            activationFunction: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>(),
+            biasMode: convolutionBias ? BiasMode.Auto : BiasMode.Never);
 
         RegisterSubLayer(_bn1);
         RegisterSubLayer(_conv1x1);
@@ -203,6 +231,12 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
         // the 1x1 fold declines; training and backward retain the ordinary engine graph without storing intermediates.
         bool tryFuse = !ShouldCacheForBackward;
 
+        // BN1-ReLU-Conv1x1-BN2-ReLU as one pre-activated convolution: on a GPU BN1 and its ReLU run as the convolution
+        // loads its input, so the normalized activation is never written. Otherwise the stages below, each fused on its own.
+        if (tryFuse && ConvolutionBatchNormFolding<T>.TryPreActivatedForward(_bn1, _conv1x1, _bn2, x,
+                FusedActivationType.ReLU, out var preActivatedBottleneck))
+            return Finish(_conv3x3.Forward(preActivatedBottleneck));
+
         // BN1-ReLU (DenseNet paper: pre-activation bottleneck)
         Tensor<T> preActivated;
         if (tryFuse && ConvolutionBatchNormFolding<T>.TryBatchNormActivation(_bn1, x, FusedActivationType.ReLU, out var fusedPre))
@@ -232,13 +266,13 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
             bottleneck = Engine.ReLU(bn2Out);
         }
 
-        var output = _conv3x3.Forward(bottleneck);
+        return Finish(_conv3x3.Forward(bottleneck));
 
         // Remove batch dim if we added it
-        if (input.Shape.Length == 3 && output.Shape.Length == 4 && output.Shape[0] == 1)
-            output = Engine.Reshape(output, [output.Shape[1], output.Shape[2], output.Shape[3]]);
-
-        return output;
+        Tensor<T> Finish(Tensor<T> output)
+            => input.Shape.Length == 3 && output.Shape.Length == 4 && output.Shape[0] == 1
+                ? Engine.Reshape(output, [output.Shape[1], output.Shape[2], output.Shape[3]])
+                : output;
     }
 
     private Tensor<T> ApplyReluDerivative(Tensor<T> input, Tensor<T> grad)

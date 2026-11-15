@@ -579,7 +579,9 @@ public partial class TimeSeriesRegression<T> : RegressionBase<T>
             denominator = Engine.DotProduct(previous, previous);
         }
 
-        return NumOps.Divide(numerator, denominator);
+        // Residuals that are all zero (a perfect fit, e.g. a constant target) have no autocorrelation;
+        // 0 / 0 was NaN, which the Cochrane-Orcutt step then spread through every corrected value.
+        return NumOps.Equals(denominator, NumOps.Zero) ? NumOps.Zero : NumOps.Divide(numerator, denominator);
     }
 
     /// <summary>

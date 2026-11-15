@@ -120,6 +120,7 @@ public partial class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>,
     private readonly int _numLayers;
     private readonly int _growthRate;
     private readonly double _bnMomentum;
+    private readonly bool _convolutionBias;
     // Non-readonly: lazy ctor leaves _inputChannels = -1 until
     // OnFirstForward resolves it from the runtime input tensor.
     private int _inputChannels;
@@ -172,7 +173,27 @@ public partial class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>,
     public DenseBlock(
         int numLayers,
         int growthRate,
-        double bnMomentum = 0.1)
+        double bnMomentum)
+        : this(numLayers, growthRate, bnMomentum, convolutionBias: true)
+    {
+    }
+
+    /// <summary>
+    /// Lazy ctor with the convolutions' bias stated.
+    /// </summary>
+    /// <param name="numLayers">The number of layers in the dense block.</param>
+    /// <param name="growthRate">The number of channels each layer adds (k in the paper).</param>
+    /// <param name="bnMomentum">Batch normalization momentum.</param>
+    /// <param name="convolutionBias">
+    /// Whether the convolutions carry a bias. Every DenseNet convolution feeds a BatchNorm (directly, or through the
+    /// concatenation or the transition's average pool), whose shift makes a per-channel bias unobservable, so the
+    /// reference architecture (torchvision <c>densenet121</c>) has none; <c>true</c> keeps the historical layout.
+    /// </param>
+    public DenseBlock(
+        int numLayers,
+        int growthRate,
+        double bnMomentum = 0.1,
+        bool convolutionBias = true)
         : base(
             inputShape: [-1, -1, -1],
             outputShape: [-1, -1, -1])
@@ -184,11 +205,12 @@ public partial class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>,
         _numLayers = numLayers;
         _growthRate = growthRate;
         _bnMomentum = bnMomentum;
+        _convolutionBias = convolutionBias;
         _layers = new List<DenseBlockLayer<T>>(numLayers);
 
         for (int i = 0; i < numLayers; i++)
         {
-            var layer = new DenseBlockLayer<T>(growthRate, bnMomentum);
+            var layer = new DenseBlockLayer<T>(growthRate, bnMomentum, convolutionBias);
             _layers.Add(layer);
             RegisterSubLayer(layer);
         }
@@ -336,6 +358,8 @@ public partial class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>,
         metadata["InputChannels"] = _inputChannels.ToString();
         metadata["NumLayers"] = _numLayers.ToString();
         metadata["GrowthRate"] = _growthRate.ToString();
+        metadata["BnMomentum"] = _bnMomentum.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["ConvolutionBias"] = _convolutionBias.ToString();
         return metadata;
     }
 

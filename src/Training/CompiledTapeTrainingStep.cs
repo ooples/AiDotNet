@@ -673,6 +673,8 @@ public static class CompiledTapeTrainingStep<T>
         object? owner = null)
     {
         if (layers is null) throw new ArgumentNullException(nameof(layers));
+        // A replay updates weights on the device without advancing their versions; derived caches must rebuild.
+        AiDotNet.NeuralNetworks.Layers.DerivedTensorCacheGeneration.Advance();
         object ownerKey = owner ?? (layers.Count > 0 ? layers[0] : new object());
         if (!TryEnterState(ownerKey, LayerSetKey(ownerKey, layers, null), out var ownerStates, out var state))
         {
@@ -1135,6 +1137,8 @@ public static class CompiledTapeTrainingStep<T>
         // The closure owns per-step data and is probed before selecting or compiling its plan.
         Func<Tensor<T>>? closureObjective = null)
     {
+        // A replay updates weights on the device without advancing their versions; derived caches must rebuild.
+        AiDotNet.NeuralNetworks.Layers.DerivedTensorCacheGeneration.Advance();
         if (layers is null) throw new ArgumentNullException(nameof(layers));
         // A model whose whole training surface is raw extra tensors passes no layers; its first extra tensor then
         // identifies it, so its plan and moments still persist across steps.

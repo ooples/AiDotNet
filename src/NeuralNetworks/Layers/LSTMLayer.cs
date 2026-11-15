@@ -1375,6 +1375,8 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
         var engine = Engine;
         if (differentiable)
         {
+            // A step that may update these weights follows: the inference stacks rebuild on their next use.
+            DerivedTensorCacheGeneration.Advance();
             wIh = engine.Concat(new[] { _weightsIi, _weightsFi, _weightsCi, _weightsOi }, 0);
             wHh = engine.Concat(new[] { _weightsIh, _weightsFh, _weightsCh, _weightsOh }, 0);
             bias = engine.Concat(new[] { _biasI, _biasF, _biasC, _biasO }, 0);
@@ -1932,32 +1934,6 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     /// influenced by the previous one.
     /// </para>
     /// </remarks>
-    /// <summary>
-    /// Invalidates the cached CPU pre-packed stacked weights on any training-mode
-    /// TRANSITION. The fused inference fast path (<see cref="TryFusedLstmForward"/>) packs
-    /// the eight per-gate weight tensors into its stacked-weight caches ONCE and
-    /// reuses them until they are invalidated. Tape-based training
-    /// updates the per-gate weights IN PLACE (the optimizer writes the tensors' backing
-    /// buffers directly; it never routes through SetParameters / UpdateParameters, the only
-    /// sites that call <see cref="InvalidateCpuStackedWeights"/>), so a stacked pack built
-    /// before/during training survives into the post-training inference and feeds STALE
-    /// input weights + biases to the fused primitive — a trained model then predicts
-    /// differently from a fresh deserialize of itself with bit-identical weights
-    /// (Clone_AfterTraining_ShouldPreserveLearnedWeights, #1623; verified: at the
-    /// LstmSequenceForward call site the orig's stacked Wih/Bih differed from the clone's
-    /// while the gate weights themselves were identical). A training↔eval transition is the
-    /// authoritative "weights may have changed" signal the layer CAN observe, so we drop the
-    /// pack here; the next inference rebuilds it from the current (final) weights. Only
-    /// transitions invalidate, so repeated same-mode inference still reuses the pack.
-    /// </summary>
-    public override void SetTrainingMode(bool isTraining)
-    {
-        if (isTraining != IsTrainingMode)
-            InvalidateCpuStackedWeights();
-        base.SetTrainingMode(isTraining);
-    }
-
-    /// <inheritdoc />
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes

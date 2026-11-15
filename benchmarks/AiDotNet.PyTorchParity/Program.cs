@@ -112,6 +112,22 @@ if (classicalAt >= 0 && classicalAt + 1 < args.Length)
     return AiDotNet.PyTorchParity.ClassicalBench.Run(args[classicalAt + 1], Flag("--repeats", 9), Flag("--seed", 42), only);
 }
 
+// `--timeseries DIR [--device cpu|cuda] [--epochs N] [--series-length N] [--seed N] [--rows a,b]`: the forecaster rows
+// (TimeSeriesBench.cs) on the engine --device chose above; then run pytorch/timeseries.py DIR --device ... --compile.
+int timeSeriesAt = Array.IndexOf(args, "--timeseries");
+if (timeSeriesAt >= 0 && timeSeriesAt + 1 < args.Length)
+{
+    int Flag(string name, int fallback)
+        => Array.IndexOf(args, name) is int at and >= 0 && at + 1 < args.Length
+            && int.TryParse(args[at + 1], out int value) ? value : fallback;
+    int rowsAt = Array.IndexOf(args, "--rows");
+    var only = rowsAt >= 0 && rowsAt + 1 < args.Length
+        ? args[rowsAt + 1].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        : Array.Empty<string>();
+    return AiDotNet.PyTorchParity.TimeSeriesBench.Run(args[timeSeriesAt + 1], Flag("--epochs", 6),
+        Flag("--series-length", 20_000), Flag("--seed", 42), only);
+}
+
 var benchOptions = BenchmarkOptions.Parse(args);
 if (benchOptions.VerifyStep1Dir is { } referenceDir)
 {
@@ -377,14 +393,19 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
             // CNN read ~740 µs / p95 1.1 ms vs a clean ~270 µs steady state). RSS is a
             // whole-process resident-set figure that barely moves per inference, so
             // sampling it once after the loop is sufficient for the report.
+            // PROFILE_INFERENCE_BATCH=<n> brackets the last two steady forwards at batch n with cuProfilerStart/Stop,
+            // so `ncu --profile-from-start off` (or nsys --capture-range=cudaProfilerApi) sees only steady inference.
+            bool profileInference = BenchStats.ProfileInferenceBatch == batchSize;
             for (var i = 0; i < options.InferenceIterations; i++)
             {
+                if (profileInference && i == options.InferenceIterations - 2) { BenchStats.SynchronizeDevice(); BenchStats.ProfilerStart(); }
                 var timer = Stopwatch.StartNew();
                 model.Forward();
                 BenchStats.SynchronizeDevice();
                 timer.Stop();
                 steady.Add(timer.Elapsed.TotalSeconds);
             }
+            if (profileInference) BenchStats.ProfilerStop();
             process.Refresh();
             var peak = Math.Max(peakBefore, process.WorkingSet64 / 1024d / 1024d);
             var totalSteady = steady.Sum();
@@ -472,6 +493,17 @@ internal sealed class AiDotNetTensorBackend(int seed)
         "ddpm" => new AiDotNetDdpmModel(seed),
         "whisper-tiny" => new AiDotNetWhisperTinyModel(seed),
         "faster-rcnn" => new AiDotNetFasterRcnnModel(seed),
+        // Time-series forecasting at the ETT shape (96-step lookback, 24-step horizon, 7 channels), TimeSeriesRows.cs.
+        "informer" => new AiDotNetTimeSeriesModel(seed, TimeSeriesFamily.Informer),
+        "autoformer" => new AiDotNetTimeSeriesModel(seed, TimeSeriesFamily.Autoformer),
+        "deepar" => new AiDotNetTimeSeriesModel(seed, TimeSeriesFamily.DeepAR),
+        "nbeats" => new AiDotNetTimeSeriesModel(seed, TimeSeriesFamily.NBeats),
+        // More shipped families (MoreFamilyRows.cs): EfficientNet-B0 at CIFAR [3, 32, 32]; Kingma & Welling's MNIST VAE;
+        // Velickovic et al.'s Cora GAT (batch size 1: one sample is the whole graph); Radford et al.'s 64x64 DCGAN.
+        "efficientnet-b0" => new AiDotNetEfficientNetB0Model(seed),
+        "vae" => new AiDotNetVaeModel(seed),
+        "gat" => new AiDotNetGatModel(seed),
+        "dcgan" => new AiDotNetDcganModel(seed),
         _ => throw new ArgumentException($"Unknown model '{model}'.")
     };
 }
@@ -1226,7 +1258,9 @@ internal sealed class ResourceMonitor : IDisposable
     private readonly Process _process = Process.GetCurrentProcess();
     private readonly CancellationTokenSource _cts = new();
     private readonly List<double> _rssMb = [];
+    private readonly List<double> _gpuMemMb = [];
     private readonly Task _task;
+    private readonly Task? _gpuTask;
 
     private ResourceMonitor()
     {
@@ -1239,6 +1273,25 @@ internal sealed class ResourceMonitor : IDisposable
                 await Task.Delay(100, _cts.Token).ContinueWith(_ => { });
             }
         });
+        // GPU runs only (#2561's "peak VRAM must not exceed PyTorch's"): nvidia-smi's memory.used, exactly what
+        // benchmark.py's ResourceMonitor samples for torch on a CUDA device. It is device-wide, as on the torch side.
+        // The sample is pinned to the engine's GPU (nvidia-smi --id); when that GPU cannot be identified, VRAM is
+        // not reported rather than read from whichever GPU nvidia-smi lists first.
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        string? gpuId = engine is AiDotNet.Tensors.Engines.DirectGpuTensorEngine ? NvidiaSmi.ResolveDevice(engine.Name) : null;
+        if (gpuId is not null)
+            _gpuTask = Task.Run(async () =>
+            {
+                while (!_cts.IsCancellationRequested)
+                {
+                    var line = NvidiaSmi.TryRead(gpuId);
+                    var parts = line?.Split(',');
+                    if (parts is { Length: >= 2 } && double.TryParse(parts[1].Trim(),
+                            System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double mem))
+                        lock (_gpuMemMb) _gpuMemMb.Add(mem);
+                    await Task.Delay(100, _cts.Token).ContinueWith(_ => { });
+                }
+            });
     }
 
     public static ResourceMonitor Start() => new();
@@ -1250,48 +1303,95 @@ internal sealed class ResourceMonitor : IDisposable
     // ProcessRssMbHwm is the OS high-water-mark (PeakWorkingSet64): the true peak the
     // 100 ms sampler can miss between ticks.
     //
-    // NvidiaSmiSample is null by design: this benchmark hard-pins the CPU
-    // engine (GpuDisableBootstrap + ResetToCpu), and nvidia-smi reports
-    // SYSTEM-WIDE GPU utilization/memory — sampling it here attributed
-    // whatever the desktop GPU happened to be doing (browser, compositor)
-    // to a CPU-only run. Mirrors the device-gated GPU sampling on the
-    // Python side (benchmark.py ResourceMonitor.track_gpu). If a GPU mode
-    // is ever added, gate the NvidiaSmi.TryRead() call on it.
+    // NvidiaSmiSample stays null. GpuMemMbPeak is sampled on GPU runs only (the constructor gates it on the engine),
+    // as benchmark.py gates its nvidia-smi sampling on a CUDA device: nvidia-smi reports device-wide memory, so a CPU
+    // run would attribute whatever the desktop GPU was doing (browser, compositor) to itself.
     public ResourceReport Summary()
     {
         _process.Refresh();
         return new ResourceReport(
             ProcessRssMbPeak: Math.Round(_rssMb.Count == 0 ? 0 : _rssMb.Max(), 3),
             ProcessRssMbHwm: Math.Round(_process.PeakWorkingSet64 / 1024d / 1024d, 3),
-            NvidiaSmiSample: null);
+            NvidiaSmiSample: null,
+            GpuMemMbPeak: GpuPeak());
+    }
+
+    private double? GpuPeak()
+    {
+        lock (_gpuMemMb) return _gpuMemMb.Count == 0 ? null : _gpuMemMb.Max();
     }
 
     public void Dispose()
     {
         _cts.Cancel();
         _task.Wait(TimeSpan.FromSeconds(2));
+        _gpuTask?.Wait(TimeSpan.FromSeconds(2));
         _cts.Dispose();
     }
 }
 
 internal static class NvidiaSmi
 {
-    public static string? TryRead()
+    /// <summary>utilization.gpu and memory.used of the GPU <paramref name="id"/> (an nvidia-smi index or UUID).</summary>
+    public static string? TryRead(string? id = null)
     {
+        var arguments = new List<string> { "--query-gpu=utilization.gpu,memory.used", "--format=csv,noheader,nounits" };
+        if (id is not null) arguments.Add($"--id={id}");
+        return Query(arguments)?.FirstOrDefault();
+    }
+
+    /// <summary>
+    /// The nvidia-smi id of the GPU the engine runs on, or null when it cannot be told apart. A UUID in
+    /// CUDA_VISIBLE_DEVICES names it outright; otherwise the single GPU, or the single GPU whose name appears in
+    /// the engine description. Tensors exposes no device UUID or PCI bus id, so two GPUs of the same model are
+    /// ambiguous unless CUDA_VISIBLE_DEVICES pins one.
+    /// </summary>
+    public static string? ResolveDevice(string engineDescription)
+    {
+        var visible = Environment.GetEnvironmentVariable("CUDA_VISIBLE_DEVICES")?.Split(',')[0].Trim();
+        if (visible is not null && visible.StartsWith("GPU-", StringComparison.OrdinalIgnoreCase))
+            return visible;
+
+        var rows = Query(new List<string> { "--query-gpu=index,name", "--format=csv,noheader" });
+        if (rows is null) return null;
+        var gpus = rows.Select(row => row.Split(',', 2)).Where(parts => parts.Length == 2)
+            .Select(parts => (Index: parts[0].Trim(), Name: parts[1].Trim())).ToList();
+        if (gpus.Count == 1) return gpus[0].Index;
+
+        var named = gpus.Where(gpu => engineDescription.Contains(gpu.Name, StringComparison.OrdinalIgnoreCase)).ToList();
+        return named.Count == 1 ? named[0].Index : null;
+    }
+
+    /// <summary>A timed-out nvidia-smi could not be confirmed terminated; no further child is started.</summary>
+    private static volatile bool _childLeftRunning;
+
+    private static List<string>? Query(List<string> arguments)
+    {
+        if (_childLeftRunning) return null;
         try
         {
-            using var process = Process.Start(new ProcessStartInfo
+            var start = new ProcessStartInfo { FileName = "nvidia-smi", RedirectStandardOutput = true, RedirectStandardError = true };
+            foreach (var argument in arguments) start.ArgumentList.Add(argument);
+            using var process = Process.Start(start);
+            if (process is null) return null;
+            if (!process.WaitForExit(1000))
             {
-                FileName = "nvidia-smi",
-                ArgumentList = { "--query-gpu=utilization.gpu,memory.used", "--format=csv,noheader,nounits" },
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-            });
-            if (process is null || !process.WaitForExit(1000) || process.ExitCode != 0) return null;
-            return process.StandardOutput.ReadLine();
+                // Disposing the handle leaves the child running, and the sampler asks again every 100 ms: end it, and
+                // start no further queries unless it is confirmed gone (a failed Kill throws and leaves the flag set).
+                _childLeftRunning = true;
+                process.Kill(entireProcessTree: true);
+                _childLeftRunning = !process.WaitForExit(1000);
+                return null;
+            }
+            if (process.ExitCode != 0) return null;
+            var lines = new List<string>();
+            for (string? line = process.StandardOutput.ReadLine(); line is not null; line = process.StandardOutput.ReadLine())
+                if (line.Trim().Length > 0) lines.Add(line);
+            return lines;
         }
-        catch
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
+            // nvidia-smi is absent or failed to start: no sample, as before.
             return null;
         }
     }
@@ -1339,6 +1439,9 @@ internal static class BenchStats
     }
 
     public static bool ProfileRangeRequested => Environment.GetEnvironmentVariable("PROFILE_RANGE") == "1";
+
+    public static int ProfileInferenceBatch =>
+        int.TryParse(Environment.GetEnvironmentVariable("PROFILE_INFERENCE_BATCH"), out var b) ? b : -1;
 
     // CUDA profiler capture range; a no-op on the CPU engine. The driver library is resolved by platform at run
     // time (nvcuda.dll on Windows, libcuda.so.1 on Linux, where nsys runs), and a missing library or export is a
@@ -1411,7 +1514,8 @@ internal sealed record TrainingReport(double[] EpochSeconds, double TotalSeconds
     double SteadyStateEpochSecondsMedian, double SteadyStateEpochSecondsP25, double SteadyStateEpochSecondsP75, int StepsPerEpoch, double GradientSecondsAvg, double DataLoadingSecondsAvg, ResourceReport Resources,
     [property: System.Text.Json.Serialization.JsonNumberHandling(System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals)] double? FirstLoss,
     [property: System.Text.Json.Serialization.JsonNumberHandling(System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals)] double? LastLoss);
-internal sealed record ResourceReport(double ProcessRssMbPeak, double ProcessRssMbHwm, string? NvidiaSmiSample);
+internal sealed record ResourceReport(double ProcessRssMbPeak, double ProcessRssMbHwm, string? NvidiaSmiSample,
+    double? GpuMemMbPeak = null);
 internal sealed record InferenceReport(int BatchSize, double WarmupSecondsAvg, double SteadyStateLatencyMsAvg, double SteadyStateLatencyMsP95,
     double SteadyStateLatencyMsMedian, double SteadyStateLatencyMsP25, double SteadyStateLatencyMsP75, double ThroughputSamplesPerSecond, double MemoryMbPeak);
 

@@ -190,6 +190,7 @@ public sealed class WganGpFusedStep<T> : IDisposable
             }
 
             var lossTensor = _plan.Step();
+            AiDotNet.NeuralNetworks.Layers.DerivedTensorCacheGeneration.Advance();
             lossValue = lossTensor.Length > 0 ? lossTensor[0] : Ops.Zero;
             return true;
         }

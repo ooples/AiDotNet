@@ -95,7 +95,23 @@ public static class TimeSeriesHelper<T>
             Y[i - p] = y[i];
         }
 
-        var coefficients = MatrixSolutionHelper.SolveLinearSystem(X, Y, decompositionType);
+        Vector<T> coefficients;
+        try
+        {
+            coefficients = MatrixSolutionHelper.SolveLinearSystem(X, Y, decompositionType);
+        }
+        catch (AiDotNet.Exceptions.MatrixFactorizationException)
+        {
+            // The lag columns are linearly dependent - a constant series makes every column identical - so
+            // least squares has no unique solution and the exact solve throws. Take the (near) minimum-norm
+            // solution instead: ridge normal equations with a damping term scaled to X^T X, which spreads the
+            // weight evenly over the redundant lags rather than failing the fit.
+            var xt = X.Transpose();
+            var gram = xt.Multiply(X);
+            T damping = _numOps.Multiply(_numOps.FromDouble(1e-10), _numOps.Add(gram.Max(_numOps.Abs), _numOps.One));
+            coefficients = MatrixSolutionHelper.SolveLinearSystem(
+                gram.Add(Matrix<T>.CreateIdentity(p).Multiply(damping)), xt.Multiply(Y), MatrixDecompositionType.Cholesky);
+        }
 
         // Enforce stationarity: |a1| + |a2| + ... + |ap| < 1 is sufficient
         // (though not necessary) for stationarity. See: #991

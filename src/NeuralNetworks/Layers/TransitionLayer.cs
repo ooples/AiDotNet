@@ -1,6 +1,7 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -116,7 +117,21 @@ public partial class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtra
     /// 1×1 projection's <c>outputDepth</c> is allocated against the
     /// resolved channel count in <see cref="OnFirstForward"/>.
     /// </summary>
-    public TransitionLayer(double compressionFactor = 0.5)
+    public TransitionLayer(double compressionFactor)
+        : this(compressionFactor, convolutionBias: true)
+    {
+    }
+
+    /// <summary>
+    /// Lazy ctor with the 1x1 projection's bias stated.
+    /// </summary>
+    /// <param name="compressionFactor">The channel-compression factor, in (0, 1].</param>
+    /// <param name="convolutionBias">
+    /// Whether the convolutions carry a bias. Every DenseNet convolution feeds a BatchNorm (directly, or through the
+    /// concatenation or the transition's average pool), whose shift makes a per-channel bias unobservable, so the
+    /// reference architecture (torchvision <c>densenet121</c>) has none; <c>true</c> keeps the historical layout.
+    /// </param>
+    public TransitionLayer(double compressionFactor = 0.5, bool convolutionBias = true)
         : base(inputShape: [-1, -1, -1], outputShape: [-1, -1, -1])
     {
         if (compressionFactor <= 0 || compressionFactor > 1)
@@ -124,6 +139,7 @@ public partial class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtra
                 "compressionFactor must be in (0, 1].");
 
         _compressionFactor = compressionFactor;
+        _convolutionBias = convolutionBias;
         _relu = new ReLUActivation<T>();
         _bn = new BatchNormalizationLayer<T>();
         // _conv stays null until OnFirstForward observes the input channel
@@ -138,6 +154,7 @@ public partial class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtra
     }
 
     private readonly double _compressionFactor;
+    private readonly bool _convolutionBias;
 
     /// <inheritdoc />
     /// <remarks>
@@ -220,7 +237,8 @@ public partial class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtra
             kernelSize: 1,
             stride: 1,
             padding: 0,
-            activationFunction: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>(),
+            biasMode: _convolutionBias ? BiasMode.Auto : BiasMode.Never);
         RegisterSubLayer(_conv);
         // Propagate parent's current training mode to the freshly-allocated
         // sub-layer; otherwise it stays in default training mode even after
@@ -302,18 +320,30 @@ public partial class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtra
 
         // BN → ReLU → Conv1x1 → AvgPool. In inference BN + ReLU is one pass (when the block's ReLU is exactly a ReLU);
         // otherwise the stages run separately. Keep intermediates local so inference doesn't retain activations.
-        Tensor<T> reluOut;
-        if (!ShouldCacheForBackward && _relu.GetType() == typeof(ReLUActivation<T>)
-            && ConvolutionBatchNormFolding<T>.TryBatchNormActivation(_bn, processInput, FusedActivationType.ReLU, out var preActivated))
+        // BN + ReLU + Conv1x1 first as one pre-activated convolution (on a GPU the normalized activation is never written).
+        bool exactRelu = _relu.GetType() == typeof(ReLUActivation<T>);
+        Tensor<T> convOut;
+        if (!ShouldCacheForBackward && exactRelu
+            && ConvolutionBatchNormFolding<T>.TryPreActivatedForward(_bn, conv, post: null, processInput,
+                FusedActivationType.None, out var preActivatedConv))
         {
-            reluOut = preActivated;
+            convOut = preActivatedConv;
         }
         else
         {
-            var bnOut = _bn.Forward(processInput);
-            reluOut = _relu.Activate(bnOut);
+            Tensor<T> reluOut;
+            if (!ShouldCacheForBackward && exactRelu
+                && ConvolutionBatchNormFolding<T>.TryBatchNormActivation(_bn, processInput, FusedActivationType.ReLU, out var preActivated))
+            {
+                reluOut = preActivated;
+            }
+            else
+            {
+                var bnOut = _bn.Forward(processInput);
+                reluOut = _relu.Activate(bnOut);
+            }
+            convOut = conv.Forward(reluOut);
         }
-        var convOut = conv.Forward(reluOut);
 
         // Handle batched input (4D) - use Engine.AvgPool2D directly
         // AveragePoolingLayer expects 3D input, so we handle 4D separately
@@ -425,6 +455,7 @@ public partial class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtra
         var metadata = base.GetMetadata();
         metadata["InputChannels"] = InputShape[0].ToString();
         metadata["OutputChannels"] = OutputChannels.ToString();
+        metadata["ConvolutionBias"] = _convolutionBias.ToString();
         return metadata;
     }
 
