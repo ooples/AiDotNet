@@ -333,7 +333,7 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
             {
                 AdversarialPreprocessingMethod.JpegCompression => ApplyJPEGCompression(vectorInput),
                 AdversarialPreprocessingMethod.BitDepthReduction => ApplyBitDepthReduction(vectorInput),
-                AdversarialPreprocessingMethod.MedianSmoothing => ApplyMedianSmoothing(vectorInput),
+                AdversarialPreprocessingMethod.MedianSmoothing => ApplyMedianSmoothing(vectorInput, MedianImageLayout(input, vectorInput.Length)),
                 _ => throw new InvalidOperationException(
                     $"AdversarialDefenseOptions.PreprocessingMethod has the undefined value {(int)options.PreprocessingMethod}.")
             };
@@ -713,7 +713,17 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
                 $"AdversarialDefenseOptions.BitDepth must lie in [1, 30] (was {options.BitDepth}).");
         }
 
-        T levels = NumOps.FromDouble((1 << options.BitDepth) - 1);
+        int levelCount = (1 << options.BitDepth) - 1;
+        T levels = NumOps.FromDouble(levelCount);
+        if (NumOps.ToDouble(levels) != levelCount)
+        {
+            // Half holds integers exactly only up to 2048 and overflows past 65504: 2^b - 1 levels would be rounded
+            // (or become infinity, turning every value into NaN) instead of quantizing to b bits.
+            throw new InvalidOperationException(
+                $"AdversarialDefenseOptions.BitDepth {options.BitDepth} needs {levelCount} levels, which {typeof(T).Name} " +
+                "cannot represent exactly. Use a smaller bit depth or a wider numeric type.");
+        }
+
         var scaled = Engine.TensorMultiplyScalar(Engine.TensorClamp(input.AsTensor(), NumOps.Zero, NumOps.One), levels);
         var reduced = Engine.TensorDivideScalar(Engine.TensorRound(scaled), levels);
         return Engine.TensorClamp(reduced, NumOps.Zero, NumOps.One).ToVector();
@@ -726,11 +736,12 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
     /// <para>
     /// The window and border follow scipy.ndimage.median_filter, the implementation Xu et al. use: the window covers
     /// offsets [-(k / 2), k - 1 - k / 2] on each axis, borders are reflected (d c b a | a b c d), and the median of an
-    /// even-sized window is the upper middle value (rank k*k / 2). A square input of side s is filtered as an s x s
-    /// image; any other length as a 1 x n row with a 1 x k window.
+    /// even-sized window is the upper middle value (rank k*k / 2). The input is filtered as
+    /// <paramref name="layout"/>.Slices independent height x width images (see <see cref="MedianImageLayout"/>), so a
+    /// window never crosses a channel or a sample.
     /// </para>
     /// </remarks>
-    private Vector<T> ApplyMedianSmoothing(Vector<T> input)
+    private Vector<T> ApplyMedianSmoothing(Vector<T> input, (int Slices, int Height, int Width) layout)
     {
         int k = options.MedianFilterSize;
         if (k < 1)
@@ -745,27 +756,53 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
             return input;
         }
 
-        int side = (int)Math.Sqrt(n);
-        bool square = side * side == n && side > 1;
-        int height = square ? side : 1;
-        int width = square ? side : n;
-        int rowsWindow = square ? k : 1;
-
-        var image = Engine.Reshape(input.AsTensor(), new[] { height, width });
+        var (slices, height, width) = layout;
+        int rowsWindow = height > 1 ? k : 1;
+        var image = Engine.Reshape(input.AsTensor(), new[] { slices, height, width });
         var shifted = new List<Tensor<T>>(rowsWindow * k);
         for (int dy = -(rowsWindow / 2); dy <= rowsWindow - 1 - rowsWindow / 2; dy++)
         {
-            var rows = Engine.TensorGather(image, ReflectedIndices(height, dy), 0);
+            var rows = Engine.TensorGather(image, ReflectedIndices(height, dy), 1);
             for (int dx = -(k / 2); dx <= k - 1 - k / 2; dx++)
             {
-                shifted.Add(Engine.TensorGather(rows, ReflectedIndices(width, dx), 1));
+                shifted.Add(Engine.TensorGather(rows, ReflectedIndices(width, dx), 2));
             }
         }
 
         var (sorted, _) = Engine.TensorSort(Engine.TensorStack(shifted.ToArray(), 0), 0, false);
         int rank = shifted.Count / 2;
-        var median = Engine.TensorSlice(sorted, new[] { rank, 0, 0 }, new[] { 1, height, width });
+        var median = Engine.TensorSlice(sorted, new[] { rank, 0, 0, 0 }, new[] { 1, slices, height, width });
         return Engine.Reshape(median, new[] { n }).ToVector();
+    }
+
+    /// <summary>
+    /// The images an input of <paramref name="length"/> values holds, for median smoothing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A <see cref="Tensor{T}"/> of rank 2 or more is a stack of images over its last two axes (C x H x W, or
+    /// N x C x H x W): every leading index is one image. A <see cref="Matrix{T}"/> holds one sample per row, and a
+    /// vector is one sample; a sample of a square length s * s is an s x s image, any other a 1 x n row.
+    /// </para>
+    /// </remarks>
+    private static (int Slices, int Height, int Width) MedianImageLayout(TInput input, int length)
+    {
+        if (input is Tensor<T> tensor && tensor.Shape.Length >= 2)
+        {
+            int height = tensor.Shape[tensor.Shape.Length - 2];
+            int width = tensor.Shape[tensor.Shape.Length - 1];
+            if (height > 0 && width > 0 && length % (height * width) == 0)
+            {
+                return (length / (height * width), height, width);
+            }
+        }
+
+        int samples = input is Matrix<T> matrix && matrix.Rows > 0 && length % matrix.Rows == 0 ? matrix.Rows : 1;
+        int sampleLength = length / samples;
+        int side = (int)Math.Sqrt(sampleLength);
+        return side > 1 && side * side == sampleLength
+            ? (samples, side, side)
+            : (samples, 1, sampleLength);
     }
 
     /// <summary>
@@ -979,13 +1016,26 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
 
         /// <inheritdoc/>
         /// <remarks>
-        /// Issue #1136 plan part 3: forwards Dispose to the inner
-        /// model when it implements IDisposable. The preprocessing
+        /// Issue #1136 plan part 3: forwards Dispose to every ensemble
+        /// member that implements IDisposable (each once). The preprocessing
         /// wrapper itself owns no additional disposable state.
         /// </remarks>
         public void Dispose()
         {
-            (_inner as System.IDisposable)?.Dispose();
+            for (int i = 0; i < _members.Length; i++)
+            {
+                bool seen = false;
+                for (int j = 0; j < i && !seen; j++)
+                {
+                    seen = ReferenceEquals(_members[i], _members[j]);
+                }
+
+                if (!seen)
+                {
+                    (_members[i] as System.IDisposable)?.Dispose();
+                }
+            }
+
             System.GC.SuppressFinalize(this);
         }
 
