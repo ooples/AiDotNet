@@ -215,8 +215,8 @@ public partial class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainin
     {
         double p = _options.PrenetDropout;
         if (p <= 0) return x;
-        var keep = NumOps.FromDouble(1.0 / (1.0 - p));
-        return Engine.TensorMultiply(x, Engine.TensorMultiplyScalar(BernoulliMask(x._shape, p, dropWhenDrawn: true), keep));
+        // A per-step draw: a compiled training plan refills the mask before every replay.
+        return Engine.TensorMultiply(x, AiDotNet.Training.CompiledStepRandom<T>.InvertedDropoutMask(x._shape, _regularizationRandom, p));
     }
 
     // Zoneout (Krueger et al. 2017), probability 0.1 (§2.2): in training each unit of the LSTM state keeps its previous
@@ -227,7 +227,12 @@ public partial class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainin
         if (p <= 0) return next;
         if (!IsTrainingMode)
             return Engine.TensorAdd(Engine.TensorMultiplyScalar(previous, NumOps.FromDouble(p)), Engine.TensorMultiplyScalar(next, NumOps.FromDouble(1 - p)));
-        var mask = BernoulliMask(next._shape, p, dropWhenDrawn: false);
+        // A per-step draw: a compiled training plan refills the zoneout mask before every replay.
+        var mask = AiDotNet.Training.CompiledStepRandom<T>.Draw(next._shape, m =>
+        {
+            var span = m.AsWritableSpan();
+            for (int i = 0; i < span.Length; i++) span[i] = _regularizationRandom.NextDouble() < p ? NumOps.One : NumOps.Zero;
+        });
         var change = Engine.TensorAddScalar(Engine.TensorNegate(mask), NumOps.One);
         return Engine.TensorAdd(Engine.TensorMultiply(mask, previous), Engine.TensorMultiply(change, next));
     }

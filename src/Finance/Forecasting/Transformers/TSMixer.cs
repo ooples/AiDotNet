@@ -953,21 +953,28 @@ public partial class TSMixer<T> : ForecastingModelBase<T>
     {
         if (normalize)
         {
-            var shape = RevInShape(input, input.Rank >= 2 ? input.Shape[input.Rank - 2] : input.Length);
-            var x = Engine.Reshape(input.Contiguous(), shape);
-            var mean = Engine.StopGradient(Engine.ReduceMean(x, new[] { 1 }, keepDims: true));
-            var centered = Engine.TensorSubtract(x, Engine.TensorBroadcastTo(mean, shape));
-            var detachedCentered = Engine.StopGradient(centered);
-            var variance = Engine.ReduceMean(
-                Engine.TensorMultiply(detachedCentered, detachedCentered), new[] { 1 }, keepDims: true);
-            var std = Engine.StopGradient(Engine.TensorSqrt(Engine.TensorAddScalar(variance, NumOps.FromDouble(RevInEpsilon))));
+            if (input.Length == 0) return input;
+            // Mean and std for this instance, detached as before: the stats are constants for the affine map below.
+            // The statistics stay one-element tensors: a compiled plan recomputes them from each input instead of
+            // freezing the traced input's values, and an inference trace does not have to cross to the host.
+            Tensor<T> mean;
+            Tensor<T> std;
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+            {
+                var flat = Engine.Reshape(input.Contiguous(), new[] { input.Length });
+                var count = NumOps.FromDouble(input.Length);
+                mean = Engine.TensorDivideScalar(Engine.ReduceSum(flat, new[] { 0 }, keepDims: true), count);
+                var variance = Engine.TensorDivideScalar(
+                    Engine.ReduceSum(Engine.TensorSquare(Engine.TensorSubtract(flat, mean)), new[] { 0 }, keepDims: true), count);
+                std = Engine.TensorAddScalar(Engine.TensorSqrt(variance), eps);
+            }
 
-            // Kept for de-normalization.
+            // Store for de-normalization
             _instanceMean = mean;
             _instanceStd = std;
 
-            var normalized = Engine.TensorDivide(centered, Engine.TensorBroadcastTo(std, shape));
-            return Engine.Reshape(normalized, (int[])input._shape.Clone());
+            // Normalize: (input - mean) / std
+            return Engine.TensorDivide(Engine.TensorSubtract(input, mean), std);
         }
         else
         {
@@ -977,25 +984,8 @@ public partial class TSMixer<T> : ForecastingModelBase<T>
                 return input;
             }
 
-            // Check the instance and channel axes themselves, not just the element count: a count check alone let an
-            // even number of forecast steps be read as extra instances.
-            int batch = _instanceMean.Shape[0];
-            int channels = _instanceMean.Shape[2];
-            int rank = input.Rank;
-            bool instancesMatch = rank >= 3 ? input.Shape[0] == batch : batch == 1 || rank == 1;
-            bool channelsMatch = rank < 2 || input.Shape[rank - 1] == channels;
-            if (channels <= 0 || !instancesMatch || !channelsMatch || input.Length % (batch * channels) != 0)
-            {
-                throw new InvalidOperationException(
-                    $"RevIN cannot de-normalize an output of {input.Length} values with the statistics of " +
-                    $"{batch} instance(s) of {channels} channel(s).");
-            }
-
-            var shape = new[] { batch, input.Length / (batch * channels), channels };
-            var x = Engine.Reshape(input.Contiguous(), shape);
-            var scaled = Engine.TensorMultiply(x, Engine.TensorBroadcastTo(_instanceStd, shape));
-            var restored = Engine.TensorAdd(scaled, Engine.TensorBroadcastTo(_instanceMean, shape));
-            return Engine.Reshape(restored, (int[])input._shape.Clone());
+            // De-normalize: input * std + mean, the one-element statistics broadcast over the tensor.
+            return Engine.TensorAdd(Engine.TensorMultiply(input, _instanceStd), _instanceMean);
         }
     }
 

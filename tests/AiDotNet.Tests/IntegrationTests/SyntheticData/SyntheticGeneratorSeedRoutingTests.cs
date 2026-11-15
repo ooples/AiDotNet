@@ -46,7 +46,10 @@ public class SyntheticGeneratorSeedRoutingTests
         type.GetField("_adjacency", flags)!.SetValue(model, adjacency);
         type.GetField("_dataWidth", flags)!.SetValue(model, 3);
         var method = type.GetMethod("ComputeNOTEARSConstraintAndGradient", flags)!;
-        (double, double[,]) Evaluate() => ((double, double[,]))method.Invoke(model, null)!;
+        // The constraint and gradient are computed in T since #2465 (SyntheticTensorOps.MatrixExponential).
+        (double, Tensor<double>) Evaluate() => method.Invoke(model, null) is System.ValueTuple<double, Tensor<double>> result
+            ? result
+            : throw new System.InvalidOperationException("ComputeNOTEARSConstraintAndGradient returned no (T, Tensor<T>) pair.");
         var (_, gradient) = Evaluate();
         const double epsilon = 1e-5;
         for (int i = 0; i < 3; i++) for (int j = 0; j < 3; j++)

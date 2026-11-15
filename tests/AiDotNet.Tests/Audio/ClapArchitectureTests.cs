@@ -262,6 +262,46 @@ public class ClapArchitectureTests
 
         Assert.Equal(Trained(), Trained());
     }
+
+    /// <summary>
+    /// The fused-training break does not depend on the regularization options. With drop-path, text dropout,
+    /// SpecAugment and feature fusion all off, the break used to be lifted. The fused plan then froze the STFT front end
+    /// at the traced step's spectra, because AiDotNet.Tensors 0.150.0 does not record it in training traces (#2592,
+    /// ooples/AiDotNet.Tensors#1750). Every step has to train on the eager tape, and two seeded models trained on
+    /// different batches must match.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task Training_StaysEager_AndReproducible_WithEveryHostDrawDisabled()
+    {
+        await Task.Yield();
+        double[] Trained()
+        {
+            var options = ClapReferenceTests.TinyOptions(fusion: false);
+            options.AudioDropPathRate = 0;
+            options.TextDropoutRate = 0;
+            options.SpecAugmentTimeStripes = 0;
+            options.SpecAugmentFreqStripes = 0;
+            using var model = new CLAPModel<double>(new NeuralNetworkArchitecture<double>(InputType.OneDimensional,
+                NeuralNetworkTaskType.Embedding, inputSize: 8192, outputSize: 12), options);
+            var captions = Captions();
+            for (int step = 0; step < 3; step++)
+            {
+                // A different batch each step, so a plan that kept the traced step's spectra trains on stale input.
+                var audio = Audio(2, 6000);
+                var span = audio.AsWritableSpan();
+                for (int i = 0; i < span.Length; i++) span[i] *= 1.0 + 0.5 * step;
+                model.Train(audio, captions);
+            }
+
+            var stepper = AiDotNet.Training.TapeTrainingStepper<double>.ForOwner(model);
+            Assert.Equal(0, stepper.FusedStepCount);
+            Assert.True(stepper.EagerStepCount > 0, "CLAP's training steps did not run through the shared stepper.");
+            return model.GetParameters().ToArray();
+        }
+
+        Assert.Equal(Trained(), Trained());
+    }
+
     private static Tensor<double> Audio(int batch, int samples)
     {
         var audio = new Tensor<double>(new[] { batch, samples });

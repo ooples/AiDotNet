@@ -200,8 +200,28 @@ internal sealed class Wav2Vec2Network<T>
         var features = ProjectionNorm.Forward(h);
         var hidden = Drop(Dense(Projection, features), c.FeatureProjectionDropout, training, random);
         double probability = maskProbability ?? c.MaskTimeProbability;
-        bool[,]? applied = mask ?? (training && probability > 0 ? DrawMask(batch, hidden.Shape[1], probability, random) : null);
-        if (applied is not null) hidden = ApplyMask(hidden, applied);
+        bool[,]? applied = mask;
+        Tensor<T>? maskedFrames = null;
+        if (mask is not null)
+        {
+            maskedFrames = MaskedFrames(mask, batch, hidden.Shape[1]);
+        }
+        else if (training && probability > 0)
+        {
+            // The time mask is a per-step draw: a compiled training plan refills it before every replay, and the
+            // mask reported with the output is the latest drawn. A forward run only to resolve shapes draws
+            // nothing, so it masks no frames.
+            int length = hidden.Shape[1];
+            var drawn = new bool[batch, length];
+            maskedFrames = AiDotNet.Training.CompiledStepRandom<T>.Draw(new[] { batch, length, 1 }, m =>
+            {
+                var next = DrawMask(batch, length, probability, random);
+                Array.Copy(next, drawn, next.Length);
+                WriteMaskedFrames(m, next);
+            });
+            applied = drawn;
+        }
+        if (maskedFrames is not null) hidden = ApplyMask(hidden, maskedFrames);
 
         var states = new List<Tensor<T>>();
         hidden = _engine.TensorAdd(hidden, PositionalEmbedding(hidden));
@@ -210,8 +230,19 @@ internal sealed class Wav2Vec2Network<T>
         states.Add(hidden);
         foreach (var layer in EncoderLayers)
         {
-            // LayerDrop: in training each layer is skipped with probability LayerDrop.
-            if (!(training && random.NextDouble() < c.LayerDrop)) hidden = Encode(layer, hidden, training, random);
+            // LayerDrop: in training each layer is skipped with probability LayerDrop. The skip is a per-step 0/1
+            // gate drawn before the layer runs, so a compiled training plan redraws it on every replay rather than
+            // baking the traced step's choice of layers into its graph: gate·layer(h) + (1 − gate)·h, exactly
+            // layer(h) or h.
+            if (training && c.LayerDrop > 0)
+            {
+                var gate = AiDotNet.Training.CompiledStepRandom<T>.KeepGate(random, c.LayerDrop);
+                hidden = AiDotNet.Training.CompiledStepRandom<T>.Gated(_engine, gate, Encode(layer, hidden, training, random), hidden);
+            }
+            else
+            {
+                hidden = Encode(layer, hidden, training, random);
+            }
             states.Add(hidden);
         }
         if (c.StableLayerNorm) hidden = EncoderNorm.Forward(hidden);
@@ -230,10 +261,8 @@ internal sealed class Wav2Vec2Network<T>
     private Tensor<T> Drop(Tensor<T> x, double rate, bool training, Random random)
     {
         if (!training || rate <= 0) return x;
-        var mask = new Tensor<T>(x._shape);
-        var keep = NumOps.FromDouble(1.0 / (1.0 - rate));
-        for (int i = 0; i < mask.Length; i++) mask[i] = random.NextDouble() < rate ? NumOps.Zero : keep;
-        return _engine.TensorMultiply(x, mask);
+        // The mask is a per-step draw, so a compiled training plan redraws it on every replay.
+        return _engine.TensorMultiply(x, AiDotNet.Training.CompiledStepRandom<T>.InvertedDropoutMask(x._shape, random, rate));
     }
 
     // A feature-encoder layer on [B, L, Cin]: the strided kernel windows [B, Lout, K·Cin] through the conv's linear map,
@@ -344,21 +373,28 @@ internal sealed class Wav2Vec2Network<T>
         return mask;
     }
 
-    // The masked frames replaced by the learned mask embedding.
-    private Tensor<T> ApplyMask(Tensor<T> hidden, bool[,] mask)
+    // A [B, L, 1] tensor that is 1 at the masked frames of mask and 0 elsewhere.
+    private Tensor<T> MaskedFrames(bool[,] mask, int batch, int length)
     {
-        var c = Configuration;
-        int batch = hidden.Shape[0], length = hidden.Shape[1], width = c.HiddenSize;
         if (mask.GetLength(0) != batch || mask.GetLength(1) != length)
             throw new ArgumentException($"The mask is [{mask.GetLength(0)}, {mask.GetLength(1)}]; the frames are [{batch}, {length}].");
-        var keep = new Tensor<T>(new[] { batch, length, 1 });
         var masked = new Tensor<T>(new[] { batch, length, 1 });
-        for (int b = 0; b < batch; b++)
-            for (int t = 0; t < length; t++)
-            {
-                keep[b, t, 0] = mask[b, t] ? NumOps.Zero : NumOps.One;
-                masked[b, t, 0] = mask[b, t] ? NumOps.One : NumOps.Zero;
-            }
+        WriteMaskedFrames(masked, mask);
+        return masked;
+    }
+
+    private static void WriteMaskedFrames(Tensor<T> masked, bool[,] mask)
+    {
+        var span = masked.AsWritableSpan();
+        int length = mask.GetLength(1);
+        for (int i = 0; i < span.Length; i++) span[i] = mask[i / length, i % length] ? NumOps.One : NumOps.Zero;
+    }
+
+    // The masked frames (1 in masked, [B, L, 1]) replaced by the learned mask embedding.
+    private Tensor<T> ApplyMask(Tensor<T> hidden, Tensor<T> masked)
+    {
+        int batch = hidden.Shape[0], length = hidden.Shape[1], width = Configuration.HiddenSize;
+        var keep = _engine.ScalarMinusTensor(NumOps.One, masked);
         var embedding = _engine.Reshape(MaskEmbedding.Forward(new Tensor<T>(new[] { 1, 1 }, new Vector<T>(new[] { NumOps.One }))), new[] { 1, 1, width });
         return _engine.TensorAdd(
             _engine.TensorMultiply(hidden, _engine.TensorTile(keep, new[] { 1, 1, width })),
