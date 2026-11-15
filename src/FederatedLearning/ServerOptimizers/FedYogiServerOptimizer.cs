@@ -24,8 +24,10 @@ public sealed class FedYogiServerOptimizer<T> : FederatedServerOptimizerBase<T>
     private readonly double _beta2;
     private readonly double _epsilon;
 
-    private Vector<T>? _m;
-    private Vector<T>? _v;
+    // The moments are held in double: v accumulates g^2, which overflows Half (65504) once |g| passes 256, and an
+    // infinite v freezes every later step at zero.
+    private Tensor<double>? _m;
+    private Tensor<double>? _v;
 
     public FedYogiServerOptimizer(double learningRate = 1.0, double beta1 = 0.9, double beta2 = 0.99, double epsilon = 1e-3)
     {
@@ -61,25 +63,31 @@ public sealed class FedYogiServerOptimizer<T> : FederatedServerOptimizerBase<T>
         ValidateVectors(currentGlobalParameters, aggregatedTargetParameters);
 
         int n = currentGlobalParameters.Length;
-        _m ??= new Vector<T>(n);
+        _m ??= new Tensor<double>(new[] { n });
         if (_v is null)
         {
             // Reddi et al. 2021, Algorithm 2: v_{-1} >= tau^2.
-            _v = new Vector<T>(n);
-            _v.Fill(NumOps.FromDouble(_epsilon * _epsilon));
+            _v = new Tensor<double>(new[] { n });
+            _v.Fill(_epsilon * _epsilon);
         }
 
         // Reddi et al. 2021, Algorithm 2 (FedYogi), no bias correction:
         // m = b1 m + (1 - b1) g;  v = v + (1 - b2) sign(g^2 - v) g^2;  x = x + lr m / (sqrt(v) + tau).
-        var g = Engine.Subtract(aggregatedTargetParameters, currentGlobalParameters);
-        var gSquared = Engine.Multiply(g, g);
-        _m = Engine.Add(Engine.Multiply(_m, NumOps.FromDouble(_beta1)), Engine.Multiply(g, NumOps.FromDouble(1.0 - _beta1)));
-        var direction = Engine.Sign(Engine.Subtract(gSquared, _v));
-        _v = Engine.Add(_v, Engine.Multiply(Engine.Multiply(direction, gSquared), NumOps.FromDouble(1.0 - _beta2)));
+        // g and the state are worked in double; the step is rounded to T once and added to x in T.
+        var current = currentGlobalParameters.AsTensor().Cast<double>();
+        var g = Engine.TensorSubtract(aggregatedTargetParameters.AsTensor().Cast<double>(), current);
+        var gSquared = Engine.TensorSquare(g);
+        var m = Engine.TensorAdd(Engine.TensorMultiplyScalar(_m, _beta1), Engine.TensorMultiplyScalar(g, 1.0 - _beta1));
+        var direction = Engine.TensorSign(Engine.TensorSubtract(gSquared, _v));
+        var v = Engine.TensorAdd(_v, Engine.TensorMultiplyScalar(Engine.TensorMultiply(direction, gSquared), 1.0 - _beta2));
 
-        var denominator = Engine.TensorAddScalar(Engine.Sqrt(_v).AsTensor(), NumOps.FromDouble(_epsilon)).ToVector();
-        var step = Engine.Multiply(Engine.Divide(_m, denominator), NumOps.FromDouble(_learningRate));
-        return Engine.Add(currentGlobalParameters, step);
+        // Kept across rounds, so copied out of the engine's buffers.
+        _m = new Tensor<double>(m.ToArray(), new[] { n });
+        _v = new Tensor<double>(v.ToArray(), new[] { n });
+
+        var denominator = Engine.TensorAddScalar(Engine.TensorSqrt(_v), _epsilon);
+        var step = Engine.TensorMultiplyScalar(Engine.TensorDivide(_m, denominator), _learningRate);
+        return Engine.Add(currentGlobalParameters, step.Cast<T>().ToVector());
     }
 
     /// <inheritdoc />
