@@ -2336,15 +2336,18 @@ public static class DeserializationHelper
             int timeEmbedDim = TryGetInt(additionalParams, "TimeEmbedDim") ?? 0;
             int numGroups = TryGetInt(additionalParams, "NumGroups") ?? 32;
             double epsilon = TryGetDouble(additionalParams, "Epsilon") ?? 1e-5;
+            var resBlockInitialization = TryGetEnum<DiffusionResBlockInitialization>(additionalParams, "Initialization")
+                ?? DiffusionResBlockInitialization.ZeroResidual;
             var ctor = type.GetConstructor(new Type[]
             {
-                typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(double)
+                typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(double),
+                typeof(DiffusionResBlockInitialization)
             });
             if (ctor is null)
                 throw new MissingLayerCtorException("Cannot find DiffusionResBlock constructor.");
             instance = ctor.Invoke(new object[]
             {
-                inChannels, outChannels, spatialSize, timeEmbedDim, numGroups, epsilon
+                inChannels, outChannels, spatialSize, timeEmbedDim, numGroups, epsilon, resBlockInitialization
             });
         }
         else if (genericDef == typeof(PoolingLayer<>))
