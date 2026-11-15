@@ -10,6 +10,7 @@ using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 
 namespace AiDotNet.AdversarialRobustness.Safety;
@@ -46,26 +47,70 @@ public class SafetyFilter<T> : ISafetyFilter<T>
     /// </summary>
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromMilliseconds(100);
 
+    /// <summary>The confidence of one matched jailbreak pattern.</summary>
+    private const double PatternConfidence = 0.8;
+
     private SafetyFilterOptions<T> options;
+    private readonly IContentClassifier<T>? contentClassifier;
     private readonly List<string> jailbreakPatterns;
     private readonly Dictionary<string, List<string>> harmfulContentPatterns;
+    private readonly ILogger? logger;
+
+    /// <summary>1 once prompt text has been screened through <see cref="DetectJailbreak(string)"/>.</summary>
+    private int textScreened;
+
+    /// <summary>1 once the vector-only <see cref="SafetyFilterOptions{T}.JailbreakSensitivity"/> warning is logged.</summary>
+    private int vectorSensitivityWarned;
 
     /// <summary>
     /// Initializes a new instance of the safety filter.
     /// </summary>
     /// <param name="options">The safety filter configuration options.</param>
     public SafetyFilter(SafetyFilterOptions<T> options)
+        : this(options, null)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new safety filter that also scores content with a classifier.
+    /// </summary>
+    /// <param name="options">The safety filter configuration options.</param>
+    /// <param name="classifier">
+    /// The classifier consulted when <see cref="SafetyFilterOptions{T}.UseClassifier"/> is true. Its category scores
+    /// are merged (by maximum) with the pattern scores. Null uses the patterns alone.
+    /// </param>
+    public SafetyFilter(SafetyFilterOptions<T> options, IContentClassifier<T>? classifier)
+        : this(options, classifier, null)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new safety filter with a classifier and a logger for configuration warnings.
+    /// </summary>
+    /// <param name="options">The safety filter configuration options.</param>
+    /// <param name="classifier">The classifier consulted when <see cref="SafetyFilterOptions{T}.UseClassifier"/> is true, or null.</param>
+    /// <param name="logger">
+    /// Receives the warning that a non-default <see cref="SafetyFilterOptions{T}.JailbreakSensitivity"/> is screening
+    /// numeric vectors only (see <see cref="DetectJailbreak(Vector{T})"/>). Null writes it to
+    /// <see cref="System.Diagnostics.Trace"/>.
+    /// </param>
+    public SafetyFilter(SafetyFilterOptions<T> options, IContentClassifier<T>? classifier, ILogger? logger)
     {
         Guard.NotNull(options);
         this.options = options;
+        contentClassifier = classifier;
+        this.logger = logger;
         jailbreakPatterns = new List<string>();
         harmfulContentPatterns = new Dictionary<string, List<string>>();
         InitializePatterns();
     }
 
     /// <summary>
-    /// Initializes the jailbreak and harmful content detection patterns from options.
+    /// True when a ready classifier is configured and <see cref="SafetyFilterOptions{T}.UseClassifier"/> is on, so
+    /// numeric content is scored by more than the length and finiteness checks.
     /// </summary>
+    internal bool HasContentClassifier => options.UseClassifier && contentClassifier is not null && contentClassifier.IsReady();
+
     private void InitializePatterns()
     {
         // Initialize jailbreak detection patterns
@@ -96,6 +141,8 @@ public class SafetyFilter<T> : ISafetyFilter<T>
                 "adultcontent" => new List<string> { @"explicit", @"nsfw", @"adult" },
                 "privateinformation" => new List<string> { @"ssn", @"credit card", @"password", @"private" },
                 "misinformation" => new List<string> { @"fake news", @"conspiracy", @"false" },
+                "selfharm" => new List<string> { @"suicide", @"self[- ]harm", @"kill myself", @"cut myself" },
+                "illegalactivities" => new List<string> { @"launder", @"counterfeit", @"smuggl", @"untraceable" },
                 _ => new List<string>()
             };
         }
@@ -176,7 +223,7 @@ public class SafetyFilter<T> : ISafetyFilter<T>
                 result.DetectedHarmCategories = harmfulResult.DetectedCategories;
                 result.SafetyScore = Math.Min(result.SafetyScore, 1.0 - harmfulResult.HarmScore);
 
-                if (harmfulResult.HarmScore > 0.5)
+                if (harmfulResult.HarmScore > options.SafetyThreshold)
                 {
                     result.IsValid = false;
                 }
@@ -273,8 +320,70 @@ public class SafetyFilter<T> : ISafetyFilter<T>
         return result;
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Detects jailbreak attempts in a numeric vector by screening its text form.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="SafetyFilterOptions{T}.JailbreakSensitivity"/> applies through the text path: jailbreak detection
+    /// matches English prompt patterns, and this overload only screens the vector's numbers written out as text, which
+    /// never match them. On numeric vectors the sensitivity therefore changes nothing. Screen prompt text with
+    /// <see cref="DetectJailbreak(string)"/> (or the <c>ConfigureSafety</c> text pipeline) for it to take effect.
+    /// </para>
+    /// <para>
+    /// So the option does not go unnoticed: when the sensitivity is not the default and this filter has seen vectors
+    /// but no text, the first call logs a warning (to the constructor's logger, else to
+    /// <see cref="System.Diagnostics.Trace"/>).
+    /// </para>
+    /// </remarks>
+    /// <param name="input">The vector to screen.</param>
+    /// <returns>The detection result.</returns>
     public JailbreakDetectionResult<T> DetectJailbreak(Vector<T> input)
+    {
+        WarnIfSensitivityOnlySeesVectors();
+        return DetectJailbreakInText(ConvertToText(input));
+    }
+
+    /// <summary>
+    /// Detects jailbreak attempts in text with the filter's patterns and <see cref="SafetyFilterOptions{T}.JailbreakSensitivity"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>This is the path the sensitivity applies through. The numeric overload stringifies the vector, which
+    /// never matches the English patterns on raw numbers; call this overload to screen prompt text directly.</para>
+    /// </remarks>
+    /// <param name="text">The text to screen.</param>
+    /// <returns>The detection result.</returns>
+    public JailbreakDetectionResult<T> DetectJailbreak(string text)
+    {
+        Interlocked.Exchange(ref textScreened, 1);
+        return DetectJailbreakInText(text);
+    }
+
+    private void WarnIfSensitivityOnlySeesVectors()
+    {
+        if (options.JailbreakSensitivity == SafetyFilterOptions<T>.DefaultJailbreakSensitivity
+            || Volatile.Read(ref textScreened) != 0
+            || Interlocked.Exchange(ref vectorSensitivityWarned, 1) != 0)
+        {
+            return;
+        }
+
+        const string Warning =
+            "SafetyFilterOptions.JailbreakSensitivity is {Sensitivity}, but this safety filter has only screened numeric " +
+            "vectors, on which jailbreak patterns never match: the sensitivity applies through the text path " +
+            "(SafetyFilter.DetectJailbreak(string) or the ConfigureSafety text pipeline).";
+        if (logger is not null)
+        {
+            logger.LogWarning(Warning, options.JailbreakSensitivity);
+        }
+        else
+        {
+            System.Diagnostics.Trace.TraceWarning(Warning.Replace("{Sensitivity}",
+                options.JailbreakSensitivity.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        }
+    }
+
+    private JailbreakDetectionResult<T> DetectJailbreakInText(string text)
     {
         var result = new JailbreakDetectionResult<T>
         {
@@ -284,7 +393,6 @@ public class SafetyFilter<T> : ISafetyFilter<T>
             Indicators = new List<JailbreakIndicator>()
         };
 
-        var text = ConvertToText(input);
         if (string.IsNullOrEmpty(text))
         {
             return result;
@@ -292,7 +400,7 @@ public class SafetyFilter<T> : ISafetyFilter<T>
 
         text = text.ToLowerInvariant();
         var matchedPatterns = 0;
-        var totalPatterns = jailbreakPatterns.Count;
+        double missProbability = 1.0;
 
         foreach (var pattern in jailbreakPatterns)
         {
@@ -301,11 +409,12 @@ public class SafetyFilter<T> : ISafetyFilter<T>
                 if (Regex.IsMatch(text, pattern, RegexOptions.IgnoreCase, RegexTimeout))
                 {
                     matchedPatterns++;
+                    missProbability *= 1.0 - PatternConfidence;
                     result.Indicators.Add(new JailbreakIndicator
                     {
                         Type = "PatternMatch",
                         Description = $"Matched jailbreak pattern: {pattern}",
-                        Confidence = 0.8,
+                        Confidence = PatternConfidence,
                         Location = 0
                     });
                 }
@@ -316,14 +425,15 @@ public class SafetyFilter<T> : ISafetyFilter<T>
             }
         }
 
-        if (matchedPatterns > 0)
+        // The indicators are combined as independent evidence (noisy-OR): one match is 0.8, two 0.96. The attempt
+        // is flagged once that confidence reaches 1 - JailbreakSensitivity, so a sensitivity of 0.7 (the default)
+        // flags a single match and a sensitivity below 0.2 needs two.
+        double confidence = 1.0 - missProbability;
+        result.ConfidenceScore = confidence;
+        if (matchedPatterns > 0 && confidence >= 1.0 - options.JailbreakSensitivity)
         {
             result.JailbreakDetected = true;
-            // Guard against division by zero when totalPatterns is 0
-            result.ConfidenceScore = totalPatterns > 0
-                ? Math.Min(1.0, (double)matchedPatterns / totalPatterns * 2.0)
-                : 1.0; // If no patterns but somehow matched, max confidence
-            result.Severity = result.ConfidenceScore;
+            result.Severity = confidence;
             result.JailbreakType = matchedPatterns > 2 ? "Sophisticated" : "Basic";
             result.RecommendedActions = new[] { "Block", "Log", "Alert" };
         }
@@ -333,6 +443,62 @@ public class SafetyFilter<T> : ISafetyFilter<T>
 
     /// <inheritdoc/>
     public HarmfulContentResult<T> IdentifyHarmfulContent(Vector<T> content)
+    {
+        var result = IdentifyHarmfulPatterns(content);
+        if (HasContentClassifier && contentClassifier is { } classifier)
+        {
+            MergeClassifierScores(result, classifier.Classify(content));
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Merges a classifier verdict into the pattern result: each category keeps the larger of the two scores.
+    /// </summary>
+    [AiDotNet.Attributes.ScalarKernel("Reads one score per harm category from a dictionary; there is no tensor to vectorize over.")]
+    private static void MergeClassifierScores(HarmfulContentResult<T> result, ContentClassificationResult<T> classification)
+    {
+        if (!classification.IsHarmful)
+        {
+            return;
+        }
+
+        foreach (var kv in classification.CategoryScores)
+        {
+            double score = MathHelper.Clamp(NumOps.ToDouble(kv.Value), 0.0, 1.0);
+            if (score <= 0.0)
+            {
+                continue;
+            }
+
+            result.CategoryScores[kv.Key] = result.CategoryScores.TryGetValue(kv.Key, out var existing)
+                ? Math.Max(existing, score)
+                : score;
+            result.Findings.Add(new HarmfulContentFinding
+            {
+                Category = kv.Key,
+                Severity = score,
+                Description = $"Content classifier scored {kv.Key} at {score:F3}",
+                Location = 0,
+                Excerpt = classification.Explanation
+            });
+        }
+
+        if (result.CategoryScores.Count == 0)
+        {
+            return;
+        }
+
+        var primary = result.CategoryScores.OrderByDescending(kv => kv.Value).First();
+        result.HarmfulContentDetected = true;
+        result.HarmScore = primary.Value;
+        result.PrimaryHarmCategory = primary.Key;
+        result.DetectedCategories = result.CategoryScores.Keys.ToArray();
+        result.RecommendedAction = result.HarmScore > 0.7 ? "Block" : result.HarmScore > 0.4 ? "Warn" : "Allow";
+    }
+
+    private HarmfulContentResult<T> IdentifyHarmfulPatterns(Vector<T> content)
     {
         var result = new HarmfulContentResult<T>
         {

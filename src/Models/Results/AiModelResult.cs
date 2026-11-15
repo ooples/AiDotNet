@@ -1105,6 +1105,15 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     internal ISafetyFilter<T>? SafetyFilter { get; private set; }
 
     /// <summary>
+    /// Replaces the safety filter: the one built from <c>AdversarialRobustnessOptions</c> at build, or null to
+    /// remove filtering (<c>EnableSafetyFiltering</c> false).
+    /// </summary>
+    internal void SetSafetyFilter(ISafetyFilter<T>? filter)
+    {
+        SafetyFilter = filter;
+    }
+
+    /// <summary>
     /// Gets the composable safety pipeline for content safety evaluation.
     /// </summary>
     /// <remarks>
@@ -2674,6 +2683,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             // through to the full ValidateInput so the exact diagnostic/throw is preserved.
             // Custom ISafetyFilter implementations always take the per-call path below.
             if (!(SafetyFilter is SafetyFilter<T> defaultInputFilter
+                  && !defaultInputFilter.HasContentClassifier
                   && IsCleanForDefaultVectorInputFilter(vectorInput, defaultInputFilter)))
             {
                 var validation = SafetyFilter.ValidateInput(vectorInput);
@@ -2779,7 +2789,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             // output (a match would have been a spurious false-positive block). Skip the
             // ConvertToText + regex for the default filter and return the output unchanged.
             // Custom ISafetyFilter implementations keep the per-call path.
-            if (SafetyFilter is not SafetyFilter<T>)
+            if (SafetyFilter is not SafetyFilter<T> { HasContentClassifier: false })
             {
                 var filtered = SafetyFilter.FilterOutput(vectorOutput);
                 if (filtered.WasModified || !filtered.IsSafe)
@@ -2986,7 +2996,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         // per-row path would return the input unchanged — so return it directly.
         // Any violation falls through to the detailed per-row path, preserving the
         // exact row-level diagnostic and sanitization for genuinely bad data.
-        if (SafetyFilter is SafetyFilter<T> defaultFilter)
+        if (SafetyFilter is SafetyFilter<T> defaultFilter && !defaultFilter.HasContentClassifier)
         {
             var opts = defaultFilter.GetOptions();
             if (!opts.EnableInputValidation)
@@ -3065,7 +3075,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         // stringified numbers would have been a spurious block; skipping it is
         // also the correct outcome.) Custom ISafetyFilter implementations keep the
         // per-row path below.
-        if (SafetyFilter is SafetyFilter<T>)
+        // A content classifier scores the numeric output itself, so a filter with one keeps the per-row path.
+        if (SafetyFilter is SafetyFilter<T> { HasContentClassifier: false })
         {
             return output;
         }
@@ -4095,7 +4106,9 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             WeightStreamingReport = WeightStreamingReport
         };
 
-        return new AiModelResult<T, TInput, TOutput>(options);
+        var updated = new AiModelResult<T, TInput, TOutput>(options);
+        CopyRobustnessStateTo(updated);
+        return updated;
     }
 
     /// <summary>
@@ -5805,16 +5818,19 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             TrainingMetricsHistory = TrainingMetricsHistory
         };
 
-        return new AiModelResult<T, TInput, TOutput>(options);
+        var copy = new AiModelResult<T, TInput, TOutput>(options);
+        CopyRobustnessStateTo(copy);
+        return copy;
     }
 
     /// <summary>
-    /// Creates a shallow copy of this AiModelResult.
+    /// Creates a copy of this AiModelResult.
     /// </summary>
-    /// <returns>A new AiModelResult instance that is a shallow copy of this one.</returns>
+    /// <returns>A new AiModelResult with a copy of the model and this result's configuration.</returns>
     /// <remarks>
-    /// This method delegates to WithParameters to ensure consistency in how OptimizationResult is handled.
-    /// The cloned instance will have a new model with the same parameters and updated OptimizationResult metadata.
+    /// The same as <see cref="DeepCopy"/>: the copy is a full result, so its robustness state (the certified defense,
+    /// the inference-time certification settings, the adversarial defense and the safety filter) is carried over.
+    /// It used to return a copy of the bare inner model, which dropped all of that.
     /// </remarks>
     public IFullModel<T, TInput, TOutput> Clone()
     {
@@ -5823,7 +5839,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             throw new InvalidOperationException("Cannot clone AiModelResult with null Model.");
         }
 
-        return Model.DeepCopy();
+        return DeepCopy();
     }
 
     /// <summary>
@@ -5993,6 +6009,10 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 // when the model was first built. Closes review-comment
                 // #1271.rT-I (data-loss bug: was being silently dropped).
                 WeightStreamingReport = deserializedObject.WeightStreamingReport;
+
+                // The certified defense and the inference-time certification settings, so PredictCertified and
+                // certified PredictWithDefense behave as they did before the save.
+                RestoreCertificationStateFrom(deserializedObject);
 
                 // Reset transient runtime state (will be reinitialized lazily)
                 JitCompiledFunction = null;

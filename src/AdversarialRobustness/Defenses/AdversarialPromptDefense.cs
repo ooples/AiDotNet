@@ -165,7 +165,7 @@ public class AdversarialPromptDefense<T, TInput, TOutput> : IAdversarialDefense<
     private const double FiniteDifferenceStep = 0.001;
 
     /// <summary>
-    /// The central-difference gradient of the MSE loss with respect to every prompt entry.
+    /// The central-difference gradient of the cross-entropy loss with respect to every prompt entry.
     /// </summary>
     private Vector<T> PromptGradient(TInput input, Vector<T> labelVec, IFullModel<T, TInput, TOutput> model, T delta)
     {
@@ -236,6 +236,7 @@ public class AdversarialPromptDefense<T, TInput, TOutput> : IAdversarialDefense<
             throw new ArgumentException("Test data must not be empty.", nameof(testData));
 
         int cleanCorrect = 0, adversarialCorrect = 0;
+        var defendedModel = new DefendedModel<T, TInput, TOutput>(model, this);
 
         for (int i = 0; i < testData.Length; i++)
         {
@@ -248,8 +249,9 @@ public class AdversarialPromptDefense<T, TInput, TOutput> : IAdversarialDefense<
             var cleanVec = ConversionsHelper.ConvertToVector<T, TOutput>(cleanOutput);
             if (ArgMax(cleanVec) == trueClass) cleanCorrect++;
 
-            // Adversarial accuracy with prompt defense
-            var adversarial = attack.GenerateAdversarialExample(testData[i], labels[i], model);
+            // Adversarial accuracy with prompt defense. The attack sees the prompted classifier x -> f(x + delta):
+            // attacking the bare model would measure transfer from the undefended model, not the defense.
+            var adversarial = attack.GenerateAdversarialExample(testData[i], labels[i], defendedModel);
             var defendedAdv = PreprocessInput(adversarial);
             var advOutput = model.Predict(defendedAdv);
             var advVec = ConversionsHelper.ConvertToVector<T, TOutput>(advOutput);
@@ -340,35 +342,98 @@ public class AdversarialPromptDefense<T, TInput, TOutput> : IAdversarialDefense<
     }
 
     /// <summary>
-    /// Adds the prompt as a border frame (Chen et al. 2023, an additive padding prompt): the first half of the
-    /// prompt goes on the first entries of the flattened input and the second half on the last ones, so a
-    /// row-major image gets a band at its top and bottom. The input keeps its size, so the frozen model sees
-    /// the shape it was trained on.
+    /// Adds the prompt as a border frame (Chen et al. 2023, after the padding prompt of Bahng et al. 2022).
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A square input of side s is an s x s image whose outer w = max(1, round(30 s / 224)) rings (the 30-pixel pad of
+    /// Bahng et al. on 224-pixel images, at the same relative width) form the frame. The frame's pixels, ordered ring
+    /// by ring and clockwise from the top-left corner, are split into <c>promptLength</c> equal runs, and each prompt
+    /// entry is added to one run, so all four sides are prompted. Any other length is a 1-D signal whose two ends
+    /// carry the first and second half of the prompt. The input keeps its size, so the frozen model sees the shape it
+    /// was trained on.
+    /// </para>
+    /// </remarks>
     private TInput ApplyPromptToInput(TInput input)
     {
         if (_defensePrompt == null) return input;
 
         var inputVec = ConversionsHelper.ConvertToVector<T, TInput>(input);
         int n = inputVec.Length;
-        int length = Math.Min(_promptLength, n);
-        int head = (length + 1) / 2;
-        int tail = length - head;
-        var prompt = _defensePrompt.AsTensor();
-        var frame = new Tensor<T>(new[] { n });
-        frame = Engine.TensorSetSlice(frame, Engine.TensorSlice(prompt, new[] { 0 }, new[] { head }), new[] { 0 });
-        if (tail > 0)
-        {
-            frame = Engine.TensorSetSlice(frame, Engine.TensorSlice(prompt, new[] { head }, new[] { tail }), new[] { n - tail });
-        }
-
+        var (indices, mask) = FrameLayout(n);
+        var frame = Engine.TensorMultiply(Engine.TensorGather(_defensePrompt.AsTensor(), indices, 0), mask);
         var combinedVec = Engine.TensorAdd(inputVec.AsTensor(), frame).ToVector();
         return ConversionsHelper.ConvertVectorToInput<T, TInput>(combinedVec, input);
     }
 
+    [AiDotNet.Attributes.Scratch]
+    private (int Length, Tensor<int> Indices, Tensor<T> Mask)? _frameLayout;
+
+    /// <summary>
+    /// For an input of length <paramref name="n"/>: the prompt entry added at every position, and a 0/1 mask of the
+    /// frame positions.
+    /// </summary>
+    private (Tensor<int> Indices, Tensor<T> Mask) FrameLayout(int n)
+    {
+        if (_frameLayout is { } cached && cached.Length == n)
+        {
+            return (cached.Indices, cached.Mask);
+        }
+
+        var entry = new int[n];
+        var mask = new double[n];
+        var positions = FramePositions(n);
+        int length = Math.Min(_promptLength, positions.Count);
+        for (int k = 0; k < positions.Count; k++)
+        {
+            int p = positions[k];
+            entry[p] = (int)((long)k * length / positions.Count);
+            mask[p] = 1.0;
+        }
+
+        var layout = (new Tensor<int>(entry, new[] { n }), new Tensor<double>(mask, new[] { n }).Cast<T>());
+        _frameLayout = (n, layout.Item1, layout.Item2);
+        return layout;
+    }
+
+    /// <summary>The frame positions in prompt order (see <see cref="ApplyPromptToInput"/>).</summary>
+    private List<int> FramePositions(int n)
+    {
+        var positions = new List<int>();
+        int side = (int)Math.Sqrt(n);
+        if (side * side == n && side >= 3)
+        {
+            int rings = Math.Min((side - 1) / 2, Math.Max(1, (int)Math.Round(30.0 * side / 224.0, MidpointRounding.AwayFromZero)));
+            for (int r = 0; r < rings; r++)
+            {
+                int first = r, last = side - 1 - r;
+                for (int c = first; c <= last; c++) positions.Add(first * side + c);          // top, left to right
+                for (int row = first + 1; row <= last; row++) positions.Add(row * side + last); // right, downward
+                for (int c = last - 1; c >= first; c--) positions.Add(last * side + c);       // bottom, right to left
+                for (int row = last - 1; row > first; row--) positions.Add(row * side + first); // left, upward
+            }
+
+            return positions;
+        }
+
+        int length = Math.Min(_promptLength, n);
+        int head = (length + 1) / 2;
+        int tail = length - head;
+        for (int i = 0; i < head; i++) positions.Add(i);
+        for (int i = n - tail; i < n; i++) positions.Add(i);
+        return positions;
+    }
+
+    /// <summary>
+    /// The softmax cross-entropy of the model output against the label, -sum_k y_k log softmax(z)_k: the
+    /// classification loss Chen et al. 2023 optimize the prompt for.
+    /// </summary>
+    /// <remarks>
+    /// Computed as sum(y) logsumexp(z) - y . z with the maximum logit subtracted first, so no exponent is positive
+    /// (Half overflows at exp(11.1)).
+    /// </remarks>
     private static T ComputeLoss(Vector<T> predicted, Vector<T> target)
     {
-        // Simple MSE loss over the common length
         int len = Math.Min(predicted.Length, target.Length);
         if (len == 0)
         {
@@ -376,10 +441,16 @@ public class AdversarialPromptDefense<T, TInput, TOutput> : IAdversarialDefense<
         }
 
         var engine = AiDotNetEngine.Current;
-        var difference = engine.TensorSubtract(
-            engine.TensorSlice(predicted.AsTensor(), new[] { 0 }, new[] { len }),
-            engine.TensorSlice(target.AsTensor(), new[] { 0 }, new[] { len }));
-        return engine.TensorMean(engine.TensorSquare(difference));
+        var logits = engine.TensorSlice(predicted.AsTensor(), new[] { 0 }, new[] { len });
+        var labels = engine.TensorSlice(target.AsTensor(), new[] { 0 }, new[] { len });
+        T count = NumOps.FromDouble(len);
+        T maximum = engine.TensorMaxValue(logits);
+        var shifted = engine.TensorAddScalar(logits, NumOps.Negate(maximum));
+        T sumExp = NumOps.Multiply(engine.TensorMean(engine.TensorExp(shifted)), count);
+        T logSumExp = NumOps.Add(maximum, NumOps.Log(sumExp));
+        T labelMass = NumOps.Multiply(engine.TensorMean(labels), count);
+        T dot = NumOps.Multiply(engine.TensorMean(engine.TensorMultiply(labels, logits)), count);
+        return NumOps.Subtract(NumOps.Multiply(labelMass, logSumExp), dot);
     }
 
     private static int ArgMax(Vector<T> vector)
