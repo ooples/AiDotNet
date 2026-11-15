@@ -420,9 +420,29 @@ public abstract class NeuralAudioCodecBase<T> : AudioNeuralNetworkBase<T>, IAudi
             TrainLayers(DiscriminatorLayersFor(bandwidth), source, target, () => DiscriminatorObjective(target, generated, bandwidth),
                 DiscriminatorGroup(bandwidth));
         }
+        FitUnfittedCodebooks(source, quantizers);
         TrainLayers(_generatorLayers, source, target, () => GeneratorObjective(target, Reconstruct(source, quantizers), bandwidth), "generator");
         if (ReportedGeneratorLoss is double reported) LastLoss = NumOps.FromDouble(reported);
         _trainingSteps++;
+    }
+
+    // The first generator step that uses a codebook fits it (k-means, which reads the batch on the host) just before the
+    // step runs, as the reference's first training forward does, so the traced forward never does and a compiled plan
+    // can replay it.
+    private void FitUnfittedCodebooks(Tensor<T> source, int quantizers)
+    {
+        if (Quantizer is not ResidualVectorQuantizerLayer<T> rvq || !rvq.HasUnfittedCodebooks(quantizers)) return;
+        bool wasTraining = IsTrainingMode;
+        SetTrainingMode(false);
+        try
+        {
+            using var _ = new NoGradScope<T>();
+            rvq.InitializeCodebooks(EncodeLatent(source), quantizers);
+        }
+        finally
+        {
+            SetTrainingMode(wasTraining);
+        }
     }
 
     // Matching segments of SegmentSize samples (the whole recording, zero-padded, when shorter).
@@ -515,7 +535,9 @@ public abstract class NeuralAudioCodecBase<T> : AudioNeuralNetworkBase<T>, IAudi
     }
 
     /// <summary>A copy of <paramref name="x"/> that carries no gradient.</summary>
-    protected static Tensor<T> Detached(Tensor<T> x) => new(x._shape, x.ToVector());
+    /// <remarks>A device copy (the engine's stop-gradient), never a read through the host, so a compiled training plan
+    /// replays the objectives that detach their targets.</remarks>
+    protected static Tensor<T> Detached(Tensor<T> x) => AiDotNet.Tensors.Engines.AiDotNetEngine.Current.StopGradient(x);
 
     /// <summary>A waveform as <c>[samples]</c> (mono) — the discriminators' and spectral losses' input.</summary>
     protected Tensor<T> Flat(Tensor<T> audio) => Engine.Reshape(audio, new[] { audio.Length });

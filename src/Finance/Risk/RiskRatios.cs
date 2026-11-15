@@ -171,19 +171,9 @@ public class RiskRatios<T> : IRiskRatioCalculator<T>
         return (mean, std);
     }
 
-    /// <summary>Sum / count; a count past T's range (Half: 65504) divides by sqrt(count) twice instead of zeroing the mean.</summary>
+    /// <summary>Mean accumulated in double, including counts beyond Half's finite range.</summary>
     private static T MeanOf(Tensor<T> values, int count)
-    {
-        T sum = AiDotNetEngine.Current.TensorSum(values);
-        T n = NumOps.FromDouble(count);
-        if (!NumOps.IsInfinity(n))
-        {
-            return NumOps.Divide(sum, n);
-        }
-
-        T rootCount = NumOps.FromDouble(Math.Sqrt(count));
-        return NumOps.Divide(NumOps.Divide(sum, rootCount), rootCount);
-    }
+        => NumOps.FromDouble(TensorReductionHelper.SumAsDouble(AiDotNetEngine.Current, values) / count);
 
     /// <summary>sqrt(sum(x^2) / divisor), with x pre-scaled by its largest magnitude.</summary>
     /// <remarks>
@@ -200,9 +190,8 @@ public class RiskRatios<T> : IRiskRatioCalculator<T>
             return NumOps.Zero;
         }
 
-        T unitSquares = TensorReductionHelper.SumOfSquares(engine, engine.TensorDivideScalar(values, scale));
-        return NumOps.Multiply(scale,
-            NumOps.Divide(NumOps.Sqrt(unitSquares), NumOps.FromDouble(Math.Sqrt(divisor))));
+        double unitSquares = TensorReductionHelper.SumOfSquaresAsDouble(engine, engine.TensorDivideScalar(values, scale));
+        return NumOps.FromDouble(NumOps.ToDouble(scale) * Math.Sqrt(unitSquares / divisor));
     }
 
     private static Tensor<T> ToTensor(IReadOnlyList<T> returns)

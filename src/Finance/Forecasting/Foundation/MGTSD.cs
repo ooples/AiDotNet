@@ -590,17 +590,17 @@ public partial class MGTSD<T> : TimeSeriesFoundationModelBase<T>
     {
         int len = Math.Max(1, input.Length);
         T mean = NumOps.Zero;
-        T variance = NumOps.Zero;
+        double sumSquares = 0.0;
         if (input.Length > 0)
         {
-            // Whole-series mean and population variance.
+            // Whole-series mean and population variance, the sum of squares in double so a Half sum past 65504
+            // does not make the std infinite.
             using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
             var flat = Engine.Reshape(input.Contiguous(), new[] { input.Length });
             mean = NumOps.Divide(Engine.TensorSum(flat), NumOps.FromDouble(len));
-            variance = TensorReductionHelper.SumOfSquares(Engine, Engine.TensorSubtractScalar(flat, mean));
+            sumSquares = TensorReductionHelper.SumOfSquaresAsDouble(Engine, Engine.TensorSubtractScalar(flat, mean));
         }
-        variance = NumOps.Divide(variance, NumOps.FromDouble(len));
-        T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
+        T std = NumOps.FromDouble(Math.Sqrt(sumSquares / len + 1e-5));
         return (mean, std);
     }
 
@@ -626,7 +626,7 @@ public partial class MGTSD<T> : TimeSeriesFoundationModelBase<T>
     public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps) { var predictions = new List<Tensor<T>>(); var currentInput = input; int stepsRemaining = steps; while (stepsRemaining > 0) { var prediction = Forecast(currentInput, null); predictions.Add(prediction); int stepsUsed = Math.Min(_forecastHorizon, stepsRemaining); stepsRemaining -= stepsUsed; if (stepsRemaining > 0) currentInput = ShiftInputWithPredictions(currentInput, prediction, stepsUsed); } return ConcatenatePredictions(predictions, steps); }
 
     /// <inheritdoc />
-    public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals) { var (mse, mae, count) = SumSquaredAndAbsoluteError(predictions, actuals); if (count > 0) { mse = NumOps.Divide(mse, NumOps.FromDouble(count)); mae = NumOps.Divide(mae, NumOps.FromDouble(count)); } return new Dictionary<string, T> { ["MSE"] = mse, ["MAE"] = mae, ["RMSE"] = NumOps.Sqrt(mse) }; }
+    public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals) { var (mse, mae, count) = MeanSquaredAndAbsoluteError(predictions, actuals); return new Dictionary<string, T> { ["MSE"] = mse, ["MAE"] = mae, ["RMSE"] = NumOps.Sqrt(mse) }; }
 
     /// <inheritdoc />
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)

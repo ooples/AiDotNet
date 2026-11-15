@@ -56,21 +56,116 @@ public class TensorSumOfSquaresDoubleTests
     [Fact]
     public void EngineTensorSumOfSquares_Double_StillHasTheTensors0150Defect_RemoveTheWorkaroundWhenThisFails()
     {
-#if NET5_0_OR_GREATER
-        // The faulty kernel runs only with FMA (which .NET ties to AVX2) and 16 or more elements.
-        if (!System.Runtime.Intrinsics.X86.Fma.IsSupported) return;
-
         var oneToSixteen = Enumerable.Range(1, 16).Select(i => (double)i).ToArray();
         double engineValue = new CpuEngine().TensorSumOfSquares(new Tensor<double>(oneToSixteen, new[] { 16 }));
 
-        // 1^2 + ... + 16^2 = 1496. The defect returns 2 * (1^2 + 3^2 + ... + 15^2) = 1360.
-        Assert.True(
-            engineValue == 1360.0,
-            $"Engine.TensorSumOfSquares(1..16 as double) returned {engineValue:R}, not the 1360 of the AiDotNet.Tensors " +
-            "0.150.0 defect. If it is 1496 the package is fixed: delete this test and the double branch of " +
-            "TensorReductionHelper.SumOfSquares.");
+        // 1^2 + ... + 16^2 = 1496, which every configuration the defect does not reach must return (net471, and a
+        // CPU without FMA, which .NET ties to AVX2, take the correct scalar or dot-product path). With FMA on net5+
+        // the faulty kernel returns 2 * (1^2 + 3^2 + ... + 15^2) = 1360.
+        double expected = 1496.0;
+        bool defectReachable = false;
+#if NET5_0_OR_GREATER
+        defectReachable = System.Runtime.Intrinsics.X86.Fma.IsSupported;
+        if (defectReachable) expected = 1360.0;
 #endif
+
+        Assert.True(
+            engineValue == expected,
+            defectReachable
+                ? $"Engine.TensorSumOfSquares(1..16 as double) returned {engineValue:R}, not the 1360 of the " +
+                  "AiDotNet.Tensors 0.150.0 defect. If it is 1496 the package is fixed: delete this test and the " +
+                  "double branch of TensorReductionHelper.SumOfSquares."
+                : $"Engine.TensorSumOfSquares(1..16 as double) returned {engineValue:R} on a configuration the " +
+                  "defect does not reach; expected 1496.");
     }
+
+    [Fact]
+    public void SumOfSquares_SparseDouble_MatchesTheDenseLoop()
+    {
+        // A 4 x 8 COO tensor whose stored values sit at odd flat indices (odd columns), plus a duplicate coordinate
+        // that must accumulate. The engine op runs the faulty double kernel over a sparse tensor too.
+        var rows = new List<int>();
+        var columns = new List<int>();
+        var values = new List<double>();
+        var dense = new double[32];
+        for (int r = 0; r < 4; r++)
+        {
+            for (int c = 1; c < 8; c += 2)
+            {
+                double v = 1.5 + r * 4 + c;
+                rows.Add(r);
+                columns.Add(c);
+                values.Add(v);
+                dense[r * 8 + c] += v;
+            }
+        }
+
+        rows.Add(0);
+        columns.Add(1);
+        values.Add(-0.75);
+        dense[1] += -0.75;
+
+        var sparse = new SparseTensor<double>(4, 8, rows.ToArray(), columns.ToArray(), values.ToArray());
+
+        foreach (var engine in Engines())
+        {
+            AssertClose(LoopSumOfSquares(dense), TensorReductionHelper.SumOfSquares(engine, sparse));
+            AssertClose(LoopSumOfSquares(dense), TensorReductionHelper.SumOfSquaresAsDouble(engine, sparse));
+        }
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(16)]
+    [InlineData(40)]
+    [InlineData(1000)]
+    public void SumOfSquaresAsDouble_Double_MatchesALoop(int n)
+    {
+        var values = Values(n, seed: 2);
+        foreach (var engine in Engines())
+        {
+            AssertClose(LoopSumOfSquares(values),
+                TensorReductionHelper.SumOfSquaresAsDouble(engine, new Tensor<double>((double[])values.Clone(), new[] { n })));
+        }
+    }
+
+    [Fact]
+    public void SumOfSquaresAsDouble_EmptyTensor_IsZero()
+    {
+        Assert.Equal(0.0, TensorReductionHelper.SumOfSquaresAsDouble(new CpuEngine(), new Tensor<float>(new[] { 0 })));
+    }
+
+#if NET5_0_OR_GREATER
+    [Theory]
+    [InlineData(40)]
+    [InlineData(1000)]
+    [InlineData(70000)]
+    public void SumOfSquaresAsDouble_Half_StaysFinitePastHalfMaxValue(int n)
+    {
+        // Elements of a few hundred: every element and every square-root statistic fits Half, the sum of squares
+        // (4e5 at n = 40) does not. SumOfSquares returns infinity there; the double sum must not.
+        var values = Enumerable.Range(0, n).Select(i => (Half)(150.0 + 100.0 * Math.Sin(0.9 * i))).ToArray();
+        double expected = LoopSumOfSquares(values.Select(v => (double)v));
+        Assert.True(expected > (double)Half.MaxValue);
+
+        double actual = TensorReductionHelper.SumOfSquaresAsDouble(new CpuEngine(), new Tensor<Half>((Half[])values.Clone(), new[] { n }));
+
+        // The rescaled elements keep Half's 11 significant bits.
+        AssertClose(expected, actual, 5e-3);
+    }
+
+    [Fact]
+    public void SumOfSquaresAsDouble_Half_KeepsInfinityAndNaN()
+    {
+        var withInfinity = new[] { (Half)1.0, Half.PositiveInfinity, (Half)2.0 };
+        var withNaN = new[] { (Half)1.0, Half.NaN, (Half)2.0 };
+
+        Assert.True(double.IsPositiveInfinity(
+            TensorReductionHelper.SumOfSquaresAsDouble(new CpuEngine(), new Tensor<Half>(withInfinity, new[] { 3 }))));
+        Assert.True(double.IsNaN(
+            TensorReductionHelper.SumOfSquaresAsDouble(new CpuEngine(), new Tensor<Half>(withNaN, new[] { 3 }))));
+    }
+#endif
 
     [Theory]
     [MemberData(nameof(Lengths))]

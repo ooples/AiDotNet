@@ -115,6 +115,10 @@ public class OneCycleLRScheduler : LearningRateSchedulerBase
     /// </summary>
     public double PctStart => _pctStart;
 
+    internal double DivFactor => _divFactor;
+    internal double FinalDivFactor => _finalDivFactor;
+    internal AnnealingStrategy Strategy => _annealStrategy;
+
     /// <inheritdoc/>
     protected override double ComputeLearningRate(int step)
     {

@@ -712,12 +712,12 @@ public partial class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<
         var variances = new List<T>();
 
         // Update level and trend variances: Σ_t (s[t] - s[t - 1])² / (n - 1) per column
-        T levelVariance = NumOps.Divide(SquaredStepSum(smoothedStates, 0, 1, steps), NumOps.FromDouble(n - 1));
+        T levelVariance = NumOps.FromDouble(SquaredStepSum(smoothedStates, 0, 1, steps) / (n - 1));
         positions.Add(0);
         variances.Add(levelVariance);
         if (_bayesianOptions.IncludeTrend)
         {
-            T trendVariance = NumOps.Divide(SquaredStepSum(smoothedStates, 1, 1, steps), NumOps.FromDouble(n - 1));
+            T trendVariance = NumOps.FromDouble(SquaredStepSum(smoothedStates, 1, 1, steps) / (n - 1));
             positions.Add(1);
             variances.Add(trendVariance);
         }
@@ -726,9 +726,9 @@ public partial class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<
         int seasonalIndex = _bayesianOptions.IncludeTrend ? 2 : 1;
         foreach (var seasonalComponent in _seasonalComponents)
         {
-            T seasonalVariance = NumOps.Divide(
-                SquaredStepSum(smoothedStates, seasonalIndex, seasonalComponent.Length, steps),
-                NumOps.FromDouble((n - 1) * seasonalComponent.Length));
+            T seasonalVariance = NumOps.FromDouble(
+                SquaredStepSum(smoothedStates, seasonalIndex, seasonalComponent.Length, steps)
+                / ((double)(n - 1) * seasonalComponent.Length));
             positions.AddRange(Enumerable.Range(seasonalIndex, seasonalComponent.Length));
             variances.AddRange(Enumerable.Repeat(seasonalVariance, seasonalComponent.Length));
             seasonalIndex += seasonalComponent.Length;
@@ -741,18 +741,18 @@ public partial class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<
         _stateCovariance = covariance.ToMatrix();
 
         // Update observation variance: Σ e² / n, log-likelihood Σ log|e|
-        T totalVariance = NumOps.Zero;
+        double totalVariance = 0.0;
         T logLikelihood = NumOps.Zero;
         if (n > 0)
         {
             Vector<T> predictions = TimeSeriesEngineOps<T>.PredictRows(
                 smoothedStates.GetSubMatrix(0, 0, n, smoothedStates.Columns), CalculatePrediction);
             Vector<T> errors = Engine.Subtract(y, predictions);
-            totalVariance = Engine.DotProduct(errors, errors);
+            totalVariance = TensorReductionHelper.SumOfSquaresAsDouble(Engine, errors.AsTensor());
             logLikelihood = Engine.Sum(Engine.Log(Engine.Abs(errors)));
         }
 
-        _observationVariance = NumOps.Divide(totalVariance, NumOps.FromDouble(n));
+        _observationVariance = NumOps.FromDouble(totalVariance / n);
 
         return logLikelihood;
     }
@@ -760,16 +760,16 @@ public partial class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<
     /// <summary>
     /// <c>Σ_{t=1..steps} ‖s[t, c..c+w) - s[t-1, c..c+w)‖²</c> over the state rows (zero when there are no steps).
     /// </summary>
-    private T SquaredStepSum(Matrix<T> states, int column, int width, int steps)
+    private double SquaredStepSum(Matrix<T> states, int column, int width, int steps)
     {
         if (steps <= 0 || width <= 0)
         {
-            return NumOps.Zero;
+            return 0.0;
         }
 
         var current = states.GetSubMatrix(1, column, steps, width);
         var previous = states.GetSubMatrix(0, column, steps, width);
-        return TensorReductionHelper.SumOfSquares(Engine, Tensor<T>.FromMatrix(Engine.MatrixSubtract(current, previous)));
+        return TensorReductionHelper.SumOfSquaresAsDouble(Engine, Tensor<T>.FromMatrix(Engine.MatrixSubtract(current, previous)));
     }
 
     /// <summary>

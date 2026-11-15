@@ -706,8 +706,8 @@ public partial class TSMixer<T> : ForecastingModelBase<T>
         var mse = _lossFunction.CalculateLoss(predictions.ToVector(), testLabels.ToVector());
 
         // Calculate MAE
-        var (_, mae, _) = SumSquaredAndAbsoluteError(predictions, testLabels);
-        mae = NumOps.Divide(mae, NumOps.FromDouble(predictions.Length));
+        var (_, sumAbsolute, _) = SumSquaredAndAbsoluteError(predictions, testLabels);
+        var mae = NumOps.FromDouble(sumAbsolute / predictions.Length);
 
         return new Dictionary<string, T>
         {
@@ -962,11 +962,24 @@ public partial class TSMixer<T> : ForecastingModelBase<T>
             using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             {
                 var flat = Engine.Reshape(input.Contiguous(), new[] { input.Length });
-                var count = NumOps.FromDouble(input.Length);
-                mean = Engine.TensorDivideScalar(Engine.ReduceSum(flat, new[] { 0 }, keepDims: true), count);
-                var variance = Engine.TensorDivideScalar(
-                    Engine.ReduceSum(Engine.TensorSquare(Engine.TensorSubtract(flat, mean)), new[] { 0 }, keepDims: true), count);
-                std = Engine.TensorAddScalar(Engine.TensorSqrt(variance), eps);
+                if (typeof(T) != typeof(float) && typeof(T) != typeof(double))
+                {
+                    var wide = flat.Cast<double>();
+                    var wideMean = Engine.TensorDivideScalar(Engine.ReduceSum(wide, new[] { 0 }, keepDims: true), (double)input.Length);
+                    var variance = Engine.TensorDivideScalar(
+                        Engine.ReduceSum(Engine.TensorSquare(Engine.TensorSubtract(wide, wideMean)), new[] { 0 }, keepDims: true), (double)input.Length);
+                    mean = wideMean.Cast<T>();
+                    std = Engine.TensorAddScalar(Engine.TensorSqrt(variance), 1e-5).Cast<T>();
+                }
+                else
+                {
+                    // Keep supported compiled types on the tensor trace; Cast reads host storage.
+                    var count = NumOps.FromDouble(input.Length);
+                    mean = Engine.TensorDivideScalar(Engine.ReduceSum(flat, new[] { 0 }, keepDims: true), count);
+                    var variance = Engine.TensorDivideScalar(
+                        Engine.ReduceSum(Engine.TensorSquare(Engine.TensorSubtract(flat, mean)), new[] { 0 }, keepDims: true), count);
+                    std = Engine.TensorAddScalar(Engine.TensorSqrt(variance), NumOps.FromDouble(1e-5));
+                }
             }
 
             // Store for de-normalization
@@ -1127,4 +1140,3 @@ public partial class TSMixer<T> : ForecastingModelBase<T>
 
     #endregion
 }
-

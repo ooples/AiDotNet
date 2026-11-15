@@ -588,11 +588,12 @@ public partial class TimeMachine<T> : ForecastingModelBase<T>
         var metrics = new Dictionary<string, T>();
 
         // Calculate MSE
-        var (mse, mae, count) = SumSquaredAndAbsoluteError(predictions, actuals);
+        // The sums are doubles, divided here and rounded to T once (no pairs gives NaN, as before).
+        var (sumSquared, sumAbsolute, count) = SumSquaredAndAbsoluteError(predictions, actuals);
 
-        mse = NumOps.Divide(mse, NumOps.FromDouble(count));
-        mae = NumOps.Divide(mae, NumOps.FromDouble(count));
-        T rmse = NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(mse)));
+        T mse = NumOps.FromDouble(sumSquared / count);
+        T mae = NumOps.FromDouble(sumAbsolute / count);
+        T rmse = NumOps.FromDouble(Math.Sqrt(sumSquared / count));
 
         metrics["MSE"] = mse;
         metrics["MAE"] = mae;

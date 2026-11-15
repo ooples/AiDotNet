@@ -969,15 +969,9 @@ public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
             return;
         }
 
-        // Compute residuals (absolute errors)
-        var absResiduals = Engine.Abs(Engine.Subtract(y, predictions.GetSubVector(0, y.Length)));
-
-        // Compute mean of absolute residuals
-        _residualMean = NumOps.Divide(Engine.Sum(absResiduals), NumOps.FromDouble(absResiduals.Length));
-
-        // Compute standard deviation of absolute residuals
-        var diff = Engine.Subtract(absResiduals, Engine.Fill(absResiduals.Length, _residualMean));
-        _residualStdDev = NumOps.Sqrt(NumOps.Divide(Engine.DotProduct(diff, diff), NumOps.FromDouble(absResiduals.Length)));
+        // Mean and standard deviation of the absolute residuals (one per observation), summed in double
+        var fitted = predictions.Length == y.Length ? predictions : predictions.Slice(0, y.Length);
+        (_residualMean, _residualStdDev) = AbsoluteResidualStatistics((Vector<T>)Engine.Subtract(y, fitted));
 
         // If std dev is zero (all residuals are the same), use a small default
         if (NumOps.Equals(_residualStdDev, NumOps.Zero))

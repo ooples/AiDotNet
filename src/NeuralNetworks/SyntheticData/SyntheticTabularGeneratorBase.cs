@@ -253,7 +253,10 @@ public abstract class SyntheticTabularGeneratorBase<T> : ISyntheticTabularGenera
             return NumOps.Sqrt(TensorReductionHelper.SumOfSquares(engine, x));
         }
 
-        return NumOps.Multiply(scale, NumOps.Sqrt(TensorReductionHelper.SumOfSquares(engine, engine.TensorDivideScalar(x, scale))));
+        // Each scaled square is at most 1, but their sum is up to x.Length, past Half's 65504 for a large gradient:
+        // take it in double, which also rescales it when it overflows T.
+        double scaledSumOfSquares = TensorReductionHelper.SumOfSquaresAsDouble(engine, engine.TensorDivideScalar(x, scale));
+        return NumOps.FromDouble(NumOps.ToDouble(scale) * Math.Sqrt(scaledSumOfSquares));
     }
 
     /// <summary>

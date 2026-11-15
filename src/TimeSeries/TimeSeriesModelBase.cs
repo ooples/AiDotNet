@@ -1180,50 +1180,58 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
     /// </remarks>
     protected virtual Dictionary<string, T> CalculateErrorMetrics(Vector<T> predictions, Vector<T> actuals)
     {
+        if (predictions is null) throw new ArgumentNullException(nameof(predictions));
+        if (actuals is null) throw new ArgumentNullException(nameof(actuals));
+
         int n = predictions.Length;
         var metrics = new Dictionary<string, T>();
 
+        // The error sums are taken in double and divided once: in Half a sum of squared (or absolute) errors passes
+        // 65504 long before the mean does. The first n actuals pair with the n predictions.
+        var observed = actuals.Length == n ? actuals : actuals.Slice(0, n);
+        var errors = n > 0 ? Engine.TensorSubtract(predictions.AsTensor(), observed.AsTensor()) : new Tensor<T>(new[] { 0 });
+
         // Calculate MAE (Mean Absolute Error)
-        Vector<T> errors = n > 0 ? Engine.Subtract(predictions, actuals.GetSubVector(0, n)) : new Vector<T>(0);
-        Vector<T> absoluteErrors = Engine.Abs(errors);
-        T sumAbsoluteError = n > 0 ? Engine.Sum(absoluteErrors) : NumOps.Zero;
-        T mae = NumOps.Divide(sumAbsoluteError, NumOps.FromDouble(n));
-        metrics["MAE"] = mae;
+        metrics["MAE"] = NumOps.FromDouble(TensorReductionHelper.SumAbsoluteAsDouble(Engine, errors) / n);
+        double mse = TensorReductionHelper.SumOfSquaresAsDouble(Engine, errors) / n;
+        metrics["MSE"] = NumOps.FromDouble(mse);
+        metrics["RMSE"] = NumOps.FromDouble(Math.Sqrt(mse));
 
-        // Calculate MSE (Mean Squared Error) and RMSE (Root Mean Squared Error)
-        T sumSquaredError = n > 0 ? Engine.DotProduct(errors, errors) : NumOps.Zero;
-        T mse = NumOps.Divide(sumSquaredError, NumOps.FromDouble(n));
-        T rmse = NumOps.Sqrt(mse);
-        metrics["MSE"] = mse;
-        metrics["RMSE"] = rmse;
-
-        // Calculate MAPE (Mean Absolute Percentage Error)
-        // Only if actuals don't contain zeros or very small values
-        bool canCalculateMape = true;
-        T sumAbsolutePercentageError = NumOps.Zero;
-        if (n > 0)
-        {
-            var absoluteActuals = Tensor<T>.FromVector(Engine.Abs(actuals.GetSubVector(0, n)));
-            // Compared in double: 1e-10 rounds to zero in Half, which would let exact zeros through.
-            canCalculateMape = Engine.TensorCountNonzero(
-                Engine.TensorLessThan(absoluteActuals.Cast<double>(), 1e-10)) == 0;
-            if (canCalculateMape)
-            {
-                sumAbsolutePercentageError = Engine.TensorSum(
-                    Engine.TensorDivide(Tensor<T>.FromVector(absoluteErrors), absoluteActuals));
-            }
-        }
-
+        var absoluteActuals = observed.AsTensor().Cast<double>();
+        absoluteActuals = Engine.TensorAbs(absoluteActuals);
+        bool canCalculateMape = Engine.TensorCountNonzero(Engine.TensorLessThan(absoluteActuals, 1e-10)) == 0;
         if (canCalculateMape)
         {
-            T mape = NumOps.Multiply(
-                NumOps.Divide(sumAbsolutePercentageError, NumOps.FromDouble(n)),
-                NumOps.FromDouble(100) // Convert to percentage
-            );
-            metrics["MAPE"] = mape;
+            double sumAbsolutePercentageError = n > 0
+                ? Engine.TensorSum(Engine.TensorDivide(Engine.TensorAbs(errors.Cast<double>()), absoluteActuals))
+                : 0.0;
+            metrics["MAPE"] = NumOps.FromDouble(sumAbsolutePercentageError / n * 100.0);
         }
 
         return metrics;
+    }
+
+    /// <summary>
+    /// The mean and population standard deviation of |r| over <paramref name="residuals"/>, the statistics the
+    /// residual-based anomaly thresholds are built from.
+    /// </summary>
+    /// <remarks>
+    /// Both are taken in double and rounded once: in Half the sum of |r| (or of the squared deviations from its mean)
+    /// passes 65504 long before the mean or the standard deviation does, and the infinite sum made the threshold
+    /// infinite, so no point was ever flagged. The centring is in double too: centring Half |r| of 2048 and 2050 at
+    /// their mean rounded to Half (2048) gave a standard deviation of 1.41 for 1.
+    /// </remarks>
+    /// <param name="residuals">The residuals, at least one.</param>
+    /// <returns>The mean and the standard deviation of the absolute residuals.</returns>
+    private protected (T Mean, T StdDev) AbsoluteResidualStatistics(Vector<T> residuals)
+    {
+        if (residuals is null) throw new ArgumentNullException(nameof(residuals));
+        int n = residuals.Length;
+        if (n == 0) throw new ArgumentException("At least one residual is required.", nameof(residuals));
+
+        // |r| is exact in T; the mean and the variance are then taken on the values widened to double.
+        var (mean, variance) = TensorReductionHelper.MeanAndPopulationVarianceAsDouble(Engine, Engine.TensorAbs(residuals.AsTensor()));
+        return (NumOps.FromDouble(mean), NumOps.FromDouble(Math.Sqrt(variance)));
     }
 
     /// <summary>

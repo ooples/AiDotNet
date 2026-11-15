@@ -200,7 +200,10 @@ public partial class UniAudio<T> : TtsModelBase<T>, ICodecTts<T>
         RequirePipeline();
         if (_options.TrainingComponent == UniAudioTrainingComponent.UniversalCodec) return TrainCodecSample(sample);
         if (_optimizer is null) throw new NotSupportedException("Native optimizer is unavailable.");
-        return TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) => BuildObjective(sample), _optimizer);
+        // The codec's tokens are integers (no gradient reaches them), so the sequence is built before the step and the
+        // objective is only the language model and its loss, which a compiled plan replays.
+        var (sequence, firstTarget) = BuildSequence(sample);
+        return TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) => SequenceObjective(sequence, firstTarget), _optimizer);
     }
 
     public override T EvaluateTrainingObjective(TtsTrainingSample<T> sample)
@@ -296,6 +299,21 @@ public partial class UniAudio<T> : TtsModelBase<T>, ICodecTts<T>
 
     private Tensor<T> BuildObjective(TtsTrainingSample<T> sample)
     {
+        var (sequence, firstTarget) = BuildSequence(sample);
+        return SequenceObjective(sequence, firstTarget);
+    }
+
+    // The teacher-forced loss of the language model on a built sequence.
+    private Tensor<T> SequenceObjective(List<int> sequence, int firstTarget)
+    {
+        var logits = _languageModel!.Forward(sequence, firstTarget);
+        return UniAudioOps<T>.TeacherForcedLoss(Engine, logits, sequence, firstTarget,
+            _options.PrefixLanguageModel, _options.PadToken);
+    }
+
+    // The training sequence (condition prefix, target audio tokens, end patches) and the index of its first target.
+    private (List<int> Sequence, int FirstTarget) BuildSequence(TtsTrainingSample<T> sample)
+    {
         var audio = sample.Audio ?? throw new ArgumentException("UniAudio training requires target audio.", nameof(sample));
         int[] phones = NormalizePhoneIds(UniAudioOps<T>.IdsOf(sample.Tokens));
         int[] target = sample.CodecTokens is not null
@@ -311,9 +329,7 @@ public partial class UniAudio<T> : TtsModelBase<T>, ICodecTts<T>
         AddPatch(sequence, _options.EndToken);
         if (sequence.Count / _options.NumCodebooks > _options.MaxContextPatches)
             throw new ArgumentException("The UniAudio training sequence exceeds the global context window.", nameof(sample));
-        var logits = _languageModel!.Forward(sequence, firstTarget);
-        return UniAudioOps<T>.TeacherForcedLoss(Engine, logits, sequence, firstTarget,
-            _options.PrefixLanguageModel, _options.PadToken);
+        return (sequence, firstTarget);
     }
 
     private List<int> BuildPrefix(IReadOnlyList<int> phoneIds, IReadOnlyList<int> promptTokens)

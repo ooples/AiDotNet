@@ -521,13 +521,11 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
     // ── Helpers ───────────────────────────────────────────────────────────────────
     private void ComputeNormStats(Vector<T> y)
     {
-        T sum = Engine.Sum(y);
-        _normMean = NumOps.Divide(sum, NumOps.FromDouble(y.Length));
-
-        var diff = Engine.TensorSubtractScalar(Tensor<T>.FromVector(y), _normMean).ToVector();
-        T sumSq = Engine.DotProduct(diff, diff);
-        T variance = NumOps.Divide(sumSq, NumOps.FromDouble(y.Length));
-        _normStd = NumOps.FromDouble(Math.Max(Math.Sqrt(NumOps.ToDouble(variance)), 1e-8));
+        // The mean and variance in double, rounded once: in Half the sum of squared deviations passes 65504 long
+        // before the std does, and the infinite std scaled every target to 0.
+        var (mean, variance) = TensorReductionHelper.MeanAndPopulationVarianceAsDouble(Engine, y.AsTensor());
+        _normMean = NumOps.FromDouble(mean);
+        _normStd = NumOps.FromDouble(Math.Max(Math.Sqrt(variance), 1e-8));
     }
 
     private Tensor<T> CreateRandomTensor(int[] shape, double stddev)

@@ -714,13 +714,7 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
     {
         var metrics = new Dictionary<string, T>();
 
-        var (mse, mae, count) = SumSquaredAndAbsoluteError(predictions, actuals);
-
-        if (count > 0)
-        {
-            mse = NumOps.Divide(mse, NumOps.FromDouble(count));
-            mae = NumOps.Divide(mae, NumOps.FromDouble(count));
-        }
+        var (mse, mae, count) = MeanSquaredAndAbsoluteError(predictions, actuals);
 
         T rmse = NumOps.Sqrt(mse);
 

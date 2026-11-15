@@ -796,11 +796,14 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         int embeddingDim = _embeddingTensor.Shape[1];
 
         // Compute L2 regularization on embedding weights using Engine operation: (1/2) * Σ||embedding||²
-        T sumSquaredNorms = TensorReductionHelper.SumOfSquares(Engine, _embeddingTensor);
+        // Summed in double: a Half table's sum of squares passes 65504 long before its mean does.
+        double sumSquaredNorms = TensorReductionHelper.SumOfSquaresAsDouble(Engine, _embeddingTensor);
 
         // Average over all embedding values and scale by 0.5 (standard L2 regularization)
         int totalElements = vocabSize * embeddingDim;
-        T regularizationLoss = NumericalStabilityHelper.SafeDiv(sumSquaredNorms, NumOps.FromDouble(totalElements * 2.0));
+        T regularizationLoss = totalElements > 0
+            ? NumOps.FromDouble(sumSquaredNorms / (totalElements * 2.0))
+            : NumOps.Zero;
 
         // Store unweighted loss for diagnostics
         _lastEmbeddingRegularizationLoss = regularizationLoss;
@@ -852,15 +855,15 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
 
         // Calculate average embedding magnitude using Engine operations
         // Sum of squares gives us Σ||embedding_i||² across all embeddings
-        T totalSumOfSquares = TensorReductionHelper.SumOfSquares(Engine, _embeddingTensor);
+        // Summed in double, so a Half table's sum past 65504 does not report an infinite magnitude.
+        double totalSumOfSquares = TensorReductionHelper.SumOfSquaresAsDouble(Engine, _embeddingTensor);
 
         // For average magnitude: sqrt(sum_of_squares / num_elements) * num_rows / num_rows
         // Simplified: average magnitude ≈ sqrt(total_sum_of_squares / total_elements) * sqrt(embedding_dim)
         // This is an approximation, but avoids per-row loops
         if (vocabSize > 0)
         {
-            T avgSquaredMagnitude = NumericalStabilityHelper.SafeDiv(totalSumOfSquares, NumOps.FromDouble(vocabSize));
-            T avgMagnitude = NumOps.Sqrt(avgSquaredMagnitude);
+            T avgMagnitude = NumOps.FromDouble(Math.Sqrt(totalSumOfSquares / vocabSize));
             string avgMagStr = Convert.ToString(avgMagnitude) ?? "0";
             diagnostics["AverageEmbeddingMagnitude"] = avgMagStr;
         }

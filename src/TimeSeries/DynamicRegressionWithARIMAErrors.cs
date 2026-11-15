@@ -810,12 +810,11 @@ public partial class DynamicRegressionWithARIMAErrors<T> : TimeSeriesModelBase<T
     /// </remarks>
     private T ComputeLogLikelihood(Vector<T> modelResiduals)
     {
-        T sumSquaredResiduals = Engine.DotProduct(modelResiduals, modelResiduals);
-        T variance = NumOps.Divide(sumSquaredResiduals, NumOps.FromDouble(modelResiduals.Length));
-        T logLikelihood = NumOps.Multiply(NumOps.FromDouble(-0.5 * modelResiduals.Length),
-            NumOps.Add(NumOps.Log(NumOps.Multiply(NumOps.FromDouble(2 * Math.PI), variance)), NumOps.One));
-
-        return logLikelihood;
+        // In double: in Half the sum of squared residuals passes 65504 long before the variance does, and the
+        // infinite sum made the log-likelihood -inf.
+        int n = modelResiduals.Length;
+        double variance = (n > 0 ? TensorReductionHelper.SumOfSquaresAsDouble(Engine, modelResiduals.AsTensor()) : 0.0) / n;
+        return NumOps.FromDouble(-0.5 * n * (Math.Log(2 * Math.PI * variance) + 1.0));
     }
 
     /// <summary>

@@ -1362,12 +1362,12 @@ public partial class STLDecomposition<T> : TimeSeriesModelBase<T>
         }
 
         // Euclidean distance between each pair of consecutive cycles in the [cycles, period] grid
-        var grid = Tensor<T>.FromVector(_seasonal.GetSubVector(0, cycles * period), new[] { cycles, period });
+        var grid = Tensor<T>.FromVector(_seasonal.GetSubVector(0, cycles * period), new[] { cycles, period }).Cast<double>();
         var next = Engine.TensorSlice(grid, new[] { 1, 0 }, new[] { cycles - 1, period });
         var previous = Engine.TensorSlice(grid, new[] { 0, 0 }, new[] { cycles - 1, period });
         var diff = Engine.TensorSubtract(next, previous);
         var sums = Engine.ReduceSum(Engine.TensorMultiply(diff, diff), new[] { 1 }, keepDims: false);
-        return Engine.TensorSqrt(sums).ToVector();
+        return Engine.TensorSqrt(sums).Cast<T>().ToVector();
     }
 
     /// <summary>

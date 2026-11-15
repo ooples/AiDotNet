@@ -208,28 +208,12 @@ internal static partial class SparseEmbeddingOptimizerHelpers
         int length = count < 0 ? values.Length : count;
         if (length == 0) return 0.0;
         var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
-        var ops = MathHelper.GetNumericOperations<T>();
         var source = length == values.Length
             ? values
             : Vector<T>.FromSpan(values.AsSpan().Slice(0, length)).AsTensor();
 
-        T direct = TensorReductionHelper.SumOfSquares(engine, source);
-        if (!ops.IsInfinity(direct) || ops.IsNaN(direct))
-        {
-            return ops.ToDouble(direct);
-        }
-
-        T maxAbs = engine.TensorMaxValue(engine.TensorAbs(source));
-        if (ops.IsInfinity(maxAbs) || ops.Equals(maxAbs, ops.Zero))
-        {
-            // An infinite element makes the true sum infinite; a zero maximum cannot overflow.
-            return ops.ToDouble(direct);
-        }
-
-        var normalized = engine.TensorDivideScalar(
-            engine.TensorDivideScalar(source, maxAbs), ops.FromDouble(Math.Sqrt(length)));
-        double scale = ops.ToDouble(maxAbs);
-        return scale * scale * length * ops.ToDouble(TensorReductionHelper.SumOfSquares(engine, normalized));
+        // The direct sum, rescaled by max|x| and sqrt(length) only when it overflows T (see the helper).
+        return TensorReductionHelper.SumOfSquaresAsDouble(engine, source);
     }
 
     internal static bool TryGetEffectiveGradient<T>(

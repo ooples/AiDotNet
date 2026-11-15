@@ -180,14 +180,17 @@ public class TimeSeriesTokenizer<T>
         if (len == 0)
             return (new Tensor<T>(series._shape), NumOps.Zero, NumOps.One);
 
-        // RevIN: population mean and variance over the instance, std = sqrt(var + 1e-5).
+        // The mean and variance in double, rounded once: in Half the sum of squared deviations of 40 values near 200
+        // passes 65504, so the std was infinite and every normalized value 0. The result stays detached, as before.
         var engine = AiDotNetEngine.Current;
-        T mean = engine.TensorMean(series);
-        var centred = engine.TensorSubtractScalar(series, mean);
-        T variance = NumOps.Divide(TensorReductionHelper.SumOfSquares(engine, centred), NumOps.FromDouble(len));
-        T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var source = series.IsContiguous ? series : series.Contiguous();
+        var (meanValue, variance) = TensorReductionHelper.MeanAndPopulationVarianceAsDouble(engine, source);
+        T mean = NumOps.FromDouble(meanValue);
+        T std = NumOps.FromDouble(Math.Sqrt(variance + 1e-5));
+        var normalized = engine.TensorDivideScalar(engine.TensorSubtractScalar(source, mean), std);
 
-        return (engine.TensorDivideScalar(centred, std), mean, std);
+        return (normalized, mean, std);
     }
 
     /// <summary>
