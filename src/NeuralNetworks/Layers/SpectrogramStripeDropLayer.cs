@@ -83,20 +83,17 @@ public partial class SpectrogramStripeDropLayer<T> : LayerBase<T>
         var random = RandomSeed.HasValue
             ? RandomHelper.CreateSeededRandom(unchecked((int)((uint)RandomSeed.Value * 2654435761u ^ (uint)counter)))
             : RandomHelper.CreateSecureRandom();
-        var keepTime = new bool[batch, time];
-        var keepFreq = new bool[batch, freq];
+        var keepTime = Tensor<T>.CreateDefault(new[] { batch, time }, NumOps.One);
+        var keepFreq = Tensor<T>.CreateDefault(new[] { batch, freq }, NumOps.One);
         for (int b = 0; b < batch; b++)
         {
             keepTime = Drop(random, _timeDropWidth, _timeStripes, time, b, keepTime);
             keepFreq = Drop(random, _freqDropWidth, _freqStripes, freq, b, keepFreq);
         }
-        var span = mask.AsWritableSpan();
-        int i = 0;
-        for (int b = 0; b < batch; b++)
-            for (int c = 0; c < channels; c++)
-                for (int t = 0; t < time; t++)
-                    for (int f = 0; f < freq; f++, i++)
-                        span[i] = keepTime[b, t] && keepFreq[b, f] ? NumOps.One : NumOps.Zero;
+        var combined = Engine.TensorMultiply(
+            keepTime.Reshape(new[] { batch, 1, time, 1 }),
+            keepFreq.Reshape(new[] { batch, 1, 1, freq }));
+        Engine.TensorBroadcastTo(combined, mask._shape).Contiguous().AsSpan().CopyTo(mask.AsWritableSpan());
     }
 
     private Tensor<T> Drop(Random random, int dropWidth, int stripes, int length, int b, Tensor<T> keep)

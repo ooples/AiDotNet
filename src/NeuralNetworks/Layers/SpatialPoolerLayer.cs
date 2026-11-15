@@ -411,6 +411,7 @@ public partial class SpatialPoolerLayer<T> : LayerBase<T>, IShapeContract
     // 2^-23 for float, 2^-10 for Half); 0 for an integral T, whose ranges are exact.
     private static readonly double RelativeSpreadTolerance = 4.0 * MachineEpsilon();
 
+    [AiDotNet.Attributes.ScalarKernel("Probes the rounding precision of one scalar in T; this is not an element-wise tensor operation.")]
     private static double MachineEpsilon()
     {
         var ops = MathHelper.GetNumericOperations<T>();
