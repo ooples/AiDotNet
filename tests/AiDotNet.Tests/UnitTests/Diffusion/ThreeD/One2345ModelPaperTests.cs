@@ -342,7 +342,7 @@ public class One2345ModelPaperTests
     private static One2345Model<float> TinyModel(int seed = 7)
     {
         var model = new One2345Model<float>(seed: seed, pipelineOptions: TinyOptions(), zero123: SharedStub.Value,
-            textToImage: SharedStub.Value);
+            textToImage: SharedStub.Value, featureMatcher: new LoFTRMatcher<float>(LoFTRMatcherTests.TinyOptions(seed, inputSize: 64)));
         var random = RandomHelper.CreateSeededRandom(seed + 1000);
         var perturbed = new Dictionary<string, Tensor<float>>();
         foreach (var p in model.GetReconstructionParameters())
@@ -401,6 +401,27 @@ public class One2345ModelPaperTests
         Assert.All(NeuSHost<float>.ToDoubles(mesh.Vertices), x => Assert.True(!double.IsNaN(x) && !double.IsInfinity(x)));
         for (int f = 0; f < mesh.Faces.GetLength(0); f++)
             for (int k = 0; k < 3; k++) Assert.InRange(mesh.Faces[f, k], 0, vertices - 1);
+    }
+
+    [Fact]
+    public void ImageTo3DRejectsViewCountsOtherThanTheFixedLayout()
+    {
+        var model = TinyModel(seed: 3);
+        Assert.Throws<ArgumentException>(() => model.ImageTo3D(InputImage(0.3f), numViews: 4, seed: 21));
+        Assert.Throws<ArgumentException>(() => model.ImageTo3D(InputImage(0.3f), numViews: 40, seed: 21));
+        // Through the interface the default is 4, which is not the 8 × 4 layout either.
+        I3DDiffusionModel<float> general = model;
+        Assert.Throws<ArgumentException>(() => general.ImageTo3D(InputImage(0.3f), seed: 21));
+    }
+
+    [Fact]
+    public void LoFTRIsTheDefaultElevationMatcher()
+    {
+        var model = new One2345Model<float>(seed: 3, pipelineOptions: TinyOptions(), zero123: SharedStub.Value);
+        var loftr = Assert.IsType<LoFTRMatcher<float>>(model.FeatureMatcher);
+        Assert.Equal(480, loftr.Options.InputSize);
+        Assert.Equal(new[] { 128, 196, 256 }, loftr.Options.BlockDims);
+        Assert.Equal(4, loftr.Options.CoarseLayerPairs);
     }
 
     [Fact]

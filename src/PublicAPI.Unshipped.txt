@@ -23013,7 +23013,7 @@ AiDotNet.Diffusion.ThreeD.One2345Model<T>.One2345Model(AiDotNet.NeuralNetworks.N
 AiDotNet.Diffusion.ThreeD.One2345Model<T>.PipelineOptions.get -> AiDotNet.Diffusion.ThreeD.One2345Options!
 AiDotNet.Diffusion.ThreeD.One2345Model<T>.GetReconstructionParameters() -> System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>>!
 AiDotNet.Diffusion.ThreeD.One2345Model<T>.LoadReconstructionParameters(System.Collections.Generic.IReadOnlyDictionary<string!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! parameters) -> void
-override AiDotNet.Diffusion.ThreeD.One2345Model<T>.ImageTo3D(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputImage, int numViews = 4, int numInferenceSteps = 50, double guidanceScale = 3, int? seed = null) -> AiDotNet.Interfaces.Mesh3D<T>!
+override AiDotNet.Diffusion.ThreeD.One2345Model<T>.ImageTo3D(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputImage, int numViews = 32, int numInferenceSteps = 50, double guidanceScale = 3, int? seed = null) -> AiDotNet.Interfaces.Mesh3D<T>!
 AiDotNet.Diffusion.ThreeD.IViewFeatureMatcher<T>
 AiDotNet.Diffusion.ThreeD.IViewFeatureMatcher<T>.Match(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image0, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image1) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Diffusion.ThreeD.FeatureCorrespondence>!
 AiDotNet.Diffusion.ThreeD.FeatureCorrespondence
@@ -23199,3 +23199,42 @@ AiDotNet.Enums.TriplaneDensityActivation
 AiDotNet.Enums.TriplaneDensityActivation.Exp = 0 -> AiDotNet.Enums.TriplaneDensityActivation
 AiDotNet.Enums.TriplaneDensityActivation.Softplus = 1 -> AiDotNet.Enums.TriplaneDensityActivation
 AiDotNet.Enums.TriplaneDensityActivation.ReLU = 2 -> AiDotNet.Enums.TriplaneDensityActivation
+AiDotNet.Diffusion.ThreeD.One2345Model<T>.FeatureMatcher.get -> AiDotNet.Diffusion.ThreeD.IViewFeatureMatcher<T>!
+AiDotNet.Diffusion.ThreeD.LoFTRMatcher<T>
+AiDotNet.Diffusion.ThreeD.LoFTRMatcher<T>.LoFTRMatcher(AiDotNet.Diffusion.ThreeD.LoFTROptions? options = null) -> void
+AiDotNet.Diffusion.ThreeD.LoFTRMatcher<T>.Options.get -> AiDotNet.Diffusion.ThreeD.LoFTROptions!
+AiDotNet.Diffusion.ThreeD.LoFTRMatcher<T>.ParameterCount.get -> int
+AiDotNet.Diffusion.ThreeD.LoFTRMatcher<T>.GetParameters() -> System.Collections.Generic.IReadOnlyDictionary<string!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.Diffusion.ThreeD.LoFTRMatcher<T>.LoadParameters(System.Collections.Generic.IReadOnlyDictionary<string!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! parameters) -> void
+AiDotNet.Diffusion.ThreeD.LoFTRMatcher<T>.Match(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image0, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image1) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Diffusion.ThreeD.FeatureCorrespondence>!
+AiDotNet.Diffusion.ThreeD.LoFTROptions
+AiDotNet.Diffusion.ThreeD.LoFTROptions.LoFTROptions() -> void
+virtual AiDotNet.Diffusion.ThreeD.LoFTROptions.Validate() -> void
+AiDotNet.Diffusion.ThreeD.LoFTROptions.InitialDim.get -> int
+AiDotNet.Diffusion.ThreeD.LoFTROptions.InitialDim.set -> void
+AiDotNet.Diffusion.ThreeD.LoFTROptions.BlockDims.get -> int[]!
+AiDotNet.Diffusion.ThreeD.LoFTROptions.BlockDims.set -> void
+AiDotNet.Diffusion.ThreeD.LoFTROptions.CoarseHeads.get -> int
+AiDotNet.Diffusion.ThreeD.LoFTROptions.CoarseHeads.set -> void
+AiDotNet.Diffusion.ThreeD.LoFTROptions.CoarseLayerPairs.get -> int
+AiDotNet.Diffusion.ThreeD.LoFTROptions.CoarseLayerPairs.set -> void
+AiDotNet.Diffusion.ThreeD.LoFTROptions.FineHeads.get -> int
+AiDotNet.Diffusion.ThreeD.LoFTROptions.FineHeads.set -> void
+AiDotNet.Diffusion.ThreeD.LoFTROptions.FineLayerPairs.get -> int
+AiDotNet.Diffusion.ThreeD.LoFTROptions.FineLayerPairs.set -> void
+AiDotNet.Diffusion.ThreeD.LoFTROptions.FineWindowSize.get -> int
+AiDotNet.Diffusion.ThreeD.LoFTROptions.FineWindowSize.set -> void
+AiDotNet.Diffusion.ThreeD.LoFTROptions.FineConcatCoarseFeature.get -> bool
+AiDotNet.Diffusion.ThreeD.LoFTROptions.FineConcatCoarseFeature.set -> void
+AiDotNet.Diffusion.ThreeD.LoFTROptions.MatchThreshold.get -> double
+AiDotNet.Diffusion.ThreeD.LoFTROptions.MatchThreshold.set -> void
+AiDotNet.Diffusion.ThreeD.LoFTROptions.BorderRemoval.get -> int
+AiDotNet.Diffusion.ThreeD.LoFTROptions.BorderRemoval.set -> void
+AiDotNet.Diffusion.ThreeD.LoFTROptions.DualSoftmaxTemperature.get -> double
+AiDotNet.Diffusion.ThreeD.LoFTROptions.DualSoftmaxTemperature.set -> void
+AiDotNet.Diffusion.ThreeD.LoFTROptions.PositionEncodingBugFix.get -> bool
+AiDotNet.Diffusion.ThreeD.LoFTROptions.PositionEncodingBugFix.set -> void
+AiDotNet.Diffusion.ThreeD.LoFTROptions.InputSize.get -> int
+AiDotNet.Diffusion.ThreeD.LoFTROptions.InputSize.set -> void
+AiDotNet.Diffusion.ThreeD.LoFTROptions.Seed.get -> int?
+AiDotNet.Diffusion.ThreeD.LoFTROptions.Seed.set -> void

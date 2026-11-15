@@ -45,9 +45,12 @@ namespace AiDotNet.Diffusion.ThreeD;
 /// the pipeline still runs end to end and its output depends on the input, but it is not a reconstruction of it.
 /// </para>
 /// <para>
-/// <b>Elevation matching.</b> The official code matches with LoFTR. That needs its own weights, so the default
-/// matcher is <see cref="NormalizedCrossCorrelationMatcher{T}"/>; pass a learned one through
-/// <see cref="IViewFeatureMatcher{T}"/>.
+/// <b>Elevation matching.</b> As in the official code, the nearby views are matched with LoFTR
+/// (<see cref="LoFTRMatcher{T}"/>, the full architecture at the configuration One-2-3-45 runs). Load its released
+/// <c>indoor_ds_new.ckpt</c> weights with <see cref="LoFTRMatcher{T}.LoadParameters"/> and pass the matcher as
+/// <c>featureMatcher</c>; untrained, the elevation estimate is not meaningful. Any other
+/// <see cref="IViewFeatureMatcher{T}"/>, such as <see cref="NormalizedCrossCorrelationMatcher{T}"/>, can be
+/// supplied instead.
 /// </para>
 /// <para>
 /// <b>Text to 3D.</b> As in the paper, text goes through a text-to-image model first; pass one as
@@ -89,6 +92,7 @@ public partial class One2345Model<T> : ThreeDDiffusionModelBase<T>
     private const int LATENT_CHANNELS = 4;
     private const int DEFAULT_POINT_COUNT = 4096;
     private const int DEFAULT_IMAGE_SIZE = 256;
+    private const int SOURCE_VIEW_COUNT = 32;
 
     #endregion
 
@@ -127,6 +131,10 @@ public partial class One2345Model<T> : ThreeDDiffusionModelBase<T>
     /// <summary>The pipeline configuration.</summary>
     public One2345Options PipelineOptions => _pipelineOptions;
 
+    /// <summary>The elevation matcher (a <see cref="LoFTRMatcher{T}"/> unless another was supplied); load the
+    /// LoFTR checkpoint into it before estimating elevations.</summary>
+    public IViewFeatureMatcher<T> FeatureMatcher => _featureMatcher;
+
     #endregion
 
     #region Constructor
@@ -142,7 +150,8 @@ public partial class One2345Model<T> : ThreeDDiffusionModelBase<T>
     /// <param name="pipelineOptions">The pipeline configuration; the official values by default.</param>
     /// <param name="zero123">The multi-view model; a default Zero123 is built from the other arguments when null.</param>
     /// <param name="textToImage">The text-to-image model used for text-to-3D, or null.</param>
-    /// <param name="featureMatcher">The elevation matcher; <see cref="NormalizedCrossCorrelationMatcher{T}"/> by default.</param>
+    /// <param name="featureMatcher">The elevation matcher; a <see cref="LoFTRMatcher{T}"/> with the official
+    /// configuration (seeded by <paramref name="seed"/>) by default.</param>
     public One2345Model(
         NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
@@ -168,7 +177,7 @@ public partial class One2345Model<T> : ThreeDDiffusionModelBase<T>
         _pipelineOptions.Validate();
         _zero123 = zero123 ?? new Zero123Model<T>(architecture, options, scheduler, unet, vae, DEFAULT_IMAGE_SIZE, seed);
         _textToImage = textToImage;
-        _featureMatcher = featureMatcher ?? new NormalizedCrossCorrelationMatcher<T>();
+        _featureMatcher = featureMatcher ?? new LoFTRMatcher<T>(new LoFTROptions { Seed = seed });
         _reconstruction = new SparseNeuS<T>(CreateReconstructionOptions(_pipelineOptions, seed));
         _reconstructionParameters = new SparseNeuSParameterSource<T>(_reconstruction);
     }
@@ -222,20 +231,27 @@ public partial class One2345Model<T> : ThreeDDiffusionModelBase<T>
     /// </summary>
     /// <param name="inputImage">The image, <c>[1, 3, H, W]</c> or <c>[3, H, W]</c> in [−1, 1]; H and W multiples of 8
     /// (256 in the paper), the object centered on a white background.</param>
-    /// <param name="numViews">Not used: the 8 + 32 view layout is fixed by <see cref="PipelineOptions"/>.</param>
+    /// <param name="numViews">The source-view count of the fixed layout, 8 × 4 = 32; any other value is rejected.</param>
     /// <param name="numInferenceSteps">DDIM steps of the second-stage views (50 officially); the first stage uses
     /// <see cref="One2345Options.Stage1Steps"/>.</param>
     /// <param name="guidanceScale">Zero123's guidance scale (3 officially).</param>
     /// <param name="seed">Seeds the Zero123 sampling; each view gets its own derived seed.</param>
     /// <returns>The mesh in the object frame, with per-vertex colours in [0, 1] and normals.</returns>
+    /// <exception cref="ArgumentException"><paramref name="numViews"/> is not 32.</exception>
     public override Mesh3D<T> ImageTo3D(
         Tensor<T> inputImage,
-        int numViews = 4,
+        int numViews = SOURCE_VIEW_COUNT,
         int numInferenceSteps = 50,
         double guidanceScale = 3.0,
         int? seed = null)
-        => Reconstruct(inputImage, _pipelineOptions.Stage1Steps, numInferenceSteps, guidanceScale,
+    {
+        if (numViews != SOURCE_VIEW_COUNT)
+            throw new ArgumentException(
+                $"One-2-3-45 reconstructs from its fixed layout of {SOURCE_VIEW_COUNT} source views (8 first-stage views " +
+                $"× 4 nearby views); {numViews} was requested.", nameof(numViews));
+        return Reconstruct(inputImage, _pipelineOptions.Stage1Steps, numInferenceSteps, guidanceScale,
             _pipelineOptions.MeshResolution, seed).Mesh;
+    }
 
     /// <summary>
     /// Text to mesh: the text-to-image model renders the prompt, then <see cref="ImageTo3D"/>'s pipeline runs with

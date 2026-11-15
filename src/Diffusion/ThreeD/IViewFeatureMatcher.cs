@@ -8,7 +8,8 @@ namespace AiDotNet.Diffusion.ThreeD;
 /// <para>
 /// One-2-3-45 matches its four nearby Zero123 views with LoFTR (Sun et al. 2021, the <c>indoor_ds_new</c> checkpoint)
 /// and estimates the input's elevation from the matches. Any matcher that returns sub-pixel correspondences with a
-/// confidence can stand in; <see cref="NormalizedCrossCorrelationMatcher{T}"/> is the built-in default.
+/// confidence can stand in; <see cref="LoFTRMatcher{T}"/> is the default and
+/// <see cref="NormalizedCrossCorrelationMatcher{T}"/> a weight-free alternative.
 /// </para>
 /// <para><b>For Beginners:</b> a correspondence says "this pixel in the first picture shows the same spot on the
 /// object as that pixel in the second picture". Several of them pin down how the camera moved.</para>
@@ -66,9 +67,9 @@ public readonly struct FeatureCorrespondence
 /// <typeparam name="T">The numeric type of the images.</typeparam>
 /// <remarks>
 /// <para>
-/// This is the default stand-in for LoFTR, which One-2-3-45 uses but which needs its own pretrained weights. The
-/// nearby views differ by only 10°, so local patch correlation finds reliable matches on textured objects. Supply a
-/// learned matcher through <see cref="IViewFeatureMatcher{T}"/> for textureless inputs.
+/// A weight-free alternative to <see cref="LoFTRMatcher{T}"/> (which One-2-3-45 uses and which needs its released
+/// checkpoint). The nearby views differ by only 10°, so local patch correlation finds reliable matches on textured
+/// objects; it is a deviation from the paper and weaker on textureless inputs.
 /// </para>
 /// <para>Grayscale is <c>0.299 R + 0.587 G + 0.114 B</c>, as <c>cv2.IMREAD_GRAYSCALE</c> converts.</para>
 /// </remarks>
