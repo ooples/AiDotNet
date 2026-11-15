@@ -332,11 +332,15 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     private bool _scatterVectorHandedOut;
 
     // On a GPU engine a training step's gradients live on the device. Publishing them used to download every one,
-    // every step (one sync per tensor: 35 per LSTM step, 65 per Transformer step). The layer now references the
-    // step's device gradients (a tape keeps its gradients alive after it ends; a compiled plan's buffers persist until
-    // its next step republishes them) and downloads only if something reads them
-    // (TryPublishDeviceGradients, TryReferenceHostGradients).
+    // every step (one sync per tensor: 35 per LSTM step, 65 per Transformer step). The layer now keeps them on the
+    // device and downloads only if something reads them (TryPublishDeviceGradients, TryReferenceHostGradients). A
+    // compiled plan's buffers persist until its next step republishes them, so those are referenced. A tape step's
+    // are copied into the device tensors below, because the step clips its own in place after publishing them.
     private Dictionary<Tensor<T>, Tensor<T>>? _pendingDeviceGradients;
+
+    // The layer-owned device copies of the last tape step's gradients, by parameter, refilled by the next tape publish
+    // instead of allocated again. Never handed out: a read materializes them into a fresh vector.
+    private Dictionary<Tensor<T>, Tensor<T>>? _deviceGradientCopies;
 
     /// <summary>
     /// Gets the input shape for this layer.
@@ -7696,20 +7700,47 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             _pendingDeviceGradients = owned;
             return true;
         }
-        // A tape step's gradients outlive the tape (only the step's other intermediates are released when it ends), so
-        // they are referenced like a compiled plan's; Retain makes that explicit. An owned copy per parameter per step
-        // cost a device-to-device copy plus a host array for every parameter (the copy's Tensor constructor allocates
-        // one): ~83 MB of host allocation per step on a 74M-parameter MoE LM, read by nothing.
+        // A tape step's gradients are COPIED, not referenced. After this publish the step clips them in place (the
+        // optimizer's default global-norm clip and the model clips scale the same device tensors), so a reference read
+        // later returned the clipped gradient while the CPU engine published the unclipped one. They are also arena
+        // memory that the arena holds back for only one more step, so a layer whose model does not publish again
+        // (one network of a GAN while the other trains) would read storage reissued to other tensors.
+        //
+        // The copies are the layer's own and are reused from one publish to the next: a read materializes them into
+        // a fresh vector, so nothing outside the layer ever holds one. A new Tensor per parameter per step allocated a
+        // host array each (~83 MB per step on a 74M-parameter MoE LM); a reused copy allocates once.
+        //
+        // The previous publish is dropped before any copy is written. Its copies are the ones being refilled, so a
+        // failure partway leaves the surface empty, never a mix of two steps.
+        var previous = _deviceGradientCopies;
+        _deviceGradientCopies = null;
+        _parameterGradients = null;
+        _pendingDeviceGradients = null;
         var tape = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current;
         foreach (var (parameter, gradient) in sources)
         {
-            tape?.Retain(gradient);
-            owned[parameter] = gradient;
+            if (previous is null || !previous.TryGetValue(parameter, out var copy) || !HasSameShape(copy, gradient))
+                copy = new Tensor<T>(gradient._shape);
+            Engine.TensorCopy(gradient, copy);
+            // The copy's device buffer is written inside the step, so the tape would release it with the step's
+            // intermediates when it ends.
+            tape?.Retain(copy);
+            owned[parameter] = copy;
             matched += gradient.Length;
         }
 
-        _parameterGradients = null;
+        _deviceGradientCopies = owned;
         _pendingDeviceGradients = owned;
+        return true;
+    }
+
+    private static bool HasSameShape(Tensor<T> a, Tensor<T> b)
+    {
+        var x = a._shape;
+        var y = b._shape;
+        if (x.Length != y.Length) return false;
+        for (int i = 0; i < x.Length; i++)
+            if (x[i] != y[i]) return false;
         return true;
     }
 
