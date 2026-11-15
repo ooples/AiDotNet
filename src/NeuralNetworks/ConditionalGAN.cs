@@ -279,9 +279,7 @@ public partial class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         // Ensure noise is 2D [batch, features] for concatenation
         if (wasSingleSample)
         {
-            noise = new Tensor<T>(new int[] { 1, input.Length });
-            for (int i = 0; i < input.Length; i++)
-                noise[0, i] = input[i];
+            noise = Engine.Reshape(input, new int[] { 1, input.Length });
         }
 
         int batchSize = noise.Shape[0];
@@ -636,17 +634,9 @@ public partial class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
                 $"Class index must be between 0 and {_numConditionClasses - 1} (inclusive).");
         }
 
-        var conditions = new Tensor<T>(new int[] { batchSize, _numConditionClasses });
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < _numConditionClasses; c++)
-            {
-                conditions[b, c] = c == classIndex ? NumOps.One : NumOps.Zero;
-            }
-        }
-
-        return conditions;
+        var classIndices = new Tensor<int>(new[] { batchSize });
+        classIndices.Fill(classIndex);
+        return Engine.TensorOneHot<T>(classIndices, _numConditionClasses);
     }
 
     /// <inheritdoc/>
