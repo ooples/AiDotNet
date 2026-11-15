@@ -1042,4 +1042,137 @@ public class PreprocessingReferenceTests
         var zeros = halfScaler.FitTransform(HalfColumn(3, _ => 0));
         Assert.Equal(0.0, (double)zeros[0, 0]);
     }
+
+    // ---- Model review fixes (#2514) ----
+
+    private static Matrix<double> ConstantColumn(int rows, double value)
+    {
+        var data = new double[rows, 1];
+        for (int i = 0; i < rows; i++)
+        {
+            data[i, 0] = value;
+        }
+
+        return M(data);
+    }
+
+    // scikit-learn's StandardScaler accumulates float32 means and variances in float64 (_safe_accumulator_op), so
+    // 1000 float32 copies of 0.1 have variance exactly 0, are a constant feature (scale_ = 1) and transform to 0.
+    // A float32 sum of the copies is not 1000 * 0.1f: the column got a ~7e-9 std and every value became +/-1.
+    [Fact(Timeout = 120000)]
+    public async Task StandardScaler_Float_ConstantColumn_IsAConstantFeature()
+    {
+        await Task.CompletedTask;
+        var data = new Matrix<float>(1000, 1);
+        for (int i = 0; i < 1000; i++)
+        {
+            data[i, 0] = 0.1f;
+        }
+
+        var scaler = new StandardScaler<float>();
+        var result = scaler.FitTransform(data);
+
+        Assert.Equal(0.1f, scaler.Mean?[0] ?? float.NaN);
+        Assert.Equal(1f, scaler.StandardDeviation?[0] ?? float.NaN);
+        for (int i = 0; i < 1000; i++)
+        {
+            Assert.Equal(0f, result[i, 0]);
+        }
+    }
+
+    // 100 doubles of 0.01 have a mean that is not exactly 0.01 in any summation order, so their std is a ~1e-18
+    // rounding residue, not 0. scikit-learn's _is_constant_feature treats that as constant; GlobalContrastScaler
+    // then maps every value to (x - mean) / 2 + 0.5 = 0.5, where the exact zero test divided by the residue (0 or 1).
+    [Fact(Timeout = 120000)]
+    public async Task GlobalContrastScaler_ConstantColumnWithRoundingNoise_MapsToOneHalf()
+    {
+        await Task.CompletedTask;
+        var scaler = new GlobalContrastScaler<double>();
+        var result = scaler.FitTransform(ConstantColumn(100, 0.01));
+
+        Assert.Equal(1.0, scaler.StdDev?[0] ?? double.NaN, Tolerance);
+        for (int i = 0; i < 100; i++)
+        {
+            Assert.Equal(0.5, result[i, 0], 1e-12);
+        }
+    }
+
+    // A constant column has no Z-scores (std 0, scored 0) and is not clipped; its rounding-noise std gave every
+    // value the Z-score +/-1.
+    [Fact(Timeout = 120000)]
+    public async Task ZScoreClipper_ConstantColumnWithRoundingNoise_HasZeroZScores()
+    {
+        await Task.CompletedTask;
+        var data = ConstantColumn(100, 0.01);
+        var clipper = new ZScoreClipper<double>(threshold: 3.0);
+        clipper.Fit(data);
+
+        Assert.Equal(0.0, clipper.StandardDeviations?[0] ?? double.NaN);
+        var z = clipper.GetZScores(data);
+        for (int i = 0; i < 100; i++)
+        {
+            Assert.Equal(0.0, z[i, 0]);
+        }
+
+        Assert.Equal(1e6, clipper.Transform(M(new double[,] { { 1e6 } }))[0, 0]);
+    }
+
+    // imbalanced-learn keys the classes in order of first appearance. Labels 5 (rows 0..2050), 9 (row 2051) and 7
+    // (row 2052): a row-index ramp held in Half rounds 2051 and 2052 both to 2052, which tied 9 and 7 and put 7 first.
+    [Fact(Timeout = 120000)]
+    public async Task ResamplingClassCounts_Half_KeepsFirstAppearanceOrderPast2048()
+    {
+        await Task.CompletedTask;
+        var labels = new Half[2053];
+        for (int i = 0; i < 2051; i++)
+        {
+            labels[i] = (Half)5;
+        }
+
+        labels[2051] = (Half)9;
+        labels[2052] = (Half)7;
+
+        var counts = ResamplingTensorOps.ClassCounts(new Vector<Half>(labels));
+
+        Assert.Equal(new[] { 5.0, 9.0, 7.0 }, counts.Keys.Select(k => (double)k).ToArray());
+        Assert.Equal(2051, counts[(Half)5]);
+        Assert.Equal(1, counts[(Half)9]);
+        Assert.Equal(1, counts[(Half)7]);
+    }
+
+    // The first set column of each mask row, w when none is set: column 2049 is not representable in Half (it rounds
+    // to 2048), so a ramp in T returned 2048, and 2051 for the empty row came back as 2052.
+    [Fact(Timeout = 120000)]
+    public async Task FirstNonZeroPerRow_Half_ReturnsExactColumnsPast2048()
+    {
+        await Task.CompletedTask;
+        const int width = 2051;
+        var mask = new Half[2 * width];
+        mask[2049] = (Half)1;
+
+        var first = PreprocessingTensorOps.FirstNonZeroPerRow(new Tensor<Half>(mask, new[] { 2, width }));
+
+        Assert.Equal(new[] { 2049, width }, first);
+    }
+
+    // sklearn's IterativeImputer estimators validate float16 input to float64 before fitting. With x1 = 2 x0 + 1 and
+    // x0 = 0, 4, ..., 196, LinearRegression imputes x1 exactly (81 at x0 = 40, 201 at x0 = 100); in Half the Gram
+    // matrix (sum of squared centred x0 ~ 1.5e5) overflowed 65504 and the imputed values were NaN.
+    [Fact(Timeout = 120000)]
+    public async Task IterativeImputer_Half_LargeValues_FitsTheModelInFloat64()
+    {
+        await Task.CompletedTask;
+        var data = new Half[50, 2];
+        for (int i = 0; i < 50; i++)
+        {
+            data[i, 0] = (Half)(4 * i);
+            data[i, 1] = i == 10 || i == 25 ? Half.NaN : (Half)(8 * i + 1);
+        }
+
+        var imputer = new IterativeImputer<Half>(estimator: IterativeImputerEstimator.LinearRegression);
+        var result = imputer.FitTransform(new Matrix<Half>(data));
+
+        Assert.Equal(81.0, (double)result[10, 1], 0.25);
+        Assert.Equal(201.0, (double)result[25, 1], 0.25);
+    }
 }
