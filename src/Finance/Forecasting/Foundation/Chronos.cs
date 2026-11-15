@@ -340,19 +340,8 @@ public partial class Chronos<T> : TimeSeriesFoundationModelBase<T>, ITrainingObj
     /// <inheritdoc/>
     public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals)
     {
-        T mse = NumOps.Zero, mae = NumOps.Zero;
-        int count = Math.Min(predictions.Length, actuals.Length);
-        for (int i = 0; i < count; i++)
-        {
-            var diff = NumOps.Subtract(predictions[i], actuals[i]);
-            mse = NumOps.Add(mse, NumOps.Multiply(diff, diff));
-            mae = NumOps.Add(mae, NumOps.Abs(diff));
-        }
-        if (count > 0)
-        {
-            mse = NumOps.Divide(mse, NumOps.FromDouble(count));
-            mae = NumOps.Divide(mae, NumOps.FromDouble(count));
-        }
+        // Summed in double and divided once: a Half sum of squared errors passes 65504 long before the mean does.
+        var (mse, mae, _) = MeanSquaredAndAbsoluteError(predictions, actuals);
         return new Dictionary<string, T> { ["MSE"] = mse, ["MAE"] = mae, ["RMSE"] = NumOps.Sqrt(mse) };
     }
 

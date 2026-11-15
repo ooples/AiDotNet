@@ -287,20 +287,15 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
         if (targets is null)
             throw new ArgumentNullException(nameof(targets));
         var predictions = Forecast(inputs);
-        T maeSum = NumOps.Zero, mseSum = NumOps.Zero;
-        int count = predictions.Length;
-        for (int i = 0; i < count; i++)
-        {
-            T diff = NumOps.Subtract(predictions.Data.Span[i], targets.Data.Span[i]);
-            maeSum = NumOps.Add(maeSum, NumOps.Abs(diff));
-            mseSum = NumOps.Add(mseSum, NumOps.Multiply(diff, diff));
-        }
-        var mse = NumOps.Divide(mseSum, NumOps.FromDouble(count));
+        // Summed in double and divided once: a Half sum of squared errors passes 65504 long before the mean does.
+        // No pairs keep the NaN metrics 0 / 0 gave before.
+        var (sumSquared, sumAbsolute, count) = SumSquaredAndAbsoluteError(predictions, targets);
+        double mse = sumSquared / count;
         return new Dictionary<string, T>
         {
-            ["MAE"] = NumOps.Divide(maeSum, NumOps.FromDouble(count)),
-            ["MSE"] = mse,
-            ["RMSE"] = NumOps.Sqrt(mse),
+            ["MAE"] = NumOps.FromDouble(sumAbsolute / count),
+            ["MSE"] = NumOps.FromDouble(mse),
+            ["RMSE"] = NumOps.FromDouble(Math.Sqrt(mse)),
         };
     }
 

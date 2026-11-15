@@ -744,41 +744,29 @@ public partial class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<
         int n = y.Length;
         int stateSize = GetStateSize();
 
+        // Every sum of squares below is taken in double and divided once: in Half it passes 65504 long before the
+        // variance it feeds does, and the infinite sum made that variance infinite.
+
         // Update level and trend variances
-        T levelVariance = NumOps.Zero;
-        T trendVariance = NumOps.Zero;
-        for (int t = 1; t < n; t++)
-        {
-            Vector<T> prevState = smoothedStates.GetRow(t - 1);
-            Vector<T> currState = smoothedStates.GetRow(t);
-            levelVariance = NumOps.Add(levelVariance, NumOps.Square(NumOps.Subtract(currState[0], prevState[0])));
-            if (_bayesianOptions.IncludeTrend)
-            {
-                trendVariance = NumOps.Add(trendVariance, NumOps.Square(NumOps.Subtract(currState[1], prevState[1])));
-            }
-        }
-        levelVariance = NumOps.Divide(levelVariance, NumOps.FromDouble(n - 1));
-        _stateCovariance[0, 0] = levelVariance;
+        _stateCovariance[0, 0] = NumOps.FromDouble(SumOfSquaredSteps(smoothedStates.GetColumn(0), n) / (n - 1));
         if (_bayesianOptions.IncludeTrend)
         {
-            trendVariance = NumOps.Divide(trendVariance, NumOps.FromDouble(n - 1));
-            _stateCovariance[1, 1] = trendVariance;
+            _stateCovariance[1, 1] = NumOps.FromDouble(SumOfSquaredSteps(smoothedStates.GetColumn(1), n) / (n - 1));
         }
 
         // Update seasonal variances
         int seasonalIndex = _bayesianOptions.IncludeTrend ? 2 : 1;
         foreach (var seasonalComponent in _seasonalComponents)
         {
-            T seasonalVariance = NumOps.Zero;
+            double seasonalSum = 0.0;
             for (int t = 1; t < n; t++)
             {
                 Vector<T> prevSeasonalSlice = smoothedStates.GetRow(t - 1).Slice(seasonalIndex, seasonalComponent.Length);
                 Vector<T> currSeasonalSlice = smoothedStates.GetRow(t).Slice(seasonalIndex, seasonalComponent.Length);
                 var diff = (Vector<T>)Engine.Subtract(currSeasonalSlice, prevSeasonalSlice);
-                T sumSquares = Engine.DotProduct(diff, diff);
-                seasonalVariance = NumOps.Add(seasonalVariance, sumSquares);
+                seasonalSum += TensorReductionHelper.SumOfSquaresAsDouble(Engine, diff.AsTensor());
             }
-            seasonalVariance = NumOps.Divide(seasonalVariance, NumOps.FromDouble((n - 1) * seasonalComponent.Length));
+            T seasonalVariance = NumOps.FromDouble(seasonalSum / ((n - 1) * seasonalComponent.Length));
             for (int i = 0; i < seasonalComponent.Length; i++)
             {
                 _stateCovariance[seasonalIndex + i, seasonalIndex + i] = seasonalVariance;
@@ -787,17 +775,31 @@ public partial class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<
         }
 
         // Update observation variance
-        T totalVariance = NumOps.Zero;
+        var errors = new Vector<T>(n);
         for (int t = 0; t < n; t++)
         {
-            T prediction = CalculatePrediction(smoothedStates.GetRow(t));
-            T error = NumOps.Subtract(y[t], prediction);
-            totalVariance = NumOps.Add(totalVariance, NumOps.Square(error));
-            logLikelihood = NumOps.Add(logLikelihood, NumOps.Log(NumOps.Abs(error)));
+            errors[t] = NumOps.Subtract(y[t], CalculatePrediction(smoothedStates.GetRow(t)));
+            logLikelihood = NumOps.Add(logLikelihood, NumOps.Log(NumOps.Abs(errors[t])));
         }
-        _observationVariance = NumOps.Divide(totalVariance, NumOps.FromDouble(n));
+        double totalVariance = n > 0 ? TensorReductionHelper.SumOfSquaresAsDouble(Engine, errors.AsTensor()) : 0.0;
+        _observationVariance = NumOps.FromDouble(totalVariance / n);
 
         return logLikelihood;
+    }
+
+    /// <summary>
+    /// The sum of (s[t] - s[t - 1])^2 over the first <paramref name="n"/> entries of a smoothed state column, in
+    /// double.
+    /// </summary>
+    private double SumOfSquaredSteps(Vector<T> column, int n)
+    {
+        if (n < 2)
+        {
+            return 0.0;
+        }
+
+        var steps = Engine.TensorSubtract(column.Slice(1, n - 1).AsTensor(), column.Slice(0, n - 1).AsTensor());
+        return TensorReductionHelper.SumOfSquaresAsDouble(Engine, steps);
     }
 
     /// <summary>
