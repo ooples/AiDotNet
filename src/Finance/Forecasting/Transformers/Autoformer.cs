@@ -287,6 +287,9 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
         if (targets is null)
             throw new ArgumentNullException(nameof(targets));
         var predictions = Forecast(inputs);
+        // Every prediction is paired with a target; a short target buffer is an index error, as it was element by element.
+        if (targets.Length < predictions.Length)
+            throw new IndexOutOfRangeException();
         // Summed in double and divided once: a Half sum of squared errors passes 65504 long before the mean does.
         // No pairs keep the NaN metrics 0 / 0 gave before.
         var (sumSquared, sumAbsolute, count) = SumSquaredAndAbsoluteError(predictions, targets);

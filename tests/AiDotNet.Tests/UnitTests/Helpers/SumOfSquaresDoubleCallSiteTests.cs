@@ -544,6 +544,34 @@ public class SumOfSquaresDoubleCallSiteTests
     }
 
     [Fact]
+    public void Optimizer_R2OnlyDataSetStats_Half_UsesAFiniteMeanWhereTheTargetSumPassesHalfMaxValue()
+    {
+        // 128 targets alternating 1000 and 1002 sum to 128128, past Half.MaxValue, with a mean of 1001. Predictions 32
+        // above them give ssRes = 128 * 1024 and ssTot = 128, so R^2 = -1023; an infinite mean reported exactly 1.
+        const int n = 128;
+        var x = new Matrix<Half>(n, 1);
+        var y = new Half[n];
+        var predicted = new Half[n];
+        for (int i = 0; i < n; i++)
+        {
+            x[i, 0] = (Half)i;
+            y[i] = (Half)(1000.0 + 2 * (i % 2));
+            predicted[i] = (Half)((double)y[i] + 32.0);
+        }
+
+        var model = new Mock<IFullModel<Half, Matrix<Half>, Vector<Half>>>();
+        model.Setup(m => m.Predict(It.IsAny<Matrix<Half>>())).Returns(new Vector<Half>(predicted));
+        var optimizer = new AdamOptimizer<Half, Matrix<Half>, Vector<Half>>(null);
+        var method = typeof(OptimizerBase<Half, Matrix<Half>, Vector<Half>>).GetMethod(
+            "CalculateR2OnlyStatsForOptimizer", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("OptimizerBase.CalculateR2OnlyStatsForOptimizer was not found.");
+        var stats = Assert.IsType<DataSetStats<Half, Matrix<Half>, Vector<Half>>>(
+            method.Invoke(optimizer, new object[] { model.Object, x, new Vector<Half>(y), PredictionType.Regression }));
+
+        AssertClose(-1023.0, (double)stats.PredictionStats.R2, HalfTolerance);
+    }
+
+    [Fact]
     public void TFGridNet_Rms_Half_IsFiniteWhereTheSumOfSquaresPassesHalfMaxValue()
     {
         // A spectrogram-sized input of magnitudes near 50: sum of squares about 1e7, RMS about 50.
@@ -709,6 +737,8 @@ public class SumOfSquaresDoubleCallSiteTests
         for (int t = 0; t < 24; t++) window[0, t, 0] = (Half)(Math.Sin(t * 0.8) + 0.05 * t);
 
         AssertEvaluateAgainstOffsetTargets(model.Forecast(window), targets => model.Evaluate(window, targets));
+        // Fewer targets than predictions is an error, not metrics over the paired prefix.
+        Assert.Throws<IndexOutOfRangeException>(() => model.Evaluate(window, new Tensor<Half>(new[] { 1 })));
     }
 
     [Fact]
@@ -726,6 +756,7 @@ public class SumOfSquaresDoubleCallSiteTests
         for (int t = 0; t < 16; t++) window[0, t, 0] = (Half)Math.Sin(t * 0.7);
 
         AssertEvaluateAgainstOffsetTargets(model.Forecast(window), targets => model.Evaluate(window, targets));
+        Assert.Throws<IndexOutOfRangeException>(() => model.Evaluate(window, new Tensor<Half>(new[] { 1 })));
     }
 
     [Fact]
