@@ -601,13 +601,7 @@ public partial class TFT<T> : ForecastingModelBase<T>
         var metrics = new Dictionary<string, T>();
 
         // Calculate MSE
-        var (mse, mae, count) = SumSquaredAndAbsoluteError(predictions, actuals);
-
-        if (count > 0)
-        {
-            mse = NumOps.Divide(mse, NumOps.FromDouble(count));
-            mae = NumOps.Divide(mae, NumOps.FromDouble(count));
-        }
+        var (mse, mae, count) = MeanSquaredAndAbsoluteError(predictions, actuals);
 
         metrics["MSE"] = mse;
         metrics["MAE"] = mae;

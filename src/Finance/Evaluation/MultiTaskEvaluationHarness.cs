@@ -73,7 +73,7 @@ public class MultiTaskEvaluationHarness<T>
             using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
             var diff = Engine.TensorSubtract(FlatPrefix(prediction, evalLen), FlatPrefix(target, evalLen));
             totalMse += TensorReductionHelper.SumOfSquaresAsDouble(Engine, diff);
-            totalMae += NumOps.ToDouble(Engine.TensorSum(Engine.TensorAbs(diff)));
+            totalMae += TensorReductionHelper.SumAbsoluteAsDouble(Engine, diff);
             totalPoints += evalLen;
         }
 

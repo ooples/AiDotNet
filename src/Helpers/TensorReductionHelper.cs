@@ -107,4 +107,45 @@ internal static class TensorReductionHelper
         double scale = numOps.ToDouble(maxAbs);
         return scale * scale * length * numOps.ToDouble(SumOfSquares(engine, normalized));
     }
+
+    /// <summary>
+    /// The sum of the absolute values of every element of <paramref name="tensor"/>, returned as a double that stays
+    /// finite whenever the true sum is, even where it is past the range of <typeparamref name="T"/>.
+    /// </summary>
+    /// <remarks>
+    /// The direct engine sum is used when it is finite. When it is not, the absolute values are divided by
+    /// m = max |x| and by sqrt(n), so every partial sum is at most sqrt(n) (65504 only past 4e9 elements),
+    /// and the scale is restored in double:
+    /// sum |x| = m * sqrt(n) * sum (|x| / m / sqrt(n)). An infinite element keeps the infinite sum and NaN stays NaN.
+    /// </remarks>
+    internal static double SumAbsoluteAsDouble<T>(IEngine engine, Tensor<T> tensor)
+    {
+        if (engine is null) throw new ArgumentNullException(nameof(engine));
+        if (tensor is null) throw new ArgumentNullException(nameof(tensor));
+
+        int length = tensor.Length;
+        if (length == 0)
+        {
+            return 0.0;
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var source = tensor is SparseTensor<T> sparse ? sparse.ToDense() : tensor;
+        var absolute = engine.TensorAbs(source);
+        T direct = engine.TensorSum(absolute);
+        if (!numOps.IsInfinity(direct) || numOps.IsNaN(direct))
+        {
+            return numOps.ToDouble(direct);
+        }
+
+        T maxAbs = engine.TensorMaxValue(absolute);
+        if (numOps.IsInfinity(maxAbs) || numOps.IsNaN(maxAbs) || !numOps.GreaterThan(maxAbs, numOps.Zero))
+        {
+            return numOps.ToDouble(direct);
+        }
+
+        double rootLength = Math.Sqrt(length);
+        var normalized = engine.TensorDivideScalar(engine.TensorDivideScalar(absolute, maxAbs), numOps.FromDouble(rootLength));
+        return numOps.ToDouble(maxAbs) * rootLength * numOps.ToDouble(engine.TensorSum(normalized));
+    }
 }

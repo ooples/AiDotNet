@@ -807,8 +807,8 @@ public partial class PatchTST<T> : ForecastingModelBase<T>
         }
 
         var (mseSum, maeSum, _) = SumSquaredAndAbsoluteError(predictions, targets);
-        metrics["MAE"] = NumOps.Divide(maeSum, NumOps.FromDouble(count));
-        metrics["MSE"] = NumOps.Divide(mseSum, NumOps.FromDouble(count));
+        metrics["MAE"] = NumOps.FromDouble(maeSum / count);
+        metrics["MSE"] = NumOps.FromDouble(mseSum / count);
         metrics["RMSE"] = NumOps.Sqrt(metrics["MSE"]);
 
         return metrics;

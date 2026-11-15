@@ -776,8 +776,8 @@ public partial class ITransformer<T> : ForecastingModelBase<T>
         var metrics = new Dictionary<string, T>();
 
         var (mseSum, maeSum, count) = SumSquaredAndAbsoluteError(predictions, expected);
-        metrics["MAE"] = NumOps.Divide(maeSum, NumOps.FromDouble(count));
-        metrics["MSE"] = NumOps.Divide(mseSum, NumOps.FromDouble(count));
+        metrics["MAE"] = NumOps.FromDouble(maeSum / count);
+        metrics["MSE"] = NumOps.FromDouble(mseSum / count);
         metrics["RMSE"] = NumOps.Sqrt(metrics["MSE"]);
 
         return metrics;

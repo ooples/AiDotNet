@@ -702,8 +702,8 @@ public partial class TSMixer<T> : ForecastingModelBase<T>
         var mse = _lossFunction.CalculateLoss(predictions.ToVector(), testLabels.ToVector());
 
         // Calculate MAE
-        var (_, mae, _) = SumSquaredAndAbsoluteError(predictions, testLabels);
-        mae = NumOps.Divide(mae, NumOps.FromDouble(predictions.Length));
+        var (_, sumAbsolute, _) = SumSquaredAndAbsoluteError(predictions, testLabels);
+        var mae = NumOps.FromDouble(sumAbsolute / predictions.Length);
 
         return new Dictionary<string, T>
         {
