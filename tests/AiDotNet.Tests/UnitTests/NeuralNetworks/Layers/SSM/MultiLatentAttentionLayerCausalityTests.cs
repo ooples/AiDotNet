@@ -214,11 +214,11 @@ public class MultiLatentAttentionLayerCausalityTests
     /// <summary>A model of one multi-latent attention layer over [batch, Seq, Dim], with seeded parameters.</summary>
     private class MlaModel<T> : NeuralNetwork<T>
     {
-        public MlaModel(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        public MlaModel(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null, int seq = Seq, int dim = Dim)
             : base(new NeuralNetworkArchitecture<T>(
                 inputType: InputType.TwoDimensional, taskType: NeuralNetworkTaskType.Regression,
-                inputHeight: Seq, inputWidth: Dim, outputSize: Seq * Dim,
-                layers: new List<ILayer<T>> { new MultiLatentAttentionLayer<T>(Seq, Dim, Heads, Latent) }), optimizer)
+                inputHeight: seq, inputWidth: dim, outputSize: seq * dim,
+                layers: new List<ILayer<T>> { new MultiLatentAttentionLayer<T>(seq, dim, Heads, Latent) }), optimizer)
         {
         }
     }
@@ -226,7 +226,11 @@ public class MultiLatentAttentionLayerCausalityTests
     /// <summary>The same model, kept on the eager tape step.</summary>
     private sealed class EagerMlaModel<T> : MlaModel<T>
     {
-        public EagerMlaModel(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer) : base(optimizer) { }
+        public EagerMlaModel(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer, int seq = Seq, int dim = Dim)
+            : base(optimizer, seq, dim)
+        {
+        }
+
         protected override bool SupportsFusedCompiledTraining => false;
     }
 
@@ -395,6 +399,50 @@ public class MultiLatentAttentionLayerCausalityTests
                 $"parameter {i}: compiled {fused.Parameters[i]:G9}, eager {eager.Parameters[i]:G9}");
         }
         Assert.True(moved > 1e-3, "training moved no parameter");
+    }
+
+    /// <summary>
+    /// An eager GPU step through this layer keeps its attention on the device. On a backend with no fused attention
+    /// kernel the engine's attention core runs its decomposed chain, whose attention runs on the host under the tape:
+    /// it read the query, key and value back from the device on every forward. A step may read scalars (the loss,
+    /// the clip norms), never a tensor the size of an attention operand.
+    /// </summary>
+    [SkippableFact]
+    public void EagerGpuStep_ReadsNoAttentionOperandBack()
+    {
+        using var gpu = new DirectGpuTensorEngine();
+        if (Environment.GetEnvironmentVariable("AIDOTNET_REQUIRE_GPU_TESTS") == "1")
+            Assert.True(gpu.SupportsGpu && gpu.IsGpuAvailable, "The required GPU backend failed to initialize.");
+        Skip.If(!gpu.SupportsGpu || !gpu.IsGpuAvailable, "No DirectGpuTensorEngine available.");
+
+        const int seq = 32, dim = 32;
+        const long operandBytes = (long)Batch * seq * dim * sizeof(float);
+        var previous = AiDotNetEngine.Current;
+        AiDotNetEngine.Current = gpu;
+        try
+        {
+            var model = new EagerMlaModel<float>(Optimizer(), seq, dim);
+            model.SetTrainingMode(true);
+            var x = Values<float>(new[] { Batch, seq, dim }, 81, 1.0);
+            var y = Values<float>(new[] { Batch, seq, dim }, 82, 1.0);
+            for (int s = 0; s < 3; s++) model.Train(x, y);
+
+            // The least of three steps: readbacks of a test running beside this one can only add to a step's count.
+            long least = long.MaxValue;
+            for (int s = 0; s < 3; s++)
+            {
+                long before = AiDotNet.Tensors.Engines.DirectGpu.GpuLaunchProbe.ReadbackBytes;
+                model.Train(x, y);
+                least = Math.Min(least, AiDotNet.Tensors.Engines.DirectGpu.GpuLaunchProbe.ReadbackBytes - before);
+            }
+            Assert.False(model.FusedSession.IsCommitted, "the step ran on a compiled plan, not the eager tape");
+            Assert.True(least < operandBytes,
+                $"an eager GPU step read {least:N0} B back from the device; one attention operand is {operandBytes:N0} B");
+        }
+        finally
+        {
+            AiDotNetEngine.Current = previous;
+        }
     }
 
     [Fact]

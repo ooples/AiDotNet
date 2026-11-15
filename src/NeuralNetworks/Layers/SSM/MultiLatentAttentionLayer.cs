@@ -340,13 +340,9 @@ public partial class MultiLatentAttentionLayer<T> : LayerBase<T>, IShapeContract
         // size the kernel declines, the engine's decomposed fallback still builds that mask itself (same causality).
         double scale = 1.0 / Math.Sqrt(_headDimension);
 
-        // An inference trace (CompiledModelHost) can capture the engine's fused core for float32 only. For every other
-        // element type the core runs its decomposed chain, whose masked attention refuses to be captured for
-        // inference, so the host dropped the plan and ran the model eagerly on every call. Those traces take the
-        // per-head FlashAttention kernel, which is captured for every element type.
-        if (typeof(T) != typeof(float) && AiDotNet.Tensors.Engines.Compilation.GraphMode.IsInferenceTrace)
+        int batchSize = q.Shape[0], seqLen = q.Shape[1];
+        if (!UsesAttentionCore(batchSize, seqLen))
         {
-            int batchSize = q.Shape[0], seqLen = q.Shape[1];
             var attended = Engine.FlashAttention(
                 SplitHeads(q, batchSize, seqLen), SplitHeads(k, batchSize, seqLen), SplitHeads(v, batchSize, seqLen),
                 scale, isCausal: true, out _, attentionBias: null);
@@ -354,6 +350,37 @@ public partial class MultiLatentAttentionLayer<T> : LayerBase<T>, IShapeContract
         }
 
         return Engine.MultiHeadAttentionCore(q, k, v, _numHeads, scale, causal: true);
+    }
+
+    /// <summary>
+    /// False in the two cases where the engine's attention core runs its decomposed chain to this layer's cost; those
+    /// take the per-head FlashAttention kernel instead, as the layer did before it used the core.
+    /// </summary>
+    /// <remarks>
+    /// <list type="bullet">
+    /// <item>An inference trace (CompiledModelHost) of any element type but float32. The chain's masked attention
+    /// refuses to be captured for inference, so the host dropped the plan and ran the model eagerly on every call.</item>
+    /// <item>An eager float32 call on a GPU engine whose fused attention kernel declines it: a head size the backend
+    /// has no kernel for (CUDA has 16, 32 and 64), a size the backend prefers composed (the portable kernels of
+    /// OpenCL, Vulkan, Metal and WebGPU below 64M score elements), or autocast. Under the tape the chain's attention
+    /// runs on the host: it read the query, key and value back from the device on every forward (25 MB a step at
+    /// batch 8, sequence 256, width 256 over four layers, the step going from 0.31 s to 7.8 s on an RTX 3090 Ti
+    /// under OpenCL). The conditions are the engine's own (DirectGpuTensorEngine.TryFusedAttentionOnDevice).</item>
+    /// </list>
+    /// A training trace keeps the core everywhere: there the chain is recorded as device primitives.
+    /// </remarks>
+    private bool UsesAttentionCore(int batchSize, int seqLen)
+    {
+        if (typeof(T) != typeof(float))
+            return !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsInferenceTrace;
+        if (AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
+            || Engine is not AiDotNet.Tensors.Engines.DirectGpuTensorEngine gpu)
+            return true;
+        return !AiDotNet.Tensors.Engines.Gpu.AutocastScope.IsEnabled
+            && gpu.PlacementBackend is AiDotNet.Tensors.Engines.DirectGpu.CUDA.IFusedAttentionBackend fused
+            && fused.SupportsFusedAttention(_headDimension)
+            && (fused is not AiDotNet.Tensors.Engines.DirectGpu.CUDA.IFusedAttentionPreference preference
+                || preference.PrefersFusedAttention(batchSize, _numHeads, seqLen, seqLen, _headDimension));
     }
 
     /// <summary>[B, S, H*hd] -> [B, H, S, hd], the layout FlashAttention expects.</summary>
