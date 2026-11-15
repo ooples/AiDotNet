@@ -526,17 +526,78 @@ public class SweepSchedulerReferenceTests
         int steps = 20;
         var result = new CosineShiftedSchedule<double>(shift).ComputeAlphasCumprod(steps);
 
+        // diffusers betas_for_alpha_bar (Nichol and Dhariwal, 2021, eq. 17 with t = 1..T and beta clipped to 0.999):
+        // beta_i = min(1 - F((i + 1) / T) / F(i / T), 0.999), alpha_cumprod_i = prod_{j <= i} (1 - beta_j). Entry 0
+        // is alpha_bar at t = 1, not F(0) / F(0) = 1, which would give sigma_0 = 0 and an infinite log-SNR.
         double s = 0.008;
         double F(double t) => Math.Pow(Math.Cos((t + s) / (1.0 + s) * Math.PI / 2.0), 2);
         var expected = new double[steps];
+        double product = 1.0;
         for (int i = 0; i < steps; i++)
         {
-            double a = F((double)i / steps) / F(0.0);
-            expected[i] = a / (a + (shift * shift * (1.0 - a)));
+            double beta = Math.Min(1.0 - (F((double)(i + 1) / steps) / F((double)i / steps)), 0.999);
+            product *= 1.0 - beta;
+            expected[i] = product / (product + (shift * shift * (1.0 - product)));
         }
 
         AssertClose(expected, result, 1e-12);
-        Assert.Equal(1.0, result[0], 12);
+        Assert.True(result[0] < 1.0, "alpha_cumprod_0 must be alpha_bar(1 / T) < 1, so sigma_0 > 0.");
+    }
+
+    [Fact]
+    public void CosineShifted_Half_RoundsTheDoubleScheduleOnce()
+    {
+        // diffusers forms the table in float64 and casts it once. Formed in Half, the index ramp is no longer exact
+        // past 2048 and every intermediate (t, angle, cosine, square, shift) rounds again.
+        const int steps = 4096;
+        var reference = new CosineShiftedSchedule<double>(2.0).ComputeAlphasCumprod(steps);
+        var expected = new Tensor<double>(new[] { steps }, reference).Cast<Half>().ToArray();
+
+        var result = new CosineShiftedSchedule<Half>(2.0).ComputeAlphasCumprod(steps);
+
+        Assert.Equal(steps, result.Length);
+        for (int i = 0; i < steps; i++)
+            Assert.True(expected[i].Equals(result[i]), $"Element {i}: expected {expected[i]}, got {result[i]}.");
+    }
+
+    [Fact]
+    public void ZeroTerminalSnr_Half_RoundsTheRescaledScheduleOnce()
+    {
+        // Master formed the rescaled table in double and rounded it once. In Half the square root, shift, scale and
+        // square each rounded again: 0.8 came out as 0.7495 instead of the once-rounded 0.7485.
+        var inputs = new[] { 0.99, 0.8, 0.5, 0.2, 0.05 };
+        var half = new Half[inputs.Length];
+        for (int i = 0; i < inputs.Length; i++)
+            half[i] = HalfOps.FromDouble(inputs[i]);
+
+        var result = new ZeroTerminalSNRSchedule<Half>().Apply(new Vector<Half>(half));
+
+        double first = Math.Sqrt(HalfOps.ToDouble(half[0]));
+        double last = Math.Sqrt(HalfOps.ToDouble(half[inputs.Length - 1]));
+        var exact = new double[inputs.Length];
+        for (int i = 0; i < inputs.Length; i++)
+        {
+            double rescaled = (Math.Sqrt(HalfOps.ToDouble(half[i])) - last) * (first / (first - last));
+            exact[i] = rescaled * rescaled;
+        }
+
+        var expected = new Tensor<double>(new[] { inputs.Length }, new Vector<double>(exact)).Cast<Half>().ToArray();
+        for (int i = 0; i < inputs.Length; i++)
+            Assert.True(expected[i].Equals(result[i]), $"Element {i}: expected {expected[i]}, got {result[i]}.");
+    }
+
+    [Fact]
+    public void FlowMatching_TimeValues_AreRoundedOnceFromDouble()
+    {
+        // t_i = i / (N - 1) rounded once, as master formed it. Multiplying a float index ramp by a float-rounded
+        // 1 / 999 rounds twice and moved 180 of the 1000 entries by one ulp.
+        const int trainTimesteps = 1000;
+        var times = FlowMatchingScheduler<float>.ComputeTimeValues(trainTimesteps);
+
+        Assert.Equal(trainTimesteps, times.Length);
+        double scale = 1.0 / (trainTimesteps - 1);
+        for (int i = 0; i < trainTimesteps; i++)
+            Assert.Equal((float)(i * scale), times[i]);
     }
 
     [Fact]
