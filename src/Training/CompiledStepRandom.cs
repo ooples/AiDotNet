@@ -117,6 +117,21 @@ public static class CompiledStepRandom<T>
         return value;
     }
 
+    /// <summary>
+    /// Runs <paramref name="sample"/> for a layer that refills a persistent per-step sample in place, except inside
+    /// <see cref="ReplayDraws"/> when the probe of the same step already ran it: the tensors then still hold that
+    /// sample, and filling them again would consume the layer's generator twice in one step.
+    /// </summary>
+    internal static void StepSample(Action sample)
+    {
+        Guard.NotNull(sample);
+        StepCounter(() =>
+        {
+            sample();
+            return 0UL;
+        });
+    }
+
     // What a closure-objective probe drew this step, kept so that a retrace of the same step reuses it.
     [ThreadStatic]
     private static CaptureScope? t_captured;

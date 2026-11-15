@@ -406,7 +406,8 @@ public partial class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>, IS
             }
             else
             {
-                FillSampleEpsilon();
+                // A closure objective's retrace of a step its probe already ran keeps the probe's sample.
+                AiDotNet.Training.CompiledStepRandom<T>.StepSample(FillSampleEpsilon);
             }
         }
         if (useSample && (_sampledWeightEpsilon is null || _sampledBiasEpsilon is null))
