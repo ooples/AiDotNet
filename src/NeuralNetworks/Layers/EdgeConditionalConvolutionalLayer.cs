@@ -516,7 +516,10 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
                     Engine.Reshape(adjacency, [1, adjacency.Shape[0], adjacency.Shape[1]]), adjacencyShape)
                 : adjacency;
             var core = Engine.TensorSlice(adj3D, [0, 0, 0], [batchSize, numNodes, numNodes]);
-            var degree = Engine.ReduceSum(Engine.TensorNotEquals(core, NumOps.Zero), new[] { 2 }, keepDims: true);
+            // The degree is counted in double (exact to 2^53) and rounded to T once, as the integer count
+            // converted with FromDouble was: a count summed in Half stops at 2048 (2048 + 1 rounds to 2048).
+            var degree = Engine.ReduceSum(
+                Engine.TensorNotEquals(core, NumOps.Zero).Cast<double>(), new[] { 2 }, keepDims: true).Cast<T>();
             var isolated = Engine.TensorEquals(degree, NumOps.Zero);
             var ones = new Tensor<T>([batchSize, numNodes, 1]);
             ones.Fill(NumOps.One);
