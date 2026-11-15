@@ -152,15 +152,9 @@ public sealed class SASolverScheduler<T> : NoiseSchedulerBase<T>
         double sampleScale = sigmaToD / NumOps.ToDouble(sigmaFrom) * Math.Exp(-tauSquaredH);
         var result = Engine.Multiply(sample, NumOps.FromDouble(sampleScale));
 
-        var offsets = new double[nodeLambdas.Count];
-        for (int i = 0; i < offsets.Length; i++)
-            offsets[i] = NumOps.ToDouble(nodeLambdas[i]) - lambdaToD;
-        var weights = SchedulerTensorOps.ExponentialAdamsCoefficients(new Vector<double>(offsets), h, 1.0 + tauSquared);
-        double alphaToD = NumOps.ToDouble(alphaTo);
-        var coefficients = new T[weights.Length];
-        for (int i = 0; i < coefficients.Length; i++)
-            coefficients[i] = NumOps.FromDouble(alphaToD * weights[i]);
-        result = SchedulerTensorOps.AddWeightedSum(result, new Vector<T>(coefficients), nodeValues);
+        var offsets = NodeOffsets(nodeLambdas, lambdaToD);
+        var weights = SchedulerTensorOps.ExponentialAdamsCoefficients(offsets, h, 1.0 + tauSquared);
+        result = SchedulerTensorOps.AddWeightedSum(result, ScaledCoefficients(weights, NumOps.ToDouble(alphaTo)), nodeValues);
 
         if (noise is null || tauD <= 0.0)
             return result;
@@ -169,11 +163,34 @@ public sealed class SASolverScheduler<T> : NoiseSchedulerBase<T>
     }
 
     /// <summary>
+    /// The node log-SNRs relative to the target, lambda_i - lambda_t, in double.
+    /// </summary>
+    [AiDotNet.Attributes.ScalarKernel("One scalar per solver node (at most the solver order, 1 to 3), formed in double.")]
+    private static Vector<double> NodeOffsets(List<T> nodeLambdas, double lambdaTo)
+    {
+        var offsets = new double[nodeLambdas.Count];
+        for (int i = 0; i < offsets.Length; i++)
+            offsets[i] = NumOps.ToDouble(nodeLambdas[i]) - lambdaTo;
+        return new Vector<double>(offsets);
+    }
+
+    /// <summary>
+    /// scale * weights, formed in double and rounded to T once per coefficient.
+    /// </summary>
+    [AiDotNet.Attributes.ScalarKernel("One scalar per solver node (at most the solver order, 1 to 3), rounded from double to T once.")]
+    private static Vector<T> ScaledCoefficients(Vector<double> weights, double scale)
+    {
+        var coefficients = new T[weights.Length];
+        for (int i = 0; i < coefficients.Length; i++)
+            coefficients[i] = NumOps.FromDouble(scale * weights[i]);
+        return new Vector<T>(coefficients);
+    }
+
+    /// <summary>
     /// e^x - 1 without the cancellation of Math.Exp(x) - 1 for small |x| (net471 has no Math.ExpM1).
     /// </summary>
     private static double ExpM1(double x)
         => Math.Abs(x) < 1e-5 ? x + (0.5 * x * x) + (x * x * x / 6.0) : Math.Exp(x) - 1.0;
-    }
 
     /// <summary>
     /// Converts the model output to the predicted clean sample x0 for the configured prediction type.
