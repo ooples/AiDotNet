@@ -15,7 +15,7 @@ namespace AiDotNet.Tests.UnitTests.Diffusion.Models;
 /// the orthographic cameras and front-frame normals of the reconstruction, the outlier-dropping geometry-aware normal
 /// loss, and the full image-to-3D path on a tiny configuration.
 /// </summary>
-public class Wonder3DComponentTests
+public class Wonder3DModelPaperTests
 {
     private const double Tolerance = 1e-9;
 

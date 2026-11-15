@@ -1759,7 +1759,7 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.Models.LGMArchitectureTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.Models.MVDreamImageConditioningTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.Meshing.MeshingComponentTests.|
-      FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.Models.Wonder3DComponentTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.Models.Wonder3DModelPaperTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.ThreeD.One2345ModelPaperTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.ThreeD.LoFTRMatcherTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.ThreeD.SyncDreamerArchitectureTests.|
