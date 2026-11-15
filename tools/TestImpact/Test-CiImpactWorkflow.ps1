@@ -1236,7 +1236,7 @@ $coverageSourceUploads = @(
 foreach ($upload in $coverageSourceUploads) {
     $uploadStep = Get-StepBlock -JobBlock (Get-JobBlock -WorkflowText $validation -Job $upload.Job) -Step $upload.Step
     $retention = [regex]::Match($uploadStep,
-        '(?m)^          retention-days: (?:(?<days>\d+)|\$\{\{ inputs\.collect_coverage_everywhere && (?<days>\d+) \|\| \d+ \}\})\s*$')
+        '(?m)^          retention-days: (?:(?<days>\d+)|\$\{\{ inputs\.collect_coverage_everywhere && (?<days>\d+) \|\| (?:\(.+\) \|\| )?\d+ \}\})\s*$')
     Assert-Contract ($retention.Success -and [int] $retention.Groups['days'].Value -ge 21) `
         "'$($upload.Step)' keeps a coverage-everywhere source for less than three weekly cycles"
 }
@@ -1296,6 +1296,118 @@ Assert-Contract ($censusPrepare.Contains('./tools/ModelPerfProbe/Select-CensusFi
 Assert-Contract ($censusPrepare.Contains("-Destination 'artifacts/model-performance/test-bundle/test-list.txt'") -and
         $censusPrepare.Contains("'artifacts/model-performance/inventory/test-list.txt'")) `
     'the shards or the verifier read a different inventory than the scoped one'
+
+# ROLLING MAP: WITH THE FLAG OFF, NOTHING CHANGES. Repository variable TEST_IMPACT_ROLLING_MAP is unset by
+# default. These hold the workflow to that: every rolling step is skipped, the Select step reads the rolling
+# tooling only behind its mode, the selection file handed to the matrix is the weekly map's, and the list of
+# shards to instrument is empty - which Test-RollingShardMap.ps1 proves leaves Invoke-Shard.ps1's coverage
+# decision, for every shard kind and event, exactly the rule it was.
+$rollingFlag = "(vars.TEST_IMPACT_ROLLING_MAP == 'shadow' || vars.TEST_IMPACT_ROLLING_MAP == 'on')"
+$rollingMarkers = @('rolling-shard-map', 'rolling-source', 'rolling-shadow-outcome', 'Invoke-RollingSelection', 'New-RollingShardMap',
+    'Select-RollingCoverageShards')
+# The steps allowed to mention the rolling map without being skipped by the flag: they only carry values that
+# are empty when it is off, and each is checked below.
+$rollingUnguarded = @('Select', 'Upload shard selection report')
+$rollingSteps = 0
+foreach ($workflowText in $validation, $map) {
+    foreach ($step in [regex]::Matches($workflowText, '(?ms)^      - name: (?<name>[^\r\n]+)\r?\n.*?(?=^      - [A-Za-z0-9_-]+:|^  [A-Za-z0-9_-]+:\s*\r?\n|\z)')) {
+        $body = $step.Value
+        if (@($rollingMarkers | Where-Object { $body.Contains($_) }).Count -eq 0) { continue }
+        $name = $step.Groups['name'].Value.Trim()
+        if ($name -cin $rollingUnguarded) { continue }
+        $rollingSteps++
+        $condition = [regex]::Match($body, '(?m)^        if: (?<if>.+)$').Groups['if'].Value
+        Assert-Contract ($condition.Contains($rollingFlag)) "step '$name' touches the rolling map but is not skipped when TEST_IMPACT_ROLLING_MAP is off"
+        Assert-Contract ($body -match '(?m)^        continue-on-error: true\s*$') "step '$name' is part of the rolling map and can fail its job"
+    }
+}
+Assert-Contract ($rollingSteps -eq 6) "expected 6 flag-guarded rolling steps across the two workflows, found $rollingSteps"
+Assert-Contract ($selectStep.Contains('TEST_IMPACT_ROLLING_MAP: ${{ vars.TEST_IMPACT_ROLLING_MAP }}')) 'the Select step does not read the rolling-map flag from the repository variable'
+
+# The mode, evaluated exactly as the step computes it: anything but shadow and on is off.
+$modeBlock = [regex]::Match($selectStep, '(?ms)^          \$rollingMode = ''off''\r?\n.*?^          \}\r?\n')
+Assert-Contract $modeBlock.Success 'the Select step does not compute the rolling mode in one block'
+if ($modeBlock.Success) {
+    $savedRollingFlag = $env:TEST_IMPACT_ROLLING_MAP
+    try {
+        foreach ($case in @(@{ Value = $null; Mode = 'off' }, @{ Value = ''; Mode = 'off' }, @{ Value = ' '; Mode = 'off' }, @{ Value = 'off'; Mode = 'off' },
+                @{ Value = 'true'; Mode = 'off' }, @{ Value = 'shadow'; Mode = 'shadow' }, @{ Value = 'On'; Mode = 'on' })) {
+            $env:TEST_IMPACT_ROLLING_MAP = $case.Value
+            $computed = & ([scriptblock]::Create($modeBlock.Value + "`n`$rollingMode"))
+            Assert-Contract ([string] $computed -ceq $case.Mode) "TEST_IMPACT_ROLLING_MAP='$($case.Value)' is read by the Select step as '$computed', not '$($case.Mode)'"
+        }
+    }
+    finally { $env:TEST_IMPACT_ROLLING_MAP = $savedRollingFlag }
+}
+# Between the weekly map's selector call and the parse of its output there is the guarded rolling block and
+# nothing else, and it sits inside the certified-map branch: no certified anchor, no rolling selection.
+Assert-Contract ($selectStep -match '(?s)-OutFile selection\.json\r?\n\s+if \(\$LASTEXITCODE -ne 0\) \{ throw "shard selector exited \$LASTEXITCODE" \}\r?\n\s+if \(\$rollingMode -ne ''off''\) \{.*?Invoke-RollingSelection\.ps1.*?\r?\n                \}\r?\n\s+\$result = Get-Content selection\.json -Raw \| ConvertFrom-Json') `
+    'the rolling selection is not confined to one guarded block between the weekly map''s selector call and the parse of selection.json'
+Assert-Contract ([regex]::Matches($selectStep, 'Invoke-RollingSelection\.ps1').Count -eq 1 -and
+        $selectStep.IndexOf('elseif ($mapCertified) {') -lt $selectStep.IndexOf('Invoke-RollingSelection.ps1') -and
+        $selectStep.IndexOf('Invoke-RollingSelection.ps1') -lt $selectStep.IndexOf("Write-Host '::warning::no certified shard map - running the full matrix'")) `
+    'the rolling selection can run without a certified weekly map to fall back to'
+Assert-Contract ($selectStep.Contains('-AnchorMapFile map/shard-map.json -AnchorRunId ([long] $env:MAP_RUN_ID)') -and
+        $selectStep.Contains('-RollingDirectory rolling-map -AnchorSelectionFile selection.json')) `
+    'the rolling selection is not bound to the certified map run the resolver returned'
+$rollingDownload = Get-StepBlock -JobBlock $selectorJob -Step 'Download the rolling shard map'
+Assert-Contract ($rollingDownload.Contains('gh run download "$MAP_RUN_ID"') -and $rollingDownload.Contains('MAP_RUN_ID: ${{ steps.map.outputs.run_id }}') -and
+        $rollingDownload.Contains("steps.map.outputs.kind == 'certified'")) `
+    'the rolling map is not fetched from exactly the run that certified the weekly map in use'
+
+# The nightly's list of shards to instrument, evaluated as written: empty with the flag off on every event,
+# and empty on every event but the schedule whatever the flag says.
+$rollingBlock = [regex]::Match($selectStep, '(?ms)^          \$rollingCoverage = @\(\)\r?\n.*?^          "coverage_rolling=[^\r\n]+\r?\n\s+Out-File[^\r\n]+\r?\n')
+Assert-Contract $rollingBlock.Success 'the Select step does not emit coverage_rolling from one block'
+if ($rollingBlock.Success) {
+    $savedRollingEnvironment = @{ Event = $env:GITHUB_EVENT_NAME; Output = $env:GITHUB_OUTPUT; Everywhere = $env:COLLECT_COVERAGE_EVERYWHERE; Summary = $env:GITHUB_STEP_SUMMARY }
+    $rollingOutput = Join-Path ([IO.Path]::GetTempPath()) "rolling-contract-$PID.txt"
+    try {
+        $env:GITHUB_OUTPUT = $rollingOutput
+        $env:GITHUB_STEP_SUMMARY = "$rollingOutput.summary"
+        foreach ($case in @(
+            @{ Mode = 'off'; Event = 'schedule' }, @{ Mode = 'off'; Event = 'pull_request' }, @{ Mode = 'off'; Event = 'push' }, @{ Mode = 'off'; Event = 'workflow_dispatch' },
+            @{ Mode = 'shadow'; Event = 'pull_request' }, @{ Mode = 'on'; Event = 'push' }, @{ Mode = 'on'; Event = 'workflow_dispatch' }, @{ Mode = 'on'; Event = 'merge_group' },
+            # On the schedule with the flag on but nothing to refresh, the block fails closed to an empty list.
+            @{ Mode = 'on'; Event = 'schedule' }
+        )) {
+            Remove-Item -LiteralPath $rollingOutput -ErrorAction SilentlyContinue
+            $env:GITHUB_EVENT_NAME = $case.Event
+            $env:COLLECT_COVERAGE_EVERYWHERE = ''
+            $rollingMode = $case.Mode
+            $selectorTrusted = $true
+            $mapCertified = $false
+            & ([scriptblock]::Create($rollingBlock.Value)) 6>$null
+            $emitted = if (Test-Path -LiteralPath $rollingOutput) { (Get-Content -LiteralPath $rollingOutput -Raw).Trim() } else { '' }
+            Assert-Contract ($emitted -ceq 'coverage_rolling=[]') "with the rolling map '$($case.Mode)' on a '$($case.Event)' event the Select step emitted '$emitted', not an empty instrumentation list"
+        }
+    }
+    finally {
+        Remove-Item -LiteralPath $rollingOutput, "$rollingOutput.summary" -ErrorAction SilentlyContinue
+        $env:GITHUB_EVENT_NAME = $savedRollingEnvironment.Event; $env:GITHUB_OUTPUT = $savedRollingEnvironment.Output
+        $env:COLLECT_COVERAGE_EVERYWHERE = $savedRollingEnvironment.Everywhere; $env:GITHUB_STEP_SUMMARY = $savedRollingEnvironment.Summary
+    }
+}
+$selectorOutputs = [regex]::Match($selectorJob, '(?ms)^    outputs:\r?\n.*?^    steps:').Value
+Assert-Contract ($selectorOutputs.Contains('coverage_rolling: ${{ steps.select.outputs.coverage_rolling }}')) 'select-shards does not publish coverage_rolling'
+# The test job: an empty list makes the timeout's middle term false, so the expression is the one it was; and
+# the list reaches Invoke-Shard.ps1, which instruments nothing extra for an empty one.
+Assert-Contract ($shardJobHeader.Contains("timeout-minutes: `${{ inputs.collect_coverage_everywhere && 90 || (contains(fromJSON(needs.select-shards.outputs.coverage_rolling || '[]'), matrix.shard.name) && 90) || matrix.shard.timeout || 60 }}")) `
+    'the shard job''s timeout is not the previous expression with one term that is false for an empty rolling list'
+Assert-Contract ($testConsumer.Contains('COVERAGE_ROLLING: ${{ needs.select-shards.outputs.coverage_rolling }}')) 'the shard job does not receive the rolling instrumentation list'
+$rollingShardScript = Get-Content -LiteralPath '.github/scripts/Invoke-Shard.ps1' -Raw
+Assert-Contract ($rollingShardScript -match '(?s)\$rollingCoverage = \$false\r?\nif \(\$env:COVERAGE_ROLLING -and -not \$forcedCoverageRun -and -not \$measuresTiming -and\r?\n\s+"\$\(\$env:GITHUB_EVENT_NAME\)" -eq ''schedule''\)') `
+    'Invoke-Shard.ps1 can instrument for the rolling map outside a scheduled run, on a timing shard, or without a list'
+$rollingDigestUpload = Get-StepBlock -JobBlock (Get-JobBlock -WorkflowText $validation -Job 'test-net10-sharded') -Step 'Upload test-impact digest'
+Assert-Contract ($rollingDigestUpload.Contains("retention-days: `${{ inputs.collect_coverage_everywhere && 30 || (github.event_name == 'schedule' && $rollingFlag && 14) || 7 }}")) `
+    'digest retention is not the previous expression with one term that is false when the rolling map is off'
+# The map workflow builds the rolling map only on top of a map it has just certified, and uploads it from the same run.
+$rollingBuild = Get-StepBlock -JobBlock (Get-JobBlock -WorkflowText $map -Job 'build-map') -Step 'Build the rolling map'
+Assert-Contract ($rollingBuild.Contains("if: `${{ steps.audit.outputs.certified == 'true' && $rollingFlag }}") -and
+        $rollingBuild.Contains('-AnchorRunId ([long] $env:GITHUB_RUN_ID)') -and
+        $rollingBuild.Contains('-AnchorMapFile certified-map/shard-map.json -AnchorCertificateFile certified-map/certification.json') -and
+        $map.IndexOf('- name: Upload certified map') -lt $map.IndexOf('- name: Build the rolling map')) `
+    'the rolling map is not built by, and bound to, the run that certified its anchor, after that anchor is uploaded'
 
 if ($failures.Count -gt 0) {
     Write-Host 'CI impact workflow contract FAILED:'
