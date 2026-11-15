@@ -653,6 +653,182 @@ public class ElementWiseSweepDataRegressionTests
     }
 
     /// <summary>
+    /// STL-10 must decode straight into one T output. The vectorized rewrite kept the file bytes, an int copy,
+    /// the cast, the permuted copy and the divided copy alive together: about 17 bytes per float pixel against
+    /// the scalar loader's 5. The pixels must still equal the scalar <c>(float)(b / 255.0)</c> in HWC order.
+    /// </summary>
+    [Fact]
+    public void Stl10_Load_AllocatesAboutOneOutputAndMatchesTheScalarDecode()
+    {
+        const int images = 200;
+        const int size = 96;
+        const int pixels = size * size * 3;
+        string root = Path.Combine(Path.GetTempPath(), "adn-stl10-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var x = new byte[images * pixels];
+            for (int i = 0; i < x.Length; i++) x[i] = (byte)((i * 7 + i / 251) & 0xFF);
+            var y = new byte[images];
+            for (int i = 0; i < images; i++) y[i] = (byte)(i % 10 + 1);
+            File.WriteAllBytes(Path.Combine(root, "test_X.bin"), x);
+            File.WriteAllBytes(Path.Combine(root, "test_y.bin"), y);
+
+            Stl10DataLoader<float> NewLoader(int? maxSamples) => new Stl10DataLoader<float>(new Stl10DataLoaderOptions
+            {
+                DataPath = root,
+                AutoDownload = false,
+                Split = DatasetSplit.Test,
+                Normalize = true,
+                MaxSamples = maxSamples
+            });
+
+            // Warm up so one-time JIT and engine allocations are not counted.
+            NewLoader(1).LoadAsync().GetAwaiter().GetResult();
+
+            var loader = NewLoader(null);
+            long before = AllocatedBytes();
+            loader.LoadAsync().GetAwaiter().GetResult();
+            long allocated = AllocatedBytes() - before;
+
+            Assert.Equal(new[] { images, size, size, 3 }, loader.Features.Shape.ToArray());
+            var decoded = loader.Features.AsSpan().ToArray();
+            int mismatches = 0;
+            int firstMismatch = -1;
+            for (int n = 0; n < images; n++)
+                for (int c = 0; c < 3; c++)
+                    for (int col = 0; col < size; col++)
+                        for (int row = 0; row < size; row++)
+                        {
+                            byte b = x[n * pixels + c * size * size + col * size + row];
+                            int dst = n * pixels + (row * size + col) * 3 + c;
+                            if (decoded[dst] != (float)(b / 255.0))
+                            {
+                                if (firstMismatch < 0) firstMismatch = dst;
+                                mismatches++;
+                            }
+                        }
+
+            Assert.True(mismatches == 0, $"{mismatches} pixels differ from the scalar decode; first at {firstMismatch}.");
+            var labels = loader.Labels.AsSpan().ToArray();
+            for (int n = 0; n < images; n++) Assert.Equal(1f, labels[n * 10 + n % 10]);
+
+            long outputBytes = (long)images * pixels * sizeof(float);
+#if NETCOREAPP3_0_OR_GREATER
+            Assert.True(allocated >= outputBytes, $"Measured {allocated} bytes, less than the {outputBytes}-byte output.");
+#endif
+            Assert.True(allocated < outputBytes * 3 / 2,
+                $"Loading allocated {allocated / 1e6:F1} MB for a {outputBytes / 1e6:F1} MB output; "
+                + "whole-dataset intermediates are being kept alive.");
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// SVHN must decode straight into one T output. The vectorized rewrite added byte, int and permuted copies of
+    /// every slab plus whole-dataset int, cast and divided copies, several times the old peak for the 531k-image
+    /// extra split. The pixels must still equal the scalar <c>(float)(X[h, w, c, i] / 255.0)</c> in HWC order,
+    /// including a partial final block and a MaxSamples cut.
+    /// </summary>
+    [Fact]
+    public void Svhn_Load_AllocatesAboutOneOutputAndMatchesTheScalarDecode()
+    {
+        const int stored = 300;
+        const int samples = 290;
+        const int size = 32;
+        const int pixels = size * size * 3;
+        string root = Path.Combine(Path.GetTempPath(), "adn-svhn-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            // Column-major (h, w, c, n), as MATLAB stores it.
+            var x = new byte[pixels * stored];
+            for (int i = 0; i < x.Length; i++) x[i] = (byte)((i * 13 + i / 509) & 0xFF);
+            var y = new byte[stored];
+            for (int i = 0; i < stored; i++) y[i] = (byte)(i % 10 + 1);
+            var builder = new MatFileHandler.DataBuilder();
+            var file = builder.NewFile(new List<MatFileHandler.IVariable>
+            {
+                builder.NewVariable("X", builder.NewArray<byte>(x, new[] { size, size, 3, stored }), false),
+                builder.NewVariable("y", builder.NewArray<byte>(y, new[] { stored, 1 }), false)
+            });
+            string path = Path.Combine(root, "train_32x32.mat");
+            using (var stream = new FileStream(path, FileMode.Create, FileAccess.Write))
+            {
+                new MatFileHandler.MatFileWriter(stream).Write(file);
+            }
+
+            SvhnDataLoader<float> NewLoader(int maxSamples) => new SvhnDataLoader<float>(new SvhnDataLoaderOptions
+            {
+                DataPath = root,
+                AutoDownload = false,
+                Split = DatasetSplit.Train,
+                Normalize = true,
+                MaxSamples = maxSamples
+            });
+
+            // Warm up, then measure what reading the .mat file costs by itself so only the decode is bounded.
+            NewLoader(1).LoadAsync().GetAwaiter().GetResult();
+            long readStart = AllocatedBytes();
+            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read))
+            {
+                var mat = new MatFileHandler.MatFileReader(stream).Read();
+                foreach (var variable in mat.Variables)
+                {
+                    if (variable.Value is MatFileHandler.IArrayOf<byte> array) GC.KeepAlive(array.Data.ToArray());
+                }
+            }
+
+            long readBytes = AllocatedBytes() - readStart;
+
+            var loader = NewLoader(samples);
+            long before = AllocatedBytes();
+            loader.LoadAsync().GetAwaiter().GetResult();
+            long allocated = AllocatedBytes() - before;
+
+            Assert.Equal(new[] { samples, size, size, 3 }, loader.Features.Shape.ToArray());
+            var decoded = loader.Features.AsSpan().ToArray();
+            int mismatches = 0;
+            int firstMismatch = -1;
+            for (int s = 0; s < samples; s++)
+                for (int h = 0; h < size; h++)
+                    for (int w = 0; w < size; w++)
+                        for (int c = 0; c < 3; c++)
+                        {
+                            byte b = x[h + size * (w + size * (c + 3 * s))];
+                            int dst = s * pixels + (h * size + w) * 3 + c;
+                            if (decoded[dst] != (float)(b / 255.0))
+                            {
+                                if (firstMismatch < 0) firstMismatch = dst;
+                                mismatches++;
+                            }
+                        }
+
+            Assert.True(mismatches == 0, $"{mismatches} pixels differ from the scalar decode; first at {firstMismatch}.");
+            var labels = loader.Labels.AsSpan().ToArray();
+            for (int s = 0; s < samples; s++) Assert.Equal(1f, labels[s * 10 + (s % 10 + 1) % 10]);
+
+            // Reading the file plus the loader's own (h, w, c, n) copy of X, then one float output and slack.
+            long outputBytes = (long)samples * pixels * sizeof(float);
+            long slabBytes = (long)stored * pixels;
+#if NETCOREAPP3_0_OR_GREATER
+            Assert.True(allocated >= outputBytes, $"Measured {allocated} bytes, less than the {outputBytes}-byte output.");
+#endif
+            long bound = readBytes + slabBytes + outputBytes * 3 / 2;
+            Assert.True(allocated < bound,
+                $"Loading allocated {allocated / 1e6:F1} MB against a {bound / 1e6:F1} MB bound (file read "
+                + $"{readBytes / 1e6:F1} MB, output {outputBytes / 1e6:F1} MB); whole-dataset intermediates are being kept alive.");
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>
     /// Bytes allocated by the current thread. .NET Framework has no per-thread counter (and a process-wide
     /// one counts parallel tests too), so the allocation bounds are only checked on .NET Core 3.0 and later.
     /// </summary>
