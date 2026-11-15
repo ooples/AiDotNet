@@ -661,7 +661,8 @@ internal sealed class FusedTrainingSession<T>
             {
                 string reason = "fused compiled step ran (loss " + NumOps.ToDouble(ReadLoss(stepLoss, deferredLoss.Value)).ToString("G6")
                     + ") but did not persist a parameter update; the plan is decoupled from the model's live "
-                    + "parameter tensors, so training continues on the eager tape (ooples/AiDotNet#1822)";
+                    + "parameter tensors, so training continues on the eager tape (ooples/AiDotNet#1822)"
+                    + $" [persisted={persisted}, attached={attached}, sampled={probe?.Length}, gradientsObserved={gradientsObserved}, gradientNonZero={gradientNonZero}]";
                 Warn(reason);
                 if (IsCommitted)
                     Reset(stickyDisable: true);
@@ -970,13 +971,8 @@ internal sealed class FusedTrainingSession<T>
         => TensorCheckpoint<T>.Restore(snapshot.Select(p => p.Live).ToArray(), snapshot.Select(p => p.Saved).ToArray());
 
     private static IEnumerable<Tensor<T>> EnumerateLiveParameters(FusedTrainingStepRequest<T> request)
-    {
-        foreach (var layer in request.Layers)
-            foreach (var parameter in layer.GetTrainableParameters())
-                if (parameter is not null) yield return parameter;
-        if (request.ExtraParameters is null) yield break;
-        foreach (var parameter in request.ExtraParameters) yield return parameter;
-    }
+        // Include composite children, exactly as the eager and compiled training steps do.
+        => TapeTrainingStepper<T>.TrainedParameters(request);
 
     // The #1822 persistence probe. Before the step it copies the first elements of every trained tensor (about
     // ChecksumTargetSamples in total, at least one per tensor) on whatever device holds the tensor; after the step it
