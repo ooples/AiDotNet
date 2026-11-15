@@ -30,6 +30,7 @@ public class Wonder3DModelTests : DiffusionModelTestBase<float>
         ReconstructionBatchSize = 32,
         ReconstructionMaxBatchSize = 64,
         SamplesPerRayBudget = 8,
+        OccupancyGridResolution = 8,
         HashGridLevels = 2,
         HashGridLog2TableSize = 8,
         HashGridBaseResolution = 4,

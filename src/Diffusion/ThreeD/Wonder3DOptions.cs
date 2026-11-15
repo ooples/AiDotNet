@@ -36,6 +36,8 @@ public class Wonder3DOptions : ModelOptions
     private const string RunConfig = "Wonder3D configs/mvdiffusion-joint-ortho-6views.yaml";
     private const string NeuSConfig = "Wonder3D instant-nsr-pl/configs/neuralangelo-ortho-wmask.yaml";
     private const string SchedulerConfigSource = "Wonder3D scheduler/scheduler_config.json (flamehaze1115/wonder3d-v1.0)";
+    private const string TextureSource = "Wonder3D instant-nsr-pl/models/texture.py";
+    private const string NerfaccSource = "nerfacc 0.3.3 (instant-nsr-pl requirements)";
 
     #region Views
 
@@ -323,16 +325,84 @@ public class Wonder3DOptions : ModelOptions
     [PaperDefault(2, Source = NeuSConfig + ": texture mlp_network_config n_hidden_layers 2")]
     public int ColorHiddenLayers { get; set; } = 2;
 
-    /// <summary>The view-direction embedding's frequency count.</summary>
+    /// <summary>
+    /// The color network: instant-nsr-pl's <c>VolumeRadiance</c> (the SDF network's output and the unit normal into a
+    /// ReLU MLP with a sigmoid), or NeuS's IDR rendering network.
+    /// </summary>
+    [PaperDefault(NeuSColorNetwork.VolumeRadiance, Source = NeuSConfig + ": texture name volume-radiance")]
+    public NeuSColorNetwork ColorNetwork { get; set; } = NeuSColorNetwork.VolumeRadiance;
+
+    /// <summary>
+    /// Whether <c>VolumeRadiance</c> also reads the view direction's spherical harmonics. The config declares a degree-4
+    /// encoding, but <c>VolumeRadiance.__init__</c> sets <c>self.with_viewdir = False</c>, so the official color does not
+    /// depend on the view.
+    /// </summary>
+    [PaperDefault(false, Source = TextureSource + ": VolumeRadiance self.with_viewdir = False")]
+    public bool TextureUsesViewDirection { get; set; }
+
+    /// <summary>The view encoding's spherical-harmonics degree when <see cref="TextureUsesViewDirection"/> is set.</summary>
+    [PaperDefault(4, Source = NeuSConfig + ": texture dir_encoding_config SphericalHarmonics degree 4")]
+    public int TextureShDegree { get; set; } = 4;
+
+    /// <summary>The view-direction embedding's frequency count (the IDR color network only).</summary>
     public int ViewFrequencies { get; set; } = 4;
 
-    /// <summary>Uniform samples per ray.</summary>
+    /// <summary>
+    /// How the SDF gradient is computed: finite differences as the config sets, or the network's analytic derivative.
+    /// </summary>
+    [PaperDefault(NeuSGradientMode.FiniteDifference, Source = NeuSConfig + ": geometry grad_type finite_difference")]
+    public NeuSGradientMode GradientMode { get; set; } = NeuSGradientMode.FiniteDifference;
+
+    /// <summary>The finite-difference step rule: the finest active hash-grid cell, or <see cref="FiniteDifferenceEpsilon"/>.</summary>
+    [PaperDefault(NeuSFiniteDifferenceStep.Progressive, Source = NeuSConfig + ": geometry finite_difference_eps progressive")]
+    public NeuSFiniteDifferenceStep FiniteDifferenceStep { get; set; } = NeuSFiniteDifferenceStep.Progressive;
+
+    /// <summary>The fixed finite-difference step (used with <see cref="NeuSFiniteDifferenceStep.Fixed"/>).</summary>
+    [PaperDefault(1e-3, Source = "instant-nsr-pl models/geometry.py: finite_difference_eps default 1e-3")]
+    public double FiniteDifferenceEpsilon { get; set; } = 1e-3;
+
+    /// <summary>
+    /// How rays are sampled: nerfacc's occupancy-grid ray marching (the official reconstruction) or NeuS's hierarchical
+    /// sampler.
+    /// </summary>
+    [PaperDefault(NeuSRaySampler.OccupancyGrid, Source = NeuSConfig + ": model grid_prune true (nerfacc ray_marching)")]
+    public NeuSRaySampler RaySampler { get; set; } = NeuSRaySampler.OccupancyGrid;
+
+    /// <summary>The scene box half extent r: rays are marched through <c>[−r, r]³</c>.</summary>
+    [PaperDefault(1.0, Source = NeuSConfig + ": model radius 1.0")]
+    public double SceneRadius { get; set; } = 1.0;
+
+    /// <summary>The occupancy grid's cells per axis.</summary>
+    [PaperDefault(128, Source = "instant-nsr-pl models/neus.py: OccupancyGrid(resolution=128)")]
+    public int OccupancyGridResolution { get; set; } = 128;
+
+    /// <summary>The iterations between occupancy-grid updates.</summary>
+    [PaperDefault(16, Source = NerfaccSource + ": OccupancyGrid.every_n_step n=16")]
+    public int OccupancyGridUpdateInterval { get; set; } = 16;
+
+    /// <summary>The occupancy threshold (a cell is occupied above <c>min(mean, threshold)</c>).</summary>
+    [PaperDefault(0.001, Source = NeuSConfig + ": model grid_prune_occ_thre 0.001")]
+    public double OccupancyGridThreshold { get; set; } = 0.001;
+
+    /// <summary>The decay of a cell's running occupancy.</summary>
+    [PaperDefault(0.95, Source = NerfaccSource + ": OccupancyGrid.every_n_step ema_decay=0.95")]
+    public double OccupancyGridEmaDecay { get; set; } = 0.95;
+
+    /// <summary>The iterations during which every occupancy cell is re-evaluated.</summary>
+    [PaperDefault(256, Source = NerfaccSource + ": OccupancyGrid.every_n_step warmup_steps=256")]
+    public int OccupancyGridWarmUpIterations { get; set; } = 256;
+
+    /// <summary>The transmittance below which marched samples get no weight.</summary>
+    [PaperDefault(1e-4, Source = NerfaccSource + ": render_weight_from_alpha early_stop_eps=1e-4")]
+    public double TransmittanceEarlyStop { get; set; } = 1e-4;
+
+    /// <summary>Uniform samples per ray (the hierarchical sampler only).</summary>
     public int RaySamples { get; set; } = 64;
 
-    /// <summary>Importance samples per ray.</summary>
+    /// <summary>Importance samples per ray (the hierarchical sampler only).</summary>
     public int ImportanceSamples { get; set; } = 64;
 
-    /// <summary>Hierarchical up-sampling rounds.</summary>
+    /// <summary>Hierarchical up-sampling rounds (the hierarchical sampler only).</summary>
     public int UpSampleSteps { get; set; } = 4;
 
     /// <summary>The marching-cubes grid resolution.</summary>

@@ -23412,6 +23412,46 @@ AiDotNet.Diffusion.ThreeD.Wonder3DOptions.HashGridStartLevel.get -> int
 AiDotNet.Diffusion.ThreeD.Wonder3DOptions.HashGridStartLevel.set -> void
 AiDotNet.Diffusion.ThreeD.Wonder3DOptions.HashGridUpdateIterations.get -> int
 AiDotNet.Diffusion.ThreeD.Wonder3DOptions.HashGridUpdateIterations.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ColorNetwork.get -> AiDotNet.Enums.NeuSColorNetwork
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ColorNetwork.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.TextureUsesViewDirection.get -> bool
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.TextureUsesViewDirection.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.TextureShDegree.get -> int
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.TextureShDegree.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.GradientMode.get -> AiDotNet.Enums.NeuSGradientMode
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.GradientMode.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.FiniteDifferenceStep.get -> AiDotNet.Enums.NeuSFiniteDifferenceStep
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.FiniteDifferenceStep.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.FiniteDifferenceEpsilon.get -> double
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.FiniteDifferenceEpsilon.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.RaySampler.get -> AiDotNet.Enums.NeuSRaySampler
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.RaySampler.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.SceneRadius.get -> double
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.SceneRadius.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.OccupancyGridResolution.get -> int
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.OccupancyGridResolution.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.OccupancyGridUpdateInterval.get -> int
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.OccupancyGridUpdateInterval.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.OccupancyGridThreshold.get -> double
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.OccupancyGridThreshold.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.OccupancyGridEmaDecay.get -> double
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.OccupancyGridEmaDecay.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.OccupancyGridWarmUpIterations.get -> int
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.OccupancyGridWarmUpIterations.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.TransmittanceEarlyStop.get -> double
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.TransmittanceEarlyStop.set -> void
+AiDotNet.Enums.NeuSGradientMode
+AiDotNet.Enums.NeuSGradientMode.Analytic = 0 -> AiDotNet.Enums.NeuSGradientMode
+AiDotNet.Enums.NeuSGradientMode.FiniteDifference = 1 -> AiDotNet.Enums.NeuSGradientMode
+AiDotNet.Enums.NeuSFiniteDifferenceStep
+AiDotNet.Enums.NeuSFiniteDifferenceStep.Fixed = 0 -> AiDotNet.Enums.NeuSFiniteDifferenceStep
+AiDotNet.Enums.NeuSFiniteDifferenceStep.Progressive = 1 -> AiDotNet.Enums.NeuSFiniteDifferenceStep
+AiDotNet.Enums.NeuSRaySampler
+AiDotNet.Enums.NeuSRaySampler.Hierarchical = 0 -> AiDotNet.Enums.NeuSRaySampler
+AiDotNet.Enums.NeuSRaySampler.OccupancyGrid = 1 -> AiDotNet.Enums.NeuSRaySampler
+AiDotNet.Enums.NeuSColorNetwork
+AiDotNet.Enums.NeuSColorNetwork.Idr = 0 -> AiDotNet.Enums.NeuSColorNetwork
+AiDotNet.Enums.NeuSColorNetwork.VolumeRadiance = 1 -> AiDotNet.Enums.NeuSColorNetwork
 AiDotNet.Diffusion.Schedulers.SchedulerConfig<T>.TimestepSpacing.get -> AiDotNet.Enums.TimestepSpacing
 AiDotNet.Diffusion.Schedulers.SchedulerConfig<T>.TimestepSpacing.init -> void
 AiDotNet.Diffusion.Schedulers.SchedulerConfig<T>.StepsOffset.get -> int

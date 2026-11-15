@@ -37,11 +37,12 @@ namespace AiDotNet.Diffusion.ThreeD;
 /// </para>
 /// <para>
 /// <b>Geometry-aware normal fusion.</b> The views are orthographic, so the reconstruction fits NeuS to them with
-/// orthographic rays, on instant-nsr-pl's SDF: a progressive multiresolution hash grid into a small MLP, trained with
-/// AdamW, a constant-then-exponential schedule and a dynamic ray batch. The generated normal maps (in the front camera's frame) are rotated to world space and
-/// supervise the rendered normals with Wonder3D's geometry-aware, outlier-dropping normal loss, alongside its color,
-/// mask, Eikonal, sparsity and smoothness terms; the zero level set is meshed with marching cubes and colored by the
-/// NeuS color network.
+/// orthographic rays, as instant-nsr-pl does: a progressive multiresolution hash grid into a small MLP with
+/// finite-difference gradients on a coarse-to-fine step, the VolumeRadiance color network, nerfacc-style ray marching
+/// pruned by an occupancy grid, AdamW on a constant-then-exponential schedule and a dynamic ray batch. The generated
+/// normal maps (in the front camera's frame) are rotated to world space and supervise the rendered normals with
+/// Wonder3D's geometry-aware, outlier-dropping normal loss, alongside its color, mask, Eikonal, sparsity and smoothness
+/// terms; the zero level set is meshed with marching cubes and colored by the color network.
 /// </para>
 /// <para>
 /// <b>Weights.</b> The architecture is the released one, but meaningful views need the released weights
@@ -534,9 +535,28 @@ public partial class Wonder3DModel<T> : ThreeDDiffusionModelBase<T>
             SdfFeatureDim = o.SdfFeatureDim,
             SdfSkipLayers = Array.Empty<int>(),
             InitialVariance = o.InitialVariance,
+            // geometry grad_type / finite_difference_eps.
+            GradientMode = o.GradientMode,
+            FiniteDifferenceStep = o.FiniteDifferenceStep,
+            FiniteDifferenceEpsilon = o.FiniteDifferenceEpsilon,
+            // texture: volume-radiance (color_activation sigmoid).
+            RenderingMode = o.ColorNetwork == NeuSColorNetwork.VolumeRadiance ? NeuSRenderingMode.VolumeRadiance : NeuSRenderingMode.Idr,
+            RadianceUsesViewDirection = o.TextureUsesViewDirection,
+            RadianceShDegree = o.TextureShDegree,
+            SqueezeColor = true,
             ColorHiddenDim = o.ColorHiddenDim,
             ColorHiddenLayers = o.ColorHiddenLayers,
             ViewFrequencies = o.ViewFrequencies,
+            // nerfacc ray marching through [-radius, radius]^3 with the occupancy grid (grid_prune).
+            Sampler = o.RaySampler,
+            SceneRadius = o.SceneRadius,
+            UseOccupancyGrid = true,
+            OccupancyGridResolution = o.OccupancyGridResolution,
+            OccupancyGridUpdateInterval = o.OccupancyGridUpdateInterval,
+            OccupancyGridThreshold = o.OccupancyGridThreshold,
+            OccupancyGridEmaDecay = o.OccupancyGridEmaDecay,
+            OccupancyGridWarmUpIterations = o.OccupancyGridWarmUpIterations,
+            TransmittanceEarlyStop = o.TransmittanceEarlyStop,
             Samples = o.RaySamples,
             ImportanceSamples = o.ImportanceSamples,
             UpSampleSteps = o.UpSampleSteps,
