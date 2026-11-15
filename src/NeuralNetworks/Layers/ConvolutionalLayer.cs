@@ -1655,16 +1655,21 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
                 // now pass this guard without sacrificing deterministic serialize/replay behavior.
                 var referenceOnce = Reference();
                 var optimizedOnce = Optimized();
-                _optimizedMatchesReference = BitwiseEquals(referenceOnce, optimizedOnce);
+                // Local until final: the cached verdict belongs to _optimizedVerifiedForShape, which may be another
+                // shape while this one is still being probed.
+                bool matchesReference = BitwiseEquals(referenceOnce, optimizedOnce);
                 if (_optimizedVerifyingShape is null || !ShapeMatches(_optimizedVerifyingShape, input4D))
                 {
                     _optimizedVerifyingShape = ShapeSnapshot(input4D);
                     _optimizedMismatchProbes = 0;
                 }
                 // A match is final; a mismatch is final only once it has repeated (see _optimizedMismatchProbes).
-                if (_optimizedMatchesReference || ++_optimizedMismatchProbes >= MaxVerificationProbes)
+                if (matchesReference || ++_optimizedMismatchProbes >= MaxVerificationProbes)
+                {
                     _optimizedVerifiedForShape = ShapeSnapshot(input4D);
-                useOptimized = _optimizedMatchesReference;
+                    _optimizedMatchesReference = matchesReference;
+                }
+                useOptimized = matchesReference;
                 // TensorAllocator may have obtained either candidate from the active TensorArena's
                 // wrapper ring. Do not Dispose the losing probe here: the arena retains that wrapper
                 // and reissues it after the next training-step Reset, and a disposed wrapper then
@@ -1672,7 +1677,7 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
                 // candidate has no escaping reference and is reclaimed normally outside an arena;
                 // inside an arena its backing storage is intentionally owned and recycled by the
                 // arena itself.
-                decided = _optimizedMatchesReference ? optimizedOnce : referenceOnce;
+                decided = matchesReference ? optimizedOnce : referenceOnce;
             }
 
             result = decided ?? (useOptimized ? Optimized() : Reference());
