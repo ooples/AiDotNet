@@ -58,7 +58,8 @@ public class MultiTaskEvaluationHarness<T>
         Guard.NotNull(model);
         Guard.NotNull(testPairs);
 
-        T totalMse = NumOps.Zero, totalMae = NumOps.Zero;
+        // Accumulated in double: a Half total of squared (or absolute) errors passes 65504 long before the mean does.
+        double totalMse = 0.0, totalMae = 0.0;
         int totalPoints = 0;
 
         foreach (var (context, target) in testPairs)
@@ -71,22 +72,21 @@ public class MultiTaskEvaluationHarness<T>
 
             using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
             var diff = Engine.TensorSubtract(FlatPrefix(prediction, evalLen), FlatPrefix(target, evalLen));
-            totalMse = NumOps.Add(totalMse, TensorReductionHelper.SumOfSquares(Engine, diff));
-            totalMae = NumOps.Add(totalMae, Engine.TensorSum(Engine.TensorAbs(diff)));
+            totalMse += TensorReductionHelper.SumOfSquaresAsDouble(Engine, diff);
+            totalMae += NumOps.ToDouble(Engine.TensorSum(Engine.TensorAbs(diff)));
             totalPoints += evalLen;
         }
 
         if (totalPoints == 0)
             return new Dictionary<string, T> { ["MSE"] = NaN, ["MAE"] = NaN };
 
-        T mse = NumOps.Divide(totalMse, NumOps.FromDouble(totalPoints));
-        T mae = NumOps.Divide(totalMae, NumOps.FromDouble(totalPoints));
+        double mse = totalMse / totalPoints;
 
         return new Dictionary<string, T>
         {
-            ["MSE"] = mse,
-            ["MAE"] = mae,
-            ["RMSE"] = NumOps.Sqrt(mse),
+            ["MSE"] = NumOps.FromDouble(mse),
+            ["MAE"] = NumOps.FromDouble(totalMae / totalPoints),
+            ["RMSE"] = NumOps.FromDouble(Math.Sqrt(mse)),
             ["NumSamples"] = NumOps.FromDouble(testPairs.Count),
             ["NumPoints"] = NumOps.FromDouble(totalPoints)
         };

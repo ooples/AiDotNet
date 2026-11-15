@@ -85,8 +85,9 @@ public static class BootstrapConfidenceInterval<T>
         var engine = AiDotNetEngine.Current;
         var values = Tensor<T>.FromVector(sample);
         T mean = engine.TensorMean(values);
-        T sse = TensorReductionHelper.SumOfSquares(engine, engine.TensorSubtractScalar(values, mean));
-        T std = NumOps.Sqrt(NumOps.Divide(sse, NumOps.FromDouble(n - 1)));
+        // The deviations' sum of squares in double, so a Half sum past 65504 does not make the deviation infinite.
+        double sse = TensorReductionHelper.SumOfSquaresAsDouble(engine, engine.TensorSubtractScalar(values, mean));
+        T std = NumOps.FromDouble(Math.Sqrt(sse / (n - 1)));
         return NumOps.GreaterThan(std, NumOps.Zero) ? NumOps.Divide(mean, std) : NumOps.Zero;
     }
 

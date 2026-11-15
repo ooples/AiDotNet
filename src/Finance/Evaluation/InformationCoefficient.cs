@@ -78,10 +78,11 @@ public static class InformationCoefficient<T>
         var engine = AiDotNetEngine.Current;
         var ics = ToTensor(perPeriodIcs);
         T mean = engine.TensorMean(ics);
-        T sse = TensorReductionHelper.SumOfSquares(engine, engine.TensorSubtractScalar(ics, mean));
+        // Summed in double, so a Half sum of squares past 65504 does not make the deviation infinite.
+        double sse = TensorReductionHelper.SumOfSquaresAsDouble(engine, engine.TensorSubtractScalar(ics, mean));
 
         // Sample standard deviation (n-1), consistent with the rest of the Finance utilities.
-        T std = NumOps.Sqrt(NumOps.Divide(sse, NumOps.FromDouble(periods - 1)));
+        T std = NumOps.FromDouble(Math.Sqrt(sse / (periods - 1)));
         T icir = NumOps.GreaterThan(std, NumOps.Zero)
             ? NumOps.Multiply(NumOps.Divide(mean, std), NumOps.Sqrt(NumOps.FromDouble(periods)))
             : NumOps.Zero;
@@ -111,13 +112,14 @@ public static class InformationCoefficient<T>
         var engine = AiDotNetEngine.Current;
         var xs = n == x.Length ? x : engine.TensorSlice(x, new[] { 0 }, new[] { n });
         var ys = n == y.Length ? y : engine.TensorSlice(y, new[] { 0 }, new[] { n });
-        var dx = engine.TensorSubtractScalar(xs, engine.TensorMean(xs));
-        var dy = engine.TensorSubtractScalar(ys, engine.TensorMean(ys));
+        var dx = ScaleForCorrelation(engine, engine.TensorSubtractScalar(xs, engine.TensorMean(xs)), n);
+        var dy = ScaleForCorrelation(engine, engine.TensorSubtractScalar(ys, engine.TensorMean(ys)), n);
         T sxy = engine.TensorSum(engine.TensorMultiply(dx, dy));
         T sxx = TensorReductionHelper.SumOfSquares(engine, dx);
         T syy = TensorReductionHelper.SumOfSquares(engine, dy);
 
-        T denom = NumOps.Sqrt(NumOps.Multiply(sxx, syy));
+        // sqrt(sxx) * sqrt(syy), not sqrt(sxx * syy): the product of two sums can overflow where neither does.
+        T denom = NumOps.Multiply(NumOps.Sqrt(sxx), NumOps.Sqrt(syy));
         if (NumOps.LessThanOrEquals(denom, NumOps.Zero))
         {
             return NumOps.Zero;
@@ -132,6 +134,25 @@ public static class InformationCoefficient<T>
         }
 
         return NumOps.GreaterThan(r, NumOps.One) ? NumOps.One : r;
+    }
+
+    /// <summary>
+    /// <paramref name="deviations"/> divided by max |d| * sqrt(n). Correlation is invariant to a positive rescaling of
+    /// either series, and after it every product and every sum of products is at most 1 in magnitude, so none of them
+    /// can overflow <typeparamref name="T"/>. Unscaled, the Spearman ranks of 200 Half values have deviations up to
+    /// 100 and a sum of squares near 6.7e5, past Half's 65504: the correlation came back as 0.
+    /// </summary>
+    private static Tensor<T> ScaleForCorrelation(IEngine engine, Tensor<T> deviations, int n)
+    {
+        T maxAbs = engine.TensorMaxValue(engine.TensorAbs(deviations));
+        if (!NumOps.GreaterThan(maxAbs, NumOps.Zero) || NumOps.IsInfinity(maxAbs))
+        {
+            // Zero spread (the correlation is 0 either way), NaN or an infinite deviation: leave it as it is.
+            return deviations;
+        }
+
+        return engine.TensorDivideScalar(
+            engine.TensorDivideScalar(deviations, maxAbs), NumOps.FromDouble(Math.Sqrt(n)));
     }
 
     /// <summary>Tie-averaged ("fractional") ranks of a sample, 1-based.</summary>

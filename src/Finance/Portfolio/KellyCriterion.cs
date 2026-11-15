@@ -111,9 +111,10 @@ public class KellyCriterion<T> : IPositionSizer<T>
         var sum = engine.TensorSum(values);
 
         var mean = NumOps.Divide(sum, NumOps.FromDouble(count));
-        var sse = TensorReductionHelper.SumOfSquares(engine, engine.TensorSubtractScalar(values, mean));
+        // The variance in double, so a Half sum of squares past 65504 does not make it infinite and the fraction 0.
+        double sse = TensorReductionHelper.SumOfSquaresAsDouble(engine, engine.TensorSubtractScalar(values, mean));
 
-        var variance = NumOps.Divide(sse, NumOps.FromDouble(count));
+        var variance = NumOps.FromDouble(sse / count);
         return Fractional(Continuous(mean, variance), fraction);
     }
 }

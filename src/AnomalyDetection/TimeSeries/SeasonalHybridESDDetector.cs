@@ -255,7 +255,8 @@ public partial class SeasonalHybridESDDetector<T> : AnomalyDetectorBase<T>
         T floor = NumOps.FromDouble(1e-10);
         if (NumOps.LessThan(residualStd, floor))
         {
-            residualStd = NumOps.Sqrt(NumOps.Divide(TensorReductionHelper.SumOfSquares(engine, residuals), NumOps.FromDouble(n)));
+            // The root-mean-square residual, summed in double so a Half sum past 65504 does not make it infinite.
+            residualStd = NumOps.FromDouble(Math.Sqrt(TensorReductionHelper.SumOfSquaresAsDouble(engine, residuals) / n));
         }
         if (NumOps.LessThan(residualStd, floor)) residualStd = floor;
         _residualStd = residualStd;

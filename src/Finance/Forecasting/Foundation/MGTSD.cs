@@ -590,17 +590,17 @@ public partial class MGTSD<T> : TimeSeriesFoundationModelBase<T>
     {
         int len = Math.Max(1, input.Length);
         T mean = NumOps.Zero;
-        T variance = NumOps.Zero;
+        double sumSquares = 0.0;
         if (input.Length > 0)
         {
-            // Whole-series mean and population variance.
+            // Whole-series mean and population variance, the sum of squares in double so a Half sum past 65504
+            // does not make the std infinite.
             using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
             var flat = Engine.Reshape(input.Contiguous(), new[] { input.Length });
             mean = NumOps.Divide(Engine.TensorSum(flat), NumOps.FromDouble(len));
-            variance = TensorReductionHelper.SumOfSquares(Engine, Engine.TensorSubtractScalar(flat, mean));
+            sumSquares = TensorReductionHelper.SumOfSquaresAsDouble(Engine, Engine.TensorSubtractScalar(flat, mean));
         }
-        variance = NumOps.Divide(variance, NumOps.FromDouble(len));
-        T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
+        T std = NumOps.FromDouble(Math.Sqrt(sumSquares / len + 1e-5));
         return (mean, std);
     }
 
