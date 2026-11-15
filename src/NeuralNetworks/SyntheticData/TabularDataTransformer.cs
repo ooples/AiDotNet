@@ -409,16 +409,17 @@ public class TabularDataTransformer<T> : IModelSerializer
         int k = Math.Min(_vgmModes, Math.Max(1, n / 5));
         int[] grid = { n, k };
 
-        Array.Sort(values);
+        // Fit in bounded units to keep squared values finite for narrow element types.
+        T scale = MathHelper.Max(NumOps.Abs(engine.TensorMinValue(x)), NumOps.Abs(engine.TensorMaxValue(x)));
+        if (!NumOps.GreaterThan(scale, NumOps.Zero)) scale = NumOps.One;
+        x = engine.TensorDivideScalar(x, scale);
+        var values = x.Cast<double>().ToArray();
+        var order = Enumerable.Range(0, n).ToArray();
+        Array.Sort(values, order);
+        x = engine.TensorIndexSelect(x, new Tensor<int>(order, new[] { n }), 0);
 
         // Divided by scale twice rather than by scale squared, which itself overflows float at 1e20.
         T VarianceInScaledUnits(double floor) => NumOps.Divide(NumOps.Divide(NumOps.FromDouble(floor), scale), scale);
-
-        T valMin = engine.TensorMinValue(x);
-        T valMax = engine.TensorMaxValue(x);
-        T range = NumOps.Subtract(valMax, valMin);
-        if (NumOps.LessThan(range, NumOps.Divide(NumOps.FromDouble(1e-10), scale)))
-            range = NumOps.Divide(NumOps.One, scale);
 
         T dataMean = engine.TensorMean(x);
         var centered = engine.TensorSubtractScalar(x, dataMean);
@@ -439,42 +440,30 @@ public class TabularDataTransformer<T> : IModelSerializer
         T halfLogTwoPi = NumOps.FromDouble(0.5 * Math.Log(2 * Math.PI));
         T massFloor = NumOps.FromDouble(1e-12);
         T rateFloor = VarianceInScaledUnits(1e-10);   // floors b_k and b_k/a_k, both variances
-        T perMode = NumOps.FromDouble((double)n / k);
 
         // Posterior parameters, initialized from a hard k-means partition of the column (sklearn's
         // BayesianGaussianMixture default, init_params="kmeans", which the official CTGAN transformer uses):
         // the variational M-step is run once on those one-hot responsibilities. Spreading the means over the
         // range with every component given the whole column's variance instead made each component cover both
-        // clusters of a bimodal column, and the components then converged together onto its centre: two spikes
-        // at 0 and 1 were fitted as two identical modes at 0.5.
-        var alpha = new double[k];
-        var betap = new double[k];
-        var mp = new double[k];
-        var ap = new double[k];
-        var bp = new double[k];
+        // clusters of a bimodal column, and the components then converged together onto its centre.
+        var alpha = new Tensor<T>(new[] { k });
+        var betap = new Tensor<T>(new[] { k });
+        var mp = new Tensor<T>(new[] { k });
+        var ap = new Tensor<T>(new[] { k });
+        var bp = new Tensor<T>(new[] { k });
         var assignment = KMeansPartition(values, k);
-        for (int m = 0; m < k; m++)
-        {
-            double Nk = 0, xbar = 0;
-            for (int i = 0; i < n; i++) if (assignment[i] == m) { Nk += 1; xbar += values[i]; }
-            if (Nk > 0) xbar /= Nk;
-            double sk = 0;
-            for (int i = 0; i < n; i++) if (assignment[i] == m) { double d = values[i] - xbar; sk += d * d; }
-            if (Nk > 0) sk /= Nk;
-
-            alpha[m] = alpha0 + Nk;
-            betap[m] = beta0 + Nk;
-            mp[m] = (beta0 * m0 + Nk * xbar) / betap[m];
-            ap[m] = a0 + 0.5 * Nk;
-            bp[m] = b0 + 0.5 * (Nk * sk + beta0 * Nk * (xbar - m0) * (xbar - m0) / betap[m]);
-            if (bp[m] < 1e-10) bp[m] = 1e-10;
-        }
+        var r = new Tensor<T>(grid);
+        var responsibilities = r.AsWritableSpan();
+        for (int i = 0; i < n; i++) responsibilities[i * k + assignment[i]] = NumOps.One;
 
         var xGrid = Expand(x.Reshape(new[] { n, 1 }), grid);
         var ones = Tensor<T>.CreateDefault(new[] { k }, NumOps.One);
         const int maxIter = 100;
-        for (int iter = 0; iter < maxIter; iter++)
+        // First initialize the posterior from the hard partition, then run the VB iterations.
+        for (int iter = -1; iter < maxIter; iter++)
         {
+            if (iter >= 0)
+            {
             // --- Variational E-step: responsibilities from expected log-likelihoods.
             var psiAlphaSum = engine.TensorDigamma(engine.ReduceSum(alpha, new[] { 0 }, true));
             var eLnPi = engine.TensorSubtract(engine.TensorDigamma(alpha), Expand(psiAlphaSum, new[] { k }));   // E[ln π_k]
@@ -489,7 +478,8 @@ public class TabularDataTransformer<T> : IModelSerializer
                 engine.TensorAdd(eLnPi, engine.TensorMultiplyScalar(eLnTau, half)), halfLogTwoPi);
             var logRho = engine.TensorAdd(Row(componentTerm, grid), engine.TensorMultiplyScalar(eTauSq, negHalf));
             // log-sum-exp normalize
-            var r = engine.Softmax(logRho, 1);
+            r = engine.Softmax(logRho, 1);
+            }
 
             // --- Variational M-step: update posteriors from sufficient statistics.
             var nk = engine.ReduceSum(r, new[] { 0 }, false);

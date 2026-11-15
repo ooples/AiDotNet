@@ -673,21 +673,21 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
     /// </remarks>
     private Tensor<T> MultiresolutionHashEncoding(Tensor<T> positions)
     {
-        // Prepare hash tables array and resolutions for Engine operation
+        // Preserve the fractional level growth; the engine derives each grid's scale and vertex count.
         var hashTablesArray = new Tensor<T>[_numLevels];
-        var resolutions = new int[_numLevels];
-
         for (int level = 0; level < _numLevels; level++)
         {
             hashTablesArray[level] = _hashTables[level];
-            resolutions[level] = GetLevelResolution(level);
         }
 
         // Normalize positions to [0, 1] range before encoding
         var normalizedPositions = NormalizePositionsToUnit(positions);
 
         // Use vectorized Engine implementation for CPU/GPU acceleration
-        var features = Engine.MultiresolutionHashEncoding(normalizedPositions, hashTablesArray, resolutions, _featuresPerLevel);
+        int baseResolution = _numLevels == 1 ? _finestResolution : _coarsestResolution;
+        double perLevelScale = HashGridPerLevelScale;
+        var features = Engine.MultiresolutionHashEncoding(
+            normalizedPositions, hashTablesArray, baseResolution, perLevelScale, _featuresPerLevel);
 
         // The engine op is not tape-recorded, so without this no loss gradient reaches the tables, which
         // are Instant-NGP's main parameters (Müller et al. 2022, Sec. 3). Route the feature gradient to
@@ -700,7 +700,7 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
             (gradOutput, inputs, _, _, engine, grads) =>
             {
                 var tableGradients = engine.MultiresolutionHashEncodingBackward(
-                    normalizedPositions, inputs, resolutions, featuresPerLevel, gradOutput);
+                    normalizedPositions, inputs, baseResolution, perLevelScale, featuresPerLevel, gradOutput);
                 for (int level = 0; level < inputs.Length; level++)
                 {
                     AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps.AccumulateGrad(
@@ -1148,17 +1148,9 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
         return value;
     }
 
-    private int GetLevelResolution(int level)
-    {
-        if (_numLevels <= 1)
-        {
-            return _finestResolution;
-        }
-
-        double scale = Math.Exp(level * Math.Log((double)_finestResolution / _coarsestResolution) / (_numLevels - 1));
-        int resolution = (int)Math.Floor(_coarsestResolution * scale);
-        return Math.Max(1, resolution);
-    }
+    private double HashGridPerLevelScale => _numLevels <= 1
+        ? 1.0
+        : Math.Pow((double)_finestResolution / _coarsestResolution, 1.0 / (_numLevels - 1));
 
     private static int GetBitfieldLength(int cellCount)
     {
