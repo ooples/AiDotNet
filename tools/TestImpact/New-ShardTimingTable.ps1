@@ -33,7 +33,7 @@ param(
     [Parameter(ParameterSetName = 'Online')] [string] $Workflow = 'sonarcloud.yml',
     [Parameter(ParameterSetName = 'Online')] [ValidateRange(1, 20)] [int] $MaxLedgers = 5,
     [Parameter(ParameterSetName = 'Online')] [ValidateRange(0, 20)] [int] $MaxInstrumentedLedgers = 2,
-    [Parameter(ParameterSetName = 'Online')] [ValidateRange(1, 500)] [int] $MaxRunsScanned = 150,
+    [Parameter(ParameterSetName = 'Online')] [ValidateRange(1, 1000)] [int] $MaxRunsScanned = 400,
     [Parameter(ParameterSetName = 'Online')] [string] $WorkDirectory = '',
     [Parameter(Mandatory, ParameterSetName = 'Offline')] [string] $SourcesFile,
     [string] $OutFile = 'shard-timing-table.json',
@@ -76,10 +76,13 @@ else {
     $instrumented = 0
     foreach ($run in @($runsJson | ConvertFrom-Json)) {
         if ($plain -ge $MaxLedgers -and $instrumented -ge $MaxInstrumentedLedgers) { break }
-        # A cancelled run was superseded before its regression analysis ran; it has no ledger to offer.
-        if ([string] $run.conclusion -cnotin @('success', 'failure')) { continue }
         $isPlain = [string] $run.event -cin $script:ShardPackEvents
         if (-not $isPlain -and [string] $run.event -cnotin @('push', 'schedule')) { continue }
+        # A cancelled pull request run was superseded before its regression analysis ran; it has no ledger to
+        # offer, and there are too many of them to ask each one. A push or scheduled run is asked whatever became
+        # of it: the nightly usually ends cancelled after publishing its ledger, and a shard that did not finish
+        # is left out of an observation anyway.
+        if ($isPlain -and [string] $run.conclusion -cnotin @('success', 'failure')) { continue }
         if ($isPlain -and $plain -ge $MaxLedgers) { continue }
         if (-not $isPlain -and $instrumented -ge $MaxInstrumentedLedgers) { continue }
 
