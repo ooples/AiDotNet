@@ -58,7 +58,7 @@ public class TrainWithCustomLossOptimizerSessionTests
         var original = TensorCodecOptions.Current;
         try
         {
-            Vector<double> Run(bool compile, Vector<double> start)
+            (Vector<double> Parameters, int FusedSteps) Run(bool compile, Vector<double> start)
             {
                 TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = compile });
                 CompiledTapeTrainingStep<double>.Invalidate();
@@ -77,7 +77,7 @@ public class TrainWithCustomLossOptimizerSessionTests
                         return engine.ReduceMean(engine.TensorMultiply(diff, diff), new[] { 0, 1 }, keepDims: false);
                     }, optimizers[step % 2]);
                 }
-                return network.GetParameters();
+                return (network.GetParameters(), network.CustomFusedStepCount);
             }
 
             Vector<double> start;
@@ -89,8 +89,11 @@ public class TrainWithCustomLossOptimizerSessionTests
 
             var eager = Run(compile: false, start);
             var compiled = Run(compile: true, start);
-            for (int i = 0; i < eager.Length; i++)
-                AssertClose(eager[i], compiled[i], $"parameter {i}");
+            // Without this the parity below would also hold for a run that fell back to the eager tape every step.
+            Assert.Equal(0, eager.FusedSteps);
+            Assert.Equal(8, compiled.FusedSteps);
+            for (int i = 0; i < eager.Parameters.Length; i++)
+                AssertClose(eager.Parameters[i], compiled.Parameters[i], $"parameter {i}");
         }
         finally
         {

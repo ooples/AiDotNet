@@ -161,6 +161,8 @@ internal sealed class ClosureObjectiveState<T>
                     catch (Exception ex) when (ex is ObjectDisposedException || ex is InvalidOperationException || ex is ArgumentException)
                     {
                         // The caller disposed the tensor during the step: there is nothing left to give back.
+                        System.Diagnostics.Trace.TraceWarning(
+                            $"Closure objective leaf {i} was not restored after the step ({ex.GetType().Name}: {ex.Message}).");
                     }
                 }
             }
