@@ -518,8 +518,15 @@ public class MVDreamArchitectureTests
         Assert.Contains("model.diffusion_model.output_blocks.11.1.norm.weight", names);
         Assert.Contains("model.diffusion_model.camera_embed.2.bias", names);
         Assert.Contains("model.diffusion_model.image_embed.latents", names);
-        Assert.DoesNotContain(names, n => n.StartsWith("model.diffusion_model.input_blocks.3.", StringComparison.Ordinal));
-        Assert.DoesNotContain(names, n => n.StartsWith("model.diffusion_model.output_blocks.2.", StringComparison.Ordinal));
+        // The whole LDM U-Net loads (openaimodel.py names): residual blocks, the op downsamplers, the conv
+        // upsamplers (.1 after a level without attention, .2 after one with it), time_embed and out.
+        Assert.Contains("model.diffusion_model.input_blocks.3.0.op.weight", names);
+        Assert.Contains("model.diffusion_model.input_blocks.4.0.skip_connection.weight", names);
+        Assert.Contains("model.diffusion_model.output_blocks.2.1.conv.weight", names);
+        Assert.Contains("model.diffusion_model.output_blocks.5.2.conv.bias", names);
+        Assert.Contains("model.diffusion_model.time_embed.2.weight", names);
+        Assert.Contains("model.diffusion_model.out.0.weight", names);
+        Assert.Equal(names.Count, names.Distinct().Count());
 
         var vae = new StandardVAE<double>(inputChannels: 3, latentChannels: 4, baseChannels: 16,
             channelMultipliers: new[] { 1, 2 }, numResBlocksPerLevel: 1, seed: seed);
