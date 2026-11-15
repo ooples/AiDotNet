@@ -24027,3 +24027,14 @@ AiDotNet.NeuralNetworks.ClipVisionEncoder<T>.LoadTorchWeights(System.Func<string
 AiDotNet.NeuralNetworks.ClipVisionEncoder<T>.ParameterCount.get -> long
 AiDotNet.NeuralNetworks.ClipVisionEncoder<T>.GetParameters() -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
 AiDotNet.NeuralNetworks.ClipVisionEncoder<T>.SetParameters(AiDotNet.Tensors.LinearAlgebra.Vector<T>! parameters) -> void
+AiDotNet.Enums.SpatialTransformerProjection
+AiDotNet.Enums.SpatialTransformerProjection.Convolution = 1 -> AiDotNet.Enums.SpatialTransformerProjection
+AiDotNet.Enums.SpatialTransformerProjection.Linear = 0 -> AiDotNet.Enums.SpatialTransformerProjection
+AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions.HeadCount.get -> int
+AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions.HeadCount.set -> void
+AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions.Projection.get -> AiDotNet.Enums.SpatialTransformerProjection
+AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions.Projection.set -> void
+static AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions.StableDiffusion1() -> AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions!
+static AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions.StableDiffusion2() -> AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions!
+AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<T>.LoadTorchWeights(System.Collections.Generic.IReadOnlyDictionary<string!, AiDotNet.Tensors.LinearAlgebra.Tensor<float>!>! state, string! prefix = "model.diffusion_model.", bool allowPartial = false) -> System.Collections.Generic.IReadOnlyList<string!>!
+AiDotNet.Diffusion.ThreeD.MultiViewUNet<T>.LoadTorchWeights(System.Collections.Generic.IReadOnlyDictionary<string!, AiDotNet.Tensors.LinearAlgebra.Tensor<float>!>! state, string! prefix = "model.diffusion_model.", bool allowPartial = false) -> System.Collections.Generic.IReadOnlyCollection<string!>!

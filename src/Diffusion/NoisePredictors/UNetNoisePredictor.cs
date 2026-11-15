@@ -99,6 +99,11 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
     private ConvolutionalLayer<T>? _outputConv;
 
     /// <summary>
+    /// GroupNorm before the output convolution (LDM <c>out.0</c>; SiLU is <c>out.1</c>).
+    /// </summary>
+    private GroupNormalizationLayer<T>? _outputNorm;
+
+    /// <summary>
     /// Time embedding MLP.
     /// </summary>
     private DenseLayer<T>? _timeEmbedMlp1;
@@ -316,7 +321,7 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
             hasCustomBlocks ? decoderBlocks : null);
     }
 
-    [MemberNotNull(nameof(_inputConv), nameof(_outputConv), nameof(_timeEmbedMlp1), nameof(_timeEmbedMlp2))]
+    [MemberNotNull(nameof(_inputConv), nameof(_outputConv), nameof(_outputNorm), nameof(_timeEmbedMlp1), nameof(_timeEmbedMlp2))]
     private void EnsureLayersInitialized()
     {
         if (!_layersInitialized)
@@ -324,7 +329,7 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
             InitializeLayers(_architecture, null, null, null);
         }
 
-        if (_inputConv is null || _outputConv is null || _timeEmbedMlp1 is null || _timeEmbedMlp2 is null)
+        if (_inputConv is null || _outputConv is null || _outputNorm is null || _timeEmbedMlp1 is null || _timeEmbedMlp2 is null)
         {
             throw new InvalidOperationException("U-Net layer initialization completed without required projection layers.");
         }
@@ -371,6 +376,10 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
             _baseChannels, _timeEmbeddingDim, new SiLUActivation<T>());
         _timeEmbedMlp2 = LazyDense(
             _timeEmbeddingDim, _timeEmbeddingDim, new IdentityActivation<T>());
+        // LDM's out head (openaimodel.py): GroupNorm(32) -> SiLU -> zero-initialised conv3x3.
+        int outputNormChannels = _baseChannels * _channelMultipliers[0];
+        _outputNorm = new GroupNormalizationLayer<T>(
+            DiffusionResBlock<T>.ComputeNumGroups(outputNormChannels, 32), outputNormChannels, 1e-5);
         // The output conv starts at zero, as in Ho et al. (init_scale=0.) and LDM (zero_module): an untrained
         // predictor predicts zero noise instead of a random field, which is the MSE-optimal start.
         _outputConv = ConvolutionalLayer<T>.WithInputDepth(
@@ -935,7 +944,7 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
             }
         }
 
-        x = _outputConv.Forward(x);
+        x = _outputConv.Forward(ApplyOutputNorm(x));
         return (x, skips);
     }
 
@@ -1069,8 +1078,8 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
             }
         }
 
-        // Output convolution
-        x = _outputConv.Forward(x);
+        // Output head: GroupNorm -> SiLU -> convolution (LDM out.0 / out.1 / out.2)
+        x = _outputConv.Forward(ApplyOutputNorm(x));
         Tick("output_conv");
 
         return x;
@@ -1356,15 +1365,16 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
     private ILayer<T> CreateUpsample(int channels, int spatialSize)
     {
-        // spatialSize here is the current (smaller) spatial size before upsampling.
-        // Fully lazy: shape resolved by the predictor's shape-only forward.
-        return DeconvolutionalLayer<T>.WithInputDepth(
-            inputDepth: channels,
-            outputDepth: channels,
-            kernelSize: 4,
-            stride: 2,
-            padding: 1,
-            activationFunction: new IdentityActivation<T>());
+        // LDM's Upsample (openaimodel.py, use_conv=True): nearest x2 then a 3x3 convolution with padding 1.
+        // The convolution stays lazy until its first forward.
+        return new LdmUpsampleLayer<T>(channels);
+    }
+
+    /// <summary>The output head's GroupNorm and SiLU (LDM <c>out.0</c>, <c>out.1</c>).</summary>
+    private Tensor<T> ApplyOutputNorm(Tensor<T> x)
+    {
+        var norm = _outputNorm ?? throw new InvalidOperationException("The U-Net output norm is not initialized.");
+        return Engine.TensorSiLU(norm.Forward(x));
     }
 
     #endregion
@@ -1446,6 +1456,7 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
                 yield return layer;
         }
 
+        yield return _outputNorm;
         yield return _outputConv;
     }
 
@@ -1746,6 +1757,7 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
         for (int i = 0; i < _decoderBlocks.Count; i++)
             CollectBlockGradients(layerGrads, ref totalCount, _decoderBlocks[i]);
 
+        CollectLayerGradients(layerGrads, ref totalCount, _outputNorm);
         CollectLayerGradients(layerGrads, ref totalCount, _outputConv);
 
         var gradients = new Vector<T>(totalCount);

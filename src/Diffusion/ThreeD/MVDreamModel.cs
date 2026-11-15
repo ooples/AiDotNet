@@ -1356,6 +1356,8 @@ public class MultiViewUNet<T> : IParameterSource<T>, ICloneable<MultiViewUNet<T>
     {
         FramesPerObject = o.FramesPerObject,
         HeadChannels = o.HeadChannels,
+        HeadCount = o.HeadCount,
+        Projection = o.Projection,
         TransformerDepth = o.TransformerDepth,
         ImagePromptTokens = o.ImagePromptTokens,
         ImagePromptWeight = o.ImagePromptWeight,
@@ -1447,26 +1449,63 @@ public class MultiViewUNet<T> : IParameterSource<T>, ICloneable<MultiViewUNet<T>
     }
 
     /// <summary>
-    /// Loads the official MVDream / ImageDream weights this class owns under their state-dict names: every
-    /// <c>SpatialTransformer3D</c> (<c>{prefix}input_blocks.*.1.*</c>, <c>middle_block.1.*</c>, <c>output_blocks.*.1.*</c>),
-    /// <c>{prefix}camera_embed.{0,2}</c> and, for ImageDream, <c>{prefix}image_embed.*</c>.
+    /// Loads an official MVDream / ImageDream U-Net checkpoint: the whole LDM U-Net
+    /// (<see cref="UNetNoisePredictor{T}.LoadTorchWeights(IReadOnlyDictionary{string, Tensor{float}}, string, bool)"/>,
+    /// with every <c>SpatialTransformer3D</c> at <c>{prefix}input_blocks.*.1.*</c>, <c>middle_block.1.*</c> and
+    /// <c>output_blocks.*.1.*</c>), <c>{prefix}camera_embed.{0,2}</c> and, for ImageDream, <c>{prefix}image_embed.*</c>.
     /// </summary>
     /// <param name="read">Returns the values of the named tensor, row-major, given its name and expected shape.</param>
     /// <param name="prefix">The U-Net's state-dict prefix (<c>model.diffusion_model.</c>).</param>
     /// <returns>The names read, in order.</returns>
-    /// <remarks>
-    /// The shared U-Net's residual blocks and convolutions are not covered: its upsampler is a stride-2 transposed
-    /// convolution, where LDM's is nearest-neighbour interpolation and a 3x3 convolution, so LDM's
-    /// <c>output_blocks.*.conv</c> weights have no counterpart.
-    /// </remarks>
     public IReadOnlyCollection<string> LoadTorchWeights(Func<string, int[], double[]> read, string prefix = "model.diffusion_model.")
     {
         if (read is null) throw new ArgumentNullException(nameof(read));
-        var source = AiDotNet.ModelLoading.TorchTensorSource.From(read);
-        var names = new List<string>(_baseUNet.LoadMultiViewTransformerWeights(source, prefix));
-        names.AddRange(_cameraEmbedding.LoadTorchWeights(source, prefix + "camera_embed."));
-        if (_imageEmbed is not null)
-            names.AddRange(KlModule<T>.Load(_imageEmbed.NamedTensors(prefix + "image_embed"), read));
+        return LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read), null, prefix, allowPartial: false);
+    }
+
+    /// <summary>
+    /// Loads an official MVDream / ImageDream U-Net checkpoint from its tensors by name; see the function overload.
+    /// </summary>
+    /// <param name="state">The checkpoint tensors by name.</param>
+    /// <param name="prefix">The U-Net's state-dict prefix (<c>model.diffusion_model.</c>).</param>
+    /// <param name="allowPartial">When false (the default) a missing tensor, or a tensor under
+    /// <paramref name="prefix"/> with no module, throws; when true, modules with missing tensors keep their weights
+    /// and unknown tensors are ignored.</param>
+    /// <returns>The names read, in order.</returns>
+    public IReadOnlyCollection<string> LoadTorchWeights(IReadOnlyDictionary<string, Tensor<float>> state,
+        string prefix = "model.diffusion_model.", bool allowPartial = false)
+    {
+        if (state is null) throw new ArgumentNullException(nameof(state));
+        return LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(state), state.Keys, prefix, allowPartial);
+    }
+
+    private IReadOnlyCollection<string> LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source,
+        IEnumerable<string>? checkpointNames, string prefix, bool allowPartial)
+    {
+        if (prefix is null) throw new ArgumentNullException(nameof(prefix));
+        var cameraNames = new List<string>();
+        cameraNames.AddRange(LdmCheckpoint.Pair(prefix + "camera_embed.0"));
+        cameraNames.AddRange(LdmCheckpoint.Pair(prefix + "camera_embed.2"));
+        var imageNames = _imageEmbed is null
+            ? new List<string>()
+            : _imageEmbed.NamedTensors(prefix + "image_embed").Select(named => named.Name).ToList();
+        bool cameraPresent = cameraNames.All(source.Contains);
+        bool imagePresent = imageNames.All(source.Contains);
+        if (!allowPartial && (!cameraPresent || !imagePresent))
+        {
+            var missing = cameraNames.Concat(imageNames).First(name => !source.Contains(name));
+            throw new InvalidOperationException(
+                $"The checkpoint is missing '{missing}'. Pass allowPartial: true to load the modules that are present.");
+        }
+
+        var owned = new HashSet<string>(cameraNames.Concat(imageNames), StringComparer.Ordinal);
+        var unetNames = checkpointNames?.Where(name => !owned.Contains(name)).ToList();
+        var names = new List<string>(_baseUNet.LoadTorchWeights(source, unetNames, prefix, allowPartial));
+        if (cameraPresent)
+            names.AddRange(_cameraEmbedding.LoadTorchWeights(source, prefix + "camera_embed."));
+        if (_imageEmbed is not null && imagePresent)
+            names.AddRange(KlModule<T>.Load(_imageEmbed.NamedTensors(prefix + "image_embed"),
+                (name, shape) => source.Read(name, shape)));
         return names;
     }
 

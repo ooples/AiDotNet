@@ -37,6 +37,7 @@ internal sealed partial class MultiViewTransformerLayer<T> : LayerBase<T>
     private readonly int _headCount;
     private readonly int _framesPerObject;
     private readonly int _imageTokens;
+    private readonly SpatialTransformerProjection _projection;
 
     private readonly GroupNormalizationLayer<T> _norm;
     private readonly DenseLayer<T> _projectionIn;
@@ -102,6 +103,7 @@ internal sealed partial class MultiViewTransformerLayer<T> : LayerBase<T>
         _headCount = options.HeadsFor(channels);
         _framesPerObject = options.FramesPerObject;
         _imageTokens = contextDimension > 0 ? options.ImagePromptTokens : 0;
+        _projection = options.Projection;
 
         // LDM Normalize: GroupNorm(32, C, eps=1e-6); a width that 32 does not divide takes the largest group count
         // that does, as the shared U-Net's other norms do.
@@ -225,6 +227,44 @@ internal sealed partial class MultiViewTransformerLayer<T> : LayerBase<T>
     /// <c>transformer_blocks.{d}.{norm1, attn1, norm2, attn2, norm3, ff.net.0.proj, ff.net.2}</c> and <c>proj_out</c>.
     /// </summary>
     internal IReadOnlyList<string> LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source, string prefix)
+        => LoadTorchWeightsCore(source, prefix);
+
+    /// <summary>The names <see cref="LoadTorchWeights"/> reads under <paramref name="prefix"/>, in order.</summary>
+    internal IReadOnlyList<string> LdmTensorNames(string prefix)
+    {
+        var names = new List<string>();
+        void Attention(string name, bool decoupled)
+        {
+            names.Add(name + "to_q.weight");
+            names.Add(name + "to_k.weight");
+            names.Add(name + "to_v.weight");
+            if (decoupled)
+            {
+                names.Add(name + "to_k_ip.weight");
+                names.Add(name + "to_v_ip.weight");
+            }
+            names.Add(name + "to_out.0.weight");
+            names.Add(name + "to_out.0.bias");
+        }
+
+        names.AddRange(LdmCheckpoint.Pair(prefix + "norm"));
+        names.AddRange(LdmCheckpoint.Pair(prefix + "proj_in"));
+        for (int d = 0; d < _blocks.Count; d++)
+        {
+            string b = $"{prefix}transformer_blocks.{d}.";
+            names.AddRange(LdmCheckpoint.Pair(b + "norm1"));
+            Attention(b + "attn1.", decoupled: false);
+            names.AddRange(LdmCheckpoint.Pair(b + "norm2"));
+            Attention(b + "attn2.", _blocks[d].Attention2 is ImagePromptCrossAttentionLayer<T>);
+            names.AddRange(LdmCheckpoint.Pair(b + "norm3"));
+            names.AddRange(LdmCheckpoint.Pair(b + "ff.net.0.proj"));
+            names.AddRange(LdmCheckpoint.Pair(b + "ff.net.2"));
+        }
+        names.AddRange(LdmCheckpoint.Pair(prefix + "proj_out"));
+        return names;
+    }
+
+    private IReadOnlyList<string> LoadTorchWeightsCore(AiDotNet.ModelLoading.TorchTensorSource source, string prefix)
     {
         if (source is null) throw new ArgumentNullException(nameof(source));
         var engine = AiDotNetEngine.Current;
@@ -246,16 +286,23 @@ internal sealed partial class MultiViewTransformerLayer<T> : LayerBase<T>
             names.Add(name + ".weight");
             names.Add(name + ".bias");
         }
-        void Linear(DenseLayer<T> layer, string name, int inputs, int outputs)
+        void Linear(DenseLayer<T> layer, string name, int inputs, int outputs, int[]? weightShape = null)
         {
-            ImagePromptCrossAttentionLayer<T>.TorchParametersLinear(engine, layer, inputs, outputs, source, name + ".weight", name + ".bias");
+            if (weightShape is null)
+                ImagePromptCrossAttentionLayer<T>.TorchParametersLinear(engine, layer, inputs, outputs, source, name + ".weight", name + ".bias");
+            else
+                AiDotNet.TextToSpeech.CodecBased.TorchParameters.Linear(engine, layer, inputs, outputs, source, name + ".weight", name + ".bias", weightShape);
             names.Add(name + ".weight");
             names.Add(name + ".bias");
         }
+        // SD 1.x's proj_in / proj_out are 1x1 convolutions: the same [C, C] map stored as [C, C, 1, 1].
+        int[]? projectionShape = _projection == SpatialTransformerProjection.Convolution
+            ? new[] { _channels, _channels, 1, 1 }
+            : null;
 
         int inner = _channels * 4;
         GroupNorm(_norm, prefix + "norm");
-        Linear(_projectionIn, prefix + "proj_in", _channels, _channels);
+        Linear(_projectionIn, prefix + "proj_in", _channels, _channels, projectionShape);
         for (int d = 0; d < _blocks.Count; d++)
         {
             var block = _blocks[d];
@@ -273,7 +320,7 @@ internal sealed partial class MultiViewTransformerLayer<T> : LayerBase<T>
             Linear(block.FeedForwardIn, b + "ff.net.0.proj", _channels, inner * 2);
             Linear(block.FeedForwardOut, b + "ff.net.2", inner, _channels);
         }
-        Linear(_projectionOut, prefix + "proj_out", _channels, _channels);
+        Linear(_projectionOut, prefix + "proj_out", _channels, _channels, projectionShape);
         return names;
     }
 
