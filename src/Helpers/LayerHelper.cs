@@ -27904,102 +27904,68 @@ public static partial class LayerHelper<T>
     }
 
     #endregion
-    #region PointTransformerV3 Layers
+    #region PointTransformerV3 and Sonata Layers
 
     /// <summary>
-    /// Creates encoder layers for the PointTransformerV3 model.
+    /// Creates the default PointTransformerV3 network (Wu et al., CVPR 2024; Pointcept <c>PT-v3m1</c>):
+    /// the serialized-attention backbone with its U-Net decoder, then Pointcept's
+    /// <c>seg_head = Linear(dec_channels[0], num_classes)</c>.
     /// </summary>
-    public static IEnumerable<ILayer<T>> CreatePointTransformerV3EncoderLayers(
-        int inputChannels, int inputHeight, int inputWidth,
-        int[] channelDims, int[] depths, double dropRate)
+    /// <param name="options">The backbone settings; the defaults are the PTv3 m1 base configuration.</param>
+    /// <param name="numClasses">Classes predicted per point.</param>
+    /// <returns>The backbone layer followed by the linear segmentation head.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> These are the two layers a <see cref="AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3{T}"/>
+    /// builds when you do not supply your own: one that turns every point into a feature vector, and
+    /// one that turns each feature vector into class scores.
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultPointTransformerV3Layers(
+        AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3Options options, int numClasses)
     {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-        int h = inputHeight, w = inputWidth, inC = inputChannels;
-
-        for (int stage = 0; stage < channelDims.Length; stage++)
-        {
-            int outC = channelDims[stage];
-            int stride = stage == 0 ? 4 : 2;
-            int kernel = stage == 0 ? 7 : 3;
-            int pad = stage == 0 ? 3 : 1;
-
-            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
-            h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>();
-
-            for (int d = 1; d < depths[stage]; d++)
-            {
-                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>();
-            }
-
-            inC = outC;
-        }
+        if (options is null) throw new ArgumentNullException(nameof(options));
+        if (numClasses <= 0) throw new ArgumentOutOfRangeException(nameof(numClasses), numClasses, "At least one class is required.");
+        var o = options;
+        var encoder = new AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3Encoder<T>(
+            o.InputChannels, false, o.GridSize, o.Strides, o.EncoderDepths, o.EncoderChannels, o.EncoderNumHeads,
+            o.EncoderPatchSizes, o.DecoderDepths, o.DecoderChannels, o.DecoderNumHeads, o.DecoderPatchSizes, o.MlpRatio,
+            o.DropPathRate, o.EnableConditionalPositionalEncoding, o.PreNorm, o.ShuffleOrders,
+            new AiDotNet.ComputerVision.Segmentation.PointCloud.SpaceFillingCurveSet(o.SerializationCurves),
+            PointTransformerV3Revision.M1Base, false, false, o.Seed);
+        return new ILayer<T>[] { encoder, new DenseLayer<T>(numClasses, (IActivationFunction<T>?)null) };
     }
 
     /// <summary>
-    /// Creates decoder layers for the PointTransformerV3 model.
+    /// Creates the default Sonata network (Wu et al., CVPR 2025; Pointcept <c>Sonata v1m1</c>): the
+    /// encoder-only PTv3 m2 backbone whose features are up-cast to full resolution, then the linear
+    /// probe <c>Linear(sum(enc_channels), num_classes)</c> of Sonata's linear-probing protocol.
     /// </summary>
-    public static IEnumerable<ILayer<T>> CreatePointTransformerV3DecoderLayers(
-        int encoderOutputChannels, int decoderDim, int numClasses,
-        int featureHeight, int featureWidth)
+    /// <param name="options">The backbone settings; the defaults are the Sonata v1m1 base configuration.</param>
+    /// <param name="numClasses">Classes predicted per point.</param>
+    /// <returns>The backbone layer followed by the linear probe.</returns>
+    /// <remarks>
+    /// <b>For Beginners:</b> These are the two layers a <see cref="AiDotNet.ComputerVision.Segmentation.PointCloud.Sonata{T}"/>
+    /// builds when you do not supply your own.
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultSonataLayers(
+        AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions options, int numClasses)
     {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
-
-        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
-    }
-
-    #endregion
-    #region Sonata Layers
-
-    /// <summary>
-    /// Creates encoder layers for the Sonata model.
-    /// </summary>
-    public static IEnumerable<ILayer<T>> CreateSonataEncoderLayers(
-        int inputChannels, int inputHeight, int inputWidth,
-        int[] channelDims, int[] depths, double dropRate)
-    {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-        int h = inputHeight, w = inputWidth, inC = inputChannels;
-
-        for (int stage = 0; stage < channelDims.Length; stage++)
-        {
-            int outC = channelDims[stage];
-            int stride = stage == 0 ? 4 : 2;
-            int kernel = stage == 0 ? 7 : 3;
-            int pad = stage == 0 ? 3 : 1;
-
-            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
-            h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>();
-
-            for (int d = 1; d < depths[stage]; d++)
-            {
-                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>();
-            }
-
-            inC = outC;
-        }
+        if (options is null) throw new ArgumentNullException(nameof(options));
+        if (numClasses <= 0) throw new ArgumentOutOfRangeException(nameof(numClasses), numClasses, "At least one class is required.");
+        var encoder = CreateSonataEncoder(options, options.DropPathRate, options.Seed, options.SerializationCurves);
+        return new ILayer<T>[] { encoder, new DenseLayer<T>(numClasses, (IActivationFunction<T>?)null) };
     }
 
     /// <summary>
-    /// Creates decoder layers for the Sonata model.
+    /// The Sonata backbone (PTv3 m2, coordinates as features, encoder only, with the mask token);
+    /// the student uses the configured drop path and the EMA teacher none.
     /// </summary>
-    public static IEnumerable<ILayer<T>> CreateSonataDecoderLayers(
-        int encoderOutputChannels, int decoderDim, int numClasses,
-        int featureHeight, int featureWidth)
-    {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
-
-        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
-    }
+    internal static AiDotNet.ComputerVision.Segmentation.PointCloud.PointTransformerV3Encoder<T> CreateSonataEncoder(
+        AiDotNet.ComputerVision.Segmentation.PointCloud.SonataOptions o, double dropPath, int? seed,
+        IReadOnlyList<AiDotNet.ComputerVision.Segmentation.PointCloud.ISpaceFillingCurve> curves)
+        => new(o.InputChannels, true, o.GridSize, o.Strides, o.EncoderDepths, o.EncoderChannels, o.EncoderNumHeads,
+            o.EncoderPatchSizes, null, null, null, null, o.MlpRatio, dropPath, o.EnableConditionalPositionalEncoding,
+            o.PreNorm, o.ShuffleOrders, new AiDotNet.ComputerVision.Segmentation.PointCloud.SpaceFillingCurveSet(curves),
+            PointTransformerV3Revision.M2Sonata, true, true, seed);
 
     #endregion
     #region Concerto Layers
