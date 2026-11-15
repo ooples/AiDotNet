@@ -24076,3 +24076,19 @@ AiDotNet.Diffusion.Conditioning.OpenClipTextConditioner<T>.Clone() -> AiDotNet.D
 AiDotNet.Diffusion.Conditioning.OpenClipTextConditioner<T>.DeepCopy() -> AiDotNet.Diffusion.Conditioning.OpenClipTextConditioner<T>!
 AiDotNet.NeuralNetworks.ClipVisionEncoder<T>.Clone() -> AiDotNet.NeuralNetworks.ClipVisionEncoder<T>!
 AiDotNet.NeuralNetworks.ClipVisionEncoder<T>.DeepCopy() -> AiDotNet.NeuralNetworks.ClipVisionEncoder<T>!
+AiDotNet.Tokenization.Algorithms.ClipBpeTokenizer
+const AiDotNet.Tokenization.Algorithms.ClipBpeTokenizer.StartOfTextToken = "<start_of_text>" -> string!
+const AiDotNet.Tokenization.Algorithms.ClipBpeTokenizer.EndOfTextToken = "<end_of_text>" -> string!
+const AiDotNet.Tokenization.Algorithms.ClipBpeTokenizer.MaxMerges = 48894 -> int
+AiDotNet.Tokenization.Algorithms.ClipBpeTokenizer.StartOfTextId.get -> int
+AiDotNet.Tokenization.Algorithms.ClipBpeTokenizer.EndOfTextId.get -> int
+AiDotNet.Tokenization.Algorithms.ClipBpeTokenizer.EncodeIds(string! text) -> System.Collections.Generic.List<int>!
+AiDotNet.Tokenization.Algorithms.ClipBpeTokenizer.EncodeContext(string! text, int contextLength = 77) -> int[]!
+static AiDotNet.Tokenization.Algorithms.ClipBpeTokenizer.FromFile(string! path) -> AiDotNet.Tokenization.Algorithms.ClipBpeTokenizer!
+static AiDotNet.Tokenization.Algorithms.ClipBpeTokenizer.FromStream(System.IO.Stream! stream) -> AiDotNet.Tokenization.Algorithms.ClipBpeTokenizer!
+static AiDotNet.Tokenization.Algorithms.ClipBpeTokenizer.FromMerges(System.Collections.Generic.IEnumerable<string!>! lines) -> AiDotNet.Tokenization.Algorithms.ClipBpeTokenizer!
+static AiDotNet.Tokenization.Algorithms.ClipBpeTokenizer.Clean(string! text) -> string!
+override AiDotNet.Tokenization.Algorithms.ClipBpeTokenizer.Tokenize(string! text) -> System.Collections.Generic.List<string!>!
+override AiDotNet.Tokenization.Algorithms.ClipBpeTokenizer.CleanupTokens(System.Collections.Generic.List<string!>! tokens) -> string!
+override AiDotNet.Tokenization.Algorithms.ClipBpeTokenizer.Encode(string! text, AiDotNet.Tokenization.Models.EncodingOptions? options = null) -> AiDotNet.Tokenization.Models.TokenizationResult!
+override AiDotNet.Tokenization.Algorithms.ClipBpeTokenizer.Decode(System.Collections.Generic.List<int>! tokenIds, bool skipSpecialTokens = true) -> string!

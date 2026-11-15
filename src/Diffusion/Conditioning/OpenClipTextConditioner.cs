@@ -1,4 +1,5 @@
 using AiDotNet.Diffusion.VAE;
+using AiDotNet.Tokenization.Algorithms;
 using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.Tokenization.Models;
 
@@ -52,9 +53,10 @@ public sealed class OpenClipTextEncoderOptions
 /// </para>
 /// <para>
 /// Tokens follow <c>open_clip.tokenize</c>: <c>&lt;start_of_text&gt;</c> (49406), the BPE tokens, <c>&lt;end_of_text&gt;</c>
-/// (49407), zeros to 77. Encoding text needs CLIP's BPE tokenizer (pass one, for example
-/// <c>AutoTokenizer.FromPretrained("laion/CLIP-ViT-H-14-laion2B-s32B-b79K")</c>); the empty prompt, which is the
-/// unconditional embedding, needs none.
+/// (49407), zeros to 77. Encoding text needs CLIP's BPE tokenizer: pass open_clip's own,
+/// <see cref="ClipBpeTokenizer.FromFile"/> over <c>bpe_simple_vocab_16e6.txt.gz</c>, which also does open_clip's text
+/// cleaning, or another CLIP tokenizer (for example <c>AutoTokenizer.FromPretrained</c>), which gets whitespace-collapsed
+/// lower-case text. The empty prompt, which is the unconditional embedding, needs none.
 /// </para>
 /// <para><b>For Beginners:</b> this turns a text prompt into the numbers the diffusion U-Net reads to know what to
 /// draw.</para>
@@ -172,12 +174,14 @@ public sealed class OpenClipTextConditioner<T> : IConditioningModule<T>, IParame
     // open_clip's whitespace_clean(basic_clean(text)).lower(), then the BPE ids without special tokens.
     private IReadOnlyList<int> Bpe(string text)
     {
+        // CLIP's own tokenizer cleans the raw text itself (HTML unescaping included).
+        if (_tokenizer is ClipBpeTokenizer clip) return clip.EncodeIds(text);
         var cleaned = string.Join(" ", text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)).ToLowerInvariant();
         if (cleaned.Length == 0) return Array.Empty<int>();
         if (_tokenizer is null)
             throw new InvalidOperationException(
                 "Encoding text needs CLIP's BPE tokenizer: pass one to the OpenClipTextConditioner, for example " +
-                "AutoTokenizer.FromPretrained(\"laion/CLIP-ViT-H-14-laion2B-s32B-b79K\").");
+                "ClipBpeTokenizer.FromFile(\"bpe_simple_vocab_16e6.txt.gz\").");
         var result = _tokenizer.Encode(cleaned, new EncodingOptions { AddSpecialTokens = false, Padding = false, Truncation = false });
         return result.TokenIds;
     }
