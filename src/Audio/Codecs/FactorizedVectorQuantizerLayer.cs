@@ -130,8 +130,12 @@ public sealed partial class FactorizedVectorQuantizerLayer<T> : LayerBase<T>, IR
     /// <inheritdoc />
     public Tensor<T>? CommitmentLoss { get; private set; }
 
-    /// <summary>The codes <c>[n_q, T]</c> of the last forward.</summary>
-    public int[,]? LastCodes { get; private set; }
+    /// <summary>The codes <c>[n_q, T]</c> of the last forward (read from its one-hot codes when first asked for).</summary>
+    public int[,]? LastCodes => _lastCodes ??= _lastOneHots is { } onehots ? CodesOf(onehots) : null;
+
+    [KeepsActivation("LastCodes reads the last forward's codes after it returns.")]
+    private Tensor<T>[]? _lastOneHots;
+    private int[,]? _lastCodes;
 
     /// <summary>Codebook <paramref name="q"/> <c>[bins, codeDim]</c>.</summary>
     public Tensor<T> Codebook(int q) => _codebooks[q];
@@ -176,7 +180,38 @@ public sealed partial class FactorizedVectorQuantizerLayer<T> : LayerBase<T>, IR
         return Engine.ReduceMean(_l1Losses ? Engine.TensorAbs(d) : Engine.TensorMultiply(d, d), Enumerable.Range(0, d.Rank).ToArray(), keepDims: false);
     }
 
-    private static Tensor<T> Detach(Tensor<T> x) => new(x._shape, x.ToVector());
+    // A device copy without gradient (never a read through the host), so a compiled training plan replays the forward.
+    private Tensor<T> Detach(Tensor<T> x) => Engine.StopGradient(x);
+
+    // One-hot [T, bins] of each row's nearest code by cosine similarity, the first of equal similarities (as the host
+    // argmax): the row maximum, its hits, and of those the first by a running count. Comparisons only, no gradient.
+    private Tensor<T> NearestOneHot(Tensor<T> projected, int q)
+    {
+        using var _ = new NoGradScope<T>();
+        var similarity = Engine.TensorMatMul(Normalize(Rows(projected)), Engine.TensorTranspose(Normalize(_codebooks[q])));   // [T, bins]
+        var best = Engine.TensorBroadcastTo(Engine.ReduceMax(similarity, new[] { 1 }, keepDims: true), similarity._shape);
+        var hits = Engine.TensorEquals(similarity, best);
+        var first = Engine.TensorEquals(Engine.TensorCumSum(hits, 1), NumOps.One);
+        return Engine.TensorMultiply(hits, first);
+    }
+
+    // The code vectors [1, M, T] of one-hot rows [T, bins]: onehot . codebook, on the tape, so the codebook loss trains
+    // the selected rows exactly as a row gather would.
+    private Tensor<T> Lookup(Tensor<T> onehot, int q)
+        => Engine.Reshape(Engine.TensorTranspose(Engine.TensorMatMul(onehot, _codebooks[q])), new[] { 1, _codeDim, onehot.Shape[0] });
+
+    // The codes [n_q, T] of one-hot rows per codebook (read on the host only when asked for).
+    private int[,] CodesOf(Tensor<T>[] onehots)
+    {
+        int t = onehots.Length == 0 ? 0 : onehots[0].Shape[0];
+        var codes = new int[onehots.Length, t];
+        for (int q = 0; q < onehots.Length; q++)
+        {
+            var code = Engine.TensorArgMax(onehots[q], 1).AsSpan();
+            for (int i = 0; i < t; i++) codes[q, i] = code[i];
+        }
+        return codes;
+    }
 
     /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
@@ -186,12 +221,13 @@ public sealed partial class FactorizedVectorQuantizerLayer<T> : LayerBase<T>, IR
         int nq = ActiveQuantizers > 0 ? Math.Min(ActiveQuantizers, _quantizers) : _quantizers, t = input.Shape[2];
         var residual = input;
         Tensor<T>? output = null, commitment = null, codebook = null;
-        var allCodes = new int[nq, t];
+        var onehots = new Tensor<T>[nq];
         for (int q = 0; q < nq; q++)
         {
             var projected = _inProjection[q].Forward(residual);                                              // z_e [1, M, T]
-            var codes = Nearest(projected, q);
-            var code = Lookup(codes, q);                                                                     // e_k [1, M, T]
+            var onehot = NearestOneHot(projected, q);
+            onehots[q] = onehot;
+            var code = Lookup(onehot, q);                                                                    // e_k [1, M, T]
             if (IsTrainingMode)
             {
                 Tensor<T> z = projected, e = code;
@@ -210,9 +246,9 @@ public sealed partial class FactorizedVectorQuantizerLayer<T> : LayerBase<T>, IR
             var quantized = _outProjection[q].Forward(straight);
             residual = Engine.TensorSubtract(residual, quantized);
             output = output is null ? quantized : Engine.TensorAdd(output, quantized);
-            for (int i = 0; i < t; i++) allCodes[q, i] = codes[i];
         }
-        LastCodes = allCodes;
+        _lastOneHots = onehots;
+        _lastCodes = null;
         CommitmentLoss = commitment;
         CodebookLoss = codebook;
         return output!;

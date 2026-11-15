@@ -300,6 +300,16 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
                 firstLoss ??= model.LastLoss;
                 gradientSeconds.Add(gradientTimer.Elapsed.TotalSeconds);
                 model.Step();
+                if (Environment.GetEnvironmentVariable("BENCH_MEMSTEP") == "1")
+                {
+                    BenchStats.SynchronizeDevice();
+                    long live = AiDotNet.Tensors.Engines.DirectGpu.GpuMemoryTracker.LiveBytes;
+                    long peak = AiDotNet.Tensors.Engines.DirectGpu.GpuMemoryTracker.PeakBytes;
+                    GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
+                    BenchStats.SynchronizeDevice();
+                    Console.WriteLine($"[memstep] step {batch}: live {live / 1048576.0:F0} MB, peak {peak / 1048576.0:F0} MB, live after GC {AiDotNet.Tensors.Engines.DirectGpu.GpuMemoryTracker.LiveBytes / 1048576.0:F0} MB");
+                    AiDotNet.Tensors.Engines.DirectGpu.GpuMemoryTracker.ResetPeak();
+                }
             }
             BenchStats.SynchronizeDevice();
             epochTimer.Stop();

@@ -99,8 +99,12 @@ public sealed partial class ResidualVectorQuantizerLayer<T> : LayerBase<T>, IRes
     /// <summary>The commitment loss of the last training forward over the codebooks used (a tape-connected scalar).</summary>
     public Tensor<T>? CommitmentLoss { get; private set; }
 
-    /// <summary>The codes <c>[n_q, T]</c> of the last forward.</summary>
-    public int[,]? LastCodes { get; private set; }
+    /// <summary>The codes <c>[n_q, T]</c> of the last forward (read from its one-hot codes when first asked for).</summary>
+    public int[,]? LastCodes => _lastCodes ??= _lastOneHots is { } onehots ? CodesOf(onehots, onehots.Length == 0 ? 0 : onehots[0].Shape[0]) : null;
+
+    [KeepsActivation("LastCodes reads the last forward's codes after it returns (NaturalSpeech3's FACodec reads them).")]
+    private Tensor<T>[]? _lastOneHots;
+    private int[,]? _lastCodes;
 
     /// <summary>The first codebook's quantized output <c>[1, dim, T]</c> of the last forward, straight-through to its input
     /// (SpeechTokenizer distills it toward a teacher).</summary>
@@ -166,15 +170,31 @@ public sealed partial class ResidualVectorQuantizerLayer<T> : LayerBase<T>, IRes
     /// <inheritdoc />
     /// <remarks>Runs the reference's k-means initialization (the first training batch's) on the residual of each
     /// unfitted codebook in turn, and nothing else: no EMA update, no dead-code restart.</remarks>
-    public void InitializeCodebooks(Tensor<T> latent)
+    public void InitializeCodebooks(Tensor<T> latent) => InitializeCodebooks(latent, _quantizers);
+
+    private bool IsFitted(int q) => NumOps.ToDouble(_initialized[q][0]) != 0;
+
+    /// <summary>Whether any of the first <paramref name="active"/> codebooks (all when 0) has never been fitted.</summary>
+    internal bool HasUnfittedCodebooks(int active)
+    {
+        int nq = active > 0 ? Math.Min(active, _quantizers) : _quantizers;
+        for (int q = 0; q < nq; q++)
+            if (!IsFitted(q)) return true;
+        return false;
+    }
+
+    /// <summary>Fits the unfitted codebooks among the first <paramref name="active"/> (all when 0), as a training forward
+    /// with that many codebooks would on its first batch; later codebooks wait for a step that uses them.</summary>
+    internal void InitializeCodebooks(Tensor<T> latent, int active)
     {
         if (latent.Rank != 3 || latent.Shape[1] != _dim)
             throw new ArgumentException($"Expected [1, {_dim}, T], got [{string.Join(", ", latent.Shape)}].", nameof(latent));
         using var _ = new NoGradScope<T>();
         var residual = Rows(latent);
-        for (int q = 0; q < _quantizers; q++)
+        int nq = active > 0 ? Math.Min(active, _quantizers) : _quantizers;
+        for (int q = 0; q < nq; q++)
         {
-            if (NumOps.ToDouble(_initialized[q][0]) == 0) KMeansInit(residual, q);
+            if (!IsFitted(q)) KMeansInit(residual, q);
             residual = Engine.TensorSubtract(residual, Engine.TensorMatMul(OneHot(Nearest(residual, _embed[q])), _embed[q]));
         }
     }
@@ -195,11 +215,15 @@ public sealed partial class ResidualVectorQuantizerLayer<T> : LayerBase<T>, IRes
         return codes;
     }
 
+    // The one-hot [T, bins] of host codes, built on the host: data, like a target, so a compiled trace takes it as an
+    // input its guard refills each step (an engine one-hot of a Tensor<int> crosses element types, which no plan captures).
     private Tensor<T> OneHot(int[] codes)
     {
-        var indices = new Tensor<int>(new[] { codes.Length });
-        for (int i = 0; i < codes.Length; i++) indices[i] = codes[i];
-        return Engine.TensorOneHot<T>(indices, _bins);                                                             // [T, bins]
+        var onehot = new Tensor<T>(new[] { codes.Length, _bins });
+        var span = onehot.AsWritableSpan();
+        for (int i = 0; i < codes.Length; i++)
+            if ((uint)codes[i] < (uint)_bins) span[i * _bins + codes[i]] = NumOps.One;                          // [T, bins]
+        return onehot;
     }
 
     // The code vectors [1, dim, T] of codes under a codebook (a constant, not on the tape).
@@ -274,40 +298,86 @@ public sealed partial class ResidualVectorQuantizerLayer<T> : LayerBase<T>, IRes
 
     // Training-time codebook maintenance (reference EuclideanCodebook.forward): codes whose EMA usage is below the threshold
     // take a sampled batch vector, then cluster_size <- g cluster_size + (1 - g) counts, embed_avg <- g embed_avg + (1 - g) sum x,
-    // embed = embed_avg / Laplace-smoothed cluster_size.
-    private void UpdateCodebook(Tensor<T> rows, int[] codes, int q)
+    // embed = embed_avg / Laplace-smoothed cluster_size. Every step stays on the device and writes the state in place (as
+    // a batch norm's running statistics), so a compiled training plan replays it: the codes come from a one-hot of each
+    // row's nearest code, never a host array.
+    private void UpdateCodebook(Tensor<T> rows, Tensor<T> onehot, int q)
     {
+        // A forward that is not a training step (resolving shapes, checking a plan against the eager tape) must not
+        // advance the codebooks, or the step that follows sees them advanced twice (as a batch norm's statistics).
+        if (AiDotNet.Training.CompiledStepRandom<T>.InNonStepForward) return;
         if (!_expireCodesAfterEma) ExpireCodes(rows, q);
-        var onehot = OneHot(codes);
         var counts = Engine.ReduceSum(onehot, new[] { 0 }, keepDims: false);                                           // [bins]
         var sums = Engine.TensorMatMul(Engine.TensorTranspose(onehot), rows);                                          // [bins, dim]
         var keep = NumOps.FromDouble(_decay);
         var take = NumOps.FromDouble(1 - _decay);
-        var size = Engine.TensorAdd(Engine.TensorMultiplyScalar(_clusterSize[q], keep), Engine.TensorMultiplyScalar(counts, take));
-        var average = Engine.TensorAdd(Engine.TensorMultiplyScalar(_embedAverage[q], keep), Engine.TensorMultiplyScalar(sums, take));
-        double total = 0;
-        for (int k = 0; k < _bins; k++) total += NumOps.ToDouble(size[k]);
-        var smoothed = Engine.TensorMultiplyScalar(Engine.TensorAddScalar(size, NumOps.FromDouble(_epsilon)),
-            NumOps.FromDouble(total / (total + _bins * _epsilon)));
-        var embed = Engine.TensorDivide(average, Engine.TensorBroadcastTo(Engine.Reshape(smoothed, new[] { _bins, 1 }), average._shape));
-        Store(size, _clusterSize[q]);
-        Store(average, _embedAverage[q]);
-        Store(embed, _embed[q]);
+        Engine.TensorMultiplyScalarInPlace(_clusterSize[q], keep);
+        Engine.TensorAddInPlace(_clusterSize[q], Engine.TensorMultiplyScalar(counts, take));
+        Engine.TensorMultiplyScalarInPlace(_embedAverage[q], keep);
+        Engine.TensorAddInPlace(_embedAverage[q], Engine.TensorMultiplyScalar(sums, take));
+        // (size + eps) * total / (total + bins * eps), with total the summed usage.
+        var total = Engine.Reshape(Engine.ReduceSum(_clusterSize[q], new[] { 0 }, keepDims: false), new[] { 1 });
+        var ratio = Engine.TensorDivide(total, Engine.TensorAddScalar(total, NumOps.FromDouble(_bins * _epsilon)));
+        var smoothed = Engine.TensorMultiply(Engine.TensorAddScalar(_clusterSize[q], NumOps.FromDouble(_epsilon)),
+            Engine.TensorBroadcastTo(ratio, new[] { _bins }));
+        var embed = Engine.TensorDivide(_embedAverage[q],
+            Engine.TensorBroadcastTo(Engine.Reshape(smoothed, new[] { _bins, 1 }), new[] { _bins, _dim }));
+        Assign(_embed[q], embed);
         if (_expireCodesAfterEma) ExpireCodes(rows, q);
-        Invalidate(q);
     }
 
+    // A code whose EMA usage is below the threshold takes a batch vector: rows sampled as the reference does (a random
+    // permutation's first rows, or draws with replacement for a short batch), drawn per step as a one-hot selection
+    // [bins, n] that a compiled replay redraws.
     private void ExpireCodes(Tensor<T> rows, int q)
     {
         if (_deadCodeThreshold <= 0) return;
-        bool anyExpired = false;
-        for (int k = 0; k < _bins; k++)
-            anyExpired |= NumOps.ToDouble(_clusterSize[q][k]) < _deadCodeThreshold;
-        if (!anyExpired && _expireCodesAfterEma) return;
-        var replacements = Gather(rows, SampleRows(rows.Shape[0], _bins));
-        for (int k = 0; k < _bins; k++)
-            if (NumOps.ToDouble(_clusterSize[q][k]) < _deadCodeThreshold)
-                for (int j = 0; j < _dim; j++) _embed[q][k, j] = replacements[k, j];
+        int n = rows.Shape[0];
+        var pick = AiDotNet.Training.CompiledStepRandom<T>.Draw(new[] { _bins, n }, selection =>
+        {
+            var span = selection.AsWritableSpan();
+            span.Clear();
+            var sampled = SampleRows(n, _bins);
+            for (int k = 0; k < _bins; k++) span[k * n + sampled[k]] = NumOps.One;
+            selection.IncrementVersion();
+        });
+        var replacements = Engine.TensorMatMul(pick, rows);                                                           // [bins, dim]
+        var dead = Engine.TensorLessThan(_clusterSize[q], NumOps.FromDouble(_deadCodeThreshold));                     // [bins]
+        var mask = Engine.TensorBroadcastTo(Engine.Reshape(dead, new[] { _bins, 1 }), new[] { _bins, _dim });
+        Assign(_embed[q], Engine.TensorWhere(mask, replacements, _embed[q]));
+    }
+
+    // dst <- src in place (0 * dst + src, exact for finite values), so a compiled plan writes the state tensor itself.
+    private void Assign(Tensor<T> destination, Tensor<T> source)
+    {
+        Engine.TensorMultiplyScalarInPlace(destination, NumOps.Zero);
+        Engine.TensorAddInPlace(destination, source);
+    }
+
+    // One-hot [T, bins] of each row's nearest code (the first of equal distances, as the host argmin): the row maximum of
+    // 2 x.e - ||e||^2, its hits, and of those the first by a running count. Comparisons only, so nothing flows back.
+    private Tensor<T> NearestOneHot(Tensor<T> rows, Tensor<T> codebook)
+    {
+        var cross = Engine.TensorMatMul(rows, Engine.TensorTranspose(codebook));                                  // [T, bins]
+        var norms = Engine.Reshape(Engine.ReduceSum(Engine.TensorMultiply(codebook, codebook), new[] { 1 }, keepDims: false),
+            new[] { 1, codebook.Shape[0] });
+        var score = Engine.TensorSubtract(Engine.TensorMultiplyScalar(cross, NumOps.FromDouble(2.0)), Engine.TensorBroadcastTo(norms, cross._shape));
+        var best = Engine.TensorBroadcastTo(Engine.ReduceMax(score, new[] { 1 }, keepDims: true), score._shape);
+        var hits = Engine.TensorEquals(score, best);
+        var first = Engine.TensorEquals(Engine.TensorCumSum(hits, 1), NumOps.One);
+        return Engine.TensorMultiply(hits, first);
+    }
+
+    // The codes [n_q, T] of one-hot rows [T, bins] per codebook (read on the host only when asked for).
+    private int[,] CodesOf(Tensor<T>[] onehots, int t)
+    {
+        var codes = new int[onehots.Length, t];
+        for (int q = 0; q < onehots.Length; q++)
+        {
+            var code = Engine.TensorArgMax(onehots[q], 1).AsSpan();
+            for (int i = 0; i < t; i++) codes[q, i] = code[i];
+        }
+        return codes;
     }
 
     /// <inheritdoc />
@@ -318,21 +388,24 @@ public sealed partial class ResidualVectorQuantizerLayer<T> : LayerBase<T>, IRes
         int nq = ActiveQuantizers > 0 ? Math.Min(ActiveQuantizers, _quantizers) : _quantizers, t = input.Shape[2];
         var residual = input;
         Tensor<T>? output = null, commitment = null;
-        var allCodes = new int[nq, t];
+        var onehots = new Tensor<T>[nq];
         for (int q = 0; q < nq; q++)
         {
-            int[] codes;
             Tensor<T> code;
             using (new NoGradScope<T>())
             {
-                var rows = Rows(Detach(residual));
+                var rows = Rows(Engine.StopGradient(residual));
+                // k-means reads the batch on the host; a codec fits its codebooks before a training step traces
+                // (NeuralAudioCodecBase.TrainOnSegment), so a compiled plan never runs it.
                 if (IsTrainingMode && NumOps.ToDouble(_initialized[q][0]) == 0) KMeansInit(rows, q);
-                codes = Nearest(rows, _embed[q]);
-                code = Lookup(codes, _embed[q]);
-                if (IsTrainingMode) UpdateCodebook(rows, codes, q);
+                var onehot = NearestOneHot(rows, _embed[q]);
+                onehots[q] = onehot;
+                code = Engine.StopGradient(Engine.Reshape(Engine.TensorTranspose(Engine.TensorMatMul(onehot, _embed[q])),
+                    new[] { 1, _dim, t }));
+                if (IsTrainingMode) UpdateCodebook(rows, onehot, q);
             }
             // Straight-through: x + stop(q − x).
-            var quantized = Engine.TensorAdd(residual, Engine.TensorSubtract(code, Detach(residual)));
+            var quantized = Engine.TensorAdd(residual, Engine.TensorSubtract(code, Engine.StopGradient(residual)));
             if (IsTrainingMode)
             {
                 var d = Engine.TensorSubtract(residual, code);
@@ -345,14 +418,12 @@ public sealed partial class ResidualVectorQuantizerLayer<T> : LayerBase<T>, IRes
             if (q == 0) FirstQuantized = quantized;
             residual = Engine.TensorSubtract(residual, quantized);
             output = output is null ? quantized : Engine.TensorAdd(output, quantized);
-            for (int i = 0; i < t; i++) allCodes[q, i] = codes[i];
         }
-        LastCodes = allCodes;
+        _lastOneHots = onehots;
+        _lastCodes = null;
         CommitmentLoss = commitment is null || !_commitmentAsMean ? commitment : Engine.TensorMultiplyScalar(commitment, NumOps.FromDouble(1.0 / nq));
         return output!;
     }
-
-    private static Tensor<T> Detach(Tensor<T> x) => new(x._shape, x.ToVector());
 
     /// <summary>The codes <c>[n_q, T]</c> of <c>[1, dim, T]</c> (no codebook update).</summary>
     public int[,] Encode(Tensor<T> x, int? quantizers = null)

@@ -168,7 +168,7 @@ public partial class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     protected override void InitializeAdaptiveParameters()
     {
         base.InitializeAdaptiveParameters();
-        CurrentLearningRate = NumOps.FromDouble(_options.InitialLearningRate);
+        ResetLearningRateToSchedule();
     }
 
     /// <summary>
