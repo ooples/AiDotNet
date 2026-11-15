@@ -24,6 +24,29 @@ public class SyncDreamerModelTests : DiffusionModelTestBase<float>
             baseChannels: 32, channelMultipliers: [1, 2, 4],
             numResBlocksPerLevel: 1, latentScaleFactor: 0.18215, seed: 42);
 
-        return new SyncDreamerModel<float>(unet: unet, vae: vae, seed: 42);
+        // A small configuration of the SyncDreamer-specific networks (CLIP, the volumes and the depth-wise attention),
+        // so the parameter-surface tests do not materialize the paper-sized ViT-L/14 image encoder.
+        var options = new SyncDreamerOptions
+        {
+            ImageSize = 64,
+            CrossAttentionDim = 16,
+            TimeEmbedDim = 8,
+            TargetEncoderWidth = 8,
+            TargetEncoderOutputDim = 4,
+            NormGroups = 4,
+            SpatialVolumeSize = 8,
+            SpatialVolumeDims = [8, 8, 8, 8],
+            FrustumVolumeDepth = 8,
+            FrustumVolumeDims = [8, 8, 8, 8],
+            DepthAttentionHeads = 2,
+            ClipImageSize = 16,
+            ClipPatchSize = 8,
+            ClipWidth = 16,
+            ClipLayers = 1,
+            ClipHeads = 2,
+            Seed = 42,
+        };
+
+        return new SyncDreamerModel<float>(options, unet: unet, vae: vae);
     }
 }

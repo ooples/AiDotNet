@@ -13,6 +13,25 @@ internal enum NeuSRenderingMode
     NoNormal,
 }
 
+/// <summary>Which NeuS renderer's sampling region and section rules a field follows.</summary>
+internal enum NeuSRendererVariant
+{
+    /// <summary>
+    /// The NeuS reference (<c>models/renderer.py</c>): sections valid when either end is inside the unit sphere, the
+    /// Eikonal term over samples inside radius 1.2, every sample contributing opacity, the last section
+    /// <c>2 / n_samples</c> long, and the color network reading the ray direction.
+    /// </summary>
+    Reference,
+
+    /// <summary>
+    /// SyncDreamer's renderer (<c>renderer/renderer.py NeuSRenderer</c>, Liu et al. 2023): only samples inside the
+    /// cube <c>|x|, |y|, |z| &lt;= CubeHalfSide</c> get opacity, color and the Eikonal term (normalized by
+    /// <c>sum(inner + 1e-5)</c>); up-sampling sections are valid when either end is inside the cube; the last section
+    /// repeats the previous one; and the color network reads the negated ray direction.
+    /// </summary>
+    SyncDreamer,
+}
+
 /// <summary>
 /// The NeuS configuration (Wang et al. 2021, "NeuS: Learning Neural Implicit Surfaces by Volume Rendering for Multi-view
 /// Reconstruction", arXiv 2106.10689). The defaults are the reference's <c>confs/wmask.conf</c>: object-centric
@@ -208,6 +227,18 @@ internal sealed class NeuSOptions
     /// <summary>The seed of every random draw (initialization, ray batches, perturbation); null draws a secure seed.</summary>
     public int? Seed { get; set; }
 
+    /// <summary>The renderer's sampling-region and section rules (the NeuS reference by default).</summary>
+    public NeuSRendererVariant RendererVariant { get; set; } = NeuSRendererVariant.Reference;
+
+    /// <summary>
+    /// The radius of the sphere whose chord gives each ray's near and far depths (<c>near_far_from_sphere</c>: 1 in
+    /// NeuS, <c>sqrt(3) / 2</c> in SyncDreamer).
+    /// </summary>
+    public double NearFarRadius { get; set; } = 1.0;
+
+    /// <summary>The half side of <see cref="NeuSRendererVariant.SyncDreamer"/>'s region of interest (<c>DEFAULT_SIDE_LENGTH</c> = 0.6).</summary>
+    public double CubeHalfSide { get; set; } = 0.6;
+
     /// <summary>Validates the configuration.</summary>
     public void Validate()
     {
@@ -249,6 +280,8 @@ internal sealed class NeuSOptions
         if (!(NormalSmoothNoise > 0)) throw new ArgumentOutOfRangeException(nameof(NormalSmoothNoise));
         if (RegularizationPoints <= 0) throw new ArgumentOutOfRangeException(nameof(RegularizationPoints));
         if (GridChunkSize <= 0) throw new ArgumentOutOfRangeException(nameof(GridChunkSize));
+        if (!(NearFarRadius > 0)) throw new ArgumentOutOfRangeException(nameof(NearFarRadius));
+        if (!(CubeHalfSide > 0)) throw new ArgumentOutOfRangeException(nameof(CubeHalfSide));
     }
 
     /// <summary>

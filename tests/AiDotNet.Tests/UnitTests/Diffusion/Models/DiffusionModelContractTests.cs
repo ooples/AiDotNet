@@ -1079,10 +1079,12 @@ public class DiffusionModelContractTests : DiffusionUnitTestBase
     {
         var model = new TripoSRModel<float>();
 
+        // TripoSR is feed-forward (Tochilkin et al. 2024): a DINO ViT, a triplane transformer and a triplane NeRF,
+        // with no denoiser and no VAE. Its scene code is the 40-channel triplane of the official configuration.
         Assert.NotNull(model);
-        Assert.NotNull(model.NoisePredictor);
-        Assert.NotNull(model.VAE);
-        Assert.True(model.LatentChannels > 0);
+        Assert.Throws<NotSupportedException>(() => model.NoisePredictor);
+        Assert.Throws<NotSupportedException>(() => model.VAE);
+        Assert.Equal(40, model.LatentChannels);
     }
 
     #endregion
