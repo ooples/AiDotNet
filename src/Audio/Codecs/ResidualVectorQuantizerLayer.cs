@@ -215,11 +215,15 @@ public sealed partial class ResidualVectorQuantizerLayer<T> : LayerBase<T>, IRes
         return codes;
     }
 
+    // The one-hot [T, bins] of host codes, built on the host: data, like a target, so a compiled trace takes it as an
+    // input its guard refills each step (an engine one-hot of a Tensor<int> crosses element types, which no plan captures).
     private Tensor<T> OneHot(int[] codes)
     {
-        var indices = new Tensor<int>(new[] { codes.Length });
-        for (int i = 0; i < codes.Length; i++) indices[i] = codes[i];
-        return Engine.TensorOneHot<T>(indices, _bins);                                                             // [T, bins]
+        var onehot = new Tensor<T>(new[] { codes.Length, _bins });
+        var span = onehot.AsWritableSpan();
+        for (int i = 0; i < codes.Length; i++)
+            if ((uint)codes[i] < (uint)_bins) span[i * _bins + codes[i]] = NumOps.One;                          // [T, bins]
+        return onehot;
     }
 
     // The code vectors [1, dim, T] of codes under a codebook (a constant, not on the tape).
