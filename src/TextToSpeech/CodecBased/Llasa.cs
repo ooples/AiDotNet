@@ -285,7 +285,7 @@ public partial class Llasa<T> : TtsModelBase<T>, ICodecTts<T>
         if (text is null) throw new ArgumentNullException(nameof(text));
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(PreprocessText(text));
         if (!HasPaperLayers) return base.Synthesize(text);
-        return (Decode(LlasaTokens.ReadCodes(Generate(LlasaTokens.Prompt(Tokenizer, text, ChatDate, Array.Empty<int>())))));
+        return Decode(LlasaTokens.ReadCodes(Generate(LlasaTokens.Prompt(Tokenizer, text, ChatDate, Array.Empty<int>()))));
     }
 
     /// <summary>

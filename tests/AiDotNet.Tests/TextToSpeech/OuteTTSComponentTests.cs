@@ -241,4 +241,17 @@ public class OuteTTSComponentTests
         double generic = LoudnessMeter.IntegratedLoudness(new Tensor<float>(new[] { x.Length }, new Vector<float>(x.Select(v => (float)v).ToArray())), rate);
         Assert.True(Math.Abs(generic - lufs) <= 1e-3, $"float {generic} vs double {lufs}");
     }
+
+    // A draw over 5,000 equal scores is uniform. In Half the running probability stalled at 0.5 (2e-4 is under half
+    // an ulp there), so every u above it fell through to the last token: about half of all draws returned 4,999.
+    [Fact(Timeout = 120000)]
+    public async Task Sample_InHalf_IsNotPulledToTheLastToken()
+    {
+        await Task.Yield();
+        var scores = new AiDotNet.Tensors.LinearAlgebra.Tensor<Half>(new Half[5000], new[] { 5000 });
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(5);
+        var draws = Enumerable.Range(0, 400).Select(_ => OuteTTSSampler<Half>.Sample(scores, random)).ToArray();
+        Assert.True(draws.Count(d => d == 4999) <= 3, $"{draws.Count(d => d == 4999)} of 400 draws on the last token");
+        Assert.True(draws.Distinct().Count() >= 300, $"{draws.Distinct().Count()} distinct draws");
+    }
 }

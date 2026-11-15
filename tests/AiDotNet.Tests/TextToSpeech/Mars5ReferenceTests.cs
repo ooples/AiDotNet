@@ -251,4 +251,76 @@ public class Mars5ReferenceTests
         Assert.Equal(0, AiDotNet.TextToSpeech.TtsSampling<float>.DrawPosition(weights, 0.25, inclusive: false));
         Assert.Equal(1, AiDotNet.TextToSpeech.TtsSampling<float>.DrawPosition(weights, 0.75, inclusive: false));
     }
+
+    private static Tensor<Half> HalfVec(double[] values)
+    {
+        var data = new Half[values.Length];
+        for (int i = 0; i < data.Length; i++) data[i] = (Half)values[i];
+        return new Tensor<Half>(data, new[] { data.Length });
+    }
+
+    // A running sum in Half stops growing at 2,048 equal terms (2,048 + 1 rounds back to 2,048). Over 5,000 equal
+    // weights u = 0.75 lies at 3,750 of the mass; summed in Half the total read 2,048 and the draw landed on 1,536.
+    [Fact(Timeout = 120000)]
+    public async Task DrawPosition_InHalf_SumsPastHalfsRunningSumStall()
+    {
+        await Task.Yield();
+        var ones = new double[5000];
+        for (int i = 0; i < ones.Length; i++) ones[i] = 1.0;
+        Assert.Equal(3750, AiDotNet.TextToSpeech.TtsSampling<double>.DrawPosition(Vec(ones), 0.75, inclusive: false));
+        Assert.Equal(3750, AiDotNet.TextToSpeech.TtsSampling<Half>.DrawPosition(HalfVec(ones), 0.75, inclusive: false));
+        Assert.Equal(3750, AiDotNet.TextToSpeech.TtsSampling<Half>.DrawPosition(HalfVec(ones), 0.75, inclusive: true));
+    }
+
+    // top-p 0.5 over 5,000 equal logits keeps the first 2,501 in index order. In Half the running sum stalled at
+    // 2,048 (cumulative 0.41), never passed 0.5, and the cut removed nothing.
+    [Fact(Timeout = 120000)]
+    public async Task TopP_InHalf_CutsPastHalfsRunningSumStall()
+    {
+        await Task.Yield();
+        var logits = new double[5000];
+        var full = Mars5Sampler<double>.TopKTopP(Vec(logits), 0, 0.5).ToArray();
+        var half = Mars5Sampler<Half>.TopKTopP(HalfVec(logits), 0, 0.5).ToArray();
+        foreach (int i in new[] { 0, 2400, 2500 })
+        {
+            Assert.Equal(0.0, full[i]);
+            Assert.Equal(0.0, (double)half[i]);
+        }
+        foreach (int i in new[] { 2501, 2600, 4999 })
+        {
+            Assert.True(double.IsNegativeInfinity(full[i]), $"double token {i}: {full[i]}");
+            Assert.True(Half.IsNegativeInfinity(half[i]), $"Half token {i}: {half[i]}");
+        }
+    }
+
+    // One token at logit 0 (p 0.93) and 4,999 at about -10.8 (2e-5 of its weight each). Typical-p 0.95 keeps the
+    // likely token and the least surprising of the rest up to the mass, 1,378 of them, and removes the tail. In Half
+    // 1 + 2e-5 rounds back to 1, so the running mass stayed at 0.93 below 0.95 and nothing was removed.
+    [Fact(Timeout = 120000)]
+    public async Task TypicalP_InHalf_CutsPastHalfsRunningSumStall()
+    {
+        await Task.Yield();
+        var logits = new double[5000];
+        for (int i = 1; i < logits.Length; i++) logits[i] = -10.8 - (i - 1) * 1e-4;
+        var full = Mars5Sampler<double>.TypicalP(Vec(logits), 0.95).ToArray();
+        var half = Mars5Sampler<Half>.TypicalP(HalfVec(logits), 0.95).ToArray();
+        foreach (int i in new[] { 0, 1, 100 })
+        {
+            Assert.False(double.IsNegativeInfinity(full[i]), $"double token {i} removed");
+            Assert.False(Half.IsNegativeInfinity(half[i]), $"Half token {i} removed");
+        }
+        Assert.True(double.IsNegativeInfinity(full[4999]), "double tail token kept");
+        Assert.True(Half.IsNegativeInfinity(half[4999]), "Half tail token kept");
+    }
+
+    // A previous token outside the logits is a bad argument, reported as such (the runtime reserves
+    // IndexOutOfRangeException for its own bounds checks).
+    [Fact(Timeout = 120000)]
+    public async Task FrequencyPenalty_RejectsATokenOutsideTheLogits()
+    {
+        await Task.Yield();
+        var error = Assert.Throws<ArgumentOutOfRangeException>(() =>
+            Mars5Sampler<double>.FrequencyPenalty(Vec(new double[3]), new[] { 1, 5 }, 3, 0.4, 6));
+        Assert.Equal("previous", error.ParamName);
+    }
 }
