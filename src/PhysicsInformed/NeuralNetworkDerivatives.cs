@@ -37,6 +37,10 @@ public static class NeuralNetworkDerivatives<T>
         if (network is null) throw new ArgumentNullException(nameof(network));
         if (inputs is null) throw new ArgumentNullException(nameof(inputs));
         if (outputDim <= 0) throw new ArgumentOutOfRangeException(nameof(outputDim), "Output dimension must be positive.");
+        int outputs = OutputDimension(network, inputs);
+        if (outputDim > outputs)
+            throw new ArgumentOutOfRangeException(nameof(outputDim),
+                $"Output dimension must be at most {outputs} for a network with {outputs} outputs.");
 
         int n = inputs.Length;
         var point = new Tensor<T>((T[])inputs.Clone(), new[] { n });
