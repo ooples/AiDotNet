@@ -100,7 +100,7 @@ internal sealed class CompiledNeuralPredictor<T>
             if (_programDisabled) return false;
             _example ??= input.Clone();
             if (_package is null && !TryTrace(input)) return false;
-            var package = _package!;
+            if (_package is not { } package) return false;
             if (package.Program.InputDimensions[0].Count != input.Rank) return false;
             try
             {

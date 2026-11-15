@@ -2860,10 +2860,10 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
         // Compilation is on by default for neural models: the compiled predictor serves the inference-optimized
         // network when there is one, so compilation composes with those optimizations instead of replacing them.
-        if (JitCompilationConfig is { Enabled: true } && Model is NeuralNetworkBase<T> compiledModel
+        if (JitCompilationConfig is { Enabled: true } compilation && Model is NeuralNetworkBase<T> compiledModel
             && normalizedNewData is Tensor<T> compiledInput)
         {
-            var predictor = EnsureCompiledPredictor(compiledModel);
+            var predictor = EnsureCompiledPredictor(compiledModel, compilation);
             var compiledResult = predictor.Predict(new[] { compiledInput });
             if (compiledResult.Length > 0 && compiledResult[0] is TOutput typedCompiled) return typedCompiled;
             return PredictViaModelOrThrow(normalizedNewData);
@@ -2886,7 +2886,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         return PredictViaModelOrThrow(normalizedNewData);
     }
 
-    private AiDotNet.Inference.CompiledNeuralPredictor<T> EnsureCompiledPredictor(NeuralNetworkBase<T> neuralModel)
+    private AiDotNet.Inference.CompiledNeuralPredictor<T> EnsureCompiledPredictor(
+        NeuralNetworkBase<T> neuralModel, AiDotNet.Configuration.JitCompilationConfig compilation)
     {
         var existing = _compiledPredictor;
         if (existing is not null) return existing;
@@ -2897,7 +2898,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 ? EnsureStatelessInferenceOptimizationsInitialized(neuralModel) ?? neuralModel
                 : neuralModel;
             _compiledPredictor = new AiDotNet.Inference.CompiledNeuralPredictor<T>(
-                effective, JitCompilationConfig!, _loadedProgram);
+                effective, compilation, _loadedProgram);
             _loadedProgram = null;
             return _compiledPredictor;
         }
@@ -2922,9 +2923,10 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     // The package a save embeds: the compiled predictor's program and plans, traced from a prediction already made.
     private byte[] ExportCompiledProgram()
     {
-        if (JitCompilationConfig is not { Enabled: true, PersistCompiledProgram: true } || Model is not NeuralNetworkBase<T> nn)
+        if (JitCompilationConfig is not { Enabled: true, PersistCompiledProgram: true } compilation
+            || Model is not NeuralNetworkBase<T> nn)
             return [];
-        var package = EnsureCompiledPredictor(nn).Export(example: null);
+        var package = EnsureCompiledPredictor(nn, compilation).Export(example: null);
         if (package is null) return CompiledProgram; // nothing new to add; keep what the model was loaded with
         using var ms = new MemoryStream();
         package.Save(ms, includeParameterValues: false);

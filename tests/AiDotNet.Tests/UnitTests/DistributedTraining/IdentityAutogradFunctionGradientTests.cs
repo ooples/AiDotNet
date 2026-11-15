@@ -34,7 +34,7 @@ public class IdentityAutogradFunctionGradientTests
         var loss = engine.ReduceSum(engine.TensorMultiply(y, y), new[] { 0, 1 }, keepDims: false);
         var grads = tape.ComputeGradients(loss, new[] { x });
         Assert.True(grads.TryGetValue(x, out var g), "the input upstream of the identity op received no gradient");
-        return g!.ToArray();
+        return (g ?? throw new InvalidOperationException("the upstream gradient is null")).ToArray();
     }
 
     private static void AssertEighteenX(Tensor<double> x, double[] gradient)
@@ -85,7 +85,7 @@ public class IdentityAutogradFunctionGradientTests
 
         Assert.True(grads.TryGetValue(bias, out var g));
         var values = bias.ToArray();
-        var gradient = g!.ToArray();
+        var gradient = (g ?? throw new InvalidOperationException("the leaf gradient is null")).ToArray();
         for (int i = 0; i < values.Length; i++) Assert.Equal(2.0 * values[i], gradient[i], 10);
     }
 
