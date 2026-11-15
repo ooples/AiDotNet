@@ -141,6 +141,55 @@ public class TabROptions<T> : RiskModelOptions<T>
     public ActivationFunction Activation { get; set; } = ActivationFunction.ReLU;
 
     /// <summary>
+    /// Gets or sets how the numeric features are embedded before the encoder: the reference implementation's
+    /// <c>num_embeddings</c>.
+    /// </summary>
+    /// <value><see cref="TabRNumericEmbedding.None"/> by default, the paper's TabR-S configuration.</value>
+    /// <remarks>
+    /// With <see cref="TabRNumericEmbedding.PeriodicLinearReLU"/> every feature becomes a
+    /// <see cref="NumericEmbeddingDimension"/>-wide vector and the encoder's first linear map reads
+    /// <c>features * d_embedding</c> inputs. All features are treated as numeric: one-hot encode categorical features
+    /// before training, as the reference's preprocessing does. Needs the feature count at construction.
+    /// </remarks>
+    public TabRNumericEmbedding NumericEmbedding { get; set; } = TabRNumericEmbedding.None;
+
+    /// <summary>
+    /// Gets or sets the number of learned frequencies per feature of the periodic embedding: the reference
+    /// <c>n_frequencies</c>.
+    /// </summary>
+    /// <value>48 by default, the <c>rtdl_num_embeddings</c> default.</value>
+    /// <remarks>Read only with <see cref="TabRNumericEmbedding.PeriodicLinearReLU"/>. Must be positive.</remarks>
+    public int NumFrequencies { get; set; } = 48;
+
+    /// <summary>
+    /// Gets or sets the standard deviation of the initial frequencies of the periodic embedding: the reference
+    /// <c>frequency_scale</c> (<c>frequency_init_scale</c> in <c>rtdl_num_embeddings</c>).
+    /// </summary>
+    /// <value>0.01 by default, the <c>rtdl_num_embeddings</c> default.</value>
+    /// <remarks>
+    /// The frequencies start as <c>N(0, scale^2)</c> draws. The scale matters: TabR tunes it log-uniformly in
+    /// [0.01, 100]. Read only with <see cref="TabRNumericEmbedding.PeriodicLinearReLU"/>. Must be positive.
+    /// </remarks>
+    public double FrequencyInitScale { get; set; } = 0.01;
+
+    /// <summary>
+    /// Gets or sets the width of each feature's embedding: the reference <c>d_embedding</c>.
+    /// </summary>
+    /// <value>24 by default, the <c>rtdl_num_embeddings</c> default.</value>
+    /// <remarks>Read only with <see cref="TabRNumericEmbedding.PeriodicLinearReLU"/>. Must be positive.</remarks>
+    public int NumericEmbeddingDimension { get; set; } = 24;
+
+    /// <summary>
+    /// Gets or sets whether the periodic embedding's linear map is shared by every feature: the reference <c>lite</c>.
+    /// </summary>
+    /// <value>True by default: every TabR configuration with PLR embeddings uses <c>lite = true</c>.</value>
+    /// <remarks>
+    /// False gives the original PLR embedding, one <c>Linear(2 n_frequencies, d_embedding)</c> per feature. Read only
+    /// with <see cref="TabRNumericEmbedding.PeriodicLinearReLU"/>.
+    /// </remarks>
+    public bool LiteNumericEmbedding { get; set; } = true;
+
+    /// <summary>
     /// Gets or sets the number of hidden layers of <see cref="AiDotNet.NeuralNetworks.Tabular.TabRNetwork{T}"/>'s
     /// retrieval-free layer stack.
     /// </summary>
@@ -260,6 +309,11 @@ public class TabROptions<T> : RiskModelOptions<T>
             MixerNormalization = MixerNormalization,
             Normalization = Normalization,
             Activation = Activation,
+            NumericEmbedding = NumericEmbedding,
+            NumFrequencies = NumFrequencies,
+            FrequencyInitScale = FrequencyInitScale,
+            NumericEmbeddingDimension = NumericEmbeddingDimension,
+            LiteNumericEmbedding = LiteNumericEmbedding,
             NumLayers = NumLayers,
             DropoutRate = DropoutRate,
             BlockOutputDropoutRate = BlockOutputDropoutRate,

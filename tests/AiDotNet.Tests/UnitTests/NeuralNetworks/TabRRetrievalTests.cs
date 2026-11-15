@@ -416,21 +416,169 @@ public class TabRRetrievalTests
     public void LabelEncoder_IsTheReferenceEmbeddingForClassesAndLinearForTargets()
     {
         // tabr.py: nn.Embedding(n_classes, d_main) initialized uniform on [-1, 1] for classes (bias-free over a one-hot
-        // label), nn.Linear(1, d_main) with weight and bias uniform on [-1/sqrt(2), 1/sqrt(2)] for regression.
-        var classifier = new TabRClassifier<double>(2, 3, new TabROptions<double> { EmbeddingDimension = 8, NumNeighbors = 2, Seed = 7 });
+        // label), nn.Linear(1, d_main) with weight and bias uniform on [-1/sqrt(2), 1/sqrt(2)] for regression. The
+        // matrices are large enough that the bounds are reached, not just respected: 4 x 256 = 1024 draws on [-1, 1] all
+        // stay inside 0.9 with probability 0.9^1024 (about 1e-47), and 2 x 256 = 512 draws on +-1/sqrt(2) all stay
+        // inside 0.6 with probability 0.85^512 (about 1e-36), so a +-1/sqrt(2) class init or a narrower target init
+        // fails for any seed.
+        var classifier = new TabRClassifier<double>(2, 4, new TabROptions<double> { EmbeddingDimension = 256, NumNeighbors = 2 });
         var embedding = classifier.LabelEmbedding;
         Assert.NotNull(embedding);
-        AssertLinear(embedding, 3, 8, bias: false);
+        AssertLinear(embedding, 4, 256, bias: false);
         var classWeights = embedding.GetParameters().ToArray();
         Assert.All(classWeights, w => Assert.InRange(w, -1.0, 1.0));
-        Assert.Contains(classWeights, w => Math.Abs(w) > 1.0 / Math.Sqrt(2.0));
+        Assert.True(classWeights.Max(v => Math.Abs(v)) > 0.9, "The class embedding must be drawn from [-1, 1], not +-1/sqrt(2).");
 
-        var regressor = new TabRRegression<double>(2, 1, new TabROptions<double> { EmbeddingDimension = 8, NumNeighbors = 2, Seed = 7 });
+        var regressor = new TabRRegression<double>(2, 1, new TabROptions<double> { EmbeddingDimension = 256, NumNeighbors = 2 });
         var linear = regressor.LabelEmbedding;
         Assert.NotNull(linear);
-        AssertLinear(linear, 1, 8, bias: true);
+        AssertLinear(linear, 1, 256, bias: true);
         double bound = 1.0 / Math.Sqrt(2.0);
-        Assert.All(linear.GetParameters().ToArray(), w => Assert.InRange(w, -bound, bound));
+        var targetWeights = linear.GetParameters().ToArray();
+        Assert.All(targetWeights, w => Assert.InRange(w, -bound, bound));
+        Assert.True(targetWeights.Max(v => Math.Abs(v)) > 0.6, "The target encoder must be drawn from +-1/sqrt(2).");
+    }
+
+    [Theory]
+    [InlineData(true, 57L, 556L)]
+    [InlineData(false, 147L, 646L)]
+    public void NumericEmbedding_PlrMatchesTheReferenceShapesAndParameterCount(bool lite, long embeddingCount, long total)
+    {
+        // lib.deep.PLREmbeddings(n_features = 3, n_frequencies = 4, frequency_scale = 0.01, d_embedding = 5, lite)
+        // feeding a regressor with d_main = 6, d_block = 12, no encoder blocks and one predictor block:
+        //   frequencies     [3, 4]                                                       12
+        //   lite            Linear(8, 5)                     40 + 5 = 45    -> embedding 57
+        //   not lite        NLinear(3, 8, 5)                 120 + 15 = 135 -> embedding 147
+        //   linear          Linear(3 * 5, 6)                 90 + 6                    = 96
+        //   K               Linear(6, 6)                     36 + 6                    = 42
+        //   T               Linear(6, 12), Linear(12, 6, bias=False)   84 + 72         = 156
+        //   label_encoder   Linear(1, 6)                     6 + 6                     = 12
+        //   blocks1[0]      LayerNorm(6), Linear(6, 12), Linear(12, 6)  12 + 84 + 78   = 174
+        //   head            LayerNorm(6), ReLU, Linear(6, 1)            12 + 7         = 19
+        //   total: 57 + 499 = 556 (lite), 147 + 499 = 646 (not lite)
+        var options = new TabROptions<double>
+        {
+            EmbeddingDimension = 6,
+            NumNeighbors = 2,
+            NumericEmbedding = TabRNumericEmbedding.PeriodicLinearReLU,
+            NumFrequencies = 4,
+            FrequencyInitScale = 0.01,
+            NumericEmbeddingDimension = 5,
+            LiteNumericEmbedding = lite
+        };
+        var model = new TabRRegression<double>(3, 1, options);
+
+        var embedding = model.NumericEmbeddingModule;
+        Assert.NotNull(embedding);
+        Assert.Equal(new[] { 3, 4 }, embedding.Frequencies.Shape.ToArray());
+        Assert.Equal(lite ? new[] { 8, 5 } : new[] { 3, 8, 5 }, embedding.Weight.Shape.ToArray());
+        Assert.Equal(lite ? new[] { 5 } : new[] { 3, 5 }, embedding.Bias.Shape.ToArray());
+        Assert.Equal(embeddingCount, embedding.ParameterCount);
+        AssertLinear(model.InputProjection, 15, 6, bias: true);
+        Assert.Equal(total, model.ParameterCount);
+        Assert.Equal(total, (long)model.GetParameters().Length);
+
+        // Frequencies start as N(0, 0.01^2) draws (all inside ten standard deviations), the linear map uniform in
+        // +-1/sqrt(2k)
+        var frequencies = embedding.Frequencies.ToArray();
+        Assert.All(frequencies, c => Assert.InRange(c, -0.1, 0.1));
+        Assert.Contains(frequencies, c => c != 0.0);
+        double bound = 1.0 / Math.Sqrt(8.0);
+        Assert.All(embedding.Weight.ToArray().Concat(embedding.Bias.ToArray()), w => Assert.InRange(w, -bound, bound));
+
+        var embedded = embedding.Forward(new Tensor<double>(new[] { 2, 3 }, new Vector<double>(new[] { 0.4, -1.1, 0.7, 1.3, 0.2, -0.5 })));
+        Assert.Equal(new[] { 2, 15 }, embedded.Shape.ToArray());
+    }
+
+    [Fact]
+    public void NumericEmbedding_IsNoneByDefault()
+    {
+        // TabR-S has no numeric embedding; the PLR defaults are rtdl_num_embeddings' (n_frequencies 48,
+        // frequency_init_scale 0.01, d_embedding 24) with TabR's lite = true
+        var options = new TabROptions<double>();
+        Assert.Equal(TabRNumericEmbedding.None, options.NumericEmbedding);
+        Assert.Equal(48, options.NumFrequencies);
+        Assert.Equal(0.01, options.FrequencyInitScale);
+        Assert.Equal(24, options.NumericEmbeddingDimension);
+        Assert.True(options.LiteNumericEmbedding);
+
+        var model = new TabRRegression<double>(3, 1, new TabROptions<double> { EmbeddingDimension = 6, NumNeighbors = 2 });
+        Assert.Null(model.NumericEmbeddingModule);
+        AssertLinear(model.InputProjection, 3, 6, bias: true);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void NumericEmbedding_ForwardMatchesAHandWrittenPeriodicLinearReLU(bool lite)
+    {
+        // periodic(x)_f = [cos(2 pi c_f x_f), sin(2 pi c_f x_f)] -> Linear (shared when lite, per feature otherwise)
+        // -> ReLU, the feature embeddings concatenated along the row
+        const int features = 3;
+        const int k = 2;
+        const int d = 3;
+        var model = new TabRRegression<double>(features, 1, new TabROptions<double>
+        {
+            EmbeddingDimension = 4,
+            NumNeighbors = 2,
+            NumericEmbedding = TabRNumericEmbedding.PeriodicLinearReLU,
+            NumFrequencies = k,
+            NumericEmbeddingDimension = d,
+            LiteNumericEmbedding = lite
+        });
+        var embedding = model.NumericEmbeddingModule;
+        Assert.NotNull(embedding);
+
+        int weightGroups = lite ? 1 : features;
+        var c = new double[features, k];
+        var w = new double[weightGroups, 2 * k, d];
+        var b = new double[weightGroups, d];
+        for (int f = 0; f < features; f++)
+            for (int j = 0; j < k; j++) c[f, j] = 0.3 * (f + 1) - 0.2 * j + 0.05;
+        for (int g = 0; g < weightGroups; g++)
+        {
+            for (int j = 0; j < 2 * k; j++)
+                for (int e = 0; e < d; e++) w[g, j, e] = 0.4 * Math.Sin(1.3 * g + 0.7 * j + 1.9 * e + 0.3);
+            for (int e = 0; e < d; e++) b[g, e] = 0.1 * (e - 1) + 0.05 * g;
+        }
+
+        // Parameter order: frequencies, weight ([2k, d] in -> out, or [F, 2k, d]), bias
+        embedding.SetParameters(new Vector<double>(c.Cast<double>().Concat(w.Cast<double>()).Concat(b.Cast<double>()).ToArray()));
+        Assert.Equal(c.Cast<double>().ToArray(), embedding.Frequencies.ToArray());
+        Assert.Equal(w.Cast<double>().ToArray(), embedding.Weight.ToArray());
+
+        double[,] x = { { 0.4, -1.1, 0.7 }, { 1.3, 0.2, -0.5 } };
+        var actual = embedding.Forward(new Tensor<double>(new[] { 2, features }, new Vector<double>(x.Cast<double>().ToArray()))).ToArray();
+
+        Assert.Equal(2 * features * d, actual.Length);
+        int clipped = 0;
+        int passed = 0;
+        for (int r = 0; r < 2; r++)
+        {
+            for (int f = 0; f < features; f++)
+            {
+                var periodic = new double[2 * k];
+                for (int j = 0; j < k; j++)
+                {
+                    double phase = 2.0 * Math.PI * c[f, j] * x[r, f];
+                    periodic[j] = Math.Cos(phase);
+                    periodic[k + j] = Math.Sin(phase);
+                }
+
+                int g = lite ? 0 : f;
+                for (int e = 0; e < d; e++)
+                {
+                    double pre = b[g, e];
+                    for (int j = 0; j < 2 * k; j++) pre += periodic[j] * w[g, j, e];
+                    if (pre < 0) clipped++;
+                    else passed++;
+                    Assert.Equal(Math.Max(0.0, pre), actual[(r * features + f) * d + e], 12);
+                }
+            }
+        }
+
+        // Both sides of the ReLU are exercised (10 / 8 lite, 6 / 12 per feature)
+        Assert.True(clipped > 0 && passed > 0, "The fixture must exercise both sides of the ReLU.");
     }
 
     private static void AssertLinear(FullyConnectedLayer<double> layer, int inputs, int outputs, bool bias)

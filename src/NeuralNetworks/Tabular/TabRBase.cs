@@ -80,7 +80,9 @@ public abstract partial class TabRBase<T> : IParameterSource<T>
     /// </summary>
     protected readonly int NumFeatures;
 
-    // Encoder E: Linear(d_in, d_main), then the encoder_n_blocks residual blocks
+    // Encoder E: the optional numeric embedding (num_embeddings), Linear(d_in, d_main), then the encoder_n_blocks
+    // residual blocks
+    private readonly PeriodicNumericEmbedding<T>? _numericEmbedding;
     private readonly FullyConnectedLayer<T> _inputProjection;
     private readonly List<TabRResidualBlock<T>> _encoderBlocks;
 
@@ -191,6 +193,7 @@ public abstract partial class TabRBase<T> : IParameterSource<T>
 
             var registry = new ParameterComponentRegistry<T>();
 
+            if (_numericEmbedding is not null) registry.Register("00000000/embedding", _numericEmbedding);
             registry.Register("00000000/input", _inputProjection);
 
             // Optional components are registered only when built: a null entry is a shape-deferred slot,
@@ -297,10 +300,34 @@ public abstract partial class TabRBase<T> : IParameterSource<T>
 
         _normalizationLayers = new List<ILayer<T>>();
 
+        // num_embeddings: d_in = n_num_features * d_embedding under an embedding, else n_num_features
+        int encoderInputWidth = numFeatures;
+        switch (Options.NumericEmbedding)
+        {
+            case TabRNumericEmbedding.None:
+                break;
+            case TabRNumericEmbedding.PeriodicLinearReLU:
+                if (numFeatures < 1)
+                {
+                    throw new ArgumentException(
+                        "A numeric embedding has one set of frequencies per feature, so it needs the feature count.",
+                        nameof(numFeatures));
+                }
+
+                _numericEmbedding = new PeriodicNumericEmbedding<T>(
+                    numFeatures, Options.NumFrequencies, Options.FrequencyInitScale, Options.NumericEmbeddingDimension,
+                    Options.LiteNumericEmbedding);
+                encoderInputWidth = _numericEmbedding.OutputWidth;
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(
+                    nameof(TabROptions<T>.NumericEmbedding), Options.NumericEmbedding, "Unknown TabR numeric embedding.");
+        }
+
         // Encoder E: self.linear = nn.Linear(d_in, d_main) with no activation, then blocks0 = [make_block(i > 0)]. A
         // non-positive feature count defers the input width to the first forward.
-        _inputProjection = numFeatures > 0
-            ? new FullyConnectedLayer<T>(numFeatures, embDim, (IActivationFunction<T>?)null)
+        _inputProjection = encoderInputWidth > 0
+            ? new FullyConnectedLayer<T>(encoderInputWidth, embDim, (IActivationFunction<T>?)null)
             : new FullyConnectedLayer<T>(embDim, (IActivationFunction<T>?)null);
         _encoderBlocks = new List<TabRResidualBlock<T>>();
         for (int i = 0; i < Options.EncoderNumBlocks; i++)
@@ -335,10 +362,12 @@ public abstract partial class TabRBase<T> : IParameterSource<T>
             normalization.SetTrainingMode(false);
         }
 
-        // One generator for the label-encoder initialization and, after it, every training-step dropout mask
+        // One generator for the numeric-embedding and label-encoder initializations and, after them, every
+        // training-step dropout mask
         _random = Options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(Options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
+        _numericEmbedding?.Initialize(_random);
 
         if (Options.IncludeNeighborTargets && labelDimension > 0)
         {
@@ -425,6 +454,9 @@ public abstract partial class TabRBase<T> : IParameterSource<T>
     /// <summary>The encoder's first linear map, <c>Linear(d_in, d_main)</c>.</summary>
     internal FullyConnectedLayer<T> InputProjection => _inputProjection;
 
+    /// <summary>The numeric-feature embedding before the encoder, or null without one.</summary>
+    internal PeriodicNumericEmbedding<T>? NumericEmbeddingModule => _numericEmbedding;
+
     /// <summary>The encoder's residual blocks, the first without its normalization.</summary>
     internal IReadOnlyList<TabRResidualBlock<T>> EncoderBlocks => _encoderBlocks;
 
@@ -475,14 +507,14 @@ public abstract partial class TabRBase<T> : IParameterSource<T>
     }
 
     /// <summary>
-    /// Encodes input features to embeddings: the reference encoder <c>x = Linear(x); x = x + block(x)</c> for every
-    /// encoder block.
+    /// Encodes input features to embeddings: the reference encoder <c>x = Linear(num_embeddings(x)); x = x + block(x)</c>
+    /// for every encoder block.
     /// </summary>
     /// <param name="features">Input features [batch_size, num_features].</param>
     /// <returns>Embeddings [batch_size, embedding_dim].</returns>
     protected Tensor<T> EncodeFeatures(Tensor<T> features)
     {
-        var x = _inputProjection.Forward(features);
+        var x = _inputProjection.Forward(_numericEmbedding is null ? features : _numericEmbedding.Forward(features));
         foreach (var block in _encoderBlocks)
         {
             x = ForwardResidualBlock(block, x);
@@ -761,7 +793,9 @@ public abstract partial class TabRBase<T> : IParameterSource<T>
     {
         var layers = new List<ILayer<T>>(BackboneLayers());
         layers.AddRange(GetExtraTrainableLayers());
-        return TabularTraining.LayerTensors(layers);
+        var tensors = new List<Tensor<T>>(TabularTraining.LayerTensors(layers));
+        if (_numericEmbedding is not null) tensors.AddRange(_numericEmbedding.Tensors);
+        return tensors;
     }
 
     /// <summary>
