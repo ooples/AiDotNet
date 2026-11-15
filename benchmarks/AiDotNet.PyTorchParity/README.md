@@ -104,6 +104,36 @@ our worst-of-95% steady-state latency still beats their average.
 
 Inference is measured at batch sizes **1, 8, 32, 128** on both sides by default (`--inference-batches`).
 
+## Time-series forecasters (`--timeseries`)
+
+The forecasters (`TimeSeriesModelBase` models such as N-BEATS) train through their own `Train(x, y)` loop over
+windows of one series, so they do not fit the per-batch Forward/Backward/Step rows above. `--timeseries` times that
+real loop instead: the AiDotNet side writes `series.csv` (a seasonal series with trend and noise) and trains each
+forecaster on it, and `pytorch/timeseries.py` trains a twin with the same architecture, window, batch, loss, optimizer
+and clipping on the same numbers.
+
+```bash
+# AiDotNet side (CPU or CUDA engine, as for the main rows)
+set AIDOTNET_CPU_THREADS=8
+dotnet run -c Release --project benchmarks/AiDotNet.PyTorchParity -- --timeseries results/ts --device cuda --epochs 6
+
+# PyTorch side, compiled (the comparison bar)
+cd benchmarks/AiDotNet.PyTorchParity/pytorch
+python timeseries.py ../results/ts --device cuda --compile --epochs 6 --threads 8
+```
+
+- **Timing:** wall time per epoch. The AiDotNet side reads it from the model's training callback, so it includes the
+  model's own window shuffling, batch building and best-epoch snapshot. Epoch 0 carries compilation and warm-up on
+  both sides and is excluded; the report gives the median and IQR of the remaining epochs.
+- **PyTorch gets its best setup:** `torch.compile` on the model, fused Adam on CUDA, windows gathered on the device
+  from one resident series tensor, and the epoch loss read back once per epoch.
+- **Rows:** `nbeats`, at `NBEATSModelOptions` defaults: 30 blocks of 4 x 512 ReLU layers, fixed polynomial basis of
+  degree 2, lookback 10, horizon 5, batch 1024, Adam lr 1e-3, global-norm clip 1.0, MSE.
+- **Loss evidence:** both reports carry the first and last epoch loss. Weight initialization differs (AiDotNet uses
+  He-normal), so the curves are comparable in trend, not value.
+- Options: `--epochs` (default 6, minimum 2), `--series-length` (AiDotNet side, default 20000), `--seed`, `--rows`.
+  Reports: `aidotnet_timeseries_<device>.json` and `pytorch_timeseries_<device>[_compiled].json`.
+
 ## Notes
 
 - `results/` is git-ignored (machine-specific timings don't belong in version control).

@@ -112,6 +112,22 @@ if (classicalAt >= 0 && classicalAt + 1 < args.Length)
     return AiDotNet.PyTorchParity.ClassicalBench.Run(args[classicalAt + 1], Flag("--repeats", 9), Flag("--seed", 42), only);
 }
 
+// `--timeseries DIR [--device cpu|cuda] [--epochs N] [--series-length N] [--seed N] [--rows a,b]`: the forecaster rows
+// (TimeSeriesBench.cs) on the engine --device chose above; then run pytorch/timeseries.py DIR --device ... --compile.
+int timeSeriesAt = Array.IndexOf(args, "--timeseries");
+if (timeSeriesAt >= 0 && timeSeriesAt + 1 < args.Length)
+{
+    int Flag(string name, int fallback)
+        => Array.IndexOf(args, name) is int at and >= 0 && at + 1 < args.Length
+            && int.TryParse(args[at + 1], out int value) ? value : fallback;
+    int rowsAt = Array.IndexOf(args, "--rows");
+    var only = rowsAt >= 0 && rowsAt + 1 < args.Length
+        ? args[rowsAt + 1].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        : Array.Empty<string>();
+    return AiDotNet.PyTorchParity.TimeSeriesBench.Run(args[timeSeriesAt + 1], Flag("--epochs", 6),
+        Flag("--series-length", 20_000), Flag("--seed", 42), only);
+}
+
 var benchOptions = BenchmarkOptions.Parse(args);
 if (benchOptions.VerifyStep1Dir is { } referenceDir)
 {
