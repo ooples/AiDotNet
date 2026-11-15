@@ -149,18 +149,18 @@ public class PrototypeFederatedGraphLearning<T> : FederatedLearningComponentBase
 
         // Accumulate embeddings per class (entries past the end of the embedding tensor count as zero).
         var embeddings = FitToLength(nodeEmbeddings, numNodes * embeddingDim).Reshape(new[] { numNodes, embeddingDim });
-        var classSums = Engine.TensorIndexAdd(
-            new Tensor<T>(new[] { classOrder.Count, embeddingDim }), 0, new Tensor<int>(nodeSlots, new[] { numNodes }), embeddings);
-
-        // Compute mean prototype per class
+        // Half and BFloat16 sum and divide in float, as the former double accumulator did: a class sum stops
+        // growing at 2048 in Half, and a class count past 65504 is +infinity there.
+        var slots = new Tensor<int>(nodeSlots, new[] { numNodes });
         var counts = new double[classOrder.Count];
         for (int s = 0; s < counts.Length; s++)
         {
             counts[s] = classCounts[s];
         }
 
-        var means = Engine.TensorDivide(classSums, Engine.TensorBroadcastTo(
-            new Tensor<double>(counts, new[] { counts.Length, 1 }).Cast<T>(), new[] { counts.Length, embeddingDim }));
+        var means = typeof(T) == typeof(Half) || typeof(T) == typeof(AiDotNet.Tensors.NumericOperations.BFloat16)
+            ? ClassMeans(embeddings.Cast<float>(), slots, counts).Cast<T>()
+            : ClassMeans(embeddings, slots, counts);
         for (int s = 0; s < classOrder.Count; s++)
         {
             prototypes[classOrder[s]] = Engine.TensorSlice(means, new[] { s, 0 }, new[] { 1, embeddingDim }).Reshape(new[] { embeddingDim });
@@ -168,6 +168,15 @@ public class PrototypeFederatedGraphLearning<T> : FederatedLearningComponentBase
         }
 
         return prototypes;
+    }
+
+    /// <summary>Per-class means of the [nodes, dim] embeddings, with <paramref name="slots"/> giving each node's class.</summary>
+    private static Tensor<TV> ClassMeans<TV>(Tensor<TV> embeddings, Tensor<int> slots, double[] counts)
+    {
+        int dim = embeddings.Shape[1];
+        var classSums = Engine.TensorIndexAdd(new Tensor<TV>(new[] { counts.Length, dim }), 0, slots, embeddings);
+        return Engine.TensorDivide(classSums, Engine.TensorBroadcastTo(
+            new Tensor<double>(counts, new[] { counts.Length, 1 }).Cast<TV>(), new[] { counts.Length, dim }));
     }
 
     /// <summary>

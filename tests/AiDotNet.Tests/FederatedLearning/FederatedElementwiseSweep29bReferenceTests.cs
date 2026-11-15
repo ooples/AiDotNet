@@ -1111,6 +1111,25 @@ public class FederatedElementwiseSweep29bReferenceTests
     }
 
     [Fact(Timeout = 60000)]
+    public async Task PrototypeGraphLearning_HalfClassMeanPastTheHalfSumSaturation()
+    {
+        await Task.Yield();
+
+        // 5000 nodes of class 0 with embedding 1: the prototype is 1. Summed in Half the class total stops growing
+        // at 2048, which gave 2048 / 5000 = 0.41.
+        const int n = 5000;
+        var learner = new AiDotNet.FederatedLearning.Graph.PrototypeFederatedGraphLearning<Half>(
+            new AiDotNet.Models.Options.FederatedGraphOptions(), prototypeDim: 1, numClasses: 2);
+        var embeddings = new Tensor<Half>(Enumerable.Repeat(HalfOps.One, n).ToArray(), new[] { n });
+        var labels = new Tensor<Half>(new[] { n });
+
+        var prototypes = learner.ComputePrototypes(embeddings, labels, 1, out var counts);
+
+        Assert.Equal(1.0, HalfOps.ToDouble(prototypes[0][0]));
+        Assert.Equal(n, counts[0]);
+    }
+
+    [Fact(Timeout = 60000)]
     public async Task Flame_HalfModelsAboveHalfSquareRangeAreClusteredAndClipped()
     {
         await Task.Yield();
