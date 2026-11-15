@@ -406,10 +406,17 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
         => ForwardNative(PreprocessAudio(input));
 
     /// <summary>
-    /// The training forward draws its dropout masks and LayerDrop decisions on the host from the model's
-    /// generator every step, which a compiled plan would freeze at the traced step's draws; identically seeded
-    /// models trained through the plan to different weights.
+    /// TEMPORARY OPT-OUT (#2592): the fused compiled training path is off until the pinned AiDotNet.Tensors contains
+    /// ooples/AiDotNet.Tensors#1750. Remove this override then.
     /// </summary>
+    /// <remarks>
+    /// The dropout masks, the SpecAugment time mask and LayerDrop are <see cref="AiDotNet.Training.CompiledStepRandom{T}"/>
+    /// draws, and the waveform standardization is graph ops, so a plan redraws and recomputes them on every replay.
+    /// AiDotNet.Tensors 0.150.0 still freezes host reads made inside a training trace into the plan as constants.
+    /// Identically seeded models then trained through the plan to different weights. #1750 makes such reads fail
+    /// closed. Before this override goes, the zero-padding of clips shorter than the receptive field in
+    /// <c>ForwardNative</c>, a host loop over the input, has to become a graph op.
+    /// </remarks>
     protected override bool SupportsFusedCompiledTraining => false;
 
     // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
