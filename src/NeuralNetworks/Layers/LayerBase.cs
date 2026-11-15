@@ -2862,6 +2862,18 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </remarks>
     internal virtual bool TryDeclareShape() => IsShapeResolved;
 
+    /// <summary>
+    /// Why this layer's training forward cannot be compiled once and replayed, or null when it can.
+    /// </summary>
+    /// <remarks>
+    /// This is the layer-level source of <see cref="AiDotNet.Training.FusedTrainingStepRequest{T}.GraphBreakReason"/>. A
+    /// network collects it from every layer at any depth, and a non-null reason keeps the step on the eager tape. The
+    /// case it covers is a layer whose gradient is defined by a tape step the compiled plan cannot reproduce, such as
+    /// a caller-supplied backward function. The plan differentiates the traced forward ops, so it would silently train
+    /// on a different gradient.
+    /// </remarks>
+    internal virtual string? CompiledTrainingGraphBreakReason => null;
+
     private static bool ShapeContainsSentinel(int[] shape)
     {
         for (int i = 0; i < shape.Length; i++)

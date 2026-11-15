@@ -3006,6 +3006,93 @@ public class AdvancedLayersIntegrationTests
         Assert.Equal(originalOutput.Shape.ToArray(), cloneOutput.Shape.ToArray());
     }
 
+    // Runs y = layer(x) under a tape and returns d sum(y) / dx, with an identity activation.
+    private static double[] LambdaInputGradient(Func<Tensor<double>, Tensor<double>> forward,
+        Func<Tensor<double>, Tensor<double>, Tensor<double>>? backward, Tensor<double> x, out double[] forwardValues)
+    {
+        var engine = AiDotNetEngine.Current;
+        var layer = new LambdaLayer<double>(new[] { 3 }, new[] { 3 }, forward, backward,
+            (IActivationFunction<double>)new IdentityActivation<double>());
+        using var tape = new GradientTape<double>();
+        var y = layer.Forward(x);
+        forwardValues = y.ToArray();
+        var loss = engine.ReduceSum(y, new[] { 0, 1 }, keepDims: false);
+        var grads = tape.ComputeGradients(loss, new[] { x });
+        Assert.True(grads.TryGetValue(x, out var g), "the LambdaLayer input received no gradient");
+        Assert.NotNull(g);
+        return g is null ? Array.Empty<double>() : g.ToArray();
+    }
+
+    private static Tensor<double> SevenLike(Tensor<double> input, Tensor<double> gradOutput)
+    {
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorAddScalar(engine.TensorMultiplyScalar(gradOutput, 0.0), 7.0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task LambdaLayer_BackwardFunction_IsTheGradientTheTapeUses()
+    {
+        // y = 2x, so differentiating the forward gives 2 everywhere. The backward function returns 7
+        // everywhere, which no differentiation of the forward could produce.
+        var x = new Tensor<double>(new[] { 0.5, -1.25, 2.0, 0.75, 3.0, -0.5 }, new[] { 2, 3 });
+        var gradient = LambdaInputGradient(t => AiDotNetEngine.Current.TensorMultiplyScalar(t, 2.0), SevenLike, x,
+            out var forwardValues);
+
+        var xs = x.ToArray();
+        for (int i = 0; i < xs.Length; i++)
+        {
+            Assert.Equal(2.0 * xs[i], forwardValues[i], 12);
+            Assert.Equal(7.0, gradient[i], 12);
+        }
+        await Task.CompletedTask;
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task LambdaLayer_BackwardFunction_OnAnIdentityForward_IsAppliedOnce()
+    {
+        // An identity forward returns its input tensor. The custom step must still get its own output, so
+        // the input's gradient is the backward function's 7, not 14 (its own gradient added to it) and not missing.
+        var x = new Tensor<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 }, new[] { 2, 3 });
+        var gradient = LambdaInputGradient(t => t, SevenLike, x, out var forwardValues);
+
+        Assert.Equal(x.ToArray(), forwardValues);
+        foreach (var g in gradient) Assert.Equal(7.0, g, 12);
+        await Task.CompletedTask;
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task LambdaLayer_WithoutBackwardFunction_TapeGradientMatchesFiniteDifferences()
+    {
+        // Without a backward function the gradient is the tape derivative of the forward function.
+        // Central differences of sum(layer(x)) through the same layer, with no tape, must agree with it.
+        var shape = new[] { 2, 3 };
+        var xs = new[] { 0.5, -1.25, 2.0, 0.75, 3.0, -0.5 };
+        Func<Tensor<double>, Tensor<double>> square = t => AiDotNetEngine.Current.TensorMultiply(t, t);
+        var gradient = LambdaInputGradient(square, null, new Tensor<double>((double[])xs.Clone(), shape), out _);
+
+        var layer = new LambdaLayer<double>(new[] { 3 }, new[] { 3 }, square, null,
+            (IActivationFunction<double>)new IdentityActivation<double>());
+        double SumOfLayer(double[] values)
+        {
+            double total = 0.0;
+            foreach (var v in layer.Forward(new Tensor<double>(values, shape)).ToArray()) total += v;
+            return total;
+        }
+
+        const double h = 1e-5;
+        for (int i = 0; i < xs.Length; i++)
+        {
+            var plus = (double[])xs.Clone();
+            var minus = (double[])xs.Clone();
+            plus[i] += h;
+            minus[i] -= h;
+            double numeric = (SumOfLayer(plus) - SumOfLayer(minus)) / (2 * h);
+            Assert.Equal(numeric, gradient[i], 6);
+            Assert.Equal(2.0 * xs[i], gradient[i], 10);
+        }
+        await Task.CompletedTask;
+    }
+
     #endregion
 
     #region LocallyConnectedLayer Tests
