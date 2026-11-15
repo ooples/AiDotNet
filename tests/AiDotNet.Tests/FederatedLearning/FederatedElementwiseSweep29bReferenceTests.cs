@@ -1070,6 +1070,29 @@ public class FederatedElementwiseSweep29bReferenceTests
     }
 
     [Fact(Timeout = 60000)]
+    public async Task FetchSGD_HalfErrorFeedbackKeepsIncrementsBelowHalfAnUlp()
+    {
+        await Task.Yield();
+
+        // Top-1, no momentum, lr 1. Round 1 sends [5000, 2000]: coordinate 0 is released and 2000 stays in the
+        // error sketch. Eight rounds of [5000, 0.5] add 0.5 each to it, and a final empty round releases it:
+        // 2000 + 8 * 0.5 = 2004. In Half 2000 + 0.5 rounds back to 2000 (the spacing there is 1), so the
+        // error feedback lost every increment and released 2000.
+        var compressor = new FetchSGDCompressor<Half>(sketchRows: 3, sketchCols: 1000, topK: 1, momentum: 0.0);
+        compressor.ServerStep(compressor.Sketch(HalfArray(5000, 2000)), 2);
+        for (int round = 0; round < 8; round++)
+        {
+            var released = compressor.ServerStep(compressor.Sketch(HalfArray(5000, 0.5)), 2);
+            Assert.Equal(5000.0, HalfOps.ToDouble(released[0]));
+        }
+
+        var last = compressor.ServerStep(compressor.Sketch(HalfArray(0, 0)), 2);
+
+        Assert.Equal(0.0, HalfOps.ToDouble(last[0]));
+        Assert.Equal(2004.0, HalfOps.ToDouble(last[1]));
+    }
+
+    [Fact(Timeout = 60000)]
     public async Task Flame_HalfModelsAboveHalfSquareRangeAreClusteredAndClipped()
     {
         await Task.Yield();

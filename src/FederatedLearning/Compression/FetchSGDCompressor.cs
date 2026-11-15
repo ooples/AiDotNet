@@ -48,11 +48,18 @@ public class FetchSGDCompressor<T> : Infrastructure.FederatedLearningComponentBa
     // both laid out [rows, length].
     private int _hashedLength = -1;
     private Tensor<int> _flatIndices = new Tensor<int>(new[] { 0 });
-    private Tensor<T> _signs = new Tensor<T>(new[] { 0 });
+    private Tensor<int> _signs = new Tensor<int>(new[] { 0 });
 
-    // Server state (sketch space), [rows, cols].
+    // Server state (sketch space), [rows, cols]. Half and BFloat16 keep it in float, as the former double
+    // accumulator did: the error sketch S_e grows while the per-round increments eta * S_u stay small, and in Half
+    // an increment below half an ulp of S_e is rounded away, which defeats the error feedback.
     private Tensor<T>? _momentumSketch;
     private Tensor<T>? _errorSketch;
+    private Tensor<float>? _momentumSketchWide;
+    private Tensor<float>? _errorSketchWide;
+
+    private static bool IsNarrowFloat =>
+        typeof(T) == typeof(Half) || typeof(T) == typeof(AiDotNet.Tensors.NumericOperations.BFloat16);
 
     /// <summary>
     /// Creates a new FetchSGD compressor.
@@ -137,7 +144,10 @@ public class FetchSGDCompressor<T> : Infrastructure.FederatedLearningComponentBa
     public Matrix<T> Sketch(T[] gradient)
     {
         Guard.NotNull(gradient);
-        return SketchTensor(new Tensor<T>(gradient, new[] { gradient.Length })).ToMatrix();
+        var values = new Tensor<T>(gradient, new[] { gradient.Length });
+
+        // A bucket sums about n / cols signed coordinates: summed in Half it stops resolving them past 2048.
+        return (IsNarrowFloat ? SketchTensor(values.Cast<float>()).Cast<T>() : SketchTensor(values)).ToMatrix();
     }
 
     /// <summary>
@@ -148,11 +158,12 @@ public class FetchSGDCompressor<T> : Infrastructure.FederatedLearningComponentBa
     public Matrix<T> MergeSketches(IReadOnlyList<Matrix<T>> sketches)
     {
         Guard.NotNull(sketches);
-        var merged = new Tensor<T>(new[] { _sketchRows, _sketchCols });
         if (sketches.Count == 0)
         {
-            return merged.ToMatrix();
+            return new Tensor<T>(new[] { _sketchRows, _sketchCols }).ToMatrix();
         }
+
+        var tensors = new List<Tensor<T>>(sketches.Count);
 
         foreach (var sketch in sketches)
         {
@@ -164,10 +175,24 @@ public class FetchSGDCompressor<T> : Infrastructure.FederatedLearningComponentBa
                     nameof(sketches));
             }
 
-            merged = Engine.TensorAdd(merged, Tensor<T>.FromMatrix(sketch));
+            tensors.Add(Tensor<T>.FromMatrix(sketch));
         }
 
-        return Engine.TensorDivideScalar(merged, NumOps.FromDouble(sketches.Count)).ToMatrix();
+        // (the sum of the client sketches is formed in float for Half / BFloat16, where it can pass 65504)
+        return (IsNarrowFloat
+            ? MeanOf(tensors.Select(t => t.Cast<float>()).ToList()).Cast<T>()
+            : MeanOf(tensors)).ToMatrix();
+    }
+
+    private static Tensor<TV> MeanOf<TV>(List<Tensor<TV>> tensors)
+    {
+        var merged = tensors[0];
+        for (int i = 1; i < tensors.Count; i++)
+        {
+            merged = Engine.TensorAdd(merged, tensors[i]);
+        }
+
+        return Engine.TensorDivideScalar(merged, MathHelper.GetNumericOperations<TV>().FromDouble(tensors.Count));
     }
 
     /// <summary>
@@ -181,20 +206,42 @@ public class FetchSGDCompressor<T> : Infrastructure.FederatedLearningComponentBa
     public T[] ServerStep(Matrix<T> aggregatedSketch, int gradientLength)
     {
         var sketch = ValidateSketch(aggregatedSketch, gradientLength);
-        var momentumSketch = _momentumSketch ?? new Tensor<T>(new[] { _sketchRows, _sketchCols });
-        var errorSketch = _errorSketch ?? new Tensor<T>(new[] { _sketchRows, _sketchCols });
+        if (IsNarrowFloat)
+        {
+            var momentumWide = _momentumSketchWide;
+            var errorWide = _errorSketchWide;
+            var deltaWide = ServerStepCore(sketch.Cast<float>(), gradientLength, ref momentumWide, ref errorWide);
+            _momentumSketchWide = momentumWide;
+            _errorSketchWide = errorWide;
+            return deltaWide.Cast<T>().ToArray();
+        }
+
+        var momentumSketch = _momentumSketch;
+        var errorSketch = _errorSketch;
+        var delta = ServerStepCore(sketch, gradientLength, ref momentumSketch, ref errorSketch);
+        _momentumSketch = momentumSketch;
+        _errorSketch = errorSketch;
+        return delta.ToArray();
+    }
+
+    private Tensor<TV> ServerStepCore<TV>(
+        Tensor<TV> sketch, int gradientLength, ref Tensor<TV>? momentumState, ref Tensor<TV>? errorState)
+    {
+        var ops = MathHelper.GetNumericOperations<TV>();
+        var momentumSketch = momentumState ?? new Tensor<TV>(new[] { _sketchRows, _sketchCols });
+        var errorSketch = errorState ?? new Tensor<TV>(new[] { _sketchRows, _sketchCols });
 
         // S_u = rho * S_u + S;  S_e = eta * S_u + S_e.
-        momentumSketch = Engine.TensorAdd(Engine.TensorMultiplyScalar(momentumSketch, NumOps.FromDouble(_momentum)), sketch);
-        errorSketch = Engine.TensorAdd(Engine.TensorMultiplyScalar(momentumSketch, NumOps.FromDouble(_learningRate)), errorSketch);
+        momentumSketch = Engine.TensorAdd(Engine.TensorMultiplyScalar(momentumSketch, ops.FromDouble(_momentum)), sketch);
+        errorSketch = Engine.TensorAdd(Engine.TensorMultiplyScalar(momentumSketch, ops.FromDouble(_learningRate)), errorSketch);
 
         // Delta = Top-k(U(S_e));  S_e = S_e - S(Delta).
         var delta = UnsketchTopK(errorSketch, gradientLength);
         errorSketch = Engine.TensorSubtract(errorSketch, SketchTensor(delta));
 
-        _momentumSketch = momentumSketch;
-        _errorSketch = errorSketch;
-        return delta.ToArray();
+        momentumState = momentumSketch;
+        errorState = errorSketch;
+        return delta;
     }
 
     /// <summary>
@@ -204,6 +251,8 @@ public class FetchSGDCompressor<T> : Infrastructure.FederatedLearningComponentBa
     {
         _momentumSketch = null;
         _errorSketch = null;
+        _momentumSketchWide = null;
+        _errorSketchWide = null;
     }
 
     /// <summary>
@@ -236,16 +285,16 @@ public class FetchSGDCompressor<T> : Infrastructure.FederatedLearningComponentBa
     }
 
     /// <summary>Count sketch of a length-n vector as a [rows, cols] tensor.</summary>
-    private Tensor<T> SketchTensor(Tensor<T> values)
+    private Tensor<TV> SketchTensor<TV>(Tensor<TV> values)
     {
         int length = values.Length;
-        var sketch = new Tensor<T>(new[] { _sketchRows * _sketchCols });
+        var sketch = new Tensor<TV>(new[] { _sketchRows * _sketchCols });
         if (length > 0)
         {
             EnsureHashTables(length);
 
             // Every row adds s_r(i) * g_i into bucket h_r(i); one index-add covers all rows.
-            var signed = Engine.TensorMultiply(_signs, values.Reshape(new[] { 1, length }));
+            var signed = Engine.TensorMultiply(_signs.Cast<TV>(), values.Reshape(new[] { 1, length }));
             sketch = Engine.TensorIndexAdd(
                 sketch, 0, _flatIndices.Reshape(new[] { _sketchRows * length }), signed.Reshape(new[] { _sketchRows * length }));
         }
@@ -254,12 +303,14 @@ public class FetchSGDCompressor<T> : Infrastructure.FederatedLearningComponentBa
     }
 
     /// <summary>U(S) followed by Top-k: median-of-rows estimates, keeping the k largest magnitudes.</summary>
-    private Tensor<T> UnsketchTopK(Tensor<T> sketch, int length)
+    private Tensor<TV> UnsketchTopK<TV>(Tensor<TV> sketch, int length)
     {
         if (length == 0)
         {
-            return new Tensor<T>(new[] { 0 });
+            return new Tensor<TV>(new[] { 0 });
         }
+
+        var ops = MathHelper.GetNumericOperations<TV>();
 
         EnsureHashTables(length);
 
@@ -267,7 +318,7 @@ public class FetchSGDCompressor<T> : Infrastructure.FederatedLearningComponentBa
         // (the upper middle value for an even row count).
         var bucketValues = Engine.TensorGather(
             sketch.Reshape(new[] { _sketchRows * _sketchCols }), _flatIndices.Reshape(new[] { _sketchRows * length }), 0);
-        var rowEstimates = Engine.TensorMultiply(_signs, bucketValues.Reshape(new[] { _sketchRows, length }));
+        var rowEstimates = Engine.TensorMultiply(_signs.Cast<TV>(), bucketValues.Reshape(new[] { _sketchRows, length }));
         var (sortedEstimates, _) = Engine.TensorSort(rowEstimates, 0, false);
         var estimates = Engine.TensorSlice(sortedEstimates, new[] { _sketchRows / 2, 0 }, new[] { 1, length })
             .Reshape(new[] { length });
@@ -279,20 +330,20 @@ public class FetchSGDCompressor<T> : Infrastructure.FederatedLearningComponentBa
         // A NaN estimate ranks below every number, where the descending CompareTo sort this replaced put it.
         // The engine sort puts NaN last, which made the threshold NaN and the recovered update all zero.
         // (A NaN anywhere makes the total NaN, so the all-finite case pays one reduction and no copy.)
-        if (NumOps.IsNaN(Engine.TensorSum(magnitudes)))
+        if (ops.IsNaN(Engine.TensorSum(magnitudes)))
         {
             magnitudes = Engine.TensorNanToNum(magnitudes, -1.0, double.PositiveInfinity, double.NegativeInfinity);
         }
 
         var (sortedMagnitudes, _) = Engine.TensorSort(magnitudes, 0, false);
-        T threshold = sortedMagnitudes[length - k];
+        TV threshold = sortedMagnitudes[length - k];
         var above = Engine.TensorGreaterThan(magnitudes, threshold).Cast<int>();
         int tieSlots = k - Engine.TensorCountNonzero(above);
         var ties = Engine.TensorEquals(magnitudes, threshold).Cast<int>();
         var keptTies = Engine.TensorMultiply(ties, Engine.TensorLessThan(Engine.TensorCumSum(ties, 0), tieSlots + 1));
-        var keep = Engine.TensorAdd(above, keptTies).Cast<T>();
+        var keep = Engine.TensorAdd(above, keptTies).Cast<TV>();
 
-        return Engine.TensorWhere(keep, estimates, new Tensor<T>(new[] { length }));
+        return Engine.TensorWhere(keep, estimates, new Tensor<TV>(new[] { length }));
     }
 
     private void EnsureHashTables(int length)
@@ -314,7 +365,7 @@ public class FetchSGDCompressor<T> : Infrastructure.FederatedLearningComponentBa
         }
 
         _flatIndices = new Tensor<int>(flatIndices, new[] { _sketchRows, length });
-        _signs = new Tensor<int>(signs, new[] { _sketchRows, length }).Cast<T>();
+        _signs = new Tensor<int>(signs, new[] { _sketchRows, length });
         _hashedLength = length;
     }
 
