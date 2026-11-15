@@ -185,7 +185,8 @@ public class FedMeZO<T> : Infrastructure.FederatedLearningComponentBase<T>, IFed
             throw new ArgumentException("At least one perturbation result is required.", nameof(lossResults));
         }
 
-        var avgGrad = new double[_modelDim];
+        // Accumulated in double for Half: two coefficients of +70000 and -70000 must cancel, not overflow.
+        var avgGrad = new Infrastructure.FederatedTensorMath<T>.Accumulator(_modelDim);
         int q = lossResults.Length;
 
         foreach (var (lossPlus, lossMinus, seed) in lossResults)
@@ -194,19 +195,10 @@ public class FedMeZO<T> : Infrastructure.FederatedLearningComponentBase<T>, IFed
             double scale = lossDiff / (2.0 * _perturbationScale);
 
             var z = GeneratePerturbation(seed);
-            for (int i = 0; i < _modelDim; i++)
-            {
-                avgGrad[i] += NumOps.ToDouble(z[i]) * scale / q;
-            }
+            avgGrad.Add(z.AsTensor(), scale / q);
         }
 
-        var result = new T[_modelDim];
-        for (int i = 0; i < _modelDim; i++)
-        {
-            result[i] = NumOps.FromDouble(avgGrad[i]);
-        }
-
-        return new Vector<T>(result);
+        return avgGrad.ToTensor().ToVector();
     }
 
     /// <summary>
@@ -251,8 +243,19 @@ public class FedMeZO<T> : Infrastructure.FederatedLearningComponentBase<T>, IFed
             throw new ArgumentException("No client messages provided.", nameof(clientMessages));
         }
 
-        var aggregated = new double[_modelDim];
         double totalWeight = 0;
+        foreach (var (clientId, messages) in clientMessages)
+        {
+            if (messages.Length > 0)
+            {
+                totalWeight += clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
+            }
+        }
+
+        // Weights are divided by their total in double before they touch T: a total of 65520 or more is
+        // infinity in Half and dividing by it zeroed the aggregate.
+        double normalizer = totalWeight > 0 ? totalWeight : 1.0;
+        var aggregated = new Infrastructure.FederatedTensorMath<T>.Accumulator(_modelDim);
 
         foreach (var (clientId, messages) in clientMessages)
         {
@@ -261,51 +264,25 @@ public class FedMeZO<T> : Infrastructure.FederatedLearningComponentBase<T>, IFed
                 continue; // Skip clients with no perturbation results.
             }
 
-            double w = clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0;
-            totalWeight += w;
+            double w = (clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0) / normalizer;
 
             // Each client may have multiple perturbation queries.
             int q = messages.Length;
             foreach (var msg in messages)
             {
                 double scale = w * msg.LossDifference / (2.0 * _perturbationScale * q);
-                var z = GeneratePerturbation(msg.Seed);
-
-                for (int i = 0; i < _modelDim; i++)
-                {
-                    aggregated[i] += NumOps.ToDouble(z[i]) * scale;
-                }
+                aggregated.Add(GeneratePerturbation(msg.Seed).AsTensor(), scale);
             }
         }
 
-        if (totalWeight > 0)
-        {
-            for (int i = 0; i < _modelDim; i++)
-            {
-                aggregated[i] /= totalWeight;
-            }
-        }
-
-        var result = new T[_modelDim];
-        for (int i = 0; i < _modelDim; i++)
-        {
-            result[i] = NumOps.FromDouble(aggregated[i]);
-        }
-
-        return new Vector<T>(result);
+        return aggregated.ToTensor().ToVector();
     }
 
     /// <inheritdoc/>
     public Vector<T> ExtractAdapterParameters(Vector<T> fullModelParameters)
     {
         // ZO operates on the full parameter vector (no separate adapters).
-        var result = new T[fullModelParameters.Length];
-        for (int i = 0; i < fullModelParameters.Length; i++)
-        {
-            result[i] = fullModelParameters[i];
-        }
-
-        return new Vector<T>(result);
+        return fullModelParameters.Clone();
     }
 
     /// <inheritdoc/>
