@@ -125,10 +125,22 @@ public static class CompiledStepRandom<T>
         return Draw(new[] { 1 }, g => g.AsWritableSpan()[0] = random.NextDouble() < dropProbability ? NumOps.Zero : NumOps.One);
     }
 
-    /// <summary><c>gate * kept + (1 - gate) * skipped</c> for a <see cref="KeepGate"/> gate.</summary>
+    /// <summary>
+    /// <paramref name="kept"/> where the <see cref="KeepGate"/> gate is 1 and <paramref name="skipped"/> where it is 0,
+    /// as a selection that has the same shape as <paramref name="kept"/>.
+    /// </summary>
+    /// <remarks>
+    /// A selection, not <c>gate * kept + (1 - gate) * skipped</c>. A dropped layer still runs so that it stays in the
+    /// traced graph. If its output overflowed (inf or NaN, which Half reaches at 65504), <c>0 * inf</c> made the
+    /// skipped step NaN, where LayerDrop's reference skips the layer and returns the input untouched.
+    /// </remarks>
     internal static Tensor<T> Gated(IEngine engine, Tensor<T> gate, Tensor<T> kept, Tensor<T> skipped)
-        => engine.TensorAdd(engine.TensorMultiply(kept, gate),
-            engine.TensorMultiply(skipped, engine.ScalarMinusTensor(NumOps.One, gate)));
+    {
+        var shape = kept._shape;
+        var ones = System.Linq.Enumerable.ToArray(System.Linq.Enumerable.Repeat(1, shape.Length));
+        var gateEverywhere = engine.TensorBroadcastTo(engine.Reshape(gate, ones), shape);
+        return engine.TensorWhere(engine.TensorGreaterThan(gateEverywhere, NumOps.Zero), kept, skipped);
+    }
 
     /// <summary>Suppresses draws on this thread for a forward run only to resolve shapes; dispose to restore.</summary>
     internal static SuppressionScope SuppressDraws() => new SuppressionScope();

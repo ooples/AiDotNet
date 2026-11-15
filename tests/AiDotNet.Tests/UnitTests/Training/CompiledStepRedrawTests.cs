@@ -187,6 +187,30 @@ public class CompiledStepRedrawTests
         Assert.True(eagerLosses.Distinct().Count() == eagerLosses.Count, "the eager steps should differ.");
     }
 
+    /// <summary>
+    /// LayerDrop's gate selects the layer's output or its input. A dropped layer still runs so that it stays in the
+    /// traced graph, and an overflowed output (inf) must not reach the skipped step. As
+    /// <c>gate * kept + (1 - gate) * skipped</c>, <c>0 * inf</c> made every element NaN.
+    /// </summary>
+    [Fact(Timeout = 60000)]
+    public async Task Layer_drop_gate_returns_the_input_of_an_overflowed_dropped_layer()
+    {
+        await Task.Yield();
+        var engine = AiDotNetEngine.Current;
+        var overflowed = new Tensor<double>(new[] { 2, 3 });
+        var input = new Tensor<double>(new[] { 2, 3 });
+        for (int i = 0; i < input.Length; i++)
+        {
+            overflowed[i] = double.PositiveInfinity;
+            input[i] = i + 1;
+        }
+        var dropped = new Tensor<double>(new[] { 1 });
+        var kept = new Tensor<double>(new[] { 1 }, new Vector<double>(new[] { 1.0 }));
+
+        Assert.Equal(input.ToArray(), CompiledStepRandom<double>.Gated(engine, dropped, overflowed, input).ToArray());
+        Assert.Equal(input.ToArray(), CompiledStepRandom<double>.Gated(engine, kept, input, overflowed).ToArray());
+    }
+
     /// <summary>The eager losses, after requiring the fused arm to engage and to follow them step for step.</summary>
     private static List<double> TrainSideBySide(
         IReadOnlyList<ITrainableLayer<double>> fusedLayers, Func<Tensor<double>, Tensor<double>> fusedForward,
