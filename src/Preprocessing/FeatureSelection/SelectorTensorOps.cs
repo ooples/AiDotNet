@@ -82,21 +82,69 @@ internal static class SelectorTensorOps
         return engine.ReduceSum(engine.TensorMultiply(x, x), new[] { 0 }, false);
     }
 
-    /// <summary>Column sample variances (divisor n - 1) of an [n, m] tensor, as [m].</summary>
-    public static Tensor<T> ColumnSampleVariance<T>(Tensor<T> x)
+    /// <summary>
+    /// Column sums of squares of an [n, m] tensor divided by <paramref name="divisor"/>, as [m]. Half and BFloat16
+    /// are summed in float and converted once: the sum of squares passes Half's 65504 (1,000 rows of magnitude 10)
+    /// while the mean itself still fits, and a running sum in Half stops growing at 2048.
+    /// </summary>
+    public static Tensor<T> ColumnMeanOfSquares<T>(Tensor<T> x, int divisor)
     {
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+            return ColumnMeanOfSquares(x.Cast<float>(), divisor).Cast<T>();
+
         var ops = MathHelper.GetNumericOperations<T>();
-        return AiDotNetEngine.Current.TensorDivideScalar(
-            ColumnSumOfSquares(FilterStatisticTensorOps.CenterColumns(x)), ops.FromDouble(x.Shape[0] - 1));
+        return AiDotNetEngine.Current.TensorDivideScalar(ColumnSumOfSquares(x), ops.FromDouble(divisor));
     }
 
-    /// <summary>Column population variances (divisor n) of an [n, m] tensor, as [m].</summary>
-    public static Tensor<T> ColumnVariance<T>(Tensor<T> x)
+    /// <summary>
+    /// The population covariance <c>X'X / n</c> of the centred columns of an [n, m] tensor, as [m, m], widened as
+    /// <see cref="ColumnMeanOfSquares{T}"/> is.
+    /// </summary>
+    public static Tensor<T> CenteredCovariance<T>(Tensor<T> centered)
     {
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+            return CenteredCovariance(centered.Cast<float>()).Cast<T>();
+
+        var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
-        return AiDotNetEngine.Current.TensorDivideScalar(
-            ColumnSumOfSquares(FilterStatisticTensorOps.CenterColumns(x)), ops.FromDouble(x.Shape[0]));
+        return engine.TensorDivideScalar(
+            engine.TensorMatMul(engine.TensorTranspose(centered), centered), ops.FromDouble(centered.Shape[0]));
     }
+
+    /// <summary>
+    /// Lag means <c>sum_{i &lt; n - lag} x[i, j] * x[i + lag, j] / (n - lag)</c> of every column of an [n, m] tensor,
+    /// as [m], widened as <see cref="ColumnMeanOfSquares{T}"/> is.
+    /// </summary>
+    public static Tensor<T> LagMeans<T>(Tensor<T> x, int lag)
+    {
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+            return LagMeans(x.Cast<float>(), lag).Cast<T>();
+
+        var ops = MathHelper.GetNumericOperations<T>();
+        return AiDotNetEngine.Current.TensorDivideScalar(LagProducts(x, lag), ops.FromDouble(x.Shape[0] - lag));
+    }
+
+    /// <summary>
+    /// <see cref="FrequencyPower{T}"/> divided by n^2, widened as <see cref="ColumnMeanOfSquares{T}"/> is: the power
+    /// itself reaches n^2 times the squared amplitude.
+    /// </summary>
+    public static Tensor<T> FrequencyPowerPerSquaredLength<T>(Tensor<T> x, Tensor<T> frequencies)
+    {
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+            return FrequencyPowerPerSquaredLength(x.Cast<float>(), frequencies.Cast<float>()).Cast<T>();
+
+        var ops = MathHelper.GetNumericOperations<T>();
+        double n = x.Shape[0];
+        return AiDotNetEngine.Current.TensorDivideScalar(FrequencyPower(x, frequencies), ops.FromDouble(n * n));
+    }
+
+    /// <summary>Column sample variances (divisor n - 1) of an [n, m] tensor, as [m].</summary>
+    public static Tensor<T> ColumnSampleVariance<T>(Tensor<T> x) =>
+        ColumnMeanOfSquares(FilterStatisticTensorOps.CenterColumns(x), x.Shape[0] - 1);
+
+    /// <summary>Column population variances (divisor n) of an [n, m] tensor, as [m].</summary>
+    public static Tensor<T> ColumnVariance<T>(Tensor<T> x) =>
+        ColumnMeanOfSquares(FilterStatisticTensorOps.CenterColumns(x), x.Shape[0]);
 
     /// <summary>
     /// Lag products <c>sum_{i &lt; n - lag} x[i, j] * x[i + lag, j]</c> of every column of an [n, m] tensor, as [m].
@@ -199,8 +247,7 @@ internal static class SelectorTensorOps
         int n = x.Shape[0];
         int m = x.Shape[1];
         var centered = FilterStatisticTensorOps.CenterColumns(x);
-        var std = engine.TensorSqrt(engine.TensorDivideScalar(
-            ColumnSumOfSquares(centered), ops.FromDouble(sample ? n - 1 : n)));
+        var std = engine.TensorSqrt(ColumnMeanOfSquares(centered, sample ? n - 1 : n));
         std = engine.TensorWhere(engine.TensorLessThan(std, PreprocessingTensorOps.Tolerance<T>(minStd)),
             PreprocessingTensorOps.Filled(new[] { m }, ops.One), std);
         return engine.TensorDivide(centered, engine.Reshape(std, new[] { 1, m }));

@@ -50,13 +50,10 @@ public class VarianceThreshold<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
     protected override void FitCore(Matrix<T> data)
     {
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
         // Population variance of every column
-        var variances = Engine.TensorDivideScalar(
-            SelectorTensorOps.ColumnSumOfSquares(FilterStatisticTensorOps.CenterColumns(Tensor<T>.FromMatrix(data))),
-            NumOps.FromDouble(n));
+        var variances = SelectorTensorOps.ColumnVariance(Tensor<T>.FromMatrix(data));
         _variances = variances.ToVector();
 
         // Select features above threshold

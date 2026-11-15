@@ -63,7 +63,7 @@ public class SeasonalityFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixed
 
         // Centre every column and compute its population variance
         var centered = FilterStatisticTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
-        var variance = Engine.TensorDivideScalar(SelectorTensorOps.ColumnSumOfSquares(centered), NumOps.FromDouble(n));
+        var variance = SelectorTensorOps.ColumnMeanOfSquares(centered, n);
         var varying = PreprocessingTensorOps.AtLeast(variance, PreprocessingTensorOps.Tolerance<T>(1e-10));
         var safeVariance = Engine.TensorWhere(varying, variance, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
 
@@ -73,8 +73,7 @@ public class SeasonalityFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixed
         if (periods.Length > 0)
         {
             var frequencies = Engine.TensorReciprocal(new Tensor<int>(periods, new[] { periods.Length }).Cast<T>());
-            var power = Engine.TensorDivideScalar(
-                SelectorTensorOps.FrequencyPower(centered, frequencies), NumOps.FromDouble((double)n * n));
+            var power = SelectorTensorOps.FrequencyPowerPerSquaredLength(centered, frequencies);
             maxPower = Engine.TensorMax(PreprocessingTensorOps.ColumnMax(power), NumOps.Zero);
         }
 

@@ -68,7 +68,7 @@ public class AutocorrelationFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
 
         // Centre every column and compute its population variance
         var centered = FilterStatisticTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
-        var variance = Engine.TensorDivideScalar(SelectorTensorOps.ColumnSumOfSquares(centered), NumOps.FromDouble(n));
+        var variance = SelectorTensorOps.ColumnMeanOfSquares(centered, n);
         var varying = PreprocessingTensorOps.AtLeast(variance, PreprocessingTensorOps.Tolerance<T>(1e-10));
         var safeVariance = Engine.TensorWhere(varying, variance, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
 
@@ -77,8 +77,7 @@ public class AutocorrelationFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IF
         int effectiveMaxLag = Math.Min(_maxLag, n - 1);
         for (int lag = 1; lag <= effectiveMaxLag; lag++)
         {
-            var covariance = Engine.TensorDivideScalar(
-                SelectorTensorOps.LagProducts(centered, lag), PreprocessingTensorOps.CountAsScalar<T>(n - lag));
+            var covariance = SelectorTensorOps.LagMeans(centered, lag);
             maxAutocorr = Engine.TensorMax(maxAutocorr, Engine.TensorAbs(Engine.TensorDivide(covariance, safeVariance)));
         }
 

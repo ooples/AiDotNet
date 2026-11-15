@@ -197,4 +197,131 @@ public class FeatureSelectionSweep09bReviewTests
         Assert.Equal(0.0004228870475972906, selector.PValues[0], 1e-5);
         Assert.Equal(0.8360452580722552, selector.PValues[1], 1e-4);
     }
+
+    // A feature equal to the target has correlation 1. The covariance update weighted the deviations by d^2 (both
+    // taken from the updated means) where the variances use d, so the feature scored d = 0.9 however long it ran.
+    [Fact(Timeout = 60000)]
+    public async Task ExponentialDecay_AFeatureEqualToTheTarget_HasCorrelationOne()
+    {
+        await Task.CompletedTask;
+        const int n = 300;
+        var data = new double[n, 2];
+        var target = new double[n];
+        for (int i = 0; i < n; i++)
+        {
+            target[i] = i * 0.618 % 1.0;
+            data[i, 0] = target[i];
+            data[i, 1] = i * 0.414 % 1.0;
+        }
+
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Streaming.ExponentialDecaySelector<double>(
+            nFeaturesToSelect: 1, decayFactor: 0.9);
+        selector.Fit(new Matrix<double>(data), new Vector<double>(target));
+
+        Assert.NotNull(selector.FeatureScores);
+        Assert.Equal(1.0, selector.FeatureScores[0], 10);
+        Assert.Equal(new[] { 0 }, selector.SelectedIndices);
+    }
+
+    // 1,000 rows alternating -10, 10 have population variance 100, but their sum of squares, 100,000, is past Half's
+    // 65504: the variance came out +infinity.
+    [Fact(Timeout = 60000)]
+    public async Task VarianceThreshold_Half_KeepsAVarianceWhoseSumOfSquaresOverflows()
+    {
+        await Task.CompletedTask;
+        const int n = 1000;
+        var data = new Half[n, 1];
+        for (int i = 0; i < n; i++)
+            data[i, 0] = (Half)(i % 2 == 0 ? -10 : 10);
+
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Unsupervised.VarianceThreshold<Half>();
+        selector.Fit(new Matrix<Half>(data));
+
+        Assert.NotNull(selector.Variances);
+        Assert.Equal(100.0, (double)selector.Variances[0]);
+    }
+
+    // The same 1,000 rows as the target and as feature 0: |r| = 1. The standard deviations and the covariance were
+    // formed from sums of squares and cross products of 100,000, +infinity in Half, and r came out NaN or 0.
+    [Fact(Timeout = 60000)]
+    public async Task PearsonSelector_Half_CorrelatesPastTheSumOfSquaresOverflow()
+    {
+        await Task.CompletedTask;
+        const int n = 1000;
+        var data = new Half[n, 2];
+        var target = new Half[n];
+        for (int i = 0; i < n; i++)
+        {
+            target[i] = (Half)(i % 2 == 0 ? -10 : 10);
+            data[i, 0] = target[i];
+            data[i, 1] = (Half)(i % 4 < 2 ? -10 : 10);
+        }
+
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Similarity.PearsonCorrelationSelector<Half>(nFeaturesToSelect: 1);
+        selector.Fit(new Matrix<Half>(data), new Vector<Half>(target));
+
+        Assert.NotNull(selector.Correlations);
+        Assert.Equal(1.0, (double)selector.Correlations[0], 2);
+        Assert.Equal(0.0, (double)selector.Correlations[1], 2);
+        Assert.Equal(new[] { 0 }, selector.SelectedIndices);
+    }
+
+    // Two classes of 300 rows, class 0 alternating 0, 1 and class 1 alternating 1, 2: Welch's
+    // t = 1 / sqrt(2 * 75 / (299 * 300)) = 24.454. The divisor (n_c - 1) n_c = 89,700 is +infinity in Half, so the
+    // standard error was 0 and t was 1 / 1e-10's Half floor.
+    [Fact(Timeout = 60000)]
+    public async Task SupervisedWelchT_Half_DividesPastTheCountProductOverflow()
+    {
+        await Task.CompletedTask;
+        const int perClass = 300;
+        var data = new Half[2 * perClass, 1];
+        var target = new Half[2 * perClass];
+        for (int i = 0; i < 2 * perClass; i++)
+        {
+            int label = i < perClass ? 0 : 1;
+            target[i] = (Half)label;
+            data[i, 0] = (Half)(label + i % 2);
+        }
+
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Supervised.TTestSelector<Half>(nFeaturesToSelect: 1);
+        selector.Fit(new Matrix<Half>(data), new Vector<Half>(target));
+
+        Assert.NotNull(selector.TStatistics);
+        Assert.InRange((double)selector.TStatistics[0], 24.2, 24.7);
+    }
+
+    // The lasso on 3,000 rows of Half data: every entry of X'X sums 3,000 products and its diagonal reaches 3,000,
+    // past the 2048 at which a running sum in Half stops growing, so the solver must not run in Half. Solved in
+    // float, the Half coefficients match the double fit of the same (Half-rounded) data.
+    [Fact(Timeout = 120000)]
+    public async Task Lasso_Half_MatchesDouble()
+    {
+        await Task.CompletedTask;
+        const int n = 3000;
+        var doubleData = new double[n, 2];
+        var doubleTarget = new double[n];
+        var halfData = new Half[n, 2];
+        var halfTarget = new Half[n];
+        for (int i = 0; i < n; i++)
+        {
+            doubleData[i, 0] = (double)(Half)(i * 0.618 % 1.0);
+            doubleData[i, 1] = (double)(Half)(i * 0.414 % 1.0);
+            doubleTarget[i] = (double)(Half)(2 * doubleData[i, 0] + 0.1 * doubleData[i, 1]);
+            halfData[i, 0] = (Half)doubleData[i, 0];
+            halfData[i, 1] = (Half)doubleData[i, 1];
+            halfTarget[i] = (Half)doubleTarget[i];
+        }
+
+        var reference = new AiDotNet.Preprocessing.FeatureSelection.Sparsity.L1RegularizationSelector<double>(nFeaturesToSelect: 1, alpha: 0.01);
+        reference.Fit(new Matrix<double>(doubleData), new Vector<double>(doubleTarget));
+        var half = new AiDotNet.Preprocessing.FeatureSelection.Sparsity.L1RegularizationSelector<Half>(nFeaturesToSelect: 1, alpha: 0.01);
+        half.Fit(new Matrix<Half>(halfData), new Vector<Half>(halfTarget));
+
+        Assert.NotNull(reference.Coefficients);
+        Assert.NotNull(half.Coefficients);
+        for (int j = 0; j < 2; j++)
+            Assert.True(Math.Abs((double)half.Coefficients[j] - reference.Coefficients[j]) <= 0.01 * Math.Abs(reference.Coefficients[0]),
+                $"Half coefficient {j}: {(double)half.Coefficients[j]}, double {reference.Coefficients[j]}.");
+        Assert.Equal(new[] { 0 }, half.SelectedIndices);
+    }
 }

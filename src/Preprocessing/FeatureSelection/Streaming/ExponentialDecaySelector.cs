@@ -178,13 +178,15 @@ public class ExponentialDecaySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         var newVars = Engine.TensorAdd(Engine.TensorMultiplyScalar(vars, decayRows), Engine.TensorMultiplyScalar(
             Engine.TensorMatMul(tail, Engine.TensorMultiply(deviation, deviation)), NumOps.Multiply(oneMinusD, d)));
 
-        // c_end = d^rows c + (1 - d) d^2 sum_i d^(rows-1-i) (x_i - m_(i-1)) (y_i - my_(i-1))
+        // c_end = d^rows c + (1 - d) d sum_i d^(rows-1-i) (x_i - m_(i-1)) (y_i - my_(i-1)), the same weight as the
+        // variances: the per-row update c <- d (c + (1 - d) dx dy), the exponentially weighted co-moment. The former
+        // d^2 (both deviations from the updated means) left a feature equal to the target at correlation d.
         var featureDeviation = Engine.TensorSlice(deviation, new[] { 0, 0 }, new[] { rows, p });
         var targetDeviation = Engine.TensorSlice(deviation, new[] { 0, p }, new[] { rows, 1 });
         var newCovariances = Engine.TensorAdd(Engine.TensorMultiplyScalar(covariances, decayRows),
             Engine.TensorMultiplyScalar(Engine.TensorMatMul(
                 Engine.TensorMultiply(tail, Engine.TensorTranspose(targetDeviation)), featureDeviation),
-                NumOps.Multiply(oneMinusD, NumOps.Multiply(d, d))));
+                NumOps.Multiply(oneMinusD, d)));
 
         var newMeans = Engine.TensorSlice(runningMeans, new[] { rows - 1, 0 }, new[] { 1, width });
         return (newMeans, newVars, newCovariances);

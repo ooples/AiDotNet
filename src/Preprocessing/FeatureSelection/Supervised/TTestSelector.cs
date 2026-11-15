@@ -98,8 +98,9 @@ public class TTestSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         {
             // Welch's t-test (unequal variances)
             se = Engine.TensorSqrt(Engine.TensorAdd(
-                Engine.TensorDivideScalar(ss0, NumOps.FromDouble((double)(n0 - 1) * n0)),
-                Engine.TensorDivideScalar(ss1, NumOps.FromDouble((double)(n1 - 1) * n1))));
+                // (divided by n_c - 1 and then by n_c: the product (n_c - 1) n_c is +infinity in Half past 256)
+                Engine.TensorDivideScalar(Engine.TensorDivideScalar(ss0, NumOps.FromDouble(n0 - 1)), NumOps.FromDouble(n0)),
+                Engine.TensorDivideScalar(Engine.TensorDivideScalar(ss1, NumOps.FromDouble(n1 - 1)), NumOps.FromDouble(n1))));
         }
 
         var scores = Engine.TensorAbs(Engine.TensorDivide(meanDifference, Engine.TensorAddScalar(se, PreprocessingTensorOps.Tolerance<T>(1e-10))));

@@ -57,15 +57,12 @@ public class MaximalVariance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFix
     protected override void FitCore(Matrix<T> data)
     {
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
         // Population mean and variance of every column
         var x = Tensor<T>.FromMatrix(data);
-        T count = NumOps.FromDouble(n);
-        var mean = Engine.TensorDivideScalar(Engine.ReduceSum(x, new[] { 0 }, false), count);
-        var variance = Engine.TensorDivideScalar(
-            SelectorTensorOps.ColumnSumOfSquares(FilterStatisticTensorOps.CenterColumns(x)), count);
+        var mean = FilterStatisticTensorOps.ColumnMeans(x);
+        var variance = SelectorTensorOps.ColumnVariance(x);
 
         var scores = variance;
         if (_normalize)

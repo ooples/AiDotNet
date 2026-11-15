@@ -85,8 +85,9 @@ public class TrendFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountF
         // Compute R-squared to measure trend strength (the fit slope t_c = projection unitTime)
         var residual = Engine.TensorSubtract(centered, Engine.TensorMultiply(
             unitTimeWide, Engine.TensorBroadcastTo(Engine.Reshape(projection, new[] { 1, p }), new[] { n, p })));
-        var ssTotal = SelectorTensorOps.ColumnSumOfSquares(centered);
-        var ssResidual = SelectorTensorOps.ColumnSumOfSquares(residual);
+        // (as means, which leave R^2 = 1 - ssResidual / ssTotal unchanged: the sums overflow Half while the means fit)
+        var ssTotal = SelectorTensorOps.ColumnMeanOfSquares(centered, n);
+        var ssResidual = SelectorTensorOps.ColumnMeanOfSquares(residual, n);
         var fitted = Engine.TensorGreaterThan(ssTotal, PreprocessingTensorOps.Tolerance<T>(1e-10));
         var safeTotal = Engine.TensorWhere(fitted, ssTotal, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
         var rSquared = SelectorTensorOps.ZeroUnless(fitted, PreprocessingTensorOps.OneMinus(Engine.TensorDivide(ssResidual, safeTotal)));

@@ -84,8 +84,8 @@ public class SparseGroupLassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
 
         // Normalize features: centre and divide by the sample standard deviation plus 1e-10
         var centered = FilterStatisticTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
-        var std = Engine.TensorAddScalar(Engine.TensorSqrt(Engine.TensorDivideScalar(
-            SelectorTensorOps.ColumnSumOfSquares(centered), NumOps.FromDouble(n - 1))), PreprocessingTensorOps.Tolerance<T>(1e-10));
+        var std = Engine.TensorAddScalar(Engine.TensorSqrt(
+            SelectorTensorOps.ColumnMeanOfSquares(centered, n - 1)), PreprocessingTensorOps.Tolerance<T>(1e-10));
         var x = Engine.TensorDivide(centered, Engine.Reshape(std, new[] { 1, p }));
         var y = SelectorTensorOps.CenteredColumn(target);
 

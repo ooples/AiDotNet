@@ -67,19 +67,17 @@ public class PearsonCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matri
         // |Pearson r| from population moments; 0 where either standard deviation is below 1e-10
         var xc = FilterStatisticTensorOps.CenterColumns(Tensor<T>.FromMatrix(data));
         var yc = SelectorTensorOps.CenteredColumn(target);
-        T count = NumOps.FromDouble(n);
+        // (the standard deviations through ColumnMeanOfSquares and r through CenteredCorrelations, which scale and
+        // widen a narrow T: the raw sums of squares and cross products overflow Half from about 1,000 rows of 10)
         T eps = PreprocessingTensorOps.Tolerance<T>(1e-10);
-        T yStd = NumOps.Sqrt(NumOps.Divide(PreprocessingTensorOps.SumOfSquares(yc), count));
-        var xStd = Engine.TensorSqrt(Engine.TensorDivideScalar(SelectorTensorOps.ColumnSumOfSquares(xc), count));
+        T yStd = NumOps.Sqrt(SelectorTensorOps.ColumnMeanOfSquares(yc, n).GetFlat(0));
+        var xStd = Engine.TensorSqrt(SelectorTensorOps.ColumnMeanOfSquares(xc, n));
         var scores = PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
         if (!NumOps.LessThan(yStd, eps))
         {
-            var covariance = Engine.TensorDivideScalar(
-                Engine.ReduceSum(Engine.TensorMultiply(xc, yc), new[] { 0 }, false), count);
             var usable = PreprocessingTensorOps.AtLeast(xStd, eps);
-            var safeStd = Engine.TensorWhere(usable, xStd, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
             scores = SelectorTensorOps.ZeroUnless(usable,
-                Engine.TensorAbs(Engine.TensorDivide(covariance, Engine.TensorMultiplyScalar(safeStd, yStd))));
+                Engine.TensorAbs(PreprocessingTensorOps.CenteredCorrelations(xc, yc)));
         }
 
         _correlations = scores.ToVector();

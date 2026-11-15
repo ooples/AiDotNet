@@ -30,6 +30,11 @@ internal static class SparseRegressionOps
     public static Tensor<T> SparseGroupElasticNet<T>(Tensor<T> x, Tensor<T> y, int[] groups,
         double l1, double l2, double group, int maxIterations, double tolerance)
     {
+        // Half and BFloat16 are solved in float and the coefficients converted once: X'X of a standardized design
+        // has n on its diagonal, X'y sums n products, and both pass Half's 65504 or stop growing at 2048
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+            return SparseGroupElasticNet(x.Cast<float>(), y.Cast<float>(), groups, l1, l2, group, maxIterations, tolerance).Cast<T>();
+
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int n = x.Shape[0];

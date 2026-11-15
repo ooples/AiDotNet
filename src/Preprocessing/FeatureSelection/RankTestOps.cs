@@ -1,4 +1,3 @@
-using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -21,7 +20,6 @@ internal static class RankTestOps
     public static Tensor<T> AverageRanksWithTies<T>(Tensor<T> x, out Tensor<double> tieTerm)
     {
         var engine = AiDotNetEngine.Current;
-        var ops = MathHelper.GetNumericOperations<T>();
         int n = x.Shape[0];
         int m = x.Shape[1];
         if (m == 0)
@@ -30,7 +28,7 @@ internal static class RankTestOps
             return new Tensor<T>(new[] { n, 0 });
         }
 
-        var columns = new Tensor<T>[m];
+        var columns = new Tensor<double>[m];
         var ties = new Tensor<double>[m];
         for (int j = 0; j < m; j++)
         {
@@ -38,7 +36,7 @@ internal static class RankTestOps
             var sorted = engine.TensorSort(column, 0, false).Values;
             var below = engine.TensorSearchSorted(sorted, column, false);
             var atMost = engine.TensorSearchSorted(sorted, column, true);
-            columns[j] = engine.Reshape(engine.TensorAdd(below, atMost).Cast<T>(), new[] { n, 1 });
+            columns[j] = engine.Reshape(engine.TensorAdd(below, atMost).Cast<double>(), new[] { n, 1 });
 
             // Each value's tie group has t = atMost - below members; summing t^2 - 1 over the values gives
             // sum over groups of t (t^2 - 1) = t^3 - t
@@ -47,9 +45,10 @@ internal static class RankTestOps
                 engine.TensorMultiply(groupSize, groupSize), new[] { 1, n }), new[] { 1 }, false);
         }
 
-        // (below + atMost + 1) / 2 = mean of the 1-based positions below + 1 .. atMost
+        // (below + atMost + 1) / 2 = mean of the 1-based positions below + 1 .. atMost, formed in double: the sum
+        // below + atMost reaches 2n - 1, past Half's 65504 from n = 32753, though every rank itself fits
         tieTerm = engine.TensorSubtractScalar(engine.TensorConcatenate(ties, 0), (double)n);
         var sum = engine.TensorConcatenate(columns, 1);
-        return engine.TensorDivideScalar(engine.TensorAddScalar(sum, ops.One), ops.FromDouble(2));
+        return engine.TensorDivideScalar(engine.TensorAddScalar(sum, 1.0), 2.0).Cast<T>();
     }
 }
