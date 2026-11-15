@@ -22924,3 +22924,19 @@ AiDotNet.Enums.ObliviousTreeChoiceFunction.SoftmaxSigmoid = 1 -> AiDotNet.Enums.
 override AiDotNet.Diffusion.Schedulers.FlowDPMSolverScheduler<T>.SetTimesteps(int inferenceSteps) -> void
 override AiDotNet.Diffusion.Schedulers.PeRFlowScheduler<T>.SetTimesteps(int inferenceSteps) -> void
 override AiDotNet.Diffusion.Schedulers.SASolverScheduler<T>.SetTimesteps(int inferenceSteps) -> void
+*REMOVED*AiDotNet.Diffusion.ThreeD.MeshyModel<T>
+*REMOVED*AiDotNet.Diffusion.ThreeD.MeshyModel<T>.MeshyModel(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>? architecture = null, AiDotNet.Models.Options.DiffusionModelOptions<T>? options = null, AiDotNet.Interfaces.INoiseScheduler<T>? scheduler = null, AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<T>? unet = null, AiDotNet.Diffusion.VAE.StandardVAE<T>? vae = null, AiDotNet.Interfaces.IConditioningModule<T>? conditioner = null, int defaultPointCount = 8192, int? seed = null) -> void
+*REMOVED*override AiDotNet.Diffusion.ThreeD.MeshyModel<T>.Conditioner.get -> AiDotNet.Interfaces.IConditioningModule<T>?
+*REMOVED*override AiDotNet.Diffusion.ThreeD.MeshyModel<T>.GenerateMesh(string! prompt, string? negativePrompt = null, int resolution = 256, int numInferenceSteps = 50, double guidanceScale = 7.5, int? seed = null) -> AiDotNet.Interfaces.Mesh3D<T>!
+*REMOVED*override AiDotNet.Diffusion.ThreeD.MeshyModel<T>.GeneratePointCloud(string! prompt, string? negativePrompt = null, int? numPoints = null, int numInferenceSteps = 50, double guidanceScale = 7.5, int? seed = null) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.Diffusion.ThreeD.MeshyModel<T>.GetModelMetadata() -> AiDotNet.Models.ModelMetadata<T>!
+*REMOVED*override AiDotNet.Diffusion.ThreeD.MeshyModel<T>.LatentChannels.get -> int
+*REMOVED*override AiDotNet.Diffusion.ThreeD.MeshyModel<T>.NoisePredictor.get -> AiDotNet.Interfaces.INoisePredictor<T>!
+*REMOVED*override AiDotNet.Diffusion.ThreeD.MeshyModel<T>.RegisterComponents() -> void
+*REMOVED*override AiDotNet.Diffusion.ThreeD.MeshyModel<T>.RegisterGeneratedParameterComponents(AiDotNet.Models.Parameters.ParameterComponentRegistry<T>! registry) -> void
+*REMOVED*override AiDotNet.Diffusion.ThreeD.MeshyModel<T>.SupportsMesh.get -> bool
+*REMOVED*override AiDotNet.Diffusion.ThreeD.MeshyModel<T>.SupportsNovelView.get -> bool
+*REMOVED*override AiDotNet.Diffusion.ThreeD.MeshyModel<T>.SupportsPointCloud.get -> bool
+*REMOVED*override AiDotNet.Diffusion.ThreeD.MeshyModel<T>.SupportsScoreDistillation.get -> bool
+*REMOVED*override AiDotNet.Diffusion.ThreeD.MeshyModel<T>.SupportsTexture.get -> bool
+*REMOVED*override AiDotNet.Diffusion.ThreeD.MeshyModel<T>.VAE.get -> AiDotNet.Interfaces.IVAEModel<T>!
