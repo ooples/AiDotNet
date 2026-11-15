@@ -1187,21 +1187,16 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
     private Tensor<T> ProjectVisionToQformer(Tensor<T> visionFeatures)
     {
         int seqLen = visionFeatures.Shape[0];
-        var projected = Tensor<T>.CreateDefault([seqLen, _qformerHiddenDim], NumOps.Zero);
+        if (seqLen == 0 || _qformerHiddenDim == 0 || _visionHiddenDim == 0)
+            return Tensor<T>.CreateDefault([seqLen, _qformerHiddenDim], NumOps.Zero);
 
-        // Simple linear projection (in practice, would use a learned projection)
-        for (int i = 0; i < seqLen; i++)
-        {
-            for (int j = 0; j < _qformerHiddenDim; j++)
-            {
-                // Average pooling over vision dimension
-                int srcIdx = j * _visionHiddenDim / _qformerHiddenDim;
-                srcIdx = Math.Min(srcIdx, _visionHiddenDim - 1);
-                projected[i, j] = visionFeatures[i, srcIdx];
-            }
-        }
-
-        return projected;
+        // Column j takes vision column min(j * visionDim / qformerDim, visionDim - 1). A gather on the
+        // tape, so the vision encoder (patch embedding, CLS token, positions) receives gradient.
+        var columns = Enumerable.Range(0, _qformerHiddenDim)
+            .Select(j => (int)Math.Min((long)j * _visionHiddenDim / _qformerHiddenDim, _visionHiddenDim - 1))
+            .ToArray();
+        var rows = Engine.TensorSlice(visionFeatures, [0, 0], [seqLen, _visionHiddenDim]);
+        return Engine.TensorGather(rows, new Tensor<int>(columns, [columns.Length]), axis: 1);
     }
 
     /// <summary>
@@ -1226,18 +1221,22 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
         if (kvLen == 0)
             throw new ArgumentException("Cross attention needs at least one key/value row.", nameof(keyValues));
 
-        // softmax(Q K^T * scale) V + Q (residual), row by row; a plain value (off the tape), as before.
+        // softmax(Q K^T * scale) V + Q (residual), recorded on the tape: this runs inside
+        // ForwardForTraining, so the queries (and every Q-Former layer before this one) and the vision
+        // features must keep their gradient through the cross-attention.
+        var q2 = Engine.TensorSlice(queries, [0, 0], [queryLen, hiddenDim]);
+        var kv = Engine.TensorSlice(keyValues, [0, 0], [kvLen, hiddenDim]);
+        var scores = Engine.TensorMultiplyScalar(
+            Engine.TensorMatMul(q2, Engine.TensorTranspose(kv)), NumOps.FromDouble(scale));   // [queryLen, kvLen]
+        Tensor<T> maxScore;
         using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            var q2 = Engine.TensorSlice(queries, [0, 0], [queryLen, hiddenDim]);
-            var kv = Engine.TensorSlice(keyValues, [0, 0], [kvLen, hiddenDim]);
-            var scores = Engine.TensorMultiplyScalar(
-                Engine.TensorMatMul(q2, Engine.TensorTranspose(kv)), NumOps.FromDouble(scale));   // [queryLen, kvLen]
-            var maxScore = Engine.ReduceMax(scores, new[] { 1 }, keepDims: true);
-            var expScores = Engine.TensorExp(Engine.TensorSubtract(scores, maxScore));
-            var weights = Engine.TensorDivide(expScores, Engine.ReduceSum(expScores, new[] { 1 }, keepDims: true));
-            return Engine.TensorAdd(q2, Engine.TensorMatMul(weights, kv));
+            // The row max only stabilises the exponent; softmax is invariant to it, so it is a constant.
+            maxScore = Engine.ReduceMax(scores, new[] { 1 }, keepDims: true);
         }
+        var expScores = Engine.TensorExp(Engine.TensorSubtract(scores, maxScore));
+        var weights = Engine.TensorDivide(expScores, Engine.ReduceSum(expScores, new[] { 1 }, keepDims: true));
+        return Engine.TensorAdd(q2, Engine.TensorMatMul(weights, kv));
     }
 
     /// <summary>

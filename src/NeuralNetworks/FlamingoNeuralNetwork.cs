@@ -743,34 +743,35 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
         int numPatches = patchFeatures.Shape[0];
         int hiddenDim = patchFeatures.Shape.Length > 1 ? patchFeatures.Shape[1] : _visionHiddenDim;
 
-        // patch + position over the block both cover, zero elsewhere, as fresh values off the tape
-        var features = Tensor<T>.CreateDefault([numPatches, hiddenDim], NumOps.Zero);
-        int blockRows = Math.Min(numPatches, _visionPositionalEmbeddings.Shape[0]);
-        int blockCols = Math.Min(hiddenDim, _visionPositionalEmbeddings.Shape[1]);
-        if (blockRows > 0 && blockCols > 0)
-        {
-            T[] block;
-            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
-            {
-                block = Engine.TensorAdd(
-                    Engine.TensorSlice(patchFeatures, [0, 0], [blockRows, blockCols]),
-                    Engine.TensorSlice(_visionPositionalEmbeddings, [0, 0], [blockRows, blockCols])).ToArray();
-            }
-
-            var featureSpan = features.AsWritableSpan();
-            for (int i = 0; i < blockRows; i++)
-            {
-                block.AsSpan(i * blockCols, blockCols).CopyTo(featureSpan.Slice(i * hiddenDim, blockCols));
-            }
-        }
-
-        var current = features;
+        var current = PatchPlusPosition(patchFeatures, _visionPositionalEmbeddings, numPatches, hiddenDim);
         foreach (var layer in _visionEncoderLayers)
         {
             current = layer.Forward(current);
         }
 
         return current;
+    }
+
+    /// <summary>
+    /// patch + position over the [rows, cols] block both cover, zero elsewhere, as a [numPatches, hiddenDim]
+    /// tensor recorded on the tape: this is the training forward, so the patch embedding and the positional
+    /// table must receive gradient.
+    /// </summary>
+    private Tensor<T> PatchPlusPosition(Tensor<T> patchFeatures, Tensor<T> positional, int numPatches, int hiddenDim)
+    {
+        int blockRows = Math.Min(numPatches, positional.Shape[0]);
+        int blockCols = Math.Min(hiddenDim, positional.Shape[1]);
+        if (blockRows <= 0 || blockCols <= 0)
+            return Tensor<T>.CreateDefault([numPatches, hiddenDim], NumOps.Zero);
+
+        var block = Engine.TensorAdd(
+            Engine.TensorSlice(patchFeatures, [0, 0], [blockRows, blockCols]),
+            Engine.TensorSlice(positional, [0, 0], [blockRows, blockCols]));
+        if (blockCols < hiddenDim)
+            block = Engine.TensorConcatenate(new[] { block, new Tensor<T>([blockRows, hiddenDim - blockCols]) }, 1);
+        if (blockRows < numPatches)
+            block = Engine.TensorConcatenate(new[] { block, new Tensor<T>([numPatches - blockRows, hiddenDim]) }, 0);
+        return block;
     }
 
     private Tensor<T> ExtractPerceiverFeaturesNative(Tensor<T> visionFeatures)
@@ -780,16 +781,11 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
             throw new InvalidOperationException("Perceiver queries not initialized.");
         }
 
-        // A fresh copy of the leading [tokens, hidden] block of the learned queries
-        var current = Tensor<T>.CreateDefault([_numPerceiverTokens, _lmHiddenDim], NumOps.Zero);
-        if (_numPerceiverTokens > 0 && _lmHiddenDim > 0)
-        {
-            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
-            {
-                Engine.TensorSlice(_perceiverQueries, [0, 0], [_numPerceiverTokens, _lmHiddenDim])
-                    .CopyTo(current.AsWritableSpan());
-            }
-        }
+        // The leading [tokens, hidden] block of the learned queries, on the tape so the latent queries
+        // (Alayrac et al. 2022, Perceiver Resampler) receive gradient in the training forward.
+        var current = _numPerceiverTokens > 0 && _lmHiddenDim > 0
+            ? Engine.TensorSlice(_perceiverQueries, [0, 0], [_numPerceiverTokens, _lmHiddenDim])
+            : Tensor<T>.CreateDefault([_numPerceiverTokens, _lmHiddenDim], NumOps.Zero);
 
         for (int i = 0; i < _perceiverLayers.Count; i += 3)
         {
