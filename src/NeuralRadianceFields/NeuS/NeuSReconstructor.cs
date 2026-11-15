@@ -135,18 +135,24 @@ internal sealed class NeuSReconstructor<T>
         if (views.Count == 0) throw new ArgumentException("At least one view is needed.", nameof(views));
         var view = NextView(views);
         var host = Host(view);
-        Field.UpdateHashGridLevels(Iteration);
+        // instant-nsr-pl update_step: the progressive band, the finite-difference step and the occupancy grid.
+        Field.UpdateStep(Iteration);
+        Field.UpdateOccupancyGrid(Iteration, _random);
         var batch = DrawBatch(host, CurrentBatchSize);
         int perturbSeed = _random.Next();
         // Drawn after the perturbation seed, and only when a term reads them, so a plain NeuS run draws exactly the
         // reference's sequence.
         if (Options.SparsityWeight > 0 || Options.NormalSmoothWeight > 0) DrawRegularizationPoints(batch);
         double annealRatio = Options.CosineAnnealRatio(Iteration);
+        long samplesUsed = (long)batch.Count * (Options.Samples + Options.ImportanceSamples);
 
         Tensor<T> Objective()
         {
             var perturb = Options.Perturb ? RandomHelper.CreateSeededRandom(perturbSeed) : null;
-            return Loss(batch, Field.Render(batch.Origins, batch.Directions, annealRatio, perturb));
+            var render = Field.Render(batch.Origins, batch.Directions, annealRatio, perturb);
+            // out['num_samples_full']: the samples the renderer actually evaluated.
+            samplesUsed = render.SampleCount;
+            return Loss(batch, render);
         }
 
         T loss;
@@ -179,9 +185,8 @@ internal sealed class NeuSReconstructor<T>
             if (optimizer is GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> scheduled) scheduled.StepScheduler();
         if (Options.DynamicRaySampling)
         {
-            long used = (long)batch.Count * (Options.Samples + Options.ImportanceSamples);
             long budget = (long)Options.BatchSize * Options.SamplesPerRayBudget;
-            CurrentBatchSize = NextDynamicBatchSize(CurrentBatchSize, budget, used, Options.MaxBatchSize);
+            CurrentBatchSize = NextDynamicBatchSize(CurrentBatchSize, budget, samplesUsed, Options.MaxBatchSize);
         }
 
         return loss;

@@ -11,6 +11,13 @@ internal enum NeuSRenderingMode
 
     /// <summary>Point, view direction and feature.</summary>
     NoNormal,
+
+    /// <summary>
+    /// instant-nsr-pl's <c>VolumeRadiance</c>: the SDF network's whole output (SDF and features), optionally the view
+    /// direction's spherical harmonics (<see cref="NeuSOptions.RadianceUsesViewDirection"/>), and the unit normal, into
+    /// a ReLU MLP (Kaiming-uniform weights, zero biases, no weight normalization) with a sigmoid.
+    /// </summary>
+    VolumeRadiance,
 }
 
 /// <summary>What encodes a point before NeuS's SDF network.</summary>
@@ -166,6 +173,16 @@ internal sealed class NeuSOptions
     /// <summary>Whether the color passes through a sigmoid (<c>squeeze_out</c> = true).</summary>
     public bool SqueezeColor { get; set; } = true;
 
+    /// <summary>
+    /// Whether <see cref="NeuSRenderingMode.VolumeRadiance"/> reads the view direction's spherical harmonics.
+    /// instant-nsr-pl's <c>VolumeRadiance</c> sets <c>self.with_viewdir = False</c> (so its <c>dir_encoding_config</c>
+    /// is never used); true restores the encoding.
+    /// </summary>
+    public bool RadianceUsesViewDirection { get; set; }
+
+    /// <summary>The spherical-harmonics degree of the view encoding (<c>dir_encoding_config.degree</c> = 4: 16 terms).</summary>
+    public int RadianceShDegree { get; set; } = 4;
+
     // ---- Variance network ----
 
     /// <summary>The initial log-variance parameter; the S-density's sharpness is <c>s = exp(10 · v)</c> (<c>init_val</c> = 0.3).</summary>
@@ -187,6 +204,51 @@ internal sealed class NeuSOptions
 
     /// <summary>A constant background color composited behind the surface (<c>background_rgb</c>), or null for none.</summary>
     public double[]? BackgroundColor { get; set; }
+
+    /// <summary>How the samples along each ray are placed (NeuS's hierarchical sampler by default).</summary>
+    public NeuSRaySampler Sampler { get; set; } = NeuSRaySampler.Hierarchical;
+
+    /// <summary>
+    /// The scene's half extent r (instant-nsr-pl <c>model.radius</c>): the marching box <c>[−r, r]³</c>, the hash
+    /// grid's domain (<c>contract_to_unisphere</c> maps it to the unit cube) and the finite-difference clamp.
+    /// </summary>
+    public double SceneRadius { get; set; } = 1.0;
+
+    /// <summary>Whether <see cref="NeuSRaySampler.OccupancyGrid"/> skips empty cells (<c>grid_prune</c> = true).</summary>
+    public bool UseOccupancyGrid { get; set; } = true;
+
+    /// <summary>The occupancy grid's cells per axis (instant-nsr-pl: 128).</summary>
+    public int OccupancyGridResolution { get; set; } = 128;
+
+    /// <summary>The iterations between occupancy-grid updates (nerfacc <c>every_n_step</c> n = 16).</summary>
+    public int OccupancyGridUpdateInterval { get; set; } = 16;
+
+    /// <summary>
+    /// The occupancy threshold: a cell is occupied when its value exceeds <c>min(mean, threshold)</c>
+    /// (<c>grid_prune_occ_thre</c>; nerfacc's default 0.01).
+    /// </summary>
+    public double OccupancyGridThreshold { get; set; } = 0.01;
+
+    /// <summary>The decay of a cell's running occupancy, <c>max(decay · old, new)</c> (nerfacc <c>ema_decay</c> = 0.95).</summary>
+    public double OccupancyGridEmaDecay { get; set; } = 0.95;
+
+    /// <summary>The iterations during which every cell is re-evaluated (nerfacc <c>warmup_steps</c> = 256).</summary>
+    public int OccupancyGridWarmUpIterations { get; set; } = 256;
+
+    /// <summary>
+    /// The transmittance below which marched samples get no weight (nerfacc <c>render_weight_from_alpha</c>
+    /// <c>early_stop_eps</c> = 1e-4).
+    /// </summary>
+    public double TransmittanceEarlyStop { get; set; } = 1e-4;
+
+    /// <summary>How the SDF gradient is computed (NeuS: analytic).</summary>
+    public NeuSGradientMode GradientMode { get; set; } = NeuSGradientMode.Analytic;
+
+    /// <summary>How the finite-difference step is chosen (a fixed step by default).</summary>
+    public NeuSFiniteDifferenceStep FiniteDifferenceStep { get; set; } = NeuSFiniteDifferenceStep.Fixed;
+
+    /// <summary>The fixed finite-difference step (instant-nsr-pl's default <c>finite_difference_eps</c> = 1e-3).</summary>
+    public double FiniteDifferenceEpsilon { get; set; } = 1e-3;
 
     // ---- Training (train) ----
 
@@ -416,7 +478,54 @@ internal sealed class NeuSOptions
         if (GridChunkSize <= 0) throw new ArgumentOutOfRangeException(nameof(GridChunkSize));
         if (!(NearFarRadius > 0)) throw new ArgumentOutOfRangeException(nameof(NearFarRadius));
         if (!(CubeHalfSide > 0)) throw new ArgumentOutOfRangeException(nameof(CubeHalfSide));
+        if (RadianceShDegree < 1 || RadianceShDegree > NeuSSphericalHarmonics.MaxDegree)
+            throw new ArgumentOutOfRangeException(nameof(RadianceShDegree), $"The degree must be 1 to {NeuSSphericalHarmonics.MaxDegree}.");
+        if (!(SceneRadius > 0) || double.IsInfinity(SceneRadius)) throw new ArgumentOutOfRangeException(nameof(SceneRadius));
+        if (OccupancyGridResolution <= 0 || OccupancyGridResolution > 1024)
+            throw new ArgumentOutOfRangeException(nameof(OccupancyGridResolution));
+        if (OccupancyGridUpdateInterval <= 0) throw new ArgumentOutOfRangeException(nameof(OccupancyGridUpdateInterval));
+        if (!(OccupancyGridThreshold >= 0)) throw new ArgumentOutOfRangeException(nameof(OccupancyGridThreshold));
+        if (!(OccupancyGridEmaDecay >= 0 && OccupancyGridEmaDecay <= 1)) throw new ArgumentOutOfRangeException(nameof(OccupancyGridEmaDecay));
+        if (OccupancyGridWarmUpIterations < 0) throw new ArgumentOutOfRangeException(nameof(OccupancyGridWarmUpIterations));
+        if (!(TransmittanceEarlyStop >= 0 && TransmittanceEarlyStop < 1))
+            throw new ArgumentOutOfRangeException(nameof(TransmittanceEarlyStop));
+        if (!(FiniteDifferenceEpsilon > 0) || double.IsInfinity(FiniteDifferenceEpsilon))
+            throw new ArgumentOutOfRangeException(nameof(FiniteDifferenceEpsilon));
+        if (GradientMode == NeuSGradientMode.FiniteDifference && FiniteDifferenceStep == NeuSFiniteDifferenceStep.Progressive
+            && SdfBackbone != NeuSSdfBackbone.HashGrid)
+            throw new ArgumentException("The progressive finite-difference step follows the hash grid's levels; use the hash-grid backbone.",
+                nameof(FiniteDifferenceStep));
     }
+
+    /// <summary>
+    /// The hash grid's active levels at <paramref name="iteration"/> (instant-nsr-pl's <c>ProgressiveBandHashGrid</c>):
+    /// <c>min(start + max(iteration − startIteration, 0) / updateIterations, levels)</c>, or every level without a
+    /// start level.
+    /// </summary>
+    /// <param name="iteration">The training iteration.</param>
+    public int ActiveHashGridLevels(int iteration)
+    {
+        if (HashGridStartLevel is not int start) return HashGridLevels;
+        int grown = Math.Max(iteration - HashGridStartIteration, 0) / HashGridUpdateIterations;
+        return (int)Math.Min((long)start + grown, HashGridLevels);
+    }
+
+    /// <summary>
+    /// The finite-difference step at <paramref name="iteration"/> (instant-nsr-pl <c>VolumeSDF.update_step</c>): the
+    /// fixed <see cref="FiniteDifferenceEpsilon"/>, or with <see cref="NeuSFiniteDifferenceStep.Progressive"/> the
+    /// finest active level's cell, <c>2r / (b · σ^(level − 1))</c>.
+    /// </summary>
+    /// <param name="iteration">The training iteration.</param>
+    public double FiniteDifferenceEpsilonAt(int iteration)
+    {
+        if (FiniteDifferenceStep == NeuSFiniteDifferenceStep.Fixed) return FiniteDifferenceEpsilon;
+        int level = ActiveHashGridLevels(iteration);
+        double resolution = HashGridBaseResolution * Math.Pow(HashGridPerLevelScale, level - 1);
+        return 2.0 * SceneRadius / resolution;
+    }
+
+    /// <summary>The ray-marching step <c>√3 · 2r / num_samples_per_ray</c> (instant-nsr-pl <c>render_step_size</c>).</summary>
+    public double MarchingStepSize => 1.732 * 2.0 * SceneRadius / SamplesPerRayBudget;
 
     /// <summary>
     /// The learning-rate factor at <paramref name="iteration"/>: linear warm-up, then cosine decay to
