@@ -6,6 +6,8 @@ namespace AiDotNet.TextToSpeech.MultiModal;
 /// <summary>Transformers' sampling for the speech language models: temperature, then top-p, then a draw.</summary>
 internal static class NucleusSampling<T>
 {
+    private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
+
     /// <summary>
     /// Transformers' sampling: logits ÷ temperature, then top-p (the smallest set of the most likely tokens whose
     /// probability reaches p, at least one), then a draw; <paramref name="allowed"/> keeps only those ids.

@@ -65,7 +65,7 @@ internal static class MegaTtsOptionFixture
         var style = model.ReadPrompt(Prompt(model, "Good morning.", 330), "style");
         var probabilities = new List<double>();
         model.SampleProsody(new[] { target }, new[] { style }, target.Pooled!, new Random(0),
-            distribution => probabilities.AddRange(distribution.Cast<double>().ToArray()));
+            p => probabilities.AddRange(p.ToArray().Select(x => Convert.ToDouble(x))));
         return OptionSensitivityHarness.Fingerprint(probabilities);
     }
 

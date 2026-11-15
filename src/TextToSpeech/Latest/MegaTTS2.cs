@@ -396,7 +396,8 @@ public partial class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// The P-LLM's codes for the frames, one token at a time after the start token, each position reading its frames'
     /// pooled content; each prompt sentence read first in full. With prosody prompts, the distribution is
     /// (1 − γ)·p(·|target prompts) + γ·p(·|prosody prompts) (Eq. 3), the two sharing the sampled codes. The end token is
-    /// not drawn (the length follows the durations); top-k sampling of what remains.
+    /// not drawn (the length follows the durations); top-k sampling of what remains (<see cref="CodeDistribution"/>),
+    /// which <paramref name="observeDistribution"/> receives.
     /// </summary>
     internal int[] SampleProsody(IReadOnlyList<Prompt> target, IReadOnlyList<Prompt>? style, Tensor<T> pooled, Random random,
         Action<Tensor<T>>? observeDistribution = null)
@@ -414,41 +415,57 @@ public partial class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
         }
         var targetCache = Prefill(target);
         var styleCache = style is null ? null : Prefill(style);
-        double gamma = style is null ? 0 : _options.ProsodyInterpolation;
+        double interpolation = style is null ? 0 : _options.ProsodyInterpolation;
         int n = pooled.Shape[0], h = pooled.Shape[1], v = _options.Codes + 1;
         var codes = new int[n];
         int token = Network.StartToken;
-        var startMask = new bool[v];
-        startMask[0] = true;
-        // The softmax, the Eq. 3 mixture and the start-token renormalization run in double and only the final
-        // distribution is narrowed to T: in half precision exp(logit − max) is 0 for a logit 17.3 below the maximum,
-        // and no rescaling after the narrowing brings those tokens back once the start token is masked.
-        Tensor<double> Probabilities(MegaTts3DurationCache<T> cache, Tensor<T> row)
-        {
-            var logits = TensorCopyHelper.CastLogical<T, double>(Engine.Reshape(
-                Engine.TensorSlice(model.Extend(new[] { token }, row, cache), new[] { 0, 0 }, new[] { 1, v }), new[] { v }));
-            var e = Engine.TensorExp(Engine.TensorAddScalar(logits, -Engine.TensorMaxValue(logits)));
-            return Engine.TensorDivideScalar(e, Engine.TensorSum(e));
-        }
-        double keep = 1 - gamma;
+        Tensor<double> Logits(MegaTts3DurationCache<T> cache, Tensor<T> row) => Engine.Reshape(
+            Engine.TensorSlice(model.Extend(new[] { token }, row, cache), new[] { 0, 0 }, new[] { 1, v }), new[] { v }).Cast<double>();
         for (int i = 0; i < n; i++)
         {
             var row = Engine.TensorSlice(pooled, new[] { i, 0 }, new[] { 1, h });
-            var p = Probabilities(targetCache, row);
-            if (styleCache is not null)
-            {
-                var q = Probabilities(styleCache, row);
-                p = Engine.TensorAdd(Engine.TensorMultiplyScalar(p, keep), Engine.TensorMultiplyScalar(q, gamma));
-            }
-            p = TtsSampling<double>.Fill(p, startMask, 0.0);
-            double remaining = Engine.TensorSum(p);
-            if (remaining > 0) p = Engine.TensorDivideScalar(p, remaining);
-            var distribution = p.Cast<T>();
+            var logits = Logits(targetCache, row);
+            var styleLogits = styleCache is null ? null : Logits(styleCache, row);
+            var distribution = CodeDistribution(logits, styleLogits, interpolation).Cast<T>();
             observeDistribution?.Invoke(distribution);
-            codes[i] = TopK(distribution, _options.TopK, random) - 1;
+            codes[i] = TopK(distribution, _options.TopK, random);
             token = codes[i] + 1;
         }
         return codes;
+    }
+
+    /// <summary>
+    /// One step's code distribution <c>[v − 1]</c> from its logits <c>[v]</c> (token 0 the end token, token c + 1 code c):
+    /// Eq. 3's (1 − γ)·softmax(logits) + γ·softmax(style logits) without the end token, renormalized, in double.
+    /// </summary>
+    /// <remarks>
+    /// The end token is outside the candidates, so it is never drawn. When it holds all of the mass even in double (every
+    /// code logit more than ~745 below it), each softmax is taken over the code logits alone and mixed the same way, so
+    /// the distribution is still defined and still follows the logits.
+    /// </remarks>
+    internal static Tensor<double> CodeDistribution(Tensor<double> logits, Tensor<double>? styleLogits, double interpolation)
+    {
+        if (logits is null) throw new ArgumentNullException(nameof(logits));
+        int v = logits.Length;
+        if (v < 2) throw new ArgumentException("The logits hold the end token and at least one code.", nameof(logits));
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        Tensor<double> Softmax(Tensor<double> x)
+        {
+            var e = engine.TensorExp(engine.TensorAddScalar(x, -engine.TensorMaxValue(x)));
+            return engine.TensorDivideScalar(e, engine.TensorSum(e));
+        }
+        Tensor<double> Codes(Tensor<double> x) => engine.TensorSlice(x, new[] { 1 }, new[] { v - 1 });
+        Tensor<double> Mix(Tensor<double> p, Tensor<double>? q) => q is null
+            ? p
+            : engine.TensorAdd(engine.TensorMultiplyScalar(p, 1 - interpolation), engine.TensorMultiplyScalar(q, interpolation));
+        var codes = Codes(Mix(Softmax(logits), styleLogits is null ? null : Softmax(styleLogits)));
+        double mass = engine.TensorSum(codes);
+        if (!(mass > 0))
+        {
+            codes = Mix(Softmax(Codes(logits)), styleLogits is null ? null : Softmax(Codes(styleLogits)));
+            mass = engine.TensorSum(codes);
+        }
+        return engine.TensorDivideScalar(codes, mass);
     }
 
     // Top-k random sampling (Fan et al. 2018): the k most probable tokens, renormalized, one draw.

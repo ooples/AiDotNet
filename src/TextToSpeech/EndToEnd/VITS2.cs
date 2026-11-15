@@ -147,8 +147,7 @@ public partial class VITS2<T> : VitsTtsModelBase<T>
         VitsAlignment alignment;
         using (new NoGradScope<T>()) alignment = Align(data, draw, training: true);
         int tokens = alignment.Durations.Length;
-        var frameCounts = new Tensor<int>(alignment.Durations, new[] { 1, 1, tokens }).Cast<T>();
-        var logDurations = Engine.TensorLog(Engine.TensorAddScalar(frameCounts, NumOps.FromDouble(1e-6)));
+        var logDurations = Engine.Reshape(LogDurationTarget(alignment.Durations, 1e-6), new[] { 1, 1, tokens });
         var hidden = new Tensor<T>(alignment.Hidden._shape, alignment.Hidden.ToVector());
         var speaker = alignment.Speaker is null ? null : new Tensor<T>(alignment.Speaker._shape, alignment.Speaker.ToVector());
         var language = alignment.Language is null ? null : new Tensor<T>(alignment.Language._shape, alignment.Language.ToVector());
