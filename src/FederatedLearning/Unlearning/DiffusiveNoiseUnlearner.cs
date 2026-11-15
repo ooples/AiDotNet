@@ -155,11 +155,10 @@ public class DiffusiveNoiseUnlearner<T> : FederatedLearningComponentBase<T>, IFe
             .ToList();
         if (lastUpdates.Count == 0) return;
 
-        var sumUpdate = UnlearningEngineOps.SumFitted(lastUpdates, modelSize);
+        var sumUpdate = UnlearningEngineOps.SumFittedWide(lastUpdates, modelSize);
         var healed = Engine.TensorAdd(
-            UnlearningEngineOps.FitLength(model, modelSize),
-            Engine.TensorMultiplyScalar(sumUpdate, NumOps.FromDouble(healingEpochs * lr / lastUpdates.Count)));
-
+            UnlearningEngineOps.FitLength(model, modelSize).Cast<double>(),
+            Engine.TensorMultiplyScalar(sumUpdate, healingEpochs * lr / lastUpdates.Count)).Cast<T>();
         // Written back into the caller's model
         healed.AsSpan().CopyTo(model.AsWritableSpan().Slice(0, modelSize));
     }

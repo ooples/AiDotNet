@@ -550,16 +550,19 @@ public partial class StableAudioModel<T> : AudioNeuralNetworkBase<T>, IAudioGene
     /// A waveform mask (1 = regenerate) on the latent grid: the last latent axis is time, latent frame f covers
     /// samples [f N / L, (f + 1) N / L), and it is masked when any of its samples is (mask value above 0.5). When
     /// there are more latent frames than samples each frame reads its nearest sample. The result has the latent
-    /// shape, the same time mask in every channel.
+    /// shape, the same time mask in every channel; a masked sample in any input channel regenerates that time.
     /// </summary>
     internal static Tensor<T> LatentMask(IEngine engine, Tensor<T> mask, int[] latentShape)
     {
         if (latentShape.Length == 0) throw new ArgumentException("The latents need a time axis.", nameof(latentShape));
         int frames = latentShape[latentShape.Length - 1];
-        int samples = mask.Length;
-        if (samples == 0 || frames == 0) return new Tensor<T>(latentShape);
+        int samples = mask.Rank > 0 ? mask.Shape[^1] : mask.Length;
+        if (samples == 0 || frames == 0 || mask.Length == 0) return new Tensor<T>(latentShape);
         var numOps = MathHelper.GetNumericOperations<T>();
-        var masked = engine.TensorGreaterThan(mask.Reshape(new[] { samples }), numOps.FromDouble(0.5));
+        // Combine channels at matching sample times, never concatenate them along time.
+        var channels = engine.Reshape(mask, new[] { mask.Length / samples, samples });
+        var shared = engine.ReduceMax(channels, new[] { 0 }, false);
+        var masked = engine.TensorGreaterThan(shared, numOps.FromDouble(0.5));
 
         var group = new int[Math.Max(samples, frames)];
         Tensor<T> perFrame;

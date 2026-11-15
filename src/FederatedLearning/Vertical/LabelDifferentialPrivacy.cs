@@ -121,7 +121,8 @@ public class LabelDifferentialPrivacy<T> : FederatedLearningComponentBase<T>, IL
     private Tensor<T> ClipGradientNorm(Tensor<T> gradients, double maxNorm)
     {
         // Reduced in double: in T the squares and their sum overflow (Half: above 65504).
-        double normSquared = Engine.TensorSum(Engine.TensorSquare(gradients.Cast<double>()));
+        var wide = gradients.Contiguous().Cast<double>();
+        double normSquared = Engine.TensorSum(Engine.TensorSquare(wide));
 
         double norm = Math.Sqrt(normSquared);
         if (norm <= maxNorm)
@@ -130,7 +131,7 @@ public class LabelDifferentialPrivacy<T> : FederatedLearningComponentBase<T>, IL
         }
 
         double scale = maxNorm / norm;
-        return Engine.TensorMultiplyScalar(gradients, NumOps.FromDouble(scale));
+        return Engine.TensorMultiplyScalar(wide, scale).Cast<T>();
     }
 
     /// <summary>

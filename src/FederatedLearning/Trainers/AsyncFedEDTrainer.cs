@@ -212,8 +212,6 @@ public class AsyncFedEDTrainer<T> : Infrastructure.FederatedLearningComponentBas
         var result = new Dictionary<string, T[]>();
         var template = clientUpdates.Values.First();
 
-        // One conversion to T per client weight (a scalar, not an element).
-        T Share(double weight) => NumOps.FromDouble(weight);
 
         foreach (var (layerName, layerParams) in template)
         {
@@ -238,17 +236,17 @@ public class AsyncFedEDTrainer<T> : Infrastructure.FederatedLearningComponentBas
                 }
             }
 
-            var merged = new Tensor<T>([layerParams.Length]);
+            var merged = new Tensor<double>([layerParams.Length]);
             if (layerWeight > 0)
             {
                 foreach (var (clientLayer, w) in holders)
                 {
-                    var term = Engine.TensorMultiplyScalar(new Tensor<T>(clientLayer, [clientLayer.Length]), Share(w / layerWeight));
+                    var term = Engine.TensorMultiplyScalar(new Tensor<T>(clientLayer, [clientLayer.Length]).Cast<double>(), w / layerWeight);
                     merged = Engine.TensorAdd(merged, term);
                 }
             }
 
-            result[layerName] = merged.ToArray();
+            result[layerName] = merged.Cast<T>().ToArray();
         }
 
         return result;

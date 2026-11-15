@@ -158,7 +158,7 @@ public class ProxyZKPVerifier<T> : Infrastructure.FederatedLearningComponentBase
         {
             // v - v is 0 for finite v and NaN for NaN or +/-Infinity.
             int[] finite = Engine.TensorEquals(Engine.TensorSubtract(flat, flat), NumOps.Zero).Cast<int>().ToArray();
-            int[] overLimit = Engine.TensorGreaterThan(Engine.TensorAbs(flat), NumOps.FromDouble(_maxElementMagnitude)).Cast<int>().ToArray();
+            int[] overLimit = Engine.TensorGreaterThan(Engine.TensorAbs(flat.Contiguous().Cast<double>()), _maxElementMagnitude).Cast<int>().ToArray();
 
             int firstBad = -1;
             for (int i = 0; i < finite.Length; i++)

@@ -185,6 +185,8 @@ public partial class RNNTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         List<int> tokens;
         if (_network is null)
         {
+            if (beamWidth > 1)
+                throw new NotSupportedException("Transducer beam search requires the native prediction and joint networks.");
             // An ONNX graph or custom layers carry no separate prediction network to step, so their frame
             // outputs are read per frame from the log-mel features.
             var features = PreprocessAudio(audio);
@@ -279,7 +281,7 @@ public partial class RNNTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         var network = _network;
         if (network is null) return false;
         int rows = input.Rank == 1 ? 1 : input.Shape[0];
-        var labels = RowLabels(target, rows);
+        var labels = RowLabels(target, rows, input.Rank > 1);
         TrainWithCustomLoss(input, _ => MeanTransducerLoss(network, input, labels, training: true), _optimizer);
         return true;
     }
@@ -295,7 +297,7 @@ public partial class RNNTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         var network = _network ?? throw new NotSupportedException("The objective is defined on the native network.");
         using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
         int rows = input.Rank == 1 ? 1 : input.Shape[0];
-        return MeanTransducerLoss(network, input, RowLabels(target, rows), training: false).GetFlat(0);
+        return MeanTransducerLoss(network, input, RowLabels(target, rows, input.Rank > 1), training: false).GetFlat(0);
     }
 
     /// <inheritdoc />
@@ -371,13 +373,13 @@ public partial class RNNTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         return SpeechRecognitionEngineOps.MeanLoss(Engine, rows, r => network.TransducerLoss(Encoded(network, Row(input, r, rows), training), labels[r]));
     }
 
-    private int[][] RowLabels(Tensor<T> target, int rows)
+    private int[][] RowLabels(Tensor<T> target, int rows, bool hasBatchAxis)
     {
         int perRow = target.Length / rows;
         var labels = new int[rows][];
         for (int r = 0; r < rows; r++)
         {
-            var row = rows == 1 ? target : Engine.Reshape(Engine.TensorSlice(Engine.Reshape(target, new[] { rows, perRow }), new[] { r, 0 }, new[] { 1, perRow }),
+            var row = !hasBatchAxis ? target : Engine.Reshape(Engine.TensorSlice(Engine.Reshape(target, new[] { rows, perRow }), new[] { r, 0 }, new[] { 1, perRow }),
                 target.Rank >= 3 ? target.Shape.ToArray().Skip(1).ToArray() : new[] { perRow });
             labels[r] = Labels(row);
         }

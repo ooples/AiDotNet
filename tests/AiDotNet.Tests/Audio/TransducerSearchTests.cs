@@ -55,13 +55,55 @@ public class TransducerSearchTests
     [Fact]
     public void BeamSearch_RanksByLogProbabilityPerLabel()
     {
-        // Graves 2012 returns the hypothesis with the highest log Pr(y) / |y|: "a" (log 0.448875) beats "b"
-        // (log(0.25 * 0.95 * 0.95 + 0.4 * 0.25 * 0.95) = log 0.320625).
-        var hypotheses = TransducerSearch.BeamSearch<double>(2, MergingLattice, 3, 0, beamWidth: 50, maxSymbolsPerFrame: 2);
-        var b = hypotheses.Single(h => h.Labels.SequenceEqual(new[] { 2 }));
+        Tensor<double> Lattice(IReadOnlyList<int> labels, int t) => labels.Count switch
+        {
+            0 => Log(0.4, 0.6),
+            1 => Log(0.6, 0.4),
+            _ => Log(1, 0)
+        };
+        var hypotheses = TransducerSearch.BeamSearch<double>(1, Lattice, 2, 0, 4, 2);
+        Assert.Equal(new[] { 1, 1 }, hypotheses[0].Labels);
+        Assert.Equal(Math.Log(0.24), hypotheses[0].LogProbability, 12);
+        Assert.Equal(Math.Log(0.4), hypotheses.Single(h => h.Labels.Length == 0).LogProbability, 12);
+    }
 
-        Assert.Equal(Math.Log(0.320625), b.LogProbability, 9);
-        Assert.True(hypotheses.IndexOf(b) > 0);
+    [Fact]
+    public void BeamSearch_PrefixMerge_PreservesThePerFrameEmissionBudget()
+    {
+        var hypotheses = TransducerSearch.BeamSearch<double>(2, (_, _) => Log(0.5, 0.5), 2, 0, 4, 1);
+        Assert.Equal(Math.Log(0.0625), hypotheses.Single(h => h.Labels.SequenceEqual(new[] { 1, 1 })).LogProbability, 12);
+        Assert.Equal(Math.Log(0.25), hypotheses.Single(h => h.Labels.SequenceEqual(new[] { 1 })).LogProbability, 12);
+        Assert.DoesNotContain(hypotheses, h => h.Labels.Length > 2);
+    }
+
+    [Fact]
+    public void BeamSearch_WithEveryPrefixKept_MatchesAnExhaustiveCappedLattice()
+    {
+        double[] Probabilities(IReadOnlyList<int> labels, int frame) =>
+            labels.Count % 2 == frame ? new[] { 0.4, 0.35, 0.25 } : new[] { 0.6, 0.15, 0.25 };
+        var expected = new Dictionary<string, double>();
+        void Visit(List<int> labels, int frame, int emitted, double probability)
+        {
+            if (frame == 2)
+            {
+                string key = string.Join(",", labels);
+                expected[key] = expected.GetValueOrDefault(key) + probability;
+                return;
+            }
+            var probabilities = Probabilities(labels, frame);
+            Visit(labels, frame + 1, 0, probability * probabilities[0]);
+            if (emitted == 2) return;
+            for (int symbol = 1; symbol < 3; symbol++)
+            {
+                var child = new List<int>(labels) { symbol };
+                Visit(child, frame, emitted + 1, probability * probabilities[symbol]);
+            }
+        }
+        Visit(new List<int>(), 0, 0, 1);
+        var actual = TransducerSearch.BeamSearch<double>(2, (labels, frame) => Log(Probabilities(labels, frame)), 3, 0, 1000, 2);
+        Assert.Equal(expected.Count, actual.Count);
+        foreach (var hypothesis in actual)
+            Assert.Equal(Math.Log(expected[string.Join(",", hypothesis.Labels)]), hypothesis.LogProbability, 12);
     }
 
     [Fact]

@@ -125,13 +125,13 @@ public class MissingFeatureHandler<T> : FederatedLearningComponentBase<T>
         // (every sample re-reads the same row).
         var batchMean = embeddings.Rank > 1
             ? Engine.TensorDivideScalar(
-                Engine.ReduceSum(VerticalEngineOps.Rows(embeddings, batchSize, embDim), new[] { 0 }, false),
-                NumOps.FromDouble(batchSize))
-            : embeddings;
+                Engine.ReduceSum(VerticalEngineOps.Rows(embeddings, batchSize, embDim).Contiguous().Cast<double>(), new[] { 0 }, false),
+                (double)batchSize)
+            : embeddings.Contiguous().Cast<double>();
 
         _columnMeans[partyId] = Engine.TensorAdd(
-            Engine.TensorMultiplyScalar(VerticalEngineOps.Rows(currentMean, 1, embDim).Reshape(new[] { embDim }), NumOps.FromDouble(1.0 - alpha)),
-            Engine.TensorMultiplyScalar(batchMean, NumOps.FromDouble(alpha)));
+            Engine.TensorMultiplyScalar(VerticalEngineOps.Rows(currentMean, 1, embDim).Contiguous().Cast<double>().Reshape(new[] { embDim }), 1.0 - alpha),
+            Engine.TensorMultiplyScalar(batchMean, alpha)).Cast<T>();
 
         _meansComputed = true;
     }

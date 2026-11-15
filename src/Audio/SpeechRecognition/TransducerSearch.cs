@@ -110,10 +110,10 @@ internal static class TransducerSearch
 
             // A: the kept hypotheses, each with the probability of reaching it from a kept prefix in this frame.
             var initial = kept.OrderBy(h => h.Labels.Length).ToList();
-            var open = new Dictionary<string, Node<T>>(StringComparer.Ordinal);
+            var open = new Dictionary<(string Prefix, int Emitted), Node<T>>();
             foreach (var y in initial)
             {
-                var terms = new List<T> { y.Score };
+                open[(y.Key, 0)] = new Node<T>(y.Labels, y.Score, 0);
                 foreach (var prefix in initial)
                 {
                     int gap = y.Labels.Length - prefix.Labels.Length;
@@ -130,13 +130,13 @@ internal static class TransducerSearch
                         parts[j - prefix.Labels.Length + 1] = Step(Take(y.Labels, j)).GetFlat(y.Labels[j]);
                     }
 
-                    terms.Add(engine.TensorSum(new Tensor<T>(parts, new[] { parts.Length })));
+                    open[(y.Key, gap)] = new Node<T>(y.Labels,
+                        engine.TensorSum(new Tensor<T>(parts, new[] { parts.Length })), gap);
                 }
 
-                open[y.Key] = new Node<T>(y.Labels, LogSumExp(engine, terms), 0);
             }
 
-            var initialKeys = new HashSet<string>(open.Keys, StringComparer.Ordinal);
+            var initialKeys = new HashSet<string>(initial.Select(h => h.Key), StringComparer.Ordinal);
             var next = new List<Node<T>>();
             while (open.Count > 0)
             {
@@ -164,13 +164,18 @@ internal static class TransducerSearch
                     break;
                 }
 
-                open.Remove(star.Key);
+                open.Remove((star.Key, star.Emitted));
 
                 // log Pr(y*) + log Pr(k | y*, t) for every symbol k
                 var extended = engine.TensorAddScalar(Step(star.Labels), star.Score);
 
                 // y* then the blank ends the frame
-                next.Add(new Node<T>(star.Labels, extended.GetFlat(blank), 0));
+                int existing = next.FindIndex(h => h.Key == star.Key);
+                T blankScore = extended.GetFlat(blank);
+                if (existing >= 0)
+                    next[existing] = new Node<T>(star.Labels, LogSumExp(engine, new List<T> { next[existing].Score, blankScore }), 0);
+                else
+                    next.Add(new Node<T>(star.Labels, blankScore, 0));
                 if (star.Emitted >= maxSymbolsPerFrame)
                 {
                     continue;
@@ -187,12 +192,12 @@ internal static class TransducerSearch
 
                     var child = Append(star.Labels, k);
                     string childKey = Key(child);
-                    if (initialKeys.Contains(childKey) || open.ContainsKey(childKey))
+                    if (initialKeys.Contains(childKey) || open.ContainsKey((childKey, star.Emitted + 1)))
                     {
                         continue;
                     }
 
-                    open[childKey] = new Node<T>(child, extended.GetFlat(k), star.Emitted + 1);
+                    open[(childKey, star.Emitted + 1)] = new Node<T>(child, extended.GetFlat(k), star.Emitted + 1);
                 }
             }
 

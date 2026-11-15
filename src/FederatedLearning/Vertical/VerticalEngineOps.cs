@@ -79,6 +79,7 @@ internal static class VerticalEngineOps
         var flatGrad = engine.TensorSlice(grad.Reshape(new[] { grad.Length }), new[] { 0 }, new[] { total });
         var updated = engine.TensorSubtract(param.Reshape(new[] { total }), engine.TensorMultiplyScalar(flatGrad, numOps.FromDouble(lr)));
         updated.AsSpan().CopyTo(param.AsWritableSpan());
+        param.MarkModified();
     }
 
     /// <summary>The first <c>rows * cols</c> entries of <paramref name="tensor"/> as a new <c>[rows, cols]</c> tensor.</summary>

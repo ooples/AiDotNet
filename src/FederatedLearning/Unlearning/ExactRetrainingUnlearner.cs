@@ -92,8 +92,8 @@ public class ExactRetrainingUnlearner<T> : FederatedLearningComponentBase<T>, IF
             if (roundUpdates.Count == 0) continue;
 
             // Weighted average of updates (equal weight since we don't have sizes)
-            var sum = UnlearningEngineOps.SumFitted(roundUpdates, modelSize);
-            retrainedModel = Engine.TensorAdd(retrainedModel, Engine.TensorDivideScalar(sum, NumOps.FromDouble(roundUpdates.Count)));
+            retrainedModel = Engine.TensorAdd(retrainedModel,
+                UnlearningEngineOps.MeanFitted(roundUpdates, modelSize));
         }
 
         stopwatch.Stop();

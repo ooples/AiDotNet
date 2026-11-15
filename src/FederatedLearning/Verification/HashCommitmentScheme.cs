@@ -117,7 +117,7 @@ public class HashCommitmentScheme<T> : FederatedLearningComponentBase<T>, IGradi
 
         // Verify each individual commitment
         int totalElements = ComputeTotalElements(aggregateCommitment.Gradient);
-        var expectedSum = new Tensor<T>(new[] { totalElements });
+        var expectedSum = new Tensor<double>(new[] { totalElements });
 
         for (int c = 0; c < individualCommitments.Count; c++)
         {
@@ -128,12 +128,12 @@ public class HashCommitmentScheme<T> : FederatedLearningComponentBase<T>, IGradi
 
             // The first totalElements entries of the (flattened) individual gradient
             var flatGrad = Engine.TensorSlice(grad.Reshape(new[] { grad.Length }), new[] { 0 }, new[] { totalElements });
-            expectedSum = Engine.TensorAdd(expectedSum, flatGrad);
+            expectedSum = Engine.TensorAdd(expectedSum, flatGrad.Contiguous().Cast<double>());
         }
 
         // Check that the aggregate matches the sum (a NaN difference is not a mismatch, as before)
-        var actual = aggregateCommitment.Gradient.Reshape(new[] { totalElements });
-        var mismatch = Engine.TensorGreaterThan(Engine.TensorAbs(Engine.TensorSubtract(actual, expectedSum)), NumOps.FromDouble(1e-6));
+        var actual = aggregateCommitment.Gradient.Contiguous().Cast<double>().Reshape(new[] { totalElements });
+        var mismatch = Engine.TensorGreaterThan(Engine.TensorAbs(Engine.TensorSubtract(actual, expectedSum)), 1e-6);
         if (Engine.TensorSum(mismatch.Cast<int>()) > 0)
         {
             return false;

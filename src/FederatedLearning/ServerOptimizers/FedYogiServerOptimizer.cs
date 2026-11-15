@@ -29,6 +29,9 @@ public sealed class FedYogiServerOptimizer<T> : FederatedServerOptimizerBase<T>
     private Tensor<double>? _m;
     private Tensor<double>? _v;
 
+    /// <summary>Creates a FedYogi optimizer with the direct-constructor defaults.</summary>
+    /// <remarks>The beta2=0.99 and epsilon=0.001 defaults apply only to direct construction.
+    /// Trainers using shared server optimizer options use the values supplied by those options.</remarks>
     public FedYogiServerOptimizer(double learningRate = 1.0, double beta1 = 0.9, double beta2 = 0.99, double epsilon = 1e-3)
     {
         if (learningRate <= 0.0)
@@ -73,7 +76,7 @@ public sealed class FedYogiServerOptimizer<T> : FederatedServerOptimizerBase<T>
 
         // Reddi et al. 2021, Algorithm 2 (FedYogi), no bias correction:
         // m = b1 m + (1 - b1) g;  v = v + (1 - b2) sign(g^2 - v) g^2;  x = x + lr m / (sqrt(v) + tau).
-        // g and the state are worked in double; the step is rounded to T once and added to x in T.
+        // Keep the step and addition in double; only the completed parameters are rounded to T.
         var current = currentGlobalParameters.AsTensor().Cast<double>();
         var g = Engine.TensorSubtract(aggregatedTargetParameters.AsTensor().Cast<double>(), current);
         var gSquared = Engine.TensorSquare(g);
@@ -87,7 +90,7 @@ public sealed class FedYogiServerOptimizer<T> : FederatedServerOptimizerBase<T>
 
         var denominator = Engine.TensorAddScalar(Engine.TensorSqrt(_v), _epsilon);
         var step = Engine.TensorMultiplyScalar(Engine.TensorDivide(_m, denominator), _learningRate);
-        return Engine.Add(currentGlobalParameters, step.Cast<T>().ToVector());
+        return Engine.TensorAdd(current, step).Cast<T>().ToVector();
     }
 
     /// <inheritdoc />

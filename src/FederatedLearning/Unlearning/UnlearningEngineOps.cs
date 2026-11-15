@@ -37,6 +37,23 @@ internal static class UnlearningEngineOps
         return sum;
     }
 
+    /// <summary>Sum fitted updates without narrowing intermediate contributions.</summary>
+    internal static Tensor<double> SumFittedWide<T>(IEnumerable<Tensor<T>> updates, int length)
+    {
+        var engine = AiDotNetEngine.Current;
+        var sum = new Tensor<double>(new[] { Math.Max(0, length) });
+        foreach (var update in updates)
+            sum = engine.TensorAdd(sum, FitLength(update, length).Cast<double>());
+        return sum;
+    }
+
+    /// <summary>Mean fitted updates, converting only the completed mean.</summary>
+    internal static Tensor<T> MeanFitted<T>(IReadOnlyCollection<Tensor<T>> updates, int length)
+    {
+        var sum = SumFittedWide(updates, length);
+        return (updates.Count > 0 ? AiDotNetEngine.Current.TensorDivideScalar(sum, (double)updates.Count) : sum).Cast<T>();
+    }
+
     /// <summary>
     /// Euclidean distance between the first <c>min(a.Shape[0], b.Shape[0])</c> entries of the two tensors.
     /// </summary>
@@ -183,38 +200,31 @@ internal static class UnlearningEngineOps
     internal static Tensor<T> InfluenceScores<T>(IReadOnlyList<Tensor<T>> updates, int modelSize)
     {
         var engine = AiDotNetEngine.Current;
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var influence = new Tensor<T>(new[] { Math.Max(0, modelSize) });
+        var influence = new Tensor<double>(new[] { Math.Max(0, modelSize) });
         if (updates.Count > 0)
         {
-            T rounds = numOps.FromDouble(updates.Count);
-            var fitted = new List<Tensor<T>>(updates.Count);
+            double rounds = updates.Count;
+            var mean = engine.TensorDivideScalar(SumFittedWide(updates, modelSize), rounds);
+            var squaredDeviation = new Tensor<double>(new[] { Math.Max(0, modelSize) });
             foreach (var update in updates)
             {
-                fitted.Add(FitLength(update, modelSize));
-            }
-
-            var mean = engine.TensorDivideScalar(SumFitted(fitted, modelSize), rounds);
-            var squaredDeviation = new Tensor<T>(new[] { Math.Max(0, modelSize) });
-            foreach (var update in fitted)
-            {
-                squaredDeviation = engine.TensorAdd(squaredDeviation, engine.TensorSquare(engine.TensorSubtract(update, mean)));
+                squaredDeviation = engine.TensorAdd(squaredDeviation, engine.TensorSquare(engine.TensorSubtract(FitLength(update, modelSize).Cast<double>(), mean)));
             }
 
             var std = engine.TensorSqrt(engine.TensorDivideScalar(squaredDeviation, rounds));
-            influence = engine.TensorMultiply(engine.TensorAbs(mean), engine.TensorAddScalar(std, numOps.One));
+            influence = engine.TensorMultiply(engine.TensorAbs(mean), engine.TensorAddScalar(std, 1.0));
         }
 
         // A NaN score leaves the scores unnormalized, as the Math.Max fold did.
         if (modelSize > 0 && !double.IsNaN(Sum(influence)))
         {
-            T maxInfluence = engine.ReduceMax(influence, new[] { 0 }, false).GetFlat(0);
-            if (numOps.GreaterThan(maxInfluence, numOps.Zero))
+            double maxInfluence = engine.ReduceMax(influence, new[] { 0 }, false).GetFlat(0);
+            if (maxInfluence > 0)
             {
                 influence = engine.TensorDivideScalar(influence, maxInfluence);
             }
         }
 
-        return influence;
+        return influence.Cast<T>();
     }
 }

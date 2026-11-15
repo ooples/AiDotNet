@@ -106,28 +106,38 @@ public sealed class FederatedPersonalizationOptions
     /// personalized model is pulled toward its local model in the Moreau-envelope problem. Default: 15, the
     /// paper's setting (with eta = 0.005 a smaller lambda makes the local step eta * lambda vanish).
     /// </summary>
+    /// <value>A finite, nonnegative regularization strength. Default: 15.</value>
+    /// <remarks><para><b>For Beginners:</b> Larger values keep the personalized model closer to the client's local model.</para></remarks>
     public double PFedMeMu { get; set; } = 15.0;
 
     /// <summary>
     /// Gets or sets the number of gradient steps (K) that approximately solve each client's personalized problem.
     /// Default: 5, the paper's setting.
     /// </summary>
+    /// <value>The number of inner personalized gradient steps. Default: 5.</value>
+    /// <remarks><para><b>For Beginners:</b> Each local round uses this many steps to improve the personalized model before moving the local model.</para></remarks>
     public int PFedMeInnerSteps { get; set; } = 5;
 
     /// <summary>
     /// Gets or sets the step size of the K inner steps on the personalized model. Default: 0.09, the paper's setting.
     /// </summary>
+    /// <value>A finite, positive inner learning rate. Default: 0.09.</value>
+    /// <remarks><para><b>For Beginners:</b> This controls the personalized model's inner gradient steps, separately from the local model's outer learning rate.</para></remarks>
     public double PFedMePersonalLearningRate { get; set; } = 0.09;
 
     /// <summary>
     /// Gets or sets the local learning rate (eta) of the update w &lt;- w - eta * lambda * (w - theta). Default: 0.005.
     /// </summary>
+    /// <value>A finite, positive local learning rate. Default: 0.005.</value>
+    /// <remarks><para><b>For Beginners:</b> This controls how far the local model moves toward the personalized model after the inner steps; the move is also scaled by PFedMeMu.</para></remarks>
     public double PFedMeLearningRate { get; set; } = 0.005;
 
     /// <summary>
     /// Gets or sets the server mixing weight (beta): w &lt;- (1 - beta) w + beta * mean of the clients' local models.
     /// Default: 1.0, plain averaging.
     /// </summary>
+    /// <value>The server interpolation weight. Default: 1.0.</value>
+    /// <remarks><para><b>For Beginners:</b> A value of one adopts the averaged local models; smaller weights retain more of the previous global model.</para></remarks>
     public double PFedMeBeta { get; set; } = 1.0;
 
     /// <summary>

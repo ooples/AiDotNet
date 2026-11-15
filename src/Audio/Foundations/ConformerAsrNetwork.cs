@@ -732,23 +732,19 @@ internal sealed class ConformerAsrNetwork<T>
         return NormalizePerBin(_engine, mel);
     }
 
-    /// <summary>Each bin (column) of <c>[frames, bins]</c> features minus its mean over the frames and divided by its
-    /// population deviation; a bin whose deviation is at most 1e-8 (or, where 1e-8 rounds to zero in T, one unit
-    /// roundoff) becomes zero. Every term is scaled before it is summed or squared - the samples by 1 / frames for
-    /// the mean, the deviations by 1 / sqrt(frames) for the variance - so the sums and squares stay in T's range
-    /// (Half: 65504) as the double reference does.</summary>
+    /// <summary>Normalize each feature bin over time using double mean and variance reductions.
+    /// Bins with population deviation at most 1e-8 become zero.</summary>
     internal static Tensor<T> NormalizePerBin(IEngine engine, Tensor<T> mel)
     {
         int frames = mel.Shape[0], bins = mel.Shape[1];
-        var mean = engine.TensorBroadcastTo(engine.ReduceSum(engine.TensorDivideScalar(mel, NumOps.FromDouble(frames)), new[] { 0 }, true), new[] { frames, bins });
-        var centered = engine.TensorSubtract(mel, mean);
-        var scaled = engine.TensorDivideScalar(centered, NumOps.FromDouble(Math.Sqrt(frames)));
+        var wide = mel.Contiguous().Cast<double>();
+        var mean = engine.TensorBroadcastTo(engine.ReduceSum(engine.TensorDivideScalar(wide, (double)frames), new[] { 0 }, true), new[] { frames, bins });
+        var centered = engine.TensorSubtract(wide, mean);
+        var scaled = engine.TensorDivideScalar(centered, Math.Sqrt(frames));
         var std = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(scaled), new[] { 0 }, true));
         var spread = engine.TensorBroadcastTo(std, new[] { frames, bins });
-        T floor = NumOps.FromDouble(1e-8);
-        if (NumOps.Equals(floor, NumOps.Zero)) floor = NumOps.FromDouble(Math.Pow(2, -NumOps.PrecisionBits));
-        var usable = engine.TensorGreaterThan(spread, floor);
-        return engine.TensorWhere(usable, engine.TensorDivide(centered, spread), new Tensor<T>(new[] { frames, bins }));
+        var usable = engine.TensorGreaterThan(spread, 1e-8);
+        return engine.TensorWhere(usable, engine.TensorDivide(centered, spread), new Tensor<double>(new[] { frames, bins })).Cast<T>();
     }
 
     /// <summary>SpecAugment (Park et al. 2019, section 2) as the Conformer paper sets it (section 3.1): frequency masks of

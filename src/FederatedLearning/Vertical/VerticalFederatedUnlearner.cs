@@ -89,11 +89,10 @@ public class VerticalFederatedUnlearner<T> : FederatedLearningComponentBase<T>
         // Approximate influence as the gradient norm of the loss on these entities: grad = 2 (pred - label)
         var grad = Engine.TensorMultiplyScalar(
             Engine.TensorSubtract(
-                VerticalEngineOps.Rows(predictions, 1, totalElements),
-                VerticalEngineOps.Rows(entityLabels, 1, totalElements)),
-            NumOps.FromDouble(2.0));
-        // Reduced in double: in T the squares and their sum overflow (Half: above 65504).
-        double gradientNormSquared = Engine.TensorSum(Engine.TensorSquare(grad.Cast<double>()));
+                VerticalEngineOps.Rows(predictions, 1, totalElements).Contiguous().Cast<double>(),
+                VerticalEngineOps.Rows(entityLabels, 1, totalElements).Contiguous().Cast<double>()),
+            2.0);
+        double gradientNormSquared = Engine.TensorSum(Engine.TensorSquare(grad));
 
         return Math.Sqrt(gradientNormSquared);
     }
@@ -134,10 +133,9 @@ public class VerticalFederatedUnlearner<T> : FederatedLearningComponentBase<T>
         if (totalElements > 0)
         {
             var diff = Engine.TensorSubtract(
-                VerticalEngineOps.Rows(predictionsBeforeUnlearning, 1, totalElements),
-                VerticalEngineOps.Rows(predictionsAfterUnlearning, 1, totalElements));
-            // Reduced in double: in T the squares and their sum overflow (Half: above 65504).
-            divergenceSum = Engine.TensorSum(Engine.TensorSquare(diff.Cast<double>()));
+                VerticalEngineOps.Rows(predictionsBeforeUnlearning, 1, totalElements).Contiguous().Cast<double>(),
+                VerticalEngineOps.Rows(predictionsAfterUnlearning, 1, totalElements).Contiguous().Cast<double>());
+            divergenceSum = Engine.TensorSum(Engine.TensorSquare(diff));
         }
 
         double divergenceScore = totalElements > 0 ? Math.Sqrt(divergenceSum / totalElements) : 0.0;

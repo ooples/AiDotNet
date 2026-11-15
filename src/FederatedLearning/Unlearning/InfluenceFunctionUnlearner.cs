@@ -84,13 +84,13 @@ public class InfluenceFunctionUnlearner<T> : FederatedLearningComponentBase<T>, 
         int targetRounds = 0;
 
         // Step 1: Compute target client's aggregate gradient
-        var targetGradient = new Tensor<T>(new[] { modelSize });
+        var targetGradient = new Tensor<double>(new[] { modelSize });
 
         if (clientHistories.ContainsKey(targetClientId))
         {
             var targetUpdates = clientHistories[targetClientId];
             targetRounds = targetUpdates.Count;
-            targetGradient = UnlearningEngineOps.SumFitted(targetUpdates, modelSize);
+            targetGradient = UnlearningEngineOps.SumFittedWide(targetUpdates, modelSize);
         }
 
         // Step 2: H^{-1} v by conjugate gradient over Hessian-vector products (Koh and Liang 2017, section 3)
@@ -99,8 +99,8 @@ public class InfluenceFunctionUnlearner<T> : FederatedLearningComponentBase<T>, 
 
         // Step 3: Apply Newton step: unlearned = global - (1/N) * H^{-1} * gradient
         int totalClients = clientHistories.Count;
-        var correction = totalClients > 0 ? Engine.TensorDivideScalar(hvp, NumOps.FromDouble(totalClients)) : hvp;
-        var unlearnedModel = Engine.TensorSubtract(fittedGlobal, correction);
+        var correction = totalClients > 0 ? Engine.TensorDivideScalar(hvp, (double)totalClients) : hvp;
+        var unlearnedModel = Engine.TensorSubtract(fittedGlobal.Cast<double>(), correction).Cast<T>();
 
         stopwatch.Stop();
         string postHash = ComputeModelHash(unlearnedModel);
@@ -131,8 +131,8 @@ public class InfluenceFunctionUnlearner<T> : FederatedLearningComponentBase<T>, 
         return (unlearnedModel, certificate);
     }
 
-    private Tensor<T> ApproximateInverseHvp(
-        Tensor<T> targetGradient,
+    private Tensor<double> ApproximateInverseHvp(
+        Tensor<double> targetGradient,
         Tensor<T> parameters,
         Dictionary<int, List<Tensor<T>>> clientHistories,
         int targetClientId,
@@ -140,21 +140,21 @@ public class InfluenceFunctionUnlearner<T> : FederatedLearningComponentBase<T>, 
     {
         var v = UnlearningEngineOps.FitLength(targetGradient, modelSize);
 
-        Func<Tensor<T>, Tensor<T>> curvature;
+        Func<Tensor<double>, Tensor<double>> curvature;
         if (_hessianVectorProduct is { } exact)
         {
-            curvature = vector => exact(parameters, vector);
+            curvature = vector => exact(parameters, vector.Cast<T>()).Contiguous().Cast<double>();
         }
         else
         {
             // The retained clients' updates as the rows of U: H v = U^T (U v) / M.
-            var rows = new List<Tensor<T>>();
+            var rows = new List<Tensor<double>>();
             foreach (var entry in clientHistories)
             {
                 if (entry.Key == targetClientId) continue;
                 foreach (var update in entry.Value)
                 {
-                    rows.Add(UnlearningEngineOps.FitLength(update, modelSize).Reshape(new[] { 1, modelSize }));
+                    rows.Add(UnlearningEngineOps.FitLength(update, modelSize).Cast<double>().Reshape(new[] { 1, modelSize }));
                 }
             }
 
@@ -165,19 +165,18 @@ public class InfluenceFunctionUnlearner<T> : FederatedLearningComponentBase<T>, 
 
             var updates = Engine.Concat(rows, 0);
             var updatesTransposed = Engine.TensorTranspose(updates);
-            var count = NumOps.FromDouble(rows.Count);
+            double count = rows.Count;
             curvature = vector => Engine.TensorDivideScalar(
                 Engine.TensorMatMul(updatesTransposed, Engine.TensorMatMul(updates, vector.Reshape(new[] { modelSize, 1 }))),
                 count).Reshape(new[] { modelSize });
         }
 
-        return SolveDamped(curvature, v, Damping, _options.MaxInfluenceIterations, _options.InfluenceTolerance);
+        return SolveWide(curvature, v, Damping, _options.MaxInfluenceIterations, _options.InfluenceTolerance);
     }
 
     /// <summary>
     /// Solves (H + damping I) x = v by conjugate gradient, reading H only through <paramref name="hessianVectorProduct"/>.
-    /// Stops after <paramref name="maxIterations"/> iterations, when the residual norm is below
-    /// <paramref name="tolerance"/>, or when a search direction has no positive curvature.
+    /// Stops after the iteration limit or residual tolerance; invalid curvature throws.
     /// </summary>
     internal static Tensor<T> SolveDamped(
         Func<Tensor<T>, Tensor<T>> hessianVectorProduct,
@@ -188,57 +187,50 @@ public class InfluenceFunctionUnlearner<T> : FederatedLearningComponentBase<T>, 
     {
         if (hessianVectorProduct is null) throw new ArgumentNullException(nameof(hessianVectorProduct));
         if (v is null) throw new ArgumentNullException(nameof(v));
+        return SolveWide(p => hessianVectorProduct(p.Cast<T>()).Contiguous().Cast<double>(),
+            v.Contiguous().Cast<double>(), damping, maxIterations, tolerance).Cast<T>();
+    }
 
+    private static Tensor<double> SolveWide(
+        Func<Tensor<double>, Tensor<double>> hessianVectorProduct,
+        Tensor<double> v, double damping, int maxIterations, double tolerance)
+    {
+        if (double.IsNaN(damping) || double.IsInfinity(damping) || damping < 0)
+            throw new ArgumentOutOfRangeException(nameof(damping));
+        if (double.IsNaN(tolerance) || double.IsInfinity(tolerance) || tolerance < 0)
+            throw new ArgumentOutOfRangeException(nameof(tolerance));
+        if (maxIterations < 1) throw new ArgumentOutOfRangeException(nameof(maxIterations));
         int n = v.Length;
-        var dampingT = NumOps.FromDouble(damping);
         double toleranceSquared = tolerance * tolerance;
-
-        Tensor<T> Apply(Tensor<T> p)
-        {
-            var hp = hessianVectorProduct(p);
-            if (hp.Length != n)
-            {
-                throw new InvalidOperationException($"The Hessian-vector product has {hp.Length} entries for {n} parameters.");
-            }
-
-            return Engine.TensorAdd(hp.Reshape(new[] { n }), Engine.TensorMultiplyScalar(p, dampingT));
-        }
-
-        // The inner products r.r and p.Ap are reduced in double and only the step sizes alpha and beta, which are
-        // ratios of them, are rounded to T: in T the squares overflow (Half: |r| above 256) and alpha = inf / inf
-        // is NaN, which poisons every entry of x.
-        T Step(double size) => NumOps.FromDouble(size);
-
-        var x = new Tensor<T>(new[] { n });
-        var r = new Tensor<T>(v.ToArray(), new[] { n });
+        var x = new Tensor<double>(new[] { n });
+        var r = new Tensor<double>(v.ToArray(), new[] { n });
         var p = r;
         double rr = UnlearningEngineOps.Dot(r, r);
         for (int i = 0; i < maxIterations; i++)
         {
-            if (rr < toleranceSquared)
-            {
-                break;
-            }
-
-            var ap = Apply(p);
+            if (double.IsNaN(rr) || double.IsInfinity(rr))
+                throw new InvalidOperationException("The inverse-Hessian residual is nonfinite.");
+            if (rr == 0 || rr < toleranceSquared) break;
+            var hp = hessianVectorProduct(p);
+            if (hp.Length != n)
+                throw new InvalidOperationException($"The Hessian-vector product has {hp.Length} entries for {n} parameters.");
+            var ap = Engine.TensorAdd(hp.Reshape(new[] { n }), Engine.TensorMultiplyScalar(p, damping));
             double pap = UnlearningEngineOps.Dot(p, ap);
-            if (!(pap > 0))
-            {
-                break; // no positive curvature along p (or NaN)
-            }
-
-            var alpha = Step(rr / pap);
+            if (!(pap > 0) || double.IsInfinity(pap))
+                throw new InvalidOperationException("The damped Hessian must have finite positive curvature along every search direction.");
+            double alpha = rr / pap;
             x = Engine.TensorAdd(x, Engine.TensorMultiplyScalar(p, alpha));
             r = Engine.TensorSubtract(r, Engine.TensorMultiplyScalar(ap, alpha));
             double rrNext = UnlearningEngineOps.Dot(r, r);
-            p = Engine.TensorAdd(r, Engine.TensorMultiplyScalar(p, Step(rrNext / rr)));
+            if (double.IsNaN(rrNext) || double.IsInfinity(rrNext))
+                throw new InvalidOperationException("The inverse-Hessian residual is nonfinite.");
+            p = Engine.TensorAdd(r, Engine.TensorMultiplyScalar(p, rrNext / rr));
             rr = rrNext;
         }
-
         return x;
     }
 
-    private static double EstimateMembershipScore(Tensor<T> gradient, Tensor<T> correction)
+    private static double EstimateMembershipScore(Tensor<double> gradient, Tensor<double> correction)
     {
         // How well the correction aligns with the original gradient
         double dot = UnlearningEngineOps.Dot(gradient, correction);
@@ -253,7 +245,7 @@ public class InfluenceFunctionUnlearner<T> : FederatedLearningComponentBase<T>, 
 
     private double ComputeL2Distance(Tensor<T> a, Tensor<T> b)
     {
-        return NumOps.ToDouble(VectorHelper.EuclideanDistance(a.ToVector(), b.ToVector()));
+        return UnlearningEngineOps.L2Distance(a, b);
     }
 
     private string ComputeModelHash(Tensor<T> model)

@@ -132,7 +132,6 @@ public class SemiAsyncFederatedTrainer<T> : Infrastructure.FederatedLearningComp
             int staleness = _currentRound - pending.ClientRound;
             double discount = Math.Pow(_stalenessDiscount, Math.Max(staleness, 0));
             double effectiveLR = _asyncLearningRate * discount;
-            T effectiveLRT = NumOps.FromDouble(effectiveLR);
 
             foreach (var (layerName, delta) in pending.Update)
             {
@@ -145,8 +144,9 @@ public class SemiAsyncFederatedTrainer<T> : Infrastructure.FederatedLearningComp
                     }
 
                     // global += lr * delta, written back into the copied layer
-                    Engine.Add(Vector<T>.Wrap(globalLayer), Engine.Multiply(Vector<T>.Wrap(delta), effectiveLRT))
-                        .AsSpan().CopyTo(globalLayer);
+                    Engine.TensorAdd(new Tensor<T>(globalLayer, [globalLayer.Length]).Cast<double>(),
+                        Engine.TensorMultiplyScalar(new Tensor<T>(delta, [delta.Length]).Cast<double>(), effectiveLR))
+                        .Cast<T>().AsSpan().CopyTo(globalLayer);
                 }
             }
         }
@@ -218,13 +218,13 @@ public class SemiAsyncFederatedTrainer<T> : Infrastructure.FederatedLearningComp
             effectiveTotalWeight += globalWeight;
 
             double invTotal = effectiveTotalWeight > 0 ? 1.0 / effectiveTotalWeight : 0;
-            var merged = Engine.Multiply(Vector<T>.Wrap(layerParams), NumOps.FromDouble(globalWeight * invTotal));
+            var merged = Engine.TensorMultiplyScalar(new Tensor<T>(layerParams, [layerParams.Length]).Cast<double>(), globalWeight * invTotal);
             foreach (var (clientLayer, w) in contributors)
             {
-                merged = Engine.Add(merged, Engine.Multiply(Vector<T>.Wrap(clientLayer), NumOps.FromDouble(w * invTotal)));
+                merged = Engine.TensorAdd(merged, Engine.TensorMultiplyScalar(new Tensor<T>(clientLayer, [clientLayer.Length]).Cast<double>(), w * invTotal));
             }
 
-            result[layerName] = merged.ToArray();
+            result[layerName] = merged.Cast<T>().ToArray();
         }
 
         return result;

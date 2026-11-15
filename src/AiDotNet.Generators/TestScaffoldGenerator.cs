@@ -17377,7 +17377,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                 or "InterCTC" or "SelfConditionedCTC" or "ParakeetCTC" or "ParakeetRNNT" or "FastEmit" or "ParakeetTDT" or "TDTDecoder"
                 or "ESPnetASR" or "SpeechBrain" or "OWSM" or "AssemblyAIUniversal2" or "CTCSegmentation" or "RevAI" or "EmformerRNNT" or "StreamingZipformer"
                 or "AzureSpeechSTT" or "AWSTranscribe" or "DeepgramNova2" or "SpeechmaticsASR" or "SarvamASR"
-                     || (model.ClassName == "RNNTransducer" && model.FullyQualifiedName.StartsWith("AiDotNet.Audio.SpeechRecognition.", System.StringComparison.Ordinal))
+                     || (model.ClassName == "RNNTransducer" && model.FullyQualifiedName.StartsWith("global::AiDotNet.Audio.SpeechRecognition.", System.StringComparison.Ordinal))
                      || (model.ClassName == "Conformer" && model.FullyQualifiedName.StartsWith("AiDotNet.Audio.SpeechRecognition.", System.StringComparison.Ordinal)))
             {
                 // Conformer reads waveforms: 0.2 s at 16 kHz is 21 log-mel frames, 4 encoder frames over its 16 tokens.

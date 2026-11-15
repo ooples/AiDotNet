@@ -1285,15 +1285,17 @@ public partial class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
         return (tokens, confidence);
     }
 
-    private (int token, double probability) GetNextTokenWithProbability(Tensor<T> logits, int position)
+    internal static (int token, double probability) GetNextTokenWithProbability(Tensor<T> logits, int position)
     {
-        // Logits of the requested position: arg-max token (first maximum, NaN never wins) and its softmax probability
+        // Token selection and confidence use one finite, consistently sanitized row.
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
         int vocabSize = logits.Shape[^1];
-        var row = Engine.TensorSlice(logits, [0, position, 0], [1, 1, vocabSize]).Reshape([1, vocabSize]);
-        var cleaned = Engine.TensorNanToNum(row, double.NegativeInfinity, double.PositiveInfinity, double.NegativeInfinity);
-        int maxIdx = Engine.TensorArgMax(cleaned, 1).ToArray()[0];
-        var probabilities = Engine.TensorSoftmax(row, 1);
-        double probability = NumOps.ToDouble(probabilities.GetFlat(maxIdx));
+        var row = engine.TensorSlice(logits, [0, position, 0], [1, 1, vocabSize]).Reshape([1, vocabSize]);
+        var cleaned = engine.TensorNanToNum(row, numOps.ToDouble(numOps.MinValue), numOps.ToDouble(numOps.MaxValue), numOps.ToDouble(numOps.MinValue));
+        int maxIdx = engine.TensorArgMax(cleaned, 1).ToArray()[0];
+        var probabilities = engine.TensorSoftmax(cleaned.Cast<double>(), 1);
+        double probability = probabilities.GetFlat(maxIdx);
 
         return (maxIdx, probability);
     }

@@ -146,9 +146,9 @@ public class VerticalFederatedBenchmark<T> : FederatedLearningComponentBase<T>
             var rowIndices = new Tensor<int>(entityIndices.ToArray(), new[] { entityIndices.Count });
             var partyData = hasRows && partyFeatures > 0
                 ? Engine.TensorIndexSelect(
-                    Engine.TensorIndexSelect(fullFeatures, rowIndices, 0),
-                    new Tensor<int>(partyColumns.ToArray(), new[] { partyFeatures }),
-                    1)
+                    Engine.TensorIndexSelect(fullFeatures, new Tensor<int>(partyColumns.ToArray(), new[] { partyFeatures }), 1),
+                    rowIndices,
+                    0)
                 : new Tensor<T>(new[] { entityIndices.Count, partyFeatures });
 
             // Label holder is the last party

@@ -153,8 +153,42 @@ internal static class SpeechRecognitionEngineOps
             var charBeam = new int[extCount];
             var isRepeat = new bool[extCount];
             var groupOf = new int[candidateCount];
-            var groupIds = new Dictionary<string, int>(StringComparer.Ordinal);
+            // Intern surviving sequences once per frame. Extension identity is (parent, symbol),
+            // so an extension lookup neither formats strings nor copies a candidate prefix.
+            var edges = new Dictionary<(int Parent, int Symbol), int>();
+            int nextIdentity = 1;
+            int Intern(int parent, int symbol)
+            {
+                var key = (parent, symbol);
+                if (!edges.TryGetValue(key, out int id)) edges[key] = id = nextIdentity++;
+                return id;
+            }
+            var identities = new int[beamCount];
+            for (int b = 0; b < beamCount; b++)
+            {
+                int id = 0;
+                foreach (int symbol in prefixes[b]) id = Intern(id, symbol);
+                identities[b] = id;
+            }
+            var groupIds = new Dictionary<int, int>();
             var groupPrefixes = new List<int[]>();
+            int Group(int id, int[] prefix, int? symbol = null)
+            {
+                if (groupIds.TryGetValue(id, out int group)) return group;
+                group = groupPrefixes.Count;
+                groupIds[id] = group;
+                if (symbol.HasValue)
+                {
+                    var extended = new int[prefix.Length + 1];
+                    Array.Copy(prefix, extended, prefix.Length);
+                    extended[prefix.Length] = symbol.Value;
+                    groupPrefixes.Add(extended);
+                }
+                else groupPrefixes.Add(prefix);
+                return group;
+            }
+            // Register survivors first so extensions into them reuse their existing arrays.
+            for (int b = 0; b < beamCount; b++) Group(identities[b], prefixes[b]);
 
             for (int b = 0; b < beamCount; b++)
             {
@@ -162,7 +196,7 @@ internal static class SpeechRecognitionEngineOps
                 hasLast[b] = prefix.Length > 0;
                 lastIdx[b] = hasLast[b] ? prefix[prefix.Length - 1] : blankIndex;
                 blankIdx[b] = blankIndex;
-                int group = GroupOf(prefix, groupIds, groupPrefixes);
+                int group = groupIds[identities[b]];
                 groupOf[b] = group;
                 groupOf[beamCount + b] = group;
                 for (int k = 0; k < charCount; k++)
@@ -178,10 +212,7 @@ internal static class SpeechRecognitionEngineOps
                         continue;
                     }
 
-                    var extended = new int[prefix.Length + 1];
-                    Array.Copy(prefix, extended, prefix.Length);
-                    extended[prefix.Length] = c;
-                    groupOf[2 * beamCount + e] = GroupOf(extended, groupIds, groupPrefixes);
+                    groupOf[2 * beamCount + e] = Group(Intern(identities[b], c), prefix, c);
                 }
             }
 
@@ -236,18 +267,6 @@ internal static class SpeechRecognitionEngineOps
         return new List<int>(prefixes[0]);
     }
 
-    private static int GroupOf(int[] prefix, Dictionary<string, int> groupIds, List<int[]> groupPrefixes)
-    {
-        string key = string.Join(",", prefix);
-        if (!groupIds.TryGetValue(key, out int group))
-        {
-            group = groupPrefixes.Count;
-            groupIds[key] = group;
-            groupPrefixes.Add(prefix);
-        }
-
-        return group;
-    }
 
     /// <summary>
     /// log-sum-exp of the candidates of each group: log(sum_j exp(c_j - m_g)) + m_g with m_g the group's largest

@@ -115,7 +115,7 @@ internal class OneShotFederatedTrainer<T> : Infrastructure.FederatedLearningComp
 
         foreach (var (layerName, layerParams) in template)
         {
-            var merged = new Vector<T>(layerParams.Length);
+            var merged = new Tensor<double>([layerParams.Length]);
 
             foreach (var (clientId, model) in clientModels)
             {
@@ -131,12 +131,12 @@ internal class OneShotFederatedTrainer<T> : Infrastructure.FederatedLearningComp
                             $"Client {clientId} layer '{layerName}' length {clientLayer.Length} differs from expected {merged.Length}.");
                     }
 
-                    // One weight conversion per client, then a whole-layer multiply-add.
-                    merged = Engine.Add(merged, Engine.Multiply(Vector<T>.Wrap(clientLayer), NumOps.FromDouble(weight)));
+                    // Normalize and accumulate in double, then convert the completed mean once.
+                    merged = Engine.TensorAdd(merged, Engine.TensorMultiplyScalar(new Tensor<T>(clientLayer, [clientLayer.Length]).Cast<double>(), weight));
                 }
             }
 
-            result[layerName] = merged.ToArray();
+            result[layerName] = merged.Cast<T>().ToArray();
         }
 
         return result;
@@ -179,8 +179,8 @@ internal class OneShotFederatedTrainer<T> : Infrastructure.FederatedLearningComp
                 if (model.TryGetValue(layerName, out var clientLayer))
                 {
                     int len = Math.Min(clientLayer.Length, globalLayer.Length);
-                    var diff = Engine.Subtract(Vector<T>.Wrap(clientLayer, 0, len), Vector<T>.Wrap(globalLayer, 0, len));
-                    var diffDouble = diff.AsTensor().Cast<double>();
+                    var diffDouble = Engine.TensorSubtract(Vector<T>.Wrap(clientLayer, 0, len).AsTensor().Cast<double>(),
+                        Vector<T>.Wrap(globalLayer, 0, len).AsTensor().Cast<double>());
                     pairSums.Add(Engine.TensorSum(Engine.TensorSquare(diffDouble)));
                     pairLayer.Add(layerCounts.Count);
                     count += len;

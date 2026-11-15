@@ -1683,7 +1683,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
         if (IsClusteredPersonalization(personalizationStrategy) && perClusterState != null)
         {
             int clusters = Math.Max(1, options.ClusterCount);
-            var clusterMembers = new Dictionary<int, List<(Vector<T> Parameters, double Weight)>>();
+            var clusterMeans = new Dictionary<int, Tensor<double>>();
             var clusterWeights = new Dictionary<int, double>();
 
             foreach (var clientId in selectedClientIds)
@@ -1709,19 +1709,16 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
                 var adapted = InterfaceGuard.Parameterizable((result.BestSolution ?? localModel)).GetParameters();
 
                 double w = Math.Max(1.0, dataset.SampleCount);
-                if (!clusterMembers.TryGetValue(clusterId, out var members))
-                {
-                    members = new List<(Vector<T> Parameters, double Weight)>();
-                    clusterMembers[clusterId] = members;
-                    clusterWeights[clusterId] = 0.0;
-                }
-
-                members.Add((adapted, w));
-
-                clusterWeights[clusterId] += w;
+                double oldWeight = clusterWeights.TryGetValue(clusterId, out var previousWeight) ? previousWeight : 0.0;
+                double totalWeight = oldWeight + w;
+                var term = Engine.TensorMultiplyScalar(adapted.AsTensor().Cast<double>(), w / totalWeight);
+                clusterMeans[clusterId] = clusterMeans.TryGetValue(clusterId, out var mean)
+                    ? Engine.TensorAdd(Engine.TensorMultiplyScalar(mean, oldWeight / totalWeight), term)
+                    : term;
+                clusterWeights[clusterId] = totalWeight;
             }
 
-            foreach (var kvp in clusterMembers)
+            foreach (var kvp in clusterMeans)
             {
                 int clusterId = kvp.Key;
                 double totalW = clusterWeights.TryGetValue(clusterId, out var tw) ? tw : 0.0;
@@ -1732,7 +1729,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
                 // Only the personalized entries of the mean are read back.
                 perClusterState[clusterId] = ReplaceAt(
-                    globalAfterParams, WeightedMean(kvp.Value, totalW), personalizedIndices, skipOutOfRange: false);
+                    globalAfterParams, kvp.Value.Cast<T>().ToVector(), personalizedIndices, skipOutOfRange: false);
             }
         }
     }
@@ -1744,18 +1741,16 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
     internal static Vector<T> WeightedMean(IReadOnlyList<(Vector<T> Parameters, double Weight)> members, double totalWeight)
     {
         var engine = AiDotNetEngine.Current;
-        int count = members.Count, length = members[0].Parameters.Length;
-        var stacked = new T[count * length];
-        var weights = new double[count];
-        for (int i = 0; i < count; i++)
+        int length = members[0].Parameters.Length;
+        var mean = new Tensor<double>(new[] { length });
+        foreach (var member in members)
         {
-            members[i].Parameters.AsSpan().CopyTo(stacked.AsSpan(i * length, length));
-            weights[i] = members[i].Weight / totalWeight;
+            if (member.Parameters.Length != length)
+                throw new ArgumentException("Cluster members must have matching parameter lengths.", nameof(members));
+            mean = engine.TensorAdd(mean, engine.TensorMultiplyScalar(
+                member.Parameters.AsTensor().Cast<double>(), member.Weight / totalWeight));
         }
-
-        var scale = engine.TensorBroadcastTo(new Tensor<double>(weights, new[] { count, 1 }).Cast<T>(), new[] { count, length });
-        var weighted = engine.TensorMultiply(new Tensor<T>(stacked, new[] { count, length }), scale);
-        return engine.ReduceSum(weighted, new[] { 0 }, false).ToVector();
+        return mean.Cast<T>().ToVector();
     }
 
     /// <summary>
@@ -1856,10 +1851,24 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
         var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
-        double lambda = Math.Max(0.0, options.PFedMeMu);
+        if (double.IsNaN(options.PFedMeMu) || double.IsInfinity(options.PFedMeMu) || options.PFedMeMu < 0)
+            throw new ArgumentOutOfRangeException(nameof(options.PFedMeMu), "The regularization strength must be finite and nonnegative.");
+        if (double.IsNaN(options.PFedMePersonalLearningRate) || double.IsInfinity(options.PFedMePersonalLearningRate) || options.PFedMePersonalLearningRate <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options.PFedMePersonalLearningRate), "The personal learning rate must be finite and positive.");
+        if (double.IsNaN(options.PFedMeLearningRate) || double.IsInfinity(options.PFedMeLearningRate) || options.PFedMeLearningRate <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options.PFedMeLearningRate), "The local learning rate must be finite and positive.");
+        double lambda = options.PFedMeMu;
         var lambdaT = numOps.FromDouble(lambda);
         var personalRate = numOps.FromDouble(options.PFedMePersonalLearningRate);
         var localStep = numOps.FromDouble(options.PFedMeLearningRate * lambda);
+        if (numOps.IsNaN(lambdaT) || numOps.IsInfinity(lambdaT) || (lambda > 0 && numOps.Equals(lambdaT, numOps.Zero)))
+            throw new ArgumentOutOfRangeException(nameof(options.PFedMeMu), "The regularization strength must be representable in the model numeric type.");
+        if (numOps.IsNaN(personalRate) || numOps.IsInfinity(personalRate) || !numOps.GreaterThan(personalRate, numOps.Zero))
+            throw new ArgumentOutOfRangeException(nameof(options.PFedMePersonalLearningRate), "The personal learning rate must be representable in the model numeric type.");
+        var localRate = numOps.FromDouble(options.PFedMeLearningRate);
+        if (numOps.IsNaN(localRate) || numOps.IsInfinity(localRate) || !numOps.GreaterThan(localRate, numOps.Zero) ||
+            numOps.IsNaN(localStep) || numOps.IsInfinity(localStep) || (lambda > 0 && numOps.Equals(localStep, numOps.Zero)))
+            throw new ArgumentOutOfRangeException(nameof(options.PFedMeLearningRate), "The local learning rate and regularized step must be representable in the model numeric type.");
         int innerSteps = Math.Max(1, options.PFedMeInnerSteps);
         int rounds = Math.Max(1, localRounds);
 
