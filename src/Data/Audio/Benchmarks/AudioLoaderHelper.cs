@@ -176,26 +176,31 @@ internal static class AudioLoaderHelper
             sampleBytes = engine.TensorStack(new[] { low, high }, 1);
         }
 
-        // Unsigned value = sum of byte * 256^k (little-endian place values)
-        var placeValues = new Tensor<int>(new[] { 1, 256, 65536, 16777216 }.Take(width).ToArray(), new[] { width, 1 })
-            .Cast<T>();
-        var unsignedValue = engine.TensorMatMul(sampleBytes, placeValues).Reshape(new[] { count });
-
         Tensor<T> signedValue;
         double fullScale;
         if (width == 1)
         {
             // 8-bit PCM is unsigned (0-255, centered at 128)
-            signedValue = engine.TensorSubtractScalar(unsignedValue, numOps.FromDouble(128.0));
+            signedValue = engine.TensorSubtractScalar(sampleBytes.Reshape(new[] { count }), numOps.FromDouble(128.0));
             fullScale = 128.0;
         }
         else
         {
-            // Two's complement: subtract 2^(8 * width) when the top byte's sign bit is set
+            // Two's complement. The bytes below the top one form an unsigned value below 2^24 (sum of
+            // byte * 256^k, little-endian place values), which every floating-point T holds exactly. The top
+            // byte carries the sign: it is made signed first (minus 256 when its sign bit is set) and then
+            // added at its place value, so the result is rounded once. Building the unsigned 32-bit value and
+            // subtracting 2^32 afterwards rounds twice in single precision and cancels the low bits: -100
+            // decoded to 0.
+            var lowPlaces = new[] { 1, 256, 65536, 16777216 }.Take(width).ToArray();
+            lowPlaces[width - 1] = 0;
+            var lowValue = engine.TensorMatMul(
+                sampleBytes, new Tensor<int>(lowPlaces, new[] { width, 1 }).Cast<T>()).Reshape(new[] { count });
             var topByte = sampleBytes.Slice(1, width - 1, width).Contiguous().Reshape(new[] { count });
             var signBit = engine.TensorGreaterThan(topByte, numOps.FromDouble(127.0));
-            signedValue = engine.TensorSubtract(
-                unsignedValue, engine.TensorMultiplyScalar(signBit, numOps.FromDouble(Math.Pow(2, 8 * width))));
+            var signedTop = engine.TensorSubtract(topByte, engine.TensorMultiplyScalar(signBit, numOps.FromDouble(256.0)));
+            signedValue = engine.TensorAdd(
+                lowValue, engine.TensorMultiplyScalar(signedTop, numOps.FromDouble(Math.Pow(2, 8 * (width - 1)))));
             fullScale = Math.Pow(2, 8 * width - 1);
         }
 
