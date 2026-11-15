@@ -92,7 +92,7 @@ public class RiskRatios<T> : IRiskRatioCalculator<T>
         // Downside: the excesses that are not positive.
         var downside = engine.TensorWhere(
             engine.TensorGreaterThan(excess, NumOps.Zero), engine.TensorZerosLike(excess), excess);
-        var downsideSq = engine.TensorSumOfSquares(downside);
+        var downsideSq = TensorReductionHelper.SumOfSquares(engine, downside);
 
         mean = NumOps.Divide(mean, n);
         var downsideDev = NumOps.Sqrt(NumOps.Divide(downsideSq, n));
@@ -147,7 +147,7 @@ public class RiskRatios<T> : IRiskRatioCalculator<T>
         var engine = AiDotNetEngine.Current;
         var excess = engine.TensorSubtractScalar(ToTensor(returns), riskFree);
         var mean = NumOps.Divide(engine.TensorSum(excess), NumOps.FromDouble(returns.Count));
-        var sse = engine.TensorSumOfSquares(engine.TensorSubtractScalar(excess, mean));
+        var sse = TensorReductionHelper.SumOfSquares(engine, engine.TensorSubtractScalar(excess, mean));
 
         // Sample standard deviation (n-1) — unbiased for a return sample.
         var std = NumOps.Sqrt(NumOps.Divide(sse, NumOps.FromDouble(returns.Count - 1)));

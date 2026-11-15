@@ -945,7 +945,7 @@ public partial class TSMixer<T> : ForecastingModelBase<T>
                 // Detached statistics, as before: the stats are constants for the affine map below.
                 var flat = Engine.Reshape(input.Contiguous(), new[] { input.Length });
                 mean = NumOps.Divide(input.Length > 0 ? Engine.TensorSum(flat) : NumOps.Zero, NumOps.FromDouble(input.Length));
-                varSum = input.Length > 0 ? Engine.TensorSumOfSquares(Engine.TensorSubtractScalar(flat, mean)) : NumOps.Zero;
+                varSum = input.Length > 0 ? TensorReductionHelper.SumOfSquares(Engine, Engine.TensorSubtractScalar(flat, mean)) : NumOps.Zero;
             }
 
             var std = NumOps.Sqrt(NumOps.Divide(varSum, NumOps.FromDouble(input.Length)));
