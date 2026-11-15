@@ -451,7 +451,7 @@ internal static class Mars5Sampler<T>
     public static Tensor<T> TopKTopP(Tensor<T> logits, int topK, double topP)
     {
         // A Half running sum stalls (see TtsSampling<T>.SumsInFloat), so the cut is taken in float.
-        if (TtsSampling<T>.SumsInFloat) return Mars5Sampler<float>.TopKTopP(logits.Cast<float>(), topK, topP).Cast<T>();
+        if (TtsSampling<T>.SumsInFloat) return Mars5Sampler<float>.TopKTopP(TtsSampling<T>.InFloat(logits), topK, topP).Cast<T>();
         var engine = AiDotNetEngine.Current;
         int n = logits.Length;
         var scores = engine.Reshape(logits, new[] { n });
@@ -481,7 +481,7 @@ internal static class Mars5Sampler<T>
     /// to the mass.</summary>
     public static Tensor<T> TypicalP(Tensor<T> logits, double mass)
     {
-        if (TtsSampling<T>.SumsInFloat) return Mars5Sampler<float>.TypicalP(logits.Cast<float>(), mass).Cast<T>();
+        if (TtsSampling<T>.SumsInFloat) return Mars5Sampler<float>.TypicalP(TtsSampling<T>.InFloat(logits), mass).Cast<T>();
         var engine = AiDotNetEngine.Current;
         int n = logits.Length;
         var scores = engine.Reshape(logits, new[] { n });

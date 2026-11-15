@@ -315,6 +315,51 @@ public class Mars5ReferenceTests
         Assert.True(Half.IsNegativeInfinity(half[4999]), "Half tail token kept");
     }
 
+    // The Half samplers take their sums in float. A cast straight off a narrowed view reads from the start of the
+    // underlying buffer, not from the view's offset: over [decoy | row] narrowed to the row, every sampler worked on
+    // the decoy (whose likely token is 3) and not on the row (whose likely token is 7). Each must give what the same
+    // row gives as a tensor of its own.
+    [Fact(Timeout = 120000)]
+    public async Task HalfSamplers_OnANarrowedView_ReadTheViewNotTheStartOfItsBuffer()
+    {
+        await Task.Yield();
+        var engine = AiDotNetEngine.Current;
+        var row = new double[10];
+        var decoy = new double[10];
+        for (int i = 0; i < 10; i++) { row[i] = -8 + 0.25 * i; decoy[i] = -8 + 0.125 * i; }
+        row[7] = 6;
+        decoy[3] = 6;
+        Tensor<Half> View() => engine.TensorNarrow(HalfVec(decoy.Concat(row).ToArray()), 0, 10, 10);
+        Tensor<Half> Fresh() => HalfVec(row);
+        Assert.Equal(row, View().ToArray().Select(v => (double)v).ToArray());
+
+        var weights = AiDotNet.TextToSpeech.TtsSampling<Half>.UnnormalizedProbabilities(Fresh()).ToArray().Select(v => (double)v).ToArray();
+        var decoyWeights = AiDotNet.TextToSpeech.TtsSampling<Half>.UnnormalizedProbabilities(HalfVec(decoy)).ToArray().Select(v => (double)v).ToArray();
+        Tensor<Half> WeightView() => engine.TensorNarrow(HalfVec(decoyWeights.Concat(weights).ToArray()), 0, 10, 10);
+        foreach (bool inclusive in new[] { false, true })
+        {
+            Assert.Equal(7, AiDotNet.TextToSpeech.TtsSampling<Half>.DrawPosition(HalfVec(weights), 0.5, inclusive));
+            Assert.Equal(7, AiDotNet.TextToSpeech.TtsSampling<Half>.DrawPosition(WeightView(), 0.5, inclusive));
+        }
+
+        Assert.Equal(Mars5Sampler<Half>.TopKTopP(Fresh(), 4, 0.9).ToArray(), Mars5Sampler<Half>.TopKTopP(View(), 4, 0.9).ToArray());
+        Assert.Equal(Mars5Sampler<Half>.TypicalP(Fresh(), 0.5).ToArray(), Mars5Sampler<Half>.TypicalP(View(), 0.5).ToArray());
+        Assert.False(Half.IsNegativeInfinity(Mars5Sampler<Half>.TopKTopP(View(), 4, 0.9).ToArray()[7]));
+        Assert.True(Half.IsNegativeInfinity(Mars5Sampler<Half>.TopKTopP(View(), 4, 0.9).ToArray()[3]));
+
+        var ids = new[] { 1, 2 };
+        Assert.Equal(
+            AiDotNet.TextToSpeech.Latest.OuteTTSSampler<Half>.Process(Fresh(), ids, 1.1, 64, 0.7, 4, 0.9, 0.05).ToArray(),
+            AiDotNet.TextToSpeech.Latest.OuteTTSSampler<Half>.Process(View(), ids, 1.1, 64, 0.7, 4, 0.9, 0.05).ToArray());
+        for (int seed = 0; seed < 8; seed++)
+        {
+            Assert.Equal(7, AiDotNet.TextToSpeech.Latest.OuteTTSSampler<Half>.Sample(View(),
+                AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed)));
+            Assert.Equal(7, AiDotNet.TextToSpeech.MultiModal.NucleusSampling<Half>.Sample(View(), 1.0, 0, 0.9, null,
+                AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed)));
+        }
+    }
+
     // A previous token outside the logits is a bad argument, reported as such (the runtime reserves
     // IndexOutOfRangeException for its own bounds checks).
     [Fact(Timeout = 120000)]

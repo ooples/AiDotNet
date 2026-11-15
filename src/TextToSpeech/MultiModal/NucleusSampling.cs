@@ -23,7 +23,7 @@ internal static class NucleusSampling<T>
     {
         if (logits is null) throw new ArgumentNullException(nameof(logits));
         // A Half running sum stalls (see TtsSampling<T>.SumsInFloat), so the top-p cut and the draw are taken in float.
-        if (TtsSampling<T>.SumsInFloat) return NucleusSampling<float>.Sample(logits.Cast<float>(), temperature, topK, topP, allowed, random);
+        if (TtsSampling<T>.SumsInFloat) return NucleusSampling<float>.Sample(TtsSampling<T>.InFloat(logits), temperature, topK, topP, allowed, random);
         var engine = AiDotNetEngine.Current;
         var ids = Allowed(logits.Length, allowed);
         if (ids.Length == 0) throw new InvalidOperationException("No token may be sampled.");
