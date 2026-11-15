@@ -175,6 +175,34 @@ public class SweepSchedulerReferenceTests
         Assert.True(lastGap < firstGap, "The quadratic schedule must concentrate steps near t = 0.");
     }
 
+    [Theory]
+    [InlineData(FlowSolver.ExFM)]
+    [InlineData(FlowSolver.PeRFlow)]
+    [InlineData(FlowSolver.FlowDpmSolver2)]
+    [InlineData(FlowSolver.FlowDpmSolver3)]
+    public void FlowScheduler_EveryTrainingTimestep_StaysDistinctFiniteAndExact(FlowSolver solver)
+    {
+        // inferenceSteps == TrainTimesteps is the largest count the base class allows. The schedule must then use
+        // every training timestep exactly once (no zero-length steps collapsed onto t = 0), and the final step
+        // from t = 0 must not evaluate lambda(0) - lambda(0) = NaN. Constant velocity still integrates exactly.
+        var scheduler = CreateFlowScheduler(solver);
+        scheduler.SetTimesteps(scheduler.TrainTimesteps);
+        var timesteps = scheduler.Timesteps;
+        Assert.Equal(scheduler.TrainTimesteps, timesteps.Length);
+        for (int i = 1; i < timesteps.Length; i++)
+            Assert.True(timesteps[i] < timesteps[i - 1],
+                $"Timesteps must be strictly decreasing: entry {i} is {timesteps[i]} after {timesteps[i - 1]}.");
+
+        var velocity = Vec(0.4, -1.2, 2.0);
+        var start = Vec(1.5, 0.3, -0.7);
+        double t0 = SchedulerTensorOps.FlowTime(timesteps[0], scheduler.TrainTimesteps);
+        var sample = start;
+        foreach (int timestep in timesteps)
+            sample = scheduler.Step(velocity, timestep, sample, 0.0);
+
+        AssertClose(Combine(start.ToArray(), 1.0, velocity.ToArray(), -t0), sample, 1e-7);
+    }
+
     [Fact]
     public void FlowDPMSolver_SecondOrder_MatchesReference()
     {
@@ -461,6 +489,52 @@ public class SweepSchedulerReferenceTests
     }
 
     [Fact]
+    public void UniPC_ThirdOrder_SmallSteps_FloatMatchesDouble()
+    {
+        // With 1000 steps h = lambda_t - lambda_s is about 0.01, where the phi recurrence
+        // h_phi_{k+1} = h_phi_k / (-h) - 1 / (k + 1)! cancels: evaluated in float its third coefficient carries an
+        // absolute error near 1e-7 / h^3, which moves the order-3 rho weights by more than 10 (the double values
+        // are about 0.2, -0.08, 0.38). The coefficients must be formed in double, so a float run of the order-2
+        // and order-3 updates stays within float rounding of the double run.
+        var single = new UniPCScheduler<float>(SchedulerConfig<float>.CreateDefault(), 3, true);
+        var reference = new UniPCScheduler<double>(SchedulerConfig<double>.CreateDefault(), 3, true);
+        single.SetTimesteps(1000);
+        reference.SetTimesteps(1000);
+        var ts = reference.Timesteps;
+        double[][] eps = { new[] { 0.5, -0.25 }, new[] { -0.75, 1.0 }, new[] { 1.25, 0.5 }, new[] { -0.5, -1.5 } };
+
+        var x = new[] { 0.75, -0.5 };
+        var singleSample = new Vector<float>(new[] { 0.75f, -0.5f });
+        var doubleSample = Vec(x);
+        for (int i = 0; i < eps.Length; i++)
+        {
+            int timestep = ts[500 + i];
+            var singleEps = new Vector<float>(new[] { (float)eps[i][0], (float)eps[i][1] });
+            singleSample = single.Step(singleEps, timestep, singleSample, 0f);
+            doubleSample = reference.Step(Vec(eps[i]), timestep, doubleSample, 0.0);
+            for (int k = 0; k < 2; k++)
+                Assert.True(Math.Abs(doubleSample[k] - singleSample[k]) <= 1e-3,
+                    $"Step {i}, element {k}: double {doubleSample[k]}, float {singleSample[k]}.");
+        }
+    }
+
+    [Fact]
+    public void ExponentialAdamsCoefficients_Half_ShortStepRoundsTheDoubleWeightsOnce()
+    {
+        // h = 0.03125, c = 1: the moment recurrence evaluated in Half gives J_2 = -4.8e-7 although
+        // J_2 = integral over [-h, 0] of u^2 e^u du is positive (about 9.9e-6). Computed in double and rounded
+        // once, the Half weights equal the double weights cast to Half.
+        var offsets = new[] { -0.03125, -0.0625, -0.09375 };
+        var expected = SchedulerTensorOps.ExponentialAdamsCoefficients(Vec(offsets), 0.03125, 1.0);
+        var actual = SchedulerTensorOps.ExponentialAdamsCoefficients(
+            HalfVec(offsets), HalfOps.FromDouble(0.03125), HalfOps.FromDouble(1.0));
+        var roundedOnce = expected.AsTensor().Cast<Half>().ToVector();
+        Assert.Equal(roundedOnce.Length, actual.Length);
+        for (int i = 0; i < roundedOnce.Length; i++)
+            Assert.Equal(roundedOnce[i], actual[i]);
+    }
+
+    [Fact]
     public void SASolver_DeterministicFirstStep_IsDpmSolverFirstOrder()
     {
         var scheduler = new SASolverScheduler<double>(SchedulerConfig<double>.CreateDefault(), 3);
@@ -476,6 +550,44 @@ public class SweepSchedulerReferenceTests
 
         var result = scheduler.Step(Vec(eps), ts[0], Vec(x), 0.0);
         AssertClose(Combine(x, p1.Sigma / p0.Sigma, m0, -p1.Alpha * phi), result, 1e-9);
+    }
+
+    [Fact]
+    public void SASolver_ReusedCallerBuffers_GiveTheSameTrajectoryAsFreshBuffers()
+    {
+        // The corrector of each interval runs on the next call and needs the previous data prediction, start
+        // sample and noise draw. A caller that refills one model-output, sample and noise buffer in place (with
+        // sample prediction and no clipping the data prediction is the model output itself) must get exactly the
+        // trajectory of a caller that allocates fresh vectors.
+        var config = new SchedulerConfig<double>(1000, 0.00085, 0.012, BetaSchedule.ScaledLinear,
+            clipSample: false, predictionType: DiffusionPredictionType.Sample);
+        var fresh = new SASolverScheduler<double>(config, 3);
+        var reused = new SASolverScheduler<double>(config, 3);
+        fresh.SetTimesteps(4);
+        reused.SetTimesteps(4);
+        var ts = fresh.Timesteps;
+        double[][] outputs = { new[] { 1.0, -0.5 }, new[] { 2.0, 0.25 }, new[] { -0.75, 1.5 }, new[] { 0.5, 0.5 } };
+        double[][] draws = { new[] { 0.3, -1.1 }, new[] { -0.8, 0.6 }, new[] { 1.4, 0.2 }, new[] { -0.1, -0.9 } };
+
+        var freshSample = Vec(0.9, -0.3);
+        var outputBuffer = Vec(0.0, 0.0);
+        var noiseBuffer = Vec(0.0, 0.0);
+        var sampleBuffer = Vec(0.9, -0.3);
+        for (int i = 0; i < ts.Length; i++)
+        {
+            freshSample = fresh.Step(Vec(outputs[i]), ts[i], freshSample, 1.0, Vec(draws[i]));
+
+            for (int k = 0; k < 2; k++)
+            {
+                outputBuffer[k] = outputs[i][k];
+                noiseBuffer[k] = draws[i][k];
+            }
+            var next = reused.Step(outputBuffer, ts[i], sampleBuffer, 1.0, noiseBuffer);
+            for (int k = 0; k < 2; k++)
+                sampleBuffer[k] = next[k];
+
+            AssertClose(freshSample.ToArray(), sampleBuffer, 1e-12);
+        }
     }
 
     [Fact]

@@ -61,6 +61,11 @@ public sealed class FlowDPMSolverScheduler<T> : NoiseSchedulerBase<T>
             ? (index + 1 < timesteps.Length ? SchedulerTensorOps.FlowTime(timesteps[index + 1], TrainTimesteps) : 0.0)
             : Math.Max(0.0, s - 1.0 / Math.Max(1, timesteps.Length));
 
+        // At t = 0 the sample is already the clean data point (x_0 = x_t - 0 * v) and there is no interval left to
+        // integrate; lambda(0) is infinite, so evaluating the update would give inf - inf = NaN.
+        if (s <= 0.0)
+            return sample;
+
         var dataPrediction = Engine.Subtract(sample, Engine.Multiply(modelOutput, NumOps.FromDouble(s)));
         double lambdaS = Lambda(s);
         _dataPredictions.Add(dataPrediction);

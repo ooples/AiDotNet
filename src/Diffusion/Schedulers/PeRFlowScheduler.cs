@@ -28,6 +28,16 @@ public sealed class PeRFlowScheduler<T> : NoiseSchedulerBase<T>
 {
     private readonly int _numSegments;
 
+    /// <summary>
+    /// Creates a PeRFlow scheduler with <paramref name="numSegments"/> piecewise-straight time windows.
+    /// </summary>
+    /// <param name="config">The scheduler configuration.</param>
+    /// <param name="numSegments">The number of trained segments K (at least 1).</param>
+    /// <remarks>
+    /// Every segment boundary is a scheduled time when the step count is at least K. A step count below K
+    /// cannot place a step in every segment, so the schedule falls back to that many equal windows and each
+    /// step spans several segments; the result approximates the trained piecewise trajectory.
+    /// </remarks>
     public PeRFlowScheduler(SchedulerConfig<T> config, int numSegments = 4) : base(config)
     {
         _numSegments = Math.Max(1, numSegments);
@@ -39,6 +49,9 @@ public sealed class PeRFlowScheduler<T> : NoiseSchedulerBase<T>
         base.SetTimesteps(inferenceSteps);
         // PeRFlow splits [0, 1] into equal time windows whose flows are straight, so every window boundary is a
         // scheduled time and the steps are spread evenly over the windows (earlier windows take the remainder).
+        // With fewer steps than segments there cannot be a step per segment: the schedule then uses
+        // inferenceSteps equal windows instead, so one Euler step spans several trained segments and is only an
+        // approximation of the piecewise-straight trajectory (documented on the constructor).
         int windows = Math.Min(_numSegments, inferenceSteps);
         var timesteps = new int[inferenceSteps];
         int index = 0;
@@ -54,7 +67,10 @@ public sealed class PeRFlowScheduler<T> : NoiseSchedulerBase<T>
                 int timestep = (int)Math.Round(t * (TrainTimesteps - 1));
                 if (index > 0)
                     timestep = Math.Min(timestep, timesteps[index - 1] - 1);
-                timesteps[index++] = Math.Max(0, timestep);
+                // Keep enough integer timesteps free below this entry for the remaining ones so the tail stays
+                // strictly decreasing (the base class guarantees inferenceSteps <= TrainTimesteps).
+                timesteps[index] = Math.Max(inferenceSteps - 1 - index, timestep);
+                index++;
             }
         }
         SetTimestepArray(timesteps);

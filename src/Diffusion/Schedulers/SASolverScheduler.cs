@@ -90,7 +90,9 @@ public sealed class SASolverScheduler<T> : NoiseSchedulerBase<T>
                 lambdas, values, _lastNoise);
         }
 
-        _dataPredictions.Add(dataPrediction);
+        // The history must not alias caller-owned buffers: with sample prediction and no clipping the data
+        // prediction is the caller's model output, which a caller may refill for the next evaluation.
+        _dataPredictions.Add(dataPrediction.Clone());
         _lambdas.Add(lambdaS);
         if (_dataPredictions.Count > _order)
         {
@@ -123,8 +125,10 @@ public sealed class SASolverScheduler<T> : NoiseSchedulerBase<T>
             _dataPredictions.GetRange(_dataPredictions.Count - predictorOrder, predictorOrder),
             stepNoise);
 
-        _lastSample = sample;
-        _lastNoise = stepNoise;
+        // Snapshot the predictor's start point and noise draw: the corrector of this interval runs on the next
+        // call and must reuse the same draw even if the caller refills its sample or noise buffer meanwhile.
+        _lastSample = sample.Clone();
+        _lastNoise = stepNoise?.Clone();
         _lastLambda = lambdaS;
         _lastSigma = sigmaS;
         _lastTau = tau;
@@ -137,21 +141,38 @@ public sealed class SASolverScheduler<T> : NoiseSchedulerBase<T>
     private Vector<T> StochasticAdams(Vector<T> sample, T lambdaFrom, T sigmaFrom, T lambdaTo, T alphaTo, T sigmaTo,
         T tau, List<T> nodeLambdas, List<Vector<T>> nodeValues, Vector<T>? noise)
     {
-        T tauSquared = NumOps.Multiply(tau, tau);
-        T h = NumOps.Subtract(lambdaTo, lambdaFrom);
-        T tauSquaredH = NumOps.Multiply(tauSquared, h);
-        T decay = NumOps.Exp(NumOps.Negate(tauSquaredH));
-        var result = Engine.Multiply(sample, NumOps.Multiply(NumOps.Divide(sigmaTo, sigmaFrom), decay));
+        // Scalars are formed in double and rounded to T once where they scale a tensor: the Adams moments and
+        // 1 - e^{-2 tau^2 h} cancel for small steps, which a narrow T (Half) cannot represent.
+        double tauD = NumOps.ToDouble(tau);
+        double tauSquared = tauD * tauD;
+        double lambdaToD = NumOps.ToDouble(lambdaTo);
+        double h = lambdaToD - NumOps.ToDouble(lambdaFrom);
+        double tauSquaredH = tauSquared * h;
+        double sigmaToD = NumOps.ToDouble(sigmaTo);
+        double sampleScale = sigmaToD / NumOps.ToDouble(sigmaFrom) * Math.Exp(-tauSquaredH);
+        var result = Engine.Multiply(sample, NumOps.FromDouble(sampleScale));
 
-        var offsets = Engine.Subtract(new Vector<T>(nodeLambdas), SchedulerTensorOps.Full(nodeLambdas.Count, lambdaTo));
-        var coefficients = SchedulerTensorOps.ExponentialAdamsCoefficients(offsets, h, NumOps.Add(NumOps.One, tauSquared));
-        result = SchedulerTensorOps.AddWeightedSum(result, Engine.Multiply(coefficients, alphaTo), nodeValues);
+        var offsets = new double[nodeLambdas.Count];
+        for (int i = 0; i < offsets.Length; i++)
+            offsets[i] = NumOps.ToDouble(nodeLambdas[i]) - lambdaToD;
+        var weights = SchedulerTensorOps.ExponentialAdamsCoefficients(new Vector<double>(offsets), h, 1.0 + tauSquared);
+        double alphaToD = NumOps.ToDouble(alphaTo);
+        var coefficients = new T[weights.Length];
+        for (int i = 0; i < coefficients.Length; i++)
+            coefficients[i] = NumOps.FromDouble(alphaToD * weights[i]);
+        result = SchedulerTensorOps.AddWeightedSum(result, new Vector<T>(coefficients), nodeValues);
 
-        if (noise is null || !NumOps.GreaterThan(tau, NumOps.Zero))
+        if (noise is null || tauD <= 0.0)
             return result;
-        T twoTauSquaredH = NumOps.Multiply(NumOps.FromDouble(2.0), tauSquaredH);
-        T noiseScale = NumOps.Multiply(sigmaTo, NumOps.Sqrt(NumOps.Subtract(NumOps.One, NumOps.Exp(NumOps.Negate(twoTauSquaredH)))));
-        return Engine.Add(result, Engine.Multiply(noise, noiseScale));
+        double noiseScale = sigmaToD * Math.Sqrt(-ExpM1(-2.0 * tauSquaredH));
+        return Engine.Add(result, Engine.Multiply(noise, NumOps.FromDouble(noiseScale)));
+    }
+
+    /// <summary>
+    /// e^x - 1 without the cancellation of Math.Exp(x) - 1 for small |x| (net471 has no Math.ExpM1).
+    /// </summary>
+    private static double ExpM1(double x)
+        => Math.Abs(x) < 1e-5 ? x + (0.5 * x * x) + (x * x * x / 6.0) : Math.Exp(x) - 1.0;
     }
 
     /// <summary>

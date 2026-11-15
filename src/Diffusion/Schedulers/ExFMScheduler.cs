@@ -30,7 +30,10 @@ public sealed class ExFMScheduler<T> : NoiseSchedulerBase<T>
     {
         base.SetTimesteps(inferenceSteps);
         // Quadratic time discretization t_i = (1 - i/N)^2: the gaps (2(N - i) - 1) / N^2 shrink towards t = 0,
-        // so more steps land near the clean end where fine details form. Timesteps stay strictly decreasing.
+        // so more steps land near the clean end where fine details form. Timesteps stay strictly decreasing:
+        // entry i keeps at least (inferenceSteps - 1 - i) integer timesteps free below it for the remaining
+        // entries, so where the quadratic spacing is finer than one training timestep the tail stays distinct
+        // instead of collapsing onto 0 (the base class guarantees inferenceSteps <= TrainTimesteps).
         var timesteps = new int[inferenceSteps];
         for (int i = 0; i < inferenceSteps; i++)
         {
@@ -39,7 +42,7 @@ public sealed class ExFMScheduler<T> : NoiseSchedulerBase<T>
             int timestep = (int)(t * (TrainTimesteps - 1));
             if (i > 0)
                 timestep = Math.Min(timestep, timesteps[i - 1] - 1);
-            timesteps[i] = Math.Max(0, timestep);
+            timesteps[i] = Math.Max(inferenceSteps - 1 - i, timestep);
         }
         SetTimestepArray(timesteps);
     }

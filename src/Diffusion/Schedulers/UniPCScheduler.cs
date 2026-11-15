@@ -206,76 +206,79 @@ public sealed class UniPCScheduler<T> : NoiseSchedulerBase<T>
     {
         int last = _dataPredictionHistory.Count - 1;
         var m0 = _dataPredictionHistory[last];
-        T lambdaS0 = _lambdas[fromIndex];
-        T lambdaT = _lambdas[toIndex];
-        T alphaT = _alphaTs[toIndex];
-        T sigmaT = _sigmaTs[toIndex];
-        T sigmaS0 = _sigmaTs[fromIndex];
-        T h = NumOps.Subtract(lambdaT, lambdaS0);
-        T hh = NumOps.Negate(h);
-        T hPhi1 = NumOps.Subtract(NumOps.Exp(hh), NumOps.One);
-        T bh = hPhi1;
+        // The scalar coefficients (h, the phi recurrence, b, the rho solve) are formed in double and each rounded
+        // to T once where it multiplies a tensor: the recurrence h_phi_{k+1} = h_phi_k / hh - 1 / (k + 1)! cancels
+        // catastrophically for small h, which in Half rounds h_phi_3 to zero and blows b[2] up by two orders.
+        double lambdaS0 = NumOps.ToDouble(_lambdas[fromIndex]);
+        double lambdaT = NumOps.ToDouble(_lambdas[toIndex]);
+        double alphaT = NumOps.ToDouble(_alphaTs[toIndex]);
+        double sigmaT = NumOps.ToDouble(_sigmaTs[toIndex]);
+        double sigmaS0 = NumOps.ToDouble(_sigmaTs[fromIndex]);
+        double h = lambdaT - lambdaS0;
+        double hh = -h;
+        double hPhi1 = Math.Exp(hh) - 1.0;
+        double bh = hPhi1;
 
         // x_t_ = sigma_t / sigma_s0 * x - alpha_t * h_phi_1 * m0
         var result = Engine.Subtract(
-            Engine.Multiply(sample, NumOps.Divide(sigmaT, sigmaS0)),
-            Engine.Multiply(m0, NumOps.Multiply(alphaT, hPhi1)));
+            Engine.Multiply(sample, NumOps.FromDouble(sigmaT / sigmaS0)),
+            Engine.Multiply(m0, NumOps.FromDouble(alphaT * hPhi1)));
 
         // b_k = h_phi_k * k! / B(h) for k = 1..3 (h_phi_{k+1} = h_phi_k / hh - 1 / (k + 1)!).
-        T hPhiK1 = NumOps.Subtract(NumOps.Divide(hPhi1, hh), NumOps.One);
-        T hPhiK2 = NumOps.Subtract(NumOps.Divide(hPhiK1, hh), NumOps.FromDouble(0.5));
-        T hPhiK3 = NumOps.Subtract(NumOps.Divide(hPhiK2, hh), NumOps.FromDouble(1.0 / 6.0));
-        var b = new Vector<T>(new[]
-        {
-            NumOps.Divide(hPhiK1, bh),
-            NumOps.Divide(NumOps.Multiply(hPhiK2, NumOps.FromDouble(2.0)), bh),
-            NumOps.Divide(NumOps.Multiply(hPhiK3, NumOps.FromDouble(6.0)), bh)
-        });
-        T scale = NumOps.Multiply(alphaT, bh);
+        double hPhiK1 = (hPhi1 / hh) - 1.0;
+        double hPhiK2 = (hPhiK1 / hh) - 0.5;
+        double hPhiK3 = (hPhiK2 / hh) - (1.0 / 6.0);
+        var b = new Vector<double>(new[] { hPhiK1 / bh, 2.0 * hPhiK2 / bh, 6.0 * hPhiK3 / bh });
+        double scale = alphaT * bh;
 
         // Earlier data predictions m_1..m_{order-1} (newest first) and r_k = (lambda_{s_k} - lambda_s0) / h.
         int previous = order - 1;
         var history = new List<Vector<T>>(previous);
-        var historyLambdas = new List<T>(previous);
+        var ratioValues = new double[previous];
         for (int k = 1; k <= previous; k++)
         {
             history.Add(_dataPredictionHistory[last - k]);
-            historyLambdas.Add(_lambdaHistory[last - k]);
+            ratioValues[k - 1] = (NumOps.ToDouble(_lambdaHistory[last - k]) - lambdaS0) / h;
         }
+        var ratios = new Vector<double>(ratioValues);
 
-        Vector<T> ratios = previous > 0
-            ? Engine.Divide(Engine.Subtract(new Vector<T>(historyLambdas), SchedulerTensorOps.Full(previous, lambdaS0)), h)
-            : new Vector<T>(0);
-
-        Vector<T> rhos;
+        Vector<double> rhos;
         if (modelAtTarget is null)
         {
             if (previous == 0)
                 return result;
             // Predictor: rho = 0.5 at order 2, otherwise solve R[:-1, :-1] rho = b[:-1].
             rhos = order == 2
-                ? SchedulerTensorOps.Full(1, NumOps.FromDouble(0.5))
+                ? SchedulerTensorOps.Full(1, 0.5)
                 : SchedulerTensorOps.SolveTransposedVandermonde(ratios, b.GetSubVector(0, previous));
         }
         else
         {
             // Corrector: rho = 0.5 at order 1, otherwise solve R rho = b with the nodes r_1..r_{order-1}, 1.
             rhos = order == 1
-                ? SchedulerTensorOps.Full(1, NumOps.FromDouble(0.5))
+                ? SchedulerTensorOps.Full(1, 0.5)
                 : SchedulerTensorOps.SolveTransposedVandermonde(
-                    Vector<T>.Concatenate(ratios, SchedulerTensorOps.Full(1, NumOps.One)), b.GetSubVector(0, order));
+                    Vector<double>.Concatenate(ratios, SchedulerTensorOps.Full(1, 1.0)), b.GetSubVector(0, order));
             // rho_last * (m_t - m0)
-            T rhoTarget = rhos[rhos.Length - 1];
-            result = Engine.Subtract(result, Engine.Multiply(Engine.Subtract(modelAtTarget, m0), NumOps.Multiply(scale, rhoTarget)));
+            double rhoTarget = rhos[rhos.Length - 1];
+            result = Engine.Subtract(result,
+                Engine.Multiply(Engine.Subtract(modelAtTarget, m0), NumOps.FromDouble(scale * rhoTarget)));
             if (previous == 0)
                 return result;
             rhos = rhos.GetSubVector(0, previous);
         }
 
         // sum_k rho_k * D1_k with D1_k = (m_k - m0) / r_k.
-        var weights = Engine.Divide(rhos, ratios);
-        result = SchedulerTensorOps.AddWeightedSum(result, Engine.Multiply(weights, NumOps.Negate(scale)), history);
-        return Engine.Add(result, Engine.Multiply(m0, NumOps.Multiply(scale, Engine.Sum(weights))));
+        var coefficients = new T[previous];
+        double weightSum = 0.0;
+        for (int k = 0; k < previous; k++)
+        {
+            double weight = rhos[k] / ratios[k];
+            weightSum += weight;
+            coefficients[k] = NumOps.FromDouble(-scale * weight);
+        }
+        result = SchedulerTensorOps.AddWeightedSum(result, new Vector<T>(coefficients), history);
+        return Engine.Add(result, Engine.Multiply(m0, NumOps.FromDouble(scale * weightSum)));
     }
 
     /// <summary>

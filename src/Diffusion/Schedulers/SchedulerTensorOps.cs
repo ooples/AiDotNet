@@ -131,39 +131,54 @@ internal static class SchedulerTensorOps
     /// </remarks>
     internal static Vector<T> ExponentialAdamsCoefficients<T>(Vector<T> offsets, T h, T c)
     {
-        var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int m = offsets.Length;
         if (m < 1 || m > 4)
             throw new ArgumentOutOfRangeException(nameof(offsets), "Between one and four nodes are supported.");
 
-        T decay = ops.Exp(ops.Negate(ops.Multiply(c, h)));
-        T hDecay = ops.Multiply(h, decay);
-        T j0 = ops.Divide(ops.Subtract(ops.One, decay), c);
-        T j1 = ops.Divide(ops.Subtract(hDecay, j0), c);
-        T j2 = ops.Divide(ops.Subtract(ops.Negate(ops.Multiply(h, hDecay)), ops.Multiply(ops.FromDouble(2.0), j1)), c);
-        T j3 = ops.Divide(ops.Subtract(ops.Multiply(ops.Multiply(h, h), hDecay), ops.Multiply(ops.FromDouble(3.0), j2)), c);
-        var moments = engine.Multiply(new Vector<T>(new[] { j0, j1, j2, j3 }).GetSubVector(0, m), c);
-        if (m == 1)
-            return moments;
-
-        return SolveTransposedVandermonde(offsets, moments);
+        // The moment recurrence J_{k+1} = ((-h)^{k+1} e^{-c h} - (k + 1) J_k) / c cancels catastrophically for
+        // small c h (in Half J_2 even changes sign), so the moments and the Vandermonde solve run in double and
+        // the weights are rounded to T once.
+        double hd = ops.ToDouble(h);
+        double cd = ops.ToDouble(c);
+        double decay = Math.Exp(-cd * hd);
+        double hDecay = hd * decay;
+        double j0 = (1.0 - decay) / cd;
+        double j1 = (hDecay - j0) / cd;
+        double j2 = (-(hd * hDecay) - (2.0 * j1)) / cd;
+        double j3 = ((hd * hd * hDecay) - (3.0 * j2)) / cd;
+        var moments = new Vector<double>(new[] { cd * j0, cd * j1, cd * j2, cd * j3 }).GetSubVector(0, m);
+        var weights = m == 1 ? moments : SolveTransposedVandermondeInDouble(ToDoubleVector(offsets), moments);
+        return weights.AsTensor().Cast<T>().ToVector();
     }
 
     /// <summary>
     /// Solves R w = <paramref name="rhs"/> for the transposed Vandermonde matrix R[k, i] = nodes_i^k (the
     /// <c>torch.linalg.solve(R, b)</c> systems of UniPC and the moment equations of the Adams weights).
     /// </summary>
+    /// <remarks>
+    /// The system is solved in double and the solution rounded to T once: Vandermonde systems of nearby nodes
+    /// are ill-conditioned, and an inverse formed in a narrow T (Half) loses most of its digits.
+    /// </remarks>
     internal static Vector<T> SolveTransposedVandermonde<T>(Vector<T> nodes, Vector<T> rhs)
     {
+        if (nodes.Length == 1)
+            return rhs;
+        return SolveTransposedVandermondeInDouble(ToDoubleVector(nodes), ToDoubleVector(rhs))
+            .AsTensor().Cast<T>().ToVector();
+    }
+
+    private static Vector<double> ToDoubleVector<T>(Vector<T> values) => values.AsTensor().Cast<double>().ToVector();
+
+    private static Vector<double> SolveTransposedVandermondeInDouble(Vector<double> nodes, Vector<double> rhs)
+    {
         var engine = AiDotNetEngine.Current;
-        var ops = MathHelper.GetNumericOperations<T>();
         int m = nodes.Length;
         if (m == 1)
             return rhs;
 
         // vandermonde[i, k] = nodes_i^k as the running product of [1, nodes_i, nodes_i, ...].
-        var ones = Tensor<T>.CreateDefault(new[] { m, 1 }, ops.One);
+        var ones = Tensor<double>.CreateDefault(new[] { m, 1 }, 1.0);
         var repeated = engine.TensorBroadcastTo(nodes.AsTensor().Reshape(new[] { m, 1 }), new[] { m, m - 1 });
         var vandermonde = engine.TensorCumProd(engine.TensorConcatenate(new[] { ones, repeated }, 1), 1);
         var transposedInverse = engine.TensorTranspose(vandermonde).ToMatrix().Inverse();
