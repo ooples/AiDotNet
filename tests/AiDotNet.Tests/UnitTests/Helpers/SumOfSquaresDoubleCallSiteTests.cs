@@ -609,5 +609,346 @@ public class SumOfSquaresDoubleCallSiteTests
                 $"element {i}: expected {expected:R}, got {(double)actual[i]:R}");
         }
     }
+
+    // ---- Half error sums written by hand in src/Finance and src/TimeSeries ----
+
+    private static TModel UninitializedHalfTimeSeries<TModel>() where TModel : AiDotNet.TimeSeries.TimeSeriesModelBase<Half>
+    {
+        var model = (TModel)RuntimeHelpers.GetUninitializedObject(typeof(TModel));
+        GC.SuppressFinalize(model);
+        var numOps = typeof(AiDotNet.TimeSeries.TimeSeriesModelBase<Half>).GetProperty(
+            "NumOps", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("TimeSeriesModelBase.NumOps was not found.");
+        numOps.SetValue(model, AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>());
+        return model;
+    }
+
+    private static FieldInfo PrivateField(object target, string name)
+    {
+        for (Type? type = target.GetType(); type is not null; type = type.BaseType)
+        {
+            var field = type.GetField(name, BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+            if (field is not null)
+            {
+                return field;
+            }
+        }
+
+        throw new InvalidOperationException($"{target.GetType().Name}.{name} was not found.");
+    }
+
+    private static void SetPrivate(object target, string name, object value) => PrivateField(target, name).SetValue(target, value);
+
+    private static TValue GetPrivate<TValue>(object target, string name)
+        => PrivateField(target, name).GetValue(target) is TValue value
+            ? value
+            : throw new InvalidOperationException($"{target.GetType().Name}.{name} is not a {typeof(TValue).Name}.");
+
+    // A private or protected member declared on declaringType, chosen by the arguments' exact types.
+    private static object? InvokeDeclared(Type declaringType, object target, string name, params object[] arguments)
+    {
+        var method = declaringType.GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic, null,
+            arguments.Select(a => a.GetType()).ToArray(), null)
+            ?? throw new InvalidOperationException($"{declaringType.Name}.{name} was not found.");
+        return method.Invoke(target, arguments);
+    }
+
+    // 150 + 80 sin(.): every square (at most 230^2 = 52900) fits Half, a sum of 40 of them (about 1e6) does not.
+    private static double[] ModerateSeries(int n, int seed)
+        => Enumerable.Range(0, n).Select(i => (double)(Half)(150.0 + 80.0 * Math.Sin(0.9 * i + seed))).ToArray();
+
+    private static void AssertErrorMetrics(double sumSquared, double sumAbsolute, int n, IReadOnlyDictionary<string, Half> metrics)
+    {
+        AssertClose(sumSquared / n, (double)metrics["MSE"], HalfTolerance);
+        AssertClose(sumAbsolute / n, (double)metrics["MAE"], HalfTolerance);
+        AssertClose(Math.Sqrt(sumSquared / n), (double)metrics["RMSE"], HalfTolerance);
+    }
+
+    [Fact]
+    public void Chronos_Evaluate_Half_ReportsAFiniteMseWhereTheSumPassesHalfMaxValue()
+    {
+        var (predictions, actuals, mse, mae) = LargeErrors(Count);
+
+        var metrics = UninitializedHalfNetwork<Chronos<Half>>().Evaluate(predictions, actuals);
+
+        AssertErrorMetrics(mse * Count, mae * Count, Count, metrics);
+    }
+
+    // Targets 150 below the model's own forecast: each squared error (about 2.3e4) fits Half, their sum does not.
+    private static void AssertEvaluateAgainstOffsetTargets(
+        Tensor<Half> forecast, Func<Tensor<Half>, Dictionary<string, Half>> evaluate)
+    {
+        var values = forecast.ToArray();
+        Assert.All(values, v => Assert.False(Half.IsNaN(v) || Half.IsInfinity(v), "the forecast is not finite"));
+        var targets = new Half[values.Length];
+        double sumSquared = 0, sumAbsolute = 0;
+        for (int i = 0; i < values.Length; i++)
+        {
+            targets[i] = (Half)((double)values[i] - 150.0 - 5.0 * Math.Sin(i));
+            double error = (double)values[i] - (double)targets[i];
+            sumSquared += error * error;
+            sumAbsolute += Math.Abs(error);
+        }
+
+        Assert.True(sumSquared > (double)Half.MaxValue);
+        AssertErrorMetrics(sumSquared, sumAbsolute, values.Length, evaluate(new Tensor<Half>(targets, forecast.Shape.ToArray())));
+    }
+
+    [Fact]
+    public void Autoformer_Evaluate_Half_ReportsAFiniteMseWhereTheSumPassesHalfMaxValue()
+    {
+        var options = new AiDotNet.Models.Options.AutoformerOptions<Half>
+        {
+            LookbackWindow = 24, LabelLength = 12, ForecastHorizon = 6, EmbeddingDim = 16, FeedForwardDim = 32,
+            NumEncoderLayers = 1, NumDecoderLayers = 1, NumAttentionHeads = 2, MovingAverageKernel = 5, DropoutRate = 0.0,
+            Seed = 3,
+        };
+        var model = new Autoformer<Half>(new NeuralNetworkArchitecture<Half>(InputType.OneDimensional,
+            NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1), options);
+        var window = new Tensor<Half>(new[] { 1, 24, 1 });
+        for (int t = 0; t < 24; t++) window[0, t, 0] = (Half)(Math.Sin(t * 0.8) + 0.05 * t);
+
+        AssertEvaluateAgainstOffsetTargets(model.Forecast(window), targets => model.Evaluate(window, targets));
+    }
+
+    [Fact]
+    public void Informer_Evaluate_Half_ReportsAFiniteMseWhereTheSumPassesHalfMaxValue()
+    {
+        var options = new AiDotNet.Models.Options.InformerOptions<Half>
+        {
+            LookbackWindow = 16, LabelLength = 8, ForecastHorizon = 4, EmbeddingDim = 16, FeedForwardDim = 32,
+            NumEncoderLayers = 2, NumDecoderLayers = 1, NumAttentionHeads = 2, SamplingFactor = 2, DropoutRate = 0.0,
+            Seed = 3,
+        };
+        var model = new Informer<Half>(new NeuralNetworkArchitecture<Half>(InputType.OneDimensional,
+            NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1), options);
+        var window = new Tensor<Half>(new[] { 1, 16, 1 });
+        for (int t = 0; t < 16; t++) window[0, t, 0] = (Half)Math.Sin(t * 0.7);
+
+        AssertEvaluateAgainstOffsetTargets(model.Forecast(window), targets => model.Evaluate(window, targets));
+    }
+
+    [Fact]
+    public void MultiTaskEvaluationHarness_EvaluateImputation_Half_ReportsAFiniteMse()
+    {
+        var (imputed, original, mse, _) = LargeErrors(Count);
+        var model = new Mock<ITimeSeriesFoundationModel<Half>>();
+        model.Setup(m => m.SupportedTasks).Returns(new[] { TimeSeriesFoundationModelTask.Imputation });
+        model.Setup(m => m.Impute(It.IsAny<Tensor<Half>>(), It.IsAny<Tensor<Half>>())).Returns(imputed);
+        var mask = new Tensor<Half>(new[] { Count }); // all zero: every position was masked
+
+        var metrics = new MultiTaskEvaluationHarness<Half>().EvaluateImputation(model.Object, new[] { original }, new[] { mask });
+
+        AssertClose(mse, (double)metrics["MSE"], HalfTolerance);
+        AssertClose(Math.Sqrt(mse), (double)metrics["RMSE"], HalfTolerance);
+        Assert.Equal((double)Count, (double)metrics["NumMaskedPoints"]);
+    }
+
+    // 800 forecast errors near 100 and a naive history whose 799 steps are near 100: both absolute sums pass Half.MaxValue.
+    private const int GiftHorizon = 800;
+
+    private static Half[] NaiveHistory()
+        => Enumerable.Range(0, GiftHorizon).Select(i => (Half)(i % 2 == 0 ? 0.0 : 100.0 + 10.0 * Math.Sin(i))).ToArray();
+
+    private static double NaiveMae(Half[] history)
+    {
+        double sum = 0;
+        for (int i = 1; i < history.Length; i++) sum += Math.Abs((double)history[i] - (double)history[i - 1]);
+        Assert.True(sum > (double)Half.MaxValue);
+        return sum / (history.Length - 1);
+    }
+
+    // Sum over the horizon of the pinball loss of error = actual - predicted at level q, and sum |actual|.
+    private static (double Loss, double AbsoluteTarget) PinballReference(Tensor<Half> predictions, Tensor<Half> actuals, double q)
+    {
+        var p = predictions.ToArray();
+        var a = actuals.ToArray();
+        double loss = 0, absoluteTarget = 0;
+        for (int i = 0; i < a.Length; i++)
+        {
+            double error = (double)a[i] - (double)p[i];
+            loss += error >= 0 ? q * error : (q - 1.0) * error;
+            absoluteTarget += Math.Abs((double)a[i]);
+        }
+
+        Assert.True(absoluteTarget > (double)Half.MaxValue);
+        return (loss, absoluteTarget);
+    }
+
+    [Fact]
+    public void GIFTEval_ComputeMASE_Half_IsFiniteWhereBothAbsoluteSumsPassHalfMaxValue()
+    {
+        var (predictions, actuals, _, mae) = LargeErrors(GiftHorizon);
+        Assert.True(mae * GiftHorizon > (double)Half.MaxValue);
+        var history = NaiveHistory();
+
+        var mase = new GIFTEvalBenchmark<Half>().ComputeMASE(
+            predictions, actuals, new Tensor<Half>(history, new[] { GiftHorizon }), seasonalPeriod: 1);
+
+        AssertClose(mae / NaiveMae(history), (double)mase, HalfTolerance);
+    }
+
+    [Fact]
+    public void GIFTEval_ComputeQuantileLossAndCRPS_Half_AreFiniteWhereTheSumsPassHalfMaxValue()
+    {
+        var (predictions, actuals, _, _) = LargeErrors(GiftHorizon);
+        var (loss, absoluteTarget) = PinballReference(predictions, actuals, 0.5);
+        var benchmark = new GIFTEvalBenchmark<Half>();
+
+        AssertClose(loss / GiftHorizon, (double)benchmark.ComputeQuantileLoss(predictions, actuals, 0.5), HalfTolerance);
+        AssertClose(2.0 * loss / absoluteTarget,
+            (double)benchmark.ComputeCRPS(new Dictionary<double, Tensor<Half>> { [0.5] = predictions }, actuals), HalfTolerance);
+    }
+
+    [Fact]
+    public void GIFTEval_RunBenchmark_Half_ScoresTheSeriesWhereItsSumsPassHalfMaxValue()
+    {
+        var (predictions, actuals, _, mae) = LargeErrors(GiftHorizon);
+        var (loss, absoluteTarget) = PinballReference(predictions, actuals, 0.5);
+        var history = NaiveHistory();
+        var series = new Tensor<Half>(history.Concat(actuals.ToArray()).ToArray(), new[] { 2 * GiftHorizon });
+        var model = new Mock<ITimeSeriesFoundationModel<Half>>();
+        model.Setup(m => m.Forecast(It.IsAny<Tensor<Half>>(), It.IsAny<double[]>())).Returns(predictions);
+
+        var results = new GIFTEvalBenchmark<Half>().RunBenchmark(
+            model.Object, new[] { series }, new[] { GiftHorizon }, new[] { 1 }, new[] { 0.5 });
+
+        Assert.Equal(1.0, (double)results["NumCRPSEvaluated"]);
+        AssertClose(2.0 * loss / absoluteTarget, (double)results["CRPS"], HalfTolerance);
+        AssertClose(mae / NaiveMae(history), (double)results["MASE"], HalfTolerance);
+    }
+
+    [Fact]
+    public void TimeSeriesModelBase_CalculateErrorMetrics_Half_ReportsAFiniteMse()
+    {
+        var (predictions, actuals, mse, mae) = LargeErrors(Count);
+        var p = predictions.ToArray();
+        var a = actuals.ToArray();
+        double mape = 100.0 * Enumerable.Range(0, Count).Average(i => Math.Abs((double)p[i] - (double)a[i]) / Math.Abs((double)a[i]));
+        var model = UninitializedHalfTimeSeries<AiDotNet.TimeSeries.ARIMAModel<Half>>();
+
+        var metrics = Assert.IsType<Dictionary<string, Half>>(InvokeDeclared(
+            typeof(AiDotNet.TimeSeries.TimeSeriesModelBase<Half>), model, "CalculateErrorMetrics",
+            new Vector<Half>(p), new Vector<Half>(a)));
+
+        AssertErrorMetrics(mse * Count, mae * Count, Count, metrics);
+        AssertClose(mape, (double)metrics["MAPE"], HalfTolerance);
+    }
+
+    // Absolute residuals near 200 with a spread near 150: the sum of squared deviations (about 4.5e5) passes Half.MaxValue.
+    private static void AssertAbsoluteResidualStatistics(double[] absoluteResiduals, object model)
+    {
+        double mean = Mean(absoluteResiduals);
+        double std = Math.Sqrt(SumSquaredDeviations(absoluteResiduals) / absoluteResiduals.Length);
+        Assert.True(SumSquaredDeviations(absoluteResiduals) > (double)Half.MaxValue);
+        AssertClose(mean, (double)GetPrivate<Half>(model, "_residualMean"), HalfTolerance);
+        AssertClose(std, (double)GetPrivate<Half>(model, "_residualStdDev"), HalfTolerance);
+        Assert.False(Half.IsInfinity(GetPrivate<Half>(model, "_anomalyThreshold")));
+    }
+
+    [Fact]
+    public void ARIMA_AnomalyThreshold_Half_HasAFiniteResidualStd()
+    {
+        var residuals = LargeSeries(Count, seed: 21);
+        var model = UninitializedHalfTimeSeries<AiDotNet.TimeSeries.ARIMAModel<Half>>();
+        SetPrivate(model, "_arimaOptions", new AiDotNet.Models.Options.ARIMAOptions<Half>());
+
+        InvokeDeclared(typeof(AiDotNet.TimeSeries.ARIMAModel<Half>), model, "ComputeAnomalyThreshold",
+            new Vector<Half>(ToHalf(residuals)));
+
+        AssertAbsoluteResidualStatistics(residuals, model);
+    }
+
+    // A Prophet whose fit is fixed, so the anomaly statistics see known residuals.
+    private sealed class FixedFitProphet : AiDotNet.TimeSeries.ProphetModel<Half, Matrix<Half>, Vector<Half>>
+    {
+        public FixedFitProphet() : base(null)
+        {
+        }
+
+        public Vector<Half> Fitted { get; set; } = new Vector<Half>(0);
+
+        public override Vector<Half> Predict(Matrix<Half> input) => Fitted;
+    }
+
+    [Fact]
+    public void Prophet_AnomalyThreshold_Half_HasAFiniteResidualStd()
+    {
+        var observed = LargeSeries(Count, seed: 22);
+        var model = UninitializedHalfTimeSeries<FixedFitProphet>();
+        model.Fitted = new Vector<Half>(Count);
+        SetPrivate(model, "_prophetOptions", new AiDotNet.Models.Options.ProphetOptions<Half, Matrix<Half>, Vector<Half>>());
+
+        InvokeDeclared(typeof(AiDotNet.TimeSeries.ProphetModel<Half, Matrix<Half>, Vector<Half>>), model,
+            "ComputeAnomalyThresholdFromTraining", new Matrix<Half>(Count, 1), new Vector<Half>(ToHalf(observed)));
+
+        AssertAbsoluteResidualStatistics(observed, model);
+    }
+
+    [Fact]
+    public void MA_NoiseVariance_Half_IsFiniteWhereTheSumOfSquaresPassesHalfMaxValue()
+    {
+        // A zero MA(1) coefficient makes every residual the observation itself.
+        var y = ModerateSeries(Count, seed: 23);
+        double expected = y.Skip(1).Sum(v => v * v) / (Count - 1);
+        var model = UninitializedHalfTimeSeries<AiDotNet.TimeSeries.MAModel<Half>>();
+
+        var variance = Assert.IsType<Half>(InvokeDeclared(typeof(AiDotNet.TimeSeries.MAModel<Half>), model,
+            "EstimateNoiseVariance", new Vector<Half>(ToHalf(y)), new Vector<Half>(1)));
+
+        AssertClose(expected, (double)variance, HalfTolerance);
+    }
+
+    [Fact]
+    public void BSTS_UpdateModelParameters_Half_GivesFiniteLevelAndObservationVariances()
+    {
+        // A level stepping by about 100 and observations about 100 above it: both sums of squares pass Half.MaxValue.
+        var states = new Matrix<Half>(Count, 1);
+        var y = new Half[Count];
+        double levelSum = 0, observationSum = 0;
+        for (int t = 0; t < Count; t++)
+        {
+            states[t, 0] = (Half)((t % 2 == 0 ? 0.0 : 100.0) + 5.0 * Math.Sin(t));
+            y[t] = (Half)((double)states[t, 0] + 100.0 + 10.0 * Math.Sin(1.3 * t));
+            double error = (double)y[t] - (double)states[t, 0];
+            observationSum += error * error;
+            if (t > 0)
+            {
+                double step = (double)states[t, 0] - (double)states[t - 1, 0];
+                levelSum += step * step;
+            }
+        }
+
+        Assert.True(levelSum > (double)Half.MaxValue && observationSum > (double)Half.MaxValue);
+        var model = UninitializedHalfTimeSeries<AiDotNet.TimeSeries.BayesianStructuralTimeSeriesModel<Half>>();
+        SetPrivate(model, "_bayesianOptions", new AiDotNet.Models.Options.BayesianStructuralTimeSeriesOptions<Half>
+        {
+            IncludeTrend = false,
+            IncludeRegression = false,
+        });
+        SetPrivate(model, "_seasonalComponents", new List<Vector<Half>>());
+        var covariance = new Matrix<Half>(1, 1);
+        SetPrivate(model, "_stateCovariance", covariance);
+
+        InvokeDeclared(typeof(AiDotNet.TimeSeries.BayesianStructuralTimeSeriesModel<Half>), model, "UpdateModelParameters",
+            new Matrix<Half>(Count, 1), new Vector<Half>(y), states);
+
+        AssertClose(levelSum / (Count - 1), (double)covariance[0, 0], HalfTolerance);
+        AssertClose(observationSum / Count, (double)GetPrivate<Half>(model, "_observationVariance"), HalfTolerance);
+    }
+
+    [Fact]
+    public void DynamicRegression_LogLikelihood_Half_IsFiniteWhereTheSumOfSquaresPassesHalfMaxValue()
+    {
+        var residuals = ModerateSeries(Count, seed: 24);
+        double variance = residuals.Sum(r => r * r) / Count;
+        double expected = -0.5 * Count * (Math.Log(2 * Math.PI * variance) + 1.0);
+        var model = UninitializedHalfTimeSeries<AiDotNet.TimeSeries.DynamicRegressionWithARIMAErrors<Half>>();
+
+        var logLikelihood = Assert.IsType<Half>(InvokeDeclared(typeof(AiDotNet.TimeSeries.DynamicRegressionWithARIMAErrors<Half>),
+            model, "ComputeLogLikelihood", new Vector<Half>(ToHalf(residuals))));
+
+        AssertClose(expected, (double)logLikelihood, HalfTolerance);
+    }
 #endif
 }
