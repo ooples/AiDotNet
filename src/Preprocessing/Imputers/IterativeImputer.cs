@@ -280,25 +280,43 @@ public class IterativeImputer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     private (Tensor<T> Coefficients, T Intercept) FitLinearModel(Tensor<T> features, Tensor<T> y)
     {
+        if (!ScalerTensorOps.ReducesInFloat<T>())
+        {
+            return FitLinearModelCore(features, y);
+        }
+
+        // Half is fitted in float64, as scikit-learn's estimators validate float16 input to float64: in Half the
+        // Gram matrix X^T X of a few dozen rows of values past ~50 overflows 65504 and every coefficient is NaN.
+        // The inputs are copied first because Tensor.Cast reads the backing storage from its start (a view's
+        // offset is lost).
+        var (coefficients, intercept) = FitLinearModelCore(
+            Tensor<T>.FromMatrix(features.ToMatrix()).Cast<double>(), Tensor<T>.FromVector(y.ToVector()).Cast<double>());
+        return (Tensor<double>.FromVector(coefficients.ToVector()).Cast<T>(), NumOps.FromDouble(intercept));
+    }
+
+    /// <summary>The linear model fit of <see cref="FitLinearModel"/> in the working type <typeparamref name="TW"/>.</summary>
+    private (Tensor<TW> Coefficients, TW Intercept) FitLinearModelCore<TW>(Tensor<TW> features, Tensor<TW> y)
+    {
+        var ops = MathHelper.GetNumericOperations<TW>();
         int n = features.Shape[0];
         int p = features.Shape[1];
         var xMean = Engine.ReduceMean(features, new[] { 0 }, false);
-        T yMean = Engine.TensorMean(y);
+        TW yMean = Engine.TensorMean(y);
         var xc = Engine.TensorSubtract(features, ScalerTensorOps.BroadcastRow(xMean, n));
         var yc = Engine.TensorSubtractScalar(y, yMean);
 
         var gram = Engine.TensorMatMul(Engine.TensorTranspose(xc), xc);
         var xty = Engine.TensorMatMul(Engine.TensorTranspose(xc), Engine.Reshape(yc, new[] { n, 1 }));
-        var (eigenvalues, eigenvectors) = LinalgDispatch<T>.Eigh(gram);
-        eigenvalues = Engine.TensorMax(eigenvalues, NumOps.Zero);
+        var (eigenvalues, eigenvectors) = LinalgDispatch<TW>.Eigh(gram);
+        eigenvalues = Engine.TensorMax(eigenvalues, ops.Zero);
         var projected = Engine.Reshape(Engine.TensorMatMul(Engine.TensorTranspose(eigenvectors), xty), new[] { p });
 
-        Tensor<T> coefficients;
+        Tensor<TW> coefficients;
         switch (_estimator)
         {
             case IterativeImputerEstimator.Ridge:
                 coefficients = SolveSpectral(eigenvectors, projected,
-                    Engine.TensorReciprocal(Engine.TensorAddScalar(eigenvalues, NumOps.One)));
+                    Engine.TensorReciprocal(Engine.TensorAddScalar(eigenvalues, ops.One)));
                 break;
             case IterativeImputerEstimator.LinearRegression:
                 coefficients = SolveLeastSquares(eigenvalues, eigenvectors, projected, Math.Max(n, p));
@@ -308,12 +326,12 @@ public class IterativeImputer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 break;
         }
 
-        T intercept = NumOps.Subtract(yMean, Engine.TensorSum(Engine.TensorMultiply(xMean, coefficients)));
+        TW intercept = ops.Subtract(yMean, Engine.TensorSum(Engine.TensorMultiply(xMean, coefficients)));
         return (coefficients, intercept);
     }
 
     /// <summary><c>V diag(weights) V^T X^T y</c>, with <paramref name="projected"/> = <c>V^T X^T y</c>.</summary>
-    private Tensor<T> SolveSpectral(Tensor<T> eigenvectors, Tensor<T> projected, Tensor<T> weights)
+    private Tensor<TW> SolveSpectral<TW>(Tensor<TW> eigenvectors, Tensor<TW> projected, Tensor<TW> weights)
     {
         int p = projected.Length;
         var scaled = Engine.Reshape(Engine.TensorMultiply(projected, weights), new[] { p, 1 });
@@ -324,17 +342,18 @@ public class IterativeImputer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// Minimum-norm least squares (scikit-learn's LinearRegression, scipy <c>lstsq</c>): the directions X^T X
     /// cannot resolve are dropped.
     /// </summary>
-    private Tensor<T> SolveLeastSquares(Tensor<T> eigenvalues, Tensor<T> eigenvectors, Tensor<T> projected, int size)
+    private Tensor<TW> SolveLeastSquares<TW>(Tensor<TW> eigenvalues, Tensor<TW> eigenvectors, Tensor<TW> projected, int size)
     {
+        var ops = MathHelper.GetNumericOperations<TW>();
         // An eigenvalue of X^T X carries a rounding error of about eps * e_max, so a singular direction (an exactly
         // collinear feature) comes back as an eigenvalue near eps * e_max, not 0. The cut-off is that noise floor,
         // eps * max(n, p) * e_max: cutting at the squared singular-value tolerance (eps * size)^2 * e_max instead
         // kept the noise eigenvalue and blew the coefficients of collinear features up instead of returning
         // lstsq's minimum-norm solution.
         double relative = ScalerTensorOps.Float64Epsilon * size;
-        T cutoff = NumOps.Multiply(Engine.TensorMaxValue(eigenvalues), NumOps.FromDouble(relative));
+        TW cutoff = ops.Multiply(Engine.TensorMaxValue(eigenvalues), ops.FromDouble(relative));
         var kept = Engine.TensorGreaterThan(eigenvalues, cutoff);
-        var safe = Engine.TensorWhere(kept, eigenvalues, PreprocessingTensorOps.Filled(eigenvalues.Shape.ToArray(), NumOps.One));
+        var safe = Engine.TensorWhere(kept, eigenvalues, PreprocessingTensorOps.Filled(eigenvalues.Shape.ToArray(), ops.One));
         var weights = Engine.TensorMultiply(kept, Engine.TensorReciprocal(safe));
         return SolveSpectral(eigenvectors, projected, weights);
     }
@@ -346,23 +365,24 @@ public class IterativeImputer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// alpha = (n - gamma + 2 alpha_1) / (|y - X coef|^2 + 2 alpha_2), until the coefficients move by less than
     /// tol (L1); the returned coefficients use the final alpha and lambda.
     /// </summary>
-    private Tensor<T> SolveBayesianRidge(Tensor<T> xc, Tensor<T> yc, Tensor<T> eigenvalues, Tensor<T> eigenvectors, Tensor<T> projected)
+    private Tensor<TW> SolveBayesianRidge<TW>(Tensor<TW> xc, Tensor<TW> yc, Tensor<TW> eigenvalues, Tensor<TW> eigenvectors, Tensor<TW> projected)
     {
+        var ops = MathHelper.GetNumericOperations<TW>();
         const double hyper = 1e-6;
         const int maxIterations = 300;
         int n = xc.Shape[0];
         int p = eigenvalues.Length;
-        T twoHyper = NumOps.FromDouble(2 * hyper);
-        T evidenceCount = NumOps.FromDouble(n + 2 * hyper);
-        T convergence = NumOps.FromDouble(1e-3);
+        TW twoHyper = ops.FromDouble(2 * hyper);
+        TW evidenceCount = ops.FromDouble(n + 2 * hyper);
+        TW convergence = ops.FromDouble(1e-3);
         var shape = new[] { p };
 
-        T variance = Engine.TensorMean(Engine.TensorSquare(yc));
+        TW variance = Engine.TensorMean(Engine.TensorSquare(yc));
         var alpha = PreprocessingTensorOps.Filled(new[] { 1 },
-            NumOps.Divide(NumOps.One, NumOps.Add(variance, NumOps.FromDouble(ScalerTensorOps.Float64Epsilon))));
-        var lambda = PreprocessingTensorOps.Filled(new[] { 1 }, NumOps.One);
+            ops.Divide(ops.One, ops.Add(variance, ops.FromDouble(ScalerTensorOps.Float64Epsilon))));
+        var lambda = PreprocessingTensorOps.Filled(new[] { 1 }, ops.One);
 
-        Tensor<T>? previous = null;
+        Tensor<TW>? previous = null;
         for (int iteration = 0; iteration < maxIterations; iteration++)
         {
             var coefficients = BayesianCoefficients(eigenvalues, eigenvectors, projected, alpha, lambda);
@@ -392,8 +412,8 @@ public class IterativeImputer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     }
 
     /// <summary><c>(X^T X + lambda / alpha I)^-1 X^T y</c> in the eigenbasis.</summary>
-    private Tensor<T> BayesianCoefficients(
-        Tensor<T> eigenvalues, Tensor<T> eigenvectors, Tensor<T> projected, Tensor<T> alpha, Tensor<T> lambda)
+    private Tensor<TW> BayesianCoefficients<TW>(
+        Tensor<TW> eigenvalues, Tensor<TW> eigenvectors, Tensor<TW> projected, Tensor<TW> alpha, Tensor<TW> lambda)
     {
         var ratio = Engine.TensorBroadcastTo(Engine.TensorDivide(lambda, alpha), eigenvalues.Shape.ToArray());
         return SolveSpectral(eigenvectors, projected, Engine.TensorReciprocal(Engine.TensorAdd(eigenvalues, ratio)));
