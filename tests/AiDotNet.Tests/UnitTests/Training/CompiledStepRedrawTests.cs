@@ -211,6 +211,33 @@ public class CompiledStepRedrawTests
         Assert.Equal(input.ToArray(), CompiledStepRandom<double>.Gated(engine, kept, input, overflowed).ToArray());
     }
 
+    /// <summary>
+    /// The selection routes the gradient to the selected branch only: a kept layer trains, and a dropped layer's
+    /// weights do not move (and do not turn NaN).
+    /// </summary>
+    [Fact(Timeout = 60000)]
+    public async Task Layer_drop_gate_routes_the_gradient_to_the_selected_branch_only()
+    {
+        await Task.Yield();
+        const int batch = 4, features = 6;
+        var engine = AiDotNetEngine.Current;
+        double[] Moved(double gateValue)
+        {
+            var layer = new DenseLayer<double>(features);
+            layer.Forward(new Tensor<double>(new[] { batch, features }));
+            var before = layer.GetParameters().ToArray();
+            var gate = new Tensor<double>(new[] { 1 }, new Vector<double>(new[] { gateValue }));
+            var data = RandomHelper.CreateSeededRandom(5);
+            TapeTrainingStepper<double>.EagerStep(Request(new[] { layer },
+                x => CompiledStepRandom<double>.Gated(engine, gate, layer.Forward(x), x),
+                Random(data, batch, features), Random(data, batch, features), Sgd()));
+            return before.Zip(layer.GetParameters().ToArray(), (b, a) => Math.Abs(a - b)).ToArray();
+        }
+
+        Assert.All(Moved(0.0), moved => Assert.Equal(0.0, moved));
+        Assert.Contains(Moved(1.0), moved => moved > 0.0);
+    }
+
     /// <summary>The eager losses, after requiring the fused arm to engage and to follow them step for step.</summary>
     private static List<double> TrainSideBySide(
         IReadOnlyList<ITrainableLayer<double>> fusedLayers, Func<Tensor<double>, Tensor<double>> fusedForward,
