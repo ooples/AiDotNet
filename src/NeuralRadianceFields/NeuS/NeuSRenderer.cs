@@ -133,10 +133,12 @@ internal static class NeuSRenderer<T>
     /// <param name="engine">The engine.</param>
     /// <param name="gradients">∇f, <c>[N, 3]</c>.</param>
     /// <param name="mask">Per-sample 0/1 weights (NeuS: inside the radius-1.2 sphere).</param>
-    public static Tensor<T> EikonalError(IEngine engine, Tensor<T> gradients, double[] mask)
+    /// <param name="perSampleEpsilon">Whether the 10⁻⁵ is added to every sample of the denominator,
+    /// <c>sum(m + 1e-5)</c> (SyncDreamer), rather than once, <c>sum(m) + 1e-5</c> (NeuS).</param>
+    public static Tensor<T> EikonalError(IEngine engine, Tensor<T> gradients, double[] mask, bool perSampleEpsilon = false)
     {
         int n = gradients.Shape[0];
-        double count = 0;
+        double count = perSampleEpsilon ? (n - 1) * 1e-5 : 0.0;
         foreach (double m in mask) count += m;
         var norm = Norm(engine, gradients);
         var residual = engine.TensorAddScalar(norm, NeuSHost<T>.Scalar(-1.0));
@@ -156,8 +158,9 @@ internal static class NeuSRenderer<T>
     /// <summary>The section lengths and midpoints of sorted depths, the last section <paramref name="sampleDist"/> long.</summary>
     /// <param name="z">The depths, <c>[R, S]</c>.</param>
     /// <param name="samples">S.</param>
-    /// <param name="sampleDist">The last section's length.</param>
-    public static (double[] Dists, double[] Mid) Sections(double[] z, int samples, double sampleDist)
+    /// <param name="sampleDist">The last section's length, or null to repeat the previous section's
+    /// (<c>torch.cat([dists, dists[..., -1:]], -1)</c>, SyncDreamer).</param>
+    public static (double[] Dists, double[] Mid) Sections(double[] z, int samples, double? sampleDist)
     {
         var dists = new double[z.Length];
         var mid = new double[z.Length];
@@ -166,7 +169,8 @@ internal static class NeuSRenderer<T>
             for (int s = 0; s < samples; s++)
             {
                 int i = r * samples + s;
-                dists[i] = s + 1 < samples ? z[i + 1] - z[i] : sampleDist;
+                dists[i] = s + 1 < samples ? z[i + 1] - z[i]
+                    : sampleDist ?? (samples > 1 ? z[i] - z[i - 1] : 0.0);
                 mid[i] = z[i] + dists[i] * 0.5;
             }
 
