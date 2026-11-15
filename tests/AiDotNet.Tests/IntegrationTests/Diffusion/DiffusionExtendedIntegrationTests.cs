@@ -500,13 +500,6 @@ public class DiffusionExtendedIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task MeshyModel_Construction()
-    {
-        var model = new MeshyModel<float>();
-        Assert.NotNull(model);
-    }
-
-    [Fact(Timeout = 120000)]
     public async Task LGMModel_Construction()
     {
         var model = new LGMModel<float>();

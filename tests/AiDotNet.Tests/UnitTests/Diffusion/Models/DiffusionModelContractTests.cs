@@ -1085,17 +1085,6 @@ public class DiffusionModelContractTests : DiffusionUnitTestBase
         Assert.True(model.LatentChannels > 0);
     }
 
-    [Fact(Timeout = 120000)]
-    public async Task MeshyModel_DefaultConstructor_CreatesValidModel()
-    {
-        var model = new MeshyModel<float>();
-
-        Assert.NotNull(model);
-        Assert.NotNull(model.NoisePredictor);
-        Assert.NotNull(model.VAE);
-        Assert.True(model.LatentChannels > 0);
-    }
-
     #endregion
 
     #region Audio Models (Tasks #95-#99)

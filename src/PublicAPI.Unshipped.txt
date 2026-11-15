@@ -22924,3 +22924,87 @@ AiDotNet.Enums.ObliviousTreeChoiceFunction.SoftmaxSigmoid = 1 -> AiDotNet.Enums.
 override AiDotNet.Diffusion.Schedulers.FlowDPMSolverScheduler<T>.SetTimesteps(int inferenceSteps) -> void
 override AiDotNet.Diffusion.Schedulers.PeRFlowScheduler<T>.SetTimesteps(int inferenceSteps) -> void
 override AiDotNet.Diffusion.Schedulers.SASolverScheduler<T>.SetTimesteps(int inferenceSteps) -> void
+*REMOVED*AiDotNet.Diffusion.ThreeD.MeshyModel<T>
+*REMOVED*AiDotNet.Diffusion.ThreeD.MeshyModel<T>.MeshyModel(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>? architecture = null, AiDotNet.Models.Options.DiffusionModelOptions<T>? options = null, AiDotNet.Interfaces.INoiseScheduler<T>? scheduler = null, AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<T>? unet = null, AiDotNet.Diffusion.VAE.StandardVAE<T>? vae = null, AiDotNet.Interfaces.IConditioningModule<T>? conditioner = null, int defaultPointCount = 8192, int? seed = null) -> void
+*REMOVED*override AiDotNet.Diffusion.ThreeD.MeshyModel<T>.Conditioner.get -> AiDotNet.Interfaces.IConditioningModule<T>?
+*REMOVED*override AiDotNet.Diffusion.ThreeD.MeshyModel<T>.GenerateMesh(string! prompt, string? negativePrompt = null, int resolution = 256, int numInferenceSteps = 50, double guidanceScale = 7.5, int? seed = null) -> AiDotNet.Interfaces.Mesh3D<T>!
+*REMOVED*override AiDotNet.Diffusion.ThreeD.MeshyModel<T>.GeneratePointCloud(string! prompt, string? negativePrompt = null, int? numPoints = null, int numInferenceSteps = 50, double guidanceScale = 7.5, int? seed = null) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.Diffusion.ThreeD.MeshyModel<T>.GetModelMetadata() -> AiDotNet.Models.ModelMetadata<T>!
+*REMOVED*override AiDotNet.Diffusion.ThreeD.MeshyModel<T>.LatentChannels.get -> int
+*REMOVED*override AiDotNet.Diffusion.ThreeD.MeshyModel<T>.NoisePredictor.get -> AiDotNet.Interfaces.INoisePredictor<T>!
+*REMOVED*override AiDotNet.Diffusion.ThreeD.MeshyModel<T>.RegisterComponents() -> void
+*REMOVED*override AiDotNet.Diffusion.ThreeD.MeshyModel<T>.RegisterGeneratedParameterComponents(AiDotNet.Models.Parameters.ParameterComponentRegistry<T>! registry) -> void
+*REMOVED*override AiDotNet.Diffusion.ThreeD.MeshyModel<T>.SupportsMesh.get -> bool
+*REMOVED*override AiDotNet.Diffusion.ThreeD.MeshyModel<T>.SupportsNovelView.get -> bool
+*REMOVED*override AiDotNet.Diffusion.ThreeD.MeshyModel<T>.SupportsPointCloud.get -> bool
+*REMOVED*override AiDotNet.Diffusion.ThreeD.MeshyModel<T>.SupportsScoreDistillation.get -> bool
+*REMOVED*override AiDotNet.Diffusion.ThreeD.MeshyModel<T>.SupportsTexture.get -> bool
+*REMOVED*override AiDotNet.Diffusion.ThreeD.MeshyModel<T>.VAE.get -> AiDotNet.Interfaces.IVAEModel<T>!
+AiDotNet.Diffusion.ThreeD.Meshing.IsoSurfaceInterior
+AiDotNet.Diffusion.ThreeD.Meshing.IsoSurfaceInterior.AboveIsoLevel = 0 -> AiDotNet.Diffusion.ThreeD.Meshing.IsoSurfaceInterior
+AiDotNet.Diffusion.ThreeD.Meshing.IsoSurfaceInterior.BelowIsoLevel = 1 -> AiDotNet.Diffusion.ThreeD.Meshing.IsoSurfaceInterior
+AiDotNet.Diffusion.ThreeD.Meshing.MarchingCubes
+static AiDotNet.Diffusion.ThreeD.Meshing.MarchingCubes.Extract<T>(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! field, double isoLevel, AiDotNet.Diffusion.ThreeD.Meshing.IsoSurfaceInterior interior, double originX, double originY, double originZ, double spacing) -> AiDotNet.Interfaces.Mesh3D<T>!
+static AiDotNet.Diffusion.ThreeD.Meshing.MarchingCubes.ExtractInCube<T>(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! field, double isoLevel, AiDotNet.Diffusion.ThreeD.Meshing.IsoSurfaceInterior interior, double halfExtent = 1) -> AiDotNet.Interfaces.Mesh3D<T>!
+AiDotNet.Diffusion.ThreeD.Meshing.PointCloudSurfaceReconstruction
+static AiDotNet.Diffusion.ThreeD.Meshing.PointCloudSurfaceReconstruction.Reconstruct<T>(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! pointCloud, AiDotNet.Interfaces.SurfaceReconstructionMethod method, AiDotNet.Diffusion.ThreeD.Meshing.SurfaceReconstructionOptions? options = null, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? normals = null) -> AiDotNet.Interfaces.Mesh3D<T>!
+static AiDotNet.Diffusion.ThreeD.Meshing.PointCloudSurfaceReconstruction.EstimateNormals<T>(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! pointCloud, int neighborCount = 10) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Diffusion.ThreeD.Meshing.SurfaceReconstructionOptions
+AiDotNet.Diffusion.ThreeD.Meshing.SurfaceReconstructionOptions.SurfaceReconstructionOptions() -> void
+AiDotNet.Diffusion.ThreeD.Meshing.SurfaceReconstructionOptions.NormalNeighborCount.get -> int
+AiDotNet.Diffusion.ThreeD.Meshing.SurfaceReconstructionOptions.NormalNeighborCount.set -> void
+AiDotNet.Diffusion.ThreeD.Meshing.SurfaceReconstructionOptions.PoissonDepth.get -> int
+AiDotNet.Diffusion.ThreeD.Meshing.SurfaceReconstructionOptions.PoissonDepth.set -> void
+AiDotNet.Diffusion.ThreeD.Meshing.SurfaceReconstructionOptions.PoissonPointWeight.get -> double
+AiDotNet.Diffusion.ThreeD.Meshing.SurfaceReconstructionOptions.PoissonPointWeight.set -> void
+AiDotNet.Diffusion.ThreeD.Meshing.SurfaceReconstructionOptions.PoissonScale.get -> double
+AiDotNet.Diffusion.ThreeD.Meshing.SurfaceReconstructionOptions.PoissonScale.set -> void
+AiDotNet.Diffusion.ThreeD.Meshing.SurfaceReconstructionOptions.PoissonMinimumDepth.get -> int
+AiDotNet.Diffusion.ThreeD.Meshing.SurfaceReconstructionOptions.PoissonMinimumDepth.set -> void
+AiDotNet.Diffusion.ThreeD.Meshing.SurfaceReconstructionOptions.PoissonSolverIterations.get -> int
+AiDotNet.Diffusion.ThreeD.Meshing.SurfaceReconstructionOptions.PoissonSolverIterations.set -> void
+AiDotNet.Diffusion.ThreeD.Meshing.SurfaceReconstructionOptions.PoissonSolverTolerance.get -> double
+AiDotNet.Diffusion.ThreeD.Meshing.SurfaceReconstructionOptions.PoissonSolverTolerance.set -> void
+AiDotNet.Diffusion.ThreeD.Meshing.SurfaceReconstructionOptions.BallPivotingRadii.get -> double[]?
+AiDotNet.Diffusion.ThreeD.Meshing.SurfaceReconstructionOptions.BallPivotingRadii.set -> void
+AiDotNet.Diffusion.ThreeD.Meshing.SurfaceReconstructionOptions.SignedDistanceResolution.get -> int
+AiDotNet.Diffusion.ThreeD.Meshing.SurfaceReconstructionOptions.SignedDistanceResolution.set -> void
+AiDotNet.Diffusion.ThreeD.Meshing.SurfaceReconstructionOptions.SignedDistanceSupportRadius.get -> double?
+AiDotNet.Diffusion.ThreeD.Meshing.SurfaceReconstructionOptions.SignedDistanceSupportRadius.set -> void
+AiDotNet.Diffusion.ThreeD.Meshing.SurfaceReconstructionOptions.AlphaShapeRadius.get -> double?
+AiDotNet.Diffusion.ThreeD.Meshing.SurfaceReconstructionOptions.AlphaShapeRadius.set -> void
+AiDotNet.Diffusion.ThreeD.Meshing.GaussianCloud<T>
+AiDotNet.Diffusion.ThreeD.Meshing.GaussianCloud<T>.GaussianCloud(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! positions, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! scales, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rotations, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! opacities) -> void
+AiDotNet.Diffusion.ThreeD.Meshing.GaussianCloud<T>.Positions.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Diffusion.ThreeD.Meshing.GaussianCloud<T>.Scales.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Diffusion.ThreeD.Meshing.GaussianCloud<T>.Rotations.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Diffusion.ThreeD.Meshing.GaussianCloud<T>.Opacities.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Diffusion.ThreeD.Meshing.GaussianCloud<T>.Count.get -> int
+AiDotNet.Diffusion.ThreeD.Meshing.GaussianDensityGrid<T>
+AiDotNet.Diffusion.ThreeD.Meshing.GaussianDensityGrid<T>.GaussianDensityGrid(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! density, double originX, double originY, double originZ, double spacing) -> void
+AiDotNet.Diffusion.ThreeD.Meshing.GaussianDensityGrid<T>.Density.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Diffusion.ThreeD.Meshing.GaussianDensityGrid<T>.OriginX.get -> double
+AiDotNet.Diffusion.ThreeD.Meshing.GaussianDensityGrid<T>.OriginY.get -> double
+AiDotNet.Diffusion.ThreeD.Meshing.GaussianDensityGrid<T>.OriginZ.get -> double
+AiDotNet.Diffusion.ThreeD.Meshing.GaussianDensityGrid<T>.Spacing.get -> double
+AiDotNet.Diffusion.ThreeD.Meshing.GaussianMeshExtractionOptions
+AiDotNet.Diffusion.ThreeD.Meshing.GaussianMeshExtractionOptions.GaussianMeshExtractionOptions() -> void
+AiDotNet.Diffusion.ThreeD.Meshing.GaussianMeshExtractionOptions.Resolution.get -> int
+AiDotNet.Diffusion.ThreeD.Meshing.GaussianMeshExtractionOptions.Resolution.set -> void
+AiDotNet.Diffusion.ThreeD.Meshing.GaussianMeshExtractionOptions.BlockCount.get -> int
+AiDotNet.Diffusion.ThreeD.Meshing.GaussianMeshExtractionOptions.BlockCount.set -> void
+AiDotNet.Diffusion.ThreeD.Meshing.GaussianMeshExtractionOptions.RelaxRatio.get -> double
+AiDotNet.Diffusion.ThreeD.Meshing.GaussianMeshExtractionOptions.RelaxRatio.set -> void
+AiDotNet.Diffusion.ThreeD.Meshing.GaussianMeshExtractionOptions.DensityThreshold.get -> double
+AiDotNet.Diffusion.ThreeD.Meshing.GaussianMeshExtractionOptions.DensityThreshold.set -> void
+AiDotNet.Diffusion.ThreeD.Meshing.GaussianMeshExtractionOptions.OpacityCullThreshold.get -> double
+AiDotNet.Diffusion.ThreeD.Meshing.GaussianMeshExtractionOptions.OpacityCullThreshold.set -> void
+AiDotNet.Diffusion.ThreeD.Meshing.GaussianMeshExtractionOptions.NormalizedHalfExtent.get -> double
+AiDotNet.Diffusion.ThreeD.Meshing.GaussianMeshExtractionOptions.NormalizedHalfExtent.set -> void
+AiDotNet.Diffusion.ThreeD.Meshing.GaussianMeshExtractor
+static AiDotNet.Diffusion.ThreeD.Meshing.GaussianMeshExtractor.ExtractDensityGrid<T>(AiDotNet.Diffusion.ThreeD.Meshing.GaussianCloud<T>! gaussians, AiDotNet.Diffusion.ThreeD.Meshing.GaussianMeshExtractionOptions? options = null) -> AiDotNet.Diffusion.ThreeD.Meshing.GaussianDensityGrid<T>!
+static AiDotNet.Diffusion.ThreeD.Meshing.GaussianMeshExtractor.ExtractMesh<T>(AiDotNet.Diffusion.ThreeD.Meshing.GaussianCloud<T>! gaussians, AiDotNet.Diffusion.ThreeD.Meshing.GaussianMeshExtractionOptions? options = null) -> AiDotNet.Interfaces.Mesh3D<T>!
+AiDotNet.NeuralRadianceFields.Models.GaussianSplatting<T>.ToGaussianCloud() -> AiDotNet.Diffusion.ThreeD.Meshing.GaussianCloud<T>!
+AiDotNet.Diffusion.ThreeDDiffusionModelBase<T>.SurfaceReconstruction.get -> AiDotNet.Diffusion.ThreeD.Meshing.SurfaceReconstructionOptions!
+AiDotNet.Diffusion.ThreeDDiffusionModelBase<T>.SurfaceReconstruction.set -> void
+*REMOVED*virtual AiDotNet.Diffusion.ThreeDDiffusionModelBase<T>.CreateSimpleMeshFromPoints(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! pointCloud) -> AiDotNet.Interfaces.Mesh3D<T>!
