@@ -67,13 +67,9 @@ internal static class SparseRegressionOps
         var momentumPoint = coefficients;
         double t = 1;
 
-        for (int iter = 0; iter < maxIterations; iter++)
+        // Proximal step: soft-threshold by l1, then scale each group by (1 - threshold / ||s_g||)_+
+        Tensor<T> Proximal(Tensor<T> v)
         {
-            // Gradient step from the momentum point
-            var gradient = engine.TensorSubtract(engine.TensorMatMul(hessian, momentumPoint), xty);
-            var v = engine.TensorSubtract(momentumPoint, engine.TensorMultiplyScalar(gradient, step));
-
-            // Proximal step: soft-threshold by l1, then scale each group by (1 - threshold / ||s_g||)_+
             var s = engine.TensorMultiply(engine.TensorSign(v),
                 engine.TensorMax(engine.TensorSubtractScalar(engine.TensorAbs(v), l1Threshold), zero));
             var groupNorm = engine.TensorSqrt(engine.TensorMatMul(membershipT, engine.TensorMultiply(s, s)));
@@ -81,7 +77,16 @@ internal static class SparseRegressionOps
             var safeNorm = engine.TensorWhere(hasNorm, groupNorm, groupOnes);
             var factor = SelectorTensorOps.ZeroUnless(hasNorm,
                 engine.TensorMax(PreprocessingTensorOps.OneMinus(engine.TensorDivide(groupThreshold, safeNorm)), zero));
-            var next = engine.TensorMultiply(s, engine.TensorMatMul(membership, factor));
+            return engine.TensorMultiply(s, engine.TensorMatMul(membership, factor));
+        }
+
+        for (int iter = 0; iter < maxIterations; iter++)
+        {
+            // Gradient step from the momentum point
+            var gradient = engine.TensorSubtract(engine.TensorMatMul(hessian, momentumPoint), xty);
+            var v = engine.TensorSubtract(momentumPoint, engine.TensorMultiplyScalar(gradient, step));
+
+            var next = Proximal(v);
 
             // FISTA momentum
             double tNext = (1 + Math.Sqrt(1 + 4 * t * t)) / 2;
@@ -91,8 +96,20 @@ internal static class SparseRegressionOps
 
             T change = engine.TensorMaxValue(engine.TensorAbs(engine.TensorSubtract(next, coefficients)));
             coefficients = next;
+
+            // A small step is not convergence here: the momentum makes the iterates oscillate around the solution,
+            // and at every turning point two successive iterates almost coincide while still being far from it
+            // (the lasso of the reference tests stopped 1.5e-4 away with the step below 1e-6). So a small step is
+            // confirmed by the fixed-point residual of a plain proximal-gradient step taken from the iterate itself,
+            // which is zero only at a minimiser.
             if (PreprocessingTensorOps.IsBelow(change, tol))
-                break;
+            {
+                var plain = Proximal(engine.TensorSubtract(next, engine.TensorMultiplyScalar(
+                    engine.TensorSubtract(engine.TensorMatMul(hessian, next), xty), step)));
+                T residual = engine.TensorMaxValue(engine.TensorAbs(engine.TensorSubtract(plain, next)));
+                if (PreprocessingTensorOps.IsBelow(residual, tol))
+                    break;
+            }
         }
 
         return engine.Reshape(coefficients, new[] { p });
