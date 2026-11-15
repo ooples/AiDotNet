@@ -367,14 +367,19 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
             // CNN read ~740 µs / p95 1.1 ms vs a clean ~270 µs steady state). RSS is a
             // whole-process resident-set figure that barely moves per inference, so
             // sampling it once after the loop is sufficient for the report.
+            // PROFILE_INFERENCE_BATCH=<n> brackets the last two steady forwards at batch n with cuProfilerStart/Stop,
+            // so `ncu --profile-from-start off` (or nsys --capture-range=cudaProfilerApi) sees only steady inference.
+            bool profileInference = BenchStats.ProfileInferenceBatch == batchSize;
             for (var i = 0; i < options.InferenceIterations; i++)
             {
+                if (profileInference && i == options.InferenceIterations - 2) { BenchStats.SynchronizeDevice(); BenchStats.ProfilerStart(); }
                 var timer = Stopwatch.StartNew();
                 model.Forward();
                 BenchStats.SynchronizeDevice();
                 timer.Stop();
                 steady.Add(timer.Elapsed.TotalSeconds);
             }
+            if (profileInference) BenchStats.ProfilerStop();
             process.Refresh();
             var peak = Math.Max(peakBefore, process.WorkingSet64 / 1024d / 1024d);
             var totalSteady = steady.Sum();
@@ -1383,6 +1388,9 @@ internal static class BenchStats
     }
 
     public static bool ProfileRangeRequested => Environment.GetEnvironmentVariable("PROFILE_RANGE") == "1";
+
+    public static int ProfileInferenceBatch =>
+        int.TryParse(Environment.GetEnvironmentVariable("PROFILE_INFERENCE_BATCH"), out var b) ? b : -1;
 
     // CUDA profiler capture range; a no-op on the CPU engine. The driver library is resolved by platform at run
     // time (nvcuda.dll on Windows, libcuda.so.1 on Linux, where nsys runs), and a missing library or export is a
