@@ -93,6 +93,14 @@ internal static class EngineStft<T>
         // 0 / 0 at a zero bin is replaced before it is used; the ratio of every other bin lies in [0, 1].
         var ratio = engine.TensorWhere(zero, new Tensor<T>(larger._shape), engine.TensorDivide(smaller, larger));
         var factor = engine.TensorSqrt(engine.TensorAddScalar(engine.TensorSquare(ratio), Ops.One));
-        return engine.TensorMultiply(larger, factor);
+        var magnitude = engine.TensorMultiply(larger, factor);
+        // A non-finite component comes out as sqrt(re² + im²) gives it: NaN if either is NaN, else +∞ if either is
+        // infinite. The max and min above drop a NaN beside a finite component, and ∞ / ∞ is NaN where the sum of
+        // squares is ∞. s = |re| / 2 + |im| / 2 has exactly that value at such a bin (halved, so two finite
+        // components cannot overflow it), and s − s is 0 only where s is finite.
+        T half = Ops.FromDouble(0.5);
+        var s = engine.TensorAdd(engine.TensorMultiplyScalar(a, half), engine.TensorMultiplyScalar(b, half));
+        var finite = engine.TensorEquals(engine.TensorSubtract(s, s), Ops.Zero);
+        return engine.TensorWhere(finite, magnitude, s);
     }
 }

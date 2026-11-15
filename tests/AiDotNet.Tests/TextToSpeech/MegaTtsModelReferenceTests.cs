@@ -220,4 +220,47 @@ public class MegaTtsModelReferenceTests
             Assert.True(Math.Abs(h - full[f, band]) <= 0.02, $"frame {f}, band {band}: Half {h} vs double {full[f, band]}");
         }
     }
+
+    // sqrt(re^2 + im^2) is NaN when either component is NaN and +inf when either is infinite (and neither NaN). The
+    // max / min form dropped a NaN beside a finite component (NaN, 1 gave sqrt 2) and turned inf, inf into NaN.
+    [Fact(Timeout = 120000)]
+    public async Task Hypot_PropagatesNonFiniteComponentsAsTheSumOfSquaresDoes()
+    {
+        await Task.Yield();
+        var engine = AiDotNetEngine.Current;
+        double nan = double.NaN, inf = double.PositiveInfinity;
+        var re = new[] { nan, 1.0, nan, inf, -inf, 2.0, inf, inf, nan, 3.0, 0.0 };
+        var im = new[] { 1.0, nan, nan, 1.0, 0.0, -inf, inf, nan, -inf, 4.0, 0.0 };
+        var expected = re.Zip(im, (a, b) => Math.Sqrt(a * a + b * b)).ToArray();
+        Assert.Equal(new[] { nan, nan, nan, inf, inf, inf, inf, nan, nan, 5.0, 0.0 }, expected);
+
+        var full = AiDotNet.Audio.Features.EngineStft<double>.Hypot(engine,
+            new Tensor<double>(re, new[] { re.Length }), new Tensor<double>(im, new[] { im.Length })).ToArray();
+        var single = AiDotNet.Audio.Features.EngineStft<float>.Hypot(engine,
+            new Tensor<double>(re, new[] { re.Length }).Cast<float>(), new Tensor<double>(im, new[] { im.Length }).Cast<float>()).ToArray();
+        var half = AiDotNet.Audio.Features.EngineStft<Half>.Hypot(engine,
+            new Tensor<double>(re, new[] { re.Length }).Cast<Half>(), new Tensor<double>(im, new[] { im.Length }).Cast<Half>()).ToArray();
+        for (int i = 0; i < expected.Length; i++)
+        {
+            Assert.True(expected[i].Equals(full[i]), $"double ({re[i]}, {im[i]}): {full[i]}, expected {expected[i]}");
+            Assert.True(expected[i].Equals((double)single[i]), $"float ({re[i]}, {im[i]}): {single[i]}, expected {expected[i]}");
+            Assert.True(expected[i].Equals((double)half[i]), $"Half ({re[i]}, {im[i]}): {half[i]}, expected {expected[i]}");
+        }
+    }
+
+    // The finite range Half keeps: components whose squares overflow (3e4, 4e4) or underflow (3e-4, 4e-4, squares
+    // below the smallest subnormal) still give their magnitude, and two components at the top of the range, whose
+    // sum is past it, are not mistaken for an infinite one.
+    [Fact(Timeout = 120000)]
+    public async Task Hypot_InHalf_KeepsLoudAndQuietFiniteComponents()
+    {
+        await Task.Yield();
+        var re = new Tensor<Half>(new[] { (Half)3e4, (Half)3e-4, (Half)40000.0, (Half)0.0 }, new[] { 4 });
+        var im = new Tensor<Half>(new[] { (Half)4e4, (Half)(-4e-4), (Half)40000.0, (Half)(-7.0) }, new[] { 4 });
+        var magnitude = AiDotNet.Audio.Features.EngineStft<Half>.Hypot(AiDotNetEngine.Current, re, im).ToArray();
+        Assert.True(Math.Abs((double)magnitude[0] / 5e4 - 1) <= 2e-3, $"loud {magnitude[0]}");
+        Assert.True(Math.Abs((double)magnitude[1] / 5e-4 - 1) <= 2e-3, $"quiet {magnitude[1]}");
+        Assert.True(Math.Abs((double)magnitude[2] / (40000.0 * Math.Sqrt(2)) - 1) <= 2e-3, $"top of range {magnitude[2]}");
+        Assert.Equal(7.0, (double)magnitude[3]);
+    }
 }
