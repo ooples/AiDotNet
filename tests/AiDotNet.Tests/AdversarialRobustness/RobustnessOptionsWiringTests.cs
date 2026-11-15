@@ -91,7 +91,9 @@ public class RobustnessOptionsWiringTests
         public bool IsFeatureUsed(int featureIndex) => true;
         public Dictionary<string, double> GetFeatureImportance() => new();
         public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;
-        public void Dispose() { }
+        public int Disposals { get; private set; }
+
+        public void Dispose() => Disposals++;
     }
 
     /// <summary>An FGSM attack that records the model it was asked to attack.</summary>
@@ -367,8 +369,80 @@ public class RobustnessOptionsWiringTests
             CustomDefense = sentinel
         });
 
-        Assert.Equal(24, sentinel.Samples);
+        // The defense trains on the training split only: floor(0.7 * 24) = 16 of the 24 rows. The previous build
+        // passed all 24, so the validation and test rows the metrics are computed on were trained on (Madry et al.
+        // 2018 and Goodfellow et al. 2015 train the defense on the training set and evaluate on held-out data).
+        Assert.Equal(16, sentinel.Samples);
         Assert.Same(sentinel.Defended, result.Model);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Builder_EnableAdversarialTraining_TrainsOnThePreprocessedTrainingSplit()
+    {
+        // The defended model predicts preprocessed inputs, so the defense must see the training rows after
+        // ConfigurePreprocessing: StandardScaler fitted on the training split centres every column of those rows.
+        // The previous build handed the defense the raw rows (column means near 0.5).
+        var sentinel = new SentinelDefense();
+        await BuildAsync(
+            new AdversarialRobustnessConfiguration<double, Matrix<double>, Vector<double>>
+            {
+                Options = new AdversarialRobustnessOptions<double> { EnableAdversarialTraining = true, EnableSafetyFiltering = false },
+                CustomDefense = sentinel
+            },
+            builder => builder.ConfigurePreprocessing(new AiDotNet.Preprocessing.Scalers.StandardScaler<double>()));
+
+        Assert.Equal(16, sentinel.Inputs.Length);
+        for (int c = 0; c < 3; c++)
+        {
+            double mean = sentinel.Inputs.Average(row => row[0, c]);
+            Assert.True(Math.Abs(mean) < 1e-9, $"column {c} of the defense's training rows has mean {mean}, not 0");
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Builder_Reused_DoesNotKeepTheCertificationEngineOfAnEarlierConfiguration()
+    {
+        // The certified engine was cached on the builder for good: a second build after reconfiguring
+        // CertificationMethod still certified with the first build's randomized-smoothing engine.
+        var (x, y) = Regression();
+        var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
+        builder.ConfigureDataLoader(DataLoaders.FromMatrixVector(x, y))
+            .ConfigureModel(new RidgeRegression<double>())
+            .ConfigureAdversarialRobustness(CertifiedConfiguration(certifiedInference: false));
+        var first = await builder.BuildAsync();
+
+        var second = CertifiedConfiguration(certifiedInference: false);
+        second.Options.CertificationMethod = CertifiedDefenseMethod.IntervalBoundPropagation;
+        builder.ConfigureAdversarialRobustness(second);
+        var rebuilt = await builder.BuildAsync();
+
+        Assert.IsType<AiDotNet.AdversarialRobustness.CertifiedRobustness.RandomizedSmoothing<double, Matrix<double>, Vector<double>>>(first.CertifiedDefense);
+        Assert.IsType<AiDotNet.AdversarialRobustness.CertifiedRobustness.IntervalBoundPropagation<double, Matrix<double>, Vector<double>>>(rebuilt.CertifiedDefense);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Builder_Reused_AttachesInputPreprocessingAfterAnEarlierBuildReplacedTheModel()
+    {
+        // A first build whose defense replaced the model left the builder believing every later build had a
+        // defended model, so a later UseInputPreprocessing-only build attached no preprocessing defense.
+        var (x, y) = Regression();
+        var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
+        builder.ConfigureDataLoader(DataLoaders.FromMatrixVector(x, y))
+            .ConfigureModel(new RidgeRegression<double>())
+            .ConfigureAdversarialRobustness(new AdversarialRobustnessConfiguration<double, Matrix<double>, Vector<double>>
+            {
+                Options = new AdversarialRobustnessOptions<double> { EnableAdversarialTraining = true, EnableSafetyFiltering = false },
+                CustomDefense = new SentinelDefense()
+            });
+        await builder.BuildAsync();
+
+        builder.ConfigureAdversarialRobustness(new AdversarialRobustnessConfiguration<double, Matrix<double>, Vector<double>>
+        {
+            Options = new AdversarialRobustnessOptions<double> { UseInputPreprocessing = true, EnableSafetyFiltering = false }
+        });
+        var rebuilt = await builder.BuildAsync();
+
+        Assert.IsType<AdversarialTraining<double, Matrix<double>, Vector<double>>>(rebuilt.AdversarialDefense);
     }
 
     /// <summary>A defense that records the samples it was applied to and returns a distinct model.</summary>
@@ -376,12 +450,15 @@ public class RobustnessOptionsWiringTests
     {
         public int Samples { get; private set; }
 
+        public Matrix<double>[] Inputs { get; private set; } = Array.Empty<Matrix<double>>();
+
         public IFullModel<double, Matrix<double>, Vector<double>>? Defended { get; private set; }
 
         public IFullModel<double, Matrix<double>, Vector<double>> ApplyDefense(
             Matrix<double>[] trainingData, Vector<double>[] labels, IFullModel<double, Matrix<double>, Vector<double>> model)
         {
             Samples = trainingData.Length;
+            Inputs = trainingData;
             Defended = model.DeepCopy();
             return Defended;
         }
@@ -956,5 +1033,371 @@ public class RobustnessOptionsWiringTests
         defaultFilter.DetectJailbreak(new Vector<double>(new[] { 1.0 }));
 
         Assert.DoesNotContain(logger.Entries, e => e.Level == LogLevel.Warning);
+    }
+
+    // ------------------------------------------------------------------ review fixes (#2591)
+
+    [Fact(Timeout = 60000)]
+    public async Task MedianSmoothing_FiltersEachChannelOfATensorOverItsLastTwoAxes()
+    {
+        await Task.Yield();
+
+        // A 2 x 3 x 3 (C x H x W) tensor is two 3 x 3 images; the 18 values used to be filtered as one 1 x 18 row.
+        // Reference: scipy.ndimage.median_filter(a, size=(1, 2, 2), mode="reflect").
+        var defense = new AdversarialTraining<double, Tensor<double>, Tensor<double>>(new AdversarialDefenseOptions<double>
+        {
+            UsePreprocessing = true,
+            PreprocessingMethod = AdversarialPreprocessingMethod.MedianSmoothing
+        });
+        var channels = new[]
+        {
+            new double[,] { { 1, 2, 3 }, { 4, 5, 6 }, { 7, 8, 9 } },
+            new double[,] { { 9, 8, 7 }, { 6, 5, 4 }, { 3, 2, 1 } }
+        };
+        var expected = new[]
+        {
+            new double[,] { { 1, 2, 3 }, { 4, 4, 5 }, { 7, 7, 8 } },
+            new double[,] { { 9, 9, 8 }, { 9, 8, 7 }, { 6, 5, 4 } }
+        };
+        var input = new Tensor<double>(new[] { 2, 3, 3 });
+        for (int c = 0; c < 2; c++)
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                for (int j = 0; j < 3; j++)
+                {
+                    input[c, i, j] = channels[c][i, j] / 10.0;
+                }
+            }
+        }
+
+        var output = defense.PreprocessInput(input);
+
+        Assert.Equal(new[] { 2, 3, 3 }, output.Shape.ToArray());
+        for (int c = 0; c < 2; c++)
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                for (int j = 0; j < 3; j++)
+                {
+                    Assert.Equal(expected[c][i, j] / 10.0, output[c, i, j], 12);
+                }
+            }
+        }
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task BitDepthReduction_RejectsADepthTheNumericTypeCannotRepresent()
+    {
+        await Task.Yield();
+
+        // 2^16 - 1 = 65535 levels overflow Half (max 65504): the levels became infinity and every value NaN.
+        var defense = new AdversarialTraining<Half, Vector<Half>, Vector<Half>>(new AdversarialDefenseOptions<Half>
+        {
+            UsePreprocessing = true,
+            PreprocessingMethod = AdversarialPreprocessingMethod.BitDepthReduction,
+            BitDepth = 16
+        });
+
+        var error = Assert.Throws<InvalidOperationException>(() =>
+            defense.PreprocessInput(new Vector<Half>(new[] { (Half)0.25, (Half)0.5 })));
+        Assert.Contains("BitDepth", error.Message);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task AdversarialTraining_EnsembleWrapper_DisposesEveryMember()
+    {
+        await Task.Yield();
+
+        // The defended ensemble owns its deep copies; Dispose used to reach only the first.
+        var (x, y) = Samples(4);
+        var model = new RecordingLinearModel();
+        var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(new AdversarialDefenseOptions<double>
+        {
+            TrainingEpochs = 1,
+            BatchSize = 4,
+            Epsilon = 0.1,
+            AttackMethod = AdversarialAttackMethod.Fgsm,
+            UsePreprocessing = false,
+            UseEnsemble = true,
+            EnsembleSize = 3,
+            Seed = 3
+        });
+
+        var defended = defense.ApplyDefense(x, y, model);
+        defended.Dispose();
+
+        Assert.Equal(3, model.Copies.Count);
+        Assert.All(model.Copies, copy => Assert.Equal(1, copy.Disposals));
+    }
+
+    /// <summary>A certified defense from outside the library, declared in an "AiDotNet." namespace.</summary>
+    public sealed class ForeignCertifiedDefense : AiDotNet.AdversarialRobustness.CertifiedRobustness.RandomizedSmoothing<double, Matrix<double>, Vector<double>>
+    {
+        private static int _constructed;
+
+        public ForeignCertifiedDefense(CertifiedDefenseOptions<double> options) : base(options)
+        {
+            System.Threading.Interlocked.Increment(ref _constructed);
+        }
+
+        public static int Constructed => System.Threading.Volatile.Read(ref _constructed);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task CertifiedDefenseSnapshot_DoesNotRebuildATypeFromOutsideTheLibrary()
+    {
+        await Task.Yield();
+
+        // The persisted type was bound through SafeSerializationBinder, which loads the payload-named assembly and
+        // admits any type in an "AiDotNet." namespace, so a payload could construct a type of any assembly.
+        int before = ForeignCertifiedDefense.Constructed;
+        var snapshot = new AiDotNet.AdversarialRobustness.CertifiedRobustness.CertifiedDefenseSnapshot<double>(
+            null,
+            typeof(ForeignCertifiedDefense).FullName,
+            typeof(ForeignCertifiedDefense).Assembly.FullName,
+            new CertifiedDefenseOptions<double>(),
+            null);
+
+        Assert.Throws<InvalidOperationException>(() => snapshot.Restore<Matrix<double>, Vector<double>>());
+        Assert.Equal(before, ForeignCertifiedDefense.Constructed);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task CertifiedDefenseSnapshot_RebuildsALibraryGenericDefenseOverTheModelTypes()
+    {
+        await Task.Yield();
+
+        // A library type is persisted by its generic definition and closed over the model's own type arguments.
+        var snapshot = new AiDotNet.AdversarialRobustness.CertifiedRobustness.CertifiedDefenseSnapshot<double>(
+            null,
+            typeof(AiDotNet.AdversarialRobustness.CertifiedRobustness.RandomizedSmoothing<,,>).FullName,
+            null,
+            new CertifiedDefenseOptions<double> { NumSamples = 40 },
+            null);
+
+        var restored = snapshot.Restore<Matrix<double>, Vector<double>>();
+
+        Assert.IsType<AiDotNet.AdversarialRobustness.CertifiedRobustness.RandomizedSmoothing<double, Matrix<double>, Vector<double>>>(restored);
+        Assert.Equal(40, restored.GetOptions().NumSamples);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task Rlhf_PerformRedTeaming_SendsOnlyAdversarialPrompts()
+    {
+        await Task.Yield();
+
+        // HarmBench (Mazeika et al. 2024) takes the attack success rate over harmful behaviours. The benchmark's
+        // benign controls ("What is the capital of France?") were sent as attacks and counted in the rate.
+        var sent = new List<string>();
+        var alignment = new RLHFAlignment<double>(new AlignmentMethodOptions<double>
+        {
+            RedTeamingAttempts = 1000,
+            RedTeamingCategories = new[] { RedTeamingCategory.Jailbreaking }
+        });
+
+        alignment.PerformRedTeaming(
+            prompt => { sent.Add(prompt); return "I can't help with that."; },
+            SafetyPipelineFactory<double>.Create(new SafetyConfig()));
+
+        var cases = new AiDotNet.Safety.Benchmarking.JailbreakBenchmark<double>().TestCases;
+        var adversarial = cases.Where(c => c.ExpectedUnsafe).Select(c => c.Text).ToArray();
+        Assert.Equal(adversarial, sent.ToArray());
+        Assert.Contains(cases, c => !c.ExpectedUnsafe);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task Rlhf_RewardModel_RejectsAModelOutputOfAnotherWidth()
+    {
+        await Task.Yield();
+
+        // The reward was fit on 2-wide responses; a 3-class policy's third class used to get reward 0 silently.
+        var feedback = new AlignmentFeedbackData<double>
+        {
+            Inputs = new Matrix<double>(2, 1),
+            Outputs = new Matrix<double>(new double[,] { { 1, 0 }, { 0, 1 } }),
+            Preferences = new[] { (1, 0) }
+        };
+        var aligned = new RLHFAlignment<double>(new AlignmentMethodOptions<double> { TrainingIterations = 10 })
+            .AlignModel(new FixedPolicy(), feedback);
+
+        var error = Assert.Throws<InvalidOperationException>(() => aligned.Predict(new Vector<double>(new[] { 1.0 })));
+        Assert.Contains("width", error.Message);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task Rlhf_RewardModelLearningRate_SetsTheBradleyTerryStep()
+    {
+        await Task.Yield();
+
+        // With a vanishing reward step the fitted reward stays ~0, so even a tight KL coefficient keeps the
+        // reference softmax(z); at the default step the same setup is reward-greedy (see the KL test above).
+        var feedback = new AlignmentFeedbackData<double>
+        {
+            Inputs = new Matrix<double>(3, 1),
+            Outputs = new Matrix<double>(new double[,] { { 1, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 } }),
+            Preferences = new[] { (1, 0), (1, 2) }
+        };
+        var z = new[] { 2.0, 0.0, 1.0 };
+        double norm = z.Sum(Math.Exp);
+
+        var output = new RLHFAlignment<double>(new AlignmentMethodOptions<double>
+        {
+            KLCoefficient = 0.01,
+            TrainingIterations = 200,
+            RewardModelLearningRate = 1e-12
+        }).AlignModel(new FixedPolicy(), feedback).Predict(new Vector<double>(new[] { 1.0 }));
+
+        for (int k = 0; k < 3; k++)
+        {
+            Assert.Equal(Math.Exp(z[k]) / norm, output[k], 6);
+        }
+    }
+
+    // ------------------------------------------------------------------ adversarial training on the other build paths
+
+    private static AdversarialRobustnessConfiguration<TNum, TInput, TOutput> AdversarialTrainingConfiguration<TNum, TInput, TOutput>() =>
+        new AdversarialRobustnessConfiguration<TNum, TInput, TOutput>
+        {
+            Options = new AdversarialRobustnessOptions<TNum> { EnableSafetyFiltering = false, EnableAdversarialTraining = true }
+        };
+
+    private static async Task AssertRejectsAdversarialTraining(Func<Task> build)
+    {
+        var error = await Assert.ThrowsAsync<NotSupportedException>(build);
+        Assert.Contains("EnableAdversarialTraining", error.Message);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ProgramSynthesisInference_EnableAdversarialTraining_IsRejectedLoudly()
+    {
+        var builder = new AiModelBuilder<double, Tensor<double>, Tensor<double>>();
+        builder.ConfigureProgramSynthesis(new AiDotNet.ProgramSynthesis.Options.ProgramSynthesisOptions
+        {
+            TargetLanguage = AiDotNet.ProgramSynthesis.Enums.ProgramLanguage.CSharp,
+            ModelKind = AiDotNet.ProgramSynthesis.Enums.ProgramSynthesisModelKind.CodeBERT,
+            MaxSequenceLength = 32,
+            VocabularySize = 2048,
+            NumEncoderLayers = 1
+        });
+        builder.ConfigureAdversarialRobustness(AdversarialTrainingConfiguration<double, Tensor<double>, Tensor<double>>());
+
+        await AssertRejectsAdversarialTraining(() => builder.BuildAsync());
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task MetaLearning_EnableAdversarialTraining_IsRejectedLoudly()
+    {
+        var learner = new Moq.Mock<IMetaLearner<double, Tensor<double>, Tensor<double>>>();
+        var builder = new AiModelBuilder<double, Tensor<double>, Tensor<double>>();
+        builder.ConfigureMetaLearning(learner.Object);
+        builder.ConfigureAdversarialRobustness(AdversarialTrainingConfiguration<double, Tensor<double>, Tensor<double>>());
+
+        await AssertRejectsAdversarialTraining(() => builder.BuildAsync());
+        learner.Verify(l => l.Train(), Moq.Times.Never);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task SelfSupervised_EnableAdversarialTraining_IsRejectedLoudly()
+    {
+        var model = new Moq.Mock<IFullModel<double, Tensor<double>, Tensor<double>>>();
+        model.As<ISelfSupervisedModel>();
+        var builder = new AiModelBuilder<double, Tensor<double>, Tensor<double>>();
+        builder.ConfigureModel(model.Object);
+        builder.ConfigureAdversarialRobustness(AdversarialTrainingConfiguration<double, Tensor<double>, Tensor<double>>());
+
+        await AssertRejectsAdversarialTraining(() => builder.BuildAsync());
+        model.Verify(m => m.Train(Moq.It.IsAny<Tensor<double>>(), Moq.It.IsAny<Tensor<double>>()), Moq.Times.Never);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ReinforcementLearning_EnableAdversarialTraining_IsRejectedLoudly()
+    {
+        var environment = new Moq.Mock<IEnvironment<double>>();
+        environment.Setup(e => e.Reset()).Returns(new Vector<double>(new[] { 0.0 }));
+        environment.SetupGet(e => e.ObservationSpaceDimension).Returns(1);
+        environment.SetupGet(e => e.ActionSpaceSize).Returns(1);
+        environment.SetupGet(e => e.IsContinuousActionSpace).Returns(false);
+        var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
+        builder.ConfigureModel(new RidgeRegression<double>());
+        builder.ConfigureReinforcementLearning(new AiDotNet.Configuration.RLTrainingOptions<double>
+        {
+            Environment = environment.Object,
+            Episodes = 1,
+            LogFrequency = 0
+        });
+        builder.ConfigureAdversarialRobustness(AdversarialTrainingConfiguration<double, Matrix<double>, Vector<double>>());
+
+        await AssertRejectsAdversarialTraining(() => builder.BuildAsync());
+        environment.Verify(e => e.Reset(), Moq.Times.Never);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task StreamingSupervised_EnableAdversarialTraining_IsRejectedLoudly()
+    {
+        var (x, y) = Regression();
+        int fetched = 0;
+        var loader = new StreamingDataLoader<double, Matrix<double>, Vector<double>>(
+            x.Rows,
+            (i, _) =>
+            {
+                System.Threading.Interlocked.Increment(ref fetched);
+                var row = new Matrix<double>(1, x.Columns);
+                row.SetRow(0, x.GetRow(i));
+                return Task.FromResult((row, new Vector<double>(new[] { y[i] })));
+            },
+            4);
+        var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
+        builder.ConfigureDataLoader(loader)
+            .ConfigureModel(new RidgeRegression<double>())
+            .ConfigureAdversarialRobustness(AdversarialTrainingConfiguration<double, Matrix<double>, Vector<double>>());
+
+        await AssertRejectsAdversarialTraining(() => builder.BuildAsync());
+        Assert.Equal(0, System.Threading.Volatile.Read(ref fetched));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ImageSpace_EnableAdversarialTraining_IsRejectedLoudly()
+    {
+        var rotation = new Matrix<float>(3, 3);
+        rotation[0, 0] = 1f;
+        rotation[1, 1] = 1f;
+        rotation[2, 2] = 1f;
+        var view = new AiDotNet.NeuralRadianceFields.Data.ImageView<float>(
+            new Tensor<float>(new[] { 2, 2, 3 }, new Vector<float>(new float[12])),
+            new Vector<float>(new[] { 0f, 0f, -1f }),
+            rotation,
+            focalLength: 0f);
+        var builder = new AiModelBuilder<float, Tensor<float>, Tensor<float>>();
+        builder.ConfigureModel(new AiDotNet.NeuralRadianceFields.Models.GaussianSplatting<float>())
+            .ConfigureDataLoader(AiDotNet.NeuralRadianceFields.Data.ImageTrainingDataLoaders.FromViews(new[] { view }, seed: 42))
+            .ConfigureAdversarialRobustness(AdversarialTrainingConfiguration<float, Tensor<float>, Tensor<float>>());
+
+        await AssertRejectsAdversarialTraining(() => builder.BuildAsync());
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task Evolution_EnableAdversarialTraining_IsRejectedLoudly()
+    {
+        var options = new AiDotNet.Configuration.EvolutionOptions
+        {
+            RunId = "adversarial-training-rejection",
+            Seed = 7UL,
+            MaxEvaluationAttempts = 4,
+            MaxProposals = 8,
+            MaxGenerations = 8,
+            ProposalBatchSize = 2
+        };
+        options.Descriptors.Add(new AiDotNet.Evolution.EvolutionDescriptorDefinition(
+            "x", 0, 100, 10, AiDotNet.Evolution.EvolutionOutOfRangePolicy.Clamp));
+        var builder = new AiModelBuilder<double, Matrix<double>, Vector<double>>();
+        builder.ConfigureEvolution(
+                new AiDotNetTests.UnitTests.Evolution.SyntheticEvolutionTask(),
+                new AiDotNetTests.UnitTests.Evolution.IncrementVariation(),
+                options)
+            .ConfigureEvolutionSeeds(new[] { new AiDotNetTests.UnitTests.Evolution.TestGenome(30) })
+            .ConfigureAdversarialRobustness(AdversarialTrainingConfiguration<double, Matrix<double>, Vector<double>>());
+
+        await AssertRejectsAdversarialTraining(() => builder.BuildAsync());
     }
 }
