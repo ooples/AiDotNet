@@ -4,10 +4,137 @@
 #>
 Set-StrictMode -Version Latest
 
+# PACKED JOB (repository variable TEST_IMPACT_REPACK=on; tools/TestImpact/ShardPacking.ps1). The matrix entry then
+# holds several shard slices in `segments`, and SHARD_SEGMENTS carries them. Each slice runs as its own invocation of
+# this script in its own process - its own filter, environment, heavy handling, hang timeout and test host - with
+# its results under TestResults/slot-N, laid out as an unpacked job lays out TestResults, so every per-shard
+# artifact keeps its name and shape. Filters are never merged.
+#
+#   * A slice that fails does not stop the ones after it; the step fails at the end if any slice did not pass.
+#   * shard-metadata.json is written for EVERY slice before the first one runs, as 'cancelled', and rewritten with
+#     the real outcome as each finishes. A job killed part-way therefore leaves the finished slices' results intact
+#     and the rest recorded exactly as a cancelled job records its shard today.
+#   * No new slice starts once the job is within 12 minutes of its timeout (SHARD_PACK_TIMEOUT), so the upload steps
+#     still run; a slice that did not start stays 'cancelled', which the regression analysis reads as incomplete.
+#
+# Without SHARD_SEGMENTS (always, unless the job is packed) none of this runs and the script is what it was.
+$packedSegments = "$($env:SHARD_SEGMENTS)".Trim()
+if ($packedSegments -and $packedSegments -cne 'null') {
+  $segments = @($packedSegments | ConvertFrom-Json)
+  if ($segments.Count -eq 0) { throw 'SHARD_SEGMENTS holds no slices' }
+  $packName = "$($env:SHARD_NAME)"
+  $packRoot = if ($env:SHARD_RESULTS_ROOT) { "$($env:SHARD_RESULTS_ROOT)" } else { 'TestResults' }
+  $packStarted = [DateTime]::UtcNow
+  $packMinutes = 0
+  [void] [int]::TryParse("$($env:SHARD_PACK_TIMEOUT)", [ref] $packMinutes)
+  $packDeadline = if ($packMinutes -gt 0) { $packStarted.AddMinutes([Math]::Max(5, $packMinutes - 12)) } else { [DateTime]::MaxValue }
+
+  $slots = for ($slot = 0; $slot -lt $segments.Count; $slot++) {
+    $segment = $segments[$slot]
+    $name = [string] $segment.name
+    if ([string]::IsNullOrWhiteSpace($name)) { throw "packed slice $($slot + 1) has no name" }
+    [pscustomobject]@{
+      Slot = $slot; Segment = $segment; Name = $name
+      Slug = $name -replace '[\\/:*?"<>|\s-]+', '_'
+      Root = Join-Path $packRoot "slot-$slot"
+      Outcome = 'cancelled'; Seconds = $null; ExitCode = $null
+      Predicted = $(if ($segment.PSObject.Properties['predictedMinutes']) { $segment.predictedMinutes } else { $null })
+    }
+  }
+  $slots = @($slots)
+
+  function Write-PackedSliceMetadata($Entry) {
+    New-Item -Path $Entry.Root -ItemType Directory -Force | Out-Null
+    $metadata = [ordered]@{
+      shard = $Entry.Name
+      slug = $Entry.Slug
+      sha = "$($env:GITHUB_SHA)"
+      runId = "$($env:GITHUB_RUN_ID)"
+      runAttempt = "$($env:GITHUB_RUN_ATTEMPT)"
+      testStepOutcome = $Entry.Outcome
+      rerunCandidateCount = ''
+      rerunStepOutcome = ''
+      packedIn = $packName
+      slot = $Entry.Slot
+    }
+    if ($null -ne $Entry.Seconds) { $metadata['testWallSeconds'] = [Math]::Round([double] $Entry.Seconds, 1) }
+    [pscustomobject] $metadata | ConvertTo-Json | Set-Content (Join-Path $Entry.Root 'shard-metadata.json') -Encoding utf8
+  }
+  foreach ($entry in $slots) { Write-PackedSliceMetadata $entry }
+
+  # A heavy slice rewrites the built xunit.runner.json (serial collections, quiet discovery). Every slice starts
+  # from the file as the build left it, whatever ran before it in this job.
+  $runnerConfigs = @{}
+  foreach ($entry in $slots) {
+    $path = Join-Path (Split-Path -Parent "$($entry.Segment.project)") "bin/Release/$($entry.Segment.framework)/xunit.runner.json"
+    if (-not $runnerConfigs.ContainsKey($path) -and (Test-Path -LiteralPath $path)) {
+      $runnerConfigs[$path] = [IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $path).Path)
+    }
+  }
+
+  $self = [Environment]::ProcessPath
+  foreach ($entry in $slots) {
+    $segment = $entry.Segment
+    Write-Host "::group::Packed slice $($entry.Slot + 1) of $($slots.Count): $($entry.Name)"
+    try {
+      if ([DateTime]::UtcNow -gt $packDeadline) {
+        Write-Host "::error::Packed slice '$($entry.Name)' was not started: the job is within 12 minutes of its $packMinutes-minute timeout. It is recorded as cancelled."
+        continue
+      }
+      foreach ($path in $runnerConfigs.Keys) { [IO.File]::WriteAllBytes((Resolve-Path -LiteralPath $path).Path, $runnerConfigs[$path]) }
+      $optional = { param($Key) if ($segment.PSObject.Properties[$Key] -and $null -ne $segment.$Key) { $segment.$Key } else { $null } }
+      $sliceEnv = & $optional 'env'
+      $env:SHARD_SEGMENTS = ''
+      $env:SHARD_RESULTS_ROOT = $entry.Root
+      $env:SHARD_NAME = $entry.Name
+      $env:SHARD_PROJECT = "$($segment.project)"
+      $env:SHARD_FRAMEWORK = "$($segment.framework)"
+      $env:SHARD_FILTER = "$($segment.filter)"
+      $env:SHARD_HEAVY = if ((& $optional 'heavy') -eq $true) { 'true' } else { '' }
+      $env:SHARD_ENV = if ($null -ne $sliceEnv) { ConvertTo-Json -InputObject $sliceEnv -Depth 4 -Compress } else { 'null' }
+      $env:SHARD_HANG_TIMEOUT = "$(& $optional 'hangTimeout')"
+      $env:SHARD_COVERAGE_INCLUDE = "$(& $optional 'coverageIncludeDirectory')"
+      $clock = [Diagnostics.Stopwatch]::StartNew()
+      & $self -NoProfile -File $PSCommandPath
+      $entry.ExitCode = $LASTEXITCODE
+      $entry.Seconds = $clock.Elapsed.TotalSeconds
+      $entry.Outcome = if ($entry.ExitCode -eq 0) { 'success' } else { 'failure' }
+    }
+    catch {
+      $entry.Outcome = 'failure'
+      Write-Host "::error::Packed slice '$($entry.Name)' could not be run: $($_.Exception.Message)"
+    }
+    finally {
+      Write-PackedSliceMetadata $entry
+      Write-Host '::endgroup::'
+      $took = if ($null -ne $entry.Seconds) { '{0:N1} min' -f ($entry.Seconds / 60) } else { 'not run' }
+      Write-Host "Packed slice $($entry.Slot + 1) of $($slots.Count): $($entry.Name) - $($entry.Outcome) ($took)"
+      if ($entry.Outcome -ceq 'failure') { Write-Host "::error::Packed slice '$($entry.Name)' failed (exit code $($entry.ExitCode))." }
+    }
+  }
+
+  if ($env:GITHUB_STEP_SUMMARY) {
+    $lines = @("### $packName", '', '| Slice | Outcome | Predicted min | Actual min |', '|---|---|---|---|')
+    foreach ($entry in $slots) {
+      $actual = if ($null -ne $entry.Seconds) { '{0:N1}' -f ($entry.Seconds / 60) } else { '' }
+      $lines += "| $($entry.Name) | $($entry.Outcome) | $($entry.Predicted) | $actual |"
+    }
+    ($lines -join "`n") | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+  }
+  $notPassed = @($slots | Where-Object { $_.Outcome -cne 'success' })
+  if ($notPassed.Count -gt 0) {
+    Write-Host "$($notPassed.Count) of $($slots.Count) packed slice(s) did not pass: $(@($notPassed | ForEach-Object { $_.Name }) -join '; ')"
+    exit 1
+  }
+  exit 0
+}
+
 # Sanitize shard name: remove/replace all characters invalid in file paths
 $shardName = "$($env:SHARD_NAME)"
 $sanitizedShardName = $shardName -replace '[\\/:*?"<>|\s-]+', '_'
-$results = Join-Path "TestResults" $sanitizedShardName
+# A packed job gives each slice its own results root (TestResults/slot-N, above); otherwise this is TestResults.
+$resultsRoot = if ($env:SHARD_RESULTS_ROOT) { "$($env:SHARD_RESULTS_ROOT)" } else { 'TestResults' }
+$results = Join-Path $resultsRoot $sanitizedShardName
 New-Item -Path $results -ItemType Directory -Force | Out-Null
 
 # Pre-test resource snapshot. Cancelled-runner shards (Diffusion

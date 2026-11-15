@@ -245,6 +245,12 @@ function Read-TestLedger {
             parseErrors = @($parseErrors)
             testStepOutcome = $stepOutcome
         })
+        # A packed job (TEST_IMPACT_REPACK=on) records how long each slice's test step took; the job's own
+        # duration no longer says. The shard timing table reads it from here. Absent for every other shard,
+        # whose row is then exactly what it was.
+        if ($metadata -and $metadata.PSObject.Properties['testWallSeconds'] -and $null -ne $metadata.testWallSeconds) {
+            $shards[$shards.Count - 1] | Add-Member -NotePropertyName testWallSeconds -NotePropertyValue ([double] $metadata.testWallSeconds)
+        }
     }
 
     $distinctTests = @($allTests | Sort-Object identity, outcome, shard -Unique)

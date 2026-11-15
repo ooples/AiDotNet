@@ -42,10 +42,59 @@ param(
     # until both together fit under this. 400,000 characters is ~800 KB, which leaves room for the job's
     # other outputs. The former 800,000 counted characters as bytes: #2272's plan passed it and still
     # failed the job with "Job outputs exceed 1,048,576 bytes".
-    [int] $MaxMatrixCharacters = 400000
+    [int] $MaxMatrixCharacters = 400000,
+    # Layer 2 (ShardPacking.ps1): what repacking does, or would do, to this run's matrix. Written only when
+    # TEST_IMPACT_REPACK is report or on and the run is in scope; the Build job uploads it as shard-pack-plan.
+    [string] $PackPlanFile = 'shard-pack-plan.json'
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+function Get-RepackedMatrix {
+    <#
+        Layer 2: the matrix with its slices packed into time-balanced jobs, as JSON, or $null to leave the matrix one
+        job per shard. $null whenever TEST_IMPACT_REPACK is not 'on' (unset and 'off' compute nothing; 'report'
+        computes the packing and records it), the run is out of scope, nothing would share a job, the packed matrix
+        does not fit a job output beside -OtherOutputCharacters, or anything at all goes wrong.
+    #>
+    param([object[]] $Slices, [hashtable] $PlanShards = @{}, [int] $OtherOutputCharacters = 0)
+    try {
+        . (Join-Path $PSScriptRoot 'ShardPacking.ps1')
+        $mode = Get-ShardRepackMode $env:TEST_IMPACT_REPACK
+        if ($mode -ceq 'off') { return $null }
+        $scope = Get-ShardRepackScope -EventName $env:GITHUB_EVENT_NAME -CoverageEverywhere $env:COLLECT_COVERAGE_EVERYWHERE
+        if (-not $scope.InScope) { Write-Host "shard repacking: $($scope.Why)"; return $null }
+        if (@($Slices).Count -eq 0) { return $null }
+
+        $tablePath = if ($env:SHARD_TIMING_TABLE) { $env:SHARD_TIMING_TABLE } else { Join-Path $Repository 'shard-timing-table.json' }
+        $weights = Get-ShardPackWeights -ShardScriptPath (Join-Path $Repository '.github/scripts/Invoke-Shard.ps1')
+        $result = New-ShardPackPlan -Slices @($Slices) -Table (Read-ShardTimingTable -Path $tablePath) -PlanShards $PlanShards `
+            -HeavyNames $weights.Heavy -AloneNames $weights.Timing -Mode $mode -EventName ([string] $env:GITHUB_EVENT_NAME)
+        $plan = $result.Plan
+        $json = $null
+        $applied = ''
+        if ($mode -cne 'on') { $applied = 'would run as' }
+        elseif ($plan.packedJobs -eq 0) { $applied = 'run unpacked (no two slices fit one job) as' }
+        else {
+            $candidate = ConvertTo-Json -InputObject @($result.Matrix) -Depth 8 -Compress
+            if (($candidate.Length + $OtherOutputCharacters) -gt $MaxMatrixCharacters) {
+                Write-Host "::warning::the packed matrix ($($candidate.Length) characters) does not fit a job output - one job per shard"
+                $applied = 'run unpacked (the packed matrix does not fit a job output), but would run as'
+            }
+            else { $json = $candidate; $applied = 'run as' }
+        }
+        $plan['applied'] = [bool] $json
+        ConvertTo-Json -InputObject $plan -Depth 8 | Set-Content -LiteralPath (Join-Path $Repository $PackPlanFile) -Encoding utf8
+        $summary = Get-ShardPackSummary -Plan $plan -Applied $applied
+        if ($env:GITHUB_STEP_SUMMARY) { "`n$summary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
+        Write-Host "shard repacking ($mode): $($plan.slices) slice(s) $applied $(@($plan.jobs).Count) job(s), $($plan.packedJobs) packed"
+        return $json
+    }
+    catch {
+        Write-Host "::warning::shard repacking unavailable ($($_.Exception.Message)) - one job per shard"
+        return $null
+    }
+}
 
 function Write-Output-Value([string] $Name, [string] $Value) {
     "$Name=$Value" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
@@ -77,11 +126,16 @@ function Write-Passthrough([string] $Why) {
     # Publish nothing for the selection itself: every consumer reads `needs.build.outputs.X || needs.select-shards
     # .outputs.X`, so an empty value IS the passthrough. Re-publishing select-shards' matrices here added their full
     # size to this job's outputs, which a large selection pushes past GitHub's 1,048,576-byte (UTF-16) job cap.
-    Write-Output-Value 'matrix' ''
+    $passed = @(try { @($env:SELECTED_MATRIX | ConvertFrom-Json) } catch { @() })
+    # The one exception, and only with TEST_IMPACT_REPACK=on: the chosen selection repacked into time-balanced jobs
+    # (Layer 2). It carries the same shards once, so it is the size select-shards' own matrix already was, and
+    # ledger_matrix and skipped still fall back to select-shards. Empty in every other case, as before.
+    $repacked = $null
+    if ($env:REQUIRES_SHARDS -eq 'true' -and $passed.Count -gt 0) { $repacked = Get-RepackedMatrix -Slices $passed }
+    Write-Output-Value 'matrix' $(if ($repacked) { $repacked } else { '' })
     Write-Output-Value 'ledger_matrix' ''
     Write-Output-Value 'skipped' ''
     Write-Output-Value 'impact_mode' 'passthrough'
-    $passed = @(try { @($env:SELECTED_MATRIX | ConvertFrom-Json) } catch { @() })
     Write-Effective 'passthrough' $Why $passed
     "### Test-level selection`n`nNot applied: $Why." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 }
@@ -253,8 +307,15 @@ if ((Measure-Outputs) -gt $MaxMatrixCharacters) { Write-Passthrough 'the narrowe
 $running = [Collections.Generic.HashSet[string]]::new([string[]] @($runnable.Shards.name), [StringComparer]::Ordinal)
 $skipped = @($all | Where-Object { -not $running.Contains([string] $_.name) } | ForEach-Object { $_.name -replace '[\\/:*?"<>|\s-]+', '_' })
 
+# Layer 2: with TEST_IMPACT_REPACK=on the narrowed slices are packed into time-balanced jobs. Everything below still
+# describes shards - ledger_matrix, skipped, the effective file and the summary - because a packed job reports each
+# slice under its own shard name. Unset, 'off' and 'report' leave $json exactly as it is.
+$ledgerJson = ConvertTo-Json -InputObject @($runnable.LedgerShards) -Depth 6 -Compress
+$repacked = Get-RepackedMatrix -Slices $tests -PlanShards $byName -OtherOutputCharacters $ledgerJson.Length
+if ($repacked) { $json = $repacked }
+
 Write-Output-Value 'matrix' $json
-Write-Output-Value 'ledger_matrix' (ConvertTo-Json -InputObject @($runnable.LedgerShards) -Depth 6 -Compress)
+Write-Output-Value 'ledger_matrix' $ledgerJson
 Write-Output-Value 'skipped' (ConvertTo-Json -InputObject @($skipped) -Depth 3 -Compress)
 Write-Output-Value 'impact_mode' 'narrowed'
 Write-Effective 'narrowed' '' $tests
