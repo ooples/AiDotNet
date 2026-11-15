@@ -30,8 +30,25 @@ internal static class BatchGather
     /// <summary>Selects the rows at <paramref name="indices"/> of a matrix (all columns).</summary>
     internal static Matrix<T> Rows<T>(Matrix<T> source, int[] indices)
     {
-        if (indices.Length == 0) return new Matrix<T>(0, source.Columns);
-        return Rows(Tensor<T>.FromMatrix(source), indices).ToMatrix();
+        int cols = source.Columns;
+        var result = new Matrix<T>(indices.Length, cols);
+        if (indices.Length == 0 || cols == 0) return result;
+
+        // One block copy per requested row, straight from the matrix storage. Converting the matrix to a
+        // tensor first would copy the whole dataset on every call, so a batch would cost O(rows * cols)
+        // time and memory instead of O(batch * cols).
+        var sourceSpan = source.AsSpan();
+        var resultSpan = result.AsWritableSpan();
+        for (int i = 0; i < indices.Length; i++)
+        {
+            int row = indices[i];
+            if ((uint)row >= (uint)source.Rows)
+                throw new ArgumentOutOfRangeException(
+                    nameof(indices), $"Row index {row} at position {i} is outside [0, {source.Rows}).");
+            sourceSpan.Slice(row * cols, cols).CopyTo(resultSpan.Slice(i * cols, cols));
+        }
+
+        return result;
     }
 
     /// <summary>The integer labels 0..count-1 as a new <typeparamref name="T"/> array (one bulk cast).</summary>
