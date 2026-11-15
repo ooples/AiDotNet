@@ -84,7 +84,7 @@ public class TabRRegression<T> : TabRBase<T>
 
         _outputDimension = outputDimension;
 
-        // Regression head
+        // The final Linear(d_main, d_out) of the reference head Sequential(Norm, Activation, Linear)
         _regressionHead = new FullyConnectedLayer<T>(
             EmbeddingDimension,
             outputDimension,
