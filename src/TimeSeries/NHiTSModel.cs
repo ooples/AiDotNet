@@ -173,6 +173,23 @@ public partial class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFuncti
     }
 
     /// <summary>
+    /// Sets the standardization statistics of the training series: its mean and population standard deviation (1
+    /// when the series has no spread).
+    /// </summary>
+    /// <remarks>
+    /// Both are taken in double and rounded once: in Half the sum of squared deviations of 40 values near 200 passes
+    /// 65504, so the standard deviation was infinite and every standardized target 0.
+    /// </remarks>
+    /// <param name="y">The training series.</param>
+    private void ComputeNormalizationStatistics(Vector<T> y)
+    {
+        var (mean, variance) = TensorReductionHelper.MeanAndPopulationVarianceAsDouble(Engine, y.AsTensor());
+        double std = Math.Sqrt(variance);
+        _normMean = NumOps.FromDouble(mean);
+        _normStd = std <= 1e-10 ? NumOps.One : NumOps.FromDouble(std);
+    }
+
+    /// <summary>
     /// Trains the N-HiTS model with tape-based automatic differentiation and the Adam
     /// optimizer (Challu et al. 2023 use Adam), mirroring the working NBEATSModel path.
     /// </summary>
@@ -211,24 +228,9 @@ public partial class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFuncti
         ModelParameters[0] = NumOps.FromDouble(y.Length);
 
         // Normalize the series to zero mean / unit variance for stable gradient flow.
-        T yMean = NumOps.Zero;
-        for (int i = 0; i < y.Length; i++)
-            yMean = NumOps.Add(yMean, y[i]);
-        yMean = NumOps.Divide(yMean, NumOps.FromDouble(y.Length));
-
-        T yVar = NumOps.Zero;
-        for (int i = 0; i < y.Length; i++)
-        {
-            T diff = NumOps.Subtract(y[i], yMean);
-            yVar = NumOps.Add(yVar, NumOps.Multiply(diff, diff));
-        }
-        yVar = NumOps.Divide(yVar, NumOps.FromDouble(y.Length));
-        T yStd = NumOps.Sqrt(yVar);
-        if (NumOps.LessThanOrEquals(yStd, NumOps.FromDouble(1e-10)))
-            yStd = NumOps.One;
-
-        _normMean = yMean;
-        _normStd = yStd;
+        ComputeNormalizationStatistics(y);
+        T yMean = _normMean;
+        T yStd = _normStd;
 
         var yNorm = new Vector<T>(y.Length);
         for (int i = 0; i < y.Length; i++)

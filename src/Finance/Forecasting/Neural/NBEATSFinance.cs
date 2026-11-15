@@ -667,7 +667,7 @@ public partial class NBEATSFinance<T> : ForecastingModelBase<T>
     {
         var metrics = new Dictionary<string, T>();
 
-        var (mse, mae, count) = SumSquaredAndAbsoluteError(predictions, actuals);
+        var (mse, mae, count) = MeanSquaredAndAbsoluteError(predictions, actuals);
         T smape = NumOps.Zero;
         if (count > 0)
         {
@@ -684,8 +684,6 @@ public partial class NBEATSFinance<T> : ForecastingModelBase<T>
 
         if (count > 0)
         {
-            mse = NumOps.Divide(mse, NumOps.FromDouble(count));
-            mae = NumOps.Divide(mae, NumOps.FromDouble(count));
             smape = NumOps.Multiply(NumOps.Divide(smape, NumOps.FromDouble(count)), NumOps.FromDouble(200)); // Convert to percentage
         }
 

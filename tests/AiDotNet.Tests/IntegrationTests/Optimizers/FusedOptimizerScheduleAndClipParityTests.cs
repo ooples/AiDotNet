@@ -236,21 +236,55 @@ public class FusedOptimizerScheduleAndClipParityTests
         }
     }
 
-    [Fact]
-    public void WarmupThenEpochScheduler_StaysOnTheEagerPath()
+    public static System.Collections.Generic.IEnumerable<object[]> FusedSchedules()
     {
-        // The fused path never calls OnBatchEnd, so it cannot advance a per-batch warmup; the optimizer
-        // must decline fusion rather than train on a schedule it cannot follow.
+        yield return new object[] { "WarmupThenEpoch", SchedulerStepMode.WarmupThenEpoch, new Func<ILearningRateScheduler>(() => new LinearWarmupScheduler(baseLearningRate: 1e-2, warmupSteps: 4, totalSteps: 20)) };
+        yield return new object[] { "WsdPerBatch", SchedulerStepMode.StepPerBatch, new Func<ILearningRateScheduler>(() => new WarmupStableDecayScheduler(1e-2, 2, 4, 4, WarmupStableDecayScheduler.DecayShape.Cosine)) };
+        yield return new object[] { "TriStagePerBatch", SchedulerStepMode.StepPerBatch, new Func<ILearningRateScheduler>(() => new TriStageScheduler(1e-2, 2, 2, 8)) };
+        yield return new object[] { "SequentialPerBatch", SchedulerStepMode.StepPerBatch, new Func<ILearningRateScheduler>(() => new SequentialLRScheduler(
+            new System.Collections.Generic.List<ILearningRateScheduler> { new ConstantLRScheduler(1e-2), new PolynomialLRScheduler(1e-2, 6, 2.0) }, new[] { 2 })) };
+        yield return new object[] { "LambdaPerBatch", SchedulerStepMode.StepPerBatch, new Func<ILearningRateScheduler>(() => new LambdaLRScheduler(1e-2, s => 1.0 / (1 + s))) };
+        yield return new object[] { "PlateauPerBatch", SchedulerStepMode.StepPerBatch, new Func<ILearningRateScheduler>(() => new ReduceOnPlateauScheduler(1e-2, factor: 0.5, patience: 0)) };
+    }
+
+    [Theory]
+    [MemberData(nameof(FusedSchedules))]
+    public void EveryScheduler_TrainsFused_AndMatchesEager(string name, SchedulerStepMode mode, Func<ILearningRateScheduler> scheduler)
+    {
+        // Every schedule now runs fused: a mapped formula, or the external rate the fused step's OnBatchEnd keeps
+        // current. Either way each step must use the rate the eager loop uses.
         AdamOptimizer<double, Tensor<double>, Tensor<double>> Factory() =>
             new(null, new AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>
             {
                 InitialLearningRate = 1e-2,
-                SchedulerStepMode = SchedulerStepMode.WarmupThenEpoch,
-                LearningRateScheduler = new LinearWarmupScheduler(baseLearningRate: 1e-2, warmupSteps: 4, totalSteps: 20),
+                EnableGradientClipping = false,
+                SchedulerStepMode = mode,
+                LearningRateScheduler = scheduler(),
+            });
+        AdamOptimizer<double, Tensor<double>, Tensor<double>> Unscheduled() =>
+            new(null, new AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>
+            {
+                InitialLearningRate = 1e-2,
+                EnableGradientClipping = false,
             });
 
-        var run = Run(Factory, InitialParameters(), compiled: true, epochs: 1, stepsPerEpoch: 2);
+        // Positive control: the schedule moves the rate within the run, so a plan that held one rate would fail.
+        var probe = Factory();
+        var rates = new System.Collections.Generic.HashSet<double> { probe.GetCurrentLearningRate() };
+        for (int i = 0; i < 8; i++) { probe.OnBatchEnd(); if (i % 4 == 3) probe.OnEpochEnd(); rates.Add(probe.GetCurrentLearningRate()); }
+        Assert.True(rates.Count > 1, $"{name}: the schedule never changed the rate; the comparison would be vacuous.");
 
-        Assert.Equal(0, run.FusedSteps);
+        var init = InitialParameters();
+        var fused = Run(Factory, init, compiled: true, epochs: 2, stepsPerEpoch: 4);
+        var eager = Run(Factory, init, compiled: false, epochs: 2, stepsPerEpoch: 4);
+        double floor = MaxAbsDifference(
+            Run(Unscheduled, init, compiled: true, epochs: 2, stepsPerEpoch: 4).Parameters,
+            Run(Unscheduled, init, compiled: false, epochs: 2, stepsPerEpoch: 4).Parameters);
+
+        Assert.Equal(8, fused.FusedSteps);
+        Assert.True(MaxAbsDifference(eager.Parameters, init) > 1e-5, $"{name}: training did not move the parameters.");
+        double divergence = MaxAbsDifference(fused.Parameters, eager.Parameters);
+        Assert.True(divergence <= AllowedDrift(floor),
+            $"{name}: fused training diverged from eager by {divergence:E3}; unscheduled Adam drifts {floor:E3}.");
     }
 }

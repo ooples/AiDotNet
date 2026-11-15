@@ -192,23 +192,15 @@ public class TimeSeriesTokenizer<T>
         if (len == 0)
             return (new Tensor<T>(series._shape), NumOps.Zero, NumOps.One);
 
-        T mean = NumOps.Zero;
-        for (int i = 0; i < len; i++)
-            mean = NumOps.Add(mean, series[i]);
-        mean = NumOps.Divide(mean, NumOps.FromDouble(len));
-
-        T variance = NumOps.Zero;
-        for (int i = 0; i < len; i++)
-        {
-            var diff = NumOps.Subtract(series[i], mean);
-            variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-        }
-        variance = NumOps.Divide(variance, NumOps.FromDouble(len));
-        T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
-
-        var normalized = new Tensor<T>(series._shape);
-        for (int i = 0; i < len; i++)
-            normalized.Data.Span[i] = NumOps.Divide(NumOps.Subtract(series[i], mean), std);
+        // The mean and variance in double, rounded once: in Half the sum of squared deviations of 40 values near 200
+        // passes 65504, so the std was infinite and every normalized value 0. The result stays detached, as before.
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var source = series.IsContiguous ? series : series.Contiguous();
+        var (meanValue, variance) = TensorReductionHelper.MeanAndPopulationVarianceAsDouble(engine, source);
+        T mean = NumOps.FromDouble(meanValue);
+        T std = NumOps.FromDouble(Math.Sqrt(variance + 1e-5));
+        var normalized = engine.TensorDivideScalar(engine.TensorSubtractScalar(source, mean), std);
 
         return (normalized, mean, std);
     }

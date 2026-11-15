@@ -332,10 +332,9 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     private bool _scatterVectorHandedOut;
 
     // On a GPU engine a training step's gradients live on the device. Publishing them used to download every one,
-    // every step (one sync per tensor: 35 per LSTM step, 65 per Transformer step). The layer now keeps OWNED device
-    // copies (an async device-to-device copy each, no sync) and downloads only if something reads the gradients.
-    // Owned, not referenced: the step's own gradient buffers are reclaimed when it returns. A compiled plan's buffers,
-    // device or host, persist until its next step republishes them, so those are referenced instead
+    // every step (one sync per tensor: 35 per LSTM step, 65 per Transformer step). The layer now references the
+    // step's device gradients (a tape keeps its gradients alive after it ends; a compiled plan's buffers persist until
+    // its next step republishes them) and downloads only if something reads them
     // (TryPublishDeviceGradients, TryReferenceHostGradients).
     private Dictionary<Tensor<T>, Tensor<T>>? _pendingDeviceGradients;
 
@@ -4063,13 +4062,21 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// <code>if (ShouldCacheForBackward) _lastInput = input;</code>
     /// It is false whenever no eager manual backward will read the caches —
     /// under a recording <see cref="GradientTape{T}"/> (unless <see cref="KeepActivationCacheUnderTape"/>),
-    /// in eval mode (<see cref="IsTrainingMode"/> is false), or inside an
+    /// while a compiled training plan is being traced (the plan differentiates its recorded graph and never calls a
+    /// layer's manual backward), in eval mode (<see cref="IsTrainingMode"/> is false), or inside an
     /// <see cref="InferenceMode"/> scope — so the redundant reference is dropped and the
     /// inference caching allocator can safely recycle the buffer (issue #1668).
+    /// <para>
+    /// A layer that picks its forward by this flag (attention keeps its weights for a manual backward, or runs the
+    /// fused kernel) must not take the caching branch inside a compiled trace: grouped-query attention did, and its
+    /// compiled step materialized the [B, H, S, S] weights and uploaded a causal mask every step (4874 ms/step against
+    /// 186.5 eager on a 16-layer, 256-wide model).
+    /// </para>
     /// </summary>
     protected bool ShouldCacheForBackward
         => IsTrainingMode
         && !InferenceMode.IsActive
+        && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
         && (GradientTape<T>.Current is null || KeepActivationCacheUnderTape);
 
     /// <summary>
@@ -5651,14 +5658,20 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         //     pushed one tensor per layer for good. A finite-difference gradient check (thousands of training-mode
         //     objective evaluations under NoGradScope) grew DemucsNoise past 13 GB and killed the CI runner.
         //
+        //   - A compiled-plan trace (GraphMode): the forward is recorded into a plan whose backward runs the
+        //     engine's own backward functions, never ApplyActivationDerivativeFromOutput. DDPM's trace pushed one
+        //     batch-sized pre-activation per activating layer and kept them for the model's life: about 1.4 GB of
+        //     a 6.7 GB step at batch 64.
+        //
         // Only push when we know the eager backward will drain it: training
-        // mode ON, not inside an inference or no-grad scope, no tape recording.
+        // mode ON, not tracing a compiled plan, not inside an inference or no-grad scope, no tape recording.
         // The tape path already preserves the pre-activation reference through its
         // recorded GradFn closures, and an InferenceMode scope guarantees no backward
         // at all — both make the cache redundant (and leaving it set would alias arena
         // scratch across a denoise-loop Reset — issue #1668).
         bool eagerBackwardWillRun =
             IsTrainingMode
+            && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
             && !InferenceMode.IsActive
             && !NoGradScope<T>.IsSuppressed
             && GradientTape<T>.Current is null;
@@ -7647,7 +7660,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// this layer owns, on the device. Declines (returns false) when any matched gradient is not device-resident or is
     /// a sparse payload / strided view, so those keep the exact eager copy.
     /// </summary>
-    private bool TryPublishDeviceGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads, bool sourcesOutliveStep, out int matched)
+    private bool TryPublishDeviceGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads, GradientSourceOwnership ownership, out int matched)
     {
         matched = 0;
         var sources = new List<(Tensor<T> Parameter, Tensor<T> Gradient)>();
@@ -7655,7 +7668,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         if (sources.Count == 0) return false;
 
         var owned = new Dictionary<Tensor<T>, Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
-        if (sourcesOutliveStep)
+        if (ownership == GradientSourceOwnership.Plan)
         {
             // A compiled plan's gradient buffers persist until its next step republishes them (and the plan lands them
             // on the host before it is retired), so they are referenced, not copied: a device copy per parameter per
@@ -7669,15 +7682,24 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             _pendingDeviceGradients = owned;
             return true;
         }
-        // A device copy made inside a tape step is one of the step's intermediates, which the tape frees on the device
-        // when it ends; the published gradient is read after that, so the tape must keep it.
+        // A tape step's gradients outlive the tape (only the step's other intermediates are released when it ends), so
+        // they are referenced like a compiled plan's; Retain makes that explicit. An owned copy per parameter per step
+        // cost a device-to-device copy plus a host array for every parameter (the copy's Tensor constructor allocates
+        // one): ~83 MB of host allocation per step on a 74M-parameter MoE LM, read by nothing.
+        // Caller-supplied gradients are copied instead: the caller may write them after publication, and the
+        // published values are a snapshot. A copy made inside a tape step is one of the step's intermediates, which the
+        // tape frees on the device when it ends, so it is retained too.
         var tape = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current;
         foreach (var (parameter, gradient) in sources)
         {
-            var copy = new Tensor<T>(gradient._shape);
-            Engine.TensorCopy(gradient, copy);
-            tape?.Retain(copy);
-            owned[parameter] = copy;
+            var published = gradient;
+            if (ownership == GradientSourceOwnership.Caller)
+            {
+                published = new Tensor<T>(gradient._shape);
+                Engine.TensorCopy(gradient, published);
+            }
+            tape?.Retain(published);
+            owned[parameter] = published;
             matched += gradient.Length;
         }
 
@@ -7687,7 +7709,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     }
 
     /// <summary>
-    /// CPU path of <see cref="ScatterParameterGradients(IReadOnlyDictionary{Tensor{T}, Tensor{T}}, bool)"/> for a
+    /// CPU path of <see cref="ScatterParameterGradients(IReadOnlyDictionary{Tensor{T}, Tensor{T}}, GradientSourceOwnership)"/> for a
     /// compiled plan's gradients: references them and fills the flat vector only if something reads it. Copying them
     /// into the layer's vector every step -- a clear and a copy of every gradient -- was 15% of a CPU MLP training
     /// process's main-thread time, for a vector nothing read. Declines (false) for sparse or strided gradients, which
@@ -7864,20 +7886,20 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
 
 
     public int ScatterParameterGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
-        => ScatterParameterGradients(grads, sourcesOutliveStep: false);
+        => ScatterParameterGradients(grads, GradientSourceOwnership.Caller);
 
     /// <summary>
-    /// <see cref="ScatterParameterGradients(IReadOnlyDictionary{Tensor{T}, Tensor{T}})"/> for gradients that stay
-    /// valid until the next publish (a compiled plan's own buffers, which it republishes every step): device-resident
-    /// ones are then referenced rather than copied.
+    /// <see cref="ScatterParameterGradients(IReadOnlyDictionary{Tensor{T}, Tensor{T}})"/> with the gradients' owner
+    /// stated: a tape step's or a compiled plan's own gradients are referenced on the device rather than copied, and a
+    /// plan's are also referenced on the host.
     /// </summary>
-    internal int ScatterParameterGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads, bool sourcesOutliveStep)
+    internal int ScatterParameterGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads, GradientSourceOwnership ownership)
     {
         if (grads is null || grads.Count == 0) return 0;
 
-        if (Engine.SupportsGpu && TryPublishDeviceGradients(grads, sourcesOutliveStep, out int deviceMatched))
+        if (Engine.SupportsGpu && TryPublishDeviceGradients(grads, ownership, out int deviceMatched))
             return deviceMatched;
-        if (sourcesOutliveStep && TryReferenceHostGradients(grads, out int hostMatched))
+        if (ownership == GradientSourceOwnership.Plan && TryReferenceHostGradients(grads, out int hostMatched))
             return hostMatched;
 
         int ignored = 0;

@@ -249,10 +249,13 @@ public abstract class SyntheticTabularGeneratorBase<T> : ISyntheticTabularGenera
         if (!NumOps.GreaterThan(scale, NumOps.Zero) || NumOps.IsInfinity(scale))
         {
             // All zeros (norm 0), a NaN maximum or an infinite entry: the plain sum already gives the answer.
-            return NumOps.Sqrt(engine.TensorSumOfSquares(x));
+            return NumOps.Sqrt(TensorReductionHelper.SumOfSquares(engine, x));
         }
 
-        return NumOps.Multiply(scale, NumOps.Sqrt(engine.TensorSumOfSquares(engine.TensorDivideScalar(x, scale))));
+        // Each scaled square is at most 1, but their sum is up to x.Length, past Half's 65504 for a large gradient:
+        // take it in double, which also rescales it when it overflows T.
+        double scaledSumOfSquares = TensorReductionHelper.SumOfSquaresAsDouble(engine, engine.TensorDivideScalar(x, scale));
+        return NumOps.FromDouble(NumOps.ToDouble(scale) * Math.Sqrt(scaledSumOfSquares));
     }
 
     /// <summary>

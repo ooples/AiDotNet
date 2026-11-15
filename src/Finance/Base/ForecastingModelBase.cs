@@ -304,11 +304,12 @@ public abstract class ForecastingModelBase<T> : FinancialModelBase<T>, IForecast
         var varianceT = Engine.ReduceMean(
             Engine.TensorMultiply(centered, centered), reduceAxis, keepDims: true);
         var stdT = Engine.TensorSqrt(Engine.TensorAddScalar(varianceT, NumOps.FromDouble(epsilon)));
+        var normalized = Engine.TensorDivide(centered, stdT);
+        RescaleIfOverflowed(flat, reduceAxis, epsilon, ref normalized, ref meanT, ref stdT);
 
         mean = ToVectorOffTape(meanT, features);
         std = ToVectorOffTape(stdT, features);
 
-        var normalized = Engine.TensorDivide(centered, stdT);
         return Engine.Reshape(normalized, (int[])input._shape.Clone());
     }
 
@@ -324,11 +325,40 @@ public abstract class ForecastingModelBase<T> : FinancialModelBase<T>, IForecast
         var varianceT = Engine.ReduceMean(
             Engine.TensorMultiply(centered, centered), reduceAxis, keepDims: true);
         var stdT = Engine.TensorSqrt(Engine.TensorAddScalar(varianceT, NumOps.FromDouble(epsilon)));
+        var normalized = Engine.TensorDivide(centered, stdT);
+        RescaleIfOverflowed(flat, reduceAxis, epsilon, ref normalized, ref meanT, ref stdT);
 
         mean = ToVectorOffTape(meanT, rows);
         std = ToVectorOffTape(stdT, rows);
 
-        return Engine.TensorDivide(centered, stdT);
+        return normalized;
+    }
+
+    /// <summary>
+    /// Replaces the normalization of <paramref name="flat"/> with its overflow-safe form when the direct statistics
+    /// are not finite although the input is.
+    /// </summary>
+    /// <remarks>
+    /// In Half the mean of 40 squared deviations near 150 (sum 9e5) passes 65504, so the variance and the std were
+    /// infinite and every normalized value 0, although the std fits. The replacement is
+    /// <see cref="TensorReductionHelper.StandardizeRescaled{T}"/>: the same values with each slice's max |x| factored
+    /// out as a detached constant, built from engine ops, so it stays on the tape and its gradients are those of the
+    /// direct form. Inputs whose statistics are finite (every double and float input in practice) are unchanged.
+    /// </remarks>
+    private void RescaleIfOverflowed(
+        Tensor<T> flat, int[] reduceAxis, double epsilon, ref Tensor<T> normalized, ref Tensor<T> meanT, ref Tensor<T> stdT)
+    {
+        bool finite;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            finite = TensorReductionHelper.AllFinite(Engine, meanT) && TensorReductionHelper.AllFinite(Engine, stdT);
+            if (finite || !TensorReductionHelper.AllFinite(Engine, flat))
+                return;
+        }
+
+        int count = 1;
+        foreach (int axis in reduceAxis) count *= flat.Shape[axis];
+        (normalized, meanT, stdT) = TensorReductionHelper.StandardizeRescaled(Engine, flat, reduceAxis, epsilon, count);
     }
 
     /// <summary>

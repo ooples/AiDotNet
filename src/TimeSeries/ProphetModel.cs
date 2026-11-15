@@ -993,15 +993,7 @@ public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         // Compute predictions for training data
         Vector<T> predictions = Predict(x);
 
-        // Compute residuals (absolute errors)
-        List<T> absResiduals = new List<T>();
-        for (int i = 0; i < y.Length; i++)
-        {
-            T residual = NumOps.Abs(NumOps.Subtract(y[i], predictions[i]));
-            absResiduals.Add(residual);
-        }
-
-        if (absResiduals.Count == 0)
+        if (y.Length == 0)
         {
             _residualMean = NumOps.Zero;
             _residualStdDev = NumOps.One;
@@ -1009,22 +1001,9 @@ public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
             return;
         }
 
-        // Compute mean of absolute residuals
-        T sum = NumOps.Zero;
-        for (int i = 0; i < absResiduals.Count; i++)
-        {
-            sum = NumOps.Add(sum, absResiduals[i]);
-        }
-        _residualMean = NumOps.Divide(sum, NumOps.FromDouble(absResiduals.Count));
-
-        // Compute standard deviation of absolute residuals
-        T sumSquaredDiff = NumOps.Zero;
-        for (int i = 0; i < absResiduals.Count; i++)
-        {
-            T diff = NumOps.Subtract(absResiduals[i], _residualMean);
-            sumSquaredDiff = NumOps.Add(sumSquaredDiff, NumOps.Multiply(diff, diff));
-        }
-        _residualStdDev = NumOps.Sqrt(NumOps.Divide(sumSquaredDiff, NumOps.FromDouble(absResiduals.Count)));
+        // Mean and standard deviation of the absolute residuals (one per observation), summed in double
+        var fitted = predictions.Length == y.Length ? predictions : predictions.Slice(0, y.Length);
+        (_residualMean, _residualStdDev) = AbsoluteResidualStatistics((Vector<T>)Engine.Subtract(y, fitted));
 
         // If std dev is zero (all residuals are the same), use a small default
         if (NumOps.Equals(_residualStdDev, NumOps.Zero))

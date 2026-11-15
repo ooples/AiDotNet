@@ -481,7 +481,7 @@ public partial class TSDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingObje
     public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps) { var predictions = new List<Tensor<T>>(); var currentInput = input; int stepsRemaining = steps; while (stepsRemaining > 0) { var prediction = Forecast(currentInput, null); predictions.Add(prediction); int stepsUsed = Math.Min(_forecastHorizon, stepsRemaining); stepsRemaining -= stepsUsed; if (stepsRemaining > 0) currentInput = ShiftInputWithPredictions(currentInput, prediction, stepsUsed); } return ConcatenatePredictions(predictions, steps); }
 
     /// <inheritdoc />
-    public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals) { var (mse, mae, count) = SumSquaredAndAbsoluteError(predictions, actuals); if (count > 0) { mse = NumOps.Divide(mse, NumOps.FromDouble(count)); mae = NumOps.Divide(mae, NumOps.FromDouble(count)); } return new Dictionary<string, T> { ["MSE"] = mse, ["MAE"] = mae, ["RMSE"] = NumOps.Sqrt(mse) }; }
+    public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals) { var (mse, mae, count) = MeanSquaredAndAbsoluteError(predictions, actuals); return new Dictionary<string, T> { ["MSE"] = mse, ["MAE"] = mae, ["RMSE"] = NumOps.Sqrt(mse) }; }
 
     /// <inheritdoc />
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)

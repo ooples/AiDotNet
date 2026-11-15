@@ -196,7 +196,7 @@ public partial class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     {
         base.InitializeAdaptiveParameters();
 
-        CurrentLearningRate = NumOps.FromDouble(_options.InitialLearningRate);
+        ResetLearningRateToSchedule();
         _iteration = 0;
         _lbfgsPreviousParameters = null;
         _lbfgsPreviousGradient = null;

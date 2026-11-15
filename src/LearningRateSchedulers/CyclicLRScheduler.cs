@@ -112,6 +112,8 @@ public class CyclicLRScheduler : LearningRateSchedulerBase
     /// </summary>
     public CyclicMode Mode => _mode;
 
+    internal double Gamma => _gamma;
+
     /// <inheritdoc/>
     protected override double ComputeLearningRate(int step)
     {

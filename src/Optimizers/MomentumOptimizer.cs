@@ -48,18 +48,19 @@ public partial class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimi
         if (_options.UseAdaptiveLearningRate) return false;
         if (_options.UseAdaptiveMomentum) return false;
         if (!TryGetFusedLrSchedule(out var schedule)) return false;
-        // The two paths store DIFFERENT things in the velocity buffer: the eager step accumulates
-        // lr_t * grad, the kernel accumulates the raw gradient and applies lr_t at the parameter write.
-        // Constant lr makes those identical (it factors out of the whole recurrence); a schedule does not,
-        // because the kernel would re-scale the entire accumulated history by the CURRENT rate while the
-        // eager path keeps each gradient at the rate that was in force when it arrived.
-        if (schedule is not null) return false;
-
+        // The eager step accumulates lr_t * grad in the velocity; the classical kernel accumulates the raw gradient
+        // and applies lr_t at the parameter write. A constant rate factors out of the whole recurrence, so the two
+        // agree; under a schedule the classical form would re-scale the entire history by the CURRENT rate. The
+        // learning-rate-in-velocity form keeps each gradient at the rate it arrived with, as the eager step does.
+        // (ResNet, VGG, YOLOv9 and other paper-scheduled SGD-momentum models trained eagerly for want of it.)
         config = new Fused.FusedOptimizerConfig(
             Tensors.Engines.Compilation.OptimizerType.SGDMomentum,
             GetCurrentLearningRate(),
             Convert.ToDouble(CurrentMomentum),   // Beta1 carries the momentum coefficient
-            0f, 0f, 0f, schedule);
+            0f, 0f, 0f, schedule)
+        {
+            Extras = schedule is null ? null : new Tensors.Engines.Compilation.FusedOptimizerExtras { VelocityIncludesLearningRate = true },
+        };
         return true;
     }
 
@@ -165,7 +166,7 @@ public partial class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimi
     protected override void InitializeAdaptiveParameters()
     {
         base.InitializeAdaptiveParameters();
-        CurrentLearningRate = NumOps.FromDouble(_options.InitialLearningRate);
+        ResetLearningRateToSchedule();
         CurrentMomentum = NumOps.FromDouble(_options.InitialMomentum);
     }
 

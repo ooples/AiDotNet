@@ -1483,28 +1483,18 @@ public partial class STLDecomposition<T> : TimeSeriesModelBase<T>
         int period = _stlOptions.SeasonalPeriod;
         int cycles = _seasonal.Length / period;
 
-        var changes = new Vector<T>(cycles - 1);
-
-        for (int cycle = 0; cycle < cycles - 1; cycle++)
+        // The Euclidean distance between consecutive cycles, its sum of squares in double: in Half the sum over a
+        // period passes 65504 long before the distance does, and the infinite sum made every change infinite. Both
+        // cycles always lie inside the series, as cycles * period never exceeds its length.
+        var changes = new double[Math.Max(0, cycles - 1)];
+        for (int cycle = 0; cycle < changes.Length; cycle++)
         {
-            T sum = NumOps.Zero;
-
-            for (int i = 0; i < period; i++)
-            {
-                int idx1 = cycle * period + i;
-                int idx2 = (cycle + 1) * period + i;
-
-                if (idx2 < _seasonal.Length)
-                {
-                    T diff = NumOps.Subtract(_seasonal[idx2], _seasonal[idx1]);
-                    sum = NumOps.Add(sum, NumOps.Square(diff));
-                }
-            }
-
-            changes[cycle] = NumOps.Sqrt(sum);
+            var step = Engine.TensorSubtract(
+                _seasonal.Slice((cycle + 1) * period, period).AsTensor(), _seasonal.Slice(cycle * period, period).AsTensor());
+            changes[cycle] = Math.Sqrt(TensorReductionHelper.SumOfSquaresAsDouble(Engine, step));
         }
 
-        return changes;
+        return new Tensor<double>(new[] { changes.Length }, new Vector<double>(changes)).Cast<T>().ToVector();
     }
 
     /// <summary>

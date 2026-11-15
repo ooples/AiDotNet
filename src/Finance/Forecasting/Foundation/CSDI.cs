@@ -620,8 +620,8 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
     /// <inheritdoc />
     public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals)
     {
-        var (mse, mae, count) = SumSquaredAndAbsoluteError(predictions, actuals);
-        if (count > 0) { mse = NumOps.Divide(mse, NumOps.FromDouble(count)); mae = NumOps.Divide(mae, NumOps.FromDouble(count)); }
+        var (mse, mae, count) = MeanSquaredAndAbsoluteError(predictions, actuals);
+
         return new Dictionary<string, T> { ["MSE"] = mse, ["MAE"] = mae, ["RMSE"] = NumOps.Sqrt(mse) };
     }
 

@@ -797,8 +797,8 @@ public partial class NonStationaryTransformer<T> : ForecastingModelBase<T>
         var mse = _lossFunction.CalculateLoss(predictions.ToVector(), testLabels.ToVector());
 
         // Calculate MAE
-        var (_, mae, _) = SumSquaredAndAbsoluteError(predictions, testLabels);
-        mae = NumOps.Divide(mae, NumOps.FromDouble(predictions.Length));
+        var (_, sumAbsolute, _) = SumSquaredAndAbsoluteError(predictions, testLabels);
+        var mae = NumOps.FromDouble(sumAbsolute / predictions.Length);
 
         return new Dictionary<string, T>
         {
@@ -993,8 +993,9 @@ public partial class NonStationaryTransformer<T> : ForecastingModelBase<T>
             var flat = Engine.Reshape(input.Contiguous(), new[] { input.Length });
             var mean = NumOps.Divide(input.Length > 0 ? Engine.TensorSum(flat) : NumOps.Zero, NumOps.FromDouble(input.Length));
             var centered = Engine.TensorSubtractScalar(flat, mean);
-            T varSum = input.Length > 0 ? Engine.TensorSumOfSquares(centered) : NumOps.Zero;
-            var std = NumOps.Sqrt(NumOps.Divide(varSum, NumOps.FromDouble(input.Length)));
+            // The sum of squares in double, so a Half sum past 65504 does not make the std infinite.
+            double varSum = input.Length > 0 ? TensorReductionHelper.SumOfSquaresAsDouble(Engine, centered) : 0.0;
+            var std = NumOps.FromDouble(Math.Sqrt(varSum / input.Length));
             std = NumOps.Add(std, eps); // Prevent division by zero
 
             // Store for de-normalization
