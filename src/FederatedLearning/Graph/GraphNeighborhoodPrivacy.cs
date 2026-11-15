@@ -141,14 +141,9 @@ public class GraphNeighborhoodPrivacy<T> : FederatedLearningComponentBase<T>
 
         var features = Engine.TensorSlice(aggregatedFeatures.Reshape(new[] { aggregatedFeatures.Length }), new[] { 0 }, new[] { dim });
 
-        // Compute L2 norm as max|v| * ‖v / max|v|‖ so the sum of squares cannot overflow narrow T.
-        T maxAbs = Engine.TensorMaxValue(Engine.TensorAbs(features));
-        double norm = 0;
-        if (NumOps.GreaterThan(maxAbs, NumOps.Zero))
-        {
-            T scaledSumSq = Engine.TensorSum(Engine.TensorSquare(Engine.TensorDivideScalar(features, maxAbs)));
-            norm = NumOps.ToDouble(maxAbs) * Math.Sqrt(NumOps.ToDouble(scaledSumSq));
-        }
+        // L2 norm as max|v| * ‖v / max|v|‖, the scaled sum of squares accumulated in double for narrow T: it
+        // reaches the entry count, which passes Half's 65504 and would make the norm infinite and the clip 0.
+        double norm = Infrastructure.FederatedTensorMath<T>.ScaledNorm(features.ToVector());
 
         double clipFactor = norm > clipNorm ? clipNorm / norm : 1.0;
 

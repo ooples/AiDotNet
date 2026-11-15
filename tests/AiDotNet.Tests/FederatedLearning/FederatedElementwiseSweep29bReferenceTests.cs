@@ -1093,6 +1093,24 @@ public class FederatedElementwiseSweep29bReferenceTests
     }
 
     [Fact(Timeout = 60000)]
+    public async Task GraphNeighborhoodPrivacy_HalfClipNormPastTheScaledSumRange()
+    {
+        await Task.Yield();
+
+        // 70,000 entries of 1 have norm sqrt(70000) = 264.575, so clipping to 1 scales each to 0.0037796. The
+        // scaled sum of squares, 70,000, was formed in Half: +infinity, a clip factor of 0, and an output of pure
+        // noise. epsilon = 1e6 keeps the noise (sigma ~ 5e-6) far below the clipped value.
+        const int n = 70000;
+        var privacy = new AiDotNet.FederatedLearning.Graph.GraphNeighborhoodPrivacy<Half>(epsilon: 1e6);
+        var features = new Tensor<Half>(Enumerable.Repeat(HalfOps.One, n).ToArray(), new[] { n });
+
+        var clipped = privacy.ClipAndNoiseNeighborhood(features, clipNorm: 1.0);
+
+        double mean = clipped.ToArray().Average(v => HalfOps.ToDouble(v));
+        Assert.InRange(mean, 0.00375, 0.00381);
+    }
+
+    [Fact(Timeout = 60000)]
     public async Task Flame_HalfModelsAboveHalfSquareRangeAreClusteredAndClipped()
     {
         await Task.Yield();

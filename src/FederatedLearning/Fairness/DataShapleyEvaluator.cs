@@ -196,15 +196,9 @@ public class DataShapleyEvaluator<T> : FederatedLearningComponentBase<T>, IClien
             Engine.TensorSlice(candidateModel, new[] { 0 }, new[] { size }),
             Engine.TensorSlice(referenceModel, new[] { 0 }, new[] { size }));
 
-        // ‖diff‖ = m · ‖diff / m‖ with m = max |diff|, so the sum of squares cannot overflow narrow T.
-        T maxAbs = Engine.TensorMaxValue(Engine.TensorAbs(diff));
-        if (!NumOps.GreaterThan(maxAbs, NumOps.Zero))
-        {
-            return 0;
-        }
-
-        T sumSq = Engine.TensorSum(Engine.TensorSquare(Engine.TensorDivideScalar(diff, maxAbs)));
-        return -NumOps.ToDouble(maxAbs) * Math.Sqrt(NumOps.ToDouble(sumSq));
+        // ‖diff‖ = m · ‖diff / m‖ with m = max |diff|, the scaled sum of squares accumulated in double for narrow
+        // T: it reaches the entry count, which passes Half's 65504 for a model of 65,505 equal differences.
+        return -Infrastructure.FederatedTensorMath<T>.ScaledNorm(diff.ToVector());
     }
 
     /// <summary>
