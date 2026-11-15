@@ -426,9 +426,9 @@ public partial class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
             var row = Engine.TensorSlice(pooled, new[] { i, 0 }, new[] { 1, h });
             var logits = Logits(targetCache, row);
             var styleLogits = styleCache is null ? null : Logits(styleCache, row);
-            var distribution = CodeDistribution(logits, styleLogits, interpolation).Cast<T>();
-            observeDistribution?.Invoke(distribution);
-            codes[i] = TopK(distribution, _options.TopK, random);
+            var distribution = CodeDistribution(logits, styleLogits, interpolation);
+            observeDistribution?.Invoke(distribution.Cast<T>());
+            codes[i] = MegaTTS2<double>.TopK(distribution, _options.TopK, random);
             token = codes[i] + 1;
         }
         return codes;

@@ -198,6 +198,9 @@ internal static class OuteTTSSampler<T>
         int topK, double topP, double minP)
     {
         if (logits is null) throw new ArgumentNullException(nameof(logits));
+        // A Half running sum stalls (see TtsSampling<T>.SumsInFloat), so the top-p cut is taken in float.
+        if (TtsSampling<T>.SumsInFloat)
+            return OuteTTSSampler<float>.Process(TtsSampling<T>.InFloat(logits), ids, repetitionPenalty, repetitionRange, temperature, topK, topP, minP).Cast<T>();
         var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
         int n = logits.Length;
         T negativeInfinity = Ops.FromDouble(double.NegativeInfinity);
@@ -264,6 +267,7 @@ internal static class OuteTTSSampler<T>
     public static int Sample(Tensor<T> scores, Random random)
     {
         if (scores is null) throw new ArgumentNullException(nameof(scores));
+        if (TtsSampling<T>.SumsInFloat) return OuteTTSSampler<float>.Sample(TtsSampling<T>.InFloat(scores), random);
         var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
         var probabilities = engine.Reshape(Softmax(scores), new[] { scores.Length });
         T u = Ops.FromDouble(random.NextDouble());

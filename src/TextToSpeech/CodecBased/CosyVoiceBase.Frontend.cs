@@ -39,14 +39,28 @@ public abstract partial class CosyVoiceBase<T>
         if (audio.Length > Settings.MaxReferenceSeconds * 16000L)
             throw new ArgumentException($"The reference recording may be at most {Settings.MaxReferenceSeconds} seconds.", nameof(recording));
         var logMel = OpenAiWhisperTranscriber<T>.LogMelSpectrogram(audio, 128);
-        int bands = logMel.Shape[0], frames = logMel.Shape[1];
-        var features = Engine.Reshape(logMel, new[] { 1, bands, frames });
-        var length = new Tensor<T>(new[] { 1 }); length[0] = NumOps.FromDouble(frames);
         var inputs = _releasedSpeechTokenizer.Metadata.Inputs.Select(x => x.Name).ToArray();
         if (inputs.Length != 2) throw new InvalidDataException("The speech tokenizer requires features and feature lengths.");
+        var (features, lengths) = SpeechTokenizerInputs(inputs, logMel);
         using var scope = new NoGradScope<T>();
-        return IdsOf(_releasedSpeechTokenizer.Run(new Dictionary<string, Tensor<T>>
-            { [inputs[0]] = features, [inputs[1]] = length }).Values.First());
+        return _releasedSpeechTokenizer.RunToIntegers(features, lengths).Values.First().ToArray();
+    }
+
+    /// <summary>
+    /// The S3 speech tokenizer's two inputs for a log-mel <c>[mels, frames]</c>: the features <c>[1, mels, frames]</c>
+    /// in T under the first name, and the frame count as an int tensor <c>[1]</c> under the second. The count is never
+    /// carried in T, where a narrow T rounds it (Half holds integers exactly only up to 2,048: 2,049 frames read 2,048).
+    /// </summary>
+    internal static (Dictionary<string, Tensor<T>> Features, Dictionary<string, Tensor<int>> Lengths) SpeechTokenizerInputs(
+        IReadOnlyList<string> inputNames, Tensor<T> logMel)
+    {
+        if (inputNames is null) throw new ArgumentNullException(nameof(inputNames));
+        if (logMel is null) throw new ArgumentNullException(nameof(logMel));
+        if (inputNames.Count != 2) throw new InvalidDataException("The speech tokenizer requires features and feature lengths.");
+        int bands = logMel.Shape[0], frames = logMel.Shape[1];
+        var features = AiDotNetEngine.Current.Reshape(logMel, new[] { 1, bands, frames });
+        return (new Dictionary<string, Tensor<T>> { [inputNames[0]] = features },
+            new Dictionary<string, Tensor<int>> { [inputNames[1]] = new Tensor<int>(new[] { frames }, new[] { 1 }) });
     }
 
     private Tensor<T>? ForwardReleasedSpeakerEncoder(Tensor<T> features)

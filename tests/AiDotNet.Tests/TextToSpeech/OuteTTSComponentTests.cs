@@ -214,26 +214,44 @@ public class OuteTTSComponentTests
             Assert.True(Math.Abs(expected[n] - actual[n]) <= 1e-9, $"rate {rate}, sample {n}: {expected[n]} vs {actual[n]}");
     }
 
-    // ITU-R BS.1770 gating over pyloudnorm's RBJ K-weighting: a 0 dBFS 997 Hz sine reads −0.691 + 10 log10 of the
-    // mean 400 ms block power of the independently filtered signal. That is −3.052 LUFS: the RBJ shelf gives 0.650 dB at
-    // 997 Hz where the BS.1770 coefficients give 0.691 dB (their −3.010), and the meter uses the RBJ filters. Every
-    // block of a full-scale sine passes both gates.
+    // |H(e^{jw})|² of a biquad at a frequency.
+    private static double PowerGain((double[] B, double[] A) f, double frequency, int rate)
+    {
+        var z = System.Numerics.Complex.Exp(new System.Numerics.Complex(0, -2 * Math.PI * frequency / rate));
+        var h = (f.B[0] + f.B[1] * z + f.B[2] * z * z) / (f.A[0] + f.A[1] * z + f.A[2] * z * z);
+        return h.Magnitude * h.Magnitude;
+    }
+
+    // A steady 0 dBFS sine reads −0.691 + 10 log10(½ |H(f)|²), H the K-weighting. ITU-R BS.1770's own coefficients
+    // give −3.01 LKFS at 997 Hz; pyloudnorm's RBJ biquads (ported here) have 0.042 dB less gain there, so the meter
+    // reads −3.0517 at 48 kHz, as pyloudnorm does (its own test pins −3.0523 for a 1 kHz sine at 44.1 kHz).
     [Fact(Timeout = 120000)]
-    public async Task IntegratedLoudness_FullScaleSineMatchesReferenceFilters()
+    public async Task IntegratedLoudness_FullScaleSineReadsTheKWeightingGain()
     {
         await Task.Yield();
         const int rate = 48000;
         var x = new double[rate * 3];
         for (int n = 0; n < x.Length; n++) x[n] = Math.Sin(2 * Math.PI * 997 * n / rate);
-        var weighted = ReferenceLfilter(ReferenceBiquad(0.0, 0.5, 38.0, rate, false),
-            ReferenceLfilter(ReferenceBiquad(4.0, 1 / Math.Sqrt(2), 1500.0, rate, true), x));
-        int block = 2 * rate / 5, step = rate / 10, blocks = (weighted.Length - block) / step + 1;
-        double meanPower = Enumerable.Range(0, blocks)
-            .Average(b => weighted.Skip(b * step).Take(block).Average(value => value * value));
-        double expected = -0.691 + 10 * Math.Log10(meanPower);
         double lufs = LoudnessMeter.IntegratedLoudness(x, rate);
-        Assert.True(Math.Abs(lufs - expected) <= 1e-3, $"{lufs} LUFS vs reference {expected}");
+        double expected = -0.691 + 10 * Math.Log10(0.5
+            * PowerGain(ReferenceBiquad(4.0, 1 / Math.Sqrt(2), 1500.0, rate, true), 997, rate)
+            * PowerGain(ReferenceBiquad(0.0, 0.5, 38.0, rate, false), 997, rate));
+        Assert.True(Math.Abs(expected - -3.0517) <= 1e-4, $"analytic {expected} LUFS");
+        Assert.True(Math.Abs(lufs - expected) <= 1e-3, $"{lufs} LUFS vs {expected}");
         double generic = LoudnessMeter.IntegratedLoudness(new Tensor<float>(new[] { x.Length }, new Vector<float>(x.Select(v => (float)v).ToArray())), rate);
         Assert.True(Math.Abs(generic - lufs) <= 1e-3, $"float {generic} vs double {lufs}");
+    }
+
+    // A draw over 5,000 equal scores is uniform. In Half the running probability stalled at 0.5 (2e-4 is under half
+    // an ulp there), so every u above it fell through to the last token: about half of all draws returned 4,999.
+    [Fact(Timeout = 120000)]
+    public async Task Sample_InHalf_IsNotPulledToTheLastToken()
+    {
+        await Task.Yield();
+        var scores = new AiDotNet.Tensors.LinearAlgebra.Tensor<Half>(new Half[5000], new[] { 5000 });
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(5);
+        var draws = Enumerable.Range(0, 400).Select(_ => OuteTTSSampler<Half>.Sample(scores, random)).ToArray();
+        Assert.True(draws.Count(d => d == 4999) <= 3, $"{draws.Count(d => d == 4999)} of 400 draws on the last token");
+        Assert.True(draws.Distinct().Count() >= 300, $"{draws.Distinct().Count()} distinct draws");
     }
 }

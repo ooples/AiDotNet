@@ -15,6 +15,25 @@ internal static class TtsSampling<T>
 {
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
 
+    /// <summary>
+    /// True for Half, whose running sums the samplers take in float: the engine's cumulative sum adds in T, and a
+    /// Half sum stops growing once it is 2,048 times a term (11 significand bits). Summing 5,000 equal weights stalls
+    /// at 2,048, and the normalized probabilities of 5,000 tokens stall at 0.5, so every draw above it lands on the
+    /// fallback token and a top-p cut above it removes nothing.
+    /// </summary>
+    internal static bool SumsInFloat => typeof(T) == typeof(Half);
+
+    /// <summary>
+    /// <paramref name="values"/> as a new flat <c>[n]</c> float tensor, for the samplers' float detour. The values
+    /// are copied out first: a cast straight off the caller's tensor reads from the start of the underlying buffer
+    /// when that tensor is a narrowed view (its offset is not carried over), which samples the wrong logits.
+    /// </summary>
+    internal static Tensor<float> InFloat(Tensor<T> values)
+    {
+        if (values is null) throw new ArgumentNullException(nameof(values));
+        return new Tensor<T>(values.ToArray(), new[] { values.Length }).Cast<float>();
+    }
+
     /// <summary>The indices of <paramref name="values"/> (flattened) by value, descending or ascending, equal values
     /// in ascending index order.</summary>
     public static int[] StableOrder(Tensor<T> values, bool descending)
@@ -55,6 +74,7 @@ internal static class TtsSampling<T>
         int n = weights.Length;
         if (n == 0) throw new ArgumentException("There is nothing to draw from.", nameof(weights));
         var flat = engine.Reshape(weights, new[] { n });
+        if (SumsInFloat) return TtsSampling<float>.DrawPosition(InFloat(flat), u, inclusive);
         var running = engine.TensorCumSum(flat, 0);
         T total = engine.TensorSlice(running, new[] { n - 1 }, new[] { 1 }).ToArray()[0];
         T draw = Ops.Multiply(Ops.FromDouble(u), total);

@@ -202,17 +202,26 @@ internal sealed class OpenAiWhisperTranscriber<T>
         return (engine.Reshape(engine.TensorHannWindow<T>(FftSize, true), new[] { 1, FftSize }), cos, sin);
     }, isThreadSafe: true);
 
+    // The largest STFT component after scaling: 128^2 per square and 2 * 128^2 per bin stay below Half's 65,504.
+    private const double PowerUnit = 128.0;
+
     /// <summary><c>log_mel_spectrogram(audio, n_mels, padding)</c>: a centred, reflect-padded 400-point STFT (hop 160,
     /// periodic Hann), its power without the last frame, the mel filter bank, log10 above 1e-10, floored 8 below the
     /// maximum, then (x + 4) / 4: <c>[mels, frames]</c>.</summary>
-    /// <remarks>The power is scaled by the square of the largest STFT component before the filter bank and the scale
-    /// is added back in the log domain (log10(max(m s^2, 1e-10)) = log10(max(m, 1e-10 / s^2)) + 2 log10 s), so a
-    /// 16-bit float never forms the overflowing squares.</remarks>
+    /// <remarks>The STFT components are scaled so the largest is 128 (s = peak / 128) before they are squared, and the
+    /// scale and the floor are applied in the log domain (log10(max(m s^2, 1e-10)) = max(log10 m + 2 log10 s, -10)), so
+    /// a 16-bit float never forms the overflowing squares (each at most 128^2, a bin at most 2 * 128^2), nor a
+    /// 1e-10 / s^2 floor that rounds to 0. A peak of 1 instead would put every mel power more than about five decades
+    /// below the loudest under Half's smallest subnormal, which reads it as the floor although whisper keeps eight.
+    /// </remarks>
     public static Tensor<T> LogMelSpectrogram(Tensor<T> audio, int mels, int padding = 0)
     {
         if (audio is null) throw new ArgumentNullException(nameof(audio));
         if (mels != 80 && mels != 128) throw new ArgumentException($"Unsupported n_mels: {mels}", nameof(mels));
         var engine = AiDotNetEngine.Current;
+        // A feature of the waveform, not a differentiable layer: off the gradient tape, as the array code it replaces
+        // was. On a tape, log10's backward at a silent frame (mel power 0) is NaN all the way back to the samples.
+        using var noGrad = new NoGradScope<T>();
         var x = engine.Reshape(audio, new[] { audio.Length });
         if (padding > 0) x = engine.PadNd(x, new[] { 0, padding }, EnginePadMode.Constant, NumOps.Zero);
         int half = FftSize / 2, length = x.Length;
@@ -226,14 +235,16 @@ internal sealed class OpenAiWhisperTranscriber<T>
         var im = engine.TensorMatMul(framed, stft.Sin);
         T peak = engine.TensorMaxValue(engine.TensorMax(engine.TensorAbs(re), engine.TensorAbs(im)));
         T scale = NumOps.GreaterThan(peak, NumOps.Zero) ? peak : NumOps.One;
-        var power = engine.TensorAdd(engine.TensorSquare(engine.TensorDivideScalar(re, scale)),
-            engine.TensorSquare(engine.TensorDivideScalar(im, scale)));
+        // Divided by the peak first (into [-1, 1]), then multiplied by 128 (a power of two, exact in every T).
+        T unit = NumOps.FromDouble(PowerUnit);
+        var power = engine.TensorAdd(engine.TensorSquare(engine.TensorMultiplyScalar(engine.TensorDivideScalar(re, scale), unit)),
+            engine.TensorSquare(engine.TensorMultiplyScalar(engine.TensorDivideScalar(im, scale), unit)));
         var filters = mels == 80 ? Filters.Value.Mel80 : Filters.Value.Mel128;
         var mel = engine.TensorMatMul(filters, engine.TensorTranspose(power));
-        // log10(max(mel·scale², 1e-10)) = max(log10(mel) + 2·log10(scale), −10): the floor is applied in the log
-        // domain, where it is representable in any T (1e-10 / scale² is not in half precision, and silence then
-        // gave log10(0) = −∞ that the later clipping cannot repair).
-        T offset = NumOps.Multiply(NumOps.FromDouble(2.0 / Math.Log(10.0)), NumOps.Log(scale));
+        // 2 log10(peak / 128), the scale the squares were taken at.
+        T offset = NumOps.Multiply(NumOps.FromDouble(2.0 / Math.Log(10.0)),
+            NumOps.Subtract(NumOps.Log(scale), NumOps.FromDouble(Math.Log(PowerUnit))));
+        // log10(0) is -inf, which the -10 floor (log10 of whisper's 1e-10 clamp) lifts exactly in every T.
         var log = engine.TensorMax(engine.TensorAddScalar(engine.TensorLog10(mel), offset), NumOps.FromDouble(-10.0));
         T max = engine.TensorMaxValue(log);
         var clipped = engine.TensorMax(log, NumOps.Subtract(max, NumOps.FromDouble(8.0)));

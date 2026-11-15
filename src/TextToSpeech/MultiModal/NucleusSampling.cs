@@ -23,6 +23,8 @@ internal static class NucleusSampling<T>
     public static int Sample(Tensor<T> logits, double temperature, int topK, double topP, Func<int, bool>? allowed, Random random)
     {
         if (logits is null) throw new ArgumentNullException(nameof(logits));
+        // A Half running sum stalls (see TtsSampling<T>.SumsInFloat), so the top-p cut and the draw are taken in float.
+        if (TtsSampling<T>.SumsInFloat) return NucleusSampling<float>.Sample(TtsSampling<T>.InFloat(logits), temperature, topK, topP, allowed, random);
         var engine = AiDotNetEngine.Current;
         var ids = Allowed(logits.Length, allowed);
         if (ids.Length == 0) throw new InvalidOperationException("No token may be sampled.");
