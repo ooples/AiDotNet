@@ -63,7 +63,9 @@ public sealed class NoamHoldAnnealingScheduler : LearningRateSchedulerBase
         if (trainingStep < WarmupSteps)
             return PeakLearningRate * trainingStep / WarmupSteps;
 
-        if (trainingStep < WarmupSteps + HoldSteps)
+        // Summed in double: WarmupSteps + HoldSteps in int wraps negative past int.MaxValue and
+        // would skip the hold phase entirely.
+        if (trainingStep < (double)WarmupSteps + HoldSteps)
             return PeakLearningRate;
 
         double decayStep = trainingStep - HoldSteps;
