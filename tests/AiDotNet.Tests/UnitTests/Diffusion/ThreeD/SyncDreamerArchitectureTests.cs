@@ -51,6 +51,8 @@ public class SyncDreamerArchitectureTests
         SamplingSteps = 2,
         ReconstructionIterations = 2,
         ReconstructionWarmUpIterations = 0,
+        ReconstructionRayBatchSize = 32,
+        ReconstructionForegroundRayBatchSize = 8,
         MeshResolution = 12,
         PointCount = 16,
         Seed = 11,
@@ -397,37 +399,283 @@ public class SyncDreamerArchitectureTests
     }
 
     [Fact]
-    public void Network_PlacesDepthAttentionAfterTheMiddleAndUpperDecoderBlocks()
+    public void Network_PlacesDepthAttentionAfterTheMiddleAndTheUpperOutputBlocks()
     {
         var model = TinyModel();
         var sites = model.UNet.FeatureSites();
-        // Two levels with one residual block each: middle, level-1 res, level-1 upsample, level-0 res.
-        Assert.Equal(4, sites.Count);
+        // Two levels with one residual block each give LDM's numResBlocks + 1 = 2 output blocks per level: the middle,
+        // level 1 (a residual block, then a residual block with the upsampling) and level 0 (two residual blocks).
+        Assert.Equal(5, sites.Count);
+        Assert.True(sites[2].IsUpsample);
+        Assert.Equal(0, sites[2].Scale);
         Assert.NotNull(model.Network.ConditionAt(0));
         Assert.Null(model.Network.ConditionAt(1));
         Assert.Null(model.Network.ConditionAt(2));
         Assert.NotNull(model.Network.ConditionAt(3));
+        Assert.NotNull(model.Network.ConditionAt(4));
         Assert.Equal(16, model.Network.MiddleCondition.Dim);
-        Assert.Single(model.Network.OutputConditions);
-        Assert.Equal(8, model.Network.OutputConditions[0].Dim);
+        Assert.Equal(2, model.Network.OutputConditions.Count);
+        Assert.All(model.Network.OutputConditions, condition => Assert.Equal(8, condition.Dim));
 
-        // The paper configuration: the middle block, then every decoder block above the deepest level.
-        // Weights are lazy, so the paper-sized U-Net and network are cheap to build without a forward pass.
+        // The paper configuration. Weights are lazy, so the paper-sized U-Net and network are cheap to build.
         var o = new SyncDreamerOptions();
         var unet = new UNetNoisePredictor<float>(inputChannels: 8, outputChannels: 4, baseChannels: o.UNetBaseChannels,
             channelMultipliers: o.UNetChannelMultipliers, numResBlocks: o.UNetNumResBlocks,
             attentionResolutions: o.UNetAttentionLevels, contextDim: o.CrossAttentionDim, numHeads: o.UNetHeads,
             inputHeight: 32, seed: 1);
         var paperSites = unet.FeatureSites();
-        Assert.Equal(1 + 3 * 3 + 2, paperSites.Count);
+        Assert.Equal(1 + 4 * 3, paperSites.Count);
         var paper = new SyncDreamerNetwork<float>(o, 4, paperSites, 4);
-        int conditioned = 0;
-        for (int i = 0; i < paperSites.Count; i++) if (paper.ConditionAt(i) is not null) conditioned++;
-        // The middle block plus the 8 decoder blocks of levels 2, 1 and 0 (two residual blocks and an upsampling each,
-        // none after the last level's residual blocks).
-        Assert.Equal(1 + 3 + 3 + 2, conditioned);
+        // sync_dreamer_attention.py DepthWiseAttention: middle_conditions DepthTransformer(1280, 4, 256, context 512),
+        // and output_b2c {3..11} -> output_conditions 0..8 with (channels, context) below.
+        Assert.Null(paper.ConditionAt(1));
+        Assert.Null(paper.ConditionAt(2));
+        Assert.Null(paper.ConditionAt(3));
         Assert.Equal(1280, paper.MiddleCondition.Dim);
         Assert.Equal(512, paper.MiddleCondition.ContextDim);
+        var expected = new[]
+        {
+            (1280, 256), (1280, 256), (1280, 128), (640, 128), (640, 128), (640, 64), (320, 64), (320, 64), (320, 64),
+        };
+        Assert.Equal(9, paper.OutputConditions.Count);
+        for (int k = 0; k < 9; k++)
+        {
+            Assert.Equal(expected[k].Item1, paper.OutputConditions[k].Dim);
+            Assert.Equal(expected[k].Item2, paper.OutputConditions[k].ContextDim);
+            Assert.Same(paper.OutputConditions[k], paper.ConditionAt(4 + k));
+        }
+    }
+
+    // ------------------------------------------------------------------ shared U-Net fidelity
+
+    [Fact]
+    public void UNet_DecoderFollowsLdmOutputBlocks()
+    {
+        // Stable Diffusion 1.x (openaimodel.py / diffusers UNet2DConditionModel): model_channels 320, mult (1, 2, 4, 4),
+        // num_res_blocks 2. input_block_chans = [320, 320, 320, 320, 640, 640, 640, 1280, 1280, 1280, 1280, 1280], and
+        // each of the 12 output blocks concatenates the next popped skip: in channels
+        // [2560, 2560, 2560, 2560, 2560, 1920, 1920, 1280, 960, 960, 640, 640].
+        var unet = new UNetNoisePredictor<float>(inputChannels: 4, outputChannels: 4, baseChannels: 320,
+            channelMultipliers: new[] { 1, 2, 4, 4 }, numResBlocks: 2, attentionResolutions: new[] { 0, 1, 2 },
+            contextDim: 768, numHeads: 8, inputHeight: 64, seed: 1);
+        var expectedIn = new[] { 2560, 2560, 2560, 2560, 2560, 1920, 1920, 1280, 960, 960, 640, 640 };
+        var expectedOut = new[] { 1280, 1280, 1280, 1280, 1280, 1280, 640, 640, 640, 320, 320, 320 };
+        var channels = unet.DecoderResBlockChannels;
+        Assert.Equal(12, channels.Count);
+        for (int i = 0; i < 12; i++)
+        {
+            Assert.Equal(expectedIn[i], channels[i].In);
+            Assert.Equal(expectedOut[i], channels[i].Out);
+        }
+    }
+
+    [Fact]
+    public void UNet_TimeEmbeddingIsLdmSinusoidThroughLinearSiluLinear()
+    {
+        const int baseChannels = 8;
+        var unet = new UNetNoisePredictor<double>(inputChannels: 4, outputChannels: 4, baseChannels: baseChannels,
+            channelMultipliers: new[] { 1, 2 }, numResBlocks: 1, attentionResolutions: new[] { 1 }, contextDim: 0,
+            numHeads: 2, inputHeight: 8, seed: 7);
+        Randomize(unet.GetParameters, unet.SetParameters, 71, 0.3);
+
+        // timestep_embedding(t, model_channels): [cos(t f), sin(t f)], f_i = exp(-ln(10000) i / half).
+        const int t = 377;
+        var sinusoid = unet.GetTimestepEmbedding(t);
+        Assert.Equal(new[] { 1, baseChannels }, sinusoid.Shape.ToArray());
+        var values = Data(sinusoid);
+        for (int i = 0; i < baseChannels / 2; i++)
+        {
+            double f = Math.Exp(-Math.Log(10000.0) * i / (baseChannels / 2));
+            Assert.Equal(Math.Cos(t * f), values[i], 12);
+            Assert.Equal(Math.Sin(t * f), values[baseChannels / 2 + i], 12);
+        }
+
+        var batched = Data(unet.GetTimestepEmbedding(new Tensor<double>(new[] { 3.0, (double)t }, new[] { 2 })));
+        for (int i = 0; i < baseChannels; i++) Assert.Equal(values[i], batched[baseChannels + i], 10);
+
+        // time_embed = Linear(C, 4C), SiLU, Linear(4C, 4C), with no activation after the second linear.
+        var (first, second) = unet.TimeEmbeddingLayers;
+        double[] Linear(double[] x, Tensor<double> weight, Tensor<double> bias, int inputs, int outputs)
+        {
+            var w = Data(weight);
+            var b = Data(bias);
+            bool inputMajor = weight.Shape[0] == inputs && weight.Shape[1] == outputs;
+            Assert.True(inputMajor || (weight.Shape[0] == outputs && weight.Shape[1] == inputs));
+            var y = new double[outputs];
+            for (int o = 0; o < outputs; o++)
+            {
+                double sum = b[o];
+                for (int k = 0; k < inputs; k++) sum += x[k] * (inputMajor ? w[k * outputs + o] : w[o * inputs + k]);
+                y[o] = sum;
+            }
+
+            return y;
+        }
+
+        int dim = 4 * baseChannels;
+        var hidden = Linear(values, first.GetWeights(), first.GetBiases(), baseChannels, dim)
+            .Select(v => v / (1.0 + Math.Exp(-v))).ToArray();
+        var expected = Linear(hidden, second.GetWeights(), second.GetBiases(), dim, dim);
+        var actual = Data(unet.ProjectTimestepEmbedding(sinusoid));
+        Assert.Equal(dim, actual.Length);
+        Assert.Contains(expected, v => v < -1e-3);   // no activation clips the output
+        for (int i = 0; i < dim; i++) Assert.Equal(expected[i], actual[i], 9);
+    }
+
+    // ------------------------------------------------------------------ input conditioning
+
+    [Fact]
+    public void ClipPreprocess_IsKorniaBicubicWithAlignCornersAndNoAntialias()
+    {
+        var encoder = new SdClipImageEncoder<double>(imageSize: 4, patchSize: 2, width: 8, layers: 1, heads: 2, embedDim: 8);
+        const int side = 7;
+        var image = new double[3 * side * side];
+        var random = RandomHelper.CreateSeededRandom(91);
+        for (int i = 0; i < image.Length; i++) image[i] = random.NextDouble();
+        var actual = Data(encoder.Preprocess(new Tensor<double>(image, new[] { 1, 3, side, side })));
+
+        // F.interpolate(mode='bicubic', align_corners=True): source = dst * (in - 1) / (out - 1), cubic convolution with
+        // A = -0.75 and clamped taps, separably; then (x - mean) / std.
+        double Cubic(double x)
+        {
+            const double a = -0.75;
+            x = Math.Abs(x);
+            return x <= 1 ? ((a + 2) * x - (a + 3)) * x * x + 1 : x < 2 ? ((a * x - 5 * a) * x + 8 * a) * x - 4 * a : 0.0;
+        }
+
+        double[] Taps(int dst, out int start)
+        {
+            double source = dst * (side - 1) / 3.0;
+            start = (int)Math.Floor(source) - 1;
+            double frac = source - Math.Floor(source);
+            return new[] { Cubic(1 + frac), Cubic(frac), Cubic(1 - frac), Cubic(2 - frac) };
+        }
+
+        double[] mean = { 0.48145466, 0.4578275, 0.40821073 };
+        double[] std = { 0.26862954, 0.26130258, 0.27577711 };
+        for (int c = 0; c < 3; c++)
+        {
+            for (int y = 0; y < 4; y++)
+            {
+                var wy = Taps(y, out int y0);
+                for (int x = 0; x < 4; x++)
+                {
+                    var wx = Taps(x, out int x0);
+                    double value = 0;
+                    for (int m = 0; m < 4; m++)
+                    {
+                        int yy = Math.Min(side - 1, Math.Max(0, y0 + m));
+                        for (int n = 0; n < 4; n++)
+                        {
+                            int xx = Math.Min(side - 1, Math.Max(0, x0 + n));
+                            value += wy[m] * wx[n] * image[(c * side + yy) * side + xx];
+                        }
+                    }
+
+                    Assert.Equal((value - mean[c]) / std[c], actual[(c * 4 + y) * 4 + x], 9);
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public void InputLatent_IsAPosteriorSample_DrawnFromTheSeed()
+    {
+        var model = TinyModel();
+        var image = Image(6);
+        var a = model.EncodeInputView(image, RandomHelper.CreateSeededRandom(1)).Latent;
+        var b = model.EncodeInputView(image, RandomHelper.CreateSeededRandom(1)).Latent;
+        var c = model.EncodeInputView(image, RandomHelper.CreateSeededRandom(2)).Latent;
+        Assert.Equal(0.0, MaxDifference(a, b));
+        // encode_first_stage(sample=True): a draw from the posterior, not its mode.
+        Assert.True(MaxDifference(a, c) > 1e-9);
+    }
+
+    [Fact]
+    public void RgbaInput_IsCompositedOnWhite()
+    {
+        var model = TinyModel();
+        var rgb = Image(7);
+        var rgbData = Data(rgb);
+        var rgba = new double[4 * 64 * 64];
+        Array.Copy(rgbData, rgba, rgbData.Length);
+        for (int i = 0; i < 64 * 64; i++) rgba[3 * 64 * 64 + i] = (i % 3) / 2.0;
+        var composited = new double[rgbData.Length];
+        for (int c = 0; c < 3; c++)
+            for (int i = 0; i < 64 * 64; i++)
+            {
+                double alpha = rgba[3 * 64 * 64 + i];
+                composited[c * 64 * 64 + i] = rgbData[c * 64 * 64 + i] * alpha + 1 - alpha;
+            }
+
+        var fromRgba = model.EncodeInputView(new Tensor<double>(rgba, new[] { 1, 4, 64, 64 }), RandomHelper.CreateSeededRandom(3));
+        var fromComposite = model.EncodeInputView(new Tensor<double>(composited, new[] { 1, 3, 64, 64 }), RandomHelper.CreateSeededRandom(3));
+        Assert.True(MaxDifference(fromRgba.Clip, fromComposite.Clip) < 1e-10);
+        Assert.True(MaxDifference(fromRgba.Latent, fromComposite.Latent) < 1e-10);
+    }
+
+    // ------------------------------------------------------------------ reconstruction
+
+    [Fact]
+    public void NeuSSchedule_MatchesScheduleFn()
+    {
+        // configs/neus.yaml: total 2000, warm-up 100; schedule_fn: warm-up 0.02 -> 1, then 0.02^(1/2) per 1000 steps.
+        Assert.Equal(0.02, SyncDreamerNeuSTrainer<double>.LearningRateFactor(0, 2000, 100), 12);
+        Assert.Equal(0.5 * 0.98 + 0.02, SyncDreamerNeuSTrainer<double>.LearningRateFactor(50, 2000, 100), 12);
+        Assert.Equal(1.0, SyncDreamerNeuSTrainer<double>.LearningRateFactor(100, 2000, 100), 12);
+        Assert.Equal(1.0, SyncDreamerNeuSTrainer<double>.LearningRateFactor(999, 2000, 100), 12);
+        Assert.Equal(Math.Sqrt(0.02), SyncDreamerNeuSTrainer<double>.LearningRateFactor(1000, 2000, 100), 12);
+        Assert.Equal(Math.Sqrt(0.02), SyncDreamerNeuSTrainer<double>.LearningRateFactor(1999, 2000, 100), 12);
+        var defaults = new SyncDreamerOptions();
+        Assert.Equal(3584, defaults.ReconstructionRayBatchSize);
+        Assert.Equal(512, defaults.ReconstructionForegroundRayBatchSize);
+        Assert.Equal(1.0, defaults.ReconstructionMaskWeight);
+        Assert.Equal(512, defaults.MeshResolution);
+        Assert.Equal(0.6, defaults.ReconstructionBoundHalfSide);
+    }
+
+    [Fact]
+    public void NeuSRays_CoverEveryPixel_AndTheForegroundSkipsWhite()
+    {
+        var layout = new SyncDreamerCameraLayout(Tiny());
+        const int size = 2;
+        var cameras = new[] { layout.CameraForNeuS(0), layout.CameraForNeuS(1) };
+        var colors = new[]
+        {
+            new[] { 1.0, 1.0, 1.0, 0.995, 1.0, 0.2, 0.5, 0.5, 0.5, 1.0, 1.0, 0.98 },
+            new[] { 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0 },
+        };
+        var rays = SyncDreamerNeuSTrainer<double>.BuildRays(cameras, colors, null, size);
+        Assert.Equal(8, rays.Count);
+        Assert.False(rays.HasMask);
+        // pseudo_fg_mask = sum(rgb > 0.99, 1) != 3.
+        Assert.Equal(new[] { 1, 2, 3, 7 }, rays.Foreground);
+        var direction = new double[3];
+        cameras[1].RayDirection(1, 0, direction);   // ray 5: view 1, row 0, column 1
+        for (int c = 0; c < 3; c++)
+        {
+            Assert.Equal(cameras[1].Center[c], rays.Origins[5 * 3 + c], 12);
+            Assert.Equal(direction[c], rays.Directions[5 * 3 + c], 12);
+        }
+    }
+
+    [Fact]
+    public void NeuSLoss_IsSoftL1PlusEikonalPlusMaskMse()
+    {
+        var options = Tiny();
+        var trainer = new SyncDreamerNeuSTrainer<double>(options, TinyNeuS(), 3, Engine);
+        var colors = new[] { 0.1, 0.2, 0.3, 0.9, 0.8, 0.7 };
+        var batch = new SyncDreamerRayBatch(new double[6], new double[6], colors, new[] { 1.0, 0.25 }, hasMask: true);
+        var render = new AiDotNet.NeuralRadianceFields.NeuS.NeuSRenderResult<double>
+        {
+            Color = new Tensor<double>(new[] { 0.0, 0.2, 0.5, 1.0, 1.0, 1.0 }, new[] { 2, 3 }),
+            WeightSum = new Tensor<double>(new[] { 0.5, 0.75 }, new[] { 2, 1 }),
+            GradientError = new Tensor<double>(new[] { 0.3 }, new[] { 1 }),
+        };
+        double softL1 = (Math.Sqrt(0.01 + 0.0 + 0.04 + 0.001) + Math.Sqrt(0.01 + 0.04 + 0.09 + 0.001)) / 2;
+        double mask = (0.25 + 0.25) / 2;
+        double expected = 0.5 * softL1 + 0.1 * 0.3 + 1.0 * mask;
+        Assert.Equal(expected, Data(trainer.Loss(batch, render))[0], 12);
     }
 
     // ------------------------------------------------------------------ sampler
@@ -490,7 +738,7 @@ public class SyncDreamerArchitectureTests
     public void OneSamplingStep_IsTheGuidedDdimUpdateOfTheSynchronizedNoise()
     {
         var model = TinyModel();
-        var input = model.EncodeInputView(Image(1));
+        var input = model.EncodeInputView(Image(1), RandomHelper.CreateSeededRandom(1));
         Assert.Equal(new[] { 1, 16 }, input.Clip.Shape.ToArray());
         Assert.Equal(new[] { 1, 4, 8, 8 }, input.Latent.Shape.ToArray());
         var schedule = SyncDreamerDdimSchedule.Create(1000, 0.00085, 0.012, 2, 1.0);
@@ -522,7 +770,7 @@ public class SyncDreamerArchitectureTests
         var middle = model.Network.MiddleCondition;
         Randomize(output.GetParameters, output.SetParameters, 81, 0.2);
         Randomize(middle.GetParameters, middle.SetParameters, 82, 0.2);
-        var input = model.EncodeInputView(Image(2));
+        var input = model.EncodeInputView(Image(2), RandomHelper.CreateSeededRandom(2));
         var x = Noise(new[] { 4, 4, 8, 8 }, 83);
         var data = Data(x);
         for (int i = 4 * 64; i < 2 * 4 * 64; i++) data[i] += 0.5;   // view 1 ([1, 4, 8, 8]) only
@@ -568,10 +816,12 @@ public class SyncDreamerArchitectureTests
         Assert.NotNull(mesh.Colors);
         var colors = mesh.Colors ?? throw new InvalidOperationException("No colors.");
         Assert.Equal(new[] { vertices, 3 }, colors.Shape.ToArray());
-        Assert.All(Data(mesh.Vertices), value => Assert.InRange(value, -1.0, 1.0));
+        // extract_mesh meshes the cube [-0.6, 0.6]^3 (DEFAULT_SIDE_LENGTH).
+        Assert.All(Data(mesh.Vertices), value => Assert.InRange(value, -0.6 - 1e-9, 0.6 + 1e-9));
         Assert.All(Data(colors), value => Assert.InRange(value, 0.0, 1.0));
 
         var again = model.ImageTo3D(image, numViews: 4, numInferenceSteps: 1, guidanceScale: 2.0, seed: 4);
+        Assert.Throws<ArgumentException>(() => model.ImageTo3D(image, numViews: 16, numInferenceSteps: 1, seed: 4));
         Assert.Equal(0.0, MaxDifference(mesh.Vertices, again.Vertices));
 
         var cloud = model.GeneratePointCloud(image, numPoints: 16, numInferenceSteps: 1, guidanceScale: 2.0, seed: 4);
