@@ -907,7 +907,7 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
             {
                 x = ApplyResBlock(block.ResBlock, x, timeEmbed);
                 if (block.AttentionBlock != null) x = block.AttentionBlock.Forward(x);
-                if (block.CrossAttentionBlock != null && (conditioning != null || _multiView is not null))
+                if (block.CrossAttentionBlock != null)
                     x = ApplyCrossAttentionSlot(block.CrossAttentionBlock, x, conditioning);
                 skips.Add(x);
             }
@@ -918,7 +918,7 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
             var block = _middleBlocks[i];
             x = ApplyResBlock(block.ResBlock, x, timeEmbed);
             if (block.AttentionBlock != null) x = block.AttentionBlock.Forward(x);
-            if (block.CrossAttentionBlock != null && (conditioning != null || _multiView is not null))
+            if (block.CrossAttentionBlock != null)
                 x = ApplyCrossAttentionSlot(block.CrossAttentionBlock, x, conditioning);
         }
 
@@ -939,7 +939,7 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
                 }
                 x = ApplyResBlock(block.ResBlock, x, timeEmbed);
                 if (block.AttentionBlock != null) x = block.AttentionBlock.Forward(x);
-                if (block.CrossAttentionBlock != null && (conditioning != null || _multiView is not null))
+                if (block.CrossAttentionBlock != null)
                     x = ApplyCrossAttentionSlot(block.CrossAttentionBlock, x, conditioning);
             }
         }
@@ -1016,7 +1016,7 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
                     x = block.AttentionBlock.Forward(x);
                     Tick($"enc[{i}].attn");
                 }
-                if (block.CrossAttentionBlock != null && (conditioning != null || _multiView is not null))
+                if (block.CrossAttentionBlock != null)
                 {
                     x = ApplyCrossAttentionSlot(block.CrossAttentionBlock, x, conditioning);
                     Tick($"enc[{i}].xattn");
@@ -1036,7 +1036,7 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
                 x = block.AttentionBlock.Forward(x);
                 Tick($"mid[{i}].attn");
             }
-            if (block.CrossAttentionBlock != null && (conditioning != null || _multiView is not null))
+            if (block.CrossAttentionBlock != null)
             {
                 x = ApplyCrossAttentionSlot(block.CrossAttentionBlock, x, conditioning);
                 Tick($"mid[{i}].xattn");
@@ -1070,7 +1070,7 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
                     x = block.AttentionBlock.Forward(x);
                     Tick($"dec[{i}].attn");
                 }
-                if (block.CrossAttentionBlock != null && (conditioning != null || _multiView is not null))
+                if (block.CrossAttentionBlock != null)
                 {
                     x = ApplyCrossAttentionSlot(block.CrossAttentionBlock, x, conditioning);
                     Tick($"dec[{i}].xattn");
@@ -1122,6 +1122,13 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
         // falls through to the single-argument Forward, which drops the conditioning silently: the
         // model keeps running, computing cross-attention with no text embedding at all. Recursive, so
         // stacked decorators all get their turn.
+        // A block that needs the context inside its own computation (Wonder3D's cross-domain attention sits between
+        // the transformer's self- and cross-attention) runs whole.
+        if (crossAttn is IContextualAttentionBlock<T> contextual)
+        {
+            return contextual.Forward(x, conditioning);
+        }
+
         if (crossAttn is IAttentionBlockDecorator<T> decorator)
         {
             return decorator.PostProcess(ApplyCrossAttention(decorator.Inner, x, conditioning));
@@ -1325,27 +1332,16 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
             timeEmbedDim: _timeEmbeddingDim);
     }
 
+    // LDM's SpatialTransformer (openaimodel.py builds one per attention level, in the slot after the ResBlock): with
+    // a context it sits in the cross-attention slot, where it receives the conditioning, and holds the self-attention
+    // itself; without one (contextDim 0) it sits in the self-attention slot. The multi-view option makes it MVDream's
+    // SpatialTransformer3D; without it the transformer is the Stable Diffusion one the context width implies
+    // (MultiViewUNetOptions.ForContext).
     private ILayer<T>? CreateAttentionBlock(int channels, int spatialSize)
-    {
-        if (_multiView is not null)
-            return CreateMultiViewAttentionBlock(channels);
-        return new DiffusionAttention<T>(
-            channels: channels,
-            numHeads: _numHeads,
-            spatialSize: spatialSize,
-            residualGroupNorm: true);
-    }
+        => _contextDim > 0 ? null : new MultiViewTransformerLayer<T>(channels, 0, TransformerOptions);
 
     private ILayer<T>? CreateCrossAttentionBlock(int channels, int spatialSize)
-    {
-        if (_multiView is not null)
-            return CreateMultiViewCrossAttentionBlock(channels);
-        return new DiffusionCrossAttention<T>(
-            queryDim: channels,
-            contextDim: _contextDim,
-            numHeads: _numHeads,
-            spatialSize: spatialSize);
-    }
+        => _contextDim > 0 ? new MultiViewTransformerLayer<T>(channels, _contextDim, TransformerOptions) : null;
 
     private ILayer<T> CreateDownsample(int channels, int spatialSize)
     {

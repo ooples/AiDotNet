@@ -95,6 +95,24 @@ public sealed class MultiViewUNetOptions
     /// </summary>
     public static MultiViewUNetOptions StableDiffusion2() => new MultiViewUNetOptions { FramesPerObject = 1 };
 
+    /// <summary>
+    /// The <c>SpatialTransformer</c> the shared U-Net builds when no option is given: one view per object, and the
+    /// Stable Diffusion configuration the context width implies. A 768-wide context is SD 1.x
+    /// (<c>v1-inference.yaml</c>: <c>num_heads</c> heads, here <paramref name="numHeads"/>, conv1x1 projections); 1024 and
+    /// 2048 are SD 2.x and SDXL (<c>num_head_channels: 64</c>, linear projections); any other width keeps
+    /// <paramref name="numHeads"/> heads with linear projections.
+    /// </summary>
+    internal static MultiViewUNetOptions ForContext(int contextDim, int numHeads)
+    {
+        if (contextDim == 1024 || contextDim == 2048) return StableDiffusion2();
+        return new MultiViewUNetOptions
+        {
+            FramesPerObject = 1,
+            HeadCount = numHeads > 0 ? numHeads : 8,
+            Projection = contextDim == 768 ? SpatialTransformerProjection.Convolution : SpatialTransformerProjection.Linear
+        };
+    }
+
     /// <summary>MVDream's text-to-multi-view configuration: 3D self-attention, text cross-attention.</summary>
     public static MultiViewUNetOptions MVDream() => new MultiViewUNetOptions();
 

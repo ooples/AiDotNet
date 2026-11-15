@@ -14,15 +14,12 @@ public partial class UNetNoisePredictor<T>
     /// </summary>
     public MultiViewUNetOptions? MultiViewOptions => _multiView;
 
-    // With a context the SpatialTransformer3D sits in the cross-attention slot, where it receives the conditioning;
-    // the self-attention slot stays empty, since the transformer holds the (3D) self-attention itself. Without a
-    // context (contextDim 0) it sits in the self-attention slot and its attn2 is self-attention, as LDM's is when
-    // context_dim is None.
-    private ILayer<T>? CreateMultiViewAttentionBlock(int channels)
-        => _multiView is null || _contextDim > 0 ? null : new MultiViewTransformerLayer<T>(channels, 0, _multiView);
+    // The transformer options every attention level is built with: the multi-view option when given, otherwise the
+    // Stable Diffusion SpatialTransformer the context width implies (one view per object).
+    private MultiViewUNetOptions? _transformerOptions;
 
-    private ILayer<T>? CreateMultiViewCrossAttentionBlock(int channels)
-        => _multiView is null ? null : new MultiViewTransformerLayer<T>(channels, _contextDim, _multiView);
+    private MultiViewUNetOptions TransformerOptions
+        => _transformerOptions ??= _multiView ?? MultiViewUNetOptions.ForContext(_contextDim, _numHeads);
 
     /// <summary>
     /// Every multi-view transformer of the default-built U-Net with its official state-dict prefix (after
@@ -33,7 +30,7 @@ public partial class UNetNoisePredictor<T>
     internal IEnumerable<(string Prefix, MultiViewTransformerLayer<T> Transformer)> MultiViewTransformers()
     {
         EnsureLayersInitialized();
-        if (_multiView is null || !_ldmSkipLayout) yield break;
+        if (!_ldmSkipLayout) yield break;
 
         for (int i = 0; i < _encoderBlocks.Count; i++)
         {
@@ -66,13 +63,14 @@ public partial class UNetNoisePredictor<T>
     {
         if (crossAttn is null) return x;
         if (conditioning is not null) return ApplyCrossAttention(crossAttn, x, conditioning);
+        if (crossAttn is IContextualAttentionBlock<T> contextual) return contextual.Forward(x, null);
         if (crossAttn is IAttentionBlockDecorator<T> decorator)
             return decorator.PostProcess(ApplyCrossAttentionSlot(decorator.Inner, x, null));
         return crossAttn is MultiViewTransformerLayer<T> transformer ? transformer.Forward(x, null) : x;
     }
 
     private static MultiViewTransformerLayer<T>? Transformer(UNetBlock block)
-        => block.CrossAttentionBlock as MultiViewTransformerLayer<T> ?? block.AttentionBlock as MultiViewTransformerLayer<T>;
+        => Unwrap(block.CrossAttentionBlock) as MultiViewTransformerLayer<T> ?? Unwrap(block.AttentionBlock) as MultiViewTransformerLayer<T>;
 
     /// <summary>
     /// Loads every multi-view transformer's weights under the official MVDream / ImageDream names
@@ -83,8 +81,6 @@ public partial class UNetNoisePredictor<T>
         string prefix = "model.diffusion_model.")
     {
         if (source is null) throw new ArgumentNullException(nameof(source));
-        if (_multiView is null)
-            throw new InvalidOperationException("This U-Net was built without the multi-view option and has no SpatialTransformer3D.");
         var names = new List<string>();
         foreach (var (blockPrefix, transformer) in MultiViewTransformers())
             names.AddRange(transformer.LoadTorchWeights(source, prefix + blockPrefix));

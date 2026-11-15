@@ -222,7 +222,7 @@ public partial class UNetNoisePredictor<T>
 
             x = ApplyResBlock(block.ResBlock, x, timeEmbed);
             if (block.AttentionBlock is not null) x = block.AttentionBlock.Forward(x);
-            if (block.CrossAttentionBlock is not null && (conditioning is not null || _multiView is not null))
+            if (block.CrossAttentionBlock is not null)
                 x = ApplyCrossAttentionSlot(block.CrossAttentionBlock, x, conditioning);
             skips.Add(x);
         }
@@ -231,7 +231,7 @@ public partial class UNetNoisePredictor<T>
         {
             x = ApplyResBlock(block.ResBlock, x, timeEmbed);
             if (block.AttentionBlock is not null) x = block.AttentionBlock.Forward(x);
-            if (block.CrossAttentionBlock is not null && (conditioning is not null || _multiView is not null))
+            if (block.CrossAttentionBlock is not null)
                 x = ApplyCrossAttentionSlot(block.CrossAttentionBlock, x, conditioning);
         }
 
@@ -256,7 +256,7 @@ public partial class UNetNoisePredictor<T>
 
                 x = ApplyResBlock(block.ResBlock, x, timeEmbed);
                 if (block.AttentionBlock is not null) x = block.AttentionBlock.Forward(x);
-                if (block.CrossAttentionBlock is not null && (conditioning is not null || _multiView is not null))
+                if (block.CrossAttentionBlock is not null)
                     x = ApplyCrossAttentionSlot(block.CrossAttentionBlock, x, conditioning);
             }
 

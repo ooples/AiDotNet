@@ -257,7 +257,11 @@ public partial class Wonder3DModel<T> : ThreeDDiffusionModelBase<T>
         int heads = _options.AttentionHeads;
         return _unet.DecorateAttentionBlocks((block, channels, isCrossAttention) =>
         {
-            if (isCrossAttention) return block;
+            // The U-Net's attention is LDM's SpatialTransformer, in the cross-attention slot when the U-Net has a
+            // context (it holds attn1 itself) and in the self-attention slot without one; Wonder3D's multi-view and
+            // cross-domain attention go inside it. A standalone cross-attention block is left alone.
+            if (isCrossAttention && block is not MultiViewTransformerLayer<T> && block is not Wonder3DAttentionBlock<T>)
+                return block;
             if (block is Wonder3DAttentionBlock<T> adopted)
             {
                 if (adopted.NumViews != numViews)
@@ -266,12 +270,12 @@ public partial class Wonder3DModel<T> : ThreeDDiffusionModelBase<T>
                 return block;
             }
 
-            if (block is not DiffusionAttention<T> attention)
+            if (block is not MultiViewTransformerLayer<T> && block is not DiffusionAttention<T>)
                 throw new InvalidOperationException(
-                    $"Wonder3D's multi-view attention reuses the U-Net's DiffusionAttention blocks; got {block.GetType().Name}.");
+                    $"Wonder3D's multi-view attention reuses the U-Net's SpatialTransformer blocks; got {block.GetType().Name}.");
             int? blockSeed = seed.HasValue ? unchecked(seed.Value * 7919 + 104729 + created) : null;
             created++;
-            return new Wonder3DAttentionBlock<T>(attention, channels, numViews, heads, blockSeed);
+            return new Wonder3DAttentionBlock<T>(block, channels, numViews, heads, blockSeed);
         });
     }
 

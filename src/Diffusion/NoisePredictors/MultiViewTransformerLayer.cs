@@ -39,6 +39,9 @@ internal sealed partial class MultiViewTransformerLayer<T> : LayerBase<T>
     private readonly int _imageTokens;
     private readonly SpatialTransformerProjection _projection;
 
+    // Construction state (replayed by clones): the options the layer was built with.
+    private readonly MultiViewUNetOptions _options;
+
     private readonly GroupNormalizationLayer<T> _norm;
     private readonly DenseLayer<T> _projectionIn;
     private readonly List<Block> _blocks = new();
@@ -98,6 +101,7 @@ internal sealed partial class MultiViewTransformerLayer<T> : LayerBase<T>
         if (contextDimension < 0) throw new ArgumentOutOfRangeException(nameof(contextDimension));
         if (options is null) throw new ArgumentNullException(nameof(options));
         options.Validate();
+        _options = options;
         _channels = channels;
         _contextDimension = contextDimension;
         _headCount = options.HeadsFor(channels);
@@ -142,7 +146,16 @@ internal sealed partial class MultiViewTransformerLayer<T> : LayerBase<T>
     /// Runs the transformer over <paramref name="input"/> <c>[B·F, C, H, W]</c> with an optional cross-attention
     /// <paramref name="context"/> <c>[B·F or 1, L, contextDimension]</c>.
     /// </summary>
-    public Tensor<T> Forward(Tensor<T> input, Tensor<T>? context)
+    public Tensor<T> Forward(Tensor<T> input, Tensor<T>? context) => Forward(input, context, null, null);
+
+    /// <summary>
+    /// <see cref="Forward(Tensor{T}, Tensor{T})"/> with the self-attention's view group set to
+    /// <paramref name="framesPerObject"/> (instead of the options') and <paramref name="afterSelfAttention"/> applied to
+    /// the tokens <c>[B·F, HW, C]</c> right after each block's self-attention residual, before its cross-attention
+    /// (Wonder3D's <c>BasicMVTransformerBlock</c> puts its cross-domain attention there).
+    /// </summary>
+    internal Tensor<T> Forward(Tensor<T> input, Tensor<T>? context, int? framesPerObject,
+        Func<Tensor<T>, Tensor<T>>? afterSelfAttention)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
         if (input.Rank != 4)
@@ -152,7 +165,7 @@ internal sealed partial class MultiViewTransformerLayer<T> : LayerBase<T>
 
         int batch = input.Shape[0], height = input.Shape[2], width = input.Shape[3];
         int positions = height * width;
-        int frames = _framesPerObject > 0 ? _framesPerObject : batch;
+        int frames = framesPerObject ?? (_framesPerObject > 0 ? _framesPerObject : batch);
         if (batch % frames != 0)
             throw new ArgumentException(
                 $"The batch ({batch}) must be a whole number of objects of {frames} views (MVDream's num_frames).", nameof(input));
@@ -170,6 +183,7 @@ internal sealed partial class MultiViewTransformerLayer<T> : LayerBase<T>
             var normed1 = block.Norm1.Forward(joined);
             joined = Engine.TensorAdd(block.Attention1.Forward(normed1, normed1), joined);
             tokens = Engine.Reshape(joined, [batch, positions, _channels]);
+            if (afterSelfAttention is not null) tokens = afterSelfAttention(tokens);
 
             if (crossContext is not null || _contextDimension == 0)
             {
