@@ -238,6 +238,116 @@ public class CompiledStepRedrawTests
         Assert.Contains(Moved(1.0), moved => moved > 0.0);
     }
 
+    /// <summary>
+    /// LayerDrop is a function of the seed: the same seed draws the same keep/drop sequence, and two identically
+    /// seeded Wav2Vec2 networks trained with LayerDrop reach identical weights, on the eager tape and through the
+    /// compiled plan.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task Layer_drop_is_reproducible_from_the_seed()
+    {
+        await Task.Yield();
+        double[] Gates(int seed)
+        {
+            var random = RandomHelper.CreateSeededRandom(seed);
+            return Enumerable.Range(0, 32).Select(_ => CompiledStepRandom<double>.KeepGate(random, 0.5)[0]).ToArray();
+        }
+        var gates = Gates(29);
+        Assert.Equal(gates, Gates(29));
+        Assert.NotEqual(gates, Gates(30));
+        Assert.All(gates, gate => Assert.True(gate == 0.0 || gate == 1.0, $"a keep gate drew {gate:R}."));
+        Assert.Contains(0.0, gates);
+        Assert.Contains(1.0, gates);
+
+        const int batch = 2, samples = 400;
+        var configuration = new Wav2Vec2Configuration
+        {
+            ConvDims = new[] { 8, 8, 8 }, ConvKernels = new[] { 10, 3, 2 }, ConvStrides = new[] { 5, 2, 2 },
+            HiddenSize = 16, Layers = 3, Heads = 2, IntermediateSize = 32, PositionalConvKernel = 8, PositionalConvGroups = 4,
+            LayerDrop = 0.5,
+        };
+        double[] Trained(bool fused)
+        {
+            var layers = new List<LayerBase<double>>();
+            var network = new Wav2Vec2Network<double>(AiDotNetEngine.Current, layers, configuration);
+            network.InitializeLikeReference(RandomHelper.CreateSeededRandom(3));
+            var random = RandomHelper.CreateSeededRandom(29);
+            var data = RandomHelper.CreateSeededRandom(5);
+            var stepper = new TapeTrainingStepper<double>(new object());
+            var optimizer = Sgd();
+            int frames = network.Frames(samples);
+            for (int step = 0; step < Steps; step++)
+            {
+                var request = Request(layers, x => network.Forward(x, training: true, random).Hidden,
+                    Random(data, batch, samples), Random(data, batch, frames, configuration.HiddenSize), optimizer);
+                if (fused)
+                {
+                    stepper.Step(request);
+                    Assert.True(stepper.LastStepFused, $"step {step}: fused path did not engage ({stepper.Session.LastMissReason}).");
+                }
+                else
+                {
+                    TapeTrainingStepper<double>.EagerStep(request);
+                }
+            }
+            return layers.SelectMany(layer => layer.GetParameters().ToArray()).ToArray();
+        }
+
+        var eager = Trained(fused: false);
+        Assert.Equal(eager, Trained(fused: false));
+        Assert.Equal(Trained(fused: true), Trained(fused: true));
+        Assert.DoesNotContain(eager, double.IsNaN);
+    }
+
+    /// <summary>
+    /// The gate selects in single and half precision too: the layer's output when kept, the input when dropped, an
+    /// overflowed dropped layer included, for gates set by hand and for gates drawn from a seeded generator.
+    /// </summary>
+    [Fact(Timeout = 60000)]
+    public async Task Layer_drop_gate_selects_in_float_and_half()
+    {
+        await Task.Yield();
+        AssertGateSelects(value => (float)value);
+#if NET5_0_OR_GREATER
+        AssertGateSelects(value => (Half)value);
+#endif
+    }
+
+    private static void AssertGateSelects<T>(Func<double, T> of)
+    {
+        var engine = AiDotNetEngine.Current;
+        var layer = new Tensor<T>(new[] { 2, 3 });
+        var overflowed = new Tensor<T>(new[] { 2, 3 });
+        var input = new Tensor<T>(new[] { 2, 3 });
+        for (int i = 0; i < input.Length; i++)
+        {
+            layer[i] = of(10 + i);
+            overflowed[i] = of(double.PositiveInfinity);
+            input[i] = of(i + 1);
+        }
+        var dropped = new Tensor<T>(new[] { 1 });
+        var kept = new Tensor<T>(new[] { 1 });
+        kept[0] = of(1.0);
+
+        Assert.Equal(layer.ToArray(), CompiledStepRandom<T>.Gated(engine, kept, layer, input).ToArray());
+        Assert.Equal(input.ToArray(), CompiledStepRandom<T>.Gated(engine, dropped, layer, input).ToArray());
+        Assert.Equal(input.ToArray(), CompiledStepRandom<T>.Gated(engine, dropped, overflowed, input).ToArray());
+        Assert.Equal(input.ToArray(), CompiledStepRandom<T>.Gated(engine, kept, input, overflowed).ToArray());
+
+        var random = RandomHelper.CreateSeededRandom(29);
+        var one = of(1.0);
+        int keptCount = 0;
+        const int draws = 32;
+        for (int draw = 0; draw < draws; draw++)
+        {
+            var gate = CompiledStepRandom<T>.KeepGate(random, 0.5);
+            bool keep = EqualityComparer<T>.Default.Equals(gate[0], one);
+            if (keep) keptCount++;
+            Assert.Equal((keep ? layer : input).ToArray(), CompiledStepRandom<T>.Gated(engine, gate, layer, input).ToArray());
+        }
+        Assert.InRange(keptCount, 1, draws - 1);
+    }
+
     /// <summary>The eager losses, after requiring the fused arm to engage and to follow them step for step.</summary>
     private static List<double> TrainSideBySide(
         IReadOnlyList<ITrainableLayer<double>> fusedLayers, Func<Tensor<double>, Tensor<double>> fusedForward,
