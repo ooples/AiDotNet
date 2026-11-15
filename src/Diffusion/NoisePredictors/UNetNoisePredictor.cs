@@ -104,6 +104,17 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
     private DenseLayer<T>? _timeEmbedMlp1;
     private DenseLayer<T>? _timeEmbedMlp2;
 
+    // The channel width of every skip connection the default encoder pushes, in push order: the input conv, each
+    // residual block and each downsampling (LDM openaimodel.py input_block_chans). Empty for a custom encoder.
+    private readonly List<int> _encoderSkipChannels = new();
+
+    // Whether the encoder and decoder follow LDM's skip layout (true for the default-built network): the input conv
+    // and every downsampling also push a skip, and each decoder level has numResBlocks + 1 residual blocks.
+    private bool _ldmSkipLayout;
+
+    // The (input, output) channels of every default decoder residual block, in forward order.
+    private readonly List<(int In, int Out)> _decoderResBlockChannels = new();
+
     /// <summary>
     /// Cached input for backward pass.
     /// </summary>
@@ -345,10 +356,13 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
             _inputChannels, _inputHeight, _inputHeight, _baseChannels,
             kernelSize: 3, stride: 1, padding: 1,
             activation: new IdentityActivation<T>());
+        // LDM / Stable Diffusion time_embed (openaimodel.py UNetModel): Linear(model_channels, 4 * model_channels),
+        // SiLU, Linear(4 * model_channels, 4 * model_channels), over the model_channels-wide sinusoid of
+        // GetTimestepEmbedding. Each residual block applies its own SiLU before its projection (emb_layers).
         _timeEmbedMlp1 = LazyDense(
-            _timeEmbeddingDim, _timeEmbeddingDim, new ReLUActivation<T>());
+            _baseChannels, _timeEmbeddingDim, new SiLUActivation<T>());
         _timeEmbedMlp2 = LazyDense(
-            _timeEmbeddingDim, _timeEmbeddingDim, new ReLUActivation<T>());
+            _timeEmbeddingDim, _timeEmbeddingDim, new IdentityActivation<T>());
         // The output conv starts at zero, as in Ho et al. (init_scale=0.) and LDM (zero_module): an untrained
         // predictor predicts zero noise instead of a random field, which is the MSE-optimal start.
         _outputConv = ConvolutionalLayer<T>.WithInputDepth(
@@ -384,6 +398,7 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
         // Priority 3: Create industry-standard layers from the Stable Diffusion paper
         CreateDefaultEncoderBlocks();
+        _ldmSkipLayout = true;
         CreateDefaultMiddleBlocks(_baseChannels * _channelMultipliers[^1]);
         CreateDefaultDecoderBlocks();
         _layersInitialized = true;
@@ -396,6 +411,8 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
     {
         var inChannels = _baseChannels;
         int spatialSize = _inputHeight;
+        _encoderSkipChannels.Clear();
+        _encoderSkipChannels.Add(_baseChannels);
         for (int level = 0; level < _channelMultipliers.Length; level++)
         {
             var outChannels = _baseChannels * _channelMultipliers[level];
@@ -411,6 +428,7 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
                     AttentionChannels = outChannels
                 });
                 inChannels = outChannels;
+                _encoderSkipChannels.Add(outChannels);
             }
 
             // Add downsampling except for last level
@@ -420,6 +438,7 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
                 {
                     Downsample = CreateDownsample(outChannels, spatialSize)
                 });
+                _encoderSkipChannels.Add(outChannels);
                 spatialSize = Math.Max(1, spatialSize / 2);
             }
         }
@@ -455,18 +474,29 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
         var inChannels = _baseChannels * _channelMultipliers[^1];
         int numDownsamples = _channelMultipliers.Length - 1;
         int spatialSize = Math.Max(1, _inputHeight >> numDownsamples);
+        var skipStack = new List<int>(_encoderSkipChannels);
 
         for (int level = _channelMultipliers.Length - 1; level >= 0; level--)
         {
             var outChannels = _baseChannels * _channelMultipliers[level];
             var useAttention = Array.IndexOf(_attentionResolutions, level) >= 0;
 
-            // Each level has _numResBlocks decoder blocks that consume skip connections
-            // from the matching encoder level (same spatial resolution)
-            for (int block = 0; block < _numResBlocks; block++)
+            // LDM (openaimodel.py output_blocks) and diffusers (UpBlock2D / CrossAttnUpBlock2D with
+            // num_layers = layers_per_block + 1) give every decoder level numResBlocks + 1 residual blocks, each
+            // concatenating the next skip popped from the encoder's stack (input conv, residual blocks and
+            // downsamplings). A custom encoder has no recorded skip widths, so it keeps one block per encoder
+            // block with skips as wide as the level.
+            int blocksPerLevel = _ldmSkipLayout ? _numResBlocks + 1 : _numResBlocks;
+            for (int block = 0; block < blocksPerLevel; block++)
             {
-                var skipChannels = outChannels;
+                int skipChannels = outChannels;
+                if (_ldmSkipLayout)
+                {
+                    skipChannels = skipStack[skipStack.Count - 1];
+                    skipStack.RemoveAt(skipStack.Count - 1);
+                }
 
+                _decoderResBlockChannels.Add((inChannels + skipChannels, outChannels));
                 _decoderBlocks.Add(new UNetBlock
                 {
                     ResBlock = CreateResBlock(inChannels + skipChannels, outChannels, spatialSize),
@@ -845,7 +875,8 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
             throw new InvalidOperationException("Convolutional layers not initialized.");
 
         x = _inputConv.Forward(x);
-        var skips = new List<Tensor<T>>(_encoderBlocks.Count);
+        var skips = new List<Tensor<T>>(_encoderBlocks.Count + 1);
+        if (_ldmSkipLayout) skips.Add(x);
 
         for (int i = 0; i < _encoderBlocks.Count; i++)
         {
@@ -853,6 +884,7 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
             if (block.Downsample != null)
             {
                 x = block.Downsample.Forward(x);
+                if (_ldmSkipLayout) skips.Add(x);
             }
             else
             {
@@ -943,8 +975,10 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
         x = _inputConv.Forward(x);
         Tick("input_conv");
 
-        // Store skip connections — pre-allocate capacity to avoid List resizing
-        var skips = new List<Tensor<T>>(_encoderBlocks.Count);
+        // Store skip connections — pre-allocate capacity to avoid List resizing. LDM's layout also keeps the
+        // input conv's and every downsampling's output (every input block pushes to hs).
+        var skips = new List<Tensor<T>>(_encoderBlocks.Count + 1);
+        if (_ldmSkipLayout) skips.Add(x);
 
         // Encoder
         for (int i = 0; i < _encoderBlocks.Count; i++)
@@ -953,6 +987,7 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
             if (block.Downsample != null)
             {
                 x = block.Downsample.Forward(x);
+                if (_ldmSkipLayout) skips.Add(x);
                 Tick($"enc[{i}].downsample");
             }
             else
