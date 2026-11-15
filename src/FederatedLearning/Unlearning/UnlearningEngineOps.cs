@@ -69,43 +69,106 @@ internal static class UnlearningEngineOps
         return AiDotNetEngine.Current.TensorSum(a.Cast<double>());
     }
 
-    /// <summary>
-    /// <paramref name="count"/> standard normal samples drawn from the operating system's cryptographic generator.
-    /// Each sample consumes 8 fresh random bytes, so the noise cannot be reproduced from a small seed: an engine
-    /// normal op seeded with one <c>Random.Next()</c> draw has at most 2^31 possible noise vectors, which an observer
-    /// of the noised model can enumerate.
-    /// </summary>
-    internal static Tensor<T> SecureStandardNormals<T>(int count)
-    {
-        var bytes = new byte[Math.Max(0, count) * 8];
-        using (var generator = System.Security.Cryptography.RandomNumberGenerator.Create())
-        {
-            generator.GetBytes(bytes);
-        }
+    /// <summary>Random bytes one standard normal consumes: two 53-bit uniforms, each read from two 32-bit words.</summary>
+    internal const int RandomBytesPerNormal = 16;
 
-        return StandardNormalsFromBytes<T>(bytes, count);
+    /// <summary>Samples <see cref="SecureStandardNormals{T}"/> draws and transforms at a time.</summary>
+    internal const int NormalsPerChunk = 65536;
+
+    /// <summary>
+    /// The random bytes <paramref name="samples"/> standard normals consume, as a long: for more than 134 million
+    /// samples the count is past <see cref="int.MaxValue"/>, and an int product wraps to a negative size.
+    /// </summary>
+    internal static long RandomBytesFor(long samples)
+    {
+        if (samples < 0) throw new ArgumentOutOfRangeException(nameof(samples));
+        return checked(samples * RandomBytesPerNormal);
     }
 
     /// <summary>
-    /// Box-Muller standard normals from random bytes: the bytes are read as 2 * <paramref name="count"/>
-    /// little-endian 32-bit integers k, mapped to uniforms u = (k + 2^31 + 1/2) / 2^32 in (0, 1); sample i is
-    /// sqrt(-2 ln u_i) cos(2 pi u_(count + i)). The arithmetic runs in double and is rounded to T once.
+    /// <paramref name="count"/> standard normal samples drawn from the operating system's cryptographic generator.
+    /// Each sample consumes 16 fresh random bytes, so the noise cannot be reproduced from a small seed: an engine
+    /// normal op seeded with one <c>Random.Next()</c> draw has at most 2^31 possible noise vectors, which an observer
+    /// of the noised model can enumerate. The samples are drawn <see cref="NormalsPerChunk"/> at a time, so the
+    /// memory used beyond the result does not grow with <paramref name="count"/>.
     /// </summary>
+    internal static Tensor<T> SecureStandardNormals<T>(int count)
+    {
+        using (var generator = System.Security.Cryptography.RandomNumberGenerator.Create())
+        {
+            return StandardNormals<T>(count, bytes => generator.GetBytes(bytes), NormalsPerChunk);
+        }
+    }
+
+    /// <summary>
+    /// <paramref name="count"/> standard normals from the bytes <paramref name="fillRandomBytes"/> supplies, at most
+    /// <paramref name="samplesPerChunk"/> samples at a time: each chunk asks for exactly the bytes its samples
+    /// consume and is transformed by <see cref="StandardNormalsFromBytes{T}"/>, so the working memory is that of one
+    /// chunk whatever the count.
+    /// </summary>
+    internal static Tensor<T> StandardNormals<T>(int count, Action<byte[]> fillRandomBytes, int samplesPerChunk)
+    {
+        if (count < 0) throw new ArgumentOutOfRangeException(nameof(count));
+        if (fillRandomBytes is null) throw new ArgumentNullException(nameof(fillRandomBytes));
+        if (samplesPerChunk < 1) throw new ArgumentOutOfRangeException(nameof(samplesPerChunk));
+        if (count == 0) return new Tensor<T>(new[] { 0 });
+
+        var result = new T[count];
+        var bytes = new byte[checked((int)RandomBytesFor(Math.Min(count, samplesPerChunk)))];
+        int done = 0;
+        while (done < count)
+        {
+            int take = Math.Min(samplesPerChunk, count - done);
+            long needed = RandomBytesFor(take);
+            if (bytes.Length != needed)
+            {
+                // The last chunk is shorter: the source is asked for no more bytes than are used.
+                bytes = new byte[checked((int)needed)];
+            }
+
+            fillRandomBytes(bytes);
+            Array.Copy(StandardNormalsFromBytes<T>(bytes, take).ToArray(), 0, result, done, take);
+            done += take;
+        }
+
+        return new Tensor<T>(result, new[] { count });
+    }
+
+    /// <summary>
+    /// Box-Muller standard normals from random bytes: sample i is sqrt(-2 ln u1_i) cos(2 pi u2_i). The bytes are read
+    /// as 4 * <paramref name="count"/> little-endian 32-bit words; with c = count and w = k + 2^31 for a word read as the signed k,
+    /// n1_i = w_i * 2^21 + floor(w_(c + i) / 2^11) and n2_i = w_(2c + i) * 2^21 + floor(w_(3c + i) / 2^11) are uniform
+    /// 53-bit integers, u1 = (n1 + 1) / 2^53 lies in (0, 1] (the logarithm never sees 0) and u2 = n2 / 2^53 in [0, 1).
+    /// The arithmetic runs in double, where every step up to the uniforms is exact, and is rounded to T once.
+    /// </summary>
+    /// <remarks>
+    /// The smallest u1 is 2^-53, so |z| reaches sqrt(106 ln 2) = 8.57, the range of a double-precision uniform. A
+    /// 32-bit uniform stops at 6.76: it cannot produce the 1.4e-11 of the normal's mass beyond that, a truncated tail
+    /// that noise calibrated as Gaussian must not have.
+    /// </remarks>
     internal static Tensor<T> StandardNormalsFromBytes<T>(byte[] bytes, int count)
     {
         if (bytes is null) throw new ArgumentNullException(nameof(bytes));
         if (count < 0) throw new ArgumentOutOfRangeException(nameof(count));
-        if (bytes.Length < count * 8) throw new ArgumentException("Each sample needs 8 bytes.", nameof(bytes));
+        if (bytes.Length < RandomBytesFor(count)) throw new ArgumentException($"Each sample needs {RandomBytesPerNormal} bytes.", nameof(bytes));
         if (count == 0) return new Tensor<T>(new[] { 0 });
 
         var engine = AiDotNetEngine.Current;
-        var words = new int[2 * count];
-        Buffer.BlockCopy(bytes, 0, words, 0, words.Length * 4);
-        var uniforms = engine.TensorMultiplyScalar(
-            engine.TensorAddScalar(new Tensor<int>(words, new[] { words.Length }).Cast<double>(), 2147483648.5),
-            1.0 / 4294967296.0);
-        var u1 = engine.TensorSlice(uniforms, new[] { 0 }, new[] { count });
-        var u2 = engine.TensorSlice(uniforms, new[] { count }, new[] { count });
+        var words = new int[checked(4 * count)];
+        Buffer.BlockCopy(bytes, 0, words, 0, checked(words.Length * 4));
+        // A word read as a signed k is the unsigned word k + 2^31 with its top bit flipped: uniform over [0, 2^32).
+        var unsigned = engine.TensorAddScalar(new Tensor<int>(words, new[] { words.Length }).Cast<double>(), 2147483648.0);
+
+        Tensor<double> Integer53(int highAt, int lowAt)
+        {
+            var high = engine.TensorSlice(unsigned, new[] { highAt }, new[] { count });
+            var low = engine.TensorSlice(unsigned, new[] { lowAt }, new[] { count });
+            return engine.TensorAdd(engine.TensorMultiplyScalar(high, 2097152.0), engine.TensorFloor(engine.TensorMultiplyScalar(low, 1.0 / 2048.0)));
+        }
+
+        const double TwoToMinus53 = 1.0 / 9007199254740992.0;
+        var u1 = engine.TensorMultiplyScalar(engine.TensorAddScalar(Integer53(0, count), 1.0), TwoToMinus53);
+        var u2 = engine.TensorMultiplyScalar(Integer53(2 * count, 3 * count), TwoToMinus53);
         var radius = engine.TensorSqrt(engine.TensorMultiplyScalar(engine.TensorLog(u1), -2.0));
         var angle = engine.TensorCos(engine.TensorMultiplyScalar(u2, 2.0 * Math.PI));
         return engine.TensorMultiply(radius, angle).Cast<T>();

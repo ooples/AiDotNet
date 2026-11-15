@@ -86,28 +86,179 @@ public class FederatedHalfRangeReviewTests
         Assert.Equal(new[] { 0.0, 0.5, 0.0, -0.75 }, sparse.ToArray().Select(D).ToArray());
     }
 
+    private static byte[] Words(params int[] words)
+    {
+        var bytes = new byte[words.Length * 4];
+        Buffer.BlockCopy(words, 0, bytes, 0, bytes.Length);
+        return bytes;
+    }
+
+    // The mapping written out with integer arithmetic: 32 bits of the first word and the top 21 of the second as a
+    // 53-bit integer n, u1 = (n + 1) / 2^53 and u2 = n / 2^53.
+    private static double[] ScalarNormals(int[] words, int count)
+    {
+        // A word counts as its signed value plus 2^31: the unsigned word with its top bit flipped.
+        uint Unsigned(int index) => unchecked((uint)words[index]) ^ 0x80000000u;
+        ulong Integer53(int high, int low) => ((ulong)Unsigned(high) << 21) | (Unsigned(low) >> 11);
+        var normals = new double[count];
+        for (int i = 0; i < count; i++)
+        {
+            double u1 = (Integer53(i, count + i) + 1) / 9007199254740992.0;
+            double u2 = Integer53(2 * count + i, 3 * count + i) / 9007199254740992.0;
+            normals[i] = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+        }
+
+        return normals;
+    }
+
+    private static int[] PseudoWords(int count, int seed)
+    {
+        var random = new Random(seed);
+        var words = new int[count];
+        for (int i = 0; i < count; i++) words[i] = unchecked((int)(((uint)random.Next(1 << 16) << 16) | (uint)random.Next(1 << 16)));
+        return words;
+    }
+
     [Fact]
     public void StandardNormalsFromBytes_IsTheBoxMullerTransformOfTheWords()
     {
-        // Words 0 and 0 give u1 = u2 = (2^31 + 1/2) / 2^32, just above 1/2: sqrt(-2 ln u1) cos(2 pi u2) = -sqrt(2 ln 2).
-        var normals = UnlearningEngineOps.StandardNormalsFromBytes<double>(new byte[8], 1);
+        // Zero words count as 2^31 each, so u1 and u2 are just above 1/2 ((2^52 + 2^20 + 1) / 2^53 and
+        // (2^52 + 2^20) / 2^53): sqrt(-2 ln u1) cos(2 pi u2) = -sqrt(2 ln 2).
+        var normals = UnlearningEngineOps.StandardNormalsFromBytes<double>(new byte[16], 1);
 
         Assert.Equal(-Math.Sqrt(2.0 * Math.Log(2.0)), normals[0], 6);
     }
 
     [Fact]
-    public void SecureStandardNormals_HaveUnitMomentsAndDoNotRepeat()
+    public void StandardNormalsFromBytes_ForAnOddCount_MatchesTheMappingInIntegerArithmetic()
     {
-        const int count = 20000;
+        const int count = 7;
+        var words = PseudoWords(4 * count, seed: 3);
+
+        var normals = UnlearningEngineOps.StandardNormalsFromBytes<double>(Words(words), count).ToArray();
+
+        var expected = ScalarNormals(words, count);
+        Assert.Equal(count, normals.Length);
+        for (int i = 0; i < count; i++)
+        {
+            Assert.Equal(expected[i], normals[i], 12);
+        }
+    }
+
+    [Fact]
+    public void StandardNormalsFromBytes_ReachesTheTailOfA53BitUniformAndStaysFinite()
+    {
+        // The smallest u1 (both of its words counting 0) is 2^-53: with u2 = 0, z = 8.5716, past the 6.7637 where a
+        // 32-bit uniform stops. The largest (both words all ones) is exactly 1, whose logarithm is 0: z = 0, not NaN.
+        // Sample 2 has the smallest u1 at the angle pi (u2 = 1/2): z = -8.5716.
+        const int zero = int.MinValue, ones = int.MaxValue, half = 0;
+        var bytes = Words(
+            zero, ones, zero,      // u1 high
+            zero, ones, zero,      // u1 low
+            zero, zero, half,      // u2 high
+            zero, zero, zero);     // u2 low
+        double limit = Math.Sqrt(106.0 * Math.Log(2.0));
+
+        var full = UnlearningEngineOps.StandardNormalsFromBytes<double>(bytes, 3).ToArray();
+        Assert.Equal(limit, full[0], 12);
+        Assert.True(full[0] > 6.77, $"largest sample {full[0]}");
+        Assert.Equal(0.0, full[1], 15);
+        Assert.Equal(-limit, full[2], 12);
+
+        var single = UnlearningEngineOps.StandardNormalsFromBytes<float>(bytes, 3).ToArray();
+        var narrow = UnlearningEngineOps.StandardNormalsFromBytes<Half>(bytes, 3).ToArray();
+        Assert.All(full, z => Assert.True(!double.IsNaN(z) && !double.IsInfinity(z)));
+        Assert.All(single, z => Assert.True(!float.IsNaN(z) && !float.IsInfinity(z)));
+        Assert.All(narrow, z => Assert.True(!Half.IsNaN(z) && !Half.IsInfinity(z)));
+        Assert.True(Math.Abs(D(narrow[0]) - limit) <= 0.01, $"Half tail sample {narrow[0]}");
+    }
+
+    [Fact]
+    public void StandardNormals_DrawnInChunks_AskForEachChunksBytesAndJoinTheChunks()
+    {
+        // 11 samples, 4 at a time: chunks of 4, 4 and 3 samples, 64, 64 and 48 bytes. The source hands out a running
+        // byte sequence, so the result is the three chunks' transforms one after the other.
+        const int count = 11, perChunk = 4;
+        var stream = Words(PseudoWords(4 * count, seed: 9));
+        int position = 0;
+        var requests = new List<int>();
+        void Fill(byte[] buffer)
+        {
+            requests.Add(buffer.Length);
+            Array.Copy(stream, position, buffer, 0, buffer.Length);
+            position += buffer.Length;
+        }
+
+        var normals = UnlearningEngineOps.StandardNormals<double>(count, Fill, perChunk).ToArray();
+
+        Assert.Equal(new[] { 64, 64, 48 }, requests);
+        Assert.Equal(stream.Length, position);
+        var expected = new List<double>();
+        int offset = 0;
+        foreach (int take in new[] { 4, 4, 3 })
+        {
+            var chunk = new byte[take * 16];
+            Array.Copy(stream, offset, chunk, 0, chunk.Length);
+            offset += chunk.Length;
+            expected.AddRange(UnlearningEngineOps.StandardNormalsFromBytes<double>(chunk, take).ToArray());
+        }
+
+        Assert.Equal(expected.ToArray(), normals);
+        Assert.Equal(count, normals.Distinct().Count());
+    }
+
+    [Fact]
+    public void StandardNormals_RejectBadArgumentsAndReturnNothingForZero()
+    {
+        Assert.Equal(0, UnlearningEngineOps.SecureStandardNormals<float>(0).Length);
+        Assert.Equal(0, UnlearningEngineOps.StandardNormalsFromBytes<float>(Array.Empty<byte>(), 0).Length);
+        Assert.Throws<ArgumentOutOfRangeException>(() => UnlearningEngineOps.SecureStandardNormals<float>(-1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => UnlearningEngineOps.StandardNormals<float>(4, _ => { }, 0));
+        Assert.Throws<ArgumentNullException>(() => UnlearningEngineOps.StandardNormals<float>(4, null!, 4));
+        Assert.Throws<ArgumentException>(() => UnlearningEngineOps.StandardNormalsFromBytes<float>(new byte[31], 2));
+    }
+
+    [Fact]
+    public void RandomBytesFor_CountsInLongPastTheIntRange()
+    {
+        // 300 million parameters need 4.8e9 random bytes: past int.MaxValue (an int product wraps), and never
+        // allocated at once. Only a count whose bytes are past long's range is refused.
+        Assert.Equal(16, UnlearningEngineOps.RandomBytesPerNormal);
+        Assert.Equal(0L, UnlearningEngineOps.RandomBytesFor(0));
+        Assert.Equal(4_800_000_000L, UnlearningEngineOps.RandomBytesFor(300_000_000));
+        Assert.True(UnlearningEngineOps.RandomBytesFor(300_000_000) > int.MaxValue);
+        Assert.Equal(16L * int.MaxValue, UnlearningEngineOps.RandomBytesFor(int.MaxValue));
+        Assert.True(UnlearningEngineOps.RandomBytesFor(UnlearningEngineOps.NormalsPerChunk) <= int.MaxValue);
+        Assert.Throws<OverflowException>(() => UnlearningEngineOps.RandomBytesFor(long.MaxValue / 8));
+        Assert.Throws<ArgumentOutOfRangeException>(() => UnlearningEngineOps.RandomBytesFor(-1));
+    }
+
+    [Fact]
+    public void SecureStandardNormals_AcrossSeveralChunks_HaveUnitMomentsAndDoNotRepeat()
+    {
+        // An odd count over three full chunks and a partial one.
+        const int count = 3 * 65536 + 4321;
+        Assert.True(count > UnlearningEngineOps.NormalsPerChunk && count % 2 == 1);
         var first = UnlearningEngineOps.SecureStandardNormals<double>(count).ToArray();
         var second = UnlearningEngineOps.SecureStandardNormals<double>(count).ToArray();
 
+        Assert.Equal(count, first.Length);
+        Assert.All(first, z => Assert.True(!double.IsNaN(z) && !double.IsInfinity(z)));
         double mean = first.Average();
         double variance = first.Select(z => (z - mean) * (z - mean)).Average();
+        double fourth = first.Select(z => Math.Pow(z - mean, 4)).Average() / (variance * variance);
 
-        // Standard errors at n = 20000: 0.007 for the mean and 0.01 for the variance.
-        Assert.InRange(mean, -0.05, 0.05);
-        Assert.InRange(variance, 0.95, 1.05);
+        // Standard errors at n = 200929: 0.0022 for the mean, 0.0032 for the variance, 0.011 for the kurtosis (3).
+        Assert.InRange(mean, -0.02, 0.02);
+        Assert.InRange(variance, 0.97, 1.03);
+        Assert.InRange(fourth, 2.9, 3.1);
         Assert.False(first.SequenceEqual(second));
+        // No chunk repeats the one before it.
+        Assert.False(first.Take(65536).SequenceEqual(first.Skip(65536).Take(65536)));
+        Assert.Equal(count, first.Distinct().Count());
+
+        var narrow = UnlearningEngineOps.SecureStandardNormals<Half>(70001).ToArray();
+        Assert.Equal(70001, narrow.Length);
+        Assert.All(narrow, z => Assert.True(!Half.IsNaN(z) && !Half.IsInfinity(z)));
     }
 }

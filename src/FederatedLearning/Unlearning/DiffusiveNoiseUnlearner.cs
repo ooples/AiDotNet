@@ -127,8 +127,8 @@ public class DiffusiveNoiseUnlearner<T> : FederatedLearningComponentBase<T>, IFe
     {
         int modelSize = model.Shape[0];
 
-        // Standard normals straight from the cryptographic generator (8 bytes each), so the noise stays
-        // unpredictable: it is not expanded from one 31-bit seed.
+        // Standard normals straight from the cryptographic generator (16 bytes each, drawn in chunks), so the noise
+        // stays unpredictable: it is not expanded from one 31-bit seed.
         var standardNormals = UnlearningEngineOps.SecureStandardNormals<T>(modelSize);
 
         // Scale noise by influence score: high-influence params get more noise.
