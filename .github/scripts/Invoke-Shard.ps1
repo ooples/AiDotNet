@@ -225,6 +225,26 @@ $collectCoverage = if ($forcedCoverageRun) {
   -not ($heavyShard -or $measuresTiming)
 }
 
+# Rolling map refresh (tools/TestImpact/RollingShardMap.ps1). On the scheduled nightly, select-shards may
+# name a budgeted handful of heavy shards to instrument tonight, so the map's per-shard coverage is days
+# old rather than a week. Only then: an unset, empty or unreadable COVERAGE_ROLLING leaves the decision
+# above exactly as it was, as does every other event. A timing shard is never instrumented here - this
+# run is its correctness net - and a forced coverage run keeps its own dispositions.
+$rollingCoverage = $false
+if ($env:COVERAGE_ROLLING -and -not $forcedCoverageRun -and -not $measuresTiming -and
+    "$($env:GITHUB_EVENT_NAME)" -eq 'schedule') {
+  try {
+    $rollingCoverage = @($env:COVERAGE_ROLLING | ConvertFrom-Json | ForEach-Object { [string] $_ }) -ccontains $shardName
+  }
+  catch {
+    Write-Host '::warning::rolling coverage list unreadable - this shard runs without instrumentation, as on any other night'
+  }
+}
+if ($rollingCoverage -and -not $collectCoverage) {
+  $collectCoverage = $true
+  Write-Host 'rolling map refresh: coverage on for this heavy shard tonight (TEST_IMPACT_ROLLING_MAP)'
+}
+
 if ($forcedCoverageRun -and $coverageDisposition -eq [CoverageDisposition]::Instrument -and
     ($heavyShard -or $measuresTiming)) {
   Write-Host 'collect_coverage_everywhere: coverage forced on for this shard to feed the test-impact map'

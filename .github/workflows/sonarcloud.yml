@@ -890,6 +890,9 @@ jobs:
       # Their full correctness suites still execute, but repeating the instrumentation that already
       # exceeded the runner envelope cannot produce a digest and is therefore suppressed.
       coverage_run_without_instrumentation: ${{ steps.select.outputs.coverage_run_without_instrumentation }}
+      # Rolling map refresh (TEST_IMPACT_ROLLING_MAP): the heavy shards tonight's scheduled run instruments.
+      # '[]' on every other event and whenever the flag is off.
+      coverage_rolling: ${{ steps.select.outputs.coverage_rolling }}
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
@@ -993,6 +996,29 @@ jobs:
           echo "kind=$kind" >> "$GITHUB_OUTPUT"
           echo "lineage_ref=$lineage_ref" >> "$GITHUB_OUTPUT"
 
+      # ROLLING MAP (tools/TestImpact/RollingShardMap.ps1), behind repository variable
+      # TEST_IMPACT_ROLLING_MAP: unset or 'off' skips this step and every other rolling step, and leaves the
+      # selection, the matrix and what is instrumented exactly as they were. 'shadow' computes the rolling
+      # selection beside the weekly map's and reports both; 'on' lets a certified rolling map decide.
+      #
+      # The rolling map is only ever taken from the run the resolver above returned: the run that certified
+      # the weekly map (the anchor) is the run that built and certified the rolling map on top of it. So the
+      # resolver's revocation barrier covers both: a revoked, unclassified or superseded anchor leaves no
+      # rolling map to find. A missing artifact is the ordinary case (no nightly digest yet) and not an error.
+      - name: Download the rolling shard map
+        id: rolling
+        if: ${{ (vars.TEST_IMPACT_ROLLING_MAP == 'shadow' || vars.TEST_IMPACT_ROLLING_MAP == 'on') && steps.map.outputs.kind == 'certified' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAP_RUN_ID: ${{ steps.map.outputs.run_id }}
+        run: |
+          rm -rf rolling-map
+          if ! gh run download "$MAP_RUN_ID" --repo "$GITHUB_REPOSITORY" --name rolling-shard-map --dir rolling-map; then
+            echo "map run $MAP_RUN_ID published no rolling map - the certified weekly map decides alone"
+            rm -rf rolling-map
+          fi
+
       # The impact tooling's own tests, run here rather than nowhere. Two defects on this PR were caught
       # only because these exist - reading the wrong side of a diff hunk, and a staleness check that
       # silently pinned the feature off - and both looked healthy in the logs.
@@ -1094,6 +1120,11 @@ jobs:
           # on; set the repository variable to 'off' to select every shard executing a file for a changed
           # range no shard executes, as before, without reverting anything.
           TEST_IMPACT_PRECISE_FALLBACKS: ${{ vars.TEST_IMPACT_PRECISE_FALLBACKS }}
+          # Rolling per-shard coverage map: off (default, also unset or unrecognised), shadow, or on. See
+          # "Download the rolling shard map". The budget is predicted EXTRA runner-minutes a scheduled nightly
+          # may spend instrumenting heavy shards; unset is RollingBudgetMinutes in RollingShardMap.ps1 (450).
+          TEST_IMPACT_ROLLING_MAP: ${{ vars.TEST_IMPACT_ROLLING_MAP }}
+          TEST_IMPACT_ROLLING_BUDGET_MINUTES: ${{ vars.TEST_IMPACT_ROLLING_BUDGET_MINUTES }}
           # Self-hosted runner routing (Get-SelfHostedShardPlan): a JSON configuration and a token that can
           # read the repository's runners, both repository secrets. Fork pull requests get neither, so
           # their code never runs on a self-hosted machine.
@@ -1156,6 +1187,13 @@ jobs:
             exit 1
           }
           Write-Host "shard list: $($all.Count) shard(s)"
+
+          # Nothing below reads the rolling map unless this is 'shadow' or 'on'.
+          $rollingMode = 'off'
+          if (-not [string]::IsNullOrWhiteSpace($env:TEST_IMPACT_ROLLING_MAP)) {
+            . ./tools/TestImpact/RollingShardMap.ps1
+            $rollingMode = Get-RollingMapMode $env:TEST_IMPACT_ROLLING_MAP
+          }
 
           $escalate = $true
           # Why the workflow overrode or bypassed the selector, for the selection report. Empty means the selector's own
@@ -1292,6 +1330,23 @@ jobs:
                     -ExpectedShards @($all.name) `
                     -OutFile selection.json
                 if ($LASTEXITCODE -ne 0) { throw "shard selector exited $LASTEXITCODE" }
+                if ($rollingMode -ne 'off') {
+                  # The weekly map has selected. Now the same change against the rolling map, each layer in
+                  # its own commit's line numbers (Select-Shards.ps1, Invoke-RollingMapSelection). shadow:
+                  # selection.json is not touched. on: it is replaced only by a certified rolling map's
+                  # selection; anything else, including a failure here, leaves the weekly map's in place.
+                  try {
+                    & ./tools/TestImpact/Invoke-RollingSelection.ps1 -Mode $rollingMode `
+                        -AnchorMapFile map/shard-map.json -AnchorRunId ([long] $env:MAP_RUN_ID) `
+                        -RollingDirectory rolling-map -AnchorSelectionFile selection.json `
+                        -PullRequestHeadSha $changeHeadSha @lineage `
+                        -ShardManifestFile shard-manifest.json -ExpectedShards @($all.name)
+                    if ($LASTEXITCODE -ne 0) { throw "exit $LASTEXITCODE" }
+                  }
+                  catch {
+                    Write-Host "::warning::rolling map selection unavailable ($($_.Exception.Message)) - the certified weekly map decides"
+                  }
+                }
                 $result = Get-Content selection.json -Raw | ConvertFrom-Json
                 $selectionEscalated = Read-RequiredJsonBoolean `
                     -Object $result -PropertyName 'escalate'
@@ -1470,6 +1525,7 @@ jobs:
               $finalCount = if ($escalate) { $all.Count } else { @($matrixShards).Count }
               & ./tools/TestImpact/Write-SelectionReport.ps1 -SelectionFile selection.json -TotalShards $all.Count `
                   -FinalShardCount $finalCount -FinalEscalated:$escalate -WorkflowReason $decisionReason `
+                  -RollingComparisonFile rolling-comparison.json `
                   -MapResolutionFile map-resolution.json -ReportFile selection-report.json
               if ($LASTEXITCODE -ne 0) { throw "the report script exited $LASTEXITCODE" }
             }
@@ -1594,6 +1650,34 @@ jobs:
               runWithoutInstrumentationShardNames = @($runWithoutInstrumentation)
             } | ConvertTo-Json -Depth 5 | Set-Content coverage-source.json -Encoding utf8
           }
+          # ROLLING MAP REFRESH. On the scheduled nightly, and only with the flag on, name a budgeted handful
+          # of heavy shards for the test job to instrument tonight (Invoke-Shard.ps1 reads COVERAGE_ROLLING).
+          # Which ones, in what order and under what cap is Select-RollingCoverageShards.ps1; timing shards and
+          # shards the weekly run could not digest are never named. Any failure names none, which is the
+          # nightly as it always was. Every other event, and the flag off, emits '[]'.
+          $rollingCoverage = @()
+          if ($rollingMode -ne 'off' -and $env:GITHUB_EVENT_NAME -eq 'schedule' -and
+              $env:COLLECT_COVERAGE_EVERYWHERE -ne 'true') {
+            try {
+              if (-not $selectorTrusted) { throw 'the impact tooling failed its own self-test' }
+              if (-not $mapCertified) { throw 'there is no certified weekly map to refresh' }
+              & ./tools/TestImpact/Select-RollingCoverageShards.ps1 -ShardManifestFile shard-manifest.json `
+                  -AnchorMapFile map/shard-map.json -RollingMapFile rolling-map/rolling-shard-map.json `
+                  -BudgetMinutes ([string] $env:TEST_IMPACT_ROLLING_BUDGET_MINUTES) -OutFile rolling-source.json
+              if ($LASTEXITCODE -ne 0) { throw "Select-RollingCoverageShards exited $LASTEXITCODE" }
+              $rollingPlan = Get-Content rolling-source.json -Raw | ConvertFrom-Json
+              $rollingCoverage = @($rollingPlan.instrument | ForEach-Object { [string] $_ })
+              "### Rolling map refresh`n`ninstrumenting $($rollingCoverage.Count) heavy shard(s) tonight, predicted $($rollingPlan.predictedExtraMinutes) of $($rollingPlan.budgetMinutes) extra runner-minute(s)." |
+                Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            }
+            catch {
+              Write-Host "::warning::rolling map refresh unavailable ($($_.Exception.Message)) - instrumenting nothing extra tonight"
+              $rollingCoverage = @()
+              Remove-Item rolling-source.json -ErrorAction SilentlyContinue
+            }
+          }
+          "coverage_rolling=$(ConvertTo-Json -InputObject @($rollingCoverage) -Depth 3 -Compress)" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "coverage_carried=$(ConvertTo-Json -InputObject @($carried) -Depth 3 -Compress)" |
             Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "coverage_run_without_instrumentation=$(ConvertTo-Json -InputObject @($runWithoutInstrumentation) -Depth 3 -Compress)" |
@@ -1608,9 +1692,26 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         with:
           name: shard-selection-report
+          # The rolling files exist only with TEST_IMPACT_ROLLING_MAP shadow or on.
           path: |
             selection.json
             selection-report.json
+            selection-rolling.json
+            selection-anchor.json
+            rolling-comparison.json
+          if-no-files-found: ignore
+          retention-days: 14
+          overwrite: true
+
+      # What makes a scheduled run a source for the rolling map: the plan it instrumented under. The map
+      # workflow ignores scheduled runs without it, so nightlies from before the flag are never drawn on.
+      - name: Upload rolling-source marker
+        if: ${{ (vars.TEST_IMPACT_ROLLING_MAP == 'shadow' || vars.TEST_IMPACT_ROLLING_MAP == 'on') && github.event_name == 'schedule' && hashFiles('rolling-source.json') != '' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with:
+          name: test-impact-rolling-source
+          path: rolling-source.json
           if-no-files-found: ignore
           retention-days: 14
           overwrite: true
@@ -1648,7 +1749,12 @@ jobs:
     # 47.9 minutes, then GitHub canceled the job before its digest step. Ordinary validation gets a
     # 60-minute fallback so a bounded artifact retry cannot consume the test's execution budget;
     # the isolated nightly run gets enough room to finish cleanly.
-    timeout-minutes: ${{ inputs.collect_coverage_everywhere && 90 || matrix.shard.timeout || 60 }}
+    #
+    # A heavy shard instrumented for the rolling map (coverage_rolling; '[]' unless TEST_IMPACT_ROLLING_MAP is
+    # on for a scheduled run) gets the same 90 minutes: instrumentation added a median 25 and at most 32
+    # minutes to a heavy shard in run 42322440147, and the longest then took 57. With an empty list the
+    # middle term is false and this is the expression it was.
+    timeout-minutes: ${{ inputs.collect_coverage_everywhere && 90 || (contains(fromJSON(needs.select-shards.outputs.coverage_rolling || '[]'), matrix.shard.name) && 90) || matrix.shard.timeout || 60 }}
     permissions:
       actions: read
       contents: read
@@ -1770,6 +1876,9 @@ jobs:
           # names, and names contain characters PowerShell would parse inside a quoted literal.
           COVERAGE_CARRIED: ${{ needs.select-shards.outputs.coverage_carried }}
           COVERAGE_RUN_WITHOUT_INSTRUMENTATION: ${{ needs.select-shards.outputs.coverage_run_without_instrumentation }}
+          # Rolling map refresh: heavy shards to instrument on tonight's scheduled run. Empty or '[]' (always,
+          # unless TEST_IMPACT_ROLLING_MAP is shadow or on) leaves Invoke-Shard.ps1's decision as it was.
+          COVERAGE_ROLLING: ${{ needs.select-shards.outputs.coverage_rolling }}
           # Dedicated enterprise CI license key (save-capable â€” lifts the persistence op cap under capability
           # gating â€” with effectively-unlimited activations for ephemeral runners). ModuleInitializer swaps
           # this online AIDN-* key for the deterministic synthetic OFFLINE license so the persistence-heavy
@@ -1960,6 +2069,10 @@ jobs:
         if: steps.shard-tests.outcome == 'success'
         continue-on-error: true
         shell: pwsh
+        env:
+          # The matrix entry this job ran, for the digest's record of its own shard definition. Via env: the
+          # filters contain quotes and pipes.
+          SHARD_DEFINITION: ${{ toJSON(matrix.shard) }}
         run: |
           $coverage = @(Get-ChildItem -Path TestResults -Filter 'coverage.opencover.xml' -Recurse -File -ErrorAction SilentlyContinue |
               Sort-Object Length -Descending)
@@ -1975,7 +2088,10 @@ jobs:
           & ./tools/TestImpact/New-CoverageDigest.ps1 `
               -CoverageXml $coverage[0].FullName `
               -Shard "${{ matrix.shard.name }}" `
-              -OutFile "impact-digest/$slug.digest.json"
+              -OutFile "impact-digest/$slug.digest.json" `
+              -MeasuredSha ([string] $env:GITHUB_SHA) -RunId ([string] $env:GITHUB_RUN_ID) `
+              -RunAttempt ([string] $env:GITHUB_RUN_ATTEMPT) -ShardDefinitionJson ([string] $env:SHARD_DEFINITION) `
+              -ManifestBlob ([string] (& git rev-parse 'HEAD:.github/test-shards.yml' 2>$null))
 
       - name: Upload test-impact digest
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
@@ -1991,7 +2107,10 @@ jobs:
           # (2026-11-07) expired the same day, and every map run since has found "no
           # coverage-everywhere marker" and published nothing. 30 days outlasts three lost weekly
           # runs; a digest is ~200 KB at most, so a retained run costs tens of MB.
-          retention-days: ${{ inputs.collect_coverage_everywhere && 30 || 7 }}
+          #
+          # A scheduled run's digests feed the rolling map when TEST_IMPACT_ROLLING_MAP is on, which uses a
+          # digest for up to 10 days (RollingMaxDigestAgeDays); 14 keeps them that long. Otherwise 7, as before.
+          retention-days: ${{ inputs.collect_coverage_everywhere && 30 || (github.event_name == 'schedule' && (vars.TEST_IMPACT_ROLLING_MAP == 'shadow' || vars.TEST_IMPACT_ROLLING_MAP == 'on') && 14) || 7 }}
 
       - name: Upload coverage + test results
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
@@ -3083,6 +3202,34 @@ jobs:
           path: TestAnalysis/
           if-no-files-found: error
           retention-days: 90
+
+      # Rolling map, after the matrix: which of the shards the rolling map would NOT have run failed here.
+      # In shadow mode they all ran, so this is the evidence for or against turning it on. Report-only,
+      # and skipped unless TEST_IMPACT_ROLLING_MAP is shadow or on.
+      - name: Compare the rolling selection with what ran
+        if: ${{ always() && (vars.TEST_IMPACT_ROLLING_MAP == 'shadow' || vars.TEST_IMPACT_ROLLING_MAP == 'on') }}
+        continue-on-error: true
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download $env:GITHUB_RUN_ID --repo $env:GITHUB_REPOSITORY --name shard-selection-report --dir rolling-report
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path rolling-report/rolling-comparison.json) -or -not (Test-Path current-jobs.json)) {
+            Write-Host 'no rolling comparison was recorded for this run'
+            exit 0
+          }
+          ./tools/TestImpact/Invoke-RollingSelection.ps1 -OutcomeComparisonFile rolling-report/rolling-comparison.json `
+              -JobsFile current-jobs.json -OutcomeFile rolling-shadow-outcome.json
+
+      - name: Upload rolling shadow outcome
+        if: ${{ always() && (vars.TEST_IMPACT_ROLLING_MAP == 'shadow' || vars.TEST_IMPACT_ROLLING_MAP == 'on') && hashFiles('rolling-shadow-outcome.json') != '' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with:
+          name: rolling-shadow-outcome
+          path: rolling-shadow-outcome.json
+          if-no-files-found: ignore
+          retention-days: 30
 
   # Certify the expensive validation stage independently from CodeQL and Sonar. A hosted runner
   # disappearing during either quality job must not force the landed tree to repeat 100+ shards.
