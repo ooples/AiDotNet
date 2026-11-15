@@ -547,11 +547,11 @@ public class One2345ModelPaperTests
     {
         public StubZero123()
             : base(
-                unet: new UNetNoisePredictor<float>(inputChannels: 4, outputChannels: 4, baseChannels: 32,
-                    channelMultipliers: new[] { 1, 2 }, numResBlocks: 1, attentionResolutions: new[] { 1 }, contextDim: 0,
+                unet: new UNetNoisePredictor<float>(inputChannels: 4, outputChannels: 4, baseChannels: 64,
+                    channelMultipliers: new[] { 1, 2, 4 }, numResBlocks: 1, attentionResolutions: new[] { 1, 2 }, contextDim: 0,
                     numHeads: 4, inputHeight: 16, seed: 42),
                 vae: new StandardVAE<float>(inputChannels: 3, latentChannels: 4, baseChannels: 32,
-                    channelMultipliers: new[] { 1, 2 }, numResBlocksPerLevel: 1, latentScaleFactor: 0.18215, seed: 42),
+                    channelMultipliers: new[] { 1, 2, 4 }, numResBlocksPerLevel: 1, latentScaleFactor: 0.18215, seed: 42),
                 seed: 42)
         {
         }
