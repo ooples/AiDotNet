@@ -24,7 +24,8 @@ internal static class TensorReductionHelper
     /// </para>
     /// <para>
     /// For double this takes the dot product of the tensor's span with itself, which is correct, vectorized and
-    /// allocates nothing (a non-contiguous view is copied first, as the engine op does). Every other element type goes
+    /// allocates nothing (a non-contiguous view is copied first, as the engine op does, and a sparse tensor is
+    /// densified, since the engine op runs the same faulty kernel over it). Every other element type goes
     /// to the engine op unchanged: it is correct for them, runs on the device for float, and accumulates Half in
     /// float32 where squaring element by element would round, or overflow, each square in Half.
     /// </para>
@@ -35,9 +36,10 @@ internal static class TensorReductionHelper
     /// </remarks>
     internal static T SumOfSquares<T>(IEngine engine, Tensor<T> tensor)
     {
+        if (engine is null) throw new ArgumentNullException(nameof(engine));
         if (tensor is null) throw new ArgumentNullException(nameof(tensor));
 
-        if (typeof(T) != typeof(double) || tensor is SparseTensor<T>)
+        if (typeof(T) != typeof(double))
         {
             return engine.TensorSumOfSquares(tensor);
         }
@@ -48,7 +50,61 @@ internal static class TensorReductionHelper
             return numOps.Zero;
         }
 
-        var values = (tensor.IsContiguous ? tensor : tensor.Contiguous()).AsSpan();
+        // A sparse double tensor goes through the same defective kernel, and its span is not readable: densify it
+        // (ToDense accumulates duplicate coordinates, so the sum is the dense tensor's).
+        var dense = tensor is SparseTensor<T> sparse ? sparse.ToDense() : tensor;
+        var values = (dense.IsContiguous ? dense : dense.Contiguous()).AsSpan();
         return numOps.Dot(values, values);
+    }
+
+    /// <summary>
+    /// The sum of the squares of every element of <paramref name="tensor"/>, returned as a double that stays finite
+    /// whenever the true sum is finite in double, even where it is past the range of <typeparamref name="T"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Use this wherever the sum feeds a standard deviation, an RMS, a norm, a mean or a ratio rather than being the
+    /// result itself. <see cref="SumOfSquares{T}"/> returns <typeparamref name="T"/>, so a Half sum past 65504 is
+    /// infinite even though the square root or the mean it feeds is representable: 40 Half returns of 200 have a sum
+    /// of squares of 1.6e6 and a standard deviation of 200, and the infinite sum made that standard deviation
+    /// infinite and every ratio over it 0.
+    /// </para>
+    /// <para>
+    /// The direct sum is used when it is finite (every double and float input in practice). When it is not, the
+    /// elements are divided by m = max |x| and by sqrt(n), so every square and every partial sum is at most 1 in
+    /// <typeparamref name="T"/>, and the scale is restored in double: sum x^2 = m^2 * n * sum (x / m / sqrt(n))^2.
+    /// An infinite element keeps the infinite sum and a NaN element the NaN one.
+    /// </para>
+    /// </remarks>
+    internal static double SumOfSquaresAsDouble<T>(IEngine engine, Tensor<T> tensor)
+    {
+        if (engine is null) throw new ArgumentNullException(nameof(engine));
+        if (tensor is null) throw new ArgumentNullException(nameof(tensor));
+
+        int length = tensor.Length;
+        if (length == 0)
+        {
+            return 0.0;
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        T direct = SumOfSquares(engine, tensor);
+        if (!numOps.IsInfinity(direct) || numOps.IsNaN(direct))
+        {
+            return numOps.ToDouble(direct);
+        }
+
+        var source = tensor is SparseTensor<T> sparse ? sparse.ToDense() : tensor;
+        T maxAbs = engine.TensorMaxValue(engine.TensorAbs(source));
+        if (numOps.IsInfinity(maxAbs) || numOps.IsNaN(maxAbs) || !numOps.GreaterThan(maxAbs, numOps.Zero))
+        {
+            // An infinite element makes the true sum infinite; NaN stays NaN; a zero maximum cannot overflow.
+            return numOps.ToDouble(direct);
+        }
+
+        var normalized = engine.TensorDivideScalar(
+            engine.TensorDivideScalar(source, maxAbs), numOps.FromDouble(Math.Sqrt(length)));
+        double scale = numOps.ToDouble(maxAbs);
+        return scale * scale * length * numOps.ToDouble(SumOfSquares(engine, normalized));
     }
 }
