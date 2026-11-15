@@ -128,8 +128,10 @@ public class DistanceCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matr
             Engine.TensorBroadcastTo(Engine.Reshape(values, new[] { 1, n }), shape)));
         var rowMeans = Engine.TensorBroadcastTo(Engine.ReduceMean(distances, new[] { 1 }, true), shape);
         var colMeans = Engine.TensorBroadcastTo(Engine.ReduceMean(distances, new[] { 0 }, true), shape);
+        // The grand mean is the mean of the row means: a single mean over all n^2 entries sums them (past Half's
+        // 65504 from about 60 samples) and divides by n^2, which is itself infinite in Half from n = 256
         return Engine.TensorAddScalar(
-            Engine.TensorSubtract(Engine.TensorSubtract(distances, rowMeans), colMeans), Engine.TensorMean(distances));
+            Engine.TensorSubtract(Engine.TensorSubtract(distances, rowMeans), colMeans), TotalMean(distances).GetFlat(0));
     }
 
     /// <summary>The mean of every element of an [n, n] tensor (the mean of its row means), as a [1] tensor.</summary>
