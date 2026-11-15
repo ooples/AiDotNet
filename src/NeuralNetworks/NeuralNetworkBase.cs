@@ -14797,7 +14797,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         Func<Tensor<T>>? closureObjective = null,
         bool verifyReplayAgreement = false,
         System.Reflection.MethodInfo? warmupKey = null,
-        Func<T>? eagerFallback = null)
+        Func<T>? eagerFallback = null,
+        bool clipCustomObjective = true)
     {
         Guard.NotNull(input);
         Guard.NotNull(target);
@@ -14860,7 +14861,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             Optimizer = resolvedOptimizer,
             ExtraParameters = parameters,
             Selection = parameters,
-            ModelGradientClip = MaxGradNormValue,
+            ModelGradientClip = clipCustomObjective ? MaxGradNormValue : 0.0,
             ExcludesParametersFromWeightDecay = () => DecayExcludedParameters().Count > 0,
             // The eager fallback regularizes as TrainWithTape does, sparing the parameters excluded from weight decay.
             RegularizeGradients = OptimizerRegularizer(resolvedOptimizer),
@@ -16990,7 +16991,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
         if (CustomObjectiveCanTryFused(optimizer))
             return TrainCustomObjectiveFused(input, input, (stepInput, _) => computeLoss(ForwardForTraining(stepInput)), optimizer,
-                computeLoss.Method, () => TrainWithCustomLossEager(input, computeLoss, optimizer));
+                computeLoss.Method, () => TrainWithCustomLossEager(input, computeLoss, optimizer), clipCustomObjective: false);
         return TrainWithCustomLossEager(input, computeLoss, optimizer);
     }
 
@@ -17223,7 +17224,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         Func<Tensor<T>, Tensor<T>, Tensor<T>> computeObjective,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer,
         System.Reflection.MethodInfo objectiveKey,
-        Func<T> eagerStep)
+        Func<T> eagerStep,
+        bool clipCustomObjective = true)
     {
         EnsureLayerRandomSeedsWired();
         Tensor<T> Objective()
@@ -17242,7 +17244,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 input, expected, _ => Objective(), static (loss, _) => loss,
                 optimizer, parameterProvider: null, sessionPerOptimizer: true,
                 verifyReplayAgreement: false, warmupKey: objectiveKey,
-                eagerFallback: eagerStep, closureObjective: Objective);
+                eagerFallback: eagerStep, closureObjective: Objective, clipCustomObjective: clipCustomObjective);
         }
         finally
         {
