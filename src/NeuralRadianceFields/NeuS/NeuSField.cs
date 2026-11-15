@@ -229,6 +229,7 @@ internal sealed class NeuSField<T> : ISignedDistanceField<T>
         if (raysPerBatch <= 0) throw new ArgumentOutOfRangeException(nameof(raysPerBatch));
         int total = width * height;
         var pixels = new double[total * 3];
+        var origin = new double[3];
         var direction = new double[3];
         using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
@@ -240,10 +241,10 @@ internal sealed class NeuSField<T> : ISignedDistanceField<T>
                 for (int k = 0; k < count; k++)
                 {
                     int p = start + k;
-                    camera.RayDirection(p % width, p / width, direction);
+                    camera.Ray(p % width, p / width, origin, direction);
                     for (int c = 0; c < 3; c++)
                     {
-                        origins[k * 3 + c] = camera.Center[c];
+                        origins[k * 3 + c] = origin[c];
                         directions[k * 3 + c] = direction[c];
                     }
                 }

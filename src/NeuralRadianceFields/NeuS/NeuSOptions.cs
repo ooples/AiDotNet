@@ -119,6 +119,30 @@ internal sealed class NeuSOptions
     /// <summary>The cosine-annealing length; 0 disables the annealing (<c>anneal_end</c> = 0 with masks, 50000 without).</summary>
     public int AnnealIterations { get; set; }
 
+    /// <summary>
+    /// The weight of NeuS's L1 color term, <c>Σ|ĉ − c|</c> per ray averaged over the color rays (NeuS: 1; Wonder3D's
+    /// <c>lambda_rgb_l1</c> = 0).
+    /// </summary>
+    public double ColorL1Weight { get; set; } = 1.0;
+
+    /// <summary>
+    /// The weight of a squared color term, <c>Σ(ĉ − c)²</c> per ray averaged over the color rays (not part of NeuS, so
+    /// 0; Wonder3D's <c>lambda_rgb_mse</c> = 0.5).
+    /// </summary>
+    public double ColorMseWeight { get; set; }
+
+    /// <summary>
+    /// Whether the color terms count only foreground rays (NeuS: true). Wonder3D composites its targets onto the
+    /// background color and supervises every ray (false).
+    /// </summary>
+    public bool ColorOnForegroundOnly { get; set; } = true;
+
+    /// <summary>
+    /// The fraction of the color rays, smallest error first, the color terms keep; the rest are dropped as outliers
+    /// (1 keeps all, as NeuS; Wonder3D's <c>rgb_p_ratio</c> = 0.8).
+    /// </summary>
+    public double ColorKeepRatio { get; set; } = 1.0;
+
     /// <summary>The Eikonal loss weight (<c>igr_weight</c> = 0.1).</summary>
     public double EikonalWeight { get; set; } = 0.1;
 
@@ -126,10 +150,57 @@ internal sealed class NeuSOptions
     public double MaskWeight { get; set; } = 0.1;
 
     /// <summary>
+    /// The fraction of rays, smallest cross-entropy first, the mask term keeps (1 keeps all, as NeuS; Wonder3D's
+    /// <c>mask_p_ratio</c> = 0.9).
+    /// </summary>
+    public double MaskKeepRatio { get; set; } = 1.0;
+
+    /// <summary>
     /// The weight of a normal-map term <c>1 − cos(n̂_rendered, n_target)</c> over foreground rays, for views that carry
     /// normals (Wonder3D's geometry fusion; not part of NeuS, so 0 by default).
     /// </summary>
     public double NormalWeight { get; set; }
+
+    /// <summary>
+    /// The fraction of the normal rays, smallest error first, the normal term keeps; the rest are dropped as outliers
+    /// (1 keeps all; Wonder3D's <c>normal_p_ratio</c> = 0.8).
+    /// </summary>
+    public double NormalKeepRatio { get; set; } = 1.0;
+
+    /// <summary>
+    /// Wonder3D's geometry-aware normal loss (<c>geo_aware</c>): each ray's error is weighted by
+    /// <c>exp(|cos θ|) / Σ exp(|cos θ|)</c>, θ the angle between the ray and its target normal, and the kept errors
+    /// are summed rather than averaged. Off by default.
+    /// </summary>
+    public bool GeometryAwareNormals { get; set; }
+
+    /// <summary>
+    /// The largest <c>cos θ</c> between a ray and its target normal for the ray to supervise normals, or null for no
+    /// limit. Wonder3D uses −0.1: a surface seen at a grazing angle or from behind gives an unreliable normal, so
+    /// those rays are dropped and their <c>cos θ</c> is zeroed in the geometry-aware weights.
+    /// </summary>
+    public double? NormalVisibleCosine { get; set; }
+
+    /// <summary>
+    /// The weight of Wonder3D's sparsity term <c>mean(exp(−SparsityScale · |f(p)|))</c> over random points of the
+    /// unit cube, which pushes empty space away from the surface (<c>lambda_sparsity</c>; 0 in NeuS, 0.5 in Wonder3D).
+    /// </summary>
+    public double SparsityWeight { get; set; }
+
+    /// <summary>The sparsity term's sharpness (<c>sparsity_scale</c> = 100).</summary>
+    public double SparsityScale { get; set; } = 100.0;
+
+    /// <summary>
+    /// The weight of Wonder3D's 3D normal-smoothness term <c>mean|∇f(p) − ∇f(p + ε)|</c>, ε ~ N(0, σ²) per coordinate,
+    /// over the same random points (<c>lambda_3d_normal_smooth</c>; 0 in NeuS, 1 in Wonder3D).
+    /// </summary>
+    public double NormalSmoothWeight { get; set; }
+
+    /// <summary>The perturbation σ of the normal-smoothness term (0.01).</summary>
+    public double NormalSmoothNoise { get; set; } = 0.01;
+
+    /// <summary>The random points per iteration of the sparsity and smoothness terms (Wonder3D: 2048).</summary>
+    public int RegularizationPoints { get; set; } = 2048;
 
     /// <summary>Points per query when sampling a dense grid (NeuS's <c>extract_fields</c> uses 64³-point blocks).</summary>
     public int GridChunkSize { get; set; } = 64 * 64 * 64;
@@ -165,6 +236,18 @@ internal sealed class NeuSOptions
         if (EikonalWeight < 0) throw new ArgumentOutOfRangeException(nameof(EikonalWeight));
         if (MaskWeight < 0) throw new ArgumentOutOfRangeException(nameof(MaskWeight));
         if (NormalWeight < 0) throw new ArgumentOutOfRangeException(nameof(NormalWeight));
+        if (ColorL1Weight < 0) throw new ArgumentOutOfRangeException(nameof(ColorL1Weight));
+        if (ColorMseWeight < 0) throw new ArgumentOutOfRangeException(nameof(ColorMseWeight));
+        if (!(ColorKeepRatio > 0 && ColorKeepRatio <= 1)) throw new ArgumentOutOfRangeException(nameof(ColorKeepRatio));
+        if (!(MaskKeepRatio > 0 && MaskKeepRatio <= 1)) throw new ArgumentOutOfRangeException(nameof(MaskKeepRatio));
+        if (!(NormalKeepRatio > 0 && NormalKeepRatio <= 1)) throw new ArgumentOutOfRangeException(nameof(NormalKeepRatio));
+        if (NormalVisibleCosine is double limit && (double.IsNaN(limit) || limit < -1 || limit > 1))
+            throw new ArgumentOutOfRangeException(nameof(NormalVisibleCosine));
+        if (SparsityWeight < 0) throw new ArgumentOutOfRangeException(nameof(SparsityWeight));
+        if (!(SparsityScale > 0)) throw new ArgumentOutOfRangeException(nameof(SparsityScale));
+        if (NormalSmoothWeight < 0) throw new ArgumentOutOfRangeException(nameof(NormalSmoothWeight));
+        if (!(NormalSmoothNoise > 0)) throw new ArgumentOutOfRangeException(nameof(NormalSmoothNoise));
+        if (RegularizationPoints <= 0) throw new ArgumentOutOfRangeException(nameof(RegularizationPoints));
         if (GridChunkSize <= 0) throw new ArgumentOutOfRangeException(nameof(GridChunkSize));
     }
 
