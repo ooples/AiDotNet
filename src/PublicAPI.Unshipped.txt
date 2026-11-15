@@ -23008,3 +23008,94 @@ AiDotNet.NeuralRadianceFields.Models.GaussianSplatting<T>.ToGaussianCloud() -> A
 AiDotNet.Diffusion.ThreeDDiffusionModelBase<T>.SurfaceReconstruction.get -> AiDotNet.Diffusion.ThreeD.Meshing.SurfaceReconstructionOptions!
 AiDotNet.Diffusion.ThreeDDiffusionModelBase<T>.SurfaceReconstruction.set -> void
 *REMOVED*virtual AiDotNet.Diffusion.ThreeDDiffusionModelBase<T>.CreateSimpleMeshFromPoints(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! pointCloud) -> AiDotNet.Interfaces.Mesh3D<T>!
+*REMOVED*AiDotNet.Diffusion.ThreeD.LGMModel<T>.LGMModel(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>? architecture = null, AiDotNet.Models.Options.DiffusionModelOptions<T>? options = null, AiDotNet.Interfaces.INoiseScheduler<T>? scheduler = null, AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<T>? unet = null, AiDotNet.Diffusion.VAE.StandardVAE<T>? vae = null, AiDotNet.Interfaces.IConditioningModule<T>? conditioner = null, int defaultPointCount = 50000, int? seed = null) -> void
+*REMOVED*override AiDotNet.Diffusion.ThreeD.LGMModel<T>.GenerateMesh(string! prompt, string? negativePrompt = null, int resolution = 256, int numInferenceSteps = 1, double guidanceScale = 1, int? seed = null) -> AiDotNet.Interfaces.Mesh3D<T>!
+*REMOVED*override AiDotNet.Diffusion.ThreeD.LGMModel<T>.GeneratePointCloud(string! prompt, string? negativePrompt = null, int? numPoints = null, int numInferenceSteps = 1, double guidanceScale = 1, int? seed = null) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Diffusion.ThreeD.LGMConfig
+AiDotNet.Diffusion.ThreeD.LGMConfig.LGMConfig() -> void
+static AiDotNet.Diffusion.ThreeD.LGMConfig.Default.get -> AiDotNet.Diffusion.ThreeD.LGMConfig!
+AiDotNet.Diffusion.ThreeD.LGMConfig.NumInputViews.get -> int
+AiDotNet.Diffusion.ThreeD.LGMConfig.NumInputViews.set -> void
+AiDotNet.Diffusion.ThreeD.LGMConfig.InputSize.get -> int
+AiDotNet.Diffusion.ThreeD.LGMConfig.InputSize.set -> void
+AiDotNet.Diffusion.ThreeD.LGMConfig.DownChannels.get -> int[]!
+AiDotNet.Diffusion.ThreeD.LGMConfig.DownChannels.set -> void
+AiDotNet.Diffusion.ThreeD.LGMConfig.DownAttention.get -> bool[]!
+AiDotNet.Diffusion.ThreeD.LGMConfig.DownAttention.set -> void
+AiDotNet.Diffusion.ThreeD.LGMConfig.MidAttention.get -> bool
+AiDotNet.Diffusion.ThreeD.LGMConfig.MidAttention.set -> void
+AiDotNet.Diffusion.ThreeD.LGMConfig.UpChannels.get -> int[]!
+AiDotNet.Diffusion.ThreeD.LGMConfig.UpChannels.set -> void
+AiDotNet.Diffusion.ThreeD.LGMConfig.UpAttention.get -> bool[]!
+AiDotNet.Diffusion.ThreeD.LGMConfig.UpAttention.set -> void
+AiDotNet.Diffusion.ThreeD.LGMConfig.LayersPerBlock.get -> int
+AiDotNet.Diffusion.ThreeD.LGMConfig.LayersPerBlock.set -> void
+AiDotNet.Diffusion.ThreeD.LGMConfig.AttentionHeads.get -> int
+AiDotNet.Diffusion.ThreeD.LGMConfig.AttentionHeads.set -> void
+AiDotNet.Diffusion.ThreeD.LGMConfig.NormGroups.get -> int
+AiDotNet.Diffusion.ThreeD.LGMConfig.NormGroups.set -> void
+AiDotNet.Diffusion.ThreeD.LGMConfig.NormEpsilon.get -> double
+AiDotNet.Diffusion.ThreeD.LGMConfig.NormEpsilon.set -> void
+AiDotNet.Diffusion.ThreeD.LGMConfig.SkipScale.get -> double
+AiDotNet.Diffusion.ThreeD.LGMConfig.SkipScale.set -> void
+AiDotNet.Diffusion.ThreeD.LGMConfig.FieldOfViewY.get -> double
+AiDotNet.Diffusion.ThreeD.LGMConfig.FieldOfViewY.set -> void
+AiDotNet.Diffusion.ThreeD.LGMConfig.CameraRadius.get -> double
+AiDotNet.Diffusion.ThreeD.LGMConfig.CameraRadius.set -> void
+AiDotNet.Diffusion.ThreeD.LGMConfig.InputElevation.get -> double
+AiDotNet.Diffusion.ThreeD.LGMConfig.InputElevation.set -> void
+AiDotNet.Diffusion.ThreeD.LGMConfig.ImageMean.get -> double[]!
+AiDotNet.Diffusion.ThreeD.LGMConfig.ImageMean.set -> void
+AiDotNet.Diffusion.ThreeD.LGMConfig.ImageStd.get -> double[]!
+AiDotNet.Diffusion.ThreeD.LGMConfig.ImageStd.set -> void
+AiDotNet.Diffusion.ThreeD.LGMConfig.PositionBound.get -> double
+AiDotNet.Diffusion.ThreeD.LGMConfig.PositionBound.set -> void
+AiDotNet.Diffusion.ThreeD.LGMConfig.ScaleFactor.get -> double
+AiDotNet.Diffusion.ThreeD.LGMConfig.ScaleFactor.set -> void
+AiDotNet.Diffusion.ThreeD.LGMConfig.OpacityThreshold.get -> double
+AiDotNet.Diffusion.ThreeD.LGMConfig.OpacityThreshold.set -> void
+AiDotNet.Diffusion.ThreeD.LGMConfig.MeshExtraction.get -> AiDotNet.Diffusion.ThreeD.Meshing.GaussianMeshExtractionOptions!
+AiDotNet.Diffusion.ThreeD.LGMConfig.MeshExtraction.set -> void
+AiDotNet.Diffusion.ThreeD.LGMAsymmetricUNet<T>
+AiDotNet.Diffusion.ThreeD.LGMAsymmetricUNet<T>.LGMAsymmetricUNet(AiDotNet.Diffusion.ThreeD.LGMConfig! config, int inputChannels = 9, int outputChannels = 14, int? seed = null) -> void
+AiDotNet.Diffusion.ThreeD.LGMAsymmetricUNet<T>.Config.get -> AiDotNet.Diffusion.ThreeD.LGMConfig!
+AiDotNet.Diffusion.ThreeD.LGMAsymmetricUNet<T>.InputChannels.get -> int
+AiDotNet.Diffusion.ThreeD.LGMAsymmetricUNet<T>.OutputChannels.get -> int
+AiDotNet.Diffusion.ThreeD.LGMAsymmetricUNet<T>.OutputSize.get -> int
+AiDotNet.Diffusion.ThreeD.LGMAsymmetricUNet<T>.Layers.get -> System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>!
+AiDotNet.Diffusion.ThreeD.LGMAsymmetricUNet<T>.ParameterCount.get -> long
+AiDotNet.Diffusion.ThreeD.LGMAsymmetricUNet<T>.GetParameters() -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.Diffusion.ThreeD.LGMAsymmetricUNet<T>.SetParameters(AiDotNet.Tensors.LinearAlgebra.Vector<T>! parameters) -> void
+AiDotNet.Diffusion.ThreeD.LGMAsymmetricUNet<T>.SetTrainingMode(bool isTraining) -> void
+AiDotNet.Diffusion.ThreeD.LGMAsymmetricUNet<T>.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Diffusion.ThreeD.LGMGaussians<T>
+AiDotNet.Diffusion.ThreeD.LGMGaussians<T>.LGMGaussians(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! positions, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! opacities, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! scales, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rotations, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! colors) -> void
+AiDotNet.Diffusion.ThreeD.LGMGaussians<T>.Count.get -> int
+AiDotNet.Diffusion.ThreeD.LGMGaussians<T>.Positions.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Diffusion.ThreeD.LGMGaussians<T>.Opacities.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Diffusion.ThreeD.LGMGaussians<T>.Scales.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Diffusion.ThreeD.LGMGaussians<T>.Rotations.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Diffusion.ThreeD.LGMGaussians<T>.Colors.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Diffusion.ThreeD.LGMGaussians<T>.ToTensor() -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+const AiDotNet.Diffusion.ThreeD.LGMModel<T>.InputChannelsPerView = 9 -> int
+const AiDotNet.Diffusion.ThreeD.LGMModel<T>.GaussianChannels = 14 -> int
+AiDotNet.Diffusion.ThreeD.LGMModel<T>.LGMModel(AiDotNet.Diffusion.ThreeD.LGMConfig? config = null, AiDotNet.Diffusion.ThreeD.MVDreamModel<T>? multiViewModel = null, AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>? architecture = null, AiDotNet.Models.Options.DiffusionModelOptions<T>? options = null, AiDotNet.Interfaces.INoiseScheduler<T>? scheduler = null, int? seed = null) -> void
+AiDotNet.Diffusion.ThreeD.LGMModel<T>.Config.get -> AiDotNet.Diffusion.ThreeD.LGMConfig!
+AiDotNet.Diffusion.ThreeD.LGMModel<T>.MultiViewModel.get -> AiDotNet.Diffusion.ThreeD.MVDreamModel<T>!
+AiDotNet.Diffusion.ThreeD.LGMModel<T>.GaussianUNet.get -> AiDotNet.Diffusion.ThreeD.LGMAsymmetricUNet<T>!
+AiDotNet.Diffusion.ThreeD.LGMModel<T>.GaussianProjection.get -> AiDotNet.NeuralNetworks.Layers.ConvolutionalLayer<T>!
+AiDotNet.Diffusion.ThreeD.LGMModel<T>.SplatSize.get -> int
+AiDotNet.Diffusion.ThreeD.LGMModel<T>.ComputeRayEmbeddings(double? elevation = null) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Diffusion.ThreeD.LGMModel<T>.BuildUNetInput(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! views, double? elevation = null) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Diffusion.ThreeD.LGMModel<T>.ReconstructGaussians(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! views, double? elevation = null) -> AiDotNet.Diffusion.ThreeD.LGMGaussians<T>!
+AiDotNet.Diffusion.ThreeD.LGMModel<T>.ActivateGaussians(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! splatterMaps) -> AiDotNet.Diffusion.ThreeD.LGMGaussians<T>!
+AiDotNet.Diffusion.ThreeD.LGMModel<T>.ImageToGaussians(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputImage, int numInferenceSteps = 30, double guidanceScale = 5, int? seed = null) -> AiDotNet.Diffusion.ThreeD.LGMGaussians<T>!
+AiDotNet.Diffusion.ThreeD.LGMModel<T>.TextToGaussians(string! prompt, string? negativePrompt = null, int numInferenceSteps = 30, double guidanceScale = 7.5, int? seed = null) -> AiDotNet.Diffusion.ThreeD.LGMGaussians<T>!
+AiDotNet.Diffusion.ThreeD.LGMModel<T>.ToGaussianSplatting(AiDotNet.Diffusion.ThreeD.LGMGaussians<T>! gaussians, AiDotNet.Models.Options.GaussianSplattingOptions? options = null) -> AiDotNet.NeuralRadianceFields.Models.GaussianSplatting<T>!
+AiDotNet.Diffusion.ThreeD.LGMModel<T>.GaussiansToPointCloud(AiDotNet.Diffusion.ThreeD.LGMGaussians<T>! gaussians, int? maxPoints = null) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Diffusion.ThreeD.LGMModel<T>.GaussiansToMesh(AiDotNet.Diffusion.ThreeD.LGMGaussians<T>! gaussians, AiDotNet.Diffusion.ThreeD.Meshing.GaussianMeshExtractionOptions? options = null) -> AiDotNet.Interfaces.Mesh3D<T>!
+AiDotNet.Diffusion.ThreeD.LGMModel<T>.ToGaussianCloud(AiDotNet.Diffusion.ThreeD.LGMGaussians<T>! gaussians) -> AiDotNet.Diffusion.ThreeD.Meshing.GaussianCloud<T>!
+override AiDotNet.Diffusion.ThreeD.LGMModel<T>.ImageTo3D(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputImage, int numViews = 4, int numInferenceSteps = 30, double guidanceScale = 5, int? seed = null) -> AiDotNet.Interfaces.Mesh3D<T>!
+override AiDotNet.Diffusion.ThreeD.LGMModel<T>.GenerateMesh(string! prompt, string? negativePrompt = null, int resolution = 128, int numInferenceSteps = 30, double guidanceScale = 7.5, int? seed = null) -> AiDotNet.Interfaces.Mesh3D<T>!
+override AiDotNet.Diffusion.ThreeD.LGMModel<T>.GeneratePointCloud(string! prompt, string? negativePrompt = null, int? numPoints = null, int numInferenceSteps = 30, double guidanceScale = 7.5, int? seed = null) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+static AiDotNet.NeuralRadianceFields.Models.GaussianSplatting<T>.FromGaussians(AiDotNet.Models.Options.GaussianSplattingOptions! options, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! positions, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! scales, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rotations, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! opacities, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! colors) -> AiDotNet.NeuralRadianceFields.Models.GaussianSplatting<T>!

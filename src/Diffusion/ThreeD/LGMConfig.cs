@@ -1,3 +1,5 @@
+using AiDotNet.Diffusion.ThreeD.Meshing;
+
 namespace AiDotNet.Diffusion.ThreeD;
 
 /// <summary>
@@ -87,14 +89,11 @@ public class LGMConfig
     /// </summary>
     public double OpacityThreshold { get; set; } = 0.005;
 
-    /// <summary>Denoising steps of the multi-view diffusion stage (30, as the official demo runs it).</summary>
-    public int MultiViewInferenceSteps { get; set; } = 30;
-
-    /// <summary>Guidance scale of the image-conditioned multi-view stage (5.0 in the official demo).</summary>
-    public double ImageGuidanceScale { get; set; } = 5.0;
-
-    /// <summary>Guidance scale of the text-conditioned multi-view stage (7.5 in the official demo).</summary>
-    public double TextGuidanceScale { get; set; } = 7.5;
+    /// <summary>
+    /// Settings of the Gaussian-to-mesh extraction (density grid and marching cubes, DreamGaussian's defaults: a 128^3
+    /// grid in 16^3 blocks, density level 1).
+    /// </summary>
+    public GaussianMeshExtractionOptions MeshExtraction { get; set; } = new GaussianMeshExtractionOptions();
 
     /// <summary>Gets a new configuration holding the paper defaults.</summary>
     public static LGMConfig Default => new LGMConfig();

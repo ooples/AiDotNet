@@ -1,5 +1,6 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
+using AiDotNet.Diffusion.ThreeD.Meshing;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -42,10 +43,12 @@ namespace AiDotNet.Diffusion.ThreeD;
 /// outputs are well-formed Gaussians of the right shapes and ranges, but not the object.
 /// </para>
 /// <para>
-/// <b>Meshes.</b> LGM's mesh is extracted from the Gaussians (a density grid and marching cubes, followed in the paper
-/// by an optional texture refinement). That extractor is a separate component, so <see cref="GenerateMesh"/> is not
-/// available yet; use the Gaussians, <see cref="GeneratePointCloud"/> or <see cref="ImageTo3D"/>, whose result holds
-/// the Gaussian centres and colours.
+/// <b>Meshes.</b> <see cref="GaussiansToMesh"/> (and through it <see cref="ImageTo3D"/> and
+/// <see cref="GenerateMesh"/>) extracts the surface from the Gaussians' density field with
+/// <see cref="GaussianMeshExtractor"/>: the density <c>sum_i alpha_i exp(-1/2 d^T Sigma_i^-1 d)</c> sampled on a grid
+/// and its level set taken by marching cubes, as DreamGaussian does. The official LGM converter refines that further
+/// (it distils the Gaussians into a NeRF and then fits and textures the mesh); those refinement stages are not part of
+/// this model.
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> LGM turns one picture (or a sentence) into a 3D object in a single pass. First a diffusion
@@ -80,23 +83,21 @@ public partial class LGMModel<T> : ThreeDDiffusionModelBase<T>
     public const int GaussianChannels = 14;
 
     private readonly LGMConfig _config;
+    // The multi-view model is a collaborator with its own parameter surface and checkpoint. Its denoiser and VAE reach
+    // this model's surface through the NoisePredictor and VAE slots; registering the whole model as well would count
+    // them twice.
+    [ExternalState]
     private readonly MVDreamModel<T> _multiViewModel;
     private readonly LGMAsymmetricUNet<T> _unet;
     private readonly ConvolutionalLayer<T> _gaussianProjection;
 
     /// <inheritdoc />
-    /// <remarks>Registration order is serialization order: the multi-view model, the U-Net layers in forward order,
-    /// then the 1x1 Gaussian projection.</remarks>
+    /// <remarks>After the base's NoisePredictor and VAE slots (the multi-view model's denoiser and VAE) come the U-Net,
+    /// its layers in forward order, then the 1x1 Gaussian projection.</remarks>
     protected override void RegisterComponents()
     {
-        RegisterParameterComponent("multiview/mvdream", _multiViewModel);
-        for (int i = 0; i < _unet.Layers.Count; i++)
-        {
-            RegisterParameterComponent(
-                $"unet/{AiDotNet.Models.Parameters.ParameterStableId.IndexSegment(i)}", _unet.Layers[i]);
-        }
-
-        RegisterParameterComponent("gaussian_projection", _gaussianProjection);
+        RegisterParameterComponent(_unet);
+        RegisterParameterComponent(_gaussianProjection);
     }
 
     /// <summary>
@@ -149,7 +150,9 @@ public partial class LGMModel<T> : ThreeDDiffusionModelBase<T>
     /// <summary>The reconstructor configuration.</summary>
     public LGMConfig Config => _config;
 
-    /// <summary>The multi-view diffusion model that generates the four input views.</summary>
+    /// <summary>The multi-view diffusion model that generates the four input views. Its own parameter surface
+    /// (its GetParameters) also holds its multi-view attention and camera embedding.</summary>
+    [ExternalState]
     public MVDreamModel<T> MultiViewModel => _multiViewModel;
 
     /// <summary>The asymmetric U-Net that predicts the splatter maps.</summary>
@@ -177,8 +180,7 @@ public partial class LGMModel<T> : ThreeDDiffusionModelBase<T>
     public override bool SupportsPointCloud => true;
 
     /// <inheritdoc />
-    /// <remarks>False until the Gaussian-to-mesh extractor is wired in; see <see cref="GenerateMesh"/>.</remarks>
-    public override bool SupportsMesh => false;
+    public override bool SupportsMesh => true;
 
     /// <inheritdoc />
     public override bool SupportsTexture => false;
@@ -423,6 +425,30 @@ public partial class LGMModel<T> : ThreeDDiffusionModelBase<T>
         return Engine.Reshape(points, new[] { 1, positions.Shape[0], 6 });
     }
 
+    /// <summary>
+    /// The mesh of the Gaussians' density level set (<see cref="GaussianMeshExtractor.ExtractMesh{T}"/>), in the
+    /// Gaussians' coordinates, wound outward with per-vertex normals.
+    /// </summary>
+    /// <param name="gaussians">The Gaussians.</param>
+    /// <param name="options">Grid and threshold settings; null for <see cref="LGMConfig.MeshExtraction"/>.</param>
+    public Mesh3D<T> GaussiansToMesh(LGMGaussians<T> gaussians, GaussianMeshExtractionOptions? options = null)
+    {
+        return GaussianMeshExtractor.ExtractMesh(ToGaussianCloud(gaussians), options ?? _config.MeshExtraction);
+    }
+
+    /// <summary>
+    /// The Gaussians as a <see cref="GaussianCloud{T}"/>, the meshing components' input. Scales are floored at 1e-6
+    /// (a softplus can underflow to zero) and opacities flattened to [N].
+    /// </summary>
+    /// <param name="gaussians">The Gaussians.</param>
+    public GaussianCloud<T> ToGaussianCloud(LGMGaussians<T> gaussians)
+    {
+        if (gaussians is null) throw new ArgumentNullException(nameof(gaussians));
+        var scales = Engine.TensorClampMin(gaussians.Scales, NumOps.FromDouble(1e-6));
+        var opacities = Engine.Reshape(gaussians.Opacities, new[] { gaussians.Count });
+        return new GaussianCloud<T>(gaussians.Positions, scales, gaussians.Rotations, opacities);
+    }
+
     #endregion
 
     #region I3DDiffusionModel
@@ -444,9 +470,9 @@ public partial class LGMModel<T> : ThreeDDiffusionModelBase<T>
 
     /// <inheritdoc />
     /// <remarks>
-    /// Image -> four MVDream views -> Gaussians. The result's <see cref="Mesh3D{T}.Vertices"/> are the visible
-    /// Gaussian centres and <see cref="Mesh3D{T}.Colors"/> their colours; it has no faces until the Gaussian-to-mesh
-    /// extractor is wired in. <paramref name="numViews"/> must equal <see cref="LGMConfig.NumInputViews"/>.
+    /// Image -> four MVDream views -> Gaussians -> the mesh of their density level set (<see cref="GaussiansToMesh"/>,
+    /// with <see cref="LGMConfig.MeshExtraction"/>). <paramref name="numViews"/> must equal
+    /// <see cref="LGMConfig.NumInputViews"/>.
     /// </remarks>
     public override Mesh3D<T> ImageTo3D(
         Tensor<T> inputImage,
@@ -459,22 +485,32 @@ public partial class LGMModel<T> : ThreeDDiffusionModelBase<T>
             throw new ArgumentOutOfRangeException(nameof(numViews),
                 $"LGM reconstructs from exactly {_config.NumInputViews} views.");
         var gaussians = ImageToGaussians(inputImage, numInferenceSteps, guidanceScale, seed);
-        var (positions, colors) = VisibleGaussians(gaussians, null);
-        return new Mesh3D<T>(positions, new int[0, 3]) { Colors = colors };
+        return GaussiansToMesh(gaussians);
     }
 
     /// <inheritdoc />
-    /// <exception cref="NotSupportedException">Always, for now: LGM's mesh comes from its Gaussians through a
-    /// Gaussian-to-density-to-mesh extractor that is not wired into this model yet.</exception>
+    /// <remarks>
+    /// Text -> four MVDream views -> Gaussians -> the mesh of their density level set, sampled on a
+    /// <paramref name="resolution"/>^3 grid (128 in DreamGaussian; it must be a multiple of
+    /// <see cref="GaussianMeshExtractionOptions.BlockCount"/>). The other extraction settings come from
+    /// <see cref="LGMConfig.MeshExtraction"/>. Requires a text conditioner on the multi-view model.
+    /// </remarks>
     public override Mesh3D<T> GenerateMesh(
         string prompt, string? negativePrompt = null,
-        int resolution = 256, int numInferenceSteps = 30,
+        int resolution = 128, int numInferenceSteps = 30,
         double guidanceScale = 7.5, int? seed = null)
     {
-        throw new NotSupportedException(
-            "LGM predicts 3D Gaussians; its mesh is extracted from them, and that Gaussian-to-mesh step is not wired "
-            + "into LGMModel yet. Use TextToGaussians/ImageToGaussians (with ToGaussianSplatting to render), or "
-            + "GeneratePointCloud/ImageTo3D for the Gaussian centres with their colours.");
+        var gaussians = TextToGaussians(prompt, negativePrompt, numInferenceSteps, guidanceScale, seed);
+        var settings = _config.MeshExtraction ?? new GaussianMeshExtractionOptions();
+        return GaussiansToMesh(gaussians, new GaussianMeshExtractionOptions
+        {
+            Resolution = resolution,
+            BlockCount = settings.BlockCount,
+            RelaxRatio = settings.RelaxRatio,
+            DensityThreshold = settings.DensityThreshold,
+            OpacityCullThreshold = settings.OpacityCullThreshold,
+            NormalizedHalfExtent = settings.NormalizedHalfExtent
+        });
     }
 
     #endregion
@@ -517,6 +553,9 @@ public partial class LGMModel<T> : ThreeDDiffusionModelBase<T>
             visible.RemoveRange(maxPoints.Value, visible.Count - maxPoints.Value);
             visible.Sort();
         }
+
+        if (visible.Count == 0)
+            return (new Tensor<T>(new[] { 0, 3 }), new Tensor<T>(new[] { 0, 3 }));
 
         var indices = new Tensor<int>(visible.ToArray(), new[] { visible.Count });
         return (Engine.TensorIndexSelect(gaussians.Positions, indices, 0),
