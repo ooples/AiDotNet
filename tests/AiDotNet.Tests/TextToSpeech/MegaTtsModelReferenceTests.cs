@@ -192,4 +192,32 @@ public class MegaTtsModelReferenceTests
             }
         }
     }
+
+    // A 1 kHz tone at full scale, then 80 dB quieter. The quiet frames' bins are 1e-4 of the spectrogram's peak
+    // component, so scaling every component by that peak before squaring gave squares below Half's smallest
+    // subnormal: their magnitudes were 0 and their log-mel the 1e-6 floor (-6), against about -4.2 in double. Each
+    // bin's magnitude is now m * sqrt(1 + (n / m)^2) of its own components, and Half follows double.
+    [Fact(Timeout = 120000)]
+    public async Task LogMel_InHalf_KeepsAQuietTone()
+    {
+        await Task.Yield();
+        const int n = 4096;
+        var samples = new double[n];
+        for (int i = 0; i < n; i++) samples[i] = (i < n / 2 ? 1.0 : 1e-4) * Math.Sin(2 * Math.PI * 1000 * i / 16000.0);
+        var audio = new Tensor<double>(new[] { n }, new Vector<double>(samples));
+        var full = new MegaTtsMel<double>(16000, 256, 64, 256, 20, 0, 8000).LogMel(audio).Contiguous();
+        var half = new MegaTtsMel<Half>(16000, 256, 64, 256, 20, 0, 8000).LogMel(audio.Cast<Half>()).Contiguous();
+        Assert.Equal(new[] { 65, 20 }, full.Shape.ToArray());
+        Assert.Equal(new[] { 65, 20 }, half.Shape.ToArray());
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        int band = 0;
+        for (int m = 1; m < 20; m++) if (full[48, m] > full[48, band]) band = m;
+        // Frames 34 to 62 see only the quiet tone; its band is well above the floor in double.
+        Assert.True(full[48, band] > -5.5, $"fixture: quiet band {full[48, band]}");
+        for (int f = 36; f <= 60; f++)
+        {
+            double h = ops.ToDouble(half[f, band]);
+            Assert.True(Math.Abs(h - full[f, band]) <= 0.02, $"frame {f}, band {band}: Half {h} vs double {full[f, band]}");
+        }
+    }
 }

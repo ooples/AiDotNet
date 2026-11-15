@@ -43,8 +43,8 @@ internal static class EngineStft<T>
 
     /// <summary>
     /// The centred STFT magnitude <c>[frames, fftSize / 2 + 1]</c> of a signal, padded by fftSize / 2 with
-    /// <paramref name="padMode"/> on each side. The components are divided by the largest one before they are
-    /// squared, and the magnitude multiplied back, so a 16-bit T cannot overflow.
+    /// <paramref name="padMode"/> on each side. The magnitude of each bin is taken by <see cref="Hypot"/>, so a 16-bit
+    /// T neither overflows on a loud bin nor underflows on a quiet one.
     /// </summary>
     public static Tensor<T> Magnitude(Tensor<T> audio, int fftSize, int hop, Tensor<T> window, EnginePadMode padMode)
     {
@@ -74,10 +74,25 @@ internal static class EngineStft<T>
             re = engine.TensorMatMul(framed, cos);
             im = engine.TensorMatMul(framed, sin);
         }
-        T peak = engine.TensorMaxValue(engine.TensorMax(engine.TensorAbs(re), engine.TensorAbs(im)));
-        T scale = Ops.GreaterThan(peak, Ops.Zero) ? peak : Ops.One;
-        var squares = engine.TensorAdd(engine.TensorSquare(engine.TensorDivideScalar(re, scale)),
-            engine.TensorSquare(engine.TensorDivideScalar(im, scale)));
-        return engine.TensorMultiplyScalar(engine.TensorSqrt(squares), scale);
+        return Hypot(engine, re, im);
+    }
+
+    /// <summary>
+    /// sqrt(re² + im²) per element as m · sqrt(1 + (n / m)²), m = max(|re|, |im|) and n = min(|re|, |im|), 0 where
+    /// m is 0. The ratio is at most 1, so neither a component's square can overflow a 16-bit T (past 255) nor a quiet
+    /// bin's square underflow to 0: a scale shared by the whole spectrogram (its peak) squares every component more
+    /// than ~1.7e-4 below the peak to 0 in Half, which reads a quiet frame as silence.
+    /// </summary>
+    internal static Tensor<T> Hypot(IEngine engine, Tensor<T> re, Tensor<T> im)
+    {
+        var a = engine.TensorAbs(re);
+        var b = engine.TensorAbs(im);
+        var larger = engine.TensorMax(a, b);
+        var smaller = engine.TensorMin(a, b);
+        var zero = engine.TensorEquals(larger, Ops.Zero);
+        // 0 / 0 at a zero bin is replaced before it is used; the ratio of every other bin lies in [0, 1].
+        var ratio = engine.TensorWhere(zero, new Tensor<T>(larger._shape), engine.TensorDivide(smaller, larger));
+        var factor = engine.TensorSqrt(engine.TensorAddScalar(engine.TensorSquare(ratio), Ops.One));
+        return engine.TensorMultiply(larger, factor);
     }
 }

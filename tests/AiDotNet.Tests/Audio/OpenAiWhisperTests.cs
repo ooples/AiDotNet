@@ -246,4 +246,33 @@ public class OpenAiWhisperTests
         Assert.Equal(new[] { 80, 20 }, mel.Shape.ToArray());
         Assert.All(mel.Contiguous().ToArray(), v => Assert.True(!double.IsNaN(v) && !double.IsInfinity(v)));
     }
+
+    // whisper keeps every mel power down to eight decades below the loudest (the max - 8 clip). This recording's
+    // second half is the same 1 kHz tone 68 dB quieter, 6.8 decades of power below the first, so whisper reads it
+    // above the clip. Scaling each STFT component by the peak (to at most 1) put that frame's weighted power under
+    // Half's smallest subnormal, and Half read the quiet frames as the clip floor, 0.3 below double; with the
+    // components scaled to at most 128 Half follows double.
+    [Fact(Timeout = 120000)]
+    public async Task LogMel_InHalf_KeepsAQuietToneWhisperKeeps()
+    {
+        await Task.Yield();
+        var samples = new double[16000];
+        for (int i = 0; i < samples.Length; i++)
+            samples[i] = (i < 8000 ? 0.5 : 2e-4) * Math.Sin(2 * Math.PI * 1000 * i / 16000.0);
+        var full = OpenAiWhisperTranscriber<double>.LogMelSpectrogram(samples, 80).Contiguous();
+        var half = OpenAiWhisperTranscriber<Half>.LogMelSpectrogram(samples, 80).Contiguous();
+        Assert.Equal(new[] { 80, 100 }, full.Shape.ToArray());
+        Assert.Equal(new[] { 80, 100 }, half.Shape.ToArray());
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        int band = 0;
+        for (int m = 1; m < 80; m++) if (full[m, 75] > full[band, 75]) band = m;
+        double clip = full.ToArray().Min();
+        // Frames 52 to 98 see only the quiet tone; the tone's band sits well above whisper's clip there.
+        Assert.True(full[band, 75] - clip > 0.1, $"fixture: quiet band {full[band, 75]} vs clip {clip}");
+        for (int f = 55; f <= 95; f++)
+        {
+            double h = ops.ToDouble(half[band, f]);
+            Assert.True(Math.Abs(h - full[band, f]) <= 0.02, $"frame {f}, band {band}: Half {h} vs double {full[band, f]} (clip {clip})");
+        }
+    }
 }
