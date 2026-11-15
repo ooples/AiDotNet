@@ -1008,6 +1008,12 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         {
             var engine = Engine;
             T meanActual = NumOps.Divide(engine.Sum(actual), NumOps.FromDouble(actual.Length));
+            if (NumOps.IsInfinity(meanActual))
+            {
+                // A Half sum of targets past 65504 is infinite where their mean is not, and an infinite mean made
+                // ssTot infinite and R^2 exactly 1: sum the targets as doubles instead.
+                meanActual = NumOps.FromDouble(engine.TensorSum(actual.AsTensor().Cast<double>()) / actual.Length);
+            }
             ssRes = TensorReductionHelper.SumOfSquaresAsDouble(engine, engine.Subtract(actual, predicted).AsTensor());
             ssTot = TensorReductionHelper.SumOfSquaresAsDouble(engine, engine.TensorSubtractScalar(actual.AsTensor(), meanActual));
         }
