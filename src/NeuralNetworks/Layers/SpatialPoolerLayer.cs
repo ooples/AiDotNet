@@ -381,20 +381,7 @@ public partial class SpatialPoolerLayer<T> : LayerBase<T>, IShapeContract
 
         // Normalize activations to [0,1] range for meaningful thresholding.
         // Raw activations scale with input magnitude, making a fixed threshold useless.
-        T maxVal = Engine.TensorMaxValue(activationsFlat);
-        T minVal = Engine.TensorMinValue(activationsFlat);
-        T range = NumOps.Subtract(maxVal, minVal);
-        Tensor<T> normalizedActivations;
-        if (NumOps.GreaterThan(range, NumOps.FromDouble(1e-10)))
-        {
-            var shifted = Engine.TensorSubtractScalar(activationsFlat, minVal);
-            normalizedActivations = Engine.TensorDivideScalar(shifted, range);
-        }
-        else
-        {
-            // All activations identical — produce uniform output
-            normalizedActivations = activationsFlat;
-        }
+        var normalizedActivations = NormalizeActivations(Engine, activationsFlat);
 
         // Apply sparsity threshold on normalized activations
         // SparsityThreshold (default 0.02) means keep top ~2% of columns active
@@ -418,6 +405,55 @@ public partial class SpatialPoolerLayer<T> : LayerBase<T>, IShapeContract
 
         LastOutput = output;
         return output;
+    }
+
+    // Four units of T's machine epsilon: the largest range rounding alone gives activations that are equal in exact
+    // arithmetic, relative to their magnitude. Derived in double from T's own rounding of 1 + e (2^-52 for double,
+    // 2^-23 for float, 2^-10 for Half); 0 for an integral T, whose ranges are exact.
+    private static readonly double RelativeSpreadTolerance = 4.0 * MachineEpsilon();
+
+    private static double MachineEpsilon()
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        if (ops.ToDouble(ops.FromDouble(0.5)) != 0.5) return 0.0;
+        double epsilon = 1.0;
+        while (epsilon > double.Epsilon && ops.ToDouble(ops.FromDouble(1.0 + epsilon / 2)) != 1.0) epsilon /= 2;
+        return epsilon;
+    }
+
+    /// <summary>
+    /// Min-max normalizes the column activations to [0, 1], or returns them unchanged when they are identical.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Activations count as identical when their range is at most <see cref="RelativeSpreadTolerance"/> times the
+    /// largest magnitude, so the test is relative to the activations and to T's precision. An absolute 1e-10 let a
+    /// one-ulp difference through (2^-29 at 1e7 in double; any nonzero range in Half, where 1e-10 rounds to 0), and
+    /// the normalization stretched that rounding noise to the full [0, 1] and into the SDR. A zero range, and all-zero
+    /// activations, keep the activations as before.
+    /// </para>
+    /// <para>
+    /// The extremes and the tolerance stay one-element tensors and every branch is a selection, so a compiled plan
+    /// recomputes them per input and an inference trace does not cross to the host.
+    /// </para>
+    /// </remarks>
+    /// <param name="engine">The engine that runs the ops.</param>
+    /// <param name="activations">The column activations, <c>[columns]</c>.</param>
+    internal static Tensor<T> NormalizeActivations(IEngine engine, Tensor<T> activations)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        var maxVal = engine.ReduceMax(activations, new[] { 0 }, keepDims: true);
+        var minVal = engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(activations), new[] { 0 }, keepDims: true));
+        var range = engine.TensorSubtract(maxVal, minVal);
+        var largest = engine.ReduceMax(engine.TensorAbs(activations), new[] { 0 }, keepDims: true);
+        var tolerance = engine.TensorMultiplyScalar(largest, ops.FromDouble(RelativeSpreadTolerance));
+        var spread = engine.TensorGreaterThan(engine.TensorSubtract(range, tolerance), ops.Zero);
+        var safeRange = engine.TensorWhere(spread, range, Tensor<T>.CreateDefault(new[] { 1 }, ops.One));
+        // Identical activations: produce uniform output (the activations themselves).
+        return engine.TensorWhere(
+            engine.TensorBroadcastTo(spread, new[] { activations.Length }),
+            engine.TensorDivide(engine.TensorSubtract(activations, minVal), safeRange),
+            activations);
     }
 
     /// <summary>

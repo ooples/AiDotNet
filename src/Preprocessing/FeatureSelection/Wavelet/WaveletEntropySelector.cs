@@ -26,14 +26,14 @@ public class WaveletEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
     private readonly int _nFeaturesToSelect;
     private readonly int _decompositionLevel;
 
-    private double[]? _waveletEntropyScores;
+    private Vector<T>? _waveletEntropyScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int DecompositionLevel => _decompositionLevel;
-    public double[]? WaveletEntropyScores => _waveletEntropyScores;
+    public Vector<T>? WaveletEntropyScores => _waveletEntropyScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -59,79 +59,34 @@ public class WaveletEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-
-        _waveletEntropyScores = new double[p];
-
-        for (int j = 0; j < p; j++)
+        var engine = Engine;
+        var scores = PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
+        if (p > 0)
         {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            _waveletEntropyScores[j] = ComputeWaveletEntropy(col, n);
-        }
-
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _waveletEntropyScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
-
-        IsFitted = true;
-    }
-
-    private double ComputeWaveletEntropy(double[] signal, int n)
-    {
-        // Simplified Haar wavelet decomposition
-        var current = (double[])signal.Clone();
-        var energies = new List<double>();
-
-        for (int level = 0; level < _decompositionLevel && current.Length >= 2; level++)
-        {
-            int len = current.Length;
-            int halfLen = len / 2;
-            var approx = new double[halfLen];
-            var detail = new double[halfLen];
-
-            for (int i = 0; i < halfLen; i++)
+            // Haar decomposition: energy of each level's detail coefficients, then of the final approximation
+            var current = Tensor<T>.FromMatrix(data);
+            var energies = new List<Tensor<T>>();
+            for (int level = 0; level < _decompositionLevel && current.Shape[0] >= 2; level++)
             {
-                approx[i] = (current[2 * i] + current[2 * i + 1]) / Math.Sqrt(2);
-                detail[i] = (current[2 * i] - current[2 * i + 1]) / Math.Sqrt(2);
+                var (approximation, detail) = SelectorTensorOps.HaarStep(current);
+                energies.Add(engine.Reshape(SelectorTensorOps.ColumnSumOfSquares(detail), new[] { 1, p }));
+                current = approximation;
             }
 
-            // Compute energy of detail coefficients
-            double energy = 0;
-            for (int i = 0; i < halfLen; i++)
-                energy += detail[i] * detail[i];
-            energies.Add(energy);
+            energies.Add(engine.Reshape(SelectorTensorOps.ColumnSumOfSquares(current), new[] { 1, p }));
 
-            current = approx;
+            // Entropy (bits) of the energy distribution; near-zero total energy scores 0
+            var energy = engine.Concat(energies, 0);
+            var totalEnergy = engine.ReduceSum(energy, new[] { 0 }, false);
+            scores = SelectorTensorOps.ZeroUnless(
+                PreprocessingTensorOps.AtLeast(totalEnergy, NumOps.FromDouble(1e-10)),
+                SelectorTensorOps.ColumnEntropyBits(energy, double.NegativeInfinity, 1e-10));
         }
 
-        // Add final approximation energy
-        double approxEnergy = 0;
-        for (int i = 0; i < current.Length; i++)
-            approxEnergy += current[i] * current[i];
-        energies.Add(approxEnergy);
+        _waveletEntropyScores = scores.ToVector();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, Math.Min(_nFeaturesToSelect, p));
 
-        // Compute entropy from energy distribution
-        double totalEnergy = energies.Sum();
-        if (totalEnergy < 1e-10) return 0;
-
-        double entropy = 0;
-        foreach (double e in energies)
-        {
-            double p = e / totalEnergy;
-            if (p > 1e-10)
-                entropy -= p * Math.Log(p) / Math.Log(2);
-        }
-
-        return entropy;
+        IsFitted = true;
     }
 
     public new Matrix<T> FitTransform(Matrix<T> data)
@@ -146,15 +101,7 @@ public class WaveletEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         if (_selectedIndices is null)
             throw new InvalidOperationException("WaveletEntropySelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

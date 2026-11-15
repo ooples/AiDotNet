@@ -223,13 +223,9 @@ public partial class CosyVoice3<T> : CosyVoiceBase<T>
         var audio = ResampleAudio(recording, sampleRate, 16000);
         if (audio.Length > _options.MaxReferenceSeconds * 16000)
             throw new ArgumentException($"The reference recording may be at most {_options.MaxReferenceSeconds} seconds.", nameof(recording));
-        var samples = new double[audio.Length];
-        for (int i = 0; i < samples.Length; i++) samples[i] = Ops.ToDouble(audio[i]);
-        var logMel = OpenAiWhisperTranscriber<T>.LogMelSpectrogram(samples, 128);
-        int bands = logMel.GetLength(0), frames = logMel.GetLength(1);
-        var features = new Tensor<T>(new[] { 1, bands, frames });
-        for (int m = 0; m < bands; m++)
-            for (int f = 0; f < frames; f++) features[0, m, f] = Ops.FromDouble(logMel[m, f]);
+        var logMel = OpenAiWhisperTranscriber<T>.LogMelSpectrogram(audio, 128);
+        int bands = logMel.Shape[0], frames = logMel.Shape[1];
+        var features = Engine.Reshape(logMel, new[] { 1, bands, frames });
         var length = new Tensor<T>(new[] { 1 });
         length[0] = Ops.FromDouble(frames);
         var inputs = tokenizer.Metadata.Inputs.Select(x => x.Name).ToArray();

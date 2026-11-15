@@ -288,6 +288,10 @@ public class CTCLoss<T> : LossFunctionBase<T>, ISequenceLossFunction<T>
     }
 
     /// <inheritdoc />
+    /// <remarks>The encoded labels are decoded into index arrays on the host (<see cref="DecodeTargets"/>).</remarks>
+    internal override bool ReadsTargetOnHost => true;
+
+    /// <inheritdoc />
     /// <remarks>
     /// Uses the tape-tracked TensorCTCLoss engine op for differentiable CTC loss.
     /// predicted: log-probabilities [batch, time, classes]

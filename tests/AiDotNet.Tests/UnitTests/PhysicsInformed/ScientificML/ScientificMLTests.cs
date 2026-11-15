@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.LinearAlgebra;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -24,7 +25,7 @@ public class ScientificMLTests
         var architecture = CreateArchitecture(2, 1, new List<ILayer<double>> { layer });
         var model = new HamiltonianNeuralNetwork<double>(architecture, stateDim: 2);
 
-        var derivative = model.ComputeTimeDerivative(new[] { 0.2, -0.4 });
+        var derivative = model.ComputeTimeDerivative(new Vector<double>(new[] { 0.2, -0.4 }));
 
         Assert.Equal(2, derivative.Length);
         Assert.InRange(derivative[0], 0.999, 1.001);
@@ -102,7 +103,7 @@ public class ScientificMLTests
         var architecture = CreateArchitecture(2, 1, new List<ILayer<double>> { layer });
         var model = new LagrangianNeuralNetwork<double>(architecture, configurationDim: 1);
 
-        var acceleration = model.ComputeAcceleration(new[] { 0.5 }, new[] { -0.2 });
+        var acceleration = model.ComputeAcceleration(new Vector<double>(new[] { 0.5 }), new Vector<double>(new[] { -0.2 }));
 
         Assert.Single(acceleration);
         Assert.InRange(Math.Abs(acceleration[0]), 0.0, 1e-6);

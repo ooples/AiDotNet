@@ -223,11 +223,8 @@ public partial class LiteDVDNet<T> : VideoDenoisingBase<T>
             var current = head.GetParameters();
             if (current.Length > 0)
             {
-                var damped = new Vector<T>(current.Length);
                 var scale = NumOps.FromDouble(_options.ResidualHeadInitScale);
-                for (int i = 0; i < current.Length; i++)
-                    damped[i] = NumOps.Multiply(current[i], scale);
-                head.SetParameters(damped);
+                head.SetParameters(Engine.Multiply(current, scale));
             }
         }
         catch (ArgumentException ex)

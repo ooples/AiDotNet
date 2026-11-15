@@ -1050,6 +1050,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// </remarks>
     private async Task<AiModelResult<T, TInput, TOutput>> BuildEvolutionInternalAsync(CancellationToken cancellationToken)
     {
+        RejectBuildTimeAdversarialTraining(RobustnessBuildPath.Evolution);
+
         EvolutionRunOutcome outcome = _evolutionRunner is not null
             ? await _evolutionRunner(cancellationToken).ConfigureAwait(false)
             : await RunProgramEvolutionAsync(cancellationToken).ConfigureAwait(false);

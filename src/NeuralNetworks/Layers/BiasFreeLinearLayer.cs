@@ -103,8 +103,10 @@ public sealed partial class BiasFreeLinearLayer<T> : LayerBase<T>, IShapeContrac
     {
         var gradients = GetParameterGradients();
         if (gradients.Length != _weights.Length) return;
-        for (int i = 0; i < _weights.Length; i++)
-            _weights[i] = NumOps.Subtract(_weights[i], NumOps.Multiply(learningRate, gradients[i]));
+        // w -= lr * g, written back into the same tensor.
+        var updated = Engine.TensorSubtract(
+            _weights, Engine.TensorMultiplyScalar(new Tensor<T>(_weights._shape, gradients), learningRate));
+        updated.CopyTo(_weights.AsWritableSpan());
         Engine.InvalidatePersistentTensor(_weights);
     }
 

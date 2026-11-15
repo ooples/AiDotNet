@@ -145,93 +145,61 @@ public partial class NGBoostClassifier<T> : EnsembleClassifierBase<T>
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
 
+        var engine = Engine;
+
         // Convert labels to class indices
-        var yIndices = new int[n];
-        for (int i = 0; i < n; i++)
-        {
-            // Find the class index for this label
-            int labelIndex = -1;
-            for (int c = 0; c < ClassLabels.Length; c++)
-            {
-                if (NumOps.Compare(y[i], ClassLabels[c]) == 0)
-                {
-                    labelIndex = c;
-                    break;
-                }
-            }
-            if (labelIndex < 0)
-                throw new InvalidOperationException(
-                    $"Label value at index {i} does not match any known class label. " +
-                    "Ensure all training labels are present in ClassLabels.");
-            yIndices[i] = labelIndex;
-        }
+        var yIndexTensor = GetClassIndexTensor(y);
+        var yIndices = yIndexTensor.ToArray();
+        int unknownAt = Array.IndexOf(yIndices, -1);
+        if (unknownAt >= 0)
+            throw new InvalidOperationException(
+                $"Label value at index {unknownAt} does not match any known class label. " +
+                "Ensure all training labels are present in ClassLabels.");
 
-        // Initialize log-odds based on class frequencies
-        _initialLogOdds = new Vector<T>(_numClasses);
-        var classCounts = new int[_numClasses];
-        for (int i = 0; i < n; i++)
-        {
-            classCounts[yIndices[i]]++;
-        }
-        for (int c = 0; c < _numClasses; c++)
-        {
-            double p = Math.Max(1e-10, Math.Min(1 - 1e-10, (double)classCounts[c] / n));
-            _initialLogOdds[c] = NumOps.FromDouble(Math.Log(p));
-        }
+        // Initialize log-odds based on class frequencies: log(clamp(count_c / n, 1e-10, 1 - 1e-10)); the counts
+        // are taken in int (a sum of ones in T stops at 2048 for Half)
+        var classCounts = engine.TensorBinCount(yIndexTensor, _numClasses).Slice(0, 0, _numClasses);
+        var priors = engine.TensorClamp(CountFractions(classCounts, n),
+            Tolerance(1e-10), NumOps.FromDouble(1 - 1e-10));
+        _initialLogOdds = engine.TensorLog(priors).ToVector();
 
-        var currentLogOdds = new Vector<T>[_numClasses];
-        for (int c = 0; c < _numClasses; c++)
-            currentLogOdds[c] = Vector<T>.CreateDefault(n, _initialLogOdds[c]);
+        // Current log-odds as a [n, classes] matrix, every row starting at the prior
+        var currentLogOdds = InitialLogOddsMatrix(n);
 
         _trees.Clear();
         Estimators.Clear();
 
-        double bestScore = double.MaxValue;
+        T bestScore = NumOps.MaxValue;
         int roundsWithoutImprovement = 0;
+        T lr = NumOps.FromDouble(_options.LearningRate);
 
         for (int iter = 0; iter < _options.NumberOfIterations; iter++)
         {
             // Subsample if needed
             int[] sampleIndices = GetSampleIndices(n);
-            int sampleSize = sampleIndices.Length;
+            var sampleIndexTensor = new Tensor<int>(sampleIndices, new[] { sampleIndices.Length });
 
-            // Compute probabilities from current log-odds (softmax)
-            var probs = ComputeProbabilities(currentLogOdds, sampleIndices);
+            // Compute probabilities from current log-odds (softmax over classes)
+            var probs = engine.Softmax(engine.TensorIndexSelect(currentLogOdds, sampleIndexTensor, 0), 1);
 
-            // Compute gradients for each class
-            var gradients = new Vector<T>[_numClasses];
-            for (int c = 0; c < _numClasses; c++)
-            {
-                gradients[c] = new Vector<T>(sampleSize);
-            }
-
-            // For cross-entropy loss, gradient = p - y
-            for (int i = 0; i < sampleSize; i++)
-            {
-                int idx = sampleIndices[i];
-                int trueClass = yIndices[idx];
-                for (int c = 0; c < _numClasses; c++)
-                {
-                    T target = c == trueClass ? NumOps.One : NumOps.Zero;
-                    gradients[c][i] = NumOps.Subtract(probs[c][i], target);
-                }
-            }
+            // For cross-entropy loss, gradient = p - onehot(y)
+            var targets = engine.TensorOneHot<T>(engine.TensorGather(yIndexTensor, sampleIndexTensor, 0), _numClasses);
+            var gradients = engine.TensorSubtract(probs, targets);
 
             // Compute natural gradients using Fisher Information approximation
-            var naturalGradients = _options.UseNaturalGradient
-                ? ComputeNaturalGradients(gradients, probs, sampleSize)
-                : gradients;
+            var naturalGradients = (_options.UseNaturalGradient
+                ? ComputeNaturalGradients(gradients, probs)
+                : gradients).ToMatrix();
 
             // Build trees for each class
             var iterTrees = new DecisionTreeRegression<T>[_numClasses];
+            var classUpdates = new Vector<T>[_numClasses];
 
             var xSample = x.GetRows(sampleIndices);
-            T lr = NumOps.FromDouble(_options.LearningRate);
 
             for (int c = 0; c < _numClasses; c++)
             {
-                var residuals = new Vector<T>(naturalGradients[c]);
-                residuals.MultiplyInPlace(NumOps.Negate(NumOps.One));
+                var residuals = engine.Negate(naturalGradients.GetColumn(c));
 
                 var tree = new DecisionTreeRegression<T>(new DecisionTreeOptions
                 {
@@ -245,37 +213,24 @@ public partial class NGBoostClassifier<T> : EnsembleClassifierBase<T>
                 tree.Train(xSample, residuals);
                 iterTrees[c] = tree;
 
-                var treePredictions = tree.Predict(x);
-                var scaled = new Vector<T>(treePredictions);
-                scaled.MultiplyInPlace(lr);
-                currentLogOdds[c].AddInPlace(scaled);
+                classUpdates[c] = engine.Multiply(tree.Predict(x), lr);
             }
 
+            currentLogOdds = engine.TensorAdd(currentLogOdds, Tensor<T>.FromMatrix(StackColumns(classUpdates)));
             _trees.Add(iterTrees);
 
             // Early stopping check
-            if (_options.EarlyStoppingRounds.HasValue)
+            if (_options.EarlyStoppingRounds.HasValue
+                && ShouldStopEarly(ComputeCrossEntropyLoss(currentLogOdds, yIndexTensor), ref bestScore,
+                    ref roundsWithoutImprovement))
             {
-                double currentScore = ComputeCrossEntropyLoss(currentLogOdds, yIndices);
-                if (currentScore < bestScore)
-                {
-                    bestScore = currentScore;
-                    roundsWithoutImprovement = 0;
-                }
-                else
-                {
-                    roundsWithoutImprovement++;
-                    if (roundsWithoutImprovement >= _options.EarlyStoppingRounds.Value)
-                    {
-                        break;
-                    }
-                }
+                break;
             }
 
             // Verbose output
             if (_options.Verbose && (iter + 1) % _options.VerboseEval == 0)
             {
-                double score = ComputeCrossEntropyLoss(currentLogOdds, yIndices);
+                double score = NumOps.ToDouble(ComputeCrossEntropyLoss(currentLogOdds, yIndexTensor));
                 Console.WriteLine($"[{iter + 1}] Cross-Entropy: {score:F6}");
             }
         }
@@ -290,26 +245,18 @@ public partial class NGBoostClassifier<T> : EnsembleClassifierBase<T>
     public override Vector<T> Predict(Matrix<T> input)
     {
         var probs = PredictProbabilities(input);
-        var predictions = new Vector<T>(input.Rows);
-
-        for (int i = 0; i < input.Rows; i++)
+        if (input.Rows == 0)
         {
-            // Find class with highest probability
-            int maxClass = 0;
-            T maxProb = NumOps.Zero;
-            for (int c = 0; c < _numClasses; c++)
-            {
-                if (NumOps.Compare(probs[i, c], maxProb) > 0)
-                {
-                    maxProb = probs[i, c];
-                    maxClass = c;
-                }
-            }
-            var classLabels = ClassLabels ?? throw new InvalidOperationException("Model must be trained before making predictions.");
-            predictions[i] = classLabels[maxClass];
+            return new Vector<T>(0);
         }
 
-        return predictions;
+        if (ClassLabels is null)
+        {
+            throw new InvalidOperationException("Model must be trained before making predictions.");
+        }
+
+        // Class with highest probability
+        return ClassIndicesToLabels(ArgMaxRows(probs));
     }
 
     /// <summary>
@@ -323,49 +270,28 @@ public partial class NGBoostClassifier<T> : EnsembleClassifierBase<T>
                 "Model has not been trained. Call Train() before PredictProbabilities().");
 
         int n = input.Rows;
-        var probs = new Matrix<T>(n, _numClasses);
+        if (n == 0)
+        {
+            return new Matrix<T>(0, _numClasses);
+        }
 
-        var currentLogOdds = new Vector<T>[_numClasses];
-        for (int c = 0; c < _numClasses; c++)
-            currentLogOdds[c] = Vector<T>.CreateDefault(n, _initialLogOdds[c]);
+        var engine = Engine;
+        var currentLogOdds = InitialLogOddsMatrix(n);
 
         T lr = NumOps.FromDouble(_options.LearningRate);
+        var classUpdates = new Vector<T>[_numClasses];
         foreach (var iterTrees in _trees)
         {
             for (int c = 0; c < _numClasses; c++)
             {
-                var treePreds = iterTrees[c].Predict(input);
-                var scaledPreds = new Vector<T>(treePreds);
-                scaledPreds.MultiplyInPlace(lr);
-                currentLogOdds[c].AddInPlace(scaledPreds);
+                classUpdates[c] = engine.Multiply(iterTrees[c].Predict(input), lr);
             }
+
+            currentLogOdds = engine.TensorAdd(currentLogOdds, Tensor<T>.FromMatrix(StackColumns(classUpdates)));
         }
 
-        // Convert log-odds to probabilities using softmax
-        for (int i = 0; i < n; i++)
-        {
-            // Compute softmax with numerical stability (subtract max)
-            double maxLogOdd = double.NegativeInfinity;
-            for (int c = 0; c < _numClasses; c++)
-            {
-                maxLogOdd = Math.Max(maxLogOdd, NumOps.ToDouble(currentLogOdds[c][i]));
-            }
-
-            double sumExp = 0;
-            var expValues = new double[_numClasses];
-            for (int c = 0; c < _numClasses; c++)
-            {
-                expValues[c] = Math.Exp(NumOps.ToDouble(currentLogOdds[c][i]) - maxLogOdd);
-                sumExp += expValues[c];
-            }
-
-            for (int c = 0; c < _numClasses; c++)
-            {
-                probs[i, c] = NumOps.FromDouble(expValues[c] / sumExp);
-            }
-        }
-
-        return probs;
+        // Convert log-odds to probabilities using softmax (numerically stable)
+        return engine.Softmax(currentLogOdds, 1).ToMatrix();
     }
 
     /// <summary>
@@ -375,112 +301,66 @@ public partial class NGBoostClassifier<T> : EnsembleClassifierBase<T>
     public override Matrix<T> PredictLogProbabilities(Matrix<T> input)
     {
         var probs = PredictProbabilities(input);
-        var logProbs = new Matrix<T>(probs.Rows, probs.Columns);
-
-        for (int i = 0; i < probs.Rows; i++)
+        if (probs.Rows == 0 || probs.Columns == 0)
         {
-            for (int c = 0; c < probs.Columns; c++)
-            {
-                logProbs[i, c] = NumOps.FromDouble(Math.Log(Math.Max(1e-10, NumOps.ToDouble(probs[i, c]))));
-            }
+            return new Matrix<T>(probs.Rows, probs.Columns);
         }
 
-        return logProbs;
+        var engine = Engine;
+        return engine.TensorLog(engine.TensorClampMin(Tensor<T>.FromMatrix(probs), Tolerance(1e-10))).ToMatrix();
     }
 
     /// <summary>
-    /// Computes probabilities from log-odds using softmax.
+    /// Builds the [n, classes] log-odds matrix with every row equal to the class priors.
     /// </summary>
-    private Vector<T>[] ComputeProbabilities(Vector<T>[] logOdds, int[] indices)
+    private Tensor<T> InitialLogOddsMatrix(int n)
     {
-        int sampleSize = indices.Length;
-        var probs = new Vector<T>[_numClasses];
-        for (int c = 0; c < _numClasses; c++)
+        var row = _initialLogOdds.AsTensor().Reshape(1, _numClasses);
+        return Engine.TensorTile(row, new[] { n, 1 });
+    }
+
+    private bool ShouldStopEarly(T score, ref T bestScore, ref int roundsWithoutImprovement)
+    {
+        if (NumOps.LessThan(score, bestScore))
         {
-            probs[c] = new Vector<T>(sampleSize);
+            bestScore = score;
+            roundsWithoutImprovement = 0;
+            return false;
         }
 
-        for (int i = 0; i < sampleSize; i++)
-        {
-            int idx = indices[i];
-
-            // Compute softmax with numerical stability
-            double maxLogOdd = double.NegativeInfinity;
-            for (int c = 0; c < _numClasses; c++)
-            {
-                maxLogOdd = Math.Max(maxLogOdd, NumOps.ToDouble(logOdds[c][idx]));
-            }
-
-            double sumExp = 0;
-            var expValues = new double[_numClasses];
-            for (int c = 0; c < _numClasses; c++)
-            {
-                expValues[c] = Math.Exp(NumOps.ToDouble(logOdds[c][idx]) - maxLogOdd);
-                sumExp += expValues[c];
-            }
-
-            for (int c = 0; c < _numClasses; c++)
-            {
-                probs[c][i] = NumOps.FromDouble(expValues[c] / sumExp);
-            }
-        }
-
-        return probs;
+        roundsWithoutImprovement++;
+        return roundsWithoutImprovement >= (_options.EarlyStoppingRounds ?? int.MaxValue);
     }
 
     /// <summary>
     /// Computes natural gradients using Fisher Information approximation.
     /// </summary>
-    private Vector<T>[] ComputeNaturalGradients(Vector<T>[] gradients, Vector<T>[] probs, int sampleSize)
+    private Tensor<T> ComputeNaturalGradients(Tensor<T> gradients, Tensor<T> probs)
     {
-        var naturalGrads = new Vector<T>[_numClasses];
-
         // For softmax, Fisher Information diagonal approximation: F_cc = p(1-p)
-        // Natural gradient = gradient / F
-        for (int c = 0; c < _numClasses; c++)
-        {
-            naturalGrads[c] = new Vector<T>(sampleSize);
-            for (int i = 0; i < sampleSize; i++)
-            {
-                double p = NumOps.ToDouble(probs[c][i]);
-                double fisher = p * (1 - p);
-                fisher = Math.Max(fisher, 1e-6); // Prevent division by zero
-
-                naturalGrads[c][i] = NumOps.FromDouble(NumOps.ToDouble(gradients[c][i]) / fisher);
-            }
-        }
-
-        return naturalGrads;
+        // Natural gradient = gradient / max(F, 1e-6)
+        var engine = Engine;
+        var fisher = engine.TensorMultiply(probs, engine.ScalarMinusTensor(NumOps.One, probs));
+        return engine.TensorDivide(gradients, engine.TensorClampMin(fisher, NumOps.FromDouble(1e-6)));
     }
 
     /// <summary>
     /// Computes cross-entropy loss for current predictions.
     /// </summary>
-    private double ComputeCrossEntropyLoss(Vector<T>[] logOdds, int[] yIndices)
+    private T ComputeCrossEntropyLoss(Tensor<T> logOdds, Tensor<int> yIndices)
     {
         int n = yIndices.Length;
-        double totalLoss = 0;
-
-        for (int i = 0; i < n; i++)
+        if (n == 0)
         {
-            // Compute log-softmax for numerical stability
-            double maxLogOdd = double.NegativeInfinity;
-            for (int c = 0; c < _numClasses; c++)
-            {
-                maxLogOdd = Math.Max(maxLogOdd, NumOps.ToDouble(logOdds[c][i]));
-            }
-
-            double sumExp = 0;
-            for (int c = 0; c < _numClasses; c++)
-            {
-                sumExp += Math.Exp(NumOps.ToDouble(logOdds[c][i]) - maxLogOdd);
-            }
-
-            double logProb = NumOps.ToDouble(logOdds[yIndices[i]][i]) - maxLogOdd - Math.Log(sumExp);
-            totalLoss -= logProb;
+            return NumOps.Zero;
         }
 
-        return totalLoss / n;
+        // Mean negative log-softmax probability of the true class
+        var engine = Engine;
+        var logProbs = engine.TensorLogSoftmax(logOdds, 1);
+        var trueClass = engine.TensorOneHot<T>(yIndices, _numClasses);
+        T total = engine.TensorSum(engine.TensorMultiply(logProbs, trueClass));
+        return NumOps.Negate(NumOps.Divide(total, NumOps.FromDouble(n)));
     }
 
     /// <summary>
@@ -509,12 +389,7 @@ public partial class NGBoostClassifier<T> : EnsembleClassifierBase<T>
         {
             foreach (var tree in iterTrees)
             {
-                var fi = tree.FeatureImportances;
-                int copyCount = Math.Min(featureCount, fi.Length);
-                for (int i = 0; i < copyCount; i++)
-                {
-                    importances[i] = NumOps.Add(importances[i], fi[i]);
-                }
+                importances = Engine.Add(importances, FitToLength(tree.FeatureImportances, featureCount));
             }
         }
 

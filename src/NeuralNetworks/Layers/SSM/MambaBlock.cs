@@ -447,13 +447,12 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
         // Initialize A_log: log of the S4D-Lin initialization
         // A = -exp(A_log) where A_log[d, n] = log(n + 1)
         // This gives the structured spacing from the S4D paper (Gu et al., 2022)
-        for (int d = 0; d < _innerDimension; d++)
-        {
-            for (int n = 0; n < _stateDimension; n++)
-            {
-                _aLog[new[] { d, n }] = NumOps.FromDouble(Math.Log(n + 1));
-            }
-        }
+        // A_log[d, n] = log(n + 1), the same S4D-Real row for every channel.
+        Engine.TensorCopy(
+            Engine.TensorBroadcastTo(
+                Engine.Reshape(Engine.TensorLog(Engine.TensorArange<T>(1, _stateDimension + 1, 1)), new[] { 1, _stateDimension }),
+                new[] { _innerDimension, _stateDimension }),
+            _aLog);
 
         // D initialized to ones (skip connection)
         _dParam.Fill(NumOps.One);
@@ -643,78 +642,9 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
         return Engine.TensorAdd(causal, bias);
     }
 
-    /// <summary>
-    /// Backward pass for depthwise causal Conv1D using explicit per-element computation.
-    /// Avoids Engine 3D tensor operations that have contiguity/reduction bugs.
-    /// </summary>
-    private Tensor<T> DepthwiseConv1DBackward(
-        Tensor<T> dOutput, Tensor<T> input, int batchSize, int seqLen)
-    {
-        var dInput = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _innerDimension });
-        // Zero-initialize rented buffer â€” it may contain stale data from previous use
-        for (int i = 0; i < dInput.Length; i++) dInput[i] = NumOps.Zero;
-        _convBiasGradient = new Tensor<T>(new[] { _innerDimension });
-        _convWeightsGradient = new Tensor<T>(new[] { _innerDimension, _convKernelSize });
-
-        // Depthwise conv1d: output[b,t,d] = sum_k(weight[d,k] * input[b,t-k,d]) + bias[d]
-        // Backward:
-        //   dInput[b,srcT,d] += weight[d,k] * dOutput[b,t,d]  where srcT = t-k
-        //   dWeight[d,k] += sum_b(input[b,srcT,d] * dOutput[b,t,d])
-        //   dBias[d] += sum_b,t(dOutput[b,t,d])
-        for (int bi = 0; bi < batchSize; bi++)
-        {
-            for (int t = 0; t < seqLen; t++)
-            {
-                for (int d = 0; d < _innerDimension; d++)
-                {
-                    T dOutVal = dOutput[new[] { bi, t, d }];
-
-                    // Bias gradient
-                    _convBiasGradient[d] = NumOps.Add(_convBiasGradient[d], dOutVal);
-
-                    for (int k = 0; k < _convKernelSize; k++)
-                    {
-                        int srcT = t - k;
-                        if (srcT >= 0)
-                        {
-                            T w = _convWeights[new[] { d, k }];
-                            T xVal = input[new[] { bi, srcT, d }];
-
-                            // Input gradient
-                            dInput[new[] { bi, srcT, d }] = NumOps.Add(
-                                dInput[new[] { bi, srcT, d }],
-                                NumOps.Multiply(w, dOutVal));
-
-                            // Weight gradient
-                            _convWeightsGradient[new[] { d, k }] = NumOps.Add(
-                                _convWeightsGradient[new[] { d, k }],
-                                NumOps.Multiply(xVal, dOutVal));
-                        }
-                    }
-                }
-            }
-        }
-
-        return dInput;
-    }
-
     #endregion
 
     #region Engine-Accelerated Helpers
-
-    /// <summary>
-    /// Workaround for Engine.ReduceSum multi-axis [0,1] bug (AiDotNet.Tensors PR #62).
-    /// Sums a [batch, seq, features] tensor over batch and seq â†’ [features].
-    /// </summary>
-    private Tensor<T> ReduceSumAxes01(Tensor<T> tensor, int batch, int seq, int features)
-    {
-        var result = new Tensor<T>(new[] { features });
-        for (int bi = 0; bi < batch; bi++)
-            for (int t = 0; t < seq; t++)
-                for (int d = 0; d < features; d++)
-                    result[d] = NumOps.Add(result[d], tensor[new[] { bi, t, d }]);
-        return result;
-    }
 
     /// <summary>
     /// Computes SiLU derivative using Engine operations: sigmoid(x) + x * sigmoid(x) * (1 - sigmoid(x)).
@@ -863,10 +793,7 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
                 $"D has {_dParam.Length} values but {values.Length} were supplied.", nameof(values));
         }
 
-        for (int i = 0; i < _dParam.Length; i++)
-        {
-            _dParam[i] = values[i];
-        }
+        Engine.TensorCopy(values.Reshape(_dParam._shape), _dParam);
     }
 
     /// <summary>

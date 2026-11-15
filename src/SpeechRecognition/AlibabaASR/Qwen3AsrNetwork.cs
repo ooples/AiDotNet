@@ -134,16 +134,9 @@ internal sealed class Qwen3AsrNetwork<T>
     /// <summary>The 16 kHz waveform's Whisper log-mel spectrogram <c>[mels, frames]</c>.</summary>
     public Tensor<T> Spectrogram(Tensor<T> audio)
     {
-        var samples = new double[audio.Length];
-        var span = audio.Data.Span;
-        for (int i = 0; i < samples.Length; i++) samples[i] = NumOps.ToDouble(span[i]);
-        var mel = OpenAiWhisperTranscriber<T>.LogMelSpectrogram(samples, Configuration.Mels);
-        int mels = mel.GetLength(0), frames = mel.GetLength(1);
-        if (frames < 1) throw new ArgumentException("The recording is shorter than one spectrogram frame.", nameof(audio));
-        var tensor = new Tensor<T>(new[] { mels, frames });
-        for (int m = 0; m < mels; m++)
-            for (int f = 0; f < frames; f++) tensor[m, f] = NumOps.FromDouble(mel[m, f]);
-        return tensor;
+        var mel = OpenAiWhisperTranscriber<T>.LogMelSpectrogram(audio, Configuration.Mels);
+        if (mel.Shape[1] < 1) throw new ArgumentException("The recording is shorter than one spectrogram frame.", nameof(audio));
+        return mel;
     }
 
     private Tensor<T> Gelu(Tensor<T> x) => ActivationHelper.ExactGelu(x, _engine);

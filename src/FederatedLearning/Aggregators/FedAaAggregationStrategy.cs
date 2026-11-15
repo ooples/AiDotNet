@@ -1,5 +1,6 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.FederatedLearning.Infrastructure;
 
 namespace AiDotNet.FederatedLearning.Aggregators;
 
@@ -93,21 +94,20 @@ public class FedAaAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
                         nameof(clientModels));
                 }
 
-                for (int i = 0; i < avg.Length; i++)
-                {
-                    avg[i] = NumOps.Add(avg[i], NumOps.Multiply(cp[i], nw));
-                }
+                AddScaledInto(avg, cp, nw);
             }
         }
 
         // Second pass: compute cosine similarity of each client vs. naive average across all layers.
         var clientIds = clientModels.Keys.ToList();
         var similarities = new double[clientIds.Count];
+        int totalParams = layerNames.Sum(ln => naiveAvg[ln].Length);
+        var avgFlat = FlattenLayers(naiveAvg, layerNames, totalParams);
+        double normAvg = FederatedReductions.SquaredNorm(avgFlat);
 
         for (int c = 0; c < clientIds.Count; c++)
         {
             var clientModel = clientModels[clientIds[c]];
-            double dot = 0, normClient = 0, normAvg = 0;
             foreach (var layerName in layerNames)
             {
                 var cp = clientModel[layerName];
@@ -118,17 +118,11 @@ public class FedAaAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
                         $"Layer '{layerName}' length mismatch for client {clientIds[c]}: client={cp.Length}, expected={ap.Length}.",
                         nameof(clientModels));
                 }
-
-                for (int i = 0; i < cp.Length; i++)
-                {
-                    double cv = NumOps.ToDouble(cp[i]);
-                    double av = NumOps.ToDouble(ap[i]);
-                    dot += cv * av;
-                    normClient += cv * cv;
-                    normAvg += av * av;
-                }
             }
 
+            var clientFlat = FlattenLayers(clientModel, layerNames, totalParams);
+            double dot = FederatedReductions.Dot(clientFlat, avgFlat);
+            double normClient = FederatedReductions.SquaredNorm(clientFlat);
             double denom = Math.Sqrt(normClient) * Math.Sqrt(normAvg);
             similarities[c] = denom > 0 ? dot / denom : 0.0;
         }
@@ -167,10 +161,7 @@ public class FedAaAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
                         nameof(clientModels));
                 }
 
-                for (int i = 0; i < rp.Length; i++)
-                {
-                    rp[i] = NumOps.Add(rp[i], NumOps.Multiply(cp[i], aw));
-                }
+                AddScaledInto(rp, cp, aw);
             }
         }
 

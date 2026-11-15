@@ -428,14 +428,28 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
         return true;
     }
 
-    /// <summary>Bit-for-bit equality. A NaN anywhere reports false, which keeps the reference.</summary>
+    /// <summary>
+    /// Element-wise equality as <c>EqualityComparer&lt;T&gt;.Default</c>: 0 equals -0 and NaN equals NaN, so
+    /// the optimized route is kept only when it reproduces every reference value.
+    /// </summary>
     private static bool BitwiseEquals(Tensor<T> a, Tensor<T> b)
     {
         if (a.Length != b.Length) return false;
-        var comparer = EqualityComparer<T>.Default;
-        for (int i = 0; i < a.Length; i++)
-            if (!comparer.Equals(a[i], b[i])) return false;
-        return true;
+        if (a.Length == 0) return true;
+
+        // EqualityComparer<T>.Default: equal values match (0 and -0 included) and NaN matches NaN.
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var flatA = engine.Reshape(a, new[] { a.Length });
+        var flatB = engine.Reshape(b, new[] { b.Length });
+        var zeros = new Tensor<T>(flatA._shape);
+        var ones = new Tensor<T>(flatA._shape);
+        ones.Fill(numOps.One);
+        var bothNaN = engine.TensorWhere(
+            engine.TensorIsNan(flatA), engine.TensorWhere(engine.TensorIsNan(flatB), ones, zeros), zeros);
+        var matches = engine.TensorMax(engine.TensorEquals(flatA, flatB), bothNaN);
+        return numOps.Equals(engine.TensorMinValue(matches), numOps.One);
     }
 
     /// <summary>Adds the rank-1 channel bias without retaining a parameter-storage view.</summary>

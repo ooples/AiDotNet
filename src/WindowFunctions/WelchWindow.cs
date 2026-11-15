@@ -76,16 +76,14 @@ public class WelchWindow<T> : IWindowFunction<T>
     /// </remarks>
     public Vector<T> Create(int windowSize)
     {
-        Vector<T> window = new Vector<T>(windowSize);
-        T N = _numOps.FromDouble(windowSize - 1);
-        for (int n = 0; n < windowSize; n++)
+        if (WindowFunctionHelper.TryCreateDegenerate(windowSize, out Vector<T> degenerate))
         {
-            T nT = _numOps.FromDouble(n);
-            T term = _numOps.Divide(_numOps.Subtract(nT, _numOps.Divide(N, _numOps.FromDouble(2))), _numOps.Divide(N, _numOps.FromDouble(2)));
-            window[n] = _numOps.Subtract(_numOps.One, _numOps.Multiply(term, term));
+            return degenerate;
         }
 
-        return window;
+        // w(n) = 1 - ((n - (N-1)/2) / ((N-1)/2))^2
+        var engine = AiDotNetEngine.Current;
+        return engine.ScalarMinusTensor(_numOps.One, engine.TensorSquare(WindowFunctionHelper.SymmetricCoordinate<T>(windowSize))).ToVector();
     }
 
     /// <summary>

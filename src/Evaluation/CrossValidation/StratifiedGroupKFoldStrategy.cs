@@ -97,6 +97,9 @@ public class StratifiedGroupKFoldStrategy<T> : ICrossValidationStrategy<T>
         // Assign majority class to each group
         if (labelsArray != null)
         {
+            // Class 1 where the label equals one (Compare semantics), class 0 otherwise
+            var sampleClasses = EvaluationTensorOps<T>.EqualMask(
+                new Tensor<T>(labelsArray, new[] { labelsArray.Length }), NumOps.One).Cast<int>().ToArray();
             foreach (var group in uniqueGroups)
             {
                 var samples = groupSamples[group];
@@ -104,7 +107,7 @@ public class StratifiedGroupKFoldStrategy<T> : ICrossValidationStrategy<T>
 
                 foreach (var idx in samples)
                 {
-                    int cls = NumOps.Compare(labelsArray[idx], NumOps.One) == 0 ? 1 : 0;
+                    int cls = sampleClasses[idx];
                     classVotes[cls] = classVotes.GetValueOrDefault(cls, 0) + 1;
                 }
 

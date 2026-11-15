@@ -347,20 +347,15 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
         }
 
         int gridSize = _occupancyGridResolution;
-        var grid = new T[gridSize * gridSize * gridSize];
+        int cellCount = gridSize * gridSize * gridSize;
 
         // Initialize all voxels as potentially occupied
         // Will be refined during training
-        for (int i = 0; i < grid.Length; i++)
-        {
-            grid[i] = NumOps.FromDouble(1.0);
-        }
+        _occupancyGrid = Engine.TensorOnesLike(new Tensor<T>([gridSize, gridSize, gridSize]));
 
-        _occupancyGrid = new Tensor<T>(grid, [gridSize, gridSize, gridSize]);
-
-        int bitfieldLength = GetBitfieldLength(grid.Length);
+        int bitfieldLength = GetBitfieldLength(cellCount);
         _occupancyBitfield = new uint[bitfieldLength];
-        FillBitfield(_occupancyBitfield, grid.Length, true);
+        FillBitfield(_occupancyBitfield, cellCount, true);
     }
 
     private void SetSceneBounds(Vector<T>? sceneMin, Vector<T>? sceneMax)
@@ -437,8 +432,7 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
             return;
         }
 
-        var gridData = _occupancyGrid.Data.Span;
-        int cellCount = gridData.Length;
+        int cellCount = _occupancyGrid.Length;
         int bitfieldLength = GetBitfieldLength(cellCount);
         if (_occupancyBitfield == null || _occupancyBitfield.Length != bitfieldLength)
         {
@@ -446,11 +440,14 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
         }
 
         Array.Clear(_occupancyBitfield, 0, _occupancyBitfield.Length);
-        for (int i = 0; i < cellCount; i++)
+        if (cellCount > 0)
         {
-            if (NumOps.ToDouble(gridData[i]) >= _occupancyThreshold)
+            var cells = _occupancyGrid.Reshape(cellCount);
+            var threshold = Engine.TensorFullLike(cells, NumOps.FromDouble(_occupancyThreshold));
+            var occupied = Engine.TensorNonzero(Engine.TensorGreaterEqual(cells, threshold)).ToArray();
+            foreach (int cell in occupied)
             {
-                SetBitfieldOccupied(_occupancyBitfield, i);
+                SetBitfieldOccupied(_occupancyBitfield, cell);
             }
         }
 
@@ -720,13 +717,12 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
     // over the positions was baked into the plan at trace time. The scene bounds are fixed at construction.
     private Tensor<T> NormalizePositionsToUnit(Tensor<T> positions)
     {
-        var sceneMin = new Tensor<T>(new[] { 1, 3 });
-        var sceneInvSize = new Tensor<T>(new[] { 1, 3 });
-        for (int i = 0; i < 3; i++)
-        {
-            sceneMin[i] = NumOps.FromDouble(_sceneMin[i]);
-            sceneInvSize[i] = NumOps.FromDouble(_sceneInvSize[i]);
-        }
+        var sceneMin = new Tensor<T>(
+            new[] { NumOps.FromDouble(_sceneMin[0]), NumOps.FromDouble(_sceneMin[1]), NumOps.FromDouble(_sceneMin[2]) },
+            new[] { 1, 3 });
+        var sceneInvSize = new Tensor<T>(
+            new[] { NumOps.FromDouble(_sceneInvSize[0]), NumOps.FromDouble(_sceneInvSize[1]), NumOps.FromDouble(_sceneInvSize[2]) },
+            new[] { 1, 3 });
 
         var scaled = Engine.TensorMultiply(Engine.TensorSubtract(positions, sceneMin), sceneInvSize);
         return Engine.TensorClamp(scaled, NumOps.Zero, NumOps.One);
@@ -1217,51 +1213,8 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
         int height,
         T focalLength)
     {
-        int numRays = width * height;
-        var origins = new T[numRays * 3];
-        var directions = new T[numRays * 3];
-        double f = NumOps.ToDouble(focalLength);
-        double cx = (width - 1) * 0.5;
-        double cy = (height - 1) * 0.5;
-
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                double px = (x - cx) / f;
-                double py = (y - cy) / f;
-                double pz = 1.0;
-
-                double dx = NumOps.ToDouble(cameraRotation[0, 0]) * px +
-                            NumOps.ToDouble(cameraRotation[0, 1]) * py +
-                            NumOps.ToDouble(cameraRotation[0, 2]) * pz;
-                double dy = NumOps.ToDouble(cameraRotation[1, 0]) * px +
-                            NumOps.ToDouble(cameraRotation[1, 1]) * py +
-                            NumOps.ToDouble(cameraRotation[1, 2]) * pz;
-                double dz = NumOps.ToDouble(cameraRotation[2, 0]) * px +
-                            NumOps.ToDouble(cameraRotation[2, 1]) * py +
-                            NumOps.ToDouble(cameraRotation[2, 2]) * pz;
-
-                double norm = Math.Sqrt(dx * dx + dy * dy + dz * dz);
-                if (norm > 0.0)
-                {
-                    double inv = 1.0 / norm;
-                    dx *= inv;
-                    dy *= inv;
-                    dz *= inv;
-                }
-
-                int idx = (y * width + x) * 3;
-                origins[idx] = cameraPosition[0];
-                origins[idx + 1] = cameraPosition[1];
-                origins[idx + 2] = cameraPosition[2];
-                directions[idx] = NumOps.FromDouble(dx);
-                directions[idx + 1] = NumOps.FromDouble(dy);
-                directions[idx + 2] = NumOps.FromDouble(dz);
-            }
-        }
-
-        return (new Tensor<T>(origins, [numRays, 3]), new Tensor<T>(directions, [numRays, 3]));
+        return NeuralRadianceFields.Helpers.ImageTrainingHelpers.GeneratePinholeRays(
+            Engine, cameraPosition, cameraRotation, width, height, focalLength);
     }
 
     private bool ComputeRayBounds(
@@ -1417,9 +1370,9 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
             var (positions, directions, occupancyMask, sampleTs, rayNear, rayFar) =
                 SampleRaysWithOccupancy(pixels.RayOrigins, pixels.RayDirections, numSamples, near, far);
             int totalSamples = numRays * numSamples;
-            var occupancy = new Tensor<T>(new[] { totalSamples, 1 });
-            for (int i = 0; i < totalSamples; i++)
-                occupancy[i] = occupancyMask[i] ? NumOps.One : NumOps.Zero;
+            var occupancyShape = new Tensor<T>(new[] { totalSamples, 1 });
+            var occupancy = Engine.TensorWhere(
+                occupancyMask, Engine.TensorOnesLike(occupancyShape), Engine.TensorZerosLike(occupancyShape));
             var spacings = NeuralRadianceFields.Helpers.VolumeRenderer<T>.Spacings(
                 numRays, numSamples, rayNear, rayFar, sampleTs);
 

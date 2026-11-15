@@ -83,19 +83,11 @@ public class SemanticScoreDistillation<T>
     /// <returns>Combined semantic + appearance gradient.</returns>
     public Vector<T> ComputeGradient(Vector<T> sdsGradient, Vector<T> semanticGradient)
     {
-        var gradient = new Vector<T>(sdsGradient.Length);
-        var appWeight = NumOps.FromDouble(_appearanceWeight);
-        var semWeight = NumOps.FromDouble(_semanticWeight);
-
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            var appGrad = NumOps.Multiply(appWeight, sdsGradient[i]);
-            var semGrad = NumOps.Multiply(semWeight,
-                i < semanticGradient.Length ? semanticGradient[i] : NumOps.Zero);
-            gradient[i] = NumOps.Add(appGrad, semGrad);
-        }
-
-        return gradient;
+        // appearance_weight * grad_sds + semantic_weight * grad_semantic (zero-padded to the SDS length)
+        var engine = AiDotNetEngine.Current;
+        var appGrad = engine.Multiply(sdsGradient, NumOps.FromDouble(_appearanceWeight));
+        var semGrad = engine.Multiply(DiffusionVectorOps.Fit(semanticGradient, sdsGradient.Length), NumOps.FromDouble(_semanticWeight));
+        return engine.Add(appGrad, semGrad);
     }
 
     /// <summary>
@@ -106,25 +98,18 @@ public class SemanticScoreDistillation<T>
     /// <returns>Cosine similarity between embeddings.</returns>
     public T ComputeSemanticAlignment(Vector<T> renderEmbedding, Vector<T> textEmbedding)
     {
-        var dotProduct = NumOps.Zero;
-        var normRender = NumOps.Zero;
-        var normText = NumOps.Zero;
+        // Cosine similarity over the common prefix; 0 when either norm vanishes
+        var engine = AiDotNetEngine.Current;
         int len = Math.Min(renderEmbedding.Length, textEmbedding.Length);
-
-        for (int i = 0; i < len; i++)
-        {
-            dotProduct = NumOps.Add(dotProduct,
-                NumOps.Multiply(renderEmbedding[i], textEmbedding[i]));
-            normRender = NumOps.Add(normRender,
-                NumOps.Multiply(renderEmbedding[i], renderEmbedding[i]));
-            normText = NumOps.Add(normText,
-                NumOps.Multiply(textEmbedding[i], textEmbedding[i]));
-        }
+        var render = DiffusionVectorOps.Fit(renderEmbedding, len);
+        var text = DiffusionVectorOps.Fit(textEmbedding, len);
+        var dotProduct = engine.DotProduct(render, text);
+        var normRender = engine.DotProduct(render, render);
+        var normText = engine.DotProduct(text, text);
 
         var denominator = NumOps.Multiply(NumOps.Sqrt(normRender), NumOps.Sqrt(normText));
         if (NumOps.LessThan(denominator, NumOps.FromDouble(1e-8)))
             return NumOps.Zero;
-
         return NumOps.Divide(dotProduct, denominator);
     }
 }

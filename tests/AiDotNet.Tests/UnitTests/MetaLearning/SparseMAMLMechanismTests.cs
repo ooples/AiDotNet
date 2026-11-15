@@ -75,7 +75,11 @@ public class SparseMAMLMechanismTests
         // A gate outside (0, 1) would either invert or amplify the update rather than gate it.
         foreach (double logit in new[] { -20.0, -1.0, 0.0, 1.0, 20.0 })
         {
-            var algorithm = Algorithm(o => o.InitialGateLogit = logit);
+            var algorithm = Algorithm(o =>
+            {
+                o.InitialGateLogit = logit;
+                o.GateFunction = SparseMAMLGateFunction.Sigmoid;
+            });
             double expected = 1.0 / (1.0 + Math.Exp(-logit));
             Assert.Equal(expected, algorithm.Gate(0), 9);
             Assert.InRange(algorithm.Gate(0), 0.0, 1.0);

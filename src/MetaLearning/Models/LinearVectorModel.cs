@@ -60,11 +60,9 @@ public partial class LinearVectorModel : ModelBase<double, Matrix<double>, Vecto
             throw new ArgumentOutOfRangeException(nameof(learningRate), "Learning rate must be positive.");
         _inputDim = inputDim;
         _learningRate = learningRate;
-        _parameters = new Vector<double>(inputDim + 1);
-        for (int i = 0; i < _parameters.Length; i++)
-        {
-            _parameters[i] = 0.01 * (i + 1);
-        }
+        // w_i = 0.01 (i + 1), bias included
+        _parameters = AiDotNetEngine.Current.TensorMultiplyScalar(
+            AiDotNetEngine.Current.TensorArange<double>(1, inputDim + 2, 1), 0.01).ToVector();
     }
 
     /// <inheritdoc/>
@@ -76,18 +74,20 @@ public partial class LinearVectorModel : ModelBase<double, Matrix<double>, Vecto
             throw new ArgumentException(
                 $"Input has {input.Columns} columns but model expects at least {_inputDim}.", nameof(input));
 
-        for (int r = 0; r < input.Rows; r++)
-        {
-            double sum = _parameters[_inputDim];
-            for (int c = 0; c < _inputDim; c++)
-            {
-                sum += input[r, c] * _parameters[c];
-            }
+        if (input.Rows == 0) return output;
 
-            output[r] = sum;
-        }
+        // y = X[:, :d] w + b
+        var engine = AiDotNetEngine.Current;
+        var weights = Tensor<double>.FromVector(_parameters.GetSubVector(0, _inputDim)).Reshape(_inputDim, 1);
+        var linear = engine.TensorMatMul(Features(input, input.Rows), weights).Reshape(input.Rows);
+        return engine.TensorAddScalar(linear, _parameters[_inputDim]).ToVector();
+    }
 
-        return output;
+    /// <summary>The first <paramref name="rows"/> rows of the model's <c>_inputDim</c> feature columns.</summary>
+    private Tensor<double> Features(Matrix<double> input, int rows)
+    {
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorNarrow(engine.TensorNarrow(Tensor<double>.FromMatrix(input), 0, 0, rows), 1, 0, _inputDim);
     }
 
     /// <inheritdoc/>
@@ -148,18 +148,13 @@ public partial class LinearVectorModel : ModelBase<double, Matrix<double>, Vecto
         // reported 1/n of its loss's gradient and every learner stepping on it moved n times too slowly.
         var lossGradient = loss.ComputeGradient(predictions, target);
 
-        for (int r = 0; r < count; r++)
-        {
-            double error = lossGradient[r];
-            for (int c = 0; c < _inputDim && c < input.Columns; c++)
-            {
-                gradients[c] += error * input[r, c];
-            }
-
-            gradients[_inputDim] += error;
-        }
-
-        return gradients;
+        // dL/dw = X^T e and dL/db = sum(e) over the first count rows
+        var engine = AiDotNetEngine.Current;
+        var errors = lossGradient.GetSubVector(0, count);
+        var weightGradient = engine.TensorMatMul(
+            engine.TensorTranspose(Features(input, count)), Tensor<double>.FromVector(errors).Reshape(count, 1));
+        using var biasGradient = new Tensor<double>(new[] { engine.Sum(errors) }, new[] { 1 });
+        return engine.Concat(new[] { weightGradient.Reshape(_inputDim), biasGradient }, 0).ToVector();
     }
 
     /// <inheritdoc/>
@@ -173,10 +168,9 @@ public partial class LinearVectorModel : ModelBase<double, Matrix<double>, Vecto
         if (learningRate <= 0)
             throw new ArgumentOutOfRangeException(nameof(learningRate), "Learning rate must be positive.");
 
-        for (int i = 0; i < _parameters.Length; i++)
-        {
-            _parameters[i] -= learningRate * gradients[i];
-        }
+        // In place, so a caller holding the parameter vector sees the step.
+        AiDotNetEngine.Current.Subtract(_parameters, AiDotNetEngine.Current.Multiply(gradients, learningRate))
+            .AsSpan().CopyTo(_parameters.AsWritableSpan());
     }
 
     /// <inheritdoc/>
@@ -245,9 +239,10 @@ public partial class LinearVectorModel : ModelBase<double, Matrix<double>, Vecto
         }
 
         // Use absolute weight magnitude as feature importance
-        for (int i = 0; i < _inputDim; i++)
+        var magnitudes = AiDotNetEngine.Current.Abs(_parameters.GetSubVector(0, _inputDim)).ToArray();
+        for (int i = 0; i < magnitudes.Length; i++)
         {
-            importance[$"feature_{i}"] = Math.Abs(_parameters[i]);
+            importance[$"feature_{i}"] = magnitudes[i];
         }
 
         return importance;
@@ -274,12 +269,6 @@ public partial class LinearVectorModel : ModelBase<double, Matrix<double>, Vecto
                 $"Parameter count mismatch: expected {expectedCount}, got {parts.Length}");
         }
 
-        var vector = new Vector<double>(parts.Length);
-        for (int i = 0; i < parts.Length; i++)
-        {
-            vector[i] = double.Parse(parts[i], CultureInfo.InvariantCulture);
-        }
-
-        _parameters = vector;
+        _parameters = new Vector<double>(parts.Select(part => double.Parse(part, CultureInfo.InvariantCulture)));
     }
 }

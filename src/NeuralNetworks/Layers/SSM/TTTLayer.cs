@@ -131,8 +131,6 @@ public partial class TTTLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _lnBeta;  // [modelDim]
 
     // Cached values for backward pass
-    [Scratch]
-    private Tensor<T>? _lastInnerWeights; // All W_t snapshots: [batch, seqLen+1, numHeads, headDim, headDim]
     private int[]? _originalInputShape;
 
     // Gradients
@@ -303,8 +301,7 @@ public partial class TTTLayer<T> : LayerBase<T>, IShapeContract
         }
 
         // Eta scale initialized to 1.0 so effective lr = innerLearningRate * 1.0
-        for (int h = 0; h < _numHeads; h++)
-            _etaScale[h] = NumOps.One;
+        _etaScale.Fill(NumOps.One);
 
         InitializeTensor2D(_outputGateWeights);
         _outputGateBias.Fill(NumOps.Zero);
@@ -312,11 +309,8 @@ public partial class TTTLayer<T> : LayerBase<T>, IShapeContract
         _outputProjectionBias.Fill(NumOps.Zero);
 
         // Layer norm: gamma=1, beta=0
-        for (int i = 0; i < _modelDimension; i++)
-        {
-            _lnGamma[i] = NumOps.One;
-            _lnBeta[i] = NumOps.Zero;
-        }
+        _lnGamma.Fill(NumOps.One);
+        _lnBeta.Fill(NumOps.Zero);
     }
 
     private void InitializeTensor2D(Tensor<T> tensor)
@@ -433,124 +427,6 @@ public partial class TTTLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
-    /// TTT-Linear forward: inner model weight update via gradient descent on self-supervised loss.
-    /// </summary>
-    /// <remarks>
-    /// For each timestep t and each head h:
-    ///   1. Compute prediction error: e_t = W_{t-1} * k_t - v_t
-    ///   2. Compute gradient: grad = 2 * e_t * k_t^T (outer product, scaled)
-    ///   3. Update: W_t = W_{t-1} - eta_h * grad
-    ///   4. Output: o_t = W_t * q_t
-    ///
-    /// This is mathematically equivalent to the delta rule applied to a linear associative memory,
-    /// where keys map to values. The inner model literally learns a key-value lookup at test time.
-    /// </remarks>
-    private Tensor<T> TTTLinearForward(
-        Tensor<T> q, Tensor<T> k, Tensor<T> v,
-        int batchSize, int seqLen)
-    {
-        var output = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-
-        // Inner weights state: starts from W_0 (learnable initialization) for each batch element
-        var innerW = TensorAllocator.Rent<T>(new[] { batchSize, _numHeads, _headDimension, _headDimension });
-        var allInnerW = TensorAllocator.Rent<T>(new[] { batchSize, seqLen + 1, _numHeads, _headDimension, _headDimension });
-
-        // Initialize inner weights to W_0
-        for (int bi = 0; bi < batchSize; bi++)
-        {
-            for (int hi = 0; hi < _numHeads; hi++)
-            {
-                for (int di = 0; di < _headDimension; di++)
-                {
-                    for (int dj = 0; dj < _headDimension; dj++)
-                    {
-                        T w0 = _innerWeightsInit[new[] { hi, di, dj }];
-                        innerW[new[] { bi, hi, di, dj }] = w0;
-                        allInnerW[new[] { bi, 0, hi, di, dj }] = w0;
-                    }
-                }
-            }
-        }
-
-        T two = NumOps.FromDouble(2.0);
-
-        for (int t = 0; t < seqLen; t++)
-        {
-            for (int hi = 0; hi < _numHeads; hi++)
-            {
-                int dimStart = hi * _headDimension;
-
-                // Effective learning rate for this head: eta * etaScale[h]
-                T etaH = NumOps.Multiply(_innerLearningRate, _etaScale[hi]);
-
-                for (int bi = 0; bi < batchSize; bi++)
-                {
-                    // Extract key and value vectors for this head
-                    var kHead = new T[_headDimension];
-                    var vHead = new T[_headDimension];
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        kHead[di] = k[new[] { bi, t, dimStart + di }];
-                        vHead[di] = v[new[] { bi, t, dimStart + di }];
-                    }
-
-                    // Step 1: Compute prediction error e = W * k - v
-                    var error = new T[_headDimension];
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        T wk = NumOps.Zero;
-                        for (int dj = 0; dj < _headDimension; dj++)
-                        {
-                            wk = NumOps.Add(wk,
-                                NumOps.Multiply(innerW[new[] { bi, hi, di, dj }], kHead[dj]));
-                        }
-                        error[di] = NumOps.Subtract(wk, vHead[di]);
-                    }
-
-                    // Step 2-3: Update W_t = W_{t-1} - eta * 2 * error * k^T
-                    // Gradient: dL/dW = 2 * error * k^T (outer product)
-                    // Update combines steps: W -= eta * 2 * error * k^T
-                    T etaTwo = NumOps.Multiply(etaH, two);
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        T scaledError = NumOps.Multiply(etaTwo, error[di]);
-                        for (int dj = 0; dj < _headDimension; dj++)
-                        {
-                            T grad = NumOps.Multiply(scaledError, kHead[dj]);
-                            innerW[new[] { bi, hi, di, dj }] = NumOps.Subtract(
-                                innerW[new[] { bi, hi, di, dj }], grad);
-                        }
-                    }
-
-                    // Step 4: Output o = W_t * q
-                    var qHead = new T[_headDimension];
-                    for (int di = 0; di < _headDimension; di++)
-                        qHead[di] = q[new[] { bi, t, dimStart + di }];
-
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        T oVal = NumOps.Zero;
-                        for (int dj = 0; dj < _headDimension; dj++)
-                        {
-                            oVal = NumOps.Add(oVal,
-                                NumOps.Multiply(innerW[new[] { bi, hi, di, dj }], qHead[dj]));
-                        }
-                        output[new[] { bi, t, dimStart + di }] = oVal;
-                    }
-
-                    // Save W_t snapshot for backward pass
-                    for (int di = 0; di < _headDimension; di++)
-                        for (int dj = 0; dj < _headDimension; dj++)
-                            allInnerW[new[] { bi, t + 1, hi, di, dj }] = innerW[new[] { bi, hi, di, dj }];
-                }
-            }
-        }
-
-        _lastInnerWeights = allInnerW;
-        return output;
-    }
-
-    /// <summary>
     /// Simple layer normalization across the last dimension.
     /// </summary>
     private Tensor<T> LayerNormForward(Tensor<T> input, int batchSize, int seqLen)
@@ -561,81 +437,6 @@ public partial class TTTLayer<T> : LayerBase<T>, IShapeContract
         // recompute path below — Engine.LayerNormBackward could fold that in
         // as a follow-up but leaves a larger refactor behind.
         return Engine.LayerNorm(input, _lnGamma, _lnBeta, 1e-5, out _, out _);
-    }
-
-    /// <summary>
-    /// Backward pass for layer normalization.
-    /// </summary>
-    private Tensor<T> LayerNormBackward(Tensor<T> dOutput, Tensor<T> input, int batchSize, int seqLen)
-    {
-        var dInput = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _modelDimension });
-        T eps = NumOps.FromDouble(1e-5);
-        T invDim = NumOps.Divide(NumOps.One, NumOps.FromDouble(_modelDimension));
-        var lnGammaGrad = _lnGammaGradient
-            ?? throw new InvalidOperationException("Gradients must be initialized before backward pass.");
-        var lnBetaGrad = _lnBetaGradient
-            ?? throw new InvalidOperationException("Gradients must be initialized before backward pass.");
-
-        for (int bi = 0; bi < batchSize; bi++)
-        {
-            for (int t = 0; t < seqLen; t++)
-            {
-                // Recompute mean, variance, invStd
-                T mean = NumOps.Zero;
-                for (int d = 0; d < _modelDimension; d++)
-                    mean = NumOps.Add(mean, input[new[] { bi, t, d }]);
-                mean = NumOps.Multiply(mean, invDim);
-
-                T variance = NumOps.Zero;
-                for (int d = 0; d < _modelDimension; d++)
-                {
-                    T diff = NumOps.Subtract(input[new[] { bi, t, d }], mean);
-                    variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-                }
-                variance = NumOps.Multiply(variance, invDim);
-                T invStd = NumOps.Divide(NumOps.One, NumOps.Sqrt(NumOps.Add(variance, eps)));
-
-                // Compute normalized values and gradient accumulations
-                T dMean = NumOps.Zero;
-                T dVar = NumOps.Zero;
-
-                for (int d = 0; d < _modelDimension; d++)
-                {
-                    T xCentered = NumOps.Subtract(input[new[] { bi, t, d }], mean);
-                    T xNorm = NumOps.Multiply(xCentered, invStd);
-                    T dNorm = NumOps.Multiply(dOutput[new[] { bi, t, d }], _lnGamma[d]);
-
-                    // Accumulate gamma and beta gradients
-                    lnGammaGrad[d] = NumOps.Add(lnGammaGrad[d],
-                        NumOps.Multiply(dOutput[new[] { bi, t, d }], xNorm));
-                    lnBetaGrad[d] = NumOps.Add(lnBetaGrad[d],
-                        dOutput[new[] { bi, t, d }]);
-
-                    dMean = NumOps.Add(dMean, dNorm);
-                    dVar = NumOps.Subtract(dVar,
-                        NumOps.Multiply(NumOps.FromDouble(0.5),
-                            NumOps.Multiply(dNorm,
-                                NumOps.Multiply(xCentered,
-                                    NumOps.Multiply(invStd, NumOps.Multiply(invStd, invStd))))));
-                }
-
-                dMean = NumOps.Multiply(NumOps.Negate(invStd), dMean);
-
-                for (int d = 0; d < _modelDimension; d++)
-                {
-                    T xCentered = NumOps.Subtract(input[new[] { bi, t, d }], mean);
-                    T dNorm = NumOps.Multiply(dOutput[new[] { bi, t, d }], _lnGamma[d]);
-
-                    T dX = NumOps.Multiply(dNorm, invStd);
-                    dX = NumOps.Add(dX, NumOps.Multiply(NumOps.Multiply(two(dVar), xCentered), invDim));
-                    dX = NumOps.Add(dX, NumOps.Multiply(dMean, invDim));
-
-                    dInput[new[] { bi, t, d }] = dX;
-                }
-            }
-        }
-
-        return dInput;
     }
 
     /// <summary>
@@ -713,7 +514,6 @@ public partial class TTTLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInnerWeights = null;
         _originalInputShape = null;
         _queryWeightsGradient = null;
         _queryBiasGradient = null;

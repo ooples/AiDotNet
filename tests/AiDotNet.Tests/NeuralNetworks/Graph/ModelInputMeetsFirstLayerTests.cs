@@ -333,13 +333,7 @@ public class ModelInputMeetsFirstLayerTests
         instance = null;
         failure = null;
 
-        var ctor = closed.GetConstructors().FirstOrDefault(c =>
-        {
-            var ps = c.GetParameters();
-            return ps.Length > 0
-                && ps[0].ParameterType == typeof(NeuralNetworkArchitecture<double>)
-                && ps.Skip(1).All(p => p.HasDefaultValue);
-        });
+        var ctor = ModelSweepConstruction.FindArchitectureConstructor(closed, typeof(NeuralNetworkArchitecture<double>));
         if (ctor is null) { failure = "no architecture constructor"; return false; }
 
         var architecture = new NeuralNetworkArchitecture<double>(

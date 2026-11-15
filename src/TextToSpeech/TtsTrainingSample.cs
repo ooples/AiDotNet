@@ -44,10 +44,10 @@ public sealed class TtsTrainingSample<T>
     public int[]? WordLengths { get; init; }
 
     /// <summary>F0 per mel frame in Hz, 0 where unvoiced. Derived from <see cref="Audio"/> when absent.</summary>
-    public double[]? Pitch { get; init; }
+    public Tensor<T>? Pitch { get; init; }
 
     /// <summary>Energy per mel frame. Derived from <see cref="Audio"/> when absent.</summary>
-    public double[]? Energy { get; init; }
+    public Tensor<T>? Energy { get; init; }
 
     /// <summary>Reference audio or embedding for the target speaker or style.</summary>
     public Tensor<T>? SpeakerReference { get; init; }

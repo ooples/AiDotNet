@@ -367,9 +367,10 @@ public partial class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
         // Element-wise version of the scalar overload below: (sumSq - count * mean^2) / (count - 1),
         // and 0 where count < 2.
         var engine = AiDotNetEngine.Current;
-        var mean = engine.Divide(sum, count);
+        var mean = RegressionEngineOps.DivideWherePositive(sum, count);
         var sumSquaredDeviations = engine.Subtract(sumSq, engine.Multiply(count, engine.Multiply(mean, mean)));
-        var variance = engine.Divide(sumSquaredDeviations, engine.Subtract(count, engine.Fill(count.Length, NumOps.One)));
+        var variance = RegressionEngineOps.DivideWherePositive(
+            sumSquaredDeviations, engine.Subtract(count, engine.Fill(count.Length, NumOps.One)));
         return engine.TensorWhere(
             engine.TensorGreaterThan(Tensor<T>.FromVector(count), NumOps.One),
             Tensor<T>.FromVector(variance),

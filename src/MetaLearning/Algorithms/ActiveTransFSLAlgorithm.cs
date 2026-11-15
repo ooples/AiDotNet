@@ -83,12 +83,17 @@ public partial class ActiveTransFSLAlgorithm<T, TInput, TOutput> : MetaLearnerBa
         var losses = new List<T>();
         var metaGradients = new List<Vector<T>>();
         var initParams = ParamModel.GetParameters();
+        T transductiveLR = NumOps.FromDouble(_algoOptions.TransductiveLR);
+        double w = _algoOptions.TransductiveWeight;
+        T inductiveShare = NumOps.FromDouble(1.0 - w);
+        T transductiveShare = NumOps.FromDouble(w);
+        int threshIdx = (int)((1.0 - _algoOptions.SelectionFraction) * _paramDim);
+        if (threshIdx >= _paramDim) threshIdx = _paramDim - 1;
 
         foreach (var task in taskBatch.Tasks)
         {
             // Phase 1: Inductive adaptation on support
-            var adaptedParams = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
+            var adaptedParams = initParams.Clone();
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
@@ -102,36 +107,23 @@ public partial class ActiveTransFSLAlgorithm<T, TInput, TOutput> : MetaLearnerBa
             var inductiveLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
 
             // Phase 2: Active transductive refinement
-            var transParams = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) transParams[d] = adaptedParams[d];
+            var transParams = adaptedParams.Clone();
 
             for (int rStep = 0; rStep < _algoOptions.TransductiveRefinementSteps; rStep++)
             {
                 ParamModel.SetParameters(transParams);
                 var queryGrad = ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput));
 
-                // Compute uncertainty per parameter
-                var uncertainty = new double[_paramDim];
-                for (int d = 0; d < _paramDim; d++)
-                    uncertainty[d] = Math.Abs(NumOps.ToDouble(queryGrad[d]));
+                // Uncertainty per parameter is |grad|; the threshold is its threshIdx-th smallest value, so the
+                // top (1 - threshIdx / n) fraction of parameters is updated.
+                var uncertainty = Engine.TensorAbs(Tensor<T>.FromVector(queryGrad));
+                var sorted = Engine.TensorSort(uncertainty, 0, false).Values;
+                T threshold = sorted[threshIdx];
 
-                // Find threshold for top-f fraction
-                var sorted = new double[_paramDim];
-                Array.Copy(uncertainty, sorted, _paramDim);
-                Array.Sort(sorted);
-                int threshIdx = (int)((1.0 - _algoOptions.SelectionFraction) * _paramDim);
-                if (threshIdx >= _paramDim) threshIdx = _paramDim - 1;
-                double threshold = sorted[threshIdx];
-
-                // Selectively update only uncertain parameters
-                for (int d = 0; d < _paramDim; d++)
-                {
-                    if (uncertainty[d] >= threshold)
-                    {
-                        transParams[d] = NumOps.Subtract(transParams[d],
-                            NumOps.FromDouble(_algoOptions.TransductiveLR * NumOps.ToDouble(queryGrad[d])));
-                    }
-                }
+                // Selectively update only uncertain parameters: mask = 1 where uncertainty >= threshold
+                var selected = Engine.TensorSubtract(
+                    Engine.TensorOnesLike(uncertainty), Engine.TensorLessThan(uncertainty, threshold)).ToVector();
+                transParams = Engine.Subtract(transParams, Engine.Multiply(Engine.Multiply(queryGrad, selected), transductiveLR));
             }
 
             ParamModel.SetParameters(transParams);
@@ -139,9 +131,8 @@ public partial class ActiveTransFSLAlgorithm<T, TInput, TOutput> : MetaLearnerBa
 
             // Combine inductive and transductive losses using TransductiveWeight
             // L_meta = (1 - w) * L_inductive + w * L_transductive
-            double w = _algoOptions.TransductiveWeight;
-            double combinedLoss = (1.0 - w) * NumOps.ToDouble(inductiveLoss) + w * NumOps.ToDouble(transductiveLoss);
-            losses.Add(NumOps.FromDouble(combinedLoss));
+            losses.Add(NumOps.Add(
+                NumOps.Multiply(inductiveShare, inductiveLoss), NumOps.Multiply(transductiveShare, transductiveLoss)));
 
             // Compute combined gradient consistent with the combined loss:
             // grad_meta = (1-w) * grad_inductive + w * grad_transductive
@@ -150,12 +141,8 @@ public partial class ActiveTransFSLAlgorithm<T, TInput, TOutput> : MetaLearnerBa
             ParamModel.SetParameters(transParams);
             var transductiveGrad = ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput);
 
-            var combinedGrad = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++)
-            {
-                double gd = (1.0 - w) * NumOps.ToDouble(inductiveGrad[d]) + w * NumOps.ToDouble(transductiveGrad[d]);
-                combinedGrad[d] = NumOps.FromDouble(gd);
-            }
+            var combinedGrad = Engine.Add(
+                Engine.Multiply(inductiveGrad, inductiveShare), Engine.Multiply(transductiveGrad, transductiveShare));
             metaGradients.Add(ClipGradients(combinedGrad));
         }
 
@@ -169,8 +156,7 @@ public partial class ActiveTransFSLAlgorithm<T, TInput, TOutput> : MetaLearnerBa
     {
         if (task == null) throw new ArgumentNullException(nameof(task));
         var initParams = ParamModel.GetParameters();
-        var adaptedParams = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
+        var adaptedParams = initParams.Clone();
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {

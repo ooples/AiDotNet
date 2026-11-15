@@ -25,11 +25,13 @@ public class SparseMAMLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerO
     /// <summary>The model whose parameters the meta-learner trains to adapt quickly to new tasks.</summary>
     public IFullModel<T, TInput, TOutput> MetaModel { get; set; }
     /// <inheritdoc cref="IMetaLearnerOptions{T}.InnerLearningRate"/>
-    public double InnerLearningRate { get; set; } = 0.01;
+    /// <value>Defaults to 0.1, the paper's alpha (Sec. 4, ConvNet experiments).</value>
+    public double InnerLearningRate { get; set; } = 0.1;
     /// <inheritdoc cref="IMetaLearnerOptions{T}.OuterLearningRate"/>
     public double OuterLearningRate { get; set; } = 0.001;
     /// <inheritdoc cref="IMetaLearnerOptions{T}.AdaptationSteps"/>
-    public int AdaptationSteps { get; set; } = 5;
+    /// <value>Defaults to 25, the paper's K for its ConvNet experiments.</value>
+    public int AdaptationSteps { get; set; } = 25;
     /// <inheritdoc cref="IMetaLearnerOptions{T}.MetaBatchSize"/>
     public int MetaBatchSize { get; set; } = 4;
     /// <inheritdoc cref="IMetaLearnerOptions{T}.NumMetaIterations"/>
@@ -78,8 +80,15 @@ public class SparseMAMLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerO
     /// <summary>
     /// Gets or sets the step size for meta-updating the gate logits.
     /// </summary>
-    /// <value>Defaults to 1e-2.</value>
-    public double GateLearningRate { get; set; } = 1e-2;
+    /// <remarks>gamma_m in Eq. 5 of the paper.</remarks>
+    /// <value>Defaults to 0.0075, the paper's gamma_m for sparse-MAML (Table S2).</value>
+    public double GateLearningRate { get; set; } = 0.0075;
+
+    /// <summary>
+    /// Gets or sets how a gate logit becomes the gate applied to the inner-loop update.
+    /// </summary>
+    /// <value>Defaults to <see cref="SparseMAMLGateFunction.Step"/>, the paper's binary mask 1[m &gt;= 0].</value>
+    public SparseMAMLGateFunction GateFunction { get; set; } = SparseMAMLGateFunction.Step;
 
     /// <summary>
     /// Gets or sets whether per-parameter learning rates are meta-learned alongside the mask.
@@ -97,8 +106,8 @@ public class SparseMAMLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerO
     /// reported.
     /// </summary>
     /// <remarks>
-    /// Reporting only; it does not gate the update, which uses the continuous gate so the mask stays
-    /// differentiable with respect to its logits.
+    /// Reporting only; it does not gate the update. For the step gate any threshold in (0, 1) counts
+    /// exactly the logits below zero.
     /// </remarks>
     /// <value>Defaults to 0.5.</value>
     public double SparsityThreshold { get; set; } = 0.5;
@@ -127,9 +136,25 @@ public class SparseMAMLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerO
         InitialGateLogit = InitialGateLogit,
         GateLearningRate = GateLearningRate,
         MetaLearnPerParameterRates = MetaLearnPerParameterRates,
-        SparsityThreshold = SparsityThreshold, MetaBatchSize = MetaBatchSize, NumMetaIterations = NumMetaIterations,
+        SparsityThreshold = SparsityThreshold, GateFunction = GateFunction, MetaBatchSize = MetaBatchSize, NumMetaIterations = NumMetaIterations,
         GradientClipThreshold = GradientClipThreshold, RandomSeed = RandomSeed, EvaluationTasks = EvaluationTasks,
         EvaluationFrequency = EvaluationFrequency, EnableCheckpointing = EnableCheckpointing,
         CheckpointFrequency = CheckpointFrequency, UseFirstOrder = UseFirstOrder,
     };
+}
+
+/// <summary>
+/// The function that maps a sparse-MAML gate logit m to the gate on its parameter's update.
+/// </summary>
+public enum SparseMAMLGateFunction
+{
+    /// <summary>
+    /// The paper's binary mask 1[m &gt;= 0] (Eq. 4), differentiated with the straight-through estimator.
+    /// </summary>
+    Step,
+
+    /// <summary>
+    /// A smooth relaxation sigmoid(m), differentiated exactly; gates lie in (0, 1).
+    /// </summary>
+    Sigmoid,
 }

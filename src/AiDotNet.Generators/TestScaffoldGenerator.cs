@@ -347,6 +347,10 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
         "AdversarialImageEvaluator",
         "ODISE",
 
+        // UniverSeg (Butoi et al. 2023) is defined only for a non-empty support set, so it rejects a
+        // prediction before SetSupportSet; its manual scaffold gives every fixture a support set.
+        "UniverSeg",
+
         // GraphCodeBERT (Guo et al. 2021): its parameterless ctor builds the
         // CodeSynthesisArchitecture DEFAULTS — BERT-base scale (6 layers, 512 dim,
         // 512 seq, 50000 vocab). The 512->50000 output projection alone is ~25M
@@ -631,9 +635,14 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
     /// </summary>
     /// <remarks>
     /// Prototypical networks (Snell et al. 2017) take the ways from the labels: one prototype per class present.
+    /// P>M>F (Hu et al. 2022) is a prototypical classifier over a pre-trained backbone, so it takes them the same way.
     /// </remarks>
     private static readonly System.Collections.Generic.HashSet<string> ClassifierMetaLearnersWithoutClassCount =
-        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal) { "ProtoNetsAlgorithm" };
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        {
+            "ProtoNetsAlgorithm",
+            "PMFAlgorithm",
+        };
 
     /// <summary>
     /// Whether a meta-learner classifies: its options declare a class count, or it is a known classifier that
@@ -6151,7 +6160,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
-                    "options: new AiDotNet.Video.Options.VideoCLIPVideoOptions { NumFrames = 4, EmbeddingDim = 4, TextMaxLength = 8, VocabSize = 64, HiddenDimension = 32, " +
+                    "options: new AiDotNet.Video.Options.VideoCLIPVideoOptions { NumFrames = 4, EmbeddingDim = 4, TextMaxLength = 8, VocabSize = 64, HiddenDimension = 24, " +
                     "NumSpatialBlocks = 1, NumTemporalBlocks = 1, NumTextBlocks = 1, " +
                     // Paper warm-up is 1000 optimizer steps and the model keeps that default.
                     // These invariants train for one or two steps, where a 1000-step linear
@@ -8418,15 +8427,18 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             else if (model.ClassName == "AudioGenModel" && model.TypeParameterCount == 1)
             {
                 // Production retains AudioGen-Medium (text dim 768, LM dim
-                // 1536, 24 decoder layers, four 1024-entry EnCodec books).
+                // 1536, 24 decoder layers, four 2048-entry EnCodec books and
+                // a 64-filter SEANet decoder with a 2-layer LSTM).
                 // Exercise the same token embedding -> text transformer ->
                 // cross-modal projection -> autoregressive LM -> codebook head
                 // through the public native constructor at CI-smoke scale.
+                // The frozen decoder shrinks through its options too: at the paper
+                // width it alone holds ~7.3M parameters for a few-thousand-parameter LM.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Generative, " +
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "options: new AiDotNet.Audio.AudioGen.AudioGenOptions { ModelSize = AiDotNet.Audio.AudioGen.AudioGenModelSize.Medium, SampleRate = 8000, DurationSeconds = 0.1, MaxDurationSeconds = 0.1, TextHiddenDim = 32, LmHiddenDim = 32, NumLmLayers = 2, NumHeads = 2, NumCodebooks = 1, CodebookSize = 4, MaxTextLength = 8 }" + ", seed: 42)";
+                    "options: new AiDotNet.Audio.AudioGen.AudioGenOptions { ModelSize = AiDotNet.Audio.AudioGen.AudioGenModelSize.Medium, SampleRate = 8000, DurationSeconds = 0.1, MaxDurationSeconds = 0.1, TextHiddenDim = 32, LmHiddenDim = 32, NumLmLayers = 2, NumHeads = 2, NumCodebooks = 1, CodebookSize = 4, MaxTextLength = 8, EncodecDimension = 8, EncodecFilters = 4, EncodecLstmLayers = 1 }" + ", seed: 42)";
             }
             else if (model.ClassName == "BandSplitRNN" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
@@ -8938,6 +8950,27 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "new[] { 24, 32, 32 } }, ClassifierChannels = new[] { 32, 16 }, " +
                     "UseDropout = false })";
             }
+            else if ((model.ClassName == "PointTransformerV3" || model.ClassName == "Sonata") && model.TypeParameterCount == 1
+                && model.FullyQualifiedName.IndexOf("Segmentation.PointCloud.", System.StringComparison.Ordinal) >= 0)
+            {
+                // PTv3 (46M) and Sonata (108M) are paper scale by default. Two stages of 8/16
+                // channels with 16-point patches keep serialization, xCPE, attention, pooling and
+                // the head on the generated path at CI scale; inputs are [points, 9], xyz first.
+                string optionsType = model.ClassName == "Sonata" ? "SonataOptions" : "PointTransformerV3Options";
+                string inputChannels = model.ClassName == "Sonata" ? "9" : "6";
+                string tail = model.ClassName == "Sonata"
+                    ? "UpCastLevel = 1, HeadHiddenChannels = 16, HeadEmbedChannels = 8, PrototypeCount = 16"
+                    : "DecoderDepths = new[] { 1 }, DecoderChannels = new[] { 8 }, DecoderNumHeads = new[] { 2 }, " +
+                      "DecoderPatchSizes = new[] { 16 }";
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.ImageSegmentation, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
+                    $"options: new AiDotNet.ComputerVision.Segmentation.PointCloud.{optionsType} {{ " +
+                    $"NumClasses = 4, InputChannels = {inputChannels}, GridSize = 0.05, Strides = new[] {{ 2 }}, " +
+                    "EncoderDepths = new[] { 1, 1 }, EncoderChannels = new[] { 8, 16 }, EncoderNumHeads = new[] { 2, 2 }, " +
+                    $"EncoderPatchSizes = new[] {{ 16, 16 }}, {tail}, Seed = 7 }})";
+            }
             else if (model.ClassName == "OnlinePassiveAggressiveRegressor" && model.TypeParameterCount == 1)
             {
                 // Keep the paper's one-pass default for online PartialFit and the default
@@ -9302,7 +9335,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputSize: 2, outputSize: 1), " +
-                    "energyFunctional: (x, u, g) => 0.5f * (g[0, 0] * g[0, 0] + g[0, 1] * g[0, 1]) - u[0], " +
+                    "energyFunctional: AiDotNet.PhysicsInformed.PINNs.DeepRitzEnergy<double>.Poisson(1), " +
                     "options: new AiDotNet.PhysicsInformed.Options.DeepRitzMethodOptions { NumQuadraturePoints = 64 })";
             }
             else if (model.ClassName == "VariationalPINN" && model.TypeParameterCount == 1)
@@ -9313,7 +9346,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputSize: 2, outputSize: 1), " +
-                    "weakFormResidual: (x, u, gu, v, gv) => gu[0, 0] * gv[0, 0] + gu[0, 1] * gv[0, 1] - v[0], " +
+                    "weakFormResidual: AiDotNet.PhysicsInformed.PINNs.VariationalWeakForm<double>.Poisson(1), " +
                     "options: new AiDotNet.PhysicsInformed.Options.VariationalPINNOptions { NumQuadraturePoints = 64, NumTestFunctions = 4 })";
             }
             else if (model.ClassName == "DeepOperatorNetwork" && model.TypeParameterCount == 1)
@@ -10660,8 +10693,9 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                      model.FullyQualifiedName.IndexOf(
                          "AiDotNet.SpeechRecognition.LLMIntegrated.", System.StringComparison.Ordinal) >= 0)
             {
-                // Fit the same compact speech tokenizer used by the native ASR task tests.
-                constructorExpr = "AiDotNet.Tests.TextToSpeech.AudioPaLMFixture.Asr<double>()";
+                // The compact ASR fixture, its speech tokenizer fitted on a broad corpus (tones, offset noise, steady
+                // levels): a codebook fitted on two tones quantizes every generic probe to one audio token.
+                constructorExpr = "AiDotNet.Tests.TextToSpeech.AudioPaLMFixture.AsrOverBroadAudio<double>()";
             }
 
             else if (model.ClassName == "CodeSwitchingASR" && model.TypeParameterCount == 1)
@@ -15493,6 +15527,10 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             // The bounded constructor above uses four 16x16 patch tokens and a 64-token head.
             sb.AppendLine("    protected override int[] InputShape => new[] { 3, 32, 32 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 4, 64 };");
+            // The Pix2Struct image processor standardizes each page by its own mean and std (Lee et al. 2023),
+            // so a page scaled 10x is the same page after preprocessing by design: the scaled-input invariant
+            // does not apply.
+            sb.AppendLine("    protected override bool ScaledInputInvariantApplicable => false;");
         }
         else if (model.ClassName == "Donut"
                  && typeName.StartsWith(
@@ -15510,6 +15548,10 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             // 32x32 with 16x16 patches gives four encoder tokens; the reduced vocabulary head is 64.
             sb.AppendLine("    protected override int[] InputShape => new[] { 3, 32, 32 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 4, 64 };");
+            // The Pix2Struct image processor standardizes each page by its own mean and std (Lee et al. 2023),
+            // so a page scaled 10x is the same page after preprocessing by design: the scaled-input invariant
+            // does not apply.
+            sb.AppendLine("    protected override bool ScaledInputInvariantApplicable => false;");
         }
         else if (model.ClassName == "InfographicVQA")
         {
@@ -15665,6 +15707,14 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
             sb.AppendLine("    protected override int MemorizationTaskIterations => 2;");
             sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");
+        }
+        else if ((model.ClassName == "PointTransformerV3" || model.ClassName == "Sonata")
+            && model.FullyQualifiedName.IndexOf("Segmentation.PointCloud.", System.StringComparison.Ordinal) >= 0)
+        {
+            // PTv3 and Sonata segment a point cloud [points, 9] (xyz then features) into per-point
+            // logits [points, classes]; the generic vision branch's [3, H, W] is not a point cloud.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 24, 9 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 24, 4 };");
         }
         else if (model.ClassName == "PointNetPlusPlus")
         {
@@ -22925,6 +22975,10 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             "GraphWaveNet" => "207, 12",
             "MTGNN" => "207, 12",
 
+            // RelationalGCN (Schlichtkrull et al. 2018): per-node output [numNodes, forecastHorizon] = [100, 12]
+            // (RelationalGCNOptions defaults). Pairs with input "100, 12, 16".
+            "RelationalGCN" => "100, 12",
+
             // All others: [B, forecastHorizon]. Common paper defaults 96.
             _ => "96",
         };
@@ -23031,6 +23085,10 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             // = [207, 12, 2], reshaped per-node for shared-weight WaveNet layers.
             "GraphWaveNet" => "207, 12, 2",
             "MTGNN" => "207, 12, 2",
+
+            // RelationalGCN: [numNodes, seqLen, numFeatures] = [100, 12, 16] (RelationalGCNOptions defaults),
+            // one history row per node for the per-node encoder ahead of the R-GCN layers.
+            "RelationalGCN" => "100, 12, 16",
 
             _ => ctx,
         };

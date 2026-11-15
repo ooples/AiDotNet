@@ -1,0 +1,62 @@
+name: Shard timing table
+
+# Builds the timing table that Layer 2 of test-impact selection predicts a shard slice's test time from
+# (tools/TestImpact/ShardPacking.ps1; repository variable TEST_IMPACT_REPACK in sonarcloud.yml).
+#
+# The table is seconds per test class per shard, the median over the newest test-outcome ledgers that Build &
+# SonarCloud runs already publish (artifact test-outcome-ledger-<sha>). It is saved to the Actions cache from the
+# default branch, which is the one place a pull request's Build job can read in a second or two without a
+# commit to the repository; the Build job only ever restores it. A cache entry is dropped after seven days
+# without a read, so this runs daily. Without a table nothing is packed: every slice is predicted to fill a job.
+#
+# It reads run metadata and artifacts and writes one cache entry. It cannot choose a shard, skip a test or
+# change a result: a wrong or stale table only changes which job a selected slice runs in.
+
+on:
+  schedule:
+    - cron: '30 8 * * *'   # 08:30 UTC, after the 03:00 nightly of Build & SonarCloud has published its ledger
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: shard-timing-table
+  cancel-in-progress: false
+
+jobs:
+  build-table:
+    name: Build the shard timing table
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # The cache a pull request can read is the default branch's; a table built anywhere else would be unreadable.
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          persist-credentials: false
+
+      - name: Build the table from the newest ledgers
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./tools/TestImpact/New-ShardTimingTable.ps1 -Repository '${{ github.repository }}' -OutFile shard-timing-table.json
+
+      # A new key every run: a cache entry cannot be overwritten, and the Build job restores the newest entry
+      # with the shard-timing-table-v1- prefix.
+      - name: Save the table to the cache
+        if: ${{ hashFiles('shard-timing-table.json') != '' }}
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
+        with:
+          path: shard-timing-table.json
+          key: shard-timing-table-v1-${{ github.run_id }}
+
+      - name: Upload the table
+        if: ${{ hashFiles('shard-timing-table.json') != '' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with:
+          name: shard-timing-table
+          path: shard-timing-table.json
+          retention-days: 14

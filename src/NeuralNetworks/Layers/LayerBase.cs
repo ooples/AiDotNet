@@ -332,12 +332,12 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     private bool _scatterVectorHandedOut;
 
     // On a GPU engine a training step's gradients live on the device. Publishing them used to download every one,
-    // every step (one sync per tensor: 35 per LSTM step, 65 per Transformer step). The layer now keeps OWNED device
-    // copies (an async device-to-device copy each, no sync) and downloads only if something reads the gradients.
-    // Owned, not referenced: the step's own gradient buffers are reclaimed when it returns. A compiled plan's buffers,
-    // device or host, persist until its next step republishes them, so those are referenced instead
-    // (TryPublishDeviceGradients, TryReferenceHostGradients).
+    // every step (one sync per tensor: 35 per LSTM step, 65 per Transformer step). The layer now keeps them on the
+    // device and downloads only if something reads them (TryPublishDeviceGradients, TryReferenceHostGradients). A
+    // compiled plan's buffers persist until its next step republishes them, so those are referenced. A tape step's
+    // are copied into the device tensors below, because the step clips its own in place after publishing them.
     private Dictionary<Tensor<T>, Tensor<T>>? _pendingDeviceGradients;
+    private Dictionary<Tensor<T>, Tensor<T>>? _publishedDeviceGradBuffers;
 
     /// <summary>
     /// Gets the input shape for this layer.
@@ -6472,9 +6472,22 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         WriteResolvedShape(writer);
         WriteRegisteredBuffers(writer);
         writer.Write(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
+        WriteNumericValues(writer, parameters.AsSpan());
+    }
+
+    private static void WriteNumericValues(BinaryWriter writer, ReadOnlySpan<T> values)
+    {
+        // Preserve the double wire format without requiring T to implement IConvertible.
+        // Bound conversion memory even when a model owns a very large parameter tensor.
+        using var noGradSource = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        using var noGradDouble = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<double>();
+        const int blockSize = 4096;
+        for (int offset = 0; offset < values.Length; offset += blockSize)
         {
-            writer.Write(Convert.ToDouble(parameters[i]));
+            int count = Math.Min(blockSize, values.Length - offset);
+            var converted = Tensor<T>.FromVector(Vector<T>.FromSpan(values.Slice(offset, count)))
+                .Cast<double>().ToArray();
+            for (int i = 0; i < converted.Length; i++) writer.Write(converted[i]);
         }
     }
 
@@ -6680,7 +6693,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             for (int i = 0; i < shape.Length; i++) writer.Write(shape[i]);
 
             writer.Write(tensor.Length);
-            for (int i = 0; i < tensor.Length; i++) writer.Write(Convert.ToDouble(tensor[i]));
+            WriteNumericValues(writer, tensor.Contiguous().AsSpan());
         }
     }
 
@@ -7698,19 +7711,59 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             return true;
         }
         // A device copy made inside a tape step is one of the step's intermediates, which the tape frees on the device
-        // when it ends; the published gradient is read after that, so the tape must keep it.
+        // when it ends; the published gradient is read after that, so reuse persistent per-parameter snapshot buffers
+        // outside TensorScope/TensorArena to avoid recurring LOH allocations per training step.
+        using var suspendScope = AiDotNet.Tensors.Engines.TensorScope.Suspend();
+        using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var buffers = _publishedDeviceGradBuffers
+            ??= new Dictionary<Tensor<T>, Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
         var tape = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current;
+        // The previous publication may reference these same buffers. Withdraw it before refilling them, so a copy that
+        // throws part-way leaves no surface rather than one mixing this step's and the last step's gradients.
+        ParameterGradients = null;
         foreach (var (parameter, gradient) in sources)
         {
-            var copy = new Tensor<T>(gradient._shape);
+            if (!buffers.TryGetValue(parameter, out var copy) || !SamePublishedShape(copy._shape, gradient._shape))
+            {
+                copy?.Dispose();
+                copy = new Tensor<T>((int[])gradient._shape.Clone());
+                buffers[parameter] = copy;
+            }
             Engine.TensorCopy(gradient, copy);
+            // The copy's device buffer is written inside the step, so the tape would release it with the step's
+            // intermediates when it ends.
             tape?.Retain(copy);
             owned[parameter] = copy;
             matched += gradient.Length;
         }
 
+        // The buffers are keyed by the parameter tensor. One whose tensor was replaced (weights set from outside, a
+        // lazy resize) gets no gradient again, so its buffer and the old tensor it pins are dropped here rather than
+        // held until the layer is disposed. The surface below references only this step's buffers.
+        if (buffers.Count > owned.Count)
+        {
+            // Materialised before the loop because the loop removes from the dictionary being filtered.
+            var stale = buffers.Keys.Where(key => !owned.ContainsKey(key)).ToList();
+            foreach (var key in stale)
+            {
+                buffers[key].Dispose();
+                buffers.Remove(key);
+            }
+        }
+
         _parameterGradients = null;
         _pendingDeviceGradients = owned;
+        return true;
+    }
+
+    private static bool SamePublishedShape(int[] left, int[] right)
+    {
+        if (left.Length != right.Length) return false;
+        for (int i = 0; i < left.Length; i++)
+        {
+            if (left[i] != right[i]) return false;
+        }
         return true;
     }
 
@@ -7908,12 +7961,20 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         if (sourcesOutliveStep && TryReferenceHostGradients(grads, out int hostMatched))
             return hostMatched;
 
+        // Withdraw the previous publish before anything is written. A reused buffer below is that publish's storage, so
+        // a fill that throws partway would otherwise leave a surface mixing this step's slots with the last step's, and
+        // a step with nothing keyed to this layer would leave the last step's surface zeroed by the fill.
+        ParameterGradients = null;
+
         int ignored = 0;
         int total = FillParameterGradients(null, 0, grads, ref ignored);
         if (total <= 0) return 0;
 
         bool reuse = !_scatterVectorHandedOut && _scatterBuffer is { } owned && owned.Length == total;
         var filled = reuse && _scatterBuffer is { } buffer ? buffer : new T[total];
+        // A reused buffer backs the current surface. Withdraw that surface before refilling it, so a fill that throws
+        // part-way leaves no surface rather than one mixing this step's and the last step's gradients.
+        if (reuse) ParameterGradients = null;
         // No up-front clear of a reused buffer: the fill overwrites every gradient slot and clears the ones with no
         // gradient this step. Buffer components and non-LayerBase sub-layers are never written, so they keep the
         // zeros of the buffer's first allocation.
@@ -10119,6 +10180,14 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             {
                 if (IsSparseTensor(tensor)) continue;
                 Engine.UnregisterPersistentTensor(tensor);
+            }
+
+            if (_publishedDeviceGradBuffers is not null)
+            {
+                foreach (var buf in _publishedDeviceGradBuffers.Values)
+                    buf.Dispose();
+                _publishedDeviceGradBuffers.Clear();
+                _publishedDeviceGradBuffers = null;
             }
         }
     }

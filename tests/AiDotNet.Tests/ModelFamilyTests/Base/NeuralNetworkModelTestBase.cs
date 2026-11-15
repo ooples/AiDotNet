@@ -1156,6 +1156,14 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         for (int i = 0; i < InputSensitivityWarmUpSteps; i++) TrainOn(network, input, target);
     }
 
+    /// <summary>
+    /// One of the two probes the different-inputs invariants compare, at <paramref name="level"/> (0.1 and 0.9).
+    /// Constant by default; a family whose models legitimately map every constant input to the same tensor
+    /// (per-image standardization sends a flat page to zeros) supplies structured probes instead, so the
+    /// invariant still compares two genuinely different legal inputs.
+    /// </summary>
+    protected virtual Tensor<T> CreateDistinctProbe(int[] shape, double level) => CreateConstantTensor(shape, level);
+
     protected virtual Tensor<T> CreateConstantTensor(int[] shape, double value)
     {
         var tensor = new Tensor<T>(shape);
@@ -1594,8 +1602,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var network = CreateNetwork();
         WarmUpForInputSensitivity(network);
 
-        var input1 = CreateConstantTensor(EffectiveInputShape, 0.1);
-        var input2 = CreateConstantTensor(EffectiveInputShape, 0.9);
+        var input1 = CreateDistinctProbe(EffectiveInputShape, 0.1);
+        var input2 = CreateDistinctProbe(EffectiveInputShape, 0.9);
 
         var output1 = network.Predict(input1);
         var output2 = network.Predict(input2);
@@ -1678,8 +1686,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // attributable purely to the network's input sensitivity rather
         // than to any pre-existing structural bias from random tensor
         // values shared between inputs.
-        var input1 = CreateConstantTensor(EffectiveInputShape, 0.1);
-        var input2 = CreateConstantTensor(EffectiveInputShape, 0.9);
+        var input1 = CreateDistinctProbe(EffectiveInputShape, 0.1);
+        var input2 = CreateDistinctProbe(EffectiveInputShape, 0.9);
 
         var output1 = network.Predict(input1);
         var output2 = network.Predict(input2);
@@ -4444,8 +4452,14 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         if (network is not ITrainingObjectiveProvider<T> objectiveProvider)
             return proposedTarget;
 
+        // The resolved target is trained on for every later step, so it must not come from the test's step arena:
+        // a model resolving with engine ops would otherwise hand back a buffer the arena reissues mid-training
+        // (CLAP's caption ids turned into waveform samples by the third step).
+        using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         if (objectiveProvider.TrainingObjectiveKind == TrainingObjectiveKind.HamiltonianDynamics)
             proposedTarget = CreateCanonicalHamiltonianDynamicsTarget(input);
+        else if (objectiveProvider.TrainingObjectiveKind == TrainingObjectiveKind.LagrangianDynamics)
+            proposedTarget = CreateCanonicalLagrangianDynamicsTarget(input);
 
         return objectiveProvider.ResolveTrainingTarget(input, proposedTarget);
     }
@@ -4477,6 +4491,36 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 target[offset + coordinate] = input[offset + coordinateCount + coordinate];
                 target[offset + coordinateCount + coordinate] =
                     NumOps.Negate(input[offset + coordinate]);
+            }
+        }
+
+        return target;
+    }
+
+    /// <summary>
+    /// Creates the exact accelerations of L(q,q̇)=0.5*(||q̇||^2-||q||^2), the harmonic oscillator:
+    /// q̈=-q for each state [q, q̇]. This gives LNN fixtures a valid dynamics target [batch, n].
+    /// </summary>
+    private static Tensor<T> CreateCanonicalLagrangianDynamicsTarget(Tensor<T> input)
+    {
+        if (input.Rank < 1 || input.Shape[^1] <= 0 || input.Shape[^1] % 2 != 0)
+        {
+            throw new InvalidOperationException(
+                $"Lagrangian dynamics require a positive even state feature dimension; " +
+                $"got [{string.Join(",", input.Shape)}].");
+        }
+
+        int stateDimension = input.Shape[^1];
+        int coordinateCount = stateDimension / 2;
+        int sampleCount = input.Length / stateDimension;
+        var target = new Tensor<T>(new[] { sampleCount, coordinateCount });
+
+        for (int sample = 0; sample < sampleCount; sample++)
+        {
+            for (int coordinate = 0; coordinate < coordinateCount; coordinate++)
+            {
+                target[sample * coordinateCount + coordinate] =
+                    NumOps.Negate(input[sample * stateDimension + coordinate]);
             }
         }
 

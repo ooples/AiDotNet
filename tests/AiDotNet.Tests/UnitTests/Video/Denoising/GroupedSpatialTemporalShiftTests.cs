@@ -205,4 +205,32 @@ public class GroupedSpatialTemporalShiftTests
 
         Assert.Equal(2.0, GroupedSpatialTemporalShift<double>.Loss(predicted, target), 10);
     }
+
+    [Fact]
+    public void SplitAndZeroShiftReturnTensorsThatDoNotAliasTheInput()
+    {
+        // The module hands out new maps, as the per-element copies did: writing to a returned group or to a
+        // zero-shift result must not change the caller's features (narrowed views would write through).
+        var module = new GroupedSpatialTemporalShift<double>();
+        var features = Features(2, 2, 4, (y, x, k) => k + 1.0);
+        var before = features.ToArray();
+
+        var (a, b) = module.SplitGroups(features);
+        a[0] = -100.0;
+        b[0] = -200.0;
+        var same = module.Shift(features, 0, 0);
+        same[3] = -300.0;
+
+        Assert.Equal(before, features.ToArray());
+    }
+
+    [Fact]
+    public void LossIsComputedInDouble()
+    {
+        // |3e38 - (-3e38)| = 6e38 overflows float to infinity; the double mean is 6e38.
+        var predicted = new Vector<float>(new[] { 3e38f });
+        var target = new Vector<float>(new[] { -3e38f });
+
+        Assert.Equal(6e38, GroupedSpatialTemporalShift<float>.Loss(predicted, target), 6e38 * 1e-6);
+    }
 }

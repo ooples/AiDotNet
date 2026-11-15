@@ -1,3 +1,4 @@
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
@@ -29,14 +30,14 @@ public class MutualInfoRegression<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
     private readonly int _nNeighbors;
     private readonly int? _randomState;
 
-    private double[]? _miScores;
+    private Vector<T>? _miScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NNeighbors => _nNeighbors;
-    public double[]? MIScores => _miScores;
+    public Vector<T>? MIScores => _miScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -73,136 +74,16 @@ public class MutualInfoRegression<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
-        _miScores = new double[p];
-
-        // Convert target to double array
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-            y[i] = NumOps.ToDouble(target[i]);
-
-        for (int j = 0; j < p; j++)
-        {
-            // Extract feature column
-            var x = new double[n];
-            for (int i = 0; i < n; i++)
-                x[i] = NumOps.ToDouble(data[i, j]);
-
-            // Estimate MI using KNN-based method (Kraskov et al.)
-            _miScores[j] = EstimateMI(x, y, n);
-        }
-
-        // Select top features by MI
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _miScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
-
+        // Kraskov et al. (2004) estimator on unit-variance features and target, as
+        // sklearn.feature_selection.mutual_info_regression; the random state seeds its tie-breaking noise (none
+        // without one, which keeps the estimate deterministic)
+        var scores = StatisticalTestHelper.MutualInfoRegression(data, target, _nNeighbors, _randomState);
+        _miScores = scores;
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(
+            FilterStatisticTensorOps.AsTensor(scores), Math.Min(_nFeaturesToSelect, p));
         IsFitted = true;
-    }
-
-    private double EstimateMI(double[] x, double[] y, int n)
-    {
-        if (n < _nNeighbors + 1) return 0;
-
-        // Normalize data
-        var xNorm = Normalize(x, n);
-        var yNorm = Normalize(y, n);
-
-        // Compute KNN distances and counts
-        var kDistances = new double[n];
-        var nxCounts = new int[n];
-        var nyCounts = new int[n];
-
-        for (int i = 0; i < n; i++)
-        {
-            // Find k-th nearest neighbor in joint space
-            var jointDists = new List<double>();
-            for (int j = 0; j < n; j++)
-            {
-                if (i == j) continue;
-                double dx = Math.Abs(xNorm[i] - xNorm[j]);
-                double dy = Math.Abs(yNorm[i] - yNorm[j]);
-                jointDists.Add(Math.Max(dx, dy)); // Chebyshev distance
-            }
-            jointDists.Sort();
-            kDistances[i] = jointDists[_nNeighbors - 1];
-
-            // Count points within this distance in marginals
-            for (int j = 0; j < n; j++)
-            {
-                if (i == j) continue;
-                if (Math.Abs(xNorm[i] - xNorm[j]) < kDistances[i])
-                    nxCounts[i]++;
-                if (Math.Abs(yNorm[i] - yNorm[j]) < kDistances[i])
-                    nyCounts[i]++;
-            }
-        }
-
-        // Compute MI estimate using digamma function
-        double mi = Digamma(_nNeighbors) + Digamma(n);
-        for (int i = 0; i < n; i++)
-        {
-            mi -= (Digamma(nxCounts[i] + 1) + Digamma(nyCounts[i] + 1)) / n;
-        }
-
-        return Math.Max(0, mi);
-    }
-
-    private double[] Normalize(double[] values, int n)
-    {
-        double min = double.MaxValue, max = double.MinValue;
-        for (int i = 0; i < n; i++)
-        {
-            if (values[i] < min) min = values[i];
-            if (values[i] > max) max = values[i];
-        }
-
-        var result = new double[n];
-        double range = max - min;
-        if (range < 1e-10)
-        {
-            for (int i = 0; i < n; i++)
-                result[i] = 0.5;
-        }
-        else
-        {
-            for (int i = 0; i < n; i++)
-                result[i] = (values[i] - min) / range;
-        }
-
-        return result;
-    }
-
-    private double Digamma(double x)
-    {
-        if (x <= 0) return double.NegativeInfinity;
-
-        // Asymptotic expansion for large x
-        if (x > 8)
-        {
-            double inv = 1.0 / x;
-            double inv2 = inv * inv;
-            return Math.Log(x) - 0.5 * inv - inv2 / 12 + inv2 * inv2 / 120;
-        }
-
-        // Recurrence relation for small x
-        double result = 0;
-        while (x < 8)
-        {
-            result -= 1.0 / x;
-            x += 1;
-        }
-
-        double inv_x = 1.0 / x;
-        double inv2_x = inv_x * inv_x;
-        result += Math.Log(x) - 0.5 * inv_x - inv2_x / 12 + inv2_x * inv2_x / 120;
-
-        return result;
     }
 
     /// <inheritdoc />
@@ -218,15 +99,7 @@ public class MutualInfoRegression<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         if (_selectedIndices is null)
             throw new InvalidOperationException("MutualInfoRegression has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

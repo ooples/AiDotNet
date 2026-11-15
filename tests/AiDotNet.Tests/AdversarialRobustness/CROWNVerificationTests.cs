@@ -1,6 +1,7 @@
 using AiDotNet.AdversarialRobustness.CertifiedRobustness;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
@@ -32,7 +33,7 @@ public class CROWNVerificationTests
         Assert.NotNull(crown);
         var options = crown.GetOptions();
         Assert.NotNull(options);
-        Assert.Equal("CROWN", options.CertificationMethod);
+        Assert.Equal(CertifiedDefenseMethod.Crown, options.CertificationMethod);
         Assert.True(options.UseTightBounds);
     }
 
@@ -56,7 +57,7 @@ public class CROWNVerificationTests
         Assert.Equal(0.1, returnedOptions.NoiseSigma, Tolerance);
         Assert.Equal(100, returnedOptions.NumSamples);
         Assert.Equal(0.95, returnedOptions.ConfidenceLevel, Tolerance);
-        Assert.Equal("CROWN", returnedOptions.CertificationMethod);
+        Assert.Equal(CertifiedDefenseMethod.Crown, returnedOptions.CertificationMethod);
         Assert.True(returnedOptions.UseTightBounds);
     }
 
@@ -117,7 +118,7 @@ public class CROWNVerificationTests
     }
 
     [Fact(Timeout = 60000)]
-    public async Task CertifyPrediction_WithSmallEpsilon_MayCertify()
+    public async Task CertifyPrediction_SampledBoundsOfALayerlessModel_DoNotCertify()
     {
         // Arrange
         var options = new CertifiedDefenseOptions<double>
@@ -134,8 +135,11 @@ public class CROWNVerificationTests
 
         // Assert
         Assert.NotNull(result);
-        // With small epsilon and large margin, should be certified
-        Assert.True(result.IsCertified);
+        // The mock exposes no layers, so its bounds come from sampling. A sampled interval is an inner estimate
+        // of the output range, not a certificate: auto_LiRPA rejects operations it can not bound, and the IBP
+        // bounds of Gowal et al. (2018) are sound by construction. So even a large margin does not certify.
+        Assert.False(result.IsCertified);
+        Assert.False((bool)result.CertificationDetails["Sound"]);
     }
 
     [Fact(Timeout = 60000)]
@@ -453,7 +457,7 @@ public class CROWNVerificationTests
             NoiseSigma = 0.15,
             NumSamples = 75,
             ConfidenceLevel = 0.9,
-            NormType = "L2",
+            NormType = AdversarialNormType.L2,
             UseTightBounds = true,
             BatchSize = 32,
             Seed = 42
@@ -470,11 +474,11 @@ public class CROWNVerificationTests
         Assert.Equal(0.15, restoredOptions.NoiseSigma, Tolerance);
         Assert.Equal(75, restoredOptions.NumSamples);
         Assert.Equal(0.9, restoredOptions.ConfidenceLevel, Tolerance);
-        Assert.Equal("L2", restoredOptions.NormType);
+        Assert.Equal(AdversarialNormType.L2, restoredOptions.NormType);
         Assert.True(restoredOptions.UseTightBounds);
         Assert.Equal(32, restoredOptions.BatchSize);
         Assert.Equal(42, restoredOptions.Seed);
-        Assert.Equal("CROWN", restoredOptions.CertificationMethod);
+        Assert.Equal(CertifiedDefenseMethod.Crown, restoredOptions.CertificationMethod);
     }
 
     #endregion
@@ -548,7 +552,7 @@ public class CROWNVerificationTests
             Assert.Equal(150, loadedOptions.NumSamples);
             Assert.Equal(0.95, loadedOptions.ConfidenceLevel, Tolerance);
             Assert.True(loadedOptions.UseTightBounds);
-            Assert.Equal("CROWN", loadedOptions.CertificationMethod);
+            Assert.Equal(CertifiedDefenseMethod.Crown, loadedOptions.CertificationMethod);
         }
         finally
         {
@@ -580,7 +584,7 @@ public class CROWNVerificationTests
         var resetOptions = crown.GetOptions();
 
         // Assert
-        Assert.Equal("CROWN", resetOptions.CertificationMethod);
+        Assert.Equal(CertifiedDefenseMethod.Crown, resetOptions.CertificationMethod);
         Assert.True(resetOptions.UseTightBounds);
     }
 

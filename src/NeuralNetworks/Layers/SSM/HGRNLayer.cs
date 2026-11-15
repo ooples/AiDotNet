@@ -218,8 +218,7 @@ public partial class HGRNLayer<T> : LayerBase<T>, IShapeContract
         // Initialize forget gate bias to the configured forgetBias value.
         // Higher values -> sigmoid closer to 1 -> slower forgetting -> longer memory.
         // This is the core of hierarchical gating: different layers get different biases.
-        for (int i = 0; i < _forgetGateBias.Length; i++)
-            _forgetGateBias[i] = NumOps.FromDouble(_forgetBias);
+        _forgetGateBias.Fill(NumOps.FromDouble(_forgetBias));
 
         InitializeTensor2D(_inputGateWeights);
         _inputGateBias.Fill(NumOps.Zero);

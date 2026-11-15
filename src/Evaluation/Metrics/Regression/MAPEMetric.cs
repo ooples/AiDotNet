@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Regression;
 
@@ -50,20 +51,16 @@ public class MAPEMetric<T> : IRegressionMetric<T>
             throw new ArgumentException("Predictions and actuals must have the same length.");
         if (predictions.Length == 0) return NumOps.Zero;
 
-        double sum = 0;
-        int validCount = 0;
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            double actual = NumOps.ToDouble(actuals[i]);
-            double pred = NumOps.ToDouble(predictions[i]);
-            if (Math.Abs(actual) > _epsilon)
-            {
-                sum += Math.Abs((actual - pred) / actual);
-                validCount++;
-            }
-        }
-
-        return validCount > 0 ? NumOps.FromDouble(100.0 * sum / validCount) : NumOps.Zero;
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
+        var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
+        var valid = engine.TensorGreaterThan(engine.TensorAbs(actual), _epsilon);
+        int validCount = EvaluationTensorOps<double>.Count(valid);
+        if (validCount == 0) return NumOps.Zero;
+        var relative = engine.TensorAbs(engine.TensorDivide(engine.TensorSubtract(actual, pred), actual));
+        double sum = engine.TensorSum(engine.TensorWhere(valid, relative, engine.TensorZerosLike(relative)));
+        return NumOps.FromDouble(100.0 * sum / validCount);
     }
 
     /// <inheritdoc />
@@ -86,18 +83,17 @@ public class MAPEMetric<T> : IRegressionMetric<T>
         int n = pred.Length;
         if (n == 0) return (NumOps.Zero, NumOps.Zero);
         var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
-        var values = new double[samples];
+        var values = new List<T>(samples);
         var predArr = pred.ToArray(); var actArr = actual.ToArray();
         for (int b = 0; b < samples; b++)
         {
             var sp = new T[n]; var sa = new T[n];
             for (int i = 0; i < n; i++) { int idx = random.Next(n); sp[i] = predArr[idx]; sa[i] = actArr[idx]; }
-            values[b] = NumOps.ToDouble(Compute(sp, sa));
+            values.Add(Compute(sp, sa));
         }
-        Array.Sort(values);
         double alpha = 1 - conf;
         int lo = Math.Max(0, (int)(alpha / 2 * samples));
         int hi = Math.Min(samples - 1, (int)((1 - alpha / 2) * samples) - 1);
-        return (NumOps.FromDouble(values[lo]), NumOps.FromDouble(values[hi]));
+        return EvaluationTensorOps<T>.OrderStatistics(values, lo, hi);
     }
 }

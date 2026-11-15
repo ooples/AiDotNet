@@ -349,7 +349,7 @@ public partial class TimeSeriesRegression<T> : RegressionBase<T>
         var differencedX = Engine.MatrixSubtract(currentX, Engine.MatrixMultiplyScalar(previousX, rho));
         int length = y.Length - 1;
         var differencedY = Engine.Subtract(
-            y.GetSubVector(1, length), Engine.Multiply(y.GetSubVector(0, length), rho));
+            RegressionEngineOps2.Slice(y, 1, length), Engine.Multiply(y.GetSubVector(0, length), rho));
         return (differencedX, differencedY);
     }
 
@@ -573,10 +573,17 @@ public partial class TimeSeriesRegression<T> : RegressionBase<T>
         if (residuals.Length > 1)
         {
             int length = residuals.Length - 1;
-            var current = residuals.GetSubVector(1, length);
+            var current = RegressionEngineOps2.Slice(residuals, 1, length);
             var previous = residuals.GetSubVector(0, length);
             numerator = Engine.DotProduct(current, previous);
             denominator = Engine.DotProduct(previous, previous);
+        }
+
+        // All-zero residuals (an exact in-sample fit) carry no serial correlation: rho is 0 and the Cochrane-Orcutt
+        // loop has converged. Dividing gave 0/0 = NaN, which quasi-differenced the data into NaN.
+        if (NumOps.Equals(denominator, NumOps.Zero))
+        {
+            return NumOps.Zero;
         }
 
         return NumOps.Divide(numerator, denominator);
@@ -724,7 +731,7 @@ public partial class TimeSeriesRegression<T> : RegressionBase<T>
 
             if (lagOrder > 0)
             {
-                recentTargets = Vector<T>.Concatenate(recentTargets.GetSubVector(1, lagOrder - 1), next);
+                recentTargets = Vector<T>.Concatenate(RegressionEngineOps2.Slice(recentTargets, 1, lagOrder - 1), next);
             }
         }
 

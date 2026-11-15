@@ -296,8 +296,7 @@ public partial class MixtureOfMemoriesLayer<T> : LayerBase<T>, IShapeContract
         _readRouterBias.Fill(NumOps.Zero);
         InitializeTensor2D(_gateRouterWeights);
         // Initialize gate bias high so sigmoid gives ~0.88 -> strong retention initially
-        for (int i = 0; i < _numMemories; i++)
-            _gateRouterBias[i] = NumOps.FromDouble(2.0);
+        _gateRouterBias.Fill(NumOps.FromDouble(2.0));
 
         InitializeTensor2D(_outputGateWeights);
         _outputGateBias.Fill(NumOps.Zero);
@@ -488,35 +487,6 @@ public partial class MixtureOfMemoriesLayer<T> : LayerBase<T>, IShapeContract
             Engine.Reshape(value, new[] { batchSize, _numHeads, seqLen, _headDimension }),
             new[] { 0, 2, 1, 3 }),
             new[] { batchSize, seqLen, _modelDimension });
-
-    /// <summary>
-    /// Backward pass for softmax: dLogits[i] = softmax[i] * (dOutput[i] - sum_j(softmax[j]*dOutput[j]))
-    /// </summary>
-    private Tensor<T> SoftmaxBackward(
-        Tensor<T> dOutput, Tensor<T> softmaxOutput,
-        int batchSize, int seqLen, int dim)
-    {
-        var dLogits = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, dim });
-
-        for (int bi = 0; bi < batchSize; bi++)
-        {
-            for (int t = 0; t < seqLen; t++)
-            {
-                T dotProduct = NumOps.Zero;
-                for (int d = 0; d < dim; d++)
-                    dotProduct = NumOps.Add(dotProduct,
-                        NumOps.Multiply(softmaxOutput[new[] { bi, t, d }],
-                            dOutput[new[] { bi, t, d }]));
-
-                for (int d = 0; d < dim; d++)
-                    dLogits[new[] { bi, t, d }] = NumOps.Multiply(
-                        softmaxOutput[new[] { bi, t, d }],
-                        NumOps.Subtract(dOutput[new[] { bi, t, d }], dotProduct));
-            }
-        }
-
-        return dLogits;
-    }
 
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)
     {

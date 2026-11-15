@@ -159,25 +159,26 @@ public partial class SparseNeuralNetwork<T> : VectorModelLayoutBase<T>
             // identity for the regression output and ReLU only for hidden
             // layers. Mirror the convention here.
             var identity = new IdentityActivation<T>();
+            double sparsityLevel = NumOps.ToDouble(_sparsity);
 
             if (hiddenSizes.Length == 0)
             {
                 // Per Mocanu et al. (2018), sparse networks need hidden layers for
                 // sparse-to-sparse connectivity. Single-layer sparse → dead ReLU neurons.
                 int hiddenSize = Math.Max(32, (inputFeatures + outputFeatures) / 2);
-                Layers.Add(new SparseLinearLayer<T>(inputFeatures, hiddenSize, NumOps.ToDouble(_sparsity)));
-                Layers.Add(new SparseLinearLayer<T>(hiddenSize, outputFeatures, NumOps.ToDouble(_sparsity), identity));
+                Layers.Add(new SparseLinearLayer<T>(inputFeatures, hiddenSize, sparsityLevel));
+                Layers.Add(new SparseLinearLayer<T>(hiddenSize, outputFeatures, sparsityLevel, identity));
             }
             else
             {
-                Layers.Add(new SparseLinearLayer<T>(inputFeatures, hiddenSizes[0], NumOps.ToDouble(_sparsity)));
+                Layers.Add(new SparseLinearLayer<T>(inputFeatures, hiddenSizes[0], sparsityLevel));
 
                 for (int i = 0; i < hiddenSizes.Length - 1; i++)
                 {
-                    Layers.Add(new SparseLinearLayer<T>(hiddenSizes[i], hiddenSizes[i + 1], NumOps.ToDouble(_sparsity)));
+                    Layers.Add(new SparseLinearLayer<T>(hiddenSizes[i], hiddenSizes[i + 1], sparsityLevel));
                 }
 
-                Layers.Add(new SparseLinearLayer<T>(hiddenSizes[^1], outputFeatures, NumOps.ToDouble(_sparsity), identity));
+                Layers.Add(new SparseLinearLayer<T>(hiddenSizes[^1], outputFeatures, sparsityLevel, identity));
             }
         }
     }

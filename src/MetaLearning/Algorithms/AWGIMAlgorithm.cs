@@ -83,11 +83,15 @@ public partial class AWGIMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     [TrainableParameter]
     private Vector<T> _weights;
 
-    // AdamW state for the generator weights and the feature encoder.
-    private readonly Vector<T> _weightMoment1;
-    private readonly Vector<T> _weightMoment2;
-    private Vector<T>? _bodyMoment1;
-    private Vector<T>? _bodyMoment2;
+    // AdamW moments are persistent optimizer state, never model parameters.
+    [Buffer(Role = PersistentTensorRole.OptimizerState)]
+    private Vector<double> _weightMoment1;
+    [Buffer(Role = PersistentTensorRole.OptimizerState)]
+    private Vector<double> _weightMoment2;
+    [Buffer(Role = PersistentTensorRole.OptimizerState)]
+    private Vector<double>? _bodyMoment1;
+    [Buffer(Role = PersistentTensorRole.OptimizerState)]
+    private Vector<double>? _bodyMoment2;
     private int _updates;
 
     /// <summary>Creates AWGIM over the feature encoder in <paramref name="options"/>.</summary>
@@ -109,8 +113,8 @@ public partial class AWGIMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         _network = new AwgimNetwork<T>(options.EmbeddingDimension, options.LatentDimension, options.NumHeads, options.DecoderLayers);
         _kernelMask = _network.KernelMask();
         _weights = _network.Initialize(RandomGenerator);
-        _weightMoment1 = new Vector<T>(_weights.Length);
-        _weightMoment2 = new Vector<T>(_weights.Length);
+        _weightMoment1 = new Vector<double>(_weights.Length);
+        _weightMoment2 = new Vector<double>(_weights.Length);
     }
 
     /// <inheritdoc/>
@@ -146,8 +150,8 @@ public partial class AWGIMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         {
             // The reference's recovery: follow the gradient of the kernels' L2 penalty (0.5·Σw², gradient w)
             // instead of a non-finite one, so one bad batch cannot poison the weights.
-            weightGrad = new Vector<T>(_weights.Length);
-            for (int i = 0; i < _weights.Length; i++) weightGrad[i] = _kernelMask[i] ? _weights[i] : NumOps.Zero;
+            var weights = Tensor<T>.FromVector(_weights);
+            weightGrad = Engine.TensorWhere(_kernelMask, weights, Engine.TensorZerosLike(weights)).ToVector();
             bodyGrad = new Vector<T>(body.Length);
         }
 
@@ -156,8 +160,8 @@ public partial class AWGIMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 
         _updates++;
         double rate = LearningRate();
-        _bodyMoment1 ??= new Vector<T>(body.Length);
-        _bodyMoment2 ??= new Vector<T>(body.Length);
+        _bodyMoment1 ??= new Vector<double>(body.Length);
+        _bodyMoment2 ??= new Vector<double>(body.Length);
         ParamModel.SetParameters(AdamW(body, bodyGrad, _bodyMoment1, _bodyMoment2, rate));
         _weights = AdamW(_weights, weightGrad, _weightMoment1, _weightMoment2, rate);
 
@@ -267,25 +271,23 @@ public partial class AWGIMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     }
 
     /// <summary>AdamW: decoupled weight decay (applied as w·decay, as TensorFlow's AdamW does), then Adam.</summary>
-    private Vector<T> AdamW(Vector<T> parameters, Vector<T> gradient, Vector<T> moment1, Vector<T> moment2, double rate)
+    private Vector<T> AdamW(Vector<T> parameters, Vector<T> gradient, Vector<double> moment1, Vector<double> moment2, double rate)
     {
         double correction1 = 1 - Math.Pow(AdamBeta1, _updates);
         double correction2 = 1 - Math.Pow(AdamBeta2, _updates);
-        var updated = new Vector<T>(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            double g = NumOps.ToDouble(gradient[i]);
-            double m = AdamBeta1 * NumOps.ToDouble(moment1[i]) + (1 - AdamBeta1) * g;
-            double v = AdamBeta2 * NumOps.ToDouble(moment2[i]) + (1 - AdamBeta2) * g * g;
-            moment1[i] = NumOps.FromDouble(m);
-            moment2[i] = NumOps.FromDouble(v);
-            double w = NumOps.ToDouble(parameters[i]);
-            w -= _awgimOptions.WeightDecay * w;
-            w -= rate * (m / correction1) / (Math.Sqrt(v / correction2) + AdamEpsilon);
-            updated[i] = NumOps.FromDouble(w);
-        }
+        var wideGradient = Tensor<T>.FromVector(gradient).Cast<double>();
+        var m = Engine.TensorAdd(Engine.TensorMultiplyScalar(Tensor<double>.FromVector(moment1), AdamBeta1),
+            Engine.TensorMultiplyScalar(wideGradient, 1 - AdamBeta1));
+        var v = Engine.TensorAdd(Engine.TensorMultiplyScalar(Tensor<double>.FromVector(moment2), AdamBeta2),
+            Engine.TensorMultiplyScalar(Engine.TensorSquare(wideGradient), 1 - AdamBeta2));
+        m.CopyTo(moment1.AsWritableSpan());
+        v.CopyTo(moment2.AsWritableSpan());
 
-        return updated;
+        var decayed = Engine.TensorMultiplyScalar(Tensor<T>.FromVector(parameters).Cast<double>(), 1 - _awgimOptions.WeightDecay);
+        var denominator = Engine.TensorAddScalar(
+            Engine.TensorSqrt(Engine.TensorDivideScalar(v, correction2)), AdamEpsilon);
+        var step = Engine.TensorDivide(Engine.TensorMultiplyScalar(m, rate / correction1), denominator);
+        return Engine.TensorSubtract(decayed, step).Cast<T>().ToVector();
     }
 
     /// <summary>Clip by value, then each tensor's gradient by its own norm, as the reference does.</summary>
@@ -294,24 +296,28 @@ public partial class AWGIMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         var clipped = CloneVector(gradient);
         if (_awgimOptions.GradientClipThreshold is double bound)
         {
-            for (int i = 0; i < clipped.Length; i++)
-            {
-                double g = NumOps.ToDouble(clipped[i]);
-                clipped[i] = NumOps.FromDouble(Math.Max(-bound, Math.Min(bound, g)));
-            }
+            clipped = Engine.Clamp(clipped, NumOps.FromDouble(-bound), NumOps.FromDouble(bound));
         }
 
         if (_awgimOptions.GradientNormClipThreshold is double normBound)
         {
-            foreach (var (offset, length) in tensors)
+            // One scale per tensor range (1 when its norm is within the bound), laid out over the whole vector.
+            // The norm accumulates in double, as the scalar loop did: a Half sum of squares overflows to infinity
+            // past 65504 (a single entry of 256 is enough), and normBound / infinity would zero the gradient
+            // instead of rescaling it.
+            var scales = new List<Vector<T>>();
+            int position = 0;
+            foreach (var (offset, length) in tensors.OrderBy(range => range.Offset))
             {
-                double sum = 0;
-                for (int i = offset; i < offset + length; i++) sum += Math.Pow(NumOps.ToDouble(clipped[i]), 2);
-                double norm = Math.Sqrt(sum);
-                if (norm <= normBound) continue;
-                T factor = NumOps.FromDouble(normBound / norm);
-                for (int i = offset; i < offset + length; i++) clipped[i] = NumOps.Multiply(clipped[i], factor);
+                if (offset > position) scales.Add(Engine.Fill(offset - position, NumOps.One));
+                double norm = Math.Sqrt(WideReduction.SumOfSquares(Engine, clipped.GetSubVector(offset, length)));
+                T factor = norm <= normBound ? NumOps.One : NumOps.FromDouble(normBound / norm);
+                scales.Add(Engine.Fill(length, factor));
+                position = offset + length;
             }
+
+            if (position < clipped.Length) scales.Add(Engine.Fill(clipped.Length - position, NumOps.One));
+            if (scales.Count > 0) clipped = Engine.Multiply(clipped, Vector<T>.Concatenate(scales));
         }
 
         return clipped;
@@ -354,41 +360,32 @@ public partial class AWGIMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     private int[] ReadLabels(TOutput labels)
     {
         var tensor = ClassifierOutputs<T>.Labels(labels, _awgimOptions.NumClasses);
-        var indices = new int[tensor.Length];
-        for (int i = 0; i < indices.Length; i++) indices[i] = (int)Math.Round(NumOps.ToDouble(tensor[i]));
-        return indices;
+        return Engine.TensorRound(tensor).Cast<int>().ToArray();
     }
 
     /// <summary><c>[classes, support]</c>: each class's row-average over its support rows.</summary>
     internal static Tensor<T> ClassAverager(PrototypeEpisode<T> episode, int rows)
     {
+        var engine = AiDotNetEngine.Current;
         int classes = episode.ClassSlots.Length;
-        var averager = new Tensor<T>(new[] { classes, rows });
-        for (int c = 0; c < classes; c++)
-        {
-            double members = 0;
-            for (int i = 0; i < rows; i++) members += NumOps.ToDouble(episode.Membership[c * rows + i]);
-            for (int i = 0; i < rows; i++)
-            {
-                averager[c * rows + i] = NumOps.FromDouble(NumOps.ToDouble(episode.Membership[c * rows + i]) / members);
-            }
-        }
-
-        return averager;
+        var shape = new[] { classes, rows };
+        var membership = engine.Reshape(episode.Membership, shape);
+        var members = engine.TensorBroadcastTo(engine.ReduceSum(membership, new[] { 1 }, true), shape);
+        return engine.TensorDivide(membership, members);
     }
 
     private static Tensor<T> SupportTarget(PrototypeEpisode<T> episode, int rows)
     {
-        var target = new Tensor<T>(new[] { rows });
-        for (int c = 0; c < episode.ClassSlots.Length; c++)
-        {
-            for (int r = 0; r < rows; r++)
-            {
-                if (NumOps.ToDouble(episode.Membership[c * rows + r]) > 0.5) target[r] = NumOps.FromDouble(c);
-            }
-        }
+        // The last class whose membership exceeds 0.5 (0 when none does): the largest c * [membership > 0.5].
+        var engine = AiDotNetEngine.Current;
+        int classes = episode.ClassSlots.Length;
+        if (classes == 0) return new Tensor<T>(new[] { rows });
 
-        return target;
+        var shape = new[] { classes, rows };
+        var member = engine.TensorGreaterThan(engine.Reshape(episode.Membership, shape), NumOps.FromDouble(0.5));
+        var classIndex = new Tensor<int>(Enumerable.Range(0, classes).ToArray(), new[] { classes, 1 }).Cast<T>();
+        var labelled = engine.TensorMultiply(member, engine.TensorBroadcastTo(classIndex, shape));
+        return engine.ReduceMax(labelled, new[] { 0 }, false);
     }
 
     #endregion
@@ -439,32 +436,19 @@ public partial class AWGIMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         return !double.IsNaN(v) && !double.IsInfinity(v);
     }
 
+    // x * 0 is NaN exactly where x is NaN or infinite, so the sum of the zeroed vector is finite iff every entry is.
     private bool IsFinite(Vector<T> values)
-    {
-        for (int i = 0; i < values.Length; i++) if (!IsFinite(values[i])) return false;
-        return true;
-    }
+        => IsFinite(Engine.Sum(Engine.Multiply(values, NumOps.Zero)));
 
     private static Vector<T> Accumulate(Vector<T>? sum, Vector<T> values)
     {
         if (sum is null) return CloneVector(values);
-        for (int i = 0; i < sum.Length; i++) sum[i] = NumOps.Add(sum[i], values[i]);
-        return sum;
+        return AiDotNetEngine.Current.Add(sum, values);
     }
 
-    private static Vector<T> Divide(Vector<T> values, T by)
-    {
-        var result = new Vector<T>(values.Length);
-        for (int i = 0; i < values.Length; i++) result[i] = NumOps.Divide(values[i], by);
-        return result;
-    }
+    private static Vector<T> Divide(Vector<T> values, T by) => AiDotNetEngine.Current.Divide(values, by);
 
-    private static Vector<T> CloneVector(Vector<T> values)
-    {
-        var copy = new Vector<T>(values.Length);
-        for (int i = 0; i < values.Length; i++) copy[i] = values[i];
-        return copy;
-    }
+    private static Vector<T> CloneVector(Vector<T> values) => values.Clone();
 
     private static Tensor<T> Scalar(Tensor<T> value) => AiDotNetEngine.Current.Reshape(value, new[] { 1 });
 

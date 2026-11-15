@@ -28,7 +28,7 @@ namespace AiDotNet.Attributes
         public string? LowPrecisionBacking { get; set; }
         public int Availability { get; set; }
     }
-    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)] public sealed class FittedParameterAttribute : Attribute { }
+    [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)] public sealed class FittedParameterAttribute : Attribute { public bool InputSized { get; set; } }
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)] public sealed class FrozenParameterAttribute : Attribute { }
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)] public sealed class BufferAttribute : Attribute
     {
@@ -1098,6 +1098,42 @@ public partial class DeclaredModel<T> : AiDotNet.Models.ModelBase<T, object, obj
         Assert.Contains("_weight", generated, StringComparison.Ordinal);
         Assert.Contains("ParameterSlotRole.Trainable", generated, StringComparison.Ordinal);
         Assert.Contains("ParameterAvailability)1", generated, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("AiDotNet.Models.ModelBase<T, object, object>")]
+    [InlineData("RegistryNetworkBase<T>")]
+    public void ModelGenerator_InputSizedFittedStateIsPersistedOutsideTheFlatVector(string baseType)
+    {
+        string source = @"
+using AiDotNet.Attributes;
+// The shared lightweight neural fixture predates the persistent-state registry.
+public abstract class RegistryNetworkBase<T> : AiDotNet.NeuralNetworks.NeuralNetworkBase<T>
+{
+    protected void RegisterParameterComponent(object value) { }
+    protected virtual void RegisterComponents() { }
+    protected virtual void RegisterGeneratedParameterComponents(object registry) { }
+}
+
+public partial class InputSizedModel<T> : " + baseType + @"
+{
+    [FittedParameter] private T _coefficient = default!;
+    [FittedParameter(InputSized = false)] private T _intercept = default!;
+    [FittedParameter(InputSized = true)] private double[]? _baseline;
+    [FittedParameter(InputSized = true)]
+    private AiDotNet.Tensors.LinearAlgebra.Vector<T>? History { get; set; }
+}";
+
+        string parameters = Run(new AiDotNet.Generators.ModelParameterGenerator(), source);
+        Assert.Contains("_coefficient", parameters, StringComparison.Ordinal);
+        Assert.Contains("_intercept", parameters, StringComparison.Ordinal);
+        Assert.Contains("ParameterSlotRole.LearnedState", parameters, StringComparison.Ordinal);
+        Assert.DoesNotContain("_baseline", parameters, StringComparison.Ordinal);
+        Assert.DoesNotContain("History", parameters, StringComparison.Ordinal);
+
+        string state = Run(new AiDotNet.Generators.ModelStateGenerator(), source);
+        Assert.Contains("_baseline", state, StringComparison.Ordinal);
+        Assert.Contains("History", state, StringComparison.Ordinal);
     }
 
     [Fact]

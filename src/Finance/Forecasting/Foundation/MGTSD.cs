@@ -597,7 +597,7 @@ public partial class MGTSD<T> : TimeSeriesFoundationModelBase<T>
             using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
             var flat = Engine.Reshape(input.Contiguous(), new[] { input.Length });
             mean = NumOps.Divide(Engine.TensorSum(flat), NumOps.FromDouble(len));
-            variance = Engine.TensorSumOfSquares(Engine.TensorSubtractScalar(flat, mean));
+            variance = TensorReductionHelper.SumOfSquares(Engine, Engine.TensorSubtractScalar(flat, mean));
         }
         variance = NumOps.Divide(variance, NumOps.FromDouble(len));
         T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));

@@ -64,7 +64,7 @@ public class ChatTTSPaperTests
     public async Task Sampling_FollowsTheReleasesWarpers()
     {
         await Task.Yield();
-        var logits = Enumerable.Range(0, 30).Select(v => v * 0.5).ToArray();
+        var logits = new Tensor<double>(Enumerable.Range(0, 30).Select(v => v * 0.5).ToArray(), new[] { 30 });
         var random = new Random(3);
         var draws = Enumerable.Range(0, 400).Select(_ => ChatTTS<double>.Sample(logits, 1.0, 1.0, Array.Empty<int>(), 0.7, 20, -1, random)).ToList();
         // Top-p 0.7 over these logits keeps only the few most likely tokens, at least 3 (min_tokens_to_keep).

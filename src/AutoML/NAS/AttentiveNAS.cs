@@ -105,61 +105,173 @@ namespace AiDotNet.AutoML.NAS
         }
 
         /// <summary>
-        /// Samples architecture using attention-based sampling strategy.
-        /// The attention module learns to focus on high-performing architecture regions.
+        /// Gets or sets which candidate attentive sampling trains: the predicted Pareto-best (BestUp, the default)
+        /// or Pareto-worst (WorstUp) of the pool drawn under a FLOPs target (Wang et al. 2021, Sec. 3.2).
+        /// </summary>
+        public AttentiveSamplingStrategy SamplingStrategy { get; set; } = AttentiveSamplingStrategy.BestUp;
+
+        private int _candidatePoolSize = 3;
+
+        /// <summary>
+        /// Gets or sets k, the number of candidates drawn under each FLOPs target before the best or worst is
+        /// picked (default 3).
+        /// </summary>
+        /// <exception cref="ArgumentOutOfRangeException">The value is less than 1.</exception>
+        public int CandidatePoolSize
+        {
+            get => _candidatePoolSize;
+            set
+            {
+                if (value < 1)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(value), value, "The candidate pool needs at least one architecture.");
+                }
+
+                _candidatePoolSize = value;
+            }
+        }
+
+        private const int MaxRejectionDraws = 100;
+
+        /// <summary>
+        /// Samples an architecture by attentive sampling (Wang et al. 2021, Sec. 3.2): draw a FLOPs target tau from
+        /// the FLOPs prior of the space, draw k candidates uniformly under that target, and rank them with the
+        /// performance predictor; <see cref="SamplingStrategy"/> picks the predicted best (BestUp) or worst
+        /// (WorstUp).
         /// </summary>
         public AttentiveNASConfig<T> AttentiveSample(Vector<T> contextVector)
         {
-            // Compute attention scores for different architecture choices
-            var attentionScores = ComputeAttentionScores(contextVector);
-
-            // Sample based on attention distribution
-            var config = new AttentiveNASConfig<T>();
-
-            // Sample depth
-            int depthStartIdx = 0;
-            int depthEndIdx = _elasticDepths.Count;
-            var depthScores = ExtractScores(attentionScores, depthStartIdx, depthEndIdx);
-            config.Depth = _elasticDepths[SampleFromDistribution(depthScores)];
-
-            // Sample width multiplier
-            int widthStartIdx = depthEndIdx;
-            int widthEndIdx = widthStartIdx + _elasticWidthMultipliers.Count;
-            var widthScores = ExtractScores(attentionScores, widthStartIdx, widthEndIdx);
-            config.WidthMultiplier = _elasticWidthMultipliers[SampleFromDistribution(widthScores)];
-
-            // Sample kernel size
-            int kernelStartIdx = widthEndIdx;
-            int kernelEndIdx = kernelStartIdx + _elasticKernelSizes.Count;
-            var kernelScores = ExtractScores(attentionScores, kernelStartIdx, kernelEndIdx);
-            config.KernelSize = _elasticKernelSizes[SampleFromDistribution(kernelScores)];
-
-            // Store architecture embedding for later updates
-            config.Embedding = CreateArchitectureEmbedding(config);
-
-            return config;
+            var candidates = DrawCandidates(out _);
+            return SelectCandidate(candidates, contextVector);
         }
 
         /// <summary>
-        /// Computes attention scores using the attention module
+        /// Draws the FLOPs target tau as the FLOPs of a uniformly random architecture (a draw from the space's
+        /// FLOPs prior), then <see cref="CandidatePoolSize"/> uniform architectures with FLOPs &lt;= tau by
+        /// rejection; after <see cref="MaxRejectionDraws"/> rejected draws a candidate falls back to the
+        /// smallest architecture, which is always under the target.
         /// </summary>
-        private Vector<T> ComputeAttentionScores(Vector<T> contextVector)
+        internal List<AttentiveNASConfig<T>> DrawCandidates(out double flopsTarget)
         {
-            // Linear attention projection: scores = W * context (no softmax needed for NAS scoring)
-            var scores = new Vector<T>(_attentionWeights.Shape[1]);
-
-            for (int j = 0; j < _attentionWeights.Shape[1]; j++)
+            double target = RelativeFlops(RandomConfig());
+            flopsTarget = target;
+            var smallest = new AttentiveNASConfig<T>
             {
-                T score = _ops.Zero;
-                for (int i = 0; i < Math.Min(_attentionWeights.Shape[0], contextVector.Length); i++)
-                {
-                    score = _ops.Add(score, _ops.Multiply(_attentionWeights[i, j], contextVector[i]));
-                }
-                scores[j] = score;
+                Depth = _elasticDepths.Min(),
+                WidthMultiplier = _elasticWidthMultipliers.Min(),
+                KernelSize = _elasticKernelSizes.Min()
+            };
+
+            return Enumerable.Range(0, CandidatePoolSize)
+                .Select(_ => Enumerable.Range(0, MaxRejectionDraws)
+                    .Select(__ => RandomConfig())
+                    .FirstOrDefault(config => RelativeFlops(config) <= target)
+                    ?? new AttentiveNASConfig<T>
+                    {
+                        Depth = smallest.Depth,
+                        WidthMultiplier = smallest.WidthMultiplier,
+                        KernelSize = smallest.KernelSize
+                    })
+                .ToList();
+        }
+
+        /// <summary>
+        /// Gives every candidate its predictor features under <paramref name="contextVector"/> and returns the
+        /// first candidate with the highest (BestUp) or lowest (WorstUp) predicted performance.
+        /// </summary>
+        internal AttentiveNASConfig<T> SelectCandidate(IReadOnlyList<AttentiveNASConfig<T>> candidates, Vector<T> contextVector)
+        {
+            foreach (var candidate in candidates)
+            {
+                candidate.Embedding = PredictorFeatures(candidate, contextVector);
             }
 
-            // Apply softmax to get probability distribution
-            return Softmax(scores);
+            var engine = AiDotNetEngine.Current;
+            var predicted = new Vector<T>(candidates.Select(PredictPerformance).ToArray());
+            var key = SamplingStrategy == AttentiveSamplingStrategy.WorstUp ? engine.Negate(predicted) : predicted;
+            return candidates[NasSamplingHelper.ArgMax(key)];
+        }
+
+        /// <summary>A uniformly random elastic configuration (depth, then width, then kernel).</summary>
+        private AttentiveNASConfig<T> RandomConfig()
+        {
+            return new AttentiveNASConfig<T>
+            {
+                Depth = _elasticDepths[_random.Next(_elasticDepths.Count)],
+                WidthMultiplier = _elasticWidthMultipliers[_random.Next(_elasticWidthMultipliers.Count)],
+                KernelSize = _elasticKernelSizes[_random.Next(_elasticKernelSizes.Count)]
+            };
+        }
+
+        /// <summary>
+        /// FLOPs of a configuration up to a constant: a k x k convolution stack scales with depth, with the square
+        /// of the width multiplier (input and output channels) and with k^2.
+        /// </summary>
+        internal static double RelativeFlops(AttentiveNASConfig<T> config)
+        {
+            return config.Depth * config.WidthMultiplier * config.WidthMultiplier * config.KernelSize * config.KernelSize;
+        }
+
+        /// <summary>
+        /// The predictor input for a configuration: its architecture embedding plus the sampling context over their
+        /// shared length.
+        /// </summary>
+        private Vector<T> PredictorFeatures(AttentiveNASConfig<T> config, Vector<T> contextVector)
+        {
+            var features = CreateArchitectureEmbedding(config);
+            int shared = Math.Min(features.Length, contextVector.Length);
+            if (shared > 0)
+            {
+                AiDotNetEngine.Current.Add(features.GetSubVector(0, shared), contextVector.GetSubVector(0, shared))
+                    .AsSpan().CopyTo(features.AsWritableSpan());
+            }
+
+            return features;
+        }
+
+        /// <summary>
+        /// The attention module as a linear performance predictor: x^T (W[:, d] + W[:, w] + W[:, k]) for the
+        /// configuration's features x (<see cref="AttentiveNASConfig{T}.Embedding"/>) and its chosen depth, width
+        /// and kernel columns. Zero for a configuration outside the elastic choices or without features.
+        /// </summary>
+        internal T PredictPerformance(AttentiveNASConfig<T> config)
+        {
+            var columnMask = ChoiceColumnMask(config);
+            var features = config.Embedding;
+            int shared = features is null ? 0 : Math.Min(_attentionWeights.Shape[0], features.Length);
+            if (columnMask is null || features is null || shared == 0)
+            {
+                return _ops.Zero;
+            }
+
+            var engine = AiDotNetEngine.Current;
+            var projected = engine.TensorMatMul(
+                features.GetSubVector(0, shared).AsTensor().Reshape(new[] { 1, shared }),
+                _attentionWeights.Slice(0, 0, shared)).Reshape(new[] { columnMask.Length });
+            return engine.TensorSum(engine.TensorMultiply(projected, columnMask));
+        }
+
+        /// <summary>
+        /// A [choices] mask with ones at the configuration's depth, width and kernel columns, or null when a value
+        /// is not one of the elastic choices.
+        /// </summary>
+        private Tensor<T>? ChoiceColumnMask(AttentiveNASConfig<T> config)
+        {
+            int depthIdx = _elasticDepths.IndexOf(config.Depth);
+            int widthIdx = _elasticWidthMultipliers.IndexOf(config.WidthMultiplier);
+            int kernelIdx = _elasticKernelSizes.IndexOf(config.KernelSize);
+
+            if (depthIdx < 0 || widthIdx < 0 || kernelIdx < 0)
+            {
+                return null;
+            }
+
+            var chosenColumns = new Tensor<int>(new[] { 3 });
+            chosenColumns[0] = depthIdx;
+            chosenColumns[1] = _elasticDepths.Count + widthIdx;
+            chosenColumns[2] = _elasticDepths.Count + _elasticWidthMultipliers.Count + kernelIdx;
+            return AiDotNetEngine.Current.ReduceSum(
+                AiDotNetEngine.Current.TensorOneHot<T>(chosenColumns, _attentionWeights.Shape[1]), new[] { 0 }, false);
         }
 
         /// <summary>
@@ -174,101 +286,15 @@ namespace AiDotNet.AutoML.NAS
             embedding[1] = _ops.FromDouble(config.WidthMultiplier);
             embedding[2] = _ops.FromDouble(config.KernelSize / 10.0);
 
-            // Pad with zeros
-            for (int i = 3; i < embedding.Length; i++)
-            {
-                embedding[i] = _ops.Zero;
-            }
+            // The remaining entries stay zero (new vectors are zero-filled).
 
             return embedding;
         }
 
         /// <summary>
-        /// Extracts a subset of scores for a specific architecture dimension
-        /// </summary>
-        private List<T> ExtractScores(Vector<T> allScores, int startIdx, int endIdx)
-        {
-            var scores = new List<T>();
-            for (int i = startIdx; i < Math.Min(endIdx, allScores.Length); i++)
-            {
-                scores.Add(allScores[i]);
-            }
-
-            // If we don't have enough scores, pad with equal probabilities
-            while (scores.Count < (endIdx - startIdx))
-            {
-                scores.Add(_ops.FromDouble(1.0 / (endIdx - startIdx)));
-            }
-
-            // Normalize to sum to 1
-            T sum = _ops.Zero;
-            foreach (var score in scores)
-            {
-                sum = _ops.Add(sum, score);
-            }
-
-            if (_ops.GreaterThan(sum, _ops.Zero))
-            {
-                for (int i = 0; i < scores.Count; i++)
-                {
-                    scores[i] = _ops.Divide(scores[i], sum);
-                }
-            }
-
-            return scores;
-        }
-
-        /// <summary>
-        /// Applies softmax to a vector
-        /// </summary>
-        private Vector<T> Softmax(Vector<T> logits)
-        {
-            var result = new Vector<T>(logits.Length);
-
-            T maxLogit = logits[0];
-            for (int i = 1; i < logits.Length; i++)
-            {
-                if (_ops.GreaterThan(logits[i], maxLogit))
-                    maxLogit = logits[i];
-            }
-
-            T sumExp = _ops.Zero;
-            var expValues = new T[logits.Length];
-            for (int i = 0; i < logits.Length; i++)
-            {
-                expValues[i] = _ops.Exp(_ops.Subtract(logits[i], maxLogit));
-                sumExp = _ops.Add(sumExp, expValues[i]);
-            }
-
-            for (int i = 0; i < logits.Length; i++)
-            {
-                result[i] = _ops.Divide(expValues[i], sumExp);
-            }
-
-            return result;
-        }
-
-        /// <summary>
-        /// Samples from a probability distribution
-        /// </summary>
-        private int SampleFromDistribution(List<T> probs)
-        {
-            double rand = _random.NextDouble();
-            double cumulative = 0.0;
-
-            for (int i = 0; i < probs.Count; i++)
-            {
-                cumulative += Convert.ToDouble(probs[i]);
-                if (rand <= cumulative)
-                    return i;
-            }
-
-            return probs.Count - 1;
-        }
-
-        /// <summary>
-        /// Updates the attention module based on architecture performance.
-        /// High-performing architectures increase attention to similar regions.
+        /// Updates the attention module based on architecture performance: one gradient step of the predictor on
+        /// the squared error (prediction - performance)^2 / 2, i.e. W[:, c] -= lr * (prediction - performance) * x
+        /// for the configuration's three columns c.
         /// </summary>
         public void UpdateAttention(AttentiveNASConfig<T> config, T performance, T learningRate)
         {
@@ -276,34 +302,31 @@ namespace AiDotNet.AutoML.NAS
             string configKey = $"{config.Depth}_{config.WidthMultiplier}_{config.KernelSize}";
             _performanceMemory[configKey] = performance;
 
-            int depthIdx = _elasticDepths.IndexOf(config.Depth);
-            int widthIdx = _elasticWidthMultipliers.IndexOf(config.WidthMultiplier);
-            int kernelIdx = _elasticKernelSizes.IndexOf(config.KernelSize);
-
-            if (depthIdx < 0 || widthIdx < 0 || kernelIdx < 0)
+            var columnMask = ChoiceColumnMask(config);
+            if (columnMask is null)
             {
                 return;
             }
 
-            int depthCol = depthIdx;
-            int widthCol = _elasticDepths.Count + widthIdx;
-            int kernelCol = _elasticDepths.Count + _elasticWidthMultipliers.Count + kernelIdx;
-
-            // Update attention weights based on performance gradient
-            // This is a simplified update; full implementation would use policy gradients
             var embedding = config.Embedding
                 ?? throw new InvalidOperationException("Config embedding must not be null when updating attention weights.");
 
-            for (int i = 0; i < Math.Min(_attentionWeights.Shape[0], embedding.Length); i++)
+            int hiddenRows = _attentionWeights.Shape[0];
+            int shared = Math.Min(hiddenRows, embedding.Length);
+            if (shared == 0)
             {
-                // Gradient approximation: performance * embedding
-                T gradient = _ops.Multiply(performance, embedding[i]);
-                T update = _ops.Multiply(learningRate, gradient);
-
-                _attentionWeights[i, depthCol] = _ops.Add(_attentionWeights[i, depthCol], update);
-                _attentionWeights[i, widthCol] = _ops.Add(_attentionWeights[i, widthCol], update);
-                _attentionWeights[i, kernelCol] = _ops.Add(_attentionWeights[i, kernelCol], update);
+                return;
             }
+
+            T error = _ops.Subtract(PredictPerformance(config), performance);
+            var engine = AiDotNetEngine.Current;
+            // The first `shared` hidden rows take the step; any rows past the embedding's length stay at zero.
+            var step = engine.TensorMultiplyScalar(
+                engine.TensorMultiplyScalar(embedding.GetSubVector(0, shared).AsTensor(), error), learningRate);
+            var update = shared == hiddenRows
+                ? step
+                : engine.TensorConcatenate(new[] { step, new Tensor<T>(new[] { hiddenRows - shared }) }, 0);
+            engine.TensorSubtractInPlace(_attentionWeights, engine.TensorOuter(update, columnMask));
         }
 
         /// <summary>

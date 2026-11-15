@@ -340,14 +340,11 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
 
         // A_log: initialized to log(1) = 0 for each head (gives A = -1)
         // Using small negative values so A = -exp(A_log) is a mild decay
-        for (int h = 0; h < _numHeads; h++)
-        {
-            _aLog[h] = NumOps.FromDouble(Math.Log(1.0 + h));
-        }
+        // A_log[h] = log(1 + h)
+        Engine.TensorCopy(Engine.TensorLog(Engine.TensorArange<T>(1, _numHeads + 1, 1)), _aLog);
 
         InitializeTensor(_dtProjectionWeights);
-        for (int i = 0; i < _dtProjectionBias.Length; i++)
-            _dtProjectionBias[i] = NumOps.FromDouble(0.01);
+        _dtProjectionBias.Fill(NumOps.FromDouble(0.01));
 
         _dParam.Fill(NumOps.One);
 
@@ -744,170 +741,6 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
         return Engine.TensorAdd(scaled, betaR);
     }
 
-    /// <summary>
-    /// Backward pass through the SSD multi-head selective scan.
-    /// </summary>
-    private Tensor<T> SSDBackward(
-        Tensor<T> dOutput, Tensor<T> x, Tensor<T> delta, Tensor<T> b, Tensor<T> c,
-        Tensor<T> hiddenStates, int batchSize, int seqLen,
-        out Tensor<T> dDelta, out Tensor<T> dB, out Tensor<T> dC)
-    {
-        var dX = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _innerDimension });
-        dDelta = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _numHeads });
-        dB = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _stateDimension });
-        dC = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _stateDimension });
-
-        _aLogGradient = new Tensor<T>(new[] { _numHeads });
-        _dParamGradient = new Tensor<T>(new[] { _numHeads });
-
-        var negAPerHead = new T[_numHeads];
-        for (int h = 0; h < _numHeads; h++)
-            negAPerHead[h] = NumOps.Negate(NumOps.FromDouble(Math.Exp(NumOps.ToDouble(_aLog[h]))));
-
-        // Per Mamba paper: recompute states during backward for numerical consistency
-        var recomputedStates = new Tensor<T>[seqLen + 1];
-        var h_recomp = TensorAllocator.Rent<T>(new[] { batchSize, _innerDimension, _stateDimension });
-        recomputedStates[0] = h_recomp.Clone();
-        for (int t = 0; t < seqLen; t++)
-        {
-            var x_fwd = x.GetSliceAlongDimension(t, 1);
-            var delta_fwd = delta.GetSliceAlongDimension(t, 1);
-            var B_fwd = b.GetSliceAlongDimension(t, 1);
-            for (int hi = 0; hi < _numHeads; hi++)
-            {
-                int dimStart = hi * _headDimension;
-                T negA = negAPerHead[hi];
-                for (int bi = 0; bi < batchSize; bi++)
-                {
-                    T dt = delta_fwd[new[] { bi, hi }];
-                    T aBar = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(NumOps.Multiply(dt, negA))));
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatD = dimStart + di;
-                        T xv = x_fwd[new[] { bi, flatD }];
-                        for (int n = 0; n < _stateDimension; n++)
-                        {
-                            T bv = B_fwd[new[] { bi, n }];
-                            h_recomp[new[] { bi, flatD, n }] = NumOps.Add(
-                                NumOps.Multiply(aBar, h_recomp[new[] { bi, flatD, n }]),
-                                NumOps.Multiply(NumOps.Multiply(dt, bv), xv));
-                        }
-                    }
-                }
-            }
-            recomputedStates[t + 1] = h_recomp.Clone();
-        }
-
-        // Verify recomputed states match cached states
-        var _dbgSsd = Path.Combine(Path.GetTempPath(), "mamba2_debug.log");
-        for (int t = 0; t < seqLen; t++)
-        {
-            var cached = hiddenStates.GetSliceAlongDimension(t + 1, 1);
-            var recomp = recomputedStates[t + 1];
-            double maxDiff = 0;
-            for (int i = 0; i < recomp.Length; i++)
-            {
-                double d2 = Math.Abs(Convert.ToDouble(cached[i]) - Convert.ToDouble(recomp[i]));
-                if (d2 > maxDiff) maxDiff = d2;
-            }
-            File.AppendAllText(_dbgSsd, $"  SSD State[{t + 1}] maxDiff={maxDiff:G6}{Environment.NewLine}");
-        }
-
-        // Running dh: [batch, innerDim, stateDim]
-        var dh = TensorAllocator.Rent<T>(new[] { batchSize, _innerDimension, _stateDimension });
-
-        for (int t = seqLen - 1; t >= 0; t--)
-        {
-            var x_t = x.GetSliceAlongDimension(t, 1);
-            var delta_t = delta.GetSliceAlongDimension(t, 1);
-            var B_t = b.GetSliceAlongDimension(t, 1);
-            var C_t = c.GetSliceAlongDimension(t, 1);
-            var dOut_t = dOutput.GetSliceAlongDimension(t, 1);
-            var h_t = recomputedStates[t + 1];
-            var h_prev = recomputedStates[t];
-
-            for (int hi = 0; hi < _numHeads; hi++)
-            {
-                int dimStart = hi * _headDimension;
-                T negA = negAPerHead[hi];
-
-                for (int bi = 0; bi < batchSize; bi++)
-                {
-                    T dt = delta_t[new[] { bi, hi }];
-                    T aBar = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(NumOps.Multiply(dt, negA))));
-
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatD = dimStart + di;
-                        T x_val = x_t[new[] { bi, flatD }];
-                        T dOut_val = dOut_t[new[] { bi, flatD }];
-
-                        // D skip gradient
-                        _dParamGradient[hi] = NumOps.Add(_dParamGradient[hi],
-                            NumOps.Multiply(x_val, dOut_val));
-
-                        // dX from D
-                        T dX_val = NumOps.Multiply(_dParam[hi], dOut_val);
-
-                        for (int n = 0; n < _stateDimension; n++)
-                        {
-                            T cVal = C_t[new[] { bi, n }];
-                            T hVal = h_t[new[] { bi, flatD, n }];
-                            T hPrevVal = h_prev[new[] { bi, flatD, n }];
-                            T bVal = B_t[new[] { bi, n }];
-
-                            // dh from output: y = C * h
-                            T dhVal = NumOps.Add(dh[new[] { bi, flatD, n }],
-                                NumOps.Multiply(cVal, dOut_val));
-                            dh[new[] { bi, flatD, n }] = dhVal;
-
-                            // dC: h * dOut
-                            dC[new[] { bi, t, n }] = NumOps.Add(dC[new[] { bi, t, n }],
-                                NumOps.Multiply(hVal, dOut_val));
-
-                            // d_A_bar from state eq: dh * h_prev
-                            T dAbar = NumOps.Multiply(dhVal, hPrevVal);
-
-                            // d_delta from A_bar: dAbar * A_bar * A
-                            T dDeltaFromA = NumOps.Multiply(dAbar, NumOps.Multiply(aBar, negA));
-                            dDelta[new[] { bi, t, hi }] = NumOps.Add(
-                                dDelta[new[] { bi, t, hi }], dDeltaFromA);
-
-                            // d_A_log: chain rule through A_bar = exp(dt * -exp(A_log))
-                            // dL/dA_log = dAbar * h_prev * dt * (-exp(A_log)) * exp(A_log)
-                            //           = dAbar * dt * h_prev * aBar * negA * exp(A_log)
-                            // Since negA = -exp(A_log), negA * exp(A_log) = -exp(2*A_log)
-                            // Simplified: dL/dA_log += dAbar * aBar * dt * negA
-                            T dAlog = NumOps.Multiply(dAbar, NumOps.Multiply(aBar, NumOps.Multiply(dt, negA)));
-                            _aLogGradient[hi] = NumOps.Add(_aLogGradient[hi], dAlog);
-
-                            // d_delta from B*x: dh * B * x
-                            T dDeltaFromBx = NumOps.Multiply(dhVal,
-                                NumOps.Multiply(bVal, x_val));
-                            dDelta[new[] { bi, t, hi }] = NumOps.Add(
-                                dDelta[new[] { bi, t, hi }], dDeltaFromBx);
-
-                            // dB: dh * dt * x
-                            dB[new[] { bi, t, n }] = NumOps.Add(dB[new[] { bi, t, n }],
-                                NumOps.Multiply(dhVal, NumOps.Multiply(dt, x_val)));
-
-                            // dX from state: dh * dt * B
-                            dX_val = NumOps.Add(dX_val,
-                                NumOps.Multiply(dhVal, NumOps.Multiply(dt, bVal)));
-
-                            // Propagate dh to previous step
-                            dh[new[] { bi, flatD, n }] = NumOps.Multiply(aBar, dhVal);
-                        }
-
-                        dX[new[] { bi, t, flatD }] = dX_val;
-                    }
-                }
-            }
-        }
-
-        return dX;
-    }
-
     #region Engine-Accelerated Conv1D
 
     /// <summary>
@@ -952,65 +785,9 @@ public partial class Mamba2Block<T> : LayerBase<T>, IShapeContract
         return Engine.TensorAdd((acc ?? throw new InvalidOperationException("acc is null where it is required.")), biasReshaped);
     }
 
-    /// <summary>
-    /// Backward pass for depthwise causal Conv1D using explicit per-element computation.
-    /// </summary>
-    private Tensor<T> DepthwiseConv1DBackward(
-        Tensor<T> dOutput, Tensor<T> input, int batchSize, int seqLen)
-    {
-        var dInput = TensorAllocator.Rent<T>(new[] { batchSize, seqLen, _innerDimension });
-        // Zero-initialize rented buffer â€” it may contain stale data from previous use
-        for (int i = 0; i < dInput.Length; i++) dInput[i] = NumOps.Zero;
-        _convBiasGradient = new Tensor<T>(new[] { _innerDimension });
-        _convWeightsGradient = new Tensor<T>(new[] { _innerDimension, _convKernelSize });
-
-        for (int bi = 0; bi < batchSize; bi++)
-        {
-            for (int t = 0; t < seqLen; t++)
-            {
-                for (int d = 0; d < _innerDimension; d++)
-                {
-                    T dOutVal = dOutput[new[] { bi, t, d }];
-                    _convBiasGradient[d] = NumOps.Add(_convBiasGradient[d], dOutVal);
-
-                    for (int k = 0; k < _convKernelSize; k++)
-                    {
-                        int srcT = t - k;
-                        if (srcT >= 0)
-                        {
-                            T w = _convWeights[new[] { d, k }];
-                            T xVal = input[new[] { bi, srcT, d }];
-                            dInput[new[] { bi, srcT, d }] = NumOps.Add(
-                                dInput[new[] { bi, srcT, d }],
-                                NumOps.Multiply(w, dOutVal));
-                            _convWeightsGradient[new[] { d, k }] = NumOps.Add(
-                                _convWeightsGradient[new[] { d, k }],
-                                NumOps.Multiply(xVal, dOutVal));
-                        }
-                    }
-                }
-            }
-        }
-
-        return dInput;
-    }
-
     #endregion
 
     #region Helpers
-
-    /// <summary>
-    /// Workaround for Engine.ReduceSum multi-axis [0,1] bug (AiDotNet.Tensors PR #62).
-    /// </summary>
-    private Tensor<T> ReduceSumAxes01(Tensor<T> tensor, int batch, int seq, int features)
-    {
-        var result = new Tensor<T>(new[] { features });
-        for (int bi = 0; bi < batch; bi++)
-            for (int t = 0; t < seq; t++)
-                for (int d = 0; d < features; d++)
-                    result[d] = NumOps.Add(result[d], tensor[new[] { bi, t, d }]);
-        return result;
-    }
 
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> input)
     {

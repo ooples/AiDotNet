@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
@@ -74,6 +75,10 @@ public partial class OWLv2<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
     private bool _useNativeMode;
     private bool _disposed;
     private int _encoderLayerEnd;
+    private readonly List<ILayer<T>> _groundingHeadLayers = new();
+    private OwlDetectionHead<T>? _groundingHead;
+    // The ViT patch embedding of the default backbone (null with a custom architecture, whose own layers take the image).
+    private PatchEmbeddingLayer<T>? _patchEmbedding;
 
     public OWLv2(
         NeuralNetworkArchitecture<T> architecture,
@@ -132,7 +137,7 @@ public partial class OWLv2<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null)
             return L2Normalize(OnnxModel.Run(p));
-        var c = p;
+        var c = PatchTokens(p);
         for (int i = 0; i < _encoderLayerEnd; i++)
             c = Layers[i].Forward(c);
         return L2Normalize(c);
@@ -155,141 +160,40 @@ public partial class OWLv2<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(PreprocessImage(image));
 
-        var p = PreprocessImage(image);
-        double confThreshold = _options.ConfidenceThreshold;
-        double nmsThreshold = _options.NmsThreshold;
+        // OWLv2 (Minderer et al. 2023): the OWL-ViT per-token box and class heads plus an objectness head.
+        var prediction = Detect(image, textQuery);
+        var scores = Engine.TensorSigmoid(prediction.Logits.Reshape(new[] { prediction.Logits.Shape[0] }));
+        return GroundingDetections<T>.Ranked(Engine, GroundingHeadModule<T>.Corners(Engine, prediction.Boxes), scores,
+            _options.ConfidenceThreshold, _options.MaxDetections, _options.NmsThreshold);
+    }
 
-        // Step 1: ViT-L/14 backbone - per-patch features
-        var visualFeatures = p;
-        for (int i = 0; i < _encoderLayerEnd; i++)
+    /// <summary>
+    /// The training loss of one image (OWL-ViT section 3.2, DETR's bipartite matching loss with a focal sigmoid class
+    /// loss): the per-token predictions matched one-to-one to the ground-truth boxes of the query, then focal, L1 and GIoU.
+    /// </summary>
+    /// <param name="image">The image.</param>
+    /// <param name="textQuery">The text query.</param>
+    /// <param name="targetBoxes">The query's ground-truth boxes <c>[G, 4]</c>, normalized (cx, cy, w, h).</param>
+    internal GroundingSetLossTerms<T> GroundingLoss(Tensor<T> image, string textQuery, Tensor<T> targetBoxes)
+    {
+        ThrowIfDisposed();
+        if (targetBoxes is null) throw new ArgumentNullException(nameof(targetBoxes));
+        var prediction = Detect(image, textQuery);
+        var labels = Tensor<T>.CreateDefault(new[] { targetBoxes.Shape[0], 1 }, NumOps.One);
+        return new GroundingSetLoss<T>(Engine).Compute(prediction.Boxes, prediction.Logits, targetBoxes, labels);
+    }
+
+    // ViT backbone with a class token (OWL-ViT section 3.1): the patch embedding, the learned class token ahead of the
+    // patch tokens, then the transformer over the one sequence; then the head against the embedded query.
+    private OwlPrediction<T> Detect(Tensor<T> image, string textQuery)
+    {
+        var head = _groundingHead ?? throw new InvalidOperationException("The grounding head is not initialized.");
+        var patches = GroundingHeadModule<T>.AsRows(Engine, Layers[0].Forward(PatchTokens(PreprocessImage(image))));
+        var visualFeatures = Engine.TensorConcatenate(new[] { head.ClassToken(), patches }, 0);
+        visualFeatures = visualFeatures.Reshape(new[] { 1, visualFeatures.Shape[0], visualFeatures.Shape[1] });
+        for (int i = 1; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-
-        // Step 2: Text-conditioned feature fusion via ConcatenateTensors
-        var textTokens = TokenizeText(textQuery);
-        var fusedInput = visualFeatures.ConcatenateTensors(textTokens);
-
-        // Run through decoder layers for text-conditioned detection features
-        var decoderOut = fusedInput;
-        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
-            decoderOut = Layers[i].Forward(decoderOut);
-        int outDim = decoderOut.Length;
-
-        // Step 3: Per-patch detection with calibrated objectness
-        int patchSize = 14;
-        int gridSize = _options.ImageSize / patchSize;
-        int numPatches = gridSize * gridSize;
-        int actualPatches = Math.Min(numPatches, outDim);
-
-        int fieldsPerDet = 5;
-        int maxDet = Math.Min(actualPatches, _options.MaxDetections);
-        var rawDetections = new double[maxDet, fieldsPerDet];
-        int validCount = 0;
-
-        for (int pIdx = 0; pIdx < actualPatches && validCount < maxDet; pIdx++)
-        {
-            int gridRow = pIdx / gridSize;
-            int gridCol = pIdx % gridSize;
-            double patchCenterX = (gridCol + 0.5) / gridSize;
-            double patchCenterY = (gridRow + 0.5) / gridSize;
-
-            // Extract text-conditioned patch features from decoder output
-            int dim = Math.Max(1, outDim / actualPatches);
-            var patchFeat = new double[dim];
-            for (int d = 0; d < dim; d++)
-            {
-                int srcIdx = (pIdx * dim + d) % outDim;
-                patchFeat[d] = NumOps.ToDouble(decoderOut[srcIdx]);
-            }
-
-            // Objectness score from text-conditioned features
-            double objectness = 0;
-            for (int d = 0; d < dim; d++)
-                objectness += patchFeat[d];
-            double conf = 1.0 / (1.0 + Math.Exp(-objectness / Math.Max(1, dim)));
-
-            // Box regression
-            double boxDx = 0,
-                boxDy = 0,
-                boxW = 0,
-                boxH = 0;
-            int quarter = Math.Max(1, dim / 4);
-            for (int d = 0; d < quarter && d < dim; d++)
-                boxDx += patchFeat[d];
-            for (int d = quarter; d < 2 * quarter && d < dim; d++)
-                boxDy += patchFeat[d];
-            for (int d = 2 * quarter; d < 3 * quarter && d < dim; d++)
-                boxW += patchFeat[d];
-            for (int d = 3 * quarter; d < dim; d++)
-                boxH += patchFeat[d];
-
-            boxDx = Math.Tanh(boxDx / quarter) * 0.5 / gridSize;
-            boxDy = Math.Tanh(boxDy / quarter) * 0.5 / gridSize;
-            boxW = 1.0 / (1.0 + Math.Exp(-boxW / quarter)) * 3.0 / gridSize;
-            boxH = 1.0 / (1.0 + Math.Exp(-boxH / quarter)) * 3.0 / gridSize;
-
-            double cx = patchCenterX + boxDx;
-            double cy = patchCenterY + boxDy;
-            double x1 = Math.Max(0, cx - boxW / 2);
-            double y1 = Math.Max(0, cy - boxH / 2);
-            double x2 = Math.Min(1, cx + boxW / 2);
-            double y2 = Math.Min(1, cy + boxH / 2);
-
-            if (conf >= confThreshold && x2 > x1 && y2 > y1)
-            {
-                rawDetections[validCount, 0] = x1;
-                rawDetections[validCount, 1] = y1;
-                rawDetections[validCount, 2] = x2;
-                rawDetections[validCount, 3] = y2;
-                rawDetections[validCount, 4] = conf;
-                validCount++;
-            }
-        }
-
-        // Step 4: NMS
-        var kept = new bool[validCount];
-        for (int i = 0; i < validCount; i++)
-            kept[i] = true;
-        for (int i = 0; i < validCount; i++)
-        {
-            if (!kept[i])
-                continue;
-            for (int j = i + 1; j < validCount; j++)
-            {
-                if (!kept[j])
-                    continue;
-                double iou = ComputeIoU(
-                    rawDetections[i, 0],
-                    rawDetections[i, 1],
-                    rawDetections[i, 2],
-                    rawDetections[i, 3],
-                    rawDetections[j, 0],
-                    rawDetections[j, 1],
-                    rawDetections[j, 2],
-                    rawDetections[j, 3]
-                );
-                if (iou > nmsThreshold)
-                    kept[j] = false;
-            }
-        }
-
-        int finalCount = 0;
-        for (int i = 0; i < validCount; i++)
-            if (kept[i])
-                finalCount++;
-        if (finalCount == 0)
-            return new Tensor<T>([fieldsPerDet]);
-
-        var result = new Tensor<T>([finalCount * fieldsPerDet]);
-        int idx = 0;
-        for (int i = 0; i < validCount; i++)
-        {
-            if (!kept[i])
-                continue;
-            for (int f = 0; f < fieldsPerDet; f++)
-                result[idx * fieldsPerDet + f] = NumOps.FromDouble(rawDetections[i, f]);
-            idx++;
-        }
-        return result;
+        return head.Forward(visualFeatures, head.EmbedQuery(TokenIds(textQuery)));
     }
 
     /// <inheritdoc />
@@ -300,34 +204,23 @@ public partial class OWLv2<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
         return GroundText(image, combined);
     }
 
-    private static double ComputeIoU(
-        double x1a,
-        double y1a,
-        double x2a,
-        double y2a,
-        double x1b,
-        double y1b,
-        double x2b,
-        double y2b
-    )
+    // The image as ViT patch tokens [1, (H / PatchSize) * (W / PatchSize), VisionDim], in row-major grid order, for the
+    // default backbone: its first layer is the linear projection of patch tokens, so a raw image fed to it was
+    // projected per channel scanline and the box head's grid was 1 x (C * H) instead of the patch grid.
+    private Tensor<T> PatchTokens(Tensor<T> preprocessed)
     {
-        double ix1 = Math.Max(x1a, x1b),
-            iy1 = Math.Max(y1a, y1b);
-        double ix2 = Math.Min(x2a, x2b),
-            iy2 = Math.Min(y2a, y2b);
-        double iw = Math.Max(0, ix2 - ix1),
-            ih = Math.Max(0, iy2 - iy1);
-        double inter = iw * ih;
-        double areaA = (x2a - x1a) * (y2a - y1a);
-        double areaB = (x2b - x1b) * (y2b - y1b);
-        double union = areaA + areaB - inter;
-        return union > 1e-8 ? inter / union : 0;
+        if (_patchEmbedding is null) return preprocessed;
+        var image = preprocessed.Rank == 4 ? preprocessed : preprocessed.Reshape(new[] { 1 }.Concat(preprocessed.Shape.ToArray()).ToArray());
+        return _patchEmbedding.Forward(image);
     }
 
     protected override void InitializeLayers()
     {
         if (!_useNativeMode)
             return;
+        if (_options.PatchSize <= 0 || _options.PatchSize > _options.ImageSize)
+            throw new ArgumentOutOfRangeException(nameof(_options.PatchSize),
+                $"PatchSize must lie in [1, ImageSize = {_options.ImageSize}], got {_options.PatchSize}.");
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
@@ -349,28 +242,39 @@ public partial class OWLv2<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
                 )
             );
             ComputeEncoderDecoderBoundary();
+            if (_patchEmbedding is null)
+            {
+                _patchEmbedding = new PatchEmbeddingLayer<T>(_options.PatchSize, _options.VisionDim, expectedInputChannels: 3);
+                _groundingHeadLayers.Add(_patchEmbedding);
+            }
+        }
+        if (_groundingHead is null)
+        {
+            // CLIP's text transformer uses 64-wide attention heads.
+            int textHeads = Math.Max(1, _options.TextEmbeddingDim / 64);
+            _groundingHead = new OwlDetectionHead<T>(Engine, _groundingHeadLayers, _options.VisionDim, new OwlDetectionHeadConfiguration(
+                _options.NumClassEmbeddings, _options.TextEmbeddingDim, _options.NumTextLayers, textHeads, _options.VocabSize,
+                _options.MaxSequenceLength, Objectness: true));
+            RegisterAuxiliaryEncoderStream(_groundingHeadLayers);
         }
     }
 
     private void ComputeEncoderDecoderBoundary()
     {
         // Each vision block is one residual TransformerEncoderLayer (+ an optional DropoutLayer);
-        // the encoder prefix is the linear input projection (patch-embedding stand-in) and the
+        // the encoder prefix is the linear projection of the patch tokens (PatchTokens embeds an image) and the
         // trailing prefix is the final encoder LayerNorm — 2 non-block layers total.
         int lpb = _options.DropoutRate > 0 ? 2 : 1;
         _encoderLayerEnd = 2 + _options.NumVisionLayers * lpb;
     }
 
-    private Tensor<T> TokenizeText(string text)
+    private List<int> TokenIds(string text)
     {
         if (_tokenizer is null)
             throw new InvalidOperationException("Tokenizer not initialized.");
-        var encoding = _tokenizer.Encode(text);
-        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
-        var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++)
-            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
-        return tokens;
+        if (text is null) throw new ArgumentNullException(nameof(text));
+        var ids = _tokenizer.Encode(text).TokenIds;
+        return ids.Count > 0 ? ids : throw new ArgumentException("The text query has no tokens.", nameof(text));
     }
 
     /// <inheritdoc />

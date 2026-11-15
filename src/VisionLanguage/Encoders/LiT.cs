@@ -211,13 +211,8 @@ public partial class LiT<T> : VisionLanguageModelBase<T>, IContrastiveVisionLang
     {
         var imageEmb = EncodeImage(image);
         var textEmbs = EncodeTexts(labels);
-        var logits = new Tensor<T>([labels.Length]);
-        double temp = _options.Temperature;
-        for (int i = 0; i < labels.Length; i++)
-            logits[i] = NumOps.FromDouble(
-                NumOps.ToDouble(CosineSimilarity(imageEmb, textEmbs[i])) / temp
-            );
-        var probs = Softmax(logits);
+        var logits = Engine.TensorDivideScalar(EmbeddingScores<T>.CosineToEach(Engine, imageEmb, textEmbs), NumOps.FromDouble(_options.Temperature));
+        T[] probs = Softmax(logits).ToArray();
         var result = new Dictionary<string, T>();
         for (int i = 0; i < labels.Length; i++)
             result[labels[i]] = probs[i];
@@ -316,9 +311,7 @@ public partial class LiT<T> : VisionLanguageModelBase<T>, IContrastiveVisionLang
             throw new InvalidOperationException("Tokenizer not initialized.");
         var encoding = _tokenizer.Encode(text);
         int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
-        var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++)
-            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
+        var tokens = TokenIdsToTensor(encoding.TokenIds, seqLen);
         return tokens;
     }
 

@@ -502,8 +502,7 @@ public partial class Transformer<T> : TokenLanguageModelLayoutBase<T>, IAuxiliar
             return NumOps.Zero;
         }
 
-        T totalAuxLoss = NumOps.Zero;
-        int attentionLayerCount = 0;
+        var layerAuxLosses = new List<T>();
 
         // Aggregate auxiliary losses from all attention layers — including the
         // attention sublayers hosted inside composite encoder/decoder blocks (the
@@ -513,11 +512,12 @@ public partial class Transformer<T> : TokenLanguageModelLayoutBase<T>, IAuxiliar
         {
             if (layer is IAuxiliaryLossLayer<T> auxLayer && auxLayer.UseAuxiliaryLoss)
             {
-                T layerAuxLoss = auxLayer.ComputeAuxiliaryLoss();
-                totalAuxLoss = NumOps.Add(totalAuxLoss, layerAuxLoss);
-                attentionLayerCount++;
+                layerAuxLosses.Add(auxLayer.ComputeAuxiliaryLoss());
             }
         }
+
+        int attentionLayerCount = layerAuxLosses.Count;
+        T totalAuxLoss = attentionLayerCount > 0 ? Engine.Sum(new Vector<T>(layerAuxLosses)) : NumOps.Zero;
 
         // Average over all attention layers
         if (attentionLayerCount > 0)

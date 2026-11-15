@@ -166,7 +166,7 @@ public class VideoFrameDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
         int pixelsPerFrame = h * w * c;
 
         var featuresData = new T[_sampleCount * frames * pixelsPerFrame];
-        var labelsData = new T[_sampleCount * _numClasses];
+        var labelsData = new int[_sampleCount * _numClasses];
 
         for (int i = 0; i < _sampleCount; i++)
         {
@@ -189,11 +189,11 @@ public class VideoFrameDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
                 Array.Copy(framePixels, 0, featuresData, dstOffset, pixelsPerFrame);
             }
 
-            labelsData[i * _numClasses + classIndex] = NumOps.One;
+            labelsData[i * _numClasses + classIndex] = 1;
         }
 
         LoadedFeatures = new Tensor<T>(featuresData, new[] { _sampleCount, frames, h, w, c });
-        LoadedLabels = new Tensor<T>(labelsData, new[] { _sampleCount, _numClasses });
+        LoadedLabels = new Tensor<int>(labelsData, new[] { _sampleCount, _numClasses }).Cast<T>();
         InitializeIndices(_sampleCount);
 
         return Task.CompletedTask;
@@ -275,48 +275,81 @@ public class VideoFrameDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
         int srcChannels = imageTensor.Shape[1];
         int srcHeight = imageTensor.Shape[2];
         int srcWidth = imageTensor.Shape[3];
-        var srcSpan = imageTensor.AsSpan();
-
         int totalPixels = targetHeight * targetWidth * targetChannels;
-        var pixels = new T[totalPixels];
+        if (totalPixels == 0)
+        {
+            return new T[0];
+        }
 
-        // Bilinear resize from source to target, converting CHW -> HWC
+        // Bilinear resize from source to target, converting CHW -> HWC. The integer neighbour indices and the
+        // per-pixel interpolation remainders are laid out in output (HWC) order. The source coordinate is
+        // y * (srcHeight - 1) / denomY, so its floor is the integer quotient and its fraction is the integer
+        // remainder / denomY (likewise for x). The four neighbours are gathered and blended with engine ops in T.
+        int denomY = Math.Max(1, targetHeight - 1);
+        int denomX = Math.Max(1, targetWidth - 1);
+        var i00 = new int[totalPixels];
+        var i01 = new int[totalPixels];
+        var i10 = new int[totalPixels];
+        var i11 = new int[totalPixels];
+        var remXs = new int[totalPixels];
+        var remYs = new int[totalPixels];
+
         for (int y = 0; y < targetHeight; y++)
         {
             for (int x = 0; x < targetWidth; x++)
             {
-                double srcY = (double)y * (srcHeight - 1) / Math.Max(1, targetHeight - 1);
-                double srcX = (double)x * (srcWidth - 1) / Math.Max(1, targetWidth - 1);
+                long scaledY = (long)y * (srcHeight - 1);
+                long scaledX = (long)x * (srcWidth - 1);
 
-                int y0 = (int)Math.Floor(srcY);
+                int y0 = (int)(scaledY / denomY);
                 int y1 = Math.Min(y0 + 1, srcHeight - 1);
-                int x0 = (int)Math.Floor(srcX);
+                int x0 = (int)(scaledX / denomX);
                 int x1 = Math.Min(x0 + 1, srcWidth - 1);
 
-                double dy = srcY - y0;
-                double dx = srcX - x0;
+                int remY = (int)(scaledY % denomY);
+                int remX = (int)(scaledX % denomX);
 
                 for (int ch = 0; ch < targetChannels; ch++)
                 {
                     int srcCh = ch < srcChannels ? ch : (srcChannels == 1 ? 0 : ch);
                     int chOffset = srcCh * srcHeight * srcWidth;
+                    int p = (y * targetWidth + x) * targetChannels + ch;
 
-                    double v00 = NumOps.ToDouble(srcSpan[chOffset + y0 * srcWidth + x0]);
-                    double v01 = NumOps.ToDouble(srcSpan[chOffset + y0 * srcWidth + x1]);
-                    double v10 = NumOps.ToDouble(srcSpan[chOffset + y1 * srcWidth + x0]);
-                    double v11 = NumOps.ToDouble(srcSpan[chOffset + y1 * srcWidth + x1]);
-
-                    double value = v00 * (1 - dx) * (1 - dy) +
-                                   v01 * dx * (1 - dy) +
-                                   v10 * (1 - dx) * dy +
-                                   v11 * dx * dy;
-
-                    pixels[(y * targetWidth + x) * targetChannels + ch] = NumOps.FromDouble(value);
+                    i00[p] = chOffset + y0 * srcWidth + x0;
+                    i01[p] = chOffset + y0 * srcWidth + x1;
+                    i10[p] = chOffset + y1 * srcWidth + x0;
+                    i11[p] = chOffset + y1 * srcWidth + x1;
+                    remXs[p] = remX;
+                    remYs[p] = remY;
                 }
             }
         }
 
-        return pixels;
+        var engine = AiDotNetEngine.Current;
+        var shape = new[] { totalPixels };
+        var source = imageTensor.Contiguous().Reshape(new[] { imageTensor.Length });
+        Tensor<T> Gather(int[] idx) => engine.TensorIndexSelect(source, new Tensor<int>(idx, shape), 0);
+
+        // dx = remX / denomX and 1 - dx = (denomX - remX) / denomX (likewise for y), all in T
+        var remXTensor = new Tensor<int>(remXs, shape).Cast<T>();
+        var remYTensor = new Tensor<int>(remYs, shape).Cast<T>();
+        T denomXT = NumOps.FromDouble(denomX);
+        T denomYT = NumOps.FromDouble(denomY);
+        var ax1 = engine.TensorDivideScalar(remXTensor, denomXT);
+        var ax0 = engine.TensorDivideScalar(engine.TensorSubtract(engine.TensorFullLike(remXTensor, denomXT), remXTensor), denomXT);
+        var by1 = engine.TensorDivideScalar(remYTensor, denomYT);
+        var by0 = engine.TensorDivideScalar(engine.TensorSubtract(engine.TensorFullLike(remYTensor, denomYT), remYTensor), denomYT);
+
+        // v00 * (1 - dx) * (1 - dy) + v01 * dx * (1 - dy) + v10 * (1 - dx) * dy + v11 * dx * dy
+        var value = engine.TensorAdd(
+            engine.TensorAdd(
+                engine.TensorAdd(
+                    engine.TensorMultiply(engine.TensorMultiply(Gather(i00), ax0), by0),
+                    engine.TensorMultiply(engine.TensorMultiply(Gather(i01), ax1), by0)),
+                engine.TensorMultiply(engine.TensorMultiply(Gather(i10), ax0), by1)),
+            engine.TensorMultiply(engine.TensorMultiply(Gather(i11), ax1), by1));
+
+        return value.AsSpan().ToArray();
     }
 
     private static Tensor<T> ExtractTensorBatch(Tensor<T> source, int[] indices)

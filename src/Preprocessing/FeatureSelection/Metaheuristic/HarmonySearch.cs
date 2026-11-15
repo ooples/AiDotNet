@@ -3,6 +3,7 @@ using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Metaheuristic;
 
@@ -36,7 +37,7 @@ public class HarmonySearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
     private readonly double _bw;
     private readonly int? _randomState;
 
-    private double[]? _featureScores;
+    private Vector<T>? _featureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -46,7 +47,7 @@ public class HarmonySearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
     public int MaxIterations => _maxIterations;
     public double HMCR => _hmcr;
     public double PAR => _par;
-    public double[]? FeatureScores => _featureScores;
+    public Vector<T>? FeatureScores => _featureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -93,146 +94,85 @@ public class HarmonySearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
+        int targetCount = Math.Min(_nFeaturesToSelect, p);
+        var engine = Engine;
 
         var random = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        // Initialize harmony memory
-        var harmonyMemory = new double[_harmonyMemorySize, p];
-        for (int i = 0; i < _harmonyMemorySize; i++)
-            for (int j = 0; j < p; j++)
-                harmonyMemory[i, j] = random.NextDouble();
+        var correlations = PopulationSearchOps.AbsTargetCorrelations(data, target, NumOps.Zero);
 
-        var fitness = new double[_harmonyMemorySize];
-        for (int i = 0; i < _harmonyMemorySize; i++)
-            fitness[i] = EvaluateSolution(data, target, harmonyMemory, i, p, n);
+        // Initialize harmony memory
+        var harmonyMemory = PopulationSearchOps.Uniform<T>(random, _harmonyMemorySize, p);
+        var fitness = PopulationSearchOps.ThresholdFitness(harmonyMemory, correlations, targetCount, 0.1);
+
+        T bandwidth = NumOps.FromDouble(_bw);
+        var memorySource = new int[p];
+        var adjustSource = new int[p];
+        var memoryRows = new int[p];
+        var unused = new Tensor<T>(new[] { 1 });
 
         // Main loop
         for (int iter = 0; iter < _maxIterations; iter++)
         {
-            // Create new harmony
-            var newHarmony = new double[p];
-
+            // Improvise a new harmony. The draws per dimension are conditional (memory consideration, then a memory
+            // row and a pitch-adjustment test with its bandwidth draw, or else a fresh random value), so they are
+            // taken one by one in Geem's order; every value derived from them is computed below on whole tensors.
+            var drawn = new Tensor<T>[p];
             for (int j = 0; j < p; j++)
             {
+                memorySource[j] = 0;
+                adjustSource[j] = 0;
+                memoryRows[j] = 0;
+                drawn[j] = unused;
                 if (random.NextDouble() < _hmcr)
                 {
-                    // Memory consideration
-                    int memIdx = random.Next(_harmonyMemorySize);
-                    newHarmony[j] = harmonyMemory[memIdx, j];
-
-                    // Pitch adjustment
+                    memorySource[j] = 1;
+                    memoryRows[j] = random.Next(_harmonyMemorySize);
                     if (random.NextDouble() < _par)
                     {
-                        newHarmony[j] += _bw * (2 * random.NextDouble() - 1);
-                        newHarmony[j] = Math.Max(0, Math.Min(1, newHarmony[j]));
+                        adjustSource[j] = 1;
+                        drawn[j] = PopulationSearchOps.Uniform<T>(random, 1);
                     }
                 }
                 else
                 {
-                    // Random selection
-                    newHarmony[j] = random.NextDouble();
+                    drawn[j] = PopulationSearchOps.Uniform<T>(random, 1);
                 }
             }
 
-            // Evaluate new harmony
-            var tempMemory = (double[,])harmonyMemory.Clone();
-            for (int j = 0; j < p; j++)
-                tempMemory[0, j] = newHarmony[j];
+            var draws = engine.TensorConcatenate(drawn, 0);
+            var fromMemory = new Tensor<int>((int[])memorySource.Clone(), new[] { p }).Cast<T>();
+            var adjusted = new Tensor<int>((int[])adjustSource.Clone(), new[] { p }).Cast<T>();
 
-            double newFitness = EvaluateSolution(data, target, tempMemory, 0, p, n);
+            // Memory consideration with pitch adjustment: x + bw * (2u - 1), clamped to [0, 1]
+            var memoryValues = PopulationSearchOps.GatherPerColumn(harmonyMemory, memoryRows);
+            var pitched = PopulationSearchOps.Clamp01(engine.TensorAdd(
+                memoryValues, engine.TensorMultiplyScalar(PopulationSearchOps.Affine(draws, 2, -1), bandwidth)));
+            var newHarmony = engine.TensorWhere(
+                fromMemory, engine.TensorWhere(adjusted, pitched, memoryValues), draws);
+            var newFitness = PopulationSearchOps.ThresholdFitness(
+                engine.Reshape(newHarmony, new[] { 1, p }), correlations, targetCount, 0.1);
 
-            // Find worst harmony
-            int worstIdx = 0;
-            double worstFitness = fitness[0];
-            for (int i = 1; i < _harmonyMemorySize; i++)
+            // Replace the worst harmony if the new one is better
+            int worstIdx = PopulationSearchOps.ArgMin(fitness);
+            if (PopulationSearchOps.Greater(newFitness, PopulationSearchOps.At(fitness, worstIdx)))
             {
-                if (fitness[i] < worstFitness)
-                {
-                    worstFitness = fitness[i];
-                    worstIdx = i;
-                }
-            }
-
-            // Replace if better
-            if (newFitness > worstFitness)
-            {
-                for (int j = 0; j < p; j++)
-                    harmonyMemory[worstIdx, j] = newHarmony[j];
-                fitness[worstIdx] = newFitness;
+                harmonyMemory = PopulationSearchOps.ReplaceRow(harmonyMemory, worstIdx, newHarmony);
+                fitness = PopulationSearchOps.ReplaceAt(fitness, worstIdx, newFitness);
             }
         }
 
-        // Find best harmony
-        int bestIdx = 0;
-        double bestFitness = fitness[0];
-        for (int i = 1; i < _harmonyMemorySize; i++)
-        {
-            if (fitness[i] > bestFitness)
-            {
-                bestFitness = fitness[i];
-                bestIdx = i;
-            }
-        }
-
-        _featureScores = new double[p];
-        for (int j = 0; j < p; j++)
-            _featureScores[j] = harmonyMemory[bestIdx, j];
+        // Best harmony
+        var best = PopulationSearchOps.Row(harmonyMemory, PopulationSearchOps.ArgMax(fitness));
+        _featureScores = best.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _featureScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(best, numToSelect);
 
         IsFitted = true;
-    }
-
-    private double EvaluateSolution(Matrix<T> data, Vector<T> target, double[,] positions, int idx, int p, int n)
-    {
-        var selectedFeatures = Enumerable.Range(0, p)
-            .Where(j => positions[idx, j] > 0.5)
-            .ToArray();
-
-        if (selectedFeatures.Length == 0)
-            return 0;
-
-        double totalScore = 0;
-        foreach (int f in selectedFeatures)
-            totalScore += ComputeCorrelation(data, target, f, n);
-
-        int targetCount = Math.Min(_nFeaturesToSelect, p);
-        double countPenalty = Math.Abs(selectedFeatures.Length - targetCount);
-
-        return totalScore / selectedFeatures.Length - 0.1 * countPenalty;
-    }
-
-    private double ComputeCorrelation(Matrix<T> data, Vector<T> target, int j, int n)
-    {
-        double xMean = 0, yMean = 0;
-        for (int i = 0; i < n; i++)
-        {
-            xMean += NumOps.ToDouble(data[i, j]);
-            yMean += NumOps.ToDouble(target[i]);
-        }
-        xMean /= n;
-        yMean /= n;
-
-        double sxy = 0, sxx = 0, syy = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-            double yDiff = NumOps.ToDouble(target[i]) - yMean;
-            sxy += xDiff * yDiff;
-            sxx += xDiff * xDiff;
-            syy += yDiff * yDiff;
-        }
-
-        return (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
     }
 
     /// <inheritdoc />
@@ -248,15 +188,7 @@ public class HarmonySearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         if (_selectedIndices is null)
             throw new InvalidOperationException("HarmonySearch has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -86,25 +86,29 @@ internal partial class DeepARLstmCellTape<T> : NeuralNetworks.Layers.LayerBase<T
 
         _wx = CreateRandomTensor(new[] { 4 * hiddenSize, inputSize }, stddevX, random);
         _wh = CreateRandomTensor(new[] { 4 * hiddenSize, hiddenSize }, stddevH, random);
-        _bias = new Tensor<T>(new[] { 4 * hiddenSize });
 
         // Forget-gate bias initialized to 1 (a standard LSTM trick that helps gradients flow
         // early in training). Gate order is (i, f, g, o), so forget occupies [H, 2H).
-        for (int i = _hiddenSize; i < 2 * _hiddenSize; i++)
-            _bias[i] = NumOps.One;
+        var forgetBias = new Tensor<T>(new[] { hiddenSize });
+        Engine.TensorFill(forgetBias, NumOps.One);
+        _bias = Engine.TensorConcatenate(new[]
+        {
+            new Tensor<T>(new[] { hiddenSize }),
+            forgetBias,
+            new Tensor<T>(new[] { 2 * hiddenSize }),
+        }, 0);
 
         RegisterTrainableParameter(_wx, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_wh, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_bias, PersistentTensorRole.Biases);
     }
 
+    // Uniform in [-stddev, stddev): (u * 2 - 1) * stddev of one NextDouble() draw u per element, in element order.
     private Tensor<T> CreateRandomTensor(int[] shape, double stddev, Random random)
     {
-        var tensor = new Tensor<T>(shape);
-        int total = tensor.Length;
-        for (int i = 0; i < total; i++)
-            tensor[i] = NumOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
-        return tensor;
+        var unit = Tensor<T>.CreateRandom(random, shape);
+        var centered = Engine.TensorSubtractScalar(Engine.TensorMultiplyScalar(unit, NumOps.FromDouble(2.0)), NumOps.One);
+        return Engine.TensorMultiplyScalar(centered, NumOps.FromDouble(stddev));
     }
 
     /// <summary>

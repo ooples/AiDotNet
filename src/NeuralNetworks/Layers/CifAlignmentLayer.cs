@@ -293,26 +293,18 @@ public partial class CifAlignmentLayer<T> : LayerBase<T>, IShapeContract
         // the token axis with a batched matmul against a column of ones.
         //   cumRep[b, l, t] = cum[b, t]   for every l
         var onesCol = new Tensor<T>(new[] { B, S, 1 });
-        for (int i = 0; i < onesCol.Length; i++) onesCol.Data.Span[i] = NumOps.One;
+        onesCol.Fill(NumOps.One);
         var cumRep = Engine.BatchMatMul(
             onesCol,                                      // [B, L=S, 1]
             Engine.Reshape(cum, new[] { B, 1, S }));      // [B, 1, S]  ->  [B, S, S]
 
         // Firing points: level[b, l, t] = (l + 1) * threshold, so a non-unit threshold stretches the
         // spacing exactly as the hard scan's accumulator would. Supervision-side constant, off-tape.
-        double thresholdValue = NumOps.ToDouble(_threshold);
-        var level = new Tensor<T>(new[] { B, S, S });
-        for (int b2 = 0; b2 < B; b2++)
+        Tensor<T> level;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            for (int l = 0; l < S; l++)
-            {
-                T value = NumOps.FromDouble((l + 1) * thresholdValue);
-                int rowOffset = ((b2 * S) + l) * S;
-                for (int t2 = 0; t2 < S; t2++)
-                {
-                    level.Data.Span[rowOffset + t2] = value;
-                }
-            }
+            var levels = Engine.TensorMultiplyScalar(Engine.TensorArange<T>(1, S + 1), _threshold);   // [S]
+            level = Engine.TensorBroadcastTo(Engine.Reshape(levels, new[] { 1, S, 1 }), new[] { B, S, S }).Clone();
         }
 
         // A = clamp(1 - |cum - level|, 0, 1), every step tape-recorded.
@@ -371,38 +363,26 @@ public partial class CifAlignmentLayer<T> : LayerBase<T>, IShapeContract
     private static Tensor<T> Zeroed(int[] shape)
     {
         var tensor = new Tensor<T>(shape);
-        var zero = MathHelper.GetNumericOperations<T>().Zero;
-        for (int i = 0; i < tensor.Length; i++) tensor[i] = zero;
+        tensor.Fill(MathHelper.GetNumericOperations<T>().Zero);
         return tensor;
     }
 
     private static Tensor<T> BuildAlphaWindow(Tensor<T> input, int B, int S, int D)
     {
-        var windowed = Zeroed(new[] { B, S, 3 * D });
+        if (B == 0 || S == 0 || D == 0) return Zeroed(new[] { B, S, 3 * D });
 
-        for (int b = 0; b < B; b++)
-        {
-            for (int s = 0; s < S; s++)
-            {
-                int outBase = ((b * S) + s) * 3 * D;
-
-                for (int offset = -1; offset <= 1; offset++)
-                {
-                    int src = s + offset;
-                    int slot = (offset + 1) * D;
-
-                    // Edge frames have no neighbour on one side; zero-pad so the window stays
-                    // a fixed 3D width and the predictor's weights keep a stable meaning.
-                    if (src < 0 || src >= S) continue;
-
-                    int inBase = ((b * S) + src) * D;
-                    for (int d = 0; d < D; d++)
-                        windowed[outBase + slot + d] = input[inBase + d];
-                }
-            }
-        }
-
-        return windowed;
+        // [previous frame | frame | next frame] per position. Edge frames have no neighbour on one side;
+        // zero-pad so the window stays a fixed 3D width and the predictor's weights keep a stable meaning.
+        var engine = AiDotNetEngine.Current;
+        var frames = engine.Reshape(engine.TensorSlice(engine.Reshape(input, new[] { input.Length }), new[] { 0 }, new[] { B * S * D }), new[] { B, S, D });
+        var edge = Zeroed(new[] { B, 1, D });
+        var previous = S == 1
+            ? edge
+            : engine.TensorConcatenate(new[] { edge, engine.TensorSlice(frames, new[] { 0, 0, 0 }, new[] { B, S - 1, D }) }, 1);
+        var next = S == 1
+            ? edge
+            : engine.TensorConcatenate(new[] { engine.TensorSlice(frames, new[] { 0, 1, 0 }, new[] { B, S - 1, D }), edge }, 1);
+        return engine.TensorConcatenate(new[] { previous, frames, next }, 2);
     }
 
     /// <inheritdoc/>

@@ -6,6 +6,8 @@ using AiDotNet.Models;
 using AiDotNet.Safety;
 using AiDotNet.Safety.Text;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Safety.Multimodal;
 
@@ -161,19 +163,20 @@ public class TextImageAlignmentChecker<T> : TextSafetyModuleBase<T>
             return EvaluateAlignmentWithClip(text, image, textCategories, _clip);
         }
 
-        var span = image.Data.Span;
-        if (span.Length < 16) return findings;
+        if (image.Length < 16) return findings;
 
         // Extract image visual signals
-        var imageFeatures = ExtractImageFeatures(span, image._shape);
+        var imageFeatures = ExtractImageFeatures(image, image._shape);
 
         // Check for misalignment between text claims and image content
         // Text says "safe" but image has unsafe visual features
         if (textCategories.ContainsKey("safe") && textCategories["safe"] > 0.5)
         {
-            if (imageFeatures.SkinFraction > 0.4 || imageFeatures.RedDominance > 0.3)
+            if (NumOps.GreaterThan(imageFeatures.SkinFraction, NumOps.FromDouble(0.4)) ||
+                NumOps.GreaterThan(imageFeatures.RedDominance, NumOps.FromDouble(0.3)))
             {
-                double mismatchScore = Math.Max(imageFeatures.SkinFraction, imageFeatures.RedDominance);
+                double mismatchScore = NumOps.ToDouble(
+                    SafetyTensorOps<T>.MaxNaN(imageFeatures.SkinFraction, imageFeatures.RedDominance));
                 if (mismatchScore >= _mismatchThreshold)
                 {
                     findings.Add(new SafetyFinding
@@ -183,8 +186,8 @@ public class TextImageAlignmentChecker<T> : TextSafetyModuleBase<T>
                         Confidence = Math.Min(1.0, mismatchScore),
                         Description = $"Text-image misalignment (score: {mismatchScore:F3}). " +
                                       $"Text describes safe content but image features suggest otherwise " +
-                                      $"(skin fraction: {imageFeatures.SkinFraction:F3}, " +
-                                      $"red dominance: {imageFeatures.RedDominance:F3}).",
+                                      $"(skin fraction: {NumOps.ToDouble(imageFeatures.SkinFraction):F3}, " +
+                                      $"red dominance: {NumOps.ToDouble(imageFeatures.RedDominance):F3}).",
                         RecommendedAction = SafetyAction.Warn,
                         SourceModule = ModuleName
                     });
@@ -292,55 +295,62 @@ public class TextImageAlignmentChecker<T> : TextSafetyModuleBase<T>
         return false;
     }
 
-    private static ImageVisualFeatures ExtractImageFeatures(ReadOnlySpan<T> span, int[] shape)
+    private ImageVisualFeatures ExtractImageFeatures(Tensor<T> image, int[] shape)
     {
-        int totalPixels = span.Length;
+        int totalPixels = image.Length;
         int channels = shape.Length >= 3 ? shape[0] : 1;
         int pixelsPerChannel = channels > 0 ? totalPixels / channels : totalPixels;
 
-        double skinCount = 0, redCount = 0, darkCount = 0;
-        int analyzed = 0;
-
-        // Sample pixels
+        // Sample pixels i = 0, step, 2 * step, ... below pixelsPerChannel
         int step = Math.Max(1, pixelsPerChannel / 1000);
-        for (int i = 0; i < pixelsPerChannel; i += step)
+        int analyzed = (pixelsPerChannel + step - 1) / step;
+        if (analyzed <= 0)
+            return new ImageVisualFeatures { SkinFraction = NumOps.Zero, RedDominance = NumOps.Zero, DarkFraction = NumOps.Zero };
+
+        using var noGrad = new NoGradScope<T>();
+        var engine = Engine;
+        var flat = engine.Reshape(image.Contiguous(), new[] { totalPixels });
+        var sampleIndex = engine.TensorArange<int>(0, analyzed * step, step);
+        var r = engine.TensorTake(flat, sampleIndex);
+        Tensor<T> g = r, b = r;
+        if (channels >= 3)
         {
-            double r, g, b;
-            if (channels >= 3)
-            {
-                r = NumOps.ToDouble(span[i]);
-                g = i + pixelsPerChannel < totalPixels ? NumOps.ToDouble(span[i + pixelsPerChannel]) : r;
-                b = i + 2 * pixelsPerChannel < totalPixels ? NumOps.ToDouble(span[i + 2 * pixelsPerChannel]) : r;
-            }
-            else
-            {
-                r = g = b = NumOps.ToDouble(span[i]);
-            }
-
-            if (r <= 1.0 && g <= 1.0 && b <= 1.0) { r *= 255; g *= 255; b *= 255; }
-
-            // Skin detection (simplified)
-            if (r > 95 && g > 40 && b > 20 && r > g && r > b && Math.Abs(r - g) > 15)
-                skinCount++;
-
-            // Red dominance
-            if (r > 150 && r > g * 1.5 && r > b * 1.5)
-                redCount++;
-
-            // Dark regions
-            if (r < 50 && g < 50 && b < 50)
-                darkCount++;
-
-            analyzed++;
+            // i + pixelsPerChannel and i + 2 * pixelsPerChannel stay inside the buffer when there are 3+ channels.
+            g = engine.TensorTake(flat, engine.TensorAddScalar(sampleIndex, pixelsPerChannel));
+            b = engine.TensorTake(flat, engine.TensorAddScalar(sampleIndex, 2 * pixelsPerChannel));
         }
 
-        if (analyzed == 0) return new ImageVisualFeatures();
+        var scaled = SafetyTensorOps<T>.And(SafetyTensorOps<T>.And(
+            SafetyTensorOps<T>.Le(r, 1.0), SafetyTensorOps<T>.Le(g, 1.0)), SafetyTensorOps<T>.Le(b, 1.0));
+        T full = NumOps.FromDouble(255);
+        r = SafetyTensorOps<T>.Where(scaled, engine.TensorMultiplyScalar(r, full), r);
+        g = SafetyTensorOps<T>.Where(scaled, engine.TensorMultiplyScalar(g, full), g);
+        b = SafetyTensorOps<T>.Where(scaled, engine.TensorMultiplyScalar(b, full), b);
 
+        // Skin detection (simplified)
+        var skin = SafetyTensorOps<T>.And(
+            SafetyTensorOps<T>.And(
+                SafetyTensorOps<T>.And(SafetyTensorOps<T>.Gt(r, 95), SafetyTensorOps<T>.Gt(g, 40)),
+                SafetyTensorOps<T>.And(SafetyTensorOps<T>.Gt(b, 20), engine.TensorGreaterThan(r, g))),
+            SafetyTensorOps<T>.And(engine.TensorGreaterThan(r, b),
+                SafetyTensorOps<T>.Gt(engine.TensorAbs(engine.TensorSubtract(r, g)), 15)));
+
+        // Red dominance
+        T onePointFive = NumOps.FromDouble(1.5);
+        var red = SafetyTensorOps<T>.And(SafetyTensorOps<T>.Gt(r, 150), SafetyTensorOps<T>.And(
+            engine.TensorGreaterThan(r, engine.TensorMultiplyScalar(g, onePointFive)),
+            engine.TensorGreaterThan(r, engine.TensorMultiplyScalar(b, onePointFive))));
+
+        // Dark regions
+        var dark = SafetyTensorOps<T>.And(SafetyTensorOps<T>.And(
+            SafetyTensorOps<T>.Lt(r, 50), SafetyTensorOps<T>.Lt(g, 50)), SafetyTensorOps<T>.Lt(b, 50));
+
+        T count = NumOps.FromDouble(analyzed);
         return new ImageVisualFeatures
         {
-            SkinFraction = skinCount / analyzed,
-            RedDominance = redCount / analyzed,
-            DarkFraction = darkCount / analyzed
+            SkinFraction = NumOps.Divide(engine.TensorSum(skin), count),
+            RedDominance = NumOps.Divide(engine.TensorSum(red), count),
+            DarkFraction = NumOps.Divide(engine.TensorSum(dark), count)
         };
     }
 
@@ -355,9 +365,9 @@ public class TextImageAlignmentChecker<T> : TextSafetyModuleBase<T>
 
     private struct ImageVisualFeatures
     {
-        public double SkinFraction;
-        public double RedDominance;
-        public double DarkFraction;
+        public T SkinFraction;
+        public T RedDominance;
+        public T DarkFraction;
     }
 
     /// <summary>Preserves the original constructor signature using the default configuration.</summary>

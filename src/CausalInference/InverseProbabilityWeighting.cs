@@ -208,17 +208,7 @@ public partial class InverseProbabilityWeighting<T> : CausalModelBase<T>
     public override void Fit(Matrix<T> features, Vector<T> treatment, Vector<T> outcome)
     {
         // Convert treatment vector to int with validation
-        var treatmentInt = new Vector<int>(treatment.Length);
-        for (int i = 0; i < treatment.Length; i++)
-        {
-            double raw = NumOps.ToDouble(treatment[i]);
-            double rounded = Math.Round(raw);
-            if (Math.Abs(raw - rounded) > 1e-6 || (rounded != 0 && rounded != 1))
-            {
-                throw new ArgumentException("Treatment indicators must be 0 or 1.", nameof(treatment));
-            }
-            treatmentInt[i] = (int)rounded;
-        }
+        var treatmentInt = RoundBinaryTreatment(treatment);
 
         // Validate outcome alignment before caching
         if (features.Rows != outcome.Length)
@@ -261,14 +251,7 @@ public partial class InverseProbabilityWeighting<T> : CausalModelBase<T>
         // IPW doesn't model heterogeneous effects
         // Return the estimated ATE for all individuals
         var (ate, _) = EstimateATE(_cachedFeatures, _cachedTreatment, _cachedOutcome);
-
-        var effects = new Vector<T>(features.Rows);
-        for (int i = 0; i < features.Rows; i++)
-        {
-            effects[i] = ate;
-        }
-
-        return effects;
+        return Constant(features.Rows, ate);
     }
 
     /// <summary>
@@ -292,41 +275,8 @@ public partial class InverseProbabilityWeighting<T> : CausalModelBase<T>
             throw new InvalidOperationException("Model must be fitted with outcome data for treated predictions.");
         }
 
-        var propensityScores = EstimatePropensityScores(features);
-        var cachedPropensityScores = EstimatePropensityScores(_cachedFeatures);
-        var predictions = new Vector<T>(features.Rows);
-
-        for (int i = 0; i < features.Rows; i++)
-        {
-            double queryScore = NumOps.ToDouble(propensityScores[i]);
-
-            // Find treated individuals with similar propensity scores
-            double sumOutcome = 0;
-            double sumWeight = 0;
-
-            for (int j = 0; j < _cachedTreatment.Length; j++)
-            {
-                if (_cachedTreatment[j] == 1)
-                {
-                    double refScore = NumOps.ToDouble(cachedPropensityScores[j]);
-                    double distance = Math.Abs(queryScore - refScore);
-
-                    // Kernel weighting
-                    double weight = Math.Exp(-distance * distance / 0.1);
-                    sumOutcome += weight * NumOps.ToDouble(_cachedOutcome[j]);
-                    sumWeight += weight;
-                }
-            }
-
-            if (sumWeight == 0)
-            {
-                throw new InvalidOperationException(
-                    $"No treated matches available for prediction at index {i}.");
-            }
-            predictions[i] = NumOps.FromDouble(sumOutcome / sumWeight);
-        }
-
-        return predictions;
+        // Kernel-weighted outcomes of the treated individuals with similar propensity scores
+        return KernelSmoothedOutcome(features, _cachedFeatures, _cachedTreatment, _cachedOutcome, 1, "treated");
     }
 
     /// <summary>
@@ -350,41 +300,31 @@ public partial class InverseProbabilityWeighting<T> : CausalModelBase<T>
             throw new InvalidOperationException("Model must be fitted with outcome data for control predictions.");
         }
 
-        var propensityScores = EstimatePropensityScores(features);
-        var cachedPropensityScores = EstimatePropensityScores(_cachedFeatures);
-        var predictions = new Vector<T>(features.Rows);
+        // Kernel-weighted outcomes of the control individuals with similar propensity scores
+        return KernelSmoothedOutcome(features, _cachedFeatures, _cachedTreatment, _cachedOutcome, 0, "control");
+    }
 
-        for (int i = 0; i < features.Rows; i++)
+    /// <summary>
+    /// For each query row, the outcomes of the cached rows in <paramref name="group"/> averaged with Gaussian weights
+    /// <c>exp(-(e_query - e_ref)² / 0.1)</c> on the propensity scores.
+    /// </summary>
+    private Vector<T> KernelSmoothedOutcome(
+        Matrix<T> features, Matrix<T> cachedFeatures, Vector<int> cachedTreatment, Vector<T> cachedOutcome,
+        int group, string groupName)
+    {
+        var inGroup = Engine.TensorEquals(cachedTreatment.AsTensor(), group).Cast<T>();
+        var (mean, sumWeight) = PropensityKernelMean(
+            EstimatePropensityScores(features).AsTensor(), EstimatePropensityScores(cachedFeatures).AsTensor(),
+            inGroup, cachedOutcome);
+
+        var empty = Engine.TensorNonzero(Engine.TensorEquals(sumWeight, NumOps.Zero));
+        if (empty.Length > 0)
         {
-            double queryScore = NumOps.ToDouble(propensityScores[i]);
-
-            // Find control individuals with similar propensity scores
-            double sumOutcome = 0;
-            double sumWeight = 0;
-
-            for (int j = 0; j < _cachedTreatment.Length; j++)
-            {
-                if (_cachedTreatment[j] == 0)
-                {
-                    double refScore = NumOps.ToDouble(cachedPropensityScores[j]);
-                    double distance = Math.Abs(queryScore - refScore);
-
-                    // Kernel weighting
-                    double weight = Math.Exp(-distance * distance / 0.1);
-                    sumOutcome += weight * NumOps.ToDouble(_cachedOutcome[j]);
-                    sumWeight += weight;
-                }
-            }
-
-            if (sumWeight == 0)
-            {
-                throw new InvalidOperationException(
-                    $"No control matches available for prediction at index {i}.");
-            }
-            predictions[i] = NumOps.FromDouble(sumOutcome / sumWeight);
+            throw new InvalidOperationException(
+                $"No {groupName} matches available for prediction at index {empty[0, 0]}.");
         }
 
-        return predictions;
+        return mean.ToVector();
     }
 
     private void ValidateFitData(Matrix<T> x, Vector<int> treatment)
@@ -395,14 +335,7 @@ public partial class InverseProbabilityWeighting<T> : CausalModelBase<T>
                 $"Number of samples in X ({x.Rows}) must match number of treatments ({treatment.Length}).");
         }
 
-        for (int i = 0; i < treatment.Length; i++)
-        {
-            if (treatment[i] != 0 && treatment[i] != 1)
-            {
-                throw new ArgumentException(
-                    $"Treatment indicators must be 0 or 1. Found {treatment[i]} at index {i}.");
-            }
-        }
+        CountTreatedRequiringBinary(treatment);
     }
 
     /// <summary>
@@ -418,14 +351,7 @@ public partial class InverseProbabilityWeighting<T> : CausalModelBase<T>
         var rawScores = PredictPropensityWithCoefficients(x, _propensityCoefficients);
 
         // Apply trimming
-        for (int i = 0; i < rawScores.Length; i++)
-        {
-            double score = NumOps.ToDouble(rawScores[i]);
-            score = Math.Max(_trimMin, Math.Min(_trimMax, score));
-            rawScores[i] = NumOps.FromDouble(score);
-        }
-
-        return rawScores;
+        return Engine.Clamp(rawScores, NumOps.FromDouble(_trimMin), NumOps.FromDouble(_trimMax));
     }
 
     /// <summary>
@@ -455,43 +381,31 @@ public partial class InverseProbabilityWeighting<T> : CausalModelBase<T>
                 $"Number of samples in X ({x.Rows}) must match number of treatments ({treatment.Length}).");
         }
 
-        var propensityScores = EstimatePropensityScores(x);
-        var weights = new Vector<T>(x.Rows);
+        var (treatedWeight, controlWeight) = InverseProbabilityWeights(EstimatePropensityScores(x).AsTensor(), treatment);
+        return Engine.TensorAdd(treatedWeight, controlWeight).ToVector();
+    }
 
-        // Calculate marginal treatment probability for stabilization
-        double marginalP = 0;
-        for (int i = 0; i < treatment.Length; i++)
+    /// <summary>
+    /// The ATE weights split by group (zero outside it): 1/e for the treated and 1/(1 − e) for the controls, scaled
+    /// by the marginal treatment probability P(T = 1) (respectively 1 − P) when weights are stabilized.
+    /// </summary>
+    private (Tensor<T> Treated, Tensor<T> Control) InverseProbabilityWeights(Tensor<T> propensity, Vector<int> treatment)
+    {
+        var treated = Engine.TensorEquals(treatment.AsTensor(), 1).Cast<T>();
+        var control = Engine.TensorSubtract(Engine.TensorOnesLike(treated), treated);
+        var ones = Engine.TensorOnesLike(propensity);
+
+        var treatedWeight = Engine.TensorMultiply(treated, Engine.TensorDivide(ones, propensity));
+        var controlWeight = Engine.TensorMultiply(control, Engine.TensorDivide(ones, Engine.TensorSubtract(ones, propensity)));
+        if (_stabilizedWeights)
         {
-            marginalP += treatment[i];
-        }
-        marginalP /= treatment.Length;
-
-        for (int i = 0; i < x.Rows; i++)
-        {
-            double e = NumOps.ToDouble(propensityScores[i]);
-
-            double weight;
-            if (treatment[i] == 1)
-            {
-                weight = 1.0 / e;
-                if (_stabilizedWeights)
-                {
-                    weight *= marginalP;
-                }
-            }
-            else
-            {
-                weight = 1.0 / (1.0 - e);
-                if (_stabilizedWeights)
-                {
-                    weight *= (1.0 - marginalP);
-                }
-            }
-
-            weights[i] = NumOps.FromDouble(weight);
+            // Calculate marginal treatment probability for stabilization
+            T marginalP = Engine.TensorMean(treated);
+            treatedWeight = Engine.TensorMultiplyScalar(treatedWeight, marginalP);
+            controlWeight = Engine.TensorMultiplyScalar(controlWeight, NumOps.Subtract(NumOps.One, marginalP));
         }
 
-        return weights;
+        return (treatedWeight, controlWeight);
     }
 
     /// <summary>
@@ -547,74 +461,35 @@ public partial class InverseProbabilityWeighting<T> : CausalModelBase<T>
 
     private T ComputeIPWEstimate(Matrix<T> x, Vector<int> treatment, Vector<T> outcome, EstimateType type)
     {
-        var propensityScores = EstimatePropensityScores(x);
-        int n = x.Rows;
+        var propensityScores = EstimatePropensityScores(x).AsTensor();
 
-        // Compute weighted outcomes
-        double sumWeightedTreated = 0;
-        double sumWeightedControl = 0;
-        double sumWeightsTreated = 0;
-        double sumWeightsControl = 0;
-
-        // Compute marginal probability for stabilized weights
-        double marginalP = treatment.Select(t => (double)t).Average();
-
-        for (int i = 0; i < n; i++)
+        Tensor<T> treatedWeight;
+        Tensor<T> controlWeight;
+        if (type == EstimateType.ATE)
         {
-            double e = NumOps.ToDouble(propensityScores[i]);
-            double y = NumOps.ToDouble(outcome[i]);
-
-            if (treatment[i] == 1)
-            {
-                double weight;
-                if (type == EstimateType.ATT)
-                {
-                    // For ATT, treated units are not weighted
-                    weight = 1.0;
-                }
-                else // ATE
-                {
-                    weight = 1.0 / e;
-                    if (_stabilizedWeights)
-                    {
-                        weight *= marginalP;
-                    }
-                }
-                sumWeightedTreated += weight * y;
-                sumWeightsTreated += weight;
-            }
-            else
-            {
-                double weight;
-                if (type == EstimateType.ATE)
-                {
-                    weight = 1.0 / (1.0 - e);
-                    if (_stabilizedWeights)
-                    {
-                        weight *= (1.0 - marginalP);
-                    }
-                }
-                else // ATT
-                {
-                    // For ATT, reweight controls by odds ratio
-                    weight = e / (1.0 - e);
-                }
-                sumWeightedControl += weight * y;
-                sumWeightsControl += weight;
-            }
+            (treatedWeight, controlWeight) = InverseProbabilityWeights(propensityScores, treatment);
+        }
+        else
+        {
+            // For ATT, treated units are not weighted and controls are reweighted by the odds e / (1 - e)
+            treatedWeight = Engine.TensorEquals(treatment.AsTensor(), 1).Cast<T>();
+            var control = Engine.TensorSubtract(Engine.TensorOnesLike(treatedWeight), treatedWeight);
+            var odds = Engine.TensorDivide(propensityScores, Engine.TensorSubtract(Engine.TensorOnesLike(propensityScores), propensityScores));
+            controlWeight = Engine.TensorMultiply(control, odds);
         }
 
-        if (sumWeightsTreated == 0 || sumWeightsControl == 0)
+        // Weighted (Hájek) outcome means of each group
+        var y = outcome.AsTensor();
+        T meanTreated = WeightedMean(y, treatedWeight, out bool hasTreated);
+        T meanControl = WeightedMean(y, controlWeight, out bool hasControl);
+        if (!hasTreated || !hasControl)
         {
             throw new InvalidOperationException(
                 "IPW requires both treated and control groups with non-zero effective weight. " +
                 "Check propensity scores and trimming settings.");
         }
 
-        double meanTreated = sumWeightedTreated / sumWeightsTreated;
-        double meanControl = sumWeightedControl / sumWeightsControl;
-
-        return NumOps.FromDouble(meanTreated - meanControl);
+        return NumOps.Subtract(meanTreated, meanControl);
     }
 
     /// <summary>
@@ -637,21 +512,10 @@ public partial class InverseProbabilityWeighting<T> : CausalModelBase<T>
 
         ValidateCausalData(x, treatment, outcome);
 
-        var propensityScores = EstimatePropensityScores(x);
-        var cate = new Vector<T>(x.Rows);
-
-        // IPW doesn't naturally give individual effects
-        // Compute pseudo-effects based on IPW contributions
+        // IPW doesn't naturally give individual effects; use the ATE as the best guess for each individual
+        // (for true individual effects, use CausalForest)
         T ate = EstimateATE(x, treatment, outcome).estimate;
-
-        for (int i = 0; i < x.Rows; i++)
-        {
-            // Use ATE as best guess for individuals
-            // (for true individual effects, use CausalForest)
-            cate[i] = ate;
-        }
-
-        return cate;
+        return Constant(x.Rows, ate);
     }
 
     /// <summary>
@@ -677,14 +541,7 @@ public partial class InverseProbabilityWeighting<T> : CausalModelBase<T>
 
         // IPW doesn't model heterogeneous effects - return constant ATE
         var (ate, _) = EstimateATE(_cachedFeatures, _cachedTreatment, _cachedOutcome);
-
-        var effects = new Vector<T>(x.Rows);
-        for (int i = 0; i < x.Rows; i++)
-        {
-            effects[i] = ate;
-        }
-
-        return effects;
+        return Constant(x.Rows, ate);
     }
 
     /// <summary>
@@ -726,12 +583,7 @@ public partial class InverseProbabilityWeighting<T> : CausalModelBase<T>
 
         if (_propensityCoefficients is not null)
         {
-            var coeffs = new double[_propensityCoefficients.Length];
-            for (int i = 0; i < _propensityCoefficients.Length; i++)
-            {
-                coeffs[i] = NumOps.ToDouble(_propensityCoefficients[i]);
-            }
-            data["PropensityCoefficients"] = coeffs;
+            data["PropensityCoefficients"] = _propensityCoefficients.ToArray();
         }
 
         return data;
@@ -758,14 +610,11 @@ public partial class InverseProbabilityWeighting<T> : CausalModelBase<T>
         var coeffsToken = modelDataObj["PropensityCoefficients"];
         if (coeffsToken is not null)
         {
-            var coeffs = coeffsToken.ToObject<double[]>();
+            var coeffs = coeffsToken.ToObject<T[]>();
             if (coeffs is not null && coeffs.Length > 0)
             {
-                _propensityCoefficients = new Vector<T>(coeffs.Length);
-                for (int i = 0; i < coeffs.Length; i++)
-                {
-                    _propensityCoefficients[i] = NumOps.FromDouble(coeffs[i]);
-                }
+                _propensityCoefficients = new Vector<T>(coeffs);
+
                 // Restore NumFeatures (coefficients include bias, so features = length - 1)
                 NumFeatures = coeffs.Length - 1;
             }
@@ -790,34 +639,27 @@ public partial class InverseProbabilityWeighting<T> : CausalModelBase<T>
     /// </remarks>
     public (T treatedESS, T controlESS) GetEffectiveSampleSize(Matrix<T> x, Vector<int> treatment)
     {
-        var weights = ComputeWeights(x, treatment);
+        var weights = ComputeWeights(x, treatment).AsTensor();
+        var treated = Engine.TensorEquals(treatment.AsTensor(), 1).Cast<T>();
+        var control = Engine.TensorSubtract(Engine.TensorOnesLike(treated), treated);
 
-        double sumWeightsTreated = 0, sumSqWeightsTreated = 0;
-        double sumWeightsControl = 0, sumSqWeightsControl = 0;
+        return (
+            EffectiveSampleSize(Engine.TensorMultiply(weights, treated)),
+            EffectiveSampleSize(Engine.TensorMultiply(weights, control)));
+    }
 
-        for (int i = 0; i < x.Rows; i++)
-        {
-            double w = NumOps.ToDouble(weights[i]);
+    /// <summary>
+    /// Kish's effective sample size (Σw)² / Σw², computed on weights scaled by their peak (the ratio is
+    /// scale-free); 0 when every weight is zero.
+    /// </summary>
+    private T EffectiveSampleSize(Tensor<T> weights)
+    {
+        T peak = Engine.TensorMaxValue(Engine.TensorAbs(weights));
+        if (!NumOps.GreaterThan(peak, NumOps.Zero))
+            return NumOps.Zero;
 
-            if (treatment[i] == 1)
-            {
-                sumWeightsTreated += w;
-                sumSqWeightsTreated += w * w;
-            }
-            else
-            {
-                sumWeightsControl += w;
-                sumSqWeightsControl += w * w;
-            }
-        }
-
-        double essTreated = sumSqWeightsTreated > 0
-            ? (sumWeightsTreated * sumWeightsTreated) / sumSqWeightsTreated
-            : 0;
-        double essControl = sumSqWeightsControl > 0
-            ? (sumWeightsControl * sumWeightsControl) / sumSqWeightsControl
-            : 0;
-
-        return (NumOps.FromDouble(essTreated), NumOps.FromDouble(essControl));
+        var scaled = Engine.TensorDivideScalar(weights, peak);
+        T sum = Engine.TensorSum(scaled);
+        return NumOps.Divide(NumOps.Multiply(sum, sum), Engine.TensorSum(Engine.TensorSquare(scaled)));
     }
 }

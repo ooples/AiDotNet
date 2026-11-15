@@ -448,37 +448,32 @@ public partial class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFuncti
         // interpolation is the identity. Any other row length keeps the per-row path.
         int lookback = _options.LookbackWindow;
         bool tailFill = _trainingSeries.Length >= lookback;
-        var batched = new List<int>(n);
-        for (int i = 0; i < n; i++)
+
+        // The batching condition depends only on the column count, so either every row is batched or none is.
+        if (!(input.Columns == lookback || (input.Columns < lookback && tailFill)))
         {
-            if (input.Columns == lookback || (input.Columns < lookback && tailFill))
-                batched.Add(i);
-            else
-                predictions[i] = PredictSingle(input.GetRow(i));
+            return TimeSeriesEngineOps<T>.PredictRows(input, PredictSingle);
         }
 
-        for (int c0 = 0; c0 < batched.Count; c0 += PredictChunkRows)
+        for (int c0 = 0; c0 < n; c0 += PredictChunkRows)
         {
-            int rows = Math.Min(PredictChunkRows, batched.Count - c0);
+            int rows = Math.Min(PredictChunkRows, n - c0);
             // A nested arena per chunk: its scratch is recycled when the chunk ends without touching any arena the
             // caller has open (whose tensors may still be live).
             using var chunkArena = AiDotNet.Tensors.Helpers.TensorArena.Create();
-            var data = new T[rows * lookback];
-            for (int r = 0; r < rows; r++)
-            {
-                int row = batched[c0 + r];
-                for (int t = 0; t < lookback; t++)
-                {
-                    T v = input.Columns == lookback ? input[row, t] : _trainingSeries[_trainingSeries.Length - lookback + t];
-                    data[r * lookback + t] = NumOps.Divide(NumOps.Subtract(v, _normMean), _normStd);
-                }
-            }
-            var outNorm = RunForwardBatched(new Tensor<T>(new[] { rows, lookback }, new Vector<T>(data)))
+            // Each row's own window, or (shorter rows) the training-series tail for every row
+            var windows = input.Columns == lookback
+                ? Tensor<T>.FromMatrix(input.GetSubMatrix(c0, 0, rows, lookback))
+                : Engine.TensorBroadcastTo(
+                    Engine.Reshape(Tensor<T>.FromVector(_trainingSeries.GetSubVector(_trainingSeries.Length - lookback, lookback)), new[] { 1, lookback }),
+                    new[] { rows, lookback });
+            var normalized = Engine.TensorDivideScalar(Engine.TensorSubtractScalar(windows, _normMean), _normStd);
+            var outNorm = RunForwardBatched(normalized)
                 ?? throw new InvalidOperationException("N-HiTS has no stacks to run; the model was not initialized.");
-            var outSpan = outNorm.IsContiguous ? outNorm.AsSpan() : outNorm.Contiguous().AsSpan();   // [rows, horizon]
             int horizon = _options.ForecastHorizon;
-            for (int r = 0; r < rows; r++)
-                predictions[batched[c0 + r]] = NumOps.Add(NumOps.Multiply(outSpan[r * horizon], _normStd), _normMean);
+            var firstStep = Engine.StridedGather(outNorm.Contiguous().ToVector(), 0, horizon);   // [rows, horizon] -> column 0
+            TimeSeriesEngineOps<T>.Destandardize(firstStep, _normStd, _normMean).AsSpan()
+                .CopyTo(predictions.AsWritableSpan().Slice(c0, rows));
         }
         return predictions;
     }
@@ -496,23 +491,21 @@ public partial class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFuncti
 
         int inputLength = input.Shape[0];
         int outputLength = (inputLength + kernelSize - 1) / kernelSize;
-        var pooled = new Tensor<T>([outputLength]);
-
-        for (int i = 0; i < outputLength; i++)
+        if (outputLength <= 0)
         {
-            int start = i * kernelSize;
-            int end = Math.Min(start + kernelSize, inputLength);
-
-            // Average pooling
-            T sum = NumOps.Zero;
-            for (int j = start; j < end; j++)
-            {
-                sum = NumOps.Add(sum, input[j]);
-            }
-            pooled[i] = NumOps.Divide(sum, NumOps.FromDouble(end - start));
+            return new Tensor<T>([outputLength]);
         }
 
-        return pooled;
+        // Average pooling over [i·k, min((i+1)·k, n)): sums over a zero-padded [outputLength, k] grid
+        // (the padding adds exact zeros) divided by each window's element count.
+        int padding = outputLength * kernelSize - inputLength;
+        var grid = Engine.Reshape(
+            Tensor<T>.FromVector(Vector<T>.Concatenate(input.ToVector().GetSubVector(0, inputLength), new Vector<T>(padding))),
+            new[] { outputLength, kernelSize });
+        var sums = Engine.ReduceSum(grid, new[] { 1 }, keepDims: false).ToVector();
+        var counts = Engine.Fill(outputLength, NumOps.FromDouble(kernelSize));
+        counts[outputLength - 1] = NumOps.FromDouble(inputLength - (outputLength - 1) * kernelSize);
+        return Tensor<T>.FromVector(Engine.Divide(sums, counts));
     }
 
     /// <summary>
@@ -524,50 +517,41 @@ public partial class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFuncti
         if (inputLength == targetLength)
             return input.Clone();
 
-        var interpolated = new Tensor<T>([targetLength]);
+        if (targetLength <= 0)
+        {
+            return new Tensor<T>([targetLength]);
+        }
 
         if (inputLength == 1)
         {
             // Repeat single value
-            for (int i = 0; i < targetLength; i++)
-            {
-                interpolated[i] = input[0];
-            }
-            return interpolated;
+            return Tensor<T>.FromVector(Engine.Fill(targetLength, input[0]));
         }
+
+        var values = input.ToVector().GetSubVector(0, Math.Max(inputLength, 0));
 
         // Handle single target length - return average of all input values
         if (targetLength == 1)
         {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < inputLength; i++)
-            {
-                sum = NumOps.Add(sum, input[i]);
-            }
-            interpolated[0] = NumOps.Divide(sum, NumOps.FromDouble(inputLength));
-            return interpolated;
+            var mean = new Tensor<T>([1]);
+            mean[0] = NumOps.Divide(Engine.Sum(values), NumOps.FromDouble(inputLength));
+            return mean;
         }
 
-        double scale = (double)(inputLength - 1) / (targetLength - 1);
-
-        for (int i = 0; i < targetLength; i++)
-        {
-            double srcIdx = i * scale;
-            int idx1 = (int)Math.Floor(srcIdx);
-            int idx2 = Math.Min(idx1 + 1, inputLength - 1);
-            double weight = srcIdx - idx1;
-
-            T val1 = input[idx1];
-            T val2 = input[idx2];
-            T interpolatedVal = NumOps.Add(
-                NumOps.Multiply(val1, NumOps.FromDouble(1.0 - weight)),
-                NumOps.Multiply(val2, NumOps.FromDouble(weight))
-            );
-
-            interpolated[i] = interpolatedVal;
-        }
-
-        return interpolated;
+        // Linear interpolation: out[i] = v[⌊s⌋]·(1 - w) + v[min(⌊s⌋ + 1, n - 1)]·w with s = i·scale, w = s - ⌊s⌋
+        // s = i·(n - 1)/(m - 1) split exactly in integers: ⌊s⌋ is the quotient, w = remainder / (m - 1) in T
+        long numeratorStep = inputLength - 1;
+        long denominator = targetLength - 1;
+        int[] lower = Enumerable.Range(0, targetLength).Select(i => (int)(i * numeratorStep / denominator)).ToArray();
+        int[] upper = Array.ConvertAll(lower, idx => Math.Min(idx + 1, inputLength - 1));
+        int[] remainders = Enumerable.Range(0, targetLength).Select(i => (int)(i * numeratorStep % denominator)).ToArray();
+        var weights = Engine.TensorDivideScalar(
+            new Tensor<int>(new[] { targetLength }, new Vector<int>(remainders)).Cast<T>(), NumOps.FromDouble(denominator));
+        var upperWeights = weights.ToVector();
+        var lowerWeights = Engine.TensorSubtract(Engine.TensorFullLike(weights, NumOps.One), weights).ToVector();
+        return Tensor<T>.FromVector(Engine.Add(
+            Engine.Multiply(TimeSeriesEngineOps<T>.Gather(values, lower), lowerWeights),
+            Engine.Multiply(TimeSeriesEngineOps<T>.Gather(values, upper), upperWeights)));
     }
 
     /// <inheritdoc />
@@ -576,11 +560,8 @@ public partial class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFuncti
         // If input is shorter than lookback window, construct from training series tail
         if (input.Length < _options.LookbackWindow && _trainingSeries.Length >= _options.LookbackWindow)
         {
-            var lookback = new Vector<T>(_options.LookbackWindow);
             int start = _trainingSeries.Length - _options.LookbackWindow;
-            for (int j = 0; j < _options.LookbackWindow; j++)
-                lookback[j] = _trainingSeries[start + j];
-            input = lookback;
+            input = _trainingSeries.GetSubVector(start, _options.LookbackWindow);
         }
 
         var forecast = ForecastHorizon(input);
@@ -594,11 +575,7 @@ public partial class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFuncti
     {
         // Normalize the input window with the training statistics so inference
         // matches the normalized space the network was trained in.
-        var inputTensor = new Tensor<T>([input.Length]);
-        for (int i = 0; i < input.Length; i++)
-        {
-            inputTensor[i] = NumOps.Divide(NumOps.Subtract(input[i], _normMean), _normStd);
-        }
+        var inputTensor = Tensor<T>.FromVector(TimeSeriesEngineOps<T>.Standardize(input, _normMean, _normStd));
 
         var aggregatedForecast = new Tensor<T>([_options.ForecastHorizon]);
 
@@ -609,21 +586,11 @@ public partial class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFuncti
             var pooledInput = ApplyPoolingTensor(inputTensor, stack.PoolingSize);
             var stackForecast = stack.ForwardInternal(pooledInput);
             var interpolatedForecast = ApplyInterpolationTensor(stackForecast, _options.ForecastHorizon);
-
-            for (int i = 0; i < _options.ForecastHorizon; i++)
-            {
-                aggregatedForecast[i] = NumOps.Add(aggregatedForecast[i], interpolatedForecast[i]);
-            }
+            aggregatedForecast = Engine.TensorAdd(aggregatedForecast, interpolatedForecast);
         }
 
         // Denormalize and convert Tensor back to Vector
-        var result = new Vector<T>(_options.ForecastHorizon);
-        for (int i = 0; i < _options.ForecastHorizon; i++)
-        {
-            result[i] = NumOps.Add(NumOps.Multiply(aggregatedForecast[i], _normStd), _normMean);
-        }
-
-        return result;
+        return TimeSeriesEngineOps<T>.Destandardize(aggregatedForecast.ToVector(), _normStd, _normMean);
     }
 
 
@@ -793,13 +760,12 @@ internal partial class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>,
 
     private Tensor<T> CreateRandomTensor(int[] shape, double stddev)
     {
-        var tensor = new Tensor<T>(shape);
-        int total = tensor.Length;
-        for (int i = 0; i < total; i++)
-        {
-            tensor[i] = NumOps.FromDouble((_random.NextDouble() * 2 - 1) * stddev);
-        }
-        return tensor;
+        // (u · 2 - 1) · stddev with u uniform in [0, 1), drawn in row-major order
+        return Engine.TensorMultiplyScalar(
+            Engine.TensorSubtractScalar(
+                Engine.TensorMultiplyScalar(Tensor<T>.CreateRandom(_random, shape), NumOps.FromDouble(2.0)),
+                NumOps.One),
+            NumOps.FromDouble(stddev));
     }
 
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
@@ -820,13 +786,10 @@ internal partial class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>,
         // Ensure input matches expected size
         if (x.Shape[0] != _inputLength)
         {
-            var resized = new Tensor<T>([_inputLength]);
-            for (int i = 0; i < _inputLength; i++)
-            {
-                int srcIdx = (i * x.Shape[0]) / _inputLength;
-                resized[i] = x[Math.Min(srcIdx, x.Shape[0] - 1)];
-            }
-            x = resized;
+            // Nearest-lower resampling: element i takes x[min(i·n / inputLength, n - 1)]
+            int sourceLength = x.Shape[0];
+            var sourceIndices = Enumerable.Range(0, _inputLength).Select(i => Math.Min((i * sourceLength) / _inputLength, sourceLength - 1));
+            x = Tensor<T>.FromVector(TimeSeriesEngineOps<T>.Gather(x.ToVector(), sourceIndices));
         }
 
         // Column vector [inputLength, 1] so weight[out, in] @ col = [out, 1].

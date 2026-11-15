@@ -260,11 +260,7 @@ public static class ModelHelper<T, TInput, TOutput>
                 }
 
                 // Create a vector from the column
-                Vector<T> column = new Vector<T>(tensor.Shape[0]);
-                for (int i = 0; i < tensor.Shape[0]; i++)
-                {
-                    column[i] = tensor[i, index];
-                }
+                Vector<T> column = tensor.GetSliceAlongDimension(index, 1).ToVector();
 
                 result.Add(column);
             }

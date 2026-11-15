@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.RetrievalAugmentedGeneration.VectorSearch.Metrics;
@@ -150,6 +151,22 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch
             int gpuThreshold,
             out T[] scores)
         {
+            return TryScoreBatch(metric, query, docs, gpuThreshold, null, out scores);
+        }
+
+        /// <summary>
+        /// <see cref="TryScoreBatch{T}(ISimilarityMetric{T}, Vector{T}, IReadOnlyList{Vector{T}}, int, out T[])"/>
+        /// on a given engine. A null <paramref name="engine"/> probes for the GPU and uses
+        /// <see cref="AiDotNetEngine.Current"/>; a non-null one is used as is, without the GPU probe.
+        /// </summary>
+        internal static bool TryScoreBatch<T>(
+            ISimilarityMetric<T> metric,
+            Vector<T> query,
+            IReadOnlyList<Vector<T>> docs,
+            int gpuThreshold,
+            IEngine? engine,
+            out T[] scores)
+        {
             scores = Array.Empty<T>();
 
             if (metric == null || query == null || docs == null)
@@ -172,108 +189,103 @@ namespace AiDotNet.RetrievalAugmentedGeneration.VectorSearch
             if (totalLong > int.MaxValue)
                 return false;
 
-            if (!IsGpuAvailable())
-                return false;
+            IEngine scoringEngine;
+            if (engine is null)
+            {
+                if (!IsGpuAvailable())
+                    return false;
+                scoringEngine = AiDotNetEngine.Current;
+            }
+            else
+            {
+                scoringEngine = engine;
+            }
 
-            var numOps = MathHelper.GetNumericOperations<T>();
-
-            // Pack docs into an [n, dim] row-major float matrix and accumulate squared norms.
-            int total = (int)totalLong;
-            var docData = new float[total];
-            var docNormSq = new double[n];
-            int idx = 0;
             for (int i = 0; i < n; i++)
             {
-                var v = docs[i];
-                if (v == null || v.Length != dim)
+                if (docs[i] == null || docs[i].Length != dim)
                     return false; // inconsistent dimensions -> CPU fallback
-
-                double ss = 0.0;
-                for (int j = 0; j < dim; j++)
-                {
-                    double d = numOps.ToDouble(v[j]);
-                    docData[idx++] = (float)d;
-                    ss += d * d;
-                }
-                docNormSq[i] = ss;
             }
 
-            // Pack the query as a [dim, 1] column and accumulate its squared norm.
-            var queryData = new float[dim];
-            double queryNormSq = 0.0;
-            for (int j = 0; j < dim; j++)
-            {
-                double d = numOps.ToDouble(query[j]);
-                queryData[j] = (float)d;
-                queryNormSq += d * d;
-            }
-
-            float[] dots;
             try
             {
-                var engine = AiDotNetEngine.Current as DirectGpuTensorEngine;
-                var backend = engine?.GetBackend();
-                if (backend == null)
-                    return false;
-
-                // C[n,1] = A[n,dim] @ B[dim,1]  ->  dots[i] = dot(doc_i, query)
-                using var docsBuffer = backend.AllocateBuffer(docData);
-                using var queryBuffer = backend.AllocateBuffer(queryData);
-                using var outBuffer = backend.AllocateBuffer(n);
-                backend.Gemm(docsBuffer, queryBuffer, outBuffer, n, 1, dim);
-                dots = backend.DownloadBuffer(outBuffer);
+                scores = ScoreOnEngine(scoringEngine, kind, query, docs, n, dim).ToArray();
+                return true;
             }
-            catch
+            catch (Exception ex)
             {
-                // Any GPU failure -> signal CPU fallback.
+                // A GPU failure signals the CPU fallback, as documented. It is recorded on the GPU
+                // diagnostics channel rather than swallowed.
+                AiDotNet.Configuration.GpuDiagnosticsConfig.Emit(
+                    AiDotNet.Configuration.GpuDiagnosticLevel.Minimal,
+                    $"[GpuVectorScorer] batched {kind} scoring failed ({ex.GetType().Name}): {ex.Message}; using the CPU path");
                 scores = Array.Empty<T>();
                 return false;
             }
+        }
 
-            if (dots == null || dots.Length < n)
+        /// <summary>One score per document for a supported metric, as whole-tensor engine operations.</summary>
+        private static Tensor<T> ScoreOnEngine<T>(
+            IEngine engine, MetricKind kind, Vector<T> query, IReadOnlyList<Vector<T>> docs, int n, int dim)
+        {
+            var matrix = engine.TensorStack(docs.Select(v => Tensor<T>.FromVector(v)).ToArray(), 0);
+            var queryRow = Tensor<T>.FromVector(query);
+
+            Tensor<T> result;
+            switch (kind)
             {
-                scores = Array.Empty<T>();
-                return false;
+                case MetricKind.DotProduct:
+                    result = engine.TensorMatMul(matrix, engine.Reshape(queryRow, [dim, 1]));
+                    break;
+
+                case MetricKind.Cosine:
+                    // Unit rows (zero rows stay zero, giving similarity 0).
+                    result = engine.TensorMatMul(UnitRows(engine, matrix), engine.Reshape(UnitRows(engine, engine.Reshape(queryRow, [1, dim])), [dim, 1]));
+                    break;
+
+                case MetricKind.Euclidean:
+                    // ||q - d|| directly (no ||q||^2 + ||d||^2 - 2 q.d cancellation), scaled by the largest
+                    // magnitude before squaring.
+                    result = RowNorms(engine, engine.TensorSubtract(matrix, engine.TensorBroadcastTo(engine.Reshape(queryRow, [1, dim]), [n, dim])));
+                    break;
+
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unsupported metric kind.");
             }
 
-            var result = new T[n];
-            double queryNorm = Math.Sqrt(queryNormSq);
-            for (int i = 0; i < n; i++)
-            {
-                double dot = dots[i];
-                double score;
-                switch (kind)
-                {
-                    case MetricKind.DotProduct:
-                        score = dot;
-                        break;
+            return result;
+        }
 
-                    case MetricKind.Cosine:
-                        {
-                            double denom = queryNorm * Math.Sqrt(docNormSq[i]);
-                            score = denom > 0.0 ? dot / denom : 0.0;
-                        }
-                        break;
+        /// <summary>Euclidean norm of every row, computed on rows pre-divided by their largest magnitude.</summary>
+        private static Tensor<T> RowNorms<T>(IEngine engine, Tensor<T> matrix)
+        {
+            var scale = NonZero(engine, engine.ReduceMax(engine.TensorAbs(matrix), [1], true));
+            var scaled = engine.TensorDivide(matrix, engine.TensorBroadcastTo(scale, matrix._shape));
+            var norms = engine.TensorMultiply(
+                engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(scaled), [1], true)), scale);
+            return engine.Reshape(norms, [matrix._shape[0]]);
+        }
 
-                    case MetricKind.Euclidean:
-                        {
-                            // ||q - d||^2 = ||q||^2 + ||d||^2 - 2 q.d ; clamp tiny negatives from fp error.
-                            double sq = queryNormSq + docNormSq[i] - 2.0 * dot;
-                            if (sq < 0.0)
-                                sq = 0.0;
-                            score = Math.Sqrt(sq);
-                        }
-                        break;
+        /// <summary>Each row divided by its Euclidean norm; zero rows stay zero.</summary>
+        /// <remarks>
+        /// The row is first divided by its largest magnitude and the scaled row is normalised directly. Multiplying
+        /// the scaled norm back by that magnitude overflows narrow types: for the Half row [60000, 60000] the norm
+        /// 84853 is +inf, and the row divided by it became zero.
+        /// </remarks>
+        private static Tensor<T> UnitRows<T>(IEngine engine, Tensor<T> matrix)
+        {
+            var scale = NonZero(engine, engine.ReduceMax(engine.TensorAbs(matrix), [1], true));
+            var scaled = engine.TensorDivide(matrix, engine.TensorBroadcastTo(scale, matrix._shape));
+            var norms = NonZero(engine, engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(scaled), [1], true)));
+            return engine.TensorDivide(scaled, engine.TensorBroadcastTo(norms, matrix._shape));
+        }
 
-                    default:
-                        return false;
-                }
-
-                result[i] = numOps.FromDouble(score);
-            }
-
-            scores = result;
-            return true;
+        /// <summary>Replaces zero entries with one so dividing a zero row by them leaves it zero.</summary>
+        private static Tensor<T> NonZero<T>(IEngine engine, Tensor<T> values)
+        {
+            var numOps = MathHelper.GetNumericOperations<T>();
+            return engine.TensorWhere(
+                engine.TensorGreaterThan(values, numOps.Zero), values, Tensor<T>.CreateDefault(values._shape, numOps.One));
         }
     }
 }

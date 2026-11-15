@@ -199,16 +199,13 @@ public partial class AiModelResult<T, TInput, TOutput>
             return null; // only matrix-input tabular models are exposed as a prediction tool.
         }
 
-        var numOps = MathHelper.GetNumericOperations<T>();
+        // The tool speaks double at its boundary; the features become a single-row matrix of T.
         return features =>
         {
-            var m = new AiDotNet.Tensors.LinearAlgebra.Matrix<T>(1, features.Length);
-            for (int j = 0; j < features.Length; j++) m[0, j] = numOps.FromDouble(features[j]);
+            var m = new Tensor<double>(features, new[] { 1, features.Length }).Cast<T>().ToMatrix();
             var output = Predict((TInput)(object)m);
             var vector = ConversionsHelper.ConvertToVector<T, TOutput>(output);
-            var result = new double[vector.Length];
-            for (int i = 0; i < vector.Length; i++) result[i] = numOps.ToDouble(vector[i]);
-            return result;
+            return Tensor<T>.FromVector(vector).Cast<double>().ToArray();
         };
     }
 

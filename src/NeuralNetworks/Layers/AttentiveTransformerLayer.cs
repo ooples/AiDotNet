@@ -147,10 +147,10 @@ public partial class AttentiveTransformerLayer<T> : LayerBase<T>, IShapeContract
         // Register the FC sub-layer so the trainable-parameter walk
         // (CollectTrainableLayers -> GetSubLayers) reaches its weights and the
         // optimizer actually updates them. Without this the attentive transformer's
-        // weights never train. (GhostBatchNormalization is not an ILayer<T>, so its
-        // gamma/beta are not collected here; the FC weights are the load-bearing
-        // learnable parameters.)
+        // weights never train. The ghost batch norm is a layer too, so its gamma and beta
+        // reach the same walk, the parameter vector and the tape.
         RegisterSubLayer(_fcLayer);
+        RegisterSubLayer(_bnLayer);
     }
 
     /// <summary>
@@ -325,15 +325,7 @@ public partial class AttentiveTransformerLayer<T> : LayerBase<T>, IShapeContract
     {
         _fcLayer.UpdateParameters(learningRate);
 
-        // Update BN parameters via gradient descent
-        var bnGrads = _bnLayer.GetParameterGradients();
-        var bnParams = _bnLayer.GetParameters();
-        if (bnGrads.Length > 0 && bnGrads.Length == bnParams.Length)
-        {
-            var updated = Engine.Subtract(
-                bnParams, Engine.Multiply(bnGrads, learningRate));
-            _bnLayer.SetParameters(updated);
-        }
+        _bnLayer.UpdateParameters(learningRate);
     }
 
     /// <inheritdoc />

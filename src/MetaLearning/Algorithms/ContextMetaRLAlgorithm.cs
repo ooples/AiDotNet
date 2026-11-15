@@ -119,34 +119,7 @@ public partial class ContextMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBas
 
         foreach (var task in taskBatch.Tasks)
         {
-            var gradHistory = new List<Vector<T>>();
-            var adaptedParams = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
-
-            for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
-            {
-                ParamModel.SetParameters(adaptedParams);
-                var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-
-                // Encode and store gradient
-                var encoded = EncodeGradient(grad);
-                gradHistory.Add(encoded);
-
-                // Attention-based context aggregation
-                var contextVec = AttentionAggregate(gradHistory);
-
-                // Multiplicative modulation: θ' = θ ⊙ (1 + strength * sigmoid(W*c))
-                var modulation = ComputeModulation(contextVec);
-                for (int d = 0; d < _paramDim; d++)
-                {
-                    int cd = d % _compressedDim;
-                    double mod = 1.0 + _algoOptions.ModulationStrength * Sigmoid(NumOps.ToDouble(modulation[cd]));
-                    double gradVal = NumOps.ToDouble(grad[d]);
-                    adaptedParams[d] = NumOps.Subtract(
-                        NumOps.Multiply(adaptedParams[d], NumOps.FromDouble(mod)),
-                        NumOps.FromDouble(_algoOptions.InnerLearningRate * gradVal));
-                }
-            }
+            var adaptedParams = AdaptWithContext(task, initParams);
 
             ParamModel.SetParameters(adaptedParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
@@ -168,123 +141,101 @@ public partial class ContextMetaRLAlgorithm<T, TInput, TOutput> : MetaLearnerBas
     {
         if (task == null) throw new ArgumentNullException(nameof(task));
         var initParams = ParamModel.GetParameters();
-        var gradHistory = new List<Vector<T>>();
-        var adaptedParams = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
-
-        for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
-        {
-            ParamModel.SetParameters(adaptedParams);
-            var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-            gradHistory.Add(EncodeGradient(grad));
-            var contextVec = AttentionAggregate(gradHistory);
-            var modulation = ComputeModulation(contextVec);
-
-            for (int d = 0; d < _paramDim; d++)
-            {
-                int cd = d % _compressedDim;
-                double mod = 1.0 + _algoOptions.ModulationStrength * Sigmoid(NumOps.ToDouble(modulation[cd]));
-                adaptedParams[d] = NumOps.Subtract(
-                    NumOps.Multiply(adaptedParams[d], NumOps.FromDouble(mod)),
-                    NumOps.FromDouble(_algoOptions.InnerLearningRate * NumOps.ToDouble(grad[d])));
-            }
-        }
+        var adaptedParams = AdaptWithContext(task, initParams);
 
         ParamModel.SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
+    /// <summary>
+    /// The context-modulated inner loop: each step encodes the clipped support gradient into the history,
+    /// attends over it and sets theta = theta * (1 + strength * sigmoid(W c))[d mod compressedDim] - lr * g.
+    /// </summary>
+    private Vector<T> AdaptWithContext(IMetaLearningTask<T, TInput, TOutput> task, Vector<T> initParams)
+    {
+        var gradHistory = new List<Vector<T>>();
+        var adaptedParams = initParams.Clone();
+        T learningRate = NumOps.FromDouble(_algoOptions.InnerLearningRate);
+        T strength = NumOps.FromDouble(_algoOptions.ModulationStrength);
+
+        for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
+        {
+            ParamModel.SetParameters(adaptedParams);
+            var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
+
+            // Encode and store gradient
+            gradHistory.Add(EncodeGradient(grad));
+
+            // Attention-based context aggregation
+            var contextVec = AttentionAggregate(gradHistory);
+
+            // Multiplicative modulation: θ' = θ ⊙ (1 + strength * sigmoid(W*c))
+            var factors = Engine.Add(Engine.Fill(_compressedDim, NumOps.One),
+                Engine.Multiply(Engine.Sigmoid(ComputeModulation(contextVec)), strength));
+            adaptedParams = Engine.Subtract(
+                Engine.Multiply(adaptedParams, ParameterModulation.Cycle(Engine, factors, _paramDim)),
+                Engine.Multiply(grad.GetSubVector(0, _paramDim), learningRate));
+        }
+
+        return adaptedParams;
+    }
+
+    /// <summary>tanh(W g[0..compressedDim)) with W stored [contextDim, compressedDim].</summary>
     private Vector<T> EncodeGradient(Vector<T> grad)
     {
-        var preAct = new Vector<T>(_contextDim);
-        for (int c = 0; c < _contextDim; c++)
-        {
-            T sum = NumOps.Zero;
-            for (int d = 0; d < _compressedDim && d < grad.Length; d++)
-                sum = NumOps.Add(sum, NumOps.Multiply(grad[d], _encoderParams[c * _compressedDim + d]));
-            preAct[c] = sum;
-        }
-        return VectorTanh(preAct);
+        int used = Math.Min(_compressedDim, grad.Length);
+        var weights = Tensor<T>.FromVector(_encoderParams, new[] { _contextDim, _compressedDim });
+        if (used < _compressedDim)
+            weights = Engine.TensorSlice(weights, new[] { 0, 0 }, new[] { _contextDim, used });
+        var input = Tensor<T>.FromVector(used == grad.Length ? grad : grad.GetSubVector(0, used), new[] { used, 1 });
+        return VectorTanh(Engine.TensorMatMul(weights, input).ToVector());
     }
 
     /// <summary>
-    /// Multi-head attention aggregation: α_k = softmax(q^T e_k / √d / τ).
+    /// Multi-head attention aggregation: α_k = softmax(q^T e_k / √d / τ), normalized by (sum + 1e-10).
     /// </summary>
     private Vector<T> AttentionAggregate(List<Vector<T>> encodedGrads)
     {
-        var result = new Vector<T>(_contextDim);
-        if (encodedGrads.Count == 0) return result;
+        if (encodedGrads.Count == 0) return new Vector<T>(_contextDim);
 
-        double scaleFactor = 1.0 / (Math.Sqrt(_contextDim) * _algoOptions.AttentionTemperature);
+        var rows = new Tensor<T>[encodedGrads.Count];
+        for (int i = 0; i < encodedGrads.Count; i++) rows[i] = Tensor<T>.FromVector(encodedGrads[i]);
+        var history = Engine.TensorStack(rows, 0);
 
         // Compute attention scores
-        var scores = new double[encodedGrads.Count];
-        double maxScore = double.NegativeInfinity;
-        for (int i = 0; i < encodedGrads.Count; i++)
-        {
-            double dot = 0;
-            for (int c = 0; c < _contextDim; c++)
-                dot += NumOps.ToDouble(_queryVector[c]) * NumOps.ToDouble(encodedGrads[i][c]);
-            scores[i] = dot * scaleFactor;
-            if (scores[i] > maxScore) maxScore = scores[i];
-        }
+        double scaleFactor = 1.0 / (Math.Sqrt(_contextDim) * _algoOptions.AttentionTemperature);
+        var scores = Engine.TensorMultiplyScalar(
+            Engine.TensorMatMul(history, Tensor<T>.FromVector(_queryVector, new[] { _contextDim, 1 })),
+            NumOps.FromDouble(scaleFactor));
 
         // Softmax
-        double sumExp = 0;
-        for (int i = 0; i < scores.Length; i++) { scores[i] = Math.Exp(scores[i] - maxScore); sumExp += scores[i]; }
-        for (int i = 0; i < scores.Length; i++) scores[i] /= (sumExp + 1e-10);
+        var exp = Engine.TensorExp(Engine.TensorSubtractScalar(scores, Engine.TensorMaxValue(scores)));
+        var weights = Engine.TensorDivideScalar(exp, NumOps.Add(Engine.TensorSum(exp), NumOps.FromDouble(1e-10)));
 
         // Weighted sum
-        for (int i = 0; i < encodedGrads.Count; i++)
-            for (int c = 0; c < _contextDim; c++)
-                result[c] = NumOps.Add(result[c], NumOps.FromDouble(scores[i] * NumOps.ToDouble(encodedGrads[i][c])));
-
-        return result;
+        return Engine.TensorMatMul(Engine.Reshape(weights, new[] { 1, encodedGrads.Count }), history).ToVector();
     }
 
+    /// <summary>M c with M stored [compressedDim, contextDim].</summary>
     private Vector<T> ComputeModulation(Vector<T> contextVec)
     {
-        var mod = new Vector<T>(_compressedDim);
-        for (int d = 0; d < _compressedDim; d++)
-        {
-            double sum = 0;
-            for (int c = 0; c < _contextDim; c++)
-                sum += NumOps.ToDouble(contextVec[c]) * NumOps.ToDouble(_modulationParams[d * _contextDim + c]);
-            mod[d] = NumOps.FromDouble(sum);
-        }
-        return mod;
+        var weights = Tensor<T>.FromVector(_modulationParams, new[] { _compressedDim, _contextDim });
+        return Engine.TensorMatMul(weights, Tensor<T>.FromVector(contextVec, new[] { _contextDim, 1 })).ToVector();
     }
-
-    private static double Sigmoid(double x) => 1.0 / (1.0 + Math.Exp(-x));
 
     private double ComputeContextMetaRLLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
-        double totalLoss = 0;
+        var losses = new List<T>(taskBatch.Tasks.Length);
         var initParams = ParamModel.GetParameters();
         foreach (var task in taskBatch.Tasks)
         {
-            var gh = new List<Vector<T>>();
-            var ap = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) ap[d] = initParams[d];
-            for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
-            {
-                ParamModel.SetParameters(ap);
-                var g = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-                gh.Add(EncodeGradient(g));
-                var cv = AttentionAggregate(gh);
-                var m = ComputeModulation(cv);
-                for (int d = 0; d < _paramDim; d++)
-                {
-                    int cd = d % _compressedDim;
-                    double mod = 1.0 + _algoOptions.ModulationStrength * Sigmoid(NumOps.ToDouble(m[cd]));
-                    ap[d] = NumOps.Subtract(NumOps.Multiply(ap[d], NumOps.FromDouble(mod)),
-                        NumOps.FromDouble(_algoOptions.InnerLearningRate * NumOps.ToDouble(g[d])));
-                }
-            }
+            var ap = AdaptWithContext(task, initParams);
             ParamModel.SetParameters(ap);
-            totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
+            losses.Add(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
         ParamModel.SetParameters(initParams);
-        return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
+
+        // The SPSA callback contract is a double; the batch mean is reduced in T and converted once.
+        return NumOps.ToDouble(ComputeMean(losses));
     }
 }

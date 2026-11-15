@@ -143,6 +143,16 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
     }
 
     /// <summary>
+    /// Drops the registered parameter components, so the next parameter access registers them again against the
+    /// fields as they are now (used when a component, such as a meta-learner's inner model, is replaced).
+    /// </summary>
+    private protected void InvalidateParameterComponents()
+    {
+        _parameterRegistry = new ParameterComponentRegistry<T>();
+        _componentsRegistered = false;
+    }
+
+    /// <summary>
     /// Declare state here that <see cref="GetParameters"/> does not carry -- a retained training set,
     /// fitted knots, kernel centres, an ensemble's children.
     /// </summary>
@@ -537,9 +547,14 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
         writer.Write(ModelSerializationMagic);
         writer.Write(GetType().FullName ?? GetType().Name);
         writer.Write(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
+        // Convert in bounded blocks: Half is not IConvertible, and a full double copy can be very large.
+        const int SerializationBlockSize = 16384;
+        for (int start = 0; start < parameters.Length;)
         {
-            writer.Write(Convert.ToDouble(parameters[i]));
+            int count = Math.Min(SerializationBlockSize, parameters.Length - start);
+            var values = new Tensor<T>(parameters.AsSpan().Slice(start, count).ToArray(), [count]).Cast<double>();
+            foreach (double value in values) writer.Write(value);
+            start += count;
         }
 
         // Whatever the model declared that the parameter vector does not carry: a retained training
@@ -549,6 +564,10 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
         writer.Flush();
         return stream.ToArray();
     }
+
+    /// <summary>The parameter vector restored from the doubles the serialization payload stores.</summary>
+    private static Vector<T> ParametersFromPayload(double[] payload) =>
+        payload.Length == 0 ? new Vector<T>(0) : new Tensor<double>(payload, new[] { payload.Length }).Cast<T>().ToVector();
 
     /// <inheritdoc/>
     public virtual void Deserialize(byte[] data)
@@ -581,10 +600,14 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
 
         int count = reader.ReadInt32();
         var parameters = new Vector<T>(count);
+        var payload = new double[count];
         for (int i = 0; i < count; i++)
         {
-            parameters[i] = NumOps.FromDouble(reader.ReadDouble());
+            payload[i] = reader.ReadDouble();
         }
+
+        // Convert the whole payload to T at once, then fill the parameter vector.
+        ParametersFromPayload(payload).AsSpan().CopyTo(parameters.AsWritableSpan());
 
         // Restore STRUCTURE before pouring the flat parameter vector into it. A fitted tree can have
         // one constant in its constructor-created shell and two after its declared node graph is

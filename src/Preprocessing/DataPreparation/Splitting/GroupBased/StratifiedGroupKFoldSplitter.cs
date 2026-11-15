@@ -96,10 +96,11 @@ public class StratifiedGroupKFoldSplitter<T> : DataSplitterBase<T>
         // Group samples by their group ID and calculate class distribution per group
         var groupInfo = new Dictionary<int, (List<int> indices, Dictionary<double, int> classCounts)>();
 
+        var labels = y.ToArray();
         for (int i = 0; i < nSamples; i++)
         {
             int groupId = groups[i];
-            double label = Convert.ToDouble(y[i]);
+            double label = Convert.ToDouble(labels[i]);
 
             if (!groupInfo.TryGetValue(groupId, out var info))
             {

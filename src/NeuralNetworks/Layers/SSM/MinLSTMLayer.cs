@@ -256,8 +256,7 @@ public partial class MinLSTMLayer<T> : LayerBase<T>, IShapeContract
 
         InitializeTensor2D(_forgetGateWeights);
         // Bias forget gate slightly positive so sigmoid starts near 0.7 -> encourages remembering
-        for (int i = 0; i < _forgetGateBias.Length; i++)
-            _forgetGateBias[i] = NumOps.FromDouble(1.0);
+        _forgetGateBias.Fill(NumOps.FromDouble(1.0));
 
         InitializeTensor2D(_inputGateWeights);
         _inputGateBias.Fill(NumOps.Zero);

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using AiDotNet.Engines;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -146,8 +147,8 @@ public class GpuPINNTrainer<T>
     /// <summary>
     /// Trains the PINN with GPU acceleration.
     /// </summary>
-    /// <param name="dataInputs">Optional measured input data.</param>
-    /// <param name="dataOutputs">Optional measured output data.</param>
+    /// <param name="dataInputs">Initial/boundary data inputs (required: the MSE_u term).</param>
+    /// <param name="dataOutputs">Initial/boundary data outputs (required).</param>
     /// <param name="epochs">Number of training epochs.</param>
     /// <param name="learningRate">Learning rate for optimization.</param>
     /// <param name="verbose">Whether to print progress.</param>
@@ -177,8 +178,12 @@ public class GpuPINNTrainer<T>
         {
             // Train the PINN using tape-based training for each epoch
             var pinnLosses = new List<T>();
-            var trainInputs = dataInputs ?? new Tensor<T>([64, _pinn.Architecture.InputSize]);
-            var trainOutputs = dataOutputs ?? new Tensor<T>([trainInputs.Shape[0], _pinn.Architecture.OutputSize]);
+            // MSE_u of Raissi et al. (2019) runs over the initial and boundary data. Without data this trained on
+            // 64 zero inputs with zero targets, which pinned u(0) = 0 whatever the problem.
+            var trainInputs = dataInputs
+                ?? throw new ArgumentNullException(nameof(dataInputs), "PINN training needs initial/boundary data inputs.");
+            var trainOutputs = dataOutputs
+                ?? throw new ArgumentNullException(nameof(dataOutputs), "PINN training needs initial/boundary data outputs.");
             for (int epoch = 0; epoch < epochs; epoch++)
             {
                 _pinn.Train(trainInputs, trainOutputs);
@@ -272,21 +277,18 @@ public class GpuPINNTrainer<T>
                     nameof(batchTargets));
             }
 
-            // Simple MSE loss for targets (physics loss computed separately)
-            T sum = _numOps.Zero;
-            int count = 0;
-
-            for (int i = 0; i < outputs.Shape[0]; i++)
+            // MSE against the targets (physics loss computed separately)
+            if (outputs.Length == 0)
             {
-                for (int j = 0; j < outputs.Shape[1]; j++)
-                {
-                    T diff = _numOps.Subtract(outputs[i, j], batchTargets[i, j]);
-                    sum = _numOps.Add(sum, _numOps.Multiply(diff, diff));
-                    count++;
-                }
+                loss = _numOps.Zero;
             }
-
-            loss = count > 0 ? _numOps.Divide(sum, _numOps.FromDouble(count)) : _numOps.Zero;
+            else
+            {
+                var engine = AiDotNetEngine.Current;
+                var diff = engine.TensorSubtract(outputs, batchTargets);
+                var axes = Enumerable.Range(0, diff.Rank).ToArray();
+                loss = engine.ReduceMean(engine.TensorMultiply(diff, diff), axes, keepDims: false).AsSpan()[0];
+            }
         }
         else
         {

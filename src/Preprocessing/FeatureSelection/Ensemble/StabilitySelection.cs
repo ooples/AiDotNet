@@ -33,7 +33,7 @@ public class StabilitySelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
     private readonly Func<Matrix<T>, Vector<T>, int, int[]>? _baseSelector;
     private readonly int? _randomState;
 
-    private double[]? _selectionProbabilities;
+    private Vector<T>? _selectionProbabilities;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -42,7 +42,7 @@ public class StabilitySelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
     public int NIterations => _nIterations;
     public double SampleFraction => _sampleFraction;
     public double Threshold => _threshold;
-    public double[]? SelectionProbabilities => _selectionProbabilities;
+    public Vector<T>? SelectionProbabilities => _selectionProbabilities;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -96,8 +96,10 @@ public class StabilitySelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
 
         var baseSelector = _baseSelector ?? DefaultSelector;
 
-        // Count selections across iterations
-        var selectionCounts = new int[p];
+        var engine = Engine;
+
+        // Count selections across iterations (in int: a Half count stops at 2048 iterations)
+        var selectionCounts = new Tensor<int>(new[] { p });
         int sampleSize = Math.Max(1, (int)(n * _sampleFraction));
 
         for (int iter = 0; iter < _nIterations; iter++)
@@ -109,46 +111,36 @@ public class StabilitySelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
                 .ToArray();
 
             // Extract subsample
-            var subData = new T[sampleSize, p];
-            var subTarget = new T[sampleSize];
-            for (int i = 0; i < sampleSize; i++)
-            {
-                for (int j = 0; j < p; j++)
-                    subData[i, j] = data[indices[i], j];
-                subTarget[i] = target[indices[i]];
-            }
-
-            var subDataMatrix = new Matrix<T>(subData);
-            var subTargetVector = new Vector<T>(subTarget);
+            var subDataMatrix = PreprocessingTensorOps.SelectRows(data, indices);
+            var subTargetVector = PreprocessingTensorOps.SelectElements(target, indices);
 
             // Run base selector
             int numBase = Math.Min(_nFeaturesToSelect, p);
             var selected = baseSelector(subDataMatrix, subTargetVector, numBase);
 
-            foreach (int idx in selected)
-                selectionCounts[idx]++;
+            if (selected.Length > 0)
+            {
+                selectionCounts = engine.TensorAdd(selectionCounts, PreprocessingTensorOps.CategoryCounts<int>(
+                    new Tensor<int>((int[])selected.Clone(), new[] { selected.Length }), p));
+            }
         }
 
         // Compute selection probabilities
-        _selectionProbabilities = new double[p];
-        for (int j = 0; j < p; j++)
-            _selectionProbabilities[j] = (double)selectionCounts[j] / _nIterations;
+        var selectionProbabilities = engine.TensorDivideScalar(selectionCounts.Cast<double>(), (double)_nIterations).Cast<T>();
+        _selectionProbabilities = selectionProbabilities.ToVector();
 
-        // Select features above threshold
-        var candidates = Enumerable.Range(0, p)
-            .Where(j => _selectionProbabilities[j] >= _threshold)
-            .OrderByDescending(j => _selectionProbabilities[j])
+        // Select features above threshold, most frequently selected first
+        var passing = new HashSet<int>(PreprocessingTensorOps.MaskPositions(
+            PreprocessingTensorOps.AtLeast(selectionProbabilities, NumOps.FromDouble(_threshold))));
+        var candidates = PreprocessingTensorOps.StableOrder(selectionProbabilities, descending: true)
+            .Where(j => passing.Contains(j))
             .ToList();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, candidates.Count);
         if (numToSelect == 0)
         {
             // No features pass threshold, select top by probability
-            _selectedIndices = Enumerable.Range(0, p)
-                .OrderByDescending(j => _selectionProbabilities[j])
-                .Take(Math.Min(_nFeaturesToSelect, p))
-                .OrderBy(x => x)
-                .ToArray();
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(selectionProbabilities, Math.Min(_nFeaturesToSelect, p));
         }
         else
         {
@@ -163,46 +155,11 @@ public class StabilitySelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
 
     private int[] DefaultSelector(Matrix<T> data, Vector<T> target, int k)
     {
-        // Simple correlation-based selection
-        int n = data.Rows;
-        int p = data.Columns;
-
-        var scores = new double[p];
-
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        for (int j = 0; j < p; j++)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, j]);
-            xMean /= n;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-                double yDiff = NumOps.ToDouble(target[i]) - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-                syy += yDiff * yDiff;
-            }
-
-            double corr = (sxx > 1e-10 && syy > 1e-10) ? sxy / Math.Sqrt(sxx * syy) : 0;
-            scores[j] = Math.Abs(corr);
-        }
-
-        return scores
-            .Select((s, idx) => (Score: s, Index: idx))
-            .OrderByDescending(x => x.Score)
-            .Take(k)
-            .Select(x => x.Index)
-            .ToArray();
+        // Simple correlation-based selection (absolute Pearson correlation, best first)
+        var scores = Engine.TensorAbs(PreprocessingTensorOps.TargetCorrelations(
+            Tensor<T>.FromMatrix(data), Tensor<T>.FromVector(target)));
+        return PreprocessingTensorOps.StableOrder(scores, descending: true).Take(k).ToArray();
     }
-
     /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
@@ -216,15 +173,7 @@ public class StabilitySelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         if (_selectedIndices is null)
             throw new InvalidOperationException("StabilitySelection has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -152,11 +152,8 @@ public partial class StateSpaceModel<T> : TimeSeriesModelBase<T>
         _maxIterations = options.MaxIterations;
         _tolerance = options.Tolerance;
         _transitionMatrix = Matrix<T>.CreateIdentity(_stateSize);
-        _observationMatrix = new Matrix<T>(_observationSize, _stateSize);
-        for (int i = 0; i < Math.Min(_observationSize, _stateSize); i++)
-        {
-            _observationMatrix[i, i] = NumOps.One;
-        }
+        _observationMatrix = Matrix<T>.CreateIdentity(Math.Max(_observationSize, _stateSize))
+            .GetSubMatrix(0, 0, _observationSize, _stateSize);
         _processNoise = Matrix<T>.CreateIdentity(_stateSize);
         _observationNoise = Matrix<T>.CreateIdentity(_observationSize);
         _initialState = new Vector<T>(_stateSize);
@@ -359,16 +356,14 @@ public partial class StateSpaceModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        Vector<T> predictions = new Vector<T>(input.Rows);
+        // Each prediction is the first observation component H[0, :] · state of the state at that step.
+        var states = new List<Vector<T>>(input.Rows);
 
         if (_smoothedStates != null && _smoothedStates.Count > 0)
         {
             // Use smoothed states for in-sample predictions
             int inSampleCount = Math.Min(input.Rows, _smoothedStates.Count);
-            for (int t = 0; t < inSampleCount; t++)
-            {
-                predictions[t] = _observationMatrix.Multiply(_smoothedStates[t])[0];
-            }
+            states.AddRange(_smoothedStates.Take(inSampleCount));
 
             // O(N) out-of-sample: propagate rolling state forward from last smoothed state
             if (input.Rows > _smoothedStates.Count)
@@ -377,7 +372,7 @@ public partial class StateSpaceModel<T> : TimeSeriesModelBase<T>
                 for (int t = _smoothedStates.Count; t < input.Rows; t++)
                 {
                     state = _transitionMatrix.Multiply(state);
-                    predictions[t] = _observationMatrix.Multiply(state)[0];
+                    states.Add(state);
                 }
             }
         }
@@ -388,11 +383,16 @@ public partial class StateSpaceModel<T> : TimeSeriesModelBase<T>
             for (int t = 0; t < input.Rows; t++)
             {
                 currentState = _transitionMatrix.Multiply(currentState);
-                predictions[t] = _observationMatrix.Multiply(currentState)[0];
+                states.Add(currentState);
             }
         }
 
-        return predictions;
+        if (states.Count == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        return Engine.MatrixVectorMultiply(Matrix<T>.FromRowVectors(states), _observationMatrix.GetRow(0));
     }
 
     /// <summary>
@@ -562,11 +562,7 @@ public partial class StateSpaceModel<T> : TimeSeriesModelBase<T>
         Matrix<T> observations;
         if (_observationSize == 1)
         {
-            observations = new Matrix<T>(y.Length, 1);
-            for (int i = 0; i < y.Length; i++)
-            {
-                observations[i, 0] = y[i];
-            }
+            observations = Matrix<T>.FromVector(y);
         }
         else if (_observationSize == x.Columns + 1)
         {
@@ -610,11 +606,7 @@ public partial class StateSpaceModel<T> : TimeSeriesModelBase<T>
         _smoothedStates = lastSmoothedStates;
 
         // Populate ModelParameters from transition matrix for GetParameters()
-        int stateSize = _transitionMatrix.Rows;
-        ModelParameters = new Vector<T>(stateSize * stateSize);
-        for (int i = 0; i < stateSize; i++)
-            for (int j = 0; j < stateSize; j++)
-                ModelParameters[i * stateSize + j] = _transitionMatrix[i, j];
+        ModelParameters = _transitionMatrix.ToRowVector();
     }
 
     /// <summary>
@@ -650,11 +642,7 @@ public partial class StateSpaceModel<T> : TimeSeriesModelBase<T>
         }
 
         // Delegate to Predict(Matrix) to use trained smoothed states consistently
-        Matrix<T> inputMatrix = new Matrix<T>(1, input.Length);
-        for (int i = 0; i < input.Length; i++)
-        {
-            inputMatrix[0, i] = input[i];
-        }
+        Matrix<T> inputMatrix = Matrix<T>.CreateFromVector(input);
 
         return Predict(inputMatrix)[0];
     }

@@ -205,8 +205,12 @@ internal sealed record ConformerAsrConfiguration
 /// NeMo build it). The paper's blocks use Transformer-XL relative positional encoding; these use rotary position encoding,
 /// the relative scheme <see cref="ConformerBlockLayer{T}"/> provides. The layers are added to the owner's list.
 /// </remarks>
-internal sealed class ConformerAsrNetwork<T>
+internal sealed class ConformerAsrNetwork<T> : ILayerAliasOwner<T>
 {
+    /// <inheritdoc />
+    public void RebindLayerAliases(IReadOnlyList<ILayer<T>> previousLayers, IReadOnlyList<ILayer<T>> replacementLayers)
+        => LayerAliasGraph.Rebind(this, previousLayers, replacementLayers);
+
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IEngine _engine;
     private readonly ConformerAsrConfiguration _o;

@@ -8,7 +8,6 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using Microsoft.ML.OnnxRuntime;
-using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
 namespace AiDotNet.ComputerVision.Segmentation.Medical;
 
@@ -197,16 +196,12 @@ public partial class MedNeXt<T> : Common.MedicalSegmentationBase<T>
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
-        var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
+        var onnxInput = CvTensorOps<T>.ToOnnxFloat(input);
         string inputName = _onnxSession.InputMetadata.Keys.FirstOrDefault() ?? "images";
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
         using var results = _onnxSession.Run(inputs);
         var outputTensor = results.First().AsTensor<float>();
-        var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++) outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-        var result = new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
+        var result = CvTensorOps<T>.FromOnnxFloat(outputTensor);
         if (!hasBatch) result = RemoveBatchDimension(result); return result;
     }
 
@@ -296,19 +291,19 @@ public partial class MedNeXt<T> : Common.MedicalSegmentationBase<T>
         var structAccum = new Dictionary<int, (double area, double confSum)>();
         for (int d = 0; d < depth; d++)
         {
-            var slice = new Tensor<T>([numC, h, w]);
-            for (int c = 0; c < numC; c++)
-                for (int y = 0; y < h; y++)
-                    for (int x = 0; x < w; x++)
-                        slice[c, y, x] = volume[c, d, y, x];
+            var slice = Engine.Reshape(Engine.TensorSlice(volume, new[] { 0, d, 0, 0 }, new[] { numC, 1, h, w }), new[] { numC, h, w });
             var result = SegmentSlice(slice);
-            for (int y = 0; y < h; y++)
-                for (int x = 0; x < w; x++)
-                    volLabels[d, y, x] = result.Labels[y, x];
+            // The slice's [H, W] labels and first numC probability planes are copied into depth d in place:
+            // TensorSetSlice returns a full copy of the volume, which made the loop quadratic in the depth.
+            int plane = h * w;
+            Engine.TensorSlice(result.Labels, new[] { 0, 0 }, new[] { h, w }).AsSpan()
+                .CopyTo(volLabels.AsWritableSpan().Slice(d * plane, plane));
+            var probabilityPlanes = Engine.TensorSlice(result.Probabilities, new[] { 0, 0, 0 }, new[] { numC, h, w }).AsSpan();
+            var volumeProbabilities = volProbs.AsWritableSpan();
             for (int c = 0; c < numC; c++)
-                for (int y = 0; y < h; y++)
-                    for (int x = 0; x < w; x++)
-                        volProbs[c, d, y, x] = result.Probabilities[c, y, x];
+            {
+                probabilityPlanes.Slice(c * plane, plane).CopyTo(volumeProbabilities.Slice(((c * depth) + d) * plane, plane));
+            }
             foreach (var s in result.Structures)
             {
                 if (structAccum.TryGetValue(s.ClassId, out var existing))

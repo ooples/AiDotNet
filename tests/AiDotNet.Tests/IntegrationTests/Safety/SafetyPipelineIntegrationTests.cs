@@ -818,4 +818,42 @@ public class SafetyPipelineIntegrationTests
 
         return frames;
     }
+
+    [Fact(Timeout = 120000)]
+    public async Task DecodeCharCodes_HalfCodeAbove2048_DecodesExactly()
+    {
+        await Task.Yield();
+        // 4096 is exact in Half, but a 0..65534 grid held in Half rounds 4095 up to 4096 and miscounts.
+        var codes = new Vector<Half>(new[] { (Half)4096, (Half)65 });
+
+        Assert.Equal("\u1000A", SafetyTensorOps<Half>.DecodeCharCodes(codes));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task DecodeCharCodes_HalfInfinity_BecomesQuestionMark()
+    {
+        await Task.Yield();
+        // For Half the 65535 bound itself converts to +infinity, so infinity passed the range test.
+        var codes = new Vector<Half>(new[] { Half.PositiveInfinity, (Half)65 });
+
+        Assert.Equal("?A", SafetyTensorOps<Half>.DecodeCharCodes(codes));
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CosineSimilarities_MatchVectorHelper()
+    {
+        await Task.Yield();
+        // A length-32 alternating vector: its similarity with itself is 1 (VectorHelper.CosineSimilarity, fixed
+        // CPU engine), whatever engine is current.
+        var values = new double[32];
+        for (int i = 0; i < values.Length; i++) values[i] = i % 2;
+        var query = new Vector<double>(values);
+        var other = new Vector<double>(new double[32]);
+        other[0] = 1.0;
+
+        var similarities = SafetyTensorOps<double>.CosineSimilarities(query, new[] { query, other }).ToArray();
+
+        Assert.Equal(1.0, similarities[0], 12);
+        Assert.Equal(AiDotNet.Helpers.VectorHelper.CosineSimilarity(query, other), similarities[1], 12);
+    }
 }
