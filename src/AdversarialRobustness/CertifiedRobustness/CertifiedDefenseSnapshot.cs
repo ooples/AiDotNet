@@ -4,7 +4,6 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
-using AiDotNet.Serialization;
 using AiDotNet.Validation;
 using Newtonsoft.Json;
 
@@ -65,8 +64,11 @@ internal static class CertifiedDefenseFactory<T, TInput, TOutput>
 /// <para>
 /// Restoring builds the engine from the persisted options (so a seeded randomized-smoothing engine starts from the
 /// same seed) and then applies the engine's own <c>IModelSerializer.Deserialize</c>. A custom defense is
-/// rebuilt from its type through the <see cref="SafeSerializationBinder"/>, with a public constructor taking
-/// <see cref="CertifiedDefenseOptions{T}"/> or a parameterless one.
+/// rebuilt from its type, with a public constructor taking <see cref="CertifiedDefenseOptions{T}"/> or a parameterless
+/// one. The type is looked up in the AiDotNet assembly only, by the name of its generic definition, and closed over
+/// the model's own type arguments: the persisted payload never names an assembly to load or a type argument to bind,
+/// so a defense defined outside the library is not rebuilt on load (the result says so from
+/// <c>PredictCertified</c>).
 /// </para>
 /// </remarks>
 internal sealed class CertifiedDefenseSnapshot<T>
@@ -89,10 +91,10 @@ internal sealed class CertifiedDefenseSnapshot<T>
     /// <summary>The library engine of the defense, or null for a custom defense.</summary>
     public CertifiedDefenseMethod? BuiltInMethod { get; }
 
-    /// <summary>The full type name of a custom defense.</summary>
+    /// <summary>The full type name of a custom defense; the generic type definition's name for a generic defense.</summary>
     public string? CustomTypeName { get; }
 
-    /// <summary>The assembly of a custom defense.</summary>
+    /// <summary>The assembly of a custom defense, for diagnostics only: restore never loads it.</summary>
     public string? CustomAssemblyName { get; }
 
     /// <summary>The options of the defense.</summary>
@@ -115,7 +117,7 @@ internal sealed class CertifiedDefenseSnapshot<T>
         var type = defense.GetType();
         return new CertifiedDefenseSnapshot<T>(
             builtIn,
-            builtIn.HasValue ? null : type.FullName,
+            builtIn.HasValue ? null : (type.IsGenericType ? type.GetGenericTypeDefinition() : type).FullName,
             builtIn.HasValue ? null : type.Assembly.FullName,
             defense.GetOptions(),
             state);
@@ -152,8 +154,39 @@ internal sealed class CertifiedDefenseSnapshot<T>
         string typeName = CustomTypeName ?? throw new InvalidOperationException(
             "The persisted certified defense names neither a library engine nor a custom type.");
 
-        // The binder admits AiDotNet types only, so a payload cannot name an arbitrary type to construct.
-        Type type = new SafeSerializationBinder().BindToType(CustomAssemblyName, typeName);
+        // Resolve inside the AiDotNet assembly only. Assembly.Load of a payload-named assembly would run its module
+        // initializer before any allowlist check, and a namespace allowlist admits any assembly that declares an
+        // "AiDotNet." namespace. Type arguments are never read from the payload either: a generic definition is closed
+        // over this model's <T, TInput, TOutput>.
+        if (typeName.IndexOfAny(new[] { '[', ',', '&', '*' }) >= 0)
+        {
+            throw new InvalidOperationException(
+                $"The persisted certified defense type '{typeName}' is not a plain type name, so it is not rebuilt.");
+        }
+
+        var libraryAssembly = typeof(ICertifiedDefense<,,>).Assembly;
+        Type type = libraryAssembly.GetType(typeName, throwOnError: false, ignoreCase: false)
+            ?? throw new InvalidOperationException(
+                $"The persisted certified defense type '{typeName}' is not an AiDotNet type, so it is not rebuilt on load.");
+        if (type.IsGenericTypeDefinition)
+        {
+            if (type.GetGenericArguments().Length != 3)
+            {
+                throw new InvalidOperationException(
+                    $"The persisted certified defense type '{typeName}' does not take the <T, TInput, TOutput> type arguments.");
+            }
+
+            try
+            {
+                type = type.MakeGenericType(typeof(T), typeof(TInput), typeof(TOutput));
+            }
+            catch (ArgumentException ex)
+            {
+                throw new InvalidOperationException(
+                    $"The persisted certified defense type '{typeName}' cannot be closed over this model's types.", ex);
+            }
+        }
+
         if (!typeof(ICertifiedDefense<T, TInput, TOutput>).IsAssignableFrom(type) || type.IsAbstract)
         {
             throw new InvalidOperationException(
