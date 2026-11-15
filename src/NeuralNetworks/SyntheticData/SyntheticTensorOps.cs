@@ -503,6 +503,16 @@ internal static class SyntheticTensorOps<T>
 
         // 1-norm: the largest absolute column sum.
         double norm = NumOps.ToDouble(engine.TensorMaxValue(engine.ReduceSum(engine.TensorAbs(a), new[] { 0 }, keepDims: false)));
+
+        // A matrix with a non-finite norm has no finite exponential and no scaling: log2(inf) cast to int saturates,
+        // and the squaring loop below then ran int.MaxValue matrix products.
+        if (double.IsNaN(norm) || double.IsInfinity(norm))
+        {
+            var notFinite = new Tensor<T>(new[] { d, d });
+            notFinite.Fill(NumOps.FromDouble(double.NaN));
+            return notFinite;
+        }
+
         int squarings = norm > 0.5 ? (int)Math.Ceiling(Math.Log(norm / 0.5, 2.0)) : 0;
         var x = squarings > 0 ? engine.TensorMultiplyScalar(a, NumOps.FromDouble(Math.Pow(2.0, -squarings))) : a;
 
