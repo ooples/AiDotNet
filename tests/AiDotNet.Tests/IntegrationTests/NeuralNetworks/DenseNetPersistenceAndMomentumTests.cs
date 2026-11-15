@@ -67,6 +67,21 @@ public class DenseNetPersistenceAndMomentumTests
             outputShape: new[] { 1, 16, 4, 4 },
             additionalParams: metadata);
 
-        Assert.IsType<DenseBlock<float>>(layer);
+        var block = Assert.IsType<DenseBlock<float>>(layer);
+        const BindingFlags Private = BindingFlags.NonPublic | BindingFlags.Instance;
+        var denseLayers = Assert.IsAssignableFrom<System.Collections.IEnumerable>(
+            typeof(DenseBlock<float>).GetField("_layers", Private)?.GetValue(block));
+        int convolutions = 0;
+        foreach (var denseLayer in denseLayers)
+        {
+            foreach (string name in new[] { "_conv1x1", "_conv3x3" })
+            {
+                var convolution = Assert.IsType<ConvolutionalLayer<float>>(
+                    typeof(DenseBlockLayer<float>).GetField(name, Private)?.GetValue(denseLayer));
+                Assert.True(convolution.UseBias, $"{name} lost its bias.");
+                convolutions++;
+            }
+        }
+        Assert.Equal(4, convolutions);
     }
 }
