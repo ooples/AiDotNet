@@ -571,7 +571,6 @@ internal static class DefectBaselines
             "global::AiDotNet.Diffusion.ThreeD.LGMModel<T>",
             "global::AiDotNet.Diffusion.ThreeD.MVDreamModel<T>",
             "global::AiDotNet.Diffusion.ThreeD.Magic3DModel<T>",
-            "global::AiDotNet.Diffusion.ThreeD.One2345Model<T>",
             "global::AiDotNet.Diffusion.ThreeD.PointEModel<T>",
             "global::AiDotNet.Diffusion.ThreeD.ShapEModel<T>",
             "global::AiDotNet.Diffusion.ThreeD.SyncDreamerModel<T>",
