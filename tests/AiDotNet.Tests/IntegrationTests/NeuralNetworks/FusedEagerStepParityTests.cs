@@ -1,10 +1,13 @@
 using System;
 using System.Threading.Tasks;
+using AiDotNet.ActivationFunctions;
+using AiDotNet.Interfaces;
 using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Optimization;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Training;
@@ -60,6 +63,68 @@ public class FusedEagerStepParityTests
             epochs: 3, stepsPerEpoch: 3, targetScale: 1.0);
 
         AssertSameSteps(fused, eager, expectedFusedSteps: 9);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CompiledTraining_LambdaLayerBackwardFunction_IsTheGradientTheStepUses()
+    {
+        await Task.CompletedTask;
+
+        // Dense(4 -> 1, identity) then LambdaLayer(y = 2z) whose backward function returns 7 everywhere. The step's
+        // gradient into the dense layer is therefore 7 per output element: dW_j = 7 * sum_i x_ij and db = 7 * N.
+        // A compiled plan differentiates the traced forward (2 * dL/dy) instead, which no batch here makes 7.
+        var input = RandomTensor(new[] { 8, 4 }, seed: 42, scale: 1.0);
+        var target = RandomTensor(new[] { 8, 1 }, seed: 43, scale: 1.0);
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.Regression,
+            complexity: NetworkComplexity.Simple,
+            inputSize: 4,
+            outputSize: 1);
+        var network = new FusedTrainingTestNetworkDouble(architecture);
+        network.AddLayer(new DenseLayer<double>(1, (IActivationFunction<double>)new IdentityActivation<double>()));
+        network.AddLayer(new LambdaLayer<double>(new[] { 1 }, new[] { 1 },
+            z => AiDotNetEngine.Current.TensorMultiplyScalar(z, 2.0),
+            (z, gradOutput) => AiDotNetEngine.Current.TensorAddScalar(
+                AiDotNetEngine.Current.TensorMultiplyScalar(gradOutput, 0.0), 7.0),
+            (IActivationFunction<double>)new IdentityActivation<double>()));
+        network.Predict(RandomTensor(new[] { 1, 4 }, seed: 99, scale: 1.0));
+        network.SetMaxGradNormForTest(0.0);
+        var optimizer = new AdamOptimizer<double, Tensor<double>, Tensor<double>>(network,
+            new AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>
+            {
+                InitialLearningRate = 1e-3,
+                EnableGradientClipping = false,
+            });
+
+        var originalOptions = TensorCodecOptions.Current;
+        try
+        {
+            // Compilation on, the default this PR ships.
+            TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = true });
+            CompiledTapeTrainingStep<double>.Invalidate();
+            CompiledTapeTrainingStep<double>.ResetFusedStepCount();
+            network.TrainPublic(input, target, optimizer);
+
+            var gradients = network.GetParameterGradients().ToArray();
+            var x = input.ToArray();
+            Assert.True(gradients.Length >= 4, $"expected the dense layer's 4 weight gradients, got {gradients.Length}.");
+            for (int j = 0; j < 4; j++)
+            {
+                double columnSum = 0.0;
+                for (int i = 0; i < 8; i++) columnSum += x[i * 4 + j];
+                Assert.Equal(7.0 * columnSum, gradients[j], 10);
+            }
+            if (gradients.Length == 5)
+                Assert.Equal(7.0 * 8, gradients[4], 10);
+            Assert.Equal(0, CompiledTapeTrainingStep<double>.GetFusedStepCount());
+        }
+        finally
+        {
+            TensorCodecOptions.SetCurrent(originalOptions);
+            CompiledTapeTrainingStep<double>.Invalidate();
+            CompiledTapeTrainingStep<double>.ResetFusedStepCount();
+        }
     }
 
     private sealed record RunResult(double[] Initial, double[] Final, long FusedSteps);

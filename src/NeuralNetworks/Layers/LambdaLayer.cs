@@ -321,6 +321,17 @@ public partial class LambdaLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
+        // A compiled training trace differentiates the traced forward ops, not this function's gradient.
+        // Networks keep such a step on the eager tape through CompiledTrainingGraphBreakReason. Any other
+        // caller that reaches here gets an error, never a plan that trains on the wrong gradient. The
+        // compiled steps (CompiledTapeTrainingStep.Step and TryStepWithFusedOptimizer) treat a trace
+        // failure as a declined step, and that step then runs on the eager tape.
+        if (_backwardFunction is not null && GradientRecording.IsTrainingTrace)
+            throw new InvalidOperationException(
+                "A LambdaLayer with a backward function cannot be traced into a compiled training plan: the plan would "
+                + "differentiate the forward function instead of using the backward function. Train it on the eager "
+                + "tape (TensorCodecOptions.EnableCompilation = false, or a network, which falls back automatically).");
+
         // With a backward function, a recording tape gets the transformation as a single step whose
         // gradient is that function's result, the way torch.autograd.Function works. Without a tape
         // there is no backward to serve, so the forward function runs directly. That keeps eager
@@ -366,6 +377,15 @@ public partial class LambdaLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     private static bool IsTapeRecording()
         => GradientTape<T>.Current is not null && !NoGradScope<T>.IsSuppressed;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// A compiled plan differentiates the forward function's traced ops, so it would ignore the caller's backward
+    /// function. With one, the step stays on the eager tape, where <see cref="LambdaLayerCustomGradient{T}"/> applies it.
+    /// </remarks>
+    internal override string? CompiledTrainingGraphBreakReason => _backwardFunction is null
+        ? null
+        : "a LambdaLayer has a caller-supplied backward function, which only the eager tape applies";
 
 }
 

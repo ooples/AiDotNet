@@ -12942,7 +12942,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // Only their ordinary independent Train path must defer to the parent graph.
             GraphBreakReason = !SupportsFusedCompiledTraining
                 ? "model opts out of fused compiled training (per-step host state)"
-                : null,
+                : LayerGraphBreakReason(),
         };
 
         // Both the plan and the eager step write the weights in place; an OOM from here on must not be retried.
@@ -14504,6 +14504,27 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     // probe only needs to detect whether the fused step moved ANY live parameter, not
     // an exact norm — so it samples a deterministic stride instead of every element.
 
+    /// <summary>
+    /// The first <see cref="LayerBase{T}.CompiledTrainingGraphBreakReason"/> any layer reports, at any depth, or null
+    /// when every layer can be compiled and replayed.
+    /// </summary>
+    private string? LayerGraphBreakReason()
+    {
+        var pending = new Stack<ILayer<T>>(Layers);
+        var seen = new HashSet<ILayer<T>>(ReferenceEqualityComparer<ILayer<T>>.Instance);
+        while (pending.Count > 0)
+        {
+            var layer = pending.Pop();
+            if (!seen.Add(layer) || layer is not LayerBase<T> owner) continue;
+            if (owner.CompiledTrainingGraphBreakReason is { } reason) return reason;
+            var subLayers = owner.GetSubLayers();
+            if (subLayers is not null)
+                foreach (var child in subLayers) pending.Push(child);
+        }
+
+        return null;
+    }
+
     /// <summary>Whether any layer, at any depth, declares its own learning rate.</summary>
     private bool HasLayerLearningRatePolicy()
     {
@@ -14675,6 +14696,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             ModelGradientClip = MaxGradNormValue,
             ExcludesParametersFromWeightDecay = () => DecayExcludedParameters().Count > 0,
             OnGradients = ScatterFusedGradients,
+            // A layer whose gradient is a tape step the plan cannot reproduce keeps the step on the eager tape.
+            GraphBreakReason = LayerGraphBreakReason(),
         };
 
         var outcome = FusedSession.TryStep(request, out T lossValue, out var lossTensor);
