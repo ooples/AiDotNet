@@ -25698,3 +25698,37 @@ AiDotNet.TextToSpeech.Latest.KaniTTS2<T>.TrainingSpeakerEmbeddings.get -> System
 AiDotNet.TextToSpeech.Latest.KaniTTS2<T>.EmbedSpeaker(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! recording) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.TextToSpeech.Latest.KaniTTS2<T>.AverageSpeakerEmbedding(System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! recordings) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.TextToSpeech.TtsModelBase<T>.AlignmentDurations(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! means, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! frames) -> int[]!
+*REMOVED*AiDotNet.Preprocessing.OutlierHandling.IQRClipper<T>.LowerBounds.get -> double[]?
+AiDotNet.Preprocessing.OutlierHandling.IQRClipper<T>.LowerBounds.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.OutlierHandling.IQRClipper<T>.UpperBounds.get -> double[]?
+AiDotNet.Preprocessing.OutlierHandling.IQRClipper<T>.UpperBounds.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.OutlierHandling.IQRClipper<T>.Q1Values.get -> double[]?
+AiDotNet.Preprocessing.OutlierHandling.IQRClipper<T>.Q1Values.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.OutlierHandling.IQRClipper<T>.Q3Values.get -> double[]?
+AiDotNet.Preprocessing.OutlierHandling.IQRClipper<T>.Q3Values.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.OutlierHandling.IQRClipper<T>.IQRValues.get -> double[]?
+AiDotNet.Preprocessing.OutlierHandling.IQRClipper<T>.IQRValues.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.OutlierHandling.MADClipper<T>.LowerBounds.get -> double[]?
+AiDotNet.Preprocessing.OutlierHandling.MADClipper<T>.LowerBounds.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.OutlierHandling.MADClipper<T>.UpperBounds.get -> double[]?
+AiDotNet.Preprocessing.OutlierHandling.MADClipper<T>.UpperBounds.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.OutlierHandling.MADClipper<T>.Medians.get -> double[]?
+AiDotNet.Preprocessing.OutlierHandling.MADClipper<T>.Medians.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.OutlierHandling.MADClipper<T>.MADs.get -> double[]?
+AiDotNet.Preprocessing.OutlierHandling.MADClipper<T>.MADs.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.OutlierHandling.ZScoreClipper<T>.LowerBounds.get -> double[]?
+AiDotNet.Preprocessing.OutlierHandling.ZScoreClipper<T>.LowerBounds.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.OutlierHandling.ZScoreClipper<T>.UpperBounds.get -> double[]?
+AiDotNet.Preprocessing.OutlierHandling.ZScoreClipper<T>.UpperBounds.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.OutlierHandling.ZScoreClipper<T>.Means.get -> double[]?
+AiDotNet.Preprocessing.OutlierHandling.ZScoreClipper<T>.Means.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.OutlierHandling.ZScoreClipper<T>.StandardDeviations.get -> double[]?
+AiDotNet.Preprocessing.OutlierHandling.ZScoreClipper<T>.StandardDeviations.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.OutlierHandling.OutlierClipper<T>.LowerBounds.get -> double[]?
+AiDotNet.Preprocessing.OutlierHandling.OutlierClipper<T>.LowerBounds.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.OutlierHandling.OutlierClipper<T>.UpperBounds.get -> double[]?
+AiDotNet.Preprocessing.OutlierHandling.OutlierClipper<T>.UpperBounds.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.OutlierHandling.Winsorizer<T>.LowerBounds.get -> double[]?
+AiDotNet.Preprocessing.OutlierHandling.Winsorizer<T>.LowerBounds.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.Preprocessing.OutlierHandling.Winsorizer<T>.UpperBounds.get -> double[]?
+AiDotNet.Preprocessing.OutlierHandling.Winsorizer<T>.UpperBounds.get -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
