@@ -111,4 +111,22 @@ public class SelectorTensorOpsReferenceTests
         Assert.Equal(0.4909923771721847, mi.ToArray()[0], 10);
         Assert.Equal(0.20556793494774284, mi.ToArray()[1], 10);
     }
+
+    // 39,999 zeros and a single one: the zeros rank 20,000 and the one ranks 40,000, both exact in Half. The rank was
+    // formed as (below + atMost + 1) / 2 in T, and the one's below + atMost = 79,999 is +infinity in Half.
+    [Fact(Timeout = 60000)]
+    public async Task AverageRanks_Half_RankPastTheDoubledCountOverflow()
+    {
+        await Task.CompletedTask;
+        const int n = 40000;
+        var values = new Half[n];
+        values[n - 1] = (Half)1;
+
+        var ranks = RankTestOps.AverageRanksWithTies(new Tensor<Half>(values, new[] { n, 1 }), out var tieTerm);
+
+        Assert.Equal(40000.0, (double)ranks[n - 1, 0]);
+        Assert.Equal(20000.0, (double)ranks[0, 0]);
+        Assert.Equal(20000.0, (double)ranks[n - 2, 0]);
+        Assert.Equal(39999.0 * 39999.0 * 39999.0 - 39999.0, tieTerm[0]);
+    }
 }

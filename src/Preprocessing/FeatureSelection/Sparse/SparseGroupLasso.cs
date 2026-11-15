@@ -32,7 +32,7 @@ public class SparseGroupLasso<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
     private readonly int _maxIterations;
     private readonly double _tolerance;
 
-    private double[]? _coefficients;
+    private Vector<T>? _coefficients;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -41,7 +41,7 @@ public class SparseGroupLasso<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
     public double Alpha => _alpha;
     public double L1Ratio => _l1Ratio;
     public int[] Groups => _groups;
-    public double[]? Coefficients => _coefficients;
+    public Vector<T>? Coefficients => _coefficients;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -82,149 +82,24 @@ public class SparseGroupLasso<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
 
         // Create default groups if not provided (each feature is its own group)
         var groups = _groups.Length == p ? _groups : Enumerable.Range(0, p).ToArray();
 
-        // Get unique groups
-        var uniqueGroups = groups.Distinct().OrderBy(x => x).ToArray();
-        var groupIndices = new Dictionary<int, List<int>>();
-        foreach (int g in uniqueGroups)
-            groupIndices[g] = [];
-        for (int j = 0; j < p; j++)
-            groupIndices[groups[j]].Add(j);
+        // Standardize features (population std, 1 for a constant column) and centre the target
+        var x = SelectorTensorOps.StandardizeColumns(Tensor<T>.FromMatrix(data));
+        var y = SelectorTensorOps.CenteredColumn(target);
 
-        // Standardize features
-        var means = new double[p];
-        var stds = new double[p];
-        var X = new double[n, p];
-
-        for (int j = 0; j < p; j++)
-        {
-            double mean = 0;
-            for (int i = 0; i < n; i++)
-                mean += NumOps.ToDouble(data[i, j]);
-            mean /= n;
-            means[j] = mean;
-
-            double variance = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double diff = NumOps.ToDouble(data[i, j]) - mean;
-                variance += diff * diff;
-            }
-            double std = Math.Sqrt(variance / n);
-            stds[j] = std > 1e-10 ? std : 1.0;
-
-            for (int i = 0; i < n; i++)
-                X[i, j] = (NumOps.ToDouble(data[i, j]) - mean) / stds[j];
-        }
-
-        // Standardize target
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-            y[i] = NumOps.ToDouble(target[i]) - yMean;
-
-        // Initialize coefficients
-        _coefficients = new double[p];
-        var residuals = (double[])y.Clone();
-
-        double l1Weight = _alpha * _l1Ratio;
-        double l2Weight = _alpha * (1 - _l1Ratio);
-
-        // Block coordinate descent
-        for (int iter = 0; iter < _maxIterations; iter++)
-        {
-            double maxChange = 0;
-
-            foreach (int g in uniqueGroups)
-            {
-                var groupIdx = groupIndices[g];
-                int groupSize = groupIdx.Count;
-
-                // Compute group gradient
-                var groupGrad = new double[groupSize];
-                for (int k = 0; k < groupSize; k++)
-                {
-                    int j = groupIdx[k];
-                    double oldCoef = _coefficients[j];
-
-                    // Add back contribution
-                    for (int i = 0; i < n; i++)
-                        residuals[i] += X[i, j] * oldCoef;
-
-                    // Compute gradient
-                    double grad = 0;
-                    for (int i = 0; i < n; i++)
-                        grad += X[i, j] * residuals[i];
-                    groupGrad[k] = grad / n;
-                }
-
-                // Group Lasso update
-                double groupNorm = Math.Sqrt(groupGrad.Sum(g => g * g));
-                double groupPenalty = l2Weight * Math.Sqrt(groupSize);
-
-                if (groupNorm <= groupPenalty)
-                {
-                    // Shrink entire group to zero
-                    foreach (int j in groupIdx)
-                    {
-                        maxChange = Math.Max(maxChange, Math.Abs(_coefficients[j]));
-                        _coefficients[j] = 0;
-                    }
-                }
-                else
-                {
-                    // Scale down group and apply L1 penalty
-                    double scale = (groupNorm - groupPenalty) / groupNorm;
-
-                    for (int k = 0; k < groupSize; k++)
-                    {
-                        int j = groupIdx[k];
-                        double scaledGrad = groupGrad[k] * scale;
-
-                        // L1 soft thresholding
-                        double newCoef;
-                        if (scaledGrad > l1Weight)
-                            newCoef = scaledGrad - l1Weight;
-                        else if (scaledGrad < -l1Weight)
-                            newCoef = scaledGrad + l1Weight;
-                        else
-                            newCoef = 0;
-
-                        maxChange = Math.Max(maxChange, Math.Abs(newCoef - _coefficients[j]));
-                        _coefficients[j] = newCoef;
-                    }
-                }
-
-                // Update residuals
-                foreach (int j in groupIdx)
-                {
-                    for (int i = 0; i < n; i++)
-                        residuals[i] -= X[i, j] * _coefficients[j];
-                }
-            }
-
-            if (maxChange < _tolerance)
-                break;
-        }
+        // Sparse group lasso (Simon et al., 2013):
+        // (1/2n) ||y - X b||^2 + alpha l1Ratio ||b||_1 + alpha (1 - l1Ratio) sum_g sqrt(p_g) ||b_g||_2
+        var coefficients = SparseRegressionOps.SparseGroupElasticNet(x, y, groups,
+            _alpha * _l1Ratio, 0, _alpha * (1 - _l1Ratio), _maxIterations, _tolerance);
+        _coefficients = coefficients.ToVector();
 
         // Select features by absolute coefficient magnitude
-        int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _coefficients
-            .Select((c, idx) => (Coef: Math.Abs(c), Index: idx))
-            .OrderByDescending(x => x.Coef)
-            .Take(numToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(
+            Engine.TensorAbs(coefficients), Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }
@@ -242,15 +117,7 @@ public class SparseGroupLasso<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISu
         if (_selectedIndices is null)
             throw new InvalidOperationException("SparseGroupLasso has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />
