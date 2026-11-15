@@ -42,15 +42,8 @@ public sealed class RectifiedFlowScheduler<T> : NoiseSchedulerBase<T>
     /// <inheritdoc />
     public override Vector<T> Step(Vector<T> modelOutput, int timestep, Vector<T> sample, T eta, Vector<T>? noise = null)
     {
-        // Rectified flow: x_{t-dt} = x_t - dt * v(x_t, t)
-        double t = (double)timestep / TrainTimesteps;
-        double dt = 1.0 / Timesteps.Length;
-        var dtT = NumOps.FromDouble(dt);
-
-        var result = new Vector<T>(sample.Length);
-        for (int i = 0; i < sample.Length; i++)
-            result[i] = NumOps.Subtract(sample[i], NumOps.Multiply(dtT, modelOutput[i]));
-
-        return result;
+        // Rectified flow: x_{t-dt} = x_t - dt * v(x_t, t), with dt the gap to the next scheduled time
+        double dt = SchedulerTensorOps.FlowStepSize(Timesteps, timestep, TrainTimesteps, 1.0 / Math.Max(1, Timesteps.Length));
+        return Engine.Subtract(sample, Engine.Multiply(modelOutput, NumOps.FromDouble(dt)));
     }
 }

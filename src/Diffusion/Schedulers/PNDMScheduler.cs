@@ -351,12 +351,7 @@ public sealed class PNDMScheduler<T> : NoiseSchedulerBase<T>
     /// </summary>
     private static Vector<T> CopyVector(Vector<T> source)
     {
-        var copy = new Vector<T>(source.Length);
-        for (int i = 0; i < source.Length; i++)
-        {
-            copy[i] = source[i];
-        }
-        return copy;
+        return source.Clone();
     }
 
     /// <inheritdoc />

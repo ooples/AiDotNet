@@ -177,6 +177,12 @@ public abstract partial class TextConditioningBase<T> : NeuralNetworkBase<T>, IC
     public virtual Tensor<T> GetPooledEmbedding(Tensor<T> sequenceEmbeddings) =>
         MeanPool(sequenceEmbeddings);
 
+    /// <summary>
+    /// Width of <see cref="GetPooledEmbedding"/>'s output. Mean pooling keeps <see cref="EmbeddingDimension"/>;
+    /// a subclass whose pooling projects to another width (CLIP's text projection) overrides this.
+    /// </summary>
+    internal virtual int PooledEmbeddingDimension => EmbeddingDimension;
+
     /// <inheritdoc />
     public virtual Tensor<T> GetUnconditionalEmbedding(int batchSize)
     {

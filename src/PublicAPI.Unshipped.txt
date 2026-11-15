@@ -26106,3 +26106,6 @@ AiDotNet.FederatedLearning.Personalization.KNNPersonalization<T>.DistanceMetric.
 AiDotNet.FederatedLearning.Personalization.FedAGHNPersonalization<T>.ComputeGradientSimilarity(T[]! gradA, T[]! gradB) -> T
 *REMOVED*AiDotNet.FederatedLearning.Personalization.FedAGHNPersonalization<T>.ComputeAdaptiveWeights(T[]! targetGradient, System.Collections.Generic.Dictionary<int, T[]!>! clientGradients, System.Collections.Generic.Dictionary<int, double>? previousWeights = null) -> System.Collections.Generic.Dictionary<int, double>!
 AiDotNet.FederatedLearning.Personalization.FedAGHNPersonalization<T>.ComputeAdaptiveWeights(T[]! targetGradient, System.Collections.Generic.Dictionary<int, T[]!>! clientGradients, System.Collections.Generic.Dictionary<int, T>? previousWeights = null) -> System.Collections.Generic.Dictionary<int, T>!
+override AiDotNet.Diffusion.Schedulers.FlowDPMSolverScheduler<T>.SetTimesteps(int inferenceSteps) -> void
+override AiDotNet.Diffusion.Schedulers.PeRFlowScheduler<T>.SetTimesteps(int inferenceSteps) -> void
+override AiDotNet.Diffusion.Schedulers.SASolverScheduler<T>.SetTimesteps(int inferenceSteps) -> void
