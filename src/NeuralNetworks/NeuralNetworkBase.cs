@@ -12855,6 +12855,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer,
         Func<IReadOnlyList<Tensor<T>>>? parameterProvider,
         bool sessionPerOptimizer,
+        Func<Tensor<T>>? closureObjective = null,
         bool verifyReplayAgreement = false,
         System.Reflection.MethodInfo? warmupKey = null,
         Func<T>? eagerFallback = null)
@@ -12936,9 +12937,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             VerifyReplayAgreement = verifyReplayAgreement,
             EagerReplay = eagerFallback,
             ObjectiveKey = verifyReplayAgreement ? warmupKey ?? forward.Method : null,
-            // A whole training objective (TrainWithCustomObjective / TrainWithCustomLoss) builds its per-step data
-            // inside itself, so every replay is checked against its signature, not only the first.
-            ClosureObjective = warmupKey is not null,
+            // Each closure step is probed and keyed by the values and structure its plan would freeze.
+            ClosureObjective = closureObjective,
         };
 
         // Both the plan and the eager step write the weights in place; an OOM from here on must not be retried.
@@ -14951,9 +14951,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         SetTrainingMode(true);
         try
         {
-            // The loss closure usually captures per-call host data (advantages, actions, a generator's samples), which
-            // a compiled plan would freeze at its first trace. The fused attempt above checks its first replay against
-            // the eager forward and stays here when they disagree; this is that eager step.
+            // A declined compiled attempt runs the original eager step without trying the session again.
             return StepOnSharedTape(
                 () => computeLoss(ForwardForTraining(input)),
                 optimizer ?? GetOrCreateBaseOptimizer(),
@@ -15121,9 +15119,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     {
         // Already inside a step of this network (a custom loss run from within its own training step): the eager path,
         // which takes no step lock.
-        if (Volatile.Read(ref _trainInFlight) != 0) return false;
+        if (Volatile.Read(ref _trainInFlight) != 0 || TapeReachabilityProbe<T>.Current is not null) return false;
         if (GradientValueClip > 0.0 || GradientClippingGroups(CollectModelTrainableTensors()) is not null) return false;
-        if (!SupportsFusedCompiledTraining || !AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
+        if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
             return false;
         // Settled here, before anything runs, so a step that will decline costs the objective nothing extra (no
         // warm-up forward) and keeps its eager contracts exactly.
@@ -15134,11 +15132,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     }
 
     /// <summary>
-    /// A custom objective on the fused session, with the replay check on. These objectives were written for the eager
-    /// tape: many read per-step host data (labels converted on the host, a SpecAugment or noise draw, a closure's
-    /// captured batch) that a compiled plan would freeze at its trace. The session therefore checks the plan's first
-    /// replay on new data against the eager forward; on disagreement it undoes that update and keeps this objective on
-    /// the eager tape for good. The input and target ride in one packed tensor the plan rebinds every step.
+    /// A custom objective on the fused session. The closure owns this step's input and target; its guard probes
+    /// every step and binds the matching plan's leaves before replay, including host-generated per-step data.
     /// </summary>
     private T TrainCustomObjectiveFused(
         Tensor<T> input,
@@ -15149,38 +15144,23 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         Func<T> eagerStep)
     {
         EnsureLayerRandomSeedsWired();
-        int[] inputShape = input._shape, expectedShape = expected._shape;
-        int inputLength = input.Length;
-        bool sameTensor = ReferenceEquals(input, expected);
-        var packed = sameTensor ? input : Training.StepInputPacking<T>.Pack(new[] { input, expected });
-        // The step's own arena, as the eager path has (see TrainWithCustomObjective).
+        Tensor<T> Objective()
+        {
+            var result = computeObjective(input, expected);
+            if (result is null || result.Length != 1)
+                throw new InvalidOperationException("A custom training objective must return exactly one scalar loss.");
+            return result;
+        }
         using var stepArena = AiDotNet.Tensors.Helpers.TensorArena.Create();
         SetTrainingMode(true);
         T lossValue;
         try
         {
             lossValue = TrainCustomTapeStep(
-                packed,
-                packed,
-                step =>
-                {
-                    var stepInput = sameTensor ? step : Training.StepInputPacking<T>.Slice(step, 0, inputShape);
-                    var stepExpected = sameTensor ? step : Training.StepInputPacking<T>.Slice(step, inputLength, expectedShape);
-                    var result = computeObjective(stepInput, stepExpected);
-                    if (result is null || result.Length != 1)
-                        throw new InvalidOperationException("A custom training objective must return exactly one scalar loss.");
-                    return result;
-                },
-                static (loss, _) => loss,
-                optimizer,
-                parameterProvider: null,
-                sessionPerOptimizer: true,
-                // Every replay is guarded by the objective's signature (FusedTrainingStepRequest.ClosureObjective), so
-                // the one-time check against an eager forward is not run: it would run the objective, and its host-side
-                // draws, a second time on that step.
-                verifyReplayAgreement: false,
-                warmupKey: objectiveKey,
-                eagerFallback: eagerStep);
+                input, expected, _ => Objective(), static (loss, _) => loss,
+                optimizer, parameterProvider: null, sessionPerOptimizer: true,
+                verifyReplayAgreement: false, warmupKey: objectiveKey,
+                eagerFallback: eagerStep, closureObjective: Objective);
         }
         finally
         {
