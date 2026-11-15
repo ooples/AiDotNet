@@ -127,11 +127,9 @@ public class DiffusiveNoiseUnlearner<T> : FederatedLearningComponentBase<T>, IFe
     {
         int modelSize = model.Shape[0];
 
-        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
-
-        // Standard normals seeded from the secure RNG, so the noise stays unpredictable.
-        var standardNormals = new Tensor<T>(new[] { modelSize });
-        Engine.TensorNormalInPlace(standardNormals, 0.0, 1.0, rng.Next());
+        // Standard normals straight from the cryptographic generator (8 bytes each), so the noise stays
+        // unpredictable: it is not expanded from one 31-bit seed.
+        var standardNormals = UnlearningEngineOps.SecureStandardNormals<T>(modelSize);
 
         // Scale noise by influence score: high-influence params get more noise.
         var noise = Engine.TensorMultiply(
