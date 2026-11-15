@@ -898,8 +898,8 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
             {
                 x = ApplyResBlock(block.ResBlock, x, timeEmbed);
                 if (block.AttentionBlock != null) x = block.AttentionBlock.Forward(x);
-                if (block.CrossAttentionBlock != null && conditioning != null)
-                    x = ApplyCrossAttention(block.CrossAttentionBlock, x, conditioning);
+                if (block.CrossAttentionBlock != null && (conditioning != null || _multiView is not null))
+                    x = ApplyCrossAttentionSlot(block.CrossAttentionBlock, x, conditioning);
                 skips.Add(x);
             }
         }
@@ -909,8 +909,8 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
             var block = _middleBlocks[i];
             x = ApplyResBlock(block.ResBlock, x, timeEmbed);
             if (block.AttentionBlock != null) x = block.AttentionBlock.Forward(x);
-            if (block.CrossAttentionBlock != null && conditioning != null)
-                x = ApplyCrossAttention(block.CrossAttentionBlock, x, conditioning);
+            if (block.CrossAttentionBlock != null && (conditioning != null || _multiView is not null))
+                x = ApplyCrossAttentionSlot(block.CrossAttentionBlock, x, conditioning);
         }
 
         var skipIdx = skips.Count - 1;
@@ -930,8 +930,8 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
                 }
                 x = ApplyResBlock(block.ResBlock, x, timeEmbed);
                 if (block.AttentionBlock != null) x = block.AttentionBlock.Forward(x);
-                if (block.CrossAttentionBlock != null && conditioning != null)
-                    x = ApplyCrossAttention(block.CrossAttentionBlock, x, conditioning);
+                if (block.CrossAttentionBlock != null && (conditioning != null || _multiView is not null))
+                    x = ApplyCrossAttentionSlot(block.CrossAttentionBlock, x, conditioning);
             }
         }
 
@@ -1007,9 +1007,9 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
                     x = block.AttentionBlock.Forward(x);
                     Tick($"enc[{i}].attn");
                 }
-                if (block.CrossAttentionBlock != null && conditioning != null)
+                if (block.CrossAttentionBlock != null && (conditioning != null || _multiView is not null))
                 {
-                    x = ApplyCrossAttention(block.CrossAttentionBlock, x, conditioning);
+                    x = ApplyCrossAttentionSlot(block.CrossAttentionBlock, x, conditioning);
                     Tick($"enc[{i}].xattn");
                 }
                 skips.Add(x);
@@ -1027,9 +1027,9 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
                 x = block.AttentionBlock.Forward(x);
                 Tick($"mid[{i}].attn");
             }
-            if (block.CrossAttentionBlock != null && conditioning != null)
+            if (block.CrossAttentionBlock != null && (conditioning != null || _multiView is not null))
             {
-                x = ApplyCrossAttention(block.CrossAttentionBlock, x, conditioning);
+                x = ApplyCrossAttentionSlot(block.CrossAttentionBlock, x, conditioning);
                 Tick($"mid[{i}].xattn");
             }
         }
@@ -1061,9 +1061,9 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
                     x = block.AttentionBlock.Forward(x);
                     Tick($"dec[{i}].attn");
                 }
-                if (block.CrossAttentionBlock != null && conditioning != null)
+                if (block.CrossAttentionBlock != null && (conditioning != null || _multiView is not null))
                 {
-                    x = ApplyCrossAttention(block.CrossAttentionBlock, x, conditioning);
+                    x = ApplyCrossAttentionSlot(block.CrossAttentionBlock, x, conditioning);
                     Tick($"dec[{i}].xattn");
                 }
             }

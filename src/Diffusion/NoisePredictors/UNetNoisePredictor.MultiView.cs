@@ -57,6 +57,20 @@ public partial class UNetNoisePredictor<T>
         }
     }
 
+    /// <summary>
+    /// The cross-attention slot's forward. With a context it is <see cref="ApplyCrossAttention"/>. Without one only a
+    /// multi-view transformer runs (its 3D self-attention and feed-forward, skipping attn2), since it also holds the
+    /// U-Net's self-attention; the callers reach the context-free case only with the multi-view option set.
+    /// </summary>
+    private Tensor<T> ApplyCrossAttentionSlot(ILayer<T>? crossAttn, Tensor<T> x, Tensor<T>? conditioning)
+    {
+        if (crossAttn is null) return x;
+        if (conditioning is not null) return ApplyCrossAttention(crossAttn, x, conditioning);
+        if (crossAttn is IAttentionBlockDecorator<T> decorator)
+            return decorator.PostProcess(ApplyCrossAttentionSlot(decorator.Inner, x, null));
+        return crossAttn is MultiViewTransformerLayer<T> transformer ? transformer.Forward(x, null) : x;
+    }
+
     private static MultiViewTransformerLayer<T>? Transformer(UNetBlock block)
         => block.CrossAttentionBlock as MultiViewTransformerLayer<T> ?? block.AttentionBlock as MultiViewTransformerLayer<T>;
 

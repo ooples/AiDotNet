@@ -23309,7 +23309,7 @@ AiDotNet.Diffusion.ThreeD.LGMGaussians<T>.Colors.get -> AiDotNet.Tensors.LinearA
 AiDotNet.Diffusion.ThreeD.LGMGaussians<T>.ToTensor() -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 const AiDotNet.Diffusion.ThreeD.LGMModel<T>.InputChannelsPerView = 9 -> int
 const AiDotNet.Diffusion.ThreeD.LGMModel<T>.GaussianChannels = 14 -> int
-AiDotNet.Diffusion.ThreeD.LGMModel<T>.LGMModel(AiDotNet.Diffusion.ThreeD.LGMConfig? config = null, AiDotNet.Diffusion.ThreeD.MVDreamModel<T>? multiViewModel = null, AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>? architecture = null, AiDotNet.Models.Options.DiffusionModelOptions<T>? options = null, AiDotNet.Interfaces.INoiseScheduler<T>? scheduler = null, int? seed = null) -> void
+AiDotNet.Diffusion.ThreeD.LGMModel<T>.LGMModel(AiDotNet.Diffusion.ThreeD.LGMConfig? config = null, AiDotNet.Diffusion.ThreeD.MVDreamModel<T>? multiViewModel = null, AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>? architecture = null, AiDotNet.Models.Options.DiffusionModelOptions<T>? options = null, AiDotNet.Interfaces.INoiseScheduler<T>? scheduler = null, int? seed = null, AiDotNet.Diffusion.ThreeD.MVDreamModel<T>? imageMultiViewModel = null) -> void
 AiDotNet.Diffusion.ThreeD.LGMModel<T>.Config.get -> AiDotNet.Diffusion.ThreeD.LGMConfig!
 AiDotNet.Diffusion.ThreeD.LGMModel<T>.MultiViewModel.get -> AiDotNet.Diffusion.ThreeD.MVDreamModel<T>!
 AiDotNet.Diffusion.ThreeD.LGMModel<T>.GaussianUNet.get -> AiDotNet.Diffusion.ThreeD.LGMAsymmetricUNet<T>!
@@ -23336,8 +23336,7 @@ AiDotNet.Enums.DiffusionResBlockInitialization
 AiDotNet.Enums.DiffusionResBlockInitialization.ZeroResidual = 0 -> AiDotNet.Enums.DiffusionResBlockInitialization
 AiDotNet.Enums.DiffusionResBlockInitialization.TorchDefault = 1 -> AiDotNet.Enums.DiffusionResBlockInitialization
 *REMOVED*virtual AiDotNet.Diffusion.ThreeD.MVDreamModel<T>.GenerateNovelViewsFromImage(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputImage, int numViews = 4, int numInferenceSteps = 50, double guidanceScale = 3, int? seed = null) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>![]!
-virtual AiDotNet.Diffusion.ThreeD.MVDreamModel<T>.GenerateNovelViewsFromImage(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputImage, int numViews = 4, int numInferenceSteps = 50, double guidanceScale = 3, int? seed = null, double? elevation = null) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>![]!
-AiDotNet.Diffusion.ThreeD.MultiViewUNet<T>.MultiViewAttention.get -> AiDotNet.Diffusion.ThreeD.MultiViewAttention<T>!
+virtual AiDotNet.Diffusion.ThreeD.MVDreamModel<T>.GenerateNovelViewsFromImage(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputImage, int numViews = 4, int numInferenceSteps = 50, double guidanceScale = 5, int? seed = null, double? elevation = null) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>![]!
 *REMOVED*AiDotNet.Diffusion.ThreeD.SyncDreamerModel<T>.SyncDreamerModel(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>? architecture = null, AiDotNet.Models.Options.DiffusionModelOptions<T>? options = null, AiDotNet.Interfaces.INoiseScheduler<T>? scheduler = null, AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<T>? unet = null, AiDotNet.Diffusion.VAE.StandardVAE<T>? vae = null, AiDotNet.Interfaces.IConditioningModule<T>? conditioner = null, int defaultPointCount = 4096, int? seed = null) -> void
 AiDotNet.Diffusion.ThreeD.SyncDreamerModel<T>.SyncDreamerModel(AiDotNet.Diffusion.ThreeD.SyncDreamerOptions? options = null, AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<T>? unet = null, AiDotNet.Diffusion.VAE.StandardVAE<T>? vae = null, AiDotNet.Interfaces.INoiseScheduler<T>? scheduler = null, AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>? architecture = null) -> void
 AiDotNet.Diffusion.ThreeD.SyncDreamerModel<T>.Configuration.get -> AiDotNet.Diffusion.ThreeD.SyncDreamerOptions!
@@ -23456,3 +23455,120 @@ AiDotNet.Diffusion.ThreeD.SyncDreamerOptions.ReconstructionSeed.set -> void
 override AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<T>.GetTimestepEmbedding(int timestep) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<T>.GetTimestepEmbedding(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! timesteps) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 ||||||| 53093add84
+*REMOVED*AiDotNet.Diffusion.NoisePredictors.DiffusionAttentionLayer<T>.DiffusionAttentionLayer(int queryDimension, int contextDimension, int headCount, bool zeroOutputProjection = false) -> void
+*REMOVED*AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<T>.UNetNoisePredictor(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>? architecture = null, int inputChannels = 4, int? outputChannels = null, int baseChannels = 320, int[]? channelMultipliers = null, int numResBlocks = 2, int[]? attentionResolutions = null, int contextDim = 768, int numHeads = 8, int inputHeight = 64, System.Collections.Generic.List<AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<T>.UNetBlock!>? encoderBlocks = null, System.Collections.Generic.List<AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<T>.UNetBlock!>? middleBlocks = null, System.Collections.Generic.List<AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<T>.UNetBlock!>? decoderBlocks = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null, int? seed = null) -> void
+*REMOVED*AiDotNet.Diffusion.ThreeD.MultiViewUNet<T>.MultiViewUNet(int inputChannels, int outputChannels, int baseChannels, int numViews, int contextDim, int? seed = null) -> void
+*REMOVED*AiDotNet.Diffusion.ThreeD.MVDreamModel<T>.MVDreamModel(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>? architecture = null, AiDotNet.Models.Options.DiffusionModelOptions<T>? options = null, AiDotNet.Interfaces.INoiseScheduler<T>? scheduler = null, AiDotNet.Diffusion.ThreeD.MultiViewUNet<T>? multiViewUNet = null, AiDotNet.Diffusion.VAE.StandardVAE<T>? imageVAE = null, AiDotNet.Interfaces.IConditioningModule<T>? textConditioner = null, AiDotNet.Interfaces.IConditioningModule<T>? imageConditioner = null, AiDotNet.Diffusion.ThreeD.MVDreamConfig? config = null, int? seed = null) -> void
+*REMOVED*virtual AiDotNet.Diffusion.ThreeD.MVDreamModel<T>.GenerateMultiView(string! prompt, string? negativePrompt = null, int numViews = 4, int numInferenceSteps = 50, double guidanceScale = 7.5, double elevation = 30, int? seed = null) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>![]!
+*REMOVED*AiDotNet.Diffusion.ThreeD.MultiViewAttention<T>
+*REMOVED*AiDotNet.Diffusion.ThreeD.MultiViewAttention<T>.Apply(AiDotNet.Tensors.LinearAlgebra.Tensor<T>![]! views) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>![]!
+*REMOVED*AiDotNet.Diffusion.ThreeD.MultiViewAttention<T>.GetParameters() -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+*REMOVED*AiDotNet.Diffusion.ThreeD.MultiViewAttention<T>.MultiViewAttention(int channels, int numViews, int? seed = null) -> void
+*REMOVED*AiDotNet.Diffusion.ThreeD.MultiViewAttention<T>.ParameterCount.get -> long
+*REMOVED*AiDotNet.Diffusion.ThreeD.MultiViewAttention<T>.SetParameters(AiDotNet.Tensors.LinearAlgebra.Vector<T>! parameters) -> void
+AiDotNet.Diffusion.NoisePredictors.DiffusionAttentionLayer<T>.DiffusionAttentionLayer(int queryDimension, int contextDimension, int headCount, bool zeroOutputProjection = false, AiDotNet.Enums.AttentionBiasInitialization outputBiasInitialization = AiDotNet.Enums.AttentionBiasInitialization.Zero) -> void
+AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<T>.UNetNoisePredictor(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>? architecture = null, int inputChannels = 4, int? outputChannels = null, int baseChannels = 320, int[]? channelMultipliers = null, int numResBlocks = 2, int[]? attentionResolutions = null, int contextDim = 768, int numHeads = 8, int inputHeight = 64, System.Collections.Generic.List<AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<T>.UNetBlock!>? encoderBlocks = null, System.Collections.Generic.List<AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<T>.UNetBlock!>? middleBlocks = null, System.Collections.Generic.List<AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<T>.UNetBlock!>? decoderBlocks = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null, int? seed = null, AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions? multiView = null) -> void
+AiDotNet.Diffusion.ThreeD.MultiViewUNet<T>.MultiViewUNet(int inputChannels, int outputChannels, int baseChannels, int numViews, int contextDim, int? seed = null, AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions? options = null) -> void
+AiDotNet.Diffusion.ThreeD.MVDreamModel<T>.MVDreamModel(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>? architecture = null, AiDotNet.Models.Options.DiffusionModelOptions<T>? options = null, AiDotNet.Interfaces.INoiseScheduler<T>? scheduler = null, AiDotNet.Diffusion.ThreeD.MultiViewUNet<T>? multiViewUNet = null, AiDotNet.Diffusion.VAE.StandardVAE<T>? imageVAE = null, AiDotNet.Interfaces.IConditioningModule<T>? textConditioner = null, AiDotNet.Interfaces.IConditioningModule<T>? imageConditioner = null, AiDotNet.Diffusion.ThreeD.MVDreamConfig? config = null, int? seed = null, AiDotNet.NeuralNetworks.ClipVisionEncoder<T>? imageEncoder = null) -> void
+virtual AiDotNet.Diffusion.ThreeD.MVDreamModel<T>.GenerateMultiView(string! prompt, string? negativePrompt = null, int numViews = 4, int numInferenceSteps = 50, double guidanceScale = 10, double? elevation = null, int? seed = null, double? azimuthStart = null) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>![]!
+AiDotNet.Enums.AttentionBiasInitialization
+AiDotNet.Enums.AttentionBiasInitialization.TorchDefault = 1 -> AiDotNet.Enums.AttentionBiasInitialization
+AiDotNet.Enums.AttentionBiasInitialization.Zero = 0 -> AiDotNet.Enums.AttentionBiasInitialization
+AiDotNet.Diffusion.NoisePredictors.DiffusionAttentionLayer<T>.OutputBiasInitialization.get -> AiDotNet.Enums.AttentionBiasInitialization
+AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions
+AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions.MultiViewUNetOptions() -> void
+static AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions.ImageDream() -> AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions!
+static AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions.MVDream() -> AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions!
+AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions.FramesPerObject.get -> int
+AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions.FramesPerObject.set -> void
+AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions.HeadChannels.get -> int
+AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions.HeadChannels.set -> void
+AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions.TransformerDepth.get -> int
+AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions.TransformerDepth.set -> void
+AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions.ImagePromptTokens.get -> int
+AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions.ImagePromptTokens.set -> void
+AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions.ImageFeatureDim.get -> int
+AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions.ImageFeatureDim.set -> void
+AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions.ResamplerDepth.get -> int
+AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions.ResamplerDepth.set -> void
+AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions.ResamplerHeads.get -> int
+AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions.ResamplerHeads.set -> void
+AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions.ResamplerHeadDim.get -> int
+AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions.ResamplerHeadDim.set -> void
+AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions.ResamplerFeedForwardMultiplier.get -> int
+AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions.ResamplerFeedForwardMultiplier.set -> void
+AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions.ImagePromptWeight.get -> double
+AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions.ImagePromptWeight.set -> void
+AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<T>.MultiViewOptions.get -> AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions?
+AiDotNet.Diffusion.ThreeD.MultiViewUNet<T>.CameraEmbedding.get -> AiDotNet.Diffusion.ThreeD.CameraEmbedding<T>!
+AiDotNet.Diffusion.ThreeD.MultiViewUNet<T>.Options.get -> AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions!
+AiDotNet.Diffusion.ThreeD.MultiViewUNet<T>.NumViews.get -> int
+AiDotNet.Diffusion.ThreeD.MultiViewUNet<T>.HasImagePrompt.get -> bool
+AiDotNet.Diffusion.ThreeD.MultiViewUNet<T>.LoadTorchWeights(System.Func<string!, int[]!, double[]!>! read, string! prefix = "model.diffusion_model.") -> System.Collections.Generic.IReadOnlyCollection<string!>!
+AiDotNet.Diffusion.ThreeD.MVDreamModel<T>.ImageEncoder.get -> AiDotNet.NeuralNetworks.ClipVisionEncoder<T>?
+AiDotNet.Diffusion.ThreeD.MVDreamModel<T>.MultiViewUNet.get -> AiDotNet.Diffusion.ThreeD.MultiViewUNet<T>!
+AiDotNet.Diffusion.ThreeD.MVDreamModel<T>.ComputeScoreDistillationGradients(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! renderedViews, string! prompt, int timestep, double guidanceScale, double elevation, double azimuthStart) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Diffusion.ThreeD.MVDreamModel<T>.SampleScoreDistillationCamera(int? seed = null) -> (double Elevation, double AzimuthStart)
+AiDotNet.Diffusion.ThreeD.MVDreamConfig.DefaultAzimuthStart.get -> double
+AiDotNet.Diffusion.ThreeD.MVDreamConfig.DefaultAzimuthStart.set -> void
+AiDotNet.Diffusion.ThreeD.MVDreamConfig.AzimuthSpan.get -> double
+AiDotNet.Diffusion.ThreeD.MVDreamConfig.AzimuthSpan.set -> void
+AiDotNet.Diffusion.ThreeD.MVDreamConfig.ImageElevation.get -> double
+AiDotNet.Diffusion.ThreeD.MVDreamConfig.ImageElevation.set -> void
+AiDotNet.Diffusion.ThreeD.MVDreamConfig.ScoreDistillationMinElevation.get -> double
+AiDotNet.Diffusion.ThreeD.MVDreamConfig.ScoreDistillationMinElevation.set -> void
+AiDotNet.Diffusion.ThreeD.MVDreamConfig.ScoreDistillationMaxElevation.get -> double
+AiDotNet.Diffusion.ThreeD.MVDreamConfig.ScoreDistillationMaxElevation.set -> void
+AiDotNet.Diffusion.ThreeD.LGMModel<T>.ImageMultiViewModel.get -> AiDotNet.Diffusion.ThreeD.MVDreamModel<T>!
+AiDotNet.NeuralNetworks.ClipVisionActivation
+AiDotNet.NeuralNetworks.ClipVisionActivation.Gelu = 1 -> AiDotNet.NeuralNetworks.ClipVisionActivation
+AiDotNet.NeuralNetworks.ClipVisionActivation.QuickGelu = 0 -> AiDotNet.NeuralNetworks.ClipVisionActivation
+AiDotNet.NeuralNetworks.ClipWeightLayout
+AiDotNet.NeuralNetworks.ClipWeightLayout.HuggingFace = 0 -> AiDotNet.NeuralNetworks.ClipWeightLayout
+AiDotNet.NeuralNetworks.ClipWeightLayout.OpenClip = 1 -> AiDotNet.NeuralNetworks.ClipWeightLayout
+AiDotNet.NeuralNetworks.ClipVisionPreset
+AiDotNet.NeuralNetworks.ClipVisionPreset.ViTH14OpenClip = 0 -> AiDotNet.NeuralNetworks.ClipVisionPreset
+AiDotNet.NeuralNetworks.ClipVisionPreset.ViTL14OpenAI = 1 -> AiDotNet.NeuralNetworks.ClipVisionPreset
+AiDotNet.NeuralNetworks.ClipVisionEncoderOptions
+AiDotNet.NeuralNetworks.ClipVisionEncoderOptions.ClipVisionEncoderOptions() -> void
+static AiDotNet.NeuralNetworks.ClipVisionEncoderOptions.ForPreset(AiDotNet.NeuralNetworks.ClipVisionPreset preset) -> AiDotNet.NeuralNetworks.ClipVisionEncoderOptions!
+AiDotNet.NeuralNetworks.ClipVisionEncoderOptions.ImageSize.get -> int
+AiDotNet.NeuralNetworks.ClipVisionEncoderOptions.ImageSize.set -> void
+AiDotNet.NeuralNetworks.ClipVisionEncoderOptions.PatchSize.get -> int
+AiDotNet.NeuralNetworks.ClipVisionEncoderOptions.PatchSize.set -> void
+AiDotNet.NeuralNetworks.ClipVisionEncoderOptions.Width.get -> int
+AiDotNet.NeuralNetworks.ClipVisionEncoderOptions.Width.set -> void
+AiDotNet.NeuralNetworks.ClipVisionEncoderOptions.Layers.get -> int
+AiDotNet.NeuralNetworks.ClipVisionEncoderOptions.Layers.set -> void
+AiDotNet.NeuralNetworks.ClipVisionEncoderOptions.Heads.get -> int
+AiDotNet.NeuralNetworks.ClipVisionEncoderOptions.Heads.set -> void
+AiDotNet.NeuralNetworks.ClipVisionEncoderOptions.MlpWidth.get -> int
+AiDotNet.NeuralNetworks.ClipVisionEncoderOptions.MlpWidth.set -> void
+AiDotNet.NeuralNetworks.ClipVisionEncoderOptions.ProjectionDim.get -> int
+AiDotNet.NeuralNetworks.ClipVisionEncoderOptions.ProjectionDim.set -> void
+AiDotNet.NeuralNetworks.ClipVisionEncoderOptions.Activation.get -> AiDotNet.NeuralNetworks.ClipVisionActivation
+AiDotNet.NeuralNetworks.ClipVisionEncoderOptions.Activation.set -> void
+AiDotNet.NeuralNetworks.ClipVisionEncoderOptions.WeightLayout.get -> AiDotNet.NeuralNetworks.ClipWeightLayout
+AiDotNet.NeuralNetworks.ClipVisionEncoderOptions.WeightLayout.set -> void
+AiDotNet.NeuralNetworks.ClipVisionEncoderOptions.LayerNormEpsilon.get -> double
+AiDotNet.NeuralNetworks.ClipVisionEncoderOptions.LayerNormEpsilon.set -> void
+AiDotNet.NeuralNetworks.ClipVisionEncoderOptions.Mean.get -> double[]!
+AiDotNet.NeuralNetworks.ClipVisionEncoderOptions.Mean.set -> void
+AiDotNet.NeuralNetworks.ClipVisionEncoderOptions.Std.get -> double[]!
+AiDotNet.NeuralNetworks.ClipVisionEncoderOptions.Std.set -> void
+AiDotNet.NeuralNetworks.ClipVisionEncoder<T>
+AiDotNet.NeuralNetworks.ClipVisionEncoder<T>.ClipVisionEncoder(AiDotNet.NeuralNetworks.ClipVisionEncoderOptions? options = null, int? seed = null) -> void
+AiDotNet.NeuralNetworks.ClipVisionEncoder<T>.Options.get -> AiDotNet.NeuralNetworks.ClipVisionEncoderOptions!
+AiDotNet.NeuralNetworks.ClipVisionEncoder<T>.EmbeddingDimension.get -> int
+AiDotNet.NeuralNetworks.ClipVisionEncoder<T>.HiddenDimension.get -> int
+AiDotNet.NeuralNetworks.ClipVisionEncoder<T>.TokenCount.get -> int
+AiDotNet.NeuralNetworks.ClipVisionEncoder<T>.ImageSize.get -> int
+AiDotNet.NeuralNetworks.ClipVisionEncoder<T>.ImageChannels.get -> int
+AiDotNet.NeuralNetworks.ClipVisionEncoder<T>.Preprocess(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.NeuralNetworks.ClipVisionEncoder<T>.EncodeHiddenStatesPreprocessed(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! pixels) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.NeuralNetworks.ClipVisionEncoder<T>.EncodePenultimateHiddenStates(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.NeuralNetworks.ClipVisionEncoder<T>.EncodeImage(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.NeuralNetworks.ClipVisionEncoder<T>.LoadTorchWeights(System.Func<string!, int[]!, double[]!>! read, string? prefix = null) -> void
+AiDotNet.NeuralNetworks.ClipVisionEncoder<T>.ParameterCount.get -> long
+AiDotNet.NeuralNetworks.ClipVisionEncoder<T>.GetParameters() -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.NeuralNetworks.ClipVisionEncoder<T>.SetParameters(AiDotNet.Tensors.LinearAlgebra.Vector<T>! parameters) -> void
