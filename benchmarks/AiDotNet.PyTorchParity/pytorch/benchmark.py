@@ -622,6 +622,476 @@ class FasterRcnnR50Fpn(nn.Module):
         return x, torch.cat([classes, corners], dim=2).to(device)
 
 
+# ---------------------------------------------------------------------------------------------------------------------
+# Time-series forecasting rows (the C# side is TimeSeriesRows.cs). The ETT protocol the transformer papers report: a
+# 96-step lookback, a 24-step horizon, 7 channels (N-BEATS is univariate). Each twin is the official architecture at the
+# paper's default sizes, written out here so it needs no repository checkout, and built layer for layer as AiDotNet's
+# shipped forecaster builds it (equal parameter counts). Neither side feeds time-feature ("timeF") marks: AiDotNet's
+# tensor-interface Informer/Autoformer take the history alone, so both run the official networks without the temporal
+# embedding. Optimizer: each paper's Adam (AdamW, no weight decay), with the harness's global-norm clip of 1.
+# ---------------------------------------------------------------------------------------------------------------------
+
+TS_LOOKBACK, TS_HORIZON, TS_CHANNELS, TS_LABEL = 96, 24, 7, 48
+
+
+def forecast_batch(batch_size: int, channels: int, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+    """A noisy daily cycle 1 + 0.5 sin(2 pi (t + phase) / 24) + 0.1 N(0, 1), a random phase per series: history
+    [B, 96, C] and its continuation [B, 24, C] (C = 1 is squeezed). The C# rows draw the same distribution."""
+    steps = TS_LOOKBACK + TS_HORIZON
+    phase = torch.rand(batch_size, 1, channels) * 24.0
+    t = torch.arange(steps, dtype=torch.float32).reshape(1, steps, 1)
+    series = 1.0 + 0.5 * torch.sin(2 * math.pi * (t + phase) / 24.0) + 0.1 * torch.randn(batch_size, steps, channels)
+    x, y = series[:, :TS_LOOKBACK], series[:, TS_LOOKBACK:]
+    if channels == 1:
+        x, y = x.squeeze(-1), y.squeeze(-1)
+    return x.contiguous().to(device), y.contiguous().to(device)
+
+
+class CircularTokenConv(nn.Module):
+    """TokenEmbedding: Conv1d(c_in, d_model, 3, padding 1, circular) over time, Kaiming-normal weights."""
+
+    def __init__(self, channels: int, d_model: int, bias: bool) -> None:
+        super().__init__()
+        self.conv = nn.Conv1d(channels, d_model, 3, padding=1, padding_mode="circular", bias=bias)
+        nn.init.kaiming_normal_(self.conv.weight, mode="fan_in", nonlinearity="leaky_relu")
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.conv(x.permute(0, 2, 1)).transpose(1, 2)
+
+
+def sinusoid_positions(length: int, d_model: int) -> torch.Tensor:
+    position = torch.arange(length, dtype=torch.float32).unsqueeze(1)
+    div = torch.exp(torch.arange(0, d_model, 2, dtype=torch.float32) * -(math.log(10000.0) / d_model))
+    table = torch.zeros(length, d_model)
+    table[:, 0::2] = torch.sin(position * div)
+    table[:, 1::2] = torch.cos(position * div)
+    return table.unsqueeze(0)
+
+
+class InformerProbAttention(nn.Module):
+    """Informer2020 models/attn.py ProbAttention: sample U = c ln L_K keys per query, let the top u = c ln L_Q queries by
+    the sparsity measurement attend, give the rest mean(V) (masked: cumsum(V)). No attention dropout (as the reference)."""
+
+    def __init__(self, mask_flag: bool, factor: int) -> None:
+        super().__init__()
+        self.mask_flag, self.factor = mask_flag, factor
+
+    def forward(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
+        b, lq, h, e = q.shape
+        lk = k.shape[1]
+        q, k, v = q.transpose(2, 1), k.transpose(2, 1), v.transpose(2, 1)                          # [B, H, L, E]
+        sample_k = min(self.factor * int(math.ceil(math.log(lk))), lk)
+        n_top = min(self.factor * int(math.ceil(math.log(lq))), lq)
+        index_sample = torch.randint(lk, (lq, sample_k), device=q.device)
+        rows = torch.arange(lq, device=q.device).unsqueeze(1)
+        k_sample = k.unsqueeze(-3).expand(b, h, lq, lk, e)[:, :, rows, index_sample, :]
+        qk_sample = torch.matmul(q.unsqueeze(-2), k_sample.transpose(-2, -1)).squeeze(-2)
+        sparsity = qk_sample.max(-1)[0] - torch.div(qk_sample.sum(-1), lk)
+        top = sparsity.topk(n_top, sorted=False)[1]                                                # [B, H, u]
+        bi = torch.arange(b, device=q.device)[:, None, None]
+        hi = torch.arange(h, device=q.device)[None, :, None]
+        scores = torch.matmul(q[bi, hi, top, :], k.transpose(-2, -1)) / math.sqrt(e)               # [B, H, u, L_K]
+        if self.mask_flag:
+            context = v.cumsum(dim=-2)
+            causal = torch.ones(lq, lk, dtype=torch.bool, device=q.device).triu(1)
+            scores = scores.masked_fill(causal[None, None].expand(b, h, lq, lk)[bi, hi, top, :], float("-inf"))
+        else:
+            context = v.mean(dim=-2, keepdim=True).expand(b, h, lq, e).clone()
+        context[bi, hi, top, :] = torch.matmul(torch.softmax(scores, dim=-1), v).type_as(context)
+        return context.transpose(2, 1).contiguous()                                                # [B, L, H, E]
+
+
+class InformerFullAttention(nn.Module):
+    """models/attn.py FullAttention (unmasked, as the cross-attention uses it) with attention dropout."""
+
+    def __init__(self, dropout: float) -> None:
+        super().__init__()
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
+        scores = torch.einsum("blhe,bshe->bhls", q, k)
+        weights = self.dropout(torch.softmax(scores / math.sqrt(q.shape[-1]), dim=-1))
+        return torch.einsum("bhls,bshd->blhd", weights, v).contiguous()
+
+
+class InformerAttentionLayer(nn.Module):
+    def __init__(self, inner: nn.Module, d_model: int, heads: int, mix: bool) -> None:
+        super().__init__()
+        self.inner, self.heads, self.mix = inner, heads, mix
+        self.query_projection = nn.Linear(d_model, d_model)
+        self.key_projection = nn.Linear(d_model, d_model)
+        self.value_projection = nn.Linear(d_model, d_model)
+        self.out_projection = nn.Linear(d_model, d_model)
+
+    def forward(self, queries: torch.Tensor, keys: torch.Tensor) -> torch.Tensor:
+        b, lq, _ = queries.shape
+        s, h = keys.shape[1], self.heads
+        out = self.inner(self.query_projection(queries).view(b, lq, h, -1), self.key_projection(keys).view(b, s, h, -1),
+                         self.value_projection(keys).view(b, s, h, -1))
+        if self.mix:
+            out = out.transpose(2, 1).contiguous()
+        return self.out_projection(out.view(b, lq, -1))
+
+
+class PointwiseFeedForward(nn.Module):
+    """The kernel-1 Conv1d feed-forward of the Encoder/DecoderLayer, as Linear maps (the same parameters), GELU."""
+
+    def __init__(self, d_model: int, d_ff: int, dropout: float, bias: bool = True) -> None:
+        super().__init__()
+        self.conv1 = nn.Linear(d_model, d_ff, bias=bias)
+        self.conv2 = nn.Linear(d_ff, d_model, bias=bias)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.dropout(self.conv2(self.dropout(F.gelu(self.conv1(x)))))
+
+
+class InformerEncoderLayer(nn.Module):
+    def __init__(self, d_model: int, heads: int, d_ff: int, factor: int, dropout: float) -> None:
+        super().__init__()
+        self.attention = InformerAttentionLayer(InformerProbAttention(False, factor), d_model, heads, mix=False)
+        self.ff = PointwiseFeedForward(d_model, d_ff, dropout)
+        self.norm1, self.norm2 = nn.LayerNorm(d_model), nn.LayerNorm(d_model)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.norm1(x + self.dropout(self.attention(x, x)))
+        return self.norm2(x + self.ff(x))
+
+
+class InformerDistil(nn.Module):
+    """models/encoder.py ConvLayer: circular Conv1d(k 3), BatchNorm1d, ELU, MaxPool1d(3, 2, 1)."""
+
+    def __init__(self, d_model: int) -> None:
+        super().__init__()
+        self.downConv = nn.Conv1d(d_model, d_model, 3, padding=1, padding_mode="circular")
+        self.norm = nn.BatchNorm1d(d_model)
+        self.pool = nn.MaxPool1d(kernel_size=3, stride=2, padding=1)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.pool(F.elu(self.norm(self.downConv(x.permute(0, 2, 1))))).transpose(1, 2)
+
+
+class InformerDecoderLayer(nn.Module):
+    def __init__(self, d_model: int, heads: int, d_ff: int, factor: int, dropout: float) -> None:
+        super().__init__()
+        self.self_attention = InformerAttentionLayer(InformerProbAttention(True, factor), d_model, heads, mix=True)
+        self.cross_attention = InformerAttentionLayer(InformerFullAttention(dropout), d_model, heads, mix=False)
+        self.ff = PointwiseFeedForward(d_model, d_ff, dropout)
+        self.norm1, self.norm2, self.norm3 = nn.LayerNorm(d_model), nn.LayerNorm(d_model), nn.LayerNorm(d_model)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x: torch.Tensor, memory: torch.Tensor) -> torch.Tensor:
+        x = self.norm1(x + self.dropout(self.self_attention(x, x)))
+        x = self.norm2(x + self.dropout(self.cross_attention(x, memory)))
+        return self.norm3(x + self.ff(x))
+
+
+class InformerForecaster(nn.Module):
+    """The "informer" row: zhouhaoyi/Informer2020 models/model.py Informer at the paper's ETTh1 setting (d 512, 8 heads,
+    e_layers 2 with distilling, d_layers 1, d_ff 2048, factor 5, ProbSparse attention, mix, GELU, dropout 0.05, 48
+    start tokens), without the time-feature embedding (see above). The decoder reads [last 48 steps; 24 zeros]."""
+
+    regression = True
+    optimizer_settings = {"lr": 1e-4, "weight_decay": 0.0}
+
+    def __init__(self, channels: int = TS_CHANNELS, d_model: int = 512, heads: int = 8, e_layers: int = 2,
+                 d_layers: int = 1, d_ff: int = 2048, factor: int = 5, dropout: float = 0.05) -> None:
+        super().__init__()
+        self.enc_embedding = CircularTokenConv(channels, d_model, bias=True)
+        self.dec_embedding = CircularTokenConv(channels, d_model, bias=True)
+        self.register_buffer("enc_positions", sinusoid_positions(TS_LOOKBACK, d_model), persistent=False)
+        self.register_buffer("dec_positions", sinusoid_positions(TS_LABEL + TS_HORIZON, d_model), persistent=False)
+        self.encoder_layers = nn.ModuleList(InformerEncoderLayer(d_model, heads, d_ff, factor, dropout) for _ in range(e_layers))
+        self.distil = nn.ModuleList(InformerDistil(d_model) for _ in range(e_layers - 1))
+        self.encoder_norm = nn.LayerNorm(d_model)
+        self.decoder_layers = nn.ModuleList(InformerDecoderLayer(d_model, heads, d_ff, factor, dropout) for _ in range(d_layers))
+        self.decoder_norm = nn.LayerNorm(d_model)
+        self.projection = nn.Linear(d_model, channels)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        dec_in = torch.cat([x[:, -TS_LABEL:, :], torch.zeros(x.shape[0], TS_HORIZON, x.shape[2], device=x.device)], dim=1)
+        h = self.dropout(self.enc_embedding(x) + self.enc_positions)
+        for i, layer in enumerate(self.encoder_layers):
+            h = layer(h)
+            if i < len(self.distil):
+                h = self.distil[i](h)
+        memory = self.encoder_norm(h)
+        y = self.dropout(self.dec_embedding(dec_in) + self.dec_positions)
+        for layer in self.decoder_layers:
+            y = layer(y, memory)
+        return self.projection(self.decoder_norm(y))[:, -TS_HORIZON:, :]
+
+    @staticmethod
+    def make_batch(batch_size: int, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+        return forecast_batch(batch_size, TS_CHANNELS, device)
+
+
+class AutoformerDecomposition(nn.Module):
+    """layers/Autoformer_EncDec.py series_decomp: the trend is AvgPool1d(k, 1) over the ends replicated (k - 1) / 2
+    times; returns (seasonal, trend)."""
+
+    def __init__(self, kernel: int) -> None:
+        super().__init__()
+        self.kernel = kernel
+        self.avg = nn.AvgPool1d(kernel_size=kernel, stride=1, padding=0)
+
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        half = (self.kernel - 1) // 2
+        padded = torch.cat([x[:, 0:1, :].repeat(1, half, 1), x, x[:, -1:, :].repeat(1, half, 1)], dim=1)
+        trend = self.avg(padded.permute(0, 2, 1)).permute(0, 2, 1)
+        return x - trend, trend
+
+
+class AutoformerSeasonalNorm(nn.Module):
+    """my_Layernorm: LayerNorm, then the mean over time subtracted."""
+
+    def __init__(self, d_model: int) -> None:
+        super().__init__()
+        self.layernorm = nn.LayerNorm(d_model)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x_hat = self.layernorm(x)
+        return x_hat - torch.mean(x_hat, dim=1, keepdim=True)
+
+
+class AutoformerCorrelationLayer(nn.Module):
+    """layers/AutoCorrelation.py AutoCorrelationLayer + AutoCorrelation: the FFT autocorrelation of queries and keys,
+    the top k = factor ln L lags, and the softmax-weighted sum of V rolled by each lag. Training shares the batch's
+    strongest lags (time_delay_agg_training), inference picks each series' own (time_delay_agg_inference). The
+    reference's training aggregation rolls V by a host integer per lag (a device sync and a torch.compile graph break);
+    here the same rolls are one gather, which computes the identical function and can only help PyTorch."""
+
+    def __init__(self, d_model: int, heads: int, factor: int) -> None:
+        super().__init__()
+        self.heads, self.factor = heads, factor
+        self.query_projection = nn.Linear(d_model, d_model)
+        self.key_projection = nn.Linear(d_model, d_model)
+        self.value_projection = nn.Linear(d_model, d_model)
+        self.out_projection = nn.Linear(d_model, d_model)
+
+    def forward(self, queries: torch.Tensor, keys: torch.Tensor) -> torch.Tensor:
+        b, length, _ = queries.shape
+        s, h = keys.shape[1], self.heads
+        q = self.query_projection(queries).view(b, length, h, -1)
+        k = self.key_projection(keys).view(b, s, h, -1)
+        v = self.value_projection(keys).view(b, s, h, -1)
+        if length > s:
+            zeros = torch.zeros_like(q[:, : (length - s), :])
+            v, k = torch.cat([v, zeros], dim=1), torch.cat([k, zeros], dim=1)
+        else:
+            v, k = v[:, :length], k[:, :length]
+        q_fft = torch.fft.rfft(q.permute(0, 2, 3, 1).contiguous(), dim=-1)
+        k_fft = torch.fft.rfft(k.permute(0, 2, 3, 1).contiguous(), dim=-1)
+        corr = torch.fft.irfft(q_fft * torch.conj(k_fft), n=length, dim=-1)                       # [B, H, E, L]
+        values = v.permute(0, 2, 3, 1).contiguous()                                                # [B, H, E, L]
+        top_k = int(self.factor * math.log(length))
+        mean_value = torch.mean(torch.mean(corr, dim=1), dim=1)                                    # [B, L]
+        steps = torch.arange(length, device=values.device)
+        if self.training:
+            index = torch.topk(torch.mean(mean_value, dim=0), top_k, dim=-1)[1]                    # [k] shared lags
+            weights = torch.softmax(mean_value[:, index], dim=-1)                                  # [B, k]
+            positions = (steps.unsqueeze(0) + index.unsqueeze(1)) % length                         # [k, L]
+            rolled = values[..., positions]                                                        # [B, H, E, k, L]
+            agg = (rolled * weights[:, None, None, :, None]).sum(dim=3)
+        else:
+            weights, delay = torch.topk(mean_value, top_k, dim=-1)                                 # [B, k] per series
+            weights = torch.softmax(weights, dim=-1)
+            doubled = values.repeat(1, 1, 1, 2)
+            agg = torch.zeros_like(values)
+            for i in range(top_k):
+                index = (steps.view(1, 1, 1, length) + delay[:, i].view(b, 1, 1, 1)).expand(b, h, values.shape[2], length)
+                agg = agg + torch.gather(doubled, dim=-1, index=index) * weights[:, i].view(b, 1, 1, 1)
+        return self.out_projection(agg.permute(0, 3, 1, 2).reshape(b, length, -1))
+
+
+class AutoformerEncoderLayer(nn.Module):
+    def __init__(self, d_model: int, heads: int, d_ff: int, factor: int, kernel: int, dropout: float) -> None:
+        super().__init__()
+        self.attention = AutoformerCorrelationLayer(d_model, heads, factor)
+        self.ff = PointwiseFeedForward(d_model, d_ff, dropout, bias=False)
+        self.decomp1, self.decomp2 = AutoformerDecomposition(kernel), AutoformerDecomposition(kernel)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x, _ = self.decomp1(x + self.dropout(self.attention(x, x)))
+        x, _ = self.decomp2(x + self.ff(x))
+        return x
+
+
+class AutoformerDecoderLayer(nn.Module):
+    def __init__(self, d_model: int, heads: int, d_ff: int, factor: int, kernel: int, dropout: float, c_out: int) -> None:
+        super().__init__()
+        self.self_attention = AutoformerCorrelationLayer(d_model, heads, factor)
+        self.cross_attention = AutoformerCorrelationLayer(d_model, heads, factor)
+        self.ff = PointwiseFeedForward(d_model, d_ff, dropout, bias=False)
+        self.decomp1 = AutoformerDecomposition(kernel)
+        self.decomp2 = AutoformerDecomposition(kernel)
+        self.decomp3 = AutoformerDecomposition(kernel)
+        self.projection = nn.Conv1d(d_model, c_out, 3, padding=1, padding_mode="circular", bias=False)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x: torch.Tensor, memory: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        x, trend1 = self.decomp1(x + self.dropout(self.self_attention(x, x)))
+        x, trend2 = self.decomp2(x + self.dropout(self.cross_attention(x, memory)))
+        x, trend3 = self.decomp3(x + self.ff(x))
+        residual = trend1 + trend2 + trend3
+        return x, self.projection(residual.permute(0, 2, 1)).transpose(1, 2)
+
+
+class AutoformerForecaster(nn.Module):
+    """The "autoformer" row: thuml/Autoformer models/Autoformer.py at the paper's setting (d 512, 8 heads, e_layers 2,
+    d_layers 1, d_ff 2048, moving average 25, factor 1, GELU, dropout 0.05, 48 start tokens), without the time-feature
+    embedding (see above). The decoder starts from the history's decomposition: [last 48 seasonal steps; zeros] and
+    [last 48 trend steps; the history mean]."""
+
+    regression = True
+    optimizer_settings = {"lr": 1e-4, "weight_decay": 0.0}
+
+    def __init__(self, channels: int = TS_CHANNELS, d_model: int = 512, heads: int = 8, e_layers: int = 2,
+                 d_layers: int = 1, d_ff: int = 2048, kernel: int = 25, factor: int = 1, dropout: float = 0.05) -> None:
+        super().__init__()
+        self.decomp = AutoformerDecomposition(kernel)
+        self.enc_embedding = CircularTokenConv(channels, d_model, bias=False)
+        self.dec_embedding = CircularTokenConv(channels, d_model, bias=False)
+        self.encoder_layers = nn.ModuleList(
+            AutoformerEncoderLayer(d_model, heads, d_ff, factor, kernel, dropout) for _ in range(e_layers))
+        self.encoder_norm = AutoformerSeasonalNorm(d_model)
+        self.decoder_layers = nn.ModuleList(
+            AutoformerDecoderLayer(d_model, heads, d_ff, factor, kernel, dropout, channels) for _ in range(d_layers))
+        self.decoder_norm = AutoformerSeasonalNorm(d_model)
+        self.projection = nn.Linear(d_model, channels)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        mean = torch.mean(x, dim=1, keepdim=True).repeat(1, TS_HORIZON, 1)
+        zeros = torch.zeros(x.shape[0], TS_HORIZON, x.shape[2], device=x.device)
+        seasonal, trend = self.decomp(x)
+        trend = torch.cat([trend[:, -TS_LABEL:, :], mean], dim=1)
+        seasonal = torch.cat([seasonal[:, -TS_LABEL:, :], zeros], dim=1)
+        h = self.dropout(self.enc_embedding(x))
+        for layer in self.encoder_layers:
+            h = layer(h)
+        memory = self.encoder_norm(h)
+        y = self.dropout(self.dec_embedding(seasonal))
+        for layer in self.decoder_layers:
+            y, residual_trend = layer(y, memory)
+            trend = trend + residual_trend
+        return (trend + self.projection(self.decoder_norm(y)))[:, -TS_HORIZON:, :]
+
+    @staticmethod
+    def make_batch(batch_size: int, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+        return forecast_batch(batch_size, TS_CHANNELS, device)
+
+
+class DeepARForecaster(nn.Module):
+    """The "deepar" row: DeepAR (Salinas et al. 2020) as AiDotNet's DeepAR builds it: each of the 7 channels is a series
+    (rows [B*7]) with a 20-wide embedding of its index, nn.LSTM(1 + 20, 40, 3 layers, dropout 0.1) over
+    [z_{t-1} / nu, embedding], and a Gaussian head (mu = nu * a, sigma = nu * softplus(b)) with nu = 1 + the mean of the
+    conditioning range. Training minimizes the Gaussian negative log-likelihood of every step of the 96 + 24 window
+    (z_0 = 0 in front); a forecast is the per-step median of 200 sample paths drawn ancestrally over the horizon. The
+    loss comes from forward(x, y) so that --compile compiles it (a training_loss method would run eager)."""
+
+    loss_from_forward = True
+    optimizer_settings = {"lr": 1e-3, "weight_decay": 0.0}
+
+    def __init__(self, channels: int = TS_CHANNELS, hidden: int = 40, layers: int = 3, embedding: int = 20,
+                 dropout: float = 0.1, samples: int = 200) -> None:
+        super().__init__()
+        self.channels, self.samples = channels, samples
+        self.embedding = nn.Embedding(channels, embedding)
+        self.lstm = nn.LSTM(1 + embedding, hidden, layers, dropout=dropout, batch_first=True)
+        self.head = nn.Linear(hidden, 2)
+
+    @staticmethod
+    def _rows(values: torch.Tensor) -> torch.Tensor:
+        return values.permute(0, 2, 1).reshape(-1, values.shape[1])                                # [B*C, steps]
+
+    @staticmethod
+    def _inputs(z: torch.Tensor, nu: torch.Tensor, emb: torch.Tensor) -> torch.Tensor:
+        return torch.cat([(z / nu).unsqueeze(-1), emb.unsqueeze(1).expand(-1, z.shape[1], -1)], dim=-1)
+
+    def _gaussian(self, top: torch.Tensor, nu: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        raw = self.head(top)
+        return raw[..., 0] * nu, F.softplus(raw[..., 1]) * nu
+
+    def forward(self, x: torch.Tensor, y: torch.Tensor | None = None) -> torch.Tensor:
+        b = x.shape[0]
+        history = self._rows(x)                                                                    # [N, L]
+        emb = self.embedding(torch.arange(self.channels, device=x.device).repeat(b))               # [N, E]
+        nu = 1.0 + history.mean(dim=1, keepdim=True)
+        zero = torch.zeros(history.shape[0], 1, device=x.device)
+        if y is not None:
+            z = torch.cat([zero, history, self._rows(y)], dim=1)                                   # [N, L + H + 1]
+            top, _ = self.lstm(self._inputs(z[:, :-1], nu, emb))
+            mu, sigma = self._gaussian(top, nu)
+            standardized = (z[:, 1:] - mu) / sigma
+            return (torch.log(sigma) + 0.5 * standardized * standardized + 0.5 * math.log(2 * math.pi)).mean()
+        # The conditioning range once per series; its state is copied to every sample path.
+        _, (h, c) = self.lstm(self._inputs(torch.cat([zero, history[:, :-1]], dim=1), nu, emb))
+        h, c = h.repeat_interleave(self.samples, dim=1), c.repeat_interleave(self.samples, dim=1)
+        nu_rows = nu.repeat_interleave(self.samples, dim=0)
+        emb_rows = emb.repeat_interleave(self.samples, dim=0)
+        last = history[:, -1:].repeat_interleave(self.samples, dim=0)                              # [N*S, 1]
+        draws = []
+        for _ in range(TS_HORIZON):
+            top, (h, c) = self.lstm(self._inputs(last, nu_rows, emb_rows), (h, c))
+            mu, sigma = self._gaussian(top, nu_rows)
+            last = mu + sigma * torch.randn_like(mu)
+            draws.append(last)
+        paths = torch.cat(draws, dim=1).view(-1, self.samples, TS_HORIZON)                         # [N, S, H]
+        # AiDotNet's quantile: the floor(0.5 * S)-th order statistic.
+        median = paths.sort(dim=1)[0][:, self.samples // 2, :]
+        return median.view(b, self.channels, TS_HORIZON).permute(0, 2, 1)
+
+    @staticmethod
+    def make_batch(batch_size: int, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+        return forecast_batch(batch_size, TS_CHANNELS, device)
+
+
+class NBeatsForecaster(nn.Module):
+    """The "nbeats" row: N-BEATS-G (Oreshkin et al. 2020; ElementAI's models/nbeats.py GenericBasis) at the paper's
+    generic setting, 30 stacks of 1 block, 4 ReLU layers of 512, univariate 96 -> 24. A block's theta Linear(512,
+    96 + 24) split into backcast and forecast is written as the two Linear maps AiDotNet builds (the same parameters).
+    AiDotNet's NBEATSFinance adds a final Linear(24, 24) over the summed forecast; the twin has it too (600 parameters)."""
+
+    regression = True
+    optimizer_settings = {"lr": 1e-3, "weight_decay": 0.0}
+
+    def __init__(self, stacks: int = 30, layers: int = 4, width: int = 512) -> None:
+        super().__init__()
+
+        def block() -> nn.ModuleDict:
+            fc: list[nn.Module] = [nn.Linear(TS_LOOKBACK, width), nn.ReLU()]
+            for _ in range(layers - 1):
+                fc += [nn.Linear(width, width), nn.ReLU()]
+            return nn.ModuleDict({"fc": nn.Sequential(*fc), "backcast": nn.Linear(width, TS_LOOKBACK),
+                                  "forecast": nn.Linear(width, TS_HORIZON)})
+
+        self.blocks = nn.ModuleList(block() for _ in range(stacks))
+        self.output_projection = nn.Linear(TS_HORIZON, TS_HORIZON)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        residual, forecast = x, None
+        for blk in self.blocks:
+            hidden = blk["fc"](residual)
+            residual = residual - blk["backcast"](hidden)
+            step = blk["forecast"](hidden)
+            forecast = step if forecast is None else forecast + step
+        return self.output_projection(forecast)
+
+    @staticmethod
+    def make_batch(batch_size: int, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+        return forecast_batch(batch_size, 1, device)
+
+
+TIME_SERIES_MODELS = {"informer": (InformerForecaster, (TS_LOOKBACK, TS_CHANNELS)),
+                      "autoformer": (AutoformerForecaster, (TS_LOOKBACK, TS_CHANNELS)),
+                      "deepar": (DeepARForecaster, (TS_LOOKBACK, TS_CHANNELS)),
+                      "nbeats": (NBeatsForecaster, (TS_LOOKBACK,))}
+
+
 def make_vision_model(name: str) -> nn.Module:
     """torchvision's definition of each architecture, adjusted only where AiDotNet's builder adjusts it for a
     32x32 input, so both sides run the same network: VGG's classifier reads the 512x1x1 feature map directly
@@ -668,6 +1138,9 @@ def make_model(name: str) -> tuple[nn.Module, tuple[int, ...]]:
         return FasterRcnnR50Fpn(), (3, DETECTION_IMAGE, DETECTION_IMAGE)
     if name in VISION_MODELS:
         return make_vision_model(name), (3, 32, 32)
+    if name in TIME_SERIES_MODELS:
+        factory, shape = TIME_SERIES_MODELS[name]
+        return factory(), shape
     if name == "mlp":
         return MLP(), (1, 28, 28)
     if name == "cnn":
@@ -747,6 +1220,13 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
                 if hasattr(model, "training_loss"):
                     # A row with its own objective (DDPM's noise regression) computes its loss itself.
                     loss = model.training_loss(x, y)
+                elif getattr(model, "loss_from_forward", False):
+                    # A row whose forward returns its own loss given the target (DeepAR's likelihood), called through
+                    # the module so a --compile run compiles the loss too.
+                    loss = model(x, y)
+                elif getattr(model, "regression", False):
+                    # A forecaster: mean squared error of the forecast against the continuation.
+                    loss = F.mse_loss(model(x), y)
                 else:
                     logits = model(x)
                     # Flattened so a per-position target (the decoder LM's [B, S] next tokens) is scored like a class one.
