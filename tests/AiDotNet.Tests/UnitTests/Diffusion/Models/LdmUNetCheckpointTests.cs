@@ -74,7 +74,7 @@ public class LdmUNetCheckpointTests
         return total + GroupNorm(ch) + Conv(ch, outChannels, 3);
     }
 
-    private static UNetNoisePredictor<float> StableDiffusion(int context, MultiViewUNetOptions options)
+    private static UNetNoisePredictor<float> StableDiffusion(int context, MultiViewUNetOptions? options)
         => new UNetNoisePredictor<float>(inputChannels: 4, outputChannels: 4, baseChannels: 320,
             channelMultipliers: new[] { 1, 2, 4, 4 }, numResBlocks: 2, attentionResolutions: new[] { 0, 1, 2 },
             contextDim: context, numHeads: 8, inputHeight: 64, multiView: options);
@@ -87,6 +87,8 @@ public class LdmUNetCheckpointTests
         long expected = LdmUNet(320, new[] { 1, 2, 4, 4 }, 2, new[] { 0, 1, 2 }, 768, 4, 4);
         Assert.Equal(859_520_964L, expected);
         Assert.Equal(expected, StableDiffusion(768, MultiViewUNetOptions.StableDiffusion1()).ParameterCount);
+        // The default-built U-Net (no option) is the same LDM UNetModel.
+        Assert.Equal(expected, StableDiffusion(768, null).ParameterCount);
     }
 
     [Fact]
@@ -97,6 +99,7 @@ public class LdmUNetCheckpointTests
         long expected = LdmUNet(320, new[] { 1, 2, 4, 4 }, 2, new[] { 0, 1, 2 }, 1024, 4, 4);
         Assert.Equal(865_910_724L, expected);
         Assert.Equal(expected, StableDiffusion(1024, MultiViewUNetOptions.StableDiffusion2()).ParameterCount);
+        Assert.Equal(expected, StableDiffusion(1024, null).ParameterCount);
     }
 
     // ------------------------------------------------------------------ official names and shapes
@@ -111,7 +114,11 @@ public class LdmUNetCheckpointTests
         attentionResolutions: new[] { 1 }, contextDim: 8, numHeads: 1, inputHeight: 8, seed: 3,
         multiView: MultiViewUNetOptions.StableDiffusion2());
 
-    private static Dictionary<string, int[]> TinyStateDictShapes()
+    private static Dictionary<string, int[]> TinyStateDictShapes() => TinyStateDictShapes(8, convolutionProjections: false);
+
+    // proj_in / proj_out are [C, C, 1, 1] convolutions in SD 1.x (use_linear_in_transformer False) and [C, C] linears
+    // in SD 2.x.
+    private static Dictionary<string, int[]> TinyStateDictShapes(int contextWidth, bool convolutionProjections)
     {
         var shapes = new Dictionary<string, int[]>(StringComparer.Ordinal);
         void Pair(string name, int[] weight, int bias) { shapes[name + ".weight"] = weight; shapes[name + ".bias"] = new[] { bias }; }
@@ -129,7 +136,7 @@ public class LdmUNetCheckpointTests
         void Transformer(string name, int c, int context)
         {
             Norm(name + "norm", c);
-            Pair(name + "proj_in", new[] { c, c }, c);
+            Pair(name + "proj_in", convolutionProjections ? new[] { c, c, 1, 1 } : new[] { c, c }, c);
             string b = name + "transformer_blocks.0.";
             Norm(b + "norm1", c);
             shapes[b + "attn1.to_q.weight"] = new[] { c, c };
@@ -144,7 +151,7 @@ public class LdmUNetCheckpointTests
             Norm(b + "norm3", c);
             Pair(b + "ff.net.0.proj", new[] { 8 * c, c }, 8 * c);
             Pair(b + "ff.net.2", new[] { c, 4 * c }, c);
-            Pair(name + "proj_out", new[] { c, c }, c);
+            Pair(name + "proj_out", convolutionProjections ? new[] { c, c, 1, 1 } : new[] { c, c }, c);
         }
 
         string p = Prefix;
@@ -154,15 +161,15 @@ public class LdmUNetCheckpointTests
         Res(p + "input_blocks.1.0.", 32, 32);
         ConvShape(p + "input_blocks.2.0.op", 32, 32, 3);
         Res(p + "input_blocks.3.0.", 32, 64);
-        Transformer(p + "input_blocks.3.1.", 64, 8);
+        Transformer(p + "input_blocks.3.1.", 64, contextWidth);
         Res(p + "middle_block.0.", 64, 64);
-        Transformer(p + "middle_block.1.", 64, 8);
+        Transformer(p + "middle_block.1.", 64, contextWidth);
         Res(p + "middle_block.2.", 64, 64);
         // input_block_chans = [32, 32, 32, 64], popped from the end.
         Res(p + "output_blocks.0.0.", 128, 64);
-        Transformer(p + "output_blocks.0.1.", 64, 8);
+        Transformer(p + "output_blocks.0.1.", 64, contextWidth);
         Res(p + "output_blocks.1.0.", 96, 64);
-        Transformer(p + "output_blocks.1.1.", 64, 8);
+        Transformer(p + "output_blocks.1.1.", 64, contextWidth);
         ConvShape(p + "output_blocks.1.2.conv", 64, 64, 3);
         Res(p + "output_blocks.2.0.", 96, 32);
         Res(p + "output_blocks.3.0.", 64, 32);
@@ -408,5 +415,112 @@ public class LdmUNetCheckpointTests
         var expected = h.Zip(skip, (a, b) => a + b).ToArray();
 
         Assert.True(MaxAbsDifference(expected, output.ToArray()) < 1e-9);
+    }
+
+    // ------------------------------------------------------------------ the default-built attention
+
+    [Fact]
+    public void DefaultSd15ConfigUNet_LoadsEveryOfficialNameOnceWithoutAllowPartial()
+    {
+        // No multi-view option: a 768-wide context makes the default attention SD 1.x's SpatialTransformer
+        // (v1-inference.yaml: num_heads, conv1x1 proj_in / proj_out).
+        var unet = new UNetNoisePredictor<double>(inputChannels: 4, outputChannels: 4, baseChannels: 32,
+            channelMultipliers: new[] { 1, 2 }, numResBlocks: 1, attentionResolutions: new[] { 1 }, contextDim: 768,
+            numHeads: 8, inputHeight: 8, seed: 3);
+        Assert.Null(unet.MultiViewOptions);
+
+        var expected = TinyStateDictShapes(768, convolutionProjections: true);
+        var requested = new Dictionary<string, int[]>(StringComparer.Ordinal);
+        var source = TorchTensorSource.From((string name, int[] shape) =>
+        {
+            Assert.False(requested.ContainsKey(name), $"'{name}' was read twice.");
+            requested[name] = shape;
+            return new double[Count(shape)];
+        });
+        var names = unet.LoadTorchWeights(source, expected.Keys, allowPartial: false);
+
+        Assert.Equal(expected.Count, names.Count);
+        Assert.Equal(expected.Keys.OrderBy(n => n, StringComparer.Ordinal), names.OrderBy(n => n, StringComparer.Ordinal));
+        foreach (var (name, shape) in expected)
+            Assert.True(shape.SequenceEqual(requested[name]),
+                $"'{name}' was read as [{string.Join(", ", requested[name])}], expected [{string.Join(", ", shape)}].");
+    }
+
+    private static UNetNoisePredictor<double> TinyContextUNet(int seed) => new UNetNoisePredictor<double>(inputChannels: 4,
+        outputChannels: 4, baseChannels: 32, channelMultipliers: new[] { 1, 2 }, numResBlocks: 1,
+        attentionResolutions: new[] { 1 }, contextDim: 8, numHeads: 2, inputHeight: 8, seed: seed);
+
+    private static double[] Pattern(int count, double scale, double frequency)
+    {
+        var values = new double[count];
+        for (int i = 0; i < count; i++) values[i] = scale * Math.Sin(frequency * (i + 1));
+        return values;
+    }
+
+    [Fact]
+    public void TLoRADecorator_WrapsTheSpatialTransformerAndReachesTheOutput()
+    {
+        var unet = TinyContextUNet(4);
+        var adapters = new List<AiDotNet.Diffusion.StyleTransfer.TLoRAAttentionAdapter<double>>();
+        unet.DecorateAttentionBlocks((block, channels, isCrossAttention) =>
+        {
+            Assert.True(isCrossAttention);
+            Assert.IsType<MultiViewTransformerLayer<double>>(block);
+            var adapter = new AiDotNet.Diffusion.StyleTransfer.TLoRAAttentionAdapter<double>(block, channels, rank: 2,
+                totalTimesteps: 1000, random: RandomHelper.CreateSeededRandom(8));
+            adapters.Add(adapter);
+            return adapter;
+        });
+        // input_blocks.3.1, middle_block.1, output_blocks.0.1 and output_blocks.1.1.
+        Assert.Equal(4, adapters.Count);
+
+        // Non-zero weights everywhere (proj_out and the output conv start at zero), so the attention reaches the output.
+        unet.SetParameters(new Vector<double>(Pattern(unet.GetParameters().Length, 0.05, 0.37)));
+        var x = new Tensor<double>(Values(4 * 8 * 8, 11), new[] { 1, 4, 8, 8 });
+        var context = new Tensor<double>(Values(3 * 8, 12), new[] { 1, 3, 8 });
+        var before = unet.PredictNoise(x, 200, context).ToArray();
+
+        var adapter0 = adapters[2];
+        var state = adapter0.GetAdapterState().ToArray().Select((v, i) => v + (0.1 * Math.Cos(i + 1.0))).ToArray();
+        adapter0.SetAdapterState(new Vector<double>(state));
+        var after = unet.PredictNoise(x, 200, context).ToArray();
+        Assert.Contains(before.Zip(after, (a, b) => Math.Abs(a - b)), d => d > 1e-9);
+    }
+
+    [Fact]
+    public void Wonder3DDecorator_RunsMultiViewSelfAttentionAndCrossDomainAttentionInsideTheTransformer()
+    {
+        const int channels = 4, views = 2;
+        var transformer = new MultiViewTransformerLayer<double>(channels, 0, MultiViewUNetOptions.StableDiffusion2());
+        var block = new AiDotNet.Diffusion.ThreeD.Wonder3DAttentionBlock<double>(transformer, channels, views, 1, seed: 5);
+        Assert.Same(transformer, block.Inner);
+        int perView = channels * 2 * 2;
+        var x = Pattern(2 * views * perView, 0.8, 0.17); // [N0, N1, C0, C1]
+        block.Forward(new Tensor<double>(x, new[] { 2 * views, channels, 2, 2 }));
+        transformer.SetParameters(new Vector<double>(Pattern(transformer.GetParameters().Length, 0.4, 0.43)));
+
+        double[] Run(double[] input) => block.Forward(new Tensor<double>(input, new[] { 2 * views, channels, 2, 2 })).ToArray();
+        double MaxDifference(double[] a, double[] b, int view)
+        {
+            double m = 0;
+            for (int i = view * perView; i < (view + 1) * perView; i++) m = Math.Max(m, Math.Abs(a[i] - b[i]));
+            return m;
+        }
+
+        var baseline = Run(x);
+        var perturbed = (double[])x.Clone();
+        perturbed[(1 * perView) + 2] += 0.9; // normal view 1
+        var changed = Run(perturbed);
+        // attn1 joins the views of one domain (MVAttnProcessor); the cross-domain output projection starts at zero.
+        Assert.True(MaxDifference(baseline, changed, 0) > 1e-6);    // normal view 0 attends to normal view 1
+        Assert.Equal(0.0, MaxDifference(baseline, changed, 2), 1e-12); // the color views do not
+        Assert.Equal(0.0, MaxDifference(baseline, changed, 3), 1e-12);
+
+        // With the cross-domain attention trained, color view 1 reads normal view 1 inside the transformer.
+        int count = block.CrossDomainAttention.GetParameters().Length;
+        block.CrossDomainAttention.SetParameters(new Vector<double>(Pattern(count, 0.4, 0.23)));
+        baseline = Run(x);
+        changed = Run(perturbed);
+        Assert.True(MaxDifference(baseline, changed, 3) > 1e-6);
     }
 }

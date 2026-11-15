@@ -456,7 +456,10 @@ public class MVDreamArchitectureTests
             channelMultipliers: new[] { 1, 2 }, numResBlocks: 1, attentionResolutions: new[] { 0, 1 }, contextDim: 6,
             numHeads: 2, inputHeight: 8, seed: 5, multiView: MultiViewUNetOptions.MVDream());
         Assert.NotNull(multiView.MultiViewOptions);
-        Assert.NotEqual(standard.ParameterCount, multiView.ParameterCount);
+        // The default U-Net's attention is LDM's SpatialTransformer; MVDream's SpatialTransformer3D holds the same
+        // modules (mvdream/ldm/modules/attention.py BasicTransformerBlock3D: attn1, attn2, ff, norm1-3, as LDM's
+        // BasicTransformerBlock), so the option changes how attn1 groups views, not the parameters.
+        Assert.Equal(standard.ParameterCount, multiView.ParameterCount);
     }
 
     // ------------------------------------------------------------------ ImageDream image path
