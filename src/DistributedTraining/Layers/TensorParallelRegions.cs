@@ -1,4 +1,4 @@
-using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.DistributedTraining.Layers;
@@ -25,6 +25,22 @@ internal static class TensorParallelGuards
 }
 
 /// <summary>
+/// The output of an identity-forward <see cref="AutogradFunction{T}"/>.
+/// </summary>
+/// <remarks>
+/// <see cref="AutogradFunction{T}.Apply"/> records the function as one tape step keyed by the tensor Forward
+/// returned, and the gradient map is keyed by tensor identity. Returning the input itself makes the step's output and
+/// input the same key: the backward then adds the input's gradient to itself (exactly 2x), and the step replaces
+/// the input's own producer, so everything upstream of it stops receiving a gradient. A view is a distinct tensor
+/// over the same storage, so the forward stays a no-op in values and memory while the step gets its own output.
+/// </remarks>
+internal static class AutogradIdentity
+{
+    /// <summary>A distinct tensor over <paramref name="input"/>'s storage (a copy only when it is not contiguous).</summary>
+    public static Tensor<T> View<T>(Tensor<T> input) => input.Reshape(input._shape);
+}
+
+/// <summary>
 /// Megatron-LM's <c>f</c> conjugate operator at the INPUT of a tensor-parallel region
 /// (Shoeybi et al. 2019, §3): identity in the forward pass, all-reduce in the backward pass.
 /// </summary>
@@ -40,9 +56,9 @@ internal sealed class CopyToTensorParallelRegion<T> : AutogradFunction<T>
     private readonly ICommunicationBackend<T> _backend;
     public CopyToTensorParallelRegion(ICommunicationBackend<T> backend) { _backend = backend; }
 
-    public override Tensor<T> Forward(AutogradContext ctx, params Tensor<T>[] inputs) => inputs[0];
+    public override Tensor<T> Forward(AutogradContext ctx, params Tensor<T>[] inputs) => AutogradIdentity.View(inputs[0]);
 
-    public override Tensor<T>[] Backward(AutogradContext ctx, Tensor<T> gradOutput)
+    public override Tensor<T>?[] Backward(AutogradContext ctx, Tensor<T> gradOutput)
     {
         if (_backend.WorldSize <= 1) return [gradOutput];
         var v = gradOutput.ToVector();
@@ -69,13 +85,13 @@ internal sealed class ReduceFromTensorParallelRegion<T> : AutogradFunction<T>
 
     public override Tensor<T> Forward(AutogradContext ctx, params Tensor<T>[] inputs)
     {
-        if (_backend.WorldSize <= 1) return inputs[0];
+        if (_backend.WorldSize <= 1) return AutogradIdentity.View(inputs[0]);
         var v = inputs[0].ToVector();
         _backend.AllReduce(v, ReductionOperation.Sum);
         return Tensor<T>.FromVector(v).Reshape(inputs[0]._shape);
     }
 
-    public override Tensor<T>[] Backward(AutogradContext ctx, Tensor<T> gradOutput) => [gradOutput];
+    public override Tensor<T>?[] Backward(AutogradContext ctx, Tensor<T> gradOutput) => [gradOutput];
 }
 
 /// <summary>
@@ -110,7 +126,7 @@ internal sealed class GatherFromTensorParallelRegion<T> : AutogradFunction<T>
     public override Tensor<T> Forward(AutogradContext ctx, params Tensor<T>[] inputs)
     {
         var local = inputs[0];                      // [batch, localOut]
-        if (_backend.WorldSize <= 1) return local;
+        if (_backend.WorldSize <= 1) return AutogradIdentity.View(local);
         // The output-column gather relies on an EQUAL per-rank AllGather count (every rank contributes
         // batch * localOut elements). ICommunicationBackend.AllGather / the NCCL/Gloo backends only support
         // a single sendCount per rank, so an uneven split (_fullOutputSize not divisible by the world size)
@@ -122,32 +138,34 @@ internal sealed class GatherFromTensorParallelRegion<T> : AutogradFunction<T>
                 "variable-count gather the backends do not provide. Use an output size divisible by the " +
                 "world size, or gatherOutput=false feeding a following RowParallelLinear.");
         int batch = local._shape[0];
-        var gathered = _backend.AllGather(local.ToVector());
+        var gathered = _backend.AllGather(local.ToVector()).AsSpan();
         var full = new Tensor<T>(new[] { batch, _fullOutputSize });
+        var fullSpan = full.AsWritableSpan();
         int offset = 0, colBase = 0;
         for (int r = 0; r < _backend.WorldSize; r++)
         {
             int outR = ShardCount(r);
             for (int b = 0; b < batch; b++)
-                for (int c = 0; c < outR; c++)
-                    full[b, colBase + c] = gathered[offset + b * outR + c];
+                gathered.Slice(offset + b * outR, outR).CopyTo(fullSpan.Slice(b * _fullOutputSize + colBase, outR));
             offset += batch * outR;
             colBase += outR;
         }
         return full;
     }
 
-    public override Tensor<T>[] Backward(AutogradContext ctx, Tensor<T> gradOutput)
+    public override Tensor<T>?[] Backward(AutogradContext ctx, Tensor<T> gradOutput)
     {
         // Adjoint of the column-gather: hand each rank back only its own output-column block.
         if (_backend.WorldSize <= 1) return [gradOutput];
         int batch = gradOutput._shape[0];
         int localOut = ShardCount(_backend.Rank);
         int colStart = ColumnStart(_backend.Rank);
+        int fullOut = gradOutput._shape[1];
+        var source = gradOutput.IsContiguous ? gradOutput.AsSpan() : gradOutput.Contiguous().AsSpan();
         var slice = new Tensor<T>(new[] { batch, localOut });
+        var sliceSpan = slice.AsWritableSpan();
         for (int b = 0; b < batch; b++)
-            for (int c = 0; c < localOut; c++)
-                slice[b, c] = gradOutput[b, colStart + c];
+            source.Slice(b * fullOut + colStart, localOut).CopyTo(sliceSpan.Slice(b * localOut, localOut));
         return [slice];
     }
 }
@@ -165,9 +183,9 @@ internal sealed class AverageGradientAcrossRanks<T> : AutogradFunction<T>
     private readonly ICommunicationBackend<T> _backend;
     public AverageGradientAcrossRanks(ICommunicationBackend<T> backend) { _backend = backend; }
 
-    public override Tensor<T> Forward(AutogradContext ctx, params Tensor<T>[] inputs) => inputs[0];
+    public override Tensor<T> Forward(AutogradContext ctx, params Tensor<T>[] inputs) => AutogradIdentity.View(inputs[0]);
 
-    public override Tensor<T>[] Backward(AutogradContext ctx, Tensor<T> gradOutput)
+    public override Tensor<T>?[] Backward(AutogradContext ctx, Tensor<T> gradOutput)
     {
         if (_backend.WorldSize <= 1) return [gradOutput];
         var v = gradOutput.ToVector();

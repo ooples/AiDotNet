@@ -1,5 +1,4 @@
 ﻿using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
@@ -335,25 +334,6 @@ public partial class RRDBLayer<T> : LayerBase<T>, IShapeContract
         }
     }
 
-
-    /// <summary>
-    /// Scales a computation node by a scalar value using element-wise multiplication.
-    /// </summary>
-    private static ComputationNode<T> ScaleNode(ComputationNode<T> node, double scale, string name)
-    {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var scaleValue = numOps.FromDouble(scale);
-
-        // Create a constant tensor filled with the scale value matching the input shape
-        var scaleTensor = new Tensor<T>(node.Value._shape);
-        for (int i = 0; i < scaleTensor.Length; i++)
-        {
-            scaleTensor.Data.Span[i] = scaleValue;
-        }
-
-        var scaleNode = TensorOperations<T>.Constant(scaleTensor, name);
-        return TensorOperations<T>.ElementwiseMultiply(node, scaleNode);
-    }
 
     #endregion
 

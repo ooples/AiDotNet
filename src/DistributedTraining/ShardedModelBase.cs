@@ -1,5 +1,4 @@
 using AiDotNet.Helpers;
-using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;

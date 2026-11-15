@@ -1,5 +1,4 @@
 ﻿using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 
 namespace AiDotNet.ActivationFunctions;
@@ -355,26 +354,4 @@ public class BinarySpikingActivation<T> : ActivationFunctionBase<T>
         return new BinarySpikingActivation<T>(newThreshold, _derivativeSlope, _derivativeWidth);
     }
 
-    /// <summary>
-    /// Applies this activation function to a computation graph node.
-    /// </summary>
-    /// <param name="input">The computation node to apply the activation to.</param>
-    /// <returns>A new computation node with surrogate spike activation applied.</returns>
-    /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method maps to TensorOperations&lt;T&gt;.SurrogateSpike(input) which uses the
-    /// straight-through estimator pattern: hard spikes in forward pass, sigmoid surrogate
-    /// gradients in backward pass.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
-    {
-        if (input == null)
-            throw new ArgumentNullException(nameof(input));
-
-        double threshold = Convert.ToDouble(_threshold);
-        double surrogateBeta = Convert.ToDouble(_derivativeSlope);
-        return TensorOperations<T>.SurrogateSpike(input, threshold, surrogateBeta);
-    }
 }

@@ -1,5 +1,4 @@
 ﻿using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
@@ -398,10 +397,6 @@ public partial class CoxProportionalHazards<T> : SurvivalModelBase<T>
 
         return AiDotNetEngine.Current.Exp(_coefficients);
     }
-
-    #region JIT Compilation Support
-
-    #endregion
 
     #region IFullModel Implementation
 

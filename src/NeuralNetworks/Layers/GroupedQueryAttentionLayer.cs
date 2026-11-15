@@ -1,5 +1,4 @@
 ﻿using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Attention;
@@ -506,7 +505,7 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
         if (!cacheBwd
             && _alibiLayer == null
             && AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null
-            && !AiDotNet.Autodiff.GradientRecording.IsTrainingTrace)
+            && !AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsTrainingTrace)
         {
             // â”€â”€ Inference fast path â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             // Fused interleaved RoPE + GQA-aware scaled-dot-product attention, both
@@ -659,7 +658,7 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
         if (_useCausalMask
             && _attnLogitSoftcap <= 0.0
             && AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null
-            && !AiDotNet.Autodiff.GradientRecording.IsTrainingTrace)
+            && !AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsTrainingTrace)
         {
             var flashConfig = new FlashAttentionConfig { ReturnAttentionWeights = true, UseCausalMask = true };
             var (flashOutput, flashWeights) = FlashAttention<T>.Forward(

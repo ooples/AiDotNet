@@ -1,5 +1,4 @@
 ﻿using AiDotNet.Helpers;
-using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 
 // File-level, deliberately: two Tensors namespaces in the project's global usings also define a

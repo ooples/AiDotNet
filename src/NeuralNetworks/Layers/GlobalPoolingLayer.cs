@@ -490,20 +490,6 @@ public partial class GlobalPoolingLayer<T> : LayerBase<T>, IShapeContract
         };
     }
 
-    /// <summary>
-    /// Applies scalar activation function with autodiff support.
-    /// </summary>
-    /// <param name="input">The input computation node.</param>
-    /// <returns>The activated computation node, or the input unchanged if no scalar activation is configured.</returns>
-    private Autodiff.ComputationNode<T> ApplyScalarActivationAutodiff(Autodiff.ComputationNode<T> input)
-    {
-        if (ScalarActivation == null)
-            return input;
-
-        // Use generic activation support - works for ALL 39 built-in activations
-        return Autodiff.TensorOperations<T>.ApplyActivation(input, ScalarActivation);
-    }
-
     /// <inheritdoc/>
     public override bool SupportsGpuTraining => true;
 

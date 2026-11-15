@@ -1,5 +1,4 @@
 using AiDotNet.AdversarialRobustness.CertifiedRobustness;
-using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;

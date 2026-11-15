@@ -201,7 +201,8 @@ public partial class FeedForwardNeuralNetwork<T> : SequentialVectorModelLayoutBa
         // beat PyTorch-CPU on. Falls back to the generic Forward for any layer the
         // kernel can't represent (non-dense, vector activation, unmapped activation,
         // mixed hidden activations) or if the kernel declines (e.g. active tape).
-        if (TryFusedDensePredict(input, out var fused))
+        // The fused kernels are forward-only: a forward that is being differentiated takes the per-layer path.
+        if (!AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsRecording<T>() && TryFusedDensePredict(input, out var fused))
         {
             IsTrainingMode = true;
             return fused;

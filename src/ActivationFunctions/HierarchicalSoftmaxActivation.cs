@@ -1,5 +1,4 @@
 using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 
 namespace AiDotNet.ActivationFunctions;
@@ -56,14 +55,13 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
     private int _weightInputDim;
 
     /// <summary>
-    /// Gets the node weights as a tensor for use in computation graphs.
+    /// Gets the node weights as a tensor.
     /// </summary>
     /// <value>A tensor containing the node weights with shape [treeDepth, numClasses].</value>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This property provides access to the internal weights used by the hierarchical
-    /// tree structure. When using JIT compilation, you can wrap these weights in a ComputationNode
-    /// to enable gradient computation and weight updates during training.
+    /// tree structure, for inspection or export.
     /// </para>
     /// </remarks>
     public Tensor<T> NodeWeightsTensor => Tensor<T>.FromRowMatrix(_nodeWeights);
@@ -339,61 +337,4 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
         return probability;
     }
 
-    /// <summary>
-    /// Applies this activation function to a computation graph node.
-    /// </summary>
-    /// <param name="input">The computation node to apply the activation to.</param>
-    /// <returns>A new computation node with HierarchicalSoftmax activation applied.</returns>
-    /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method maps to TensorOperations&lt;T&gt;.HierarchicalSoftmax which handles both
-    /// forward and backward passes for JIT compilation.
-    /// </para>
-    /// <para>
-    /// The internal node weights are wrapped in a ComputationNode to enable gradient tracking.
-    /// For full training support with weight updates, use <see cref="ApplyToGraph(ComputationNode{T}, ComputationNode{T})"/>
-    /// with externally managed weights.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
-    {
-        if (input == null)
-            throw new ArgumentNullException(nameof(input));
-
-        // Wrap internal weights in a ComputationNode for JIT compilation
-        var weightsNode = new ComputationNode<T>(NodeWeightsTensor, requiresGradient: true);
-        return TensorOperations<T>.HierarchicalSoftmax(input, weightsNode, _numClasses);
-    }
-
-    /// <summary>
-    /// Applies Hierarchical Softmax with externally provided weights for full training support.
-    /// </summary>
-    /// <param name="input">The computation node containing the input features.</param>
-    /// <param name="nodeWeights">The computation node containing the tree node weights.</param>
-    /// <returns>A new computation node with HierarchicalSoftmax activation applied.</returns>
-    /// <exception cref="ArgumentNullException">Thrown if input or nodeWeights is null.</exception>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Use this overload when you want to train the hierarchical softmax weights
-    /// as part of your model. By providing the weights as a ComputationNode, gradients will flow
-    /// through them during backpropagation, allowing the optimizer to update them.
-    /// </para>
-    /// <para>
-    /// Example usage:
-    /// <code>
-    /// var weightsNode = new ComputationNode&lt;float&gt;(activation.NodeWeightsTensor, requiresGrad: true);
-    /// var output = activation.ApplyToGraph(input, weightsNode);
-    /// </code>
-    /// </para>
-    /// </remarks>
-    public ComputationNode<T> ApplyToGraph(ComputationNode<T> input, ComputationNode<T> nodeWeights)
-    {
-        if (input == null)
-            throw new ArgumentNullException(nameof(input));
-        if (nodeWeights == null)
-            throw new ArgumentNullException(nameof(nodeWeights));
-
-        return TensorOperations<T>.HierarchicalSoftmax(input, nodeWeights, _numClasses);
-    }
 }
