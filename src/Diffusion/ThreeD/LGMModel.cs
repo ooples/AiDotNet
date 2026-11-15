@@ -140,7 +140,7 @@ public partial class LGMModel<T> : ThreeDDiffusionModelBase<T>
             stride: 1,
             padding: 0,
             activationFunction: new IdentityActivation<T>(),
-            initializationStrategy: InitializationStrategies<T>.Lazy,
+            initializationStrategy: new TorchDefaultInitializationStrategy<T>(),
             biasMode: BiasMode.Always);
         _gaussianProjection.SetTrainingMode(false);
     }
@@ -359,7 +359,8 @@ public partial class LGMModel<T> : ThreeDDiffusionModelBase<T>
     /// <summary>
     /// Generates the four views from one image with the multi-view model, then reconstructs their Gaussians.
     /// </summary>
-    /// <param name="inputImage">The image, <c>[1, 3, H, W]</c>, in the multi-view model's VAE range.</param>
+    /// <param name="inputImage">The image, <c>[1, 3, H, W]</c>, in the multi-view model's VAE range, seen from
+    /// azimuth 0.</param>
     /// <param name="numInferenceSteps">Multi-view denoising steps (30 in the official demo).</param>
     /// <param name="guidanceScale">Multi-view guidance scale (5.0 in the official demo).</param>
     /// <param name="seed">Seed of the multi-view sampler.</param>
@@ -367,11 +368,13 @@ public partial class LGMModel<T> : ThreeDDiffusionModelBase<T>
         double guidanceScale = 5.0, int? seed = null)
     {
         if (inputImage is null) throw new ArgumentNullException(nameof(inputImage));
+        // The official pipeline generates the views with ImageDream at elevation 0 (LGMConfig.InputElevation). The
+        // multi-view model's elevation is positive looking down; LGM's (kiui) is negative looking down. Its view v is at
+        // azimuth 360 v / views measured from the input's viewpoint, which is LGM's camera order, so no reordering is
+        // needed (the official code reorders ImageDream's output, whose azimuth origin differs from kiui's).
         var views = _multiViewModel.GenerateNovelViewsFromImage(
-            inputImage, _config.NumInputViews, numInferenceSteps, guidanceScale, seed);
-        // MVDream's image path places its cameras at Config.DefaultElevation (degrees, positive looks down); the rays
-        // must describe the same cameras, in the kiui convention where looking down is negative.
-        return ReconstructGaussians(StackViews(views), -_multiViewModel.Config.DefaultElevation);
+            inputImage, _config.NumInputViews, numInferenceSteps, guidanceScale, seed, -_config.InputElevation);
+        return ReconstructGaussians(StackViews(views), _config.InputElevation);
     }
 
     /// <summary>

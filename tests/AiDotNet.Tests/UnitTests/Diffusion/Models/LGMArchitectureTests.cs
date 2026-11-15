@@ -1,6 +1,8 @@
+using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.ThreeD;
 using AiDotNet.Diffusion.ThreeD.Meshing;
 using AiDotNet.Diffusion.VAE;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -405,6 +407,124 @@ public class LGMArchitectureTests
         var model = TinyModel(6);
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             model.ImageTo3D(new Tensor<double>(new[] { 1, 3, 16, 16 }), numViews: 6));
+    }
+
+    [Fact]
+    public void ImageTo3D_RunsThroughTheMultiViewModel_DeterministicallyAndDependingOnTheImage()
+    {
+        var model = TinyModel(14);
+        model.Config.MeshExtraction = new GaussianMeshExtractionOptions
+        {
+            Resolution = 64,
+            BlockCount = 8,
+            DensityThreshold = 0.5
+        };
+        var image = MVDreamImageConditioningTests.RandomImage(21);
+        var otherImage = MVDreamImageConditioningTests.RandomImage(22);
+
+        // Untrained weights give arbitrary scales and opacities, so the 1x1 projection is set by hand: centres are the
+        // U-Net's first three channels (clamped to [-1, 1]), opacity sigmoid(4), identity rotation, and a scale of
+        // 4% of the centres' extent, so every Gaussian is a resolvable blob of the 64^3 grid. The extent is read off a
+        // first pass through the full image path.
+        model.ReconstructGaussians(RandomViews(1)); // materializes the lazy projection
+        var kernel = new double[14 * 14];
+        for (int c = 0; c < 3; c++) kernel[(c * 14) + c] = 1.0;
+        SetProjection(model.GaussianProjection, kernel, ProjectionBias(Math.Log(Math.E - 1.0)));
+
+        var probe = model.ImageToGaussians(image, numInferenceSteps: 2, guidanceScale: 5.0, seed: 7);
+        double extent = Extent(probe.Positions.ToArray());
+        Assert.True(extent > 1e-6, "the reconstructed centres must not collapse to one point");
+        // scale = 0.1 softplus(b) = 0.04 extent.
+        SetProjection(model.GaussianProjection, kernel, ProjectionBias(Math.Log(Math.Exp(0.4 * extent) - 1.0)));
+
+        var first = model.ImageTo3D(image, numViews: 4, numInferenceSteps: 2, guidanceScale: 5.0, seed: 7);
+        var second = model.ImageTo3D(image, numViews: 4, numInferenceSteps: 2, guidanceScale: 5.0, seed: 7);
+        var other = model.ImageTo3D(otherImage, numViews: 4, numInferenceSteps: 2, guidanceScale: 5.0, seed: 7);
+
+        Assert.True(first.Faces.GetLength(0) > 0, "the mesh must not be empty");
+        Assert.True(other.Faces.GetLength(0) > 0, "the mesh must not be empty");
+        Assert.Equal(first.Vertices.ToArray(), second.Vertices.ToArray());
+        Assert.Equal(Triangles(first.Faces), Triangles(second.Faces));
+
+        var a = first.Vertices.ToArray();
+        var b = other.Vertices.ToArray();
+        Assert.True(a.Length != b.Length || MaxAbsDifference(a, b) > 1e-9, "the mesh must depend on the input image");
+    }
+
+    [Fact]
+    public void ResidualBlocks_StartFromPyTorchsDefaultInitialization()
+    {
+        // The official LGM never re-initializes its modules: every conv is nn.Conv2d's default,
+        // kaiming_uniform_(a = sqrt(5)) = U(+-1/sqrt(fan_in)) weights and U(+-1/sqrt(fan_in)) biases. In particular the
+        // second conv of each residual block is not the diffusion zero init.
+        var model = TinyModel(2);
+        var blocks = model.GaussianUNet.Layers.OfType<DiffusionResBlock<double>>().ToList();
+        Assert.Equal(9, blocks.Count); // down 3, middle 2, up 2 x 2
+        foreach (var block in blocks)
+        {
+            Assert.Equal(DiffusionResBlockInitialization.TorchDefault, block.Initialization);
+            var (conv1, conv2, skip) = ConvolutionSlices(block);
+            AssertTorchDefault(conv1, 9 * block.InputChannels);
+            AssertTorchDefault(conv2, 9 * block.OutputChannels);
+            if (skip.Length > 0) AssertTorchDefault(skip, block.InputChannels);
+        }
+    }
+
+    [Fact]
+    public void ResidualBlock_DefaultInitializationStillZeroesTheSecondConvolution()
+    {
+        var block = new DiffusionResBlock<double>(8, 16, 4, numGroups: 4);
+        Assert.Equal(DiffusionResBlockInitialization.ZeroResidual, block.Initialization);
+        var (conv1, conv2, _) = ConvolutionSlices(block);
+        Assert.All(conv2, value => Assert.Equal(0.0, value));
+        Assert.Contains(conv1, value => value != 0.0);
+    }
+
+    /// <summary>
+    /// The block's parameters in registration order: GroupNorm(in) (2 in), conv1 (9 in out + out), GroupNorm(out)
+    /// (2 out), conv2 (9 out^2 + out) and, when the width changes, the 1x1 skip (in out + out).
+    /// </summary>
+    private static (double[] Conv1, double[] Conv2, double[] Skip) ConvolutionSlices(DiffusionResBlock<double> block)
+    {
+        int cin = block.InputChannels, cout = block.OutputChannels;
+        var parameters = block.GetParameters().ToArray();
+        int conv1Start = 2 * cin, conv1Length = (9 * cin * cout) + cout;
+        int conv2Start = conv1Start + conv1Length + (2 * cout), conv2Length = (9 * cout * cout) + cout;
+        int skipLength = cin != cout ? (cin * cout) + cout : 0;
+        Assert.Equal(conv2Start + conv2Length + skipLength, parameters.Length);
+        return (parameters.Skip(conv1Start).Take(conv1Length).ToArray(),
+            parameters.Skip(conv2Start).Take(conv2Length).ToArray(),
+            parameters.Skip(conv2Start + conv2Length).Take(skipLength).ToArray());
+    }
+
+    private static void AssertTorchDefault(double[] values, int fanIn)
+    {
+        double bound = 1.0 / Math.Sqrt(fanIn);
+        Assert.All(values, value => Assert.InRange(value, -bound, bound));
+        // Uniform draws: none is exactly zero (the biases included), and they spread across the bound.
+        Assert.All(values, value => Assert.NotEqual(0.0, value));
+        Assert.True(values.Max(value => Math.Abs(value)) > 0.5 * bound);
+    }
+
+    private static double[] ProjectionBias(double scaleLogit)
+        => new[] { 0, 0, 0, 4.0, scaleLogit, scaleLogit, scaleLogit, 1, 0, 0, 0, 0, 0, 0 };
+
+    private static double Extent(double[] positions)
+    {
+        double extent = 0.0;
+        for (int axis = 0; axis < 3; axis++)
+        {
+            double low = double.MaxValue, high = double.MinValue;
+            for (int i = axis; i < positions.Length; i += 3)
+            {
+                low = Math.Min(low, positions[i]);
+                high = Math.Max(high, positions[i]);
+            }
+
+            extent = Math.Max(extent, high - low);
+        }
+
+        return extent;
     }
 
     // ---------------------------------------------------------------- helpers

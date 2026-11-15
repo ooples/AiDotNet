@@ -38,8 +38,10 @@ namespace AiDotNet.Diffusion.ThreeD;
 /// The blocks are the library's existing layers (<see cref="DiffusionResBlock{T}"/> with no time embedding,
 /// <see cref="DiffusionAttentionLayer{T}"/>, <see cref="GroupNormalizationLayer{T}"/>,
 /// <see cref="ConvolutionalLayer{T}"/>); this type composes them in the LGM order and owns their parameter surface.
-/// The weights start from the library's initializers; load the released LGM checkpoint through
-/// <see cref="SetParameters"/> (in <see cref="Layers"/> order) for meaningful reconstructions.
+/// The official model never re-initializes its modules, so every convolution here, the residual blocks' included
+/// (<see cref="AiDotNet.Enums.DiffusionResBlockInitialization.TorchDefault"/>, not the diffusion zero init), starts
+/// from PyTorch's default: U(-1/sqrt(fan_in), 1/sqrt(fan_in)) weights and biases. Load the released LGM checkpoint
+/// through <see cref="SetParameters"/> (in <see cref="Layers"/> order) for meaningful reconstructions.
 /// </para>
 /// <para><b>For Beginners:</b> the network looks at four photos of the same object at once and, for every pixel of a
 /// half-resolution grid in each photo, predicts one small 3D blob (a Gaussian).</para>
@@ -374,7 +376,8 @@ public class LGMAsymmetricUNet<T> : IParameterSource<T>
 
     private static DiffusionResBlock<T> Res(int inChannels, int outChannels, int resolution, LGMConfig config)
         => new DiffusionResBlock<T>(inChannels, outChannels, resolution, timeEmbedDim: 0,
-            numGroups: config.NormGroups, epsilon: config.NormEpsilon);
+            numGroups: config.NormGroups, epsilon: config.NormEpsilon,
+            initialization: AiDotNet.Enums.DiffusionResBlockInitialization.TorchDefault);
 
     private static ConvolutionalLayer<T> Conv(int inChannels, int outChannels, int kernel, int stride, int padding)
         => ConvolutionalLayer<T>.WithInputDepth(
@@ -384,7 +387,7 @@ public class LGMAsymmetricUNet<T> : IParameterSource<T>
             stride: stride,
             padding: padding,
             activationFunction: new IdentityActivation<T>(),
-            initializationStrategy: InitializationStrategies<T>.Lazy,
+            initializationStrategy: new TorchDefaultInitializationStrategy<T>(),
             biasMode: AiDotNet.Enums.BiasMode.Always);
 
     /// <summary>The largest group count no greater than <paramref name="target"/> that divides the channels, the same
