@@ -97,6 +97,37 @@ public class FeatureSelectionTensorOpsTests
         }
     }
 
+    // A path 0 - 1 - 2 with edges of length 40000: the path 0 - 2 is 80000, past Half's 65504. It was summed in Half
+    // to +infinity, the no-edge value, so the connected pair read as unreachable with length 0. It is connected,
+    // and its length is Half's +infinity.
+    [Fact(Timeout = 60000)]
+    public async Task ShortestPaths_Half_KeepsAConnectedPairWhosePathOverflows()
+    {
+        await Task.CompletedTask;
+        const int n = 3;
+        var lengthValues = new Half[n * n];
+        var edgeValues = new Half[n * n];
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < n; j++)
+            {
+                lengthValues[i * n + j] = (Half)(i == j ? 0 : 40000);
+                edgeValues[i * n + j] = (Half)(Math.Abs(i - j) == 1 ? 1 : 0);
+            }
+        }
+
+        var geodesic = FeatureSelectionTensorOps.ShortestPaths(
+            new Tensor<Half>(lengthValues, new[] { n, n }), new Tensor<Half>(edgeValues, new[] { n, n }), out var reachable);
+
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < n; j++)
+                Assert.Equal(1.0, (double)reachable[i, j]);
+        Assert.Equal(40000.0, (double)geodesic[0, 1]);
+        Assert.Equal(40000.0, (double)geodesic[1, 2]);
+        Assert.True(double.IsPositiveInfinity((double)geodesic[0, 2]));
+        Assert.True(double.IsPositiveInfinity((double)geodesic[2, 0]));
+    }
+
     // A path 0 - 1 - 2 with edges of length 30000 and an isolated node 3. The former unreachable sentinel was the
     // sum of all edge lengths plus 1, 120001, which is +infinity in Half; the mask multiply then put 0 * infinity =
     // NaN on every edge. The paths are 30000 and 60000, and node 3 is unreachable (length 0, reachable 0).
@@ -224,7 +255,8 @@ public class FeatureSelectionTensorOpsTests
     public async Task CenteredColumnStd_Half_DoesNotOverflowPast256()
     {
         await Task.CompletedTask;
-        var centered = new Tensor<Half>(new[] { (Half)(-300), (Half)300, (Half)0, (Half)0 }, new[] { 2, 2 });
+        // Row-major [2, 2]: column 0 is -300, 300 and column 1 is 0, 0
+        var centered = new Tensor<Half>(new[] { (Half)(-300), (Half)0, (Half)300, (Half)0 }, new[] { 2, 2 });
 
         var std = FeatureSelectionTensorOps.CenteredColumnStd(centered);
 

@@ -87,7 +87,10 @@ internal static class MaximalInformationCoefficient
         double budget = alpha > 0.0 && alpha <= 1.0 ? Math.Max(Math.Pow(n, alpha), 4) : Math.Min(alpha, n);
         int rows = Math.Max((int)Math.Floor(budget / 2.0), 2) - 1;
 
-        var scores = new List<Tensor<T>>();
+        // The partition entropies are computed from the counts in double: in Half the sample total and the
+        // cumulative counts are +infinity past 65504 and the entropy terms NaN. MIC lies in [0, 1], so only the
+        // final score is converted to T.
+        var scores = new List<Tensor<double>>();
         var temp = new int[n];
         for (int i = 0; i < rows; i++)
         {
@@ -102,7 +105,7 @@ internal static class MaximalInformationCoefficient
             for (int k = 0; k < n; k++)
                 qByX[k] = temp[xOrder[k]];
             var pMap = GetSuperclumpsPartition(xGroups, n, clumps, qByX, out int pCount);
-            scores.Add(OptimizeXAxis<T>(n, qByX, qCount, pMap, pCount, columnsMax + 1));
+            scores.Add(OptimizeXAxis<double>(n, qByX, qCount, pMap, pCount, columnsMax + 1));
 
             // y vs. x: equipartition x into i + 2 rows, superclumps on y
             q = EquipartitionYAxis(xGroups, n, i + 2, out qCount);
@@ -112,14 +115,14 @@ internal static class MaximalInformationCoefficient
             for (int k = 0; k < n; k++)
                 qByY[k] = temp[yOrder[k]];
             pMap = GetSuperclumpsPartition(yGroups, n, clumps, qByY, out pCount);
-            scores.Add(OptimizeXAxis<T>(n, qByY, qCount, pMap, pCount, columnsMax + 1));
+            scores.Add(OptimizeXAxis<double>(n, qByY, qCount, pMap, pCount, columnsMax + 1));
         }
 
         var nonEmpty = scores.Where(s => s.Length > 0).ToArray();
         if (nonEmpty.Length == 0)
             return new Tensor<T>(new[] { 1 });
 
-        return engine.ReduceMax(engine.TensorConcatenate(nonEmpty, 0), new[] { 0 }, true);
+        return engine.ReduceMax(engine.TensorConcatenate(nonEmpty, 0), new[] { 0 }, true).Cast<T>();
     }
 
     /// <summary>

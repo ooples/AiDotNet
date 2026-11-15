@@ -97,6 +97,13 @@ public class OSFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// The correlations and the independence tests are computed in double from the data as stored in T: in a
+    /// narrow T the residual variances of the redundancy analysis round away the very signal the test decides on
+    /// (a residual near 1e-4 is below float's sqrt(roundoff) cutoff), and sqrt(n) overflows Half past 65504 rows.
+    /// Only the feature-target correlations of every feature are formed up front; the feature-pair correlations
+    /// are those of the current best candidates, so the memory follows the candidates, not the feature count.
+    /// </remarks>
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -107,37 +114,41 @@ public class OSFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
         int p = data.Columns;
         var engine = Engine;
 
-        // Correlation matrix of the features and the target (the target is variable p)
+        // Unit-length centred columns of the features and the target (the target is variable p)
         var variables = engine.TensorConcatenate(
             new[] { Tensor<T>.FromMatrix(data), engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 }) }, 1);
-        var correlations = CorrelationMatrix(variables);
-        var withTarget = engine.Reshape(engine.TensorSlice(correlations, new[] { 0, p }, new[] { p, 1 }), new[] { p });
+        var unit = UnitColumns(variables.Cast<double>());
+        var targetColumn = engine.TensorSlice(unit, new[] { 0, p }, new[] { n, 1 });
+        var withTarget = engine.Reshape(
+            engine.TensorMatMul(engine.TensorTranspose(engine.TensorSlice(unit, new[] { 0, 0 }, new[] { n, p })), targetColumn),
+            new[] { p });
         var scores = engine.TensorAbs(withTarget);
-        _featureScores = scores.ToVector();
+        _featureScores = scores.Cast<T>().ToVector();
 
-        // Fisher z factors sqrt(n - k - 3) for conditioning sets of size k = 0 .. max (sizes holds k + 1)
+        // Fisher z factors sqrt(n - k - 3) for conditioning sets of size k = 0 .. max
         int maxSize = _maxConditioningSetSize;
-        var sizes = engine.TensorCumSum(FeatureSelectionTensorOps.Filled(new[] { maxSize + 1 }, NumOps.One), 0);
-        var factors = engine.TensorSqrt(engine.TensorMax(
-            engine.TensorSubtract(FeatureSelectionTensorOps.Filled(new[] { maxSize + 1 }, NumOps.FromDouble(n - 2)), sizes),
-            NumOps.Zero));
-        T alpha = NumOps.FromDouble(_alpha);
+        var factors = Enumerable.Range(0, maxSize + 1).Select(k => Math.Sqrt(Math.Max(n - 3.0 - k, 0.0))).ToArray();
 
         // Online relevance analysis needs no conditioning set, so it is one test per feature
-        var marginal = FisherPValues(withTarget, engine.TensorSlice(factors, new[] { 0 }, new[] { 1 }));
+        var marginal = FisherPValues(withTarget, factors[0]);
         var relevant = FeatureSelectionTensorOps.MaskPositions(
-            FeatureSelectionTensorOps.OneMinus(engine.TensorGreaterThan(marginal, alpha)));
+            FeatureSelectionTensorOps.OneMinus(engine.TensorGreaterThan(marginal, _alpha)));
 
         var bestCandidates = new List<int>();
         foreach (int feature in relevant)
         {
             bestCandidates.Add(feature);
 
-            // Online redundancy analysis over the current BCF, in the order the features arrived
-            foreach (int candidate in bestCandidates.ToArray())
+            // Online redundancy analysis over the current BCF, in the order the features arrived. The correlations
+            // among the target (local index 0) and the BCF (local index 1 + position) are formed once per arrival.
+            var members = bestCandidates.ToArray();
+            var correlations = Correlations(unit, new[] { p }.Concat(members).ToArray());
+            for (int position = 0; position < members.Length; position++)
             {
-                var others = bestCandidates.Where(f => f != candidate).ToArray();
-                if (others.Length > 0 && IsRedundant(correlations, candidate, p, others, factors, alpha))
+                int candidate = members[position];
+                var others = Enumerable.Range(0, members.Length)
+                    .Where(m => m != position && bestCandidates.Contains(members[m])).Select(m => 1 + m).ToArray();
+                if (others.Length > 0 && IsRedundant(correlations, 1 + position, 0, others, factors))
                     bestCandidates.Remove(candidate);
             }
         }
@@ -156,11 +167,18 @@ public class OSFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
     }
 
     /// <summary>
+    /// The most gathered correlation entries one batch of conditioning subsets may hold (8 MB of doubles): with
+    /// hundreds of candidates the size-three subsets alone number in the tens of millions.
+    /// </summary>
+    private const int SubsetBlockEntries = 1 << 20;
+
+    /// <summary>
     /// Whether some conditioning set S of the <paramref name="others"/> (1 &lt;= |S| &lt;= the maximum size) makes
     /// <paramref name="candidate"/> independent of the target, <c>Ind(C, Y | S)</c> (LOFS <c>compter_dep_2</c>).
-    /// Every subset of one size is tested in one batch.
+    /// The subsets of one size are tested in bounded batches, in lexicographic order, and the search stops at the
+    /// first batch that finds one.
     /// </summary>
-    private bool IsRedundant(Tensor<T> correlations, int candidate, int targetIndex, int[] others, Tensor<T> factors, T alpha)
+    private bool IsRedundant(Tensor<double> correlations, int candidate, int targetIndex, int[] others, double[] factors)
     {
         var engine = Engine;
         int width = correlations.Shape[0];
@@ -168,35 +186,37 @@ public class OSFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
         int largest = Math.Min(_maxConditioningSetSize, others.Length);
         for (int size = 1; size <= largest; size++)
         {
-            var subsets = Combinations(others.Length, size);
-            int count = subsets.Count;
             int order = size + 2;
-
-            // Correlation submatrices of (Y, C, S) for every subset S, gathered as [count, order, order]
-            var linear = new int[count * order * order];
-            var members = new int[order];
-            members[0] = candidate;
-            members[1] = targetIndex;
-            for (int s = 0; s < count; s++)
+            int batchSize = Math.Max(1, SubsetBlockEntries / (order * order));
+            foreach (var subsets in CombinationBatches(others.Length, size, batchSize))
             {
-                for (int k = 0; k < size; k++)
-                    members[k + 2] = others[subsets[s][k]];
-                for (int a = 0; a < order; a++)
-                    for (int b = 0; b < order; b++)
-                        linear[(s * order + a) * order + b] = members[a] * width + members[b];
+                int count = subsets.Count;
+
+                // Correlation submatrices of (Y, C, S) for every subset S, gathered as [count, order, order]
+                var linear = new int[count * order * order];
+                var members = new int[order];
+                members[0] = candidate;
+                members[1] = targetIndex;
+                for (int s = 0; s < count; s++)
+                {
+                    for (int k = 0; k < size; k++)
+                        members[k + 2] = others[subsets[s][k]];
+                    for (int a = 0; a < order; a++)
+                        for (int b = 0; b < order; b++)
+                            linear[(s * order + a) * order + b] = members[a] * width + members[b];
+                }
+
+                var blocks = engine.Reshape(
+                    engine.TensorIndexSelect(flat, new Tensor<int>(linear, new[] { linear.Length }), 0), new[] { count, order, order });
+                var partial = PartialCorrelations(blocks, out var invertible, out var determined);
+
+                // Ind(C, Y | S): the Fisher z test accepts independence, or S determines Y or C (LOFS osfs_z: isnan(dep))
+                var accepted = engine.TensorMultiply(
+                    engine.TensorGreaterThan(FisherPValues(partial, factors[size]), _alpha), FeatureSelectionTensorOps.OneMinus(determined));
+                var independent = engine.TensorMultiply(engine.TensorAdd(accepted, determined), invertible);
+                if (FeatureSelectionTensorOps.CountNonZero(independent) > 0)
+                    return true;
             }
-
-            var blocks = engine.Reshape(
-                engine.TensorIndexSelect(flat, new Tensor<int>(linear, new[] { linear.Length }), 0), new[] { count, order, order });
-            var partial = PartialCorrelations(blocks, out var invertible, out var determined);
-            var factor = engine.TensorSlice(factors, new[] { size }, new[] { 1 });
-
-            // Ind(C, Y | S): the Fisher z test accepts independence, or S determines Y or C (LOFS osfs_z: isnan(dep))
-            var accepted = engine.TensorMultiply(
-                engine.TensorGreaterThan(FisherPValues(partial, factor), alpha), FeatureSelectionTensorOps.OneMinus(determined));
-            var independent = engine.TensorMultiply(engine.TensorAdd(accepted, determined), invertible);
-            if (FeatureSelectionTensorOps.CountNonZero(independent) > 0)
-                return true;
         }
 
         return false;
@@ -211,10 +231,11 @@ public class OSFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
     /// <paramref name="invertible"/> is 1 where <c>R_SS</c> could be inverted; a singular conditioning block only
     /// repeats a smaller conditioning set, which is tested on its own. <paramref name="determined"/> is 1 where S
     /// (almost) determines Y or C, i.e. a residual variance <c>R2[0, 0]</c> or <c>R2[1, 1]</c> is within the square
-    /// root of T's unit roundoff of 0: there Y adds nothing about C once S is known, so Y and C are independent given
-    /// S (LOFS gets r = 0/0 = NaN and treats it as independence). The partial correlation is 0 at such blocks.
+    /// root of double's unit roundoff (about 1.5e-8) of 0: there Y adds nothing about C once S is known, so Y and C
+    /// are independent given S (LOFS gets r = 0/0 = NaN and treats it as independence). The partial correlation is
+    /// 0 at such blocks. The blocks are in double whatever T is, so a residual signal such as 1e-4 stays testable.
     /// </remarks>
-    private Tensor<T> PartialCorrelations(Tensor<T> blocks, out Tensor<T> invertible, out Tensor<T> determined)
+    private Tensor<double> PartialCorrelations(Tensor<double> blocks, out Tensor<double> invertible, out Tensor<double> determined)
     {
         var engine = Engine;
         int count = blocks.Shape[0];
@@ -225,8 +246,8 @@ public class OSFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
         var crossTransposed = engine.TensorSlice(blocks, new[] { 0, 2, 0 }, new[] { count, size, 2 });
         var conditioning = engine.TensorSlice(blocks, new[] { 0, 2, 2 }, new[] { count, size, size });
 
-        var (solved, info) = LinalgDispatch<T>.SolveEx(conditioning, crossTransposed);
-        invertible = engine.TensorEquals(info, 0).Cast<T>();
+        var (solved, info) = LinalgDispatch<double>.SolveEx(conditioning, crossTransposed);
+        invertible = engine.TensorEquals(info, 0).Cast<double>();
         var residual = engine.TensorSubtract(pair, engine.TensorBatchMatMul(cross, solved)); // [count, 2, 2]
 
         var r00 = engine.Reshape(engine.TensorSlice(residual, new[] { 0, 0, 0 }, new[] { count, 1, 1 }), new[] { count });
@@ -234,58 +255,39 @@ public class OSFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
         var r11 = engine.Reshape(engine.TensorSlice(residual, new[] { 0, 1, 1 }, new[] { count, 1, 1 }), new[] { count });
 
         // A failed solve leaves no usable residual; those blocks are masked out by invertible
-        T tolerance = NumOps.Sqrt(UnitRoundoff());
-        var zeros = new Tensor<T>(new[] { count });
-        var ones = FeatureSelectionTensorOps.Filled(new[] { count }, NumOps.One);
+        double tolerance = Math.Sqrt(Math.Pow(2, -52));
+        var zeros = new Tensor<double>(new[] { count });
+        var ones = FeatureSelectionTensorOps.Filled(new[] { count }, 1.0);
         var varies = engine.TensorMultiply(
             engine.TensorMultiply(engine.TensorGreaterThan(r00, tolerance), engine.TensorGreaterThan(r11, tolerance)), invertible);
         determined = engine.TensorMultiply(FeatureSelectionTensorOps.OneMinus(varies), invertible);
 
-        // sqrt(a) sqrt(b) rather than sqrt(a b), which can underflow in Half
         var scale = engine.TensorMultiply(
             engine.TensorSqrt(engine.TensorWhere(varies, r00, ones)), engine.TensorSqrt(engine.TensorWhere(varies, r11, ones)));
         return engine.TensorDivide(engine.TensorWhere(varies, r01, zeros), scale);
     }
 
     /// <summary>
-    /// The unit roundoff of T (2^-52 for double, 2^-23 for float, 2^-10 for Half, 2^-7 for BFloat16), found by
-    /// checking which powers of two still change 1 when added to it.
-    /// </summary>
-    private static T UnitRoundoff()
-    {
-        var ops = MathHelper.GetNumericOperations<T>();
-        T one = ops.One;
-        if (ops.GreaterThan(ops.Add(one, ops.FromDouble(Math.Pow(2, -30))), one))
-            return ops.FromDouble(Math.Pow(2, -52));
-        if (ops.GreaterThan(ops.Add(one, ops.FromDouble(Math.Pow(2, -16))), one))
-            return ops.FromDouble(Math.Pow(2, -23));
-        if (ops.GreaterThan(ops.Add(one, ops.FromDouble(Math.Pow(2, -9))), one))
-            return ops.FromDouble(Math.Pow(2, -10));
-        return ops.FromDouble(Math.Pow(2, -7));
-    }
-
-    /// <summary>
     /// Two-sided p-values of Fisher's z test, <c>2 Phi(-|sqrt(n - |S| - 3) atanh(r)|)</c>, for the correlations
-    /// <paramref name="r"/> and the [1] factor <c>sqrt(n - |S| - 3)</c>.
+    /// <paramref name="r"/> and the factor <c>sqrt(n - |S| - 3)</c>.
     /// </summary>
-    private Tensor<T> FisherPValues(Tensor<T> r, Tensor<T> factor)
+    private Tensor<double> FisherPValues(Tensor<double> r, double factor)
     {
         var engine = Engine;
-        var clipped = engine.TensorMax(engine.TensorMin(r, NumOps.One), NumOps.Negate(NumOps.One));
-        var w = engine.TensorMultiply(engine.TensorAtanh(clipped), engine.TensorBroadcastTo(factor, clipped.Shape.ToArray()));
-        return engine.TensorMultiplyScalar(engine.TensorNdtr(engine.TensorNegate(engine.TensorAbs(w))), NumOps.FromDouble(2));
+        var clipped = engine.TensorMax(engine.TensorMin(r, 1.0), -1.0);
+        var w = engine.TensorMultiplyScalar(engine.TensorAtanh(clipped), factor);
+        return engine.TensorMultiplyScalar(engine.TensorNdtr(engine.TensorNegate(engine.TensorAbs(w))), 2.0);
     }
 
     /// <summary>
-    /// Pearson correlation matrix of the columns of an [n, v] tensor, with an exact unit diagonal; a constant column
-    /// is uncorrelated with every other.
+    /// The columns of an [n, v] tensor centred and scaled to unit length, so <c>U'U</c> is their Pearson correlation
+    /// matrix; a constant column is all zeros, uncorrelated with every other.
     /// </summary>
     /// <remarks>
     /// Every column is first divided by its largest magnitude and, once centred, by sqrt(n), so no intermediate
-    /// square or sum leaves [0, 4]: squaring the raw data overflows float above about 1.8e19 and Half above 256.
-    /// The columns are then normalized to unit length, so <c>U'U</c> is the correlation matrix.
+    /// square or sum leaves [0, 4].
     /// </remarks>
-    private Tensor<T> CorrelationMatrix(Tensor<T> x)
+    private Tensor<double> UnitColumns(Tensor<double> x)
     {
         var engine = Engine;
         int n = x.Shape[0];
@@ -293,44 +295,66 @@ public class OSFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
         var columnMax = FeatureSelectionTensorOps.ColumnMax(x);
         var columnMin = FeatureSelectionTensorOps.ColumnMin(x);
         var varying = engine.TensorGreaterThan(columnMax, columnMin);
-        var ones = FeatureSelectionTensorOps.Filled(new[] { v }, NumOps.One);
+        var ones = FeatureSelectionTensorOps.Filled(new[] { v }, 1.0);
         var magnitude = engine.TensorMax(engine.TensorAbs(columnMax), engine.TensorAbs(columnMin));
         var scale = engine.TensorWhere(varying, magnitude, ones);
         var scaled = engine.TensorDivide(x, engine.Reshape(scale, new[] { 1, v }));
 
         var centered = engine.TensorDivideScalar(
-            engine.TensorSubtract(scaled, engine.ReduceMean(scaled, new[] { 0 }, true)), NumOps.Sqrt(NumOps.FromDouble(Math.Max(n, 1))));
+            engine.TensorSubtract(scaled, engine.ReduceMean(scaled, new[] { 0 }, true)), Math.Sqrt(Math.Max(n, 1)));
         var norms = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(centered), new[] { 0 }, false));
-        var usable = engine.TensorMultiply(varying, engine.TensorGreaterThan(norms, NumOps.Zero));
+        var usable = engine.TensorMultiply(varying, engine.TensorGreaterThan(norms, 0.0));
         var safeNorms = engine.Reshape(engine.TensorWhere(usable, norms, ones), new[] { 1, v });
-        var unit = engine.TensorMultiply(
+        return engine.TensorMultiply(
             engine.TensorDivide(centered, safeNorms), engine.TensorBroadcastTo(engine.Reshape(usable, new[] { 1, v }), new[] { n, v }));
-        var correlations = engine.TensorMatMul(engine.TensorTranspose(unit), unit);
-        var eye = engine.TensorEye<T>(v);
+    }
+
+    /// <summary>
+    /// The Pearson correlation matrix of the unit columns <paramref name="variables"/> of <paramref name="unit"/>,
+    /// with an exact unit diagonal.
+    /// </summary>
+    private Tensor<double> Correlations(Tensor<double> unit, int[] variables)
+    {
+        var engine = Engine;
+        var columns = engine.TensorIndexSelect(unit, new Tensor<int>((int[])variables.Clone(), new[] { variables.Length }), 1);
+        var correlations = engine.TensorMatMul(engine.TensorTranspose(columns), columns);
+        var eye = engine.TensorEye<double>(variables.Length);
         return engine.TensorAdd(engine.TensorMultiply(correlations, FeatureSelectionTensorOps.OneMinus(eye)), eye);
     }
 
-    /// <summary>All k-subsets of 0 .. count-1 in lexicographic order (MATLAB <c>nchoosek</c> order).</summary>
-    private static List<int[]> Combinations(int count, int k)
+    /// <summary>
+    /// All k-subsets of 0 .. count-1 in lexicographic order (MATLAB <c>nchoosek</c> order), enumerated lazily in
+    /// batches of at most <paramref name="batchSize"/>.
+    /// </summary>
+    private static IEnumerable<List<int[]>> CombinationBatches(int count, int k, int batchSize)
     {
-        var result = new List<int[]>();
+        var batch = new List<int[]>();
         var current = new int[k];
         for (int i = 0; i < k; i++)
             current[i] = i;
 
         while (true)
         {
-            result.Add((int[])current.Clone());
+            batch.Add((int[])current.Clone());
+            if (batch.Count == batchSize)
+            {
+                yield return batch;
+                batch = new List<int[]>();
+            }
+
             int position = k - 1;
             while (position >= 0 && current[position] == count - k + position)
                 position--;
             if (position < 0)
-                return result;
+                break;
 
             current[position]++;
             for (int i = position + 1; i < k; i++)
                 current[i] = current[i - 1] + 1;
         }
+
+        if (batch.Count > 0)
+            yield return batch;
     }
 
     /// <inheritdoc />
