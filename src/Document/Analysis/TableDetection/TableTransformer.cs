@@ -278,17 +278,18 @@ public partial class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableE
     private void InitializeObjectQueries()
     {
         var random = RandomHelper.CreateSeededRandom(42);
-        _objectQueries = Tensor<T>.CreateDefault([_numQueries, _hiddenDim], NumOps.Zero);
 
-        // Xavier initialization for object queries
+        // Xavier-scaled Box-Muller normals, drawn in the same (u1, u2) order per element as before.
         double scale = Math.Sqrt(2.0 / (_numQueries + _hiddenDim));
-        for (int i = 0; i < _objectQueries.Data.Length; i++)
+        var normals = new double[_numQueries * _hiddenDim];
+        for (int i = 0; i < normals.Length; i++)
         {
             double u1 = 1.0 - random.NextDouble();
             double u2 = 1.0 - random.NextDouble();
-            double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-            _objectQueries.Data.Span[i] = NumOps.FromDouble(randStdNormal * scale);
+            normals[i] = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2) * scale;
         }
+
+        _objectQueries = new Tensor<double>(normals, new[] { _numQueries, _hiddenDim }).Cast<T>();
     }
 
     private void InitializeOnnxSessions()
@@ -478,20 +479,7 @@ public partial class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableE
         if (boxesTensor.Shape[0] != logitsTensor.Shape[0])
             throw new InvalidOperationException("pred_boxes and pred_logits must have the same number of queries.");
 
-        int numQueries = boxesTensor.Shape[0];
-        int boxDim = boxesTensor.Shape[1];
-        int classDim = logitsTensor.Shape[1];
-        var merged = new Tensor<T>([numQueries, boxDim + classDim]);
-
-        for (int i = 0; i < numQueries; i++)
-        {
-            for (int b = 0; b < boxDim; b++)
-                merged[i, b] = boxesTensor[i, b];
-            for (int c = 0; c < classDim; c++)
-                merged[i, boxDim + c] = logitsTensor[i, c];
-        }
-
-        return merged;
+        return AiDotNetEngine.Current.TensorConcatenate(new[] { boxesTensor, logitsTensor }, 1);
     }
 
     private static Tensor<T> SqueezeBatch(Tensor<T> tensor, string outputName)
@@ -514,15 +502,6 @@ public partial class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableE
         return (image.Shape[^2], image.Shape[^1]);
     }
 
-    private static double Clamp(double value, double min, double max)
-    {
-        if (value < min)
-            return min;
-        if (value > max)
-            return max;
-        return value;
-    }
-
     private static int Clamp(int value, int min, int max)
     {
         if (value < min)
@@ -532,224 +511,147 @@ public partial class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableE
         return value;
     }
 
-    private IEnumerable<TableRegion<T>> ParseTableDetections(Tensor<T> output, Tensor<T> originalImage, double threshold)
+    internal IEnumerable<TableRegion<T>> ParseTableDetections(Tensor<T> output, Tensor<T> originalImage, double threshold)
     {
-        var regions = new List<TableRegion<T>>();
-        var (imageHeight, imageWidth) = GetImageDimensions(originalImage);
-
-        // DETR output: [num_queries, 4 + num_classes] (bbox + class logits)
-        bool is1D = output.Shape.Length == 1;
-        int outputDim = output.Shape.Length > 1 ? output.Shape[1] : 4 + _numTableClasses; // 4 bbox + classes
-        int numDetections = is1D ? output.Length / outputDim : output.Shape[0];
-
-        for (int i = 0; i < numDetections; i++)
+        // Every class except DETR's trailing "no object" is a table (official weights: table, table rotated).
+        var objects = DetrObjects(output, _numTableClasses, originalImage, threshold);
+        return objects.Scores.Select((score, i) => new TableRegion<T>
         {
-            int baseIndex = is1D ? i * outputDim : 0;
-            if (is1D && baseIndex + outputDim > output.Length)
-                break;
-
-            // Get class probabilities
-            double tableProb = 0;
-            if (outputDim >= 6)
-            {
-                // Softmax over class logits
-                if (is1D && baseIndex + 5 >= output.Length)
-                    continue;
-
-                double bg = is1D
-                    ? NumOps.ToDouble(output[baseIndex + 4])
-                    : NumOps.ToDouble(output[i, 4]);
-                double table = is1D
-                    ? NumOps.ToDouble(output[baseIndex + 5])
-                    : NumOps.ToDouble(output[i, 5]);
-                double maxLogit = Math.Max(bg, table);
-                double sumExp = Math.Exp(bg - maxLogit) + Math.Exp(table - maxLogit);
-                tableProb = Math.Exp(table - maxLogit) / sumExp;
-            }
-
-            if (tableProb >= threshold)
-            {
-                if (is1D && baseIndex + 3 >= output.Length)
-                    continue;
-
-                // Get bounding box (DETR uses center_x, center_y, width, height format normalized to [0,1])
-                double cx = is1D
-                    ? NumOps.ToDouble(output[baseIndex + 0])
-                    : NumOps.ToDouble(output[i, 0]);
-                double cy = is1D
-                    ? NumOps.ToDouble(output[baseIndex + 1])
-                    : NumOps.ToDouble(output[i, 1]);
-                double w = is1D
-                    ? NumOps.ToDouble(output[baseIndex + 2])
-                    : NumOps.ToDouble(output[i, 2]);
-                double h = is1D
-                    ? NumOps.ToDouble(output[baseIndex + 3])
-                    : NumOps.ToDouble(output[i, 3]);
-
-                // Convert to [x1, y1, x2, y2] format
-                double x1 = (cx - w / 2) * imageWidth;
-                double y1 = (cy - h / 2) * imageHeight;
-                double x2 = (cx + w / 2) * imageWidth;
-                double y2 = (cy + h / 2) * imageHeight;
-
-                x1 = Clamp(x1, 0, imageWidth);
-                x2 = Clamp(x2, 0, imageWidth);
-                y1 = Clamp(y1, 0, imageHeight);
-                y2 = Clamp(y2, 0, imageHeight);
-
-                if (x2 <= x1 || y2 <= y1)
-                    continue;
-
-                var region = new TableRegion<T>
-                {
-                    BoundingBox = new Vector<T>([
-                        NumOps.FromDouble(x1),
-                        NumOps.FromDouble(y1),
-                        NumOps.FromDouble(x2),
-                        NumOps.FromDouble(y2)
-                    ]),
-                    Confidence = NumOps.FromDouble(tableProb),
-                    TableIndex = regions.Count,
-                    Image = CropTableImage(originalImage, x1, y1, x2, y2)
-                };
-
-                regions.Add(region);
-            }
-        }
-
-        return regions;
+            BoundingBox = new Vector<T>(objects.Boxes[i]),
+            Confidence = score,
+            TableIndex = i,
+            Image = CropTableImage(originalImage, objects.Pixels[i][0], objects.Pixels[i][1], objects.Pixels[i][2], objects.Pixels[i][3])
+        }).ToList();
     }
 
-    private TableStructureResult<T> ParseStructureOutput(Tensor<T> output, Tensor<T> tableImage, double threshold)
+    /// <summary>
+    /// DETR's post-processing (Carion et al. 2020, as in Table Transformer's <c>postprocess</c>): each query row is
+    /// <c>[cx, cy, w, h, class logits...]</c> whose LAST class is "no object". The class probabilities are the
+    /// softmax over all logits; a query's label and score are the best class other than "no object". Boxes are
+    /// normalized centre/size (the native head emits them as logits, so they get the head's sigmoid), converted to
+    /// pixel corners and clipped to the image. Queries scoring below <paramref name="threshold"/> or with an empty
+    /// box are dropped.
+    /// </summary>
+    internal (int[] Labels, T[] Scores, T[][] Boxes, double[][] Pixels) DetrObjects(Tensor<T> output, int numClasses, Tensor<T> image, double threshold)
     {
+        var (imageHeight, imageWidth) = GetImageDimensions(image);
+        int width = output.Shape.Length > 1 ? output.Shape[^1] : 4 + numClasses;
+        int classes = width - 4;
+        int count = classes > 1 ? output.Length / width : 0;
+        if (count == 0)
+            return (Array.Empty<int>(), Array.Empty<T>(), Array.Empty<T[]>(), Array.Empty<double[]>());
+
+        var flat = Engine.Reshape(output, new[] { output.Length });
+        if (flat.Length != count * width)
+            flat = Engine.TensorSlice(flat, new[] { 0 }, new[] { count * width });
+        var queries = Engine.Reshape(flat, new[] { count, width });
+        var boxes = Engine.TensorSlice(queries, new[] { 0, 0 }, new[] { count, 4 });
+        if (_useNativeMode)
+            boxes = Engine.Sigmoid(boxes);
+        var probabilities = Engine.Softmax(Engine.TensorSlice(queries, new[] { 0, 4 }, new[] { count, classes }), 1);
+        var (labels, scores) = DocumentTensorOps.RowMax(Engine, probabilities, classes - 1);
+
+        Tensor<T> Column(int c) => Engine.TensorSlice(boxes, new[] { 0, c }, new[] { count, 1 });
+        T half = NumOps.FromDouble(0.5), pixelWidth = NumOps.FromDouble(imageWidth), pixelHeight = NumOps.FromDouble(imageHeight);
+        var halfWidth = Engine.TensorMultiplyScalar(Column(2), half);
+        var halfHeight = Engine.TensorMultiplyScalar(Column(3), half);
+        Tensor<T> ToPixels(Tensor<T> t, T size) => Engine.TensorClamp(Engine.TensorMultiplyScalar(t, size), NumOps.Zero, size);
+        var x1 = ToPixels(Engine.TensorSubtract(Column(0), halfWidth), pixelWidth);
+        var y1 = ToPixels(Engine.TensorSubtract(Column(1), halfHeight), pixelHeight);
+        var x2 = ToPixels(Engine.TensorAdd(Column(0), halfWidth), pixelWidth);
+        var y2 = ToPixels(Engine.TensorAdd(Column(1), halfHeight), pixelHeight);
+
+        var keep = Engine.TensorMultiply(
+            Engine.TensorMultiply(Engine.TensorGreaterThan(x2, x1), Engine.TensorGreaterThan(y2, y1)),
+            Engine.Reshape(DocumentTensorOps.AtLeast(Engine, scores, NumOps.FromDouble(threshold)), new[] { count, 1 }));
+        int[] kept = DocumentTensorOps.Hits(Engine, Engine.Reshape(keep, new[] { count }));
+        var corners = Engine.TensorConcatenate(new[] { x1, y1, x2, y2 }, 1);
+        T[] values = corners.ToArray();
+        double[] pixels = corners.Cast<double>().ToArray();
+        return (kept.Select(i => labels[i]).ToArray(),
+            DocumentTensorOps.Pick(Engine, scores, kept),
+            kept.Select(i => values.Skip(4 * i).Take(4).ToArray()).ToArray(),
+            kept.Select(i => pixels.Skip(4 * i).Take(4).ToArray()).ToArray());
+    }
+
+    /// <summary>Table Transformer's structure classes (the official order; "no object" is the last logit).</summary>
+    private const int StructureColumn = 1, StructureRow = 2, StructureColumnHeader = 3, StructureSpanningCell = 5;
+
+    internal TableStructureResult<T> ParseStructureOutput(Tensor<T> output, Tensor<T> tableImage, double threshold)
+    {
+        // Table Transformer's objects-to-cells: the table's rows and columns are the detected row and column
+        // objects ordered top-to-bottom and left-to-right; each row/column intersection is a cell, a row is a header
+        // row when its centre lies in a column-header object, and a spanning-cell object merges the grid cells whose
+        // row and column centres it contains into one cell.
+        var (labels, scores, boxes, pixels) = DetrObjects(output, _numStructureClasses, tableImage, threshold);
+        int[] Of(int label) => Enumerable.Range(0, labels.Length).Where(i => labels[i] == label).ToArray();
+        double Center(int i, int axis) => (pixels[i][axis] + pixels[i][axis + 2]) / 2;
+        bool Inside(double v, int obj, int axis) => v >= pixels[obj][axis] && v <= pixels[obj][axis + 2];
+
+        int[] rows = Of(StructureRow).OrderBy(i => Center(i, 1)).ToArray();
+        int[] columns = Of(StructureColumn).OrderBy(i => Center(i, 0)).ToArray();
+        int[] headers = Of(StructureColumnHeader);
+        var headerRows = Enumerable.Range(0, rows.Length).Where(r => headers.Any(h => Inside(Center(rows[r], 1), h, 1))).ToList();
         var cells = new List<TableCell<T>>();
-        var rows = new HashSet<int>();
-        var columns = new HashSet<int>();
-        var (imageHeight, imageWidth) = GetImageDimensions(tableImage);
-
-        bool is1D = output.Shape.Length == 1;
-        int outputDim = output.Shape.Length > 1 ? output.Shape[1] : 4 + _numStructureClasses; // 4 bbox + classes
-        int numDetections = is1D ? output.Length / outputDim : output.Shape[0];
-
-        for (int i = 0; i < numDetections; i++)
+        if (rows.Length > 0 && columns.Length > 0)
         {
-            int baseIndex = is1D ? i * outputDim : 0;
-            if (is1D && baseIndex + outputDim > output.Length)
-                break;
-
-            // Find the class with highest probability
-            double maxProb = 0;
-            int maxClass = 0;
-            for (int c = 0; c < _numStructureClasses && (4 + c) < outputDim; c++)
+            // A grid cell's confidence is the mean of the scores of its row and its column.
+            var all = new Tensor<T>(scores, new[] { scores.Length });
+            int[] grid = { rows.Length, columns.Length };
+            T[] gridScores = Engine.TensorMultiplyScalar(Engine.TensorAdd(
+                Engine.TensorBroadcastTo(new Tensor<T>(DocumentTensorOps.Pick(Engine, all, rows), new[] { rows.Length, 1 }), grid),
+                Engine.TensorBroadcastTo(new Tensor<T>(DocumentTensorOps.Pick(Engine, all, columns), new[] { 1, columns.Length }), grid)),
+                NumOps.FromDouble(0.5)).ToArray();
+            Vector<T> Box(int firstRow, int firstColumn, int lastRow, int lastColumn) => new(new[]
             {
-                if (is1D)
-                {
-                    int flatIndex = baseIndex + 4 + c;
-                    if (flatIndex < 0 || flatIndex >= output.Length)
-                        break;
-                    double prob = NumOps.ToDouble(output[flatIndex]);
-                    if (prob > maxProb)
-                    {
-                        maxProb = prob;
-                        maxClass = c;
-                    }
-                }
-                else
-                {
-                    double prob = NumOps.ToDouble(output[i, 4 + c]);
-                    if (prob > maxProb)
-                    {
-                        maxProb = prob;
-                        maxClass = c;
-                    }
-                }
-            }
+                boxes[columns[firstColumn]][0], boxes[rows[firstRow]][1], boxes[columns[lastColumn]][2], boxes[rows[lastRow]][3]
+            });
 
-            if (maxProb >= threshold && maxClass > 0) // Skip background class
+            var covered = new bool[rows.Length * columns.Length];
+            foreach (int span in Of(StructureSpanningCell))
             {
-                if (is1D && baseIndex + 3 >= output.Length)
+                int[] r = Enumerable.Range(0, rows.Length).Where(i => Inside(Center(rows[i], 1), span, 1)).ToArray();
+                int[] c = Enumerable.Range(0, columns.Length).Where(i => Inside(Center(columns[i], 0), span, 0)).ToArray();
+                if (r.Length * c.Length < 2 || r.Any(i => c.Any(j => covered[(i * columns.Length) + j])))
                     continue;
-
-                double cx = is1D
-                    ? NumOps.ToDouble(output[baseIndex + 0])
-                    : NumOps.ToDouble(output[i, 0]);
-                double cy = is1D
-                    ? NumOps.ToDouble(output[baseIndex + 1])
-                    : NumOps.ToDouble(output[i, 1]);
-                double w = is1D
-                    ? NumOps.ToDouble(output[baseIndex + 2])
-                    : NumOps.ToDouble(output[i, 2]);
-                double h = is1D
-                    ? NumOps.ToDouble(output[baseIndex + 3])
-                    : NumOps.ToDouble(output[i, 3]);
-
-                // Convert to pixel coordinates
-                double x1 = (cx - w / 2) * imageWidth;
-                double y1 = (cy - h / 2) * imageHeight;
-                double x2 = (cx + w / 2) * imageWidth;
-                double y2 = (cy + h / 2) * imageHeight;
-
-                x1 = Clamp(x1, 0, imageWidth);
-                x2 = Clamp(x2, 0, imageWidth);
-                y1 = Clamp(y1, 0, imageHeight);
-                y2 = Clamp(y2, 0, imageHeight);
-
-                if (x2 <= x1 || y2 <= y1)
-                    continue;
-
-                // Determine row/column based on position
-                int rowIdx = EstimateRowIndex(y1, y2);
-                int colIdx = EstimateColumnIndex(x1, x2);
-                rows.Add(rowIdx);
-                columns.Add(colIdx);
-
-                bool isHeader = maxClass == 4; // column header class
-                int rowSpan = maxClass == 6 ? 2 : 1; // spanning cell
-                int colSpan = maxClass == 6 ? 2 : 1;
-
+                foreach (int i in r)
+                    foreach (int j in c)
+                        covered[(i * columns.Length) + j] = true;
                 cells.Add(new TableCell<T>
                 {
-                    Row = rowIdx,
-                    Column = colIdx,
-                    RowSpan = rowSpan,
-                    ColSpan = colSpan,
-                    BoundingBox = new Vector<T>([
-                        NumOps.FromDouble(x1),
-                        NumOps.FromDouble(y1),
-                        NumOps.FromDouble(x2),
-                        NumOps.FromDouble(y2)
-                    ]),
-                    IsHeader = isHeader,
-                    Confidence = NumOps.FromDouble(maxProb),
-                    Text = "" // Would be filled by OCR
+                    Row = r[0],
+                    Column = c[0],
+                    RowSpan = r[r.Length - 1] - r[0] + 1,
+                    ColSpan = c[c.Length - 1] - c[0] + 1,
+                    BoundingBox = Box(r[0], c[0], r[r.Length - 1], c[c.Length - 1]),
+                    IsHeader = headerRows.Contains(r[0]),
+                    Confidence = scores[span]
                 });
             }
+
+            for (int i = 0; i < rows.Length; i++)
+                for (int j = 0; j < columns.Length; j++)
+                    if (!covered[(i * columns.Length) + j])
+                        cells.Add(new TableCell<T>
+                        {
+                            Row = i,
+                            Column = j,
+                            BoundingBox = Box(i, j, i, j),
+                            IsHeader = headerRows.Contains(i),
+                            Confidence = gridScores[(i * columns.Length) + j]
+                        });
         }
 
+        var ordered = cells.OrderBy(c => c.Row).ThenBy(c => c.Column).ToList();
         return new TableStructureResult<T>
         {
-            NumRows = rows.Count > 0 ? rows.Max() + 1 : 0,
-            NumColumns = columns.Count > 0 ? columns.Max() + 1 : 0,
-            Cells = cells,
-            HeaderRows = cells.Any(c => c.IsHeader) ? [0] : [],
+            NumRows = rows.Length,
+            NumColumns = columns.Length,
+            Cells = ordered,
+            HeaderRows = headerRows,
             HasBorders = true,
-            Confidence = cells.Count > 0
-                ? NumOps.FromDouble(cells.Average(c => NumOps.ToDouble(c.Confidence)))
-                : NumOps.Zero
+            Confidence = DocumentTensorOps.Mean(Engine, ordered.Select(c => c.Confidence).ToArray())
         };
-    }
-
-    private int EstimateRowIndex(double y1, double y2)
-    {
-        // Simple heuristic: divide image into grid
-        double centerY = (y1 + y2) / 2;
-        return (int)(centerY / 50); // Assume ~50px per row
-    }
-
-    private int EstimateColumnIndex(double x1, double x2)
-    {
-        double centerX = (x1 + x2) / 2;
-        return (int)(centerX / 100); // Assume ~100px per column
     }
 
     private Tensor<T>? CropTableImage(Tensor<T> image, double x1, double y1, double x2, double y2)
@@ -762,52 +664,13 @@ public partial class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableE
 
         int cropWidth = endX - startX;
         int cropHeight = endY - startY;
-        if (cropWidth <= 0 || cropHeight <= 0)
+        if (cropWidth <= 0 || cropHeight <= 0 || (image.Rank != 3 && image.Rank != 4))
             return null;
 
-        if (image.Rank == 3)
-        {
-            int channels = image.Shape[0];
-            var cropped = new Tensor<T>([channels, cropHeight, cropWidth]);
-            for (int c = 0; c < channels; c++)
-            {
-                for (int y = 0; y < cropHeight; y++)
-                {
-                    int srcY = startY + y;
-                    for (int x = 0; x < cropWidth; x++)
-                    {
-                        int srcX = startX + x;
-                        cropped[c, y, x] = image[c, srcY, srcX];
-                    }
-                }
-            }
-            return cropped;
-        }
-
-        if (image.Rank == 4)
-        {
-            int batch = image.Shape[0];
-            int channels = image.Shape[1];
-            var cropped = new Tensor<T>([batch, channels, cropHeight, cropWidth]);
-            for (int b = 0; b < batch; b++)
-            {
-                for (int c = 0; c < channels; c++)
-                {
-                    for (int y = 0; y < cropHeight; y++)
-                    {
-                        int srcY = startY + y;
-                        for (int x = 0; x < cropWidth; x++)
-                        {
-                            int srcX = startX + x;
-                            cropped[b, c, y, x] = image[b, c, srcY, srcX];
-                        }
-                    }
-                }
-            }
-            return cropped;
-        }
-
-        return null;
+        int lead = image.Rank - 2;
+        var start = Enumerable.Repeat(0, lead).Concat(new[] { startY, startX }).ToArray();
+        var length = image.Shape.ToArray().Take(lead).Concat(new[] { cropHeight, cropWidth }).ToArray();
+        return Engine.TensorSlice(image, start, length).Clone();
     }
 
     #region Export Methods
@@ -947,48 +810,9 @@ public partial class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableE
     /// From the PubTables-1M paper (CVPR 2022).
     /// </remarks>
     protected override Tensor<T> ApplyDefaultPreprocessing(Tensor<T> rawImage)
-    {
-        var image = EnsureBatchDimension(rawImage);
-
-        int batchSize = image.Shape[0];
-        int channels = image.Shape[1];
-        int height = image.Shape[2];
-        int width = image.Shape[3];
-
-        var normalized = new Tensor<T>(image._shape);
-
-        // COCO/ImageNet normalization (industry standard for TableTransformer)
-        double[] means = [0.485, 0.456, 0.406];
-        double[] stds = [0.229, 0.224, 0.225];
-
-        // Pixel intensities are expected in [0,1]; clamp out-of-range values
-        // (over/under-exposed pixels, or callers passing un-normalized data) rather
-        // than rejecting them, so the model is robust to arbitrary inputs. Clamping
-        // — not min-max rescaling — is intentional: it keeps distinct-brightness
-        // inputs distinct after preprocessing (a 2× image still differs from the 1×),
-        // which the ScaledInput/LargerInput invariants depend on.
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                double mean = c < means.Length ? means[c] : 0.5;
-                double std = c < stds.Length ? stds[c] : 0.5;
-
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        int idx = b * channels * height * width + c * height * width + h * width + w;
-                        double value = NumOps.ToDouble(image.Data.Span[idx]);
-                        value = Math.Max(0.0, Math.Min(1.0, value));
-                        normalized.Data.Span[idx] = NumOps.FromDouble((value - mean) / std);
-                    }
-                }
-            }
-        }
-
-        return normalized;
-    }
+        => DocumentTensorOps.NormalizeChannels(Engine,
+            Engine.TensorClamp(EnsureBatchDimension(rawImage), NumOps.Zero, NumOps.One),
+            DocumentTensorOps.ImageNetMean, DocumentTensorOps.ImageNetStd);
 
     /// <summary>
     /// Applies TableTransformer's industry-standard postprocessing: pass-through (DETR outputs are already in final format).
