@@ -1,5 +1,4 @@
-﻿
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 
 namespace AiDotNet.KnowledgeDistillation;
 

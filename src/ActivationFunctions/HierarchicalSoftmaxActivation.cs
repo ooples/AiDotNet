@@ -55,14 +55,13 @@ public class HierarchicalSoftmaxActivation<T> : ActivationFunctionBase<T>
     private int _weightInputDim;
 
     /// <summary>
-    /// Gets the node weights as a tensor for use in computation graphs.
+    /// Gets the node weights as a tensor.
     /// </summary>
     /// <value>A tensor containing the node weights with shape [treeDepth, numClasses].</value>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This property provides access to the internal weights used by the hierarchical
-    /// tree structure. When using JIT compilation, you can wrap these weights in a ComputationNode
-    /// to enable gradient computation and weight updates during training.
+    /// tree structure, for inspection or export.
     /// </para>
     /// </remarks>
     public Tensor<T> NodeWeightsTensor => Tensor<T>.FromRowMatrix(_nodeWeights);

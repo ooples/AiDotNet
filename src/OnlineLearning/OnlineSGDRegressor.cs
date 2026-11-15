@@ -420,10 +420,6 @@ public partial class OnlineSGDRegressor<T> : OnlineLearningModelBase<T>
 
     #endregion
 
-    #region JIT Compilation Support
-
-    #endregion
-
     /// <summary>
     /// Gets the weights vector.
     /// </summary>
