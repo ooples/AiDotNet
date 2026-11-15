@@ -79,7 +79,7 @@ public class TabRClassifier<T> : TabRBase<T>
         int numFeatures,
         int numClasses,
         TabROptions<T>? options = null)
-        : base(numFeatures, options, Math.Max(numClasses, 0))
+        : base(numFeatures, options, Math.Max(numClasses, 0), categoricalLabels: true)
     {
         if (numClasses < 2)
         {
@@ -88,7 +88,7 @@ public class TabRClassifier<T> : TabRBase<T>
 
         _numClasses = numClasses;
 
-        // Classification head
+        // The final Linear(d_main, n_classes) of the reference head Sequential(Norm, Activation, Linear)
         _classificationHead = new FullyConnectedLayer<T>(
             EmbeddingDimension,
             numClasses,

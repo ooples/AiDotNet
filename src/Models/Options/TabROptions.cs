@@ -32,8 +32,9 @@ namespace AiDotNet.Models.Options;
 /// var options = new TabROptions&lt;double&gt;
 /// {
 ///     NumNeighbors = 96,
-///     EmbeddingDimension = 256,
-///     NumLayers = 4
+///     EmbeddingDimension = 265,
+///     EncoderNumBlocks = 0,
+///     PredictorNumBlocks = 1
 /// };
 /// var model = new TabRClassifier&lt;double&gt;(numFeatures: 10, numClasses: 3, options);
 /// </code>
@@ -60,37 +61,96 @@ public class TabROptions<T> : RiskModelOptions<T>
     public int NumNeighbors { get; set; } = 96;
 
     /// <summary>
-    /// Gets or sets the embedding dimension for encoding features.
+    /// Gets or sets the width of every hidden representation: the reference implementation's <c>d_main</c>.
     /// </summary>
-    /// <value>The embedding dimension, defaulting to 256.</value>
+    /// <value>265 by default, the paper's default TabR-S configuration.</value>
     /// <remarks>
+    /// <para>
+    /// The encoder's first linear map, every block's input and output, the keys, the values and the prediction
+    /// head all have this width. Gorishniy et al. (2023) list <c>d = 265</c> among the default TabR-S
+    /// hyperparameters. Must be positive.
+    /// </para>
     /// <para>
     /// <b>For Beginners:</b> This controls the size of the learned representation:
     /// - Smaller (128-192): Faster, good for smaller datasets
     /// - Larger (256-384): More capacity, better for complex relationships
     /// </para>
     /// </remarks>
-    public int EmbeddingDimension { get; set; } = 256;
+    public int EmbeddingDimension { get; set; } = 265;
 
     /// <summary>
-    /// Gets or sets the number of MLP layers in the feature encoder.
+    /// Gets or sets the hidden width of every block and of the value MLP <c>T</c> as a multiple of
+    /// <see cref="EmbeddingDimension"/>: the reference implementation's <c>d_multiplier</c>.
+    /// </summary>
+    /// <value>2.0 by default: the paper's first linear layer of the FFN and of T has output size 2d.</value>
+    /// <remarks>
+    /// The reference sets <c>d_block = int(d_main * d_multiplier)</c>, truncating, and each block maps
+    /// <c>d_main -&gt; d_block -&gt; d_main</c>. Must be positive and give a block width of at least 1.
+    /// </remarks>
+    public double BlockWidthMultiplier { get; set; } = 2.0;
+
+    /// <summary>
+    /// Gets or sets the number of residual blocks after the encoder's first linear map: the reference
+    /// implementation's <c>encoder_n_blocks</c>.
+    /// </summary>
+    /// <value>0 by default, the paper's TabR-S configuration, whose encoder is the single linear map.</value>
+    /// <remarks>
+    /// Each block is <c>x + Dropout(dropout1)(Linear(Dropout(dropout0)(Activation(Linear(Norm(x))))))</c>, the norm
+    /// skipped on the first encoder block. Must not be negative.
+    /// </remarks>
+    public int EncoderNumBlocks { get; set; } = 0;
+
+    /// <summary>
+    /// Gets or sets the number of residual blocks between the retrieval module and the prediction head: the
+    /// reference implementation's <c>predictor_n_blocks</c>.
+    /// </summary>
+    /// <value>1 by default, the paper's TabR-S configuration.</value>
+    /// <remarks>
+    /// Every predictor block normalizes its input first. The head after them is
+    /// <c>Linear(Activation(Norm(x)))</c>. Must not be negative.
+    /// </remarks>
+    public int PredictorNumBlocks { get; set; } = 1;
+
+    /// <summary>
+    /// Gets or sets whether the encoder output is normalized before the key projection <c>K</c>: the reference
+    /// implementation's <c>mixer_normalization</c>.
+    /// </summary>
+    /// <value>Null by default, the reference's <c>'auto'</c>: on exactly when <see cref="EncoderNumBlocks"/> is positive.</value>
+    /// <remarks>
+    /// Only the key sees the normalized encoding; the representation the retrieved context is added to stays
+    /// unnormalized. The reference asserts that an encoder without blocks has no mixer normalization, so true with
+    /// <see cref="EncoderNumBlocks"/> = 0 is rejected.
+    /// </remarks>
+    public bool? MixerNormalization { get; set; } = null;
+
+    /// <summary>
+    /// Gets or sets the normalization layer of the blocks, the mixer and the head: the reference implementation's
+    /// <c>normalization</c>.
+    /// </summary>
+    /// <value><see cref="TabRNormalization.LayerNorm"/> by default, the paper's choice.</value>
+    public TabRNormalization Normalization { get; set; } = TabRNormalization.LayerNorm;
+
+    /// <summary>
+    /// Gets or sets the activation inside every block, inside the value MLP <c>T</c> and in the head: the reference
+    /// implementation's <c>activation</c>.
+    /// </summary>
+    /// <value><see cref="ActivationFunction.ReLU"/> by default, the paper's choice.</value>
+    /// <remarks>
+    /// Any element-wise activation; <see cref="ActivationFunction.Softmax"/> is rejected because it is not one.
+    /// </remarks>
+    public ActivationFunction Activation { get; set; } = ActivationFunction.ReLU;
+
+    /// <summary>
+    /// Gets or sets the number of hidden layers of <see cref="AiDotNet.NeuralNetworks.Tabular.TabRNetwork{T}"/>'s
+    /// retrieval-free layer stack.
     /// </summary>
     /// <value>The number of layers, defaulting to 4.</value>
-    public int NumLayers { get; set; } = 4;
-
-    /// <summary>
-    /// Gets or sets the number of attention heads for neighbor aggregation.
-    /// </summary>
-    /// <value>The number of attention heads, defaulting to 8.</value>
     /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Attention heads let the model weigh different neighbors
-    /// differently from multiple perspectives.
-    ///
-    /// Must divide EmbeddingDimension evenly.
-    /// </para>
+    /// Only the layer-stack network reads this. The retrieval models built on
+    /// <see cref="AiDotNet.NeuralNetworks.Tabular.TabRBase{T}"/> follow the reference architecture and take their depth
+    /// from <see cref="EncoderNumBlocks"/> and <see cref="PredictorNumBlocks"/>.
     /// </remarks>
-    public int NumAttentionHeads { get; set; } = 8;
+    public int NumLayers { get; set; } = 4;
 
     /// <summary>
     /// Gets or sets the dropout rate after every hidden activation: the reference implementation's <c>dropout0</c>.
@@ -98,11 +158,23 @@ public class TabROptions<T> : RiskModelOptions<T>
     /// <value>0.38852797479169876 by default, the paper's default TabR-S configuration.</value>
     /// <remarks>
     /// The reference <c>make_block</c> is <c>Linear -&gt; ReLU -&gt; Dropout(dropout0) -&gt; Linear -&gt; Dropout(dropout1)</c>,
-    /// and the value MLP is <c>T = LinearWithoutBias(Dropout(dropout0)(ReLU(Linear(.))))</c>. Here it follows each
-    /// encoder and predictor layer's ReLU and T's ReLU. The default TabR-S uses <c>dropout1 = 0</c>, and these layers
-    /// have no second linear map for it. It drops only inside training steps; prediction never drops. Must lie in [0, 1).
+    /// and the value MLP is <c>T = LinearWithoutBias(Dropout(dropout0)(ReLU(Linear(.))))</c>. This rate follows the
+    /// activation of every encoder and predictor block and of T; <see cref="BlockOutputDropoutRate"/> is
+    /// <c>dropout1</c>. It drops only inside training steps; prediction never drops. Must lie in [0, 1).
     /// </remarks>
     public double DropoutRate { get; set; } = 0.38852797479169876;
+
+    /// <summary>
+    /// Gets or sets the dropout rate on the output of every encoder and predictor block, before the residual add: the
+    /// reference implementation's <c>dropout1</c>.
+    /// </summary>
+    /// <value>0 by default, the paper's TabR-S configuration.</value>
+    /// <remarks>
+    /// Drawn through the same training-step masks as <see cref="DropoutRate"/>: it drops only inside training steps,
+    /// and prediction never drops. The reference's <c>dropout1 = 'dropout0'</c> is this set equal to
+    /// <see cref="DropoutRate"/>. Must lie in [0, 1).
+    /// </remarks>
+    public double BlockOutputDropoutRate { get; set; } = 0.0;
 
     /// <summary>
     /// Gets or sets the dropout rate on the retrieval weights: the reference implementation's <c>context_dropout</c>.
@@ -168,26 +240,6 @@ public class TabROptions<T> : RiskModelOptions<T>
     public bool NormalizeEmbeddings { get; set; } = false;
 
     /// <summary>
-    /// Gets or sets the number of context encoder layers.
-    /// </summary>
-    /// <value>The number of context layers, defaulting to 2.</value>
-    /// <remarks>
-    /// <para>
-    /// Context encoder processes the retrieved neighbors and aggregates
-    /// their information with the query sample.
-    /// </para>
-    /// </remarks>
-    public int NumContextLayers { get; set; } = 2;
-
-    /// <summary>
-    /// Gets or sets whether to use layer normalization.
-    /// </summary>
-    /// <value>True to use layer normalization; false otherwise. Defaults to true.</value>
-    public bool UseLayerNorm { get; set; } = true;
-
-
-
-    /// <summary>
     /// Gets or sets the weight decay coefficient.
     /// </summary>
     /// <value>The weight decay, defaulting to 1e-5.</value>
@@ -202,16 +254,20 @@ public class TabROptions<T> : RiskModelOptions<T>
         {
             NumNeighbors = NumNeighbors,
             EmbeddingDimension = EmbeddingDimension,
+            BlockWidthMultiplier = BlockWidthMultiplier,
+            EncoderNumBlocks = EncoderNumBlocks,
+            PredictorNumBlocks = PredictorNumBlocks,
+            MixerNormalization = MixerNormalization,
+            Normalization = Normalization,
+            Activation = Activation,
             NumLayers = NumLayers,
-            NumAttentionHeads = NumAttentionHeads,
             DropoutRate = DropoutRate,
+            BlockOutputDropoutRate = BlockOutputDropoutRate,
             ContextDropoutRate = ContextDropoutRate,
             ValueOutputBiasMode = ValueOutputBiasMode,
             IncludeNeighborTargets = IncludeNeighborTargets,
             RetrievalTemperature = RetrievalTemperature,
             NormalizeEmbeddings = NormalizeEmbeddings,
-            NumContextLayers = NumContextLayers,
-            UseLayerNorm = UseLayerNorm,
             WeightDecay = WeightDecay,
             MaxGradNorm = MaxGradNorm
         };

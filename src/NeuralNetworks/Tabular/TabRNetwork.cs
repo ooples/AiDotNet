@@ -139,12 +139,6 @@ public partial class TabRNetwork<T> : TabularNeuralNetworkBase<T>
                     WeightDecay = _options.WeightDecay,
                 });
 
-        if (_options.EmbeddingDimension % _options.NumAttentionHeads != 0)
-        {
-            throw new ArgumentException(
-                $"EmbeddingDimension ({_options.EmbeddingDimension}) must be divisible by NumAttentionHeads ({_options.NumAttentionHeads})");
-        }
-
         InitializeLayers();
     }
 
@@ -214,7 +208,6 @@ public partial class TabRNetwork<T> : TabularNeuralNetworkBase<T>
                 { "NumNeighbors", _options.NumNeighbors },
                 { "EmbeddingDimension", _options.EmbeddingDimension },
                 { "NumLayers", _options.NumLayers },
-                { "NumAttentionHeads", _options.NumAttentionHeads },
                 { "IncludeNeighborTargets", _options.IncludeNeighborTargets },
                 { "NormalizeEmbeddings", _options.NormalizeEmbeddings },
                 { "LayerCount", Layers.Count },

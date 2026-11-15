@@ -22935,7 +22935,7 @@ AiDotNet.NeuralNetworks.Tabular.TabTransformerBase<T>.GetTrainableTensors() -> S
 AiDotNet.NeuralNetworks.Tabular.TabTransformerBase<T>.TrainWithTape(System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! objective, T learningRate) -> T
 AiDotNet.NeuralNetworks.Tabular.TabRRegression<T>.BuildIndex(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! features, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! targets) -> void
 AiDotNet.NeuralNetworks.Tabular.TabRClassifier<T>.BuildIndex(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! features, int[]! labels) -> void
-AiDotNet.NeuralNetworks.Tabular.TabRBase<T>.TabRBase(int numFeatures, AiDotNet.Models.Options.TabROptions<T>? options = null, int labelDimension = 0) -> void
+AiDotNet.NeuralNetworks.Tabular.TabRBase<T>.TabRBase(int numFeatures, AiDotNet.Models.Options.TabROptions<T>? options = null, int labelDimension = 0, bool categoricalLabels = false) -> void
 AiDotNet.NeuralNetworks.Tabular.TabRBase<T>.BuildIndexWithLabels(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! features, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! labelEncodings) -> void
 AiDotNet.NeuralNetworks.Tabular.TabRBase<T>.GetTrainableTensors() -> System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
 AiDotNet.NeuralNetworks.Tabular.TabRBase<T>.TrainWithTape(System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! objective, T learningRate) -> T
@@ -22992,3 +22992,27 @@ AiDotNet.NeuralNetworks.Layers.FullyConnectedLayer<T>.FullyConnectedLayer(int in
 AiDotNet.NeuralNetworks.Layers.FullyConnectedLayer<T>.FullyConnectedLayer(int outputSize) -> void
 AiDotNet.Models.Options.TabROptions<T>.ContextDropoutRate.get -> double
 AiDotNet.Models.Options.TabROptions<T>.ContextDropoutRate.set -> void
+*REMOVED*AiDotNet.Models.Options.TabROptions<T>.NumAttentionHeads.get -> int
+*REMOVED*AiDotNet.Models.Options.TabROptions<T>.NumAttentionHeads.set -> void
+*REMOVED*AiDotNet.Models.Options.TabROptions<T>.NumContextLayers.get -> int
+*REMOVED*AiDotNet.Models.Options.TabROptions<T>.NumContextLayers.set -> void
+*REMOVED*AiDotNet.Models.Options.TabROptions<T>.UseLayerNorm.get -> bool
+*REMOVED*AiDotNet.Models.Options.TabROptions<T>.UseLayerNorm.set -> void
+AiDotNet.Models.Options.TabROptions<T>.Activation.get -> AiDotNet.Enums.ActivationFunction
+AiDotNet.Models.Options.TabROptions<T>.Activation.set -> void
+AiDotNet.Models.Options.TabROptions<T>.BlockOutputDropoutRate.get -> double
+AiDotNet.Models.Options.TabROptions<T>.BlockOutputDropoutRate.set -> void
+AiDotNet.Models.Options.TabROptions<T>.BlockWidthMultiplier.get -> double
+AiDotNet.Models.Options.TabROptions<T>.BlockWidthMultiplier.set -> void
+AiDotNet.Models.Options.TabROptions<T>.EncoderNumBlocks.get -> int
+AiDotNet.Models.Options.TabROptions<T>.EncoderNumBlocks.set -> void
+AiDotNet.Models.Options.TabROptions<T>.MixerNormalization.get -> bool?
+AiDotNet.Models.Options.TabROptions<T>.MixerNormalization.set -> void
+AiDotNet.Models.Options.TabROptions<T>.Normalization.get -> AiDotNet.Enums.TabRNormalization
+AiDotNet.Models.Options.TabROptions<T>.Normalization.set -> void
+AiDotNet.Models.Options.TabROptions<T>.PredictorNumBlocks.get -> int
+AiDotNet.Models.Options.TabROptions<T>.PredictorNumBlocks.set -> void
+AiDotNet.Enums.TabRNormalization
+AiDotNet.Enums.TabRNormalization.BatchNorm = 1 -> AiDotNet.Enums.TabRNormalization
+AiDotNet.Enums.TabRNormalization.Identity = 2 -> AiDotNet.Enums.TabRNormalization
+AiDotNet.Enums.TabRNormalization.LayerNorm = 0 -> AiDotNet.Enums.TabRNormalization
