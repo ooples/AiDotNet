@@ -1,4 +1,5 @@
-﻿using System;
+﻿using AiDotNet.Helpers;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.Enums;
@@ -75,7 +76,7 @@ public class MultiTaskEvaluationHarness<T>
 
             using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
             var diff = Engine.TensorSubtract(FlatPrefix(prediction, evalLen), FlatPrefix(target, evalLen));
-            totalMse = NumOps.Add(totalMse, Engine.TensorSumOfSquares(diff));
+            totalMse = NumOps.Add(totalMse, TensorReductionHelper.SumOfSquares(Engine, diff));
             totalMae = NumOps.Add(totalMae, Engine.TensorSum(Engine.TensorAbs(diff)));
             totalPoints += evalLen;
         }

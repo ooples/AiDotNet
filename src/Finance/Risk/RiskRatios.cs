@@ -200,7 +200,7 @@ public class RiskRatios<T> : IRiskRatioCalculator<T>
             return NumOps.Zero;
         }
 
-        T unitSquares = engine.TensorSumOfSquares(engine.TensorDivideScalar(values, scale));
+        T unitSquares = TensorReductionHelper.SumOfSquares(engine, engine.TensorDivideScalar(values, scale));
         return NumOps.Multiply(scale,
             NumOps.Divide(NumOps.Sqrt(unitSquares), NumOps.FromDouble(Math.Sqrt(divisor))));
     }

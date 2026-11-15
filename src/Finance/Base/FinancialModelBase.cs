@@ -779,7 +779,7 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
 
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var diff = Engine.TensorSubtract(FlattenPrefix(predictions, count), FlattenPrefix(actuals, count));
-        return (Engine.TensorSumOfSquares(diff), Engine.TensorSum(Engine.TensorAbs(diff)), count);
+        return (TensorReductionHelper.SumOfSquares(Engine, diff), Engine.TensorSum(Engine.TensorAbs(diff)), count);
     }
 
     #endregion

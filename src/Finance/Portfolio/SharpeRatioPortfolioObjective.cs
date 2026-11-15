@@ -80,7 +80,7 @@ public class SharpeRatioPortfolioObjective<T>
         var returns = Tensor<T>.FromVector(portfolioReturns).Cast<double>();
         double mean = Engine.TensorMean(returns);
         var centred = Engine.TensorSubtractScalar(returns, mean);
-        double variance = Engine.TensorSumOfSquares(centred) / portfolioReturns.Length;
+        double variance = TensorReductionHelper.SumOfSquares(Engine, centred) / portfolioReturns.Length;
         return (mean, Math.Sqrt(variance));
     }
 

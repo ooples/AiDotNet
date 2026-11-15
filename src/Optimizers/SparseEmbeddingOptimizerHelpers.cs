@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using System;
 using System.Collections.Generic;
 using AiDotNet.Tensors.Engines.Autodiff;
@@ -212,7 +213,7 @@ internal static partial class SparseEmbeddingOptimizerHelpers
             ? values
             : Vector<T>.FromSpan(values.AsSpan().Slice(0, length)).AsTensor();
 
-        T direct = engine.TensorSumOfSquares(source);
+        T direct = TensorReductionHelper.SumOfSquares(engine, source);
         if (!ops.IsInfinity(direct) || ops.IsNaN(direct))
         {
             return ops.ToDouble(direct);
@@ -228,7 +229,7 @@ internal static partial class SparseEmbeddingOptimizerHelpers
         var normalized = engine.TensorDivideScalar(
             engine.TensorDivideScalar(source, maxAbs), ops.FromDouble(Math.Sqrt(length)));
         double scale = ops.ToDouble(maxAbs);
-        return scale * scale * length * ops.ToDouble(engine.TensorSumOfSquares(normalized));
+        return scale * scale * length * ops.ToDouble(TensorReductionHelper.SumOfSquares(engine, normalized));
     }
 
     internal static bool TryGetEffectiveGradient<T>(
