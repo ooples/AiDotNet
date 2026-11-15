@@ -571,6 +571,66 @@ public class ThreeDGeometryTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => model.GenerateAsync("a chair", numIterations: 1));
     }
 
+    private static Tensor<double> TestImage(double phase)
+    {
+        // 128 x 128 so the image-VAE latent [4, 16, 16] flattens to the 1024-wide latent-predictor context.
+        var image = new Tensor<double>(new[] { 1, 3, 128, 128 });
+        for (int i = 0; i < image.Length; i++)
+            image[i] = Math.Sin((0.013 * i) + phase);
+        return image;
+    }
+
+    [Fact]
+    public void ShapE_ImageTo3D_DecodesTheImageConditionedLatent()
+    {
+        // Shap-E image-to-3D: the image conditions the latent diffusion, and the mesh is the zero level set of that
+        // latent's implicit SDF. The result is seeded, follows the image and equals the latent's extracted mesh.
+        var model = SmallShapE();
+        var image = TestImage(0.0);
+
+        var mesh = model.ImageTo3D(image, numInferenceSteps: 2, guidanceScale: 3.0, seed: 5);
+        var again = model.ImageTo3D(image, numInferenceSteps: 2, guidanceScale: 3.0, seed: 5);
+        Assert.Equal(mesh.Vertices.ToArray(), again.Vertices.ToArray());
+        Assert.Equal(mesh.Faces, again.Faces);
+
+        var latent = model.GenerateLatentFromImage(image, numInferenceSteps: 2, guidanceScale: 3.0, seed: 5);
+        var (vertices, faces) = model.ExtractMesh(latent, ShapEModel<double>.DefaultImageMeshResolution);
+        Assert.Equal(vertices.Shape.ToArray(), mesh.Vertices.Shape.ToArray());
+        Assert.Equal(vertices.ToArray(), mesh.Vertices.ToArray());
+        Assert.Equal(faces.Shape[0], mesh.Faces.GetLength(0));
+        var faceValues = faces.ToArray();
+        for (int f = 0; f < mesh.Faces.GetLength(0); f++)
+            for (int k = 0; k < 3; k++)
+                Assert.Equal(faceValues[(f * 3) + k], mesh.Faces[f, k]);
+
+        var otherLatent = model.GenerateLatentFromImage(TestImage(1.7), numInferenceSteps: 2, guidanceScale: 3.0, seed: 5);
+        double difference = 0;
+        var a = latent.ToArray();
+        var b = otherLatent.ToArray();
+        for (int i = 0; i < a.Length; i++)
+            difference += Math.Abs(a[i] - b[i]);
+        Assert.True(difference > 0, "A different image must change the shape latent.");
+        Assert.All(a, value => Assert.False(double.IsNaN(value) || double.IsInfinity(value)));
+    }
+
+    [Fact]
+    public void TextOnly3DModels_ImageTo3D_NamesTheSupportedEntryPoint()
+    {
+        var image = new Tensor<double>(new[] { 1, 3, 8, 8 });
+
+        var magic = Assert.Throws<NotSupportedException>(() => new Magic3DModel<double>().ImageTo3D(image));
+        Assert.Equal(Magic3DModel<double>.ImageTo3DUnsupportedMessage, magic.Message);
+        Assert.Contains("GenerateMesh", magic.Message);
+
+        var instant = Assert.Throws<NotSupportedException>(() => new Instant3DModel<double>().ImageTo3D(image));
+        Assert.Equal(Instant3DModel<double>.ImageTo3DUnsupportedMessage, instant.Message);
+        Assert.Contains("GenerateMesh", instant.Message);
+
+        var pointE = Assert.Throws<NotSupportedException>(() => new PointEModel<double>().ImageTo3D(image));
+        Assert.Equal(PointEModel<double>.ImageTo3DUnsupportedMessage, pointE.Message);
+        Assert.Contains("GenerateFromImage", pointE.Message);
+    }
+
     [Fact]
     public void ShapE_RenderView_IsUprightAndUnmirrored()
     {

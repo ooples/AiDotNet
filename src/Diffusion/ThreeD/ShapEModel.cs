@@ -413,9 +413,15 @@ public partial class ShapEModel<T> : ThreeDDiffusionModelBase<T>
         if (_imageVAE == null)
             throw new InvalidOperationException("Image VAE not initialized.");
 
-        // Encode image for conditioning
+        if (image is null)
+            throw new ArgumentNullException(nameof(image));
+
+        // Encode image for conditioning. Classifier-free guidance contrasts it with the zero (dropped) condition,
+        // as Shap-E's image model is trained with condition dropout.
         var imageLatent = _imageVAE.Encode(image, sampleMode: false);
         var imageCondition = FlattenToCondition(imageLatent);
+        bool useCFG = guidanceScale > 1.0 && _latentPredictor.SupportsCFG;
+        var unconditional = new Tensor<T>(imageCondition._shape);
 
         // Generate shape latent
         var latentShape = new[] { 1, 1, SHAPE_LATENT_DIM };
@@ -426,7 +432,12 @@ public partial class ShapEModel<T> : ThreeDDiffusionModelBase<T>
 
         foreach (var timestep in Scheduler.Timesteps)
         {
-            var noisePrediction = _latentPredictor.PredictNoise(latent, timestep, imageCondition);
+            var noisePrediction = useCFG
+                ? ApplyGuidance(
+                    _latentPredictor.PredictNoise(latent, timestep, unconditional),
+                    _latentPredictor.PredictNoise(latent, timestep, imageCondition),
+                    guidanceScale)
+                : _latentPredictor.PredictNoise(latent, timestep, imageCondition);
 
             var latentVector = latent.ToVector();
             var noiseVector = noisePrediction.ToVector();
@@ -710,9 +721,44 @@ public partial class ShapEModel<T> : ThreeDDiffusionModelBase<T>
         int? seed = null)
     {
         var latent = GenerateLatent(prompt, negativePrompt, numInferenceSteps, guidanceScale, seed);
-        var (coordinates, triangles) = ExtractSurface(latent, resolution);
+        return MeshFromLatent(latent, resolution);
+    }
 
-        // Faces as int[faceCount, 3] straight from the integer triangle list (zero rows when there is no surface).
+    /// <summary>
+    /// Image-to-3D with Shap-E's image-conditioned pipeline (Jun and Nichol, 2023, image300M): the image conditions
+    /// the latent diffusion (<see cref="GenerateLatentFromImage"/>), and the latent's implicit SDF is decoded
+    /// and its zero level set extracted on a 64^3 grid.
+    /// </summary>
+    /// <param name="inputImage">The image [1, 3, height, width]; its image-VAE latent must flatten to the
+    /// latent predictor's context width (128 x 128 for the default 1024-wide context).</param>
+    /// <param name="numViews">Not used: Shap-E conditions on the single image directly, without novel views.</param>
+    /// <param name="numInferenceSteps">Number of latent denoising steps.</param>
+    /// <param name="guidanceScale">Classifier-free guidance scale against a zero image condition.</param>
+    /// <param name="seed">Optional random seed.</param>
+    /// <returns>The extracted mesh (zero rows when the SDF has no surface in [-1, 1]^3).</returns>
+    public override Mesh3D<T> ImageTo3D(
+        Tensor<T> inputImage,
+        int numViews = 4,
+        int numInferenceSteps = 50,
+        double guidanceScale = 3.0,
+        int? seed = null)
+    {
+        if (inputImage is null)
+            throw new ArgumentNullException(nameof(inputImage));
+        var latent = GenerateLatentFromImage(inputImage, numInferenceSteps, guidanceScale, seed);
+        return MeshFromLatent(latent, DefaultImageMeshResolution);
+    }
+
+    /// <summary>Grid resolution of the image-to-3D mesh extraction.</summary>
+    internal const int DefaultImageMeshResolution = 64;
+
+    /// <summary>
+    /// The mesh of the latent's SDF zero level set, with integer faces [faceCount, 3] (zero rows when there is no
+    /// surface).
+    /// </summary>
+    private Mesh3D<T> MeshFromLatent(Tensor<T> latent, int resolution)
+    {
+        var (coordinates, triangles) = ExtractSurface(latent, resolution);
         var faceIndices = new int[(triangles.Count / 3) * 3];
         triangles.CopyTo(faceIndices);
         var faceArray = new int[faceIndices.Length / 3, 3];
