@@ -113,7 +113,7 @@ internal static class ConvolutionBatchNormFolding<T>
     }
 
     /// <summary>
-    /// <c>act(bn(depthwise(input) + bias))</c> as a bias-free depthwise convolution and one batch-norm pass with the bias
+    /// <c>act(bn(depthwise(input) + bias))</c> as one fused bias-free depthwise convolution and batch norm with the bias
     /// folded into its mean (mean - bias): the bias add and the activation are no separate passes. False, with nothing
     /// computed, under the conditions of <see cref="TryBatchNormActivation"/> or when the convolution is not a depthwise
     /// one without an activation of its own (<see cref="ConvolutionalLayer{T}.CanFoldBiasIntoFollowingBatchNorm"/>).
@@ -130,14 +130,15 @@ internal static class ConvolutionBatchNormFolding<T>
         if (ObserverSuppresses()) return false;
 
         var engine = AiDotNetEngine.Current;
-        var depthwise = engine.DepthwiseConv2D(input, conv.KernelsForFolding, new[] { conv.Stride, conv.Stride },
-            new[] { conv.Padding, conv.Padding });
         // mean - bias is the same for every predict, so it is computed once and kept until the mean or the bias is
         // replaced or written (a SetParameters, a deserialization, a training step), like the folded convolution weights.
         var shiftedMean = conv.BiasesForFolding is { } bias
             ? conv.FoldedBatchNormMean.GetOrBuild(engine, SubtractBias, mean, bias)
             : mean;
-        output = engine.BatchNormInference(depthwise, gamma, beta, shiftedMean, variance, epsilon, activation);
+        // One engine op: on the CPU the batch norm and activation are applied as the 3x3 depthwise kernel stores each
+        // output, bit for bit the depthwise convolution then BatchNormInference, without writing the intermediate.
+        output = engine.DepthwiseConv2DBatchNorm(input, conv.KernelsForFolding, new[] { conv.Stride, conv.Stride },
+            new[] { conv.Padding, conv.Padding }, gamma, beta, shiftedMean, variance, epsilon, activation);
         return true;
     }
 
