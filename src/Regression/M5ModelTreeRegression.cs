@@ -366,6 +366,7 @@ public partial class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
     {
         // Element-wise version of the scalar overload below: (sumSq - count * mean^2) / (count - 1),
         // and 0 where count < 2.
+        // Guard both divisions before evaluating them: empty sides and singleton groups have zero divisors.
         var engine = AiDotNetEngine.Current;
         var mean = RegressionEngineOps.DivideWherePositive(sum, count);
         var sumSquaredDeviations = engine.Subtract(sumSq, engine.Multiply(count, engine.Multiply(mean, mean)));

@@ -28,11 +28,33 @@ d 192, 6 layers, 3 heads). The AiDotNet side builds each through its own configu
 (VGG's classifier reads the 512x1x1 map directly, DenseNet uses the CIFAR stem). These rows have no step-1 weight map,
 so `--verify-step1` skips them; each report records both parameter counts instead (they agree within 1.4%).
 
+Four time-series forecasting rows run the shipped tensor-interface forecasters at the ETT shape (96-step lookback,
+24-step horizon, 7 channels; N-BEATS univariate) with each paper's default sizes and Adam learning rate:
+`informer` (`Informer`, d 512, ProbSparse, distilling), `autoformer` (`Autoformer`, d 512, auto-correlation),
+`deepar` (`DeepAR`, 3x40 LSTM, Gaussian likelihood, forecast = median of 200 sample paths) and `nbeats`
+(`NBEATSFinance`, 30 generic blocks of 4x512). `TimeSeriesRows.cs` wraps them; benchmark.py's twins write out the
+official architectures layer for layer, and the parameter counts match exactly (trainable: informer 11,324,935, autoformer
+10,531,847, deepar 36,542, nbeats 26,976,360). Neither side feeds time-feature marks (AiDotNet's tensor-interface forecasters take the history alone).
+
 **The `gru` row is a timing comparison, not a parity row.** PyTorch's `nn.GRU` applies the reset gate after the recurrent
 product, `n = tanh(W_in x + b_in + r * (W_hn h + b_hn))`; AiDotNet's `GRULayer` applies it before,
 `n = tanh(W_in x + b_in + W_hn (r * h) + b_hn)` (Cho et al., Keras `reset_after=False`). The sizes and parameter shapes
 match, but the two compute different functions, so their losses are not expected to agree. The PyTorch report carries
 this as the row's `note`.
+
+Four more rows wrap shipped model classes (`MoreFamilyRows.cs`), each against a layer-for-layer twin in
+`benchmark.py` with the same trainable parameter count, loss and optimizer:
+
+| row | AiDotNet class | shape | parameters |
+|-----|----------------|-------|-----------:|
+| `efficientnet-b0` | `EfficientNetNetwork` (B0 scaling) | CIFAR `[3, 32, 32]`, 10 classes | 4,020,358 |
+| `vae` | `VariationalAutoencoder` | MNIST 784 -> 400 -> 20 -> 400 -> 784 | 652,824 |
+| `gat` | `GraphAttentionNetwork` | Cora-sized graph: 2,708 nodes, 1,433 features, 8x8 heads, 7 classes | 92,373 |
+| `dcgan` | `DCGAN` | 64x64 images, latent 100, one D + one G update per step | 6,350,852 |
+
+`gat` treats the whole graph as one sample: run it with `--batch-size 1 --inference-batches 1` on both sides. Under
+`--compile`, a twin with its own objective (`training_loss`, or the GAN's `train_step` networks) is compiled too, so
+compiled training is what gets timed.
 
 Each training report also records `FirstLoss` / `LastLoss` (`first_loss` / `last_loss`): the loss of the first and
 the last training step, as evidence the timed step trains. The last is read after timing. The first is read during
@@ -90,7 +112,7 @@ our worst-of-95% steady-state latency still beats their average.
 
 | flag | default | meaning |
 |------|---------|---------|
-| `--models` | `mlp,cnn,lstm,transformer` | comma-separated subset of `mlp,cnn,lstm,gru,transformer,resnet18,resnet50,vgg11,mobilenetv2,densenet121,vit`; C# side also accepts `mlp-fused` |
+| `--models` | `mlp,cnn,lstm,transformer` | comma-separated subset of `mlp,cnn,lstm,gru,transformer,resnet18,resnet50,vgg11,mobilenetv2,densenet121,vit,informer,autoformer,deepar,nbeats` (and the other family rows); C# side also accepts `mlp-fused` |
 | `--inference-batches` | `1,8,32,128` | inference batch sizes; for vision rows on a 6 GB card, explicitly pass `--inference-batches 1,8,16` to both harnesses (the default does not change by model) |
 | `--epochs` | `3` | training epochs |
 | `--train-batches` | `20` | batches per epoch |
@@ -103,6 +125,36 @@ our worst-of-95% steady-state latency still beats their average.
 | `--threads` (PyTorch) | `0` (all cores) | pin CPU threads; match `AIDOTNET_CPU_THREADS` |
 
 Inference is measured at batch sizes **1, 8, 32, 128** on both sides by default (`--inference-batches`).
+
+## Time-series forecasters (`--timeseries`)
+
+The forecasters (`TimeSeriesModelBase` models such as N-BEATS) train through their own `Train(x, y)` loop over
+windows of one series, so they do not fit the per-batch Forward/Backward/Step rows above. `--timeseries` times that
+real loop instead: the AiDotNet side writes `series.csv` (a seasonal series with trend and noise) and trains each
+forecaster on it, and `pytorch/timeseries.py` trains a twin with the same architecture, window, batch, loss, optimizer
+and clipping on the same numbers.
+
+```bash
+# AiDotNet side (CPU or CUDA engine, as for the main rows)
+set AIDOTNET_CPU_THREADS=8
+dotnet run -c Release --project benchmarks/AiDotNet.PyTorchParity -- --timeseries results/ts --device cuda --epochs 6
+
+# PyTorch side, compiled (the comparison bar)
+cd benchmarks/AiDotNet.PyTorchParity/pytorch
+python timeseries.py ../results/ts --device cuda --compile --epochs 6 --threads 8
+```
+
+- **Timing:** wall time per epoch. The AiDotNet side reads it from the model's training callback, so it includes the
+  model's own window shuffling, batch building and best-epoch snapshot. Epoch 0 carries compilation and warm-up on
+  both sides and is excluded; the report gives the median and IQR of the remaining epochs.
+- **PyTorch gets its best setup:** `torch.compile` on the model, fused Adam on CUDA, windows gathered on the device
+  from one resident series tensor, and the epoch loss read back once per epoch.
+- **Rows:** `nbeats`, at `NBEATSModelOptions` defaults: 30 blocks of 4 x 512 ReLU layers, fixed polynomial basis of
+  degree 2, lookback 10, horizon 5, batch 1024, Adam lr 1e-3, global-norm clip 1.0, MSE.
+- **Loss evidence:** both reports carry the first and last epoch loss. Weight initialization differs (AiDotNet uses
+  He-normal), so the curves are comparable in trend, not value.
+- Options: `--epochs` (default 6, minimum 2), `--series-length` (AiDotNet side, default 20000), `--seed`, `--rows`.
+  Reports: `aidotnet_timeseries_<device>.json` and `pytorch_timeseries_<device>[_compiled].json`.
 
 ## Notes
 

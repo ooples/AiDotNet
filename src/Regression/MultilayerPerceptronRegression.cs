@@ -314,6 +314,33 @@ public partial class MultilayerPerceptronRegression<T> : NonLinearRegressionBase
     /// </summary>
     private T _targetScale = MathHelper.GetNumericOperations<T>().One;
 
+    /// <summary>
+    /// Per-feature mean of the training inputs; empty until Train runs (no input transform).
+    /// </summary>
+    private Vector<T> _featureMean = new Vector<T>(0);
+
+    /// <summary>
+    /// Per-feature standard deviation of the training inputs, one for a constant feature.
+    /// </summary>
+    private Vector<T> _featureScale = new Vector<T>(0);
+
+    /// <summary>
+    /// Applies the training inputs' standardization, or returns the input unchanged before training.
+    /// </summary>
+    private Matrix<T> StandardizeFeatures(Matrix<T> X)
+    {
+        if (_featureMean.Length == 0 || _featureMean.Length != X.Columns || X.Rows == 0)
+        {
+            return X;
+        }
+
+        var shape = new[] { X.Rows, X.Columns };
+        var row = new[] { 1, X.Columns };
+        var mean = Engine.TensorBroadcastTo(new Tensor<T>(row, _featureMean), shape);
+        var scale = Engine.TensorBroadcastTo(new Tensor<T>(row, _featureScale), shape);
+        return Engine.TensorDivide(Engine.TensorSubtract(Tensor<T>.FromMatrix(X), mean), scale).ToMatrix();
+    }
+
 
     private T _olsIntercept;
 
@@ -355,6 +382,18 @@ public partial class MultilayerPerceptronRegression<T> : NonLinearRegressionBase
         }
 
         y = Engine.Divide(Engine.Subtract(y, Engine.Fill(y.Length, _targetMean)), _targetScale);
+
+        // Standardize each feature as well. With raw inputs (the model-family data spans [0, 10]) the
+        // default Adam step of 0.001 left ReLU units saturated and under-fit, learning a negative effect for
+        // a feature whose true coefficient is +2. Predict applies the same transform.
+        var features = Tensor<T>.FromMatrix(X);
+        var featureMean = Engine.ReduceMean(features, new[] { 0 }, keepDims: true);
+        var centered = Engine.TensorSubtract(features, Engine.TensorBroadcastTo(featureMean, features.Shape.ToArray()));
+        var featureScale = Engine.TensorSqrt(Engine.ReduceMean(Engine.TensorMultiply(centered, centered), new[] { 0 }, keepDims: true));
+        featureScale = Engine.TensorAdd(featureScale, Engine.TensorEquals(featureScale, NumOps.Zero));
+        _featureMean = featureMean.ToVector();
+        _featureScale = featureScale.ToVector();
+        X = StandardizeFeatures(X);
 
         if (_options.LayerSizes[0] != numFeatures)
         {
@@ -520,6 +559,9 @@ public partial class MultilayerPerceptronRegression<T> : NonLinearRegressionBase
     private void UpdateParameters(List<Matrix<T>> weightGradients, List<Vector<T>> biasGradients, int batchSize)
     {
         T scaleFactor = NumOps.FromDouble(1.0 / batchSize);
+        T learningRate = NumOps.FromDouble(_options.LearningRate);
+        var parameterParts = new List<Vector<T>>(2 * _weights.Count);
+        var gradientParts = new List<Vector<T>>(2 * _weights.Count);
 
         for (int i = 0; i < _weights.Count; i++)
         {
@@ -527,20 +569,43 @@ public partial class MultilayerPerceptronRegression<T> : NonLinearRegressionBase
                 Tensor<T>.FromMatrix(weightGradients[i]), scaleFactor).ToMatrix();
             Vector<T> avgBiasGradient = Engine.Multiply(biasGradients[i], scaleFactor);
 
-            if (_optimizer is IGradientBasedOptimizer<T, Matrix<T>, Vector<T>> gradientOptimizer)
+            if (_optimizer is IGradientBasedOptimizer<T, Matrix<T>, Vector<T>>)
             {
-                _weights[i] = gradientOptimizer.UpdateParameters(_weights[i], avgWeightGradient);
-                _biases[i] = gradientOptimizer.UpdateParameters(_biases[i], avgBiasGradient);
+                parameterParts.Add(_weights[i].ToRowVector());
+                parameterParts.Add(_biases[i]);
+                gradientParts.Add(avgWeightGradient.ToRowVector());
+                gradientParts.Add(avgBiasGradient);
             }
             else
             {
-                _weights[i] = _weights[i].Subtract(avgWeightGradient.Multiply(NumOps.FromDouble(_options.LearningRate)));
-                _biases[i] = _biases[i].Subtract(avgBiasGradient.Multiply(NumOps.FromDouble(_options.LearningRate)));
+                _weights[i] = _weights[i].Subtract(avgWeightGradient.Multiply(learningRate));
+                _biases[i] = _biases[i].Subtract(avgBiasGradient.Multiply(learningRate));
             }
 
             // Regularization for neural network weights is applied through
             // gradient-based methods (L2 weight decay), not post-hoc matrix replacement.
             // The Regularize(Matrix) API returns a penalty matrix, not regularized weights.
+        }
+
+        if (_optimizer is IGradientBasedOptimizer<T, Matrix<T>, Vector<T>> gradientOptimizer)
+        {
+            // One update over every parameter at once. A stateful optimizer (the default Adam) keeps one set
+            // of moment estimates and reset them whenever the parameter size changed; feeding it each layer's
+            // weights and biases in turn restarted it on nearly every call, so every step was a first step
+            // (lr * sign(g)) and same-sized tensors shared each other's moments. The fit barely moved
+            // (R^2 ~ 0.01 on a linear target).
+            var updated = gradientOptimizer.UpdateParameters(
+                Vector<T>.Concatenate(parameterParts), Vector<T>.Concatenate(gradientParts));
+            int offset = 0;
+            for (int i = 0; i < _weights.Count; i++)
+            {
+                var weight = new Matrix<T>(_weights[i].Rows, _weights[i].Columns);
+                updated.AsSpan().Slice(offset, weight.Rows * weight.Columns).CopyTo(weight.AsWritableSpan());
+                offset += weight.Rows * weight.Columns;
+                _weights[i] = weight;
+                _biases[i] = updated.GetSubVector(offset, _biases[i].Length);
+                offset += _biases[i].Length;
+            }
         }
     }
 
@@ -585,6 +650,8 @@ public partial class MultilayerPerceptronRegression<T> : NonLinearRegressionBase
         {
             return new Vector<T>(0);
         }
+
+        X = StandardizeFeatures(X);
 
         // First network output for every row
         Vector<T> outputs = Vector<T>.Concatenate(X.GetRows().Select(row => ForwardPass(row).GetSubVector(0, 1)).ToList());
@@ -666,11 +733,14 @@ public partial class MultilayerPerceptronRegression<T> : NonLinearRegressionBase
     /// </remarks>
     private Vector<T> BackpropagateThroughActivation(Vector<T> upstream, Vector<T> input, bool isOutputLayer)
     {
-        // First check if vector activation is available
+        // A vector activation's Derivative(Vector) is its n x n Jacobian. Flattening that (ToVector) and
+        // multiplying it element-wise with an n-long gradient threw "Vector lengths must match. Got 10 and
+        // 100" for the default ReLU hidden layer, so no MLP with a hidden layer trained. Backward applies
+        // the chain rule itself, including activations whose outputs depend on several inputs.
         var vectorActivation = isOutputLayer ? _options.OutputVectorActivation : _options.HiddenVectorActivation;
         if (vectorActivation != null)
         {
-            return vectorActivation.Derivative(input).Transpose().Multiply(upstream);
+            return vectorActivation.Backward(Tensor<T>.FromVector(input), Tensor<T>.FromVector(upstream)).ToVector();
         }
 
         // Fall back to scalar activation

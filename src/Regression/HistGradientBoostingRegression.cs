@@ -1083,7 +1083,10 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
         // An empty side has zero hessian (and zero gradient): with the default lambda of 0 its term is 0, not 0/0.
         var leftTerm = RegressionEngineOps.DivideWherePositive(engine.Multiply(leftGrad, leftGrad), engine.Add(leftHess, lambdas));
         var rightTerm = RegressionEngineOps.DivideWherePositive(engine.Multiply(rightGrad, rightGrad), engine.Add(rightHess, lambdas));
-        T totalTerm = NumOps.Divide(NumOps.Multiply(totalGrad, totalGrad), NumOps.Add(totalHess, lambda));
+        T totalDenominator = NumOps.Add(totalHess, lambda);
+        T totalTerm = NumOps.Equals(totalDenominator, NumOps.Zero)
+            ? NumOps.Zero
+            : NumOps.Divide(NumOps.Multiply(totalGrad, totalGrad), totalDenominator);
         var gains = engine.Multiply(
             engine.Subtract(engine.Add(leftTerm, rightTerm), engine.Fill(candidates, totalTerm)),
             NumOps.FromDouble(0.5));

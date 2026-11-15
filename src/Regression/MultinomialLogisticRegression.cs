@@ -228,6 +228,10 @@ public partial class MultinomialLogisticRegression<T> : RegressionBase<T>
 
         Matrix<T> xWithIntercept = x.AddColumn(Vector<T>.CreateDefault(x.Rows, NumOps.One));
         var (jitterRelative, jitterFloor) = NewtonJitter();
+        Matrix<T> yOneHot = CreateOneHotEncoding(y);
+        bool penalized = Regularization is not NoRegularization<T, Matrix<T>, Vector<T>>;
+        T logLikelihood = LogLikelihood(xWithIntercept, yOneHot);
+        T half = NumOps.FromDouble(0.5);
 
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
         {
@@ -260,9 +264,34 @@ public partial class MultinomialLogisticRegression<T> : RegressionBase<T>
             update.AsSpan().Slice(0, copied).CopyTo(featureMajor.AsWritableSpan());
             Matrix<T> updateMatrix = featureMajor.Transpose();
 
-            _coefficients = _coefficients.Subtract(updateMatrix);
+            // A full Newton step overshoots when the classes are (nearly) separable: the likelihood has no
+            // finite maximum, the curvature vanishes as the probabilities saturate, and the unguarded step
+            // grew the coefficients until the Hessian held NaN. Halve the step until it is finite and (when
+            // no penalty reshapes the objective) raises the likelihood; stop when no step does.
+            Matrix<T> previous = _coefficients;
+            Matrix<T>? accepted = null;
+            for (int halving = 0; halving < MaxStepHalvings && accepted is null; halving++)
+            {
+                _coefficients = previous.Subtract(updateMatrix);
+                T candidate = LogLikelihood(xWithIntercept, yOneHot);
+                if (AcceptsStep(candidate, logLikelihood, penalized))
+                {
+                    accepted = updateMatrix;
+                    logLikelihood = candidate;
+                }
+                else
+                {
+                    updateMatrix = updateMatrix.Multiply(half);
+                }
+            }
 
-            if (HasConverged(updateMatrix))
+            if (accepted is null)
+            {
+                _coefficients = previous;
+                break;
+            }
+
+            if (HasConverged(accepted))
             {
                 break;
             }
@@ -387,6 +416,24 @@ public partial class MultinomialLogisticRegression<T> : RegressionBase<T>
     {
         Matrix<T> yOneHot = CreateOneHotEncoding(y);
         return x.Transpose().Multiply(yOneHot.Subtract(probabilities));
+    }
+
+    private const int MaxStepHalvings = 30;
+
+    /// <summary>A step is taken when its likelihood is a number and, unpenalized, higher than before.</summary>
+    private bool AcceptsStep(T candidate, T current, bool penalized)
+        => !NumOps.IsNaN(candidate) && (penalized || NumOps.GreaterThan(candidate, current));
+
+    /// <summary>
+    /// The training log-likelihood, sum over samples of log P(true class), at the current coefficients.
+    /// Probabilities are floored at the smallest positive value so a saturated 0 gives a large finite
+    /// penalty instead of 0 * -Inf = NaN.
+    /// </summary>
+    private T LogLikelihood(Matrix<T> xWithIntercept, Matrix<T> yOneHot)
+    {
+        var probabilities = Tensor<T>.FromMatrix(ComputeProbabilities(xWithIntercept));
+        var logProbabilities = Engine.TensorLog(Engine.TensorMax(probabilities, NumOps.FromDouble(1e-300)));
+        return Engine.TensorSum(Engine.TensorMultiply(logProbabilities, Tensor<T>.FromMatrix(yOneHot)));
     }
 
     /// <summary>

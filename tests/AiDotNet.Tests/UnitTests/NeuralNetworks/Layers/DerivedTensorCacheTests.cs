@@ -113,6 +113,24 @@ public class DerivedTensorCacheTests
     }
 
     [Fact]
+    public void Rebuilds_after_a_training_step_is_noted()
+    {
+        // A compiled replay updates weights on the device without advancing their versions, so the sources look
+        // unchanged; the training generation is what tells the cache its value may be stale.
+        var cache = new DerivedTensorCache<double>();
+        var engine = AiDotNetEngine.Current;
+        var a = Vector(1, 2);
+        var b = Vector(3);
+        var first = cache.GetOrBuild(engine, Concat, a, b);
+
+        DerivedTensorCache<double>.NoteTrainingStep();
+
+        var second = cache.GetOrBuild(engine, Concat, a, b);
+        Assert.NotSame(first, second);
+        Assert.Equal(new[] { 1.0, 2.0, 3.0 }, second.ToArray());
+    }
+
+    [Fact]
     public void Rebuilds_on_another_engine_and_after_invalidation()
     {
         var cache = new DerivedTensorCache<double>();

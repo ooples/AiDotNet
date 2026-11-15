@@ -983,16 +983,16 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
                 // Recalibration (see OverwriteRunningStatistics) replaces the statistics outright: momentum 0.
                 T momentum = OverwriteRunningStatistics ? NumOps.Zero : _momentum;
                 T oneMinusMomentum = NumOps.Subtract(NumOps.One, momentum);
-                Engine.TensorMultiplyScalarInPlace(_runningMean, momentum);
-                var scaledBatchMean = Engine.TensorMultiplyScalar(batchMean, oneMinusMomentum);
-                Engine.TensorAddInPlace(_runningMean, scaledBatchMean);
-                Engine.TensorMultiplyScalarInPlace(_runningVariance, momentum);
+                // running = momentum * running + (1 - momentum) * batch, one in-place launch per statistic on a GPU
+                // engine (the scale / scale / add composition took three).
+                AiDotNet.Tensors.Engines.RunningStatistics.UpdateInPlace(Engine, _runningMean, batchMean, momentum,
+                    oneMinusMomentum);
                 // The batch normalizes with its biased variance, but the inference statistic is the unbiased
                 // estimate m/(m-1)·σ²_B over the m values per feature (Ioffe & Szegedy 2015, Algorithm 2; PyTorch's
                 // running_var).
                 T unbiased = OverwriteRunningStatistics ? NumOps.One : NumOps.FromDouble(valuesPerFeature / (valuesPerFeature - 1.0));
-                var scaledBatchVar = Engine.TensorMultiplyScalar(batchVariance, NumOps.Multiply(oneMinusMomentum, unbiased));
-                Engine.TensorAddInPlace(_runningVariance, scaledBatchVar);
+                AiDotNet.Tensors.Engines.RunningStatistics.UpdateInPlace(Engine, _runningVariance, batchVariance,
+                    momentum, NumOps.Multiply(oneMinusMomentum, unbiased));
             }
 
             // Restore pre-flatten rank if we collapsed leading axes for the
