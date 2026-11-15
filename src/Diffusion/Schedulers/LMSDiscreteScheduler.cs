@@ -26,11 +26,12 @@ namespace AiDotNet.Diffusion.Schedulers;
 /// - One model evaluation per step
 /// - Deterministic: same seed always produces the same result
 ///
-/// The method computes Adams-Bashforth-style coefficients from the sigma schedule
-/// and applies them to the stored derivative history.
+/// The method integrates the Lagrange basis of the recent sigmas over each step to get the
+/// linear multistep coefficients and applies them to the stored derivative history.
 /// </para>
 /// <para>
-/// <b>Reference:</b> Based on Adams-Bashforth multi-step ODE methods applied to diffusion.
+/// <b>Reference:</b> Karras et al., "Elucidating the Design Space of Diffusion-Based Generative Models", 2022,
+/// as implemented by k-diffusion's sample_lms and diffusers' LMSDiscreteScheduler (get_lms_coefficient).
 /// </para>
 /// </remarks>
 [ComponentType(ComponentType.Scheduler)]
