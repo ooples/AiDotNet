@@ -614,6 +614,82 @@ public class SyncDreamerArchitectureTests
         Assert.True(MaxDifference(fromRgba.Latent, fromComposite.Latent) < 1e-10);
     }
 
+    [Fact]
+    public void ResizeWeights_ArePilBicubic_ByHand()
+    {
+        // PIL bicubic_filter, a = -0.5: |x| < 1 -> 1.5|x|^3 - 2.5|x|^2 + 1, 1 <= |x| < 2 -> -0.5 (|x|^3 - 5|x|^2 + 8|x| - 4).
+        // 4 -> 2: scale 2 stretches the support to 4 and the argument by 1/2. Output 0 (centre 1) reads j = 0..3 at
+        // x = (j - 0.5) / 2 = -0.25, 0.25, 0.75, 1.25: 111/128, 111/128, 29/128, -9/128, normalized by 242/128.
+        var shrink = new[] { 111 / 242.0, 111 / 242.0, 29 / 242.0, -9 / 242.0, -9 / 242.0, 29 / 242.0, 111 / 242.0, 111 / 242.0 };
+        AssertWeights(shrink, AntialiasedResize<double>.Weights(4, 2, ResizeFilter.Bicubic));
+
+        // 5 -> 3: scale 5/3, support 10/3, argument 0.6 (j + 0.5 - centre). Output 0 (centre 5/6) reads j = 0..3 at
+        // -0.2, 0.4, 1.0, 1.6: 0.912, 0.696, 0, -0.048 over 1.56 = 38/65, 29/65, 0, -2/65. Output 1 (centre 2.5) reads
+        // j = 0..4 at -1.2, -0.6, 0, 0.6, 1.2: -0.064, 0.424, 1, 0.424, -0.064 over 1.72 = (-8, 53, 125, 53, -8) / 215.
+        // Output 2 mirrors output 0.
+        var uneven = new[]
+        {
+            38 / 65.0, 29 / 65.0, 0, -2 / 65.0, 0,
+            -8 / 215.0, 53 / 215.0, 125 / 215.0, 53 / 215.0, -8 / 215.0,
+            0, -2 / 65.0, 0, 29 / 65.0, 38 / 65.0,
+        };
+        AssertWeights(uneven, AntialiasedResize<double>.Weights(5, 3, ResizeFilter.Bicubic));
+    }
+
+    [Fact]
+    public void PrepareImage_IsPilBicubicOnThePremultipliedImage_ThenWhite()
+    {
+        // prepare_inputs: Image.resize(BICUBIC) on RGBA (PIL premultiplies, resizes, clips), then rgb * a + 1 - a, which is
+        // clip(resize(rgb * a)) + 1 - clip(resize(a)). 96 -> 64 shrinks, so the kernel is stretched (antialiased).
+        const int input = 96, side = 64;
+        var random = RandomHelper.CreateSeededRandom(11);
+        var rgba = new double[4 * input * input];
+        for (int i = 0; i < rgba.Length; i++) rgba[i] = random.NextDouble();
+        var weights = AntialiasedResize<double>.Weights(input, side, ResizeFilter.Bicubic);
+
+        double[] Resized(Func<int, double> pixel)
+        {
+            var rows = new double[input * side];
+            for (int y = 0; y < input; y++)
+                for (int x = 0; x < side; x++)
+                {
+                    double sum = 0;
+                    for (int j = 0; j < input; j++) sum += weights[(x * input) + j] * pixel((y * input) + j);
+                    rows[(y * side) + x] = sum;
+                }
+
+            var result = new double[side * side];
+            for (int y = 0; y < side; y++)
+                for (int x = 0; x < side; x++)
+                {
+                    double sum = 0;
+                    for (int i = 0; i < input; i++) sum += weights[(y * input) + i] * rows[(i * side) + x];
+                    result[(y * side) + x] = Math.Min(1.0, Math.Max(0.0, sum));
+                }
+
+            return result;
+        }
+
+        int plane = input * input;
+        var alpha = Resized(k => rgba[(3 * plane) + k]);
+        var expected = new double[3 * side * side];
+        for (int c = 0; c < 3; c++)
+        {
+            int channel = c;
+            var premultiplied = Resized(k => rgba[(channel * plane) + k] * rgba[(3 * plane) + k]);
+            for (int k = 0; k < side * side; k++) expected[(c * side * side) + k] = premultiplied[k] + 1 - alpha[k];
+        }
+
+        var prepared = TinyModel().PrepareImage(new Tensor<double>(rgba, new[] { 1, 4, input, input }));
+        Assert.True(MaxDifference(prepared, new Tensor<double>(expected, new[] { 1, 3, side, side })) < 1e-10);
+    }
+
+    private static void AssertWeights(double[] expected, double[] actual)
+    {
+        Assert.Equal(expected.Length, actual.Length);
+        for (int i = 0; i < expected.Length; i++) Assert.Equal(expected[i], actual[i], 14);
+    }
+
     // ------------------------------------------------------------------ reconstruction
 
     [Fact]

@@ -640,63 +640,19 @@ internal sealed class TsrNeRFDecoder<T> : KlModule<T>
 /// <c>ImagePreprocessor.convert_and_resize</c> resizes every conditioning image (tsr/utils.py). Separable: along each
 /// axis, output i takes the triangle filter centred at <c>scale (i + 0.5)</c> in input pixels, widened by
 /// <c>scale = in / out</c> when shrinking, over the inputs within its support, normalized to sum to one (ATen's
-/// <c>upsample_bilinear2d_aa</c>). When enlarging it is ordinary bilinear interpolation.
+/// <c>upsample_bilinear2d_aa</c>). When enlarging it is ordinary bilinear interpolation. This is the shared
+/// <see cref="AntialiasedResize{T}"/> with <see cref="ResizeFilter.Triangle"/>.
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
 internal static class TsrResize<T>
 {
-    private static IEngine Engine => AiDotNetEngine.Current;
-
     /// <summary>The resampling matrix [outSize, inSize], row-major: output i is the row-i weighted sum of the inputs.</summary>
     public static double[] Weights(int inSize, int outSize)
-    {
-        if (inSize <= 0) throw new ArgumentOutOfRangeException(nameof(inSize), "The input size must be positive.");
-        if (outSize <= 0) throw new ArgumentOutOfRangeException(nameof(outSize), "The output size must be positive.");
-        double scale = (double)inSize / outSize;
-        double support = scale >= 1.0 ? scale : 1.0;
-        double invScale = scale >= 1.0 ? 1.0 / scale : 1.0;
-        var weights = new double[outSize * inSize];
-        for (int i = 0; i < outSize; i++)
-        {
-            double center = scale * (i + 0.5);
-            // ATen truncates toward zero, then clamps to the input.
-            int start = Math.Max((int)(center - support + 0.5), 0);
-            int stop = Math.Min((int)(center + support + 0.5), inSize);
-            double total = 0.0;
-            for (int j = start; j < stop; j++)
-            {
-                double w = Math.Max(0.0, 1.0 - Math.Abs((j - center + 0.5) * invScale));
-                weights[(i * inSize) + j] = w;
-                total += w;
-            }
-
-            if (total > 0.0)
-                for (int j = start; j < stop; j++) weights[(i * inSize) + j] /= total;
-        }
-
-        return weights;
-    }
+        => AntialiasedResize<T>.Weights(inSize, outSize, ResizeFilter.Triangle);
 
     /// <summary>Resizes images [B, C, H, W] to [B, C, height, width].</summary>
     public static Tensor<T> Resize(Tensor<T> images, int height, int width)
-    {
-        if (images is null) throw new ArgumentNullException(nameof(images));
-        if (images.Rank != 4) throw new ArgumentException("Images must be [B, C, H, W].", nameof(images));
-        int batch = images.Shape[0], channels = images.Shape[1], inHeight = images.Shape[2], inWidth = images.Shape[3];
-        var alongWidth = Matrix(inWidth, width);
-        var alongHeight = Matrix(inHeight, height);
-
-        // Width: rows [B C H, W] times the [width, W] weights transposed -> [B C H, width].
-        var x = Engine.TensorMatMulTransposed(Engine.Reshape(images.Contiguous(), new[] { batch * channels * inHeight, inWidth }), alongWidth);
-        // Height: bring H last, [B C width, H] times [height, H] transposed -> [B C width, height], and back.
-        x = Engine.TensorPermute(Engine.Reshape(x, new[] { batch * channels, inHeight, width }), new[] { 0, 2, 1 }).Contiguous();
-        x = Engine.TensorMatMulTransposed(Engine.Reshape(x, new[] { batch * channels * width, inHeight }), alongHeight);
-        x = Engine.TensorPermute(Engine.Reshape(x, new[] { batch * channels, width, height }), new[] { 0, 2, 1 }).Contiguous();
-        return Engine.Reshape(x, new[] { batch, channels, height, width });
-    }
-
-    private static Tensor<T> Matrix(int inSize, int outSize)
-        => new Tensor<double>(new[] { outSize, inSize }, new Vector<double>(Weights(inSize, outSize))).Cast<T>();
+        => AntialiasedResize<T>.Resize(images, height, width, ResizeFilter.Triangle);
 }
 
 /// <summary>

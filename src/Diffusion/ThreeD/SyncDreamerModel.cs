@@ -33,7 +33,7 @@ namespace AiDotNet.Diffusion.ThreeD;
 /// <para>
 /// The generated views have known cameras, so the object is reconstructed as the official code does
 /// (<c>train_renderer.py</c>): a NeuS field trained with SyncDreamer's renderer and loss on every pixel of the views
-/// (<see cref="SyncDreamerNeuSTrainer{T}"/>), meshed by marching cubes at its zero level over [-0.6, 0.6]^3; point
+/// (<c>renderer/renderer.py</c>), meshed by marching cubes at its zero level over [-0.6, 0.6]^3; point
 /// clouds are colored surface points of that mesh. The official trainer supervises NeuS with CarveKit foreground
 /// masks; CarveKit is not available here, so masks come from the caller (<see cref="ReconstructMesh"/>) or the views'
 /// alpha.
@@ -447,8 +447,10 @@ public partial class SyncDreamerModel<T> : ThreeDDiffusionModelBase<T>
         return result;
     }
 
-    // [1, 3, S, S] in [0, 1] at the configured side.
-    private Tensor<T> PrepareImage(Tensor<T> image)
+    // [1, 3, S, S] in [0, 1] at the configured side: prepare_inputs, Image.resize((S, S), BICUBIC) and then
+    // rgb * alpha + 1 - alpha. PIL resizes RGBA premultiplied (RGBA -> RGBa -> resize -> RGBA) and clips each channel to
+    // [0, 255], so the composite of its output is resize(rgb * alpha) + 1 - resize(alpha), each clipped to [0, 1].
+    internal Tensor<T> PrepareImage(Tensor<T> image)
     {
         if (image is null) throw new ArgumentNullException(nameof(image));
         var batched = image.Rank == 3 ? Engine.Reshape(image, new[] { 1, image.Shape[0], image.Shape[1], image.Shape[2] }) : image;
@@ -456,22 +458,28 @@ public partial class SyncDreamerModel<T> : ThreeDDiffusionModelBase<T>
             throw new ArgumentException(
                 $"SyncDreamer reads one RGB or RGBA image [1, 3 or 4, H, W] or [3 or 4, H, W]; got [{string.Join(", ", image.Shape.ToArray())}].",
                 nameof(image));
-        int h = batched.Shape[2], w = batched.Shape[3];
-        if (batched.Shape[1] == 4)
+        int h = batched.Shape[2], w = batched.Shape[3], side = _options.ImageSize;
+        bool resize = h != side || w != side;
+        if (batched.Shape[1] == 3)
+            return resize ? PilBicubic(batched, side) : batched;
+
+        var rgb = Engine.TensorSlice(batched, new[] { 0, 0, 0, 0 }, new[] { 1, 3, h, w });
+        var alpha = Engine.TensorSlice(batched, new[] { 0, 3, 0, 0 }, new[] { 1, 1, h, w });
+        var premultiplied = Engine.TensorMultiply(rgb, Engine.TensorBroadcastTo(alpha, new[] { 1, 3, h, w }));
+        if (resize)
         {
-            // prepare_inputs: rgb * alpha + 1 - alpha, a white background.
-            var rgb = Engine.TensorSlice(batched, new[] { 0, 0, 0, 0 }, new[] { 1, 3, h, w });
-            var alpha = Engine.TensorBroadcastTo(Engine.TensorSlice(batched, new[] { 0, 3, 0, 0 }, new[] { 1, 1, h, w }), new[] { 1, 3, h, w });
-            batched = Engine.TensorAdd(Engine.TensorMultiply(rgb, alpha),
-                Engine.TensorAddScalar(Engine.TensorNegate(alpha), NumOps.One));
+            var resized = PilBicubic(Engine.TensorConcatenate(new[] { premultiplied, alpha }, 1), side);
+            premultiplied = Engine.TensorSlice(resized, new[] { 0, 0, 0, 0 }, new[] { 1, 3, side, side });
+            alpha = Engine.TensorSlice(resized, new[] { 0, 3, 0, 0 }, new[] { 1, 1, side, side });
         }
 
-        int side = _options.ImageSize;
-        // prepare_inputs resizes with PIL's bicubic filter (half-pixel centers).
-        return h == side && w == side
-            ? batched
-            : Engine.Interpolate(batched, new[] { side, side }, InterpolateMode.Bicubic, false);
+        return Engine.TensorAdd(premultiplied,
+            Engine.TensorBroadcastTo(Engine.TensorAddScalar(Engine.TensorNegate(alpha), NumOps.One), new[] { 1, 3, side, side }));
     }
+
+    // PIL BICUBIC (a = -0.5, antialiased when shrinking), clipped to [0, 1] as PIL clips to the 8-bit range.
+    private Tensor<T> PilBicubic(Tensor<T> images, int side)
+        => Engine.TensorClamp(AntialiasedResize<T>.Resize(images, side, side, ResizeFilter.Bicubic), NumOps.Zero, NumOps.One);
 
     // [-1, 1] decoder output to [0, 1].
     private Tensor<T> ToUnitRange(Tensor<T> decoded)
@@ -484,7 +492,7 @@ public partial class SyncDreamerModel<T> : ThreeDDiffusionModelBase<T>
 
     /// <summary>
     /// Reconstructs the object from the views as SyncDreamer does (<c>train_renderer.py</c>): a NeuS field trained on
-    /// every pixel of every view with SyncDreamer's renderer and loss (<see cref="SyncDreamerNeuSTrainer{T}"/>), then
+    /// every pixel of every view with SyncDreamer's renderer and loss (<c>renderer/renderer.py</c>), then
     /// marching cubes at its zero level over the cube of half side
     /// <see cref="SyncDreamerOptions.ReconstructionBoundHalfSide"/> with the field set to 1 outside the unit sphere
     /// (<c>extract_fields</c>), and vertex colors from the color network seen along the normal
