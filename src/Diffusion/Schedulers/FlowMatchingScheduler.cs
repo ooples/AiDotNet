@@ -334,12 +334,15 @@ public sealed partial class FlowMatchingScheduler<T> : NoiseSchedulerBase<T>
     /// </summary>
     /// <param name="trainTimesteps">Total number of training timesteps.</param>
     /// <returns>Vector of continuous time values t = timestep / (trainTimesteps - 1).</returns>
-    private static Vector<T> ComputeTimeValues(int trainTimesteps)
+    internal static Vector<T> ComputeTimeValues(int trainTimesteps)
     {
+        // Formed in double and rounded to T once (t_i = i / (N - 1), as master and diffusers' float64 sigma tables):
+        // an index ramp in T stops being exact past 2048 in Half, and multiplying by a scale already rounded to T
+        // would round every entry twice.
         var engine = AiDotNetEngine.Current;
         double scale = 1.0 / (trainTimesteps - 1);
-        var indices = engine.TensorArange<T>(0.0, trainTimesteps, 1.0);
-        return engine.TensorMultiplyScalar(indices, NumOps.FromDouble(scale)).ToVector();
+        var indices = engine.TensorArange<double>(0.0, trainTimesteps, 1.0);
+        return engine.TensorMultiplyScalar(indices, scale).Cast<T>().ToVector();
     }
 
     /// <summary>
