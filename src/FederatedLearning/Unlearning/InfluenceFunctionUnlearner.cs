@@ -191,8 +191,7 @@ public class InfluenceFunctionUnlearner<T> : FederatedLearningComponentBase<T>, 
 
         int n = v.Length;
         var dampingT = NumOps.FromDouble(damping);
-        var toleranceSquared = NumOps.FromDouble(tolerance * tolerance);
-        var zero = NumOps.Zero;
+        double toleranceSquared = tolerance * tolerance;
 
         Tensor<T> Apply(Tensor<T> p)
         {
@@ -205,33 +204,34 @@ public class InfluenceFunctionUnlearner<T> : FederatedLearningComponentBase<T>, 
             return Engine.TensorAdd(hp.Reshape(new[] { n }), Engine.TensorMultiplyScalar(p, dampingT));
         }
 
-        Tensor<T> Dot(Tensor<T> a, Tensor<T> b) => Engine.ReduceSum(Engine.TensorMultiply(a, b), new[] { 0 }, true);
-        Tensor<T> Spread(Tensor<T> scalar) => Engine.TensorBroadcastTo(scalar, new[] { n });
+        // The inner products r.r and p.Ap are reduced in double and only the step sizes alpha and beta, which are
+        // ratios of them, are rounded to T: in T the squares overflow (Half: |r| above 256) and alpha = inf / inf
+        // is NaN, which poisons every entry of x.
+        T Step(double size) => NumOps.FromDouble(size);
 
         var x = new Tensor<T>(new[] { n });
         var r = new Tensor<T>(v.ToArray(), new[] { n });
         var p = r;
-        var rr = Dot(r, r);
+        double rr = UnlearningEngineOps.Dot(r, r);
         for (int i = 0; i < maxIterations; i++)
         {
-            if (Engine.TensorSum(Engine.TensorLessThan(rr, toleranceSquared).Cast<int>()) == 1)
+            if (rr < toleranceSquared)
             {
                 break;
             }
 
             var ap = Apply(p);
-            var pap = Dot(p, ap);
-            if (Engine.TensorSum(Engine.TensorGreaterThan(pap, zero).Cast<int>()) == 0)
+            double pap = UnlearningEngineOps.Dot(p, ap);
+            if (!(pap > 0))
             {
                 break; // no positive curvature along p (or NaN)
             }
 
-            var alpha = Spread(Engine.TensorDivide(rr, pap));
-            x = Engine.TensorAdd(x, Engine.TensorMultiply(alpha, p));
-            r = Engine.TensorSubtract(r, Engine.TensorMultiply(alpha, ap));
-            var rrNext = Dot(r, r);
-            var beta = Spread(Engine.TensorDivide(rrNext, rr));
-            p = Engine.TensorAdd(r, Engine.TensorMultiply(beta, p));
+            var alpha = Step(rr / pap);
+            x = Engine.TensorAdd(x, Engine.TensorMultiplyScalar(p, alpha));
+            r = Engine.TensorSubtract(r, Engine.TensorMultiplyScalar(ap, alpha));
+            double rrNext = UnlearningEngineOps.Dot(r, r);
+            p = Engine.TensorAdd(r, Engine.TensorMultiplyScalar(p, Step(rrNext / rr)));
             rr = rrNext;
         }
 

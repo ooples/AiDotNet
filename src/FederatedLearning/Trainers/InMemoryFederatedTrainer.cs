@@ -1759,6 +1759,23 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
     }
 
     /// <summary>
+    /// <paramref name="delta"/> with every entry whose magnitude is below |<paramref name="threshold"/>| set to zero,
+    /// and the number kept. The magnitudes are compared in double against the threshold itself: rounded to T the
+    /// threshold moves (Half holds 0.3 as 0.2998), so an entry just below it would be uploaded.
+    /// </summary>
+    internal static Vector<T> ThresholdSparsify(Vector<T> delta, double threshold, out int kept)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = delta.Length;
+        var magnitudes = engine.TensorAbs(delta.AsTensor().Cast<double>());
+        var limit = new Tensor<double>([n]);
+        limit.Fill(Math.Abs(threshold));
+        var keep = engine.TensorGreaterEqual(magnitudes, limit);
+        kept = engine.TensorSum(keep.Cast<int>());
+        return engine.TensorWhere(keep.Cast<T>(), delta.AsTensor(), new Tensor<T>([n])).ToVector();
+    }
+
+    /// <summary>
     /// Uniform quantization of <paramref name="delta"/> onto <paramref name="levels"/> + 1 grid points over
     /// [-maxAbs, maxAbs]: q = round((clamp(v / maxAbs, -1, 1) + 1) / 2 * levels) (half to even, as Math.Round),
     /// dequantized as (q / levels * 2 - 1) * maxAbs. The grid arithmetic runs in double and is rounded to T once:
@@ -2093,14 +2110,9 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
         if (strategy == FederatedCompressionStrategy.Threshold)
         {
-            var magnitudes = Engine.TensorAbs(delta.AsTensor());
-            var limit = new Tensor<T>([n]);
-            limit.Fill(NumOps.FromDouble(Math.Abs(options.Threshold)));
-            var keep = Engine.TensorGreaterEqual(magnitudes, limit);
-            int kept = Engine.TensorSum(keep.Cast<int>());
-
+            var sparse = ThresholdSparsify(delta, options.Threshold, out int kept);
             uploadRatio = n > 0 ? (double)kept / n : 1.0;
-            return Engine.TensorWhere(keep, delta.AsTensor(), new Tensor<T>([n])).ToVector();
+            return sparse;
         }
 
         if (strategy == FederatedCompressionStrategy.UniformQuantization ||
