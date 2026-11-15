@@ -4106,7 +4106,9 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             WeightStreamingReport = WeightStreamingReport
         };
 
-        return new AiModelResult<T, TInput, TOutput>(options);
+        var updated = new AiModelResult<T, TInput, TOutput>(options);
+        CopyRobustnessStateTo(updated);
+        return updated;
     }
 
     /// <summary>
@@ -5816,16 +5818,19 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             TrainingMetricsHistory = TrainingMetricsHistory
         };
 
-        return new AiModelResult<T, TInput, TOutput>(options);
+        var copy = new AiModelResult<T, TInput, TOutput>(options);
+        CopyRobustnessStateTo(copy);
+        return copy;
     }
 
     /// <summary>
-    /// Creates a shallow copy of this AiModelResult.
+    /// Creates a copy of this AiModelResult.
     /// </summary>
-    /// <returns>A new AiModelResult instance that is a shallow copy of this one.</returns>
+    /// <returns>A new AiModelResult with a copy of the model and this result's configuration.</returns>
     /// <remarks>
-    /// This method delegates to WithParameters to ensure consistency in how OptimizationResult is handled.
-    /// The cloned instance will have a new model with the same parameters and updated OptimizationResult metadata.
+    /// The same as <see cref="DeepCopy"/>: the copy is a full result, so its robustness state (the certified defense,
+    /// the inference-time certification settings, the adversarial defense and the safety filter) is carried over.
+    /// It used to return a copy of the bare inner model, which dropped all of that.
     /// </remarks>
     public IFullModel<T, TInput, TOutput> Clone()
     {
@@ -5834,7 +5839,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             throw new InvalidOperationException("Cannot clone AiModelResult with null Model.");
         }
 
-        return Model.DeepCopy();
+        return DeepCopy();
     }
 
     /// <summary>
@@ -6004,6 +6009,10 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 // when the model was first built. Closes review-comment
                 // #1271.rT-I (data-loss bug: was being silently dropped).
                 WeightStreamingReport = deserializedObject.WeightStreamingReport;
+
+                // The certified defense and the inference-time certification settings, so PredictCertified and
+                // certified PredictWithDefense behave as they did before the save.
+                RestoreCertificationStateFrom(deserializedObject);
 
                 // Reset transient runtime state (will be reinitialized lazily)
                 JitCompiledFunction = null;

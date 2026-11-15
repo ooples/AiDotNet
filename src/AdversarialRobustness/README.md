@@ -168,9 +168,10 @@ var principles = new[]
 };
 var constitutionalModel = rlhf.ApplyConstitutionalPrinciples(alignedModel, principles);
 
-// Perform red teaming
-Matrix<double> adversarialPrompts = /* adversarial prompts as rows */;
-var redTeamResults = rlhf.PerformRedTeaming(constitutionalModel, adversarialPrompts);
+// Red team a text model: RedTeamingAttempts safety-benchmark prompts of RedTeamingCategories go to the
+// model, and the safety pipeline judges each response (an attack succeeds when the response is unsafe).
+Func<string, string> chat = prompt => /* your model's text response */;
+var redTeamResults = rlhf.PerformRedTeaming(chat, SafetyPipelineFactory<double>.Create(new SafetyConfig()));
 Console.WriteLine($"Red team success rate: {redTeamResults.SuccessRate:P2}");
 ```
 

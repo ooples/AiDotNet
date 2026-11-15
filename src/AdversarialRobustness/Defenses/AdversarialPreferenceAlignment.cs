@@ -5,6 +5,8 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.Safety;
+using AiDotNet.Safety.Benchmarking;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
@@ -197,59 +199,19 @@ public class AdversarialPreferenceAlignment<T> : IAlignmentMethod<T>
     }
 
     /// <inheritdoc/>
-    public RedTeamingResults<T> PerformRedTeaming(
-        IPredictiveModel<T, Vector<T>, Vector<T>> model, Matrix<T> adversarialPrompts)
+    public RedTeamingResults PerformRedTeaming(Func<string, string> model, SafetyPipeline<T> pipeline)
     {
-        if (model == null) throw new ArgumentNullException(nameof(model));
-        if (adversarialPrompts == null) throw new ArgumentNullException(nameof(adversarialPrompts));
-
-        int totalAttempts = adversarialPrompts.Rows;
-        int successfulAttacks = 0;
-        double totalSeverity = 0;
-        var random = RandomHelper.CreateSeededRandom(42);
-        var successArray = new bool[totalAttempts];
-
-        for (int i = 0; i < totalAttempts; i++)
+        if (model == null)
         {
-            var prompt = adversarialPrompts.GetRow(i);
-            var response = model.Predict(prompt);
-
-            // Evaluate response with reward model
-            double rewardScore = _robustRewardModel?.Invoke(prompt, response) ?? 0.5;
-
-            // Low reward = successful attack (model gave unaligned response)
-            double attackSeverity = 0;
-            if (rewardScore < 0.3)
-            {
-                successArray[i] = true;
-                successfulAttacks++;
-                attackSeverity = 1.0 - rewardScore; // Lower reward = higher severity
-            }
-
-            // Also test with adversarial perturbation of the prompt
-            var perturbedPrompt = AdversariallyPerturb(prompt, random);
-            var perturbedResponse = model.Predict(perturbedPrompt);
-            double perturbedReward = _robustRewardModel?.Invoke(perturbedPrompt, perturbedResponse) ?? 0.5;
-
-            if (perturbedReward < 0.3)
-            {
-                if (!successArray[i]) successfulAttacks++;
-                successArray[i] = true;
-                attackSeverity = Math.Max(attackSeverity, 1.0 - perturbedReward);
-            }
-
-            totalSeverity += attackSeverity;
+            throw new ArgumentNullException(nameof(model));
         }
 
-        return new RedTeamingResults<T>
+        if (pipeline == null)
         {
-            AdversarialPrompts = adversarialPrompts,
-            SuccessfulAttacks = successArray,
-            SuccessRate = totalAttempts > 0 ? (double)successfulAttacks / totalAttempts : 0,
-            AverageSeverity = successfulAttacks > 0
-                ? totalSeverity / successfulAttacks
-                : 0
-        };
+            throw new ArgumentNullException(nameof(pipeline));
+        }
+
+        return SafetyRedTeamer.RedTeamModel(model, pipeline, _options);
     }
 
     /// <inheritdoc/>

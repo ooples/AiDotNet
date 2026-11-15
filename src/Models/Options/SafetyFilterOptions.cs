@@ -41,7 +41,10 @@ public class SafetyFilterOptions<T> : ModelOptions
     /// <para><b>For Beginners:</b> How sensitive the system is to jailbreak attempts.
     /// Higher values catch more jailbreaks but might have false positives.</para>
     /// </remarks>
-    public double JailbreakSensitivity { get; set; } = 0.7;
+    public double JailbreakSensitivity { get; set; } = DefaultJailbreakSensitivity;
+
+    /// <summary>The default <see cref="JailbreakSensitivity"/>.</summary>
+    internal const double DefaultJailbreakSensitivity = 0.7;
 
     /// <summary>
     /// Gets or sets whether to enable input validation.

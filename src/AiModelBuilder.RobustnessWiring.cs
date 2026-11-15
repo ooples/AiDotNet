@@ -114,15 +114,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// </summary>
     internal static ICertifiedDefense<T, TInput, TOutput> CreateCertifiedDefense(CertifiedDefenseOptions<T> options)
     {
-        return options.CertificationMethod switch
-        {
-            CertifiedDefenseMethod.RandomizedSmoothing => new RandomizedSmoothing<T, TInput, TOutput>(options),
-            CertifiedDefenseMethod.IntervalBoundPropagation => new IntervalBoundPropagation<T, TInput, TOutput>(options),
-            CertifiedDefenseMethod.Crown => new CROWNVerification<T, TInput, TOutput>(options),
-            CertifiedDefenseMethod.AdaptiveRandomizedSmoothing => new AdaptiveRandomizedSmoothing<T, TInput, TOutput>(options),
-            _ => throw new InvalidOperationException(
-                $"AdversarialRobustnessOptions.CertificationMethod has the undefined value {(int)options.CertificationMethod}.")
-        };
+        return CertifiedDefenseFactory<T, TInput, TOutput>.Create(options);
     }
 
     /// <summary>
@@ -220,6 +212,57 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         }
 
         return new[] { 0.25 * baseEpsilon, 0.5 * baseEpsilon, baseEpsilon, 2.0 * baseEpsilon };
+    }
+
+    /// <summary>The build paths on which build-time adversarial training cannot run.</summary>
+    private enum RobustnessBuildPath
+    {
+        ProgramSynthesisInference,
+        InferenceOnly,
+        MetaLearning,
+        SelfSupervised,
+        ReinforcementLearning,
+        StreamingSupervised,
+        ImageSpace,
+        Evolution
+    }
+
+    /// <summary>
+    /// Rejects <c>EnableAdversarialTraining</c> on a build path that has no labelled per-sample training set for
+    /// the min-max training of Madry et al. (2018) to run on, instead of building an undefended model silently.
+    /// </summary>
+    /// <remarks>
+    /// <para>Build-time adversarial training runs on the supervised in-memory path (including AutoML and the direct
+    /// neural-network loop), which is where every <c>IInputOutputDataLoader</c> build ends. The paths rejected here
+    /// either train nothing (inference-only, program synthesis, evolution), train against no labels (self-supervised,
+    /// reinforcement learning, image-space reconstruction, meta-learning episodes) or never hold the data set
+    /// (streaming).</para>
+    /// </remarks>
+    /// <exception cref="NotSupportedException">Adversarial training is enabled.</exception>
+    private void RejectBuildTimeAdversarialTraining(RobustnessBuildPath path)
+    {
+        if (ActiveRobustnessConfiguration is not { Options.EnableAdversarialTraining: true })
+        {
+            return;
+        }
+
+        string reason = path switch
+        {
+            RobustnessBuildPath.ProgramSynthesisInference => "a program-synthesis inference build trains no model",
+            RobustnessBuildPath.InferenceOnly => "BuildForInference wraps an already-trained model and trains nothing",
+            RobustnessBuildPath.MetaLearning => "meta-learning trains on sampled episodes, not a labelled sample set",
+            RobustnessBuildPath.SelfSupervised => "a self-supervised model trains against its own objective, with no labels",
+            RobustnessBuildPath.ReinforcementLearning => "reinforcement learning trains on environment rewards, with no labels",
+            RobustnessBuildPath.StreamingSupervised => "a streaming loader never holds the training set the defense iterates",
+            RobustnessBuildPath.ImageSpace => "image-space training fits ray batches, not labelled samples",
+            RobustnessBuildPath.Evolution => "an evolutionary search trains no model",
+            _ => $"build path {(int)path} does not support it"
+        };
+
+        throw new NotSupportedException(
+            $"AdversarialRobustnessOptions.EnableAdversarialTraining cannot apply to this build: {reason}. " +
+            "Adversarial training runs on the supervised in-memory build path (ConfigureDataLoader with an " +
+            "IInputOutputDataLoader). Turn EnableAdversarialTraining off, or train through that path.");
     }
 
     /// <summary>
@@ -337,7 +380,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         if (options.EnableSafetyFiltering)
         {
             result.SetSafetyFilter(configuration.CustomSafetyFilter
-                ?? new SafetyFilter<T>(ToSafetyFilterOptions(options), configuration.CustomContentClassifier));
+                ?? new SafetyFilter<T>(ToSafetyFilterOptions(options), configuration.CustomContentClassifier, configuration.Logger));
             LogRobustnessStep("Safety filter attached (threshold {Threshold}).", options.SafetyThreshold);
         }
         else
@@ -397,53 +440,15 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// </summary>
     private void RunRedTeaming(AiModelResult<T, TInput, TOutput> result, AdversarialRobustnessOptions<T> options)
     {
-        if (options.RedTeamingPromptCount < 1)
-        {
-            throw new InvalidOperationException(
-                $"AdversarialRobustnessOptions.RedTeamingPromptCount must be at least 1 (was {options.RedTeamingPromptCount}).");
-        }
-
-        var categories = options.RedTeamingCategories?.Distinct().ToArray() ?? Array.Empty<RedTeamingCategory>();
-        if (categories.Length == 0)
-        {
-            throw new InvalidOperationException("AdversarialRobustnessOptions.RedTeamingCategories must name at least one category.");
-        }
-
-        var pools = categories.Select(c => RedTeamingBenchmark(c).TestCases).ToArray();
-        var prompts = new List<SafetyBenchmarkCase>(options.RedTeamingPromptCount);
-        for (int round = 0; prompts.Count < options.RedTeamingPromptCount; round++)
-        {
-            bool any = false;
-            foreach (var pool in pools)
-            {
-                if (round < pool.Count && prompts.Count < options.RedTeamingPromptCount)
-                {
-                    prompts.Add(pool[round]);
-                    any = true;
-                }
-            }
-
-            if (!any)
-            {
-                break; // every pool is exhausted
-            }
-        }
-
+        var prompts = SafetyRedTeamer.SelectPrompts<T>(
+            options.RedTeamingCategories,
+            options.RedTeamingPromptCount,
+            "AdversarialRobustnessOptions.RedTeamingPromptCount",
+            "AdversarialRobustnessOptions.RedTeamingCategories");
         var pipeline = result.SafetyPipeline ?? SafetyPipelineFactory<T>.Create(_safetyPipelineConfig);
         LogRobustnessStep("Red teaming the safety pipeline with {Prompts} prompts.", prompts.Count);
-        result.SetRedTeamingReport(new SafetyBenchmarkRunner<T>(pipeline).RunBenchmark(prompts));
+        result.SetRedTeamingReport(SafetyRedTeamer.ScreenPrompts(pipeline, prompts));
     }
-
-    private static SafetyBenchmarkBase<T> RedTeamingBenchmark(RedTeamingCategory category) => category switch
-    {
-        RedTeamingCategory.Jailbreaking => new JailbreakBenchmark<T>(),
-        RedTeamingCategory.HarmfulContent => new ToxicityBenchmark<T>(),
-        RedTeamingCategory.Misinformation => new HallucinationBenchmark<T>(),
-        RedTeamingCategory.PrivacyViolation => new PIIBenchmark<T>(),
-        RedTeamingCategory.BiasExploration => new BiasBenchmark<T>(),
-        _ => throw new InvalidOperationException(
-            $"AdversarialRobustnessOptions.RedTeamingCategories contains the undefined value {(int)category}.")
-    };
 
     /// <summary>
     /// The robustness figures of the result, by metadata key.

@@ -53,6 +53,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// </example>
     public AiModelResult<T, TInput, TOutput> BuildForInference()
     {
+        RejectBuildTimeAdversarialTraining(RobustnessBuildPath.InferenceOnly);
+
         if (_model is null)
         {
             throw new InvalidOperationException(

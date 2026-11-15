@@ -1851,6 +1851,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
     private AiModelResult<T, TInput, TOutput> BuildProgramSynthesisInferenceOnlyResult()
     {
+        RejectBuildTimeAdversarialTraining(RobustnessBuildPath.ProgramSynthesisInference);
+
         // Preprocessing requires fitted statistics - for inference-only builds, the pipeline must be pre-fitted
         if (_preprocessingPipeline is not null && !_preprocessingPipeline.IsFitted)
         {
@@ -2220,6 +2222,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <returns>A task that represents the asynchronous operation, containing the trained meta-learner result.</returns>
     private AiModelResult<T, TInput, TOutput> BuildMetaLearningInternalAsync()
     {
+        RejectBuildTimeAdversarialTraining(RobustnessBuildPath.MetaLearning);
+
         // META-LEARNING TRAINING PATH
 
         // Create profiler session if profiling is enabled
@@ -2363,6 +2367,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     private async Task<AiModelResult<T, TInput, TOutput>> BuildSelfSupervisedInternalAsync(
         CancellationToken cancellationToken)
     {
+        RejectBuildTimeAdversarialTraining(RobustnessBuildPath.SelfSupervised);
+
         var profilerSession = CreateProfilerSession();
         using var _ = profilerSession?.Scope("BuildSelfSupervisedInternalAsync");
 
@@ -2643,6 +2649,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <returns>A task that represents the asynchronous operation, containing the trained RL agent result.</returns>
     private async Task<AiModelResult<T, TInput, TOutput>> BuildRLInternalAsync(int episodes, bool verbose)
     {
+        RejectBuildTimeAdversarialTraining(RobustnessBuildPath.ReinforcementLearning);
+
         // RL TRAINING PATH
 
         // Create profiler session if profiling is enabled
