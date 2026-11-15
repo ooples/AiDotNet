@@ -226,7 +226,7 @@ internal class EnergyScoreMetric<T> : IRegressionMetric<T>
         {
             var normalized = engine.TensorDivideScalar(difference, scale);
             double numerator = engine.TensorSum(engine.TensorMultiply(engine.TensorSquare(normalized), normalized));
-            double denominator = engine.TensorSumOfSquares(normalized);
+            double denominator = TensorReductionHelper.SumOfSquares(engine, normalized);
             acceleration = numerator / (6 * Math.Pow(denominator, 1.5));
         }
         double zLo = NormalQuantile(alpha / 2), zHi = NormalQuantile(1 - alpha / 2);
@@ -244,7 +244,7 @@ internal class EnergyScoreMetric<T> : IRegressionMetric<T>
         var engine = AiDotNetEngine.Current;
         int count = bootstrapValues.Length, n = errors.Length;
         var jack = Jackknife(errors);
-        double jackVariance = engine.TensorSumOfSquares(engine.TensorSubtractScalar(jack, engine.TensorMean(jack)));
+        double jackVariance = TensorReductionHelper.SumOfSquares(engine, engine.TensorSubtractScalar(jack, engine.TensorMean(jack)));
         double seHat = Math.Max(1e-30, Math.Sqrt((n - 1.0) / n * jackVariance));
         int innerCount = Math.Max(25, count / 10);
         var tStatistics = new double[count];

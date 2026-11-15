@@ -89,7 +89,7 @@ public class LeveneTest<T> : IStatisticalTest<T>
         // Compute Levene statistic (F-test on Z values)
         double SSBetween = engine.TensorSum(
             engine.TensorMultiply(sizes, engine.TensorSquare(engine.TensorSubtractScalar(ZMeans, ZGrandMean))));
-        double SSWithin = engine.TensorSumOfSquares(
+        double SSWithin = TensorReductionHelper.SumOfSquares(engine,
             engine.TensorSubtract(Z, engine.TensorGather(ZMeans, groupIndex, 0)));
 
         int dfBetween = k - 1;

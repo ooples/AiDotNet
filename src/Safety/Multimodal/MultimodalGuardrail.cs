@@ -223,7 +223,7 @@ public class MultimodalGuardrail<T> : MultimodalSafetyModuleBase<T>
         var values = NormalizedSample(image, sampleSize);
         T n = NumOps.FromDouble(sampleSize);
         T mean = NumOps.Divide(engine.TensorSum(values), n);
-        T variance = NumOps.Subtract(NumOps.Divide(engine.TensorSumOfSquares(values), n), NumOps.Multiply(mean, mean));
+        T variance = NumOps.Subtract(NumOps.Divide(TensorReductionHelper.SumOfSquares(engine, values), n), NumOps.Multiply(mean, mean));
 
         // Very low variance = very uniform = possible text overlay background
         T limit = NumOps.FromDouble(0.01);

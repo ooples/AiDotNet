@@ -85,7 +85,7 @@ public static class BootstrapConfidenceInterval<T>
         var engine = AiDotNetEngine.Current;
         var values = Tensor<T>.FromVector(sample).Cast<double>();
         double mean = engine.TensorMean(values);
-        double sse = engine.TensorSumOfSquares(engine.TensorSubtractScalar(values, mean));
+        double sse = TensorReductionHelper.SumOfSquares(engine, engine.TensorSubtractScalar(values, mean));
         double std = Math.Sqrt(sse / (n - 1));
         return std > 0 ? NumOps.FromDouble(mean / std) : NumOps.Zero;
     }

@@ -239,7 +239,7 @@ public partial class CenteringMechanism<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     public T CenterNorm()
     {
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        T sumSquared = Engine.TensorSumOfSquares(CenterTensor);
+        T sumSquared = TensorReductionHelper.SumOfSquares(Engine, CenterTensor);
         return NumOps.Sqrt(sumSquared);
     }
 
@@ -259,7 +259,7 @@ public partial class CenteringMechanism<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 
         // Population variance of the center values
         var diff = Engine.TensorSubtractScalar(center, mean);
-        T variance = NumOps.Divide(Engine.TensorSumOfSquares(diff), NumOps.FromDouble(_dimension));
+        T variance = NumOps.Divide(TensorReductionHelper.SumOfSquares(Engine, diff), NumOps.FromDouble(_dimension));
         var std = NumOps.Sqrt(variance);
 
         return (mean, std, min, max);

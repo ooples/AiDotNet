@@ -111,7 +111,7 @@ public class KellyCriterion<T> : IPositionSizer<T>
         var sum = engine.TensorSum(values);
 
         var mean = NumOps.Divide(sum, NumOps.FromDouble(count));
-        var sse = engine.TensorSumOfSquares(engine.TensorSubtractScalar(values, mean));
+        var sse = TensorReductionHelper.SumOfSquares(engine, engine.TensorSubtractScalar(values, mean));
 
         var variance = NumOps.Divide(sse, NumOps.FromDouble(count));
         return Fractional(Continuous(mean, variance), fraction);

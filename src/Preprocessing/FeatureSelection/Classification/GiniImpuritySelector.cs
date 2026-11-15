@@ -76,7 +76,7 @@ public class GiniImpuritySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         var membershipCounts = membership.Cast<double>();
         var classTotals = engine.ReduceSum(membershipCounts, new[] { 1 }, true);                                 // [k, 1]
         double count = n;
-        double parentGini = 1.0 - engine.TensorSumOfSquares(engine.TensorDivideScalar(classTotals, count));
+        double parentGini = 1.0 - TensorReductionHelper.SumOfSquares(engine, engine.TensorDivideScalar(classTotals, count));
 
         // Candidate thresholds min + s * (max - min) / (nSplits + 1) for s = 1..nSplits, one row per split
         var minVal = PreprocessingTensorOps.ColumnMin(X);

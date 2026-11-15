@@ -169,7 +169,7 @@ public class ARDSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervi
 
             // Update beta (noise precision)
             var residual = engine.TensorSubtract(y, engine.TensorMatMul(X, engine.Reshape(coefficients, new[] { p, 1 })));
-            beta = UpdateNoisePrecision(n, engine.TensorSum(gamma), engine.TensorSumOfSquares(residual));
+            beta = UpdateNoisePrecision(n, engine.TensorSum(gamma), TensorReductionHelper.SumOfSquares(engine, residual));
 
             // Check convergence
             var change = engine.TensorDivide(

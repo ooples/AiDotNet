@@ -253,7 +253,7 @@ internal static class FilterStatisticTensorOps
         var yc = engine.Reshape(engine.TensorSubtractScalar(y, engine.TensorMean(y)), new[] { n, 1 });
         var sxy = engine.Reshape(engine.TensorMatMul(engine.TensorTranspose(xc), yc), new[] { p });
         var sxx = engine.ReduceSum(engine.TensorSquare(xc), new[] { 0 }, false);
-        return (sxx, sxy, engine.TensorSumOfSquares(yc));
+        return (sxx, sxy, TensorReductionHelper.SumOfSquares(engine, yc));
     }
 
     /// <summary>

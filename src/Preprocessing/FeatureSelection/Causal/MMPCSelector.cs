@@ -173,7 +173,7 @@ public class MMPCSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         var ops = MathHelper.GetNumericOperations<TC>();
         int n = xc.Shape[0];
         var z = PreprocessingTensorOps.ColumnVector(xc, conditioning);
-        TC varZ = engine.TensorSumOfSquares(z);
+        TC varZ = TensorReductionHelper.SumOfSquares(engine, z);
         var residX = xc;
         var residY = yc;
         if (ops.GreaterThan(varZ, PreprocessingTensorOps.Tolerance<TC>(1e-10)))

@@ -123,7 +123,7 @@ public class TranscriptionToxicityDetector<T> : AudioSafetyModuleBase<T>
         var signal = SafetyTensorOps<T>.AsTensor(samples);
 
         T sum = engine.TensorSum(signal);
-        T sumSq = engine.TensorSumOfSquares(signal);
+        T sumSq = TensorReductionHelper.SumOfSquares(engine, signal);
         T maxVal = SafetyTensorOps<T>.ScanMax(signal);
         T minVal = SafetyTensorOps<T>.ScanMin(signal);
         T zeroCrossings = SafetyTensorOps<T>.ZeroCrossings(

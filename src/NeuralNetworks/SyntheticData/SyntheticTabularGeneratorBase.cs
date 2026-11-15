@@ -250,10 +250,10 @@ public abstract class SyntheticTabularGeneratorBase<T> : ISyntheticTabularGenera
         if (!NumOps.GreaterThan(scale, NumOps.Zero) || NumOps.IsInfinity(scale))
         {
             // All zeros (norm 0), a NaN maximum or an infinite entry: the plain sum already gives the answer.
-            return NumOps.Sqrt(engine.TensorSumOfSquares(x));
+            return NumOps.Sqrt(TensorReductionHelper.SumOfSquares(engine, x));
         }
 
-        return NumOps.Multiply(scale, NumOps.Sqrt(engine.TensorSumOfSquares(engine.TensorDivideScalar(x, scale))));
+        return NumOps.Multiply(scale, NumOps.Sqrt(TensorReductionHelper.SumOfSquares(engine, engine.TensorDivideScalar(x, scale))));
     }
 
     /// <summary>

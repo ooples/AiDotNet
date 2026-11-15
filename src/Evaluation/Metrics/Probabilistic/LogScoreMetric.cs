@@ -80,7 +80,7 @@ public class LogScoreMetric<T> : IRegressionMetric<T>
         using var noGrad = new NoGradScope<T>();
         var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
         var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
-        double sumSqErr = engine.TensorSumOfSquares(engine.TensorSubtract(pred, actual));
+        double sumSqErr = TensorReductionHelper.SumOfSquares(engine, engine.TensorSubtract(pred, actual));
 
         int n = predictions.Length;
         double variance = Math.Max(sumSqErr / n, 1e-15);
