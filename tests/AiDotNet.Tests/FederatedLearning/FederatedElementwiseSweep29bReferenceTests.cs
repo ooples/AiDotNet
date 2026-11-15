@@ -770,7 +770,9 @@ public class FederatedElementwiseSweep29bReferenceTests
             small[i] = new Tensor<double>(new[] { 1.0 }, new[] { 1 });
         }
 
-        foreach (var score in exact.EvaluateContributions(small, global, new Dictionary<int, List<Tensor<double>>>()).Values)
+        var exactScores = exact.EvaluateContributions(small, global, new Dictionary<int, List<Tensor<double>>>());
+        Assert.Equal(3, exactScores.Count);
+        foreach (var score in exactScores.Values)
         {
             Assert.Equal(1.0 / 3.0, score, Precision);
         }
@@ -1504,5 +1506,113 @@ public class FederatedElementwiseSweep29bReferenceTests
         double expectedB2 = b2[0] - lrNow * (0.4 + 1e-2 * b2[0]);
         fedGen.BackpropGenerator(input, hidden, gradLatent);
         Assert.Equal(expectedB2, fedGen.GeneratorState.B2.ToArray()[0], 12);
+    }
+
+    private static Vector<Half> HalfVector(params double[] values) => new Vector<Half>(HalfArray(values));
+
+    [Fact(Timeout = 60000)]
+    public async Task WeightedAverages_HalfNormalizeTheWeightsBeforeTheyTouchHalf()
+    {
+        await Task.Yield();
+
+        // One client [4, 4] with weight 32768 averages to [4, 4]: 4 * 32768 is past Half's 65504.
+        var petuning = new FedPETuning<Half>(modelDim: 10, method: PEFTMethod.LoRA, bottleneckDim: 1, numAdaptedLayers: 1, layerDim: 1);
+        var averaged = petuning.AggregateAdapters(
+            new Dictionary<int, Vector<Half>> { [0] = HalfVector(4, 4) }, new Dictionary<int, double> { [0] = 32768 });
+        Assert.Equal(4.0, HalfOps.ToDouble(averaged[0]));
+        Assert.Equal(4.0, HalfOps.ToDouble(averaged[1]));
+
+        // Two importance vectors [1] with weights 40000: the weighted sum and the total 80000 both overflowed
+        // Half and the result was NaN.
+        var fcl = new AiDotNet.FederatedLearning.ContinualLearning.DataFreeFCL<Half>();
+        var importance = fcl.AggregateImportance(
+            new Dictionary<int, Vector<Half>> { [0] = HalfVector(1), [1] = HalfVector(1) },
+            new Dictionary<int, double> { [0] = 40000, [1] = 40000 });
+        Assert.Equal(1.0, HalfOps.ToDouble(importance[0]));
+
+        // DP-FedLoRA without noise: two adapters [0.5] (inside the clip) with weights 70000 average to 0.5.
+        var dp = new DPFedLoRA<Half>(
+            modelDim: 100, rank: 1, noiseMultiplier: 0.0, clipNorm: 1.0,
+            numAdaptedLayers: 1, layerInputDim: 1, layerOutputDim: 1, seed: 42);
+        var released = dp.AggregateAdapters(
+            new Dictionary<int, Vector<Half>> { [0] = HalfVector(0.5, 0), [1] = HalfVector(0.5, 0) },
+            new Dictionary<int, double> { [0] = 70000, [1] = 70000 });
+        Assert.Equal(0.5, HalfOps.ToDouble(released[0]));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task RunningSums_HalfAccumulateInDouble()
+    {
+        await Task.Yield();
+
+        // 4096 equally weighted trees with leaf value 1 merge to 1. A Half running sum of 1/4096 terms stops
+        // at 0.5 (0.5 + 1/4096 rounds back to 0.5).
+        var compressor = new FedDTCompressor<Half>();
+        var delta = new Dictionary<string, Half[]> { ["w"] = HalfArray(1, 1) };
+        var tree = compressor.Compress(delta);
+        var trees = new Dictionary<int, FedDTCompressor<Half>.CompressedTree>();
+        var weights = new Dictionary<int, double>();
+        for (int i = 0; i < 4096; i++)
+        {
+            trees[i] = tree;
+            weights[i] = 1.0;
+        }
+
+        var merged = compressor.MergeTrees(trees, weights, delta)["w"];
+        Assert.Equal(1.0, HalfOps.ToDouble(merged[0]));
+        Assert.Equal(1.0, HalfOps.ToDouble(merged[1]));
+
+        // 128 equally weighted sparse adapters with the value 2^-20: each weighted term 2^-27 is below the
+        // smallest Half (2^-24) and rounded to zero, so the average was 0 instead of 2^-20.
+        var lora = new SparseLoRA<Half>(modelDim: 100);
+        var adapters = new Dictionary<int, Vector<Half>>();
+        for (int i = 0; i < 128; i++)
+        {
+            adapters[i] = HalfVector(Math.Pow(2, -20));
+        }
+
+        Assert.Equal(Math.Pow(2, -20), HalfOps.ToDouble(lora.AggregateAdapters(adapters, null)[0]));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ContinualLearning_HalfPenaltyFisherAndProjectionStayInRange()
+    {
+        await Task.Yield();
+
+        // EWC penalty 0.5 * 0.001 * 1 * (300 - 0)^2 = 45; the square 90000 is past Half's 65504.
+        var ewc = new AiDotNet.FederatedLearning.ContinualLearning.FederatedEWC<Half>();
+        Assert.Equal(45.0, HalfOps.ToDouble(ewc.ComputeRegularizationPenalty(HalfVector(300), HalfVector(0), HalfVector(1), 0.001)), 1);
+
+        // The pseudo-Fisher of theta = 0 on a feature of 300 is 0^2 * 300^2 = 0, not 0 * infinity = NaN.
+        var data = new Matrix<Half>(1, 1);
+        data[0, 0] = HalfOps.FromDouble(300);
+        Assert.Equal(0.0, HalfOps.ToDouble(ewc.ComputeImportance(HalfVector(0), data)[0]));
+
+        // Projecting g = [40000, 40000] off e = [1, 1]: g - (g . e / e . e) e = 0. g . e = 80000 is past
+        // Half's range and the projection was -infinity.
+        var projection = new AiDotNet.FederatedLearning.ContinualLearning.FederatedOrthogonalProjection<Half>();
+        var projected = projection.ProjectGradient(HalfVector(40000, 40000), HalfVector(1, 1));
+        Assert.Equal(0.0, HalfOps.ToDouble(projected[0]));
+        Assert.Equal(0.0, HalfOps.ToDouble(projected[1]));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task Flame_HalfDeltaPastTheHalfRangeStillAggregates()
+    {
+        await Task.Yield();
+
+        // G_{t-1} = [-60000] and three clients at [60000]: every delta is 120000, past Half's 65504, but the
+        // clipping bound is their median (nothing is clipped) and G_t = -60000 + 120000 = 60000 is in range.
+        var flame = new FlameAggregationStrategy<Half>(noiseMultiplier: 0.0);
+        flame.SetGlobalModel(new Dictionary<string, Half[]> { ["w"] = HalfArray(-60000) });
+        var models = new Dictionary<int, Dictionary<string, Half[]>>();
+        var weights = new Dictionary<int, double>();
+        for (int i = 0; i < 3; i++)
+        {
+            models[i] = new Dictionary<string, Half[]> { ["w"] = HalfArray(60000) };
+            weights[i] = 1.0;
+        }
+
+        Assert.Equal(60000.0, HalfOps.ToDouble(flame.Aggregate(models, weights)["w"][0]));
     }
 }

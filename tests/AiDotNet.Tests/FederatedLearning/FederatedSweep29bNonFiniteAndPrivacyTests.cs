@@ -130,4 +130,87 @@ public class FederatedSweep29bNonFiniteAndPrivacyTests
         Assert.Equal(0f, losses.StudentTotalLoss);
         Assert.Equal(0f, losses.TeacherTotalLoss);
     }
+
+    [Fact(Timeout = 60000)]
+    public async Task FetchSGD_ServerStepRejectsANonFiniteSketchBeforeItReachesTheServerState()
+    {
+        await Task.Yield();
+
+        // A NaN sketch stored in the momentum and error sketches made every later round NaN (0 * NaN is NaN
+        // even with zero momentum). It is rejected, and the next finite round releases its top coordinate.
+        var compressor = new FetchSGDCompressor<double>(sketchRows: 3, sketchCols: 1000, topK: 1, momentum: 0.0);
+        var poisoned = compressor.Sketch(new[] { double.NaN, 1.0 });
+        Assert.ThrowsAny<ArgumentException>(() => compressor.ServerStep(poisoned, 2));
+
+        var released = compressor.ServerStep(compressor.Sketch(new[] { 5.0, 1.0 }), 2);
+        Assert.Equal(5.0, released[0], Precision);
+        Assert.Equal(0.0, released[1], Precision);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task Flame_NonFiniteGlobalModelIsNeverRemembered()
+    {
+        await Task.Yield();
+
+        // SetGlobalModel rejects a NaN model, and a single NaN client (returned as-is) does not become G_{t-1}:
+        // the next round still starts from the zero model and gives the same [1, 0] as a fresh instance.
+        var flame = new FlameAggregationStrategy<double>(noiseMultiplier: 0.0);
+        Assert.ThrowsAny<ArgumentException>(
+            () => flame.SetGlobalModel(new Dictionary<string, double[]> { ["w"] = new[] { double.NaN, 0.0 } }));
+        flame.Aggregate(
+            new Dictionary<int, Dictionary<string, double[]>> { [0] = new Dictionary<string, double[]> { ["w"] = new[] { double.NaN, 0.0 } } },
+            new Dictionary<int, double> { [0] = 1.0 });
+
+        // (the same four models as Flame_ClientWithNonFiniteModelIsNotAdmitted)
+        var points = new[] { new[] { 1.0, 0.0 }, new[] { 1.0, 0.01 }, new[] { 1.0, -0.01 }, new[] { double.NaN, 0.0 } };
+        var models = new Dictionary<int, Dictionary<string, double[]>>();
+        var weights = new Dictionary<int, double>();
+        for (int i = 0; i < points.Length; i++)
+        {
+            models[i] = new Dictionary<string, double[]> { ["w"] = points[i] };
+            weights[i] = 1.0;
+        }
+
+        var aggregated = flame.Aggregate(models, weights);
+        Assert.Equal(1.0, aggregated["w"][0], Precision);
+        Assert.Equal(0.0, aggregated["w"][1], Precision);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task InvalidWeightsAndConfiguration_AreRejected()
+    {
+        await Task.Yield();
+
+        // DP-FedLoRA: weights [10, -10] would average with coefficients [5, -5] under noise sized for 0.5.
+        var dp = new DPFedLoRA<double>(
+            modelDim: 100, rank: 1, noiseMultiplier: 1.0, clipNorm: 1.0,
+            numAdaptedLayers: 1, layerInputDim: 1, layerOutputDim: 1, seed: 42);
+        var adapters = new Dictionary<int, Vector<double>>
+        {
+            [0] = new Vector<double>(new[] { 1.0, 0.0 }),
+            [1] = new Vector<double>(new[] { 0.0, 1.0 }),
+        };
+        Assert.ThrowsAny<ArgumentException>(() => dp.AggregateAdapters(adapters, new Dictionary<int, double> { [0] = 10.0, [1] = -10.0 }));
+        Assert.ThrowsAny<ArgumentException>(() => dp.AggregateAdapters(adapters, new Dictionary<int, double> { [0] = double.NaN, [1] = 1.0 }));
+
+        // FedMD: a NaN weight passed the "total <= 0" check and made the consensus NaN.
+        var fedMd = new AiDotNet.FederatedLearning.Distillation.FedMDDistillation<double>();
+        Assert.ThrowsAny<ArgumentException>(() => fedMd.AggregateKnowledge(
+            new Dictionary<int, Matrix<double>> { [0] = new Matrix<double>(new[,] { { 1.0 } }) },
+            new Dictionary<int, double> { [0] = double.NaN }));
+
+        // FedGEN and FedCIL: NaN learning rates and a zero Adam epsilon (0 / 0 for a zero gradient).
+        Assert.ThrowsAny<ArgumentException>(
+            () => new AiDotNet.FederatedLearning.Distillation.FedGENDistillation<double>(distillationLearningRate: double.NaN));
+        var fedGen = new AiDotNet.FederatedLearning.Distillation.FedGENDistillation<double>();
+        Assert.ThrowsAny<ArgumentException>(() => fedGen.AdamEpsilon = 0.0);
+        Assert.ThrowsAny<ArgumentException>(
+            () => new AiDotNet.FederatedLearning.ContinualLearning.FedCILContinualLearning<double>(learningRate: double.NaN));
+
+        // FedKD: two logit rows with one hidden row mixed a two-sample task loss with a one-sample hidden loss.
+        var fedKd = new FedKDCompressor<float>();
+        var logits = new Tensor<float>(new[] { 1f, 0f, 0f, 1f }, new[] { 2, 2 });
+        var hidden = new Tensor<float>(new[] { 1f, 2f }, new[] { 1, 2 });
+        Assert.ThrowsAny<ArgumentException>(() => fedKd.ComputeMutualDistillationLosses(logits, logits, new[] { 0, 1 }, hidden, hidden));
+    }
 }
