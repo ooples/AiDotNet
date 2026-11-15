@@ -204,11 +204,11 @@ try {
     ConvertTo-Json -InputObject $built -Depth 6 -Compress | Set-Content -LiteralPath $tableFile -Encoding utf8
     $table = Read-ShardTimingTable -Path $tableFile
     Assert-True ($null -ne $table) 'a table this code wrote could not be read back'
-    Assert-True ($null -eq (Read-ShardTimingTable -Path (Join-Path $scratch 'absent.json'))) 'a missing table was read'
+    Assert-True ($null -eq (Read-ShardTimingTable -Path (Join-Path $scratch 'absent.json') 6>$null)) 'a missing table was read'
     Set-Content -LiteralPath (Join-Path $scratch 'broken.json') -Value '{ not json'
-    Assert-True ($null -eq (Read-ShardTimingTable -Path (Join-Path $scratch 'broken.json'))) 'a broken table was read'
+    Assert-True ($null -eq (Read-ShardTimingTable -Path (Join-Path $scratch 'broken.json') 6>$null)) 'a broken table was read'
     Set-Content -LiteralPath (Join-Path $scratch 'other.json') -Value '{"schemaVersion":2,"shards":{}}'
-    Assert-True ($null -eq (Read-ShardTimingTable -Path (Join-Path $scratch 'other.json'))) 'a table of another schema version was read'
+    Assert-True ($null -eq (Read-ShardTimingTable -Path (Join-Path $scratch 'other.json') 6>$null)) 'a table of another schema version was read'
 
     $factor = [double] $table['shards']['A_1']['wallFactor']
     $whole = Get-ShardSlicePrediction -Slice (New-Slice 'A - 1') -Table $table -Classes $null
@@ -491,6 +491,7 @@ try {
         foreach ($case in @(
                 @{ Job = 'build'; Step = 'Restore the shard timing table'; Needs = $gate },
                 @{ Job = 'build'; Step = 'Upload the shard pack plan'; Needs = $gate },
+                @{ Job = 'ci-test-analysis'; Step = 'Verify shard repacking'; Needs = "vars.TEST_IMPACT_REPACK == 'report' || vars.TEST_IMPACT_REPACK == 'on'" },
                 @{ Job = 'ci-test-analysis'; Step = 'Report shard repacking'; Needs = $gate },
                 @{ Job = 'ci-test-analysis'; Step = 'Upload the shard repacking report'; Needs = $gate },
                 @{ Job = 'ci-test-analysis'; Step = 'Read packed jobs by shard'; Needs = "vars.TEST_IMPACT_REPACK == 'on'" })) {
@@ -670,9 +671,49 @@ try {
         Assert-True ($narrowPacked) 'on mode did not repack a narrowed matrix'
         Assert-Equal (@($narrowSlices | ForEach-Object { ConvertTo-SliceJson $_ }) -join "`n") (@(Expand-PackedShardMatrix -Matrix @($narrowPacked | ConvertFrom-Json) | ForEach-Object { ConvertTo-SliceJson $_ }) -join "`n") `
             'a repacked narrowed matrix does not run exactly the narrowed slices'
-        Assert-True ($null -eq (Get-RepackedMatrix -Slices $narrowSlices -PlanShards $planShards -OtherOutputCharacters 400000)) 'a packed matrix that does not fit beside ledger_matrix was published'
-        Assert-True ($null -eq (Get-RepackedMatrix -Slices @($narrowSlices[0], $narrowSlices[0]) -PlanShards $planShards)) 'a matrix the packer refuses was published'
+        Assert-True ($null -eq (Get-RepackedMatrix -Slices $narrowSlices -PlanShards $planShards -OtherOutputCharacters 400000 6>$null)) 'a packed matrix that does not fit beside ledger_matrix was published'
+        Assert-True ($null -eq (Get-RepackedMatrix -Slices @($narrowSlices[0], $narrowSlices[0]) -PlanShards $planShards 6>$null)) 'a matrix the packer refuses was published'
         $env:TEST_IMPACT_REPACK = $null
+
+        # ---------------------------------------------------------------- Write-ShardPackReport.ps1
+
+        $reporter = Join-Path $PSScriptRoot 'Write-ShardPackReport.ps1'
+        $jobsFile = Join-Path $scratch 'current-jobs.json'
+        $rawFile = Join-Path $scratch 'current-jobs-raw.json'
+        # The aggregate analysis job writes the job list as one array; an unpacked run's must come back untouched.
+        ConvertTo-Json -InputObject @($plain, $build) -Depth 8 | Set-Content -LiteralPath $jobsFile -Encoding utf8
+        $before = [IO.File]::ReadAllBytes($jobsFile)
+        & $pwsh -NoProfile -File $reporter -JobsFile $jobsFile -ExpandJobs -RawJobsFile $rawFile | Out-Null
+        Assert-Equal 0 $LASTEXITCODE 'expanding the job list of an unpacked run failed'
+        Assert-True ([Linq.Enumerable]::SequenceEqual([byte[]] $before, [IO.File]::ReadAllBytes($jobsFile))) 'the job list of an unpacked run was rewritten'
+        Assert-True (-not (Test-Path -LiteralPath $rawFile)) 'an unpacked run got a second copy of its job list'
+        ConvertTo-Json -InputObject @($packedJob, $queued, $plain, $build) -Depth 8 | Set-Content -LiteralPath $jobsFile -Encoding utf8
+        & $pwsh -NoProfile -File $reporter -JobsFile $jobsFile -ExpandJobs -RawJobsFile $rawFile | Out-Null
+        Assert-Equal 0 $LASTEXITCODE 'expanding the job list of a packed run failed'
+        $rewritten = @(Get-Content -LiteralPath $jobsFile -Raw | ConvertFrom-Json)
+        Assert-Equal 'Tests (net10.0) - Unit - 01 Core:success|Tests (net10.0) - Unit - 02 A/B:failure' (@($rewritten[0..1] | ForEach-Object { "$($_.name):$($_.conclusion)" }) -join '|') `
+            'the job list of a packed run was not rewritten slice by slice'
+        Assert-Equal 5 $rewritten.Count 'the rewritten job list lost or gained a job'
+        Assert-Equal 4 @(Get-Content -LiteralPath $rawFile -Raw | ConvertFrom-Json).Count 'the original job list of a packed run was not kept'
+
+        $reported.Plan['applied'] = $false
+        $reported.Plan['mode'] = 'report'
+        $reportPlan = Join-Path $scratch 'shard-pack-plan.json'
+        ConvertTo-Json -InputObject $reported.Plan -Depth 8 | Set-Content -LiteralPath $reportPlan -Encoding utf8
+        ConvertTo-Json -InputObject $runJobs -Depth 8 | Set-Content -LiteralPath $jobsFile -Encoding utf8
+        $reportFile = Join-Path $scratch 'shard-pack-report.json'
+        $reportSummary = Join-Path $scratch 'report-summary.md'
+        & $pwsh -NoProfile -File $reporter -JobsFile $jobsFile -PlanFile $reportPlan -OutFile $reportFile -SummaryFile $reportSummary | Out-Null
+        Assert-Equal 0 $LASTEXITCODE 'the repacking report failed'
+        $written = Get-Content -LiteralPath $reportFile -Raw | ConvertFrom-Json
+        Assert-Equal '60|55|estimated' (@($written.runnerMinutesMeasured, $written.runnerMinutesPacked, $written.runnerMinutesPackedIs) -join '|') 'the published report is not the one computed'
+        Assert-True ((Get-Content -LiteralPath $reportSummary -Raw) -match 'predicted against actual') 'the report did not reach the step summary'
+        # Report-only: a missing plan, or a job list it cannot read, is a note and exit 0, never a failed step.
+        & $pwsh -NoProfile -File $reporter -JobsFile $jobsFile -PlanFile (Join-Path $scratch 'no-plan.json') -OutFile $reportFile -SummaryFile $reportSummary | Out-Null
+        Assert-Equal 0 $LASTEXITCODE 'a run with no pack plan failed the report step'
+        Set-Content -LiteralPath $jobsFile -Value '{ broken'
+        & $pwsh -NoProfile -File $reporter -JobsFile $jobsFile -PlanFile $reportPlan -OutFile $reportFile -SummaryFile $reportSummary | Out-Null
+        Assert-Equal 0 $LASTEXITCODE 'an unreadable job list failed the report step'
 
         # ---------------------------------------------------------------- Invoke-Shard.ps1 over a packed job
 

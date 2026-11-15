@@ -1139,6 +1139,11 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Isolated worker coverage proof failed' }
           ./tools/TestImpact/Test-ValidationReuseModes.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Validation reuse mode proof failed' }
+          # Layer 2 (TEST_IMPACT_REPACK): the packing rules, set equality over generated matrices and the real
+          # manifest, and the workflow's per-slice steps. A few seconds; the end-to-end half of this self-test
+          # runs in the aggregate analysis job, and only while the variable is report or on.
+          ./tools/TestImpact/Test-ShardPacking.ps1 -RulesOnly
+          if ($LASTEXITCODE -ne 0) { throw 'Shard packing rules proof failed' }
 
       - name: Select
         id: select
@@ -3381,6 +3386,17 @@ jobs:
       - name: Verify aggregate analyzer
         shell: pwsh
         run: ./.github/scripts/test-analyze-test-results.ps1
+
+      # Layer 2 (TEST_IMPACT_REPACK): the whole repacking self-test on a real runner - the selection with the flag
+      # unset, off, report and on, and Invoke-Shard.ps1 over a packed job with a stub in place of dotnet. Skipped
+      # unless the variable is report or on, and it cannot fail the job: until packing has run here for a while
+      # this is evidence, not a gate.
+      - name: Verify shard repacking
+        if: ${{ vars.TEST_IMPACT_REPACK == 'report' || vars.TEST_IMPACT_REPACK == 'on' }}
+        continue-on-error: true
+        timeout-minutes: 5
+        shell: pwsh
+        run: ./tools/TestImpact/Test-ShardPacking.ps1
 
       - name: Initialize diagnostics directory
         shell: pwsh
