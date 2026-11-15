@@ -139,6 +139,9 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
     private double _lagrangeRho;
     private double _prevDagConstraint;
 
+    // Dual-ascent rounds of NOTEARS run in the current fit; the rounds stop at the reference's termination test.
+    private int _adjacencyDualRounds;
+
     // Generator batch normalization layers (auxiliary, always created to match Layers)
     private readonly List<BatchNormalizationLayer<T>> _genBNLayers = new();
 
@@ -213,6 +216,7 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
         _lagrangeAlpha = 0.0;
         _lagrangeRho = 1.0;
         _prevDagConstraint = double.MaxValue;
+        _adjacencyDualRounds = 0;
 
         InitializeLayers();
     }
@@ -399,6 +403,7 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
         _lagrangeAlpha = 0.0;
         _lagrangeRho = 1.0;
         _prevDagConstraint = double.MaxValue;
+        _adjacencyDualRounds = 0;
 
         // Step 4: Build networks with actual dimensions
         BuildFromConstructionSequence(() => RebuildLayersWithActualDimensions(_options.EmbeddingDimension, _dataWidth, _dataWidth));
@@ -452,6 +457,7 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
             _lagrangeAlpha = 0.0;
             _lagrangeRho = 1.0;
             _prevDagConstraint = double.MaxValue;
+            _adjacencyDualRounds = 0;
 
             BuildFromConstructionSequence(() => RebuildLayersWithActualDimensions(_options.EmbeddingDimension, _dataWidth, _dataWidth));
 
@@ -885,6 +891,15 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
     // L-BFGS iterations per epoch on the adjacency subproblem, warm-started from the previous epoch's adjacency.
     private const int AdjacencySubproblemIterations = 100;
 
+    // NOTEARS' termination test (the reference's notears_linear defaults): at most max_iter = 100 dual rounds, and
+    // none after h(W) <= h_tol = 1e-8 or rho >= rho_max = 1e16.
+    private const int MaxAdjacencyDualRounds = 100;
+    private const double AcyclicityTolerance = 1e-8;
+    private const double MaxPenaltyRho = 1e16;
+
+    /// <summary>The NOTEARS dual-ascent rounds the last fit ran on the adjacency.</summary>
+    internal int AdjacencyDualRounds => _adjacencyDualRounds;
+
     /// <summary>
     /// One dual-ascent round of NOTEARS (Zheng et al., 2018, Algorithm 1) on the learned adjacency: the augmented
     /// Lagrangian subproblem is minimized over W, then alpha and rho are updated from h(W).
@@ -902,10 +917,19 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
     /// moved by about 1e-6 per epoch, so h(W) stayed at rounding level, the dual variables never moved and neither
     /// the data score nor DAGPenaltyWeight shaped the learned graph.
     /// </para>
+    /// <para>
+    /// The rounds stop where the reference's Algorithm 1 stops: after 100 rounds, once h(W) is at most 1e-8, or once
+    /// rho reaches 1e16. The subproblem reads only the data Gram and the dual variables, not the generator. Every
+    /// later epoch would therefore re-solve the same converged problem: up to 100 L-BFGS iterations, each with a
+    /// d x d matrix exponential, on every one of the 300 default epochs.
+    /// </para>
     /// </remarks>
     private void UpdateAdjacencyAugmentedLagrangian()
     {
         if (_adjacency is null || _dataGram is null) return;
+        bool converged = _prevDagConstraint < double.MaxValue && Math.Abs(_prevDagConstraint) <= AcyclicityTolerance;
+        if (converged || _lagrangeRho >= MaxPenaltyRho || _adjacencyDualRounds >= MaxAdjacencyDualRounds) return;
+        _adjacencyDualRounds++;
 
         var engine = Engine;
         int d = _dataWidth;

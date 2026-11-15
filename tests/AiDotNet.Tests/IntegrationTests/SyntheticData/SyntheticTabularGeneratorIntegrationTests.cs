@@ -588,6 +588,41 @@ public class SyntheticTabularGeneratorIntegrationTests
         ValidateGeneratedData(generated, GenSamples, TotalCols, "CausalGAN");
     }
 
+    /// <summary>
+    /// The adjacency's dual ascent stops at NOTEARS' termination test (Zheng et al. 2018, Algorithm 1; the reference
+    /// notears_linear: max_iter 100, h_tol 1e-8, rho_max 1e16). The subproblem reads only the data and the dual
+    /// variables, so once it stops the adjacency is final. It used to be re-solved with up to 100 L-BFGS iterations on
+    /// every epoch. A fit of 110 epochs and one of 140 then run the same rounds and learn the same graph.
+    /// </summary>
+    [Fact(Timeout = 300000)]
+    public async Task CausalGANGenerator_AdjacencyDualAscent_StopsAtTheNotearsTerminationTest()
+    {
+        await Task.Yield();
+        (int Rounds, Matrix<double> Adjacency) Fit(int epochs)
+        {
+            var (data, columns) = CreateTestData();
+            var generator = new CausalGANGenerator<double>(CreateArchitecture(TotalCols, TotalCols), new CausalGANOptions<double>
+            {
+                Seed = Seed,
+                EmbeddingDimension = 4,
+                HiddenDimensions = [8, 8],
+                BatchSize = 50
+            });
+            generator.Fit(data, columns, epochs);
+            return (generator.AdjacencyDualRounds, GetPrivateField<Matrix<double>>(generator, "_adjacency"));
+        }
+
+        var shorter = Fit(110);
+        var longer = Fit(140);
+
+        Assert.InRange(shorter.Rounds, 1, 100);
+        Assert.Equal(shorter.Rounds, longer.Rounds);
+        Assert.Equal(shorter.Adjacency.Rows, longer.Adjacency.Rows);
+        for (int i = 0; i < shorter.Adjacency.Rows; i++)
+            for (int j = 0; j < shorter.Adjacency.Columns; j++)
+                Assert.Equal(shorter.Adjacency[i, j], longer.Adjacency[i, j]);
+    }
+
     [Fact(Timeout = 120000)]
     public async Task MisGANGenerator_FitAndGenerate_ProducesValidOutput()
     {
