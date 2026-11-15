@@ -462,6 +462,12 @@ internal sealed class AiDotNetTensorBackend(int seed)
         "ddpm" => new AiDotNetDdpmModel(seed),
         "whisper-tiny" => new AiDotNetWhisperTinyModel(seed),
         "faster-rcnn" => new AiDotNetFasterRcnnModel(seed),
+        // More shipped families (MoreFamilyRows.cs): EfficientNet-B0 at CIFAR [3, 32, 32]; Kingma & Welling's MNIST VAE;
+        // Velickovic et al.'s Cora GAT (batch size 1: one sample is the whole graph); Radford et al.'s 64x64 DCGAN.
+        "efficientnet-b0" => new AiDotNetEfficientNetB0Model(seed),
+        "vae" => new AiDotNetVaeModel(seed),
+        "gat" => new AiDotNetGatModel(seed),
+        "dcgan" => new AiDotNetDcganModel(seed),
         _ => throw new ArgumentException($"Unknown model '{model}'.")
     };
 }
