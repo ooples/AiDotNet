@@ -33,10 +33,10 @@ public class SpeakerEmbedding<T>
     /// Computes cosine similarity with another embedding.
     /// </summary>
     /// <remarks>
-    /// Only the common prefix of the two vectors is compared (the shorter length). Each vector is divided by its
-    /// largest magnitude before it is squared, so the norms stay inside <typeparamref name="T"/>'s range (a norm
-    /// above 65504 is infinite in Half, and dividing by it zeroes the score); a norm product below 1e-10 returns
-    /// zero. The dot product is taken between the unit vectors, which keeps it inside [-1, 1].
+    /// Only the common prefix of the two vectors is compared (the shorter length). The score is computed in double,
+    /// the type this method returns, whatever <typeparamref name="T"/> is: reduced in Half, a norm above 65504 is
+    /// infinite (dividing by it zeroes the score) and the rounding of 4096 additions put the cosine of a vector with
+    /// itself at 1.001. A norm product below 1e-10 returns zero. The result is always inside [-1, 1].
     /// </remarks>
     public double CosineSimilarity(SpeakerEmbedding<T> other)
     {
@@ -44,13 +44,13 @@ public class SpeakerEmbedding<T>
         var a = AiDotNet.Tensors.LinearAlgebra.Vector<T>.Wrap(Vector, 0, len).AsTensor();
         var b = AiDotNet.Tensors.LinearAlgebra.Vector<T>.Wrap(other.Vector, 0, len).AsTensor();
 
-        T cosine = SpeakerScoring.Cosine(AiDotNetEngine.Current, a, b, out double denominator);
+        double cosine = SpeakerScoring.CosineInDouble(AiDotNetEngine.Current, a, b, out double denominator);
         if (!(denominator >= 1e-10))
         {
             return 0.0;
         }
 
-        return NumOps.ToDouble(cosine);
+        return cosine;
     }
 
     /// <summary>

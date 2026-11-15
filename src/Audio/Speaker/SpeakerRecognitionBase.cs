@@ -80,8 +80,8 @@ public abstract partial class SpeakerRecognitionBase<T> : AudioNeuralNetworkBase
             throw new ArgumentException("Embeddings must have the same dimension.");
         }
 
-        // Each vector is divided by its largest magnitude before it is squared, so the norms stay inside T's
-        // range (a norm above 65504 is infinite in Half), and the dot product is taken between the unit vectors.
+        // Computed in double and rounded to T once (in [-1, 1]): each vector is divided by its largest magnitude
+        // before it is squared, and the dot product is taken between the unit vectors.
         return SpeakerScoring.Cosine(Engine, embedding1.AsTensor(), embedding2.AsTensor(), out _);
     }
 
@@ -112,8 +112,9 @@ public abstract partial class SpeakerRecognitionBase<T> : AudioNeuralNetworkBase
     /// </remarks>
     protected Tensor<T> NormalizeEmbedding(Tensor<T> embedding)
     {
-        // A new tensor with the same shape (a defensive copy when the norm is zero). The embedding is divided by its
-        // largest magnitude before it is squared, so the norm cannot overflow T (Half: above 65504).
+        // A new tensor with the same shape (a defensive copy when the norm is zero). The norm is taken in double
+        // after dividing by the largest magnitude, so it neither overflows T (Half: above 65504) nor carries T's
+        // rounding of every addition.
         return SpeakerScoring.L2Normalize(Engine, embedding);
     }
 
