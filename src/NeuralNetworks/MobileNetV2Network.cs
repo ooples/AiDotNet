@@ -252,6 +252,16 @@ public partial class MobileNetV2Network<T> : ImageClassifierModelLayoutBase<T>
     }
 
     /// <inheritdoc />
+    /// <summary>
+    /// The generated MobileNetV2 stack keeps nothing between calls, so each Predict frees its GPU intermediates when it
+    /// ends instead of leaving them to the finalizer (a b16 inference loop held 1,300+ dead convolution outputs, about
+    /// 450 MB at peak). Caller-supplied <c>Architecture.Layers</c> may carry a tensor between calls, so they keep the
+    /// default; so do layers added afterwards and derived types, as for <see cref="ResNetNetwork{T}"/>.
+    /// </summary>
+    protected override bool ReleasesInferenceIntermediates =>
+        GetType() == typeof(MobileNetV2Network<T>) && Architecture.Layers is not { Count: > 0 }
+        && LayersMatchTheGeneratedStack();
+
     protected sealed override void InitializeLayers()
     {
         if (Architecture.Layers != null && Architecture.Layers.Count > 0)
@@ -264,6 +274,7 @@ public partial class MobileNetV2Network<T> : ImageClassifierModelLayoutBase<T>
         {
             // Use MobileNetV2-specific layer configuration
             Layers.AddRange(LayerHelper<T>.CreateDefaultMobileNetV2Layers(_configuration));
+            RecordGeneratedLayerTypes();
         }
 
         SetAllLayersEvalMode();

@@ -77,8 +77,8 @@ public partial class BidirectionalRecurrentLayer<T> : LayerBase<T>, IShapeContra
         }
         else
         {
-            _forwardGru = new GRULayer<T>(hiddenSize, returnSequences: true);
-            _backwardGru = new GRULayer<T>(hiddenSize, returnSequences: true);
+            _forwardGru = new GRULayer<T>(hiddenSize, returnSequences: true, resetAfter: false);
+            _backwardGru = new GRULayer<T>(hiddenSize, returnSequences: true, resetAfter: false);
             RegisterSubLayer(_forwardGru);
             RegisterSubLayer(_backwardGru);
         }

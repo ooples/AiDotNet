@@ -335,8 +335,10 @@ public partial class GradientBoostingRegression<T> : AsyncDecisionTreeRegression
             importances = engine.Add(importances, treeImportance);
         }
 
-        // Normalize feature importances
-        FeatureImportances = engine.Divide(importances, engine.Sum(importances));
+        // Normalize feature importances. With no split anywhere (a constant target) every importance is 0;
+        // they stay 0 rather than dividing by a zero total, as DecisionTreeRegression already does.
+        T total = engine.Sum(importances);
+        FeatureImportances = NumOps.Equals(total, NumOps.Zero) ? importances : engine.Divide(importances, total);
     }
 
     /// <summary>

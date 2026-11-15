@@ -231,7 +231,7 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
 
             for (int i = 0; i < numLayers; i++)
             {
-                Layers.Add(new GRULayer<T>(hiddenDim, returnSequences: true));
+                Layers.Add(new GRULayer<T>(hiddenDim, returnSequences: true, resetAfter: false));
             }
             _generatorOutput = new FullyConnectedLayer<T>(hiddenDim, hiddenDim, identity);
             _usingCustomLayers = false;
@@ -260,7 +260,7 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
             Layers.Clear();
             for (int i = 0; i < numLayers; i++)
             {
-                Layers.Add(new GRULayer<T>(hiddenDim, returnSequences: true));
+                Layers.Add(new GRULayer<T>(hiddenDim, returnSequences: true, resetAfter: false));
             }
             _generatorOutput = new FullyConnectedLayer<T>(hiddenDim, hiddenDim, identity);
         }
@@ -274,7 +274,7 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         _embedderLayers.Clear();
         for (int i = 0; i < numLayers; i++)
         {
-            _embedderLayers.Add(new GRULayer<T>(hiddenDim, returnSequences: true));
+            _embedderLayers.Add(new GRULayer<T>(hiddenDim, returnSequences: true, resetAfter: false));
         }
         _embedderOutput = new FullyConnectedLayer<T>(hiddenDim, hiddenDim, identity);
 
@@ -291,7 +291,7 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         _supervisorLayers.Clear();
         for (int i = 0; i < numLayers - 1; i++)
         {
-            _supervisorLayers.Add(new GRULayer<T>(hiddenDim, returnSequences: true));
+            _supervisorLayers.Add(new GRULayer<T>(hiddenDim, returnSequences: true, resetAfter: false));
         }
         _supervisorOutput = new FullyConnectedLayer<T>(hiddenDim, hiddenDim, identity);
 
@@ -303,8 +303,8 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         _discDropoutLayers.Clear();
         for (int i = 0; i < numLayers; i++)
         {
-            _discriminatorForwardLayers.Add(new GRULayer<T>(hiddenDim, returnSequences: true));
-            _discriminatorBackwardLayers.Add(new GRULayer<T>(hiddenDim, returnSequences: true));
+            _discriminatorForwardLayers.Add(new GRULayer<T>(hiddenDim, returnSequences: true, resetAfter: false));
+            _discriminatorBackwardLayers.Add(new GRULayer<T>(hiddenDim, returnSequences: true, resetAfter: false));
             _discDropoutLayers.Add(new DropoutLayer<T>(_options.DiscriminatorDropout));
         }
         _discriminatorOutput = new FullyConnectedLayer<T>(2 * hiddenDim, 1, identity);

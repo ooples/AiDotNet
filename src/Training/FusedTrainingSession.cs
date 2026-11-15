@@ -93,6 +93,21 @@ internal sealed class FusedTrainingStepRequest<T>
     public bool VerifyReplayAgreement { get; init; }
 
     /// <summary>
+    /// A closure objective: the step's loss as a function that builds its own per-step data (a batch, noise, labels,
+    /// a sampled timestep) inside itself. When set, the compiled step re-probes the closure every step and replays a
+    /// plan only when the closure traces to the same structure, after copying in this step's data (see
+    /// <see cref="AiDotNet.Tensors.Engines.Compilation.ClosureObjectiveGuard{T}"/>). <see cref="Forward"/> and
+    /// <see cref="ComputeLoss"/> must evaluate the same closure (they drive the eager fallback), and
+    /// <see cref="Input"/>/<see cref="Target"/> may be placeholders.
+    /// </summary>
+    /// <remarks>
+    /// The guard checks everything a plan would freeze, so a closure step ignores <see cref="GraphBreakReason"/>'s
+    /// per-step host state reason and <see cref="VerifyReplayAgreement"/>: a changed captured value changes the
+    /// signature and is compiled from its own trace, and a host read of an intermediate is never replayed.
+    /// </remarks>
+    public Func<Tensor<T>>? ClosureObjective { get; init; }
+
+    /// <summary>
     /// The caller's own eager step on this request's data, for <see cref="VerifyReplayAgreement"/>: when the plan this
     /// step traces later fails its replay check, the session restores the model and optimizer to before this step and
     /// re-runs it with this, so the run matches one that was eager from the start. Null runs
@@ -107,14 +122,6 @@ internal sealed class FusedTrainingStepRequest<T>
     /// again, so a plan traced for one objective is never replayed unchecked as another. Null never re-checks.
     /// </summary>
     public object? ObjectiveKey { get; init; }
-
-    /// <summary>
-    /// The forward and loss are one closure objective that builds its per-step data (a batch, noise, a drawn count)
-    /// inside itself. Every replay is then guarded: before each step the objective is probed and signed
-    /// (<c>ClosureObjectiveGuard</c>), and only a plan compiled for that exact signature, refilled with this step's
-    /// data, steps. A step no plan can replay declines.
-    /// </summary>
-    public bool ClosureObjective { get; init; }
 }
 
 /// <summary>
@@ -305,7 +312,7 @@ internal sealed class FusedTrainingSession<T>
             _lastOptimizer = request.Optimizer;
         }
 
-        // A different objective on this session's plan: its replay has to pass the agreement check again.
+        // A standard objective sharing this session must recheck replay agreement when its identity changes.
         if (request.VerifyReplayAgreement && request.ObjectiveKey is { } objectiveKey)
         {
             if (IsCommitted && _objectiveKey is not null && !_objectiveKey.Equals(objectiveKey))
@@ -313,7 +320,7 @@ internal sealed class FusedTrainingSession<T>
             _objectiveKey = objectiveKey;
         }
 
-        if (request.GraphBreakReason is { } graphBreak)
+        if (request.ClosureObjective is null && request.GraphBreakReason is { } graphBreak)
         {
             if (!IsCommitted)
                 return Decline("graph break: " + graphBreak);
@@ -405,7 +412,8 @@ internal sealed class FusedTrainingSession<T>
 
         // The first replay with new data (the step after the trace) is checked against the eager forward when the
         // caller asks: the eager loss on this batch, and a copy of the trained tensors to undo a disagreeing update.
-        bool checkReplay = request.VerifyReplayAgreement && IsCommitted && !_replayAgreementVerified;
+        bool checkReplay = request.ClosureObjective is null
+            && request.VerifyReplayAgreement && IsCommitted && !_replayAgreementVerified;
         double eagerLoss = 0.0;
         (Tensor<T> Live, Tensor<T> Saved)[]? snapshot = null;
         if (checkReplay)
@@ -431,7 +439,7 @@ internal sealed class FusedTrainingSession<T>
         // objective's signature): keep what it takes to redo it eagerly.
         bool wasCommitted = IsCommitted;
         PendingTrace? trace = null;
-        if ((request.VerifyReplayAgreement || request.ClosureObjective) && !IsCommitted
+        if (request.VerifyReplayAgreement && request.ClosureObjective is null && !IsCommitted
             && optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> positioned)
         {
             trace = new PendingTrace
@@ -498,7 +506,7 @@ internal sealed class FusedTrainingSession<T>
             // Later, a step no plan can replay (the objective read its own forward on the host this step) runs on the
             // eager tape, and the configured plan's own optimizer applies its gradients: the plan's moments and step
             // count carry on, and the next step replays again.
-            if (IsCommitted && request.ClosureObjective && CompiledTapeTrainingStep<T>.LastFallbackWasUnreplayableClosureStep
+            if (IsCommitted && request.ClosureObjective is not null && CompiledTapeTrainingStep<T>.LastFallbackWasUnreplayableClosureStep
                 && TryStepOutsideThePlan(request, OnGradients, out var outsideLoss))
             {
                 LastStepRanOutsidePlan = true;
@@ -621,7 +629,7 @@ internal sealed class FusedTrainingSession<T>
 
         IsCommitted = true;
         if (trace is not null) _pendingTrace = trace;
-        else if (wasCommitted && request.ClosureObjective && !checkReplay) _pendingTrace = null;   // a replay ran
+        else if (wasCommitted && request.ClosureObjective is not null && !checkReplay) _pendingTrace = null;   // a replay ran
         LastMissReason = null;
         loss = stepLoss;
         lossTensor = deferredLoss.Value;

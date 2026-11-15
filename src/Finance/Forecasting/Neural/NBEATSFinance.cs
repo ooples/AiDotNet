@@ -338,7 +338,46 @@ public partial class NBEATSFinance<T> : ForecastingModelBase<T>
                 _numBlocksPerStack, _hiddenSize, _numHiddenLayers));
 
             ExtractLayerReferences();
+            InitializeLikeReference();
         }
+    }
+
+    /// <summary>
+    /// Initializes every default layer as the reference N-BEATS does (ElementAI's models/nbeats.py, PyTorch's
+    /// <c>nn.Linear</c> default): weights and biases uniform in ±1/√fan_in.
+    /// </summary>
+    /// <remarks>
+    /// The layers' own default (He for the ReLU stack, Xavier for the heads) makes every block's backcast about 1.3
+    /// times the residual it explains, so the residual and the summed forecast grow geometrically through the stacks:
+    /// at the paper's 30 blocks of 4 x 512 the untrained forecast of a unit-scale series is in the hundreds (a first
+    /// MSE of ~1e5) and Adam diverged from there. The reference scale shrinks each block's output instead.
+    /// </remarks>
+    private void InitializeLikeReference()
+    {
+        var random = RandomHelper.CreateSeededRandom(_options.Seed ?? 42);
+        void Uniform(ILayer<T> layer, int inputs, int outputs)
+        {
+            if (layer is not DenseLayer<T> dense) return;
+            double bound = 1.0 / Math.Sqrt(inputs);
+            var weight = new double[outputs * inputs];
+            var bias = new double[outputs];
+            for (int i = 0; i < weight.Length; i++) weight[i] = (2 * random.NextDouble() - 1) * bound;
+            for (int i = 0; i < bias.Length; i++) bias[i] = (2 * random.NextDouble() - 1) * bound;
+            AiDotNet.TextToSpeech.CodecBased.TorchParameters.Linear(Engine, dense, inputs, outputs, weight, bias);
+        }
+
+        // A block is its hidden stack (the first layer reads the lookback window), then the backcast and forecast heads.
+        foreach (var block in _blocks)
+        {
+            int hidden = block.Count - 2;
+            for (int i = 0; i < block.Count; i++)
+            {
+                int inputs = i == 0 ? _lookbackWindow : _hiddenSize;
+                int outputs = i < hidden ? _hiddenSize : i == hidden ? _lookbackWindow : _forecastHorizon;
+                Uniform(block[i], inputs, outputs);
+            }
+        }
+        if (_outputProjection is not null) Uniform(_outputProjection, _forecastHorizon, _forecastHorizon);
     }
 
     /// <summary>

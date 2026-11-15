@@ -29,10 +29,11 @@ public class GRULayerFusedSequenceTests
         return new Tensor<double>(data, new[] { Batch, Steps, Inputs });
     }
 
-    private static (GRULayer<double> Fused, GRULayer<double> Loop) Pair(bool returnSequences)
+    private static (GRULayer<double> Fused, GRULayer<double> Loop) Pair(bool returnSequences, bool resetAfter = true)
     {
-        var fused = new GRULayer<double>(Hidden, returnSequences);
-        var loop = new GRULayer<double>(Hidden, returnSequences, new LoopTanh<double>(), new LoopSigmoid<double>());
+        var fused = new GRULayer<double>(Hidden, returnSequences, resetAfter: resetAfter);
+        var loop = new GRULayer<double>(Hidden, returnSequences, new LoopTanh<double>(), new LoopSigmoid<double>(),
+            resetAfter: resetAfter);
         fused.SetTrainingMode(false);
         loop.SetTrainingMode(false);
         var warm = Input(0);
@@ -43,11 +44,13 @@ public class GRULayerFusedSequenceTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void Forward_MatchesThePerStepLoop(bool returnSequences)
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    public void Forward_MatchesThePerStepLoop(bool returnSequences, bool resetAfter)
     {
-        var (fused, loop) = Pair(returnSequences);
+        var (fused, loop) = Pair(returnSequences, resetAfter);
         var input = Input(1);
         var expected = loop.Forward(input).ToArray();
         var actual = fused.Forward(input).ToArray();
@@ -87,12 +90,61 @@ public class GRULayerFusedSequenceTests
             Assert.True(Math.Abs(expected[i] - actual[i]) <= 1e-12, $"output {i}: loop {expected[i]}, fused {actual[i]}.");
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void Gradients_MatchThePerStepLoop(bool returnSequences)
+    [Fact]
+    public void ResetPlacement_ChangesTheRecurrence_AndSurvivesAClone()
     {
-        var (fused, loop) = Pair(returnSequences);
+        // Same weights, different reset-gate placement: the two forms are different functions, so a flag that was
+        // dropped (by the layer, or by a clone that rebuilds it from its metadata) shows as equal outputs here.
+        var (after, _) = Pair(returnSequences: true, resetAfter: true);
+        var (before, _) = Pair(returnSequences: true, resetAfter: false);
+        before.SetParameters(after.GetParameters());
+        Assert.True(after.ResetAfter);
+        Assert.False(before.ResetAfter);
+
+        var input = Input(4);
+        var afterOutput = after.Forward(input).ToArray();
+        var beforeOutput = before.Forward(input).ToArray();
+        double largest = 0;
+        for (int i = 0; i < afterOutput.Length; i++)
+            largest = Math.Max(largest, Math.Abs(afterOutput[i] - beforeOutput[i]));
+        Assert.True(largest > 1e-6, $"reset-after and reset-before agree to {largest}: the flag has no effect.");
+
+        var afterClone = (GRULayer<double>)after.Clone();
+        var beforeClone = (GRULayer<double>)before.Clone();
+        Assert.True(afterClone.ResetAfter);
+        Assert.False(beforeClone.ResetAfter);
+        beforeClone.SetTrainingMode(false);
+        var cloneOutput = beforeClone.Forward(input).ToArray();
+        for (int i = 0; i < beforeOutput.Length; i++)
+            Assert.True(Math.Abs(beforeOutput[i] - cloneOutput[i]) <= 1e-12, $"output {i}: original {beforeOutput[i]}, clone {cloneOutput[i]}.");
+    }
+
+    [Theory]
+    [InlineData(null, false)]      // a layer saved before the flag existed applied the reset gate before the product
+    [InlineData("False", false)]
+    [InlineData("True", true)]
+    public void Metadata_RebuildsTheSavedResetPlacement(string? savedResetAfter, bool expected)
+    {
+        var metadata = new Dictionary<string, object> { ["HiddenSize"] = "6", ["ReturnSequences"] = "True" };
+        if (savedResetAfter is not null) metadata["ResetAfter"] = savedResetAfter;
+
+        var layer = AiDotNet.Helpers.DeserializationHelper.CreateLayerFromType<double>(
+            layerType: typeof(GRULayer<>).Name,
+            inputShape: new[] { Batch, Steps, Inputs },
+            outputShape: new[] { Batch, Steps, Hidden },
+            additionalParams: metadata);
+
+        Assert.Equal(expected, Assert.IsType<GRULayer<double>>(layer).ResetAfter);
+    }
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    public void Gradients_MatchThePerStepLoop(bool returnSequences, bool resetAfter)
+    {
+        var (fused, loop) = Pair(returnSequences, resetAfter);
         Dictionary<string, double[]> Grads(GRULayer<double> layer, out int tapeEntries)
         {
             var input = Input(2);

@@ -183,6 +183,7 @@ public sealed class DpSgdFusedStep<T> : IDisposable
                 // Run compiled forward+backward. LR=0 means weights don't update
                 // but .Grad on every parameter gets populated by the backward.
                 _plan.Step();
+                AiDotNet.NeuralNetworks.Layers.DerivedTensorCacheGeneration.Advance();
 
                 // GLOBAL L2 norm across ALL parameter gradients concatenated —
                 // Abadi 2016 L2-sensitivity contract. Per parameter: sum(g²) via

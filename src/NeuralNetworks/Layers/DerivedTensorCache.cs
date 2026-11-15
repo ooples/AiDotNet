@@ -18,14 +18,25 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </para>
 /// <para>
 /// A writer that changes a source without advancing its version (a device-side optimizer update of a GPU-resident
-/// copy) must call <see cref="Invalidate"/>. A clone is a new layer with a new cache, so nothing is shared between
-/// copies.
+/// copy) must call <see cref="Invalidate"/> or advance <see cref="TrainingGeneration"/>: every training step does the
+/// latter (<see cref="NoteTrainingStep"/>), so a value built before a step is rebuilt on its next use. A clone is a new
+/// layer with a new cache, so nothing is shared between copies.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type of the tensors.</typeparam>
 internal sealed class DerivedTensorCache<T>
 {
     private const int MaxSources = 4;
+
+    /// <summary>The number of training steps noted so far, process-wide (<see cref="DerivedTensorCacheGeneration"/>).</summary>
+    internal static long TrainingGeneration => DerivedTensorCacheGeneration.Current;
+
+    /// <summary>
+    /// Records that a training step may have written parameters, so every cached derivation is rebuilt on its next use.
+    /// </summary>
+    internal static void NoteTrainingStep() => DerivedTensorCacheGeneration.Advance();
+
+    private long _generation;
 
     private readonly Tensor<T>?[] _sources = new Tensor<T>?[MaxSources];
     private readonly int[] _versions = new int[MaxSources];
@@ -41,7 +52,9 @@ internal sealed class DerivedTensorCache<T>
         Tensor<T> source0, Tensor<T>? source1 = null, Tensor<T>? source2 = null, Tensor<T>? source3 = null)
     {
         int count = source1 is null ? 1 : source2 is null ? 2 : source3 is null ? 3 : 4;
-        if (_value is { } cached && ReferenceEquals(_engine, engine) && SourcesMatch(count, source0, source1, source2, source3))
+        long generation = TrainingGeneration;
+        if (_value is { } cached && _generation == generation && ReferenceEquals(_engine, engine)
+            && SourcesMatch(count, source0, source1, source2, source3))
             return cached;
 
         var sources = new Tensor<T>[count];
@@ -65,6 +78,7 @@ internal sealed class DerivedTensorCache<T>
 
         _sourceCount = count;
         _engine = engine;
+        _generation = generation;
         _value = value;
         return value;
     }
@@ -89,4 +103,18 @@ internal sealed class DerivedTensorCache<T>
 
     private bool Matches(int index, Tensor<T>? source)
         => source is not null && ReferenceEquals((object?)_sources[index], (object)source) && _versions[index] == source.Version;
+}
+
+/// <summary>
+/// The process-wide training generation every <see cref="DerivedTensorCache{T}"/> checks, advanced by every training step
+/// (eager, taped, traced, or a compiled replay that updates weights on the device without advancing their versions).
+/// Non-generic so one counter serves every numeric type.
+/// </summary>
+internal static class DerivedTensorCacheGeneration
+{
+    private static long s_generation;
+
+    internal static long Current => System.Threading.Interlocked.Read(ref s_generation);
+
+    internal static void Advance() => System.Threading.Interlocked.Increment(ref s_generation);
 }
