@@ -144,10 +144,13 @@ $script:SelectionControlPaths = @(
 # Workflows that take part in the validation pipeline without choosing shards: full validation.
 #   - resume-deferred-ci.yml re-runs the deferred jobs of a Build & SonarCloud run once the pull request run it
 #     waits for completes, so it decides when post-merge validation executes.
+#   - shard-timing-table.yml builds the timing table the Build job packs shard slices from (ShardPacking.ps1,
+#     repository variable TEST_IMPACT_REPACK), so it shapes which job each selected slice runs in.
 # Every file under .github/workflows is in exactly one of SelectionControlPaths, this list and
 # NonRuntimeWorkflowPaths; Assert-WorkflowsClassified fails the self-test for a file in none of them.
 $script:PipelineWorkflowPaths = @(
-    '.github/workflows/resume-deferred-ci.yml'
+    '.github/workflows/resume-deferred-ci.yml',
+    '.github/workflows/shard-timing-table.yml'
 )
 # Build-time code: the source generators the test project loads as an analyzer. It runs inside the
 # compiler, so runtime coverage never records it, yet one edit can rewrite thousands of generated
@@ -420,7 +423,7 @@ Whether a file under a pathspec at HEAD passes a directory name as a Path.Combin
 git grep matches one line at a time, so `Path.Combine(root,` on one line and `"benchmarks", "data")` on the next was
 never seen. A fixed-string search finds the few files that hold the name as a whole string literal ("benchmarks" or
 'benchmarks'); each is then read whole from HEAD and matched as complete text. The argument may follow others that
-are themselves calls: Path.Combine(GetRoot(), "benchmarks"). A failed search or read counts as a reference.
+are themselves calls, nested to any depth: Path.Combine(FindRoot(Path.GetFullPath(".")), "benchmarks"). A failed search or read counts as a reference.
 #>
 function Test-HeadTextJoinsDirectory {
     param(
@@ -430,8 +433,9 @@ function Test-HeadTextJoinsDirectory {
     $naming = @(& git -c core.quotepath=false grep -l -i -F -e ('"' + $Name + '"') -e ("'" + $Name + "'") HEAD -- $Pathspec 2>$null)
     if ($LASTEXITCODE -gt 1) { return $true }
     if ($LASTEXITCODE -ne 0 -or $naming.Count -eq 0) { return $false }
-    # The argument list before the name: anything but parentheses, or a parenthesised call one level deep.
-    $pattern = 'Path\.(Combine|Join)\s*\((?:[^()]|\([^()]*\))*?["'']' + [regex]::Escape($Name) + '["'']'
+    # The argument list before the name, with calls nested to any depth: the balancing group d counts the open
+    # parentheses, and the name must sit at the call's own level (an argument of the Combine/Join itself).
+    $pattern = 'Path\.(Combine|Join)\s*\((?:[^()]|(?<d>\()|(?<-d>\)))*?(?(d)(?!))["'']' + [regex]::Escape($Name) + '["'']'
     $regex = [regex]::new($pattern, [Text.RegularExpressions.RegexOptions]::IgnoreCase, [TimeSpan]::FromSeconds(5))
     foreach ($entry in $naming) {
         $file = ([string] $entry) -replace '^HEAD:', ''
@@ -760,7 +764,10 @@ function Get-PackagePropsVerdict {
         # Each ProjectReference element's own Include, in either quote style: a line can also hold other reference
         # kinds, whose Include is not a project target. One unresolvable element makes the line's targets unknown.
         $targets = [System.Collections.Generic.List[string]]::new()
-        foreach ($element in [regex]::Matches($text, '<ProjectReference\b[^>]*>')) {
+        $elements = [regex]::Matches($text, '<ProjectReference\b[^>]*>')
+        # An element split across lines is not complete on this one, so its target is unknown here.
+        if ($elements.Count -lt [regex]::Matches($text, '<ProjectReference\b').Count) { $targets = $null }
+        foreach ($element in $(if ($null -ne $targets) { $elements } else { @() })) {
             $include = [regex]::Match($element.Value, '\bInclude\s*=\s*(?:"(?<v>[^"]+)"|''(?<v>[^'']+)'')')
             $resolved = if ($include.Success) { Resolve-ReferenceTargets $file $include.Groups['v'].Value } else { $null }
             if ($null -eq $resolved) { $targets = $null; break }
@@ -803,6 +810,10 @@ function Get-PackagePropsVerdict {
             if ($file -ceq $script:PackagePropsPath) { continue }
             if ($text -match '<PackageReference\b' -and $text -notmatch '\b(Include|Update)\s*=') {
                 return & $full "$file declares a PackageReference across several lines, so its package cannot be read"
+            }
+            # Include="$(SharedPackage)" can name this package through a property, so its identity is unbounded.
+            if ($text -imatch '<PackageReference\b[^>]*\b(Include|Update)\s*=\s*["''][^"'']*\$\(') {
+                return & $full "$file names a PackageReference through an MSBuild property, so whether it is this package cannot be read"
             }
             if ($text -inotmatch $quoted) { continue }
             if (-not $file.EndsWith('.csproj', [StringComparison]::OrdinalIgnoreCase)) {
@@ -1224,18 +1235,26 @@ function Get-ScopedChangedRanges {
         tree (post-merge delta reuse compares against a rebuilt tree).
 
         Detail, when given, receives a New-ChangeDetail record per changed C# file.
+
+        OwnDiff, when given, is the Base -> HEAD diff for exactly Paths, already taken (Get-ScopedChangeDiff).
+        A rolling map translates one change to several commits; the change itself is the same each time, so
+        only the MapSha -> Base half is taken again.
     #>
     param(
         [Parameter(Mandatory)] [string] $MapSha,
         [Parameter(Mandatory)] [string] $Base,
         [Parameter(Mandatory)] [AllowEmptyCollection()] [string[]] $Paths,
-        [hashtable] $Detail
+        [hashtable] $Detail,
+        [AllowEmptyCollection()] [string[]] $OwnDiff
     )
 
     $changed = @{}
     if ($Paths.Count -eq 0) { return $changed }
-    $changeDiff = @(& git -c core.quotepath=false --literal-pathspecs diff --no-renames --no-ext-diff -U0 $Base HEAD -- @Paths)
-    if ($LASTEXITCODE -ne 0) { throw "git diff from '$Base' failed" }
+    if ($PSBoundParameters.ContainsKey('OwnDiff')) { $changeDiff = @($OwnDiff) }
+    else {
+        $changeDiff = @(& git -c core.quotepath=false --literal-pathspecs diff --no-renames --no-ext-diff -U0 $Base HEAD -- @Paths)
+        if ($LASTEXITCODE -ne 0) { throw "git diff from '$Base' failed" }
+    }
     $ownRanges = ConvertTo-ChangedRanges -DiffLines $changeDiff -ChangedFiles $Paths
     $mapDiff = @(& git -c core.quotepath=false --literal-pathspecs diff --no-renames --no-ext-diff -U0 $MapSha $Base -- @Paths)
     if ($LASTEXITCODE -ne 0) { throw "git diff from the map commit '$MapSha' to '$Base' failed" }
@@ -1269,6 +1288,16 @@ function Get-ScopedChangedRanges {
     }
     return $changed
 }
+
+function Get-ScopedChangeDiff {
+    # The Base -> HEAD half of Get-ScopedChangedRanges, for callers that translate one change to several commits.
+    param([Parameter(Mandatory)] [string] $Base, [Parameter(Mandatory)] [AllowEmptyCollection()] [string[]] $Paths)
+    if ($Paths.Count -eq 0) { return @() }
+    $diff = @(& git -c core.quotepath=false --literal-pathspecs diff --no-renames --no-ext-diff -U0 $Base HEAD -- @Paths)
+    if ($LASTEXITCODE -ne 0) { throw "git diff from '$Base' failed" }
+    return $diff
+}
+
 function Get-ChangedRanges {
     # Detail, when given, receives a New-ChangeDetail record per changed C# file (the map is the base).
     param([string] $MapSha, [hashtable] $Detail)
@@ -1730,6 +1759,32 @@ function Resolve-UncoveredChangeScope {
         $oldItems = Get-CSharpTokenContexts -Tokens $old.Tokens -From $prefix -To ($old.Tokens.Count - 1 - $suffix)
         $newItems = Get-CSharpTokenContexts -Tokens $new.Tokens -From $prefix -To ($new.Tokens.Count - 1 - $suffix)
         if ($oldItems.Count -eq 0 -and $newItems.Count -eq 0) {
+            # A comment delimiter can turn code outside the hunk into a comment or back into code (replace the
+            # /* that opens a block comment with //, and the lines up to its */ execute), so an edit touching
+            # /* or */ is inert only when every token before and after the hunk is unchanged.
+            $delimiter = $false
+            foreach ($pair in @(@($BaseModel, $Hunk[0], $Hunk[1]), @($HeadModel, $Hunk[2], $Hunk[3]))) {
+                for ($line = $pair[1]; $line -lt $pair[1] + $pair[2]; $line++) {
+                    if ($line -ge 1 -and $line -le $pair[0].Lines.Count -and $pair[0].Lines[$line - 1].ToString() -match '/\*|\*/') {
+                        $delimiter = $true
+                    }
+                }
+            }
+            if ($delimiter) {
+                $oldEnd = $Hunk[0] + [Math]::Max($Hunk[1], 0)
+                $newEnd = $Hunk[2] + [Math]::Max($Hunk[3], 0)
+                $outside = @(
+                    @((Get-CSharpChangeSide -Model $BaseModel -StartLine 1 -Count ($Hunk[0] - 1)),
+                      (Get-CSharpChangeSide -Model $HeadModel -StartLine 1 -Count ($Hunk[2] - 1))),
+                    @((Get-CSharpChangeSide -Model $BaseModel -StartLine $oldEnd -Count ($BaseModel.Lines.Count - $oldEnd + 1)),
+                      (Get-CSharpChangeSide -Model $HeadModel -StartLine $newEnd -Count ($HeadModel.Lines.Count - $newEnd + 1))))
+                foreach ($region in $outside) {
+                    if ($region[0].Blocker -or $region[1].Blocker -or
+                        (@($region[0].Keys) -join "`u{1}") -cne (@($region[1].Keys) -join "`u{1}")) {
+                        return New-Scope 'File' 'a comment delimiter changed and the code outside the hunk did not stay the same'
+                    }
+                }
+            }
             return New-Scope 'Inert' 'only comments or whitespace changed'
         }
 
@@ -2096,7 +2151,10 @@ function Select-ImpactedShards {
         [string[]] $RequiredShards = @(),
         [hashtable] $ChangeDetail = @{},
         [scriptblock] $ReadSource = $null,
-        [bool] $PreciseFallbacks = (Test-PreciseFallbacksEnabled)
+        [bool] $PreciseFallbacks = (Test-PreciseFallbacksEnabled),
+        # Set only for one layer of a rolling map (New-RollingSelectionContext); Map is then that layer's view
+        # and Changed is the change in that layer's own commit numbering. $null leaves every rule as it was.
+        $Rolling = $null
     )
 
     # Indexed shards whose manifest definition changed since the map was measured: their index
@@ -2234,11 +2292,19 @@ function Select-ImpactedShards {
             }
         }
 
+        $emptyReason = $(if ($Changed.Count -eq 0) { 'changed path set was empty' }
+            else { 'audit has no mandatory shards and no runtime delta' })
+        if ($null -ne $Rolling) {
+            # One layer with nothing to say is not a failed selection: another layer may select, and
+            # Merge-RollingLayerSelections escalates with this reason only when none does.
+            return [pscustomobject]@{
+                Escalate = $false; RequiresValidation = $true; Reasons = @(); Shards = @(); Routes = @(); Vacuous = $emptyReason
+            }
+        }
         return [pscustomobject]@{
             Escalate            = $true
             RequiresValidation = $true
-            Reasons             = @($(if ($Changed.Count -eq 0) { 'changed path set was empty' }
-                else { 'audit has no mandatory shards and no runtime delta' }))
+            Reasons             = @($emptyReason)
             Shards              = @()
             Routes              = @()
         }
@@ -2305,11 +2371,28 @@ function Select-ImpactedShards {
             # An unmapped source file - normally one this pull request adds - has no coverage of its
             # own. Only C# is routed to its directory's owners: an unmapped project, props or data
             # file can change how everything builds or loads, which no neighbour's coverage bounds.
+            if ($null -ne $Rolling -and $Rolling.MappedPaths.Contains([string] $path) -and
+                $Rolling.SettledPaths.Contains([string] $path)) {
+                # Rolling map: another layer indexes this file, and at THIS layer's commit it already existed
+                # with exactly the content the change edits (unchanged from there to the change's base). So
+                # this layer's shards were measured with it and executed none of it: the same fact a single
+                # map records by leaving a shard out of the file's occurrences. A file the base branch has
+                # touched since this layer's commit does not qualify, and takes the unmapped-file rule below.
+                Add-FileDecision $path 'MapCandidate' 'routed' @() "no shard measured at $(([string] $Rolling.Sha).Substring(0, 8)) executes it"
+                continue
+            }
             $directoryOwners = $null
             if ($path.EndsWith('.cs', [StringComparison]::OrdinalIgnoreCase) -and
                 -not $path.StartsWith('tests/', [StringComparison]::OrdinalIgnoreCase)) {
-                if ($null -eq $directoryOwnerIndex) { $directoryOwnerIndex = New-DirectoryOwnerIndex -Map $Map }
-                $directoryOwners = Get-DirectoryOwners -Index $directoryOwnerIndex -Path $path
+                if ($null -ne $Rolling) {
+                    # Unmapped everywhere, or added after this layer was measured (its shards' coverage of it
+                    # is unknown until they are measured again): the unmapped-file rule, for this layer's shards.
+                    $directoryOwners = Get-RollingDirectoryOwners -Rolling $Rolling -Path $path
+                }
+                else {
+                    if ($null -eq $directoryOwnerIndex) { $directoryOwnerIndex = New-DirectoryOwnerIndex -Map $Map }
+                    $directoryOwners = Get-DirectoryOwners -Index $directoryOwnerIndex -Path $path
+                }
             }
             if ($null -eq $directoryOwners) {
                 $escalate = $true
@@ -2452,12 +2535,16 @@ function Select-ImpactedShards {
         Add-FileDecision $path 'MapCandidate' 'routed' $fileShards $fileWhy
     }
 
+    $vacuous = ''
     if ($selected.Count -eq 0) {
-        $escalate = $true
-        [void] $reasons.Add('selection was empty')
+        if ($null -ne $Rolling) { $vacuous = 'selection was empty' }
+        else {
+            $escalate = $true
+            [void] $reasons.Add('selection was empty')
+        }
     }
 
-    return [pscustomobject]@{
+    $result = [pscustomobject]@{
         Escalate           = $escalate
         RequiresValidation = $true
         Reasons            = $reasons
@@ -2466,6 +2553,243 @@ function Select-ImpactedShards {
         Files              = @($files)
         Untested           = @($untested.Values)
         NewSourcePaths     = @($newSourcePaths)
+    }
+    if ($null -ne $Rolling) { $result | Add-Member -NotePropertyName Vacuous -NotePropertyValue $vacuous }
+    return $result
+}
+
+# ---------------------------------------------------------------- rolling map
+#
+# A rolling map (RollingShardMap.ps1) holds one ordinary map per measured commit. NOTHING here compares a
+# layer's ranges with anything but the change translated to that layer's own commit: each layer is selected
+# for by Select-ImpactedShards exactly as a single map is, with its own Get-ScopedChangedRanges /
+# Get-ChangedRanges result, and only the resulting shard NAMES are merged. Names carry no coordinates.
+
+function Test-RollingMapFile {
+    # A cheap look at the head of the file, so an ordinary map is never parsed twice. A file that is missing or
+    # cannot be read is not a rolling map: the ordinary path below then reports it exactly as it always has.
+    param([Parameter(Mandatory)] [string] $Path)
+    try {
+        if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $false }
+        $buffer = [char[]]::new(256)
+        $reader = [System.IO.StreamReader]::new((Resolve-Path -LiteralPath $Path).ProviderPath)
+        try { $read = $reader.Read($buffer, 0, $buffer.Length) } finally { $reader.Dispose() }
+        return ([string]::new($buffer, 0, [Math]::Max(0, $read))) -match '"kind"\s*:\s*"rolling"'
+    }
+    catch { return $false }
+}
+
+function New-RollingSelectionContext {
+    <#
+        What every layer needs to know about the OTHER layers, none of it line numbers: which paths any layer
+        indexes, and which shards execute files in each directory. Paths and directory membership mean the
+        same at every commit; ranges do not, and are not here.
+    #>
+    param([Parameter(Mandatory)] [object[]] $Layers)
+
+    $mapped = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $owners = [System.Collections.Generic.Dictionary[string, System.Collections.Generic.SortedSet[string]]]::new(
+        [StringComparer]::OrdinalIgnoreCase)
+    $fileCount = [System.Collections.Generic.Dictionary[string, int]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($layer in $Layers) {
+        $known = @($layer.map.knownShards)
+        foreach ($property in $layer.map.files.PSObject.Properties) {
+            $isNew = $mapped.Add([string] $property.Name)
+            $segments = @($property.Name.Replace('\', '/').Split('/'))
+            for ($depth = $segments.Count - 1; $depth -ge 2; $depth--) {
+                $directory = ($segments[0..($depth - 1)] -join '/') + '/'
+                if (-not $owners.ContainsKey($directory)) {
+                    $owners[$directory] = [System.Collections.Generic.SortedSet[string]]::new([StringComparer]::Ordinal)
+                    $fileCount[$directory] = 0
+                }
+                if ($isNew) { $fileCount[$directory]++ }
+                foreach ($occurrence in @($property.Value)) { [void] $owners[$directory].Add([string] $known[[int] $occurrence.s]) }
+            }
+        }
+    }
+    return [pscustomobject]@{ MappedPaths = $mapped; DirectoryOwners = $owners; DirectoryFileCount = $fileCount }
+}
+
+function New-RollingLayerView {
+    <#
+        One layer as the map Select-ImpactedShards reads: the layer's own index, with the whole shard universe
+        around it so universe rules (policy-required workloads, always-run) read the same in every layer.
+        The layer's shards keep their positions, which the file index addresses; other layers' shards follow
+        and have no occurrences here.
+    #>
+    param(
+        [Parameter(Mandatory)] $Layer,
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [string[]] $AllKnown,
+        [AllowEmptyCollection()] [string[]] $AlwaysRun = @(),
+        [AllowEmptyCollection()] [string[]] $Unmapped = @()
+    )
+
+    $homeNames = @($Layer.map.knownShards | ForEach-Object { [string] $_ })
+    $homeSet = [System.Collections.Generic.HashSet[string]]::new([string[]] $homeNames, [StringComparer]::Ordinal)
+    $view = [pscustomobject]@{
+        schemaVersion = 1; sha = [string] $Layer.sha
+        knownShards = @($homeNames + @($AllKnown | Where-Object { -not $homeSet.Contains([string] $_) }))
+        alwaysRun = @($AlwaysRun); files = $Layer.map.files
+    }
+    if ($Unmapped.Count -gt 0) { $view | Add-Member -NotePropertyName unmappedShards -NotePropertyValue @($Unmapped) }
+    return [pscustomobject]@{ View = $view; Home = $homeSet }
+}
+
+function Get-RollingDirectoryOwners {
+    <#
+        Get-DirectoryOwners for one layer of a rolling map: the nearest directory that holds a mapped file
+        OTHER than Path, in any layer, and this layer's shards among its owners. With a single layer this is
+        Get-DirectoryOwners exactly. $null (an orphan: escalate) only when no layer has a neighbour; an empty
+        shard list means the neighbours are all executed by shards of other layers, which answer for themselves.
+    #>
+    param([Parameter(Mandatory)] $Rolling, [Parameter(Mandatory)] [string] $Path)
+
+    $self = if ($Rolling.MappedPaths.Contains($Path)) { 1 } else { 0 }
+    $segments = @(([string] $Path).Replace('\', '/').Split('/'))
+    for ($depth = $segments.Count - 1; $depth -ge 2; $depth--) {
+        $directory = ($segments[0..($depth - 1)] -join '/') + '/'
+        if ($Rolling.DirectoryFileCount.ContainsKey($directory) -and $Rolling.DirectoryFileCount[$directory] - $self -gt 0) {
+            return [pscustomobject]@{
+                Directory = $directory.TrimEnd('/')
+                Shards    = @($Rolling.DirectoryOwners[$directory] | Where-Object { $Rolling.Home.Contains($_) })
+            }
+        }
+    }
+    return $null
+}
+
+function Merge-RollingLayerSelections {
+    <#
+    .SYNOPSIS
+        Pure. One selection from the per-layer selections of a rolling map.
+    .DESCRIPTION
+        Each entry of Layers is { Sha; Home; Selection; optional Index }: the layer's commit, the shards whose
+        coverage it holds, Select-ImpactedShards' result for the change translated to that commit, and the
+        layer's file index. A shard's fate is
+        decided by its own layer alone - the only one whose line numbers describe it - so a layer's result is
+        kept for its own shards plus the shards that run whatever the change (Mandatory: the anchor's
+        always-run list, shards the map has never seen, and policy-required workloads).
+
+        A layer that escalates cannot bound the change for ITS shards. When every layer does, that is the
+        whole matrix and the result escalates as a single map's would. When only some do, exactly their shards
+        run: the others were measured after whatever made the change unbounded, and stay selective.
+
+        With a single layer the result equals Select-ImpactedShards' own (the self-test compares them).
+    #>
+    param(
+        [Parameter(Mandatory)] [object[]] $Layers,
+        [AllowEmptyCollection()] [string[]] $Mandatory = @()
+    )
+
+    $ordinal = [StringComparer]::Ordinal
+    $always = [System.Collections.Generic.HashSet[string]]::new($ordinal)
+    foreach ($name in $Mandatory) { if ($name) { [void] $always.Add([string] $name) } }
+    $escalatedLayers = @($Layers | Where-Object { [bool] $_.Selection.Escalate })
+    $allEscalated = $Layers.Count -gt 0 -and $escalatedLayers.Count -eq $Layers.Count
+
+    $selected = [System.Collections.Generic.SortedSet[string]]::new($ordinal)
+    $routes = [System.Collections.Generic.List[string]]::new()
+    $routeSeen = [System.Collections.Generic.HashSet[string]]::new($ordinal)
+    $reasons = [System.Collections.Generic.List[string]]::new()
+    $files = [ordered]@{}
+    $untested = [ordered]@{}
+    $newSources = [System.Collections.Generic.SortedSet[string]]::new($ordinal)
+    $vacuous = ''
+    $requiresValidation = $false
+    $summaries = [System.Collections.Generic.List[object]]::new()
+    $outcomeRank = @{ escalated = 4; routed = 3; unassigned = 2; reviewed = 1; skipped = 0 }
+    foreach ($layer in $Layers) {
+        $selection = $layer.Selection
+        $homeShards = $layer.Home
+        $short = ([string] $layer.Sha).Substring(0, [Math]::Min(8, ([string] $layer.Sha).Length))
+        if ([bool] $selection.RequiresValidation) { $requiresValidation = $true }
+        $own = [System.Collections.Generic.List[string]]::new()
+        foreach ($value in @($selection.Shards)) {
+            $name = [string] $value
+            if ($homeShards.Contains($name) -or $always.Contains($name)) {
+                [void] $selected.Add($name)
+                if ($homeShards.Contains($name)) { [void] $own.Add($name) }
+            }
+        }
+        foreach ($route in @($selection.Routes)) {
+            $text = [string] $route
+            $split = $text.IndexOf(' <= ', [StringComparison]::Ordinal)
+            $name = if ($split -ge 0) { $text.Substring(0, $split) } else { '' }
+            # '(none) <= ...' names no shard and is kept; a route for another layer's shard is that layer's to give.
+            if ($split -ge 0 -and $name -cne '(none)' -and -not $homeShards.Contains($name) -and -not $always.Contains($name)) { continue }
+            if ($routeSeen.Add($text)) { [void] $routes.Add($text) }
+        }
+        foreach ($reason in @($selection.Reasons)) { if ($reason -and $reasons -cnotcontains [string] $reason) { [void] $reasons.Add([string] $reason) } }
+        if ([bool] $selection.Escalate -and -not $allEscalated) {
+            $why = @($selection.Reasons | Where-Object { $_ } | Select-Object -First 1)
+            foreach ($name in $homeShards) {
+                [void] $selected.Add([string] $name)
+                $text = "$name <= was measured at $short, and the change cannot be bounded for the shards measured there" +
+                    $(if ($why.Count -gt 0) { " ($($why[0]))" } else { '' })
+                if ($routeSeen.Add($text)) { [void] $routes.Add($text) }
+            }
+        }
+        if ($selection.PSObject.Properties['Vacuous'] -and $selection.Vacuous -and -not $vacuous) { $vacuous = [string] $selection.Vacuous }
+        if ($selection.PSObject.Properties['Files']) {
+            foreach ($file in @($selection.Files)) {
+                $kept = @($file.shards | Where-Object { $homeShards.Contains([string] $_) -or $always.Contains([string] $_) })
+                if (-not $files.Contains([string] $file.path)) {
+                    $files[[string] $file.path] = [pscustomobject]@{
+                        path = [string] $file.path; category = [string] $file.category; outcome = [string] $file.outcome
+                        shards = @($kept); why = [string] $file.why
+                    }
+                    continue
+                }
+                $merged = $files[[string] $file.path]
+                $merged.shards = @(@($merged.shards) + $kept | Sort-Object -Unique)
+                if ($outcomeRank[[string] $file.outcome] -gt $outcomeRank[[string] $merged.outcome]) { $merged.outcome = [string] $file.outcome }
+                if ($file.why -and -not ([string] $merged.why).Contains([string] $file.why)) {
+                    $merged.why = "$($merged.why) | at ${short}: $($file.why)"
+                }
+            }
+        }
+        if ($selection.PSObject.Properties['Untested']) {
+            # A member is untested only when no layer's shards execute it. Line numbers differ per layer, so
+            # the member is identified by file and name; the first layer's record is the one reported.
+            $reported = [System.Collections.Generic.HashSet[string]]::new($ordinal)
+            foreach ($entry in @($selection.Untested)) {
+                $key = "$($entry.path)`n$($entry.member)"
+                if (-not $reported.Add($key)) { continue }
+                if (-not $untested.Contains($key)) { $untested[$key] = [pscustomobject]@{ Entry = $entry; Layers = 0 } }
+                $untested[$key].Layers++
+            }
+        }
+        if ($selection.PSObject.Properties['NewSourcePaths']) {
+            foreach ($path in @($selection.NewSourcePaths)) { [void] $newSources.Add([string] $path) }
+        }
+        [void] $summaries.Add([pscustomobject]@{
+            sha = [string] $layer.Sha; shards = $homeShards.Count; selected = $own.Count
+            escalated = [bool] $selection.Escalate
+            changedSinceMeasured = $(if ($layer.PSObject.Properties['ChangedCount']) { [int] $layer.ChangedCount } else { $null })
+        })
+    }
+
+    $untestedEverywhere = foreach ($record in $untested.Values) {
+        $path = [string] $record.Entry.path
+        $indexedBy = @($Layers | Where-Object { -not $_.PSObject.Properties['Index'] -or $null -ne $_.Index.PSObject.Properties[$path] }).Count
+        if ($record.Layers -ge $indexedBy) { $record.Entry }
+    }
+    $escalate = $allEscalated
+    if (-not $escalate -and $requiresValidation -and $selected.Count -eq 0) {
+        # No layer selected anything for a change that needs validating: the single-map rule, on the union.
+        $escalate = $true
+        [void] $reasons.Add($(if ($vacuous) { $vacuous } else { 'selection was empty' }))
+    }
+    return [pscustomobject]@{
+        Escalate           = $escalate
+        RequiresValidation = $requiresValidation
+        Reasons            = $reasons
+        Shards             = @($selected)
+        Routes             = @($routes)
+        Files              = @($files.Values)
+        Untested           = @($untestedEverywhere)
+        NewSourcePaths     = @($newSources)
+        Layers             = @($summaries)
     }
 }
 
@@ -5154,6 +5478,197 @@ var source = "class Test : RealBase { } // string contents survive"; /* AnotherF
     catch { [void] $failures.Add("the precise-fallback cases could not run: $($_.Exception.Message) at line $($_.InvocationInfo.ScriptLineNumber)") }
     finally { Remove-Item -LiteralPath $preciseRoot -Recurse -Force -ErrorAction SilentlyContinue }
 
+    # 18. ROLLING MAP. One ordinary map per measured commit; each layer is selected for with the change in
+    # that layer's own line numbers, and only shard names are merged. Test-TestImpactEndToEnd.ps1 drives the
+    # same cases through real commits, where the translation itself is under test.
+    try {
+        function New-TestLayer([string] $Sha, [string[]] $Known, [hashtable] $Files) {
+            return (@{ sha = $Sha; map = @{ schemaVersion = 1; sha = $Sha; knownShards = @($Known); alwaysRun = @(); files = $Files } } |
+                ConvertTo-Json -Depth 9 -Compress | ConvertFrom-Json)
+        }
+        function Invoke-RollingCase {
+            # The orchestration's per-layer loop without git: Changed and Settled are given per layer commit.
+            param([object[]] $Layers, [hashtable] $ChangedByLayer, [hashtable] $SettledByLayer = @{}, [string[]] $AlwaysRun = @(),
+                  [hashtable] $TestRoutes = @{}, [hashtable] $RedefinedByLayer = @{}, [switch] $Scoped, [string[]] $CurrentPaths = @())
+            $context = New-RollingSelectionContext -Layers $Layers
+            $allKnown = @($Layers | ForEach-Object { @($_.map.knownShards) } | ForEach-Object { [string] $_ })
+            $results = foreach ($layer in $Layers) {
+                $layerView = New-RollingLayerView -Layer $layer -AllKnown $allKnown -AlwaysRun $AlwaysRun
+                if ($RedefinedByLayer.ContainsKey([string] $layer.sha)) {
+                    $layerView.View | Add-Member -NotePropertyName redefinedShards -NotePropertyValue @($RedefinedByLayer[[string] $layer.sha])
+                }
+                $settled = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+                foreach ($path in @($SettledByLayer[[string] $layer.sha])) { if ($path) { [void] $settled.Add($path) } }
+                $layerContext = [pscustomobject]@{
+                    Sha = [string] $layer.sha; Home = $layerView.Home; SettledPaths = $settled; MappedPaths = $context.MappedPaths
+                    DirectoryOwners = $context.DirectoryOwners; DirectoryFileCount = $context.DirectoryFileCount
+                }
+                $changed = $ChangedByLayer[[string] $layer.sha]
+                $current = if ($Scoped) { $CurrentPaths } else { @($changed.Keys) }
+                [pscustomobject]@{
+                    Sha = [string] $layer.sha; Home = $layerView.Home; Index = $layer.map.files
+                    Selection = Select-ImpactedShards -Map $layerView.View -Changed $changed -CurrentPaths $current `
+                        -ScopeToCurrentPaths:$Scoped -TestRoutes $TestRoutes -PreciseFallbacks $false -Rolling $layerContext
+                }
+            }
+            return Merge-RollingLayerSelections -Layers @($results) -Mandatory $AlwaysRun
+        }
+        $shaOne = '1' * 40
+        $shaTwo = '2' * 40
+
+        # 18a. A rolling map with ONE layer is the map it was built from: same shards, same escalation, same
+        # reasons and routes, for every regime the single-map selection has.
+        $single = New-TestLayer $map.sha @($map.knownShards) @{
+            'src/Covered.cs' = @(@{ s = 0; r = @(10, 20) }, @{ s = 1; r = @(100, 110) })
+            'src/SingleRange.cs' = @(, @{ s = 0; r = @(5, 6) })
+        }
+        $bare = @{ schemaVersion = 1; sha = $map.sha; knownShards = @('Alpha', 'Beta'); alwaysRun = @(); files = @{
+            'src/Covered.cs' = @(@{ s = 0; r = @(10, 20) }, @{ s = 1; r = @(100, 110) }) } } | ConvertTo-Json -Depth 8 -Compress | ConvertFrom-Json
+        $bareLayer = New-TestLayer $map.sha @('Alpha', 'Beta') @{ 'src/Covered.cs' = @(@{ s = 0; r = @(10, 20) }, @{ s = 1; r = @(100, 110) }) }
+        foreach ($case in @(
+            @{ What = 'a mapped hit'; Changed = @{ 'src/Covered.cs' = @(12, 12) } },
+            @{ What = 'a range no shard executes'; Changed = @{ 'src/Covered.cs' = @(50, 51) } },
+            @{ What = 'two files'; Changed = @{ 'src/Covered.cs' = @(105, 105); 'src/SingleRange.cs' = @(5, 5) } },
+            @{ What = 'an unmapped source with mapped neighbours'; Changed = @{ 'src/Area/Sub/New.cs' = @(1, 4); 'src/Covered.cs' = @(1, 1) } },
+            @{ What = 'an orphan source'; Changed = @{ 'src/Nowhere/Deep/New.cs' = @(1, 4) } },
+            @{ What = 'an unmapped project file'; Changed = @{ 'src/Thing.csproj' = @(1, 1) } },
+            @{ What = 'no change at all'; Changed = @{} },
+            @{ What = 'documentation only'; Changed = @{ 'docs/Guide.md' = @(1, 1) } },
+            @{ What = 'validation infrastructure'; Changed = @{ 'Directory.Build.props' = @(1, 1); 'src/Covered.cs' = @(12, 12) } },
+            @{ What = 'a routed test source'; Changed = @{ 'tests/T/FooTests.cs' = @(3, 3) }
+               Routes = @{ 'tests/T/FooTests.cs' = [pscustomobject]@{ Routable = $true; Shards = @('Beta'); Why = 'its class matches the filter' } } },
+            @{ What = 'an unroutable test source'; Changed = @{ 'tests/T/FooTests.cs' = @(3, 3) }
+               Routes = @{ 'tests/T/FooTests.cs' = [pscustomobject]@{ Routable = $false; Shards = @(); Why = 'no filter decides it' } } },
+            @{ What = 'no always-run shard and no hit'; Changed = @{ 'src/Covered.cs' = @(50, 51) }; Bare = $true },
+            @{ What = 'no always-run shard and an empty selection'; Changed = @{ 'tests/T/FooTests.cs' = @(3, 3) }; Bare = $true
+               Routes = @{ 'tests/T/FooTests.cs' = [pscustomobject]@{ Routable = $false; Unassigned = $true; Shards = @(); Why = 'no shard runs it' } } }
+        )) {
+            $routesGiven = if ($case.ContainsKey('Routes')) { $case.Routes } else { @{} }
+            $useBare = $case.ContainsKey('Bare')
+            $one = Select-ImpactedShards -Map $(if ($useBare) { $bare } else { $map }) -Changed $case.Changed -TestRoutes $routesGiven -PreciseFallbacks $false
+            $rolled = Invoke-RollingCase -Layers @($(if ($useBare) { $bareLayer } else { $single })) -ChangedByLayer @{ $map.sha = $case.Changed } `
+                -AlwaysRun $(if ($useBare) { @() } else { @($map.alwaysRun) }) -TestRoutes $routesGiven
+            Assert-True ([bool] $one.Escalate -eq [bool] $rolled.Escalate) "one-layer rolling map, $($case.What): escalate $($rolled.Escalate), the single map says $($one.Escalate)"
+            Assert-True ([bool] $one.RequiresValidation -eq [bool] $rolled.RequiresValidation) "one-layer rolling map, $($case.What): requiresValidation differs from the single map"
+            Assert-True ((@($one.Shards) -join '|') -ceq (@($rolled.Shards) -join '|')) "one-layer rolling map, $($case.What): selected '$(@($rolled.Shards) -join ',')', the single map selects '$(@($one.Shards) -join ',')'"
+            Assert-True ((@($one.Reasons) -join '|') -ceq (@($rolled.Reasons) -join '|')) "one-layer rolling map, $($case.What): reasons '$(@($rolled.Reasons) -join '|')' differ from the single map's '$(@($one.Reasons) -join '|')'"
+            Assert-True ((@($one.Routes | Sort-Object) -join '|') -ceq (@($rolled.Routes | Sort-Object) -join '|')) "one-layer rolling map, $($case.What): routes differ from the single map's"
+        }
+
+        # 18b. THE MIXED-COORDINATE CASE. F.cs is 100 lines at commit 1. Commit 2 inserts 20 lines at its top.
+        #   measured at 1:  Early executes 40-42,  Shifted executes 20-22        (commit 1's numbering)
+        #   measured at 2:  Late  executes 40-42,  Moved   executes 60-62        (commit 2's numbering)
+        # so Shifted and Late execute the same code, as do Early and Moved. A pull request on commit 2 edits
+        # line 41 there, which is line 21 at commit 1. Exactly Shifted and Late execute it.
+        $layerOne = New-TestLayer $shaOne @('Early', 'Shifted') @{ 'src/F.cs' = @(@{ s = 0; r = @(40, 42) }, @{ s = 1; r = @(20, 22) }) }
+        $layerTwo = New-TestLayer $shaTwo @('Late', 'Moved') @{ 'src/F.cs' = @(@{ s = 0; r = @(40, 42) }, @{ s = 1; r = @(60, 62) }) }
+        $insertion = ConvertTo-DiffHunks -DiffLines @('diff --git a/src/F.cs b/src/F.cs', '--- a/src/F.cs', '+++ b/src/F.cs', '@@ -0,0 +1,20 @@')
+        $atTwo = [int[]] @(41, 41)
+        $atOne = [int[]] (Convert-RangesThroughHunks -Ranges $atTwo -Hunks @($insertion['src/F.cs']))
+        Assert-True (($atOne -join ',') -ceq '21,21') "line 41 after a 20-line insertion carried back to '$($atOne -join ',')', not line 21"
+        $right = Invoke-RollingCase -Layers @($layerOne, $layerTwo) -ChangedByLayer @{ $shaOne = @{ 'src/F.cs' = $atOne }; $shaTwo = @{ 'src/F.cs' = $atTwo } }
+        Assert-True ((@($right.Shards) -join ',') -ceq 'Late,Shifted') "translated per measured commit, the edit selected '$(@($right.Shards) -join ',')', not exactly Late and Shifted"
+        Assert-True (-not $right.Escalate) 'the two-commit case escalated'
+        # The mistake, both ways round. With the newer numbering against the older layer the edit lands on
+        # Early's lines and Shifted - which really executes it - is never selected: a missed shard. This is
+        # why no range is ever read against a commit it was not translated to.
+        $newerOnly = Invoke-RollingCase -Layers @($layerOne, $layerTwo) -ChangedByLayer @{ $shaOne = @{ 'src/F.cs' = $atTwo }; $shaTwo = @{ 'src/F.cs' = $atTwo } }
+        Assert-True ((@($newerOnly.Shards) -join ',') -ceq 'Early,Late') "the newer commit's numbers against both layers selected '$(@($newerOnly.Shards) -join ',')' (expected the wrong answer Early,Late)"
+        Assert-True (@($newerOnly.Shards) -cnotcontains 'Shifted') 'the mixed-coordinate mistake no longer misses a shard; this case has stopped guarding it'
+        $olderOnly = Invoke-RollingCase -Layers @($layerOne, $layerTwo) -ChangedByLayer @{ $shaOne = @{ 'src/F.cs' = $atOne }; $shaTwo = @{ 'src/F.cs' = $atOne } }
+        Assert-True ((@($olderOnly.Shards) -join ',') -cne 'Late,Shifted') "the older commit's numbers against both layers still selected exactly the right shards; this case has stopped guarding it"
+        Assert-True (@($right.Layers).Count -eq 2 -and $right.Layers[0].selected -eq 1 -and $right.Layers[1].selected -eq 1) 'the per-commit summary does not show one shard selected at each commit'
+
+        # 18c. A file added AFTER a layer's commit. Shards measured before it existed cannot be said not to
+        # execute it, so the unmapped-file rule applies to them until they are measured again; shards measured
+        # with it present are selected by their own coverage. A file that already existed there, unchanged up
+        # to the change's base, is different: those shards ran with exactly that content and executed none of it.
+        $before = New-TestLayer $shaOne @('OldA', 'OldB', 'OldFar') @{
+            'src/Area/Old.cs' = @(@{ s = 0; r = @(1, 9) }, @{ s = 1; r = @(3, 4) })
+            'src/Elsewhere/Far.cs' = @(, @{ s = 2; r = @(1, 9) })
+        }
+        $after = New-TestLayer $shaTwo @('NewHit', 'NewMiss') @{
+            'src/Area/New.cs' = @(, @{ s = 0; r = @(1, 10) })
+            'src/Area/Old.cs' = @(, @{ s = 1; r = @(1, 9) })
+        }
+        $edit = @{ $shaOne = @{ 'src/Area/New.cs' = @(5, 5) }; $shaTwo = @{ 'src/Area/New.cs' = @(5, 5) } }
+        $added = Invoke-RollingCase -Layers @($before, $after) -ChangedByLayer $edit
+        Assert-True ((@($added.Shards) -join ',') -ceq 'NewHit,OldA,OldB') "a file added after one layer's commit selected '$(@($added.Shards) -join ',')', not its measured shard plus the older layer's directory owners"
+        Assert-True (-not $added.Escalate) 'a file added after one layer''s commit escalated although it has mapped neighbours'
+        $present = Invoke-RollingCase -Layers @($before, $after) -ChangedByLayer $edit -SettledByLayer @{ $shaOne = @('src/Area/New.cs') }
+        Assert-True ((@($present.Shards) -join ',') -ceq 'NewHit') "a file that existed unchanged, unexecuted, at the older layer's commit selected '$(@($present.Shards) -join ',')', not only the shard that executes it"
+        # No mapped neighbour at all for the older layer's purposes: that layer cannot bound the change, so
+        # exactly its shards run, and the layer measured with the file stays selective.
+        $lonely = New-TestLayer $shaTwo @('NewHit', 'NewMiss') @{
+            'src/Fresh/Deep/New.cs' = @(, @{ s = 0; r = @(1, 10) })
+            'src/Area/Old.cs' = @(, @{ s = 1; r = @(1, 9) })
+        }
+        $partial = Invoke-RollingCase -Layers @($before, $lonely) -ChangedByLayer @{ $shaOne = @{ 'src/Fresh/Deep/New.cs' = @(5, 5) }; $shaTwo = @{ 'src/Fresh/Deep/New.cs' = @(5, 5) } }
+        Assert-True ((@($partial.Shards) -join ',') -ceq 'NewHit,OldA,OldB,OldFar') "an unbounded change for one layer selected '$(@($partial.Shards) -join ',')', not that layer's every shard plus the other layer's own selection"
+        Assert-True (-not $partial.Escalate) 'one unbounded layer escalated the whole matrix'
+        Assert-True (@($partial.Routes | Where-Object { $_ -like 'OldFar <= was measured at 11111111*' }).Count -eq 1) 'a shard run because its layer could not bound the change has no route saying so'
+        # Unbounded for every layer is the whole matrix, as with a single map.
+        $everywhere = Invoke-RollingCase -Layers @($before, $after) -ChangedByLayer @{ $shaOne = @{ 'src/Nowhere/Deep/X.cs' = @(1, 1) }; $shaTwo = @{ 'src/Nowhere/Deep/X.cs' = @(1, 1) } }
+        Assert-True ([bool] $everywhere.Escalate) 'a change no layer can bound did not escalate'
+
+        # 18d. A shard redefined since ITS layer was measured runs; the other layers are unaffected by that.
+        $redefinedCase = Invoke-RollingCase -Layers @($layerOne, $layerTwo) -RedefinedByLayer @{ $shaTwo = @('Moved') } `
+            -ChangedByLayer @{ $shaOne = @{ 'src/F.cs' = $atOne }; $shaTwo = @{ 'src/F.cs' = $atTwo } }
+        Assert-True ((@($redefinedCase.Shards) -join ',') -ceq 'Late,Moved,Shifted') "a shard redefined after its digest selected '$(@($redefinedCase.Shards) -join ',')', not the redefined shard as well"
+
+        # 18e. Always-run shards come through whichever layer names them; a layer's opinion about ANOTHER
+        # layer's shard is not kept (a test route names shards of both layers and each layer keeps its own).
+        $routed = @{ 'tests/T/FooTests.cs' = [pscustomobject]@{ Routable = $true; Shards = @('Early', 'Moved'); Why = 'its class matches the filter' } }
+        $mixed = Invoke-RollingCase -Layers @($layerOne, $layerTwo) -AlwaysRun @('Heavy') -TestRoutes $routed `
+            -ChangedByLayer @{ $shaOne = @{ 'tests/T/FooTests.cs' = @(1, 1) }; $shaTwo = @{ 'tests/T/FooTests.cs' = @(1, 1) } }
+        Assert-True ((@($mixed.Shards) -join ',') -ceq 'Early,Heavy,Moved') "a test route across two layers selected '$(@($mixed.Shards) -join ',')'"
+        $foreign = Merge-RollingLayerSelections -Mandatory @('Heavy') -Layers @(
+            [pscustomobject]@{ Sha = $shaOne; Home = [System.Collections.Generic.HashSet[string]]::new([string[]] @('Early'), [StringComparer]::Ordinal)
+                Selection = [pscustomobject]@{ Escalate = $false; RequiresValidation = $true; Reasons = @(); Shards = @('Heavy', 'Late'); Routes = @('Late <= x', 'Heavy <= is always run') } },
+            [pscustomobject]@{ Sha = $shaTwo; Home = [System.Collections.Generic.HashSet[string]]::new([string[]] @('Late'), [StringComparer]::Ordinal)
+                Selection = [pscustomobject]@{ Escalate = $false; RequiresValidation = $true; Reasons = @(); Shards = @('Heavy'); Routes = @('Heavy <= is always run') } })
+        Assert-True ((@($foreign.Shards) -join ',') -ceq 'Heavy') "a layer's selection of another layer's shard was kept ('$(@($foreign.Shards) -join ',')')"
+        Assert-True (@($foreign.Routes).Count -eq 1) 'a route for another layer''s shard was kept'
+
+        # A member is reported untested only when no layer's shards execute it.
+        $untestedHere = [pscustomobject]@{ path = 'src/F.cs'; member = 'F.M'; lines = '21-21'; memberLines = '21-21' }
+        $bothIndex = Merge-RollingLayerSelections -Layers @(
+            [pscustomobject]@{ Sha = $shaOne; Home = [System.Collections.Generic.HashSet[string]]::new([string[]] @('Early'), [StringComparer]::Ordinal); Index = $layerOne.map.files
+                Selection = [pscustomobject]@{ Escalate = $false; RequiresValidation = $true; Reasons = @(); Shards = @(); Routes = @(); Untested = @($untestedHere) } },
+            [pscustomobject]@{ Sha = $shaTwo; Home = [System.Collections.Generic.HashSet[string]]::new([string[]] @('Late'), [StringComparer]::Ordinal); Index = $layerTwo.map.files
+                Selection = [pscustomobject]@{ Escalate = $false; RequiresValidation = $true; Reasons = @(); Shards = @('Late'); Routes = @('Late <= x'); Untested = @() } })
+        Assert-True (@($bothIndex.Untested).Count -eq 0) 'a member one layer''s shards execute was reported as untested because another layer''s do not'
+        $neither = Merge-RollingLayerSelections -Layers @(
+            [pscustomobject]@{ Sha = $shaOne; Home = [System.Collections.Generic.HashSet[string]]::new([string[]] @('Early'), [StringComparer]::Ordinal); Index = $layerOne.map.files
+                Selection = [pscustomobject]@{ Escalate = $false; RequiresValidation = $true; Reasons = @(); Shards = @('Early'); Routes = @('Early <= x'); Untested = @($untestedHere) } },
+            [pscustomobject]@{ Sha = $shaTwo; Home = [System.Collections.Generic.HashSet[string]]::new([string[]] @('Late'), [StringComparer]::Ordinal); Index = $layerTwo.map.files
+                Selection = [pscustomobject]@{ Escalate = $false; RequiresValidation = $true; Reasons = @(); Shards = @(); Routes = @(); Untested = @([pscustomobject]@{ path = 'src/F.cs'; member = 'F.M'; lines = '41-41'; memberLines = '41-41' }) } })
+        Assert-True (@($neither.Untested).Count -eq 1) 'a member no layer''s shards execute was not reported as untested exactly once'
+
+        # 18f. Nothing selected by any layer for a change that needs validating: the single map's rule.
+        $nothing = Invoke-RollingCase -Layers @($before, $after) -ChangedByLayer @{ $shaOne = @{}; $shaTwo = @{} }
+        Assert-True ([bool] $nothing.Escalate -and (@($nothing.Reasons) -join '|') -ceq 'changed path set was empty') 'an empty change against every layer did not escalate as the single map does'
+        $oneSided = Invoke-RollingCase -Layers @($before, $after) -ChangedByLayer @{ $shaOne = @{ 'src/Area/Old.cs' = @(3, 3) }; $shaTwo = @{} }
+        Assert-True (-not $oneSided.Escalate -and (@($oneSided.Shards) -join ',') -ceq 'OldA,OldB') "a change only one layer sees selected '$(@($oneSided.Shards) -join ',')' or escalated"
+
+        # 18g. The map kinds are told apart from the head of the file.
+        $sniffRoot = Join-Path ([IO.Path]::GetTempPath()) ("rolling-sniff-" + [Guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $sniffRoot | Out-Null
+        try {
+            '{"schemaVersion":1,"kind":"rolling","anchor":{}}' | Set-Content -LiteralPath (Join-Path $sniffRoot 'r.json') -Encoding utf8
+            "{`n  `"schemaVersion`": 1,`n  `"kind`": `"rolling`"`n}" | Set-Content -LiteralPath (Join-Path $sniffRoot 'p.json') -Encoding utf8
+            $map | ConvertTo-Json -Depth 8 -Compress | Set-Content -LiteralPath (Join-Path $sniffRoot 'm.json') -Encoding utf8
+            Assert-True (Test-RollingMapFile -Path (Join-Path $sniffRoot 'r.json')) 'a rolling map was not recognised'
+            Assert-True (Test-RollingMapFile -Path (Join-Path $sniffRoot 'p.json')) 'an indented rolling map was not recognised'
+            Assert-True (-not (Test-RollingMapFile -Path (Join-Path $sniffRoot 'm.json'))) 'an ordinary map was read as a rolling map'
+            # A missing map is the ordinary path's to report (it escalates); the sniff must not throw first.
+            Assert-True (-not (Test-RollingMapFile -Path (Join-Path $sniffRoot 'absent.json'))) 'a missing map file was read as a rolling map'
+            Assert-True (-not (Test-RollingMapFile -Path $sniffRoot)) 'a directory was read as a rolling map'
+        }
+        finally { Remove-Item -LiteralPath $sniffRoot -Recurse -Force -ErrorAction SilentlyContinue }
+    }
+    catch { [void] $failures.Add("the rolling-map cases could not run: $($_.Exception.Message) at line $($_.InvocationInfo.ScriptLineNumber)") }
+
     if ($failures.Count -gt 0) {
         Write-Host 'Select-Shards self-test FAILED:'
         foreach ($failure in $failures) { Write-Host "  - $failure" }
@@ -5241,6 +5756,406 @@ function Exit-Escalated {
 
 if (-not (Test-Path -LiteralPath $MapFile)) {
     Exit-Escalated -Reason 'map-missing' -Message "no shard map at $MapFile - running the full matrix"
+}
+
+function Invoke-RollingMapSelection {
+    <#
+    .SYNOPSIS
+        Selection against a rolling map: the single-map flow below, once per measured commit.
+    .DESCRIPTION
+        Everything that does not depend on a map commit is established once (the base, the change's own
+        paths and diff, package and CI-policy routing). Everything that does is done per layer, with that
+        layer's commit as the map commit and nothing shared between layers: the change's ranges
+        (Get-ScopedChangedRanges / Get-ChangedRanges, including the stale-map sweep), which files exist
+        there unchanged, the manifest the layer was measured with, the auxiliary inventory check, and
+        Select-ImpactedShards itself. Merge-RollingLayerSelections then keeps each layer's verdict for its own
+        shards. A layer's ranges never meet another layer's diff.
+
+        The orchestration is a copy of the single-map flow rather than a refactor of it, so that flow is
+        untouched; a rolling map with one layer must select exactly what the map it was built from selects,
+        and Test-TestImpactEndToEnd.ps1 holds that on real commits.
+
+        Cost, measured per layer for a pull request: one diff from the layer's commit to the base limited to
+        the pull request's paths, at most one sweep diff, one manifest read and one name-only diff, plus an
+        ls-tree and a name-only diff when the change touches files only other layers index. The change's own
+        diff, test routing, package routing and CI-policy review are taken once.
+    #>
+    $rolling = $null
+    $layers = @()
+    $universe = $null
+    $manifest = @()
+    $retiredIndexed = @()
+    $unmapped = @()
+    $allKnown = @()
+    try {
+        . "$PSScriptRoot/RollingShardMap.ps1"
+        $rolling = Get-Content -LiteralPath $MapFile -Raw | ConvertFrom-Json
+        Assert-RollingShardMap -Map $rolling
+        $layers = @($rolling.layers)
+        # Each layer is an ordinary map over its own shards, held to the ordinary map's rules.
+        foreach ($layer in $layers) { Assert-ShardMap -Map $layer.map -Expected @($layer.map.knownShards | ForEach-Object { [string] $_ }) }
+        $allKnown =@($layers | ForEach-Object { @($_.map.knownShards) } | ForEach-Object { [string] $_ })
+        $universe = [pscustomobject]@{
+            schemaVersion = 1; sha = [string] $rolling.anchor.sha
+            knownShards = @($allKnown); alwaysRun = @($rolling.alwaysRun | ForEach-Object { [string] $_ })
+        }
+        if ($ShardManifestFile) {
+            $expectedNames = [System.Collections.Generic.HashSet[string]]::new([string[]] @($ExpectedShards), [StringComparer]::Ordinal)
+            $retired = @(@($universe.knownShards) + @($universe.alwaysRun) | Where-Object { -not $expectedNames.Contains([string] $_) } | Sort-Object -Unique)
+            if ($retired.Count -gt 0) {
+                $retiredIndexed = @($retired | Where-Object { $_ -cin @($universe.knownShards) })
+                $universe.alwaysRun = @(@($universe.alwaysRun) | Where-Object { $expectedNames.Contains([string] $_) })
+                Write-Host "$($retired.Count) shard(s) in the map are no longer in the manifest: $($retired -join ', ')"
+            }
+            $manifest = @(Get-Content -LiteralPath $ShardManifestFile -Raw | ConvertFrom-Json)
+            if (@($manifest | Where-Object { $null -ne $_.PSObject.Properties['workload'] }).Count -gt 0) {
+                . "$PSScriptRoot/CiWorkloadKinds.ps1"
+                $extension = Complete-CiMapWorkloads -Map $universe -Manifest $manifest
+                $universe = $extension.Map
+                if ($extension.Added.Count -gt 0) {
+                    Write-Host "$($extension.Added.Count) workload(s) are not in the coverage map yet and will run until a map includes them: $($extension.Added -join ', ')"
+                }
+            }
+        }
+        # Assert-ShardMap's universe rule: a map shard the manifest no longer has is a removal or a rename.
+        $allowed = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+        foreach ($name in @($ExpectedShards) + @($retiredIndexed)) {
+            if ([string]::IsNullOrWhiteSpace([string] $name)) { throw 'expected shard names must be nonempty' }
+            [void] $allowed.Add([string] $name)
+        }
+        if ($allowed.Count -eq 0) { throw 'the expected shard manifest is empty' }
+        $extra = @(@($universe.knownShards) + @($universe.alwaysRun) | Where-Object { -not $allowed.Contains([string] $_) } | Sort-Object -Unique)
+        if ($extra.Count -gt 0) { throw "map names shard(s) the manifest does not have: $($extra -join ', ')" }
+        $unmapped = @(Add-UnmappedShardsAsAlwaysRun -Map $universe -Expected $ExpectedShards)
+        if ($unmapped.Count -gt 0) {
+            Write-Host "$($unmapped.Count) shard(s) are not in the coverage map yet and will run until a map includes them: $($unmapped -join ', ')"
+        }
+    }
+    catch {
+        Exit-Escalated -Reason 'map-unreadable' `
+            -Message "the rolling shard map at $MapFile could not be trusted - running the full matrix ($($_.Exception.Message))"
+    }
+
+    foreach ($layer in $layers) {
+        & git cat-file -e "$($layer.sha)^{commit}" 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            Exit-Escalated -Reason 'map-unresolvable' `
+                -Message "the rolling map's commit $($layer.sha) is not present in this checkout - running the full matrix"
+        }
+    }
+
+    try {
+        $preciseFallbacks = Test-PreciseFallbacksEnabled
+        $scopeToPullRequest = $false
+        if (@(@($PullRequestHeadSha, $BaseSha, $DeltaFromTree) | Where-Object { $_ }).Count -gt 1) {
+            throw 'pass at most one of PullRequestHeadSha, BaseSha and DeltaFromTree'
+        }
+        if ($PullRequestHeadSha) {
+            $BaseSha = Resolve-PullRequestBase -PullRequestHeadSha $PullRequestHeadSha
+            $scopeToPullRequest = $true
+            Write-Host "pull request base (merge commit's first parent): $BaseSha"
+            if ($MapLineageRef) {
+                # Every layer's commit must be in the checkout's history, not only the anchor's.
+                foreach ($layer in $layers) { $BaseSha = Resolve-MapLineageBase -LineageRef $MapLineageRef -MapSha ([string] $layer.sha) }
+                Write-Host "the map is from '$MapLineageRef', not the pull request's base branch: selecting for everything the checkout adds to it (merge base $BaseSha)"
+            }
+        }
+        elseif ($MapLineageRef) {
+            throw 'MapLineageRef is only meaningful with PullRequestHeadSha'
+        }
+        if ($DeltaFromTree) {
+            if ($DeltaFromTree -notmatch '^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$') {
+                throw "delta tree '$DeltaFromTree' is not a complete Git object id"
+            }
+            & git cat-file -e "$DeltaFromTree^{tree}" 2>$null
+            if ($LASTEXITCODE -ne 0) { throw "delta tree '$DeltaFromTree' is not present in this checkout" }
+            $BaseSha = $DeltaFromTree
+            $scopeToPullRequest = $true
+            Write-Host "delta from validated tree: $DeltaFromTree"
+        }
+        $currentPaths = $null
+        if ($BaseSha) {
+            $baseKind = if ($DeltaFromTree) { 'tree' } else { 'commit' }
+            & git cat-file -e "$BaseSha^{$baseKind}"
+            if ($LASTEXITCODE -ne 0) { throw "base $baseKind '$BaseSha' is not present in this checkout" }
+            $currentPaths = @(& git -c core.quotepath=false diff --no-renames --name-only $BaseSha HEAD --)
+            if ($LASTEXITCODE -ne 0) { throw "git diff --name-only from current base '$BaseSha' failed" }
+            $currentPaths = @($currentPaths | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        }
+        if ($ShardManifestFile) {
+            $manifestNames = @($manifest | ForEach-Object { [string] $_.name } | Sort-Object)
+            if (($manifestNames -join "`n") -cne (@($ExpectedShards | Sort-Object) -join "`n")) {
+                throw 'the shard manifest does not describe exactly the expected shards'
+            }
+        }
+
+        # Commit-independent, so taken once: the change's own diff, package routing, CI-policy review.
+        $ownDiff = @()
+        if ($scopeToPullRequest) { $ownDiff = @(Get-ScopedChangeDiff -Base $BaseSha -Paths $currentPaths) }
+        $packageRoute = $null
+        $packageRouting = $null
+        if ($BaseSha -and $currentPaths -ccontains $script:PackagePropsPath) {
+            $verdict = Resolve-PackagePropsVerdict -BaseSha $BaseSha -Manifest $(if ($ShardManifestFile) { $manifest } else { $null })
+            $script:PackagePropsVerdict = $verdict
+            if ($verdict.Impact -ceq 'TestRoute') {
+                $packageRoute = [pscustomobject]@{
+                    Routable = $true; Shards = @($verdict.Shards); Why = $verdict.Why; Category = 'PackageVersion'
+                }
+            }
+            Write-Host "package versions: $($verdict.Impact) - $($verdict.Why)"
+            $packageRouting = [pscustomobject]@{ impact = $verdict.Impact; why = $verdict.Why; packages = @($verdict.Packages) }
+        }
+        $reviewed = [pscustomobject]@{ Paths = @(); Shards = @() }
+        if ($BaseSha -and (Test-Path "$PSScriptRoot/CiPolicyImpact.ps1")) {
+            try {
+                . "$PSScriptRoot/CiPolicyImpact.ps1"
+                $reviewed = Get-ReviewedCiPolicyImpact -BaseSha $BaseSha -Paths $currentPaths
+                Write-Host "CI policy review: $($reviewed.Paths.Count) control paths handled; $($reviewed.Shards.Count) execution workloads required."
+            }
+            catch { Write-Warning "CI execution impact is unproven; retaining full-validation controls: $($_.Exception.Message)" }
+        }
+
+        $context = New-RollingSelectionContext -Layers $layers
+        $definitionsCompared = [bool] $ShardManifestFile
+        $scopedTestRoutes = $null
+        $deltaImportReasons = [System.Collections.Generic.List[string]]::new()
+        $layerResults = [System.Collections.Generic.List[object]]::new()
+        $unionChanged = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+        Write-Host "rolling map: $($layers.Count) measured commit(s), anchor $(([string] $rolling.anchor.sha).Substring(0, 8))"
+        foreach ($layer in $layers) {
+            # The ONE commit this iteration's line numbers are in. Every range below is in it.
+            $mapSha = [string] $layer.sha
+            $layerView = New-RollingLayerView -Layer $layer -AllKnown $allKnown -AlwaysRun @($universe.alwaysRun) -Unmapped $unmapped
+            $view = $layerView.View
+            $homeSet = $layerView.Home
+            $homeNames = @($layer.map.knownShards | ForEach-Object { [string] $_ })
+            $changeDetail = @{}
+            if ($scopeToPullRequest) {
+                $changed = if ($preciseFallbacks) {
+                    Get-ScopedChangedRanges -MapSha $mapSha -Base $BaseSha -Paths $currentPaths -OwnDiff $ownDiff -Detail $changeDetail
+                } else {
+                    Get-ScopedChangedRanges -MapSha $mapSha -Base $BaseSha -Paths $currentPaths -OwnDiff $ownDiff
+                }
+            }
+            else {
+                $changed = if ($preciseFallbacks) { Get-ChangedRanges -MapSha $mapSha -Detail $changeDetail } else { Get-ChangedRanges -MapSha $mapSha }
+            }
+            # Two statements: an if-expression yielding @() unrolls to $null.
+            $layerCurrent = @($changed.Keys)
+            if ($null -ne $currentPaths) { $layerCurrent = @($currentPaths) }
+            foreach ($key in $changed.Keys) { [void] $unionChanged.Add([string] $key) }
+            $changedSinceMeasured = @(& git -c core.quotepath=false diff --no-renames --name-only $mapSha HEAD --).Count
+            if ($LASTEXITCODE -ne 0) { throw "git diff --name-only from '$mapSha' failed" }
+
+            $testRoutes = @{}
+            if ($ShardManifestFile) {
+                # This layer was measured with the manifest committed at ITS commit.
+                $manifestAtMap = Read-ShardManifestAtRevision -Revision $mapSha
+                $manifestTracked = $null -ne $manifestAtMap
+                if (-not $manifestTracked) {
+                    & git cat-file -e 'HEAD:.github/test-shards.yml' 2>$null
+                    $manifestTracked = $LASTEXITCODE -eq 0
+                    $manifestAtMap = @()
+                }
+                if ($manifestTracked) {
+                    $redefinedShards = @(Get-RedefinedShards -MapManifest $manifestAtMap -Manifest $manifest `
+                        -IndexedShards @($homeNames | Where-Object { $_ -cnotin $retiredIndexed }))
+                    if ($redefinedShards.Count -gt 0) {
+                        $view | Add-Member -NotePropertyName redefinedShards -NotePropertyValue $redefinedShards -Force
+                        Write-Host "$($redefinedShards.Count) shard(s) measured at $($mapSha.Substring(0, 8)) changed definition since and will run until measured again: $($redefinedShards -join ', ')"
+                    }
+                }
+                else {
+                    $definitionsCompared = $false
+                    Write-Host "no committed shard manifest at $($mapSha.Substring(0, 8)) or HEAD; definition drift is not checked"
+                }
+                if ($scopeToPullRequest -and $null -ne $scopedTestRoutes) {
+                    # A pull request's test-source routing reads the change and the manifest, not a map commit.
+                    $testRoutes = $scopedTestRoutes
+                }
+                else {
+                    $currentSet = [System.Collections.Generic.HashSet[string]]::new([string[]] $layerCurrent, [StringComparer]::OrdinalIgnoreCase)
+                    $testPaths = @($changed.Keys | Where-Object {
+                        $candidate = [string] $_
+                        (-not $scopeToPullRequest -or $currentSet.Contains($candidate)) -and
+                        $candidate.StartsWith('tests/', [StringComparison]::OrdinalIgnoreCase) -and
+                        $candidate.EndsWith('.cs', [StringComparison]::OrdinalIgnoreCase) -and
+                        (Get-ChangedPathImpact -Path $candidate) -eq [ChangedPathImpact]::MapCandidate -and
+                        -not $context.MappedPaths.Contains($candidate)
+                    })
+                    $revisions = @('HEAD', $BaseSha, $mapSha)
+                    $testRoutes = Get-TestFileRoutes -Paths $testPaths -Manifest $manifest `
+                        -ReadFile { param($path) Get-GitFileText -Path $path -Revisions $revisions } `
+                        -ReadPriorFile { param($path) Get-GitFileText -Path $path -Revisions @($BaseSha, $mapSha) } `
+                        -FindReferrers { param($names, $directory) Find-GitReferrers -Names $names -Directory $directory } `
+                        -FindBuildTimeReferences { param($names) Find-GitBuildTimeReferences -Names $names } `
+                        -FindCollectionReferrers { param($names, $directory) Find-GitCollectionReferrers -Names $names -Directory $directory } `
+                        -GeneratedDependenciesKnown (Test-ReviewedGeneratedDependencies -ChangedPaths $layerCurrent) `
+                        -GeneratedDependencyProjects @('tests/AiDotNet.Tests/')
+                    if ($scopeToPullRequest) { $scopedTestRoutes = $testRoutes }
+                }
+            }
+            if ($null -ne $packageRoute) { $testRoutes[$script:PackagePropsPath] = $packageRoute }
+
+            # Changed files another layer indexes and this one does not. "Settled" ones existed at this layer's
+            # commit and are byte-identical from there to the change's base: this layer's shards were measured
+            # with exactly the content the change edits. Only a scoped change has such a base; a replay of
+            # everything since the layer's commit has, by definition, no file unchanged since then.
+            $elsewhere = @($changed.Keys | Where-Object {
+                $context.MappedPaths.Contains([string] $_) -and -not $layer.map.files.PSObject.Properties[[string] $_]
+            })
+            $settled = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+            for ($offset = 0; $scopeToPullRequest -and $offset -lt $elsewhere.Count; $offset += 200) {
+                $batch = @($elsewhere[$offset..([Math]::Min($offset + 199, $elsewhere.Count - 1))])
+                $listed = @(& git -c core.quotepath=false --literal-pathspecs ls-tree -r --name-only $mapSha -- @batch)
+                if ($LASTEXITCODE -ne 0) { throw "git ls-tree at '$mapSha' failed" }
+                $movedSince = @(& git -c core.quotepath=false --literal-pathspecs diff --no-renames --name-only $mapSha $BaseSha -- @batch)
+                if ($LASTEXITCODE -ne 0) { throw "git diff --name-only from '$mapSha' to '$BaseSha' failed" }
+                $moved = [System.Collections.Generic.HashSet[string]]::new([string[]] @($movedSince | Where-Object { $_ }), [StringComparer]::OrdinalIgnoreCase)
+                foreach ($path in $listed) { if ($path -and -not $moved.Contains([string] $path)) { [void] $settled.Add([string] $path) } }
+            }
+            $layerContext = [pscustomobject]@{
+                Sha = $mapSha; Home = $homeSet; SettledPaths = $settled; MappedPaths = $context.MappedPaths
+                DirectoryOwners = $context.DirectoryOwners; DirectoryFileCount = $context.DirectoryFileCount
+            }
+
+            $selection = Select-ImpactedShards -Map $view -Changed $changed -CurrentPaths $layerCurrent `
+                -ScopeToCurrentPaths:$scopeToPullRequest -TestRoutes $testRoutes `
+                -AuditUnchangedMap:$AuditUnchangedMap -ReviewedControlPaths $reviewed.Paths -RequiredShards $reviewed.Shards `
+                -ChangeDetail $changeDetail -PreciseFallbacks $preciseFallbacks `
+                -ReadSource { param($revision, $path) Get-GitSourceText -Path $path -Revision $revision } `
+                -Rolling $layerContext
+
+            if (-not $selection.Escalate -and $selection.RequiresValidation -and $ShardManifestFile -and
+                @($manifest | Where-Object { Test-InventoryWindow $_ }).Count -gt 0) {
+                . "$PSScriptRoot/AuxiliaryInventory.ps1"
+                $auxiliary = @($manifest | Where-Object { Test-InventoryWindow $_ })
+                $indexedAuxiliary = @($auxiliary | Where-Object { $homeSet.Contains([string] $_.name) })
+                $windows = @($auxiliary | Where-Object { Test-NameKeyedWindow $_ })
+                $workloads = @($auxiliary | Where-Object { -not (Test-NameKeyedWindow $_) })
+                $invalidated = @()
+                if (@($indexedAuxiliary | Where-Object { $_ -cin $workloads }).Count -gt 0 -and (Test-AuxiliaryInventoryChange -MapSha $mapSha)) {
+                    $invalidated += @($workloads | ForEach-Object { [pscustomobject]@{ Name = $_.name; Why = 'reflection inventory changed or could not be established' } })
+                }
+                if (@($indexedAuxiliary | Where-Object { $_ -cin $windows }).Count -gt 0) {
+                    $windowCheck = Get-AuxiliaryWindowInvalidation -MapSha $mapSha -BaseSha $BaseSha -Windows $windows
+                    $invalidated += @($windowCheck.Shards | ForEach-Object { [pscustomobject]@{ Name = $_; Why = $windowCheck.Reason } })
+                }
+                if ($invalidated.Count -gt 0) {
+                    if ($DeltaFromTree) {
+                        # Imported window results refer to the old catalog, whichever layer noticed.
+                        [void] $deltaImportReasons.Add('auxiliary inventory changed; delta imports are unsafe')
+                    }
+                    else {
+                        $selection.Shards = @(@($selection.Shards) + @($invalidated.Name) | Sort-Object -Unique)
+                        $selection.Routes = @($selection.Routes) + @($invalidated | ForEach-Object { "$($_.Name) <= $($_.Why)" })
+                    }
+                }
+            }
+
+            [void] $layerResults.Add([pscustomobject]@{
+                Sha = $mapSha; Home = $homeSet; Selection = $selection; ChangedCount = $changedSinceMeasured; Index = $layer.map.files
+            })
+        }
+
+        $selection = Merge-RollingLayerSelections -Layers @($layerResults) -Mandatory @(@($universe.alwaysRun) + @($reviewed.Shards))
+        if ($deltaImportReasons.Count -gt 0) {
+            $selection.Escalate = $true
+            $selection.RequiresValidation = $true
+            $selection.Reasons = @($selection.Reasons) + @($deltaImportReasons | Select-Object -Unique)
+        }
+        foreach ($summary in $selection.Layers) {
+            Write-Host ("  measured at {0}: {1} shard(s), {2} selected{3}; {4} file(s) changed since" -f $summary.sha.Substring(0, 8),
+                $summary.shards, $summary.selected, $(if ($summary.escalated) { ' (unbounded here)' } else { '' }), $summary.changedSinceMeasured)
+        }
+        if ($null -eq $currentPaths) { $currentPaths = @($unionChanged) }
+        $changedSinceMapCount = [int] ($selection.Layers | Measure-Object -Property changedSinceMeasured -Maximum).Maximum
+        Write-Host "changed files since the oldest measured commit: $changedSinceMapCount; changed by the current change: $(@($currentPaths).Count)"
+
+        $untestedMembers = @(if ($selection.PSObject.Properties['Untested']) { @($selection.Untested) })
+        $newTypePaths = @(if ($selection.PSObject.Properties['NewSourcePaths']) {
+            $priorRevision = if ($BaseSha) { $BaseSha } else { [string] $rolling.anchor.sha }
+            foreach ($candidate in @($selection.NewSourcePaths)) {
+                & git cat-file -e "${priorRevision}:$candidate" 2>$null
+                if ($LASTEXITCODE -ne 0) { $candidate }
+            }
+        })
+        $preciseState = if (-not $preciseFallbacks) { 'off (TEST_IMPACT_PRECISE_FALLBACKS)' }
+            elseif ($null -eq $script:CSharpSyntaxAvailable) { 'on (not needed by this change)' }
+            elseif ($script:CSharpSyntaxAvailable) { 'on' }
+            else { "unavailable, so every unexecuted range kept the file-wide rule ($script:CSharpSyntaxProblem)" }
+        Write-Host "precise fallbacks: $preciseState; $($untestedMembers.Count) changed member(s) no shard executes; $($newTypePaths.Count) new source file(s)"
+
+        if ($retiredIndexed.Count -gt 0) {
+            $reachedRetired = @($selection.Shards | Where-Object { $_ -cin $retiredIndexed })
+            if ($reachedRetired.Count -gt 0 -and -not $selection.Escalate -and -not $definitionsCompared) {
+                $selection.Escalate = $true
+                $selection.RequiresValidation = $true
+                $selection.Reasons = @($selection.Reasons) + @($reachedRetired | ForEach-Object {
+                    "the change reaches retired shard '$_', and no manifest comparison accounts for its tests"
+                })
+            }
+            $selection.Shards = @($selection.Shards | Where-Object { $_ -cnotin $retiredIndexed })
+        }
+
+        if ($selection.Escalate) {
+            Write-Host '::warning::selection escalated to the full matrix'
+            foreach ($reason in $selection.Reasons) { Write-Host "  reason: $reason" }
+        }
+        else {
+            Write-Host "selected $($selection.Shards.Count) of $($ExpectedShards.Count) shard(s)"
+            foreach ($shard in $selection.Shards) { Write-Host "  $shard" }
+        }
+
+        $impacts = @($currentPaths | ForEach-Object { Get-ChangedPathImpact -Path ([string] $_) })
+        $buildOnlyChange = $impacts.Count -gt 0 -and
+            @($impacts | Where-Object { $_ -eq [ChangedPathImpact]::BuildOnly }).Count -gt 0 -and
+            @($impacts | Where-Object {
+                $_ -ne [ChangedPathImpact]::BuildOnly -and $_ -ne [ChangedPathImpact]::NonRuntime
+            }).Count -eq 0
+        if ($buildOnlyChange) {
+            Write-Host 'build-only change: compiling it, but no test shard can be affected by it'
+        }
+        $emittedShards = @(if ($buildOnlyChange) { @() } else { $selection.Shards })
+
+        $result = [pscustomobject]@{
+            escalate          = [bool] $selection.Escalate
+            requiresValidation = [bool] ($selection.RequiresValidation -or $buildOnlyChange)
+            requiresShards    = [bool] ($selection.RequiresValidation -and -not $buildOnlyChange)
+            reason            = $(if ($buildOnlyChange) { 'build-only' }
+                                  elseif ($selection.Escalate) { 'impact-unknown' }
+                                  elseif (-not $selection.RequiresValidation) { 'non-runtime-only' }
+                                  else { 'selected' })
+            reasons           = @($selection.Reasons)
+            shards            = $emittedShards
+            routes            = @($selection.Routes)
+            wouldSelect       = @($selection.Shards)
+            files             = @(if ($selection.PSObject.Properties['Files']) { @($selection.Files) })
+            untested          = $untestedMembers
+            newTypePaths      = $newTypePaths
+            preciseFallbacks  = $preciseState
+            packageRouting    = $packageRouting
+            map               = [pscustomobject]@{
+                sha = [string] $rolling.anchor.sha; changedSinceMap = $changedSinceMapCount; changedByThisChange = @($currentPaths).Count
+            }
+            # One entry per measured commit: how many shards it holds, how many of them this change selected,
+            # and how far that commit is behind HEAD.
+            rolling           = [pscustomobject]@{
+                anchorSha = [string] $rolling.anchor.sha; anchorRunId = [long] $rolling.anchor.runId
+                layers = @($selection.Layers)
+            }
+        }
+        if ($OutFile) { $result | ConvertTo-Json -Depth 6 -Compress | Set-Content -LiteralPath $OutFile -Encoding utf8 }
+    }
+    catch {
+        Exit-Escalated -Reason 'selection-failed' `
+            -Message "rolling shard selection failed ($($_.Exception.Message))"
+    }
+}
+
+if (Test-RollingMapFile -Path $MapFile) {
+    Invoke-RollingMapSelection
+    exit 0
 }
 
 $map = $null

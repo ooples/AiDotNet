@@ -18,6 +18,10 @@ if ($LASTEXITCODE -ne 0) { throw 'Certificate evidence controls failed.' }
 if ($LASTEXITCODE -ne 0) { throw 'No-coverage parser controls failed.' }
 & pwsh -NoProfile -File (Join-Path $PSScriptRoot 'Test-ShardManifestDrift.ps1')
 if ($LASTEXITCODE -ne 0) { throw 'Shard manifest drift proof failed.' }
+# The rolling per-shard map, rules and real commits: shards measured at different commits with a file's lines
+# moved between them, a file added after a layer's commit, a redefined shard, refused digests and every fallback.
+& pwsh -NoProfile -File (Join-Path $PSScriptRoot 'Test-RollingShardMap.ps1')
+if ($LASTEXITCODE -ne 0) { throw 'Rolling shard map proof failed.' }
 
 foreach ($review in 'Test-CertificateEvidenceReview', 'Test-ReviewFixtureCleanup') {
     & pwsh -NoProfile -File (Join-Path $PSScriptRoot "$review.ps1")

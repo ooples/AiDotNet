@@ -459,9 +459,26 @@ jobs:
           COLLECT_COVERAGE_EVERYWHERE: ${{ inputs.collect_coverage_everywhere }}
         run: ./tools/TestImpact/Build-GeneratorBase.ps1
 
+      # Layer 2 (repository variable TEST_IMPACT_REPACK; tools/TestImpact/ShardPacking.ps1): the timing table the
+      # step below predicts each slice's test time from. shard-timing-table.yml rebuilds it daily and saves it to
+      # the default branch's cache, which a pull request can read. Skipped unless the variable is report or on;
+      # without a table every slice is predicted to fill a job, so nothing is packed.
+      - name: Restore the shard timing table
+        if: ${{ (vars.TEST_IMPACT_REPACK == 'report' || vars.TEST_IMPACT_REPACK == 'on') && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
+        continue-on-error: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
+        with:
+          path: shard-timing-table.json
+          key: shard-timing-table-v1-${{ github.run_id }}
+          restore-keys: |
+            shard-timing-table-v1-
+
       # Test-level selection: which test classes can this change reach? Read from the assemblies this
       # job just built, so it sees generated tests too. It only narrows select-shards' decision, and
       # passes it through whenever it cannot map every changed file (Select-AffectedTests.ps1).
+      #
+      # With TEST_IMPACT_REPACK=on it then packs the slices it kept into time-balanced jobs (the matrix output
+      # holds packed jobs); with report it only records what packing would do; unset or off, it is as it was.
       - name: Select affected tests
         id: impact
         shell: pwsh
@@ -478,7 +495,22 @@ jobs:
           # The routing select-shards planned, so a narrowed matrix sends the same share to the self-hosted runners.
           SELF_HOSTED_SHARDS: ${{ needs.select-shards.outputs.self_hosted_shards || '0' }}
           SELF_HOSTED_LABEL: ${{ needs.select-shards.outputs.self_hosted_label }}
+          # off (or unset) | report | on. Anything else reads as off.
+          TEST_IMPACT_REPACK: ${{ vars.TEST_IMPACT_REPACK }}
         run: ./tools/TestImpact/Select-AffectedTests.ps1
+
+      # What repacking did, or would do, to this run's matrix: every job, its slices and their predicted minutes.
+      # The aggregate analysis compares it with what the jobs took. Written only with TEST_IMPACT_REPACK report or on.
+      - name: Upload the shard pack plan
+        if: ${{ always() && (vars.TEST_IMPACT_REPACK == 'report' || vars.TEST_IMPACT_REPACK == 'on') && hashFiles('shard-pack-plan.json') != '' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with:
+          name: shard-pack-plan
+          path: shard-pack-plan.json
+          if-no-files-found: ignore
+          retention-days: 14
+          overwrite: true
 
       - name: Upload test-level selection plan
         if: always() && hashFiles('type-impact-plan.json') != ''
@@ -715,6 +747,9 @@ jobs:
       # Their full correctness suites still execute, but repeating the instrumentation that already
       # exceeded the runner envelope cannot produce a digest and is therefore suppressed.
       coverage_run_without_instrumentation: ${{ steps.select.outputs.coverage_run_without_instrumentation }}
+      # Rolling map refresh (TEST_IMPACT_ROLLING_MAP): the heavy shards tonight's scheduled run instruments.
+      # '[]' on every other event and whenever the flag is off.
+      coverage_rolling: ${{ steps.select.outputs.coverage_rolling }}
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
@@ -818,6 +853,29 @@ jobs:
           echo "kind=$kind" >> "$GITHUB_OUTPUT"
           echo "lineage_ref=$lineage_ref" >> "$GITHUB_OUTPUT"
 
+      # ROLLING MAP (tools/TestImpact/RollingShardMap.ps1), behind repository variable
+      # TEST_IMPACT_ROLLING_MAP: unset or 'off' skips this step and every other rolling step, and leaves the
+      # selection, the matrix and what is instrumented exactly as they were. 'shadow' computes the rolling
+      # selection beside the weekly map's and reports both; 'on' lets a certified rolling map decide.
+      #
+      # The rolling map is only ever taken from the run the resolver above returned: the run that certified
+      # the weekly map (the anchor) is the run that built and certified the rolling map on top of it. So the
+      # resolver's revocation barrier covers both: a revoked, unclassified or superseded anchor leaves no
+      # rolling map to find. A missing artifact is the ordinary case (no nightly digest yet) and not an error.
+      - name: Download the rolling shard map
+        id: rolling
+        if: ${{ (vars.TEST_IMPACT_ROLLING_MAP == 'shadow' || vars.TEST_IMPACT_ROLLING_MAP == 'on') && steps.map.outputs.kind == 'certified' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAP_RUN_ID: ${{ steps.map.outputs.run_id }}
+        run: |
+          rm -rf rolling-map
+          if ! gh run download "$MAP_RUN_ID" --repo "$GITHUB_REPOSITORY" --name rolling-shard-map --dir rolling-map; then
+            echo "map run $MAP_RUN_ID published no rolling map - the certified weekly map decides alone"
+            rm -rf rolling-map
+          fi
+
       # The impact tooling's own tests, run here rather than nowhere. Two defects on this PR were caught
       # only because these exist - reading the wrong side of a diff hunk, and a staleness check that
       # silently pinned the feature off - and both looked healthy in the logs.
@@ -906,6 +964,11 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Isolated worker coverage proof failed' }
           ./tools/TestImpact/Test-ValidationReuseModes.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Validation reuse mode proof failed' }
+          # Layer 2 (TEST_IMPACT_REPACK): the packing rules, set equality over generated matrices and the real
+          # manifest, and the workflow's per-slice steps. A few seconds; the end-to-end half of this self-test
+          # runs in the aggregate analysis job, and only while the variable is report or on.
+          ./tools/TestImpact/Test-ShardPacking.ps1 -RulesOnly
+          if ($LASTEXITCODE -ne 0) { throw 'Shard packing rules proof failed' }
 
       - name: Select
         id: select
@@ -919,6 +982,11 @@ jobs:
           # on; set the repository variable to 'off' to select every shard executing a file for a changed
           # range no shard executes, as before, without reverting anything.
           TEST_IMPACT_PRECISE_FALLBACKS: ${{ vars.TEST_IMPACT_PRECISE_FALLBACKS }}
+          # Rolling per-shard coverage map: off (default, also unset or unrecognised), shadow, or on. See
+          # "Download the rolling shard map". The budget is predicted EXTRA runner-minutes a scheduled nightly
+          # may spend instrumenting heavy shards; unset is RollingBudgetMinutes in RollingShardMap.ps1 (450).
+          TEST_IMPACT_ROLLING_MAP: ${{ vars.TEST_IMPACT_ROLLING_MAP }}
+          TEST_IMPACT_ROLLING_BUDGET_MINUTES: ${{ vars.TEST_IMPACT_ROLLING_BUDGET_MINUTES }}
           # Self-hosted runner routing (Get-SelfHostedShardPlan): a JSON configuration and a token that can
           # read the repository's runners, both repository secrets. Fork pull requests get neither, so
           # their code never runs on a self-hosted machine.
@@ -981,6 +1049,13 @@ jobs:
             exit 1
           }
           Write-Host "shard list: $($all.Count) shard(s)"
+
+          # Nothing below reads the rolling map unless this is 'shadow' or 'on'.
+          $rollingMode = 'off'
+          if (-not [string]::IsNullOrWhiteSpace($env:TEST_IMPACT_ROLLING_MAP)) {
+            . ./tools/TestImpact/RollingShardMap.ps1
+            $rollingMode = Get-RollingMapMode $env:TEST_IMPACT_ROLLING_MAP
+          }
 
           $escalate = $true
           # Why the workflow overrode or bypassed the selector, for the selection report. Empty means the selector's own
@@ -1122,6 +1197,23 @@ jobs:
                     -ExpectedShards @($all.name) `
                     -OutFile selection.json
                 if ($LASTEXITCODE -ne 0) { throw "shard selector exited $LASTEXITCODE" }
+                if ($rollingMode -ne 'off') {
+                  # The weekly map has selected. Now the same change against the rolling map, each layer in
+                  # its own commit's line numbers (Select-Shards.ps1, Invoke-RollingMapSelection). shadow:
+                  # selection.json is not touched. on: it is replaced only by a certified rolling map's
+                  # selection; anything else, including a failure here, leaves the weekly map's in place.
+                  try {
+                    & ./tools/TestImpact/Invoke-RollingSelection.ps1 -Mode $rollingMode `
+                        -AnchorMapFile map/shard-map.json -AnchorRunId ([long] $env:MAP_RUN_ID) `
+                        -RollingDirectory rolling-map -AnchorSelectionFile selection.json `
+                        -PullRequestHeadSha $changeHeadSha @lineage `
+                        -ShardManifestFile shard-manifest.json -ExpectedShards @($all.name)
+                    if ($LASTEXITCODE -ne 0) { throw "exit $LASTEXITCODE" }
+                  }
+                  catch {
+                    Write-Host "::warning::rolling map selection unavailable ($($_.Exception.Message)) - the certified weekly map decides"
+                  }
+                }
                 $result = Get-Content selection.json -Raw | ConvertFrom-Json
                 $selectionEscalated = Read-RequiredJsonBoolean `
                     -Object $result -PropertyName 'escalate'
@@ -1300,6 +1392,7 @@ jobs:
               $finalCount = if ($escalate) { $all.Count } else { @($matrixShards).Count }
               & ./tools/TestImpact/Write-SelectionReport.ps1 -SelectionFile selection.json -TotalShards $all.Count `
                   -FinalShardCount $finalCount -FinalEscalated:$escalate -WorkflowReason $decisionReason `
+                  -RollingComparisonFile rolling-comparison.json `
                   -MapResolutionFile map-resolution.json -ReportFile selection-report.json
               if ($LASTEXITCODE -ne 0) { throw "the report script exited $LASTEXITCODE" }
             }
@@ -1424,6 +1517,34 @@ jobs:
               runWithoutInstrumentationShardNames = @($runWithoutInstrumentation)
             } | ConvertTo-Json -Depth 5 | Set-Content coverage-source.json -Encoding utf8
           }
+          # ROLLING MAP REFRESH. On the scheduled nightly, and only with the flag on, name a budgeted handful
+          # of heavy shards for the test job to instrument tonight (Invoke-Shard.ps1 reads COVERAGE_ROLLING).
+          # Which ones, in what order and under what cap is Select-RollingCoverageShards.ps1; timing shards and
+          # shards the weekly run could not digest are never named. Any failure names none, which is the
+          # nightly as it always was. Every other event, and the flag off, emits '[]'.
+          $rollingCoverage = @()
+          if ($rollingMode -ne 'off' -and $env:GITHUB_EVENT_NAME -eq 'schedule' -and
+              $env:COLLECT_COVERAGE_EVERYWHERE -ne 'true') {
+            try {
+              if (-not $selectorTrusted) { throw 'the impact tooling failed its own self-test' }
+              if (-not $mapCertified) { throw 'there is no certified weekly map to refresh' }
+              & ./tools/TestImpact/Select-RollingCoverageShards.ps1 -ShardManifestFile shard-manifest.json `
+                  -AnchorMapFile map/shard-map.json -RollingMapFile rolling-map/rolling-shard-map.json `
+                  -BudgetMinutes ([string] $env:TEST_IMPACT_ROLLING_BUDGET_MINUTES) -OutFile rolling-source.json
+              if ($LASTEXITCODE -ne 0) { throw "Select-RollingCoverageShards exited $LASTEXITCODE" }
+              $rollingPlan = Get-Content rolling-source.json -Raw | ConvertFrom-Json
+              $rollingCoverage = @($rollingPlan.instrument | ForEach-Object { [string] $_ })
+              "### Rolling map refresh`n`ninstrumenting $($rollingCoverage.Count) heavy shard(s) tonight, predicted $($rollingPlan.predictedExtraMinutes) of $($rollingPlan.budgetMinutes) extra runner-minute(s)." |
+                Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            }
+            catch {
+              Write-Host "::warning::rolling map refresh unavailable ($($_.Exception.Message)) - instrumenting nothing extra tonight"
+              $rollingCoverage = @()
+              Remove-Item rolling-source.json -ErrorAction SilentlyContinue
+            }
+          }
+          "coverage_rolling=$(ConvertTo-Json -InputObject @($rollingCoverage) -Depth 3 -Compress)" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "coverage_carried=$(ConvertTo-Json -InputObject @($carried) -Depth 3 -Compress)" |
             Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "coverage_run_without_instrumentation=$(ConvertTo-Json -InputObject @($runWithoutInstrumentation) -Depth 3 -Compress)" |
@@ -1438,9 +1559,26 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         with:
           name: shard-selection-report
+          # The rolling files exist only with TEST_IMPACT_ROLLING_MAP shadow or on.
           path: |
             selection.json
             selection-report.json
+            selection-rolling.json
+            selection-anchor.json
+            rolling-comparison.json
+          if-no-files-found: ignore
+          retention-days: 14
+          overwrite: true
+
+      # What makes a scheduled run a source for the rolling map: the plan it instrumented under. The map
+      # workflow ignores scheduled runs without it, so nightlies from before the flag are never drawn on.
+      - name: Upload rolling-source marker
+        if: ${{ (vars.TEST_IMPACT_ROLLING_MAP == 'shadow' || vars.TEST_IMPACT_ROLLING_MAP == 'on') && github.event_name == 'schedule' && hashFiles('rolling-source.json') != '' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with:
+          name: test-impact-rolling-source
+          path: rolling-source.json
           if-no-files-found: ignore
           retention-days: 14
           overwrite: true
@@ -1478,7 +1616,12 @@ jobs:
     # 47.9 minutes, then GitHub canceled the job before its digest step. Ordinary validation gets a
     # 60-minute fallback so a bounded artifact retry cannot consume the test's execution budget;
     # the isolated nightly run gets enough room to finish cleanly.
-    timeout-minutes: ${{ inputs.collect_coverage_everywhere && 90 || matrix.shard.timeout || 60 }}
+    #
+    # A heavy shard instrumented for the rolling map (coverage_rolling; '[]' unless TEST_IMPACT_ROLLING_MAP is
+    # on for a scheduled run) gets the same 90 minutes: instrumentation added a median 25 and at most 32
+    # minutes to a heavy shard in run 42322440147, and the longest then took 57. With an empty list the
+    # middle term is false and this is the expression it was.
+    timeout-minutes: ${{ inputs.collect_coverage_everywhere && 90 || (contains(fromJSON(needs.select-shards.outputs.coverage_rolling || '[]'), matrix.shard.name) && 90) || matrix.shard.timeout || 60 }}
     permissions:
       actions: read
       contents: read
@@ -1497,6 +1640,11 @@ jobs:
         shard: ${{ fromJSON(needs.build.outputs.matrix || needs.select-shards.outputs.matrix) }}
 
     steps:
+      # Invoke-Shard.ps1 counts a packed job's slice deadline from here, so the setup steps below are inside it.
+      - name: Record job start
+        shell: pwsh
+        run: '"SHARD_JOB_STARTED=$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())" >> $env:GITHUB_ENV'
+
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
 
@@ -1600,6 +1748,9 @@ jobs:
           # names, and names contain characters PowerShell would parse inside a quoted literal.
           COVERAGE_CARRIED: ${{ needs.select-shards.outputs.coverage_carried }}
           COVERAGE_RUN_WITHOUT_INSTRUMENTATION: ${{ needs.select-shards.outputs.coverage_run_without_instrumentation }}
+          # Rolling map refresh: heavy shards to instrument on tonight's scheduled run. Empty or '[]' (always,
+          # unless TEST_IMPACT_ROLLING_MAP is shadow or on) leaves Invoke-Shard.ps1's decision as it was.
+          COVERAGE_ROLLING: ${{ needs.select-shards.outputs.coverage_rolling }}
           # Dedicated enterprise CI license key (save-capable â€” lifts the persistence op cap under capability
           # gating â€” with effectively-unlimited activations for ephemeral runners). ModuleInitializer swaps
           # this online AIDN-* key for the deterministic synthetic OFFLINE license so the persistence-heavy
@@ -1627,6 +1778,11 @@ jobs:
           SHARD_NAME: ${{ matrix.shard.name }}
           SHARD_FILTER: ${{ matrix.shard.filter }}
           SHARD_FORCE_COVERAGE: ${{ github.event.inputs.collect_coverage_everywhere }}
+          # Layer 2 (TEST_IMPACT_REPACK=on): a packed job's slices. Invoke-Shard.ps1 then runs each as its own
+          # invocation, with its own filter, environment and TestResults/slot-N. `null` for every other job,
+          # which runs exactly as before. The timeout lets it stop starting slices before the job is cancelled.
+          SHARD_SEGMENTS: ${{ toJSON(matrix.shard.segments) }}
+          SHARD_PACK_TIMEOUT: ${{ matrix.shard.segments && matrix.shard.timeout || '' }}
         # Keep explanatory prose outside this scalar: GitHub evaluates expression-bearing run
         # blocks as one expression and rejects oversized values, so retain headroom for future logic.
         run: |
@@ -1678,7 +1834,7 @@ jobs:
           github-token: ${{ github.token }}
 
       - name: Download legacy retry baseline shard TRX
-        if: always() && steps.retry-baseline.outputs.baseline_mode == 'trx'
+        if: always() && !matrix.shard.segments && steps.retry-baseline.outputs.baseline_mode == 'trx'
         id: retry-trx-download
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v4
         with:
@@ -1690,7 +1846,7 @@ jobs:
 
       - name: Select PR-new failures for targeted retry
         if: >-
-          always() && steps.retry-baseline.outcome == 'success' &&
+          always() && !matrix.shard.segments && steps.retry-baseline.outcome == 'success' &&
           ((steps.retry-baseline.outputs.baseline_mode == 'ledger' && steps.retry-ledger-download.outcome == 'success') ||
           (steps.retry-baseline.outputs.baseline_mode == 'trx' && steps.retry-trx-download.outcome == 'success'))
         id: retry-candidates
@@ -1743,8 +1899,22 @@ jobs:
           & dotnet @retryArgs
           exit $LASTEXITCODE
 
+      # A packed job (Layer 2) retries per slice: each failed slice's PR-new failures, rerun with that slice's own
+      # environment into its own TestResults/slot-N (Invoke-PackedShardRetry.ps1). It needs the compact ledger
+      # baseline, which is one download for the whole job; against a legacy per-shard TRX baseline the first
+      # results stand, as they do for an unpacked job with no baseline.
+      - name: Rerun PR-new failures once in each packed slice
+        if: always() && matrix.shard.segments && steps.retry-baseline.outputs.baseline_mode == 'ledger' && steps.retry-ledger-download.outcome == 'success'
+        id: retry-packed-slices
+        continue-on-error: true
+        shell: pwsh
+        env:
+          SHARD_SEGMENTS: ${{ toJSON(matrix.shard.segments) }}
+        run: ./.github/scripts/Invoke-PackedShardRetry.ps1
+
       - name: Record shard outcome
-        if: always()
+        # A packed job records one outcome per slice instead (Invoke-Shard.ps1 writes TestResults/slot-N/shard-metadata.json).
+        if: always() && !matrix.shard.segments
         shell: pwsh
         run: |
           # A TRX cannot identify a shard whose host died before flushing results. Keep a tiny
@@ -1762,6 +1932,53 @@ jobs:
             rerunCandidateCount = "${{ steps.retry-candidates.outputs.rerun_count }}"
             rerunStepOutcome = "${{ steps.retry-new-failures.outcome }}"
           } | ConvertTo-Json | Set-Content TestResults/shard-metadata.json -Encoding utf8
+
+      # PACKED JOB, one step per slice (Layer 2: repository variable TEST_IMPACT_REPACK=on, ShardPacking.ps1).
+      # A packed job runs up to eight shard slices in the test step above. Each slice gets a step named for its
+      # shard whose conclusion is that slice's own, so the job page shows which slice failed, and the tools that
+      # read a run's jobs by shard name (Resolve-CiValidationReuse.ps1, the aggregate analysis) read a packed
+      # run slice by slice. matrix.shard.slotN exists only for the Nth slice of a packed job, so on every other
+      # job these steps, and the per-slice uploads below, are skipped.
+      # Test-ShardPacking.ps1 fails when the number of slots here and ShardPackMaxSegments differ.
+      - name: "Packed slice 1: ${{ matrix.shard.slot0.name }}"
+        if: always() && matrix.shard.slot0
+        shell: pwsh
+        run: ./.github/scripts/Get-PackedSliceOutcome.ps1 -Slot 0
+
+      - name: "Packed slice 2: ${{ matrix.shard.slot1.name }}"
+        if: always() && matrix.shard.slot1
+        shell: pwsh
+        run: ./.github/scripts/Get-PackedSliceOutcome.ps1 -Slot 1
+
+      - name: "Packed slice 3: ${{ matrix.shard.slot2.name }}"
+        if: always() && matrix.shard.slot2
+        shell: pwsh
+        run: ./.github/scripts/Get-PackedSliceOutcome.ps1 -Slot 2
+
+      - name: "Packed slice 4: ${{ matrix.shard.slot3.name }}"
+        if: always() && matrix.shard.slot3
+        shell: pwsh
+        run: ./.github/scripts/Get-PackedSliceOutcome.ps1 -Slot 3
+
+      - name: "Packed slice 5: ${{ matrix.shard.slot4.name }}"
+        if: always() && matrix.shard.slot4
+        shell: pwsh
+        run: ./.github/scripts/Get-PackedSliceOutcome.ps1 -Slot 4
+
+      - name: "Packed slice 6: ${{ matrix.shard.slot5.name }}"
+        if: always() && matrix.shard.slot5
+        shell: pwsh
+        run: ./.github/scripts/Get-PackedSliceOutcome.ps1 -Slot 5
+
+      - name: "Packed slice 7: ${{ matrix.shard.slot6.name }}"
+        if: always() && matrix.shard.slot6
+        shell: pwsh
+        run: ./.github/scripts/Get-PackedSliceOutcome.ps1 -Slot 6
+
+      - name: "Packed slice 8: ${{ matrix.shard.slot7.name }}"
+        if: always() && matrix.shard.slot7
+        shell: pwsh
+        run: ./.github/scripts/Get-PackedSliceOutcome.ps1 -Slot 7
 
       - name: Set artifact name
         if: always()
@@ -1787,9 +2004,13 @@ jobs:
         # That is a silent miss, and it is likelier here than anywhere: forcing coverage onto
         # heavy shards is exactly what pushes them into an OOM. A shard that fails simply
         # produces no digest and stays always-run, which is the safe direction.
-        if: steps.shard-tests.outcome == 'success'
+        if: steps.shard-tests.outcome == 'success' && !matrix.shard.segments
         continue-on-error: true
         shell: pwsh
+        env:
+          # The matrix entry this job ran, for the digest's record of its own shard definition. Via env: the
+          # filters contain quotes and pipes.
+          SHARD_DEFINITION: ${{ toJSON(matrix.shard) }}
         run: |
           $coverage = @(Get-ChildItem -Path TestResults -Filter 'coverage.opencover.xml' -Recurse -File -ErrorAction SilentlyContinue |
               Sort-Object Length -Descending)
@@ -1805,7 +2026,10 @@ jobs:
           & ./tools/TestImpact/New-CoverageDigest.ps1 `
               -CoverageXml $coverage[0].FullName `
               -Shard "${{ matrix.shard.name }}" `
-              -OutFile "impact-digest/$slug.digest.json"
+              -OutFile "impact-digest/$slug.digest.json" `
+              -MeasuredSha ([string] $env:GITHUB_SHA) -RunId ([string] $env:GITHUB_RUN_ID) `
+              -RunAttempt ([string] $env:GITHUB_RUN_ATTEMPT) -ShardDefinitionJson ([string] $env:SHARD_DEFINITION) `
+              -ManifestBlob ([string] (& git rev-parse 'HEAD:.github/test-shards.yml' 2>$null))
 
       - name: Upload test-impact digest
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
@@ -1821,11 +2045,14 @@ jobs:
           # (2026-11-07) expired the same day, and every map run since has found "no
           # coverage-everywhere marker" and published nothing. 30 days outlasts three lost weekly
           # runs; a digest is ~200 KB at most, so a retained run costs tens of MB.
-          retention-days: ${{ inputs.collect_coverage_everywhere && 30 || 7 }}
+          #
+          # A scheduled run's digests feed the rolling map when TEST_IMPACT_ROLLING_MAP is on, which uses a
+          # digest for up to 10 days (RollingMaxDigestAgeDays); 14 keeps them that long. Otherwise 7, as before.
+          retention-days: ${{ inputs.collect_coverage_everywhere && 30 || (github.event_name == 'schedule' && (vars.TEST_IMPACT_ROLLING_MAP == 'shadow' || vars.TEST_IMPACT_ROLLING_MAP == 'on') && 14) || 7 }}
 
       - name: Upload coverage + test results
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
-        if: always() && steps.download-build-artifacts.outcome == 'success'
+        if: always() && steps.download-build-artifacts.outcome == 'success' && !matrix.shard.segments
         continue-on-error: true  # Prevent transient GitHub artifact service issues from failing the job
         with:
           name: ${{ env.ARTIFACT_NAME }}
@@ -1837,6 +2064,120 @@ jobs:
           if-no-files-found: error
           # A forced all-shard run is several GiB. The compact digests above are the durable input;
           # raw coverage only needs to survive long enough for immediate diagnosis.
+          retention-days: ${{ inputs.collect_coverage_everywhere && 1 || 14 }}
+      # PACKED JOB: each slice uploads under its own shard's artifact name, from its own TestResults/slot-N, in
+      # the layout the step above gives an unpacked job (shard-metadata.json beside the <slug>/ results) - so
+      # the regression ledger, the delta import, the retry baseline and Sonar read it as they always have.
+      - name: Upload coverage + test results (packed slice 1)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot0
+        continue-on-error: true
+        with:
+          name: coverage-${{ github.sha }}-${{ matrix.shard.slot0.slug }}
+          path: |
+            TestResults/slot-0/**/coverage.opencover.xml
+            TestResults/slot-0/**/*.trx
+            TestResults/slot-0/shard-metadata.json
+            TestResults/slot-0/rerun-candidates.json
+          if-no-files-found: error
+          retention-days: ${{ inputs.collect_coverage_everywhere && 1 || 14 }}
+
+      - name: Upload coverage + test results (packed slice 2)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot1
+        continue-on-error: true
+        with:
+          name: coverage-${{ github.sha }}-${{ matrix.shard.slot1.slug }}
+          path: |
+            TestResults/slot-1/**/coverage.opencover.xml
+            TestResults/slot-1/**/*.trx
+            TestResults/slot-1/shard-metadata.json
+            TestResults/slot-1/rerun-candidates.json
+          if-no-files-found: error
+          retention-days: ${{ inputs.collect_coverage_everywhere && 1 || 14 }}
+
+      - name: Upload coverage + test results (packed slice 3)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot2
+        continue-on-error: true
+        with:
+          name: coverage-${{ github.sha }}-${{ matrix.shard.slot2.slug }}
+          path: |
+            TestResults/slot-2/**/coverage.opencover.xml
+            TestResults/slot-2/**/*.trx
+            TestResults/slot-2/shard-metadata.json
+            TestResults/slot-2/rerun-candidates.json
+          if-no-files-found: error
+          retention-days: ${{ inputs.collect_coverage_everywhere && 1 || 14 }}
+
+      - name: Upload coverage + test results (packed slice 4)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot3
+        continue-on-error: true
+        with:
+          name: coverage-${{ github.sha }}-${{ matrix.shard.slot3.slug }}
+          path: |
+            TestResults/slot-3/**/coverage.opencover.xml
+            TestResults/slot-3/**/*.trx
+            TestResults/slot-3/shard-metadata.json
+            TestResults/slot-3/rerun-candidates.json
+          if-no-files-found: error
+          retention-days: ${{ inputs.collect_coverage_everywhere && 1 || 14 }}
+
+      - name: Upload coverage + test results (packed slice 5)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot4
+        continue-on-error: true
+        with:
+          name: coverage-${{ github.sha }}-${{ matrix.shard.slot4.slug }}
+          path: |
+            TestResults/slot-4/**/coverage.opencover.xml
+            TestResults/slot-4/**/*.trx
+            TestResults/slot-4/shard-metadata.json
+            TestResults/slot-4/rerun-candidates.json
+          if-no-files-found: error
+          retention-days: ${{ inputs.collect_coverage_everywhere && 1 || 14 }}
+
+      - name: Upload coverage + test results (packed slice 6)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot5
+        continue-on-error: true
+        with:
+          name: coverage-${{ github.sha }}-${{ matrix.shard.slot5.slug }}
+          path: |
+            TestResults/slot-5/**/coverage.opencover.xml
+            TestResults/slot-5/**/*.trx
+            TestResults/slot-5/shard-metadata.json
+            TestResults/slot-5/rerun-candidates.json
+          if-no-files-found: error
+          retention-days: ${{ inputs.collect_coverage_everywhere && 1 || 14 }}
+
+      - name: Upload coverage + test results (packed slice 7)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot6
+        continue-on-error: true
+        with:
+          name: coverage-${{ github.sha }}-${{ matrix.shard.slot6.slug }}
+          path: |
+            TestResults/slot-6/**/coverage.opencover.xml
+            TestResults/slot-6/**/*.trx
+            TestResults/slot-6/shard-metadata.json
+            TestResults/slot-6/rerun-candidates.json
+          if-no-files-found: error
+          retention-days: ${{ inputs.collect_coverage_everywhere && 1 || 14 }}
+
+      - name: Upload coverage + test results (packed slice 8)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot7
+        continue-on-error: true
+        with:
+          name: coverage-${{ github.sha }}-${{ matrix.shard.slot7.slug }}
+          path: |
+            TestResults/slot-7/**/coverage.opencover.xml
+            TestResults/slot-7/**/*.trx
+            TestResults/slot-7/shard-metadata.json
+            TestResults/slot-7/rerun-candidates.json
+          if-no-files-found: error
           retention-days: ${{ inputs.collect_coverage_everywhere && 1 || 14 }}
 
       # Keep crash evidence separate from coverage artifacts. Process dumps are deliberately not
@@ -1860,13 +2201,109 @@ jobs:
       # retains hang-sequence evidence that the coverage artifact intentionally omits.
       - name: Upload compact test diagnostics
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
-        if: always() && steps.download-build-artifacts.outcome == 'success'
+        if: always() && steps.download-build-artifacts.outcome == 'success' && !matrix.shard.segments
         continue-on-error: true
         with:
           name: ${{ env.TEST_RESULTS_ARTIFACT_NAME }}
           path: |
             TestResults/**/*.trx
             TestResults/**/Sequence*.xml
+          if-no-files-found: ignore
+          retention-days: 30
+      # PACKED JOB: the same compact diagnostics, one artifact per slice under its own shard's name.
+      - name: Upload compact test diagnostics (packed slice 1)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot0
+        continue-on-error: true
+        with:
+          name: test-results-${{ github.sha }}-${{ matrix.shard.slot0.slug }}
+          path: |
+            TestResults/slot-0/**/*.trx
+            TestResults/slot-0/**/Sequence*.xml
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload compact test diagnostics (packed slice 2)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot1
+        continue-on-error: true
+        with:
+          name: test-results-${{ github.sha }}-${{ matrix.shard.slot1.slug }}
+          path: |
+            TestResults/slot-1/**/*.trx
+            TestResults/slot-1/**/Sequence*.xml
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload compact test diagnostics (packed slice 3)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot2
+        continue-on-error: true
+        with:
+          name: test-results-${{ github.sha }}-${{ matrix.shard.slot2.slug }}
+          path: |
+            TestResults/slot-2/**/*.trx
+            TestResults/slot-2/**/Sequence*.xml
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload compact test diagnostics (packed slice 4)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot3
+        continue-on-error: true
+        with:
+          name: test-results-${{ github.sha }}-${{ matrix.shard.slot3.slug }}
+          path: |
+            TestResults/slot-3/**/*.trx
+            TestResults/slot-3/**/Sequence*.xml
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload compact test diagnostics (packed slice 5)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot4
+        continue-on-error: true
+        with:
+          name: test-results-${{ github.sha }}-${{ matrix.shard.slot4.slug }}
+          path: |
+            TestResults/slot-4/**/*.trx
+            TestResults/slot-4/**/Sequence*.xml
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload compact test diagnostics (packed slice 6)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot5
+        continue-on-error: true
+        with:
+          name: test-results-${{ github.sha }}-${{ matrix.shard.slot5.slug }}
+          path: |
+            TestResults/slot-5/**/*.trx
+            TestResults/slot-5/**/Sequence*.xml
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload compact test diagnostics (packed slice 7)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot6
+        continue-on-error: true
+        with:
+          name: test-results-${{ github.sha }}-${{ matrix.shard.slot6.slug }}
+          path: |
+            TestResults/slot-6/**/*.trx
+            TestResults/slot-6/**/Sequence*.xml
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Upload compact test diagnostics (packed slice 8)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        if: always() && steps.download-build-artifacts.outcome == 'success' && matrix.shard.slot7
+        continue-on-error: true
+        with:
+          name: test-results-${{ github.sha }}-${{ matrix.shard.slot7.slug }}
+          path: |
+            TestResults/slot-7/**/*.trx
+            TestResults/slot-7/**/Sequence*.xml
           if-no-files-found: ignore
           retention-days: 30
 
@@ -2780,6 +3217,17 @@ jobs:
         shell: pwsh
         run: ./.github/scripts/test-analyze-test-results.ps1
 
+      # Layer 2 (TEST_IMPACT_REPACK): the whole repacking self-test on a real runner - the selection with the flag
+      # unset, off, report and on, and Invoke-Shard.ps1 over a packed job with a stub in place of dotnet. Skipped
+      # unless the variable is report or on, and it cannot fail the job: until packing has run here for a while
+      # this is evidence, not a gate.
+      - name: Verify shard repacking
+        if: ${{ vars.TEST_IMPACT_REPACK == 'report' || vars.TEST_IMPACT_REPACK == 'on' }}
+        continue-on-error: true
+        timeout-minutes: 5
+        shell: pwsh
+        run: ./tools/TestImpact/Test-ShardPacking.ps1
+
       - name: Initialize diagnostics directory
         shell: pwsh
         run: New-Item -ItemType Directory -Path TestDiagnostics -Force | Out-Null
@@ -2889,6 +3337,43 @@ jobs:
           "BASELINE_SOURCE=$baselineSource" >> $env:GITHUB_ENV
           "Baseline: $baselineSource" >> $env:GITHUB_STEP_SUMMARY
 
+      # Layer 2 (repository variable TEST_IMPACT_REPACK; ShardPacking.ps1): what the Build job's packing predicted
+      # for each job against what the jobs took. With `report` the matrix was one job per shard, so this is the
+      # evidence for or against turning packing on. Report-only, and skipped unless the variable is report or on.
+      - name: Report shard repacking
+        if: ${{ always() && (vars.TEST_IMPACT_REPACK == 'report' || vars.TEST_IMPACT_REPACK == 'on') && hashFiles('current-jobs.json') != '' }}
+        continue-on-error: true
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download $env:GITHUB_RUN_ID --repo $env:GITHUB_REPOSITORY --name shard-pack-plan --dir shard-pack-plan
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host 'this run published no shard pack plan'
+            exit 0
+          }
+          ./tools/TestImpact/Write-ShardPackReport.ps1 -JobsFile current-jobs.json -PlanFile shard-pack-plan/shard-pack-plan.json
+
+      - name: Upload the shard repacking report
+        if: ${{ always() && (vars.TEST_IMPACT_REPACK == 'report' || vars.TEST_IMPACT_REPACK == 'on') && hashFiles('shard-pack-report.json') != '' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with:
+          name: shard-pack-report
+          path: shard-pack-report.json
+          if-no-files-found: ignore
+          retention-days: 30
+          overwrite: true
+
+      # A packed job is several shards. The analysis below and the rolling-map comparison read this run's jobs by
+      # shard name, so each packed job is replaced by one entry per slice, with the slice's own conclusion (its
+      # 'Packed slice N' step). A job list with no packed job is left untouched. Skipped unless the variable is on.
+      - name: Read packed jobs by shard
+        if: ${{ always() && vars.TEST_IMPACT_REPACK == 'on' && hashFiles('current-jobs.json') != '' }}
+        continue-on-error: true
+        shell: pwsh
+        run: ./tools/TestImpact/Write-ShardPackReport.ps1 -JobsFile current-jobs.json -ExpandJobs
+
       - name: Build aggregate failure analysis
         shell: pwsh
         env:
@@ -2913,6 +3398,34 @@ jobs:
           path: TestAnalysis/
           if-no-files-found: error
           retention-days: 90
+
+      # Rolling map, after the matrix: which of the shards the rolling map would NOT have run failed here.
+      # In shadow mode they all ran, so this is the evidence for or against turning it on. Report-only,
+      # and skipped unless TEST_IMPACT_ROLLING_MAP is shadow or on.
+      - name: Compare the rolling selection with what ran
+        if: ${{ always() && (vars.TEST_IMPACT_ROLLING_MAP == 'shadow' || vars.TEST_IMPACT_ROLLING_MAP == 'on') }}
+        continue-on-error: true
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download $env:GITHUB_RUN_ID --repo $env:GITHUB_REPOSITORY --name shard-selection-report --dir rolling-report
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path rolling-report/rolling-comparison.json) -or -not (Test-Path current-jobs.json)) {
+            Write-Host 'no rolling comparison was recorded for this run'
+            exit 0
+          }
+          ./tools/TestImpact/Invoke-RollingSelection.ps1 -OutcomeComparisonFile rolling-report/rolling-comparison.json `
+              -JobsFile current-jobs.json -OutcomeFile rolling-shadow-outcome.json
+
+      - name: Upload rolling shadow outcome
+        if: ${{ always() && (vars.TEST_IMPACT_ROLLING_MAP == 'shadow' || vars.TEST_IMPACT_ROLLING_MAP == 'on') && hashFiles('rolling-shadow-outcome.json') != '' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with:
+          name: rolling-shadow-outcome
+          path: rolling-shadow-outcome.json
+          if-no-files-found: ignore
+          retention-days: 30
 
   # Certify the expensive validation stage independently from Sonar. A hosted runner
   # disappearing during either quality job must not force the landed tree to repeat 100+ shards.
