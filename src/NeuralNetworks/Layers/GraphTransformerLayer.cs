@@ -106,6 +106,51 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
     private const double LayerNormEpsilon = 1e-5;
 
     /// <summary>
+    /// Layer norm over the feature axis: gamma * (x - mean) / sqrt(var + eps) + beta, on the tape.
+    /// </summary>
+    /// <remarks>
+    /// float and double use the fused engine kernel, which accumulates in a wide type. Its generic path sums
+    /// x and (x - mean)^2 in T, so for Half a row whose centred entries reach 256 (256^2 is past Half's
+    /// 65504) gets an infinite variance and a zero or NaN output. Here the statistics are taken on x / m with
+    /// m = max|x| per row, every term pre-divided by the width, so no partial sum exceeds 4; the normalised
+    /// value (x/m - mean) / sqrt(var + eps/m^2) equals the unscaled one, so m is a constant (off the tape).
+    /// </remarks>
+    private Tensor<T> PostResidualLayerNorm(Tensor<T> x, Tensor<T> gamma, Tensor<T> beta)
+    {
+        if (typeof(T) == typeof(float) || typeof(T) == typeof(double))
+            return Engine.LayerNorm(x, gamma, beta, LayerNormEpsilon, out _, out _);
+
+        int axis = x.Shape.Length - 1;
+        int width = x.Shape[axis];
+        if (x.Length == 0 || width == 0)
+            return Engine.LayerNorm(x, gamma, beta, LayerNormEpsilon, out _, out _);
+
+        Tensor<T> magnitude;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            var rowMax = Engine.ReduceMax(Engine.TensorAbs(x), new[] { axis }, keepDims: true);
+            var ones = new Tensor<T>(rowMax.Shape.ToArray());
+            ones.Fill(NumOps.One);
+            // An all-zero row normalises to zero with any scale; 1 keeps x / m finite.
+            magnitude = Engine.TensorWhere(Engine.TensorEquals(rowMax, NumOps.Zero), ones, rowMax);
+        }
+
+        T inverseWidth = NumOps.FromDouble(1.0 / width);
+        var scaled = Engine.TensorDivide(x, magnitude);
+        var mean = Engine.ReduceSum(Engine.TensorMultiplyScalar(scaled, inverseWidth), new[] { axis }, keepDims: true);
+        var centred = Engine.TensorSubtract(scaled, mean);
+        var variance = Engine.ReduceSum(
+            Engine.TensorMultiplyScalar(Engine.TensorMultiply(centred, centred), inverseWidth), new[] { axis }, keepDims: true);
+        // eps / m^2 as (sqrt(eps) / m)^2, so a large m does not square into infinity first.
+        var epsilonRatio = Engine.TensorDivide(
+            Engine.TensorAddScalar(new Tensor<T>(magnitude.Shape.ToArray()), NumOps.FromDouble(Math.Sqrt(LayerNormEpsilon))),
+            magnitude);
+        var deviation = Engine.TensorSqrt(Engine.TensorAdd(variance, Engine.TensorMultiply(epsilonRatio, epsilonRatio)));
+        var normalized = Engine.TensorDivide(centred, deviation);
+        return Engine.TensorAdd(Engine.TensorMultiply(normalized, gamma), beta);
+    }
+
+    /// <summary>
     /// Query transformation weights for each head: [numHeads, inputFeatures, headDim]
     /// </summary>
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
@@ -566,15 +611,13 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
 
         // Residual then layer norm (Dwivedi & Bresson 2020, eqs. 5-9: h = Norm(h + MHA(h)),
         // h = Norm(h + FFN(h))). The two norms' scale and shift are this layer's trainable parameters.
-        var normed1 = Engine.LayerNorm(
-            Engine.TensorAdd(attended, residualInput), _layerNorm1Scale, _layerNorm1Bias, LayerNormEpsilon, out _, out _);
+        var normed1 = PostResidualLayerNorm(Engine.TensorAdd(attended, residualInput), _layerNorm1Scale, _layerNorm1Bias);
 
         // Feed-forward network with residual
         var ffnOutput = FeedForwardNetwork(normed1, batchSize, numNodes);
 
         // Final residual and layer norm
-        var output = Engine.LayerNorm(
-            Engine.TensorAdd(normed1, ffnOutput), _layerNorm2Scale, _layerNorm2Bias, LayerNormEpsilon, out _, out _);
+        var output = PostResidualLayerNorm(Engine.TensorAdd(normed1, ffnOutput), _layerNorm2Scale, _layerNorm2Bias);
 
         var result = ApplyActivation(output);
 
