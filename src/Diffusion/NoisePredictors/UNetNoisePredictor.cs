@@ -238,6 +238,11 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// </param>
     /// <param name="lossFunction">Optional loss function (default: MSE).</param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
+    /// <param name="multiView">
+    /// Optional MVDream / ImageDream multi-view configuration (<see cref="MultiViewUNetOptions"/>). Null (the default)
+    /// builds the standard U-Net unchanged; set, every attention position holds a <c>SpatialTransformer3D</c> with 3D
+    /// self-attention across the views of one object.
+    /// </param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> All parameters are optional with industry-standard defaults
@@ -275,9 +280,12 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
         List<UNetBlock>? middleBlocks = null,
         List<UNetBlock>? decoderBlocks = null,
         ILossFunction<T>? lossFunction = null,
-        int? seed = null)
+        int? seed = null,
+        MultiViewUNetOptions? multiView = null)
         : base(lossFunction, seed)
     {
+        multiView?.Validate();
+        _multiView = multiView;
         _architecture = architecture;
         _inputChannels = inputChannels;
         _outputChannels = outputChannels ?? inputChannels;
@@ -1110,6 +1118,12 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
             return decorator.PostProcess(ApplyCrossAttention(decorator.Inner, x, conditioning));
         }
 
+        // MVDream's SpatialTransformer3D (multi-view option only).
+        if (crossAttn is MultiViewTransformerLayer<T> multiViewTransformer)
+        {
+            return multiViewTransformer.Forward(x, conditioning);
+        }
+
         // DiffusionCrossAttention uses ForwardWithContext for conditioning
         if (crossAttn is DiffusionCrossAttention<T> diffusionCrossAttn)
         {
@@ -1302,8 +1316,10 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
             timeEmbedDim: _timeEmbeddingDim);
     }
 
-    private ILayer<T> CreateAttentionBlock(int channels, int spatialSize)
+    private ILayer<T>? CreateAttentionBlock(int channels, int spatialSize)
     {
+        if (_multiView is not null)
+            return CreateMultiViewAttentionBlock(channels);
         return new DiffusionAttention<T>(
             channels: channels,
             numHeads: _numHeads,
@@ -1311,8 +1327,10 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
             residualGroupNorm: true);
     }
 
-    private ILayer<T> CreateCrossAttentionBlock(int channels, int spatialSize)
+    private ILayer<T>? CreateCrossAttentionBlock(int channels, int spatialSize)
     {
+        if (_multiView is not null)
+            return CreateMultiViewCrossAttentionBlock(channels);
         return new DiffusionCrossAttention<T>(
             queryDim: channels,
             contextDim: _contextDim,
