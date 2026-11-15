@@ -757,8 +757,11 @@ jobs:
             esac
           else
             # The executable resolver makes the newest completed map workflow a revocation barrier.
-            # Its adversarial fixtures record every download attempt and prove that a newer failed
-            # or certificate-withholding run can never fall back to an older certificate.
+            # Its adversarial fixtures record every download attempt and prove that a newer run
+            # that audited a miss, or that withholds its certificate, can never fall back to an
+            # older certificate. A run that failed WITHOUT a typed audit decision is neutral: the
+            # last certified map stays in use while it is no older than the resolver's
+            # FailedRunFallbackMaxAgeDays setting (default 14), and the selection report says so.
             if pwsh -NoProfile -File ./tools/TestImpact/Resolve-CertifiedShardMap.ps1 \
                  -Repository "$GITHUB_REPOSITORY" -OutDirectory map \
                  -ResultFile map-resolution.json -MapBranch "$MAP_BRANCH"; then
@@ -906,6 +909,10 @@ jobs:
           MAP_RUN_ID: ${{ steps.map.outputs.run_id }}
           # Set only when a stacked pull request fell back to master's map (Download the shard map).
           MAP_LINEAGE_REF: ${{ steps.map.outputs.lineage_ref }}
+          # Kill switch for the selector's precise fallbacks (Select-Shards.ps1, .NOTES). Unset leaves them
+          # on; set the repository variable to 'off' to select every shard executing a file for a changed
+          # range no shard executes, as before, without reverting anything.
+          TEST_IMPACT_PRECISE_FALLBACKS: ${{ vars.TEST_IMPACT_PRECISE_FALLBACKS }}
           # Self-hosted runner routing (Get-SelfHostedShardPlan): a JSON configuration and a token that can
           # read the repository's runners, both repository secrets. Fork pull requests get neither, so
           # their code never runs on a self-hosted machine.
@@ -1067,6 +1074,11 @@ jobs:
             # remains true and continues into the certified-map path below.
             $pathRequiresValidation = $true
             try {
+              # A stacked pull request's change is everything its stack adds to the lineage branch, not
+              # only its own base-to-head paths, so the classifier cannot clear it on that narrower set.
+              if (-not [string]::IsNullOrWhiteSpace($env:MAP_LINEAGE_REF)) {
+                throw "the map lineage '$($env:MAP_LINEAGE_REF)' widens the change beyond the pull request's own paths"
+              }
               & ./tools/TestImpact/Select-Shards.ps1 -ClassifyOnly `
                   -PullRequestHeadSha $changeHeadSha -OutFile path-classification.json
               if ($LASTEXITCODE -ne 0) { throw "path classifier exited $LASTEXITCODE" }
@@ -1282,7 +1294,7 @@ jobs:
               $finalCount = if ($escalate) { $all.Count } else { @($matrixShards).Count }
               & ./tools/TestImpact/Write-SelectionReport.ps1 -SelectionFile selection.json -TotalShards $all.Count `
                   -FinalShardCount $finalCount -FinalEscalated:$escalate -WorkflowReason $decisionReason `
-                  -ReportFile selection-report.json
+                  -MapResolutionFile map-resolution.json -ReportFile selection-report.json
               if ($LASTEXITCODE -ne 0) { throw "the report script exited $LASTEXITCODE" }
             }
             catch {
