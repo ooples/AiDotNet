@@ -22,6 +22,10 @@ internal sealed record ClipVisionConfiguration
     public int Intermediate { get; init; } = 4096;
 
     public double LayerNormEpsilon { get; init; } = 1e-5;
+
+    /// <summary>The feed-forward activation: OpenAI CLIP's quick GELU (the default), or the exact GELU open_clip's
+    /// LAION models (ViT-H/14) use.</summary>
+    public ClipVisionActivation Activation { get; init; } = ClipVisionActivation.QuickGelu;
 }
 
 /// <summary>
@@ -136,8 +140,10 @@ internal sealed class ClipVisionNetwork<T>
             new[] { 0, 2, 1, 3 }), new[] { b, n, c.Hidden });
         x = _engine.TensorAdd(x, Rows(layer.Output, context));
         var hidden = Rows(layer.Fc1, Rows(layer.Norm2, x));
-        // quick_gelu: x · sigmoid(1.702 x).
-        hidden = _engine.TensorMultiply(hidden, _engine.Sigmoid(_engine.TensorMultiplyScalar(hidden, NumOps.FromDouble(1.702))));
+        hidden = c.Activation == ClipVisionActivation.Gelu
+            ? ActivationHelper.ExactGelu(hidden, _engine)
+            // quick_gelu: x · sigmoid(1.702 x).
+            : _engine.TensorMultiply(hidden, _engine.Sigmoid(_engine.TensorMultiplyScalar(hidden, NumOps.FromDouble(1.702))));
         return _engine.TensorAdd(x, Rows(layer.Fc2, hidden));
     }
 
@@ -175,6 +181,51 @@ internal sealed class ClipVisionNetwork<T>
             Linear(layer.Fc2, $"{n}.mlp.fc2", c.Intermediate, h);
         }
         Norm(PostNorm, "post_layernorm");
+    }
+
+    /// <summary>
+    /// Loads an open_clip <c>VisionTransformer</c> state dict (names after <paramref name="prefix"/>, <c>visual.</c> by
+    /// default): <c>conv1</c>, <c>class_embedding</c>, <c>positional_embedding</c>, <c>ln_pre</c>,
+    /// <c>transformer.resblocks.{i}.{ln_1, attn.in_proj_*, attn.out_proj, ln_2, mlp.c_fc, mlp.c_proj}</c> and
+    /// <c>ln_post</c>. The fused <c>in_proj</c> rows are the query, key and value projections in that order (torch
+    /// <c>nn.MultiheadAttention</c>). The projection <c>proj</c> is not part of this network.
+    /// </summary>
+    internal void LoadOpenClipWeights(AiDotNet.ModelLoading.TorchTensorSource source, string prefix = "visual.")
+    {
+        source = source.WithPrefix(prefix);
+        var c = Configuration;
+        int h = c.Hidden;
+        void Linear(DenseLayer<T> layer, string name, int inputs, int outputs)
+            => TorchParameters.Linear(_engine, layer, inputs, outputs, source, $"{name}.weight", $"{name}.bias");
+        void Norm(LayerNormalizationLayer<T> norm, string name)
+            => TorchParameters.LayerNorm(_engine, norm, source, $"{name}.weight", $"{name}.bias");
+        TorchParameters.Linear(PatchEmbedding, c.Channels * c.PatchSize * c.PatchSize, h, source, "conv1.weight",
+            new[] { h, c.Channels, c.PatchSize, c.PatchSize });
+        TorchParameters.Linear(ClassEmbedding, 1, h, source, "class_embedding", new[] { h });
+        TorchParameters.Linear(PositionEmbedding, 1, (Patches + 1) * h, source, "positional_embedding", new[] { Patches + 1, h });
+        Norm(PreNorm, "ln_pre");
+        for (int i = 0; i < Layers.Count; i++)
+        {
+            var layer = Layers[i];
+            string n = $"transformer.resblocks.{i}";
+            Norm(layer.Norm1, $"{n}.ln_1");
+            var weight = source.Read($"{n}.attn.in_proj_weight", new[] { 3 * h, h });
+            var bias = source.Read($"{n}.attn.in_proj_bias", new[] { 3 * h });
+            var projections = new[] { layer.Query, layer.Key, layer.Value };
+            for (int k = 0; k < projections.Length; k++)
+            {
+                var rows = new double[h * h];
+                var shift = new double[h];
+                Array.Copy(weight, k * h * h, rows, 0, rows.Length);
+                Array.Copy(bias, k * h, shift, 0, h);
+                TorchParameters.Linear(_engine, projections[k], h, h, rows, shift);
+            }
+            Linear(layer.Output, $"{n}.attn.out_proj", h, h);
+            Norm(layer.Norm2, $"{n}.ln_2");
+            Linear(layer.Fc1, $"{n}.mlp.c_fc", h, c.Intermediate);
+            Linear(layer.Fc2, $"{n}.mlp.c_proj", c.Intermediate, h);
+        }
+        Norm(PostNorm, "ln_post");
     }
 
     /// <summary>

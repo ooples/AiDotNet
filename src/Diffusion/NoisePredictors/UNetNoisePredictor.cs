@@ -99,6 +99,11 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
     private ConvolutionalLayer<T>? _outputConv;
 
     /// <summary>
+    /// GroupNorm before the output convolution (LDM <c>out.0</c>; SiLU is <c>out.1</c>).
+    /// </summary>
+    private GroupNormalizationLayer<T>? _outputNorm;
+
+    /// <summary>
     /// Time embedding MLP.
     /// </summary>
     private DenseLayer<T>? _timeEmbedMlp1;
@@ -238,6 +243,11 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
     /// </param>
     /// <param name="lossFunction">Optional loss function (default: MSE).</param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
+    /// <param name="multiView">
+    /// Optional MVDream / ImageDream multi-view configuration (<see cref="MultiViewUNetOptions"/>). Null (the default)
+    /// builds the standard U-Net unchanged; set, every attention position holds a <c>SpatialTransformer3D</c> with 3D
+    /// self-attention across the views of one object.
+    /// </param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> All parameters are optional with industry-standard defaults
@@ -275,9 +285,12 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
         List<UNetBlock>? middleBlocks = null,
         List<UNetBlock>? decoderBlocks = null,
         ILossFunction<T>? lossFunction = null,
-        int? seed = null)
+        int? seed = null,
+        MultiViewUNetOptions? multiView = null)
         : base(lossFunction, seed)
     {
+        multiView?.Validate();
+        _multiView = multiView;
         _architecture = architecture;
         _inputChannels = inputChannels;
         _outputChannels = outputChannels ?? inputChannels;
@@ -308,7 +321,7 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
             hasCustomBlocks ? decoderBlocks : null);
     }
 
-    [MemberNotNull(nameof(_inputConv), nameof(_outputConv), nameof(_timeEmbedMlp1), nameof(_timeEmbedMlp2))]
+    [MemberNotNull(nameof(_inputConv), nameof(_outputConv), nameof(_outputNorm), nameof(_timeEmbedMlp1), nameof(_timeEmbedMlp2))]
     private void EnsureLayersInitialized()
     {
         if (!_layersInitialized)
@@ -316,7 +329,7 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
             InitializeLayers(_architecture, null, null, null);
         }
 
-        if (_inputConv is null || _outputConv is null || _timeEmbedMlp1 is null || _timeEmbedMlp2 is null)
+        if (_inputConv is null || _outputConv is null || _outputNorm is null || _timeEmbedMlp1 is null || _timeEmbedMlp2 is null)
         {
             throw new InvalidOperationException("U-Net layer initialization completed without required projection layers.");
         }
@@ -363,6 +376,10 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
             _baseChannels, _timeEmbeddingDim, new SiLUActivation<T>());
         _timeEmbedMlp2 = LazyDense(
             _timeEmbeddingDim, _timeEmbeddingDim, new IdentityActivation<T>());
+        // LDM's out head (openaimodel.py): GroupNorm(32) -> SiLU -> zero-initialised conv3x3.
+        int outputNormChannels = _baseChannels * _channelMultipliers[0];
+        _outputNorm = new GroupNormalizationLayer<T>(
+            DiffusionResBlock<T>.ComputeNumGroups(outputNormChannels, 32), outputNormChannels, 1e-5);
         // The output conv starts at zero, as in Ho et al. (init_scale=0.) and LDM (zero_module): an untrained
         // predictor predicts zero noise instead of a random field, which is the MSE-optimal start.
         _outputConv = ConvolutionalLayer<T>.WithInputDepth(
@@ -890,8 +907,8 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
             {
                 x = ApplyResBlock(block.ResBlock, x, timeEmbed);
                 if (block.AttentionBlock != null) x = block.AttentionBlock.Forward(x);
-                if (block.CrossAttentionBlock != null && conditioning != null)
-                    x = ApplyCrossAttention(block.CrossAttentionBlock, x, conditioning);
+                if (block.CrossAttentionBlock != null && (conditioning != null || _multiView is not null))
+                    x = ApplyCrossAttentionSlot(block.CrossAttentionBlock, x, conditioning);
                 skips.Add(x);
             }
         }
@@ -901,8 +918,8 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
             var block = _middleBlocks[i];
             x = ApplyResBlock(block.ResBlock, x, timeEmbed);
             if (block.AttentionBlock != null) x = block.AttentionBlock.Forward(x);
-            if (block.CrossAttentionBlock != null && conditioning != null)
-                x = ApplyCrossAttention(block.CrossAttentionBlock, x, conditioning);
+            if (block.CrossAttentionBlock != null && (conditioning != null || _multiView is not null))
+                x = ApplyCrossAttentionSlot(block.CrossAttentionBlock, x, conditioning);
         }
 
         var skipIdx = skips.Count - 1;
@@ -922,12 +939,12 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
                 }
                 x = ApplyResBlock(block.ResBlock, x, timeEmbed);
                 if (block.AttentionBlock != null) x = block.AttentionBlock.Forward(x);
-                if (block.CrossAttentionBlock != null && conditioning != null)
-                    x = ApplyCrossAttention(block.CrossAttentionBlock, x, conditioning);
+                if (block.CrossAttentionBlock != null && (conditioning != null || _multiView is not null))
+                    x = ApplyCrossAttentionSlot(block.CrossAttentionBlock, x, conditioning);
             }
         }
 
-        x = _outputConv.Forward(x);
+        x = _outputConv.Forward(ApplyOutputNorm(x));
         return (x, skips);
     }
 
@@ -999,9 +1016,9 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
                     x = block.AttentionBlock.Forward(x);
                     Tick($"enc[{i}].attn");
                 }
-                if (block.CrossAttentionBlock != null && conditioning != null)
+                if (block.CrossAttentionBlock != null && (conditioning != null || _multiView is not null))
                 {
-                    x = ApplyCrossAttention(block.CrossAttentionBlock, x, conditioning);
+                    x = ApplyCrossAttentionSlot(block.CrossAttentionBlock, x, conditioning);
                     Tick($"enc[{i}].xattn");
                 }
                 skips.Add(x);
@@ -1019,9 +1036,9 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
                 x = block.AttentionBlock.Forward(x);
                 Tick($"mid[{i}].attn");
             }
-            if (block.CrossAttentionBlock != null && conditioning != null)
+            if (block.CrossAttentionBlock != null && (conditioning != null || _multiView is not null))
             {
-                x = ApplyCrossAttention(block.CrossAttentionBlock, x, conditioning);
+                x = ApplyCrossAttentionSlot(block.CrossAttentionBlock, x, conditioning);
                 Tick($"mid[{i}].xattn");
             }
         }
@@ -1053,16 +1070,16 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
                     x = block.AttentionBlock.Forward(x);
                     Tick($"dec[{i}].attn");
                 }
-                if (block.CrossAttentionBlock != null && conditioning != null)
+                if (block.CrossAttentionBlock != null && (conditioning != null || _multiView is not null))
                 {
-                    x = ApplyCrossAttention(block.CrossAttentionBlock, x, conditioning);
+                    x = ApplyCrossAttentionSlot(block.CrossAttentionBlock, x, conditioning);
                     Tick($"dec[{i}].xattn");
                 }
             }
         }
 
-        // Output convolution
-        x = _outputConv.Forward(x);
+        // Output head: GroupNorm -> SiLU -> convolution (LDM out.0 / out.1 / out.2)
+        x = _outputConv.Forward(ApplyOutputNorm(x));
         Tick("output_conv");
 
         return x;
@@ -1108,6 +1125,12 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
         if (crossAttn is IAttentionBlockDecorator<T> decorator)
         {
             return decorator.PostProcess(ApplyCrossAttention(decorator.Inner, x, conditioning));
+        }
+
+        // MVDream's SpatialTransformer3D (multi-view option only).
+        if (crossAttn is MultiViewTransformerLayer<T> multiViewTransformer)
+        {
+            return multiViewTransformer.Forward(x, conditioning);
         }
 
         // DiffusionCrossAttention uses ForwardWithContext for conditioning
@@ -1302,8 +1325,10 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
             timeEmbedDim: _timeEmbeddingDim);
     }
 
-    private ILayer<T> CreateAttentionBlock(int channels, int spatialSize)
+    private ILayer<T>? CreateAttentionBlock(int channels, int spatialSize)
     {
+        if (_multiView is not null)
+            return CreateMultiViewAttentionBlock(channels);
         return new DiffusionAttention<T>(
             channels: channels,
             numHeads: _numHeads,
@@ -1311,8 +1336,10 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
             residualGroupNorm: true);
     }
 
-    private ILayer<T> CreateCrossAttentionBlock(int channels, int spatialSize)
+    private ILayer<T>? CreateCrossAttentionBlock(int channels, int spatialSize)
     {
+        if (_multiView is not null)
+            return CreateMultiViewCrossAttentionBlock(channels);
         return new DiffusionCrossAttention<T>(
             queryDim: channels,
             contextDim: _contextDim,
@@ -1338,15 +1365,16 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
 
     private ILayer<T> CreateUpsample(int channels, int spatialSize)
     {
-        // spatialSize here is the current (smaller) spatial size before upsampling.
-        // Fully lazy: shape resolved by the predictor's shape-only forward.
-        return DeconvolutionalLayer<T>.WithInputDepth(
-            inputDepth: channels,
-            outputDepth: channels,
-            kernelSize: 4,
-            stride: 2,
-            padding: 1,
-            activationFunction: new IdentityActivation<T>());
+        // LDM's Upsample (openaimodel.py, use_conv=True): nearest x2 then a 3x3 convolution with padding 1.
+        // The convolution stays lazy until its first forward.
+        return new LdmUpsampleLayer<T>(channels);
+    }
+
+    /// <summary>The output head's GroupNorm and SiLU (LDM <c>out.0</c>, <c>out.1</c>).</summary>
+    private Tensor<T> ApplyOutputNorm(Tensor<T> x)
+    {
+        var norm = _outputNorm ?? throw new InvalidOperationException("The U-Net output norm is not initialized.");
+        return Engine.TensorSiLU(norm.Forward(x));
     }
 
     #endregion
@@ -1428,6 +1456,7 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
                 yield return layer;
         }
 
+        yield return _outputNorm;
         yield return _outputConv;
     }
 
@@ -1728,6 +1757,7 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
         for (int i = 0; i < _decoderBlocks.Count; i++)
             CollectBlockGradients(layerGrads, ref totalCount, _decoderBlocks[i]);
 
+        CollectLayerGradients(layerGrads, ref totalCount, _outputNorm);
         CollectLayerGradients(layerGrads, ref totalCount, _outputConv);
 
         var gradients = new Vector<T>(totalCount);

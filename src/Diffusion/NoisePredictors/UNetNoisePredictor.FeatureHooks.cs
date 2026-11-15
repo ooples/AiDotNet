@@ -222,8 +222,8 @@ public partial class UNetNoisePredictor<T>
 
             x = ApplyResBlock(block.ResBlock, x, timeEmbed);
             if (block.AttentionBlock is not null) x = block.AttentionBlock.Forward(x);
-            if (block.CrossAttentionBlock is not null && conditioning is not null)
-                x = ApplyCrossAttention(block.CrossAttentionBlock, x, conditioning);
+            if (block.CrossAttentionBlock is not null && (conditioning is not null || _multiView is not null))
+                x = ApplyCrossAttentionSlot(block.CrossAttentionBlock, x, conditioning);
             skips.Add(x);
         }
 
@@ -231,8 +231,8 @@ public partial class UNetNoisePredictor<T>
         {
             x = ApplyResBlock(block.ResBlock, x, timeEmbed);
             if (block.AttentionBlock is not null) x = block.AttentionBlock.Forward(x);
-            if (block.CrossAttentionBlock is not null && conditioning is not null)
-                x = ApplyCrossAttention(block.CrossAttentionBlock, x, conditioning);
+            if (block.CrossAttentionBlock is not null && (conditioning is not null || _multiView is not null))
+                x = ApplyCrossAttentionSlot(block.CrossAttentionBlock, x, conditioning);
         }
 
         x = hook(sites[0], x);
@@ -256,8 +256,8 @@ public partial class UNetNoisePredictor<T>
 
                 x = ApplyResBlock(block.ResBlock, x, timeEmbed);
                 if (block.AttentionBlock is not null) x = block.AttentionBlock.Forward(x);
-                if (block.CrossAttentionBlock is not null && conditioning is not null)
-                    x = ApplyCrossAttention(block.CrossAttentionBlock, x, conditioning);
+                if (block.CrossAttentionBlock is not null && (conditioning is not null || _multiView is not null))
+                    x = ApplyCrossAttentionSlot(block.CrossAttentionBlock, x, conditioning);
             }
 
             // An output block ends after its residual block unless the level's upsampling follows it.
@@ -266,6 +266,6 @@ public partial class UNetNoisePredictor<T>
                 x = hook(sites[site++], x);
         }
 
-        return _outputConv.Forward(x);
+        return _outputConv.Forward(ApplyOutputNorm(x));
     }
 }

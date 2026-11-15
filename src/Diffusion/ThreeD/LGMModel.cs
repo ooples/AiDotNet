@@ -88,6 +88,10 @@ public partial class LGMModel<T> : ThreeDDiffusionModelBase<T>
     // them twice.
     [ExternalState]
     private readonly MVDreamModel<T> _multiViewModel;
+    // The image path's multi-view model (ImageDream), a collaborator like the text one; the same instance when one
+    // model serves both.
+    [ExternalState]
+    private readonly MVDreamModel<T> _imageMultiViewModel;
     private readonly LGMAsymmetricUNet<T> _unet;
     private readonly ConvolutionalLayer<T> _gaussianProjection;
 
@@ -110,13 +114,19 @@ public partial class LGMModel<T> : ThreeDDiffusionModelBase<T>
     /// <param name="options">Diffusion options for the base model.</param>
     /// <param name="scheduler">Scheduler for the base model.</param>
     /// <param name="seed">Seed for the initial weights; null for a non-reproducible draw.</param>
+    /// <param name="imageMultiViewModel">The multi-view model of the image path. The official pipeline generates the
+    /// text views with MVDream and the image views with ImageDream (a U-Net built with
+    /// <see cref="AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions.ImageDream"/>, whose resampler and decoupled image
+    /// cross-attention read the CLIP image features). Null for <paramref name="multiViewModel"/> when that is given,
+    /// otherwise for a default ImageDream model.</param>
     public LGMModel(
         LGMConfig? config = null,
         MVDreamModel<T>? multiViewModel = null,
         NeuralNetworkArchitecture<T>? architecture = null,
         DiffusionModelOptions<T>? options = null,
         INoiseScheduler<T>? scheduler = null,
-        int? seed = null)
+        int? seed = null,
+        MVDreamModel<T>? imageMultiViewModel = null)
         : base(
             options ?? new DiffusionModelOptions<T>
             {
@@ -131,6 +141,24 @@ public partial class LGMModel<T> : ThreeDDiffusionModelBase<T>
     {
         _config = config ?? LGMConfig.Default;
         _multiViewModel = multiViewModel ?? new MVDreamModel<T>(seed: seed);
+        _imageMultiViewModel = imageMultiViewModel ?? (multiViewModel is not null
+            ? multiViewModel
+            : new MVDreamModel<T>(
+                multiViewUNet: new MultiViewUNet<T>(
+                    inputChannels: MVDreamModel<T>.MVDREAM_LATENT_CHANNELS,
+                    outputChannels: MVDreamModel<T>.MVDREAM_LATENT_CHANNELS,
+                    baseChannels: MVDreamModel<T>.MVDREAM_BASE_CHANNELS,
+                    numViews: _config.NumInputViews,
+                    contextDim: MVDreamModel<T>.MVDREAM_CONTEXT_DIM,
+                    seed: seed,
+                    options: AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions.ImageDream()),
+                // Both official models decode with the same Stable Diffusion 2.1 VAE.
+                imageVAE: _multiViewModel.VAE as AiDotNet.Diffusion.VAE.StandardVAE<T>,
+                // ImageDream's paper conditioners, lazy until first used: the OpenCLIP ViT-H/14 text encoder and
+                // the OpenCLIP ViT-H/14 image encoder whose penultimate tokens feed the resampler.
+                textConditioner: new AiDotNet.Diffusion.Conditioning.OpenClipTextConditioner<T>(),
+                seed: seed,
+                imageEncoder: new ClipVisionEncoder<T>(seed: seed)));
         _unet = new LGMAsymmetricUNet<T>(_config, InputChannelsPerView, GaussianChannels, seed);
         // The U-Net reset the layer seed scope; the projection continues the same sequence.
         _gaussianProjection = ConvolutionalLayer<T>.WithInputDepth(
@@ -154,6 +182,11 @@ public partial class LGMModel<T> : ThreeDDiffusionModelBase<T>
     /// (its GetParameters) also holds its multi-view attention and camera embedding.</summary>
     [ExternalState]
     public MVDreamModel<T> MultiViewModel => _multiViewModel;
+
+    /// <summary>The multi-view diffusion model of the image path (ImageDream by default); the text model when one
+    /// model serves both.</summary>
+    [ExternalState]
+    public MVDreamModel<T> ImageMultiViewModel => _imageMultiViewModel;
 
     /// <summary>The asymmetric U-Net that predicts the splatter maps.</summary>
     public LGMAsymmetricUNet<T> GaussianUNet => _unet;
@@ -372,7 +405,7 @@ public partial class LGMModel<T> : ThreeDDiffusionModelBase<T>
         // multi-view model's elevation is positive looking down; LGM's (kiui) is negative looking down. Its view v is at
         // azimuth 360 v / views measured from the input's viewpoint, which is LGM's camera order, so no reordering is
         // needed (the official code reorders ImageDream's output, whose azimuth origin differs from kiui's).
-        var views = _multiViewModel.GenerateNovelViewsFromImage(
+        var views = _imageMultiViewModel.GenerateNovelViewsFromImage(
             inputImage, _config.NumInputViews, numInferenceSteps, guidanceScale, seed, -_config.InputElevation);
         return ReconstructGaussians(StackViews(views), _config.InputElevation);
     }
@@ -391,7 +424,7 @@ public partial class LGMModel<T> : ThreeDDiffusionModelBase<T>
         if (prompt is null) throw new ArgumentNullException(nameof(prompt));
         // MVDream's elevation is positive looking down; LGM's (kiui) is negative looking down.
         var views = _multiViewModel.GenerateMultiView(prompt, negativePrompt, _config.NumInputViews,
-            numInferenceSteps, guidanceScale, -_config.InputElevation, seed);
+            numInferenceSteps, guidanceScale, -_config.InputElevation, seed, azimuthStart: 0.0);
         return ReconstructGaussians(StackViews(views), _config.InputElevation);
     }
 

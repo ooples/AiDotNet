@@ -42,14 +42,15 @@ public class MVDreamImageConditioningTests
     {
         var model = TinyModel(out var multiViewUNet, out var vae);
 
-        // Base U-Net (the NoisePredictor slot), VAE, multi-view attention (query, key, value and output C x C
-        // matrices over the C = 4 predicted channels) and the camera MLP (16 -> E -> E, both with bias), each once.
+        // Base U-Net (the NoisePredictor slot, which holds the 3D self-attention transformers), VAE and the camera MLP
+        // (16 -> E -> E, both with bias), each once. The official MultiViewUNetModel (bytedance/MVDream,
+        // openaimodel.py) has camera_embed and no separate attention over the final noise predictions, so the
+        // post-hoc MultiViewAttention this test used to count no longer exists.
         int embedding = multiViewUNet.BaseUNet.TimeEmbeddingDim;
-        long attention = 4L * 4 * 4;
         long camera = (16L * embedding) + embedding + ((long)embedding * embedding) + embedding;
-        long expected = multiViewUNet.BaseUNet.ParameterCount + vae.ParameterCount + attention + camera;
+        long expected = multiViewUNet.BaseUNet.ParameterCount + vae.ParameterCount + camera;
 
-        Assert.Equal(attention, multiViewUNet.MultiViewAttention.ParameterCount);
+        Assert.Same(multiViewUNet.CameraEmbedding, model.CameraEmbedding);
         Assert.Equal(camera, model.CameraEmbedding.ParameterCount);
         Assert.Equal(expected, model.ParameterCount);
         Assert.Equal(expected, model.GetParameters().Length);
@@ -88,10 +89,12 @@ public class MVDreamImageConditioningTests
     {
         var model = TinyModel(out _, out _);
         var image = RandomImage(4);
-        Assert.Equal(30.0, model.Config.DefaultElevation);
+        // ImageDream's demo samples the image path at elevation 5 (bytedance/ImageDream scripts/demo.py:
+        // get_camera(4, elevation=5, azimuth_start=0, extra_view=True)); the text path's 15 is MVDream's t2i.py.
+        Assert.Equal(5.0, model.Config.ImageElevation);
 
         var byDefault = Flatten(model.GenerateNovelViewsFromImage(image, 4, 2, 1.0, seed: 11));
-        var explicitDefault = Flatten(model.GenerateNovelViewsFromImage(image, 4, 2, 1.0, seed: 11, elevation: 30.0));
+        var explicitDefault = Flatten(model.GenerateNovelViewsFromImage(image, 4, 2, 1.0, seed: 11, elevation: 5.0));
         var level = Flatten(model.GenerateNovelViewsFromImage(image, 4, 2, 1.0, seed: 11, elevation: 0.0));
 
         Assert.Equal(byDefault, explicitDefault);
