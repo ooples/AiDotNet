@@ -1,5 +1,6 @@
 ﻿using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -145,8 +146,9 @@ public partial class LambdaLayer<T> : LayerBase<T>, IShapeContract
     /// - Calculates how to adjust the input to reduce these errors
     /// - Is necessary if you want your network to learn through this custom layer
     ///
-    /// If you don't provide this function, the layer cannot participate in training,
-    /// meaning that while it will transform data, the network cannot learn to optimize this transformation.
+    /// If you provide it, a recording gradient tape uses its result as the gradient of the layer input,
+    /// in place of differentiating the forward function. If you don't, the tape differentiates the
+    /// forward function's own engine ops.
     ///
     /// Writing this function correctly requires understanding of calculus and backpropagation.
     /// </para>
@@ -319,7 +321,13 @@ public partial class LambdaLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        var output = _forwardFunction(input);
+        // With a backward function, a recording tape gets the transformation as a single step whose
+        // gradient is that function's result, the way torch.autograd.Function works. Without a tape
+        // there is no backward to serve, so the forward function runs directly. That keeps eager
+        // inference and compiled traces on the engine ops the function itself issues.
+        var output = _backwardFunction is { } backward && IsTapeRecording()
+            ? new LambdaLayerCustomGradient<T>(_forwardFunction, backward).Apply(input)
+            : _forwardFunction(input);
 
         output = ApplyActivation(output);
 
@@ -352,4 +360,57 @@ public partial class LambdaLayer<T> : LayerBase<T>, IShapeContract
         // Clear cached values from forward pass
     }
 
+    /// <summary>
+    /// Whether an eager gradient tape is recording on this thread. When it is, a custom backward
+    /// registered through <see cref="AutogradFunction{T}.Apply"/> is the step the tape differentiates.
+    /// </summary>
+    private static bool IsTapeRecording()
+        => GradientTape<T>.Current is not null && !NoGradScope<T>.IsSuppressed;
+
+}
+
+/// <summary>
+/// Records a <see cref="LambdaLayer{T}"/> transformation as one tape step whose input gradient comes
+/// from the caller's backward function, <c>backward(input, outputGradient)</c>.
+/// </summary>
+/// <remarks>
+/// <see cref="AutogradFunction{T}.Apply"/> runs the forward with recording suppressed, so the tape
+/// does not also differentiate the forward function's own ops and add a second gradient on top.
+/// Only the layer input gets a gradient. Tensors the forward function captures (closures) get no
+/// gradient from this step, because the backward function returns only the input gradient.
+/// </remarks>
+internal sealed class LambdaLayerCustomGradient<T> : AutogradFunction<T>
+{
+    private readonly Func<Tensor<T>, Tensor<T>> _forward;
+    private readonly Func<Tensor<T>, Tensor<T>, Tensor<T>> _backward;
+
+    public LambdaLayerCustomGradient(Func<Tensor<T>, Tensor<T>> forward, Func<Tensor<T>, Tensor<T>, Tensor<T>> backward)
+    {
+        _forward = forward ?? throw new ArgumentNullException(nameof(forward));
+        _backward = backward ?? throw new ArgumentNullException(nameof(backward));
+    }
+
+    public override Tensor<T> Forward(AutogradContext ctx, params Tensor<T>[] inputs)
+    {
+        var input = inputs[0];
+        ctx.SaveForBackward(input);
+        var output = _forward(input);
+        // The tape keys a step by its output tensor. If the forward returned its input unchanged, the
+        // step's output and input would be one key: the input would get its own gradient added to it,
+        // and the step would replace the input's producer. A view gives the step its own output and
+        // shares the input's storage.
+        return ReferenceEquals(output, input) ? output.Reshape(output._shape) : output;
+    }
+
+    public override Tensor<T>?[] Backward(AutogradContext ctx, Tensor<T> gradOutput)
+    {
+        var input = ctx.GetSaved<T>(0);
+        var inputGradient = _backward(input, gradOutput)
+            ?? throw new InvalidOperationException("The LambdaLayer backward function returned null.");
+        if (!inputGradient._shape.SequenceEqual(input._shape))
+            throw new InvalidOperationException(
+                $"The LambdaLayer backward function returned a gradient of shape [{string.Join(", ", inputGradient._shape)}] "
+                + $"for an input of shape [{string.Join(", ", input._shape)}].");
+        return [inputGradient];
+    }
 }
