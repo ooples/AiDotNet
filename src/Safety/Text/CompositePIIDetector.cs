@@ -60,10 +60,6 @@ public class CompositePIIDetector<T> : TextSafetyModuleBase<T>
     }
 
     /// <summary>
-    /// Initializes a new composite PII detector with custom sub-detectors.
-    /// </summary>
-    /// <param name="detectors">The PII detectors to combine.</param>
-    /// <summary>
     /// Initializes the default regex + NER composite restricted to the given kinds of PII.
     /// </summary>
     /// <param name="types">The kinds of PII to detect.</param>
