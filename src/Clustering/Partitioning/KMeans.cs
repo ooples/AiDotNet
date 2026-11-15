@@ -199,17 +199,46 @@ public partial class KMeans<T> : ClusteringBase<T>
                 // origin (in single precision, unit-spread clusters around 1e4 are otherwise unresolvable).
                 var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
                 Origin = ClusteringTensorOps.ColumnMeans(x);
-                Values = ClusteringTensorOps.SubtractRow(x, Origin);
+                var centered = ClusteringTensorOps.SubtractRow(x, Origin);
+                Scale = OverflowSafeScale(engine.TensorMaxValue(engine.TensorAbs(centered)), x.Columns);
+                Values = engine.TensorDivideScalar(centered, Scale);
                 RowNorms = engine.ReduceSum(engine.TensorSquare(Values), new[] { 1 }, true);
             }
+        }
+
+        /// <summary>
+        /// One when every squared norm of the centered data fits in <typeparamref name="T"/>; otherwise the power of
+        /// two at or above the largest centered magnitude. In half precision a centered coordinate above ~256
+        /// already squares past 65504, which would make the norm expansion inf or NaN. Dividing by a power of two is
+        /// exact, and the nearest center and the k-means++ sampling weights are unchanged by a positive scale.
+        /// </summary>
+        private static T OverflowSafeScale(T largestMagnitude, int columns)
+        {
+            var numOps = MathHelper.GetNumericOperations<T>();
+            double magnitude = numOps.ToDouble(largestMagnitude);
+            double bound = 4.0 * magnitude * magnitude * Math.Max(1, columns);
+            double roundTrip = numOps.ToDouble(numOps.FromDouble(bound));
+            if (magnitude <= 0 || double.IsNaN(magnitude) || double.IsInfinity(magnitude)
+                || (!double.IsInfinity(roundTrip) && !double.IsNaN(roundTrip)))
+            {
+                return numOps.One;
+            }
+
+            return numOps.FromDouble(Math.Pow(2.0, Math.Ceiling(Math.Log(magnitude, 2.0))));
         }
 
         /// <summary>The column means subtracted from <see cref="Values"/>; null unless Euclidean.</summary>
         public Vector<T>? Origin { get; }
 
+        /// <summary>The power of two the centered data is divided by (one unless its squares would overflow T).</summary>
+        public T Scale { get; } = MathHelper.GetNumericOperations<T>().One;
+
         public Matrix<T> X { get; }
 
-        /// <summary>The data as a [rows, columns] tensor, shifted to its column means when Euclidean.</summary>
+        /// <summary>
+        /// The data as a [rows, columns] tensor, shifted to its column means (and divided by <see cref="Scale"/>)
+        /// when Euclidean.
+        /// </summary>
         public Tensor<T> Values { get; }
 
         public bool Euclidean { get; }
@@ -425,7 +454,8 @@ public partial class KMeans<T> : ClusteringBase<T>
 
         int rows = x.Rows;
         int clusters = centers.Rows;
-        var centersT = Engine.TensorTranspose(ClusteringTensorOps.SubtractRow(centers, data.Origin));
+        var centersT = Engine.TensorTranspose(
+            Engine.TensorDivideScalar(ClusteringTensorOps.SubtractRow(centers, data.Origin), data.Scale));
         // ||x||^2 is the same for every center of a row, so the nearest center minimizes ||c||^2 / 2 - x.c.
         var halfCenterNorms = Engine.TensorMultiplyScalar(
             Engine.Reshape(Engine.ReduceSum(Engine.TensorSquare(centersT), new[] { 0 }, false), new[] { 1, clusters }),

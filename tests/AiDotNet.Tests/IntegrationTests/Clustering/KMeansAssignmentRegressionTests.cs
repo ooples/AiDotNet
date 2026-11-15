@@ -19,7 +19,7 @@ public class KMeansAssignmentRegressionTests
         const int n = 300;
         const int d = 4;
         const int k = 3;
-        var rng = new Random(17);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(17);
         var x = new Matrix<float>(n, d);
         for (int i = 0; i < n; i++)
         {
@@ -53,7 +53,7 @@ public class KMeansAssignmentRegressionTests
         const int n = 70_000;
         const int d = 2;
         const int k = 64;
-        var rng = new Random(23);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(23);
         var x = new Matrix<double>(n, d);
         for (int i = 0; i < n; i++)
         {

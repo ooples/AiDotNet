@@ -95,7 +95,7 @@ internal static class GaussianProcessEvidence
         T averageVariance = numOps.Divide(
             engine.TensorSumOfSquares(deviations), numOps.FromDouble(Math.Max(n - 1, 1) * (double)count));
 
-        T floor = numOps.FromDouble(1e-8);
+        T floor = NumericTolerance.Of<T>(1e-8);
         T logSignal = numOps.Log(MathHelper.Max(averageVariance, floor));
         bool learnNoise = !fixedNoise.HasValue;
         T fixedNoiseValue = numOps.FromDouble(fixedNoise ?? 0.0);
@@ -135,7 +135,7 @@ internal static class GaussianProcessEvidence
             T firstHat = numOps.Divide(first, numOps.FromDouble(1 - Math.Pow(Beta1, step + 1)));
             T secondHat = numOps.Divide(second, numOps.FromDouble(1 - Math.Pow(Beta2, step + 1)));
             return numOps.Add(log, numOps.Divide(numOps.Multiply(numOps.FromDouble(LearningRate), firstHat),
-                numOps.Add(numOps.Sqrt(secondHat), numOps.FromDouble(Epsilon))));
+                numOps.Add(numOps.Sqrt(secondHat), NumericTolerance.Of<T>(Epsilon))));
         }
 
         T SignalOf(T log) => numOps.Exp(log);

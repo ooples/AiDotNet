@@ -345,7 +345,9 @@ public class BetaLikelihood<T>
     private (Tensor<T> LogY, Tensor<T> LogOneMinusY) ClampedLogs(Vector<T> y)
     {
         var engine = AiDotNetEngine.Current;
-        T low = _numOps.FromDouble(Epsilon);
+
+        // Epsilon is 0 in half precision; the type-aware floor keeps log away from log(0) there too.
+        T low = NumericTolerance.Of<T>(Epsilon);
         T high = _numOps.FromDouble(1 - Epsilon);
         var values = Tensor<T>.FromVector(y);
         var clamped = engine.TensorClamp(values, low, high);
@@ -367,7 +369,7 @@ public class BetaLikelihood<T>
         var latent = Tensor<T>.FromVector(f);
         var mu = engine.TensorSigmoid(latent);
         var oneMinusMu = engine.TensorSigmoid(engine.TensorNegate(latent));
-        T low = _numOps.FromDouble(Epsilon);
+        T low = NumericTolerance.Of<T>(Epsilon);
         T high = _numOps.FromDouble(1 - Epsilon);
         T precision = _numOps.FromDouble(_precision);
         var alpha = engine.TensorMultiplyScalar(engine.TensorClamp(mu, low, high), precision);

@@ -269,7 +269,7 @@ public partial class BayesianGPLVM<T>
         var workMatrix = cov.ToMatrix();
 
         var rand = RandomHelper.CreateSeededRandom(42);
-        T tinyNorm = _numOps.FromDouble(1e-10);
+        T tinyNorm = NumericTolerance.Of<T>(1e-10);
 
         for (int k = 0; k < effectiveLatentDims; k++)
         {
@@ -541,7 +541,7 @@ public partial class BayesianGPLVM<T>
         var weights = Tensor<T>.FromMatrix(ComputeKernelMatrix(points.ToMatrix(), _latentMean));
         var weighted = engine.TensorMatMul(weights, Tensor<T>.FromMatrix(_observedData));
         var totalWeight = engine.ReduceSum(weights, new[] { 1 }, keepDims: true);
-        var normalize = engine.TensorGreaterThan(totalWeight, _numOps.FromDouble(1e-10));
+        var normalize = engine.TensorGreaterThan(totalWeight, NumericTolerance.Of<T>(1e-10));
         var divisor = engine.TensorWhere(normalize, totalWeight, engine.TensorOnesLike(totalWeight));
 
         return engine.TensorDivide(weighted, engine.TensorBroadcastTo(divisor, new[] { k, d })).ToMatrix();
@@ -638,16 +638,14 @@ public partial class BayesianGPLVM<T>
         // Find nearest training point (first one on ties) and use its latent representation.
         // Optimize latent position (simplified: just use nearest)
         // A full implementation would do gradient descent on reconstruction error
-        var engine = AiDotNetEngine.Current;
-        int k = newData.Rows;
-        int n = _observedData.Rows;
-        int d = _observedData.Columns;
-        var shape = new[] { k, n, d };
-        var diff = engine.TensorSubtract(
-            engine.TensorBroadcastTo(Tensor<T>.FromMatrix(newData).Reshape(new[] { k, 1, d }), shape),
-            engine.TensorBroadcastTo(Tensor<T>.FromMatrix(_observedData).Reshape(new[] { 1, n, d }), shape));
-        var distances = engine.ReduceSum(engine.TensorSquare(diff), new[] { 2 }, keepDims: false);
-        var nearest = engine.TensorArgMin(distances, 1).AsSpan().ToArray();
+        // The squared distances are evaluated in bounded row blocks: a dense [k, n, d] difference tensor is
+        // k * n * d elements (1e9 for 10 000 queries against 10 000 observations in 10 dimensions).
+        if (newData.Columns != _observedData.Columns)
+            throw new ArgumentException(
+                $"New data has {newData.Columns} columns but the model was fitted on {_observedData.Columns}.", nameof(newData));
+
+        var nearest = AiDotNet.Clustering.Base.ClusteringTensorOps.ArgMinRows(
+            AiDotNet.Clustering.Base.ClusteringTensorOps.SquaredDistances(newData, _observedData));
 
         return GaussianProcessEngineOps.SelectRows(_latentMean, nearest);
     }
@@ -713,7 +711,7 @@ public partial class BayesianGPLVM<T>
         // KL divergence term (pushes q(X) towards N(0,I)):
         // KL = 0.5 * Σ (mu^2 + sigma^2 - log(sigma^2) - 1), with log(sigma^2) floored at log(1e-10)
         var sigma2 = Tensor<T>.FromMatrix(latentVariance);
-        var logVar = engine.TensorLog(engine.TensorMax(sigma2, _numOps.FromDouble(1e-10)));
+        var logVar = engine.TensorLog(engine.TensorMax(sigma2, NumericTolerance.Of<T>(1e-10)));
         var perEntry = engine.TensorSubtract(engine.TensorAdd(engine.TensorSquare(latent), sigma2), logVar);
         T klTerm = _numOps.Multiply(_numOps.FromDouble(0.5),
             _numOps.Subtract(engine.TensorSum(perEntry), _numOps.FromDouble(latentVariance.Rows * latentVariance.Columns)));

@@ -33,8 +33,34 @@ internal static class ClusteringTensorOps
     }
 
     /// <summary>Euclidean distance between the paired rows of two [p, d] tensors, returned as [p].</summary>
+    /// <remarks>
+    /// A distance can be representable while its square is not (in half precision anything above ~256 squares past
+    /// 65504). Rows whose direct sqrt(sum diff^2) overflows are recomputed as s * ||diff / s|| with s the row's largest
+    /// |difference|, so every square stays at most one; all other rows keep the direct value.
+    /// </remarks>
     internal static Tensor<T> RowEuclidean<T>(Tensor<T> a, Tensor<T> b)
-        => Engine.TensorSqrt(RowSquaredEuclidean(a, b));
+    {
+        var engine = Engine;
+        var direct = engine.TensorSqrt(RowSquaredEuclidean(a, b));
+        if (direct.Length == 0 || !HasNonFinite(direct))
+        {
+            return direct;
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var diff = engine.TensorSubtract(a, b);
+        int rows = diff.Shape[0];
+        var scale = engine.ReduceMax(engine.TensorAbs(diff), new[] { 1 }, true);
+        var safe = engine.TensorWhere(engine.TensorGreaterThan(scale, numOps.Zero), scale, engine.TensorOnesLike(scale));
+        var scaled = engine.TensorDivide(diff, engine.TensorBroadcastTo(safe, new[] { rows, diff.Shape[1] }));
+        var norms = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(scaled), new[] { 1 }, false));
+        var rescaled = engine.TensorMultiply(norms, engine.Reshape(safe, new[] { rows }));
+        return engine.TensorWhere(engine.TensorIsFinite(direct), direct, rescaled);
+    }
+
+    /// <summary>True when any entry of the tensor is NaN or infinite.</summary>
+    private static bool HasNonFinite<T>(Tensor<T> t)
+        => Engine.TensorMaskedSelect(t, Engine.TensorLogicalNot(Engine.TensorIsFinite(t))).Length > 0;
 
     /// <summary>Manhattan (L1) distance between the paired rows of two [p, d] tensors, returned as [p].</summary>
     internal static Tensor<T> RowManhattan<T>(Tensor<T> a, Tensor<T> b)
@@ -81,18 +107,19 @@ internal static class ClusteringTensorOps
             return engine.Reshape(rowPairs(a, b), new[] { n, m }).ToMatrix();
         }
 
-        var result = Tensor<T>.CreateZeros(new[] { n, m });
+        // The blocks are concatenated once at the end: writing each one into the full [n, m] result with
+        // TensorSetSlice would copy the whole result per block, which is quadratic in n.
+        var blocks = new List<Tensor<T>>((n + rowsPerBlock - 1) / rowsPerBlock);
         for (int start = 0; start < n; start += rowsPerBlock)
         {
             int count = Math.Min(rowsPerBlock, n - start);
             var block = engine.TensorSlice(xt, new[] { start, 0 }, new[] { count, d });
             var a = engine.TensorRepeatInterleave(block, m, 0);
             var b = engine.TensorTile(yt, new[] { count, 1 });
-            var values = engine.Reshape(rowPairs(a, b), new[] { count, m });
-            result = engine.TensorSetSlice(result, values, new[] { start, 0 });
+            blocks.Add(engine.Reshape(rowPairs(a, b), new[] { count, m }));
         }
 
-        return result.ToMatrix();
+        return engine.TensorConcatenate(blocks.ToArray(), 0).ToMatrix();
     }
 
     /// <summary>Applies a paired-row reducer between one point and every row of <paramref name="data"/>.</summary>
@@ -122,7 +149,7 @@ internal static class ClusteringTensorOps
     internal static Vector<T> DistancesToPoint<T>(Vector<T> point, Matrix<T> data)
         => PointRowReduce(point, data, RowEuclidean<T>);
 
-    /// <summary>Index of the smallest entry in every row (first one on ties).</summary>
+    /// <summary>Index of the smallest entry in every row (first one on ties; NaN entries are never chosen).</summary>
     internal static int[] ArgMinRows<T>(Matrix<T> values)
     {
         if (values.Rows == 0)
@@ -130,11 +157,24 @@ internal static class ClusteringTensorOps
             return Array.Empty<int>();
         }
 
-        return Engine.TensorArgMin(ToTensor(values), 1).ToArray();
+        return Engine.TensorArgMin(NanToInfinity(ToTensor(values)), 1).ToArray();
     }
 
-    /// <summary>Index of the smallest entry of a non-empty vector (first one on ties).</summary>
-    internal static int ArgMin<T>(Vector<T> values) => Engine.TensorArgMin(values.AsTensor(), 0).ToArray()[0];
+    /// <summary>Index of the smallest entry of a non-empty vector (first one on ties; NaN entries are never chosen).</summary>
+    internal static int ArgMin<T>(Vector<T> values) => Engine.TensorArgMin(NanToInfinity(values.AsTensor()), 0).ToArray()[0];
+
+    /// <summary>
+    /// Replaces NaN with +infinity. The loops the argmin helpers replaced compared with a strict <c>&lt;</c> from
+    /// MaxValue, so a NaN was never selected; the engine argmin starts from element 0 and would keep a NaN there.
+    /// </summary>
+    private static Tensor<T> NanToInfinity<T>(Tensor<T> values)
+    {
+        var engine = Engine;
+        var nan = engine.TensorIsNan(values);
+        return engine.TensorMaskedSelect(values, nan).Length == 0
+            ? values
+            : engine.TensorMaskedFill(values, nan, MathHelper.GetNumericOperations<T>().FromDouble(double.PositiveInfinity));
+    }
 
     /// <summary>Index of the largest entry of a non-empty vector (first one on ties).</summary>
     internal static int ArgMax<T>(Vector<T> values) => Engine.TensorArgMax(values.AsTensor(), 0).ToArray()[0];
@@ -224,27 +264,55 @@ internal static class ClusteringTensorOps
             return new Vector<T>(0);
         }
 
-        var engine = Engine;
-        var indices = Vector<int>.Wrap(values).AsTensor();
-        int min = engine.TensorMinValue(indices);
-        int max = engine.TensorMaxValue(indices);
-        var table = engine.TensorArange<T>(min, (double)max + 1, 1);
-        var offsets = min == 0 ? indices : engine.TensorSubtractScalar(indices, min);
-        return engine.TensorGather(table, offsets, 0).ToVector();
+        // A direct per-value conversion: a gather from a [min, max] lookup table would be sized by the range of
+        // the ids (unbounded for sparse labels), and a ramp in T cannot represent integers above 2048 in half
+        // precision.
+        return new Tensor<int>((int[])values.Clone(), new[] { values.Length }).Cast<T>().ToVector();
+    }
+
+    /// <summary>Number of ids equal to each slot 0..k-1; ids outside [0, k) are not counted.</summary>
+    /// <remarks>Counted in <see cref="int"/>: a running count in half precision stops at 2048.</remarks>
+    internal static int[] CountIds(int[] ids, int k)
+    {
+        var counts = new int[Math.Max(0, k)];
+        foreach (int id in ids)
+        {
+            if (id >= 0 && id < k)
+            {
+                counts[id]++;
+            }
+        }
+
+        return counts;
     }
 
     /// <summary>
     /// One-hot membership mask [n, k] in <typeparamref name="T"/>: entry (i, c) is one when labels[i] == c.
     /// Labels outside [0, k) (noise, unassigned) produce an all-zero row.
     /// </summary>
-    internal static Tensor<T> OneHotMask<T>(Vector<T> labels, int k)
+    internal static Tensor<T> OneHotMask<T>(Vector<T> labels, int k) => OneHotRows<T>(ToIntArray(labels), k);
+
+    /// <summary>
+    /// One-hot mask [ids.Length, k] in <typeparamref name="T"/> built from <see cref="int"/> ids: entry (i, c) is one
+    /// when ids[i] == c; ids outside [0, k) give an all-zero row.
+    /// </summary>
+    /// <remarks>
+    /// The comparison is made on the int ids. Comparing against a ramp 0..k-1 built in <typeparamref name="T"/> would
+    /// merge columns above 2048 in half precision, where consecutive integers are no longer representable.
+    /// </remarks>
+    internal static Tensor<T> OneHotRows<T>(int[] ids, int k)
     {
-        int n = labels.Length;
-        var engine = Engine;
-        var column = engine.TensorBroadcastTo(Tensor<T>.FromVector(labels, new[] { n, 1 }), new[] { n, k });
-        var ids = engine.TensorBroadcastTo(engine.Reshape(engine.TensorArange<T>(0, k, 1), new[] { 1, k }), new[] { n, k });
-        return engine.TensorEquals(column, ids);
+        int n = ids.Length;
+        if (n == 0 || k <= 0)
+        {
+            return Tensor<T>.CreateZeros(new[] { n, Math.Max(0, k) });
+        }
+
+        return Engine.TensorOneHot<T>(new Tensor<int>((int[])ids.Clone(), new[] { n }), k);
     }
+
+    /// <summary>The ids start, start + 1, ..., start + count - 1.</summary>
+    internal static int[] Range(int start, int count) => Enumerable.Range(start, count).ToArray();
 
     /// <summary>True when every id is a valid slot in [0, k).</summary>
     private static bool AllWithin(int[] ids, int k)
@@ -260,9 +328,9 @@ internal static class ClusteringTensorOps
         return true;
     }
 
-    /// <summary>Number of samples carrying each label 0..k-1 ([k], in T).</summary>
+    /// <summary>Number of samples carrying each label 0..k-1 ([k], counted in int and converted to T).</summary>
     internal static Vector<T> ClusterCounts<T>(Vector<T> labels, int k)
-        => Engine.ReduceSum(OneHotMask(labels, k), new[] { 0 }, false).ToVector();
+        => FromIntArray<T>(CountIds(ToIntArray(labels), k));
 
     /// <summary>Per-cluster sums of the rows of x [k, d] and member counts [k].</summary>
     internal static Matrix<T> ClusterSums<T>(Matrix<T> x, Vector<T> labels, int k, out Vector<T> counts)
@@ -270,17 +338,17 @@ internal static class ClusteringTensorOps
         var engine = Engine;
         int n = labels.Length;
         var ids = ToIntArray(labels);
+
+        // Counts are taken in int: accumulated in half precision they stop growing at 2048.
+        counts = FromIntArray<T>(CountIds(ids, k));
         if (n > 0 && AllWithin(ids, k))
         {
             // Every label names a cluster: scatter-add the rows, O(n d), instead of an [n, k] mask product.
             var index = Vector<int>.Wrap(ids).AsTensor();
-            var ones = Tensor<T>.CreateDefault(new[] { n }, MathHelper.GetNumericOperations<T>().One);
-            counts = engine.TensorIndexAdd(new Tensor<T>(new[] { k }), 0, index, ones).ToVector();
             return engine.TensorIndexAdd(new Tensor<T>(new[] { k, x.Columns }), 0, index, ToTensor(x)).ToMatrix();
         }
 
         var mask = OneHotMask(labels, k);
-        counts = engine.ReduceSum(mask, new[] { 0 }, false).ToVector();
         return engine.TensorMatMul(engine.TensorTranspose(mask), ToTensor(x)).ToMatrix();
     }
 
@@ -501,7 +569,9 @@ internal static class ClusteringTensorOps
         var engine = Engine;
         var mask = OneHotMask(labels, centers.Rows);
         var distances = Tensor<T>.FromMatrix(metric.ComputePairwise(x, centers));
-        return engine.ReduceSum(engine.TensorMultiply(distances, mask), new[] { 1 }, false).ToVector();
+
+        // Selected, not multiplied: 0 * inf for an infinite distance to another center would make the row NaN.
+        return engine.ReduceSum(engine.TensorWhere(mask, distances, engine.TensorZerosLike(distances)), new[] { 1 }, false).ToVector();
     }
 
     /// <summary>Rows of <paramref name="candidate"/> where the count is positive, rows of <paramref name="fallback"/> elsewhere.</summary>
@@ -515,18 +585,43 @@ internal static class ClusteringTensorOps
     }
 
     /// <summary>
-    /// Column means and population standard deviations of x (deviations below 1e-10 become 1), and x standardized with them.
+    /// Column means and population standard deviations of x (deviations below 1e-10, or the smallest value
+    /// <typeparamref name="T"/> resolves, become 1), and x standardized with them.
     /// </summary>
     internal static Matrix<T> StandardizeColumns<T>(Matrix<T> x, out Vector<T> means, out Vector<T> stds)
     {
         var engine = Engine;
-        var numOps = MathHelper.GetNumericOperations<T>();
         means = ColumnMeans(x);
         var centered = SubtractRow(x, means);
-        var std = engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(centered), new[] { 0 }, false));
-        var tiny = engine.TensorLessThan(std, numOps.FromDouble(1e-10));
+        var std = ColumnRootMeanSquare(centered);
+        var tiny = engine.TensorLessThan(std, NumericTolerance.Of<T>(1e-10));
         stds = engine.TensorWhere(tiny, engine.TensorOnesLike(std), std).ToVector();
         return engine.TensorDivide(centered, TileRow(stds, x.Rows)).ToMatrix();
+    }
+
+    /// <summary>
+    /// sqrt(mean of squares) of every column of a [n, d] tensor. Columns whose direct value overflows (in half
+    /// precision any entry above ~256 squares past 65504) are recomputed as s * rms(c / s) with s the column's
+    /// largest magnitude.
+    /// </summary>
+    private static Tensor<T> ColumnRootMeanSquare<T>(Tensor<T> centered)
+    {
+        var engine = Engine;
+        var direct = engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(centered), new[] { 0 }, false));
+        if (direct.Length == 0 || !HasNonFinite(direct))
+        {
+            return direct;
+        }
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int rows = centered.Shape[0];
+        int columns = centered.Shape[1];
+        var scale = engine.ReduceMax(engine.TensorAbs(centered), new[] { 0 }, true);
+        var safe = engine.TensorWhere(engine.TensorGreaterThan(scale, numOps.Zero), scale, engine.TensorOnesLike(scale));
+        var scaled = engine.TensorDivide(centered, engine.TensorBroadcastTo(safe, new[] { rows, columns }));
+        var rms = engine.TensorSqrt(engine.ReduceMean(engine.TensorSquare(scaled), new[] { 0 }, false));
+        var rescaled = engine.TensorMultiply(rms, engine.Reshape(safe, new[] { columns }));
+        return engine.TensorWhere(engine.TensorIsFinite(direct), direct, rescaled);
     }
 
     /// <summary>(x - means) / stds applied to every row.</summary>
@@ -560,18 +655,22 @@ internal static class ClusteringTensorOps
         var numOps = MathHelper.GetNumericOperations<T>();
         var (sorted, order) = engine.TensorSort(values.AsTensor(), 0, false);
 
-        // 1 where a sorted entry differs from its predecessor; the running sum is the dense rank
-        var first = Tensor<T>.CreateZeros(new[] { 1 });
+        // 1 where a sorted entry differs from its predecessor; the running sum is the dense rank. The sum is taken
+        // in int: a running sum in half precision stops growing at 2048.
         var changes = n == 1
-            ? first
-            : engine.TensorConcatenate(new[]
-            {
-                first,
-                engine.ScalarMinusTensor(numOps.One, engine.TensorEquals(
-                    engine.TensorSlice(sorted, new[] { 1 }, new[] { n - 1 }),
-                    engine.TensorSlice(sorted, new[] { 0 }, new[] { n - 1 })))
-            }, 0);
-        var sortedRanks = engine.TensorCumSum(changes, 0);
-        return ToIntArray(engine.Scatter(Tensor<T>.CreateZeros(new[] { n }), order, sortedRanks, 0).ToVector());
+            ? new int[1]
+            : ToIntArray(engine.ScalarMinusTensor(numOps.One, engine.TensorEquals(
+                engine.TensorSlice(sorted, new[] { 1 }, new[] { n - 1 }),
+                engine.TensorSlice(sorted, new[] { 0 }, new[] { n - 1 }))).ToVector());
+        var positions = order.ToArray();
+        var ranks = new int[n];
+        int rank = 0;
+        for (int i = 1; i < n; i++)
+        {
+            rank += changes[i - 1];
+            ranks[positions[i]] = rank;
+        }
+
+        return ranks;
     }
 }

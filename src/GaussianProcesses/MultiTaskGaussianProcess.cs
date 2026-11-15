@@ -362,7 +362,7 @@ public partial class MultiTaskGaussianProcess<T> : GaussianProcessBase<T>
         var startingFactor = GaussianProcessEvidence.Cholesky(startingCovariance);
         var taskFactor = startingFactor is not null ? engine.TensorTril(startingFactor) : engine.TensorEye<T>(tasks);
 
-        T floor = _numOps.FromDouble(1e-8);
+        T floor = NumericTolerance.Of<T>(1e-8);
         T logNoise = learnNoise
             ? _numOps.Log(MathHelper.Max(_numOps.Multiply(_numOps.FromDouble(0.1), averageTaskVariance), floor))
             : _numOps.Zero;
@@ -578,9 +578,6 @@ public partial class MultiTaskGaussianProcess<T> : GaussianProcessBase<T>
     }
 
     /// <summary>
-    /// Computes the alpha vector for predictions.
-    /// </summary>
-    /// <summary>
     /// Targets minus their task means, [n, tasks].
     /// </summary>
     private Tensor<T> CenteredTargets()
@@ -591,6 +588,9 @@ public partial class MultiTaskGaussianProcess<T> : GaussianProcessBase<T>
         return engine.TensorSubtract(targets, engine.TensorBroadcastTo(means, new[] { _Y.Rows, _numTasks }));
     }
 
+    /// <summary>
+    /// Computes the alpha vector for predictions.
+    /// </summary>
     private void ComputeAlpha()
     {
         int n = _X.Rows;
@@ -668,7 +668,7 @@ public partial class MultiTaskGaussianProcess<T> : GaussianProcessBase<T>
         var reduction = engine.ReduceSum(
             engine.TensorMultiply(kStarTasks, engine.TensorStack(solved, 1)), new[] { 0 }, keepDims: false);
         var priorVariance = engine.TensorMultiplyScalar(engine.TensorDiagonal(taskCovariance), kStarStar);
-        var variances = engine.TensorMax(engine.TensorSubtract(priorVariance, reduction), _numOps.FromDouble(1e-10)).ToVector();
+        var variances = engine.TensorMax(engine.TensorSubtract(priorVariance, reduction), NumericTolerance.Of<T>(1e-10)).ToVector();
 
         return (means, variances);
     }

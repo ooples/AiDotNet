@@ -614,7 +614,7 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
         var kStarStar = Tensor<T>.FromVector(selfKernel);
         var variance = engine.TensorMax(
             engine.TensorAddScalar(engine.TensorSubtract(kStarStar, vTv), _numOps.FromDouble(_scale * _scale)),
-            _numOps.FromDouble(1e-10)).ToVector();
+            NumericTolerance.Of<T>(1e-10)).ToVector();
 
         return (mean, variance);
     }
@@ -653,7 +653,7 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
     {
         var numOps = MathHelper.GetNumericOperations<T>();
         var engine = AiDotNetEngine.Current;
-        T floor = numOps.FromDouble(1e-10);
+        T floor = NumericTolerance.Of<T>(1e-10);
         var unclamped = GaussianProcessEngineOps.UnclampedCholesky(K, floor);
         if (unclamped is not null)
             return unclamped;

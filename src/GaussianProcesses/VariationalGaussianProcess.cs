@@ -537,7 +537,7 @@ public partial class VariationalGaussianProcess<T> : GaussianProcessBase<T>
             var KnInvKStar = MatrixSolutionHelper.SolveLinearSystem(_KPlusNoise, kStar, _decompositionType);
             T gVariance = _numOps.Subtract(kStarStar, Engine.DotProduct(kStar, KnInvKStar));
             if (_numOps.LessThan(gVariance, _numOps.Zero))
-                gVariance = _numOps.FromDouble(1e-10);
+                gVariance = NumericTolerance.Of<T>(1e-10);
 
             return (gMean, gVariance);
         }
@@ -562,7 +562,7 @@ public partial class VariationalGaussianProcess<T> : GaussianProcessBase<T>
         // Ensure non-negative variance
         if (_numOps.LessThan(variance, _numOps.Zero))
         {
-            variance = _numOps.FromDouble(1e-10);
+            variance = NumericTolerance.Of<T>(1e-10);
         }
 
         return (mean, variance);
@@ -669,9 +669,6 @@ public partial class VariationalGaussianProcess<T> : GaussianProcessBase<T>
     }
 
     /// <summary>
-    /// Calculates the kernel matrix between two sets of points.
-    /// </summary>
-    /// <summary>
     /// log|A| = 2 Σ log|L_ii| for A = L Lᵀ.
     /// </summary>
     private T LogDeterminantFromCholesky(Matrix<T> L)
@@ -681,6 +678,9 @@ public partial class VariationalGaussianProcess<T> : GaussianProcessBase<T>
         return _numOps.Multiply(_numOps.FromDouble(2.0), engine.TensorSum(engine.TensorLog(diagonal)));
     }
 
+    /// <summary>
+    /// Calculates the kernel matrix between two sets of points.
+    /// </summary>
     private Matrix<T> CalculateKernelMatrix(Matrix<T> X1, Matrix<T> X2)
     {
         var K = new Matrix<T>(X1.Rows, X2.Rows);

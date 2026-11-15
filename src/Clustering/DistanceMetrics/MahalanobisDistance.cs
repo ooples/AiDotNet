@@ -103,7 +103,8 @@ public class MahalanobisDistance<T> : DistanceMetricBase<T>
         // Compute (a - b)^T × temp
         T result = Engine.DotProduct(diff, temp);
 
-        return Sqrt(result);
+        // Non-negative in exact arithmetic; rounding can leave it slightly below zero for (nearly) equal vectors.
+        return Sqrt(MathHelper.Max(result, NumOps.Zero));
     }
 
     /// <summary>
@@ -126,7 +127,7 @@ public class MahalanobisDistance<T> : DistanceMetricBase<T>
         var covariance = Engine.TensorDivideScalar(scatter, NumOps.FromDouble(data.Rows - 1));
 
         // Add small regularization for numerical stability
-        var ridge = Engine.TensorMultiplyScalar(Engine.TensorEye<T>(data.Columns), NumOps.FromDouble(1e-6));
+        var ridge = Engine.TensorMultiplyScalar(Engine.TensorEye<T>(data.Columns), NumericTolerance.Of<T>(1e-6));
 
         _inverseCovarianceMatrix = InvertMatrix(Engine.TensorAdd(covariance, ridge).ToMatrix());
     }
@@ -151,7 +152,10 @@ public class MahalanobisDistance<T> : DistanceMetricBase<T>
         var diff = Engine.TensorSubtract(a, b);
         var inverseT = Engine.TensorTranspose(Tensor<T>.FromMatrix(_inverseCovarianceMatrix));
         var quadratic = Engine.ReduceSum(Engine.TensorMultiply(Engine.TensorMatMul(diff, inverseT), diff), new[] { 1 }, false);
-        return Engine.TensorSqrt(quadratic);
+
+        // A sum of signed products: for (nearly) equal rows rounding can leave it slightly negative, and sqrt of a
+        // negative number is NaN. The exact value is non-negative (S^-1 is positive definite).
+        return Engine.TensorSqrt(Engine.TensorMax(quadratic, NumOps.Zero));
     }
 
     private T ComputeEuclidean(Vector<T> a, Vector<T> b)
@@ -168,7 +172,7 @@ public class MahalanobisDistance<T> : DistanceMetricBase<T>
         var augmented = engine.TensorConcatenate(
             new[] { Tensor<T>.FromMatrix(matrix), engine.TensorEye<T>(n) }, 1).ToMatrix();
         var ones = engine.Fill(n, NumOps.One);
-        var tolerance = NumOps.FromDouble(1e-10);
+        var tolerance = NumericTolerance.Of<T>(1e-10);
 
         // Gauss-Jordan elimination with partial pivoting, one whole-matrix update per column
         for (int col = 0; col < n; col++)

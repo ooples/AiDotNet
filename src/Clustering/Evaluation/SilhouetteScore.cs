@@ -185,11 +185,10 @@ public class SilhouetteScore<T> : IClusterMetric<T>
         var one = _numOps.One;
 
         // Distances to every other point (self excluded) and per-cluster sums of them
-        var rowIds = engine.TensorBroadcastTo(
-            engine.Reshape(engine.TensorArange<T>(start, start + count, 1), new[] { count, 1 }), new[] { count, n });
-        var columnIds = engine.TensorBroadcastTo(
-            engine.Reshape(engine.TensorArange<T>(0, n, 1), new[] { 1, n }), new[] { count, n });
-        var offDiagonal = engine.ScalarMinusTensor(one, engine.TensorEquals(rowIds, columnIds));
+        // Row r of this block is sample start + r; its self-distance column is found from int ids (a ramp in T
+        // cannot tell neighbouring sample indices apart above 2048 in half precision).
+        var self = ClusteringTensorOps.OneHotRows<T>(ClusteringTensorOps.Range(start, count), n);
+        var offDiagonal = engine.ScalarMinusTensor(one, self);
         var distances = engine.TensorMultiply(Tensor<T>.FromMatrix(metric.ComputePairwise(rows, data)), offDiagonal);
         var clusterSums = engine.TensorMatMul(distances, mask);
 

@@ -426,7 +426,7 @@ public partial class GaussianMixtureModel<T> : ClusteringBase<T>
     /// Lower Cholesky factor (matrix = L L^T), built column by column. A pivot that is not above
     /// <paramref name="threshold"/> is replaced by <paramref name="floor"/>, keeping near-singular covariances usable.
     /// </summary>
-    private Matrix<T> Cholesky(Matrix<T> matrix, T threshold, T floor)
+    internal Matrix<T> Cholesky(Matrix<T> matrix, T threshold, T floor)
     {
         int d = matrix.Rows;
         var factor = new Matrix<T>(d, d);
@@ -443,12 +443,13 @@ public partial class GaussianMixtureModel<T> : ClusteringBase<T>
                     new[] { d }));
 
             var roots = Engine.TensorSqrt(Engine.TensorWhere(Engine.TensorGreaterThan(s, threshold), s, Engine.TensorFullLike(s, floor)));
-            T pivot = Engine.DotProduct(roots.ToVector(), identity.GetColumn(j));
+            T pivot = Engine.TensorSum(Engine.TensorWhere(identity.GetColumn(j).AsTensor(), roots, Engine.TensorZerosLike(roots)));
 
-            // L_jj = pivot, L_ij = s_i / pivot below the diagonal, zero above
-            var column = Engine.TensorAdd(
-                Engine.TensorMultiply(Engine.TensorDivideScalar(s, pivot), strictlyBelow.GetColumn(j).AsTensor()),
-                Engine.TensorMultiplyScalar(identity.GetColumn(j).AsTensor(), pivot));
+            // L_jj = pivot, L_ij = s_i / pivot below the diagonal, zero above. The entries above are selected
+            // away rather than multiplied by zero: 0 * inf (a zero or overflowing pivot) would be NaN.
+            var below = Engine.TensorWhere(
+                strictlyBelow.GetColumn(j).AsTensor(), Engine.TensorDivideScalar(s, pivot), Engine.TensorZerosLike(s));
+            var column = Engine.TensorAdd(below, Engine.TensorMultiplyScalar(identity.GetColumn(j).AsTensor(), pivot));
             Engine.SetColumn(factor, j, column.ToVector());
         }
 
@@ -487,7 +488,7 @@ public partial class GaussianMixtureModel<T> : ClusteringBase<T>
     {
         T reg = NumOps.FromDouble(_options.RegularizationCovariance);
         T nT = NumOps.FromDouble(n);
-        T epsilon = NumOps.FromDouble(1e-10);
+        T epsilon = NumericTolerance.Of<T>(1e-10);
         T minWeight = NumOps.FromDouble(_options.MinWeight);
         var resp = Tensor<T>.FromMatrix(FittedResponsibilities);
 
@@ -586,7 +587,7 @@ public partial class GaussianMixtureModel<T> : ClusteringBase<T>
     private T ComputeLowerBound(Matrix<T> data, int n, int d, int k)
     {
         // sum over (i, c) with r_ic > epsilon of r_ic * (log p(x_i, c) - log r_ic)
-        T epsilon = NumOps.FromDouble(1e-10);
+        T epsilon = NumericTolerance.Of<T>(1e-10);
         var resp = Tensor<T>.FromMatrix(FittedResponsibilities);
         var terms = Engine.TensorMultiply(
             resp, Engine.TensorSubtract(LogProbabilities(data, k), Engine.TensorLog(Engine.TensorMax(resp, epsilon))));
@@ -680,7 +681,7 @@ public partial class GaussianMixtureModel<T> : ClusteringBase<T>
             Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorArange<T>(0, k, 1), new[] { 1, k }), shape)).ToMatrix();
 
         // sample = mean + L z for the chosen component's Cholesky factor L
-        T floor = NumOps.FromDouble(1e-10);
+        T floor = NumericTolerance.Of<T>(1e-10);
         var z = Engine.TensorSlice(noiseDraws, new[] { 0, 1 }, new[] { numSamples, d });
         var samples = Tensor<T>.CreateZeros(new[] { numSamples, d });
         for (int c = 0; c < k; c++)

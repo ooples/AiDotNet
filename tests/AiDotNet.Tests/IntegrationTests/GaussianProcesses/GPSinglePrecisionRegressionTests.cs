@@ -70,7 +70,7 @@ public class GPSinglePrecisionRegressionTests
         const int n = 200;
         var x = new Matrix<float>(n, 2);
         var y = new Vector<float>(n);
-        var rng = new Random(3);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(3);
         for (int i = 0; i < n; i++)
         {
             float value = (float)(100 + rng.NextDouble() * 50);

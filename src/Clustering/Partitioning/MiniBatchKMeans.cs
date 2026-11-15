@@ -266,24 +266,36 @@ public partial class MiniBatchKMeans<T> : ClusteringBase<T>
         var distances = ClusteringTensorOps.MinRows(batchDistances);
 
         // Streaming average: processing the batch points one by one with eta = 1 / count is the running mean
-        // c <- (N * c + sum of new points) / (N + m) for a center with N earlier and m new points.
+        // c <- (N * c + sum of new points) / (N + m) for a center with N earlier and m new points, evaluated as
+        // c * (N / (N + m)) + sum * (1 / (N + m)). Both factors come from the int counts and are at most one, so
+        // no count enters T: a running count in half precision is rounded above 2048 and infinite above 65504,
+        // which would turn the center into NaN.
+        int k = centers.Rows;
         var batchLabels = ClusteringTensorOps.FromIntArray<T>(nearestCenters);
-        var sums = ClusteringTensorOps.ClusterSums(batch, batchLabels, centers.Rows, out var batchCounts);
-        var priorCounts = ClusteringTensorOps.FromIntArray<T>(_centerCounts.Length == centers.Rows
-            ? _centerCounts
-            : _centerCounts.Take(centers.Rows).ToArray());
-        var totals = Engine.Add(priorCounts, batchCounts);
-        var weighted = Engine.TensorAdd(
-            Engine.TensorMultiply(Tensor<T>.FromMatrix(centers),
-                Engine.TensorBroadcastTo(Tensor<T>.FromVector(priorCounts, new[] { centers.Rows, 1 }), new[] { centers.Rows, centers.Columns })),
-            Tensor<T>.FromMatrix(sums)).ToMatrix();
-        var updated = ClusteringTensorOps.RowsWherePositive(batchCounts, ClusteringTensorOps.DivideRows(weighted, totals), centers);
+        var sums = ClusteringTensorOps.ClusterSums(batch, batchLabels, k, out var batchCounts);
+        var added = ClusteringTensorOps.CountIds(nearestCenters, k);
+        var keepFraction = new double[k];
+        var stepSize = new double[k];
+        for (int c = 0; c < k; c++)
+        {
+            double prior = c < _centerCounts.Length ? _centerCounts[c] : 0;
+            double total = prior + added[c];
+            keepFraction[c] = total > 0 ? prior / total : 1.0;
+            stepSize[c] = total > 0 ? 1.0 / total : 0.0;
+        }
+
+        var shape = new[] { k, centers.Columns };
+        var keep = Engine.TensorBroadcastTo(new Tensor<double>(keepFraction, new[] { k, 1 }).Cast<T>(), shape);
+        var step = Engine.TensorBroadcastTo(new Tensor<double>(stepSize, new[] { k, 1 }).Cast<T>(), shape);
+        var averaged = Engine.TensorAdd(
+            Engine.TensorMultiply(Tensor<T>.FromMatrix(centers), keep),
+            Engine.TensorMultiply(Tensor<T>.FromMatrix(sums), step)).ToMatrix();
+        var updated = ClusteringTensorOps.RowsWherePositive(batchCounts, averaged, centers);
         centers.SetSubMatrix(0, 0, updated);
 
-        var added = ClusteringTensorOps.ToIntArray(batchCounts);
-        for (int k = 0; k < added.Length; k++)
+        for (int c = 0; c < added.Length && c < _centerCounts.Length; c++)
         {
-            _centerCounts[k] += added[k];
+            _centerCounts[c] += added[c];
         }
 
         // Handle empty clusters

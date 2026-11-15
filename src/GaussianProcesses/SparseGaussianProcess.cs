@@ -271,11 +271,6 @@ public partial class SparseGaussianProcess<T> : GaussianProcessBase<T>
     }
 
     /// <summary>
-    /// Calculates the reciprocal (1/x) of a value.
-    /// </summary>
-    /// <param name="value">The value to calculate the reciprocal for.</param>
-    /// <returns>The reciprocal of the input value.</returns>
-    /// <summary>
     /// Returns true only if every element of <paramref name="v"/> is a finite
     /// number (no NaN, no infinity). Used to reject a Cholesky solve that
     /// silently produced a non-finite solution from a near-singular system so

@@ -220,7 +220,7 @@ public partial class GMeans<T> : ClusteringBase<T>
         var centered = Engine.TensorSubtractScalar(projections, mean);
         T std = NumOps.Sqrt(NumOps.Divide(Engine.TensorSum(Engine.TensorSquare(centered)), NumOps.FromDouble(n)));
 
-        if (NumOps.LessThan(std, NumOps.FromDouble(1e-10))) return true; // Constant data
+        if (NumOps.LessThan(std, NumericTolerance.Of<T>(1e-10))) return true; // Constant data
 
         var standardized = Engine.TensorMsort(Engine.TensorDivideScalar(centered, std));
 
@@ -266,26 +266,31 @@ public partial class GMeans<T> : ClusteringBase<T>
     }
 
     /// <summary>True when a norm is too small to normalize by.</summary>
-    private bool IsTiny(T norm) => NumOps.LessThan(norm, NumOps.FromDouble(1e-10));
+    private bool IsTiny(T norm) => NumOps.LessThan(norm, NumericTolerance.Of<T>(1e-10));
 
-    private T ComputeAndersonDarling(Tensor<T> sortedStandardized, int n)
+    internal T ComputeAndersonDarling(Tensor<T> sortedStandardized, int n)
     {
         // Anderson-Darling test statistic: -n - (1/n) sum (2i - 1)(ln F(z_i) + ln(1 - F(z_{n+1-i})))
-        T low = NumOps.FromDouble(1e-10);
-        T high = NumOps.FromDouble(1 - 1e-10);
-        var phi = Engine.TensorClamp(NormalCdf(sortedStandardized), low, high);
-        var phiReversed = Engine.TensorFlip(phi, new[] { 0 });
-        var terms = Engine.TensorAdd(
-            Engine.TensorLog(phi),
-            Engine.TensorLog(Engine.ScalarMinusTensor(NumOps.One, phiReversed)));
-        var weights = Engine.TensorArange<T>(1, 2 * n, 2);
-        T sum = Engine.TensorSum(Engine.TensorMultiply(weights, terms));
+        if (n == 0) return NumOps.Zero;
 
+        // Both probabilities are floored at 1e-10 (or the smallest value T resolves). 1 - F(z) is evaluated as
+        // F(-z): 1 - (1 - 1e-10) is exactly 0 in single and half precision, so subtracting from one would leave
+        // ln(0) = -inf for a well separated split.
+        T low = NumericTolerance.Of<T>(1e-10);
+        var phi = Engine.TensorMax(NormalCdf(sortedStandardized), low);
+        var upperTail = Engine.TensorMax(
+            NormalCdf(Engine.TensorNegate(Engine.TensorFlip(sortedStandardized, new[] { 0 }))), low);
+        var terms = Engine.TensorAdd(Engine.TensorLog(phi), Engine.TensorLog(upperTail));
+
+        // The weighted sum is reduced in double: the weights 2i - 1 reach 2n and the sum about 4n^2 (past 65504 in
+        // half precision for a few dozen points), and -n - sum / n then cancels down to the statistic.
+        var weights = Engine.TensorArange<double>(1, 2.0 * n, 2);
+        double sum = Engine.TensorSum(Engine.TensorMultiply(weights, terms.Contiguous().Cast<double>()));
         double nd = n;
-        T ad = NumOps.Subtract(NumOps.FromDouble(-nd), NumOps.Divide(sum, NumOps.FromDouble(nd)));
+        double ad = -nd - sum / nd;
 
         // Apply correction for small samples
-        return NumOps.Multiply(ad, NumOps.FromDouble(1 + 4.0 / nd - 25.0 / (nd * nd)));
+        return NumOps.FromDouble(ad * (1 + 4.0 / nd - 25.0 / (nd * nd)));
     }
 
     /// <summary>Standard normal CDF, 0.5 (1 + erf(z / sqrt 2)).</summary>

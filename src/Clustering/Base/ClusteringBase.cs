@@ -303,7 +303,7 @@ public abstract partial class ClusteringBase<T> : IClustering<T>, IConfigurableM
             { "NumClusters", NumClusters },
             { "NumFeatures", NumFeatures },
             { "ClusterCenters", ClusterCenters is not null ? MatrixToRowArrays(ClusterCenters) : null },
-            { "Labels", Labels is not null ? Labels.ToArray() : null },
+            { "Labels", Labels is not null ? ToDoubles(Labels.AsTensor()) : null },
             { "Inertia", Inertia is not null ? NumOps.ToDouble(Inertia) : (double?)null },
             { "RegularizationOptions", Regularization.GetOptions() }
         };
@@ -343,7 +343,7 @@ public abstract partial class ClusteringBase<T> : IClustering<T>, IConfigurableM
         var centersToken = dataObj["ClusterCenters"];
         if (centersToken is not null && centersToken.Type != Newtonsoft.Json.Linq.JTokenType.Null)
         {
-            var centersArray = centersToken.ToObject<T[][]>();
+            var centersArray = centersToken.ToObject<double[][]>();
             if (centersArray is not null && centersArray.Length > 0)
             {
                 ClusterCenters = RowArraysToMatrix(centersArray);
@@ -353,10 +353,10 @@ public abstract partial class ClusteringBase<T> : IClustering<T>, IConfigurableM
         var labelsToken = dataObj["Labels"];
         if (labelsToken is not null && labelsToken.Type != Newtonsoft.Json.Linq.JTokenType.Null)
         {
-            var labelsArray = labelsToken.ToObject<T[]>();
+            var labelsArray = labelsToken.ToObject<double[]>();
             if (labelsArray is not null)
             {
-                Labels = Vector<T>.FromArray(labelsArray);
+                Labels = new Tensor<double>(labelsArray, new[] { labelsArray.Length }).Cast<T>().ToVector();
             }
         }
 
@@ -379,14 +379,26 @@ public abstract partial class ClusteringBase<T> : IClustering<T>, IConfigurableM
         IsTrained = NumClusters > 0 && (ClusterCenters is not null || Labels is not null);
     }
 
-    private static T[][] MatrixToRowArrays(Matrix<T> matrix)
+    /// <summary>
+    /// The matrix as rows of doubles. The payload stays in double whatever T is: Newtonsoft.Json has no converter
+    /// for <see cref="Half"/> (it would write each value as an empty object and read it back as zero), and models
+    /// saved before T-typed arrays were introduced store doubles.
+    /// </summary>
+    private static double[][] MatrixToRowArrays(Matrix<T> matrix)
     {
-        return matrix.GetRows().Select(row => row.ToArray()).ToArray();
+        var values = ToDoubles(Tensor<T>.FromMatrix(matrix));
+        int columns = matrix.Columns;
+        return Enumerable.Range(0, matrix.Rows)
+            .Select(row => new ArraySegment<double>(values, row * columns, columns).ToArray())
+            .ToArray();
     }
 
-    private static Matrix<T> RowArraysToMatrix(T[][] array)
+    /// <summary>All values of a tensor converted to double with one bulk cast.</summary>
+    private static double[] ToDoubles(Tensor<T> values) => values.Contiguous().Cast<double>().ToArray();
+
+    private static Matrix<T> RowArraysToMatrix(double[][] array)
     {
-        return Matrix<T>.FromRows(array);
+        return Tensor<double>.FromMatrix(Matrix<double>.FromRows(array)).Cast<T>().ToMatrix();
     }
     /// <inheritdoc/>
     public virtual int[] GetInputShape()

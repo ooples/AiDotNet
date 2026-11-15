@@ -216,7 +216,7 @@ public partial class FuzzyCMeans<T> : ClusteringBase<T>
         }
 
         var dist = Tensor<T>.FromMatrix(distances);
-        var nearZero = Engine.TensorLessThan(dist, NumOps.FromDouble(1e-10));
+        var nearZero = Engine.TensorLessThan(dist, NumericTolerance.Of<T>(1e-10));
 
         // Rows with a (near) zero distance: one-hot at the last such center
         var position = Engine.TensorBroadcastTo(

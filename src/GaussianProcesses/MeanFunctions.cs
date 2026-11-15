@@ -367,6 +367,8 @@ public class LinearMean<T> : IMeanFunction<T>
         if (y is null) throw new ArgumentNullException(nameof(y));
         if (X.Rows != y.Length)
             throw new ArgumentException("X and y must have the same number of samples.");
+        if (X.Columns == 0)
+            throw new ArgumentException("X must have at least one feature column.", nameof(X));
 
         var numOps = MathHelper.GetNumericOperations<T>();
         int n = X.Rows;
@@ -392,7 +394,7 @@ public class LinearMean<T> : IMeanFunction<T>
         // The absolute 1e-6 ridge is rounded away when the Gram diagonal is large relative to the precision
         // of T (single precision with features of magnitude ~100), so collinear columns leave an exactly
         // singular system and the LU solve returns NaN. Retry with a ridge relative to the diagonal.
-        if (d > 0 && !GaussianProcessEngineOps.AllFinite(solution))
+        if (!GaussianProcessEngineOps.AllFinite(solution))
         {
             // Ridge of 1e-5, 1e-4, 1e-3, 1e-2 times the largest diagonal entry, until the solve is finite
             T maxDiagonal = engine.TensorMaxValue(engine.TensorDiagonal(XtX));
@@ -406,12 +408,8 @@ public class LinearMean<T> : IMeanFunction<T>
             }
         }
 
-        var w = solution.Reshape(new[] { d + 1 }).ToVector();
-
         // Extract weights and bias
-        if (d == 0)
-            throw new ArgumentException("Weights array cannot be empty.", "weights");
-
+        var w = solution.Reshape(new[] { d + 1 }).ToVector();
         return new LinearMean<T>(w.GetSubVector(0, d), w[d]);
     }
 

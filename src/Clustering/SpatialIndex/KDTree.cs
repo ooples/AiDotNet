@@ -426,9 +426,12 @@ public class KDTree<T>
 
     private T ComputeSquaredDistance(Vector<T> query, int dataIndex)
     {
-        // Sum of squared differences as whole-vector tensor ops (no per-element numeric calls)
+        // One subtraction and one dot product per visited point: this runs for every candidate of every query, so
+        // a sub-matrix plus a tiled/squared/reduced tensor per call would dominate the search.
         var data = _data ?? throw new InvalidOperationException("KDTree: Data not initialized.");
-        return ClusteringTensorOps.SquaredDistancesToPoint(query, data.GetSubMatrix(dataIndex, 0, 1, data.Columns))[0];
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var diff = engine.Subtract(query, data.GetRow(dataIndex));
+        return engine.DotProduct(diff, diff);
     }
 
     /// <summary>

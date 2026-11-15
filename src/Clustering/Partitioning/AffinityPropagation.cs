@@ -237,7 +237,7 @@ public partial class AffinityPropagation<T> : ClusteringBase<T>
             : values[mid];
     }
 
-    private Tensor<T> UpdateResponsibilities(Tensor<T> similarity, Tensor<T> availability,
+    internal Tensor<T> UpdateResponsibilities(Tensor<T> similarity, Tensor<T> availability,
         Tensor<T> responsibility, T damping, T oneMinusDamping)
     {
         int n = similarity.Shape[0];
@@ -250,9 +250,9 @@ public partial class AffinityPropagation<T> : ClusteringBase<T>
         var withoutFirst = Engine.TensorWhere(first, Engine.TensorFullLike(sums, NumOps.MinValue), sums);
         var max2 = Engine.TensorBroadcastTo(Engine.ReduceMax(withoutFirst, new[] { 1 }, true), shape);
 
-        // Max over k' != k: the runner-up where this entry is the maximum
-        var isMax = Engine.TensorLessThan(Engine.TensorAbs(Engine.TensorSubtract(sums, max1)), NumOps.FromDouble(1e-10));
-        var maxOther = Engine.TensorWhere(isMax, max2, max1);
+        // Max over k' != k: the runner-up at the argmax position, the maximum everywhere else (with tied maxima
+        // the runner-up equals the maximum, so this is the exact exclusion of k the per-entry loop made)
+        var maxOther = Engine.TensorWhere(first, max2, max1);
         var newResponsibility = Engine.TensorSubtract(similarity, maxOther);
 
         // Apply damping

@@ -324,16 +324,15 @@ public partial class ConsensusClustering<T> : ClusteringBase<T>
             Engine.TensorAdd(distances.GetRow(merge1).AsTensor(), distances.GetRow(merge2).AsTensor()), _numOps.FromDouble(0.5));
 
         // Keep the merged clusters' own entries (the diagonal and the merge1/merge2 pair) unchanged
-        var ids = Engine.TensorArange<T>(0, n, 1);
-        var keep = Engine.TensorAdd(
-            Engine.TensorEquals(ids, _numOps.FromDouble(merge1)),
-            Engine.TensorEquals(ids, _numOps.FromDouble(merge2)));
+        // Indicators of the two merged clusters, built from int ids (a ramp 0..n-1 in T merges neighbouring
+        // indices above 2048 in half precision)
+        var isMerge1 = Engine.Reshape(ClusteringTensorOps.OneHotRows<T>(new[] { merge1 }, n), new[] { n });
+        var isMerge2 = Engine.Reshape(ClusteringTensorOps.OneHotRows<T>(new[] { merge2 }, n), new[] { n });
+        var keep = Engine.TensorAdd(isMerge1, isMerge2);
         var update = Engine.TensorWhere(keep, distances.GetRow(merge1).AsTensor(), merged);
 
-        var rowMask = Engine.TensorBroadcastTo(
-            Engine.Reshape(Engine.TensorEquals(ids, _numOps.FromDouble(merge1)), new[] { n, 1 }), shape);
-        var columnMask = Engine.TensorBroadcastTo(
-            Engine.Reshape(Engine.TensorEquals(ids, _numOps.FromDouble(merge1)), new[] { 1, n }), shape);
+        var rowMask = Engine.TensorBroadcastTo(Engine.Reshape(isMerge1, new[] { n, 1 }), shape);
+        var columnMask = Engine.TensorBroadcastTo(Engine.Reshape(isMerge1, new[] { 1, n }), shape);
         var withRow = Engine.TensorWhere(rowMask, Engine.TensorBroadcastTo(Engine.Reshape(update, new[] { 1, n }), shape), clusterDist);
         return Engine.TensorWhere(columnMask, Engine.TensorBroadcastTo(Engine.Reshape(update, new[] { n, 1 }), shape), withRow);
     }

@@ -114,7 +114,7 @@ public partial class BisectingKMeans<T> : ClusteringBase<T>
         if (_options.NumClusters >= n)
         {
             // Each point is its own cluster
-            Labels = Engine.TensorArange<T>(0, n, 1).ToVector();
+            Labels = ClusteringTensorOps.FromIntArray<T>(ClusteringTensorOps.Range(0, n));
             ClusterCenters = x.Clone();
             Inertia = NumOps.Zero;
             IsTrained = true;

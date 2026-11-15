@@ -102,20 +102,24 @@ internal static class GaussianProcessEngineOps
     }
 
     /// <summary>
-    /// Adds <paramref name="jitterValue"/> to the diagonal of <paramref name="K"/> and keeps it when the
-    /// Cholesky factor exists and is well conditioned (max/min diagonal ratio below 1e8); otherwise
-    /// removes it again and returns false.
+    /// Writes K + <paramref name="jitterValue"/> I into <paramref name="K"/> when its Cholesky factor exists and is
+    /// well conditioned (max/min diagonal ratio below 1e8); otherwise leaves <paramref name="K"/> unchanged and
+    /// returns false.
     /// </summary>
+    /// <remarks>
+    /// The jitter is tried on a copy. Adding it in place and subtracting it again after a failed attempt does not
+    /// restore the diagonal in floating point ((1 + 1e-6) - 1e-6 is 0.99999994 in single precision), so the
+    /// diagonal would drift with every rejected jitter.
+    /// </remarks>
     private static bool TryAddJitter<T>(Matrix<T> K, double jitterValue)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
         var engine = AiDotNetEngine.Current;
-        var jitter = numOps.FromDouble(jitterValue);
-        AddToDiagonalInPlace(K, jitter);
+        var candidate = AddToDiagonal(K, numOps.FromDouble(jitterValue));
 
         try
         {
-            var chol = new CholeskyDecomposition<T>(K);
+            var chol = new CholeskyDecomposition<T>(candidate);
             var diagonal = Tensor<T>.FromVector(Diagonal(chol.L));
             bool wellConditioned = diagonal.Length == 0;
             if (!wellConditioned && AllFinite(diagonal))
@@ -127,14 +131,16 @@ internal static class GaussianProcessEngineOps
             }
 
             if (wellConditioned)
+            {
+                K.SetSubMatrix(0, 0, candidate);
                 return true;
+            }
         }
         catch (ArgumentException)
         {
-            // Cholesky failed - remove this jitter so a larger value can be tried.
+            // Cholesky failed - K is untouched, so a larger value can be tried.
         }
 
-        AddToDiagonalInPlace(K, numOps.Negate(jitter));
         return false;
     }
 

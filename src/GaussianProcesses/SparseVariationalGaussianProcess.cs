@@ -802,9 +802,6 @@ public partial class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T
     }
 
     /// <summary>
-    /// Calculates the kernel matrix between two sets of data points.
-    /// </summary>
-    /// <summary>
     /// log|A| = 2 Σ log|L_ii| for A = L Lᵀ.
     /// </summary>
     private T LogDeterminantFromCholesky(Matrix<T> L)
@@ -814,6 +811,9 @@ public partial class SparseVariationalGaussianProcess<T> : GaussianProcessBase<T
         return _numOps.Multiply(_numOps.FromDouble(2.0), engine.TensorSum(engine.TensorLog(diagonal)));
     }
 
+    /// <summary>
+    /// Calculates the kernel matrix between two sets of data points.
+    /// </summary>
     private Matrix<T> CalculateKernelMatrix(Matrix<T> X1, Matrix<T> X2)
     {
         var K = new Matrix<T>(X1.Rows, X2.Rows);

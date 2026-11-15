@@ -299,7 +299,10 @@ public partial class SUBCLU<T> : ClusteringBase<T>
         int n = x.Rows;
 
         // Visit points in order of value
-        var order = Engine.TensorArgsort(Tensor<T>.FromVector(x.GetColumn(dim), new[] { n }), 0, false).ToArray();
+        // Ascending by value, ties by index: the engine argsort is not stable, and the visit order decides which
+        // cluster a border point joins
+        var ranks = ClusteringTensorOps.DenseRanks(x.GetColumn(dim));
+        var order = Enumerable.Range(0, n).OrderBy(i => ranks[i]).ThenBy(i => i).ToArray();
 
         var visited = new bool[n];
         var clusters = new List<HashSet<int>>();

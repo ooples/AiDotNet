@@ -468,7 +468,7 @@ public partial class DeepGaussianProcess<T> : GaussianProcessBase<T>
         var columnMax = engine.ReduceMax(training, new[] { 0 }, keepDims: false);
         var columnMin = engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(training), new[] { 0 }, keepDims: false));
         T dataScale = MathHelper.Max(
-            engine.TensorSumOfSquares(engine.TensorSubtract(columnMax, columnMin)), _numOps.FromDouble(1e-10));
+            engine.TensorSumOfSquares(engine.TensorSubtract(columnMax, columnMin)), NumericTolerance.Of<T>(1e-10));
 
         // Relative distance: 0 = on training point, 1 = at data range boundary
         T relDist = _numOps.Sqrt(_numOps.Divide(minDistSq, dataScale));
@@ -1012,7 +1012,7 @@ internal class DGPLayer<T>
         var gradient = engine.TensorMatMul(engine.TensorTranspose(weights), nextValues);
         var weightSum = engine.ReduceSum(engine.TensorAbs(weights), new[] { 0 }, keepDims: false).Reshape(new[] { rows, 1 });
 
-        var hasWeight = engine.TensorGreaterThan(weightSum, _numOps.FromDouble(1e-10));
+        var hasWeight = engine.TensorGreaterThan(weightSum, NumericTolerance.Of<T>(1e-10));
         var safeSum = engine.TensorWhere(hasWeight, weightSum, engine.TensorOnesLike(weightSum));
         var update = engine.TensorMultiplyScalar(
             engine.TensorDivide(gradient, engine.TensorBroadcastTo(safeSum, new[] { rows, _outputDim })),

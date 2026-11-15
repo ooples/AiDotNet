@@ -17,7 +17,7 @@ public class ClusterMetricLabelRangeRegressionTests
     private static (Matrix<double> Data, Vector<double> Dense, Vector<double> Wide) TwoBlobs()
     {
         const int n = 40;
-        var rng = new Random(11);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(11);
         var data = new Matrix<double>(n, 2);
         var dense = new Vector<double>(n);
         var wide = new Vector<double>(n);
@@ -126,7 +126,7 @@ public class ClusterMetricLabelRangeRegressionTests
         // 2 100 rows exceeds one 2^22-element block of the row-blocked evaluation (2 048 x 2 048), so the
         // result crosses a block seam.
         const int n = 2100;
-        var rng = new Random(5);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(5);
         var data = new Matrix<double>(n, 3);
         var labels = new Vector<double>(n);
         for (int i = 0; i < n; i++)

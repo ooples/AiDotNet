@@ -166,7 +166,7 @@ public partial class SpectralClustering<T> : ClusteringBase<T>
             // Sum of the per-feature population variances
             var centered = ClusteringTensorOps.SubtractRow(x, ClusteringTensorOps.ColumnMeans(x));
             T totalVar = Engine.TensorSum(Engine.ReduceMean(Engine.TensorSquare(centered), new[] { 0 }, false));
-            gamma = NumOps.GreaterThan(totalVar, NumOps.FromDouble(1e-10))
+            gamma = NumOps.GreaterThan(totalVar, NumericTolerance.Of<T>(1e-10))
                 ? NumOps.Divide(NumOps.One, totalVar)
                 : NumOps.Divide(NumOps.One, NumOps.FromDouble(x.Columns));
         }
@@ -210,7 +210,7 @@ public partial class SpectralClustering<T> : ClusteringBase<T>
 
     private Matrix<T> ComputeLaplacian(Matrix<T> affinity, int n)
     {
-        T epsilon = NumOps.FromDouble(1e-10);
+        T epsilon = NumericTolerance.Of<T>(1e-10);
         var shape = new[] { n, n };
         var weights = Tensor<T>.FromMatrix(affinity);
         var identity = Engine.TensorEye<T>(n);
@@ -250,8 +250,8 @@ public partial class SpectralClustering<T> : ClusteringBase<T>
     private Matrix<T> ComputeEigenvectors(Matrix<T> laplacian, int n, int k)
     {
         // Simple power iteration method for finding smallest eigenvalues/eigenvectors
-        T epsilon = NumOps.FromDouble(1e-10);
-        T tolerance = NumOps.FromDouble(1e-12);
+        T epsilon = NumericTolerance.Of<T>(1e-10);
+        T tolerance = NumericTolerance.Of<T>(1e-12);
 
         // Initialize with random vectors
         var rand = Random ?? RandomHelper.CreateSecureRandom();
@@ -320,7 +320,7 @@ public partial class SpectralClustering<T> : ClusteringBase<T>
     private Matrix<T> NormalizeRows(Matrix<T> embedding)
     {
         // Divide each row by sqrt(max(||row||^2, epsilon))
-        T epsilon = NumOps.FromDouble(1e-10);
+        T epsilon = NumericTolerance.Of<T>(1e-10);
         var rows = Tensor<T>.FromMatrix(embedding);
         var norms = Engine.TensorSqrt(Engine.TensorMax(Engine.ReduceSum(Engine.TensorSquare(rows), new[] { 1 }, true), epsilon));
         return Engine.TensorDivide(rows, Engine.TensorBroadcastTo(norms, new[] { embedding.Rows, embedding.Columns })).ToMatrix();

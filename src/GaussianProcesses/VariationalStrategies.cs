@@ -95,7 +95,7 @@ public class VariationalStrategies<T>
 
         // Remaining centers: k-means++ initialization
         var minDistances = Tensor<T>.CreateDefault(new[] { n }, _numOps.FromDouble(double.MaxValue));
-        T tinyTotal = _numOps.FromDouble(1e-10);
+        T tinyTotal = NumericTolerance.Of<T>(1e-10);
 
         for (int k = 1; k < m; k++)
         {
@@ -130,7 +130,6 @@ public class VariationalStrategies<T>
 
         // Run k-means iterations
         var assignments = new int[n];
-        var ones = Tensor<T>.CreateDefault(new[] { n }, _numOps.One);
         for (int iter = 0; iter < maxIterations; iter++)
         {
             // Assignment step: nearest center (first one on ties) for every point
@@ -145,7 +144,9 @@ public class VariationalStrategies<T>
 
             // Update step: mean of the points assigned to each center (empty clusters keep their center)
             var sums = engine.TensorIndexAdd(new Tensor<T>(new[] { m, d }), 0, nearest, data);
-            var counts = engine.TensorIndexAdd(new Tensor<T>(new[] { m }), 0, nearest, ones);
+            // Counted in int: a running count in half precision stops at 2048
+            var counts = AiDotNet.Clustering.Base.ClusteringTensorOps.FromIntArray<T>(
+                AiDotNet.Clustering.Base.ClusteringTensorOps.CountIds(nearestCenters, m)).AsTensor();
             var hasPoints = engine.TensorGreaterThan(counts, _numOps.Zero);
             var safeCounts = engine.TensorWhere(hasPoints, counts, engine.TensorOnesLike(counts));
             var means = engine.TensorDivide(
@@ -367,7 +368,7 @@ public class VariationalStrategies<T>
         }
 
         var luuDiagonal = engine.TensorAbs(engine.TensorDiagonal(luu));
-        if (m > 0 && _numOps.LessThan(engine.TensorMinValue(luuDiagonal), _numOps.FromDouble(1e-10)))
+        if (m > 0 && _numOps.LessThan(engine.TensorMinValue(luuDiagonal), NumericTolerance.Of<T>(1e-10)))
         {
             return negativeInfinity;
         }
@@ -409,7 +410,7 @@ public class VariationalStrategies<T>
 
         // KL divergence term: KL(q(u) || p(u))
         // = 0.5 * (tr(Kuu^{-1} S) + m^T Kuu^{-1} m - M + log|Kuu| - log|S|)
-        T floor = _numOps.FromDouble(1e-10);
+        T floor = NumericTolerance.Of<T>(1e-10);
         T two = _numOps.FromDouble(2.0);
         T logDetKuu = _numOps.Multiply(two, engine.TensorSum(engine.TensorLog(engine.TensorMax(luuDiagonal, floor))));
         T logDetS = _numOps.Multiply(two, engine.TensorSum(engine.TensorLog(
@@ -488,7 +489,7 @@ public class VariationalStrategies<T>
         var weights = engine.TensorAbs(Tensor<T>.FromMatrix(Kuf));
         var weightSums = engine.ReduceSum(weights, new[] { 1 }, keepDims: false);
         var valueSums = engine.TensorMatMul(weights, Tensor<T>.FromVector(y).Reshape(new[] { n, 1 })).Reshape(new[] { m });
-        var hasWeight = engine.TensorGreaterThan(weightSums, _numOps.FromDouble(1e-10));
+        var hasWeight = engine.TensorGreaterThan(weightSums, NumericTolerance.Of<T>(1e-10));
         var safeSums = engine.TensorWhere(hasWeight, weightSums, engine.TensorOnesLike(weightSums));
         var mean = engine.TensorWhere(
             hasWeight, engine.TensorDivide(valueSums, safeSums), engine.TensorZerosLike(weightSums)).ToVector();

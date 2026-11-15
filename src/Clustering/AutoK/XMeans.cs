@@ -243,7 +243,7 @@ public partial class XMeans<T> : ClusteringBase<T>
         T variance = ComputeVariance(clusterData, n, d);
 
         // Log-likelihood for single Gaussian
-        T eps = NumOps.FromDouble(1e-10);
+        T eps = NumericTolerance.Of<T>(1e-10);
         T logVariance = NumOps.Log(NumOps.Add(variance, eps));
         T log2Pi = NumOps.FromDouble(Math.Log(2 * Math.PI));
         T nT = NumOps.FromDouble(n);
@@ -286,10 +286,10 @@ public partial class XMeans<T> : ClusteringBase<T>
             Engine.TensorDivide(Engine.Reshape(sumSquares, new[] { k }), Engine.TensorMax(countTensor, NumOps.One)),
             NumOps.FromDouble(d));
         var singular = Engine.TensorLessThan(countTensor, NumOps.FromDouble(1.5));
-        variance = Engine.TensorWhere(singular, Engine.TensorFullLike(variance, NumOps.FromDouble(1e-10)), variance);
+        variance = Engine.TensorWhere(singular, Engine.TensorFullLike(variance, NumericTolerance.Of<T>(1e-10)), variance);
 
         T dT = NumOps.FromDouble(d);
-        var logVariance = Engine.TensorLog(Engine.TensorAddScalar(variance, NumOps.FromDouble(1e-10)));
+        var logVariance = Engine.TensorLog(Engine.TensorAddScalar(variance, NumericTolerance.Of<T>(1e-10)));
         var inner = Engine.TensorAddScalar(
             Engine.TensorMultiplyScalar(logVariance, dT),
             NumOps.Add(NumOps.Multiply(dT, NumOps.FromDouble(Math.Log(2 * Math.PI))), dT));
@@ -318,7 +318,7 @@ public partial class XMeans<T> : ClusteringBase<T>
 
     private T ComputeVariance(Matrix<T> data, int n, int d)
     {
-        if (n <= 1) return NumOps.FromDouble(1e-10);
+        if (n <= 1) return NumericTolerance.Of<T>(1e-10);
 
         // Mean squared deviation from the column means over all n * d entries
         var centered = ClusteringTensorOps.SubtractRow(data, ClusteringTensorOps.ColumnMeans(data));

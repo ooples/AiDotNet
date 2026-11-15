@@ -369,7 +369,7 @@ public partial class CURE<T> : ClusteringBase<T>
 
         // Add more representatives using farthest-point heuristic: the point farthest from its nearest
         // representative, skipping points that coincide (closer than 1e-10) with a representative
-        T epsilon = NumOps.FromDouble(1e-10);
+        T epsilon = NumericTolerance.Of<T>(1e-10);
         var minToReps = ClusteringTensorOps.DistancesToPoint(_distanceMetric, members, members.GetRow(chosen[0])).AsTensor();
         var isRep = Engine.TensorLessThan(minToReps, epsilon);
         T minusOne = NumOps.Negate(NumOps.One);

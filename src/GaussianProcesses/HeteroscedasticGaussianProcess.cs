@@ -253,7 +253,7 @@ public partial class HeteroscedasticGaussianProcess<T> : GaussianProcessBase<T>
         // upward where the data actually has high variance. Starting too large causes
         // under-fitting that the EM algorithm struggles to recover from.
         T initialNoiseLog = _numOps.Log(MathHelper.Max(
-            _numOps.Multiply(yVar, _numOps.FromDouble(0.0001)), _numOps.FromDouble(1e-10)));
+            _numOps.Multiply(yVar, _numOps.FromDouble(0.0001)), NumericTolerance.Of<T>(1e-10)));
 
         _noiseLatentValues = Tensor<T>.CreateDefault(new[] { n }, initialNoiseLog).ToVector();
 
@@ -433,7 +433,7 @@ public partial class HeteroscedasticGaussianProcess<T> : GaussianProcessBase<T>
 
         // Complexity penalty: 0.5 * log|K| = sum(log(L_ii))
         var diagonal = Tensor<T>.FromVector(GaussianProcessEngineOps.Diagonal(_L));
-        T logDet = engine.TensorSum(engine.TensorLog(engine.TensorMax(diagonal, _numOps.FromDouble(1e-10))));
+        T logDet = engine.TensorSum(engine.TensorLog(engine.TensorMax(diagonal, NumericTolerance.Of<T>(1e-10))));
 
         // Constant term
         T constant = _numOps.FromDouble(0.5 * n * Math.Log(2 * Math.PI));
@@ -522,7 +522,7 @@ public partial class HeteroscedasticGaussianProcess<T> : GaussianProcessBase<T>
         }
 
         var kStarStar = Tensor<T>.FromVector(meanSelf);
-        var predictiveVar = engine.TensorMax(engine.TensorSubtract(kStarStar, vTv), _numOps.FromDouble(1e-10));
+        var predictiveVar = engine.TensorMax(engine.TensorSubtract(kStarStar, vTv), NumericTolerance.Of<T>(1e-10));
 
         // Noise variance prediction
         var noiseVar = engine.TensorExp(engine.TensorMatMul(kStarNoise, alpha_noise).Reshape(new[] { nNew }));
@@ -603,7 +603,7 @@ public partial class HeteroscedasticGaussianProcess<T> : GaussianProcessBase<T>
     {
         var numOps = MathHelper.GetNumericOperations<T>();
         var engine = AiDotNetEngine.Current;
-        T floor = numOps.FromDouble(1e-10);
+        T floor = NumericTolerance.Of<T>(1e-10);
         var unclamped = GaussianProcessEngineOps.UnclampedCholesky(K, floor);
         if (unclamped is not null)
             return unclamped;

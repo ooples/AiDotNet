@@ -669,6 +669,19 @@ public class GaussianProcessClassifier<T> : IGaussianProcessClassifier<T>
     }
 
     /// <summary>
+    /// Probit approximation of p(y = 1): sigmoid(kappa * mean) with kappa = 1 / sqrt(1 + pi * variance / 8).
+    /// </summary>
+    private Vector<T> ProbitClassOneProbability(Vector<T> latentMeans, Vector<T> latentVariances)
+    {
+        // Probit approximation: sigmoid(κ f) with κ = 1 / sqrt(1 + π * max(var, 1e-10) / 8)
+        var engine = AiDotNetEngine.Current;
+        var variance = engine.TensorMax(Tensor<T>.FromVector(latentVariances), NumericTolerance.Of<T>(1e-10));
+        var kappa = engine.TensorRsqrt(
+            engine.TensorAddScalar(engine.TensorMultiplyScalar(variance, _numOps.FromDouble(Math.PI / 8.0)), _numOps.One));
+        return engine.TensorSigmoid(engine.TensorMultiply(kappa, Tensor<T>.FromVector(latentMeans))).ToVector();
+    }
+
+    /// <summary>
     /// Calculates the kernel matrix between two sets of data points.
     /// </summary>
     /// <param name="X1">The first set of data points.</param>
@@ -689,16 +702,6 @@ public class GaussianProcessClassifier<T> : IGaussianProcessClassifier<T>
     /// similar inputs should produce similar outputs.
     /// </para>
     /// </remarks>
-    private Vector<T> ProbitClassOneProbability(Vector<T> latentMeans, Vector<T> latentVariances)
-    {
-        // Probit approximation: sigmoid(κ f) with κ = 1 / sqrt(1 + π * max(var, 1e-10) / 8)
-        var engine = AiDotNetEngine.Current;
-        var variance = engine.TensorMax(Tensor<T>.FromVector(latentVariances), _numOps.FromDouble(1e-10));
-        var kappa = engine.TensorRsqrt(
-            engine.TensorAddScalar(engine.TensorMultiplyScalar(variance, _numOps.FromDouble(Math.PI / 8.0)), _numOps.One));
-        return engine.TensorSigmoid(engine.TensorMultiply(kappa, Tensor<T>.FromVector(latentMeans))).ToVector();
-    }
-
     private Matrix<T> CalculateKernelMatrix(Matrix<T> X1, Matrix<T> X2)
     {
         var K = new Matrix<T>(X1.Rows, X2.Rows);

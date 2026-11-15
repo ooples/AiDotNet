@@ -128,7 +128,7 @@ public partial class SelfOrganizingMap<T> : ClusteringBase<T>
         var minVals = Engine.TensorAmin(data, new[] { 0 }, true);
         var range = Engine.TensorSubtract(Engine.ReduceMax(data, new[] { 0 }, true), minVals);
         range = Engine.TensorWhere(
-            Engine.TensorLessThan(range, NumOps.FromDouble(1e-10)), Engine.TensorOnesLike(range), range);
+            Engine.TensorLessThan(range, NumericTolerance.Of<T>(1e-10)), Engine.TensorOnesLike(range), range);
         var shape = new[] { numNeurons, d };
         var uniform = Tensor<T>.FromMatrix(Matrix<T>.CreateRandom(rand, numNeurons, d));
         var initialCodebook = Engine.TensorAdd(

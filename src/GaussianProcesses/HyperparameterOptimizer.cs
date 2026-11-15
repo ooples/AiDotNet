@@ -559,7 +559,7 @@ public class HyperparameterOptimizer<T>
         var foldScores = new List<double>();
         int startIdx = 0;
 
-        T varianceFloor = _numOps.FromDouble(1e-10);
+        T varianceFloor = NumericTolerance.Of<T>(1e-10);
         T twoPi = _numOps.FromDouble(2 * Math.PI);
         T minusHalf = _numOps.FromDouble(-0.5);
         for (int fold = 0; fold < numFolds; fold++)
