@@ -78,7 +78,9 @@ internal static class WrapperScoringOps
         var root = engine.TensorSqrt(safe);
         var correlation = engine.TensorDivide(products, engine.TensorOuter(root, root));
         var counted = engine.TensorMultiply(engine.TensorOuter(varying, varying), SelectorTensorOps.StrictUpperMask<T>(k));
-        T total = engine.TensorSum(engine.TensorMultiply(counted, engine.TensorAbs(correlation)));
+        // Selected, not multiplied by the 0/1 mask: a column holding a NaN fails the guard, as in the loop this
+        // replaced (NaN > 1e-10 is false, so its pairs count 0), but 0 * NaN would put the NaN back into the sum
+        T total = engine.TensorSum(SelectorTensorOps.ZeroUnless(counted, engine.TensorAbs(correlation)));
         return ops.Divide(total, ops.FromDouble(k * (k - 1) / 2));
     }
 
@@ -301,7 +303,8 @@ internal static class WrapperScoringOps
         var safe = engine.TensorWhere(valid, denominator, PreprocessingTensorOps.Filled(new[] { k, k }, ops.One));
         var correlation = engine.TensorDivide(engine.TensorMatMul(engine.TensorTranspose(centered), centered), safe);
         var counted = engine.TensorMultiply(valid, SelectorTensorOps.StrictUpperMask<T>(k));
-        T total = engine.TensorSum(engine.TensorMultiply(counted, engine.TensorAbs(correlation)));
+        // Selected, not multiplied by the mask: see MeanAbsPairCorrelation
+        T total = engine.TensorSum(SelectorTensorOps.ZeroUnless(counted, engine.TensorAbs(correlation)));
         return ops.Divide(total, ops.FromDouble(k * (k - 1) / 2));
     }
 
