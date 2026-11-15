@@ -35,6 +35,7 @@ public sealed partial class DiffusionAttentionLayer<T> : LayerBase<T>, IShapeCon
     private readonly int _headCount;
     private readonly int _headDimension;
     private readonly bool _zeroOutputProjection;
+    private readonly AttentionBiasInitialization _outputBiasInitialization;
 
     [TrainableParameter(Role = PersistentTensorRole.Weights,
         Shape = "_queryDimension, _queryDimension")]
@@ -63,15 +64,29 @@ public sealed partial class DiffusionAttentionLayer<T> : LayerBase<T>, IShapeCon
     /// <summary>Gets whether the output projection starts at zero.</summary>
     public bool IsOutputProjectionZeroInitialized => _zeroOutputProjection;
 
+    /// <summary>Gets how the output projection's bias is initialized.</summary>
+    public AttentionBiasInitialization OutputBiasInitialization => _outputBiasInitialization;
+
     /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <summary>Creates self- or cross-attention without eager weight allocation.</summary>
+    /// <param name="queryDimension">The query and output width.</param>
+    /// <param name="contextDimension">The key/value context width.</param>
+    /// <param name="headCount">The number of heads; must divide <paramref name="queryDimension"/>.</param>
+    /// <param name="zeroOutputProjection">Whether the output projection's weights (and bias) start at zero.</param>
+    /// <param name="outputBiasInitialization">
+    /// How the output projection's bias starts when <paramref name="zeroOutputProjection"/> is false:
+    /// <see cref="AttentionBiasInitialization.Zero"/> (the default, unchanged for existing callers) or
+    /// <see cref="AttentionBiasInitialization.TorchDefault"/>, PyTorch's <c>nn.Linear</c> uniform in
+    /// <c>±1/sqrt(queryDimension)</c> as the reference <c>to_out</c> projections start.
+    /// </param>
     public DiffusionAttentionLayer(
         int queryDimension,
         int contextDimension,
         int headCount,
-        bool zeroOutputProjection = false)
+        bool zeroOutputProjection = false,
+        AttentionBiasInitialization outputBiasInitialization = AttentionBiasInitialization.Zero)
         : base([-1, queryDimension], [-1, queryDimension])
     {
         if (queryDimension <= 0) throw new ArgumentOutOfRangeException(nameof(queryDimension));
@@ -83,6 +98,7 @@ public sealed partial class DiffusionAttentionLayer<T> : LayerBase<T>, IShapeCon
         _headCount = headCount;
         _headDimension = queryDimension / headCount;
         _zeroOutputProjection = zeroOutputProjection;
+        _outputBiasInitialization = outputBiasInitialization;
     }
 
     /// <inheritdoc />
@@ -160,6 +176,7 @@ public sealed partial class DiffusionAttentionLayer<T> : LayerBase<T>, IShapeCon
         metadata["ContextDimension"] = _contextDimension.ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata["HeadCount"] = _headCount.ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata["ZeroOutputProjection"] = _zeroOutputProjection.ToString();
+        metadata["OutputBiasInitialization"] = _outputBiasInitialization.ToString();
         return metadata;
     }
 
@@ -179,12 +196,41 @@ public sealed partial class DiffusionAttentionLayer<T> : LayerBase<T>, IShapeCon
             Engine.TensorFill(_outputWeights, NumOps.Zero);
         else
             InitializeLinear(_outputWeights, _queryDimension);
-        Engine.TensorFill(_outputBias, NumOps.Zero);
+        // nn.Linear's bias bound is 1/sqrt(fan_in) with fan_in the projection's input width (the query width here).
+        if (!_zeroOutputProjection && _outputBiasInitialization == AttentionBiasInitialization.TorchDefault)
+            InitializeLinear(_outputBias, _queryDimension);
+        else
+            Engine.TensorFill(_outputBias, NumOps.Zero);
         RegisterTrainableParameter(_queryWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_outputWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
+    }
+
+    /// <summary>
+    /// Loads a reference attention module's <c>to_q</c>, <c>to_k</c>, <c>to_v</c> (bias-free, <c>[out, in]</c>) and
+    /// <c>to_out.0</c> (weight and bias) under <paramref name="prefix"/>, as LDM's <c>CrossAttention</c> names them.
+    /// </summary>
+    internal IReadOnlyList<string> LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source, string prefix)
+    {
+        if (source is null) throw new ArgumentNullException(nameof(source));
+        MaterializeParameters();
+        var names = new List<string>(5);
+        void Transposed(string name, int outputs, int inputs, Tensor<T> destination)
+        {
+            source.CopyTransposedTo(name, new[] { outputs, inputs }, outputs, inputs, destination);
+            Engine.InvalidatePersistentTensor(destination);
+            names.Add(name);
+        }
+        Transposed(prefix + "to_q.weight", _queryDimension, _queryDimension, _queryWeights);
+        Transposed(prefix + "to_k.weight", _queryDimension, _contextDimension, _keyWeights);
+        Transposed(prefix + "to_v.weight", _queryDimension, _contextDimension, _valueWeights);
+        Transposed(prefix + "to_out.0.weight", _queryDimension, _queryDimension, _outputWeights);
+        source.CopyTo(prefix + "to_out.0.bias", new[] { _queryDimension }, _outputBias);
+        Engine.InvalidatePersistentTensor(_outputBias);
+        names.Add(prefix + "to_out.0.bias");
+        return names;
     }
 
     private void InitializeLinear(Tensor<T> tensor, int fanIn)

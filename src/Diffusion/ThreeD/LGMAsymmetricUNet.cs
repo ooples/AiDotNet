@@ -370,7 +370,8 @@ public class LGMAsymmetricUNet<T> : IParameterSource<T>
                 $"AttentionHeads ({config.AttentionHeads}) must divide every attended width ({channels}).",
                 nameof(config));
         var norm = Register(new GroupNormalizationLayer<T>(Groups(channels, config.NormGroups), channels, config.NormEpsilon));
-        var attention = Register(new DiffusionAttentionLayer<T>(channels, channels, config.AttentionHeads));
+        var attention = Register(new DiffusionAttentionLayer<T>(channels, channels, config.AttentionHeads,
+            outputBiasInitialization: AttentionBiasInitialization.TorchDefault));
         return new AttentionBlock(norm, attention);
     }
 
