@@ -98,11 +98,11 @@ public sealed partial class HouseholderSubspaceLayer<T> : LayerBase<T>, IShapeCo
     }
 
     [ThreadStatic]
-    private static Dictionary<int, (Tensor<T> StrictUpperTwo, Tensor<T> Identity)>? t_compactWyMasks;
+    private static Dictionary<int, (Tensor<T> StrictUpperTwo, Tensor<T> Identity, Tensor<T>[] RowSelectors)>? t_compactWyMasks;
 
-    private static (Tensor<T> StrictUpperTwo, Tensor<T> Identity) GetOrCreateCompactWyMasks(int k)
+    private static (Tensor<T> StrictUpperTwo, Tensor<T> Identity, Tensor<T>[] RowSelectors) GetOrCreateCompactWyMasks(int k)
     {
-        var cache = t_compactWyMasks ??= new Dictionary<int, (Tensor<T> StrictUpperTwo, Tensor<T> Identity)>();
+        var cache = t_compactWyMasks ??= new Dictionary<int, (Tensor<T> StrictUpperTwo, Tensor<T> Identity, Tensor<T>[] RowSelectors)>();
         if (cache.TryGetValue(k, out var existing))
         {
             return existing;
@@ -128,7 +128,19 @@ public sealed partial class HouseholderSubspaceLayer<T> : LayerBase<T>, IShapeCo
             }
         }
 
-        var masks = (new Tensor<T>([k, k], new Vector<T>(upperData)), new Tensor<T>([k, k], new Vector<T>(idData)));
+        // RowSelectors[r] is 1 on row r and 0 elsewhere; the triangular solve in ApplyChain writes one row per step.
+        var rowSelectors = new Tensor<T>[k];
+        for (int r = 0; r < k; r++)
+        {
+            var rowData = new T[k * k];
+            for (int idx = 0; idx < rowData.Length; idx++)
+            {
+                rowData[idx] = idx / k == r ? one : zero;
+            }
+            rowSelectors[r] = new Tensor<T>([k, k], new Vector<T>(rowData));
+        }
+
+        var masks = (new Tensor<T>([k, k], new Vector<T>(upperData)), new Tensor<T>([k, k], new Vector<T>(idData)), rowSelectors);
         cache[k] = masks;
         return masks;
     }
@@ -164,13 +176,7 @@ public sealed partial class HouseholderSubspaceLayer<T> : LayerBase<T>, IShapeCo
         // exact orthogonal isometry while zero reflectors yield 0 / sqrt(floor) = 0 (identity). Because both k == 1
         // and k > 1 normalize by sqrt(denom), backward divides by denom (not denom^2), so 1e-30 keeps float reflectors
         // exact down to ||u|| = 1e-15 while keeping 1 / (2 * denom) well below float.MaxValue on sub-floor inputs.
-        string typeName = typeof(T).Name;
-        double floorValue = (typeof(T) == typeof(double) || typeof(T) == typeof(decimal))
-            ? 1.1754943508222875e-38
-            : (typeName == "Half" || typeName.StartsWith("Float8", StringComparison.Ordinal))
-                ? 1e-2
-                : 1e-30;
-        T normFloor = numOps.FromDouble(floorValue);
+        double floorValue = ReflectorNormFloor();
 
         Tensor<T> current = input.Rank == 2
             ? input
@@ -178,9 +184,7 @@ public sealed partial class HouseholderSubspaceLayer<T> : LayerBase<T>, IShapeCo
 
         if (k == 1)
         {
-            Tensor<T> normSq = engine.ReduceSum(engine.TensorMultiply(reflectors, reflectors), [1], keepDims: true);
-            Tensor<T> denom = engine.TensorMax(normSq, normFloor);
-            Tensor<T> uHat = engine.TensorDivide(reflectors, engine.TensorSqrt(denom));
+            Tensor<T> uHat = NormalizeReflectorRows(engine, reflectors, floorValue);
             Tensor<T> uHatCol = engine.TensorTranspose(uHat);
             Tensor<T> proj = engine.TensorMatMul(current, uHatCol);
             Tensor<T> outer = engine.TensorMatMul(engine.TensorMultiplyScalar(proj, two), uHat);
@@ -191,19 +195,24 @@ public sealed partial class HouseholderSubspaceLayer<T> : LayerBase<T>, IShapeCo
             // Exact Compact WY representation (Schreiber & Van Loan 1989):
             // Normalize rows by sqrt(max(||u_j||_2^2, normFloor)) so H_j = I - 2 * uHat_j * uHat_j^T holds across
             // normal, subnormal, and identically zero reflectors without overflow. Then H_0 ... H_{k-1} = I - UHat^T * T * UHat
-            // where N = 2 * strict_triu(UHat * UHat^T) is nilpotent (N^k == 0) and T = 2 * sum_{p=0}^{k-1} (-N)^p.
-            var (strictUpperTwo, identityK) = GetOrCreateCompactWyMasks(k);
-            Tensor<T> rowSq = engine.ReduceSum(engine.TensorMultiply(reflectors, reflectors), [1], keepDims: true);
-            Tensor<T> denom = engine.TensorMax(rowSq, normFloor);
-            Tensor<T> uHat = engine.TensorDivide(reflectors, engine.TensorSqrt(denom));
+            // where N = 2 * strict_triu(UHat * UHat^T) is nilpotent (N^k == 0) and T = 2 * (I + N)^-1.
+            var (strictUpperTwo, identityK, rowSelectors) = GetOrCreateCompactWyMasks(k);
+            Tensor<T> uHat = NormalizeReflectorRows(engine, reflectors, floorValue);
             Tensor<T> uHatCol = engine.TensorTranspose(uHat);
             Tensor<T> gram = engine.TensorMatMul(uHat, uHatCol);
             Tensor<T> nilpotent = engine.TensorMultiply(gram, strictUpperTwo);
 
+            // M = (I + N)^-1 by back substitution, one row per step from the bottom: (I + N) M = I gives
+            // M[i] = e_i - N[i] M, and N[i] is non-zero only right of the diagonal, so it reads only rows below i,
+            // which are already final. Row i of M is still e_i before its step, so subtracting the masked row of N M
+            // sets it exactly. Every intermediate is a finished row of M or an identity row, so nothing grows past
+            // the final T. The truncated Neumann series this replaces formed the partial sums of (-N)^p, which grow
+            // like 2^p * C(k - 1, p - 1) before cancelling and overflow Half at k = 16 for correlated reflectors.
             Tensor<T> series = identityK;
-            for (int p = 1; p < k; p++)
+            for (int i = k - 2; i >= 0; i--)
             {
-                series = engine.TensorSubtract(identityK, engine.TensorMatMul(nilpotent, series));
+                series = engine.TensorSubtract(
+                    series, engine.TensorMultiply(rowSelectors[i], engine.TensorMatMul(nilpotent, series)));
             }
 
             Tensor<T> tMat = engine.TensorMultiplyScalar(series, two);
@@ -221,6 +230,40 @@ public sealed partial class HouseholderSubspaceLayer<T> : LayerBase<T>, IShapeCo
         return input.Rank == 2
             ? current
             : engine.Reshape(current, input._shape);
+    }
+
+    /// <summary>
+    /// Returns <c>u_j / sqrt(max(||u_j||^2, floor))</c> for each reflector row without forming <c>||u_j||^2</c> in T.
+    /// Squaring in T overflows Half once a row norm passes 256 (256^2 = 65536 &gt; 65504), which made the
+    /// denominator infinite and the reflector the identity. Each row is first divided by its largest magnitude
+    /// <c>c_j</c>, so every square is at most 1 and the row sum is at most D. Because
+    /// <c>(u / c) / sqrt(max(||u / c||^2, floor / c^2)) = u / sqrt(max(||u||^2, floor))</c> for any c &gt; 0, the
+    /// values are those of the unscaled formula, and with c detached so are the gradients. c is held at least
+    /// <c>sqrt(floor) / 16</c>, which keeps <c>floor / c^2</c> at most 256 and maps a zero row to 0 (identity).
+    /// </summary>
+    private static double ReflectorNormFloor()
+    {
+        string typeName = typeof(T).Name;
+        return (typeof(T) == typeof(double) || typeof(T) == typeof(decimal))
+            ? 1.1754943508222875e-38
+            : (typeName == "Half" || typeName.StartsWith("Float8", StringComparison.Ordinal))
+                ? 1e-2
+                : 1e-30;
+    }
+
+    private static Tensor<T> NormalizeReflectorRows(IEngine engine, Tensor<T> reflectors, double floorValue)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        double sqrtFloor = Math.Sqrt(floorValue);
+        Tensor<T> rowMaxAbs = engine.StopGradient(engine.ReduceMax(engine.TensorAbs(reflectors), [1], keepDims: true));
+        Tensor<T> rowScale = engine.TensorMax(rowMaxAbs, numOps.FromDouble(sqrtFloor / 16.0));
+        Tensor<T> scaled = engine.TensorDivide(reflectors, rowScale);
+        Tensor<T> scaledSq = engine.ReduceSum(engine.TensorMultiply(scaled, scaled), [1], keepDims: true);
+        Tensor<T> scaledFloorRoot = engine.TensorMultiplyScalar(
+            engine.TensorReciprocal(rowScale), numOps.FromDouble(sqrtFloor));
+        Tensor<T> scaledFloor = engine.TensorMultiply(scaledFloorRoot, scaledFloorRoot);
+        Tensor<T> denom = engine.TensorMax(scaledSq, scaledFloor);
+        return engine.TensorDivide(scaled, engine.TensorSqrt(denom));
     }
 
     /// <inheritdoc />
@@ -256,10 +299,15 @@ public sealed partial class HouseholderSubspaceLayer<T> : LayerBase<T>, IShapeCo
     {
         if (rows <= 0 || cols <= 0) return;
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        var sq = Engine.TensorMultiply(reflectors, reflectors);
-        var rowNormSq = Engine.ReduceSum(sq, new[] { 1 }, keepDims: true);
-        var safeNorm = Engine.TensorSqrt(Engine.TensorAddScalar(rowNormSq, NumOps.FromDouble(1e-24)));
-        var normalized = Engine.TensorDivide(reflectors, safeNorm);
+        // Same overflow-safe normalization as the forward pass: the former sum of squares in T overflowed Half for
+        // rows above norm 256, and its 1e-24 guard rounded to 0 in Half, turning a zero row into 0 / 0. The init floor
+        // is at most 1e-6 so every row of norm 1e-3 or more becomes exactly unit, as before; for Half its
+        // sqrt(1e-6) / 16 = 6.25e-5 scale bound is still a normal Half. Float8 keeps its forward floor, since
+        // 6.25e-5 is below its smallest subnormal.
+        double initFloor = typeof(T).Name.StartsWith("Float8", StringComparison.Ordinal)
+            ? ReflectorNormFloor()
+            : Math.Min(ReflectorNormFloor(), 1e-6);
+        var normalized = NormalizeReflectorRows(Engine, reflectors, initFloor);
         normalized.AsSpan().Slice(0, reflectors.Length).CopyTo(reflectors.Data.Span);
         Engine.InvalidatePersistentTensor(reflectors);
     }

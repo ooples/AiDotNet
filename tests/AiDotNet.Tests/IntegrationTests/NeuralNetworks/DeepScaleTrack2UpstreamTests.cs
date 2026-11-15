@@ -790,6 +790,86 @@ public sealed class DeepScaleTrack2UpstreamTests
         }
     }
 
+    /// <summary>
+    /// Half has max 65504 = 255.9^2, so a reflector whose norm is above 256 overflowed its sum of squares; the
+    /// infinite denominator zeroed the unit reflector and the layer returned its input (identity). Fifteen correlated
+    /// reflectors also overflowed the old Neumann-series T build, whose partial sums reach ~1e6 before cancelling,
+    /// and produced NaN. Each case must match the double sequential reflection of the same Half-rounded values.
+    /// </summary>
+    [Theory]
+    [InlineData(1, 1.0, 300.0)]
+    [InlineData(3, 1.0, 300.0)]
+    [InlineData(4, 1.0, 2000.0)]
+    [InlineData(15, 0.05, 1.0)]
+    [InlineData(15, 0.05, 300.0)]
+    public void HouseholderSubspaceLayer_HalfLargeNormAndCorrelatedReflectors_MatchDoubleSequentialReflection(
+        int numReflectors, double spread, double magnitude)
+    {
+        const int dim = 8;
+        const int rows = 2;
+        var half = MathHelper.GetNumericOperations<Half>();
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(4100 + numReflectors);
+        var shared = new double[dim];
+        for (int i = 0; i < dim; i++) shared[i] = rng.NextDouble() * 2.0 - 1.0;
+
+        var reflectorData = new Half[numReflectors * dim];
+        var reflectors = new double[numReflectors][];
+        for (int j = 0; j < numReflectors; j++)
+        {
+            reflectors[j] = new double[dim];
+            for (int i = 0; i < dim; i++)
+            {
+                double v = (shared[i] + spread * (rng.NextDouble() * 2.0 - 1.0)) * magnitude;
+                reflectorData[j * dim + i] = half.FromDouble(v);
+                reflectors[j][i] = half.ToDouble(reflectorData[j * dim + i]);
+            }
+        }
+
+        var inputData = new Half[rows * dim];
+        var expected = new double[rows * dim];
+        for (int i = 0; i < inputData.Length; i++)
+        {
+            inputData[i] = half.FromDouble(rng.NextDouble() * 2.0 - 1.0);
+            expected[i] = half.ToDouble(inputData[i]);
+        }
+        var original = (double[])expected.Clone();
+
+        for (int r = 0; r < rows; r++)
+        {
+            foreach (var u in reflectors)
+            {
+                double normSq = 0.0, proj = 0.0;
+                for (int i = 0; i < dim; i++)
+                {
+                    normSq += u[i] * u[i];
+                    proj += expected[r * dim + i] * u[i];
+                }
+                for (int i = 0; i < dim; i++)
+                    expected[r * dim + i] -= 2.0 * proj / normSq * u[i];
+            }
+        }
+
+        // The fixture must discriminate: the reflection moves the input far more than the tolerance, so a result
+        // that degenerated to the identity cannot pass.
+        const double tolerance = 2e-2;
+        double moved = 0.0;
+        for (int i = 0; i < expected.Length; i++) moved = Math.Max(moved, Math.Abs(expected[i] - original[i]));
+        Assert.True(moved > 5 * tolerance, $"Degenerate fixture: the reflection moves the input by only {moved}.");
+
+        var y = HouseholderSubspaceLayer<Half>.ApplyChain(
+            AiDotNetEngine.Current,
+            new Tensor<Half>(new[] { rows, dim }, new Vector<Half>(inputData)),
+            new Tensor<Half>(new[] { numReflectors, dim }, new Vector<Half>(reflectorData)));
+
+        for (int i = 0; i < expected.Length; i++)
+        {
+            double got = half.ToDouble(y.GetFlat(i));
+            Assert.False(double.IsNaN(got) || double.IsInfinity(got), $"Non-finite Half output at {i}: {got}");
+            Assert.True(Math.Abs(got - expected[i]) <= tolerance,
+                $"Half mismatch at {i}: double sequential={expected[i]}, Half compact WY={got}, input={original[i]}");
+        }
+    }
+
     [Fact]
     public void SequentialBlockCredit_LocalObjectiveThrows_ReleasesDetachedNextBlockInput()
     {
