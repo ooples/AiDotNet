@@ -29,7 +29,7 @@ public class TensorProgramPersistenceTests
 {
     private static Tensor<float> Random(int seed, params int[] shape)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var t = new Tensor<float>(shape);
         for (int i = 0; i < t.Length; i++) t[i] = (float)(rng.NextDouble() * 2 - 1);
         return t;
@@ -127,6 +127,37 @@ public class TensorProgramPersistenceTests
         AssertClose(original.Predict(input), loaded.Predict(input));
     }
 
+    [Fact]
+    public void LambdaLayer_BuiltFromAClosure_IsRebuiltFromItsSavedProgram_InASkeletonThatHasNoClosure()
+    {
+        // The round trip above loads into a network built with the SAME closure, so it passes whether or not the
+        // saved program is ever used. A model file is loaded into a skeleton (AiModelResult's path), which has no
+        // closure to fall back on: only the program saved with the layer can reproduce the original's output.
+        var scale = Random(12, 6);
+        Func<Tensor<float>, Tensor<float>> forward = x => AiDotNetEngine.Current.TensorMultiply(x, scale);
+        var original = new FeedForwardNeuralNetwork<float>(new NeuralNetworkArchitecture<float>(
+            inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 5, outputSize: 2, layers: new List<ILayer<float>>
+            {
+                new InputLayer<float>(5),
+                new DenseLayer<float>(6, activationFunction: new TanhActivation<float>()),
+                new LambdaLayer<float>(new[] { 6 }, new[] { 6 }, forward, null, (IActivationFunction<float>)new IdentityActivation<float>()),
+                new DenseLayer<float>(2, activationFunction: new IdentityActivation<float>()),
+            }), lossFunction: new MeanSquaredErrorLoss<float>());
+        var input = Random(13, 4, 5);
+        var expected = original.Predict(input);
+
+        var skeleton = new FeedForwardNeuralNetwork<float>();
+        using (ModelPersistenceGuard.InternalOperation())
+        using (SerializedArchitectureAdoption.Begin())
+        {
+            skeleton.Deserialize(original.Serialize());
+        }
+
+        Assert.Contains(skeleton.Layers, l => l is LambdaLayer<float>);
+        AssertClose(expected, skeleton.Predict(input));
+    }
+
     // ── Facade: compiled program embedded in a saved model ───────────────────────────────────────────────
 
     private static FeedForwardNeuralNetwork<float> Regressor() => new(new NeuralNetworkArchitecture<float>(
@@ -203,19 +234,23 @@ public class TensorProgramPersistenceTests
         var point = new[] { 0.3, -0.7 };
 
         var d = NeuralNetworkDerivatives<double>.ComputeDerivatives(net, point, 1);
+        var first = d.FirstDerivatives ?? throw new InvalidOperationException("no first derivatives were computed");
+        var second = d.SecondDerivatives ?? throw new InvalidOperationException("no second derivatives were computed");
         double F(double[] p) => net.Predict(new Tensor<double>(p, new[] { 1, 2 }))[0];
         const double h = 1e-4;
         for (int i = 0; i < 2; i++)
         {
             var up = (double[])point.Clone(); up[i] += h;
             var down = (double[])point.Clone(); down[i] -= h;
-            Assert.Equal((F(up) - F(down)) / (2 * h), d.FirstDerivatives![0, i], 6);
+            Assert.Equal((F(up) - F(down)) / (2 * h), first[0, i], 6);
 
             // Second derivatives: central differences of the exact first derivatives.
-            var gUp = NeuralNetworkDerivatives<double>.ComputeDerivatives(net, up, 1).FirstDerivatives!;
-            var gDown = NeuralNetworkDerivatives<double>.ComputeDerivatives(net, down, 1).FirstDerivatives!;
+            var gUp = NeuralNetworkDerivatives<double>.ComputeDerivatives(net, up, 1).FirstDerivatives
+                ?? throw new InvalidOperationException("no first derivatives were computed above the point");
+            var gDown = NeuralNetworkDerivatives<double>.ComputeDerivatives(net, down, 1).FirstDerivatives
+                ?? throw new InvalidOperationException("no first derivatives were computed below the point");
             for (int j = 0; j < 2; j++)
-                Assert.Equal((gUp[0, j] - gDown[0, j]) / (2 * h), d.SecondDerivatives![0, i, j], 5);
+                Assert.Equal((gUp[0, j] - gDown[0, j]) / (2 * h), second[0, i, j], 5);
         }
     }
 
