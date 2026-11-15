@@ -305,27 +305,24 @@ internal sealed class DreamGaussianPipeline<T>
         var firstMoment = new double[raw.Length];
         var secondMoment = new double[raw.Length];
 
-        MeshTextureView? referenceView = null;
-        if (_mode == DreamGaussianMode.ImageTo3D)
-        {
-            referenceView = DreamGaussianTexturing.SampleView(geometry, GaussianSplatCamera.FromOrbit(
-                elevation, 0.0, radius, s.ReferenceSize, s.ReferenceSize, s.FovYDegrees));
-        }
-
         for (int step = 1; step <= s.RefineIterations; step++)
         {
             double ratio = Math.Min(1.0, (double)step / s.RefineIterations);
             var gradient = new double[raw.Length];
 
-            if (referenceView is not null && _referenceImage is not null)
+            if (_mode == DreamGaussianMode.ImageTo3D && _referenceImage is not null)
             {
-                // mse(image * valid, ref * valid) with valid = alpha > 0 and viewcos > threshold.
+                // A random super-sampling per render; mse(image * valid, ref * valid) with valid = alpha > 0 and
+                // viewcos > threshold, both resized with the image.
+                var referenceView = DreamGaussianTexturing.SampleSupersampledView(
+                    geometry, (w, h) => GaussianSplatCamera.FromOrbit(elevation, 0.0, radius, w, h, s.FovYDegrees),
+                    s.ReferenceSize, s.ReferenceSize, DreamGaussianTexturing.DrawSupersampling(_random));
                 var image = DreamGaussianTexturing.Render(referenceView, raw, size, 1.0);
                 int pixels = referenceView.Width * referenceView.Height;
                 var imageGradient = new double[3 * pixels];
                 for (int p = 0; p < pixels; p++)
                 {
-                    if (!referenceView.Covered[p] || !(referenceView.ViewCosine[p] > s.ViewCosineThreshold)) continue;
+                    if (!(referenceView.Alpha[p] > 0.0) || !(referenceView.ViewCosine[p] > s.ViewCosineThreshold)) continue;
                     for (int c = 0; c < 3; c++)
                         imageGradient[(3 * p) + c] = 2.0 * (image[(3 * p) + c] - _referenceImage[(3 * p) + c]) / (3.0 * pixels);
                 }
@@ -334,7 +331,7 @@ internal sealed class DreamGaussianPipeline<T>
             }
 
             int resolution = s.RefineRenderResolution;
-            var views = new MeshTextureView[s.BatchSize];
+            var views = new SupersampledTextureView[s.BatchSize];
             var offsets = new GuidanceViewOffset[s.BatchSize];
             var images = new double[s.BatchSize][];
             for (int b = 0; b < s.BatchSize; b++)
@@ -342,8 +339,9 @@ internal sealed class DreamGaussianPipeline<T>
                 int ver = RandomInteger(minVer, maxVer);
                 int hor = _random.Next(-180, 180);
                 offsets[b] = new GuidanceViewOffset(ver, hor, 0.0);
-                views[b] = DreamGaussianTexturing.SampleView(geometry, GaussianSplatCamera.FromOrbit(
-                    elevation + ver, hor, radius, resolution, resolution, s.FovYDegrees));
+                views[b] = DreamGaussianTexturing.SampleSupersampledView(
+                    geometry, (w, h) => GaussianSplatCamera.FromOrbit(elevation + ver, hor, radius, w, h, s.FovYDegrees),
+                    resolution, resolution, DreamGaussianTexturing.DrawSupersampling(_random));
                 images[b] = DreamGaussianTexturing.Render(views[b], raw, size, 1.0);
             }
 

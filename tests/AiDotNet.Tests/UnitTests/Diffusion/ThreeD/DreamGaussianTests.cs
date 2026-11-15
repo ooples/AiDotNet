@@ -600,6 +600,232 @@ public class DreamGaussianTests
         Assert.True(checkedTexels > 10);
     }
 
+    /// <summary>A <see cref="Random"/> whose NextDouble is fixed, to pin main2.py's ssaa draw.</summary>
+    private sealed class FixedRandom : Random
+    {
+        private readonly double _value;
+
+        public FixedRandom(double value) => _value = value;
+
+        public override double NextDouble() => _value;
+    }
+
+    [Fact]
+    public void Supersampling_DrawsAndSizesAsMain2()
+    {
+        // ssaa = min(2, max(0.125, 2 * random())).
+        Assert.Equal(0.125, DreamGaussianTexturing.DrawSupersampling(new FixedRandom(0.01)), 12);
+        Assert.Equal(0.6, DreamGaussianTexturing.DrawSupersampling(new FixedRandom(0.3)), 12);
+        Assert.Equal(1.98, DreamGaussianTexturing.DrawSupersampling(new FixedRandom(0.99)), 12);
+        // make_divisible(size * ssaa, 8) = ceil(size * ssaa / 8) * 8; ssaa = 1 keeps the size.
+        Assert.Equal(312, DreamGaussianTexturing.SupersampledSize(512, 0.6));
+        Assert.Equal(64, DreamGaussianTexturing.SupersampledSize(512, 0.125));
+        Assert.Equal(1024, DreamGaussianTexturing.SupersampledSize(512, 2.0));
+        Assert.Equal(136, DreamGaussianTexturing.SupersampledSize(100, 1.3));
+        Assert.Equal(100, DreamGaussianTexturing.SupersampledSize(100, 1.0));
+    }
+
+    [Fact]
+    public void ScaleImage_MinifiesWithoutAndMagnifiesWithAlignedCorners()
+    {
+        // Minification 8 -> 4, align_corners=False: output 0 reads source 0.5 (half of 0 and 1), output 3 reads 6.5.
+        var down = DreamGaussianTexturing.ScaleImageTaps(8, 8, 4, 4);
+        var ramp = Enumerable.Range(0, 64).Select(i => (double)(i % 8)).ToArray();
+        var small = down.Apply(ramp, 1);
+        Assert.Equal(0.5, small[0], 12);
+        Assert.Equal(6.5, small[3], 12);
+        // Magnification 4 -> 8, align_corners=True: output i reads source 3 i / 7.
+        var up = DreamGaussianTexturing.ScaleImageTaps(4, 4, 8, 8);
+        var coarse = Enumerable.Range(0, 16).Select(i => (double)(i % 4)).ToArray();
+        var large = up.Apply(coarse, 1);
+        for (int x = 0; x < 8; x++)
+            Assert.Equal(3.0 * x / 7.0, large[x], 12);
+        // The transpose is the adjoint: <A x, y> = <x, A^T y>.
+        var random = RandomHelper.CreateSeededRandom(5);
+        var y = Enumerable.Range(0, 16).Select(_ => random.NextDouble()).ToArray();
+        double left = small.Select((v, i) => v * y[i]).Sum();
+        var adjoint = down.Transpose(y, 1);
+        double right = ramp.Select((v, i) => v * adjoint[i]).Sum();
+        Assert.Equal(left, right, 9);
+    }
+
+    [Theory]
+    [InlineData(1.5)]
+    [InlineData(0.5)]
+    public void SupersampledTextureBackward_MatchesFiniteDifferences(double ssaa)
+    {
+        var (vertices, faces) = Cube();
+        var geometry = DreamGaussianTexturing.Prepare(vertices, faces, new UvAtlasOptions { TextureResolution = 16, PaddingTexels = 1 });
+        var view = DreamGaussianTexturing.SampleSupersampledView(
+            geometry, (w, h) => GaussianSplatCamera.FromOrbit(-20.0, 30.0, 2.0, w, h, 49.1), 12, 12, ssaa);
+        Assert.Equal(DreamGaussianTexturing.SupersampledSize(12, ssaa), view.View.Width);
+        Assert.NotNull(view.Taps);
+        Assert.All(view.Alpha, a => Assert.InRange(a, 0.0, 1.0));
+        var random = RandomHelper.CreateSeededRandom(9);
+        var raw = Enumerable.Range(0, 16 * 16 * 3).Select(_ => random.NextDouble() - 0.5).ToArray();
+        var weights = Enumerable.Range(0, 12 * 12 * 3).Select(_ => random.NextDouble() - 0.5).ToArray();
+        var gradient = new double[raw.Length];
+        DreamGaussianTexturing.Backward(view, raw, 16, weights, gradient);
+
+        double Loss(double[] texture)
+            => DreamGaussianTexturing.Render(view, texture, 16, 1.0).Select((v, i) => v * weights[i]).Sum();
+
+        int checkedTexels = 0;
+        for (int i = 0; i < raw.Length; i++)
+        {
+            if (gradient[i] == 0.0 && i % 37 != 0) continue;
+            var plus = (double[])raw.Clone();
+            var minus = (double[])raw.Clone();
+            plus[i] += 1e-6;
+            minus[i] -= 1e-6;
+            double numeric = (Loss(plus) - Loss(minus)) / 2e-6;
+            Assert.True(Math.Abs(numeric - gradient[i]) <= 1e-7 + (1e-5 * Math.Abs(numeric)),
+                $"texel value {i}: analytic {gradient[i]:G10} vs numeric {numeric:G10}");
+            checkedTexels++;
+        }
+
+        Assert.True(checkedTexels > 10);
+    }
+
+    [Fact]
+    public void Mipmaps_AreBoxFilteredAndTheLevelIsTheFootprintsMajorAxis()
+    {
+        // 4 x 4 -> 2 x 2 -> 1 x 1, channel 0 = texel index.
+        var texture = new double[48];
+        for (int t = 0; t < 16; t++) texture[3 * t] = t;
+        var (levels, sizes) = DreamGaussianTexturing.BuildMipmaps(texture, 4);
+        Assert.Equal(new[] { 4, 2, 1 }, sizes);
+        Assert.Equal((0 + 1 + 4 + 5) / 4.0, levels[1][0], 12);
+        Assert.Equal((10 + 11 + 14 + 15) / 4.0, levels[1][3 * 3], 12);
+        Assert.Equal(7.5, levels[2][0], 12);
+
+        // Footprint (du/dx, du/dy, dv/dx, dv/dy) in uv per pixel on a 64-texel texture.
+        double Level(double dudx, double dudy, double dvdx, double dvdy)
+            => DreamGaussianTexturing.MipLevel(new[] { dudx / 64, dudy / 64, dvdx / 64, dvdy / 64 }, 0, 64, 6);
+        Assert.Equal(2.0, Level(4, 0, 0, 4), 12);
+        // Anisotropic: the major axis (4 texels) decides, not the minor one.
+        Assert.Equal(2.0, Level(4, 0, 0, 1), 12);
+        // Rotated: x-axis (2, 2), y-axis (-1, 1): A = 8, B = 2, C = 0, major^2 = 8, level 1.5.
+        Assert.Equal(1.5, Level(2, -1, 2, 1), 12);
+        // Magnification clamps to level 0 and a footprint wider than the texture to the last level.
+        Assert.Equal(0.0, Level(0.25, 0, 0, 0.25), 12);
+        Assert.Equal(6.0, Level(1000, 0, 0, 1000), 12);
+    }
+
+    [Fact]
+    public void Render_MinifiedCheckerboard_IsFilteredByTheMipmap()
+    {
+        // A unit quad facing the camera covers ~9 pixels per side: ~7 texels of a 64-texel texture per pixel.
+        double[] vertices = { -0.5, -0.5, 0.0, 0.5, -0.5, 0.0, 0.5, 0.5, 0.0, -0.5, 0.5, 0.0 };
+        int[] faces = { 0, 1, 2, 0, 2, 3 };
+        var geometry = DreamGaussianTexturing.Prepare(vertices, faces, new UvAtlasOptions { TextureResolution = 64, PaddingTexels = 1 });
+        var view = DreamGaussianTexturing.SampleView(geometry, GaussianSplatCamera.FromOrbit(0.0, 0.0, 2.0, 16, 16, 49.1));
+        const int size = 64;
+        var raw = new double[3 * size * size];
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                for (int c = 0; c < 3; c++)
+                    raw[(3 * ((y * size) + x)) + c] = ((x + y) % 2 == 0) ? 3.0 : -3.0;
+            }
+        }
+
+        var image = DreamGaussianTexturing.Render(view, raw, size, 1.0);
+        int covered = 0;
+        bool levelZeroAliases = false;
+        var sample = new double[3];
+        for (int p = 0; p < view.Covered.Length; p++)
+        {
+            if (!view.Covered[p]) continue;
+            covered++;
+            Assert.InRange(DreamGaussianTexturing.MipLevel(view.UvDerivatives, p, size, 6), 1.0, 6.0);
+            // Every level from 1 up averages the checkerboard to 0, so the render is sigmoid(0) everywhere.
+            Assert.Equal(0.5, image[3 * p], 12);
+            DreamGaussianTexturing.SampleBilinear(raw, size, view.Uv[2 * p], view.Uv[(2 * p) + 1], sample);
+            levelZeroAliases |= Math.Abs(sample[0]) > 0.5;
+        }
+
+        Assert.True(covered > 20);
+        Assert.True(levelZeroAliases, "Plain bilinear sampling should alias on this checkerboard.");
+    }
+
+    /// <summary>A one- or two-triangle mesh with hand-placed screen positions over a 4 x 1 image.</summary>
+    private static (UvTexturedMesh Mesh, MeshRasterization Raster) SyntheticRaster(
+        double edgeX, double[]? neighbour, int[] pixelFaces, double[] pixelDepths)
+    {
+        var screen = new List<double[]> { new[] { -10.0, -10.0 }, new[] { edgeX, -10.0 }, new[] { edgeX, 10.0 } };
+        var faceList = new List<int> { 0, 1, 2 };
+        if (neighbour is not null)
+        {
+            screen.Add(neighbour);
+            faceList.AddRange(new[] { 1, 3, 2 });
+        }
+
+        int vertexCount = screen.Count;
+        var atlas = new UvAtlas(new double[3 * vertexCount], faceList.ToArray(), new double[2 * vertexCount],
+            Enumerable.Range(0, vertexCount).ToArray(), new int[faceList.Count / 3], 1);
+        var mesh = new UvTexturedMesh(atlas, new double[3 * vertexCount]);
+        var raster = new MeshRasterization(4, 1)
+        {
+            ScreenX = screen.Select(v => v[0]).ToArray(),
+            ScreenY = screen.Select(v => v[1]).ToArray(),
+            VertexDepth = Enumerable.Repeat(1.0, vertexCount).ToArray(),
+        };
+        for (int p = 0; p < 4; p++)
+        {
+            raster.Face[p] = pixelFaces[p];
+            raster.Depth[p] = pixelDepths[p];
+        }
+
+        return (mesh, raster);
+    }
+
+    [Fact]
+    public void Antialias_BlendsAcrossSilhouettesByTheCrossingDistance()
+    {
+        // The vertical boundary edge x = 1.8 crosses between pixel 1 (inside) and pixel 2 at t = 0.8 from pixel 1:
+        // pixel 2 takes 0.3 of pixel 1's colour.
+        var (mesh, raster) = SyntheticRaster(1.8, null, new[] { 0, 0, -1, -1 }, new[] { 1.0, 1.0, 0.0, 0.0 });
+        var blends = DreamGaussianTexturing.FindSilhouetteBlends(mesh, raster);
+        Assert.Equal(new[] { 2 }, blends.Destination);
+        Assert.Equal(new[] { 1 }, blends.Source);
+        Assert.Equal(0.3, blends.Weight[0], 12);
+
+        // At x = 1.3 the crossing is in pixel 1's half (t = 0.3): pixel 1 takes 0.2 of pixel 2's colour.
+        (mesh, raster) = SyntheticRaster(1.3, null, new[] { 0, 0, -1, -1 }, new[] { 1.0, 1.0, 0.0, 0.0 });
+        blends = DreamGaussianTexturing.FindSilhouetteBlends(mesh, raster);
+        Assert.Equal(new[] { 1 }, blends.Destination);
+        Assert.Equal(new[] { 2 }, blends.Source);
+        Assert.Equal(0.2, blends.Weight[0], 12);
+
+        // Rendered: pixel 1 = a + 0.2 (b - a), with a its own texel and b the uncovered pixel's lookup at uv (0, 0),
+        // as main2.py antialiases before compositing over the background.
+        double[] raw = { 1.0, 1.0, 1.0, -2.0, -2.0, -2.0, 0.5, 0.5, 0.5, 2.5, 2.5, 2.5 };
+        double[] uv = { 0.25, 0.25, 0.25, 0.25, 0.0, 0.0, 0.0, 0.0 };
+        var view = new MeshTextureView(4, 1, new[] { true, true, false, false }, uv, new double[4], new double[16], blends);
+        var image = DreamGaussianTexturing.Render(view, raw, 2, 1.0);
+        double Sigmoid(double x) => 1.0 / (1.0 + Math.Exp(-x));
+        double a = Sigmoid(1.0), b = Sigmoid((1.0 - 2.0 + 0.5 + 2.5) / 4.0);
+        Assert.Equal(a, image[0], 12);
+        Assert.Equal(a + (0.2 * (b - a)), image[3], 12);
+        Assert.Equal(1.0, image[6], 12);
+    }
+
+    [Fact]
+    public void Antialias_SkipsInteriorEdgesAndBlendsFolds()
+    {
+        // Two triangles sharing the edge x = 1.8 with the same winding: an interior edge, no blend.
+        var (mesh, raster) = SyntheticRaster(1.8, new[] { 10.0, 0.0 }, new[] { 0, 0, 1, 1 }, new[] { 1.0, 1.0, 2.0, 2.0 });
+        Assert.Empty(DreamGaussianTexturing.FindSilhouetteBlends(mesh, raster).Weight);
+
+        // The neighbour folded back (opposite winding on screen): the shared edge is a silhouette of the nearer face.
+        (mesh, raster) = SyntheticRaster(1.8, new[] { -5.0, 0.0 }, new[] { 0, 0, 1, 1 }, new[] { 1.0, 1.0, 2.0, 2.0 });
+        var blends = DreamGaussianTexturing.FindSilhouetteBlends(mesh, raster);
+        Assert.Equal(new[] { 2 }, blends.Destination);
+        Assert.Equal(0.3, blends.Weight[0], 12);
+    }
+
     [Fact]
     public void Inpaint_CopiesTheNearestBorderTexel()
     {

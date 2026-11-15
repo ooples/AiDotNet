@@ -16,8 +16,12 @@ internal sealed class MeshRasterization
         Bary1 = new double[width * height];
         Bary2 = new double[width * height];
         Depth = new double[width * height];
+        BaryDerivatives = new double[4 * width * height];
         for (int i = 0; i < Face.Length; i++)
             Face[i] = -1;
+        ScreenX = Array.Empty<double>();
+        ScreenY = Array.Empty<double>();
+        VertexDepth = Array.Empty<double>();
     }
 
     /// <summary>Image width.</summary>
@@ -37,6 +41,58 @@ internal sealed class MeshRasterization
 
     /// <summary>Camera-space depth of the visible surface.</summary>
     public double[] Depth { get; }
+
+    /// <summary>
+    /// The pixel-space derivatives of the two barycentrics [H, W, 4] (d b1/dx, d b1/dy, d b2/dx, d b2/dy), nvdiffrast's
+    /// <c>rast_db</c>.
+    /// </summary>
+    public double[] BaryDerivatives { get; }
+
+    /// <summary>Projected x of every vertex, in pixels (pixel centres at integers).</summary>
+    public double[] ScreenX { get; internal set; }
+
+    /// <summary>Projected y of every vertex, in pixels.</summary>
+    public double[] ScreenY { get; internal set; }
+
+    /// <summary>Camera-space depth of every vertex.</summary>
+    public double[] VertexDepth { get; internal set; }
+
+    /// <summary>Whether a triangle lies in front of the near plane, so it is drawn.</summary>
+    public bool IsDrawable(int i0, int i1, int i2)
+        => VertexDepth[i0] > MeshRasterizer.NearPlane && VertexDepth[i1] > MeshRasterizer.NearPlane
+           && VertexDepth[i2] > MeshRasterizer.NearPlane;
+
+    /// <summary>Twice the signed screen-space area of a triangle (its winding as seen by the camera).</summary>
+    public double SignedArea(int i0, int i1, int i2)
+        => ((ScreenX[i1] - ScreenX[i0]) * (ScreenY[i2] - ScreenY[i0])) - ((ScreenX[i2] - ScreenX[i0]) * (ScreenY[i1] - ScreenY[i0]));
+
+    /// <summary>
+    /// The pixel-space derivatives of an interpolated attribute ([H, W, width, 2]: d/dx then d/dy per component),
+    /// <c>dr.interpolate(..., rast_db, diff_attrs='all')</c>'s second output.
+    /// </summary>
+    public double[] InterpolateDerivatives(double[] attributes, int width, int[] attributeFaces)
+    {
+        if (attributes is null) throw new ArgumentNullException(nameof(attributes));
+        if (attributeFaces is null) throw new ArgumentNullException(nameof(attributeFaces));
+        var result = new double[Face.Length * width * 2];
+        for (int p = 0; p < Face.Length; p++)
+        {
+            int f = Face[p];
+            if (f < 0) continue;
+            int i0 = attributeFaces[3 * f], i1 = attributeFaces[(3 * f) + 1], i2 = attributeFaces[(3 * f) + 2];
+            double b1x = BaryDerivatives[4 * p], b1y = BaryDerivatives[(4 * p) + 1];
+            double b2x = BaryDerivatives[(4 * p) + 2], b2y = BaryDerivatives[(4 * p) + 3];
+            for (int k = 0; k < width; k++)
+            {
+                double a0 = attributes[(i0 * width) + k];
+                double d1 = attributes[(i1 * width) + k] - a0, d2 = attributes[(i2 * width) + k] - a0;
+                result[(((p * width) + k) * 2)] = (b1x * d1) + (b2x * d2);
+                result[(((p * width) + k) * 2) + 1] = (b1y * d1) + (b2y * d2);
+            }
+        }
+
+        return result;
+    }
 
     /// <summary>
     /// Interpolates a per-vertex attribute of <paramref name="width"/> values (<c>dr.interpolate</c>), with
@@ -75,8 +131,9 @@ internal sealed class MeshRasterization
 /// the Gaussian renderer, so a mesh and the Gaussians it came from line up pixel for pixel. Both windings are drawn
 /// (nvdiffrast does not cull), barycentrics are perspective-correct and the nearest surface wins. Triangles with a
 /// vertex at or behind the near plane are skipped rather than clipped; DreamGaussian's cameras orbit at a radius of 2
-/// or more around a mesh inside the unit cube, so none of its triangles reaches the plane. nvdiffrast's analytic
-/// antialiasing (<c>dr.antialias</c>) is not reproduced.
+/// or more around a mesh inside the unit cube, so none of its triangles reaches the plane. The barycentrics' pixel-space
+/// derivatives (nvdiffrast's <c>rast_db</c>) are the analytic derivatives of the perspective-correct barycentrics of the
+/// visible triangle.
 /// </para>
 /// </remarks>
 internal static class MeshRasterizer
@@ -112,6 +169,9 @@ internal static class MeshRasterizer
             screenY[v] = tz > NearPlane ? (fy * ty / tz) + cy : 0.0;
         }
 
+        result.ScreenX = screenX;
+        result.ScreenY = screenY;
+        result.VertexDepth = depth;
         var zBuffer = new double[width * height];
         for (int i = 0; i < zBuffer.Length; i++)
             zBuffer[i] = double.MaxValue;
@@ -132,6 +192,10 @@ internal static class MeshRasterizer
             int minY = Math.Max(0, (int)Math.Ceiling(Math.Min(y0, Math.Min(y1, y2))));
             int maxY = Math.Min(height - 1, (int)Math.Floor(Math.Max(y0, Math.Max(y1, y2))));
             double inverseArea = 1.0 / area;
+            // Screen-linear barycentrics are affine in (x, y): constant derivatives per triangle.
+            double l1dx = (y2 - y0) * inverseArea, l1dy = -(x2 - x0) * inverseArea;
+            double l2dx = -(y1 - y0) * inverseArea, l2dy = (x1 - x0) * inverseArea;
+            double l0dx = -l1dx - l2dx, l0dy = -l1dy - l2dy;
             for (int y = minY; y <= maxY; y++)
             {
                 for (int x = minX; x <= maxX; x++)
@@ -153,6 +217,14 @@ internal static class MeshRasterizer
                     result.Bary1[p] = w1 * z;
                     result.Bary2[p] = w2 * z;
                     result.Depth[p] = z;
+                    // b_i = (l_i / z_i) / S with S = sum_j l_j / z_j: d b_i = (d l_i / z_i - b_i dS) / S.
+                    double sdx = (l0dx / z0) + (l1dx / z1) + (l2dx / z2);
+                    double sdy = (l0dy / z0) + (l1dy / z1) + (l2dy / z2);
+                    double b1 = w1 * z, b2 = w2 * z;
+                    result.BaryDerivatives[4 * p] = ((l1dx / z1) - (b1 * sdx)) * z;
+                    result.BaryDerivatives[(4 * p) + 1] = ((l1dy / z1) - (b1 * sdy)) * z;
+                    result.BaryDerivatives[(4 * p) + 2] = ((l2dx / z2) - (b2 * sdx)) * z;
+                    result.BaryDerivatives[(4 * p) + 3] = ((l2dy / z2) - (b2 * sdy)) * z;
                 }
             }
         }
