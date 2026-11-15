@@ -253,6 +253,20 @@ public static class DeserializationHelper
 
         bool isShapeAgnosticLayer = genericDefForValidation == typeof(AiDotNet.NeuralNetworks.Layers.DropoutLayer<>);
 
+        // A GRU saved before ResetAfter existed applied the reset gate before the recurrent product. The generated
+        // factory below fills an absent constructor argument with the constructor's default (reset-after), and it
+        // accepts any metadata that names the hidden size, so the legacy placement has to be stated here: left to
+        // CreateGRULayer's fallback it was never reached, and such a checkpoint loaded as a different recurrence.
+        if (genericDefForValidation == typeof(GRULayer<>)
+            && (additionalParams is null
+                || !additionalParams.Keys.Any(key => string.Equals(key, "ResetAfter", StringComparison.OrdinalIgnoreCase))))
+        {
+            additionalParams = additionalParams is null
+                ? new Dictionary<string, object>()
+                : new Dictionary<string, object>(additionalParams, additionalParams.Comparer);
+            additionalParams["ResetAfter"] = bool.FalseString;
+        }
+
         // Rebuild from saved constructor state when the layer declares it via [LayerState]. This
         // calls the layer's real constructor with the values it was originally given, so nothing is
         // inferred from inputShape -- which is what let a dynamic (-1) axis reach a constructor and
@@ -2449,12 +2463,19 @@ public static class DeserializationHelper
             int inputWidth = inputShape.Length > 3 ? inputShape[3] : 1;
             double bnMomentum = TryGetDouble(additionalParams, "BnMomentum") ?? 0.1;
 
-            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(double) });
-            if (ctor is null)
+            // A checkpoint written before ConvolutionBias existed has a bias on every convolution.
+            bool convolutionBias = ReadBooleanOption(additionalParams, "ConvolutionBias", true);
+            var lazyCtor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(double), typeof(bool) });
+            var ctor = lazyCtor is null
+                ? type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(int), typeof(int), typeof(double) })
+                : null;
+            if (lazyCtor is null && ctor is null)
             {
                 throw new MissingLayerCtorException($"Cannot find DenseBlock constructor.");
             }
-            instance = ctor.Invoke(new object[] { inputChannels, numLayers, growthRate, inputHeight, inputWidth, bnMomentum });
+            instance = lazyCtor is not null
+                ? lazyCtor.Invoke(new object[] { numLayers, growthRate, bnMomentum, convolutionBias })
+                : ctor!.Invoke(new object[] { inputChannels, numLayers, growthRate, inputHeight, inputWidth, bnMomentum });
         }
         else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.InvertedResidualBlock<>) ||
                  (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".NeuralNetworks.Layers.InvertedResidualBlock`1")))
@@ -2537,12 +2558,18 @@ public static class DeserializationHelper
             int outputChannels = TryGetInt(additionalParams, "OutputChannels") ?? (outputShape.Length > 1 ? outputShape[1] : outputShape[0]);
             double compressionFactor = inputChannels > 0 ? (double)outputChannels / inputChannels : 0.5;
 
-            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(double) });
-            if (ctor is null)
+            bool convolutionBias = ReadBooleanOption(additionalParams, "ConvolutionBias", true);
+            var lazyCtor = type.GetConstructor(new Type[] { typeof(double), typeof(bool) });
+            var ctor = lazyCtor is null
+                ? type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), typeof(double) })
+                : null;
+            if (lazyCtor is null && ctor is null)
             {
                 throw new MissingLayerCtorException($"Cannot find TransitionLayer constructor.");
             }
-            instance = ctor.Invoke(new object[] { inputChannels, inputHeight, inputWidth, compressionFactor });
+            instance = lazyCtor is not null
+                ? lazyCtor.Invoke(new object[] { compressionFactor, convolutionBias })
+                : ctor!.Invoke(new object[] { inputChannels, inputHeight, inputWidth, compressionFactor });
         }
         else if (genericDef == typeof(AiDotNet.NeuralNetworks.Layers.AdaptiveAveragePoolingLayer<>) ||
                  (openGenericType.FullName != null && openGenericType.FullName.EndsWith(".NeuralNetworks.Layers.AdaptiveAveragePoolingLayer`1")))
@@ -4451,7 +4478,10 @@ public static class DeserializationHelper
         // the wrong (identity) activation and diverged from the source despite byte-identical weights.
         // Passing null activations lets the ctor restore its Tanh (candidate) / Sigmoid (gate) defaults,
         // which match the model's default GRU construction.
-        return new GRULayer<T>(hiddenSize, returnSequences, activation, recurrentActivation);
+        // A layer saved before ResetAfter existed applied the reset gate before the recurrent product.
+        bool resetAfter = ReadBooleanOption(additionalParams, "ResetAfter", false);
+        return new GRULayer<T>(hiddenSize, returnSequences, activation, recurrentActivation, stateful: false,
+            resetAfter: resetAfter);
     }
 
     /// <summary>
@@ -4913,6 +4943,19 @@ public static class DeserializationHelper
                 return parsed;
         }
         return null;
+    }
+
+    /// <summary>
+    /// A persisted behaviour flag: <paramref name="legacyDefault"/> when the key is absent (a checkpoint written before
+    /// the flag existed), the parsed value when present. A present value that is not a boolean throws, because a
+    /// silently defaulted flag can load the same parameter count and compute a different layer.
+    /// </summary>
+    private static bool ReadBooleanOption(Dictionary<string, object>? parameters, string key, bool legacyDefault)
+    {
+        if (parameters is null || !parameters.TryGetValue(key, out var value) || value is null)
+            return legacyDefault;
+        return TryGetBool(parameters, key)
+            ?? throw new InvalidOperationException($"Invalid '{key}' layer metadata '{value}'; expected true or false.");
     }
 
     private static string? TryGetString(Dictionary<string, object>? parameters, string key)

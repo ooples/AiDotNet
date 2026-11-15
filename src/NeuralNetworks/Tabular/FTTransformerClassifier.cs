@@ -276,7 +276,8 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
             lossValue = AiDotNet.Training.TapeTrainingStepper<T>.EagerSgdObjectiveStep(
                 () => trainable,
                 () => SoftmaxCrossEntropyLoss(Forward(numericalFeatures, categoricalIndices), onehot),
-                learningRate);
+                learningRate,
+                owner: this);
         }
 
         ResetState();

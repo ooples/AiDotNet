@@ -107,6 +107,7 @@ public static class CompiledTapeTrainingStep<T>
         internal (int OptType, double Lr, double B1, double B2, double Eps, double Wd)? configuredOptimizerConfig;
         internal double configuredL2;
         internal bool configuredL2AfterClip;
+        internal double configuredMaxGradNorm;
         internal long fusedStepCount;
         // The configured plan's optimizer step (1-based after its first Step), counted from configuration; -1 when it
         // is unknown (an imported checkpoint set it, or the last fused step ran a different plan).
@@ -132,27 +133,10 @@ public static class CompiledTapeTrainingStep<T>
         internal bool distributedReplayEvaluated;
         internal object? shapeSwitchFrom;
         internal CompiledModelCache<T>? retiringCache;
-        // A closure objective's plans, one per objective signature (ClosureObjectiveGuard): the objective builds its
-        // per-step data inside itself, so a step whose signature differs (a captured scalar, a shape, an op) needs its
-        // own plan, which continues the optimizer from the configured one like a batch-shape switch.
-        internal List<ClosureVariant>? closureVariants;
+        // Plans replaying a closure objective, keyed by its traced signature (see ClosureObjectiveState).
+        internal ClosureObjectiveState<T>? closureState;
     }
 
-    internal sealed class ClosureVariant
-    {
-        internal ClosureVariant(AiDotNet.Tensors.Engines.Compilation.ClosureObjectiveGuard<T> guard, int index)
-        {
-            Guard = guard;
-            Index = index;
-        }
-
-        internal AiDotNet.Tensors.Engines.Compilation.ClosureObjectiveGuard<T> Guard { get; }
-        internal int Index { get; }
-    }
-
-    // Distinct closure-objective plans kept per lifecycle; a step past them trains eagerly (a declined replay) rather
-    // than compiling without bound.
-    private const int MaxClosureVariantsPerLifecycle = 8;
 
     /// <summary>
     /// Every compiled-training state of ONE owner (a model), one per layer set it trains. A GAN's discriminator and
@@ -486,6 +470,9 @@ public static class CompiledTapeTrainingStep<T>
     /// <summary>Whether the configured plan adds its L2 term after the gradient clip (PyTorch's order) rather than before.</summary>
     private static bool _configuredL2AfterClip { get => CurrentState.configuredL2AfterClip; set => CurrentState.configuredL2AfterClip = value; }
 
+    /// <summary>The global-norm clip threshold the configured plan applies (0 = none).</summary>
+    private static double _configuredMaxGradNorm { get => CurrentState.configuredMaxGradNorm; set => CurrentState.configuredMaxGradNorm = value; }
+
     /// <summary>
     /// Counter of successful fused-step executions on this thread. Exposed
     /// via <see cref="GetFusedStepCount"/>/<see cref="ResetFusedStepCount"/>
@@ -709,6 +696,8 @@ public static class CompiledTapeTrainingStep<T>
         object? owner = null)
     {
         if (layers is null) throw new ArgumentNullException(nameof(layers));
+        // A replay updates weights on the device without advancing their versions; derived caches must rebuild.
+        AiDotNet.NeuralNetworks.Layers.DerivedTensorCacheGeneration.Advance();
         object ownerKey = owner ?? (layers.Count > 0 ? layers[0] : new object());
         if (!TryEnterState(ownerKey, LayerSetKey(ownerKey, layers, null), out var ownerStates, out var state))
         {
@@ -1035,7 +1024,8 @@ public static class CompiledTapeTrainingStep<T>
         _shapeSwitchFrom = null;
         _retiringCache?.Invalidate();
         _retiringCache = null;
-        CurrentState.closureVariants = null;
+        CurrentState.closureState?.Clear(keepAlive: null);
+        CurrentState.closureState = null;
         // Drop ALL mixed-precision plans (SGD/Adam/generic) on explicit Invalidate,
         // matching InvalidateIfLayerSetChanged — a model-structure change must not
         // leave any stale FP16 plan capturing the old layer set's tensors (#558).
@@ -1181,8 +1171,10 @@ public static class CompiledTapeTrainingStep<T>
         bool verifyDistributedReplay = false,
         double? distributedEagerReplayLoss = null,
         double distributedReplayTolerance = 0.0,
-        bool closureObjective = false)
+        Func<Tensor<T>>? closureObjective = null)
     {
+        // A replay updates weights on the device without advancing their versions; derived caches must rebuild.
+        AiDotNet.NeuralNetworks.Layers.DerivedTensorCacheGeneration.Advance();
         if (layers is null) throw new ArgumentNullException(nameof(layers));
         // A model whose whole training surface is raw extra tensors passes no layers; its first extra tensor then
         // identifies it, so its plan and moments still persist across steps.
@@ -1240,6 +1232,175 @@ public static class CompiledTapeTrainingStep<T>
         }
     }
 
+    /// <summary>
+    /// Picks the compiled plan a closure objective's step runs on. The first step compiles from its own trace (that
+    /// trace holds this step's data). Later steps probe the closure without executing it: a signature matching a
+    /// cached plan copies this step's leaf data into that plan, which then replays; anything else (a new signature, a
+    /// host read, uncomparable captured state, or an objective the dynamic rule gave up caching) compiles a plan from
+    /// a real trace of this step, which continues the configured plan's optimizer. No path replays another step's
+    /// data, and once a plan has trained none restarts the optimizer's moments on the eager tape.
+    /// </summary>
+    /// <returns>False only on the first step, when the objective cannot be signed: it then trains on the eager tape
+    /// from the start.</returns>
+    private static bool TrySelectClosurePlan(
+        Func<Tensor<T>> objective,
+        Tensor<T>[] parameters,
+        out ICompiledTrainingPlan<T>? plan,
+        out bool compiledThisCall,
+        out ClosureObjectiveState<T>.Entry? rebound)
+    {
+        var closure = CurrentState.closureState ??= new ClosureObjectiveState<T>();
+        plan = null;
+        compiledThisCall = false;
+        rebound = null;
+        // Every plan after the first continues the configured one's optimizer; without that a signature change could
+        // only restart the moments.
+        if (!PlanSupportsContinueOptimizer())
+        {
+            Fd("closure objective needs ICompiledTrainingPlan.ContinueOptimizerFrom, which the linked Tensors build lacks");
+            return false;
+        }
+        if (closure.UnsignableReason is { } unsignable)
+        {
+            Fd("closure objective is unsignable: " + unsignable);
+            return false;
+        }
+
+        var configured = _configuredPlan;
+        ClosureObjectiveState<T>.Entry? entry = null;
+        // The probe runs the closure for real on the host side, so its random draws are this step's draws. A retrace
+        // of the same step must reuse them, or the step consumes the model's generator twice.
+        CompiledStepRandom<T>.CaptureScope? probeDraws = null;
+        if (configured is null && closure.PlanCount == 0)
+        {
+            var first = CompileClosurePlan(objective, parameters, out var firstGuard, out var firstLeaves, out var firstReason);
+            if (firstGuard is null)
+            {
+                first.Dispose();
+                string why = firstReason ?? "the objective could not be signed";
+                closure.MarkUnsignable(why);
+                ReportClosureFallback(closure, ClosureFallbackReason.Unsignable, why);
+                return false;
+            }
+            entry = new ClosureObjectiveState<T>.Entry(first, firstGuard, firstLeaves);
+            closure.Add(entry, keepAlive: null);
+            closure.RecordStep(failed: false, reason: null);
+            compiledThisCall = true;
+        }
+        else
+        {
+            if (!closure.IsDynamic)
+            {
+                ClosureGuardResult probe;
+                ObjectiveSignature? signature;
+                object[] leaves;
+                string? reason;
+                using (probeDraws = CompiledStepRandom<T>.CaptureDraws())
+                    probe = ClosureObjectiveGuard<T>.Probe(objective, parameters, out signature, out leaves, out reason);
+                if (probe == ClosureGuardResult.Matched && signature is not null)
+                {
+                    entry = closure.Find(signature);
+                    if (entry is null)
+                        reason = "no cached plan for this signature (" + signature.NodeCount + " ops)";
+                    else if (entry.TryRebind(leaves, out reason))
+                    {
+                        // The plan's leaves now hold this step's data; they get their own back after the step.
+                        rebound = entry;
+                    }
+                    else
+                    {
+                        closure.Remove(entry, keepAlive: configured);
+                        entry = null;
+                    }
+                }
+                else
+                {
+                    ReportClosureFallback(closure,
+                        probe == ClosureGuardResult.Aborted ? ClosureFallbackReason.Aborted : ClosureFallbackReason.Unsignable,
+                        reason);
+                }
+
+                closure.RecordStep(failed: entry is null, reason: reason);
+                if (closure.IsDynamic)
+                    ReportClosureFallback(closure, ClosureFallbackReason.Dynamic,
+                        "its structure changed on more than " + ClosureObjectiveState<T>.MaxEarlyFailures + " of its first "
+                        + ClosureObjectiveState<T>.ObservationSteps + " steps (last: " + reason + "); each step now compiles "
+                        + "from its own trace, which can be slower than the eager tape");
+            }
+
+            if (entry is null)
+            {
+                ICompiledTrainingPlan<T> traced;
+                ClosureObjectiveGuard<T>? tracedGuard;
+                object[]? tracedLeaves;
+                using (probeDraws is null ? null : CompiledStepRandom<T>.ReplayDraws(probeDraws))
+                    traced = CompileClosurePlan(objective, parameters, out tracedGuard, out tracedLeaves, out _);
+                entry = new ClosureObjectiveState<T>.Entry(traced, closure.IsDynamic ? null : tracedGuard, tracedLeaves);
+                closure.Add(entry, keepAlive: configured);
+                compiledThisCall = true;
+            }
+        }
+
+        t_lastClosurePlanCount = closure.PlanCount;
+        t_lastClosureIsDynamic = closure.IsDynamic;
+        plan = entry.Plan;
+        // A different plan continues the configured one's optimizer (moments, step count) through the shape-switch
+        // path below, exactly as a new batch shape does.
+        if (configured is not null && !ReferenceEquals(configured, plan))
+            _shapeSwitchFrom = configured;
+        return true;
+    }
+
+    /// <summary>
+    /// Traces <paramref name="objective"/> once and compiles it, recording the trace's signature for replay
+    /// (<paramref name="guard"/> is null, with <paramref name="reason"/>, when the trace cannot be signed).
+    /// </summary>
+    private static ICompiledTrainingPlan<T> CompileClosurePlan(
+        Func<Tensor<T>> objective,
+        Tensor<T>[] parameters,
+        out ClosureObjectiveGuard<T>? guard,
+        out object[]? leaves,
+        out string? reason)
+    {
+        // A compiled plan keeps its traced buffers: they must be fresh and outside any per-step arena.
+        using var freshAllocations = FirstCompiledStepAllocationScope.Enter(true);
+        using var closureRecording = ClosureObjectiveGuard<T>.BeginRecording();
+        using var stepRandom = CompiledStepRandom<T>.BeginRecording();
+        CompiledTrainingPlan<T> plan;
+        using (TensorArena.Suspend())
+        using (var scope = GraphMode.EnableTraining(parameters))
+        {
+            var loss = objective();
+            if (scope.NodeCount == 0)
+                throw new InvalidOperationException("The closure objective recorded no tensor operations.");
+            // The plan's external leaves, in the order the guard copies a later step's data into them: the entry
+            // saves and restores what they hold around every replay (some are the caller's own tensors). Read before
+            // compilation, which may rewrite the node list.
+            var traced = ObjectiveSignature.Build(scope.Nodes, parameters, out var tracedLeaves);
+            leaves = traced.Signable ? tracedLeaves : null;
+            plan = scope.CompileTraining(parameters, loss);
+        }
+        CompiledStepRandom<T>.Attach(plan, stepRandom);
+        guard = ClosureObjectiveGuard<T>.TakeRecorded(out reason);
+        guard?.AttachTo(plan);
+        return plan;
+    }
+
+    [ThreadStatic] private static int t_lastClosurePlanCount;
+    [ThreadStatic] private static bool t_lastClosureIsDynamic;
+
+    /// <summary>Plans the last closure-objective step on this thread held (diagnostics and tests).</summary>
+    internal static int LastClosurePlanCount => t_lastClosurePlanCount;
+
+    /// <summary>Whether the last closure-objective step on this thread had given up caching (the dynamic rule).</summary>
+    internal static bool LastClosureIsDynamic => t_lastClosureIsDynamic;
+
+    private static void ReportClosureFallback(ClosureObjectiveState<T> closure, ClosureFallbackReason kind, string? reason)
+    {
+        if (closure.ReportedReasons.Add(kind))
+            FdTagged("CLOSURE-OBJECTIVE", kind + ": " + (reason ?? "no reason recorded"));
+    }
+
     private static bool TryStepWithFusedOptimizerCore(
         IReadOnlyList<ITrainableLayer<T>> layers,
         Tensor<T> input,
@@ -1278,7 +1439,7 @@ public static class CompiledTapeTrainingStep<T>
         bool verifyDistributedReplay = false,
         double? distributedEagerReplayLoss = null,
         double distributedReplayTolerance = 0.0,
-        bool closureObjective = false)
+        Func<Tensor<T>>? closureObjective = null)
     {
         lossValue = MathHelper.GetNumericOperations<T>().Zero;
         if (deferredLoss is not null) deferredLoss.Value = null;
@@ -1363,6 +1524,7 @@ public static class CompiledTapeTrainingStep<T>
         l2AfterClip = l2AfterClip && l2Regularization > 0.0 && maxGradNorm > 0.0;
 
         AiDotNet.Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>>? restoredStateAwaitingStep = null;
+        ClosureObjectiveState<T>.Entry? reboundClosureEntry = null;
         try
         {
             // AiDotNet#1406: drop the cached compiled plan + parameter array
@@ -1462,7 +1624,7 @@ public static class CompiledTapeTrainingStep<T>
             // With no layers the parameters are exactly the caller's extras (DDPM's U-Net), collected before this step,
             // so a sizing forward cannot change them; it only left a batch of eval-mode scratch (1.1 GB on DDPM at
             // batch 64) on the device for the model's life.
-            if (_cachedParameters is null && !closureObjective && layers.Count > 0)
+            if (_cachedParameters is null && closureObjective is null && layers.Count > 0)
             {
                 // TryStepWithFusedOptimizer is the training entry — every layer
                 // is in training mode here by precondition (NeuralNetworkBase
@@ -1538,7 +1700,10 @@ public static class CompiledTapeTrainingStep<T>
             // Adam on FP32 master weights+moments with a GradScaler. This is the path Adam-configured
             // models (the cortex) take, so it is what makes them eligible for the memory win. Default off
             // => the single-type fused plan below is byte-identical.
-            if (typeof(T) == typeof(float)
+            // The mixed-precision plans trace once and never rebind, so a closure objective (whose data lives in the
+            // closure) stays on the guarded single-type plan below.
+            if (closureObjective is null
+                && typeof(T) == typeof(float)
                 && Environment.GetEnvironmentVariable("AIDOTNET_FP16_ACTIVATIONS") == "1"
                 && MixedPrecisionReflection.IsAvailable
                 && (optimizerType == AiDotNet.Tensors.Engines.Compilation.OptimizerType.Adam
@@ -1597,7 +1762,8 @@ public static class CompiledTapeTrainingStep<T>
             // NeuralNetworkBase) and a Tensors build exposing ComputeGradients (Tensors #574); both
             // gates degrade to the FP32 plan below when absent. Skipped on FP16 overflow (the GradScaler
             // backs off). Default off => the single-type fused plan below is byte-identical.
-            if (typeof(T) == typeof(float)
+            if (closureObjective is null
+                && typeof(T) == typeof(float)
                 && Environment.GetEnvironmentVariable("AIDOTNET_FP16_ACTIVATIONS") == "1"
                 && eagerOptimizer is not null
                 && MixedPrecisionReflection.IsComputeGradientsAvailable)
@@ -1660,74 +1826,19 @@ public static class CompiledTapeTrainingStep<T>
             // activation storage, ~half the activation VRAM). Distinct from AIDOTNET_FP16_ACTIVATIONS, which
             // routes to the separate, capture-incompatible MixedPrecisionCompiledPlan handled above. The scope
             // is active only during the (once-per-shape) trace+compile; Step() replays without it.
-            // A closure objective's step picks the plan its signature matches, refilled with this step's data. Its
-            // first step traces without a probe; every later step probes the objective once (a storage-free trace
-            // that also runs its host-side draws, exactly once, as the eager step would). Its CompiledStepRandom draws
-            // are skipped: the replay redraws each one, and the probe drawing as well would advance the generator twice
-            // per step (measured: 5.7e-2 from eager after 6 steps of a noisy target).
-            int closureVariant = 0;
-            if (closureObjective && CurrentState.closureVariants is { Count: > 0 } variants)
-            {
-                AiDotNet.Tensors.Engines.Compilation.ClosureGuardResult probe;
-                AiDotNet.Tensors.Engines.Compilation.ObjectiveSignature? probed;
-                object[] leaves;
-                string? probeReason;
-                using (CompiledStepRandom<T>.SkipDraws())
-                    probe = AiDotNet.Tensors.Engines.Compilation.ClosureObjectiveGuard<T>.Probe(
-                        () => computeLoss(forward(_persistentInput!), _persistentTarget!), parameters,
-                        out probed, out leaves, out probeReason);
-                if (probe != AiDotNet.Tensors.Engines.Compilation.ClosureGuardResult.Matched || probed is null)
-                {
-                    _lastFallbackException = new InvalidOperationException(
-                        "the closure objective cannot replay a compiled plan this step (" + probe + "): " + probeReason);
-                    CurrentState.lastFallbackUnreplayableClosureStep = true;
-                    Fd(_lastFallbackException.Message);
-                    return false;
-                }
-                ClosureVariant? match = null;
-                foreach (var v in variants)
-                    if (v.Guard.Signature.Equals(probed)) { match = v; break; }
-                if (match is not null)
-                {
-                    if (!match.Guard.TryCopyLeaves(leaves, out string? copyReason))
-                    {
-                        _lastFallbackException = new InvalidOperationException(
-                            "the closure objective's data cannot be copied into its compiled plan: " + copyReason);
-                        CurrentState.lastFallbackUnreplayableClosureStep = true;
-                        Fd(_lastFallbackException.Message);
-                        return false;
-                    }
-                    closureVariant = match.Index;
-                }
-                else if (variants.Count >= MaxClosureVariantsPerLifecycle)
-                {
-                    _lastFallbackException = new InvalidOperationException(
-                        $"the closure objective traced {variants.Count + 1} distinct signatures; past "
-                        + $"{MaxClosureVariantsPerLifecycle} it is not compiled again: "
-                        + (variants[0].Guard.Signature.DescribeDifference(probed) ?? "signatures differ"));
-                    CurrentState.lastFallbackUnreplayableClosureStep = true;
-                    Fd(_lastFallbackException.Message);
-                    return false;
-                }
-                else
-                {
-                    closureVariant = variants.Count;   // a new signature: traced and compiled below
-                }
-            }
-            if (closureObjective)
-            {
-                // The variant joins the plan cache's key, so each signature has its own plan.
-                Array.Resize(ref compositeKey, compositeKey.Length + 2);
-                compositeKey[compositeKey.Length - 2] = -2;
-                compositeKey[compositeKey.Length - 1] = closureVariant;
-            }
 
             ICompiledTrainingPlan<T> plan;
             bool compiledThisCall = false;
+            if (closureObjective is not null)
             {
-                using var closureRecording = closureObjective
-                    ? AiDotNet.Tensors.Engines.Compilation.ClosureObjectiveGuard<T>.BeginRecording()
-                    : null;
+                if (!TrySelectClosurePlan(closureObjective, parameters, out var closurePlan, out compiledThisCall,
+                        out reboundClosureEntry)
+                    || closurePlan is null)
+                    return false;
+                plan = closurePlan;
+            }
+            else
+            {
                 using var _fp16Capture =
                     (typeof(T) == typeof(float) && Environment.GetEnvironmentVariable("AIDOTNET_FP16_CAPTURE") == "1")
                         ? new AiDotNet.Tensors.Engines.Gpu.AutocastScope(AiDotNet.Tensors.Engines.Gpu.PrecisionMode.Float16)
@@ -1748,36 +1859,6 @@ public static class CompiledTapeTrainingStep<T>
                     parameters);
                 if (compiledThisCall)
                     CompiledStepRandom<T>.Attach(plan, stepRandom);
-                if (closureObjective && compiledThisCall)
-                {
-                    var guard = AiDotNet.Tensors.Engines.Compilation.ClosureObjectiveGuard<T>.TakeRecorded(out string? guardReason);
-                    if (guard is null)
-                    {
-                        // Nothing this plan freezes can be compared step to step, so no replay of it is safe. Before any
-                        // plan stepped, drop it; with other signatures' plans live, keep them (this step fails, and a
-                        // committed session does not continue on a cached unguarded plan, since the failure is surfaced).
-                        if (CurrentState.closureVariants is null) cache.Invalidate();
-                        _lastFallbackException = new InvalidOperationException(
-                            "the closure objective cannot be guarded for replay: " + guardReason);
-                        Fd(_lastFallbackException.Message);
-                        return false;
-                    }
-                    if (plan is AiDotNet.Tensors.Engines.Compilation.CompiledTrainingPlan<T> guardedPlan)
-                        guard.AttachTo(guardedPlan);
-                    (CurrentState.closureVariants ??= new List<ClosureVariant>()).Add(new ClosureVariant(guard, closureVariant));
-                }
-            }
-            // Another signature's plan continues the optimizer (moments, step count) from the configured one.
-            if (closureObjective && _configuredPlan is not null && !ReferenceEquals(_configuredPlan, plan))
-            {
-                if (!PlanSupportsContinueOptimizer())
-                {
-                    _lastFallbackException = new InvalidOperationException(
-                        "the closure objective needs another signature's plan, and this Tensors build cannot continue "
-                        + "the optimizer across plans");
-                    return false;
-                }
-                _shapeSwitchFrom = _configuredPlan;
             }
 
             // STRICT SINGLE-PLAN POLICY: optimizer state lives inside the
@@ -1813,6 +1894,10 @@ public static class CompiledTapeTrainingStep<T>
                 InvokePlanMethod(s_continueOptimizerMethod, "ContinueOptimizerFrom", plan, switchedFrom);
                 _configuredPlan = plan;
                 isFirstStepForConfiguredPlan = compiledThisCall;
+                // The optimizer's link exports from the plan it was attached with; point it at the plan that now
+                // holds the moments, or a checkpoint written after the switch has no fused optimizer state.
+                if (eagerOptimizer is AiDotNet.Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> continued)
+                    AttachFusedOptimizerStateLink(plan, continued);
             }
             _shapeSwitchFrom = null;
             _retiringCache?.Invalidate();
@@ -1875,6 +1960,7 @@ public static class CompiledTapeTrainingStep<T>
                 // fused. Pass 0 to disable.
                 if (maxGradNorm > 0.0)
                     TrySetPlanMaxGradNorm(plan, maxGradNorm);
+                _configuredMaxGradNorm = maxGradNorm;
                 if (l2AfterClip)
                 {
                     // PyTorch's order: clip the loss gradient, then add the L2 term.
@@ -1913,12 +1999,24 @@ public static class CompiledTapeTrainingStep<T>
                 return false;
             }
 
+            // The eager tape clips by the threshold of each call, so a threshold that changed since the plan was
+            // configured (or since the plan this one continues was) is applied before the step, 0 included.
+            if (!_configuredMaxGradNorm.Equals(maxGradNorm))
+            {
+                TrySetPlanMaxGradNorm(plan, maxGradNorm);
+                _configuredMaxGradNorm = maxGradNorm;
+            }
+
             // The trace captured stochastic layer tensors by reference. A static replay
             // would otherwise reuse the first dropout mask or Bayesian posterior sample
             // forever and optimize a different objective than eager training. Keep the
             // first traced draw for step one, then refresh captured tensors in place before
             // later replays. The fused plan and optimizer moments remain intact.
-            if (!isFirstStepForConfiguredPlan)
+            // A closure objective's step has already drawn: its probe ran the closure, whose dropout masks and
+            // CompiledStepRandom draws are this step's leaves and were copied into the plan (or the plan was traced
+            // from this step). Redrawing here would advance every generator twice per step and train on a different
+            // random stream than the eager tape.
+            if (!isFirstStepForConfiguredPlan && closureObjective is null)
             {
                 RefreshCompiledStochasticState(layers);
                 CompiledStepRandom<T>.RedrawFor(plan);
@@ -2002,6 +2100,12 @@ public static class CompiledTapeTrainingStep<T>
             _configuredL2AfterClip = false;
             return false;
         }
+        finally
+        {
+            // A replayed closure plan read this step's data through the tensors it was traced from; they get their
+            // own contents back whether the step ran, declined or threw.
+            reboundClosureEntry?.RestoreLeaves();
+        }
     }
 
     /// <summary>
@@ -2048,6 +2152,15 @@ public static class CompiledTapeTrainingStep<T>
             optimizer.EnsureRestoredStateUsableByFusedPlan();
         }
 
+        AttachFusedOptimizerStateLink(plan, optimizer);
+        return imported;
+    }
+
+    /// <summary>Makes <paramref name="plan"/> the one <paramref name="optimizer"/> exports its fused state from and releases.</summary>
+    private static void AttachFusedOptimizerStateLink(
+        ICompiledTrainingPlan<T> plan,
+        AiDotNet.Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> optimizer)
+    {
         var state = CurrentState;
         optimizer.AttachFusedOptimizerState(new AiDotNet.Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>>.FusedOptimizerStateLink(
             export: () => ReferenceEquals(state.configuredPlan, plan) ? plan.ExportOptimizerState() : null,
@@ -2062,7 +2175,6 @@ public static class CompiledTapeTrainingStep<T>
                 }
                 finally { _currentState = previous; }
             }));
-        return imported;
     }
 
     private static void RefreshCompiledStochasticState(IReadOnlyList<ITrainableLayer<T>> layers)

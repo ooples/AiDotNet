@@ -295,7 +295,13 @@ public partial class DropoutLayer<T> : LayerBase<T>, IShapeContract
         // helper centralizes the Interlocked.Increment + Unsafe.As
         // reinterpret so the GPU forward path below shares the exact
         // same atomic increment semantics.
-        ulong counter = AdvanceSeedCounter();
+        // A forward that is not a training step (resolving lazy shapes before a compiled trace, a closure objective's
+        // warm-up) builds the same mask from the current counter without advancing it, so the next real step draws
+        // the mask the eager tape would.
+        // A closure objective's retrace of a step its probe already ran reuses the probe's counter (StepCounter).
+        ulong counter = AiDotNet.Training.CompiledStepRandom<T>.InNonStepForward
+            ? PeekSeedCounter()
+            : AiDotNet.Training.CompiledStepRandom<T>.StepCounter(AdvanceSeedCounter);
         int? perCallSeed = RandomSeed.HasValue
             ? DeriveSeed32(RandomSeed.Value, counter)
             : (int?)null;
@@ -391,6 +397,11 @@ public partial class DropoutLayer<T> : LayerBase<T>, IShapeContract
     /// <see cref="System.Threading.Interlocked.Exchange(ref long, long)"/>
     /// reset in <see cref="ResetState"/>.
     /// </summary>
+    /// <summary>The counter value the next <see cref="AdvanceSeedCounter"/> returns, without advancing it.</summary>
+    private ulong PeekSeedCounter()
+        => unchecked((ulong)System.Threading.Interlocked.Read(
+            ref System.Runtime.CompilerServices.Unsafe.As<ulong, long>(ref _seedCounter)));
+
     private ulong AdvanceSeedCounter()
     {
         long incremented = System.Threading.Interlocked.Increment(

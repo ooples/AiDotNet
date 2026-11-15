@@ -349,7 +349,21 @@ public partial class BayesianDenseLayer<T> : LayerBase<T>, IBayesianLayer<T>, IS
         // refreshes the same captured tensor references between steps.
         bool useSample = IsTrainingMode || _samplePending;
         if (IsTrainingMode && !_samplePending)
-            FillSampleEpsilon();
+        {
+            // A forward that is not a training step (shape resolution before a compiled trace, a closure objective's
+            // warm-up) must not consume the generator, or every later step samples what the eager tape samples one
+            // step later. It reuses the current sample (zeros before the first).
+            if (AiDotNet.Training.CompiledStepRandom<T>.InNonStepForward)
+            {
+                _sampledWeightEpsilon ??= new Tensor<T>([_outputSize, _inputSize]);
+                _sampledBiasEpsilon ??= new Tensor<T>([_outputSize]);
+            }
+            else
+            {
+                // A closure objective's retrace of a step its probe already ran keeps the probe's sample.
+                AiDotNet.Training.CompiledStepRandom<T>.StepSample(FillSampleEpsilon);
+            }
+        }
         if (useSample && (_sampledWeightEpsilon is null || _sampledBiasEpsilon is null))
             throw new InvalidOperationException("Bayesian posterior sample was not initialized.");
 

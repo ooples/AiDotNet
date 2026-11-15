@@ -168,8 +168,8 @@ public partial class CbhgLayer<T> : LayerBase<T>, IShapeContract
             _highways.Add(highway);
             RegisterSubLayer(highway);
         }
-        _forwardGru = new GRULayer<T>(gruUnits, returnSequences: true);
-        _backwardGru = new GRULayer<T>(gruUnits, returnSequences: true);
+        _forwardGru = new GRULayer<T>(gruUnits, returnSequences: true, resetAfter: false);
+        _backwardGru = new GRULayer<T>(gruUnits, returnSequences: true, resetAfter: false);
         RegisterSubLayer(_forwardGru);
         RegisterSubLayer(_backwardGru);
     }
