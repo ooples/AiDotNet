@@ -1,6 +1,5 @@
 #pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.DirectGpu;

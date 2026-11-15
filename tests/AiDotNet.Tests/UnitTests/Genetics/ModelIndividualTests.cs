@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using AiDotNet.Helpers;
-using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Genetics;
 using AiDotNet.Interfaces;

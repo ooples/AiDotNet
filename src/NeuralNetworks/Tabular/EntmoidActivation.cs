@@ -1,6 +1,5 @@
 ﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Tensors.Engines.DirectGpu;
@@ -192,18 +191,6 @@ public class EntmoidActivation<T> : ActivationFunctionBase<T>
                 NumOps.FromDouble(1.0 / (2.0 * (_alpha - 1.0))));
             return engine.TensorWhere(inside, slope, new Tensor<T>(input._shape));
         }
-    }
-
-    /// <summary>
-    /// Applies this activation function to a computation graph node.
-    /// </summary>
-    /// <param name="input">The computation node to apply the activation to.</param>
-    /// <returns>A new computation node with entmoid activation applied.</returns>
-    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
-    {
-        // Entmoid is not yet supported in computation graphs
-        // Fall back to element-wise application
-        throw new NotSupportedException("Entmoid activation does not yet support JIT compilation.");
     }
 
     /// <summary>

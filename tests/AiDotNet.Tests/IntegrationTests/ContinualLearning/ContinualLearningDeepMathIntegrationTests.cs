@@ -1,4 +1,3 @@
-using AiDotNet.Autodiff;
 using AiDotNet.ContinualLearning.Interfaces;
 using AiDotNet.ContinualLearning.Memory;
 using AiDotNet.ContinualLearning.Strategies;

@@ -3,7 +3,6 @@
 // TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
 using AiDotNet.Attributes;
 using AiDotNet.ActivationFunctions;
-using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 

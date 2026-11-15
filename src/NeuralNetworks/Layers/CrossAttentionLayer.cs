@@ -1,6 +1,5 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;

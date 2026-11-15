@@ -1,5 +1,4 @@
 using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 
 namespace AiDotNet.ActivationFunctions;
@@ -211,23 +210,4 @@ public class TaylorSoftmaxActivation<T> : ActivationFunctionBase<T>
         return result;
     }
 
-    /// <summary>
-    /// Applies this activation function to a computation graph node.
-    /// </summary>
-    /// <param name="input">The computation node to apply the activation to.</param>
-    /// <returns>A new computation node with TaylorSoftmax activation applied.</returns>
-    /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method maps to TensorOperations&lt;T&gt;.TaylorSoftmax(input) which handles both
-    /// forward and backward passes for JIT compilation using Taylor series polynomial.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
-    {
-        if (input == null)
-            throw new ArgumentNullException(nameof(input));
-
-        return TensorOperations<T>.TaylorSoftmax(input, _order);
-    }
 }

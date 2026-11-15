@@ -3,7 +3,6 @@ using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;

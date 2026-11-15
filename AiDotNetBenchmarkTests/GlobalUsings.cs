@@ -5,7 +5,6 @@ global using System.IO;
 global using System.Linq;
 // AiDotNet Components
 global using AiDotNet.ActivationFunctions;
-global using AiDotNet.Autodiff;
 global using AiDotNet.AutoML;
 global using AiDotNet.Caching;
 global using AiDotNet.CrossValidators;

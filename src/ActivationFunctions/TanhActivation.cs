@@ -1,7 +1,6 @@
 ﻿
 
 using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors;
@@ -166,26 +165,6 @@ public class TanhActivation<T> : ActivationFunctionBase<T>, IOutputDerivative<T>
         var tanhSquared = Engine.TensorMultiply(tanh, tanh);
         var one = Tensor<T>.CreateDefault(input._shape, NumOps.One);
         return Engine.TensorSubtract(one, tanhSquared);
-    }
-
-    /// <summary>
-    /// Applies this activation function to a computation graph node.
-    /// </summary>
-    /// <param name="input">The computation node to apply the activation to.</param>
-    /// <returns>A new computation node with Tanh activation applied.</returns>
-    /// <exception cref="ArgumentNullException">Thrown if input is null.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method maps the Tanh activation to TensorOperations&lt;T&gt;.Tanh(input),
-    /// which handles both forward and backward passes for JIT compilation.
-    /// </para>
-    /// </remarks>
-    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
-    {
-        if (input == null)
-            throw new ArgumentNullException(nameof(input));
-
-        return TensorOperations<T>.Tanh(input);
     }
 
     #region GPU Training Support

@@ -1,7 +1,6 @@
 ﻿// File-level, deliberately: two Tensors namespaces in the project's global usings also define a
 // TensorLayout, so [TensorLayout(...)] only binds when this import shadows them from a nearer scope.
 using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
 using AiDotNet.NeuralNetworks.Tabular;
 
 namespace AiDotNet.NeuralNetworks.Layers;

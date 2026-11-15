@@ -1,5 +1,4 @@
 ﻿using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.Engines.DirectGpu;
 
@@ -152,18 +151,6 @@ public class HardSwishActivation<T> : ActivationFunctionBase<T>, Fused.IFusedAct
     public override Tensor<T> Derivative(Tensor<T> input)
     {
         return input.Transform((x, _) => Derivative(x));
-    }
-
-    /// <summary>
-    /// Applies this activation function to a computation graph node.
-    /// </summary>
-    /// <param name="input">The computation node to apply the activation to.</param>
-    /// <returns>A new computation node with Hard Swish activation applied.</returns>
-    /// <exception cref="NotSupportedException">Always thrown as JIT compilation is not supported.</exception>
-    public override ComputationNode<T> ApplyToGraph(ComputationNode<T> input)
-    {
-        throw new NotSupportedException(
-            "HardSwishActivation does not support JIT compilation. Use the standard Activate method instead.");
     }
 
     #region GPU Training Support

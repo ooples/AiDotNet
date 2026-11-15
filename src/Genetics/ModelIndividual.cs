@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using AiDotNet.Helpers;
 using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 
 namespace AiDotNet.Genetics;

@@ -1,5 +1,4 @@
-﻿using AiDotNet.Autodiff;
-using AiDotNet.Enums;
+﻿using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Attributes;
@@ -340,10 +339,6 @@ public partial class OnlinePassiveAggressiveClassifier<T> : OnlineLearningModelB
 
         return result;
     }
-
-    #endregion
-
-    #region JIT Compilation Support
 
     #endregion
 
