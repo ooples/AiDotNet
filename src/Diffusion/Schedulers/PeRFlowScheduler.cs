@@ -28,26 +28,59 @@ public sealed class PeRFlowScheduler<T> : NoiseSchedulerBase<T>
 {
     private readonly int _numSegments;
 
+    /// <summary>
+    /// Creates a PeRFlow scheduler with <paramref name="numSegments"/> piecewise-straight time windows.
+    /// </summary>
+    /// <param name="config">The scheduler configuration.</param>
+    /// <param name="numSegments">The number of trained segments K (at least 1).</param>
+    /// <remarks>
+    /// Every segment boundary is a scheduled time when the step count is at least K. A step count below K
+    /// cannot place a step in every segment, so the schedule falls back to that many equal windows and each
+    /// step spans several segments; the result approximates the trained piecewise trajectory.
+    /// </remarks>
     public PeRFlowScheduler(SchedulerConfig<T> config, int numSegments = 4) : base(config)
     {
         _numSegments = Math.Max(1, numSegments);
     }
 
     /// <inheritdoc />
+    public override void SetTimesteps(int inferenceSteps)
+    {
+        base.SetTimesteps(inferenceSteps);
+        // PeRFlow splits [0, 1] into equal time windows whose flows are straight, so every window boundary is a
+        // scheduled time and the steps are spread evenly over the windows (earlier windows take the remainder).
+        // With fewer steps than segments there cannot be a step per segment: the schedule then uses
+        // inferenceSteps equal windows instead, so one Euler step spans several trained segments and is only an
+        // approximation of the piecewise-straight trajectory (documented on the constructor).
+        int windows = Math.Min(_numSegments, inferenceSteps);
+        var timesteps = new int[inferenceSteps];
+        int index = 0;
+        for (int w = windows - 1; w >= 0; w--)
+        {
+            int windowRank = windows - 1 - w;
+            int stepsInWindow = inferenceSteps / windows + (windowRank < inferenceSteps % windows ? 1 : 0);
+            double top = (double)(w + 1) / windows;
+            double bottom = (double)w / windows;
+            for (int s = 0; s < stepsInWindow; s++)
+            {
+                double t = top - (top - bottom) * s / stepsInWindow;
+                int timestep = (int)Math.Round(t * (TrainTimesteps - 1));
+                if (index > 0)
+                    timestep = Math.Min(timestep, timesteps[index - 1] - 1);
+                // Keep enough integer timesteps free below this entry for the remaining ones so the tail stays
+                // strictly decreasing (the base class guarantees inferenceSteps <= TrainTimesteps).
+                timesteps[index] = Math.Max(inferenceSteps - 1 - index, timestep);
+                index++;
+            }
+        }
+        SetTimestepArray(timesteps);
+    }
+
+    /// <inheritdoc />
     public override Vector<T> Step(Vector<T> modelOutput, int timestep, Vector<T> sample, T eta, Vector<T>? noise = null)
     {
-        double t = (double)timestep / TrainTimesteps;
-
-        // Determine which segment we're in and compute local dt
-        double segmentSize = 1.0 / _numSegments;
-        int segmentIdx = Math.Min((int)(t / segmentSize), _numSegments - 1);
-        double dt = segmentSize / Math.Max(1, Timesteps.Length / _numSegments);
-        var dtT = NumOps.FromDouble(dt);
-
-        var result = new Vector<T>(sample.Length);
-        for (int i = 0; i < sample.Length; i++)
-            result[i] = NumOps.Subtract(sample[i], NumOps.Multiply(dtT, modelOutput[i]));
-
-        return result;
+        // Within a window the flow is straight, so the Euler step over the gap to the next scheduled time is exact.
+        double dt = SchedulerTensorOps.FlowStepSize(Timesteps, timestep, TrainTimesteps, 1.0 / Math.Max(1, Timesteps.Length));
+        return Engine.Subtract(sample, Engine.Multiply(modelOutput, NumOps.FromDouble(dt)));
     }
 }

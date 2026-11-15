@@ -156,6 +156,10 @@ public partial class CLIPTextConditioner<T> : TextConditioningBase<T>
         return _textProjection.Forward(eosTensor);
     }
 
+    /// <inheritdoc />
+    /// <remarks>The text projection's output width, e.g. 512 for the 1024-wide x4-upscaler encoder.</remarks>
+    internal override int PooledEmbeddingDimension => GetProjectionDim(_variant);
+
     // UpdateParameters restated a fold the base now derives from generated component registration.
     // Removed under AIDN082.
     /// <summary>
