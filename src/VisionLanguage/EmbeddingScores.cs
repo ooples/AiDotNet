@@ -29,7 +29,7 @@ internal static class EmbeddingScores<T>
             return new Tensor<T>([0]);
 
         int dim = query.Length;
-        var rows = new Tensor<T>[count];
+        var rows = new Tensor<T>[count + 1];
         for (int c = 0; c < count; c++)
         {
             var candidate = candidates[c] ?? throw new ArgumentNullException(nameof(candidates));
@@ -39,9 +39,29 @@ internal static class EmbeddingScores<T>
             rows[c] = candidate.Reshape([1, dim]);
         }
 
+        // Types narrower than float (Half, BFloat16) are scored in float: a Half running sum of the scaled
+        // squares stops growing at 2048, which shortens the norm of a long row and inflates its cosine.
+        rows[count] = query.Reshape([1, dim]);
+        var stacked = engine.TensorConcatenate(rows, 0);
+        return MathHelper.GetNumericOperations<T>().PrecisionBits < 24
+            ? EmbeddingScores<float>.CosineToLastRow(engine, stacked.Cast<float>()).Cast<T>()
+            : CosineToLastRow(engine, stacked);
+    }
+
+    /// <summary>
+    /// Cosine similarity between the last row of a <c>[count + 1, dim]</c> matrix and each row before it, with
+    /// the semantics of <see cref="CosineToEach"/>.
+    /// </summary>
+    internal static Tensor<T> CosineToLastRow(IEngine engine, Tensor<T> stacked)
+    {
+        int count = stacked.Shape[0] - 1;
+        int dim = stacked.Shape[1];
         var numOps = MathHelper.GetNumericOperations<T>();
-        var unitRows = UnitRows(engine, engine.TensorConcatenate(rows, 0), out var rowNorms);
-        var unitQuery = UnitRows(engine, query.Reshape([1, dim]), out var queryNorm);
+        var unit = UnitRows(engine, stacked, out var norms);
+        var unitRows = engine.TensorSlice(unit, [0, 0], [count, dim]);
+        var unitQuery = engine.TensorSlice(unit, [count, 0], [1, dim]);
+        var rowNorms = engine.TensorSlice(norms, [0, 0], [count, 1]);
+        var queryNorm = engine.TensorSlice(norms, [count, 0], [1, 1]);
         var cosine = engine.TensorClamp(
             engine.TensorMatMul(unitRows, unitQuery.Reshape([dim, 1])).Reshape([count]),
             numOps.FromDouble(-1.0), numOps.One);
