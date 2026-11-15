@@ -48,6 +48,12 @@ public class GIFTEvalBenchmark<T>
     private static double PinballSum(Tensor<double> error, double quantile)
         => Engine.TensorSum(PinballLoss(error, Engine.TensorFullLike(error, quantile)));
 
+    private static void ValidateQuantileLevel(double level, string parameterName)
+    {
+        if (double.IsNaN(level) || double.IsInfinity(level) || level < 0.0 || level > 1.0)
+            throw new ArgumentOutOfRangeException(parameterName, level, "Quantile levels must be within [0, 1].");
+    }
+
     private static Tensor<double> PinballLoss(Tensor<double> error, Tensor<double> quantiles)
         => Engine.TensorWhere(Engine.TensorGreaterEqual(error, Engine.TensorZerosLike(error)),
             Engine.TensorMultiply(quantiles, error),
@@ -84,6 +90,8 @@ public class GIFTEvalBenchmark<T>
         // Compute forecast MAE
         if (horizon == 0) return NumOps.Zero;
 
+        // Both MAEs are summed in double and their ratio taken in double: a Half sum of absolute errors passes 65504
+        // long before either mean does, and inf / inf made the score NaN.
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         double forecastMae = NumOps.Divide(
             Engine.TensorSum(Engine.TensorAbs(Engine.TensorSubtract(
@@ -95,10 +103,8 @@ public class GIFTEvalBenchmark<T>
         int naiveCount = Math.Max(0, historicalData.Length - seasonalPeriod);
         if (naiveCount > 0)
         {
-            naiveMae = NumOps.Divide(
-                Engine.TensorSum(Engine.TensorAbs(Engine.TensorSubtract(
-                    FlatRange(historicalData, seasonalPeriod, naiveCount), FlatRange(historicalData, 0, naiveCount)))),
-                NumOps.FromDouble(naiveCount));
+            naiveMae = TensorReductionHelper.SumAbsoluteAsDouble(Engine, Engine.TensorSubtract(
+                FlatRange(historicalData, seasonalPeriod, naiveCount), FlatRange(historicalData, 0, naiveCount))) / naiveCount;
         }
 
         // Avoid division by zero
@@ -106,7 +112,7 @@ public class GIFTEvalBenchmark<T>
         if (NumOps.LessThan(naiveMae, tiny))
             return NumOps.LessThan(forecastMae, tiny) ? NumOps.One : NumOps.FromDouble(double.PositiveInfinity);
 
-        return NumOps.Divide(forecastMae, naiveMae);
+        return NumOps.FromDouble(forecastMae / naiveMae);
     }
 
     /// <summary>
@@ -137,6 +143,8 @@ public class GIFTEvalBenchmark<T>
     {
         Guard.NotNull(quantileForecasts);
         Guard.NotNull(actuals);
+        foreach (double level in quantileForecasts.Keys)
+            ValidateQuantileLevel(level, nameof(quantileForecasts));
 
         if (quantileForecasts.Count == 0)
             return NumOps.FromDouble(double.PositiveInfinity);
@@ -168,18 +176,15 @@ public class GIFTEvalBenchmark<T>
         {
             using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
             var actual = FlatRange(actuals, 0, horizon);
-            absoluteTarget = Engine.TensorSum(Engine.TensorAbs(actual));
+            absoluteTarget = TensorReductionHelper.SumAbsoluteAsDouble(Engine, actual);
             foreach (var kvp in quantileForecasts)
             {
                 var error = Engine.TensorSubtract(actual, FlatRange(kvp.Value, 0, horizon));
-                totalLoss = NumOps.Add(totalLoss, PinballSum(error, kvp.Key));
+                totalLoss += PinballSum(error, kvp.Key);
             }
         }
 
-        // Divide by sum|y| before applying 2 / Q: Q * sum|y| can overflow T (float targets near 1e38) while the
-        // loss ratio itself is finite.
-        return NumOps.Multiply(
-            NumOps.Divide(totalLoss, absoluteTarget), NumOps.FromDouble(2.0 / quantileForecasts.Count));
+        return NumOps.FromDouble(totalLoss / absoluteTarget * (2.0 / quantileForecasts.Count));
     }
 
     /// <summary>
@@ -193,6 +198,7 @@ public class GIFTEvalBenchmark<T>
     {
         Guard.NotNull(predictions);
         Guard.NotNull(actuals);
+        ValidateQuantileLevel(quantileLevel, nameof(quantileLevel));
 
         int horizon = Math.Min(predictions.Length, actuals.Length);
         double totalLoss = NumOps.Zero;
@@ -203,7 +209,7 @@ public class GIFTEvalBenchmark<T>
             totalLoss = PinballSum(error, quantileLevel);
         }
 
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(horizon));
+        return NumOps.FromDouble(totalLoss / horizon);
     }
 
     /// <summary>
@@ -233,6 +239,8 @@ public class GIFTEvalBenchmark<T>
         Guard.NotNull(seasonalPeriods);
 
         quantileLevels ??= new[] { 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9 };
+        foreach (double level in quantileLevels)
+            ValidateQuantileLevel(level, nameof(quantileLevels));
 
         if (contextLengths.Count != testSeries.Count)
             throw new ArgumentException($"contextLengths.Count ({contextLengths.Count}) must equal testSeries.Count ({testSeries.Count}).", nameof(contextLengths));

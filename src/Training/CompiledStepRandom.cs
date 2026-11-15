@@ -52,6 +52,11 @@ public static class CompiledStepRandom<T>
     [ThreadStatic]
     private static int t_suppressDepth;
 
+    // Depth of scopes that skip only the draws (a closure objective's per-step probe): the forward is the step's own,
+    // so other per-step state still advances, but the plan's replay redraws, so the probe must not draw too.
+    [ThreadStatic]
+    private static int t_skipDrawsDepth;
+
     private static readonly ConditionalWeakTable<object, RecordedDraw[]> DrawsByPlan = new();
 
     /// <summary>A tensor of independent standard-normal samples, redrawn on every compiled replay.</summary>
@@ -91,7 +96,7 @@ public static class CompiledStepRandom<T>
         Guard.NotNull(shape);
         Guard.NotNull(fill);
         var tensor = new Tensor<T>(shape);
-        if (t_suppressDepth > 0)
+        if (t_suppressDepth > 0 || t_skipDrawsDepth > 0)
             return tensor;
         fill(tensor);
         t_recording?.Add(new RecordedDraw(tensor, fill));
@@ -164,6 +169,28 @@ public static class CompiledStepRandom<T>
             if (_disposed) return;
             _disposed = true;
             t_suppressDepth--;
+        }
+    }
+
+    /// <summary>
+    /// Skips draws on this thread (they return zeros without consuming the generator) while leaving
+    /// <see cref="InNonStepForward"/> false: for a closure objective's per-step probe, whose step then replays a plan
+    /// that redraws every recorded draw itself. Dispose to restore.
+    /// </summary>
+    internal static DrawSkipScope SkipDraws() => new DrawSkipScope();
+
+    /// <summary>A scope in which <see cref="Draw"/> returns zeros without consuming the generator.</summary>
+    internal sealed class DrawSkipScope : IDisposable
+    {
+        private bool _disposed;
+
+        internal DrawSkipScope() => t_skipDrawsDepth++;
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            t_skipDrawsDepth--;
         }
     }
 

@@ -562,20 +562,14 @@ public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBa
         var safePrev = engine.TensorWhere(valid, prev, engine.TensorAddScalar(zeros, ops.One));
         var returns = engine.TensorWhere(valid, engine.TensorDivide(engine.TensorSubtract(curr, prev), safePrev), zeros);
 
-        // Mean and sample standard deviation of the valid returns.
-        T meanReturn = ops.Divide(engine.TensorSum(returns), ops.FromDouble(count));
-        var deviations = engine.TensorWhere(valid, engine.TensorSubtractScalar(returns, meanReturn), zeros);
-        T variance = ops.Divide(TensorReductionHelper.SumOfSquares(engine, deviations), ops.FromDouble(count - 1));
-        T stdDev = ops.Sqrt(variance);
-
-        if (ops.LessThan(stdDev, AiDotNet.Finance.FinanceNumerics.Tolerance<T>(1e-10))) return ops.Zero;
-
-        // Calculate Sharpe ratio (annualized)
-        T dailyRiskFreeRate = ops.FromDouble(riskFreeRate / 252.0);
-        T sharpe = ops.Divide(ops.Subtract(meanReturn, dailyRiskFreeRate), stdDev);
-
-        // Annualize
-        return ops.Multiply(sharpe, ops.FromDouble(Math.Sqrt(252)));
+        // Widen returns before centering and reducing; the count remains an integer even for Half histories.
+        var wideReturns = returns.Cast<double>();
+        double meanReturn = engine.TensorSum(wideReturns) / count;
+        var deviations = engine.TensorWhere(valid.Cast<double>(), engine.TensorSubtractScalar(wideReturns, meanReturn),
+            new Tensor<double>(new[] { steps }));
+        double stdDev = Math.Sqrt(TensorReductionHelper.SumOfSquares(engine, deviations) / (count - 1));
+        return stdDev < 1e-10 ? ops.Zero
+            : ops.FromDouble((meanReturn - riskFreeRate / 252.0) / stdDev * Math.Sqrt(252));
     }
 
     /// <summary>

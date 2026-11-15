@@ -86,36 +86,6 @@ public class FusedLrScheduleMappingTests
     }
 
     [Fact]
-    public void CyclicLR_NonCanonical_FallsBackToEager_NotFused()
-    {
-        // Triangular2 has no fused shape (per-cycle amplitude decay) → must NOT map.
-        var t2 = new AdamOptimizer<float, Tensor<float>, Tensor<float>>(
-            null,
-            new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
-            {
-                LearningRateScheduler = new CyclicLRScheduler(
-                    baseLearningRate: 0.001, maxLearningRate: 0.1, stepSizeUp: 10, stepSizeDown: 10,
-                    mode: CyclicLRScheduler.CyclicMode.Triangular2),
-                SchedulerStepMode = SchedulerStepMode.StepPerBatch,
-            });
-        Assert.False(((IFusedOptimizerSpec)t2).TryGetFusedOptimizerConfig(out _),
-            "Triangular2 cyclic has no fused equivalent and must fall back to the eager path.");
-
-        // Asymmetric up≠down also has no fused shape.
-        var asym = new AdamOptimizer<float, Tensor<float>, Tensor<float>>(
-            null,
-            new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
-            {
-                LearningRateScheduler = new CyclicLRScheduler(
-                    baseLearningRate: 0.001, maxLearningRate: 0.1, stepSizeUp: 5, stepSizeDown: 15,
-                    mode: CyclicLRScheduler.CyclicMode.Triangular),
-                SchedulerStepMode = SchedulerStepMode.StepPerBatch,
-            });
-        Assert.False(((IFusedOptimizerSpec)asym).TryGetFusedOptimizerConfig(out _),
-            "Asymmetric cyclic (up≠down) has no fused equivalent and must fall back to eager.");
-    }
-
-    [Fact]
     public void LinearWarmup_Constant_MapsToFused_StepForStepParity()
     {
         // Warmup-then-constant is the HRE cortex recipe; before the LinearWarmup

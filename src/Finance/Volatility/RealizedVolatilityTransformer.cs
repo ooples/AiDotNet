@@ -376,6 +376,10 @@ public partial class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, I
         return VolatilityStatistics<T>.Covariance(returns);
     }
 
+    /// <summary>Column <paramref name="index"/> of a [samples, assets] matrix, as a contiguous rank-1 tensor.</summary>
+    private static Tensor<T> Column(IEngine engine, Tensor<T> matrix, int index, int samples)
+        => engine.Reshape(engine.TensorSlice(matrix, new[] { 0, index }, new[] { samples, 1 }).Contiguous(), new[] { samples });
+
     /// <summary>
     /// Calculates realized volatility from high-frequency returns.
     /// </summary>

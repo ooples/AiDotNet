@@ -53,6 +53,7 @@ public class SpeechTokenizerOptions : NeuralAudioCodecOptions
     public int KMeansIterations { get; set; } = 50;
 
     /// <summary>Gets or sets the EMA usage below which a code is replaced by a batch vector (2).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("As in the reference (encodec core_vq.py EuclideanCodebook.forward), dead codes are replaced before the EMA update, which rewrites every code from embed_avg in the same step, after this step's codes were chosen; a replacement therefore never reaches the model, and the option only advances the codebook sampler.")]
     public int DeadCodeThreshold { get; set; } = 2;
 
     // ---------------------------------------------------------------- losses (§3.2–3.3; weights from the reference)

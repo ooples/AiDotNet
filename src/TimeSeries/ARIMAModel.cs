@@ -453,13 +453,8 @@ public partial class ARIMAModel<T> : TimeSeriesModelBase<T>
             return;
         }
 
-        // Compute mean of absolute residuals
-        var absResiduals = Engine.Abs(residuals);
-        _residualMean = NumOps.Divide(Engine.Sum(absResiduals), NumOps.FromDouble(residuals.Length));
-
-        // Compute standard deviation of absolute residuals
-        var diff = Engine.Subtract(absResiduals, Engine.Fill(residuals.Length, _residualMean));
-        _residualStdDev = NumOps.Sqrt(NumOps.Divide(Engine.DotProduct(diff, diff), NumOps.FromDouble(residuals.Length)));
+        // Mean and standard deviation of the absolute residuals, summed in double
+        (_residualMean, _residualStdDev) = AbsoluteResidualStatistics(residuals);
 
         // If std dev is zero (all residuals are the same), use a small default
         if (NumOps.Equals(_residualStdDev, NumOps.Zero))
