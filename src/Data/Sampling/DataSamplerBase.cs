@@ -256,11 +256,45 @@ public abstract class WeightedSamplerBase<T> : DataSamplerBase, IWeightedSampler
     /// <returns>A randomly selected index based on weights.</returns>
     protected int SampleWeightedIndex()
     {
-        // First entry with r <= cumulative (left search-sorted), capped at the last index like the former
-        // binary search.
-        var r = new Tensor<T>(new[] { NumOps.FromDouble(Random.NextDouble()) }, new[] { 1 });
-        int firstAtOrAbove = AiDotNetEngine.Current.TensorSearchSorted(CumulativeProbabilities, r, right: false).AsSpan()[0];
-        return Math.Min(firstAtOrAbove, CumulativeProbabilities.Length - 1);
+        // First entry with r <= cumulative, capped at the last index like the former binary search.
+        return CumulativeSearch.FirstAtOrAbove(CumulativeProbabilities.AsSpan(), NumOps.FromDouble(Random.NextDouble()));
+    }
+}
+
+/// <summary>
+/// Binary search over a non-decreasing cumulative distribution for a single draw.
+/// </summary>
+/// <remarks>
+/// A sampler draws one index at a time, so each draw must stay O(log n). The engine's search-sorted is
+/// built for batches of values: for a single value it allocates two tensors, and on <see cref="float"/> it
+/// first scans the whole sequence for NaN, which made every draw O(n).
+/// </remarks>
+internal static class CumulativeSearch
+{
+    /// <summary>
+    /// Returns the first index whose cumulative value is not below <paramref name="value"/>, or the last
+    /// index when every entry is below it.
+    /// </summary>
+    internal static int FirstAtOrAbove<T>(ReadOnlySpan<T> cumulative, T value)
+    {
+        var comparer = Comparer<T>.Default;
+        int left = 0;
+        int right = cumulative.Length - 1;
+
+        while (left < right)
+        {
+            int mid = left + ((right - left) >> 1);
+            if (comparer.Compare(cumulative[mid], value) < 0)
+            {
+                left = mid + 1;
+            }
+            else
+            {
+                right = mid;
+            }
+        }
+
+        return left;
     }
 }
 

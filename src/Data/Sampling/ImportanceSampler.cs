@@ -234,11 +234,8 @@ public class ImportanceSampler<T> : DataSamplerBase
 
     private int SampleOne()
     {
-        // First entry with u <= cumulative (left search-sorted), capped at the last index like the former
-        // binary search.
-        var u = new Tensor<T>(new[] { NumOps.FromDouble(Random.NextDouble()) }, new[] { 1 });
-        int firstAtOrAbove = AiDotNetEngine.Current.TensorSearchSorted(_cumulativeProbabilities, u, right: false).AsSpan()[0];
-        return Math.Min(firstAtOrAbove, _cumulativeProbabilities.Length - 1);
+        // First entry with u <= cumulative, capped at the last index like the former binary search.
+        return CumulativeSearch.FirstAtOrAbove(_cumulativeProbabilities.AsSpan(), NumOps.FromDouble(Random.NextDouble()));
     }
 
     /// <summary>
