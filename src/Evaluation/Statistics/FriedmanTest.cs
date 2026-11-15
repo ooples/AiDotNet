@@ -68,7 +68,7 @@ public class FriedmanTest<T> : IMultipleSampleTest<T>
         var ranks = engine.TensorDivideScalar(engine.ReduceSum(datasetRanks, new[] { 0 }, false), (double)n);
 
         // Friedman statistic (chi-squared approximation)
-        double sumSquaredRanks = engine.TensorSumOfSquares(ranks);
+        double sumSquaredRanks = TensorReductionHelper.SumOfSquares(engine, ranks);
         double chiSquared = 12.0 * n / ((double)k * (k + 1)) * (sumSquaredRanks - k * Math.Pow((k + 1) / 2.0, 2));
 
         // Iman-Davenport correction (more conservative, recommended)

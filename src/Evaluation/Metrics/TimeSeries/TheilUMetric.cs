@@ -54,8 +54,8 @@ public class TheilUMetric<T> : ITimeSeriesMetric<T>
         using var noGrad = new NoGradScope<T>();
         var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
         var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
-        double sumSquaredError = engine.TensorSumOfSquares(engine.TensorSubtract(pred, actual));
-        double sumSquaredChange = engine.TensorSumOfSquares(engine.TensorDiff(actual, 1, 0));
+        double sumSquaredError = TensorReductionHelper.SumOfSquares(engine, engine.TensorSubtract(pred, actual));
+        double sumSquaredChange = TensorReductionHelper.SumOfSquares(engine, engine.TensorDiff(actual, 1, 0));
         if (sumSquaredChange < 1e-10)
             return sumSquaredError < 1e-10 ? NumOps.Zero : NumOps.MaxValue;
         return NumOps.FromDouble(Math.Sqrt(sumSquaredError / sumSquaredChange));

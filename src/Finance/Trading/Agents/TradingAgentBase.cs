@@ -565,7 +565,7 @@ public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBa
         // Mean and sample standard deviation of the valid returns.
         T meanReturn = ops.Divide(engine.TensorSum(returns), ops.FromDouble(count));
         var deviations = engine.TensorWhere(valid, engine.TensorSubtractScalar(returns, meanReturn), zeros);
-        T variance = ops.Divide(engine.TensorSumOfSquares(deviations), ops.FromDouble(count - 1));
+        T variance = ops.Divide(TensorReductionHelper.SumOfSquares(engine, deviations), ops.FromDouble(count - 1));
         T stdDev = ops.Sqrt(variance);
 
         if (ops.LessThan(stdDev, AiDotNet.Finance.FinanceNumerics.Tolerance<T>(1e-10))) return ops.Zero;

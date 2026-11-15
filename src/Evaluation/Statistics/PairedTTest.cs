@@ -50,7 +50,7 @@ public class PairedTTest<T> : IPairedTest<T>
             var differences = engine.TensorSubtract(new Tensor<T>(sample1, new[] { n }).Cast<double>(),
                 new Tensor<T>(sample2, new[] { n }).Cast<double>());
             meanDiff = engine.TensorMean(differences);
-            sumSqDiff = engine.TensorSumOfSquares(engine.TensorSubtractScalar(differences, meanDiff));
+            sumSqDiff = TensorReductionHelper.SumOfSquares(engine, engine.TensorSubtractScalar(differences, meanDiff));
         }
         double stdDiff = Math.Sqrt(sumSqDiff / (n - 1));
 

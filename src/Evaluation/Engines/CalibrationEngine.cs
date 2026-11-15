@@ -93,7 +93,7 @@ public class CalibrationEngine<T>
 
         // Calculate Brier Score
         var actualIsOne = EvaluationTensorOps<T>.EqualMask(actualTensor, NumOps.One);
-        double brier = engine.TensorSumOfSquares(engine.TensorSubtract(probs, actualIsOne.Cast<double>())) / n;
+        double brier = TensorReductionHelper.SumOfSquares(engine, engine.TensorSubtract(probs, actualIsOne.Cast<double>())) / n;
 
         return new CalibrationResult<T>
         {

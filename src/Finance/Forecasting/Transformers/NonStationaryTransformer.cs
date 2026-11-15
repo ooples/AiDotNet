@@ -993,7 +993,7 @@ public partial class NonStationaryTransformer<T> : ForecastingModelBase<T>
             var flat = Engine.Reshape(input.Contiguous(), new[] { input.Length });
             var mean = NumOps.Divide(input.Length > 0 ? Engine.TensorSum(flat) : NumOps.Zero, NumOps.FromDouble(input.Length));
             var centered = Engine.TensorSubtractScalar(flat, mean);
-            T varSum = input.Length > 0 ? Engine.TensorSumOfSquares(centered) : NumOps.Zero;
+            T varSum = input.Length > 0 ? TensorReductionHelper.SumOfSquares(Engine, centered) : NumOps.Zero;
             var std = NumOps.Sqrt(NumOps.Divide(varSum, NumOps.FromDouble(input.Length)));
             std = NumOps.Add(std, eps); // Prevent division by zero
 

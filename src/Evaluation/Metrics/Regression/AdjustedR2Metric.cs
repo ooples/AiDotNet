@@ -65,8 +65,8 @@ public class AdjustedR2Metric<T> : IRegressionMetric<T>
         var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
         var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
         double mean = engine.TensorMean(actual);
-        double residual = engine.TensorSumOfSquares(engine.TensorSubtract(actual, pred));
-        double total = engine.TensorSumOfSquares(engine.TensorSubtractScalar(actual, mean));
+        double residual = TensorReductionHelper.SumOfSquares(engine, engine.TensorSubtract(actual, pred));
+        double total = TensorReductionHelper.SumOfSquares(engine, engine.TensorSubtractScalar(actual, mean));
         if (Math.Abs(total) < 1e-10) return Math.Abs(residual) < 1e-10 ? NumOps.One : NumOps.Zero;
         double scale = (n - 1.0) / (n - _numPredictors - 1.0);
         return NumOps.FromDouble(1 - residual / total * scale);

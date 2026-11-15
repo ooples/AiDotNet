@@ -605,7 +605,7 @@ public partial class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T
         var groupCounts = CountsToValues(engine.TensorClampMin(engine.TensorBinCount(groupIds, numGroups).Slice(0, 0, numGroups), 1));
         var groupMeans = engine.TensorDivide(groupSums, groupCounts);
         var deviation = engine.TensorSubtract(r, engine.TensorGather(groupMeans, groupIds, 0));
-        T withinVar = NumOps.Divide(engine.TensorSumOfSquares(deviation), NumOps.FromDouble(n));
+        T withinVar = NumOps.Divide(TensorReductionHelper.SumOfSquares(engine, deviation), NumOps.FromDouble(n));
 
         return NumOps.Subtract(totalVar, withinVar);
     }
@@ -619,7 +619,7 @@ public partial class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T
         var engine = Engine;
         T mean = engine.Mean(values);
         var diff = engine.TensorSubtractScalar(values.AsTensor(), mean);
-        return NumOps.Divide(engine.TensorSumOfSquares(diff), NumOps.FromDouble(values.Length));
+        return NumOps.Divide(TensorReductionHelper.SumOfSquares(engine, diff), NumOps.FromDouble(values.Length));
     }
 
     /// <summary>

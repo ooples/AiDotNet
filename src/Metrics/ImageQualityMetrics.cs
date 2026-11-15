@@ -130,7 +130,7 @@ public class PeakSignalToNoiseRatio<T> where T : struct
     {
         var engine = AiDotNetEngine.Current;
         var diff = engine.TensorSubtract(a, b);
-        return _numOps.Divide(engine.TensorSumOfSquares(diff), _numOps.FromDouble(a.Length));
+        return _numOps.Divide(TensorReductionHelper.SumOfSquares(engine, diff), _numOps.FromDouble(a.Length));
     }
 
     /// <summary>

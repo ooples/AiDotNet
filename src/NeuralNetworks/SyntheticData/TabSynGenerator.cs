@@ -1216,7 +1216,7 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         }
 
         TValue mean = Engine.TensorMean(column);
-        double sumOfSquares = ops.ToDouble(Engine.TensorSumOfSquares(Engine.TensorSubtractScalar(column, mean)));
+        double sumOfSquares = ops.ToDouble(TensorReductionHelper.SumOfSquares(Engine, Engine.TensorSubtractScalar(column, mean)));
         return (ops.ToDouble(mean) * scale, sumOfSquares * scale * scale);
     }
 

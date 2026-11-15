@@ -1618,8 +1618,8 @@ namespace AiDotNet.NeuralNetworks
                 ops.ToDouble(Engine.TensorSum(x)),
                 ops.ToDouble(Engine.TensorSum(y)),
                 ops.ToDouble(Engine.TensorSum(Engine.TensorMultiply(x, y))),
-                ops.ToDouble(Engine.TensorSumOfSquares(x)),
-                ops.ToDouble(Engine.TensorSumOfSquares(y)));
+                ops.ToDouble(TensorReductionHelper.SumOfSquares(Engine, x)),
+                ops.ToDouble(TensorReductionHelper.SumOfSquares(Engine, y)));
         }
 
         /// <summary>

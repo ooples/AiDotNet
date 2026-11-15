@@ -53,8 +53,8 @@ public class RelativeSquaredErrorMetric<T> : IRegressionMetric<T>
         var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
         var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
         double mean = engine.TensorMean(actual);
-        double error = engine.TensorSumOfSquares(engine.TensorSubtract(actual, pred));
-        double total = engine.TensorSumOfSquares(engine.TensorSubtractScalar(actual, mean));
+        double error = TensorReductionHelper.SumOfSquares(engine, engine.TensorSubtract(actual, pred));
+        double total = TensorReductionHelper.SumOfSquares(engine, engine.TensorSubtractScalar(actual, mean));
         return total < 1e-10 ? NumOps.Zero : NumOps.FromDouble(error / total);
     }
 

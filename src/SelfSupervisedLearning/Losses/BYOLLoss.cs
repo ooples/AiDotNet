@@ -176,7 +176,7 @@ public class BYOLLoss<T> : ContrastiveLossBase<T>
         var z = _normalize ? L2Normalize(target) : target;
 
         // Mean squared difference over every element
-        T totalLoss = Engine.TensorSumOfSquares(Engine.TensorSubtract(p, z));
+        T totalLoss = TensorReductionHelper.SumOfSquares(Engine, Engine.TensorSubtract(p, z));
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize * dim));
     }
 

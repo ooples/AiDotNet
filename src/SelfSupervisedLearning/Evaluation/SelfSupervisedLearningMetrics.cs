@@ -62,7 +62,7 @@ public class SelfSupervisedLearningMetrics<T>
 
         // Mean over the batch of the squared distance between normalized pairs
         var diff = Engine.TensorSubtract(L2Normalize(z1), L2Normalize(z2));
-        return NumOps.Divide(Engine.TensorSumOfSquares(diff), NumOps.FromDouble(batchSize));
+        return NumOps.Divide(TensorReductionHelper.SumOfSquares(Engine, diff), NumOps.FromDouble(batchSize));
     }
 
     /// <summary>

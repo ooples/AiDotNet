@@ -212,7 +212,7 @@ public partial class NaturalSpeech3<T>
         var wideF0 = engine.TensorWhere(mask, TensorCopyHelper.CastLogical<T, double>(f0), wideZero);
         double mean = engine.TensorSum(wideF0) / count;
         var centered = engine.TensorWhere(mask, engine.TensorSubtractScalar(wideF0, mean), wideZero);
-        double std = count > 1 ? Math.Sqrt(engine.TensorSumOfSquares(centered) / count) : 1;
+        double std = count > 1 ? Math.Sqrt(TensorReductionHelper.SumOfSquares(engine, centered) / count) : 1;
         var normalized = engine.TensorDivideScalar(centered, Math.Max(std, 1e-8)).Cast<T>();
         return (normalized, voiced);
     }

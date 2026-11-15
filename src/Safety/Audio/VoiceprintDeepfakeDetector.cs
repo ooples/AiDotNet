@@ -238,7 +238,7 @@ public class VoiceprintDeepfakeDetector<T> : AudioSafetyModuleBase<T>
         T countT = NumOps.FromDouble(count);
         T mean = NumOps.Divide(engine.TensorSum(frames.SpectralCentroid), countT);
         T variance = NumOps.Subtract(
-            NumOps.Divide(engine.TensorSumOfSquares(frames.SpectralCentroid), countT),
+            NumOps.Divide(TensorReductionHelper.SumOfSquares(engine, frames.SpectralCentroid), countT),
             NumOps.Multiply(mean, mean));
         T cv = NumOps.GreaterThan(mean, NumOps.FromDouble(1e-10))
             ? NumOps.Divide(NumOps.Sqrt(SafetyTensorOps<T>.MaxZero(variance)), mean)

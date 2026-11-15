@@ -176,7 +176,7 @@ public abstract class ClassicalVolatilityModelBase<T> :
         var r = Tensor<T>.FromVector(returns);
         T mean = engine.TensorMean(r);
         var centered = engine.TensorSubtractScalar(r, mean);
-        T sampleVar = NumOps.Divide(engine.TensorSumOfSquares(centered), NumOps.FromDouble(Math.Max(1, r.Length - 1)));
+        T sampleVar = NumOps.Divide(TensorReductionHelper.SumOfSquares(engine, centered), NumOps.FromDouble(Math.Max(1, r.Length - 1)));
 
         // The mean is searched in units of the sample standard deviation so the simplex steps scale
         // with the data.
@@ -298,7 +298,7 @@ public abstract class ClassicalVolatilityModelBase<T> :
     public Tensor<T> CalculateRealizedVolatility(Tensor<T> highFrequencyReturns)
     {
         var r = Tensor<T>.FromVector(ReturnsVector(highFrequencyReturns));
-        T meanSquare = NumOps.Divide(AiDotNetEngine.Current.TensorSumOfSquares(r), NumOps.FromDouble(Math.Max(1, r.Length)));
+        T meanSquare = NumOps.Divide(TensorReductionHelper.SumOfSquares(AiDotNetEngine.Current, r), NumOps.FromDouble(Math.Max(1, r.Length)));
         return new Tensor<T>(new[] { NumOps.Sqrt(meanSquare) }, new[] { 1 });
     }
 
@@ -308,7 +308,7 @@ public abstract class ClassicalVolatilityModelBase<T> :
         var engine = AiDotNetEngine.Current;
         var r = Tensor<T>.FromVector(ReturnsVector(returns));
         T mean = r.Length == 0 ? NumOps.Zero : engine.TensorMean(r);
-        T v = NumOps.Divide(engine.TensorSumOfSquares(engine.TensorSubtractScalar(r, mean)),
+        T v = NumOps.Divide(TensorReductionHelper.SumOfSquares(engine, engine.TensorSubtractScalar(r, mean)),
             NumOps.FromDouble(Math.Max(1, r.Length - 1)));
         return new Tensor<T>(new[] { v }, new[] { 1, 1 });
     }

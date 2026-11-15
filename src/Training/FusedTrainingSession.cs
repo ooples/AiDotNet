@@ -692,6 +692,9 @@ internal sealed class FusedTrainingSession<T>
             }
             // An exact zero test: a nonzero sum means the gradient reached the parameters. NaN counts as non-zero (NaN
             // never Equals 0), since the gradient did reach them, as non-finite values the plan's guard handles.
+            // The engine op stays here, not TensorReductionHelper.SumOfSquares: only device and sparse gradients reach
+            // it, which the helper's span path cannot read, and only zero against non-zero is used, which the op's
+            // double defect in AiDotNet.Tensors 0.150.0 changes only when every non-zero element sits at an odd index.
             if (!NumOps.ToDouble(engine.TensorSumOfSquares(gradient)).Equals(0.0)) return true;
         }
         return false;
