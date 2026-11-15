@@ -221,7 +221,12 @@ class TransformerClassifier(nn.Module):
 # default resetAfter: true). nn.GRU also carries a recurrent bias b_hh; AiDotNet's GRULayer has one bias per gate.
 GRU_NOTE = ("Same reset-after recurrence and weight shapes; nn.GRU has a second (recurrent) bias per gate that "
             "AiDotNet's GRULayer folds into one, so a timing comparison rather than bitwise parity.")
-MODEL_NOTES = {"gru": GRU_NOTE}
+MODEL_NOTES = {
+    "gru": GRU_NOTE,
+    "gat": "One sample is the whole Cora-sized graph (2,708 nodes); run at --batch-size 1 --inference-batches 1. "
+           "Dense masked attention on both sides.",
+    "dcgan": "One training step updates the discriminator then the generator; the loss is the discriminator's.",
+}
 
 
 class GRUClassifier(nn.Module):
@@ -1092,6 +1097,292 @@ TIME_SERIES_MODELS = {"informer": (InformerForecaster, (TS_LOOKBACK, TS_CHANNELS
                       "nbeats": (NBeatsForecaster, (TS_LOOKBACK,))}
 
 
+class TfSamePad(nn.Module):
+    """TensorFlow "same" padding ahead of a strided convolution: total = max((ceil(n / s) - 1) * s + k - n, 0), the
+    smaller half before. AiDotNet's EfficientNetTrunk.SamePad pads the same way (stride 1 convolutions pad k // 2)."""
+
+    def __init__(self, kernel: int, stride: int) -> None:
+        super().__init__()
+        self.kernel, self.stride = kernel, stride
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        pads: list[int] = []
+        for n in (x.shape[3], x.shape[2]):  # F.pad takes the last axis first
+            total = max((math.ceil(n / self.stride) - 1) * self.stride + self.kernel - n, 0)
+            pads += [total // 2, total - total // 2]
+        return F.pad(x, pads)
+
+
+def efficientnet_conv(inputs: int, outputs: int, kernel: int, stride: int, groups: int = 1) -> nn.Module:
+    """A bias-free convolution with AiDotNet's padding: k // 2 at stride 1, TensorFlow "same" at stride 2."""
+    if stride == 1:
+        return nn.Conv2d(inputs, outputs, kernel, 1, kernel // 2, groups=groups, bias=False)
+    return nn.Sequential(TfSamePad(kernel, stride), nn.Conv2d(inputs, outputs, kernel, stride, 0, groups=groups, bias=False))
+
+
+def efficientnet_norm(channels: int) -> nn.BatchNorm2d:
+    """AiDotNet's trunk BatchNorm: eps 1e-3 and TensorFlow momentum 0.99 (PyTorch momentum 0.01)."""
+    return nn.BatchNorm2d(channels, eps=1e-3, momentum=0.01)
+
+
+class MBConv(nn.Module):
+    """EfficientNet's mobile inverted bottleneck as AiDotNet's EfficientNetTrunk runs it (and torchvision's MBConv):
+    1x1 expand + BN + SiLU (when the ratio is not 1), depthwise k x k + BN + SiLU, squeeze-excitation (mean pool,
+    Linear to max(1, inputs // 4), SiLU, Linear back, sigmoid gate), 1x1 project + BN, and a residual with
+    per-sample stochastic depth when the shape is kept."""
+
+    def __init__(self, inputs: int, outputs: int, expand: int, kernel: int, stride: int, drop_rate: float) -> None:
+        super().__init__()
+        hidden = inputs * expand
+        layers: list[nn.Module] = []
+        if expand != 1:
+            layers += [efficientnet_conv(inputs, hidden, 1, 1), efficientnet_norm(hidden), nn.SiLU()]
+        layers += [efficientnet_conv(hidden, hidden, kernel, stride, groups=hidden), efficientnet_norm(hidden), nn.SiLU()]
+        self.features = nn.Sequential(*layers)
+        squeezed = max(1, inputs // 4)
+        self.reduce, self.excite = nn.Linear(hidden, squeezed), nn.Linear(squeezed, hidden)
+        self.project = nn.Sequential(efficientnet_conv(hidden, outputs, 1, 1), efficientnet_norm(outputs))
+        self.residual = stride == 1 and inputs == outputs
+        self.drop_rate = drop_rate
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        h = self.features(x)
+        gate = torch.sigmoid(self.excite(F.silu(self.reduce(h.mean(dim=(2, 3))))))
+        h = self.project(h * gate[:, :, None, None])
+        if not self.residual:
+            return h
+        if self.training and self.drop_rate > 0:
+            keep = (torch.rand(h.shape[0], 1, 1, 1, device=h.device) >= self.drop_rate).to(h.dtype)
+            h = h * keep / (1.0 - self.drop_rate)
+        return h + x
+
+
+class EfficientNetB0(nn.Module):
+    """The "efficientnet-b0" row: EfficientNet-B0 (Tan & Le 2019; width and depth 1.0) at CIFAR [3, 32, 32], 10
+    classes, as AiDotNet's EfficientNetNetwork builds it: stem 3x3/2 to 32, the seven MBConv stages, 1x1 head to 1280,
+    global mean pool, dropout 0.1 (AiDotNet's Custom-variant rate), Linear(1280, 10). Drop-connect rises linearly to
+    0.2 over the 16 blocks. Same layout and trainable parameter count as torchvision's efficientnet_b0 at 10 classes
+    (4,020,358); defined here rather than taken from torchvision so the BatchNorm settings and the TensorFlow "same"
+    padding of the strided convolutions match AiDotNet's trunk exactly."""
+
+    STAGES = ((1, 3, 1, 32, 16, 1), (6, 3, 2, 16, 24, 2), (6, 5, 2, 24, 40, 2), (6, 3, 2, 40, 80, 3),
+              (6, 5, 1, 80, 112, 3), (6, 5, 2, 112, 192, 4), (6, 3, 1, 192, 320, 1))
+
+    def __init__(self, classes: int = 10, dropout: float = 0.1, drop_connect: float = 0.2) -> None:
+        super().__init__()
+        self.stem = nn.Sequential(efficientnet_conv(3, 32, 3, 2), efficientnet_norm(32), nn.SiLU())
+        total = sum(stage[5] for stage in self.STAGES)
+        blocks: list[nn.Module] = []
+        for expand, kernel, stride, inputs, outputs, count in self.STAGES:
+            for b in range(count):
+                blocks.append(MBConv(inputs if b == 0 else outputs, outputs, expand, kernel, stride if b == 0 else 1,
+                                     drop_connect * len(blocks) / total))
+        self.blocks = nn.Sequential(*blocks)
+        self.head = nn.Sequential(efficientnet_conv(320, 1280, 1, 1), efficientnet_norm(1280), nn.SiLU())
+        self.dropout = nn.Dropout(dropout)
+        self.classifier = nn.Linear(1280, classes)
+        # The reference initialization (torchvision's, and the official code AiDotNet follows): convolutions normal
+        # with fan-out scaling, dense weights U(+-1/sqrt(out)) with zero bias. The dense bound puts the initial loss
+        # well above ln(10) on both sides.
+        for module in self.modules():
+            if isinstance(module, nn.Conv2d):
+                nn.init.kaiming_normal_(module.weight, mode="fan_out")
+            elif isinstance(module, nn.Linear):
+                bound = 1.0 / math.sqrt(module.out_features)
+                nn.init.uniform_(module.weight, -bound, bound)
+                nn.init.zeros_(module.bias)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        h = self.head(self.blocks(self.stem(x)))
+        return self.classifier(self.dropout(h.mean(dim=(2, 3))))
+
+
+VAE_PIXELS, VAE_HIDDEN, VAE_LATENT = 784, 400, 20
+
+
+class MnistVAE(nn.Module):
+    """The "vae" row: Kingma & Welling's MNIST VAE in the pytorch/examples layout, 784 -> 400 (ReLU) -> 20 means and
+    20 log-variances -> reparameterized sample -> 400 (ReLU) -> 784 (sigmoid), 652,824 parameters. fc2 is AiDotNet's
+    single 400 -> 40 layer (means, then log-variances); pytorch/examples' fc21/fc22 pair is the same weights. The loss
+    is AiDotNet VariationalAutoencoder's: mean squared reconstruction error plus beta = 0.01 times the KL divergence
+    summed over the latent and averaged over the batch. Inference decodes the latent mean."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.fc1 = nn.Linear(VAE_PIXELS, VAE_HIDDEN)
+        self.fc2 = nn.Linear(VAE_HIDDEN, 2 * VAE_LATENT)
+        self.fc3 = nn.Linear(VAE_LATENT, VAE_HIDDEN)
+        self.fc4 = nn.Linear(VAE_HIDDEN, VAE_PIXELS)
+
+    def encode(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        mean, log_variance = self.fc2(F.relu(self.fc1(x))).chunk(2, dim=1)
+        return mean, log_variance
+
+    def decode(self, z: torch.Tensor) -> torch.Tensor:
+        return torch.sigmoid(self.fc4(F.relu(self.fc3(z))))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        mean, _ = self.encode(x)
+        return self.decode(mean)
+
+    def training_loss(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        mean, log_variance = self.encode(x)
+        z = mean + torch.randn_like(mean) * torch.exp(0.5 * log_variance)
+        kl = 0.5 * (log_variance.exp() + mean * mean - 1 - log_variance).sum() / x.shape[0]
+        return F.mse_loss(self.decode(z), y) + 0.01 * kl
+
+    @staticmethod
+    def make_batch(batch_size: int, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+        """Flattened 28x28 images with pixels uniform in [0, 1]; the target is the input."""
+        x = torch.rand(batch_size, VAE_PIXELS).to(device)
+        return x, x
+
+
+GAT_NODES, GAT_FEATURES, GAT_CLASSES = 2708, 1433, 7
+
+
+def cora_like_graph(nodes: int = GAT_NODES) -> torch.Tensor:
+    """The C# gat row's graph: a ring plus a chord i -> i+7 from every node, undirected, with self-loops - 5,416 edges
+    against Cora's 5,429. Returned as the additive attention mask AiDotNet's GraphAttentionLayer builds: 0 on an
+    edge, -1e9 elsewhere."""
+    adjacency = torch.eye(nodes)
+    index = torch.arange(nodes)
+    for step in (1, 7):
+        adjacency[index, (index + step) % nodes] = 1
+        adjacency[(index + step) % nodes, index] = 1
+    return (1 - adjacency) * -1e9
+
+
+class DenseGATLayer(nn.Module):
+    """AiDotNet's GraphAttentionLayer on its dense path (and the GAT authors' reference implementation): per head,
+    Wh = X W, e_ij = LeakyReLU_0.2(a_self . Wh_i + a_neigh . Wh_j) + mask_ij, softmax over j, dropout on the
+    coefficients, then aggregation; heads are concatenated (hidden layer) or averaged (output layer), plus a bias."""
+
+    def __init__(self, inputs: int, outputs: int, heads: int, concat: bool, dropout: float) -> None:
+        super().__init__()
+        self.outputs, self.concat, self.dropout = outputs, concat, dropout
+        self.weight = nn.Parameter(torch.empty(heads, inputs, outputs))
+        self.attention = nn.Parameter(torch.empty(heads, 2 * outputs))
+        self.bias = nn.Parameter(torch.zeros(heads * outputs if concat else outputs))
+        nn.init.xavier_uniform_(self.weight)
+        nn.init.xavier_uniform_(self.attention)
+
+    def forward(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
+        wh = torch.einsum("bnf,hfo->bhno", x, self.weight)                              # [B, H, N, O]
+        self_scores = torch.einsum("bhno,ho->bhn", wh, self.attention[:, :self.outputs])
+        neighbor_scores = torch.einsum("bhno,ho->bhn", wh, self.attention[:, self.outputs:])
+        scores = F.leaky_relu(self_scores[..., :, None] + neighbor_scores[..., None, :], 0.2) + mask
+        coefficients = F.dropout(torch.softmax(scores, dim=-1), self.dropout, self.training)
+        out = coefficients @ wh                                                           # [B, H, N, O]
+        out = out.permute(0, 2, 1, 3).flatten(2) if self.concat else out.mean(dim=1)
+        return out + self.bias
+
+
+class CoraGAT(nn.Module):
+    """The "gat" row: Velickovic et al.'s Cora GAT as AiDotNet's GraphAttentionNetwork builds it - 1,433 features ->
+    8 heads x 8 (ELU, concatenated) -> 1 head x 7 classes, attention dropout 0.6 - trained full-batch for node
+    classification on the Cora-sized graph, 92,373 parameters (PyG's GATConv pair on Cora has the same count).
+    AiDotNet applies the paper's 0.6 dropout to the attention coefficients only, not also to each layer's input, so
+    this twin does too. One sample is the whole graph: the row runs at batch size 1."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.register_buffer("mask", cora_like_graph())
+        self.gat1 = DenseGATLayer(GAT_FEATURES, 8, 8, concat=True, dropout=0.6)
+        self.gat2 = DenseGATLayer(64, GAT_CLASSES, 1, concat=False, dropout=0.6)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.gat2(F.elu(self.gat1(x, self.mask)), self.mask)
+
+    @staticmethod
+    def make_batch(batch_size: int, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+        """One graph of standard-normal node features; each node's class is the largest of its first seven features."""
+        if batch_size != 1:
+            raise ValueError("The gat row runs on the whole Cora-sized graph as one sample: use --batch-size 1 "
+                             "--inference-batches 1.")
+        x = torch.randn(1, GAT_NODES, GAT_FEATURES)
+        return x.to(device), x[..., :GAT_CLASSES].argmax(dim=-1).to(device)
+
+
+DCGAN_LATENT, DCGAN_IMAGE = 100, 64
+
+
+class DCGAN64(nn.Module):
+    """The "dcgan" row: Radford et al.'s 64x64 DCGAN as AiDotNet's DCGAN builds it. Generator: Linear(100, 512*4*4) +
+    reshape, transposed convolutions 4x4/2 512 -> 256 -> 128 -> 64 with BatchNorm + ReLU, -> 3 with tanh.
+    Discriminator: 4x4/2 convolutions 3 -> 64 (LeakyReLU 0.2) -> 128 -> 256 -> 512 (BatchNorm + LeakyReLU 0.2), then a
+    4x4 convolution to one logit. Layers carry biases and N(0, 0.02) weights, as AiDotNet's do; unlike the paper (and
+    pytorch/examples), AiDotNet's generator has no BatchNorm + ReLU after the projection, so this twin has none either.
+    6,350,852 parameters (generator 3,584,323, discriminator 2,766,529). A training step is AiDotNet's adversarial
+    iteration: the discriminator on the concatenated [real; generated] batch with BCE-with-logits, then the generator
+    through the frozen eval-mode discriminator with the non-saturating loss softplus(-D(G(z))), each under Adam
+    (lr 2e-4, betas 0.5 / 0.999) with the global-norm clip at 1. The reported loss is the discriminator's."""
+
+    def __init__(self) -> None:
+        super().__init__()
+
+        def up(inputs: int, outputs: int) -> list[nn.Module]:
+            return [nn.ConvTranspose2d(inputs, outputs, 4, 2, 1), nn.BatchNorm2d(outputs), nn.ReLU(True)]
+
+        def down(inputs: int, outputs: int) -> list[nn.Module]:
+            return [nn.Conv2d(inputs, outputs, 4, 2, 1), nn.BatchNorm2d(outputs), nn.LeakyReLU(0.2, True)]
+
+        self.generator = nn.Sequential(
+            nn.Linear(DCGAN_LATENT, 512 * 4 * 4), nn.Unflatten(1, (512, 4, 4)),
+            *up(512, 256), *up(256, 128), *up(128, 64), nn.ConvTranspose2d(64, 3, 4, 2, 1), nn.Tanh())
+        self.discriminator = nn.Sequential(
+            nn.Conv2d(3, 64, 4, 2, 1), nn.LeakyReLU(0.2, True), *down(64, 128), *down(128, 256), *down(256, 512),
+            nn.Conv2d(512, 1, 4, 1, 0), nn.Flatten())
+        for module in self.modules():
+            if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
+                nn.init.normal_(module.weight, 0.0, 0.02)
+                nn.init.zeros_(module.bias)
+        self._optimizers: tuple[torch.optim.Optimizer, torch.optim.Optimizer] | None = None
+
+    def forward(self, z: torch.Tensor) -> torch.Tensor:
+        return self.generator(z)
+
+    def compile_parts(self) -> None:
+        """--compile: train_step calls the two networks directly, so compile them rather than only forward."""
+        self.generator = torch.compile(self.generator)
+        self.discriminator = torch.compile(self.discriminator)
+
+    def train_step(self, z: torch.Tensor, real: torch.Tensor) -> torch.Tensor:
+        if self._optimizers is None:
+            self._optimizers = (torch.optim.Adam(self.generator.parameters(), lr=2e-4, betas=(0.5, 0.999)),
+                                torch.optim.Adam(self.discriminator.parameters(), lr=2e-4, betas=(0.5, 0.999)))
+        generator_optimizer, discriminator_optimizer = self._optimizers
+        batch = z.shape[0]
+
+        with torch.no_grad():
+            fake = self.generator(z)
+        labels = torch.cat([torch.ones(batch, 1, device=z.device), torch.zeros(batch, 1, device=z.device)])
+        discriminator_loss = F.binary_cross_entropy_with_logits(self.discriminator(torch.cat([real, fake])), labels)
+        discriminator_optimizer.zero_grad(set_to_none=True)
+        discriminator_loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.discriminator.parameters(), 1.0)
+        discriminator_optimizer.step()
+
+        self.discriminator.eval()
+        self.discriminator.requires_grad_(False)
+        try:
+            generator_loss = F.softplus(-self.discriminator(self.generator(z))).mean()
+            generator_optimizer.zero_grad(set_to_none=True)
+            generator_loss.backward()
+            torch.nn.utils.clip_grad_norm_(self.generator.parameters(), 1.0)
+            generator_optimizer.step()
+        finally:
+            self.discriminator.requires_grad_(True)
+            self.discriminator.train()
+        return discriminator_loss.detach()
+
+    @staticmethod
+    def make_batch(batch_size: int, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+        """Standard-normal latents and real images uniform in [-1, 1], the tanh range."""
+        z = torch.randn(batch_size, DCGAN_LATENT).to(device)
+        return z, (torch.rand(batch_size, 3, DCGAN_IMAGE, DCGAN_IMAGE) * 2 - 1).to(device)
+
+
 def make_vision_model(name: str) -> nn.Module:
     """torchvision's definition of each architecture, adjusted only where AiDotNet's builder adjusts it for a
     32x32 input, so both sides run the same network: VGG's classifier reads the 512x1x1 feature map directly
@@ -1136,6 +1427,14 @@ def make_model(name: str) -> tuple[nn.Module, tuple[int, ...]]:
         return WhisperTiny(), (WHISPER_MELS, WHISPER_FRAMES)
     if name == "faster-rcnn":
         return FasterRcnnR50Fpn(), (3, DETECTION_IMAGE, DETECTION_IMAGE)
+    if name == "efficientnet-b0":
+        return EfficientNetB0(), (3, 32, 32)
+    if name == "vae":
+        return MnistVAE(), (VAE_PIXELS,)
+    if name == "gat":
+        return CoraGAT(), (GAT_NODES, GAT_FEATURES)
+    if name == "dcgan":
+        return DCGAN64(), (DCGAN_LATENT,)
     if name in VISION_MODELS:
         return make_vision_model(name), (3, 32, 32)
     if name in TIME_SERIES_MODELS:
@@ -1189,7 +1488,9 @@ def synthetic_batch(batch_size: int, shape: tuple[int, ...], device: torch.devic
 def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.device, epochs: int, batches: int, batch_size: int, breakdown: bool = False) -> TrainingResult:
     criterion = nn.CrossEntropyLoss()
     # A row whose model trains with another recipe (the detector's paper SGD) builds its own optimizer.
-    optimizer = (model.make_optimizer() if hasattr(model, "make_optimizer")
+    # A row whose step updates several networks (the GAN) owns its optimizers and its whole step (train_step).
+    optimizer = (None if hasattr(model, "train_step")
+                 else model.make_optimizer() if hasattr(model, "make_optimizer")
                  else torch.optim.AdamW(model.parameters(), **getattr(model, "optimizer_settings", {"lr": 1e-3})))
     epoch_seconds: list[float] = []
     gradient_seconds: list[float] = []
@@ -1215,6 +1516,11 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
                 torch.cuda.profiler.start()
             start_epoch = time.perf_counter()
             for x, y in pool:
+                if optimizer is None:
+                    loss = model.train_step(x, y)
+                    if first_loss is None:
+                        first_loss = loss.detach()
+                    continue
 
                 optimizer.zero_grad(set_to_none=True)
                 if hasattr(model, "training_loss"):
@@ -1373,6 +1679,13 @@ def run(args: argparse.Namespace) -> dict[str, object]:
         if args.compile:
             # torch.compile (TorchInductor) — the "PyTorch compiled" comparison.
             # Counts params BEFORE compile (the wrapper hides .parameters()).
+            # A row that trains through its own training_loss / train_step reaches it through the compiled wrapper's
+            # attribute forwarding, which runs the original eager module: compile that path too, so --compile times
+            # compiled training rather than only compiled inference.
+            if hasattr(model, "compile_parts"):
+                model.compile_parts()
+            elif hasattr(model, "training_loss"):
+                model.training_loss = torch.compile(model.training_loss)
             model = torch.compile(model)
         training = benchmark_training(model, shape, device, args.epochs, args.train_batches, args.batch_size, args.breakdown)
         model.eval()

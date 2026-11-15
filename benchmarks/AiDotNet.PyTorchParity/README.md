@@ -42,6 +42,20 @@ product, `n = tanh(W_in x + b_in + r * (W_hn h + b_hn))`; AiDotNet's `GRULayer` 
 match, but the two compute different functions, so their losses are not expected to agree. The PyTorch report carries
 this as the row's `note`.
 
+Four more rows wrap shipped model classes (`MoreFamilyRows.cs`), each against a layer-for-layer twin in
+`benchmark.py` with the same trainable parameter count, loss and optimizer:
+
+| row | AiDotNet class | shape | parameters |
+|-----|----------------|-------|-----------:|
+| `efficientnet-b0` | `EfficientNetNetwork` (B0 scaling) | CIFAR `[3, 32, 32]`, 10 classes | 4,020,358 |
+| `vae` | `VariationalAutoencoder` | MNIST 784 -> 400 -> 20 -> 400 -> 784 | 652,824 |
+| `gat` | `GraphAttentionNetwork` | Cora-sized graph: 2,708 nodes, 1,433 features, 8x8 heads, 7 classes | 92,373 |
+| `dcgan` | `DCGAN` | 64x64 images, latent 100, one D + one G update per step | 6,350,852 |
+
+`gat` treats the whole graph as one sample: run it with `--batch-size 1 --inference-batches 1` on both sides. Under
+`--compile`, a twin with its own objective (`training_loss`, or the GAN's `train_step` networks) is compiled too, so
+compiled training is what gets timed.
+
 Each training report also records `FirstLoss` / `LastLoss` (`first_loss` / `last_loss`): the loss of the first and
 the last training step, as evidence the timed step trains. The last is read after timing. The first is read during
 epoch 0, once, which the steady-state figures exclude; the PyTorch side holds it on the device until timing ends.
