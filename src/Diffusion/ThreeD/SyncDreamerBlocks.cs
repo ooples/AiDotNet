@@ -898,19 +898,30 @@ internal sealed class SdClipImageEncoder<T> : KlModule<T>
     public int EmbedDim { get; }
 
     /// <summary>
-    /// The CLIP image embedding [B, embedDim] of images [B, 3, H, W] in [0, 1]: bicubic resize to the CLIP side, CLIP
-    /// normalization, then the transformer.
+    /// <c>FrozenCLIPImageEmbedder.preprocess</c> of images [B, 3, H, W] in [0, 1]: kornia's bicubic resize to the CLIP
+    /// side with <c>align_corners=True</c> and <c>antialias=False</c> (the embedder's default), then CLIP's mean and std.
+    /// The reference resizes the [-1, 1] image and maps it to [0, 1] afterwards; the resize is linear, so the order does
+    /// not change the result.
+    /// </summary>
+    public Tensor<T> Preprocess(Tensor<T> images)
+    {
+        var x = images.Shape[2] == _imageSize && images.Shape[3] == _imageSize
+            ? images
+            : Engine.Interpolate(images, new[] { _imageSize, _imageSize }, InterpolateMode.Bicubic, true);
+        var mean = new Tensor<double>(Mean, new[] { 3 }).Cast<T>();
+        var inverseStd = new Tensor<double>(new[] { 1.0 / Std[0], 1.0 / Std[1], 1.0 / Std[2] }, new[] { 3 }).Cast<T>();
+        return SdOps<T>.ChannelAffine(Engine.TensorSubtract(x, Engine.TensorBroadcastTo(Engine.Reshape(mean, new[] { 1, 3, 1, 1 }), x.Shape.ToArray())),
+            inverseStd, new Tensor<T>(new[] { 3 }));
+    }
+
+    /// <summary>
+    /// The CLIP image embedding [B, embedDim] of images [B, 3, H, W] in [0, 1]: <see cref="Preprocess"/>, then the
+    /// transformer.
     /// </summary>
     public Tensor<T> Encode(Tensor<T> images)
     {
         int b = images.Shape[0];
-        var x = images.Shape[2] == _imageSize && images.Shape[3] == _imageSize
-            ? images
-            : Engine.Interpolate(images, new[] { _imageSize, _imageSize }, InterpolateMode.Bicubic, false);
-        var mean = new Tensor<double>(Mean, new[] { 3 }).Cast<T>();
-        var inverseStd = new Tensor<double>(new[] { 1.0 / Std[0], 1.0 / Std[1], 1.0 / Std[2] }, new[] { 3 }).Cast<T>();
-        x = SdOps<T>.ChannelAffine(Engine.TensorSubtract(x, Engine.TensorBroadcastTo(Engine.Reshape(mean, new[] { 1, 3, 1, 1 }), x.Shape.ToArray())),
-            inverseStd, new Tensor<T>(new[] { 3 }));
+        var x = Preprocess(images);
         int grid = _imageSize / _patch, patches = grid * grid;
         var tokens = Engine.Conv2D(x, _conv.Value, new[] { _patch, _patch }, new[] { 0, 0 }, new[] { 1, 1 });   // [B, W, g, g]
         tokens = Engine.TensorPermute(Engine.Reshape(tokens, new[] { b, _width, patches }), new[] { 0, 2, 1 }); // [B, P, W]
@@ -978,8 +989,9 @@ internal sealed class SyncDreamerNetwork<T> : KlModule<T>
         FrustumNet = new SdFrustumTV3DNet<T>(o.SpatialVolumeDims[0], o.TimeEmbedDim, ViewpointDim, o.FrustumVolumeDims, o.NormGroups);
         TimeEmbedDim = o.TimeEmbedDim;
 
-        // Depth-wise attention after the middle block and after every decoder block above the deepest level, each
-        // reading the frustum volume at its own resolution: DepthTransformer(ch, heads, d / 2, context_dim=d).
+        // Depth-wise attention after the middle block and after every LDM output block of the levels above the deepest
+        // (DepthWiseAttention: middle_conditions and output_b2c 3..11 for four levels), each reading the frustum volume
+        // at the resolution the block outputs: DepthTransformer(ch, heads, d / 2, context_dim=d).
         _siteConditions = new SdDepthTransformer<T>?[sites.Count];
         SdDepthTransformer<T>? middle = null;
         for (int i = 0; i < sites.Count; i++)

@@ -225,8 +225,51 @@ public class SyncDreamerOptions : ModelOptions
     [PaperDefault(100, Source = Repo + " configs/neus.yaml: warm_up_steps 100")]
     public int ReconstructionWarmUpIterations { get; set; } = 100;
 
+    /// <summary>The NeuS learning rate (<c>base_lr</c>), scaled by <c>schedule_fn</c>.</summary>
+    [PaperDefault(5.0e-4, Source = Repo + " configs/neus.yaml: base_lr 5.0e-4")]
+    public double ReconstructionLearningRate { get; set; } = 5.0e-4;
+
+    /// <summary>Rays per NeuS step drawn from all pixels of all views (<c>train_batch_num</c>).</summary>
+    [PaperDefault(3584, Source = Repo + " configs/neus.yaml: train_batch_num 3584")]
+    public int ReconstructionRayBatchSize { get; set; } = 3584;
+
+    /// <summary>Extra rays per NeuS step drawn from the pseudo-foreground pixels (<c>train_batch_fg_num</c>).</summary>
+    [PaperDefault(512, Source = Repo + " configs/neus.yaml: train_batch_fg_num 512")]
+    public int ReconstructionForegroundRayBatchSize { get; set; } = 512;
+
+    /// <summary>The soft-L1 color loss weight (<c>lambda_rgb_loss</c>).</summary>
+    [PaperDefault(0.5, Source = Repo + " configs/neus.yaml: lambda_rgb_loss 0.5")]
+    public double ReconstructionRgbWeight { get; set; } = 0.5;
+
+    /// <summary>The Eikonal loss weight (<c>lambda_eikonal_loss</c>).</summary>
+    [PaperDefault(0.1, Source = Repo + " configs/neus.yaml: lambda_eikonal_loss 0.1")]
+    public double ReconstructionEikonalWeight { get; set; } = 0.1;
+
+    /// <summary>
+    /// The mask MSE weight (<c>lambda_mask_loss</c>), applied when the views carry masks (the official trainer predicts
+    /// them with CarveKit; here they come from the caller or the views' alpha).
+    /// </summary>
+    [PaperDefault(1.0, Source = Repo + " configs/neus.yaml: lambda_mask_loss 1.0, use_mask true")]
+    public double ReconstructionMaskWeight { get; set; } = 1.0;
+
+    /// <summary>The cosine-annealing steps of the NeuS slope (<c>anneal_end</c>).</summary>
+    [PaperDefault(200, Source = Repo + " renderer/renderer.py NeuSRenderer: anneal_end 200")]
+    public int ReconstructionAnnealIterations { get; set; } = 200;
+
+    /// <summary>The half side of the cube NeuS renders inside and the mesh is extracted over (<c>DEFAULT_SIDE_LENGTH</c>).</summary>
+    [PaperDefault(0.6, Source = Repo + " renderer/renderer.py: DEFAULT_SIDE_LENGTH 0.6")]
+    public double ReconstructionBoundHalfSide { get; set; } = 0.6;
+
+    /// <summary>The radius of the sphere giving each ray's near and far depths (<c>DEFAULT_RADIUS</c> = sqrt(3) / 2).</summary>
+    [PaperDefault(0.8660254037844386, Source = Repo + " renderer/renderer.py: DEFAULT_RADIUS np.sqrt(3)/2")]
+    public double ReconstructionNearFarRadius { get; set; } = 0.8660254037844386;
+
+    /// <summary>The NeuS seed when the caller passes none (<c>train_renderer.py --seed</c>).</summary>
+    [PaperDefault(6033, Source = Repo + " train_renderer.py: --seed default 6033")]
+    public int ReconstructionSeed { get; set; } = 6033;
+
     /// <summary>The marching-cubes grid resolution the NeuS field is meshed at.</summary>
-    [PaperDefault(512, Source = Repo + " renderer/renderer.py extract_mesh: resolution 512")]
+    [PaperDefault(512, Source = Repo + " train_renderer.py extract_mesh: resolution 512")]
     public int MeshResolution { get; set; } = 512;
 
     /// <summary>The number of surface points a point cloud keeps.</summary>

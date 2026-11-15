@@ -31,9 +31,12 @@ namespace AiDotNet.Diffusion.ThreeD;
 /// unconditional branch zeroing the CLIP context, the input latent and the frustum features.
 /// </para>
 /// <para>
-/// The generated views have known cameras, so the object is reconstructed as the paper does: a NeuS field
-/// (<see cref="NeuSReconstructor{T}"/>) is fitted to them and meshed by marching cubes at its zero level; point clouds
-/// are colored surface points of that mesh.
+/// The generated views have known cameras, so the object is reconstructed as the official code does
+/// (<c>train_renderer.py</c>): a NeuS field trained with SyncDreamer's renderer and loss on every pixel of the views
+/// (<see cref="SyncDreamerNeuSTrainer{T}"/>), meshed by marching cubes at its zero level over [-0.6, 0.6]^3; point
+/// clouds are colored surface points of that mesh. The official trainer supervises NeuS with CarveKit foreground
+/// masks; CarveKit is not available here, so masks come from the caller (<see cref="ReconstructMesh"/>) or the views'
+/// alpha.
 /// </para>
 /// <para>
 /// <b>Weights.</b> The architecture is the paper's, but meaningful views need the released SyncDreamer checkpoint (the
@@ -267,8 +270,10 @@ public partial class SyncDreamerModel<T> : ThreeDDiffusionModelBase<T>
     public int NumViews => _options.ViewCount;
 
     /// <summary>
-    /// The NeuS configuration of the reconstruction, or null for NeuS's defaults with the configured iteration and
-    /// warm-up counts.
+    /// The NeuS field configuration (network widths, samples per ray, grid chunking) of the reconstruction, or null for
+    /// NeuS's defaults, which are SyncDreamer's (<c>renderer/renderer.py NeuSRenderer</c>: SDF 8 x 256 with a skip at 4,
+    /// 6 frequencies, color 4 x 256, 64 + 64 samples, 4 up-sampling steps). The renderer variant, bounds, annealing
+    /// and background are always SyncDreamer's.
     /// </summary>
     internal NeuSOptions? ReconstructionOptions { get; set; }
 
@@ -309,9 +314,9 @@ public partial class SyncDreamerModel<T> : ThreeDDiffusionModelBase<T>
     /// <summary>The denoised target latents [N, 4, S/8, S/8] (scaled as the U-Net sees them).</summary>
     internal Tensor<T> SampleLatents(Tensor<T> image, int steps, double guidanceScale, int? seed)
     {
-        var input = EncodeInputView(image);
-        var schedule = SyncDreamerDdimSchedule.Create(_options.TrainTimesteps, _options.BetaStart, _options.BetaEnd, steps, _options.DdimEta);
         var rng = CreateInferenceRng(seed);
+        var input = EncodeInputView(image, rng);
+        var schedule = SyncDreamerDdimSchedule.Create(_options.TrainTimesteps, _options.BetaStart, _options.BetaEnd, steps, _options.DdimEta);
         int side = _cameras.LatentSize;
         var x = SampleNoiseTensor(new[] { _options.ViewCount, LatentChannelCount, side, side }, rng);
         for (int index = schedule.Count - 1; index >= 0; index--)
@@ -331,14 +336,24 @@ public partial class SyncDreamerModel<T> : ThreeDDiffusionModelBase<T>
         return schedule.Step(Engine, x, noise, index, fresh);
     }
 
-    /// <summary>The input view's conditioning: its CLIP embedding [1, dim] and its unscaled VAE latent [1, 4, S/8, S/8].</summary>
-    internal SyncDreamerInputView<T> EncodeInputView(Tensor<T> image)
+    /// <summary>
+    /// The input view's conditioning: its CLIP embedding [1, dim] and its unscaled VAE latent [1, 4, S/8, S/8], a draw
+    /// from the VAE posterior (<c>prepare</c> calls <c>encode_first_stage(image_input)</c> with its default
+    /// <c>sample=True</c>; <c>DiagonalGaussianDistribution</c> clamps the log-variance to [-30, 20]).
+    /// </summary>
+    /// <param name="image">The input view.</param>
+    /// <param name="rng">The generator the posterior draw takes its seed from.</param>
+    internal SyncDreamerInputView<T> EncodeInputView(Tensor<T> image, Random rng)
     {
+        if (rng is null) throw new ArgumentNullException(nameof(rng));
         var prepared = PrepareImage(image);
         var clip = _network.Clip.Encode(prepared);
         // The VAE reads [-1, 1]. Zero123's U-Net was trained on the unscaled latent: SyncDreamer multiplies by the
         // scale factor when encoding and divides it back out before the U-Net (UNetWrapper with use_zero_123).
-        var latent = _vae.Encode(Engine.TensorSubtractScalar(Engine.TensorMultiplyScalar(prepared, NumOps.FromDouble(2.0)), NumOps.One), false);
+        var (mean, logVariance) = _vae.EncodeWithDistribution(
+            Engine.TensorSubtractScalar(Engine.TensorMultiplyScalar(prepared, NumOps.FromDouble(2.0)), NumOps.One));
+        logVariance = Engine.TensorClamp(logVariance, NumOps.FromDouble(-30.0), NumOps.FromDouble(20.0));
+        var latent = _vae.Sample(mean, logVariance, rng.Next());
         if (latent.Shape[1] != LatentChannelCount || latent.Shape[2] != _cameras.LatentSize || latent.Shape[3] != _cameras.LatentSize)
             throw new InvalidOperationException(
                 $"The VAE encodes a {_options.ImageSize}-pixel image to [{string.Join(", ", latent.Shape.ToArray())}], " +
@@ -437,13 +452,25 @@ public partial class SyncDreamerModel<T> : ThreeDDiffusionModelBase<T>
     {
         if (image is null) throw new ArgumentNullException(nameof(image));
         var batched = image.Rank == 3 ? Engine.Reshape(image, new[] { 1, image.Shape[0], image.Shape[1], image.Shape[2] }) : image;
-        if (batched.Rank != 4 || batched.Shape[0] != 1 || batched.Shape[1] != 3)
+        if (batched.Rank != 4 || batched.Shape[0] != 1 || (batched.Shape[1] != 3 && batched.Shape[1] != 4))
             throw new ArgumentException(
-                $"SyncDreamer reads one RGB image [1, 3, H, W] or [3, H, W]; got [{string.Join(", ", image.Shape.ToArray())}].", nameof(image));
+                $"SyncDreamer reads one RGB or RGBA image [1, 3 or 4, H, W] or [3 or 4, H, W]; got [{string.Join(", ", image.Shape.ToArray())}].",
+                nameof(image));
+        int h = batched.Shape[2], w = batched.Shape[3];
+        if (batched.Shape[1] == 4)
+        {
+            // prepare_inputs: rgb * alpha + 1 - alpha, a white background.
+            var rgb = Engine.TensorSlice(batched, new[] { 0, 0, 0, 0 }, new[] { 1, 3, h, w });
+            var alpha = Engine.TensorBroadcastTo(Engine.TensorSlice(batched, new[] { 0, 3, 0, 0 }, new[] { 1, 1, h, w }), new[] { 1, 3, h, w });
+            batched = Engine.TensorAdd(Engine.TensorMultiply(rgb, alpha),
+                Engine.TensorAddScalar(Engine.TensorNegate(alpha), NumOps.One));
+        }
+
         int side = _options.ImageSize;
-        return batched.Shape[2] == side && batched.Shape[3] == side
+        // prepare_inputs resizes with PIL's bicubic filter (half-pixel centers).
+        return h == side && w == side
             ? batched
-            : Engine.Interpolate(batched, new[] { side, side }, InterpolateMode.Bilinear, false);
+            : Engine.Interpolate(batched, new[] { side, side }, InterpolateMode.Bicubic, false);
     }
 
     // [-1, 1] decoder output to [0, 1].
@@ -456,46 +483,131 @@ public partial class SyncDreamerModel<T> : ThreeDDiffusionModelBase<T>
     #region Reconstruction
 
     /// <summary>
-    /// Reconstructs the object from the generated views as the paper does: a NeuS field fitted to the views with the
-    /// layout's cameras, meshed by marching cubes at its zero level over the unit cube, with vertex colors from the NeuS
-    /// color network seen along the inward normal.
+    /// Reconstructs the object from the views as SyncDreamer does (<c>train_renderer.py</c>): a NeuS field trained on
+    /// every pixel of every view with SyncDreamer's renderer and loss (<see cref="SyncDreamerNeuSTrainer{T}"/>), then
+    /// marching cubes at its zero level over the cube of half side
+    /// <see cref="SyncDreamerOptions.ReconstructionBoundHalfSide"/> with the field set to 1 outside the unit sphere
+    /// (<c>extract_fields</c>), and vertex colors from the color network seen along the normal
+    /// (<c>get_vertex_colors</c>), clamped to [0, 1].
     /// </summary>
-    /// <param name="views">The N views in layout order, each [1, 3, S, S] or [3, S, S] in [0, 1].</param>
-    /// <param name="seed">The NeuS seed, or null for the configured one.</param>
+    /// <param name="views">The N views in layout order, each [1, 3 or 4, S, S] or [3 or 4, S, S] in [0, 1]; a fourth
+    /// channel is the view's foreground alpha.</param>
+    /// <param name="masks">Per-view foreground masks [1, 1, S, S], [1, S, S] or [S, S] in [0, 1], or null. The official
+    /// trainer predicts them with CarveKit, which is not available here; without masks (and without alpha) the mask term
+    /// is off.</param>
+    /// <param name="seed">The NeuS seed, or null for <see cref="SyncDreamerOptions.ReconstructionSeed"/>.</param>
     /// <returns>The mesh: vertices [V, 3], faces [F, 3], unit normals and colors [V, 3].</returns>
-    public Mesh3D<T> ReconstructMesh(Tensor<T>[] views, int? seed = null)
+    public Mesh3D<T> ReconstructMesh(Tensor<T>[] views, Tensor<T>[]? masks = null, int? seed = null)
+        => Reconstruct(views, masks, seed, quantize: false);
+
+    // quantize: the views went through generate.py's uint8 PNG, (x * 255).astype(np.uint8) / 255.
+    internal Mesh3D<T> Reconstruct(Tensor<T>[] views, Tensor<T>[]? masks, int? seed, bool quantize)
     {
         if (views is null) throw new ArgumentNullException(nameof(views));
-        if (views.Length != _options.ViewCount)
-            throw new ArgumentException($"SyncDreamer reconstructs from its {_options.ViewCount} layout views; got {views.Length}.", nameof(views));
-        var neusViews = new List<NeuSView<T>>(views.Length);
-        for (int i = 0; i < views.Length; i++)
+        int n = _options.ViewCount, size = _options.ImageSize, pixels = size * size;
+        if (views.Length != n)
+            throw new ArgumentException($"SyncDreamer reconstructs from its {n} layout views; got {views.Length}.", nameof(views));
+        if (masks is not null && masks.Length != n)
+            throw new ArgumentException($"Expected {n} masks; got {masks.Length}.", nameof(masks));
+        var cameras = new NeuSCamera[n];
+        var colors = new double[n][];
+        var alphas = new double[n][];
+        bool allAlpha = true;
+        for (int i = 0; i < n; i++)
         {
             var view = views[i] ?? throw new ArgumentException($"View {i} is null.", nameof(views));
-            var chw = view.Rank == 4 ? Engine.Reshape(view, new[] { view.Shape[1], view.Shape[2], view.Shape[3] }) : view;
-            if (chw.Rank != 3 || chw.Shape[0] != 3 || chw.Shape[1] != _options.ImageSize || chw.Shape[2] != _options.ImageSize)
+            var chw = view.Rank == 4 && view.Shape[0] == 1
+                ? Engine.Reshape(view, new[] { view.Shape[1], view.Shape[2], view.Shape[3] })
+                : view;
+            if (chw.Rank != 3 || (chw.Shape[0] != 3 && chw.Shape[0] != 4) || chw.Shape[1] != size || chw.Shape[2] != size)
                 throw new ArgumentException(
-                    $"View {i} must be [1, 3, {_options.ImageSize}, {_options.ImageSize}]; got [{string.Join(", ", view.Shape.ToArray())}].",
-                    nameof(views));
-            neusViews.Add(new NeuSView<T>(Engine.TensorPermute(chw, new[] { 1, 2, 0 }), _cameras.CameraForNeuS(i)));
+                    $"View {i} must be [1, 3 or 4, {size}, {size}]; got [{string.Join(", ", view.Shape.ToArray())}].", nameof(views));
+            int channels = chw.Shape[0];
+            var hwc = NeuSHost<T>.ToDoubles(Engine.TensorPermute(chw, new[] { 1, 2, 0 }));
+            var rgb = new double[pixels * 3];
+            var alpha = channels == 4 ? new double[pixels] : null;
+            for (int p = 0; p < pixels; p++)
+            {
+                for (int c = 0; c < 3; c++)
+                {
+                    double value = Math.Min(1.0, Math.Max(0.0, hwc[p * channels + c]));
+                    rgb[p * 3 + c] = quantize ? Math.Floor(value * 255.0) / 255.0 : value;
+                }
+
+                if (alpha is not null) alpha[p] = hwc[p * channels + 3];
+            }
+
+            colors[i] = rgb;
+            if (alpha is null) allAlpha = false;
+            else alphas[i] = alpha;
+            cameras[i] = _cameras.CameraForNeuS(i);
         }
 
-        var neusOptions = ReconstructionOptions ?? new NeuSOptions
+        double[][]? hostMasks = null;
+        if (masks is not null)
         {
-            Iterations = _options.ReconstructionIterations,
-            WarmUpIterations = _options.ReconstructionWarmUpIterations,
-            // The official pipeline supervised NeuS with CarveKit foreground masks (configs/neus.yaml lambda_mask_loss);
-            // the generated views carry no mask here, so the mask term is off.
-            MaskWeight = 0.0,
-            Seed = seed ?? _options.Seed,
-        };
-        var field = new NeuSReconstructor<T>(neusOptions, Engine).Fit(neusViews, _options.ReconstructionIterations);
+            hostMasks = new double[n][];
+            for (int i = 0; i < n; i++)
+            {
+                var mask = masks[i] ?? throw new ArgumentException($"Mask {i} is null.", nameof(masks));
+                if (mask.Length != pixels)
+                    throw new ArgumentException($"Mask {i} must have {size} x {size} values; got {mask.Length}.", nameof(masks));
+                hostMasks[i] = NeuSHost<T>.ToDoubles(mask);
+            }
+        }
+        else if (allAlpha)
+        {
+            hostMasks = alphas;
+        }
+
+        var fieldOptions = FieldOptions();
+        var trainer = new SyncDreamerNeuSTrainer<T>(_options, fieldOptions, seed ?? _options.ReconstructionSeed, Engine);
+        var field = trainer.Fit(SyncDreamerNeuSTrainer<T>.BuildRays(cameras, colors, hostMasks, size), _options.ReconstructionIterations);
+        return ExtractMesh(field, fieldOptions.GridChunkSize);
+    }
+
+    // SyncDreamer's renderer on the configured (or default) NeuS networks.
+    private NeuSOptions FieldOptions()
+    {
+        var options = ReconstructionOptions ?? new NeuSOptions();
+        options.RendererVariant = NeuSRendererVariant.SyncDreamer;
+        options.NearFarRadius = _options.ReconstructionNearFarRadius;
+        options.CubeHalfSide = _options.ReconstructionBoundHalfSide;
+        options.AnnealIterations = _options.ReconstructionAnnealIterations;
+        options.BackgroundColor = new[] { 1.0, 1.0, 1.0 };   // color + (1 - mask): the white background
+        options.Perturb = true;
+        return options;
+    }
+
+    // extract_mesh: the SDF on a res^3 grid over [-h, h]^3, set to 1 (outside) beyond the unit sphere, marching cubes
+    // at 0, and get_vertex_colors.
+    internal Mesh3D<T> ExtractMesh(NeuSField<T> field, int chunkSize)
+    {
+        double h = _options.ReconstructionBoundHalfSide;
         int resolution = _options.MeshResolution;
-        var bounds = SdfGridBounds.UnitCube;
-        var mesh = MarchingCubes.Extract(field.SampleGrid(resolution, bounds), 0.0, IsoSurfaceInterior.BelowIsoLevel,
+        var bounds = new SdfGridBounds(-h, -h, -h, h, h, h);
+        var grid = NeuSHost<T>.SampleGrid(Engine, points =>
+        {
+            var sdf = field.QuerySdf(points);
+            var host = NeuSHost<T>.ToDoubles(points);
+            int count = host.Length / 3;
+            var outside = new bool[count];
+            for (int i = 0; i < count; i++)
+            {
+                double x = host[i * 3], y = host[i * 3 + 1], z = host[i * 3 + 2];
+                outside[i] = x * x + y * y + z * z >= 1.0;
+            }
+
+            return Engine.TensorWhere(outside, NeuSHost<T>.Filled(1.0, count), sdf);
+        }, resolution, bounds, chunkSize);
+        var mesh = MarchingCubes.Extract(grid, 0.0, IsoSurfaceInterior.BelowIsoLevel,
             bounds.Min[0], bounds.Min[1], bounds.Min[2], bounds.Spacing(resolution, 0));
-        if (mesh.Vertices.Shape[0] > 0 && mesh.Normals is not null)
-            mesh.Colors = field.QueryColor(mesh.Vertices, Engine.TensorNegate(mesh.Normals));
+        if (mesh.Vertices.Shape[0] > 0)
+        {
+            var normals = field.QueryNormals(mesh.Vertices);
+            mesh.Colors = Engine.TensorClamp(field.QueryColor(mesh.Vertices, normals), NumOps.Zero, NumOps.One);
+        }
+
         return mesh;
     }
 
@@ -510,7 +622,7 @@ public partial class SyncDreamerModel<T> : ThreeDDiffusionModelBase<T>
         for (int i = 0; i < angles.Length; i++)
             if (LayoutIndex(angles[i]) != i)
                 throw new ArgumentException($"Angle {i} is not layout view {i}.", nameof(angles));
-        return ReconstructMesh(views);
+        return Reconstruct(views, null, null, quantize: false);
     }
 
     #endregion
@@ -521,14 +633,19 @@ public partial class SyncDreamerModel<T> : ThreeDDiffusionModelBase<T>
     /// Image to 3D: the synchronized views, then NeuS and marching cubes (<see cref="ReconstructMesh"/>).
     /// </summary>
     /// <param name="inputImage">The input view, [1, 3, H, W] or [3, H, W] in [0, 1].</param>
-    /// <param name="numViews">Not used: SyncDreamer always generates its fixed layout of
-    /// <see cref="SyncDreamerOptions.ViewCount"/> views, which its 3D-aware attention was trained on.</param>
+    /// <param name="numViews">Must equal <see cref="SyncDreamerOptions.ViewCount"/>: SyncDreamer generates its fixed
+    /// layout, which its 3D-aware attention was trained on.</param>
     /// <param name="numInferenceSteps">The DDIM steps.</param>
     /// <param name="guidanceScale">The guidance scale (the paper uses 2, which the image overload of <c>GenerateMesh</c> applies by default).</param>
     /// <param name="seed">The seed of the sampling and of NeuS.</param>
     public override Mesh3D<T> ImageTo3D(Tensor<T> inputImage, int numViews = 4, int numInferenceSteps = 50,
         double guidanceScale = 3.0, int? seed = null)
-        => ReconstructMesh(GenerateViews(inputImage, numInferenceSteps, guidanceScale, seed), seed);
+    {
+        if (numViews != _options.ViewCount)
+            throw new ArgumentException(
+                $"SyncDreamer generates its fixed layout of {_options.ViewCount} views; got numViews = {numViews}.", nameof(numViews));
+        return Reconstruct(GenerateViews(inputImage, numInferenceSteps, guidanceScale, seed), null, seed, quantize: true);
+    }
 
     /// <summary>The image-to-3D mesh with the configured sampler defaults (50 DDIM steps, guidance 2).</summary>
     /// <param name="image">The input view, [1, 3, H, W] or [3, H, W] in [0, 1].</param>
@@ -536,7 +653,7 @@ public partial class SyncDreamerModel<T> : ThreeDDiffusionModelBase<T>
     /// <param name="guidanceScale">The guidance scale, or null for the configured one.</param>
     /// <param name="seed">The seed of the sampling and of NeuS.</param>
     public Mesh3D<T> GenerateMesh(Tensor<T> image, int? numInferenceSteps = null, double? guidanceScale = null, int? seed = null)
-        => ReconstructMesh(GenerateViews(image, numInferenceSteps, guidanceScale, seed), seed);
+        => Reconstruct(GenerateViews(image, numInferenceSteps, guidanceScale, seed), null, seed, quantize: true);
 
     /// <summary>
     /// A colored point cloud of the reconstructed surface, [1, P, 6] (xyz, rgb): mesh vertices taken at an even stride,
@@ -548,7 +665,7 @@ public partial class SyncDreamerModel<T> : ThreeDDiffusionModelBase<T>
     /// <param name="numInferenceSteps">The DDIM steps, or null for the configured count.</param>
     /// <param name="guidanceScale">The guidance scale, or null for the configured one.</param>
     /// <param name="seed">The seed of the sampling and of NeuS.</param>
-    /// <exception cref="InvalidOperationException">The reconstructed field has no zero level inside the unit cube.</exception>
+    /// <exception cref="InvalidOperationException">The reconstructed field has no zero level inside the reconstruction bounds.</exception>
     public Tensor<T> GeneratePointCloud(Tensor<T> image, int? numPoints = null, int? numInferenceSteps = null,
         double? guidanceScale = null, int? seed = null)
     {
@@ -562,7 +679,7 @@ public partial class SyncDreamerModel<T> : ThreeDDiffusionModelBase<T>
         if (count <= 0) throw new ArgumentOutOfRangeException(nameof(count), "The point count must be positive.");
         int vertices = mesh.Vertices.Shape[0];
         if (vertices == 0 || mesh.Colors is null)
-            throw new InvalidOperationException("The reconstructed NeuS field has no surface inside the unit cube.");
+            throw new InvalidOperationException("The reconstructed NeuS field has no surface inside the reconstruction bounds.");
         int kept = Math.Min(count, vertices);
         var indices = new int[kept];
         for (int i = 0; i < kept; i++) indices[i] = (int)((long)i * vertices / kept);

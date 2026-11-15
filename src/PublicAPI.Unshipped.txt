@@ -23014,7 +23014,7 @@ AiDotNet.Diffusion.ThreeD.SyncDreamerModel<T>.Configuration.get -> AiDotNet.Diff
 AiDotNet.Diffusion.ThreeD.SyncDreamerModel<T>.GenerateViews(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, int? numInferenceSteps = null, double? guidanceScale = null, int? seed = null) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>![]!
 AiDotNet.Diffusion.ThreeD.SyncDreamerModel<T>.GenerateMesh(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, int? numInferenceSteps = null, double? guidanceScale = null, int? seed = null) -> AiDotNet.Interfaces.Mesh3D<T>!
 AiDotNet.Diffusion.ThreeD.SyncDreamerModel<T>.GeneratePointCloud(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, int? numPoints = null, int? numInferenceSteps = null, double? guidanceScale = null, int? seed = null) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-AiDotNet.Diffusion.ThreeD.SyncDreamerModel<T>.ReconstructMesh(AiDotNet.Tensors.LinearAlgebra.Tensor<T>![]! views, int? seed = null) -> AiDotNet.Interfaces.Mesh3D<T>!
+AiDotNet.Diffusion.ThreeD.SyncDreamerModel<T>.ReconstructMesh(AiDotNet.Tensors.LinearAlgebra.Tensor<T>![]! views, AiDotNet.Tensors.LinearAlgebra.Tensor<T>![]? masks = null, int? seed = null) -> AiDotNet.Interfaces.Mesh3D<T>!
 AiDotNet.Diffusion.ThreeD.SyncDreamerModel<T>.LoadSyncDreamerWeights(System.Func<string!, int[]!, double[]!>! read) -> System.Collections.Generic.IReadOnlyCollection<string!>!
 override AiDotNet.Diffusion.ThreeD.SyncDreamerModel<T>.ImageTo3D(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputImage, int numViews = 4, int numInferenceSteps = 50, double guidanceScale = 3, int? seed = null) -> AiDotNet.Interfaces.Mesh3D<T>!
 override AiDotNet.Diffusion.ThreeD.SyncDreamerModel<T>.SynthesizeNovelViews(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputImage, (double azimuth, double elevation)[]! targetAngles, int numInferenceSteps = 50, double guidanceScale = 3, int? seed = null) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>![]!
@@ -23201,3 +23201,25 @@ AiDotNet.Enums.TriplaneDensityActivation
 AiDotNet.Enums.TriplaneDensityActivation.Exp = 0 -> AiDotNet.Enums.TriplaneDensityActivation
 AiDotNet.Enums.TriplaneDensityActivation.Softplus = 1 -> AiDotNet.Enums.TriplaneDensityActivation
 AiDotNet.Enums.TriplaneDensityActivation.ReLU = 2 -> AiDotNet.Enums.TriplaneDensityActivation
+AiDotNet.Diffusion.ThreeD.SyncDreamerOptions.ReconstructionLearningRate.get -> double
+AiDotNet.Diffusion.ThreeD.SyncDreamerOptions.ReconstructionLearningRate.set -> void
+AiDotNet.Diffusion.ThreeD.SyncDreamerOptions.ReconstructionRayBatchSize.get -> int
+AiDotNet.Diffusion.ThreeD.SyncDreamerOptions.ReconstructionRayBatchSize.set -> void
+AiDotNet.Diffusion.ThreeD.SyncDreamerOptions.ReconstructionForegroundRayBatchSize.get -> int
+AiDotNet.Diffusion.ThreeD.SyncDreamerOptions.ReconstructionForegroundRayBatchSize.set -> void
+AiDotNet.Diffusion.ThreeD.SyncDreamerOptions.ReconstructionRgbWeight.get -> double
+AiDotNet.Diffusion.ThreeD.SyncDreamerOptions.ReconstructionRgbWeight.set -> void
+AiDotNet.Diffusion.ThreeD.SyncDreamerOptions.ReconstructionEikonalWeight.get -> double
+AiDotNet.Diffusion.ThreeD.SyncDreamerOptions.ReconstructionEikonalWeight.set -> void
+AiDotNet.Diffusion.ThreeD.SyncDreamerOptions.ReconstructionMaskWeight.get -> double
+AiDotNet.Diffusion.ThreeD.SyncDreamerOptions.ReconstructionMaskWeight.set -> void
+AiDotNet.Diffusion.ThreeD.SyncDreamerOptions.ReconstructionAnnealIterations.get -> int
+AiDotNet.Diffusion.ThreeD.SyncDreamerOptions.ReconstructionAnnealIterations.set -> void
+AiDotNet.Diffusion.ThreeD.SyncDreamerOptions.ReconstructionBoundHalfSide.get -> double
+AiDotNet.Diffusion.ThreeD.SyncDreamerOptions.ReconstructionBoundHalfSide.set -> void
+AiDotNet.Diffusion.ThreeD.SyncDreamerOptions.ReconstructionNearFarRadius.get -> double
+AiDotNet.Diffusion.ThreeD.SyncDreamerOptions.ReconstructionNearFarRadius.set -> void
+AiDotNet.Diffusion.ThreeD.SyncDreamerOptions.ReconstructionSeed.get -> int
+AiDotNet.Diffusion.ThreeD.SyncDreamerOptions.ReconstructionSeed.set -> void
+override AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<T>.GetTimestepEmbedding(int timestep) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<T>.GetTimestepEmbedding(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! timesteps) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
