@@ -234,15 +234,6 @@ public class DreamGaussianOptions
     /// <summary>Texture Adam epsilon (<c>torch.optim.Adam</c>'s default). Default: 1e-8.</summary>
     public double TextureAdamEpsilon { get; set; } = 1e-8;
 
-    // ---- Input -----------------------------------------------------------------------------------------------------
-
-    /// <summary>
-    /// For an RGB input without an alpha channel, pixels whose three channels are all at least this value are taken
-    /// as background. The reference removes the background with <c>rembg</c> instead, which is not available here;
-    /// pass an RGBA image for the paper's behaviour. Default: 0.98.
-    /// </summary>
-    public double WhiteBackgroundThreshold { get; set; } = 0.98;
-
     internal double CameraRadius(DreamGaussianMode mode) => mode == DreamGaussianMode.ImageTo3D ? ImageCameraRadius : TextCameraRadius;
 
     internal int PositionLearningRateMaxSteps(DreamGaussianMode mode)

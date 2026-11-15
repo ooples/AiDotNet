@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using AiDotNet.Attributes;
+using AiDotNet.ComputerVision.Segmentation.Salient;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.VAE;
 using AiDotNet.Enums;
@@ -177,6 +178,14 @@ public partial class DreamGaussianModel<T> : ThreeDDiffusionModelBase<T>
     /// </summary>
     public Func<string, string?, IScoreDistillationGuidance<T>>? TextGuidanceFactory { get; set; }
 
+    /// <summary>
+    /// Separates the object from the background of an RGB input given without a mask. Null creates the reference's
+    /// choice on first use: U²-Net run as rembg runs it (<see cref="U2NetForegroundSegmenter{T}"/>). Load the released
+    /// <c>u2net.pth</c> into its <see cref="U2NetForegroundSegmenter{T}.Network"/> for rembg's masks.
+    /// </summary>
+    [ExternalState]
+    public IForegroundSegmenter<T>? ForegroundSegmenter { get; set; }
+
     #endregion
 
     #region Constructor
@@ -271,15 +280,17 @@ public partial class DreamGaussianModel<T> : ThreeDDiffusionModelBase<T>
     /// <summary>
     /// Image-to-3D with <see cref="Settings"/>: stage 1, mesh extraction and (when enabled) the texture stage.
     /// </summary>
-    /// <param name="image">
-    /// The input image in [0, 1], [1, 4, H, W] RGBA (the alpha is the foreground mask, as the reference's
-    /// background-removed input) or [1, 3, H, W] RGB on a white background (the mask is the non-white pixels, see
-    /// <see cref="DreamGaussianOptions.WhiteBackgroundThreshold"/>); [C, H, W] is accepted too.
+    /// <param name="image">The input image in [0, 1]: [1, 4, H, W] RGBA or [1, 3, H, W] RGB ([C, H, W] is accepted
+    /// too).</param>
+    /// <param name="mask">
+    /// Optional foreground mask with H x W values in [0, 1]. The mask is taken from, in order: this argument, the
+    /// image's alpha channel, then <see cref="ForegroundSegmenter"/> (U²-Net, as the reference's <c>rembg</c>
+    /// pre-processing).
     /// </param>
     /// <param name="seed">Random seed; null uses the model's seed, or a secure random source when that is null too.</param>
     /// <returns>The Gaussians, point cloud, mesh and textured mesh.</returns>
-    public DreamGaussianResult<T> RunImageTo3D(Tensor<T> image, int? seed = null)
-        => RunImage(image, Settings, seed, includeMesh: true);
+    public DreamGaussianResult<T> RunImageTo3D(Tensor<T> image, Tensor<T>? mask = null, int? seed = null)
+        => RunImage(image, mask, Settings, seed, includeMesh: true);
 
     /// <summary>Text-to-3D with <see cref="Settings"/>.</summary>
     /// <param name="prompt">The prompt.</param>
@@ -289,19 +300,20 @@ public partial class DreamGaussianModel<T> : ThreeDDiffusionModelBase<T>
     public DreamGaussianResult<T> RunTextTo3D(string prompt, string? negativePrompt = null, int? seed = null)
         => RunText(prompt, negativePrompt, Settings, seed, includeMesh: true);
 
-    private DreamGaussianResult<T> RunImage(Tensor<T> image, DreamGaussianOptions settings, int? seed, bool includeMesh)
+    private DreamGaussianResult<T> RunImage(Tensor<T> image, Tensor<T>? mask, DreamGaussianOptions settings, int? seed, bool includeMesh)
     {
         if (image is null) throw new ArgumentNullException(nameof(image));
         if (settings is null) throw new InvalidOperationException("Settings must not be null.");
         var random = CreateRandom(seed);
-        var (reference, mask) = PrepareReference(image, settings);
+        var (reference, referenceMask) = PrepareReference(
+            image, mask, settings, () => ForegroundSegmenter ??= new U2NetForegroundSegmenter<T>(seed: _seed));
         var referenceTensor = DreamGaussianPipeline<T>.ToBatch(new[] { reference }, settings.ReferenceSize);
         var guidance = ImageGuidanceFactory is not null
             ? ImageGuidanceFactory(referenceTensor, random)
             : new Zero123ScoreDistillationGuidance<T>(
                 ImageGuidanceModel ??= new Zero123Model<T>(seed: _seed), referenceTensor, random, settings.ImageGuidanceScale,
                 settings.ImageGuidanceResolution, settings.MinTimestepRatio, settings.MaxTimestepRatio);
-        var pipeline = new DreamGaussianPipeline<T>(settings, DreamGaussianMode.ImageTo3D, guidance, reference, mask, random);
+        var pipeline = new DreamGaussianPipeline<T>(settings, DreamGaussianMode.ImageTo3D, guidance, reference, referenceMask, random);
         return includeMesh ? pipeline.Run() : pipeline.RunGaussiansOnly();
     }
 
@@ -340,40 +352,68 @@ public partial class DreamGaussianModel<T> : ThreeDDiffusionModelBase<T>
     }
 
     /// <summary>
-    /// The reference's <c>load_input</c>: resize to <see cref="DreamGaussianOptions.ReferenceSize"/> (area filter when
-    /// shrinking), take the alpha as the mask and composite the colour onto white.
+    /// The reference's input handling: the foreground alpha (the caller's mask, else the RGBA alpha, else the
+    /// segmenter, as <c>process.py</c>'s <c>rembg.remove</c>), then <c>load_input</c>: the RGBA image resized to
+    /// <see cref="DreamGaussianOptions.ReferenceSize"/> (area filter when shrinking) and the colour composited onto
+    /// white.
     /// </summary>
     /// <returns>The image [S, S, 3] on white and the mask [S, S].</returns>
-    internal static (double[] Image, double[] Mask) PrepareReference(Tensor<T> image, DreamGaussianOptions settings)
+    internal static (double[] Image, double[] Mask) PrepareReference(
+        Tensor<T> image, Tensor<T>? mask, DreamGaussianOptions settings, Func<IForegroundSegmenter<T>> segmenter)
     {
         var batch = image.Rank == 3 ? image.Reshape(new[] { 1, image.Shape[0], image.Shape[1], image.Shape[2] }) : image;
         if (batch.Rank != 4 || batch.Shape[0] != 1 || (batch.Shape[1] != 3 && batch.Shape[1] != 4))
             throw new ArgumentException("The input image must be [1, 3, H, W] or [1, 4, H, W] (or without the batch axis).", nameof(image));
-        int size = settings.ReferenceSize;
-        int channels = batch.Shape[1];
-        bool shrinking = batch.Shape[2] >= size && batch.Shape[3] >= size;
-        var resized = batch.Shape[2] == size && batch.Shape[3] == size
-            ? batch
-            : AiDotNetEngine.Current.Interpolate(
-                batch, new[] { size, size }, shrinking ? InterpolateMode.Area : InterpolateMode.Bilinear, false);
-        var data = resized.Cast<double>().ToArray();
-        int pixels = size * size;
-        var rgb = new double[3 * pixels];
-        var mask = new double[pixels];
-        for (int p = 0; p < pixels; p++)
+        int height = batch.Shape[2], width = batch.Shape[3], sourcePixels = height * width;
+        var source = batch.Cast<double>().ToArray();
+        double[] alpha;
+        if (mask is not null)
         {
-            double r = data[p], g = data[pixels + p], b = data[(2 * pixels) + p];
-            double alpha = channels == 4
-                ? Math.Min(1.0, Math.Max(0.0, data[(3 * pixels) + p]))
-                : (r >= settings.WhiteBackgroundThreshold && g >= settings.WhiteBackgroundThreshold
-                   && b >= settings.WhiteBackgroundThreshold ? 0.0 : 1.0);
-            mask[p] = alpha;
-            rgb[3 * p] = (r * alpha) + (1.0 - alpha);
-            rgb[(3 * p) + 1] = (g * alpha) + (1.0 - alpha);
-            rgb[(3 * p) + 2] = (b * alpha) + (1.0 - alpha);
+            if (mask.Length != sourcePixels)
+                throw new ArgumentException($"The mask must have {height} x {width} values.", nameof(mask));
+            alpha = mask.Cast<double>().ToArray();
+        }
+        else if (batch.Shape[1] == 4)
+        {
+            alpha = new double[sourcePixels];
+            Array.Copy(source, 3 * sourcePixels, alpha, 0, sourcePixels);
+        }
+        else
+        {
+            var matte = segmenter().Segment(batch);
+            if (matte is null || matte.Length != sourcePixels)
+                throw new InvalidOperationException("The foreground segmenter must return an H x W mask.");
+            alpha = matte.Cast<double>().ToArray();
         }
 
-        return (rgb, mask);
+        var rgba = new double[4 * sourcePixels];
+        Array.Copy(source, 0, rgba, 0, 3 * sourcePixels);
+        for (int p = 0; p < sourcePixels; p++)
+            rgba[(3 * sourcePixels) + p] = Math.Min(1.0, Math.Max(0.0, alpha[p]));
+
+        int size = settings.ReferenceSize;
+        var data = rgba;
+        if (height != size || width != size)
+        {
+            bool shrinking = height >= size && width >= size;
+            var tensor = new Tensor<double>(new[] { 1, 4, height, width }, new Vector<double>(rgba)).Cast<T>();
+            data = AiDotNetEngine.Current.Interpolate(
+                tensor, new[] { size, size }, shrinking ? InterpolateMode.Area : InterpolateMode.Bilinear, false)
+                .Cast<double>().ToArray();
+        }
+
+        int pixels = size * size;
+        var rgb = new double[3 * pixels];
+        var referenceMask = new double[pixels];
+        for (int p = 0; p < pixels; p++)
+        {
+            double a = Math.Min(1.0, Math.Max(0.0, data[(3 * pixels) + p]));
+            referenceMask[p] = a;
+            for (int c = 0; c < 3; c++)
+                rgb[(3 * p) + c] = (data[(c * pixels) + p] * a) + (1.0 - a);
+        }
+
+        return (rgb, referenceMask);
     }
 
     private static DreamGaussianOptions CopySettings(DreamGaussianOptions settings)
@@ -417,7 +457,7 @@ public partial class DreamGaussianModel<T> : ThreeDDiffusionModelBase<T>
         settings.BatchSize = numViews;
         settings.RefineDenoisingSteps = numInferenceSteps;
         settings.ImageGuidanceScale = guidanceScale;
-        return RunImage(inputImage, settings, seed, includeMesh: true).FinalMesh;
+        return RunImage(inputImage, null, settings, seed, includeMesh: true).FinalMesh;
     }
 
     /// <summary>

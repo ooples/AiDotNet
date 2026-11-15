@@ -1761,6 +1761,7 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.Meshing.MeshingComponentTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.ThreeD.DreamGaussianTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.ThreeD.Zero123CameraProjectionTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.ComputerVision.Segmentation.U2NetTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.Models.TimestepDependentLoraTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.StyleTransfer.UniVSTComponentTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.VaeDecodeAliasingTests.|

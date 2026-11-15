@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.ComputerVision.Segmentation.Salient;
 using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.Schedulers;
 using AiDotNet.Diffusion.ThreeD;
@@ -621,6 +622,85 @@ public class DreamGaussianTests
         var blue = TinyModel().RunImageTo3D(RgbaInput(16, 0.1, 0.2, 0.9, 0.45), seed: 3);
         Assert.NotEqual(red.Mesh.Vertices.ToArray(), blue.Mesh.Vertices.ToArray());
         Assert.NotEqual(red.PointCloud.ToArray(), blue.PointCloud.ToArray());
+    }
+
+    /// <summary>Returns a fixed matte and counts its calls.</summary>
+    private sealed class RecordingSegmenter : IForegroundSegmenter<double>
+    {
+        public int Calls { get; private set; }
+
+        public Tensor<double> Segment(Tensor<double> image)
+        {
+            Calls++;
+            Assert.Equal(new[] { 1, 3, 4, 4 }, image.Shape.ToArray());
+            return Matte(0.25);
+        }
+    }
+
+    private static Tensor<double> Matte(double value)
+        => new Tensor<double>(new[] { 4, 4 }, new Vector<double>(Enumerable.Repeat(value, 16).ToArray()));
+
+    private static Tensor<double> Constant(int channels, double colour, double alpha)
+    {
+        var data = new double[channels * 16];
+        for (int i = 0; i < 48; i++) data[i] = colour;
+        for (int i = 48; i < data.Length; i++) data[i] = alpha;
+        return new Tensor<double>(new[] { 1, channels, 4, 4 }, new Vector<double>(data));
+    }
+
+    [Fact]
+    public void PrepareReference_TakesTheCallerMask_ThenTheAlpha_ThenTheSegmenter()
+    {
+        var settings = new DreamGaussianOptions { ReferenceSize = 4 };
+        var segmenter = new RecordingSegmenter();
+
+        // RGBA: the alpha is used and the segmenter is never run.
+        var (rgbaImage, rgbaMask) = DreamGaussianModel<double>.PrepareReference(Constant(4, 0.2, 0.5), null, settings, () => segmenter);
+        Assert.All(rgbaMask, a => Assert.Equal(0.5, a, 12));
+        Assert.All(rgbaImage, v => Assert.Equal((0.2 * 0.5) + 0.5, v, 12));
+        Assert.Equal(0, segmenter.Calls);
+
+        // A caller mask wins over the alpha.
+        var (_, callerMask) = DreamGaussianModel<double>.PrepareReference(Constant(4, 0.2, 0.5), Matte(0.75), settings, () => segmenter);
+        Assert.All(callerMask, a => Assert.Equal(0.75, a, 12));
+        Assert.Equal(0, segmenter.Calls);
+
+        // RGB with a caller mask: still no segmentation.
+        var (_, rgbCallerMask) = DreamGaussianModel<double>.PrepareReference(Constant(3, 0.2, 0.0), Matte(1.0), settings, () => segmenter);
+        Assert.All(rgbCallerMask, a => Assert.Equal(1.0, a, 12));
+        Assert.Equal(0, segmenter.Calls);
+
+        // RGB alone: the segmenter's matte is the mask and the colour is composited onto white with it.
+        var (rgbImage, segmentedMask) = DreamGaussianModel<double>.PrepareReference(Constant(3, 0.2, 0.0), null, settings, () => segmenter);
+        Assert.Equal(1, segmenter.Calls);
+        Assert.All(segmentedMask, a => Assert.Equal(0.25, a, 12));
+        Assert.All(rgbImage, v => Assert.Equal((0.2 * 0.25) + 0.75, v, 12));
+    }
+
+    [Fact]
+    public void ImageTo3D_RgbInput_RunsTheConfiguredSegmenter()
+    {
+        var model = TinyModel();
+        var segmenter = new CountingSegmenter();
+        model.ForegroundSegmenter = segmenter;
+        var rgba = RgbaInput(16, 0.9, 0.2, 0.1, 0.3).ToArray();
+        var rgb = new Tensor<double>(new[] { 1, 3, 16, 16 }, new Vector<double>(rgba.Take(3 * 256).ToArray()));
+        model.RunImageTo3D(rgb, seed: 3);
+        Assert.Equal(1, segmenter.Calls);
+        model.RunImageTo3D(RgbaInput(16, 0.9, 0.2, 0.1, 0.3), seed: 3);
+        Assert.Equal(1, segmenter.Calls);
+    }
+
+    private sealed class CountingSegmenter : IForegroundSegmenter<double>
+    {
+        public int Calls { get; private set; }
+
+        public Tensor<double> Segment(Tensor<double> image)
+        {
+            Calls++;
+            var (_, mask) = DiskReference(image.Shape[2], 0.0, 0.0, 0.0, 0.3);
+            return new Tensor<double>(new[] { image.Shape[2], image.Shape[3] }, new Vector<double>(mask));
+        }
     }
 
     [Fact]
