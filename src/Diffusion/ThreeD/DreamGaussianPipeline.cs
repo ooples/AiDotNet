@@ -123,8 +123,10 @@ internal sealed class DreamGaussianPipeline<T>
     public GaussianSplatting<T> TrainGaussians()
     {
         var s = _settings;
+        // sh_degree 0: the colour parameter is the DC coefficient, so the feature learning rate is in the
+        // reference's units (a raw-RGB parameter would move C0 times faster per step).
         var scene = GaussianSplatting<T>.CreateInSphere(
-            new GaussianSplattingOptions { UseSphericalHarmonics = false, ShDegree = 0 },
+            new GaussianSplattingOptions { UseSphericalHarmonics = true, ShDegree = 0 },
             s.InitialGaussianCount, s.InitialRadius, s.InitialOpacity, _random);
 
         var adam = new GaussianAdamSettings
