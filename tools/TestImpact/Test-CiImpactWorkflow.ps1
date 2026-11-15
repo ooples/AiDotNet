@@ -1178,6 +1178,54 @@ foreach ($command in $apiCommands) {
         "coverage-run has a gh api command without an explicit repository endpoint: $command"
 }
 
+# MAP FRESHNESS. One coverage-everywhere run a week is the map's only source. Each failure below
+# is a way a single lost run left the map stale, or unbuildable, until the following weekend.
+$compatCanceller = Get-JobBlock -WorkflowText $validation -Job 'cancel-after-compat-build-failure'
+Assert-Contract ($compatCanceller -match "(?m)^    if: \`$\{\{ always\(\) && needs\.build-compat\.result == 'failure' && !inputs\.collect_coverage_everywhere \}\}\s*$") `
+    'a compat build failure cancels the coverage-everywhere shard matrix that feeds the map'
+$shardJobHeader = Get-JobHeader -JobBlock (Get-JobBlock -WorkflowText $validation -Job 'test-net10-sharded')
+$shardNeeds = [regex]::Match($shardJobHeader, '(?m)^    needs: \[(?<needs>[^\]]*)\]\s*$')
+Assert-Contract ($shardNeeds.Success -and
+        @($shardNeeds.Groups['needs'].Value -split ',' | ForEach-Object { $_.Trim() }) -cnotcontains 'build-compat') `
+    'the shard matrix depends on the compat build, so a coverage run can no longer outlive its failure'
+
+# The source must outlive more than one weekly cycle, or a single lost run leaves nothing to rebuild from.
+$coverageSourceUploads = @(
+    @{ Job = 'select-shards'; Step = 'Upload carried digests' },
+    @{ Job = 'select-shards'; Step = 'Upload coverage-source marker' },
+    @{ Job = 'test-net10-sharded'; Step = 'Upload test-impact digest' }
+)
+foreach ($upload in $coverageSourceUploads) {
+    $uploadStep = Get-StepBlock -JobBlock (Get-JobBlock -WorkflowText $validation -Job $upload.Job) -Step $upload.Step
+    $retention = [regex]::Match($uploadStep,
+        '(?m)^          retention-days: (?:(?<days>\d+)|\$\{\{ inputs\.collect_coverage_everywhere && (?<days>\d+) \|\| \d+ \}\})\s*$')
+    Assert-Contract ($retention.Success -and [int] $retention.Groups['days'].Value -ge 21) `
+        "'$($upload.Step)' keeps a coverage-everywhere source for less than three weekly cycles"
+}
+
+# The map workflow runs on every master push, so the resolver's window is counted in merges.
+$resolverWindow = [regex]::Match($certifiedMapResolverText, '--status completed --limit (?<limit>\d+) ')
+Assert-Contract ($resolverWindow.Success -and [int] $resolverWindow.Groups['limit'].Value -ge 60) `
+    'the certified map resolver looks back fewer than 60 map runs, so a few merges without a harvestable source hide the last certified map'
+
+Assert-Contract ($map.Contains('source_run_id: ${{ steps.source.outputs.run_id }}')) `
+    'the map build no longer reports which coverage run it harvested'
+$coverageRunHeader = Get-JobHeader -JobBlock $coverageRun
+Assert-Contract (-not $coverageRunHeader.Contains("github.event.schedule != '0 0 * * 0'")) `
+    'the Sunday schedule can never dispatch, so a lost Saturday coverage run is not retried for a week'
+Assert-Contract ($coverageRunHeader.Contains("github.event_name != 'push'")) `
+    'a merge can dispatch the instrumented matrix'
+$sundayGate = $coverageRun.IndexOf('if [ "$EVENT_SCHEDULE" = ''0 0 * * 0'' ]; then', [StringComparison]::Ordinal)
+$firstDispatch = $coverageRun.IndexOf('gh workflow run sonarcloud.yml', [StringComparison]::Ordinal)
+Assert-Contract ($sundayGate -ge 0 -and $firstDispatch -gt $sundayGate) `
+    'the Sunday schedule dispatches a second weekly run instead of only a retry'
+Assert-Contract ($coverageRun.Contains('SOURCE_RUN_ID: ${{ needs.build-map.outputs.source_run_id }}') -and
+        $coverageRun.Contains("date -u -d '2 days ago' +%s") -and
+        $coverageRun.Contains('if [ "$fresh" = ''true'' ]; then')) `
+    'the Sunday retry is not decided by the age of the harvested coverage run'
+Assert-Contract ($map.Contains("- cron: '0 0 * * 6'") -and $map.Contains("- cron: '0 0 * * 0'")) `
+    'the Saturday dispatch or the Sunday harvest-and-retry schedule is gone'
+
 # NIGHTLY AUXILIARY WORKLOADS. The census, samples and docs wiki are not pull-request work: a PR's
 # runner time goes to the tests its change can affect. Each failure below is a way one of them
 # could come back onto every pull request, or silently stop running at all.
