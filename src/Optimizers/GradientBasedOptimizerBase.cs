@@ -716,6 +716,19 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     private protected void ResetLearningRateToSchedule()
         => SetLearningRate(_learningRateScheduler?.CurrentLearningRate ?? GradientOptions.InitialLearningRate);
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The base sets <c>CurrentLearningRate</c> to <c>InitialLearningRate</c>. AMSGrad, Nadam, RAdam, AdaMax, ASGD and
+    /// Rprop reach it through <c>base.InitializeAdaptiveParameters()</c> from their constructors, after this class had
+    /// synced the rate to the scheduler, so their eager step 1 under a warmup schedule ran at the full rate while the
+    /// fused step ran at the schedule's starting rate. The rate is put back on the schedule here, for every subclass.
+    /// </remarks>
+    protected override void InitializeAdaptiveParameters()
+    {
+        base.InitializeAdaptiveParameters();
+        ResetLearningRateToSchedule();
+    }
+
     /// <summary>
     /// The optimizer's step position: its batch counter, learning rate, last schedule metric and the schedule's own
     /// state. A fused step advances these (<see cref="OnBatchEnd"/>) without touching the eager moments, so restoring

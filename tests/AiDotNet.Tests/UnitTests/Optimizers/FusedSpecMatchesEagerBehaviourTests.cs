@@ -917,4 +917,58 @@ public class FusedSpecMatchesEagerBehaviourTests
                 "step can reproduce, so fusing would run a different algorithm under the same name.");
         }
     }
+
+    public static System.Collections.Generic.IEnumerable<object[]> OptimizersThatCallTheBaseInitializer()
+    {
+        const double rate = 0.05;
+        var mode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch;
+        yield return new object[] { "AMSGrad", new Func<AiDotNet.LearningRateSchedulers.ILearningRateScheduler, object>(s =>
+            new AMSGradOptimizer<double, Matrix<double>, Vector<double>>(null,
+                new AMSGradOptimizerOptions<double, Matrix<double>, Vector<double>> { InitialLearningRate = rate, LearningRateScheduler = s, SchedulerStepMode = mode })) };
+        yield return new object[] { "Nadam", new Func<AiDotNet.LearningRateSchedulers.ILearningRateScheduler, object>(s =>
+            new NadamOptimizer<double, Matrix<double>, Vector<double>>(null,
+                new NadamOptimizerOptions<double, Matrix<double>, Vector<double>> { InitialLearningRate = rate, LearningRateScheduler = s, SchedulerStepMode = mode })) };
+        yield return new object[] { "RAdam", new Func<AiDotNet.LearningRateSchedulers.ILearningRateScheduler, object>(s =>
+            new RAdamOptimizer<double, Matrix<double>, Vector<double>>(null,
+                new RAdamOptimizerOptions<double, Matrix<double>, Vector<double>> { InitialLearningRate = rate, LearningRateScheduler = s, SchedulerStepMode = mode })) };
+        yield return new object[] { "AdaMax", new Func<AiDotNet.LearningRateSchedulers.ILearningRateScheduler, object>(s =>
+            new AdaMaxOptimizer<double, Matrix<double>, Vector<double>>(null,
+                new AdaMaxOptimizerOptions<double, Matrix<double>, Vector<double>> { InitialLearningRate = rate, LearningRateScheduler = s, SchedulerStepMode = mode })) };
+        yield return new object[] { "ASGD", new Func<AiDotNet.LearningRateSchedulers.ILearningRateScheduler, object>(s =>
+            new ASGDOptimizer<double, Matrix<double>, Vector<double>>(null,
+                new ASGDOptimizerOptions<double, Matrix<double>, Vector<double>> { InitialLearningRate = rate, LearningRateScheduler = s, SchedulerStepMode = mode })) };
+        yield return new object[] { "Rprop", new Func<AiDotNet.LearningRateSchedulers.ILearningRateScheduler, object>(s =>
+            new RpropOptimizer<double, Matrix<double>, Vector<double>>(null,
+                new RpropOptimizerOptions<double, Matrix<double>, Vector<double>> { InitialLearningRate = rate, LearningRateScheduler = s, SchedulerStepMode = mode })) };
+    }
+
+    private static readonly System.Reflection.FieldInfo s_eagerLearningRate =
+        typeof(OptimizerBase<double, Matrix<double>, Vector<double>>).GetField("CurrentLearningRate",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+        ?? throw new InvalidOperationException("OptimizerBase.CurrentLearningRate was not found.");
+
+    /// <summary>
+    /// The eager step reads <c>CurrentLearningRate</c>, the fused spec <c>GetCurrentLearningRate()</c>. These
+    /// optimizers' constructors run <c>base.InitializeAdaptiveParameters()</c> after the rate was synced to the
+    /// scheduler, which put <c>CurrentLearningRate</c> back to <c>InitialLearningRate</c>: under a warmup that starts
+    /// at 0 the eager step 1 ran at the full rate and the fused step 1 at 0.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(OptimizersThatCallTheBaseInitializer))]
+    public void EagerLearningRate_StartsOnTheSchedule_LikeTheFusedRate(string name,
+        Func<AiDotNet.LearningRateSchedulers.ILearningRateScheduler, object> make)
+    {
+        var scheduler = new AiDotNet.LearningRateSchedulers.WarmupStableDecayScheduler(0.05, 4, 4, 8);
+        double start = scheduler.CurrentLearningRate;
+        Assert.NotEqual(0.05, start);   // positive control: the schedule does not start at InitialLearningRate
+        var optimizer = (GradientBasedOptimizerBase<double, Matrix<double>, Vector<double>>)make(scheduler);
+
+        Assert.Equal(start, optimizer.GetCurrentLearningRate());
+        double eager = Convert.ToDouble(s_eagerLearningRate.GetValue(optimizer));
+        Assert.True(eager == start, $"{name}: the eager step starts at {eager:R}, the schedule (and the fused step) at {start:R}.");
+
+        optimizer.Reset();
+        eager = Convert.ToDouble(s_eagerLearningRate.GetValue(optimizer));
+        Assert.True(eager == optimizer.GetCurrentLearningRate(), $"{name}: after Reset the eager rate is {eager:R}.");
+    }
 }
