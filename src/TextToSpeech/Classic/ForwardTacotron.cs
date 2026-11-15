@@ -356,7 +356,6 @@ public partial class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
         Validation.Guard.NotNull(engine);
         Validation.Guard.NotNull(mel);
         Validation.Guard.NotNull(durations);
-        var ops = MathHelper.GetNumericOperations<T>();
         int tokens = durations.Length, frames = durations.Sum(), channels = mel.Shape[1];
         if (frames == 0) return new Tensor<T>(new[] { tokens });
         var melFrames = engine.TensorSlice(mel, new[] { 0, 0 }, new[] { frames, channels });
@@ -364,10 +363,8 @@ public partial class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
         var scaled = engine.TensorExp(engine.TensorSubtract(melFrames, engine.TensorTile(peak, new[] { 1, channels })));
         var frameEnergy = engine.TensorMultiply(engine.TensorExp(peak),
             engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(scaled), new[] { 1 }, keepDims: true)));   // [frames, 1]
-        // Row p of the alignment is 1/d_p on the phoneme's frames; a phoneme with no frames keeps its zero row (no 0 · ∞).
-        var counts = new Tensor<int>((int[])durations.Clone(), new[] { tokens, 1 }).Cast<T>();
-        var inverse = engine.TensorWhere(engine.TensorEquals(counts, ops.Zero), counts, engine.TensorReciprocal(counts));
-        var weights = engine.TensorMultiply(DurationAlignment(engine, durations), engine.TensorTile(inverse, new[] { 1, frames }));
+        // Row p is 1/d_p on the phoneme's frames; a phoneme with no frames keeps its zero row (no 0 · ∞).
+        var weights = DurationAverage(engine, durations, frames);
         return engine.Reshape(engine.TensorMatMul(weights, frameEnergy), new[] { tokens });
     }
 

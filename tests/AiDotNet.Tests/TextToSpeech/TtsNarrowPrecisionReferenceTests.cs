@@ -7,6 +7,8 @@ using AiDotNet.TextToSpeech;
 using AiDotNet.TextToSpeech.Classic;
 using AiDotNet.TextToSpeech.EndToEnd;
 using AiDotNet.TextToSpeech.FlowDiffusion;
+using AiDotNet.TextToSpeech.Latest;
+using AiDotNet.TextToSpeech.MultiModal;
 using AiDotNet.TextToSpeech.StyleEmotion;
 using Xunit;
 
@@ -283,5 +285,85 @@ public sealed class TtsNarrowPrecisionReferenceTests
     {
         var input = new Tensor<double>(new[] { double.PositiveInfinity, double.NegativeInfinity, double.NaN, 3.5, 2.5, 12.0, -3.0 }, new[] { 7 });
         Assert.Equal(new[] { 9, 0, 0, 4, 2, 9, 0 }, MeloTTS<double>.SymbolIds(Engine, input, 10));
+    }
+
+    [Fact]
+    public void MonotonicDurations_InHalf_KeepTheFrontierAdditionsWide()
+    {
+        // After frame 1 the frontier is [-60,000, 0]; at frame 2 token 0 adds another -60,000, which is -inf in Half
+        // before any renormalization, and the trace-back took [1, 5] (score -180,000) over the best [5, 1] (-120,000).
+        var scores = new double[,]
+        {
+            { 0, -60000, -60000, 0, 0, 0 },
+            { 0, 0, -60000, -60000, -60000, 0 },
+        };
+        var expected = ReferenceDurations(scores);
+        Assert.Equal(new[] { 5, 1 }, expected);
+
+        var flat = new Half[scores.Length];
+        for (int i = 0; i < 2; i++)
+            for (int y = 0; y < 6; y++) flat[i * 6 + y] = (Half)scores[i, y];
+        Assert.Equal(expected, TtsModelBase<Half>.MonotonicDurations(Engine, new Tensor<Half>(flat, new[] { 2, 6 })));
+    }
+
+    [Fact]
+    public void AlignmentScores_InHalf_ScaleTheDistanceBeforeNarrowing()
+    {
+        // 80 channels of 30 against a zero mean: the squared distance 72,000 is past Half's 65,504, the score -36,000 is not.
+        var means = new Tensor<Half>(new Half[80], new[] { 1, 80 });
+        var frames = new Tensor<Half>(Enumerable.Repeat((Half)30.0, 80).ToArray(), new[] { 1, 80 });
+        Assert.Equal(new[] { -36000.0 }, TtsModelBase<Half>.AlignmentScores(Engine, means, frames).ToArray());
+    }
+
+    [Fact]
+    public void AlignmentScores_InTokenBlocks_MatchTheDirectDistances()
+    {
+        // 4,100 frames × 256 channels is past one block's 2^20 differences, so each token is its own block.
+        const int tokens = 3, count = 4100, channels = 256;
+        var means = new double[tokens * channels];
+        for (int i = 0; i < tokens; i++)
+            for (int c = 0; c < channels; c++) means[i * channels + c] = i;
+        var frames = Enumerable.Repeat(1.0, count * channels).ToArray();
+        var scores = TtsModelBase<double>.AlignmentScores(Engine, new Tensor<double>(means, new[] { tokens, channels }),
+            new Tensor<double>(frames, new[] { count, channels }));
+
+        Assert.Equal(tokens, scores.Shape[0]);
+        Assert.Equal(count, scores.Shape[1]);
+        var values = scores.ToArray();
+        for (int i = 0; i < tokens; i++)
+            Assert.All(Enumerable.Range(0, count), j => Assert.Equal(-0.5 * channels * (1 - i) * (1 - i), values[i * count + j]));
+    }
+
+    [Fact]
+    public void Tacotron2StopDecision_InHalf_IsTakenBeforeRoundingTheProbability()
+    {
+        // σ(2^-12) ≈ 0.500061 is above the default threshold of 0.5, but rounds to 0.5 in Half.
+        var logit = new Tensor<Half>(new[] { (Half)0.000244140625 }, new[] { 1, 1 });
+        Assert.True(Tacotron2<Half>.StopsAfter(logit, 0.5));
+        Assert.False(Tacotron2<Half>.StopsAfter(new Tensor<Half>(new[] { (Half)0.0 }, new[] { 1, 1 }), 0.5));
+    }
+
+    [Theory]
+    [InlineData(-110.0)]
+    [InlineData(-1000.0)]
+    public void MegaTts2CodeDistribution_NeverDrawsTheEndToken_WhenItHoldsTheMass(double offset)
+    {
+        // exp(-110) underflows float and exp(-1000) underflows double: either way the codes keep their relative weights.
+        var logits = new Tensor<double>(new[] { 0, offset, offset - 1 }, new[] { 3 });
+        var distribution = MegaTTS2<float>.CodeDistribution(logits, null, 0).ToArray();
+        double first = 1 / (1 + Math.Exp(-1));
+        Assert.Equal(new[] { first, 1 - first }, distribution, (a, b) => Math.Abs(a - b) < 1e-12);
+
+        var codes = MegaTTS2<float>.CodeDistribution(logits, null, 0).Cast<float>();
+        Assert.Equal(0, MegaTTS2<float>.TopK(codes, 1, RandomHelper.CreateSeededRandom(0)));
+    }
+
+    [Fact]
+    public void NucleusSampling_InHalf_ShiftsTheLogitsBeforeTheTemperature()
+    {
+        // [20, 10] / 0.0001 overflows Half to [+inf, +inf]; inf - inf made every weight NaN.
+        var logits = new Tensor<Half>(new[] { (Half)20.0, (Half)10.0 }, new[] { 2 });
+        for (int seed = 0; seed < 8; seed++)
+            Assert.Equal(0, NucleusSampling<Half>.Sample(logits, 0.0001, 0, 1.0, null, RandomHelper.CreateSeededRandom(seed)));
     }
 }

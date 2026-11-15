@@ -167,7 +167,7 @@ public partial class KaniTTS2<T> : KaniTTSBase<T>
     /// <inheritdoc />
     protected override Tensor<T>? TrainingSpeakerEmbedding(TtsTrainingSample<T> sample)
     {
-        if (sample.SpeakerId is int id && TrainingSpeakerEmbeddings.TryGetValue(id, out var embedding)) return AsSpeaker(embedding);
+        if (sample.SpeakerId is int id && TrainingSpeakerEmbeddings.TryGetValue(id, out var embedding)) return AsSpeaker(embedding).Clone();
         return sample.SpeakerReference is { } reference ? AsSpeaker(EmbedSpeaker(reference)) : null;
     }
 

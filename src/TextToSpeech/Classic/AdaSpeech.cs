@@ -359,13 +359,7 @@ public partial class AdaSpeech<T> : VarianceAdaptorTtsModelBase<T>, IAcousticMod
         int frames = mel.Shape[0], total = durations.Sum();
         if (total > frames)
             throw new ArgumentOutOfRangeException(nameof(durations), $"The durations cover {total} frames but the mel spectrogram has {frames}.");
-        var alignment = DurationAlignment(durations);                                                    // [L, total]
-        if (total < frames)
-            alignment = Engine.TensorConcatenate(new[] { alignment, new Tensor<T>(new[] { durations.Length, frames - total }) }, 1);
-        // Each row scaled by 1 / d_p; a phoneme with no frames keeps its zero row (no 0 · ∞).
-        var counts = new Tensor<int>((int[])durations.Clone(), new[] { durations.Length, 1 }).Cast<T>();
-        var inverse = Engine.TensorWhere(Engine.TensorEquals(counts, NumOps.Zero), counts, Engine.TensorReciprocal(counts));
-        var average = Engine.TensorMultiply(alignment, Engine.TensorTile(inverse, new[] { 1, frames }));
+        var average = DurationAverage(Engine, durations, frames);                                        // [L, frames]
         return Engine.TensorMatMul(average, Engine.Reshape(mel, new[] { frames, mel.Length / frames }));
     }
 

@@ -346,7 +346,7 @@ public partial class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingO
 
         // log N(z_j; mu_i, 1) up to a constant, for the search only.
         int tokenCount = means.Shape[0];
-        int[] durations = MonotonicDurations(AlignmentScores(means, z));
+        int[] durations = AlignmentDurations(means, z);
 
         var alignedMeans = LengthRegulator.Expand(means, durations);
         var diff = Engine.TensorSubtract(z, alignedMeans);

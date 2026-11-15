@@ -338,11 +338,12 @@ public partial class SpeechT5<T> : TtsModelBase<T>
         using var _ = new NoGradScope<T>();
         var vocoderMean = _vocoderMean ?? throw NotNative();
         var vocoderScale = _vocoderScale ?? throw NotNative();
-        // The vocoder's per-channel statistics (loaded as doubles), as [1, m] rows of T.
-        Tensor<T> StatisticsRow(double[] values) => Engine.TensorSlice(
-            new Tensor<double>(values, new[] { 1, values.Length }).Cast<T>(), new[] { 0, 0 }, new[] { 1, m });
-        var shift = Engine.TensorTile(StatisticsRow(vocoderMean), new[] { frames, 1 });
-        var scale = Engine.TensorTile(Engine.TensorReciprocal(StatisticsRow(vocoderScale)), new[] { frames, 1 });
+        // The vocoder's per-channel statistics (loaded as doubles), as [1, m] rows formed in double and then cast to T.
+        Tensor<double> StatisticsRow(double[] values) => Engine.TensorSlice(
+            new Tensor<double>(values, new[] { 1, values.Length }), new[] { 0, 0 }, new[] { 1, m });
+        var shift = Engine.TensorTile(StatisticsRow(vocoderMean).Cast<T>(), new[] { frames, 1 });
+        // 1 / scale in double: a scale past Half's 65,504 would round to ∞ first and its reciprocal to 0.
+        var scale = Engine.TensorTile(Engine.TensorReciprocal(StatisticsRow(vocoderScale)).Cast<T>(), new[] { frames, 1 });
         var normalized = Engine.TensorMultiply(Engine.TensorSubtract(mel, shift), scale);
         var wave = Vocoder.Forward(Engine.Reshape(Engine.TensorTranspose(normalized), new[] { 1, m, frames }));
         return Engine.Reshape(wave, new[] { wave.Length });

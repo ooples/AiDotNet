@@ -313,11 +313,11 @@ public partial class PortaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
             new Tensor<int>(frameSpan, new[] { frames, 1 }).Cast<T>());
         var tokenFraction = Engine.TensorDivide(new Tensor<int>(tokenStep, new[] { tokens, 1 }).Cast<T>(),
             new Tensor<int>(tokenSpan, new[] { tokens, 1 }).Cast<T>());
-        // -1e9 where a frame and a phoneme belong to different words: same-word is the product of the word one-hots.
-        int wordCount = wordLengths.Length;
-        var sameWord = Engine.TensorMatMul(
-            Engine.TensorOneHot<T>(new Tensor<int>(frameWord, new[] { frames }), wordCount),
-            Engine.TensorTranspose(Engine.TensorOneHot<T>(new Tensor<int>(tokenWord, new[] { tokens }), wordCount)));
+        // -1e9 where a frame and a phoneme belong to different words: same-word compares the two word ids, frames × tokens
+        // comparisons rather than a product of word one-hots that also scales with the word count.
+        var sameWord = Engine.TensorEquals(
+            Engine.TensorTile(new Tensor<int>(frameWord, new[] { frames, 1 }), new[] { 1, tokens }),
+            Engine.TensorTile(new Tensor<int>(tokenWord, new[] { 1, tokens }), new[] { frames, 1 })).Cast<T>();
         var mask = Engine.TensorWhere(sameWord, new Tensor<T>(new[] { frames, tokens }),
             Tensor<T>.CreateDefault(new[] { frames, tokens }, NumOps.FromDouble(-1e9)));
 

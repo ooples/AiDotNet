@@ -457,17 +457,19 @@ public partial class IndexTTS2<T> : TtsModelBase<T>
         return Engine.TensorMatMul(weightRow, Engine.TensorStack(vectors, 0));
     }
 
-    // F.cosine_similarity of each row of `rows` [n, k] with `vector` (k values), each norm clamped at 1e-8.
+    // F.cosine_similarity of each row of `rows` [n, k] with `vector` (k values), each norm clamped at 1e-8. Formed in
+    // double: in Half the 1e-8 floor rounds to 0, so a zero row's cosine is 0 / 0 = NaN rather than 0, and the squares
+    // of a wide row can overflow.
     private Tensor<T> CosineToRow(Tensor<T> rows, Tensor<T> vector)
     {
+        const double Floor = 1e-8;
         int n = rows.Shape[0], k = rows.Shape[1];
-        var column = Engine.Reshape(vector, new[] { k, 1 });
-        var dot = Engine.Reshape(Engine.TensorMatMul(rows, column), new[] { n });
-        var floor = Ops.FromDouble(1e-8);
-        var rowNorms = Engine.TensorMax(Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorSquare(rows), new[] { 1 }, keepDims: false)), floor);
-        var vectorNorm = Ops.Sqrt(Engine.TensorSum(Engine.TensorSquare(column)));
-        if (Ops.LessThan(vectorNorm, floor)) vectorNorm = floor;
-        return Engine.TensorDivide(dot, Engine.TensorMultiplyScalar(rowNorms, vectorNorm));
+        var wideRows = rows.Cast<double>();
+        var column = Engine.Reshape(vector.Cast<double>(), new[] { k, 1 });
+        var dot = Engine.Reshape(Engine.TensorMatMul(wideRows, column), new[] { n });
+        var rowNorms = Engine.TensorMax(Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorSquare(wideRows), new[] { 1 }, keepDims: false)), Floor);
+        double vectorNorm = Math.Max(Math.Sqrt(Engine.TensorSum(Engine.TensorSquare(column))), Floor);
+        return Engine.TensorDivide(dot, Engine.TensorMultiplyScalar(rowNorms, vectorNorm)).Cast<T>();
     }
 
     /// <summary>Sets the emotion table: one emotion vector <c>[d]</c> per row (the release's <c>feat2.pt</c>), grouped by

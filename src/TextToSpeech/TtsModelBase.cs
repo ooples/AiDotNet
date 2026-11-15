@@ -852,22 +852,71 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
     }
 
     /// <summary>
-    /// The Glow-TTS search scores <c>−½ ‖y_j − μ_i‖²</c> <c>[tokens, frames]</c> of token means <c>[tokens, ≥ C]</c>
-    /// against frames <c>[frames, C]</c> (the first C channels of the means), off the gradient tape.
+    /// The phoneme-average weights <c>[durations.Length, frames]</c>: row p is 1 / d_p on phoneme p's frames of
+    /// <see cref="DurationAlignment(int[])"/> and 0 on the frames past <c>sum(durations)</c>, so their product with a
+    /// <c>[frames, C]</c> sequence is each phoneme's mean frame. A phoneme with no frames keeps its zero row (no 0 · ∞).
     /// </summary>
-    protected Tensor<T> AlignmentScores(Tensor<T> means, Tensor<T> frames)
+    internal static Tensor<T> DurationAverage(AiDotNet.Tensors.Engines.IEngine engine, int[] durations, int frames)
     {
+        Guard.NotNull(engine);
+        Guard.NotNull(durations);
+        int total = durations.Sum();
+        if (total > frames)
+            throw new ArgumentOutOfRangeException(nameof(durations), $"The durations cover {total} frames but there are {frames}.");
+        var ops = MathHelper.GetNumericOperations<T>();
+        var alignment = DurationAlignment(engine, durations);                                           // [L, total]
+        if (total < frames)
+            alignment = engine.TensorConcatenate(new[] { alignment, new Tensor<T>(new[] { durations.Length, frames - total }) }, 1);
+        var counts = new Tensor<int>((int[])durations.Clone(), new[] { durations.Length, 1 }).Cast<T>();
+        var inverse = engine.TensorWhere(engine.TensorEquals(counts, ops.Zero), counts, engine.TensorReciprocal(counts));
+        return engine.TensorMultiply(alignment, engine.TensorTile(inverse, new[] { 1, frames }));
+    }
+
+    /// <summary>The most pairwise differences one block of <see cref="AlignmentScores"/> holds at a time.</summary>
+    private const int AlignmentBlockEntries = 1 << 20;
+
+    /// <summary>
+    /// The durations of the monotonic alignment (<see cref="MonotonicDurations(Tensor{T})"/>) of token means
+    /// <c>[tokens, ≥ C]</c> against frames <c>[frames, C]</c>, scored by <see cref="AlignmentScores"/>. The scores and the
+    /// search both stay in double, so a narrow T neither overflows a distance nor rounds a poor score to −∞.
+    /// </summary>
+    protected int[] AlignmentDurations(Tensor<T> means, Tensor<T> frames) =>
+        TtsModelBase<double>.MonotonicDurations(Engine, AlignmentScores(Engine, means, frames));
+
+    /// <summary>
+    /// The Glow-TTS search scores <c>−½ ‖y_j − μ_i‖²</c> <c>[tokens, frames]</c> of token means <c>[tokens, ≥ C]</c>
+    /// against frames <c>[frames, C]</c> (the first C channels of the means), in double and off the gradient tape.
+    /// </summary>
+    /// <remarks>
+    /// The squared distances are summed and scaled by −½ in double: in Half, 80 channels of 30 against a zero mean sum to
+    /// 72,000, past Half's 65,504, although the score −36,000 is representable. The means are compared with the frames a
+    /// block of tokens at a time: tiling every token against every frame at once holds tokens × frames × C values
+    /// (640 MB of float for [500, 2000, 80]); a block holds at most <see cref="AlignmentBlockEntries"/> of them, or one
+    /// token's frames × C.
+    /// </remarks>
+    internal static Tensor<double> AlignmentScores(AiDotNet.Tensors.Engines.IEngine engine, Tensor<T> means, Tensor<T> frames)
+    {
+        Guard.NotNull(engine);
         Guard.NotNull(means);
         Guard.NotNull(frames);
         int tokens = means.Shape[0], count = frames.Shape[0], channels = frames.Shape[1];
         using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<double>())
         {
-            var mu = Engine.TensorSlice(means, new[] { 0, 0 }, new[] { tokens, channels });
-            // [tokens, frames, C] pairwise differences, squared and summed over the channels.
-            var tiledMeans = Engine.TensorTile(Engine.Reshape(mu, new[] { tokens, 1, channels }), new[] { 1, count, 1 });
-            var tiledFrames = Engine.TensorTile(Engine.Reshape(frames, new[] { 1, count, channels }), new[] { tokens, 1, 1 });
-            var squared = Engine.ReduceSum(Engine.TensorSquare(Engine.TensorSubtract(tiledFrames, tiledMeans)), new[] { 2 }, keepDims: false);
-            return Engine.TensorMultiplyScalar(squared, NumOps.FromDouble(-0.5));
+            var mu = engine.TensorSlice(means, new[] { 0, 0 }, new[] { tokens, channels }).Cast<double>();
+            var y = engine.Reshape(frames.Cast<double>(), new[] { 1, count, channels });
+            int blockTokens = Math.Max(1, AlignmentBlockEntries / Math.Max(1, count * channels));
+            var blocks = new List<Tensor<double>>();
+            for (int start = 0; start < tokens; start += blockTokens)
+            {
+                int rows = Math.Min(blockTokens, tokens - start);
+                // [rows, frames, C] pairwise differences, squared and summed over the channels.
+                var blockMeans = engine.Reshape(engine.TensorSlice(mu, new[] { start, 0 }, new[] { rows, channels }), new[] { rows, 1, channels });
+                var difference = engine.TensorSubtract(engine.TensorTile(y, new[] { rows, 1, 1 }), engine.TensorTile(blockMeans, new[] { 1, count, 1 }));
+                var squared = engine.ReduceSum(engine.TensorSquare(difference), new[] { 2 }, keepDims: false);
+                blocks.Add(engine.TensorMultiplyScalar(squared, -0.5));
+            }
+            return blocks.Count == 1 ? blocks[0] : engine.TensorConcatenate(blocks.ToArray(), 0);
         }
     }
 
@@ -880,11 +929,20 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
     protected int[] MonotonicDurations(Tensor<T> scores) => MonotonicDurations(Engine, scores);
 
     /// <summary>The search of <see cref="MonotonicDurations(Tensor{T})"/> on <paramref name="engine"/>.</summary>
+    /// <remarks>
+    /// Off the gradient tape: the result is a host <c>int[]</c>. A T other than double is searched in double. The
+    /// per-frame renormalization below bounds the totals after each frame, but not the addition that forms them: in Half,
+    /// a frontier of [−60,000, 0] plus a frame score of −60,000 is −∞ on token 0 before the renormalization, and the
+    /// trace-back then takes a worse path.
+    /// </remarks>
     internal static int[] MonotonicDurations(AiDotNet.Tensors.Engines.IEngine engine, Tensor<T> scores)
     {
         Guard.NotNull(engine);
-        var ops = MathHelper.GetNumericOperations<T>();
         Guard.NotNull(scores);
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        if (typeof(T) != typeof(double))
+            return TtsModelBase<double>.MonotonicDurations(engine, scores.Cast<double>());
+        var ops = MathHelper.GetNumericOperations<T>();
         if (scores.Rank != 2) throw new ArgumentException("Expected [tokens, frames] scores.", nameof(scores));
         int tokens = scores.Shape[0], frames = scores.Shape[1];
         if (tokens == 0 || frames < tokens)

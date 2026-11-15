@@ -193,9 +193,8 @@ public partial class GradTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingO
         return new IReadOnlyList<Tensor<T>>[] { encoder, decoder };
     }
 
-    // cumulative noise ∫_0^t β_s ds and β_t for β_t = β0 + (β1 − β0) t.
+    // cumulative noise ∫_0^t β_s ds for β_t = β0 + (β1 − β0) t.
     private double CumulativeNoise(double t) => _options.BetaMin * t + 0.5 * (_options.BetaMax - _options.BetaMin) * t * t;
-    private double Noise(double t) => _options.BetaMin + (_options.BetaMax - _options.BetaMin) * t;
 
     /// <summary>
     /// ½ β_t h at the reverse solver's interval midpoints t_i = 1 − (i + ½) h, h = 1 / steps, with β_t = β_min +
@@ -383,7 +382,7 @@ public partial class GradTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingO
         var (hidden, means) = Encode(tokens);
 
         int tokenCount = means.Shape[0];
-        int[] durations = MonotonicDurations(AlignmentScores(means, mel));
+        int[] durations = AlignmentDurations(means, mel);
 
         var target = LogDurationTarget(durations, 1e-8);
         var durationError = Engine.TensorSubtract(LogDurations(hidden), target);

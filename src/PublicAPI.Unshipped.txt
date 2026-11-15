@@ -22936,5 +22936,5 @@ AiDotNet.TextToSpeech.TtsModelBase<T>.BatchRow(AiDotNet.Tensors.LinearAlgebra.Te
 AiDotNet.TextToSpeech.TtsModelBase<T>.PadAndStack(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! outputs, int columns) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.TextToSpeech.TtsModelBase<T>.RowMask(System.Collections.Generic.IReadOnlyList<bool>! flags, int columns) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.TextToSpeech.TtsModelBase<T>.DurationAlignment(int[]! durations) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-AiDotNet.TextToSpeech.TtsModelBase<T>.AlignmentScores(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! means, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! frames) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.TtsModelBase<T>.AlignmentDurations(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! means, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! frames) -> int[]!
 AiDotNet.TextToSpeech.TtsModelBase<T>.MonotonicDurations(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! scores) -> int[]!

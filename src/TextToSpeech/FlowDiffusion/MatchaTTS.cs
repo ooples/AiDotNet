@@ -367,7 +367,7 @@ public partial class MatchaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcousticM
         var (hidden, means) = Encode(tokens);
 
         int tokenCount = means.Shape[0];
-        int[] durations = MonotonicDurations(AlignmentScores(means, normalized));
+        int[] durations = AlignmentDurations(means, normalized);
 
         var target = LogDurationTarget(durations, 1e-8);
         var durationError = Engine.TensorSubtract(LogDurations(hidden), target);

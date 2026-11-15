@@ -538,7 +538,7 @@ public partial class CoMoSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcoustic
         else (hidden, means) = Encode(tokens);
 
         int tokenCount = means.Shape[0];
-        int[] durations = MonotonicDurations(AlignmentScores(means, mel));
+        int[] durations = AlignmentDurations(means, mel);
 
         int length = Math.Min(frames, _options.SegmentFrames);
         int padded = draw.Noise.Shape[0];

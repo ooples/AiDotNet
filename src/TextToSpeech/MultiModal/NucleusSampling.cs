@@ -25,7 +25,12 @@ internal static class NucleusSampling<T>
         var engine = AiDotNetEngine.Current;
         var ids = Allowed(logits.Length, allowed);
         if (ids.Length == 0) throw new InvalidOperationException("No token may be sampled.");
-        var candidates = engine.TensorDivideScalar(Select(engine.Reshape(logits, new[] { logits.Length }), ids), Ops.FromDouble(temperature));
+        // Shifted by the largest logit before the temperature, so every scaled score is at most 0: a small temperature
+        // sends the others to −∞ (weight 0) instead of overflowing a narrow T to +∞, where ∞ − ∞ made every weight NaN.
+        // A positive temperature keeps the order, so top-k and top-p are unchanged.
+        var scores = Select(engine.Reshape(logits, new[] { logits.Length }), ids);
+        var candidates = engine.TensorDivideScalar(
+            engine.TensorAddScalar(scores, Ops.Negate(engine.TensorMaxValue(scores))), Ops.FromDouble(temperature));
         if (topK > 0 && topK < ids.Length)
         {
             // TopKLogitsWarper: scores below the k-th largest are removed.

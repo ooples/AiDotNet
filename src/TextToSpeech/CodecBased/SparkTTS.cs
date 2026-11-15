@@ -461,7 +461,7 @@ public partial class SparkTTS<T> : TtsModelBase<T>, ICodecTts<T>
         if (NumOps.IsNaN(Engine.TensorSum(fraction))
             || NumOps.GreaterThan(Engine.TensorMaxValue(fraction), NumOps.Zero)
             || NumOps.LessThan(Engine.TensorMinValue(tensor), NumOps.Zero)
-            || NumOps.GreaterThanOrEquals(Engine.TensorMaxValue(tensor), NumOps.FromDouble(vocabulary)))
+            || NumOps.ToDouble(Engine.TensorMaxValue(tensor)) >= vocabulary)
             throw new ArgumentException("Token IDs must be integers inside the configured vocabulary.", nameof(tensor));
         return tensor.Cast<int>().ToArray();
     }

@@ -257,7 +257,7 @@ public partial class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainin
         var previous = new Tensor<T>(new[] { 1, groupWidth });
         var groups = new List<Tensor<T>>();
         var stops = new List<Tensor<T>>();
-        var stopThreshold = NumOps.FromDouble(o.StopThreshold);
+        double stopThreshold = o.StopThreshold;
         for (int step = 0; step < steps; step++)
         {
             var prenet = Prenet(previous);
@@ -274,8 +274,7 @@ public partial class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainin
             if (target is null)
             {
                 previous = group;
-                // The stop decision σ(logit) > threshold, read once per step.
-                if (Engine.TensorGreaterThan(Engine.Sigmoid(stop), stopThreshold).Cast<int>().ToArray()[0] != 0)
+                if (StopsAfter(stop, stopThreshold))
                     break;
             }
             else
@@ -301,6 +300,16 @@ public partial class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainin
     }
 
     // The ground-truth frame group of step `step`, zero-padded past the end.
+    /// <summary>
+    /// The stop decision σ(logit) &gt; threshold of a <c>[1, 1]</c> stop logit, read once per step and formed in double:
+    /// a narrow T rounds σ(2⁻¹²) ≈ 0.500061 to 0.5, which would keep decoding past the default threshold of 0.5.
+    /// </summary>
+    internal static bool StopsAfter(Tensor<T> stopLogit, double threshold)
+    {
+        double logit = stopLogit.Cast<double>().ToArray()[0];
+        return 1.0 / (1.0 + Math.Exp(-logit)) > threshold;
+    }
+
     private Tensor<T> TargetGroup(Tensor<T> target, int step)
     {
         int r = _options.OutputsPerStep, mel = _options.MelChannels;
