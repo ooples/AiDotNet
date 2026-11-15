@@ -23008,3 +23008,96 @@ AiDotNet.NeuralRadianceFields.Models.GaussianSplatting<T>.ToGaussianCloud() -> A
 AiDotNet.Diffusion.ThreeDDiffusionModelBase<T>.SurfaceReconstruction.get -> AiDotNet.Diffusion.ThreeD.Meshing.SurfaceReconstructionOptions!
 AiDotNet.Diffusion.ThreeDDiffusionModelBase<T>.SurfaceReconstruction.set -> void
 *REMOVED*virtual AiDotNet.Diffusion.ThreeDDiffusionModelBase<T>.CreateSimpleMeshFromPoints(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! pointCloud) -> AiDotNet.Interfaces.Mesh3D<T>!
+*REMOVED*AiDotNet.Diffusion.ThreeD.One2345Model<T>.One2345Model(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>? architecture = null, AiDotNet.Models.Options.DiffusionModelOptions<T>? options = null, AiDotNet.Interfaces.INoiseScheduler<T>? scheduler = null, AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<T>? unet = null, AiDotNet.Diffusion.VAE.StandardVAE<T>? vae = null, AiDotNet.Interfaces.IConditioningModule<T>? conditioner = null, int defaultPointCount = 4096, int? seed = null) -> void
+AiDotNet.Diffusion.ThreeD.One2345Model<T>.One2345Model(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>? architecture = null, AiDotNet.Models.Options.DiffusionModelOptions<T>? options = null, AiDotNet.Interfaces.INoiseScheduler<T>? scheduler = null, AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<T>? unet = null, AiDotNet.Diffusion.VAE.StandardVAE<T>? vae = null, int defaultPointCount = 4096, int? seed = null, AiDotNet.Diffusion.ThreeD.One2345Options? pipelineOptions = null, AiDotNet.Diffusion.ThreeD.Zero123Model<T>? zero123 = null, AiDotNet.Interfaces.ILatentDiffusionModel<T>? textToImage = null, AiDotNet.Diffusion.ThreeD.IViewFeatureMatcher<T>? featureMatcher = null) -> void
+AiDotNet.Diffusion.ThreeD.One2345Model<T>.PipelineOptions.get -> AiDotNet.Diffusion.ThreeD.One2345Options!
+AiDotNet.Diffusion.ThreeD.One2345Model<T>.GetReconstructionParameters() -> System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>>!
+AiDotNet.Diffusion.ThreeD.One2345Model<T>.LoadReconstructionParameters(System.Collections.Generic.IReadOnlyDictionary<string!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! parameters) -> void
+override AiDotNet.Diffusion.ThreeD.One2345Model<T>.ImageTo3D(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputImage, int numViews = 4, int numInferenceSteps = 50, double guidanceScale = 3, int? seed = null) -> AiDotNet.Interfaces.Mesh3D<T>!
+AiDotNet.Diffusion.ThreeD.IViewFeatureMatcher<T>
+AiDotNet.Diffusion.ThreeD.IViewFeatureMatcher<T>.Match(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image0, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image1) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Diffusion.ThreeD.FeatureCorrespondence>!
+AiDotNet.Diffusion.ThreeD.FeatureCorrespondence
+AiDotNet.Diffusion.ThreeD.FeatureCorrespondence.FeatureCorrespondence() -> void
+AiDotNet.Diffusion.ThreeD.FeatureCorrespondence.FeatureCorrespondence(double x0, double y0, double x1, double y1, double confidence) -> void
+AiDotNet.Diffusion.ThreeD.FeatureCorrespondence.X0.get -> double
+AiDotNet.Diffusion.ThreeD.FeatureCorrespondence.Y0.get -> double
+AiDotNet.Diffusion.ThreeD.FeatureCorrespondence.X1.get -> double
+AiDotNet.Diffusion.ThreeD.FeatureCorrespondence.Y1.get -> double
+AiDotNet.Diffusion.ThreeD.FeatureCorrespondence.Confidence.get -> double
+AiDotNet.Diffusion.ThreeD.FeatureCorrespondence.Reversed() -> AiDotNet.Diffusion.ThreeD.FeatureCorrespondence
+AiDotNet.Diffusion.ThreeD.NormalizedCrossCorrelationMatcher<T>
+AiDotNet.Diffusion.ThreeD.NormalizedCrossCorrelationMatcher<T>.NormalizedCrossCorrelationMatcher(int patchRadius = 3, int searchRadius = 12, int stride = 4, double minCorrelation = 0.8, double minTextureStd = 0.02) -> void
+AiDotNet.Diffusion.ThreeD.NormalizedCrossCorrelationMatcher<T>.Match(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image0, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image1) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Diffusion.ThreeD.FeatureCorrespondence>!
+AiDotNet.Diffusion.ThreeD.One2345Options
+AiDotNet.Diffusion.ThreeD.One2345Options.One2345Options() -> void
+virtual AiDotNet.Diffusion.ThreeD.One2345Options.Validate() -> void
+AiDotNet.Diffusion.ThreeD.One2345Options.Stage1Steps.get -> int
+AiDotNet.Diffusion.ThreeD.One2345Options.Stage1Steps.set -> void
+AiDotNet.Diffusion.ThreeD.One2345Options.Stage2Steps.get -> int
+AiDotNet.Diffusion.ThreeD.One2345Options.Stage2Steps.set -> void
+AiDotNet.Diffusion.ThreeD.One2345Options.GuidanceScale.get -> double
+AiDotNet.Diffusion.ThreeD.One2345Options.GuidanceScale.set -> void
+AiDotNet.Diffusion.ThreeD.One2345Options.Stage1AzimuthDeltas.get -> double[]!
+AiDotNet.Diffusion.ThreeD.One2345Options.Stage1AzimuthDeltas.set -> void
+AiDotNet.Diffusion.ThreeD.One2345Options.Stage1OffsetAzimuthDeltas.get -> double[]!
+AiDotNet.Diffusion.ThreeD.One2345Options.Stage1OffsetAzimuthDeltas.set -> void
+AiDotNet.Diffusion.ThreeD.One2345Options.Stage1OffsetPolarDelta.get -> double
+AiDotNet.Diffusion.ThreeD.One2345Options.Stage1OffsetPolarDelta.set -> void
+AiDotNet.Diffusion.ThreeD.One2345Options.OffsetBelowMaxPolar.get -> double
+AiDotNet.Diffusion.ThreeD.One2345Options.OffsetBelowMaxPolar.set -> void
+AiDotNet.Diffusion.ThreeD.One2345Options.Stage2PolarDeltas.get -> double[]!
+AiDotNet.Diffusion.ThreeD.One2345Options.Stage2PolarDeltas.set -> void
+AiDotNet.Diffusion.ThreeD.One2345Options.Stage2AzimuthDeltas.get -> double[]!
+AiDotNet.Diffusion.ThreeD.One2345Options.Stage2AzimuthDeltas.set -> void
+AiDotNet.Diffusion.ThreeD.One2345Options.InputAzimuth.get -> double
+AiDotNet.Diffusion.ThreeD.One2345Options.InputAzimuth.set -> void
+AiDotNet.Diffusion.ThreeD.One2345Options.CameraRadius.get -> double
+AiDotNet.Diffusion.ThreeD.One2345Options.CameraRadius.set -> void
+AiDotNet.Diffusion.ThreeD.One2345Options.FocalLengthRatio.get -> double
+AiDotNet.Diffusion.ThreeD.One2345Options.FocalLengthRatio.set -> void
+AiDotNet.Diffusion.ThreeD.One2345Options.Near.get -> double
+AiDotNet.Diffusion.ThreeD.One2345Options.Near.set -> void
+AiDotNet.Diffusion.ThreeD.One2345Options.Far.get -> double
+AiDotNet.Diffusion.ThreeD.One2345Options.Far.set -> void
+AiDotNet.Diffusion.ThreeD.One2345Options.BoundingBoxFactor.get -> double
+AiDotNet.Diffusion.ThreeD.One2345Options.BoundingBoxFactor.set -> void
+AiDotNet.Diffusion.ThreeD.One2345Options.WhiteCleanupThreshold.get -> double
+AiDotNet.Diffusion.ThreeD.One2345Options.WhiteCleanupThreshold.set -> void
+AiDotNet.Diffusion.ThreeD.One2345Options.BackgroundThreshold.get -> double
+AiDotNet.Diffusion.ThreeD.One2345Options.BackgroundThreshold.set -> void
+AiDotNet.Diffusion.ThreeD.One2345Options.ElevationSearchMinPolar.get -> double
+AiDotNet.Diffusion.ThreeD.One2345Options.ElevationSearchMinPolar.set -> void
+AiDotNet.Diffusion.ThreeD.One2345Options.ElevationSearchMaxPolar.get -> double
+AiDotNet.Diffusion.ThreeD.One2345Options.ElevationSearchMaxPolar.set -> void
+AiDotNet.Diffusion.ThreeD.One2345Options.ElevationCoarseStep.get -> double
+AiDotNet.Diffusion.ThreeD.One2345Options.ElevationCoarseStep.set -> void
+AiDotNet.Diffusion.ThreeD.One2345Options.ElevationFineHalfWidth.get -> double
+AiDotNet.Diffusion.ThreeD.One2345Options.ElevationFineHalfWidth.set -> void
+AiDotNet.Diffusion.ThreeD.One2345Options.ElevationFineStep.get -> double
+AiDotNet.Diffusion.ThreeD.One2345Options.ElevationFineStep.set -> void
+AiDotNet.Diffusion.ThreeD.One2345Options.FallbackPolar.get -> double
+AiDotNet.Diffusion.ThreeD.One2345Options.FallbackPolar.set -> void
+AiDotNet.Diffusion.ThreeD.One2345Options.CorrespondenceTolerance.get -> double
+AiDotNet.Diffusion.ThreeD.One2345Options.CorrespondenceTolerance.set -> void
+AiDotNet.Diffusion.ThreeD.One2345Options.MeshResolution.get -> int
+AiDotNet.Diffusion.ThreeD.One2345Options.MeshResolution.set -> void
+AiDotNet.Diffusion.ThreeD.One2345Options.TextToImageSize.get -> int
+AiDotNet.Diffusion.ThreeD.One2345Options.TextToImageSize.set -> void
+AiDotNet.Diffusion.ThreeD.One2345Options.VolumeResolution.get -> int
+AiDotNet.Diffusion.ThreeD.One2345Options.VolumeResolution.set -> void
+AiDotNet.Diffusion.ThreeD.One2345Options.CompressedFeatureDim.get -> int
+AiDotNet.Diffusion.ThreeD.One2345Options.CompressedFeatureDim.set -> void
+AiDotNet.Diffusion.ThreeD.One2345Options.GeometryFeatureDim.get -> int
+AiDotNet.Diffusion.ThreeD.One2345Options.GeometryFeatureDim.set -> void
+AiDotNet.Diffusion.ThreeD.One2345Options.SdfHiddenDim.get -> int
+AiDotNet.Diffusion.ThreeD.One2345Options.SdfHiddenDim.set -> void
+AiDotNet.Diffusion.ThreeD.One2345Options.SdfLayers.get -> int
+AiDotNet.Diffusion.ThreeD.One2345Options.SdfLayers.set -> void
+AiDotNet.Diffusion.ThreeD.One2345Options.SdfFrequencies.get -> int
+AiDotNet.Diffusion.ThreeD.One2345Options.SdfFrequencies.set -> void
+AiDotNet.Diffusion.ThreeD.One2345Options.InitialVariance.get -> double
+AiDotNet.Diffusion.ThreeD.One2345Options.InitialVariance.set -> void
+AiDotNet.Diffusion.ThreeD.One2345Options.AntiAliasPooling.get -> bool
+AiDotNet.Diffusion.ThreeD.One2345Options.AntiAliasPooling.set -> void
+AiDotNet.Diffusion.ThreeD.One2345Options.QueryChunkSize.get -> int
+AiDotNet.Diffusion.ThreeD.One2345Options.QueryChunkSize.set -> void

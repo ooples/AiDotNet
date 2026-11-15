@@ -225,6 +225,40 @@ internal sealed class SparseNeuSScene<T> : ISignedDistanceField<T>
         return NeuSHost<T>.FromDoubles(pixels, height, width, 3);
     }
 
+    /// <summary>
+    /// The rendering network's colour at surface points (the reference's <c>validate_colored_mesh</c>:
+    /// <c>Projector.compute_view_independent</c> then <c>rendering_network</c>), blending every source view as seen
+    /// from <paramref name="queryCenter"/>, without a tape.
+    /// </summary>
+    /// <param name="points">The points, <c>[P, 3]</c> row-major (host).</param>
+    /// <param name="queryCenter">The query camera's center (the reference's <c>query_c2w</c>).</param>
+    /// <returns>The colours, <c>[P, 3]</c>.</returns>
+    public Tensor<T> PointColors(double[] points, double[] queryCenter)
+    {
+        if (points is null) throw new ArgumentNullException(nameof(points));
+        if (points.Length % 3 != 0) throw new ArgumentException("Points need three coordinates each.", nameof(points));
+        if (queryCenter is null || queryCenter.Length != 3) throw new ArgumentException("The query center needs 3 values.", nameof(queryCenter));
+        int total = points.Length / 3;
+        var colors = new double[total * 3];
+        int chunk = Options.GridChunkSize;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            for (int start = 0; start < total; start += chunk)
+            {
+                int count = Math.Min(chunk, total - start);
+                var part = new double[count * 3];
+                Array.Copy(points, start * 3, part, 0, count * 3);
+                var (_, latent, interpolation) = Query(part, withGradient: false);
+                var (rgbFeatures, rayDiff, viewMask, views) = Project(part, queryCenter, -1, interpolation);
+                var rgb = _network.RenderingNetwork.Forward(_engine, latent, rgbFeatures, rayDiff, viewMask, views);
+                // Copied out of the query's arena: the next chunk may reuse its buffers.
+                Array.Copy(NeuSHost<T>.ToDoubles(rgb), 0, colors, start * 3, count * 3);
+            }
+        }
+
+        return NeuSHost<T>.FromDoubles(colors, total, 3);
+    }
+
     /// <summary>Whether each point's nearest voxel is active (nearest-neighbor <c>grid_sample</c> of the mask volume).</summary>
     internal double[] NearestActive(double[] points)
     {
