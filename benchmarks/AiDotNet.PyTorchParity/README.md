@@ -28,6 +28,14 @@ d 192, 6 layers, 3 heads). The AiDotNet side builds each through its own configu
 (VGG's classifier reads the 512x1x1 map directly, DenseNet uses the CIFAR stem). These rows have no step-1 weight map,
 so `--verify-step1` skips them; each report records both parameter counts instead (they agree within 1.4%).
 
+Four time-series forecasting rows run the shipped tensor-interface forecasters at the ETT shape (96-step lookback,
+24-step horizon, 7 channels; N-BEATS univariate) with each paper's default sizes and Adam learning rate:
+`informer` (`Informer`, d 512, ProbSparse, distilling), `autoformer` (`Autoformer`, d 512, auto-correlation),
+`deepar` (`DeepAR`, 3x40 LSTM, Gaussian likelihood, forecast = median of 200 sample paths) and `nbeats`
+(`NBEATSFinance`, 30 generic blocks of 4x512). `TimeSeriesRows.cs` wraps them; benchmark.py's twins write out the
+official architectures layer for layer, and the parameter counts match exactly (trainable: informer 11,324,935, autoformer
+10,531,847, deepar 36,542, nbeats 26,976,360). Neither side feeds time-feature marks (AiDotNet's tensor-interface forecasters take the history alone).
+
 **The `gru` row is a timing comparison, not a parity row.** PyTorch's `nn.GRU` applies the reset gate after the recurrent
 product, `n = tanh(W_in x + b_in + r * (W_hn h + b_hn))`; AiDotNet's `GRULayer` applies it before,
 `n = tanh(W_in x + b_in + W_hn (r * h) + b_hn)` (Cho et al., Keras `reset_after=False`). The sizes and parameter shapes
@@ -90,7 +98,7 @@ our worst-of-95% steady-state latency still beats their average.
 
 | flag | default | meaning |
 |------|---------|---------|
-| `--models` | `mlp,cnn,lstm,transformer` | comma-separated subset of `mlp,cnn,lstm,gru,transformer,resnet18,resnet50,vgg11,mobilenetv2,densenet121,vit`; C# side also accepts `mlp-fused` |
+| `--models` | `mlp,cnn,lstm,transformer` | comma-separated subset of `mlp,cnn,lstm,gru,transformer,resnet18,resnet50,vgg11,mobilenetv2,densenet121,vit,informer,autoformer,deepar,nbeats` (and the other family rows); C# side also accepts `mlp-fused` |
 | `--inference-batches` | `1,8,32,128` | inference batch sizes; for vision rows on a 6 GB card, explicitly pass `--inference-batches 1,8,16` to both harnesses (the default does not change by model) |
 | `--epochs` | `3` | training epochs |
 | `--train-batches` | `20` | batches per epoch |
