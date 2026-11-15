@@ -311,8 +311,10 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
     /// <para>
     /// The reward is linear in the response, r(x, y) = w . y, and w maximizes the preference log-likelihood
     /// sum log sigmoid(r(y_preferred) - r(y_rejected)) by <see cref="AlignmentMethodOptions{T}.TrainingIterations"/>
-    /// full-batch gradient-ascent steps of size <see cref="RewardModelStepSize"/>. Without preference pairs the reward
-    /// is zero, so alignment leaves the model's distribution unchanged.
+    /// full-batch gradient-ascent steps of size <see cref="AlignmentMethodOptions{T}.RewardModelLearningRate"/>. Without
+    /// preference pairs the reward is zero, so alignment leaves the model's distribution unchanged. The reward scores
+    /// responses of the width of <c>AlignmentFeedbackData.Outputs</c> only: a response of another width is an error,
+    /// not truncated or zero-padded.
     /// </para>
     /// </remarks>
     private Func<Vector<T>, Vector<T>, double> TrainRewardModel(AlignmentFeedbackData<T> feedbackData)
@@ -323,6 +325,13 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
         if (pairs.Length == 0 || dimension == 0)
         {
             return (input, output) => 0.0;
+        }
+
+        if (double.IsNaN(options.RewardModelLearningRate) || double.IsInfinity(options.RewardModelLearningRate)
+            || options.RewardModelLearningRate <= 0)
+        {
+            throw new InvalidOperationException(
+                $"AlignmentMethodOptions.RewardModelLearningRate must be positive and finite (was {options.RewardModelLearningRate}).");
         }
 
         if (!feedbackData.ValidatePreferences())
@@ -337,7 +346,7 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
         var differences = Engine.TensorSubtract(preferred, rejected);
         var differencesT = Engine.TensorTranspose(differences);
         var weights = new Tensor<T>(new[] { dimension, 1 });
-        T step = NumOps.FromDouble(RewardModelStepSize / pairs.Length);
+        T step = NumOps.FromDouble(options.RewardModelLearningRate / pairs.Length);
 
         for (int iteration = 0; iteration < options.TrainingIterations; iteration++)
         {
@@ -351,21 +360,18 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
         var w = Engine.Reshape(weights, new[] { dimension });
         return (input, output) =>
         {
-            int length = Math.Min(dimension, output.Length);
-            if (length == 0)
+            if (output.Length != dimension)
             {
-                return 0.0;
+                throw new InvalidOperationException(
+                    $"The reward model was fit on responses of width {dimension} (AlignmentFeedbackData.Outputs columns) " +
+                    $"but was asked to score one of width {output.Length}: the model's outputs and the feedback responses " +
+                    "must have the same width.");
             }
 
-            var y = Engine.TensorSlice(output.AsTensor(), new[] { 0 }, new[] { length });
-            var weightSlice = Engine.TensorSlice(w, new[] { 0 }, new[] { length });
-            T mean = Engine.TensorMean(Engine.TensorMultiply(y, weightSlice));
-            return NumOps.ToDouble(mean) * length;
+            T mean = Engine.TensorMean(Engine.TensorMultiply(output.AsTensor(), w));
+            return NumOps.ToDouble(mean) * dimension;
         };
     }
-
-    /// <summary>The gradient-ascent step of the reward model fit, per unit of mean gradient.</summary>
-    private const double RewardModelStepSize = 1.0;
 
     /// <summary>
     /// The aligned policy: the optimum of the KL-regularized RLHF objective, softmax(z + r / KLCoefficient), over the
