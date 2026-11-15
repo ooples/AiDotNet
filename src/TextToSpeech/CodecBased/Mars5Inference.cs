@@ -416,7 +416,7 @@ internal static class Mars5Sampler<T>
         var present = new int[n];
         foreach (int id in previous.Skip(Math.Max(0, previous.Count - window)))
         {
-            if (id < 0 || id >= n) throw new IndexOutOfRangeException($"Token {id} is outside the {n} logits.");
+            if (id < 0 || id >= n) throw new ArgumentOutOfRangeException(nameof(previous), id, $"Token {id} is outside the {n} logits.");
             counts[id]++;
             present[id] = 1;
         }
@@ -450,6 +450,8 @@ internal static class Mars5Sampler<T>
     /// <summary><c>top_k_top_p_filtering</c> (min_tokens 1).</summary>
     public static Tensor<T> TopKTopP(Tensor<T> logits, int topK, double topP)
     {
+        // A Half running sum stalls (see TtsSampling<T>.SumsInFloat), so the cut is taken in float.
+        if (TtsSampling<T>.SumsInFloat) return Mars5Sampler<float>.TopKTopP(TtsSampling<T>.InFloat(logits), topK, topP).Cast<T>();
         var engine = AiDotNetEngine.Current;
         int n = logits.Length;
         var scores = engine.Reshape(logits, new[] { n });
@@ -479,6 +481,7 @@ internal static class Mars5Sampler<T>
     /// to the mass.</summary>
     public static Tensor<T> TypicalP(Tensor<T> logits, double mass)
     {
+        if (TtsSampling<T>.SumsInFloat) return Mars5Sampler<float>.TypicalP(TtsSampling<T>.InFloat(logits), mass).Cast<T>();
         var engine = AiDotNetEngine.Current;
         int n = logits.Length;
         var scores = engine.Reshape(logits, new[] { n });

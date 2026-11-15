@@ -213,4 +213,18 @@ public class GLM4VoiceTaskTests
         double after = model.EvaluateTrainingObjective(sample);
         Assert.True(after < before, $"{before} then {after}");
     }
+
+    // top-p 0.5 over 5,000 equal logits keeps the later 2,500 (ascending order, ties by id; those whose cumulative
+    // probability is at most 0.5 are dropped). In Half the cumulative probability stalled at 0.5 (2e-4 is under half
+    // an ulp there), nothing passed it, and only the last token was kept: every draw returned 4,999.
+    [Fact(Timeout = 120000)]
+    public async Task TopP_InHalf_KeepsTheSetPastHalfsRunningSumStall()
+    {
+        await Task.Yield();
+        var logits = new Tensor<Half>(new Half[5000], new[] { 5000 });
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(11);
+        var draws = Enumerable.Range(0, 200).Select(_ => NucleusSampling<Half>.Sample(logits, 1.0, 0, 0.5, null, random)).ToArray();
+        Assert.All(draws, d => Assert.True(d >= 2490, $"draw {d} below the kept set"));
+        Assert.True(draws.Distinct().Count() >= 50, $"{draws.Distinct().Count()} distinct draws");
+    }
 }

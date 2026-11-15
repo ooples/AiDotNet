@@ -224,16 +224,13 @@ public partial class CosyVoice3<T> : CosyVoiceBase<T>
         if (audio.Length > _options.MaxReferenceSeconds * 16000)
             throw new ArgumentException($"The reference recording may be at most {_options.MaxReferenceSeconds} seconds.", nameof(recording));
         var logMel = OpenAiWhisperTranscriber<T>.LogMelSpectrogram(audio, 128);
-        int bands = logMel.Shape[0], frames = logMel.Shape[1];
-        var features = Engine.Reshape(logMel, new[] { 1, bands, frames });
-        var length = new Tensor<T>(new[] { 1 });
-        length[0] = Ops.FromDouble(frames);
         var inputs = tokenizer.Metadata.Inputs.Select(x => x.Name).ToArray();
         if (inputs.Length != 2)
             throw new InvalidDataException("speech_tokenizer_v3.onnx must expose feature and feature-length inputs.");
+        // The frame count goes in as an integer and the codes come out as integers: neither passes through T.
+        var (features, lengths) = SpeechTokenizerInputs(inputs, logMel);
         using var _ = new NoGradScope<T>();
-        var output = tokenizer.Run(new Dictionary<string, Tensor<T>> { [inputs[0]] = features, [inputs[1]] = length }).Values.First();
-        return IdsOf(output);
+        return tokenizer.RunToIntegers(features, lengths).Values.First().ToArray();
     }
 
     private void OpenSpeechTokenizer(string path)

@@ -124,4 +124,143 @@ public class MegaTtsModelReferenceTests
         Assert.Equal(first.Length, mel.Shape[0] * options.HopSize);
         Assert.Equal(mel.ToArray(), model.Predict(model.TextToTokens("Good morning.")).ToArray());
     }
+
+    // The log-mel is a feature of the recording: the array code it replaced never reached the gradient tape, and on a
+    // tape log10's backward is taken at the floored (silent) frames too. Half of this recording is silence.
+    [Fact(Timeout = 120000)]
+    public async Task LogMel_IsComputedOffTheGradientTape()
+    {
+        await Task.Yield();
+        var samples = new double[2048];
+        for (int i = 0; i < 1024; i++) samples[i] = 0.3 * Math.Sin(2 * Math.PI * 440 * i / 16000.0);
+        var audio = new Tensor<double>(new[] { samples.Length }, new Vector<double>(samples));
+        var extractor = new MegaTtsMel<double>(16000, 256, 64, 256, 20, 0, 8000);
+        using var tape = new GradientTape<double>();
+        var mel = extractor.LogMel(audio);
+        Assert.Equal(0, tape.EntryCount);
+        Assert.Equal(new[] { 33, 20 }, mel.Shape.ToArray());
+    }
+
+    // librosa.stft(center=True, pad_mode="constant") as librosa_wav2spec calls it: fft/2 zeros each side and
+    // 1 + (n + 2 (fft/2) - fft) / hop frames. For an odd FFT size the old frame count 1 + n / hop is one too many
+    // (here 5 instead of 4), and its last frame read past the padded signal. The bins are checked against a direct
+    // DFT at an odd size, an even size that is not a power of two, and a power of two: the engine's FFT is the DFT
+    // only at the last, so the others take the DFT bases.
+    [Theory(Timeout = 120000)]
+    [InlineData(63, 4)]
+    [InlineData(60, 5)]
+    [InlineData(64, 5)]
+    public async Task LogMel_OddFftSize_MatchesLibrosaFraming(int fft, int expectedFrames)
+    {
+        await Task.Yield();
+        const int rate = 8000, hop = 16, win = 48, mels = 8, n = 64;
+        var x = new double[n];
+        for (int i = 0; i < n; i++) x[i] = Math.Sin(2 * Math.PI * 440 * i / rate) + 0.3 * Math.Cos(2 * Math.PI * 1900 * i / rate);
+        var mel = new MegaTtsMel<double>(rate, fft, hop, win, mels, 0, rate / 2.0)
+            .LogMel(new Tensor<double>(new[] { n }, new Vector<double>((double[])x.Clone())));
+
+        int pad = fft / 2, bins = fft / 2 + 1, frames = 1 + (n + 2 * pad - fft) / hop;
+        Assert.Equal(expectedFrames, frames);
+        Assert.Equal(2, mel.Shape.Length);
+        Assert.Equal(frames, mel.Shape[0]);
+        Assert.Equal(mels, mel.Shape[1]);
+        var padded = new double[n + 2 * pad];
+        Array.Copy(x, 0, padded, pad, n);
+        var window = new double[fft];
+        for (int i = 0; i < win; i++) window[(fft - win) / 2 + i] = 0.5 - 0.5 * Math.Cos(2 * Math.PI * i / win);
+        var basis = AiDotNet.Audio.Features.MelFilterbanks.Slaney(rate, fft, mels, 0, rate / 2.0);
+        for (int f = 0; f < frames; f++)
+        {
+            var magnitude = new double[bins];
+            for (int k = 0; k < bins; k++)
+            {
+                double re = 0, im = 0;
+                for (int t = 0; t < fft; t++)
+                {
+                    double v = padded[f * hop + t] * window[t], angle = 2 * Math.PI * k * t / fft;
+                    re += v * Math.Cos(angle);
+                    im -= v * Math.Sin(angle);
+                }
+                magnitude[k] = Math.Sqrt(re * re + im * im);
+            }
+            for (int m = 0; m < mels; m++)
+            {
+                double sum = 0;
+                for (int k = 0; k < bins; k++) sum += basis[m, k] * magnitude[k];
+                double expected = Math.Log10(Math.Max(1e-6, sum));
+                Assert.True(Math.Abs(expected - mel[f, m]) <= 1e-9, $"frame {f}, mel {m}: {expected} vs {mel[f, m]}");
+            }
+        }
+    }
+
+    // A 1 kHz tone at full scale, then 80 dB quieter. The quiet frames' bins are 1e-4 of the spectrogram's peak
+    // component, so scaling every component by that peak before squaring gave squares below Half's smallest
+    // subnormal: their magnitudes were 0 and their log-mel the 1e-6 floor (-6), against about -4.2 in double. Each
+    // bin's magnitude is now m * sqrt(1 + (n / m)^2) of its own components, and Half follows double.
+    [Fact(Timeout = 120000)]
+    public async Task LogMel_InHalf_KeepsAQuietTone()
+    {
+        await Task.Yield();
+        const int n = 4096;
+        var samples = new double[n];
+        for (int i = 0; i < n; i++) samples[i] = (i < n / 2 ? 1.0 : 1e-4) * Math.Sin(2 * Math.PI * 1000 * i / 16000.0);
+        var audio = new Tensor<double>(new[] { n }, new Vector<double>(samples));
+        var full = new MegaTtsMel<double>(16000, 256, 64, 256, 20, 0, 8000).LogMel(audio).Contiguous();
+        var half = new MegaTtsMel<Half>(16000, 256, 64, 256, 20, 0, 8000).LogMel(audio.Cast<Half>()).Contiguous();
+        Assert.Equal(new[] { 65, 20 }, full.Shape.ToArray());
+        Assert.Equal(new[] { 65, 20 }, half.Shape.ToArray());
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
+        int band = 0;
+        for (int m = 1; m < 20; m++) if (full[48, m] > full[48, band]) band = m;
+        // Frames 34 to 62 see only the quiet tone; its band is well above the floor in double.
+        Assert.True(full[48, band] > -5.5, $"fixture: quiet band {full[48, band]}");
+        for (int f = 36; f <= 60; f++)
+        {
+            double h = ops.ToDouble(half[f, band]);
+            Assert.True(Math.Abs(h - full[f, band]) <= 0.02, $"frame {f}, band {band}: Half {h} vs double {full[f, band]}");
+        }
+    }
+
+    // sqrt(re^2 + im^2) is NaN when either component is NaN and +inf when either is infinite (and neither NaN). The
+    // max / min form dropped a NaN beside a finite component (NaN, 1 gave sqrt 2) and turned inf, inf into NaN.
+    [Fact(Timeout = 120000)]
+    public async Task Hypot_PropagatesNonFiniteComponentsAsTheSumOfSquaresDoes()
+    {
+        await Task.Yield();
+        var engine = AiDotNetEngine.Current;
+        double nan = double.NaN, inf = double.PositiveInfinity;
+        var re = new[] { nan, 1.0, nan, inf, -inf, 2.0, inf, inf, nan, 3.0, 0.0 };
+        var im = new[] { 1.0, nan, nan, 1.0, 0.0, -inf, inf, nan, -inf, 4.0, 0.0 };
+        var expected = re.Zip(im, (a, b) => Math.Sqrt(a * a + b * b)).ToArray();
+        Assert.Equal(new[] { nan, nan, nan, inf, inf, inf, inf, nan, nan, 5.0, 0.0 }, expected);
+
+        var full = AiDotNet.Audio.Features.EngineStft<double>.Hypot(engine,
+            new Tensor<double>(re, new[] { re.Length }), new Tensor<double>(im, new[] { im.Length })).ToArray();
+        var single = AiDotNet.Audio.Features.EngineStft<float>.Hypot(engine,
+            new Tensor<double>(re, new[] { re.Length }).Cast<float>(), new Tensor<double>(im, new[] { im.Length }).Cast<float>()).ToArray();
+        var half = AiDotNet.Audio.Features.EngineStft<Half>.Hypot(engine,
+            new Tensor<double>(re, new[] { re.Length }).Cast<Half>(), new Tensor<double>(im, new[] { im.Length }).Cast<Half>()).ToArray();
+        for (int i = 0; i < expected.Length; i++)
+        {
+            Assert.True(expected[i].Equals(full[i]), $"double ({re[i]}, {im[i]}): {full[i]}, expected {expected[i]}");
+            Assert.True(expected[i].Equals((double)single[i]), $"float ({re[i]}, {im[i]}): {single[i]}, expected {expected[i]}");
+            Assert.True(expected[i].Equals((double)half[i]), $"Half ({re[i]}, {im[i]}): {half[i]}, expected {expected[i]}");
+        }
+    }
+
+    // The finite range Half keeps: components whose squares overflow (3e4, 4e4) or underflow (3e-4, 4e-4, squares
+    // below the smallest subnormal) still give their magnitude, and two components at the top of the range, whose
+    // sum is past it, are not mistaken for an infinite one.
+    [Fact(Timeout = 120000)]
+    public async Task Hypot_InHalf_KeepsLoudAndQuietFiniteComponents()
+    {
+        await Task.Yield();
+        var re = new Tensor<Half>(new[] { (Half)3e4, (Half)3e-4, (Half)40000.0, (Half)0.0 }, new[] { 4 });
+        var im = new Tensor<Half>(new[] { (Half)4e4, (Half)(-4e-4), (Half)40000.0, (Half)(-7.0) }, new[] { 4 });
+        var magnitude = AiDotNet.Audio.Features.EngineStft<Half>.Hypot(AiDotNetEngine.Current, re, im).ToArray();
+        Assert.True(Math.Abs((double)magnitude[0] / 5e4 - 1) <= 2e-3, $"loud {magnitude[0]}");
+        Assert.True(Math.Abs((double)magnitude[1] / 5e-4 - 1) <= 2e-3, $"quiet {magnitude[1]}");
+        Assert.True(Math.Abs((double)magnitude[2] / (40000.0 * Math.Sqrt(2)) - 1) <= 2e-3, $"top of range {magnitude[2]}");
+        Assert.Equal(7.0, (double)magnitude[3]);
+    }
 }

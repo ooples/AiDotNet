@@ -49,22 +49,32 @@ internal static class LoudnessMeter
             lengths[j] = Math.Max(0, upper - lower[j]);
             widest = Math.Max(widest, lengths[j]);
         }
-        var index = new int[blocks * widest];
-        var inside = new int[blocks * widest];
-        for (int j = 0; j < blocks; j++)
-            for (int k = 0; k < widest; k++)
-            {
-                bool used = k < lengths[j];
-                index[j * widest + k] = used ? lower[j] + k : 0;
-                inside[j * widest + k] = used ? 1 : 0;
-            }
+        // Bound the overlapping-block working set independently of the recording's duration. Only each batch's
+        // scalar energies survive to the gates; the waveform and its squares remain linear in the sample count.
+        const int maxGatherElements = 262144;
+        int batchSize = Math.Max(1, maxGatherElements / Math.Max(1, widest));
         var squares = engine.TensorSquare(filtered);
-        var gathered = engine.Reshape(engine.TensorIndexSelect(squares, new Tensor<int>(index, new[] { index.Length }), 0), new[] { blocks, widest });
-        var masked = engine.TensorWhere(new Tensor<int>(inside, new[] { blocks, widest }).Cast<T>(), gathered,
-            new Tensor<T>(new[] { blocks, widest }));
-        var z = engine.TensorMultiplyScalar(engine.ReduceSum(masked, new[] { 1 }, keepDims: false), ops.FromDouble(1.0 / (blockSize * rate)));
+        T inverseBlockLength = ops.FromDouble(1.0 / (blockSize * rate));
+        var energies = new List<Tensor<T>>();
+        for (int first = 0; first < blocks; first += batchSize)
+        {
+            int count = Math.Min(batchSize, blocks - first);
+            var index = new int[count * widest];
+            var inside = new int[count * widest];
+            for (int j = 0; j < count; j++)
+                for (int k = 0; k < widest; k++)
+                {
+                    bool used = k < lengths[first + j];
+                    index[j * widest + k] = used ? lower[first + j] + k : 0;
+                    inside[j * widest + k] = used ? 1 : 0;
+                }
+            var gathered = engine.Reshape(engine.TensorIndexSelect(squares, new Tensor<int>(index, new[] { index.Length }), 0), new[] { count, widest });
+            var masked = engine.TensorWhere(new Tensor<int>(inside, new[] { count, widest }).Cast<T>(), gathered,
+                new Tensor<T>(new[] { count, widest }));
+            energies.Add(engine.TensorMultiplyScalar(engine.ReduceSum(masked, new[] { 1 }, keepDims: false), inverseBlockLength));
+        }
+        var z = engine.TensorConcatenate(energies.ToArray(), 0);
         var loudness = Level(engine, ops, z);
-
         // loudness >= −70 (a NaN block fails it, as in numpy).
         var absolute = engine.TensorMax(engine.TensorGreaterThan(loudness, ops.FromDouble(-70.0)), engine.TensorEquals(loudness, ops.FromDouble(-70.0)));
         T relative = ops.Subtract(Level(ops, GatedMean(engine, ops, z, absolute)), ops.FromDouble(10.0));
