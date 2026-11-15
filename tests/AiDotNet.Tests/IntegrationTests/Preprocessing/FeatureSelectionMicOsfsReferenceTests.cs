@@ -1,3 +1,4 @@
+using AiDotNet.Models.Options;
 using AiDotNet.Preprocessing.FeatureSelection.Online;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -214,7 +215,7 @@ public class FeatureSelectionMicOsfsReferenceTests
         AssertClose(MicDefault, selector.MICValues);
         Assert.Equal(new[] { 0, 1, 3 }, selector.SelectedIndices);
 
-        var coarse = new NonlinearMic(nFeaturesToSelect: 2, alpha: 0.5, c: 5);
+        var coarse = new NonlinearMic(nFeaturesToSelect: 2, options: new MaximalInformationOptions { Alpha = 0.5, C = 5 });
         coarse.Fit(new Matrix<double>(MicX), new Vector<double>(MicY));
 
         AssertClose(MicAlphaHalfC5, coarse.MICValues);
@@ -230,7 +231,7 @@ public class FeatureSelectionMicOsfsReferenceTests
         AssertClose(MicDefault, selector.MICScores);
         Assert.Equal(new[] { 0, 1, 3 }, selector.SelectedIndices);
 
-        var coarse = new NonparametricMic(nFeaturesToSelect: 2, alpha: 0.5, c: 5);
+        var coarse = new NonparametricMic(nFeaturesToSelect: 2, options: new MaximalInformationOptions { Alpha = 0.5, C = 5 });
         coarse.Fit(new Matrix<double>(MicX), new Vector<double>(MicY));
 
         AssertClose(MicAlphaHalfC5, coarse.MICScores);
@@ -242,8 +243,8 @@ public class FeatureSelectionMicOsfsReferenceTests
     {
         // mine_check_parameter: alpha in (0, 1] or alpha >= 4, and c > 0
         Assert.Throws<ArgumentOutOfRangeException>(() => new InformationMic(alpha: 2.0));
-        Assert.Throws<ArgumentOutOfRangeException>(() => new NonlinearMic(alpha: 0.0));
-        Assert.Throws<ArgumentOutOfRangeException>(() => new NonparametricMic(c: 0.0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new NonlinearMic(options: new MaximalInformationOptions { Alpha = 0.0 }));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new NonparametricMic(options: new MaximalInformationOptions { C = 0.0 }));
     }
 
     [Fact]
@@ -268,5 +269,164 @@ public class FeatureSelectionMicOsfsReferenceTests
         selector.Fit(new Matrix<double>(OsfsX), new Vector<double>(OsfsY));
 
         Assert.Equal(new[] { 1 }, selector.SelectedIndices);
+    }
+
+    // a: eight +1 then eight -1; y: a with entries 0 and 8 flipped (corr(a, y) = 0.75); b alternates and is
+    // uncorrelated with both. Every mean, norm and inner product of these +-1 columns is exact.
+    private static readonly double[] SignA = { 1, 1, 1, 1, 1, 1, 1, 1, -1, -1, -1, -1, -1, -1, -1, -1 };
+    private static readonly double[] SignB = { 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1 };
+    private static readonly double[] SignY = { -1, 1, 1, 1, 1, 1, 1, 1, 1, -1, -1, -1, -1, -1, -1, -1 };
+
+    [Fact]
+    public void OSFS_DropsAFeatureThatAnotherDetermines()
+    {
+        // Feature 1 is an exact copy of feature 0. When it arrives, R_SS = [1] and the residual variance of
+        // feature 0 given S = {1} is exactly 0, so C and feature 0 are independent given S (LOFS: r = 0/0, isnan,
+        // so the feature is removed). The old code inverted the singular (Y, C, S) block and counted it as
+        // dependent, keeping both copies.
+        var data = new double[16, 2];
+        for (int i = 0; i < 16; i++)
+        {
+            data[i, 0] = SignA[i];
+            data[i, 1] = SignA[i];
+        }
+
+        var selector = new OSFS<double>(nFeaturesToSelect: 10);
+        selector.Fit(new Matrix<double>(data), new Vector<double>(SignY));
+
+        Assert.Equal(new[] { 1 }, selector.SelectedIndices);
+    }
+
+    [Fact]
+    public void OSFS_KeepsTheExactPredictor_WhenItsNoisyCopyLeavesASmallResidual()
+    {
+        // X0 = SignA is the target itself; X1 = SignA + 0.01 SignB is a noisy copy. Given X1, X0's residual variance
+        // is about 1e-4 and its partial correlation with the target is 1, so X0 stays; given X0, the target has no
+        // residual and X1 goes. The former float cutoff, sqrt(2^-23) = 3.5e-4, called X0 determined by X1 and
+        // dropped the exact predictor for its noisy substitute.
+        var data = new float[16, 2];
+        var target = new float[16];
+        for (int i = 0; i < 16; i++)
+        {
+            data[i, 0] = (float)SignA[i];
+            data[i, 1] = (float)(SignA[i] + 0.01 * SignB[i]);
+            target[i] = (float)SignA[i];
+        }
+
+        var selector = new OSFS<float>(nFeaturesToSelect: 10);
+        selector.Fit(new Matrix<float>(data), new Vector<float>(target));
+
+        Assert.Equal(new[] { 0 }, selector.SelectedIndices);
+    }
+
+    [Fact]
+    public void OSFS_InHalf_CorrelatesPast65504Rows()
+    {
+        // 65536 rows: sqrt(n) was formed in Half from n, which is +infinity past 65504, so every centred column was
+        // divided by infinity, every correlation was 0, and no feature was relevant. Feature 0 is the target, feature
+        // 1 alternates independently of it.
+        const int n = 65536;
+        var data = new Half[n, 2];
+        var target = new Half[n];
+        for (int i = 0; i < n; i++)
+        {
+            data[i, 0] = (Half)(i < n / 2 ? 1 : -1);
+            data[i, 1] = (Half)(i % 2 == 0 ? 1 : -1);
+            target[i] = data[i, 0];
+        }
+
+        var selector = new OSFS<Half>(nFeaturesToSelect: 10);
+        selector.Fit(new Matrix<Half>(data), new Vector<Half>(target));
+
+        Assert.Equal(new[] { 0 }, selector.SelectedIndices);
+        var scores = selector.FeatureScores;
+        Assert.NotNull(scores);
+        Assert.Equal(1.0, (double)scores[0], 3);
+        Assert.Equal(0.0, (double)scores[1], 3);
+    }
+
+    [Fact]
+    public void Mic_InHalf_KeepsCountsPast65504Representable()
+    {
+        // 65536 balanced observations whose feature equals the binary target: MIC is 1. The integer histogram was
+        // right, but its cumulative total and n were +infinity in Half and the entropy terms NaN.
+        const int n = 65536;
+        var data = new Half[n, 1];
+        var target = new Half[n];
+        for (int i = 0; i < n; i++)
+        {
+            data[i, 0] = (Half)(i % 2);
+            target[i] = (Half)(i % 2);
+        }
+
+        var selector = new AiDotNet.Preprocessing.FeatureSelection.Nonparametric.MaximalInformationSelector<Half>(nFeaturesToSelect: 1);
+        selector.Fit(new Matrix<Half>(data), new Vector<Half>(target));
+
+        var scores = selector.MICScores;
+        Assert.NotNull(scores);
+        Assert.Equal(1.0, (double)scores[0], 3);
+    }
+
+    [Fact]
+    public void OSFS_CorrelatesLargeMagnitudeFloatData()
+    {
+        // Values of 1e20 square to 1e40, past float's range. The old code squared the raw centred data, got an
+        // infinite standard deviation and zero correlations, and so found no relevant feature.
+        var data = new float[16, 2];
+        var target = new float[16];
+        for (int i = 0; i < 16; i++)
+        {
+            data[i, 0] = (float)(SignA[i] * 1e20);
+            data[i, 1] = (float)(SignB[i] * 1e20);
+            target[i] = (float)(SignY[i] * 1e20);
+        }
+
+        var selector = new OSFS<float>(nFeaturesToSelect: 10);
+        selector.Fit(new Matrix<float>(data), new Vector<float>(target));
+
+        Assert.Equal(new[] { 0 }, selector.SelectedIndices);
+        var scores = selector.FeatureScores;
+        Assert.NotNull(scores);
+        Assert.Equal(0.75f, scores[0], 6);
+        Assert.Equal(0f, scores[1], 6);
+    }
+
+    [Fact]
+    public void Mic_CountsBeyond2048InHalfMatchDouble()
+    {
+        // 2048 tied points (x = 0, y = 0) form one clump, then x = 1 .. 100 alternate y = 1, 0, so every later
+        // clump holds one point. The old code summed the clump counts in T: in Half 2048 + 1 rounds back to 2048,
+        // the row of y = 0 stopped growing, and MIC came out near 0.19 instead of about 0.115.
+        const int tied = 2048;
+        const int singles = 100;
+        var halfData = new Half[tied + singles, 1];
+        var halfTarget = new Half[tied + singles];
+        var doubleData = new double[tied + singles, 1];
+        var doubleTarget = new double[tied + singles];
+        for (int k = 1; k <= singles; k++)
+        {
+            int row = tied + k - 1;
+            double label = k % 2 == 1 ? 1.0 : 0.0;
+            halfData[row, 0] = (Half)(float)k;
+            halfTarget[row] = (Half)(float)label;
+            doubleData[row, 0] = k;
+            doubleTarget[row] = label;
+        }
+
+        // alpha >= 4 fixes the grid budget B = 8; c = 30 keeps all 101 clumps on the 4-column grids
+        var grid = new MaximalInformationOptions { Alpha = 8, C = 30 };
+        var reference = new NonparametricMic(nFeaturesToSelect: 1, options: grid);
+        reference.Fit(new Matrix<double>(doubleData), new Vector<double>(doubleTarget));
+        var half = new AiDotNet.Preprocessing.FeatureSelection.Nonparametric.MaximalInformationSelector<Half>(
+            nFeaturesToSelect: 1, options: grid);
+        half.Fit(new Matrix<Half>(halfData), new Vector<Half>(halfTarget));
+
+        var expected = reference.MICScores;
+        var actual = half.MICScores;
+        Assert.NotNull(expected);
+        Assert.NotNull(actual);
+        Assert.InRange(expected[0], 0.10, 0.13);
+        double actualValue = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>().ToDouble(actual[0]);
+        Assert.True(Math.Abs(actualValue - expected[0]) <= 0.02, $"Half MIC {actualValue}, double MIC {expected[0]}.");
     }
 }

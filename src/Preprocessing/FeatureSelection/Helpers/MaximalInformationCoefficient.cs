@@ -87,7 +87,10 @@ internal static class MaximalInformationCoefficient
         double budget = alpha > 0.0 && alpha <= 1.0 ? Math.Max(Math.Pow(n, alpha), 4) : Math.Min(alpha, n);
         int rows = Math.Max((int)Math.Floor(budget / 2.0), 2) - 1;
 
-        var scores = new List<Tensor<T>>();
+        // The partition entropies are computed from the counts in double: in Half the sample total and the
+        // cumulative counts are +infinity past 65504 and the entropy terms NaN. MIC lies in [0, 1], so only the
+        // final score is converted to T.
+        var scores = new List<Tensor<double>>();
         var temp = new int[n];
         for (int i = 0; i < rows; i++)
         {
@@ -102,7 +105,7 @@ internal static class MaximalInformationCoefficient
             for (int k = 0; k < n; k++)
                 qByX[k] = temp[xOrder[k]];
             var pMap = GetSuperclumpsPartition(xGroups, n, clumps, qByX, out int pCount);
-            scores.Add(OptimizeXAxis<T>(n, qByX, qCount, pMap, pCount, columnsMax + 1));
+            scores.Add(OptimizeXAxis<double>(n, qByX, qCount, pMap, pCount, columnsMax + 1));
 
             // y vs. x: equipartition x into i + 2 rows, superclumps on y
             q = EquipartitionYAxis(xGroups, n, i + 2, out qCount);
@@ -112,14 +115,14 @@ internal static class MaximalInformationCoefficient
             for (int k = 0; k < n; k++)
                 qByY[k] = temp[yOrder[k]];
             pMap = GetSuperclumpsPartition(yGroups, n, clumps, qByY, out pCount);
-            scores.Add(OptimizeXAxis<T>(n, qByY, qCount, pMap, pCount, columnsMax + 1));
+            scores.Add(OptimizeXAxis<double>(n, qByY, qCount, pMap, pCount, columnsMax + 1));
         }
 
         var nonEmpty = scores.Where(s => s.Length > 0).ToArray();
         if (nonEmpty.Length == 0)
             return new Tensor<T>(new[] { 1 });
 
-        return engine.ReduceMax(engine.TensorConcatenate(nonEmpty, 0), new[] { 0 }, true);
+        return engine.ReduceMax(engine.TensorConcatenate(nonEmpty, 0), new[] { 0 }, true).Cast<T>();
     }
 
     /// <summary>
@@ -231,13 +234,25 @@ internal static class MaximalInformationCoefficient
         T one = ops.One;
         T minusOne = ops.Negate(one);
 
-        // Cumulative histogram along the superclumps: cumhist[r, t] = #{points in row r and clumps 0 .. t}
-        var keys = new int[n];
+        // Cumulative histogram along the superclumps: cumhist[r, t] = #{points in row r and clumps 0 .. t}. The counts
+        // are summed as integers and converted once: a running sum in T stops growing past 2048 in Half.
+        var histogram = new int[q * p];
         for (int k = 0; k < n; k++)
-            keys[k] = qMap[k] * p + pMap[k];
-        var counts = engine.TensorBinCount(new Tensor<int>(keys, new[] { n }), q * p).Cast<T>();
-        var cumhist = engine.TensorCumSum(engine.Reshape(counts, new[] { q, p }), 1); // [q, p]
-        var cumulative = engine.ReduceSum(cumhist, new[] { 0 }, false); // c_1 .. c_p, [p]
+            histogram[qMap[k] * p + pMap[k]]++;
+        var cumulativeCounts = new int[p];
+        for (int r = 0; r < q; r++)
+        {
+            int running = 0;
+            for (int t = 0; t < p; t++)
+            {
+                running += histogram[r * p + t];
+                histogram[r * p + t] = running;
+                cumulativeCounts[t] += running;
+            }
+        }
+
+        var cumhist = new Tensor<int>(histogram, new[] { q, p }).Cast<T>(); // [q, p]
+        var cumulative = new Tensor<int>(cumulativeCounts, new[] { p }).Cast<T>(); // c_1 .. c_p, [p]
 
         // Pairs (s, t) are indexed [s - 1, t - 1]
         var cS = engine.TensorBroadcastTo(engine.Reshape(cumulative, new[] { p, 1 }), new[] { p, p });

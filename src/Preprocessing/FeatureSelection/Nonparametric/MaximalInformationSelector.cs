@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Models.Options;
 using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Nonparametric;
@@ -56,24 +57,23 @@ public class MaximalInformationSelector<T> : TransformerBase<T, Matrix<T>, Matri
     /// Creates a MIC feature selector.
     /// </summary>
     /// <param name="nFeaturesToSelect">The number of features to keep.</param>
-    /// <param name="alpha">The grid budget exponent: <c>B(n) = max(n^alpha, 4)</c> for alpha in (0, 1], or
-    /// <c>B = min(alpha, n)</c> for alpha of at least 4 (paper and minepy default 0.6).</param>
-    /// <param name="c">The clump factor (paper and minepy default 15).</param>
+    /// <param name="options">The MINE grid parameters, alpha and c; null for the paper and minepy defaults (0.6, 15).
+    /// A distinct type, so a call written for the former <c>maxBins</c> argument does not compile as alpha.</param>
     /// <param name="columnIndices">The columns to operate on, or null for all columns.</param>
     public MaximalInformationSelector(
         int nFeaturesToSelect = 10,
-        double alpha = MaximalInformationCoefficient.DefaultAlpha,
-        double c = MaximalInformationCoefficient.DefaultClumps,
+        MaximalInformationOptions? options = null,
         int[]? columnIndices = null)
         : base(columnIndices)
     {
         if (nFeaturesToSelect < 1)
             throw new ArgumentException("Number of features must be at least 1.", nameof(nFeaturesToSelect));
-        MaximalInformationCoefficient.Validate(alpha, c, nameof(alpha), nameof(c));
+        var grid = options ?? new MaximalInformationOptions();
+        MaximalInformationCoefficient.Validate(grid.Alpha, grid.C, nameof(options), nameof(options));
 
         _nFeaturesToSelect = nFeaturesToSelect;
-        _alpha = alpha;
-        _c = c;
+        _alpha = grid.Alpha;
+        _c = grid.C;
     }
 
     /// <inheritdoc />
