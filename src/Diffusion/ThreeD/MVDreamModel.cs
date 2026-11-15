@@ -1466,7 +1466,7 @@ public class MultiViewUNet<T> : IParameterSource<T>, ICloneable<MultiViewUNet<T>
         var names = new List<string>(_baseUNet.LoadMultiViewTransformerWeights(source, prefix));
         names.AddRange(_cameraEmbedding.LoadTorchWeights(source, prefix + "camera_embed."));
         if (_imageEmbed is not null)
-            names.AddRange(KlModule<T>.Load(_imageEmbed.NamedTensors(prefix + "image_embed"), source));
+            names.AddRange(KlModule<T>.Load(_imageEmbed.NamedTensors(prefix + "image_embed"), read));
         return names;
     }
 

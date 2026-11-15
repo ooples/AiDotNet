@@ -348,60 +348,10 @@ public class ThreeDGeometryTests
         Assert.Equal(0.36 * (1.0 + (7.5 * -3.0)), g[1], 12);
     }
 
-    [Fact]
-    public void MultiViewAttention_IsResidualCrossViewAttention()
-    {
-        const int channels = 3;
-        var attention = new MultiViewAttention<double>(channels, numViews: 2, seed: 5);
-        var views = new[]
-        {
-            new Tensor<double>(new[] { 1, channels, 1, 2 }, new Vector<double>(new[] { 1.0, 2.0, 0.5, -1.0, 0.0, 3.0 })),
-            new Tensor<double>(new[] { 1, channels, 1, 2 }, new Vector<double>(new[] { -1.0, 0.0, 1.5, 2.0, 1.0, -2.0 }))
-        };
-
-        // Zero output projection: the residual returns the views unchanged.
-        var p = attention.GetParameters().ToArray();
-        int block = channels * channels;
-        var zeroOut = p.ToArray();
-        for (int i = 3 * block; i < 4 * block; i++)
-            zeroOut[i] = 0.0;
-        attention.SetParameters(new Vector<double>(zeroOut));
-        var identity = attention.Apply(views);
-        Assert.Equal(views[0].ToArray(), identity[0].ToArray());
-        Assert.Equal(views[1].ToArray(), identity[1].ToArray());
-
-        // Reference attention at every position over the two views' tokens.
-        attention.SetParameters(new Vector<double>(p));
-        var result = attention.Apply(views);
-        double[] W(int index, int row) => p.Skip((index * block) + (row * channels)).Take(channels).ToArray();
-        double[] Project(int index, double[] x) =>
-            Enumerable.Range(0, channels).Select(r => W(index, r).Zip(x, (w, v) => w * v).Sum()).ToArray();
-
-        for (int position = 0; position < 2; position++)
-        {
-            var tokens = views.Select(view => Enumerable.Range(0, channels)
-                .Select(c => view.ToArray()[(c * 2) + position]).ToArray()).ToArray();
-            for (int v = 0; v < 2; v++)
-            {
-                var q = Project(0, tokens[v]);
-                var scores = tokens.Select(t => Project(1, t).Zip(q, (a, b) => a * b).Sum() / Math.Sqrt(channels)).ToArray();
-                double max = scores.Max();
-                var weights = scores.Select(s => Math.Exp(s - max)).ToArray();
-                double total = weights.Sum();
-                var mixed = new double[channels];
-                for (int u = 0; u < 2; u++)
-                {
-                    var value = Project(2, tokens[u]);
-                    for (int c = 0; c < channels; c++)
-                        mixed[c] += weights[u] / total * value[c];
-                }
-
-                var output = Project(3, mixed);
-                for (int c = 0; c < channels; c++)
-                    Assert.Equal(tokens[v][c] + output[c], result[v].ToArray()[(c * 2) + position], 10);
-            }
-        }
-    }
+    // MultiViewAttention (post-hoc attention over the final noise predictions) was removed: the official
+    // MultiViewUNetModel (bytedance/MVDream, mvdream/ldm/modules/diffusionmodules/openaimodel.py) has no such module;
+    // its cross-view attention is the 3D self-attention inside every SpatialTransformer3D, tested by
+    // MVDreamArchitectureTests.ThreeDSelfAttention_EqualsAttentionOverTheConcatenatedViewTokens.
 
     // ---------------------------------------------------------------- Shap-E
 

@@ -1758,6 +1758,7 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.Models.ThreeDGeometryTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.Models.LGMArchitectureTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.Models.MVDreamImageConditioningTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.Models.MVDreamArchitectureTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.Meshing.MeshingComponentTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.ThreeD.One2345ModelPaperTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.ThreeD.LoFTRMatcherTests.|
