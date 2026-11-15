@@ -241,6 +241,101 @@ public class OnnxModel<T> : IOnnxModel<T>
     }
 
     /// <summary>
+    /// Runs inference with integer inputs (lengths, counts, ids) kept as integers, and reads the integer outputs
+    /// exactly.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Run(IReadOnlyDictionary{string, Tensor{T}})"/> carries every value in T, which loses the integers a
+    /// narrow T cannot hold: Half is exact only up to 2,048. Here each of <paramref name="integerInputs"/> is converted
+    /// straight to the type the graph declares for it (int64, int32, float or double), and int64 and int32 outputs are
+    /// returned as ints; a floating-point output is rounded half to even.
+    /// </remarks>
+    /// <param name="inputs">The inputs carried in T.</param>
+    /// <param name="integerInputs">The integer inputs.</param>
+    /// <returns>The outputs, as ints.</returns>
+    public IReadOnlyDictionary<string, Tensor<int>> RunToIntegers(
+        IReadOnlyDictionary<string, Tensor<T>> inputs,
+        IReadOnlyDictionary<string, Tensor<int>> integerInputs)
+    {
+        ThrowIfDisposed();
+        if (inputs is null) throw new ArgumentNullException(nameof(inputs));
+        if (integerInputs is null) throw new ArgumentNullException(nameof(integerInputs));
+        var onnxInputs = BuildInputs(Metadata.Inputs, inputs, integerInputs);
+        using var results = _session.Run(onnxInputs);
+        var outputs = new Dictionary<string, Tensor<int>>();
+        foreach (var result in results)
+        {
+            var converted = IntegersOf(result);
+            if (converted is not null) outputs[result.Name] = converted;
+        }
+
+        return outputs;
+    }
+
+    /// <summary>The session inputs for <see cref="RunToIntegers"/>: the T inputs as <see cref="Run(IReadOnlyDictionary{string, Tensor{T}})"/>
+    /// converts them, and each integer input converted directly to its declared type (int64 when undeclared).</summary>
+    internal static List<NamedOnnxValue> BuildInputs(IEnumerable<IOnnxTensorInfo> declared,
+        IReadOnlyDictionary<string, Tensor<T>> inputs, IReadOnlyDictionary<string, Tensor<int>> integerInputs)
+    {
+        if (declared is null) throw new ArgumentNullException(nameof(declared));
+        if (inputs is null) throw new ArgumentNullException(nameof(inputs));
+        if (integerInputs is null) throw new ArgumentNullException(nameof(integerInputs));
+        var types = declared.ToDictionary(i => i.Name, i => i.ElementType);
+        var onnxInputs = new List<NamedOnnxValue>();
+        foreach (var (name, tensor) in inputs)
+            onnxInputs.Add(OnnxTensorConverter.ToOnnxValue(name, tensor, types.TryGetValue(name, out var type) ? type : "float"));
+        foreach (var (name, tensor) in integerInputs)
+            onnxInputs.Add(IntegerValue(name, tensor, types.TryGetValue(name, out var type) ? type : "int64"));
+        return onnxInputs;
+    }
+
+    /// <summary>An integer tensor as the named ONNX input of the declared element type, without a round trip
+    /// through T or double.</summary>
+    internal static NamedOnnxValue IntegerValue(string name, Tensor<int> tensor, string elementType)
+    {
+        if (tensor is null) throw new ArgumentNullException(nameof(tensor));
+        if (elementType is null) throw new ArgumentNullException(nameof(elementType));
+        var values = tensor.ToArray();
+        var shape = tensor.Shape.ToArray();
+        return elementType.ToLowerInvariant() switch
+        {
+            "int64" or "long" => NamedOnnxValue.CreateFromTensor(name, new OnnxTensors.DenseTensor<long>(Array.ConvertAll(values, v => (long)v), shape)),
+            "int32" or "int" => NamedOnnxValue.CreateFromTensor(name, new OnnxTensors.DenseTensor<int>(values, shape)),
+            "float" or "float32" => NamedOnnxValue.CreateFromTensor(name, new OnnxTensors.DenseTensor<float>(Array.ConvertAll(values, v => (float)v), shape)),
+            "double" or "float64" => NamedOnnxValue.CreateFromTensor(name, new OnnxTensors.DenseTensor<double>(Array.ConvertAll(values, v => (double)v), shape)),
+            _ => throw new System.IO.InvalidDataException($"The input {name} is declared {elementType}; an integer input needs int64, int32, float or double.")
+        };
+    }
+
+    /// <summary>An output as ints: int64 and int32 exactly (an int64 outside Int32 throws), float and double rounded
+    /// half to even; null for any other element type.</summary>
+    internal static Tensor<int>? IntegersOf(NamedOnnxValue result)
+    {
+        if (result is null) throw new ArgumentNullException(nameof(result));
+        if (result.AsTensor<long>() is { } longs)
+        {
+            var dense = longs.ToDenseTensor();
+            return new Tensor<int>(Array.ConvertAll(dense.Buffer.ToArray(), v => checked((int)v)), dense.Dimensions.ToArray());
+        }
+        if (result.AsTensor<int>() is { } ints)
+        {
+            var dense = ints.ToDenseTensor();
+            return new Tensor<int>(dense.Buffer.ToArray(), dense.Dimensions.ToArray());
+        }
+        if (result.AsTensor<float>() is { } floats)
+        {
+            var dense = floats.ToDenseTensor();
+            return new Tensor<int>(Array.ConvertAll(dense.Buffer.ToArray(), v => checked((int)Math.Round(v))), dense.Dimensions.ToArray());
+        }
+        if (result.AsTensor<double>() is { } doubles)
+        {
+            var dense = doubles.ToDenseTensor();
+            return new Tensor<int>(Array.ConvertAll(dense.Buffer.ToArray(), v => checked((int)Math.Round(v))), dense.Dimensions.ToArray());
+        }
+        return null;
+    }
+
+    /// <summary>
     /// Runs inference with long integer inputs (useful for token IDs).
     /// </summary>
     /// <param name="inputName">The input tensor name.</param>
