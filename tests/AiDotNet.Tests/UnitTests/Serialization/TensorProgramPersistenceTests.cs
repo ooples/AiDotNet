@@ -309,6 +309,140 @@ public class TensorProgramPersistenceTests
         Assert.Equal(-4.0, g[1], 4);
     }
 
+    // ── Compiled predictor after the weights change ──────────────────────────────────────────────────────
+    //
+    // The program binds the network's parameter TENSORS, so an in-place update reaches it, but a path that replaces
+    // a tensor (or rebuilds the layers) would leave a compiled plan answering with the old weights. Each test builds the
+    // compiled predictor, predicts through it, changes the weights through one path, and requires the compiled answer to
+    // be the eager one.
+
+    public enum WeightChange
+    {
+        SetParameters,
+        UpdateParameters,
+        LayerSetParameters,
+        DeserializeIntoTheSameModel,
+        TrainInPlace,
+    }
+
+    private static FeedForwardNeuralNetwork<float> SmallRegressor() => new(new NeuralNetworkArchitecture<float>(
+        inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.Regression,
+        inputSize: 4, outputSize: 2, layers: new List<ILayer<float>>
+        {
+            new InputLayer<float>(4),
+            new DenseLayer<float>(6, activationFunction: new TanhActivation<float>()),
+            new DenseLayer<float>(2, activationFunction: new IdentityActivation<float>()),
+        }), lossFunction: new MeanSquaredErrorLoss<float>());
+
+    private static Vector<float> Perturbed(Vector<float> parameters)
+    {
+        var changed = new Vector<float>(parameters.Length);
+        for (int i = 0; i < parameters.Length; i++) changed[i] = -0.5f * parameters[i] + 0.05f * ((i % 7) - 3);
+        return changed;
+    }
+
+    private static void ChangeWeights(FeedForwardNeuralNetwork<float> network, WeightChange how, Tensor<float> x)
+    {
+        switch (how)
+        {
+            case WeightChange.SetParameters:
+                network.SetParameters(Perturbed(network.GetParameters()));
+                break;
+            case WeightChange.UpdateParameters:
+                network.UpdateParameters(Perturbed(network.GetParameters()));
+                break;
+            case WeightChange.LayerSetParameters:
+                var dense = network.Layers.OfType<DenseLayer<float>>().First();
+                dense.SetParameters(Perturbed(dense.GetParameters()));
+                break;
+            case WeightChange.DeserializeIntoTheSameModel:
+                var donor = SmallRegressor();
+                donor.SetParameters(Perturbed(donor.GetParameters()));
+                using (ModelPersistenceGuard.InternalOperation())
+                {
+                    network.Deserialize(donor.Serialize());
+                }
+                break;
+            case WeightChange.TrainInPlace:
+                var target = Random(41, x.Shape[0], 2);
+                for (int step = 0; step < 5; step++) network.Train(x, target);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(how), how, "unknown weight change");
+        }
+    }
+
+    [Theory]
+    [InlineData(WeightChange.SetParameters)]
+    [InlineData(WeightChange.UpdateParameters)]
+    [InlineData(WeightChange.LayerSetParameters)]
+    [InlineData(WeightChange.DeserializeIntoTheSameModel)]
+    [InlineData(WeightChange.TrainInPlace)]
+    public void CompiledPredictor_AfterTheWeightsChange_AnswersWithTheNewWeights(WeightChange how)
+    {
+        var network = SmallRegressor();
+        var predictor = new AiDotNet.Inference.CompiledNeuralPredictor<float>(network, JitCompilationConfig.Default);
+        var x = Random(40, 3, 4);
+
+        AssertClose(network.Predict(x), predictor.Predict(new[] { x })[0], 1e-4f);
+        Assert.NotNull(predictor.Export(example: null)); // the program tier is the one serving, not eager
+        var before = network.Predict(x);
+
+        ChangeWeights(network, how, x);
+
+        var eager = network.Predict(x);
+        Assert.True(MaxDifference(before, eager) > 1e-3f, $"{how} did not change the network's output");
+        AssertClose(eager, predictor.Predict(new[] { x })[0], 1e-4f);
+        // A second batch size goes through a fresh plan of the same program: it must see the new weights too.
+        var other = Random(42, 5, 4);
+        AssertClose(network.Predict(other), predictor.Predict(new[] { other })[0], 1e-4f);
+    }
+
+    [Fact]
+    public void CompiledPredictor_TracedOnTheFirstForward_FollowsTrainingOfTheWeightsThatForwardMaterialized()
+    {
+        // No forward has run: a lazily sized layer materializes its weights inside the traced forward itself.
+        var network = SmallRegressor();
+        var predictor = new AiDotNet.Inference.CompiledNeuralPredictor<float>(network, JitCompilationConfig.Default);
+        var x = Random(43, 3, 4);
+        var first = predictor.Predict(new[] { x })[0];
+        AssertClose(network.Predict(x), first, 1e-4f);
+
+        ChangeWeights(network, WeightChange.TrainInPlace, x);
+
+        var eager = network.Predict(x);
+        Assert.True(MaxDifference(first, eager) > 1e-3f, "training did not change the network's output");
+        AssertClose(eager, predictor.Predict(new[] { x })[0], 1e-4f);
+    }
+
+    [Fact]
+    public void ModelResult_AfterAdapt_PredictsWithTheAdaptedWeights()
+    {
+        var network = SmallRegressor();
+        var result = new AiModelResult<float, Tensor<float>, Tensor<float>>(new AiModelResultOptions<float, Tensor<float>, Tensor<float>>
+        {
+            OptimizationResult = new OptimizationResult<float, Tensor<float>, Tensor<float>> { BestSolution = network },
+            JitCompilationConfig = JitCompilationConfig.Default,
+            InferenceOptimizationConfig = new InferenceOptimizationConfig(),
+        });
+        var x = Random(44, 3, 4);
+        var before = result.Predict(x);
+
+        result.Adapt(x, Random(45, 3, 2), steps: 5, learningRate: 0.05);
+
+        var eager = network.Predict(x);
+        Assert.True(MaxDifference(before, eager) > 1e-3f, "Adapt did not change the network's output");
+        AssertClose(eager, result.Predict(x), 1e-4f);
+    }
+
+    private static float MaxDifference(Tensor<float> a, Tensor<float> b)
+    {
+        Assert.Equal(a.Length, b.Length);
+        float max = 0f;
+        for (int i = 0; i < a.Length; i++) max = Math.Max(max, Math.Abs(a[i] - b[i]));
+        return max;
+    }
+
     private sealed class ToleranceComparer : IEqualityComparer<double>
     {
         private readonly double _tol;
