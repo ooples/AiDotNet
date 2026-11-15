@@ -475,10 +475,14 @@ internal static class PreprocessingTensorOps
         if (w == 0)
             return new int[n];
 
-        var columnIndex = engine.TensorBroadcastTo(engine.Reshape(Range<T>(w), new[] { 1, w }), new[] { n, w });
-        var candidates = engine.TensorWhere(mask, columnIndex, Filled(new[] { n, w }, MathHelper.GetNumericOperations<T>().FromDouble(w)));
+        // Column positions in int: a ramp held in T is inexact past 2048 for Half (2049 rounds to 2048) and
+        // infinite past 65504, which tied or corrupted the first positions.
+        var set = engine.TensorNotEquals(mask, MathHelper.GetNumericOperations<T>().Zero).Cast<int>();
+        var columnIndex = engine.TensorBroadcastTo(
+            new Tensor<int>(Enumerable.Range(0, w).ToArray(), new[] { 1, w }), new[] { n, w });
+        var candidates = engine.TensorWhere(set, columnIndex, Filled(new[] { n, w }, w));
         var first = engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(candidates), new[] { 1 }, false));
-        return first.Cast<int>().AsSpan().ToArray();
+        return first.AsSpan().ToArray();
     }
 
     /// <summary>

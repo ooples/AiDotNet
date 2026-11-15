@@ -25,17 +25,22 @@ internal static class ResamplingTensorOps
         var engine = AiDotNetEngine.Current;
         var labels = Tensor<T>.FromVector(y);
         var classes = PreprocessingTensorOps.SortedUnique(labels);
-        int c = classes.Length;
-        var shape = new[] { c, n };
-        var membership = engine.TensorEquals(
-            engine.TensorBroadcastTo(engine.Reshape(classes, new[] { c, 1 }), shape).Contiguous(),
-            engine.TensorBroadcastTo(engine.Reshape(labels, new[] { 1, n }), shape).Contiguous());
-        // Summed as int: a sum in T stops counting at 2048 for Half
-        var sizes = engine.ReduceSum(membership.Cast<int>(), new[] { 1 }, false).AsSpan().ToArray();
-        var first = PreprocessingTensorOps.FirstNonZeroPerRow(membership);
+
+        // Sort-based, with every count and position in int: the stable ascending order lists each class as one run
+        // of equal labels in row order, so the run's width is the class size and its first entry is the row where
+        // the class first appears. (A [classes, n] membership matrix is quadratic for many classes, and a column
+        // index ramp held in T is inexact past 2048 rows for Half, which reordered classes first seen there.)
+        var order = PreprocessingTensorOps.StableOrder(labels, descending: false);
+        var sorted = engine.TensorIndexSelect(labels, new Tensor<int>(order, new[] { n }), 0);
+        var start = engine.TensorSearchSorted(sorted, classes, false).AsSpan().ToArray();
+        var end = engine.TensorSearchSorted(sorted, classes, true).AsSpan().ToArray();
         var values = classes.AsSpan().ToArray();
-        foreach (int k in Enumerable.Range(0, c).Where(k => sizes[k] > 0).OrderBy(k => first[k]))
-            counts[values[k]] = sizes[k];
+        // NaN never equals a label, so (as before) it is not a class
+        var notANumber = ScalerTensorOps.NanMask(classes).Cast<int>().AsSpan().ToArray();
+        foreach (int k in Enumerable.Range(0, values.Length)
+            .Where(k => end[k] > start[k] && notANumber[k] == 0)
+            .OrderBy(k => order[start[k]]))
+            counts[values[k]] = end[k] - start[k];
         return counts;
     }
 
