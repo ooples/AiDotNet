@@ -135,27 +135,49 @@ public sealed class ClipVisionEncoderOptions
 /// var tokens = encoder.EncodePenultimateHiddenStates(image); // [1, 257, 1024]
 /// </code>
 /// </example>
-public sealed class ClipVisionEncoder<T> : IVisualEncoder<T>, IParameterSource<T>
+public sealed class ClipVisionEncoder<T> : IVisualEncoder<T>, IParameterSource<T>, ICloneable<ClipVisionEncoder<T>>
 {
     private readonly IEngine _engine;
     private readonly ClipVisionEncoderOptions _options;
-    private readonly List<LayerBase<T>> _layers = new();
-    private readonly ClipVisionNetwork<T> _network;
-    private readonly BiasFreeLinearLayer<T>? _projection;
+    private readonly int _seed;
+    private List<LayerBase<T>>? _layers;
+    private ClipVisionNetwork<T>? _network;
+    private BiasFreeLinearLayer<T>? _projection;
+    private bool _initialized;
 
     /// <summary>Creates the encoder; ViT-H/14 (open_clip) by default.</summary>
     /// <param name="options">The encoder's shape and conventions; <see cref="ClipVisionPreset.ViTH14OpenClip"/> when null.</param>
     /// <param name="seed">Optional seed for the initial (untrained) weights.</param>
+    /// <remarks>
+    /// Construction allocates no weights: the network is built and initialized on first use (an encode, a parameter
+    /// read or write), or filled straight from a checkpoint by <see cref="LoadTorchWeights(Func{string, int[], double[]}, string)"/>,
+    /// so a model can hold the paper's 632M-parameter encoder by default and pay for it only when it runs.
+    /// </remarks>
     public ClipVisionEncoder(ClipVisionEncoderOptions? options = null, int? seed = null)
     {
         _options = options ?? ClipVisionEncoderOptions.ForPreset(ClipVisionPreset.ViTH14OpenClip);
         var o = _options;
         if (o.ImageSize <= 0 || o.PatchSize <= 0 || o.Width <= 0 || o.Layers < 2 || o.Heads <= 0 || o.MlpWidth <= 0 || o.ProjectionDim < 0)
             throw new ArgumentException("The CLIP sizes must be positive, with at least two layers (the penultimate states).", nameof(options));
+        if (o.Width % o.Heads != 0) throw new ArgumentException("The width must divide by the head count.", nameof(options));
+        if (o.ImageSize % o.PatchSize != 0) throw new ArgumentException("The image side must divide by the patch side.", nameof(options));
         if (o.Mean is null || o.Std is null || o.Mean.Length != 3 || o.Std.Length != 3)
             throw new ArgumentException("Mean and Std need three values (RGB).", nameof(options));
         _engine = AiDotNetEngine.Current;
-        _network = new ClipVisionNetwork<T>(_engine, _layers, new ClipVisionConfiguration
+        // The initial weights are drawn when first needed; fixing their seed now keeps them the same whenever that is,
+        // and lets a copy that has not materialized draw the same ones.
+        _seed = seed ?? RandomHelper.CreateSecureRandom().Next();
+    }
+
+    /// <summary>Whether the network's weights exist yet (initialized or loaded).</summary>
+    internal bool IsMaterialized => _initialized;
+
+    private ClipVisionNetwork<T> Build()
+    {
+        if (_network is not null) return _network;
+        var o = _options;
+        var layers = new List<LayerBase<T>>();
+        var network = new ClipVisionNetwork<T>(_engine, layers, new ClipVisionConfiguration
         {
             ImageSize = o.ImageSize,
             PatchSize = o.PatchSize,
@@ -170,9 +192,29 @@ public sealed class ClipVisionEncoder<T> : IVisualEncoder<T>, IParameterSource<T
         if (o.ProjectionDim > 0)
         {
             _projection = new BiasFreeLinearLayer<T>(o.Width, o.ProjectionDim);
-            _layers.Add(_projection);
+            layers.Add(_projection);
         }
-        _network.InitializeLikeReference(seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom());
+        _layers = layers;
+        _network = network;
+        return network;
+    }
+
+    // The built and initialized network.
+    private ClipVisionNetwork<T> Network()
+    {
+        var network = Build();
+        if (!_initialized)
+        {
+            network.InitializeLikeReference(RandomHelper.CreateSeededRandom(_seed));
+            _initialized = true;
+        }
+        return network;
+    }
+
+    private List<LayerBase<T>> Layers()
+    {
+        Network();
+        return _layers ?? throw new InvalidOperationException("The CLIP encoder's layers were not built.");
     }
 
     /// <summary>The encoder's options.</summary>
@@ -228,7 +270,7 @@ public sealed class ClipVisionEncoder<T> : IVisualEncoder<T>, IParameterSource<T
     public IReadOnlyList<Tensor<T>> EncodeHiddenStatesPreprocessed(Tensor<T> pixels)
     {
         if (pixels is null) throw new ArgumentNullException(nameof(pixels));
-        return _network.Forward(pixels);
+        return Network().Forward(pixels);
     }
 
     /// <summary>The penultimate hidden states <c>[B, TokenCount, Width]</c> of images in [-1, 1] (ImageDream's local
@@ -249,7 +291,7 @@ public sealed class ClipVisionEncoder<T> : IVisualEncoder<T>, IParameterSource<T
         var last = states[states.Count - 1];
         int batch = last.Shape[0];
         var cls = _engine.Reshape(_engine.TensorNarrow(last, 1, 0, 1).Contiguous(), new[] { batch, _options.Width });
-        var pooled = _network.PostNorm.Forward(cls);
+        var pooled = Network().PostNorm.Forward(cls);
         return _projection is null ? pooled : _projection.Forward(pooled);
     }
 
@@ -269,11 +311,20 @@ public sealed class ClipVisionEncoder<T> : IVisualEncoder<T>, IParameterSource<T
 
     internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source, string? prefix = null)
     {
+        if (source is null) throw new ArgumentNullException(nameof(source));
+        // A checkpoint writes every weight, so a network not yet initialized is filled from it directly.
+        var network = Build();
+        LoadInto(network, source, prefix);
+        _initialized = true;
+    }
+
+    private void LoadInto(ClipVisionNetwork<T> network, AiDotNet.ModelLoading.TorchTensorSource source, string? prefix)
+    {
         var o = _options;
         if (o.WeightLayout == ClipWeightLayout.OpenClip)
         {
             string p = prefix ?? "visual.";
-            _network.LoadOpenClipWeights(source, p);
+            network.LoadOpenClipWeights(source, p);
             // open_clip's proj is [width, embed] and applied as x @ proj: already the [in, out] layout.
             if (_projection is not null)
             {
@@ -285,16 +336,31 @@ public sealed class ClipVisionEncoder<T> : IVisualEncoder<T>, IParameterSource<T
         }
 
         string root = prefix ?? string.Empty;
-        _network.LoadTorchWeights(source, root + "vision_model.");
+        network.LoadTorchWeights(source, root + "vision_model.");
         if (_projection is not null)
             AiDotNet.TextToSpeech.CodecBased.TorchParameters.Linear(_projection, o.Width, o.ProjectionDim, source, root + "visual_projection.weight");
     }
 
     /// <inheritdoc />
-    public long ParameterCount => _layers.Sum(layer => layer.ParameterCount);
+    /// <remarks>Known from the options, without building the network.</remarks>
+    public long ParameterCount
+    {
+        get
+        {
+            var o = _options;
+            long width = o.Width, mlp = o.MlpWidth;
+            long patches = (o.ImageSize / o.PatchSize) * (long)(o.ImageSize / o.PatchSize);
+            // patch embedding (bias-free), class embedding, position embeddings
+            long embeddings = (3L * o.PatchSize * o.PatchSize * width) + width + ((patches + 1) * width);
+            // ln_1, q/k/v/out projections with biases, ln_2, fc1, fc2
+            long layer = (2 * width) + (4 * ((width * width) + width)) + (2 * width) + ((width * mlp) + mlp) + ((mlp * width) + width);
+            // pre-norm, the layers, post-norm, the bias-free projection
+            return embeddings + (2 * width) + (o.Layers * layer) + (2 * width) + (width * o.ProjectionDim);
+        }
+    }
 
     /// <inheritdoc />
-    public Vector<T> GetParameters() => Vector<T>.Concatenate(_layers.Select(layer => layer.GetParameters()).ToArray());
+    public Vector<T> GetParameters() => Vector<T>.Concatenate(Layers().Select(layer => layer.GetParameters()).ToArray());
 
     /// <inheritdoc />
     public void SetParameters(Vector<T> parameters)
@@ -303,11 +369,40 @@ public sealed class ClipVisionEncoder<T> : IVisualEncoder<T>, IParameterSource<T
         if (parameters.Length != ParameterCount)
             throw new ArgumentException($"The CLIP encoder has {ParameterCount} parameters; got {parameters.Length}.", nameof(parameters));
         int offset = 0;
-        foreach (var layer in _layers)
+        foreach (var layer in Layers())
         {
             int count = checked((int)layer.ParameterCount);
             layer.SetParameters(parameters.GetSubVector(offset, count));
             offset += count;
         }
     }
+
+    /// <summary>
+    /// A deep copy with storage of its own: the same options and, once materialized, the same weights. An encoder not
+    /// yet materialized copies as one that will draw the same initial weights, still without allocating.
+    /// </summary>
+    public ClipVisionEncoder<T> Clone()
+    {
+        var o = _options;
+        var copy = new ClipVisionEncoder<T>(new ClipVisionEncoderOptions
+        {
+            ImageSize = o.ImageSize,
+            PatchSize = o.PatchSize,
+            Width = o.Width,
+            Layers = o.Layers,
+            Heads = o.Heads,
+            MlpWidth = o.MlpWidth,
+            ProjectionDim = o.ProjectionDim,
+            Activation = o.Activation,
+            WeightLayout = o.WeightLayout,
+            LayerNormEpsilon = o.LayerNormEpsilon,
+            Mean = (double[])o.Mean.Clone(),
+            Std = (double[])o.Std.Clone()
+        }, _seed);
+        if (_initialized) copy.SetParameters(new Vector<T>(GetParameters().ToArray()));
+        return copy;
+    }
+
+    /// <inheritdoc cref="Clone"/>
+    public ClipVisionEncoder<T> DeepCopy() => Clone();
 }

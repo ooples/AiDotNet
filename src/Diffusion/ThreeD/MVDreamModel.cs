@@ -264,11 +264,15 @@ public partial class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
             architecture: architecture)
     {
         _config = config ?? MVDreamConfig.Default;
-        _textConditioner = textConditioner;
         _imageConditioner = imageConditioner;
         _imageEncoder = imageEncoder;
 
         InitializeLayers(multiViewUNet, imageVAE, seed);
+
+        // The paper's text encoder (OpenCLIP ViT-H/14, penultimate layer, 1024-wide context) for the default-built
+        // U-Net, whose context it matches; no weight is allocated until it encodes. A supplied U-Net brings its own.
+        _textConditioner = textConditioner
+            ?? (multiViewUNet is null ? new AiDotNet.Diffusion.Conditioning.OpenClipTextConditioner<T>() : null);
     }
 
     #endregion

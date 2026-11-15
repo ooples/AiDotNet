@@ -154,7 +154,11 @@ public partial class LGMModel<T> : ThreeDDiffusionModelBase<T>
                     options: AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions.ImageDream()),
                 // Both official models decode with the same Stable Diffusion 2.1 VAE.
                 imageVAE: _multiViewModel.VAE as AiDotNet.Diffusion.VAE.StandardVAE<T>,
-                seed: seed));
+                // ImageDream's paper conditioners, lazy until first used: the OpenCLIP ViT-H/14 text encoder and
+                // the OpenCLIP ViT-H/14 image encoder whose penultimate tokens feed the resampler.
+                textConditioner: new AiDotNet.Diffusion.Conditioning.OpenClipTextConditioner<T>(),
+                seed: seed,
+                imageEncoder: new ClipVisionEncoder<T>(seed: seed)));
         _unet = new LGMAsymmetricUNet<T>(_config, InputChannelsPerView, GaussianChannels, seed);
         // The U-Net reset the layer seed scope; the projection continues the same sequence.
         _gaussianProjection = ConvolutionalLayer<T>.WithInputDepth(

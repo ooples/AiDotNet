@@ -24038,3 +24038,41 @@ static AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions.StableDiffusion1(
 static AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions.StableDiffusion2() -> AiDotNet.Diffusion.NoisePredictors.MultiViewUNetOptions!
 AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<T>.LoadTorchWeights(System.Collections.Generic.IReadOnlyDictionary<string!, AiDotNet.Tensors.LinearAlgebra.Tensor<float>!>! state, string! prefix = "model.diffusion_model.", bool allowPartial = false) -> System.Collections.Generic.IReadOnlyList<string!>!
 AiDotNet.Diffusion.ThreeD.MultiViewUNet<T>.LoadTorchWeights(System.Collections.Generic.IReadOnlyDictionary<string!, AiDotNet.Tensors.LinearAlgebra.Tensor<float>!>! state, string! prefix = "model.diffusion_model.", bool allowPartial = false) -> System.Collections.Generic.IReadOnlyCollection<string!>!
+AiDotNet.Diffusion.Conditioning.OpenClipTextEncoderOptions
+AiDotNet.Diffusion.Conditioning.OpenClipTextEncoderOptions.OpenClipTextEncoderOptions() -> void
+static AiDotNet.Diffusion.Conditioning.OpenClipTextEncoderOptions.ViTH14() -> AiDotNet.Diffusion.Conditioning.OpenClipTextEncoderOptions!
+AiDotNet.Diffusion.Conditioning.OpenClipTextEncoderOptions.VocabularySize.get -> int
+AiDotNet.Diffusion.Conditioning.OpenClipTextEncoderOptions.VocabularySize.set -> void
+AiDotNet.Diffusion.Conditioning.OpenClipTextEncoderOptions.ContextLength.get -> int
+AiDotNet.Diffusion.Conditioning.OpenClipTextEncoderOptions.ContextLength.set -> void
+AiDotNet.Diffusion.Conditioning.OpenClipTextEncoderOptions.Width.get -> int
+AiDotNet.Diffusion.Conditioning.OpenClipTextEncoderOptions.Width.set -> void
+AiDotNet.Diffusion.Conditioning.OpenClipTextEncoderOptions.Layers.get -> int
+AiDotNet.Diffusion.Conditioning.OpenClipTextEncoderOptions.Layers.set -> void
+AiDotNet.Diffusion.Conditioning.OpenClipTextEncoderOptions.Heads.get -> int
+AiDotNet.Diffusion.Conditioning.OpenClipTextEncoderOptions.Heads.set -> void
+AiDotNet.Diffusion.Conditioning.OpenClipTextEncoderOptions.SkippedFinalLayers.get -> int
+AiDotNet.Diffusion.Conditioning.OpenClipTextEncoderOptions.SkippedFinalLayers.set -> void
+AiDotNet.Diffusion.Conditioning.OpenClipTextConditioner<T>
+const AiDotNet.Diffusion.Conditioning.OpenClipTextConditioner<T>.StartOfText = 49406 -> int
+const AiDotNet.Diffusion.Conditioning.OpenClipTextConditioner<T>.EndOfText = 49407 -> int
+AiDotNet.Diffusion.Conditioning.OpenClipTextConditioner<T>.OpenClipTextConditioner(AiDotNet.Diffusion.Conditioning.OpenClipTextEncoderOptions? options = null, AiDotNet.Tokenization.Interfaces.ITokenizer? tokenizer = null) -> void
+AiDotNet.Diffusion.Conditioning.OpenClipTextConditioner<T>.Options.get -> AiDotNet.Diffusion.Conditioning.OpenClipTextEncoderOptions!
+AiDotNet.Diffusion.Conditioning.OpenClipTextConditioner<T>.EmbeddingDimension.get -> int
+AiDotNet.Diffusion.Conditioning.OpenClipTextConditioner<T>.ConditioningType.get -> AiDotNet.Interfaces.ConditioningType
+AiDotNet.Diffusion.Conditioning.OpenClipTextConditioner<T>.ProducesPooledOutput.get -> bool
+AiDotNet.Diffusion.Conditioning.OpenClipTextConditioner<T>.MaxSequenceLength.get -> int
+AiDotNet.Diffusion.Conditioning.OpenClipTextConditioner<T>.Encode(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Diffusion.Conditioning.OpenClipTextConditioner<T>.EncodeText(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! tokenIds, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? attentionMask = null) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Diffusion.Conditioning.OpenClipTextConditioner<T>.GetPooledEmbedding(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! sequenceEmbeddings) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Diffusion.Conditioning.OpenClipTextConditioner<T>.GetUnconditionalEmbedding(int batchSize) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Diffusion.Conditioning.OpenClipTextConditioner<T>.Tokenize(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Diffusion.Conditioning.OpenClipTextConditioner<T>.TokenizeBatch(string![]! texts) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Diffusion.Conditioning.OpenClipTextConditioner<T>.LoadTorchWeights(System.Func<string!, int[]!, double[]!>! read, string! prefix = "cond_stage_model.model.") -> System.Collections.Generic.IReadOnlyCollection<string!>!
+AiDotNet.Diffusion.Conditioning.OpenClipTextConditioner<T>.ParameterCount.get -> long
+AiDotNet.Diffusion.Conditioning.OpenClipTextConditioner<T>.GetParameters() -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.Diffusion.Conditioning.OpenClipTextConditioner<T>.SetParameters(AiDotNet.Tensors.LinearAlgebra.Vector<T>! parameters) -> void
+AiDotNet.Diffusion.Conditioning.OpenClipTextConditioner<T>.Clone() -> AiDotNet.Diffusion.Conditioning.OpenClipTextConditioner<T>!
+AiDotNet.Diffusion.Conditioning.OpenClipTextConditioner<T>.DeepCopy() -> AiDotNet.Diffusion.Conditioning.OpenClipTextConditioner<T>!
+AiDotNet.NeuralNetworks.ClipVisionEncoder<T>.Clone() -> AiDotNet.NeuralNetworks.ClipVisionEncoder<T>!
+AiDotNet.NeuralNetworks.ClipVisionEncoder<T>.DeepCopy() -> AiDotNet.NeuralNetworks.ClipVisionEncoder<T>!
