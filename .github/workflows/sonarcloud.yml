@@ -1293,6 +1293,11 @@ jobs:
             # remains true and continues into the certified-map path below.
             $pathRequiresValidation = $true
             try {
+              # A stacked pull request's change is everything its stack adds to the lineage branch, not
+              # only its own base-to-head paths, so the classifier cannot clear it on that narrower set.
+              if (-not [string]::IsNullOrWhiteSpace($env:MAP_LINEAGE_REF)) {
+                throw "the map lineage '$($env:MAP_LINEAGE_REF)' widens the change beyond the pull request's own paths"
+              }
               & ./tools/TestImpact/Select-Shards.ps1 -ClassifyOnly `
                   -PullRequestHeadSha $changeHeadSha -OutFile path-classification.json
               if ($LASTEXITCODE -ne 0) { throw "path classifier exited $LASTEXITCODE" }

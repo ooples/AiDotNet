@@ -757,7 +757,15 @@ function Get-PackagePropsVerdict {
         if ($text -notmatch '<ProjectReference\b') { continue }
         $file = ([string] $line.File).Replace('\', '/')
         $isProject = $file.EndsWith('.csproj', [StringComparison]::OrdinalIgnoreCase)
-        $targets = if ($text -match '\bInclude\s*=\s*"([^"]+)"') { Resolve-ReferenceTargets $file $Matches[1] } else { $null }
+        # Each ProjectReference element's own Include, in either quote style: a line can also hold other reference
+        # kinds, whose Include is not a project target. One unresolvable element makes the line's targets unknown.
+        $targets = [System.Collections.Generic.List[string]]::new()
+        foreach ($element in [regex]::Matches($text, '<ProjectReference\b[^>]*>')) {
+            $include = [regex]::Match($element.Value, '\bInclude\s*=\s*(?:"(?<v>[^"]+)"|''(?<v>[^'']+)'')')
+            $resolved = if ($include.Success) { Resolve-ReferenceTargets $file $include.Groups['v'].Value } else { $null }
+            if ($null -eq $resolved) { $targets = $null; break }
+            foreach ($target in $resolved) { [void] $targets.Add($target) }
+        }
         if (-not $isProject) {
             # A shared props/targets file gives the reference to an unknown set of projects.
             if ($null -eq $targets) { $sharedWild = $true } else { foreach ($target in $targets) { [void] $sharedTargets.Add($target) } }
@@ -785,8 +793,9 @@ function Get-PackagePropsVerdict {
         foreach ($pattern in $script:AlwaysFullPackagePatterns) {
             if ($name -imatch $pattern) { return & $full 'the product, every test host or the compiler depends on this package family' }
         }
-        $quoted = '"' + $name + '"'
-        $reference = '<PackageReference\b[^>]*\bInclude\s*=\s*"' + [regex]::Escape($name) + '"'
+        # The name as an XML attribute value in either quote style, so Include='X' is a consumer as Include="X" is.
+        $quoted = '(["''])' + [regex]::Escape($name) + '\1'
+        $reference = '<PackageReference\b[^>]*\bInclude\s*=\s*(["''])' + [regex]::Escape($name) + '\1'
         $consumers = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
         foreach ($line in $Lines) {
             $text = [string] $line.Text
@@ -795,7 +804,7 @@ function Get-PackagePropsVerdict {
             if ($text -match '<PackageReference\b' -and $text -notmatch '\b(Include|Update)\s*=') {
                 return & $full "$file declares a PackageReference across several lines, so its package cannot be read"
             }
-            if ($text.IndexOf($quoted, [StringComparison]::OrdinalIgnoreCase) -lt 0) { continue }
+            if ($text -inotmatch $quoted) { continue }
             if (-not $file.EndsWith('.csproj', [StringComparison]::OrdinalIgnoreCase)) {
                 return & $full "$file names it, and a shared MSBuild file applies to an unknown set of projects"
             }
@@ -1881,6 +1890,15 @@ function Get-UncoveredRangeDecision {
                                 -not $mapModel.Members.ContainsKey($memberKey)) {
                                 return New-Decision 'File' "the base branch added a member to $($span.Label) since the map was built"
                             }
+                        }
+                    }
+                    # The exclusion that matters is the map's: a declaration the map measured under
+                    # [ExcludeFromCodeCoverage] (or inside an excluded type) has no executed lines there
+                    # even when the base has since removed the attribute, so its span proves nothing.
+                    for ($node = $match[0]; $null -ne $node; $node = $node.Parent) {
+                        if ($node -is [Microsoft.CodeAnalysis.CSharp.Syntax.MemberDeclarationSyntax] -and
+                            $node.AttributeLists.ToString() -match 'ExcludeFromCodeCoverage|GeneratedCode|CompilerGenerated|DebuggerNonUserCode') {
+                            return New-Decision 'File' "the map measured $($span.Label) excluded from coverage, so its executed lines are unknown"
                         }
                     }
                     $carried = Get-CSharpNodeLines -Model $mapModel -Node $match[0]
