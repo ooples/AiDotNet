@@ -797,7 +797,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     needs: build-compat
-    if: ${{ always() && needs.build-compat.result == 'failure' }}
+    # Not on a coverage-everywhere run. The shard matrix needs only `build`, never `build-compat`,
+    # so a compat or pack failure cannot invalidate one shard's coverage, and the map builder
+    # harvests a failed run as long as every shard completed. Cancelling here threw away the whole
+    # weekly map source instead: in run 43536907336 (2026-11-14) `Build` was green and 11 shards
+    # had finished when a benchmark project failed to compile in the compat build, and the other
+    # 156 shards were cancelled. Nothing retried it, so the map stayed at its 2026-11-06 commit.
+    if: ${{ always() && needs.build-compat.result == 'failure' && !inputs.collect_coverage_everywhere }}
     permissions:
       actions: write
     steps:
@@ -1564,7 +1570,8 @@ jobs:
           name: impact-digest-carried
           path: carried-digests/*.digest.json
           if-no-files-found: ignore
-          retention-days: 7
+          # 30, with the marker and the per-shard digests: see "Upload test-impact digest".
+          retention-days: 30
           overwrite: true
 
       - name: Upload coverage-source marker
@@ -1574,7 +1581,8 @@ jobs:
           name: test-impact-coverage-source
           path: coverage-source.json
           if-no-files-found: error
-          retention-days: 7
+          # 30, with the per-shard digests: see "Upload test-impact digest".
+          retention-days: 30
           overwrite: true
 
   test-net10-sharded:
@@ -1925,7 +1933,13 @@ jobs:
           name: impact-digest-${{ env.ARTIFACT_NAME }}
           path: impact-digest/*.digest.json
           if-no-files-found: ignore
-          retention-days: 7
+          # A coverage-everywhere run is the map's only source, and the map workflow rebuilds the
+          # map from it on every master push. At 7 days the source expired exactly one weekly cycle
+          # after it ran: when the 2026-11-14 run was lost, the digests of run 42322440147
+          # (2026-11-07) expired the same day, and every map run since has found "no
+          # coverage-everywhere marker" and published nothing. 30 days outlasts three lost weekly
+          # runs; a digest is ~200 KB at most, so a retained run costs tens of MB.
+          retention-days: ${{ inputs.collect_coverage_everywhere && 30 || 7 }}
 
       - name: Upload coverage + test results
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
