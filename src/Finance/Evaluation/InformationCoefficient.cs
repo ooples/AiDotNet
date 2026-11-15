@@ -101,6 +101,16 @@ public static class InformationCoefficient<T>
         return new Tensor<T>(new[] { values.Count }, new Vector<T>(values.ToArray()));
     }
 
+    /// <summary>
+    /// The Pearson correlation of the first min(|x|, |y|) elements, computed in double and rounded once.
+    /// </summary>
+    /// <remarks>
+    /// Correlation is a ratio of sums whose terms can leave the range of <typeparamref name="T"/> at either end. In
+    /// Half the Spearman ranks of 200 values have a sum of squared deviations near 6.7e5, past 65504, and rescaling
+    /// the deviations to keep the sums finite pushed small cross-products below Half's smallest subnormal: with 4000
+    /// values of which one in each series is an outlier, every scaled product rounded to 0 and a correlation of 0.17
+    /// came back as 0. Widened to double, no deviation, product or sum is rounded until the result.
+    /// </remarks>
     private static T PearsonCore(Tensor<T> x, Tensor<T> y)
     {
         int n = Math.Min(x.Length, y.Length);
@@ -110,49 +120,23 @@ public static class InformationCoefficient<T>
         }
 
         var engine = AiDotNetEngine.Current;
-        var xs = n == x.Length ? x : engine.TensorSlice(x, new[] { 0 }, new[] { n });
-        var ys = n == y.Length ? y : engine.TensorSlice(y, new[] { 0 }, new[] { n });
-        var dx = ScaleForCorrelation(engine, engine.TensorSubtractScalar(xs, engine.TensorMean(xs)), n);
-        var dy = ScaleForCorrelation(engine, engine.TensorSubtractScalar(ys, engine.TensorMean(ys)), n);
-        T sxy = engine.TensorSum(engine.TensorMultiply(dx, dy));
-        T sxx = TensorReductionHelper.SumOfSquares(engine, dx);
-        T syy = TensorReductionHelper.SumOfSquares(engine, dy);
+        var xs = (n == x.Length ? x : engine.TensorSlice(x, new[] { 0 }, new[] { n })).Contiguous().Cast<double>();
+        var ys = (n == y.Length ? y : engine.TensorSlice(y, new[] { 0 }, new[] { n })).Contiguous().Cast<double>();
+        var dx = engine.TensorSubtractScalar(xs, engine.TensorSum(xs) / n);
+        var dy = engine.TensorSubtractScalar(ys, engine.TensorSum(ys) / n);
+        double sxy = engine.TensorSum(engine.TensorMultiply(dx, dy));
+        double sxx = TensorReductionHelper.SumOfSquares(engine, dx);
+        double syy = TensorReductionHelper.SumOfSquares(engine, dy);
 
-        // sqrt(sxx) * sqrt(syy), not sqrt(sxx * syy): the product of two sums can overflow where neither does.
-        T denom = NumOps.Multiply(NumOps.Sqrt(sxx), NumOps.Sqrt(syy));
-        if (NumOps.LessThanOrEquals(denom, NumOps.Zero))
+        double denom = Math.Sqrt(sxx) * Math.Sqrt(syy);
+        if (denom <= 0.0)
         {
             return NumOps.Zero;
         }
 
-        T r = NumOps.Divide(sxy, denom);
         // Clamp to [-1, 1] to absorb floating-point overshoot; NaN passes through as before.
-        T minusOne = NumOps.Negate(NumOps.One);
-        if (NumOps.LessThan(r, minusOne))
-        {
-            return minusOne;
-        }
-
-        return NumOps.GreaterThan(r, NumOps.One) ? NumOps.One : r;
-    }
-
-    /// <summary>
-    /// <paramref name="deviations"/> divided by max |d| * sqrt(n). Correlation is invariant to a positive rescaling of
-    /// either series, and after it every product and every sum of products is at most 1 in magnitude, so none of them
-    /// can overflow <typeparamref name="T"/>. Unscaled, the Spearman ranks of 200 Half values have deviations up to
-    /// 100 and a sum of squares near 6.7e5, past Half's 65504: the correlation came back as 0.
-    /// </summary>
-    private static Tensor<T> ScaleForCorrelation(IEngine engine, Tensor<T> deviations, int n)
-    {
-        T maxAbs = engine.TensorMaxValue(engine.TensorAbs(deviations));
-        if (!NumOps.GreaterThan(maxAbs, NumOps.Zero) || NumOps.IsInfinity(maxAbs))
-        {
-            // Zero spread (the correlation is 0 either way), NaN or an infinite deviation: leave it as it is.
-            return deviations;
-        }
-
-        return engine.TensorDivideScalar(
-            engine.TensorDivideScalar(deviations, maxAbs), NumOps.FromDouble(Math.Sqrt(n)));
+        double r = sxy / denom;
+        return NumOps.FromDouble(r < -1.0 ? -1.0 : r > 1.0 ? 1.0 : r);
     }
 
     /// <summary>Tie-averaged ("fractional") ranks of a sample, 1-based.</summary>

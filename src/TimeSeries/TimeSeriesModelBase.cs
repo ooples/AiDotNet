@@ -1211,9 +1211,10 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
     /// residual-based anomaly thresholds are built from.
     /// </summary>
     /// <remarks>
-    /// Both sums are taken in double and divided once: in Half the sum of |r| (or of the squared deviations from its
-    /// mean) passes 65504 long before the mean or the standard deviation does, and the infinite sum made the
-    /// threshold infinite, so no point was ever flagged.
+    /// Both are taken in double and rounded once: in Half the sum of |r| (or of the squared deviations from its mean)
+    /// passes 65504 long before the mean or the standard deviation does, and the infinite sum made the threshold
+    /// infinite, so no point was ever flagged. The centring is in double too: centring Half |r| of 2048 and 2050 at
+    /// their mean rounded to Half (2048) gave a standard deviation of 1.41 for 1.
     /// </remarks>
     /// <param name="residuals">The residuals, at least one.</param>
     /// <returns>The mean and the standard deviation of the absolute residuals.</returns>
@@ -1223,11 +1224,9 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
         int n = residuals.Length;
         if (n == 0) throw new ArgumentException("At least one residual is required.", nameof(residuals));
 
-        var absolute = Engine.TensorAbs(residuals.AsTensor());
-        double mean = TensorReductionHelper.SumAbsoluteAsDouble(Engine, absolute) / n;
-        double sumSquaredDeviations = TensorReductionHelper.SumOfSquaresAsDouble(
-            Engine, Engine.TensorSubtractScalar(absolute, NumOps.FromDouble(mean)));
-        return (NumOps.FromDouble(mean), NumOps.FromDouble(Math.Sqrt(sumSquaredDeviations / n)));
+        // |r| is exact in T; the mean and the variance are then taken on the values widened to double.
+        var (mean, variance) = TensorReductionHelper.MeanAndPopulationVarianceAsDouble(Engine, Engine.TensorAbs(residuals.AsTensor()));
+        return (NumOps.FromDouble(mean), NumOps.FromDouble(Math.Sqrt(variance)));
     }
 
     /// <summary>

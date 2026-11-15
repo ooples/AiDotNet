@@ -71,9 +71,10 @@ internal static class TensorReductionHelper
     /// </para>
     /// <para>
     /// The direct sum is used when it is finite (every double and float input in practice). When it is not, the
-    /// elements are divided by m = max |x| and by sqrt(n), so every square and every partial sum is at most 1 in
-    /// <typeparamref name="T"/>, and the scale is restored in double: sum x^2 = m^2 * n * sum (x / m / sqrt(n))^2.
-    /// An infinite element keeps the infinite sum and a NaN element the NaN one.
+    /// elements are widened to double and summed there, so no square or partial sum is rounded to
+    /// <typeparamref name="T"/>: a rescaled sum taken in <typeparamref name="T"/> could overflow at one end and, in
+    /// Half, underflow the small squares at the other (2^20 values with two near 256 rounded each scaled square to a
+    /// multiple of 2^-24). An infinite element keeps the infinite sum and a NaN element the NaN one.
     /// </para>
     /// </remarks>
     internal static double SumOfSquaresAsDouble<T>(IEngine engine, Tensor<T> tensor)
@@ -94,18 +95,17 @@ internal static class TensorReductionHelper
             return numOps.ToDouble(direct);
         }
 
-        var source = tensor is SparseTensor<T> sparse ? sparse.ToDense() : tensor;
-        T maxAbs = engine.TensorMaxValue(engine.TensorAbs(source));
-        if (numOps.IsInfinity(maxAbs) || numOps.IsNaN(maxAbs) || !numOps.GreaterThan(maxAbs, numOps.Zero))
-        {
-            // An infinite element makes the true sum infinite; NaN stays NaN; a zero maximum cannot overflow.
-            return numOps.ToDouble(direct);
-        }
+        return SumOfSquares(engine, Widen(tensor));
+    }
 
-        var normalized = engine.TensorDivideScalar(
-            engine.TensorDivideScalar(source, maxAbs), numOps.FromDouble(Math.Sqrt(length)));
-        double scale = numOps.ToDouble(maxAbs);
-        return scale * scale * length * numOps.ToDouble(SumOfSquares(engine, normalized));
+    /// <summary>
+    /// <paramref name="tensor"/> as a dense <c>Tensor&lt;double&gt;</c>: every element of every supported numeric type
+    /// is exact in double, so the overflow fallbacks sum the true values.
+    /// </summary>
+    private static Tensor<double> Widen<T>(Tensor<T> tensor)
+    {
+        var source = tensor is SparseTensor<T> sparse ? sparse.ToDense() : tensor;
+        return (source.IsContiguous ? source : source.Contiguous()).Cast<double>();
     }
 
     /// <summary>
@@ -113,10 +113,8 @@ internal static class TensorReductionHelper
     /// finite whenever the true sum is, even where it is past the range of <typeparamref name="T"/>.
     /// </summary>
     /// <remarks>
-    /// The direct engine sum is used when it is finite. When it is not, the absolute values are divided by
-    /// m = max |x| and by sqrt(n), so every partial sum is at most sqrt(n) (65504 only past 4e9 elements),
-    /// and the scale is restored in double:
-    /// sum |x| = m * sqrt(n) * sum (|x| / m / sqrt(n)). An infinite element keeps the infinite sum and NaN stays NaN.
+    /// The direct engine sum is used when it is finite. When it is not, the values are widened to double and summed
+    /// there. An infinite element keeps the infinite sum and NaN stays NaN.
     /// </remarks>
     internal static double SumAbsoluteAsDouble<T>(IEngine engine, Tensor<T> tensor)
     {
@@ -138,15 +136,7 @@ internal static class TensorReductionHelper
             return numOps.ToDouble(direct);
         }
 
-        T maxAbs = engine.TensorMaxValue(absolute);
-        if (numOps.IsInfinity(maxAbs) || numOps.IsNaN(maxAbs) || !numOps.GreaterThan(maxAbs, numOps.Zero))
-        {
-            return numOps.ToDouble(direct);
-        }
-
-        double rootLength = Math.Sqrt(length);
-        var normalized = engine.TensorDivideScalar(engine.TensorDivideScalar(absolute, maxAbs), numOps.FromDouble(rootLength));
-        return numOps.ToDouble(maxAbs) * rootLength * numOps.ToDouble(engine.TensorSum(normalized));
+        return engine.TensorSum(engine.TensorAbs(Widen(source)));
     }
 
     /// <summary>
@@ -154,9 +144,8 @@ internal static class TensorReductionHelper
     /// sum is, even where it is past the range of <typeparamref name="T"/>.
     /// </summary>
     /// <remarks>
-    /// The direct engine sum is used when it is finite. When it is not, the elements are divided by m = max |x| and
-    /// by sqrt(n), so every partial sum is at most sqrt(n), and the scale is restored in double. An infinite element
-    /// keeps the infinite (or NaN) sum and NaN stays NaN.
+    /// The direct engine sum is used when it is finite. When it is not, the values are widened to double and summed
+    /// there. An infinite element keeps the infinite (or NaN) sum and NaN stays NaN.
     /// </remarks>
     internal static double SumAsDouble<T>(IEngine engine, Tensor<T> tensor)
     {
@@ -177,15 +166,7 @@ internal static class TensorReductionHelper
             return numOps.ToDouble(direct);
         }
 
-        T maxAbs = engine.TensorMaxValue(engine.TensorAbs(source));
-        if (numOps.IsInfinity(maxAbs) || numOps.IsNaN(maxAbs) || !numOps.GreaterThan(maxAbs, numOps.Zero))
-        {
-            return numOps.ToDouble(direct);
-        }
-
-        double rootLength = Math.Sqrt(length);
-        var normalized = engine.TensorDivideScalar(engine.TensorDivideScalar(source, maxAbs), numOps.FromDouble(rootLength));
-        return numOps.ToDouble(maxAbs) * rootLength * numOps.ToDouble(engine.TensorSum(normalized));
+        return engine.TensorSum(Widen(source));
     }
 
     /// <summary>
@@ -195,10 +176,10 @@ internal static class TensorReductionHelper
     /// <remarks>
     /// <para>
     /// In Half, 40 values near 200 with a spread near 150 have a sum of squared deviations near 9e5: the variance
-    /// taken in <typeparamref name="T"/> was infinite although the standard deviation (150) fits. Here the mean is
-    /// <see cref="SumAsDouble{T}"/> / n and the variance <see cref="SumOfSquaresAsDouble{T}"/> of the centred values
-    /// / n. Should a centred value itself overflow (a spread past the range of <typeparamref name="T"/>), the values
-    /// are centred in units of max |x| instead.
+    /// taken in <typeparamref name="T"/> was infinite although the standard deviation (150) fits. Here the values are
+    /// widened to double and both statistics taken there, so neither a sum nor the centring is rounded to
+    /// <typeparamref name="T"/>: centring Half 2048 and 2050 at their mean rounded to Half (2048) gave a standard
+    /// deviation of 1.41 for 1.
     /// </para>
     /// <para>NaN for both when the tensor is empty.</para>
     /// </remarks>
@@ -213,22 +194,9 @@ internal static class TensorReductionHelper
             return (double.NaN, double.NaN);
         }
 
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var source = tensor is SparseTensor<T> sparse ? sparse.ToDense() : tensor;
-        double mean = SumAsDouble(engine, source) / length;
-        double sumSquares = SumOfSquaresAsDouble(engine, engine.TensorSubtractScalar(source, numOps.FromDouble(mean)));
-        if (double.IsInfinity(sumSquares) && !double.IsInfinity(mean))
-        {
-            T maxAbs = engine.TensorMaxValue(engine.TensorAbs(source));
-            if (!numOps.IsInfinity(maxAbs) && !numOps.IsNaN(maxAbs) && numOps.GreaterThan(maxAbs, numOps.Zero))
-            {
-                double scale = numOps.ToDouble(maxAbs);
-                var scaled = engine.TensorDivideScalar(source, maxAbs);
-                sumSquares = scale * scale
-                    * SumOfSquaresAsDouble(engine, engine.TensorSubtractScalar(scaled, numOps.FromDouble(mean / scale)));
-            }
-        }
-
+        var values = Widen(tensor);
+        double mean = engine.TensorSum(values) / length;
+        double sumSquares = SumOfSquares(engine, engine.TensorSubtractScalar(values, mean));
         return (mean, sumSquares / length);
     }
 
@@ -237,8 +205,8 @@ internal static class TensorReductionHelper
     /// the range of <typeparamref name="T"/>.
     /// </summary>
     /// <remarks>
-    /// The direct engine sum of the products is used when it is finite. When it is not, each tensor is divided by its
-    /// max |x| and both by sqrt(n), so every product and partial sum is at most 1, and the scale is restored in double.
+    /// The direct engine sum of the products is used when it is finite. When it is not, both tensors are widened to
+    /// double and the products summed there.
     /// </remarks>
     internal static double DotAsDouble<T>(IEngine engine, Tensor<T> left, Tensor<T> right)
     {
@@ -261,22 +229,8 @@ internal static class TensorReductionHelper
             return numOps.ToDouble(direct);
         }
 
-        T leftMax = engine.TensorMaxValue(engine.TensorAbs(left));
-        T rightMax = engine.TensorMaxValue(engine.TensorAbs(right));
-        if (!IsPositiveFinite(numOps, leftMax) || !IsPositiveFinite(numOps, rightMax))
-        {
-            return numOps.ToDouble(direct);
-        }
-
-        T root = numOps.FromDouble(Math.Sqrt(length));
-        var leftUnit = engine.TensorDivideScalar(engine.TensorDivideScalar(left, leftMax), root);
-        var rightUnit = engine.TensorDivideScalar(engine.TensorDivideScalar(right, rightMax), root);
-        return numOps.ToDouble(leftMax) * numOps.ToDouble(rightMax) * length
-            * numOps.ToDouble(engine.TensorSum(engine.TensorMultiply(leftUnit, rightUnit)));
+        return engine.TensorSum(engine.TensorMultiply(Widen(left), Widen(right)));
     }
-
-    private static bool IsPositiveFinite<T>(INumericOperations<T> numOps, T value)
-        => !numOps.IsInfinity(value) && !numOps.IsNaN(value) && numOps.GreaterThan(value, numOps.Zero);
 
     /// <summary>Whether every element of <paramref name="tensor"/> is finite (neither infinite nor NaN).</summary>
     internal static bool AllFinite<T>(IEngine engine, Tensor<T> tensor)

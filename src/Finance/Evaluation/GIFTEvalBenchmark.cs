@@ -54,6 +54,16 @@ public class GIFTEvalBenchmark<T>
         => TensorReductionHelper.SumAbsoluteAsDouble(
             Engine, PinballTerms(error, Engine.TensorMultiplyScalar(error, NumOps.FromDouble(quantile))));
 
+    /// <summary>
+    /// Throws unless <paramref name="level"/> is a quantile level in [0, 1]. Outside it the pinball terms can be
+    /// negative, and the loss (summed as a sum of non-negative terms) would score an invalid level as a valid one.
+    /// </summary>
+    private static void ValidateQuantileLevel(double level, string parameterName)
+    {
+        if (double.IsNaN(level) || double.IsInfinity(level) || level < 0.0 || level > 1.0)
+            throw new ArgumentOutOfRangeException(parameterName, level, "Quantile levels must be within [0, 1].");
+    }
+
     /// <summary>The per-element pinball loss q * e + max(-e, 0), given the error e and q * e.</summary>
     private static Tensor<T> PinballTerms(Tensor<T> error, Tensor<T> scaledError)
         => Engine.TensorAdd(scaledError, Engine.TensorReLU(Engine.TensorNegate(error)));
@@ -140,6 +150,8 @@ public class GIFTEvalBenchmark<T>
     {
         Guard.NotNull(quantileForecasts);
         Guard.NotNull(actuals);
+        foreach (double level in quantileForecasts.Keys)
+            ValidateQuantileLevel(level, nameof(quantileForecasts));
 
         if (quantileForecasts.Count == 0)
             return NumOps.FromDouble(double.PositiveInfinity);
@@ -194,6 +206,7 @@ public class GIFTEvalBenchmark<T>
     {
         Guard.NotNull(predictions);
         Guard.NotNull(actuals);
+        ValidateQuantileLevel(quantileLevel, nameof(quantileLevel));
 
         int horizon = Math.Min(predictions.Length, actuals.Length);
         // Summed in double, so a Half total past 65504 does not make the mean infinite (or NaN).
@@ -235,6 +248,8 @@ public class GIFTEvalBenchmark<T>
         Guard.NotNull(seasonalPeriods);
 
         quantileLevels ??= new[] { 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9 };
+        foreach (double level in quantileLevels)
+            ValidateQuantileLevel(level, nameof(quantileLevels));
 
         if (contextLengths.Count != testSeries.Count)
             throw new ArgumentException($"contextLengths.Count ({contextLengths.Count}) must equal testSeries.Count ({testSeries.Count}).", nameof(contextLengths));
