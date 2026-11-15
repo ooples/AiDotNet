@@ -23008,3 +23008,121 @@ AiDotNet.NeuralRadianceFields.Models.GaussianSplatting<T>.ToGaussianCloud() -> A
 AiDotNet.Diffusion.ThreeDDiffusionModelBase<T>.SurfaceReconstruction.get -> AiDotNet.Diffusion.ThreeD.Meshing.SurfaceReconstructionOptions!
 AiDotNet.Diffusion.ThreeDDiffusionModelBase<T>.SurfaceReconstruction.set -> void
 *REMOVED*virtual AiDotNet.Diffusion.ThreeDDiffusionModelBase<T>.CreateSimpleMeshFromPoints(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! pointCloud) -> AiDotNet.Interfaces.Mesh3D<T>!
+*REMOVED*AiDotNet.Diffusion.ThreeD.Wonder3DModel<T>.Wonder3DModel(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>? architecture = null, AiDotNet.Models.Options.DiffusionModelOptions<T>? options = null, AiDotNet.Interfaces.INoiseScheduler<T>? scheduler = null, AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<T>? unet = null, AiDotNet.Diffusion.VAE.StandardVAE<T>? vae = null, AiDotNet.Interfaces.IConditioningModule<T>? conditioner = null, int defaultPointCount = 4096, int? seed = null) -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DModel<T>.Wonder3DModel(AiDotNet.Diffusion.ThreeD.Wonder3DOptions? options = null, AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>? architecture = null, AiDotNet.Interfaces.INoiseScheduler<T>? scheduler = null, AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<T>? unet = null, AiDotNet.Diffusion.VAE.StandardVAE<T>? vae = null, AiDotNet.VisionLanguage.Interfaces.IVisualEncoder<T>? imageEncoder = null) -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DModel<T>.Configuration.get -> AiDotNet.Diffusion.ThreeD.Wonder3DOptions!
+AiDotNet.Diffusion.ThreeD.Wonder3DModel<T>.GenerateViews(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, int? numInferenceSteps = null, double? guidanceScale = null, int? seed = null) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Diffusion.ThreeD.Wonder3DModel<T>.ReconstructMesh(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! views, int? resolution = null, int? seed = null) -> AiDotNet.Interfaces.Mesh3D<T>!
+AiDotNet.Diffusion.ThreeD.Wonder3DModel<T>.GenerateMeshFromImage(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, int? resolution = null, int? numInferenceSteps = null, double? guidanceScale = null, int? seed = null) -> AiDotNet.Interfaces.Mesh3D<T>!
+AiDotNet.Diffusion.ThreeD.Wonder3DModel<T>.GeneratePointCloudFromImage(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, int? numPoints = null, int? numInferenceSteps = null, double? guidanceScale = null, int? seed = null) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Diffusion.ThreeD.Wonder3DModel<T>.PredictNoise(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! noisySample, int timestep) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Diffusion.ThreeD.Wonder3DModel<T>.IsBatchedTrainingSample(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! sample) -> bool
+override AiDotNet.Diffusion.ThreeD.Wonder3DModel<T>.ImageTo3D(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputImage, int numViews = 4, int numInferenceSteps = 50, double guidanceScale = 3, int? seed = null) -> AiDotNet.Interfaces.Mesh3D<T>!
+override AiDotNet.Diffusion.ThreeD.Wonder3DModel<T>.SynthesizeNovelViews(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputImage, (double azimuth, double elevation)[]! targetAngles, int numInferenceSteps = 50, double guidanceScale = 3, int? seed = null) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>![]!
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.Wonder3DOptions() -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.NumViews.get -> int
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.NumViews.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ViewAzimuthsDegrees.get -> double[]!
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ViewAzimuthsDegrees.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ViewCameraEmbedding.get -> double[]!
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ViewCameraEmbedding.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ImageSize.get -> int
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ImageSize.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.LatentChannels.get -> int
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.LatentChannels.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.BaseChannels.get -> int
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.BaseChannels.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ChannelMultipliers.get -> int[]!
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ChannelMultipliers.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ResBlocksPerLevel.get -> int
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ResBlocksPerLevel.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.AttentionLevels.get -> int[]!
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.AttentionLevels.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.AttentionHeads.get -> int
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.AttentionHeads.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.CrossAttentionDim.get -> int
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.CrossAttentionDim.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.VaeBaseChannels.get -> int
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.VaeBaseChannels.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.VaeChannelMultipliers.get -> int[]!
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.VaeChannelMultipliers.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.VaeResBlocksPerLevel.get -> int
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.VaeResBlocksPerLevel.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.VaeScaleFactor.get -> double
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.VaeScaleFactor.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.InferenceSteps.get -> int
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.InferenceSteps.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.GuidanceScale.get -> double
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.GuidanceScale.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.Eta.get -> double
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.Eta.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ReconstructionIterations.get -> int
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ReconstructionIterations.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ReconstructionBatchSize.get -> int
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ReconstructionBatchSize.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ViewWeights.get -> double[]!
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ViewWeights.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.OrthographicHalfExtent.get -> double
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.OrthographicHalfExtent.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.CameraDistance.get -> double
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.CameraDistance.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.BackgroundThreshold.get -> double
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.BackgroundThreshold.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ReconstructionLearningRate.get -> double
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ReconstructionLearningRate.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ReconstructionLearningRateAlpha.get -> double
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ReconstructionLearningRateAlpha.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ReconstructionAnnealIterations.get -> int
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ReconstructionAnnealIterations.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ColorMseWeight.get -> double
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ColorMseWeight.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.MaskWeight.get -> double
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.MaskWeight.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.EikonalWeight.get -> double
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.EikonalWeight.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.NormalWeight.get -> double
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.NormalWeight.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.NormalSmoothWeight.get -> double
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.NormalSmoothWeight.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.SparsityWeight.get -> double
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.SparsityWeight.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.SparsityScale.get -> double
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.SparsityScale.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.GeometryAwareNormals.get -> bool
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.GeometryAwareNormals.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ColorKeepRatio.get -> double
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ColorKeepRatio.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.NormalKeepRatio.get -> double
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.NormalKeepRatio.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.MaskKeepRatio.get -> double
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.MaskKeepRatio.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.NormalVisibleCosine.get -> double
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.NormalVisibleCosine.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.SdfHiddenDim.get -> int
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.SdfHiddenDim.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.SdfHiddenLayers.get -> int
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.SdfHiddenLayers.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.SdfSkipLayers.get -> int[]!
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.SdfSkipLayers.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.SdfFeatureDim.get -> int
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.SdfFeatureDim.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.SdfFrequencies.get -> int
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.SdfFrequencies.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ColorHiddenDim.get -> int
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ColorHiddenDim.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ColorHiddenLayers.get -> int
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ColorHiddenLayers.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ViewFrequencies.get -> int
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ViewFrequencies.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.RaySamples.get -> int
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.RaySamples.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ImportanceSamples.get -> int
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ImportanceSamples.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.UpSampleSteps.get -> int
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.UpSampleSteps.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.MeshResolution.get -> int
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.MeshResolution.set -> void
+AiDotNet.Enums.Wonder3DDomain
+AiDotNet.Enums.Wonder3DDomain.Normal = 0 -> AiDotNet.Enums.Wonder3DDomain
+AiDotNet.Enums.Wonder3DDomain.Color = 1 -> AiDotNet.Enums.Wonder3DDomain
