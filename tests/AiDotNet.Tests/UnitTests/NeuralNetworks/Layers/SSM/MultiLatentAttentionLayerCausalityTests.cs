@@ -1,7 +1,15 @@
 using System;
+using System.Collections.Generic;
+using AiDotNet.Enums;
+using AiDotNet.Interfaces;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers.SSM;
+using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Tensors.Engines.Optimization;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -12,6 +20,7 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM;
 /// causality (position i reads only positions j &lt;= i), agreement between the fused host float32 kernel and the
 /// decomposed chain every other element type runs, and a gradient that reaches the input.
 /// </summary>
+[Collection("NonParallelIntegration")]
 public class MultiLatentAttentionLayerCausalityTests
 {
     private const int Batch = 2;
@@ -200,5 +209,205 @@ public class MultiLatentAttentionLayerCausalityTests
         }
 
         Assert.True(gradScale > 1e-6, "the loss does not depend on the input: the gradient check is vacuous");
+    }
+
+    /// <summary>A model of one multi-latent attention layer over [batch, Seq, Dim], with seeded parameters.</summary>
+    private class MlaModel<T> : NeuralNetwork<T>
+    {
+        public MlaModel(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+            : base(new NeuralNetworkArchitecture<T>(
+                inputType: InputType.TwoDimensional, taskType: NeuralNetworkTaskType.Regression,
+                inputHeight: Seq, inputWidth: Dim, outputSize: Seq * Dim,
+                layers: new List<ILayer<T>> { new MultiLatentAttentionLayer<T>(Seq, Dim, Heads, Latent) }), optimizer)
+        {
+        }
+    }
+
+    /// <summary>The same model, kept on the eager tape step.</summary>
+    private sealed class EagerMlaModel<T> : MlaModel<T>
+    {
+        public EagerMlaModel(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer) : base(optimizer) { }
+        protected override bool SupportsFusedCompiledTraining => false;
+    }
+
+    private static Tensor<T> Values<T>(int[] shape, int seed, double scale)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        var rng = RandomHelper.CreateSeededRandom(seed);
+        var t = new Tensor<T>(shape);
+        for (int i = 0; i < t.Length; i++) t.SetFlat(i, ops.FromDouble((rng.NextDouble() * 2.0 - 1.0) * scale));
+        return t;
+    }
+
+    private static void Seed<T>(NeuralNetworkBase<T> model)
+    {
+        model.Predict(Values<T>(new[] { Batch, Seq, Dim }, 1, 1.0));   // materialize any lazily shaped state
+        int count = model.GetParameters().Length;
+        var flat = Values<T>(new[] { count }, 4242, 0.6);
+        var vector = new Vector<T>(count);
+        for (int i = 0; i < count; i++) vector[i] = flat.GetFlat(i);
+        model.UpdateParameters(vector);
+    }
+
+    private static double[] ToDoubles<T>(Tensor<T> t)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        var result = new double[t.Length];
+        for (int i = 0; i < result.Length; i++) result[i] = ops.ToDouble(t.GetFlat(i));
+        return result;
+    }
+
+    private static double[] ToDoubles<T>(Vector<T> v)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        var result = new double[v.Length];
+        for (int i = 0; i < result.Length; i++) result[i] = ops.ToDouble(v[i]);
+        return result;
+    }
+
+    private static CompiledModelHost<T> CompileHostOf<T>(NeuralNetworkBase<T> model)
+        => (CompiledModelHost<T>)(typeof(NeuralNetworkBase<T>)
+            .GetField("_compileHost", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?.GetValue(model) ?? throw new InvalidOperationException("NeuralNetworkBase has no _compileHost field."));
+
+    /// <summary>
+    /// A model holding this layer keeps its compiled inference plan for every element type. Only float32 has the fused
+    /// attention kernel; the engine runs every other type through a masked attention op that refuses to be traced for
+    /// inference, so the host dropped the plan and ran such a model eagerly on every call, without saying so. The plan
+    /// must be the thing that answers (the host's replay counter moves) and it must answer what the eager forward does,
+    /// on values other than the ones it was traced with.
+    /// </summary>
+    private static void AssertCompiledInferenceKeepsItsPlan<T>(double tolerance, IEngine? engine = null)
+    {
+        var previousEngine = AiDotNetEngine.Current;
+        var options = TensorCodecOptions.Current;
+        AiDotNetEngine.Current = engine ?? new CpuEngine();
+        try
+        {
+            TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = false });
+            var model = new MlaModel<T>();
+            model.SetTrainingMode(false);
+            Seed(model);
+            var traced = Values<T>(new[] { Batch, Seq, Dim }, 61, 1.0);
+            var replayed = Values<T>(new[] { Batch, Seq, Dim }, 62, 1.0);
+            var eager = ToDoubles(model.Predict(replayed));
+
+            TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = true });
+            Assert.True(model.CompileForward(traced), "CompileForward reported a failure");
+            var host = CompileHostOf(model);
+            long before = host.HotPathHits;
+            var compiled = ToDoubles(model.PredictCompiled(replayed));
+            Assert.True(host.HotPathHits > before,
+                $"{typeof(T).Name}: the compiled plan did not answer (replays {before} -> {host.HotPathHits}, "
+                + $"slow-path calls {host.SlowPathCalls}); the host fell back to the eager forward");
+
+            Assert.Equal(eager.Length, compiled.Length);
+            double largest = 0.0;
+            foreach (double v in eager) largest = Math.Max(largest, Math.Abs(v));
+            Assert.True(largest > 1e-3, "the eager output is all zero, so the comparison proves nothing");
+            for (int i = 0; i < eager.Length; i++)
+                Assert.True(Math.Abs(eager[i] - compiled[i]) <= tolerance * Math.Max(1.0, largest),
+                    $"{typeof(T).Name}: compiled output {compiled[i]:G9} differs from eager {eager[i]:G9} at {i}");
+        }
+        finally
+        {
+            TensorCodecOptions.SetCurrent(options);
+            AiDotNetEngine.Current = previousEngine;
+        }
+    }
+
+    [Fact]
+    public void CompiledInference_KeepsItsPlan_AndMatchesEager_Float() => AssertCompiledInferenceKeepsItsPlan<float>(1e-5);
+
+    [Fact]
+    public void CompiledInference_KeepsItsPlan_AndMatchesEager_Double() => AssertCompiledInferenceKeepsItsPlan<double>(1e-12);
+
+    [Fact]
+    public void CompiledInference_KeepsItsPlan_AndMatchesEager_Half() => AssertCompiledInferenceKeepsItsPlan<Half>(1e-2);
+
+    /// <summary>The float32 plan is kept on a GPU engine as well.</summary>
+    [SkippableFact]
+    public void CompiledInference_KeepsItsPlan_AndMatchesEager_FloatOnTheGpuEngine()
+    {
+        using var gpu = new DirectGpuTensorEngine();
+        if (Environment.GetEnvironmentVariable("AIDOTNET_REQUIRE_GPU_TESTS") == "1")
+            Assert.True(gpu.SupportsGpu && gpu.IsGpuAvailable, "The required GPU backend failed to initialize.");
+        Skip.If(!gpu.SupportsGpu || !gpu.IsGpuAvailable, "No DirectGpuTensorEngine available.");
+        AssertCompiledInferenceKeepsItsPlan<float>(1e-4, gpu);
+    }
+
+    private const int TrainingSteps = 6;
+
+    private static AdamWOptimizer<float, Tensor<float>, Tensor<float>> Optimizer()
+        => new(null, new AdamWOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 });
+
+    /// <summary>Trains the model <see cref="TrainingSteps"/> steps from the seeded parameters; returns each step's loss and the final parameters.</summary>
+    private static (double[] Losses, double[] Parameters, bool Fused, string? Miss) Train(IEngine engine, bool fused)
+    {
+        var previous = AiDotNetEngine.Current;
+        AiDotNetEngine.Current = engine;
+        try
+        {
+            MlaModel<float> model = fused ? new MlaModel<float>(Optimizer()) : new EagerMlaModel<float>(Optimizer());
+            Seed(model);
+            model.SetTrainingMode(true);
+            var x = Values<float>(new[] { Batch, Seq, Dim }, 71, 1.0);
+            var y = Values<float>(new[] { Batch, Seq, Dim }, 72, 1.0);
+            var losses = new double[TrainingSteps];
+            for (int s = 0; s < TrainingSteps; s++)
+            {
+                model.Train(x, y);
+                losses[s] = model.GetLastLoss();
+            }
+            return (losses, ToDoubles(model.GetParameters()), model.FusedSession.IsCommitted, model.FusedSession.LastMissReason);
+        }
+        finally
+        {
+            AiDotNetEngine.Current = previous;
+        }
+    }
+
+    /// <summary>
+    /// The compiled training plan of a model holding this layer trains it as the eager tape does: the same loss at
+    /// every step and the same parameters after them. The plan has to be the thing that ran, or the two arms are one.
+    /// </summary>
+    private static void AssertFusedTrainingMatchesEager(IEngine engine, double tolerance)
+    {
+        var eager = Train(engine, fused: false);
+        var fused = Train(engine, fused: true);
+        Assert.False(eager.Fused, "the eager arm committed a compiled plan");
+        Assert.True(fused.Fused, "the compiled training plan did not commit: " + (fused.Miss ?? "no reason recorded"));
+
+        Assert.True(eager.Losses[0] > 1e-3, "the first loss is zero, so nothing is being trained");
+        Assert.True(eager.Losses[TrainingSteps - 1] < 0.98 * eager.Losses[0],
+            $"the eager loss did not fall ({eager.Losses[0]:G6} -> {eager.Losses[TrainingSteps - 1]:G6}), so the steps prove nothing");
+        for (int s = 0; s < TrainingSteps; s++)
+            Assert.True(Math.Abs(eager.Losses[s] - fused.Losses[s]) <= tolerance * Math.Max(1.0, Math.Abs(eager.Losses[s])),
+                $"step {s}: compiled loss {fused.Losses[s]:G9}, eager loss {eager.Losses[s]:G9}");
+
+        Assert.Equal(eager.Parameters.Length, fused.Parameters.Length);
+        double moved = 0.0;
+        var seeded = Values<float>(new[] { eager.Parameters.Length }, 4242, 0.6);
+        for (int i = 0; i < eager.Parameters.Length; i++)
+        {
+            moved = Math.Max(moved, Math.Abs(eager.Parameters[i] - seeded.GetFlat(i)));
+            Assert.True(Math.Abs(eager.Parameters[i] - fused.Parameters[i]) <= tolerance * Math.Max(1.0, Math.Abs(eager.Parameters[i])),
+                $"parameter {i}: compiled {fused.Parameters[i]:G9}, eager {eager.Parameters[i]:G9}");
+        }
+        Assert.True(moved > 1e-3, "training moved no parameter");
+    }
+
+    [Fact]
+    public void CompiledTrainingPlan_MatchesTheEagerTape_OnTheCpuEngine()
+        => AssertFusedTrainingMatchesEager(new CpuEngine(), 1e-4);
+
+    [SkippableFact]
+    public void CompiledTrainingPlan_MatchesTheEagerTape_OnTheGpuEngine()
+    {
+        using var gpu = new DirectGpuTensorEngine();
+        if (Environment.GetEnvironmentVariable("AIDOTNET_REQUIRE_GPU_TESTS") == "1")
+            Assert.True(gpu.SupportsGpu && gpu.IsGpuAvailable, "The required GPU backend failed to initialize.");
+        Skip.If(!gpu.SupportsGpu || !gpu.IsGpuAvailable, "No DirectGpuTensorEngine available.");
+        AssertFusedTrainingMatchesEager(gpu, 2e-3);
     }
 }

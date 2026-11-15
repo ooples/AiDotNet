@@ -336,8 +336,38 @@ public partial class MultiLatentAttentionLayer<T> : LayerBase<T>, IShapeContract
         // Causality is the engine's flag, not a mask tensor, and the heads stay interleaved in [B, S, H*hd]: a GPU
         // engine runs one fused FlashAttention-2 kernel (causal in the kernel, device backward) with no head permutes.
         // The [B, H, S, S] bool mask this built on every forward was 2M bools at B8 H4 S256, converted to float and
-        // uploaded each call.
-        return Engine.MultiHeadAttentionCore(q, k, v, _numHeads, 1.0 / Math.Sqrt(_headDimension), causal: true);
+        // uploaded each call. That holds for float32 where the fused kernel applies; for other element types, or a head
+        // size the kernel declines, the engine's decomposed fallback still builds that mask itself (same causality).
+        double scale = 1.0 / Math.Sqrt(_headDimension);
+
+        // An inference trace (CompiledModelHost) can capture the engine's fused core for float32 only. For every other
+        // element type the core runs its decomposed chain, whose masked attention refuses to be captured for
+        // inference, so the host dropped the plan and ran the model eagerly on every call. Those traces take the
+        // per-head FlashAttention kernel, which is captured for every element type.
+        if (typeof(T) != typeof(float) && AiDotNet.Tensors.Engines.Compilation.GraphMode.IsInferenceTrace)
+        {
+            int batchSize = q.Shape[0], seqLen = q.Shape[1];
+            var attended = Engine.FlashAttention(
+                SplitHeads(q, batchSize, seqLen), SplitHeads(k, batchSize, seqLen), SplitHeads(v, batchSize, seqLen),
+                scale, isCausal: true, out _, attentionBias: null);
+            return MergeHeads(attended, batchSize, seqLen);
+        }
+
+        return Engine.MultiHeadAttentionCore(q, k, v, _numHeads, scale, causal: true);
+    }
+
+    /// <summary>[B, S, H*hd] -> [B, H, S, hd], the layout FlashAttention expects.</summary>
+    private Tensor<T> SplitHeads(Tensor<T> x, int batchSize, int seqLen)
+    {
+        var byHead = Engine.Reshape(x, new[] { batchSize, seqLen, _numHeads, _headDimension });
+        return Engine.TensorPermute(byHead, new[] { 0, 2, 1, 3 });
+    }
+
+    /// <summary>[B, H, S, hd] -> [B, S, H*hd], the inverse of <see cref="SplitHeads"/>.</summary>
+    private Tensor<T> MergeHeads(Tensor<T> x, int batchSize, int seqLen)
+    {
+        var bySeq = Engine.TensorPermute(x, new[] { 0, 2, 1, 3 });
+        return Engine.Reshape(bySeq, new[] { batchSize, seqLen, _modelDimension });
     }
 
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)
