@@ -1,3 +1,4 @@
+using AiDotNet.Enums;
 using AiDotNet.AdversarialRobustness.Attacks;
 using AiDotNet.AdversarialRobustness.Defenses;
 using AiDotNet.AdversarialRobustness.Safety;
@@ -103,7 +104,7 @@ public class DefenseReferenceTests
         }
 
         var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(
-            new AdversarialDefenseOptions<double> { UsePreprocessing = true, PreprocessingMethod = "JPEG" });
+            new AdversarialDefenseOptions<double> { UsePreprocessing = true, PreprocessingMethod = AdversarialPreprocessingMethod.JpegCompression });
         var output = defense.PreprocessInput(new Vector<double>(pixels)).ToArray();
 
         Assert.Equal(64, output.Length);
@@ -122,7 +123,7 @@ public class DefenseReferenceTests
 
         // Xu et al. (2018): 4-bit depth maps x to round(15 x) / 15. Multiplying by 16 kept 17 levels.
         var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(
-            new AdversarialDefenseOptions<double> { UsePreprocessing = true, PreprocessingMethod = "bit_depth_reduction" });
+            new AdversarialDefenseOptions<double> { UsePreprocessing = true, PreprocessingMethod = AdversarialPreprocessingMethod.BitDepthReduction });
         var output = defense.PreprocessInput(new Vector<double>(new[] { 0.2, 0.0, 1.0, 0.52 })).ToArray();
 
         Assert.Equal(3.0 / 15, output[0], 1e-12);
@@ -170,7 +171,7 @@ public class DefenseReferenceTests
         // saturated -0.5 to 0 and 1.5 to 1, so the output range depended on the input length.
         var input = new[] { -0.5, 0.0, 0.5, 1.0, 1.5 };
         var defense = new AdversarialTraining<double, Vector<double>, Vector<double>>(
-            new AdversarialDefenseOptions<double> { UsePreprocessing = true, PreprocessingMethod = "JPEG" });
+            new AdversarialDefenseOptions<double> { UsePreprocessing = true, PreprocessingMethod = AdversarialPreprocessingMethod.JpegCompression });
         var output = defense.PreprocessInput(new Vector<double>(input)).ToArray();
 
         Assert.Equal(5, output.Length);

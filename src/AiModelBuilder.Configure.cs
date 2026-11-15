@@ -1684,6 +1684,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         cancellationToken.ThrowIfCancellationRequested();
         if (_dataLoader is not IStreamingDataLoader<T, TInput, TOutput>)
             ThrowIfStreamingTrainingConfigured("BuildAsync without a streaming data loader");
+        ResetPerBuildRobustnessState();
 
         // Propagate the builder's license key to ModelPersistenceGuard so it can
         // validate during serialize/deserialize operations within BuildAsync.
@@ -1851,6 +1852,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
     private AiModelResult<T, TInput, TOutput> BuildProgramSynthesisInferenceOnlyResult()
     {
+        RejectBuildTimeAdversarialTraining(RobustnessBuildPath.ProgramSynthesisInference);
+
         // Preprocessing requires fitted statistics - for inference-only builds, the pipeline must be pre-fitted
         if (_preprocessingPipeline is not null && !_preprocessingPipeline.IsFitted)
         {
@@ -1941,6 +1944,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
     private void AttachSafetyPipeline(AiModelResult<T, TInput, TOutput> result)
     {
+        // The content moderation group of ConfigureAdversarialRobustness fills the unset text settings.
+        MergeContentModerationIntoSafetyConfig();
         if (_safetyPipelineConfig != null)
         {
             result.SafetyPipeline = AiDotNet.Safety.SafetyPipelineFactory<T>.Create(_safetyPipelineConfig);
@@ -1991,10 +1996,22 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             result.SetAdversarialRobustnessOptions(_adversarialRobustnessConfiguration.Options);
         }
 
-        if (defense is not null)
+        // A defense whose defended model already replaced the result's model must not preprocess a second time in
+        // PredictWithDefense. Without any defense, UseInputPreprocessing alone attaches the preprocessing defense.
+        if (defense is null && !_adversarialDefenseAppliedToModel
+            && _adversarialRobustnessConfiguration is { Options.UseInputPreprocessing: true } preprocessingOnly)
+        {
+            var preprocessingOptions = ToAdversarialDefenseOptions(preprocessingOnly.Options);
+            preprocessingOptions.TrainingEpochs = 0;
+            defense = new AiDotNet.AdversarialRobustness.Defenses.AdversarialTraining<T, TInput, TOutput>(preprocessingOptions);
+        }
+
+        if (defense is not null && !(_adversarialDefenseAppliedToModel && ReferenceEquals(defense, _adversarialRobustnessConfiguration?.CustomDefense)))
         {
             result.SetAdversarialDefense(defense);
         }
+
+        AttachConfiguredRobustness(result);
     }
 
     private void ProcessKnowledgeGraphOptions(AiModelResult<T, TInput, TOutput> result)
@@ -2206,6 +2223,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <returns>A task that represents the asynchronous operation, containing the trained meta-learner result.</returns>
     private AiModelResult<T, TInput, TOutput> BuildMetaLearningInternalAsync()
     {
+        RejectBuildTimeAdversarialTraining(RobustnessBuildPath.MetaLearning);
+
         // META-LEARNING TRAINING PATH
 
         // Create profiler session if profiling is enabled
@@ -2349,6 +2368,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     private async Task<AiModelResult<T, TInput, TOutput>> BuildSelfSupervisedInternalAsync(
         CancellationToken cancellationToken)
     {
+        RejectBuildTimeAdversarialTraining(RobustnessBuildPath.SelfSupervised);
+
         var profilerSession = CreateProfilerSession();
         using var _ = profilerSession?.Scope("BuildSelfSupervisedInternalAsync");
 
@@ -2629,6 +2650,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <returns>A task that represents the asynchronous operation, containing the trained RL agent result.</returns>
     private async Task<AiModelResult<T, TInput, TOutput>> BuildRLInternalAsync(int episodes, bool verbose)
     {
+        RejectBuildTimeAdversarialTraining(RobustnessBuildPath.ReinforcementLearning);
+
         // RL TRAINING PATH
 
         // Create profiler session if profiling is enabled

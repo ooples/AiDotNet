@@ -1,4 +1,5 @@
 using AiDotNet.AdversarialRobustness.Attacks;
+using AiDotNet.AdversarialRobustness.CertifiedRobustness;
 using AiDotNet.AdversarialRobustness.Defenses;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -62,6 +63,181 @@ public partial class AiModelResult<T, TInput, TOutput>
     }
 
     /// <summary>
+    /// The certified defense of <see cref="PredictCertified"/>: <c>ConfigureCertifiedDefense</c>, the robustness
+    /// configuration's <c>CustomCertifiedDefense</c>, or the <c>CertificationMethod</c> engine. Persisted through <see cref="CertifiedDefenseState"/>.
+    /// </summary>
+    [JsonIgnore]
+    internal ICertifiedDefense<T, TInput, TOutput>? CertifiedDefense { get; private set; }
+
+    /// <summary>The inference-time certification settings of the robustness configuration.</summary>
+    [JsonProperty]
+    internal CertifiedInferenceSettings? CertifiedInference { get; private set; }
+
+    /// <summary>
+    /// The persisted form of <see cref="CertifiedDefense"/>: written from the live defense on save, read back into
+    /// <see cref="_loadedCertifiedDefenseState"/> on load and rebuilt by <see cref="RestoreCertificationStateFrom"/>.
+    /// </summary>
+    [JsonProperty]
+    internal CertifiedDefenseSnapshot<T>? CertifiedDefenseState
+    {
+        get => CertifiedDefense is null ? null : CertifiedDefenseSnapshot<T>.Capture(CertifiedDefense);
+        private set => _loadedCertifiedDefenseState = value;
+    }
+
+    [JsonIgnore]
+    private CertifiedDefenseSnapshot<T>? _loadedCertifiedDefenseState;
+
+    /// <summary>Why the persisted certified defense could not be rebuilt on load, or null.</summary>
+    [JsonIgnore]
+    private string? _certifiedDefenseRestoreFailure;
+
+    /// <summary>
+    /// Takes the certification state of a deserialized result: the settings as read, and a defense rebuilt from its
+    /// persisted options and state. A defense that cannot be rebuilt makes <see cref="PredictCertified"/> say why.
+    /// </summary>
+    internal void RestoreCertificationStateFrom(AiModelResult<T, TInput, TOutput> loaded)
+    {
+        CertifiedInference = loaded.CertifiedInference;
+        CertifiedDefense = null;
+        _certifiedDefenseRestoreFailure = null;
+        if (loaded._loadedCertifiedDefenseState is { } snapshot)
+        {
+            CertifiedDefense = TryRebuildCertifiedDefense(snapshot);
+        }
+    }
+
+    /// <summary>
+    /// Carries the robustness state of this result to a copy of it (<see cref="DeepCopy"/>, <see cref="Clone"/>,
+    /// <see cref="WithParameters"/>). The certified defense is rebuilt, so the copy's randomized-smoothing
+    /// generator is its own and starts from the configured seed.
+    /// </summary>
+    internal void CopyRobustnessStateTo(AiModelResult<T, TInput, TOutput> target)
+    {
+        target.AdversarialRobustnessOptions = AdversarialRobustnessOptions;
+        target.AdversarialDefense = AdversarialDefense;
+        target.SetSafetyFilter(SafetyFilter);
+        target.CertifiedInference = CertifiedInference;
+        target._certifiedDefenseRestoreFailure = _certifiedDefenseRestoreFailure;
+        target.CertifiedDefense = CertifiedDefense is null
+            ? null
+            : target.TryRebuildCertifiedDefense(CertifiedDefenseSnapshot<T>.Capture(CertifiedDefense)) ?? CertifiedDefense;
+        target.RedTeamingReport = RedTeamingReport;
+        target.RobustnessModelCard = RobustnessModelCard;
+    }
+
+    private ICertifiedDefense<T, TInput, TOutput>? TryRebuildCertifiedDefense(CertifiedDefenseSnapshot<T> snapshot)
+    {
+        try
+        {
+            return snapshot.Restore<TInput, TOutput>();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException || ex is JsonException
+            || ex is System.Reflection.TargetInvocationException)
+        {
+            _certifiedDefenseRestoreFailure =
+                $"The persisted certified defense ({snapshot.CustomTypeName ?? snapshot.BuiltInMethod?.ToString()}) " +
+                "could not be rebuilt on load. Rebuild the model with the defense configured.";
+            System.Diagnostics.Trace.TraceWarning($"Certified defense restore failed: {ex}");
+            return null;
+        }
+    }
+
+    internal void SetCertifiedDefense(ICertifiedDefense<T, TInput, TOutput>? defense)
+    {
+        CertifiedDefense = defense;
+    }
+
+    internal void SetCertifiedInference(CertifiedInferenceSettings? settings)
+    {
+        CertifiedInference = settings;
+    }
+
+    /// <summary>
+    /// Gets the result of red teaming the safety pipeline at build (<c>EnableRedTeaming</c>), or null.
+    /// </summary>
+    /// <remarks>
+    /// <para>Every prompt is a case of one of the library's safety benchmarks: recall is the share of adversarial
+    /// prompts the pipeline caught, and the false-positive rate the share of benign controls it blocked.</para>
+    /// </remarks>
+    [JsonIgnore]
+    public AiDotNet.Safety.Benchmarking.SafetyBenchmarkResult? RedTeamingReport { get; private set; }
+
+    internal void SetRedTeamingReport(AiDotNet.Safety.Benchmarking.SafetyBenchmarkResult? report)
+    {
+        RedTeamingReport = report;
+    }
+
+    /// <summary>
+    /// Gets the robustness model card generated at build (<c>AutoGenerateModelCardSections</c>), or null.
+    /// </summary>
+    /// <remarks>
+    /// <para>Its robustness metrics are the empirical, certified and red-teaming figures of this result, and its
+    /// caveats include <c>ModelCardRobustnessNotes</c>.</para>
+    /// </remarks>
+    [JsonIgnore]
+    public AiDotNet.AdversarialRobustness.Documentation.ModelCard? RobustnessModelCard { get; private set; }
+
+    internal void SetRobustnessModelCard(AiDotNet.AdversarialRobustness.Documentation.ModelCard? card)
+    {
+        RobustnessModelCard = card;
+    }
+
+    /// <summary>
+    /// Predicts the class of <paramref name="input"/> with a certified robustness guarantee.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Runs the certified defense on the trained model: with randomized smoothing (Cohen et al. 2019) the class is
+    /// the smoothed classifier's, certified within an L2 radius at the configured confidence; IBP and CROWN bound the
+    /// network's outputs over the perturbation ball. A prediction whose radius is below
+    /// <c>MinimumCertifiedRadius</c> is reported as not certified, and with <c>RejectNonRobustPredictions</c> it is
+    /// rejected.
+    /// </para>
+    /// <para><b>For Beginners:</b> The answer comes with a promise: no change to the input smaller than the
+    /// returned radius can change it.</para>
+    /// </remarks>
+    /// <param name="input">The input, in the model's input space.</param>
+    /// <returns>The predicted class, certified radius and bounds.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// No certified defense is configured, or the prediction is not certified and
+    /// <c>RejectNonRobustPredictions</c> is on.
+    /// </exception>
+    public CertifiedPrediction<T> PredictCertified(TInput input)
+    {
+        if (Model == null)
+        {
+            throw new InvalidOperationException("Model is not initialized.");
+        }
+
+        var defense = CertifiedDefense ?? throw new InvalidOperationException(
+            _certifiedDefenseRestoreFailure ??
+            "No certified defense is configured. Set AdversarialRobustnessOptions.EnableCertifiedRobustness, " +
+            "AdversarialRobustnessConfiguration.CustomCertifiedDefense, or call ConfigureCertifiedDefense on the builder.");
+
+        var prediction = defense.CertifyPrediction(input, Model);
+        var settings = CertifiedInference;
+        if (settings is null)
+        {
+            return prediction;
+        }
+
+        if (prediction.IsCertified && _robustnessNumOps.ToDouble(prediction.CertifiedRadius) < settings.MinimumCertifiedRadius)
+        {
+            prediction.IsCertified = false;
+            prediction.CertificationDetails["BelowMinimumCertifiedRadius"] = settings.MinimumCertifiedRadius;
+        }
+
+        if (settings.RejectNonRobustPredictions && !prediction.IsCertified)
+        {
+            throw new InvalidOperationException(
+                $"The prediction is not certified at the minimum radius {settings.MinimumCertifiedRadius} " +
+                $"(certified radius {_robustnessNumOps.ToDouble(prediction.CertifiedRadius)}), and RejectNonRobustPredictions is on.");
+        }
+
+        return prediction;
+    }
+
+    /// <summary>
     /// Makes a prediction with adversarial preprocessing applied if configured.
     /// </summary>
     /// <remarks>
@@ -79,6 +255,16 @@ public partial class AiModelResult<T, TInput, TOutput>
         if (Model == null)
         {
             throw new InvalidOperationException("Model is not initialized.");
+        }
+
+        if (CertifiedInference is { UseCertifiedInference: true } && CertifiedDefense is not null)
+        {
+            // Certified inference: the certified class, one-hot in the shape of the model's output.
+            var reference = Model.Predict(input);
+            var certified = PredictCertified(input);
+            int classes = ConversionsHelper.ConvertToVector<T, TOutput>(reference).Length;
+            var oneHot = Vector<T>.CreateStandardBasis(Math.Max(classes, certified.PredictedClass + 1), certified.PredictedClass);
+            return ConversionsHelper.ConvertVectorToInput<T, TOutput>(oneHot, reference);
         }
 
         if (!HasAdversarialRobustness || AdversarialDefense == null)
@@ -238,7 +424,7 @@ public partial class AiModelResult<T, TInput, TOutput>
     {
         var model = Model ?? throw new InvalidOperationException("Model is not initialized.");
         return HasAdversarialRobustness && AdversarialDefense is { } defense
-            ? new DefendedAttackModel(model, defense)
+            ? new DefendedModel<T, TInput, TOutput>(model, defense)
             : model;
     }
 
@@ -260,79 +446,6 @@ public partial class AiModelResult<T, TInput, TOutput>
             ? _robustnessNumOps.ToDouble(RobustnessEngine.TensorNorm(delta.AsTensor()).Data.Span[0])
             : _robustnessNumOps.ToDouble(RobustnessEngine.TensorMaxValue(RobustnessEngine.TensorAbs(delta.AsTensor())));
         return size <= options.Epsilon;
-    }
-
-    /// <summary>
-    /// The model as an attack sees it when a defense is configured: predictions (and gradients computed from
-    /// them) include the defense's input preprocessing; everything else is the wrapped model's.
-    /// </summary>
-    [AiDotNet.Attributes.ModelMetadataExempt]
-    private sealed class DefendedAttackModel : IFullModel<T, TInput, TOutput>
-    {
-        private readonly IFullModel<T, TInput, TOutput> _inner;
-        private readonly IAdversarialDefense<T, TInput, TOutput> _defense;
-
-        public DefendedAttackModel(IFullModel<T, TInput, TOutput> inner, IAdversarialDefense<T, TInput, TOutput> defense)
-        {
-            _inner = inner;
-            _defense = defense;
-        }
-
-        public ILossFunction<T> DefaultLossFunction => _inner.DefaultLossFunction;
-
-        public long ParameterCount => InterfaceGuard.Parameterizable(_inner).ParameterCount;
-
-        public bool SupportsParameterInitialization => InterfaceGuard.Parameterizable(_inner).SupportsParameterInitialization;
-
-        public Vector<T> SanitizeParameters(Vector<T> parameters) => InterfaceGuard.Parameterizable(_inner).SanitizeParameters(parameters);
-
-        public TOutput Predict(TInput input) => _inner.Predict(_defense.PreprocessInput(input));
-
-        public void Train(TInput input, TOutput expectedOutput) => _inner.Train(_defense.PreprocessInput(input), expectedOutput);
-
-        public ModelMetadata<T> GetModelMetadata() => _inner.GetModelMetadata();
-
-        public byte[] Serialize() => _inner.Serialize();
-
-        public void Deserialize(byte[] data) => _inner.Deserialize(data);
-
-        public void SaveModel(string filePath) => _inner.SaveModel(filePath);
-
-        public void LoadModel(string filePath) => _inner.LoadModel(filePath);
-
-        public void SaveState(Stream stream) => _inner.SaveState(stream);
-
-        public void LoadState(Stream stream) => _inner.LoadState(stream);
-
-        public Vector<T> GetParameters() => InterfaceGuard.Parameterizable(_inner).GetParameters();
-
-        public void SetParameters(Vector<T> parameters) => InterfaceGuard.Parameterizable(_inner).SetParameters(parameters);
-
-        public IFullModel<T, TInput, TOutput> WithParameters(Vector<T> parameters)
-            => new DefendedAttackModel(InterfaceGuard.Parameterizable(_inner).WithParameters(parameters), _defense);
-
-        public IEnumerable<int> GetActiveFeatureIndices() => InterfaceGuard.FeatureAware(_inner).GetActiveFeatureIndices();
-
-        public void SetActiveFeatureIndices(IEnumerable<int> featureIndices) => InterfaceGuard.FeatureAware(_inner).SetActiveFeatureIndices(featureIndices);
-
-        public bool IsFeatureUsed(int featureIndex) => InterfaceGuard.FeatureAware(_inner).IsFeatureUsed(featureIndex);
-
-        public Dictionary<string, T> GetFeatureImportance() => _inner.GetFeatureImportance();
-
-        public IFullModel<T, TInput, TOutput> DeepCopy() => new DefendedAttackModel(_inner.DeepCopy(), _defense);
-
-        public IFullModel<T, TInput, TOutput> Clone() => new DefendedAttackModel(_inner.Clone(), _defense);
-
-        public Vector<T> ComputeGradients(TInput input, TOutput target, ILossFunction<T>? lossFunction = null)
-            => InterfaceGuard.GradientComputable(_inner).ComputeGradients(_defense.PreprocessInput(input), target, lossFunction);
-
-        public void ApplyGradients(Vector<T> gradients, T learningRate) => InterfaceGuard.GradientComputable(_inner).ApplyGradients(gradients, learningRate);
-
-        // The wrapped model belongs to the result, which disposes it; the view owns nothing.
-        public void Dispose()
-        {
-            System.GC.SuppressFinalize(this);
-        }
     }
 
     /// <summary>
@@ -614,4 +727,33 @@ public partial class AiModelResult<T, TInput, TOutput>
         return RobustnessEngine.Subtract(a, b);
     }
 
+}
+
+/// <summary>
+/// The inference-time certification settings of an <see cref="AdversarialRobustnessConfiguration{T, TInput, TOutput}"/>.
+/// </summary>
+internal sealed class CertifiedInferenceSettings
+{
+    [JsonConstructor]
+    public CertifiedInferenceSettings(bool useCertifiedInference, double minimumCertifiedRadius, bool rejectNonRobustPredictions)
+    {
+        if (!(minimumCertifiedRadius >= 0.0 && !double.IsInfinity(minimumCertifiedRadius)))
+        {
+            throw new InvalidOperationException(
+                $"AdversarialRobustnessConfiguration.MinimumCertifiedRadius must be a non-negative finite number (was {minimumCertifiedRadius}).");
+        }
+
+        UseCertifiedInference = useCertifiedInference;
+        MinimumCertifiedRadius = minimumCertifiedRadius;
+        RejectNonRobustPredictions = rejectNonRobustPredictions;
+    }
+
+    /// <summary>Whether <c>PredictWithDefense</c> returns the certified prediction.</summary>
+    public bool UseCertifiedInference { get; }
+
+    /// <summary>The radius below which a prediction is not considered certified.</summary>
+    public double MinimumCertifiedRadius { get; }
+
+    /// <summary>Whether a prediction that is not certified is rejected.</summary>
+    public bool RejectNonRobustPredictions { get; }
 }
