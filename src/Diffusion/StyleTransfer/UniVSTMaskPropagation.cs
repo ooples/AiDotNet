@@ -31,6 +31,15 @@ public class UniVSTMaskPropagation<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    /// <summary>Default bound on the point-by-anchor similarity grid formed at once (16M entries).</summary>
+    internal const long DefaultSimilarityBlockElements = 1L << 24;
+
+    /// <summary>
+    /// Largest point-by-anchor similarity grid formed at once; query points are voted in row blocks of at most
+    /// this many entries (at least one row). Adjustable so tests can force several blocks on small inputs.
+    /// </summary>
+    internal long SimilarityBlockElements { get; set; } = DefaultSimilarityBlockElements;
+
     private readonly int _neighbors;
     private readonly int _anchorHistory;
     private readonly double _downsampleRate;
@@ -191,22 +200,49 @@ public class UniVSTMaskPropagation<T>
         var pool = anchorFrameRows.Count == 1 ? anchorFrameRows[0] : Engine.TensorConcatenate(anchorFrameRows.ToArray(), 0);
         var anchorRows = Engine.TensorIndexSelect(pool, new Tensor<int>(new[] { anchorCount }, new Vector<int>(rowIndex)), 0);
 
+        // Query points are processed in row blocks so the [points, anchors] similarity grid and the comparison,
+        // cumulative-sum and selection grids derived from it never exceed SimilarityBlockElements entries: a
+        // 64x64 map with ten anchor frames at downsampleRate 0.5 would otherwise hold 84M similarities at once.
+        // Every point's vote depends only on its own row, so the blocks give exactly the unblocked result.
+        int k = Math.Min(_neighbors, anchorCount);
+        var anchorsTransposed = Engine.TensorTranspose(anchorRows);
+        var anchorForeground = new Tensor<int>(new[] { 1, anchorCount }, new Vector<int>(anchorIsForeground));
+        int blockRows = (int)Math.Max(1L, Math.Min(points, SimilarityBlockElements / anchorCount));
+        var result = new bool[points];
+        for (int first = 0; first < points; first += blockRows)
+        {
+            int count = Math.Min(blockRows, points - first);
+            var queries = count == points
+                ? normalized[frame]
+                : Engine.TensorSlice(normalized[frame], new[] { first, 0 }, new[] { count, channels });
+            var majority = VoteBlock(queries, anchorsTransposed, anchorForeground, count, anchorCount, k);
+            for (int p = 0; p < count; p++)
+                result[first + p] = majority[p] != 0;
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// The k-nearest-anchor majority vote of a block of <paramref name="count"/> query points: 1 where a strict
+    /// majority of the k most similar anchors is foreground.
+    /// </summary>
+    private static int[] VoteBlock(
+        Tensor<T> queries, Tensor<T> anchorsTransposed, Tensor<int> anchorForeground, int count, int anchorCount, int k)
+    {
         // Nearest neighbour = MAXIMUM cosine similarity. The paper prints "arg min CosSim(...)",
         // which reads as minimising cosine DISTANCE; minimising similarity would select the least
         // similar point and invert the whole scheme.
-        var similarity = Engine.TensorMatMul(normalized[frame], Engine.TensorTranspose(anchorRows));
+        var similarity = Engine.TensorMatMul(queries, anchorsTransposed);
 
         // k nearest anchors per point, ties at the k-th similarity resolved toward the earlier anchor (the
         // first-come order of a running top-k): everything above the k-th value is in, and the remaining slots
         // go to the first anchors equal to it. Counts stay in int so no element type can overflow them.
-        int k = Math.Min(_neighbors, anchorCount);
-        var grid = new[] { points, anchorCount };
+        var grid = new[] { count, anchorCount };
         var topValues = Engine.TensorTopK(similarity, k, 1, out _);
-        var kth = Engine.TensorBroadcastTo(Engine.TensorSelect(topValues, 1, k - 1).Reshape(new[] { points, 1 }), grid);
+        var kth = Engine.TensorBroadcastTo(Engine.TensorSelect(topValues, 1, k - 1).Reshape(new[] { count, 1 }), grid);
         var above = Engine.TensorGreaterThan(similarity, kth).Cast<int>();
         var tied = Engine.TensorEquals(similarity, kth).Cast<int>();
-        var foreground = Engine.TensorBroadcastTo(
-            new Tensor<int>(new[] { 1, anchorCount }, new Vector<int>(anchorIsForeground)), grid);
+        var foreground = Engine.TensorBroadcastTo(anchorForeground, grid);
 
         var openSlots = Engine.ScalarMinusTensor(k + 1, Engine.ReduceSum(above, new[] { 1 }, true));
         var tieRank = Engine.TensorCumSum(tied, 1);
@@ -216,8 +252,7 @@ public class UniVSTMaskPropagation<T>
 
         // Strict majority: a tie is left as background so the region cannot creep outward on
         // ambiguous points.
-        var majority = Engine.TensorGreaterThan(Engine.TensorMultiplyScalar(foregroundVotes, 2), k).ToArray();
-        return Array.ConvertAll(majority, v => v != 0);
+        return Engine.TensorGreaterThan(Engine.TensorMultiplyScalar(foregroundVotes, 2), k).ToArray();
     }
 
     private List<(int Frame, int Point, bool Foreground)> BuildCandidates(
@@ -276,21 +311,15 @@ public class UniVSTMaskPropagation<T>
     internal static Tensor<T> NormalizeRows(Tensor<T> features, int points, int channels)
     {
         var engine = AiDotNetEngine.Current;
-        var rows = features.Reshape(new[] { points, channels });
+        // The rows are normalized in double and rounded to T once: the engine reduces in T, so a Half sum of
+        // squares would overflow 65504 and stop absorbing terms past 2048, inflating wide rows.
+        var rows = features.Reshape(new[] { points, channels }).Cast<double>();
         var grid = new[] { points, channels };
-        var ones = Tensor<T>.CreateDefault(new[] { points, 1 }, NumOps.One);
-
-        // Each row is first divided by its largest magnitude, so the squares summed below are at most 1 each:
-        // squaring the raw features overflows Half (65504) once a row's sum of squares passes it. x / |x| is
-        // unchanged by the pre-scaling.
-        var peaks = engine.ReduceMax(engine.TensorAbs(rows), new[] { 1 }, true);
-        var safePeaks = engine.TensorWhere(engine.TensorGreaterThan(peaks, NumOps.Zero), peaks, ones);
-        var scaled = engine.TensorDivide(rows, engine.TensorBroadcastTo(safePeaks, grid));
-
-        var norms = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(scaled), new[] { 1 }, true));
+        var ones = Tensor<double>.CreateDefault(new[] { points, 1 }, 1.0);
+        var norms = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(rows), new[] { 1 }, true));
         // A zero-length feature vector has no direction; leaving it zero makes its similarity to
         // everything 0 rather than NaN, so it simply never wins a vote (its norm is replaced by 1).
-        var safeNorms = engine.TensorWhere(engine.TensorGreaterThan(norms, NumOps.Zero), norms, ones);
-        return engine.TensorDivide(scaled, engine.TensorBroadcastTo(safeNorms, grid));
+        var safeNorms = engine.TensorWhere(engine.TensorGreaterThan(norms, 0.0), norms, ones);
+        return engine.TensorDivide(rows, engine.TensorBroadcastTo(safeNorms, grid)).Cast<T>();
     }
 }

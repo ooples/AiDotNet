@@ -38,6 +38,12 @@ public class LogSNRImportanceSampling<T>
     internal static readonly double LogSnrBound = Math.Log(1e10);
 
     /// <summary>
+    /// Largest target-by-timestep distance grid formed at once (4M entries); targets are matched in row blocks
+    /// of at most this many entries (at least one row). Adjustable so tests can force several blocks.
+    /// </summary>
+    internal long DistanceBlockElements { get; set; } = 1L << 22;
+
+    /// <summary>
     /// Samples timesteps with importance weighting based on log-SNR distribution.
     /// </summary>
     /// <param name="batchSize">Number of timesteps to sample.</param>
@@ -68,11 +74,24 @@ public class LogSNRImportanceSampling<T>
         var targets = engine.TensorAddScalar(
             engine.TensorMultiplyScalar(uniform.AsTensor(), NumOps.Subtract(maxLogSnr, minLogSnr)), minLogSnr);
 
-        // Closest timestep per target: argmin over |logSnr[i] - target| (first index on ties).
-        var shape = new[] { batchSize, numTimesteps };
-        var distances = engine.TensorAbs(engine.TensorSubtract(
-            engine.TensorBroadcastTo(logSnr.Reshape(new[] { 1, numTimesteps }), shape),
-            engine.TensorBroadcastTo(targets.Reshape(new[] { batchSize, 1 }), shape)));
-        return engine.TensorArgMin(distances, 1).ToArray();
+        // Closest timestep per target: argmin over |logSnr[i] - target| (first index on ties). The targets are
+        // matched in blocks so the [targets, timesteps] distance grid never exceeds DistanceBlockElements entries;
+        // each target's argmin depends only on its own row, so the blocks give the unblocked result.
+        var row = logSnr.Reshape(new[] { 1, numTimesteps });
+        int blockRows = (int)Math.Max(1L, Math.Min(batchSize, DistanceBlockElements / numTimesteps));
+        var result = new int[batchSize];
+        for (int first = 0; first < batchSize; first += blockRows)
+        {
+            int count = Math.Min(blockRows, batchSize - first);
+            var blockTargets = count == batchSize
+                ? targets
+                : engine.TensorSlice(targets, new[] { first }, new[] { count });
+            var shape = new[] { count, numTimesteps };
+            var distances = engine.TensorAbs(engine.TensorSubtract(
+                engine.TensorBroadcastTo(row, shape),
+                engine.TensorBroadcastTo(blockTargets.Reshape(new[] { count, 1 }), shape)));
+            Array.Copy(engine.TensorArgMin(distances, 1).ToArray(), 0, result, first, count);
+        }
+        return result;
     }
 }

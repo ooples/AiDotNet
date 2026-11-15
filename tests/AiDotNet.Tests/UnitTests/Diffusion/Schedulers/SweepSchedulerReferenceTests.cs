@@ -754,6 +754,21 @@ public class SweepSchedulerReferenceTests
         }
     }
 
+    [Theory]
+    [InlineData(1L)]
+    [InlineData(12L)]
+    public void LogSnrImportanceSampling_BlockedSearchMatchesTheSingleBlockSearch(long blockElements)
+    {
+        // The nearest-timestep search is done in target blocks to bound the [batch, timesteps] grid; each
+        // target's argmin is its own row, so the seeded picks must not depend on the block size.
+        var alphas = Vec(0.99, 0.95, 0.8, 0.7, 0.4, 0.25, 0.1, 0.01);
+        var single = new LogSNRImportanceSampling<double>()
+            .SampleTimesteps(9, alphas, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(17));
+        var blocked = new LogSNRImportanceSampling<double> { DistanceBlockElements = blockElements }
+            .SampleTimesteps(9, alphas, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(17));
+        Assert.Equal(single, blocked);
+    }
+
     #endregion
 
     #region Image and video helpers

@@ -584,6 +584,51 @@ public class UniVSTComponentTests
         }
     }
 
+    [Fact]
+    public void MaskPropagation_Half_RowWiderThan2048ChannelsKeepsUnitNorm()
+    {
+        // 4096 equal channels: each normalized entry is 1 / sqrt(4096) = 1 / 64. A Half running sum of the
+        // squares stalls at 2048, which gave the norm sqrt(2048) and the entries 0.0221 instead.
+        const int channels = 4096;
+        var values = new double[channels];
+        for (int c = 0; c < channels; c++)
+            values[c] = 1.0;
+
+        var rows = UniVSTMaskPropagation<Half>.NormalizeRows(HalfTensor(new[] { 1, 1, channels }, values), 1, channels);
+
+        for (int c = 0; c < channels; c++)
+            Assert.Equal(1.0 / 64.0, HalfOps.ToDouble(rows[c]), tolerance: 1e-6);
+    }
+
+    [Theory]
+    [InlineData(1L)]
+    [InlineData(200L)]
+    public void MaskPropagation_BlockedVoteMatchesTheSingleBlockVote(long blockElements)
+    {
+        // Voting the query points in row blocks bounds the [points, anchors] grids; every point's vote depends
+        // only on its own row, so any block size must reproduce the single-block masks exactly.
+        const int h = 8, w = 8, c = 4;
+        var frames = new List<Tensor<double>>();
+        for (int f = 0; f < 4; f++)
+        {
+            int shift = f;
+            frames.Add(Features(h, w, c, (y, x, k) => Math.Sin((0.7 * (x + shift)) + (1.3 * y) + (2.1 * k)) + (k == 0 && x >= 4 ? 1.0 : 0.0)));
+        }
+        var mask = Mask(h, w, (y, x) => x >= 4 ? 1.0 : 0.0);
+
+        var single = new UniVSTMaskPropagation<double>(neighbors: 5, downsampleRate: 0.5, seed: 3)
+            .Propagate(frames, mask);
+        var blocked = new UniVSTMaskPropagation<double>(neighbors: 5, downsampleRate: 0.5, seed: 3)
+        {
+            SimilarityBlockElements = blockElements
+        }.Propagate(frames, mask);
+
+        Assert.Equal(single.Count, blocked.Count);
+        for (int f = 0; f < single.Count; f++)
+            for (int p = 0; p < h * w; p++)
+                Assert.Equal(single[f][p], blocked[f][p]);
+    }
+
     private static readonly AiDotNet.Tensors.Interfaces.INumericOperations<Half> HalfOps =
         AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>();
 
