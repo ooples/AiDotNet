@@ -215,7 +215,7 @@ public partial class TripoSRModel<T> : ThreeDDiffusionModelBase<T>
 
     /// <summary>
     /// The scene codes (triplanes) of RGB images: [B, 3, C, 2R, 2R] for images [B, 3, H, W] (or one [3, H, W]) with
-    /// values in [0, 1]. Images whose side differs from <see cref="TripoSROptions.ImageSize"/> are resized bilinearly.
+    /// values in [0, 1]. Images whose side differs from <see cref="TripoSROptions.ImageSize"/> are resized as TripoSR's preprocessor does (bilinear, antialiased).
     /// </summary>
     /// <param name="images">The images, foreground-centred as TripoSR expects.</param>
     public Tensor<T> EncodeSceneCodes(Tensor<T> images)

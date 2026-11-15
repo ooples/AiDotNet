@@ -133,7 +133,20 @@ internal sealed class TsrLayerNorm<T> : KlModule<T>
         _beta = LazyWeight<T>.Constant(new[] { width }, 0.0);
     }
 
-    public Tensor<T> Forward(Tensor<T> x) => Engine.LayerNorm(x, _gamma.Value, _beta.Value, _epsilon, out _, out _);
+    // Whether T is narrower than float (Half, BFloat16): 1 + 1e-6 rounds to 1 there. Such types lose small
+    // epsilons (DINO's 1e-12 rounds to 0 in Half, so a constant row divides 0 by 0) and the variance itself, so the
+    // statistics run in double and the result rounds to T once.
+    private static readonly bool NarrowType = MathHelper.GetNumericOperations<T>() is var ops
+        && ops.ToDouble(ops.FromDouble(1.0 + 1e-6)) == 1.0;
+
+    public Tensor<T> Forward(Tensor<T> x)
+    {
+        if (!NarrowType)
+            return Engine.LayerNorm(x, _gamma.Value, _beta.Value, _epsilon, out _, out _);
+        var wide = Engine.LayerNorm(
+            x.Cast<double>(), _gamma.Value.Cast<double>(), _beta.Value.Cast<double>(), _epsilon, out _, out _);
+        return wide.Cast<T>();
+    }
 
     public override IEnumerable<(string Name, Tensor<T> Tensor)> NamedTensors(string prefix)
     {
@@ -623,6 +636,70 @@ internal sealed class TsrNeRFDecoder<T> : KlModule<T>
 }
 
 /// <summary>
+/// torch <c>F.interpolate(mode="bilinear", align_corners=False, antialias=True)</c>, as TripoSR's
+/// <c>ImagePreprocessor.convert_and_resize</c> resizes every conditioning image (tsr/utils.py). Separable: along each
+/// axis, output i takes the triangle filter centred at <c>scale (i + 0.5)</c> in input pixels, widened by
+/// <c>scale = in / out</c> when shrinking, over the inputs within its support, normalized to sum to one (ATen's
+/// <c>upsample_bilinear2d_aa</c>). When enlarging it is ordinary bilinear interpolation.
+/// </summary>
+/// <typeparam name="T">The numeric type.</typeparam>
+internal static class TsrResize<T>
+{
+    private static IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>The resampling matrix [outSize, inSize], row-major: output i is the row-i weighted sum of the inputs.</summary>
+    public static double[] Weights(int inSize, int outSize)
+    {
+        if (inSize <= 0) throw new ArgumentOutOfRangeException(nameof(inSize), "The input size must be positive.");
+        if (outSize <= 0) throw new ArgumentOutOfRangeException(nameof(outSize), "The output size must be positive.");
+        double scale = (double)inSize / outSize;
+        double support = scale >= 1.0 ? scale : 1.0;
+        double invScale = scale >= 1.0 ? 1.0 / scale : 1.0;
+        var weights = new double[outSize * inSize];
+        for (int i = 0; i < outSize; i++)
+        {
+            double center = scale * (i + 0.5);
+            // ATen truncates toward zero, then clamps to the input.
+            int start = Math.Max((int)(center - support + 0.5), 0);
+            int stop = Math.Min((int)(center + support + 0.5), inSize);
+            double total = 0.0;
+            for (int j = start; j < stop; j++)
+            {
+                double w = Math.Max(0.0, 1.0 - Math.Abs((j - center + 0.5) * invScale));
+                weights[(i * inSize) + j] = w;
+                total += w;
+            }
+
+            if (total > 0.0)
+                for (int j = start; j < stop; j++) weights[(i * inSize) + j] /= total;
+        }
+
+        return weights;
+    }
+
+    /// <summary>Resizes images [B, C, H, W] to [B, C, height, width].</summary>
+    public static Tensor<T> Resize(Tensor<T> images, int height, int width)
+    {
+        if (images is null) throw new ArgumentNullException(nameof(images));
+        if (images.Rank != 4) throw new ArgumentException("Images must be [B, C, H, W].", nameof(images));
+        int batch = images.Shape[0], channels = images.Shape[1], inHeight = images.Shape[2], inWidth = images.Shape[3];
+        var alongWidth = Matrix(inWidth, width);
+        var alongHeight = Matrix(inHeight, height);
+
+        // Width: rows [B C H, W] times the [width, W] weights transposed -> [B C H, width].
+        var x = Engine.TensorMatMulTransposed(Engine.Reshape(images.Contiguous(), new[] { batch * channels * inHeight, inWidth }), alongWidth);
+        // Height: bring H last, [B C width, H] times [height, H] transposed -> [B C width, height], and back.
+        x = Engine.TensorPermute(Engine.Reshape(x, new[] { batch * channels, inHeight, width }), new[] { 0, 2, 1 }).Contiguous();
+        x = Engine.TensorMatMulTransposed(Engine.Reshape(x, new[] { batch * channels * width, inHeight }), alongHeight);
+        x = Engine.TensorPermute(Engine.Reshape(x, new[] { batch * channels, width, height }), new[] { 0, 2, 1 }).Contiguous();
+        return Engine.Reshape(x, new[] { batch, channels, height, width });
+    }
+
+    private static Tensor<T> Matrix(int inSize, int outSize)
+        => new Tensor<double>(new[] { outSize, inSize }, new Vector<double>(Weights(inSize, outSize))).Cast<T>();
+}
+
+/// <summary>
 /// The whole TripoSR network (<c>TSR</c>): image tokenizer, triplane tokenizer, backbone, post-processor and decoder,
 /// named as the official checkpoint names them.
 /// </summary>
@@ -662,14 +739,14 @@ internal sealed class TripoSRNetwork<T> : KlModule<T>
     public TsrNeRFDecoder<T> Decoder { get; }
 
     /// <summary>
-    /// The image tokens [B, M, D] of RGB images [B, 3, H, W] in [0, 1]: resized to the conditioning size (bilinear),
+    /// The image tokens [B, M, D] of RGB images [B, 3, H, W] in [0, 1]: resized to the conditioning size (antialiased bilinear),
     /// ImageNet-normalized and encoded.
     /// </summary>
     public Tensor<T> EncodeImage(Tensor<T> images)
     {
         var x = images;
         if (x.Shape[2] != _imageSize || x.Shape[3] != _imageSize)
-            x = Engine.Interpolate(x, new[] { _imageSize, _imageSize }, InterpolateMode.Bilinear, false);
+            x = TsrResize<T>.Resize(x, _imageSize, _imageSize);
         var shape = x.Shape.ToArray();
         var mean = Engine.TensorBroadcastTo(ChannelConstant(_mean), shape);
         var std = Engine.TensorBroadcastTo(ChannelConstant(_std), shape);

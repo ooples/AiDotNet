@@ -56,6 +56,12 @@ public class TripoSRModelTests
 
     private static double[] Values(Tensor<double> tensor) => tensor.ToArray();
 
+    private static void AssertClose(double[] expected, double[] actual, double tolerance)
+    {
+        Assert.Equal(expected.Length, actual.Length);
+        for (int i = 0; i < expected.Length; i++) Assert.Equal(expected[i], actual[i], tolerance);
+    }
+
     // ---------------------------------------------------------------------------------------------
     // Parameter counts, derived by hand from the official module definitions.
     // ---------------------------------------------------------------------------------------------
@@ -354,6 +360,102 @@ public class TripoSRModelTests
         }
 
         for (int a = 0; a < 3; a++) Assert.Equal(expected[a], colours[a], 1e-9);
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Preprocessing: tsr/utils.py ImagePreprocessor resizes with
+    // F.interpolate(mode="bilinear", align_corners=False, antialias=True).
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact(Timeout = 120000)]
+    public async Task ResizeWeights_AreTorchAntialiasedBilinear_ByHand()
+    {
+        await Task.Yield();
+        // 4 -> 2: scale 2, support 2. Output 0 is centred at 1: triangle (1 - |j + 0.5 - 1| / 2) over j = 0..2 gives
+        // 0.75, 0.75, 0.25, normalized by 1.75. Output 1 is centred at 3 and covers j = 1..3.
+        var shrink = new[] { 3 / 7.0, 3 / 7.0, 1 / 7.0, 0, 0, 1 / 7.0, 3 / 7.0, 3 / 7.0 };
+        AssertClose(shrink, TsrResize<double>.Weights(4, 2), 1e-15);
+
+        // 5 -> 3: scale 5/3, support 5/3, inverse scale 0.6. Output 0 (centre 5/6): 0.8, 0.6 -> 4/7, 3/7.
+        // Output 1 (centre 2.5) over j = 1..3: 0.4, 1, 0.4 -> 2/9, 5/9, 2/9. Output 2 mirrors output 0.
+        var uneven = new[] { 4 / 7.0, 3 / 7.0, 0, 0, 0, 0, 2 / 9.0, 5 / 9.0, 2 / 9.0, 0, 0, 0, 0, 3 / 7.0, 4 / 7.0 };
+        AssertClose(uneven, TsrResize<double>.Weights(5, 3), 1e-15);
+
+        // 3 -> 5 enlarges: plain bilinear, source x = 0.6 (i + 0.5) - 0.5 clamped at the borders.
+        var grow = new[] { 1.0, 0, 0, 0.6, 0.4, 0, 0, 1, 0, 0, 0.4, 0.6, 0, 0, 1 };
+        AssertClose(grow, TsrResize<double>.Weights(3, 5), 1e-15);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Resize_IsSeparableHeightThenWidth_AndTheEncoderUsesIt()
+    {
+        await Task.Yield();
+        // [1, 2, 5, 4] -> [1, 2, 3, 2]: height 5 -> 3 and width 4 -> 2, so an axis mix-up changes the result.
+        var values = new double[2 * 5 * 4];
+        for (int i = 0; i < values.Length; i++) values[i] = Math.Sin(i + 1.0);
+        var input = new Tensor<double>(new[] { 1, 2, 5, 4 }, new Vector<double>(values));
+        var output = TsrResize<double>.Resize(input, 3, 2);
+        Assert.Equal(new[] { 1, 2, 3, 2 }, output.Shape.ToArray());
+
+        double[,] height = { { 4 / 7.0, 3 / 7.0, 0, 0, 0 }, { 0, 2 / 9.0, 5 / 9.0, 2 / 9.0, 0 }, { 0, 0, 0, 3 / 7.0, 4 / 7.0 } };
+        double[,] width = { { 3 / 7.0, 3 / 7.0, 1 / 7.0, 0 }, { 0, 1 / 7.0, 3 / 7.0, 3 / 7.0 } };
+        var actual = output.ToArray();
+        for (int c = 0; c < 2; c++)
+            for (int i = 0; i < 3; i++)
+                for (int j = 0; j < 2; j++)
+                {
+                    double expected = 0;
+                    for (int a = 0; a < 5; a++)
+                        for (int b = 0; b < 4; b++) expected += height[i, a] * width[j, b] * values[(((c * 5) + a) * 4) + b];
+                    Assert.Equal(expected, actual[(((c * 3) + i) * 2) + j], Tolerance);
+                }
+
+        // A 48px image is conditioned exactly as its antialiased resize to ImageSize (32).
+        var model = new TripoSRModel<double>(Tiny());
+        var large = new double[3 * 48 * 48];
+        var random = RandomHelper.CreateSeededRandom(13);
+        for (int i = 0; i < large.Length; i++) large[i] = random.NextDouble();
+        var image = new Tensor<double>(new[] { 1, 3, 48, 48 }, new Vector<double>(large));
+        Assert.Equal(Values(model.EncodeSceneCodes(TsrResize<double>.Resize(image, 32, 32))), Values(model.EncodeSceneCodes(image)));
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Half precision: DINO's layer-norm epsilon 1e-12 is below Half's smallest subnormal.
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact(Timeout = 120000)]
+    public async Task EncoderLayerNorm_Half_ConstantRowIsFinite_AndMatchesDouble()
+    {
+        await Task.Yield();
+        var half = MathHelper.GetNumericOperations<Half>();
+        Assert.Equal(0.0, half.ToDouble(half.FromDouble(1e-12)));   // the trap: the epsilon itself rounds to zero
+
+        // A constant row has zero variance: (x - mean) / sqrt(0 + eps) must give the shift (0), not 0 / 0.
+        var constant = new Half[2 * 8];
+        for (int i = 0; i < constant.Length; i++) constant[i] = half.FromDouble(0.75);
+        var norm = new TsrLayerNorm<Half>(8, 1e-12);
+        var flat = norm.Forward(new Tensor<Half>(new[] { 2, 8 }, new Vector<Half>(constant))).ToArray();
+        Assert.All(flat, h =>
+        {
+            double value = half.ToDouble(h);
+            Assert.False(double.IsNaN(value) || double.IsInfinity(value), $"Half layer norm gave {value}.");
+            Assert.Equal(0.0, value);
+        });
+
+        // A varying row agrees with the double computation to Half precision.
+        var row = new double[8];
+        var halves = new Half[8];
+        for (int i = 0; i < 8; i++)
+        {
+            halves[i] = half.FromDouble((0.37 * i) - 1.1);
+            row[i] = half.ToDouble(halves[i]);
+        }
+
+        double mean = row.Average();
+        double variance = row.Select(v => (v - mean) * (v - mean)).Average();
+        var normalized = norm.Forward(new Tensor<Half>(new[] { 1, 8 }, new Vector<Half>(halves))).ToArray();
+        for (int i = 0; i < 8; i++)
+            Assert.Equal((row[i] - mean) / Math.Sqrt(variance + 1e-12), half.ToDouble(normalized[i]), 2e-3);
     }
 
     // ---------------------------------------------------------------------------------------------
