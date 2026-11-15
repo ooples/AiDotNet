@@ -346,7 +346,9 @@ public abstract partial class TabRBase<T> : IParameterSource<T>
     public void BuildIndex(Tensor<T> features)
     {
         _numIndexedSamples = features.Shape[0];
-        _indexFeatures = features;
+        // A copy, as the labels are: every forward re-encodes the indexed features, so a reference would let the
+        // caller's later writes to its own tensor change the index
+        _indexFeatures = TabularMetrics.KeptCopy(features);
         _indexLabels = null;
 
         // Encode all training samples; the index outlives this call, so it holds its own copy of the engine result
@@ -421,36 +423,39 @@ public abstract partial class TabRBase<T> : IParameterSource<T>
                 "Retrieval needs at least one candidate besides the excluded sample; index more samples.");
         }
 
-        // ||q||^2 + ||c||^2 - 2 q.c for every (query, candidate) pair
-        var queryNormSq = Engine.ReduceSum(Engine.TensorMultiply(queries, queries), new[] { 1 }, true);
-        var candidateNormSq = Engine.ReduceSum(Engine.TensorMultiply(candidates, candidates), new[] { 1 }, false)
-            .Reshape(1, _numIndexedSamples);
-        var cross = Engine.TensorMatMul(queries, Engine.TensorTranspose(candidates));
-        var allDistances = Engine.TensorSubtract(
-            Engine.TensorAdd(queryNormSq, candidateNormSq),
-            TensorTapeOps.TapeMultiplyScalar(Engine, cross, NumOps.FromDouble(2.0)));
-
-        // Skip excluded indices (for leave-one-out): row b excludes column excludeIndices[b] when b is covered
-        if (excludes && excludeIndices != null)
+        // The ranking is a discrete selection with no gradient, so it is computed off the tape. Distances are direct
+        // per-row differences: the ||q||^2 + ||c||^2 - 2 q.c expansion cancels for keys that are close relative to
+        // their norm, misranks the neighbours in float and overflows the squares in Half.
+        Tensor<int> nearest;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            int covered = Math.Min(batchSize, excludeIndices.Length);
-            var excluded = Tensor<int>.FromVector(excludeIndices.GetSubVector(0, covered));
-            if (covered < batchSize)
+            var allDistances = TabularMetrics.SquaredDistances(queries, candidates);
+
+            // Skip excluded indices (for leave-one-out): row b excludes column excludeIndices[b] when b is covered
+            if (excludes && excludeIndices != null)
             {
-                excluded = Engine.TensorConcatenate(
-                    new[] { excluded, Engine.TensorFullLike(new Tensor<int>(new[] { batchSize - covered }), -1) }, 0);
+                int covered = Math.Min(batchSize, excludeIndices.Length);
+                var excluded = Tensor<int>.FromVector(excludeIndices.GetSubVector(0, covered));
+                if (covered < batchSize)
+                {
+                    excluded = Engine.TensorConcatenate(
+                        new[] { excluded, Engine.TensorFullLike(new Tensor<int>(new[] { batchSize - covered }), -1) }, 0);
+                }
+
+                var excludedMask = Engine.TensorOneHot<T>(excluded, _numIndexedSamples).Reshape(batchSize, _numIndexedSamples);
+                allDistances = Engine.TensorWhere(
+                    excludedMask, Engine.TensorFullLike(allDistances, NumOps.MaxValue), allDistances);
             }
 
-            var excludedMask = Engine.TensorOneHot<T>(excluded, _numIndexedSamples).Reshape(batchSize, _numIndexedSamples);
-            allDistances = Engine.TensorWhere(
-                excludedMask, Engine.TensorFullLike(allDistances, NumOps.MaxValue), allDistances);
+            // k nearest in stable ascending order of distance
+            nearest = TieBreakArgMax.StableSmallestK(allDistances, k);
         }
 
-        // k nearest in stable ascending order of distance
-        var nearest = TieBreakArgMax.StableSmallestK(allDistances, k);
-        var distances = Engine.TensorTakeAlongDim(allDistances, nearest, 1);
+        // The gathered rows and their distances are on the tape, so gradients reach the queries and candidates
         var neighbors = Engine.TensorIndexSelect(candidates, nearest.Reshape(batchSize * k), 0)
             .Reshape(batchSize, k, dim);
+        var offsets = Engine.TensorSubtract(queries.Reshape(batchSize, 1, dim), neighbors);
+        var distances = Engine.ReduceSum(Engine.TensorMultiply(offsets, offsets), new[] { 2 }, false);
 
         return (nearest, neighbors, distances);
     }

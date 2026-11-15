@@ -397,9 +397,9 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
                 nameof(labels));
         }
 
-        _contextFeatures = features;
-        // The labels are read on every later prediction, so the context holds its own copy: a caller's labels can
-        // be an engine result (the classifier's one-hot) living in a tensor arena that a later call recycles
+        // The features and labels are read on every later prediction, so the context holds its own copies: a caller
+        // can write to its own tensors afterwards, and its labels can be an engine result (the classifier's one-hot) living in a tensor arena that a later call recycles
+        _contextFeatures = TabularMetrics.KeptCopy(features);
         var keptLabels = TabularMetrics.KeptCopy(labels);
         _contextLabels = _labelDimension > 0 ? keptLabels.Reshape(numSamples, _labelDimension) : keptLabels;
     }

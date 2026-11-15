@@ -124,28 +124,16 @@ public class RetrievalModule<T>
     /// </summary>
     /// <remarks>
     /// Each query row is differenced against all keys and squared directly (no ||q||^2 - 2 q.k + ||k||^2
-    /// expansion, which cancels catastrophically for close points), one query row at a time so the
-    /// intermediate stays [numTrainingSamples, embeddingDim].
+    /// expansion, which cancels catastrophically for close points); see
+    /// <see cref="TabularMetrics.SquaredDistances{T}(Tensor{T}, Tensor{T})"/>.
     /// </remarks>
     private Tensor<T> ComputeDistances(Tensor<T> queryKeys)
     {
-        var engine = AiDotNetEngine.Current;
         var trainingKeys = (_trainingKeys ?? throw new InvalidOperationException("_trainingKeys has not been initialized."))
             .Reshape(_numTrainingSamples, _embeddingDim);
         int batchSize = queryKeys.Shape[0];
         var queries = TabularMetrics.Flat(queryKeys, batchSize * _embeddingDim).Reshape(batchSize, _embeddingDim);
-
-        var rows = new Tensor<T>[batchSize];
-        for (int b = 0; b < batchSize; b++)
-        {
-            var diff = engine.TensorSubtract(engine.TensorNarrow(queries, 0, b, 1), trainingKeys);
-            rows[b] = engine.ReduceSum(engine.TensorMultiply(diff, diff), new[] { 1 }, false)
-                .Reshape(1, _numTrainingSamples);
-        }
-
-        return batchSize == 0
-            ? new Tensor<T>(new[] { 0, _numTrainingSamples })
-            : engine.TensorConcatenate(rows, 0);
+        return TabularMetrics.SquaredDistances(queries, trainingKeys);
     }
 
     /// <summary>

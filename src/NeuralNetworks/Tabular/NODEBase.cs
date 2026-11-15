@@ -253,12 +253,7 @@ public abstract class NODEBase<T> : IParameterSource<T>
         var splitProbs = ComputeBinProbabilities(scaledDiff);
         var stayLeftProbs = Engine.ScalarMinusTensor(NumOps.One, splitProbs);
 
-        // goesRight[d, leaf] = (leaf >> (depth - 1 - d)) & 1, computed as floor(leaf / 2^k) mod 2
-        var leafIds = Engine.TensorArange<T>(0, numLeaves).Reshape(1, numLeaves);
-        var pathScale = Engine.TensorExp2(Engine.TensorArange<T>(depth - 1, -1, -1)).Reshape(depth, 1);
-        var quotient = Engine.TensorFloor(Engine.TensorDivide(leafIds, pathScale));
-        var goesRight = Engine.TensorSubtract(
-            quotient, Engine.TensorMultiplyScalar(Engine.TensorFloor(Engine.TensorDivideScalar(quotient, NumOps.FromDouble(2.0))), NumOps.FromDouble(2.0)));
+        var goesRight = LeafPathBits(depth);
         var goesLeft = Engine.ScalarMinusTensor(NumOps.One, goesRight);
 
         // Leaf weight = product over depths of p_d (right) or 1 - p_d (left), multiplied in depth order
@@ -276,6 +271,30 @@ public abstract class NODEBase<T> : IParameterSource<T>
         // Compute tree output as weighted sum of leaf values
         return Engine.TensorMatMul(
             leafWeights, _leafValues[treeIdx].Reshape(numLeaves, Options.TreeOutputDimension));
+    }
+
+    /// <summary>
+    /// The path bits of every leaf: goesRight[d, leaf] = (leaf &gt;&gt; (depth - 1 - d)) &amp; 1, as [depth, 2^depth].
+    /// </summary>
+    /// <remarks>
+    /// Bit d of every leaf is the pattern [0 x s, 1 x s] repeated 2^d times, s = 2^(depth - 1 - d): a [0, 1] pair
+    /// broadcast over [2^d, 2, s]. Only the values 0 and 1 are ever held in T. Computing floor(leaf / 2^k) mod 2 in T
+    /// instead is wrong in Half from depth 12, where leaf ids above 2048 are no longer exact.
+    /// </remarks>
+    internal static Tensor<T> LeafPathBits(int depth)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int numLeaves = 1 << depth;
+        var pair = new Tensor<T>(new[] { numOps.Zero, numOps.One }, new[] { 1, 2, 1 });
+        var rows = new Tensor<T>[depth];
+        for (int d = 0; d < depth; d++)
+        {
+            var span = new Tensor<T>(new[] { 1 << d, 2, 1 << (depth - 1 - d) });
+            rows[d] = engine.TensorAdd(span, pair).Reshape(1, numLeaves);
+        }
+
+        return engine.TensorConcatenate(rows, 0);
     }
 
     /// <summary>

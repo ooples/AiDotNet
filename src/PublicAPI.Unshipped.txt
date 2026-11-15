@@ -22952,8 +22952,6 @@ AiDotNet.NeuralNetworks.Tabular.TabPFNBase<T>.GetTrainableTensors() -> System.Co
 AiDotNet.NeuralNetworks.Tabular.TabPFNBase<T>.TrainWithTape(System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! objective, T learningRate) -> T
 AiDotNet.NeuralNetworks.Tabular.MambularBase<T>.GetTrainableTensors() -> System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
 AiDotNet.NeuralNetworks.Tabular.MambularBase<T>.TrainWithTape(System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! objective, T learningRate) -> T
-override AiDotNet.NeuralNetworks.Tabular.GhostBatchNormalization<T>.UpdateParameters(T learningRate) -> void
-override AiDotNet.NeuralNetworks.Tabular.GhostBatchNormalization<T>.ClearGradients() -> void
 override AiDotNet.NeuralNetworks.Tabular.GhostBatchNormalization<T>.ResetState() -> void
 AiDotNet.NeuralNetworks.Tabular.TabNetBase<T>.GetTrainableTensors() -> System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
 AiDotNet.NeuralNetworks.Tabular.TabNetBase<T>.TrainWithTape(System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! objective, T learningRate) -> T

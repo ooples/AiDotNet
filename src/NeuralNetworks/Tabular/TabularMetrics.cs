@@ -153,6 +153,39 @@ internal static class TabularMetrics
     }
 
     /// <summary>
+    /// Squared Euclidean distance from every query row to every candidate row: [queries, candidates].
+    /// </summary>
+    /// <remarks>
+    /// Each query row is differenced against all candidates and squared directly. The ||q||^2 + ||c||^2 - 2 q.c
+    /// expansion cancels catastrophically for points that are close relative to their norm (it misranks
+    /// neighbours in float and overflows the squares in Half), so it is not used. One query row at a time keeps
+    /// the intermediate at [candidates, dim]. All engine ops, so gradients reach both arguments.
+    /// </remarks>
+    public static Tensor<T> SquaredDistances<T>(Tensor<T> queries, Tensor<T> candidates)
+    {
+        if (queries is null) throw new ArgumentNullException(nameof(queries));
+        if (candidates is null) throw new ArgumentNullException(nameof(candidates));
+
+        var engine = AiDotNetEngine.Current;
+        int batchSize = queries.Shape[0];
+        int numCandidates = candidates.Shape[0];
+        if (batchSize == 0)
+        {
+            return new Tensor<T>(new[] { 0, numCandidates });
+        }
+
+        var rows = new Tensor<T>[batchSize];
+        for (int b = 0; b < batchSize; b++)
+        {
+            var diff = engine.TensorSubtract(engine.TensorNarrow(queries, 0, b, 1), candidates);
+            rows[b] = engine.ReduceSum(engine.TensorMultiply(diff, diff), new[] { 1 }, false)
+                .Reshape(1, numCandidates);
+        }
+
+        return engine.TensorConcatenate(rows, 0);
+    }
+
+    /// <summary>
     /// A garbage-collected copy of an engine result that a field keeps past the current call. Engine results can
     /// live in a tensor arena that a later call recycles, so a kept reference would read overwritten values.
     /// </summary>

@@ -246,4 +246,100 @@ public class NeuralNetworkSweepAdversarialTests
 
         Assert.Equal(new[] { 8.0, 80.0, 0.0, 0.0, 2.0, 20.0 }, sum);
     }
+
+    [Fact]
+    public void GhostBatchNormalization_ForwardThatIsNotATrainingStep_LeavesRunningStatisticsUnchanged()
+    {
+        // The fused session's lazy-shape pass and replay checks run training-mode forwards that are not steps;
+        // like BatchNormalizationLayer, the ghost batch norm must not advance its EMA on them.
+        var layer = new GhostBatchNormalization<double>(2);
+        layer.SetTrainingMode(true);
+        var batch = Doubles(new[] { 4, 2 }, 1, 10, 3, 30, 5, 50, 7, 70);
+        var meanBefore = layer.RunningMean.ToArray();
+        var varBefore = layer.RunningVar.ToArray();
+
+        using (AiDotNet.Training.CompiledStepRandom<double>.SuppressDraws())
+        {
+            _ = layer.Forward(batch);
+        }
+
+        Assert.Equal(meanBefore, layer.RunningMean.ToArray());
+        Assert.Equal(varBefore, layer.RunningVar.ToArray());
+
+        // A real step does advance it: momentum 0.02 toward the batch mean (4, 40) and the unbiased variance
+        // (20/3, 2000/3), starting from mean 0 and variance 1.
+        _ = layer.Forward(batch);
+        var mean = layer.RunningMean.ToArray();
+        var variance = layer.RunningVar.ToArray();
+        Assert.Equal(0.02 * 4, mean[0], 12);
+        Assert.Equal(0.02 * 40, mean[1], 12);
+        Assert.Equal(0.98 + 0.02 * 20.0 / 3.0, variance[0], 12);
+        Assert.Equal(0.98 + 0.02 * 2000.0 / 3.0, variance[1], 12);
+    }
+
+    [Fact]
+    public void SquaredDistances_KeysCloseRelativeToTheirNorm_AreExact()
+    {
+        // ||q||^2 + ||c||^2 - 2 q.c at norm 1e8 cancels 1e16-sized terms whose spacing is 2, so distances of 1
+        // and 0.25 come out as 0 or 2 and the two candidates swap rank. Direct differences are exact.
+        var queries = Doubles(new[] { 1, 2 }, 1e8, 0);
+        var candidates = Doubles(new[] { 2, 2 }, 1e8 + 1, 0, 1e8, 0.5);
+
+        var distances = TabularMetrics.SquaredDistances(queries, candidates);
+
+        Assert.Equal(new[] { 1, 2 }, distances.Shape.ToArray());
+        Assert.Equal(new[] { 1.0, 0.25 }, distances.ToArray());
+    }
+
+    [Fact]
+    public void TabR_WritesToTheCallersFeaturesAfterBuildIndex_DoNotChangePredictions()
+    {
+        // Every forward re-encodes the indexed features, so the index must own them, as it owns the labels.
+        var model = new TabRRegression<double>(2, 1, SmallTabROptions(neighbors: 2));
+        var features = Doubles(new[] { 3, 2 }, 0.4, 0.7, 1.1, 0.2, 0.6, 0.9);
+        model.BuildIndex(features, Doubles(new[] { 3, 1 }, 0.1, 0.5, 0.9));
+        var query = Doubles(new[] { 1, 2 }, 0.5, 0.6);
+        var before = model.Predict(query).ToArray();
+
+        features[0, 0] = 40.0;
+        features[1, 1] = -25.0;
+        var after = model.Predict(query).ToArray();
+
+        Assert.Equal(before, after);
+    }
+
+    [Fact]
+    public void TabPFN_WritesToTheCallersFeaturesAfterSetContext_DoNotChangePredictions()
+    {
+        var model = new TabPFNClassifier<double>(2, 2, SmallTabPFNOptions());
+        var features = Doubles(new[] { 3, 2 }, 0.4, 0.7, 1.1, 0.2, 0.6, 0.9);
+        model.SetContext(features, new Vector<int>(new[] { 0, 1, 0 }));
+        var query = Doubles(new[] { 1, 2 }, 0.5, 0.5);
+        var before = model.PredictProbabilities(query).ToArray();
+
+        features[0, 0] = 40.0;
+        features[2, 1] = -25.0;
+        var after = model.PredictProbabilities(query).ToArray();
+
+        Assert.Equal(before, after);
+    }
+
+    [Fact]
+    public void NODELeafPathBits_Half_DeepTreesRouteEveryLeafByItsBinaryId()
+    {
+        // At depth 12 there are 4096 leaves; Half holds integers exactly only up to 2048, so leaf ids computed in
+        // T collapse (2049 -> 2048) and route leaves down the wrong branch.
+        const int depth = 12;
+        var bits = NODEBase<Half>.LeafPathBits(depth);
+
+        Assert.Equal(new[] { depth, 1 << depth }, bits.Shape.ToArray());
+        for (int leaf = 0; leaf < 1 << depth; leaf++)
+        {
+            for (int d = 0; d < depth; d++)
+            {
+                double expected = (leaf >> (depth - 1 - d)) & 1;
+                Assert.Equal(expected, (double)bits[d, leaf]);
+            }
+        }
+    }
 }

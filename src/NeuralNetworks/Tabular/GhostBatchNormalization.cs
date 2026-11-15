@@ -59,9 +59,6 @@ public partial class GhostBatchNormalization<T> : LayerBase<T>, IShapeContract
     [TrainableParameter(Role = PersistentTensorRole.NormalizationParams)]
     private Tensor<T> _beta;
 
-    private Tensor<T>? _gammaGradient;
-    private Tensor<T>? _betaGradient;
-
     // Running statistics for inference
     [Buffer(Name = "running_mean", Role = PersistentTensorRole.Constant)]
     private Tensor<T> _runningMean;
@@ -218,24 +215,30 @@ public partial class GhostBatchNormalization<T> : LayerBase<T>, IShapeContract
 
     private void UpdateRunningStatistics(Tensor<T> meanRow, Tensor<T> varRow, int sampleCount)
     {
-        // Running stats are a non-tape side effect: running = (1 - momentum) running + momentum batch, written
-        // in place so the registered buffer keeps its identity. As in torch.nn.BatchNorm1d (which the reference
-        // pytorch-tabnet GBN wraps), the batch is normalized with the biased variance but the running variance
-        // tracks the unbiased one, var * n / (n - 1); callers guarantee n >= 2.
-        var engine = Engine;
-        var keep = NumOps.FromDouble(1 - _momentum);
-        var take = NumOps.FromDouble(_momentum);
-        var unbiasedTake = NumOps.FromDouble(_momentum * sampleCount / (sampleCount - 1.0));
-        var mean = engine.TensorAdd(
-            engine.TensorMultiplyScalar(_runningMean, keep),
-            engine.TensorMultiplyScalar(meanRow.Contiguous().Reshape(_numFeatures), take));
-        var variance = engine.TensorAdd(
-            engine.TensorMultiplyScalar(_runningVar, keep),
-            engine.TensorMultiplyScalar(varRow.Contiguous().Reshape(_numFeatures), unbiasedTake));
-        mean.AsSpan().CopyTo(_runningMean.AsWritableSpan());
-        variance.AsSpan().CopyTo(_runningVar.AsWritableSpan());
-        engine.InvalidatePersistentTensor(_runningMean);
-        engine.InvalidatePersistentTensor(_runningVar);
+        // Running stats are buffers, not trainable state: running = (1 - momentum) running + momentum batch.
+        // As in BatchNormalizationLayer, the EMA is written with GraphMode-aware in-place engine ops so a compiled
+        // plan replays it on every step (a host span copy would be baked into the plan once and freeze the
+        // statistics), under NoGradScope so the tape does not record it, and skipped on forwards that are not a
+        // training step (the fused session's lazy-shape pass and replay checks), which must not advance it.
+        // As in torch.nn.BatchNorm1d (which the reference pytorch-tabnet GBN wraps), the batch is normalized with
+        // the biased variance but the running variance tracks the unbiased one, var * n / (n - 1); callers
+        // guarantee n >= 2.
+        if (AiDotNet.Training.CompiledStepRandom<T>.InNonStepForward)
+        {
+            return;
+        }
+
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            var engine = Engine;
+            var keep = NumOps.FromDouble(1 - _momentum);
+            var take = NumOps.FromDouble(_momentum);
+            var unbiasedTake = NumOps.FromDouble(_momentum * sampleCount / (sampleCount - 1.0));
+            engine.TensorMultiplyScalarInPlace(_runningMean, keep);
+            engine.TensorAddInPlace(_runningMean, engine.TensorMultiplyScalar(meanRow.Reshape(_numFeatures), take));
+            engine.TensorMultiplyScalarInPlace(_runningVar, keep);
+            engine.TensorAddInPlace(_runningVar, engine.TensorMultiplyScalar(varRow.Reshape(_numFeatures), unbiasedTake));
+        }
     }
 
     /// <summary>
@@ -255,35 +258,12 @@ public partial class GhostBatchNormalization<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
-    /// Plain gradient descent on gamma and beta when a manual backward has supplied their gradients; the tape
-    /// training path updates the registered tensors directly instead.
-    /// </summary>
-    public override void UpdateParameters(T learningRate)
-    {
-        if (_gammaGradient is null || _betaGradient is null) return;
-
-        var gamma = Engine.TensorSubtract(_gamma, Engine.TensorMultiplyScalar(_gammaGradient, learningRate));
-        var beta = Engine.TensorSubtract(_beta, Engine.TensorMultiplyScalar(_betaGradient, learningRate));
-        gamma.AsSpan().CopyTo(_gamma.AsWritableSpan());
-        beta.AsSpan().CopyTo(_beta.AsWritableSpan());
-        Engine.InvalidatePersistentTensor(_gamma);
-        Engine.InvalidatePersistentTensor(_beta);
-    }
-
-    /// <summary>
-    /// Resets the gradients to zero.
+    /// Clears the gradients accumulated for gamma and beta. The tape training path updates the registered gamma
+    /// and beta tensors directly, so this layer keeps no gradient state of its own.
     /// </summary>
     public void ResetGradients()
     {
-        _gammaGradient = null;
-        _betaGradient = null;
-    }
-
-    /// <inheritdoc/>
-    public override void ClearGradients()
-    {
-        base.ClearGradients();
-        ResetGradients();
+        ClearGradients();
     }
 
     /// <inheritdoc/>
