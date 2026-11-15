@@ -389,6 +389,169 @@ public class DreamGaussianTests
         }
     }
 
+    private static double[] UvTriangle(UvAtlas atlas, int f)
+    {
+        var t = new double[6];
+        for (int k = 0; k < 3; k++)
+        {
+            t[2 * k] = atlas.Uvs[2 * atlas.Faces[(3 * f) + k]];
+            t[(2 * k) + 1] = atlas.Uvs[(2 * atlas.Faces[(3 * f) + k]) + 1];
+        }
+
+        return t;
+    }
+
+    private static double SignedUvArea(double[] t)
+        => 0.5 * (((t[2] - t[0]) * (t[5] - t[1])) - ((t[4] - t[0]) * (t[3] - t[1])));
+
+    /// <summary>
+    /// The ratio of the singular values of the 3D-to-UV Jacobian of a face: 1 for a conformal (angle-preserving) map.
+    /// </summary>
+    private static double ConformalDistortion(UvAtlas atlas, int f)
+    {
+        double[] P(int k)
+        {
+            int v = atlas.Faces[(3 * f) + k];
+            return new[] { atlas.Vertices[3 * v], atlas.Vertices[(3 * v) + 1], atlas.Vertices[(3 * v) + 2] };
+        }
+
+        double[] p0 = P(0), p1 = P(1), p2 = P(2);
+        double[] e1 = { p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2] };
+        double[] e2 = { p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2] };
+        double l1 = Math.Sqrt((e1[0] * e1[0]) + (e1[1] * e1[1]) + (e1[2] * e1[2]));
+        double x2 = ((e1[0] * e2[0]) + (e1[1] * e2[1]) + (e1[2] * e2[2])) / l1;
+        double e2Length2 = (e2[0] * e2[0]) + (e2[1] * e2[1]) + (e2[2] * e2[2]);
+        double y2 = Math.Sqrt(e2Length2 - (x2 * x2));
+        var t = UvTriangle(atlas, f);
+        // J = D_uv * D_xy^-1 with D_xy = [[l1, x2], [0, y2]].
+        double a = t[2] - t[0], b = t[4] - t[0], c = t[3] - t[1], d = t[5] - t[1];
+        double j00 = a / l1, j01 = (b - (a * x2 / l1)) / y2;
+        double j10 = c / l1, j11 = (d - (c * x2 / l1)) / y2;
+        double frobenius = (j00 * j00) + (j01 * j01) + (j10 * j10) + (j11 * j11);
+        double det = (j00 * j11) - (j01 * j10);
+        double root = Math.Sqrt(Math.Max(0.0, (frobenius * frobenius) - (4.0 * det * det)));
+        return Math.Sqrt((frobenius + root) / (frobenius - root));
+    }
+
+    private static (double[] Vertices, int[] Faces) UvSphere(int rings, int segments)
+    {
+        var vertices = new List<double> { 0.0, 0.0, 1.0 };
+        for (int r = 1; r < rings; r++)
+        {
+            double theta = Math.PI * r / rings;
+            for (int s = 0; s < segments; s++)
+            {
+                double phi = 2.0 * Math.PI * s / segments;
+                vertices.Add(Math.Sin(theta) * Math.Cos(phi));
+                vertices.Add(Math.Sin(theta) * Math.Sin(phi));
+                vertices.Add(Math.Cos(theta));
+            }
+        }
+
+        vertices.AddRange(new[] { 0.0, 0.0, -1.0 });
+        int south = (vertices.Count / 3) - 1;
+        int Ring(int r, int s) => 1 + ((r - 1) * segments) + (((s % segments) + segments) % segments);
+        var faces = new List<int>();
+        for (int s = 0; s < segments; s++)
+        {
+            faces.AddRange(new[] { 0, Ring(1, s), Ring(1, s + 1) });
+            for (int r = 1; r < rings - 1; r++)
+            {
+                faces.AddRange(new[] { Ring(r, s), Ring(r + 1, s), Ring(r + 1, s + 1) });
+                faces.AddRange(new[] { Ring(r, s), Ring(r + 1, s + 1), Ring(r, s + 1) });
+            }
+
+            faces.AddRange(new[] { Ring(rings - 1, s), south, Ring(rings - 1, s + 1) });
+        }
+
+        return (vertices.ToArray(), faces.ToArray());
+    }
+
+    [Fact]
+    public void UvAtlas_PlanarQuad_IsOneConformalChart()
+    {
+        // A 2 x 0.71 rectangle in a tilted plane: LSCM maps it to a similar rectangle, so every face's distortion is 1.
+        double[] origin = { 0.3, -0.2, 0.1 };
+        double[] along = { 2.0 / Math.Sqrt(2.0), 2.0 / Math.Sqrt(2.0), 0.0 };
+        double[] across = { -0.5 / Math.Sqrt(3.0), 0.5 / Math.Sqrt(3.0), 1.0 / Math.Sqrt(3.0) };
+        var vertices = new double[12];
+        for (int i = 0; i < 4; i++)
+        {
+            double s = (i & 1) == 0 ? 0.0 : 1.0, t = (i & 2) == 0 ? 0.0 : 1.0;
+            for (int k = 0; k < 3; k++)
+                vertices[(3 * i) + k] = origin[k] + (s * along[k]) + (t * across[k]);
+        }
+
+        int[] faces = { 0, 1, 3, 0, 3, 2 };
+        var atlas = UvAtlasUnwrapper.Unwrap(vertices, faces, new UvAtlasOptions { TextureResolution = 256, PaddingTexels = 2 });
+        Assert.Equal(1, atlas.ChartCount);
+        Assert.Equal(4, atlas.SourceVertex.Length);
+        for (int f = 0; f < 2; f++)
+        {
+            Assert.Equal(1.0, ConformalDistortion(atlas, f), 6);
+            Assert.True(SignedUvArea(UvTriangle(atlas, f)) > 0.0);
+        }
+
+        // A similarity: both triangles keep the same UV-to-surface area ratio, so texel density is uniform.
+        Assert.Equal(SignedUvArea(UvTriangle(atlas, 0)), SignedUvArea(UvTriangle(atlas, 1)), 9);
+    }
+
+    [Fact]
+    public void UvAtlas_CurvedSurface_CoversEveryFaceWithoutFlipsOrOverlaps()
+    {
+        var (vertices, faces) = UvSphere(8, 12);
+        int faceCount = faces.Length / 3;
+        var atlas = UvAtlasUnwrapper.Unwrap(vertices, faces, new UvAtlasOptions { TextureResolution = 512, PaddingTexels = 2 });
+
+        Assert.InRange(atlas.ChartCount, 2, faceCount - 1);
+        Assert.Equal(faceCount, atlas.FaceChart.Length);
+        Assert.All(atlas.FaceChart, c => Assert.InRange(c, 0, atlas.ChartCount - 1));
+        Assert.All(atlas.Uvs, uv => Assert.InRange(uv, 0.0, 1.0));
+        for (int f = 0; f < faceCount; f++)
+        {
+            // Covered with the input's orientation, and still close to conformal on a smooth surface.
+            Assert.True(SignedUvArea(UvTriangle(atlas, f)) > 0.0, $"Face {f} is flipped or collapsed in UV.");
+            Assert.InRange(ConformalDistortion(atlas, f), 1.0, 1.5);
+            for (int k = 0; k < 3; k++)
+                Assert.Equal(faces[(3 * f) + k], atlas.SourceVertex[atlas.Faces[(3 * f) + k]]);
+        }
+
+        for (int a = 0; a < faceCount; a++)
+        {
+            for (int b = a + 1; b < faceCount; b++)
+                Assert.False(UvAtlasUnwrapper.TrianglesOverlap(UvTriangle(atlas, a), UvTriangle(atlas, b)), $"UV triangles {a} and {b} overlap.");
+        }
+
+        // The padding gutter: no UV closer than the padding to the square's border.
+        double padding = 2.0 / 512.0;
+        Assert.All(atlas.Uvs, uv => Assert.InRange(uv, padding - 1e-12, 1.0 - padding + 1e-12));
+    }
+
+    [Fact]
+    public void UvAtlas_Segmentation_KeepsEachChartWithinItsNormalCone()
+    {
+        var (vertices, faces) = UvSphere(8, 12);
+        var mesh = new UvAtlasUnwrapper.MeshData(vertices, faces);
+        var all = Enumerable.Range(0, faces.Length / 3).ToArray();
+        double cosLimit = Math.Cos(Math.PI / 4.0);
+        var groups = UvAtlasUnwrapper.Segment(mesh, all, cosLimit);
+        Assert.Equal(all, groups.SelectMany(g => g).OrderBy(f => f).ToArray());
+        Assert.True(groups.Count > 1);
+        foreach (var group in groups)
+        {
+            // Every face joined within the cone of the chart normal at the time, so none faces away from the final one.
+            double sx = group.Sum(f => mesh.Normals[3 * f] * mesh.Areas[f]);
+            double sy = group.Sum(f => mesh.Normals[(3 * f) + 1] * mesh.Areas[f]);
+            double sz = group.Sum(f => mesh.Normals[(3 * f) + 2] * mesh.Areas[f]);
+            double length = Math.Sqrt((sx * sx) + (sy * sy) + (sz * sz));
+            foreach (int f in group)
+            {
+                double cos = ((mesh.Normals[3 * f] * sx) + (mesh.Normals[(3 * f) + 1] * sy) + (mesh.Normals[(3 * f) + 2] * sz)) / length;
+                Assert.True(cos > 0.0, $"Face {f} faces away from its chart.");
+            }
+        }
+    }
+
     [Fact]
     public void MeshRasterizer_SeesTheFrontFaceAtTheRightDepth()
     {
