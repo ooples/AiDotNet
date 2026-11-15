@@ -409,18 +409,7 @@ public class TabularDataTransformer<T> : IModelSerializer
         int k = Math.Min(_vgmModes, Math.Max(1, n / 5));
         int[] grid = { n, k };
 
-        // The fit runs on the column divided by its largest magnitude and the fitted means and
-        // stds are scaled back at the end. Squaring raw values overflows narrow types (float data
-        // at ±1e20 squares to +inf, which turned the variance into inf and every responsibility
-        // into NaN); in scaled units every value is within [-1, 1], so its square cannot overflow.
-        // The Normal-Gamma posterior is scale-equivariant (b0 is the data variance), and every floor
-        // below stays in ORIGINAL data units (a length floor is divided by scale, a variance floor by
-        // scale twice; the dimensionless mass and weight floors are unchanged), so the fitted modes
-        // match an unscaled fit exactly up to rounding.
-        T scale = MathHelper.Max(
-            NumOps.Abs(engine.TensorMinValue(x)), NumOps.Abs(engine.TensorMaxValue(x)));
-        if (!NumOps.GreaterThan(scale, NumOps.Zero)) scale = NumOps.One;
-        x = engine.TensorDivideScalar(x, scale);
+        Array.Sort(values);
 
         // Divided by scale twice rather than by scale squared, which itself overflows float at 1e20.
         T VarianceInScaledUnits(double floor) => NumOps.Divide(NumOps.Divide(NumOps.FromDouble(floor), scale), scale);
@@ -452,15 +441,34 @@ public class TabularDataTransformer<T> : IModelSerializer
         T rateFloor = VarianceInScaledUnits(1e-10);   // floors b_k and b_k/a_k, both variances
         T perMode = NumOps.FromDouble((double)n / k);
 
-        // Posterior parameters, initialized by spreading component means across the
-        // data range (k-means-style seeding) with broad precision.
-        var alpha = Tensor<T>.CreateDefault(new[] { k }, NumOps.Add(alpha0, perMode));
-        var betap = Tensor<T>.CreateDefault(new[] { k }, NumOps.Add(beta0, perMode));
-        var mp = engine.TensorAddScalar(
-            engine.TensorMultiplyScalar(engine.TensorArange<T>(0.5, k, 1.0), NumOps.Divide(range, NumOps.FromDouble(k))),
-            valMin);
-        var ap = Tensor<T>.CreateDefault(new[] { k }, NumOps.Add(a0, NumOps.Multiply(half, perMode)));
-        var bp = Tensor<T>.CreateDefault(new[] { k }, NumOps.Add(b0, NumOps.Multiply(NumOps.Multiply(half, dataVar), perMode)));
+        // Posterior parameters, initialized from a hard k-means partition of the column (sklearn's
+        // BayesianGaussianMixture default, init_params="kmeans", which the official CTGAN transformer uses):
+        // the variational M-step is run once on those one-hot responsibilities. Spreading the means over the
+        // range with every component given the whole column's variance instead made each component cover both
+        // clusters of a bimodal column, and the components then converged together onto its centre: two spikes
+        // at 0 and 1 were fitted as two identical modes at 0.5.
+        var alpha = new double[k];
+        var betap = new double[k];
+        var mp = new double[k];
+        var ap = new double[k];
+        var bp = new double[k];
+        var assignment = KMeansPartition(values, k);
+        for (int m = 0; m < k; m++)
+        {
+            double Nk = 0, xbar = 0;
+            for (int i = 0; i < n; i++) if (assignment[i] == m) { Nk += 1; xbar += values[i]; }
+            if (Nk > 0) xbar /= Nk;
+            double sk = 0;
+            for (int i = 0; i < n; i++) if (assignment[i] == m) { double d = values[i] - xbar; sk += d * d; }
+            if (Nk > 0) sk /= Nk;
+
+            alpha[m] = alpha0 + Nk;
+            betap[m] = beta0 + Nk;
+            mp[m] = (beta0 * m0 + Nk * xbar) / betap[m];
+            ap[m] = a0 + 0.5 * Nk;
+            bp[m] = b0 + 0.5 * (Nk * sk + beta0 * Nk * (xbar - m0) * (xbar - m0) / betap[m]);
+            if (bp[m] < 1e-10) bp[m] = 1e-10;
+        }
 
         var xGrid = Expand(x.Reshape(new[] { n, 1 }), grid);
         var ones = Tensor<T>.CreateDefault(new[] { k }, NumOps.One);
@@ -552,7 +560,53 @@ public class TabularDataTransformer<T> : IModelSerializer
     }
 
     /// <summary>
-    /// Copies a 1-D tensor into a freshly allocated heap array, independent of any arena buffer.
+    /// Lloyd's k-means on sorted one-dimensional values, seeded with k equal-count contiguous groups (the 1-D
+    /// quantile split, deterministic), returning each value's cluster index.
+    /// </summary>
+    private static int[] KMeansPartition(double[] sortedValues, int k)
+    {
+        int n = sortedValues.Length;
+        var labels = new int[n];
+        for (int i = 0; i < n; i++) labels[i] = Math.Min((int)((long)i * k / n), k - 1);
+        if (k <= 1) return labels;
+
+        var centers = new double[k];
+        var counts = new int[k];
+        const int maxIterations = 100;
+        for (int iteration = 0; iteration < maxIterations; iteration++)
+        {
+            Array.Clear(centers, 0, k);
+            Array.Clear(counts, 0, k);
+            for (int i = 0; i < n; i++) { centers[labels[i]] += sortedValues[i]; counts[labels[i]]++; }
+            for (int m = 0; m < k; m++)
+            {
+                // An emptied cluster keeps its last centre (no point is nearer to it); it ends with no members.
+                if (counts[m] > 0) centers[m] /= counts[m];
+            }
+
+            bool changed = false;
+            for (int i = 0; i < n; i++)
+            {
+                int best = labels[i];
+                double bestDistance = Math.Abs(sortedValues[i] - centers[best]);
+                for (int m = 0; m < k; m++)
+                {
+                    if (counts[m] == 0) continue;
+                    double distance = Math.Abs(sortedValues[i] - centers[m]);
+                    if (distance < bestDistance) { best = m; bestDistance = distance; }
+                }
+                if (best != labels[i]) { labels[i] = best; changed = true; }
+            }
+
+            if (!changed) break;
+        }
+
+        return labels;
+    }
+
+    /// <summary>
+    /// Digamma function ψ(x) = d/dx ln Γ(x), used by the variational GMM E-step.
+    /// Uses the asymptotic series with a recurrence to push the argument above 6.
     /// </summary>
     private static Tensor<T> Detach(Tensor<T> tensor)
     {

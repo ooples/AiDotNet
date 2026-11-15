@@ -8,7 +8,7 @@ namespace AiDotNet.Tests.IntegrationTests.SyntheticData;
 internal static class SyntheticGanOptionFixture
 {
     internal static bool Handles<T>(INeuralNetworkModel<T> model) => model is CTABGANPlusGenerator<T> or CopulaGANGenerator<T> or CausalGANGenerator<T> or PATEGANGenerator<T>
-        or OCTGANGenerator<T>;
+        or OCTGANGenerator<T> or DPCTGANGenerator<T>;
 
     internal static void PrepareOptions(ModelOptions options, string option)
     {
@@ -27,7 +27,7 @@ internal static class SyntheticGanOptionFixture
             return;
         }
         if (definition != typeof(CTABGANPlusOptions<>) && definition != typeof(CopulaGANOptions<>) && definition != typeof(CausalGANOptions<>)
-            && definition != typeof(OCTGANOptions<>)) return;
+            && definition != typeof(OCTGANOptions<>) && definition != typeof(DPCTGANOptions<>)) return;
         void Set(string name, object value) => type.GetProperty(name)?.SetValue(options, value);
         Set("EmbeddingDimension", 4);
         Set("GeneratorDimensions", new[] { 8, 8 });
@@ -45,7 +45,15 @@ internal static class SyntheticGanOptionFixture
         if (option is "ClassifierWeight" or "TargetColumnIndex") Set("TargetColumnIndex", 1);
     }
 
-    internal static (Matrix<T> Data, List<ColumnMetadata> Columns) Data<T>()
+    internal static (Matrix<T> Data, List<ColumnMetadata> Columns) Data<T>() => Data<T>(tiedClusters: false);
+
+    /// <summary>
+    /// The fixture table. <paramref name="tiedClusters"/> makes the first column's two clusters exact ties (0 and 1),
+    /// which CopulaGAN needs: its VGM sees mid-rank normal scores, the same unimodal bell for every column of distinct
+    /// values, while two tied groups become two spikes that a VGM fits as two modes (sklearn's BayesianGaussianMixture
+    /// too, at -0.52 and 0.52).
+    /// </summary>
+    internal static (Matrix<T> Data, List<ColumnMetadata> Columns) Data<T>(bool tiedClusters)
     {
         var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         var data = new Matrix<T>(12, 3);
@@ -54,7 +62,7 @@ internal static class SyntheticGanOptionFixture
             // Two well-separated clusters (rows 0-5 near 0, rows 6-11 near 1): a variational GMM finds two modes
             // here, so VGMModes 1 and 2 fit different encodings. A single linear ramp is one mode to the VB fit
             // at 12 rows, and every VGMModes value then encoded it identically.
-            data[row, 0] = ops.FromDouble((row < 6 ? 0.0 : 1.0) + row / 120.0);
+            data[row, 0] = ops.FromDouble(tiedClusters ? (row < 6 ? 0.0 : 1.0) : (row < 6 ? 0.0 : 1.0) + row / 120.0);
             data[row, 1] = ops.FromDouble(row % 2);
             data[row, 2] = ops.FromDouble(Math.Sin(row + .5));
         }
@@ -69,7 +77,7 @@ internal static class SyntheticGanOptionFixture
 
     internal static void Train<T>(INeuralNetworkModel<T> model)
     {
-        var (data, columns) = Data<T>();
+        var (data, columns) = Data<T>(tiedClusters: model is CopulaGANGenerator<T>);
         switch (model)
         {
             case CTABGANPlusGenerator<T> ctab: ctab.Fit(data, columns); break;
@@ -77,6 +85,7 @@ internal static class SyntheticGanOptionFixture
             case CausalGANGenerator<T> causal: causal.Fit(data, columns); break;
             case PATEGANGenerator<T> pate: pate.Fit(data, columns); break;
             case OCTGANGenerator<T> oct: oct.Fit(data, columns); break;
+            case DPCTGANGenerator<T> dp: dp.Fit(data, columns); break;
         }
     }
 
@@ -84,7 +93,7 @@ internal static class SyntheticGanOptionFixture
     {
         var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         bool fitted = model switch { CTABGANPlusGenerator<T> ctab => ctab.IsFitted, CopulaGANGenerator<T> copula => copula.IsFitted, CausalGANGenerator<T> causal => causal.IsFitted, PATEGANGenerator<T> pate => pate.IsFitted,
-            OCTGANGenerator<T> oct => oct.IsFitted, _ => false };
+            OCTGANGenerator<T> oct => oct.IsFitted, DPCTGANGenerator<T> dp => dp.IsFitted, _ => false };
         if (fitted)
         {
             var rows = ((ISyntheticTabularGenerator<T>)model).Generate(4);

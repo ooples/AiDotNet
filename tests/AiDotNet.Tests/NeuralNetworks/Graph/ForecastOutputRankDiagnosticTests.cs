@@ -135,13 +135,7 @@ public class ForecastOutputRankDiagnosticTests
 
     private static object? Construct(Type closed)
     {
-        var ctor = closed.GetConstructors().FirstOrDefault(c =>
-        {
-            var ps = c.GetParameters();
-            return ps.Length > 0
-                && ps[0].ParameterType == typeof(NeuralNetworkArchitecture<double>)
-                && ps.Skip(1).All(p => p.HasDefaultValue);
-        });
+        var ctor = ModelSweepConstruction.FindArchitectureConstructor(closed, typeof(NeuralNetworkArchitecture<double>));
         if (ctor is null) return null;
 
         // #2147: a model refuses an architecture that disagrees with the sizes its options build, so a fixed 16 x 4

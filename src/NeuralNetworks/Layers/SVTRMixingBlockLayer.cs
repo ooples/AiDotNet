@@ -175,31 +175,21 @@ public partial class SVTRMixingBlockLayer<T> : LayerBase<T>
     {
         if (_dropPathRate <= 0.0 || !IsTrainingMode) return branch;
         double keepProbability = 1.0 - _dropPathRate;
-        long counter = System.Threading.Interlocked.Increment(ref _dropPathForwardCounter);
-        var random = RandomSeed.HasValue
-            ? RandomHelper.CreateSeededRandom(unchecked((int)((uint)RandomSeed.Value * 2654435761u ^ (uint)counter)))
-            : RandomHelper.CreateSecureRandom();
-        // One draw per sample, in sample order: dropped samples get 0, kept ones 1 / keepProbability.
-        var droppedSamples = new List<int>();
-        for (int b = 0; b < batch; b++)
-        {
-            if (random.NextDouble() < _dropPathRate) droppedSamples.Add(b);
-        }
-
-        var sampleScale = new Tensor<T>([batch, 1]);
-        sampleScale.Fill(NumOps.FromDouble(1.0 / keepProbability));
-        if (droppedSamples.Count > 0)
-        {
-            sampleScale = Engine.TensorIndexCopy(
-                sampleScale, 0,
-                new Tensor<int>(droppedSamples.ToArray(), [droppedSamples.Count]),
-                new Tensor<T>([droppedSamples.Count, 1]));
-        }
-
+        T scale = NumOps.FromDouble(1.0 / keepProbability);
         int sampleSize = branch.Length / batch;
-        var scaled = Engine.TensorMultiply(Engine.Reshape(branch, [batch, sampleSize]),
-            Engine.TensorBroadcastTo(sampleScale, [batch, sampleSize]));
-        return Engine.Reshape(scaled, branch.Shape.ToArray());
+        // The mask is a per-step draw, so a compiled training plan refills it before every replay. The seed comes
+        // from RandomSeed and a counter that advances per fill: once per eager forward and once per replay alike.
+        var mask = AiDotNet.Training.CompiledStepRandom<T>.Draw(branch.Shape.ToArray(), m =>
+        {
+            long counter = System.Threading.Interlocked.Increment(ref _dropPathForwardCounter);
+            var random = RandomSeed.HasValue
+                ? RandomHelper.CreateSeededRandom(unchecked((int)((uint)RandomSeed.Value * 2654435761u ^ (uint)counter)))
+                : RandomHelper.CreateSecureRandom();
+            var span = m.AsWritableSpan();
+            for (int b = 0; b < batch; b++)
+                span.Slice(b * sampleSize, sampleSize).Fill(random.NextDouble() < _dropPathRate ? NumOps.Zero : scale);
+        });
+        return Engine.TensorMultiply(branch, mask);
     }
 
     private Vector<T> Concatenate(Func<ILayer<T>, Vector<T>> selector)

@@ -102,7 +102,12 @@ internal sealed class PreNormTransformerEncoder<T>
         states?.Add(x);
         foreach (var layer in Layers)
         {
-            if (!(training && random.NextDouble() < layerDrop)) x = Encode(layer, x, training, random, dropout, activationDropout);
+            // LayerDrop as a per-step 0/1 gate, so a compiled training plan redraws which layers run.
+            if (training && layerDrop > 0)
+                x = AiDotNet.Training.CompiledStepRandom<T>.Gated(_engine, AiDotNet.Training.CompiledStepRandom<T>.KeepGate(random, layerDrop),
+                    Encode(layer, x, training, random, dropout, activationDropout), x);
+            else
+                x = Encode(layer, x, training, random, dropout, activationDropout);
             states?.Add(x);
         }
         return FinalNorm.Forward(x);
@@ -111,10 +116,8 @@ internal sealed class PreNormTransformerEncoder<T>
     private Tensor<T> Drop(Tensor<T> x, double rate, bool training, Random random)
     {
         if (!training || rate <= 0) return x;
-        var mask = new Tensor<T>(x._shape);
-        var keep = NumOps.FromDouble(1.0 / (1.0 - rate));
-        for (int i = 0; i < mask.Length; i++) mask[i] = random.NextDouble() < rate ? NumOps.Zero : keep;
-        return _engine.TensorMultiply(x, mask);
+        // The mask is a per-step draw, so a compiled training plan redraws it on every replay.
+        return _engine.TensorMultiply(x, AiDotNet.Training.CompiledStepRandom<T>.InvertedDropoutMask(x._shape, random, rate));
     }
 
     private Tensor<T> Encode(Layer l, Tensor<T> x, bool training, Random random, double dropout, double activationDropout)

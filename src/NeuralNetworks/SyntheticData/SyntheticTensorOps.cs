@@ -472,13 +472,13 @@ internal static class SyntheticTensorOps<T>
         return engine.TensorAdd(below, engine.TensorMultiply(engine.TensorSubtract(above, below), frac));
     }
 
-    /// <summary>Phi^-1(u) = sqrt(2) erfinv(2u - 1) (scipy.stats.norm.ppf).</summary>
-    public static Tensor<T> StandardNormalQuantile(Tensor<T> u)
-    {
-        var engine = Engine;
-        var centered = engine.TensorSubtractScalar(engine.TensorMultiplyScalar(u, NumOps.FromDouble(2.0)), NumOps.One);
-        return engine.TensorMultiplyScalar(engine.TensorErfinv(centered), NumOps.FromDouble(Math.Sqrt(2.0)));
-    }
+    /// <summary>Phi^-1(u), scipy.stats.norm.ppf (scipy.special.ndtri / torch.special.ndtri).</summary>
+    /// <remarks>
+    /// ndtri directly, not sqrt(2) erfinv(2u - 1): the engine's erfinv is off by about 3e-9 relative in the tail
+    /// (Phi^-1(1e-6) came out 1.5e-8 from scipy's -4.753424308822899), while ndtri is refined by Halley steps
+    /// against an erfc-based Phi, which keeps the tail to double precision.
+    /// </remarks>
+    public static Tensor<T> StandardNormalQuantile(Tensor<T> u) => Engine.TensorNdtri(u);
 
     /// <summary>Phi(z) = (1 + erf(z / sqrt 2)) / 2 (scipy.stats.norm.cdf).</summary>
     public static Tensor<T> StandardNormalCdf(Tensor<T> z)
