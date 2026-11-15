@@ -38,10 +38,6 @@ public sealed class FedAvgFullModelAggregationStrategy<T, TInput, TOutput> :
         var firstParams = InterfaceGuard.Parameterizable(first).GetParameters();
 
         var aggregated = new Vector<T>(firstParams.Length);
-        for (int i = 0; i < aggregated.Length; i++)
-        {
-            aggregated[i] = NumOps.Zero;
-        }
 
         foreach (var kvp in clientModels)
         {
@@ -59,10 +55,7 @@ public sealed class FedAvgFullModelAggregationStrategy<T, TInput, TOutput> :
             }
 
             var normalizedWeightT = NumOps.FromDouble(weight / totalWeight);
-            for (int i = 0; i < aggregated.Length; i++)
-            {
-                aggregated[i] = NumOps.Add(aggregated[i], NumOps.Multiply(parameters[i], normalizedWeightT));
-            }
+            aggregated = Engine.Add(aggregated, Engine.Multiply(parameters, normalizedWeightT));
         }
 
         return InterfaceGuard.Parameterizable(first).WithParameters(aggregated);
