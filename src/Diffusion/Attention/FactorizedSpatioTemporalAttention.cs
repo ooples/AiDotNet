@@ -123,16 +123,13 @@ public partial class FactorizedSpatioTemporalAttention<T> : LayerBase<T>, IShape
 
     private static void CopyParams(Vector<T> src, Vector<T> dst, ref int offset)
     {
-        for (int i = 0; i < src.Length; i++)
-            dst[offset + i] = src[i];
+        src.AsSpan().CopyTo(dst.AsWritableSpan().Slice(offset, src.Length));
         offset += src.Length;
     }
 
     private static Vector<T> ExtractParams(Vector<T> src, int count, ref int offset)
     {
-        var result = new Vector<T>(count);
-        for (int i = 0; i < count; i++)
-            result[i] = src[offset + i];
+        var result = src.GetSubVector(offset, count);
         offset += count;
         return result;
     }

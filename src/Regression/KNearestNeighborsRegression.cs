@@ -270,7 +270,7 @@ public partial class KNearestNeighborsRegression<T> : NonLinearRegressionBase<T>
 
             // Predict: intercept + sum(coeff * input)
             T intercept = coefficients[0];
-            return NumOps.Add(intercept, engine.DotProduct(coefficients.GetSubVector(1, p), input));
+            return NumOps.Add(intercept, engine.DotProduct(RegressionEngineOps2.Slice(coefficients, 1, p), input));
         }
 
         // Fallback: inverse-distance weighting, w = 1/d (1e10 for d < 1e-10)

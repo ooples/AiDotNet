@@ -99,6 +99,19 @@ namespace AiDotNet.PhysicsInformed.PDEs
         }
 
         /// <inheritdoc/>
+        public override int DerivativeOrder => 3;
+
+        /// <inheritdoc/>
+        /// <remarks>The residual u_t + alpha u u_x + beta u_xxx.</remarks>
+        public override Tensor<T> ComputeTapeResidual(Tensor<T> inputs, Tensor<T> outputs, PDEDerivatives<T> derivatives)
+        {
+            var e = TapeEngine;
+            var nonlinear = e.TensorMultiplyScalar(e.TensorMultiply(Output(outputs, 0), D1(derivatives, 0, 0)), _alpha);
+            var dispersion = e.TensorMultiplyScalar(D3(derivatives, 0, 0, 0, 0), _beta);
+            return e.TensorAdd(e.TensorAdd(D1(derivatives, 0, 1), nonlinear), dispersion);
+        }
+
+        /// <inheritdoc/>
         public override T ComputeResidual(Vector<T> inputs, Vector<T> outputs, PDEDerivatives<T> derivatives)
         {
             ValidateFirstDerivatives(derivatives);

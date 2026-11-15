@@ -2,6 +2,8 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.Scalers;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.Preprocessing.OutlierHandling;
 
@@ -35,11 +37,11 @@ public class IQRClipper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly double _multiplier;
 
     // Fitted parameters
-    private double[]? _lowerBounds;
-    private double[]? _upperBounds;
-    private double[]? _q1Values;
-    private double[]? _q3Values;
-    private double[]? _iqrValues;
+    private Vector<T>? _lowerBounds;
+    private Vector<T>? _upperBounds;
+    private Vector<T>? _q1Values;
+    private Vector<T>? _q3Values;
+    private Vector<T>? _iqrValues;
 
     /// <summary>
     /// Gets the IQR multiplier for determining outlier boundaries.
@@ -49,27 +51,27 @@ public class IQRClipper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the fitted lower bounds for each feature.
     /// </summary>
-    public double[]? LowerBounds => _lowerBounds;
+    public Vector<T>? LowerBounds => _lowerBounds;
 
     /// <summary>
     /// Gets the fitted upper bounds for each feature.
     /// </summary>
-    public double[]? UpperBounds => _upperBounds;
+    public Vector<T>? UpperBounds => _upperBounds;
 
     /// <summary>
     /// Gets the Q1 (25th percentile) values for each feature.
     /// </summary>
-    public double[]? Q1Values => _q1Values;
+    public Vector<T>? Q1Values => _q1Values;
 
     /// <summary>
     /// Gets the Q3 (75th percentile) values for each feature.
     /// </summary>
-    public double[]? Q3Values => _q3Values;
+    public Vector<T>? Q3Values => _q3Values;
 
     /// <summary>
     /// Gets the IQR values for each feature.
     /// </summary>
-    public double[]? IQRValues => _iqrValues;
+    public Vector<T>? IQRValues => _iqrValues;
 
     /// <summary>
     /// Gets whether this transformer supports inverse transformation.
@@ -101,68 +103,36 @@ public class IQRClipper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     protected override void FitCore(Matrix<T> data)
     {
         int numColumns = data.Columns;
-        int numRows = data.Rows;
-        var columnsToProcess = GetColumnsToProcess(numColumns);
+        var mask = ScalerTensorOps.ColumnMask<T>(numColumns, GetColumnsToProcess(numColumns));
+        T zero = NumOps.Zero;
 
-        _lowerBounds = new double[numColumns];
-        _upperBounds = new double[numColumns];
-        _q1Values = new double[numColumns];
-        _q3Values = new double[numColumns];
-        _iqrValues = new double[numColumns];
-
-        foreach (int col in columnsToProcess)
+        // Q1 / Q3 are the linearly interpolated 25th / 75th percentiles (numpy's default), ignoring NaN; an
+        // empty column gets 0.
+        Tensor<T> q1;
+        Tensor<T> q3;
+        if (data.Rows == 0 || numColumns == 0)
         {
-            // Extract column values
-            var values = new double[numRows];
-            for (int i = 0; i < numRows; i++)
-            {
-                values[i] = NumOps.ToDouble(data[i, col]);
-            }
-
-            // Sort for percentile calculation
-            Array.Sort(values);
-
-            // Compute Q1 (25th percentile) and Q3 (75th percentile)
-            _q1Values[col] = ComputePercentile(values, 25);
-            _q3Values[col] = ComputePercentile(values, 75);
-
-            // Compute IQR
-            _iqrValues[col] = _q3Values[col] - _q1Values[col];
-
-            // Compute bounds
-            _lowerBounds[col] = _q1Values[col] - _multiplier * _iqrValues[col];
-            _upperBounds[col] = _q3Values[col] + _multiplier * _iqrValues[col];
+            q1 = new Tensor<T>(new[] { numColumns });
+            q3 = new Tensor<T>(new[] { numColumns });
+        }
+        else
+        {
+            var x = Tensor<T>.FromMatrix(data);
+            q1 = Engine.TensorNanQuantile(x, 0.25, 0, false, QuantileInterpolation.Linear);
+            q3 = Engine.TensorNanQuantile(x, 0.75, 0, false, QuantileInterpolation.Linear);
         }
 
-        // For non-processed columns, set wide bounds (no clipping)
-        var processSet = new HashSet<int>(columnsToProcess);
-        for (int col = 0; col < numColumns; col++)
-        {
-            if (!processSet.Contains(col))
-            {
-                _lowerBounds[col] = double.NegativeInfinity;
-                _upperBounds[col] = double.PositiveInfinity;
-            }
-        }
-    }
+        var iqr = Engine.TensorSubtract(q3, q1);
+        var spread = Engine.TensorMultiplyScalar(iqr, NumOps.FromDouble(_multiplier));
+        _q1Values = ScalerTensorOps.MaskedParameters(mask, q1, zero);
+        _q3Values = ScalerTensorOps.MaskedParameters(mask, q3, zero);
+        _iqrValues = ScalerTensorOps.MaskedParameters(mask, iqr, zero);
 
-    private double ComputePercentile(double[] sortedValues, double percentile)
-    {
-        int n = sortedValues.Length;
-        if (n == 0) return 0;
-        if (n == 1) return sortedValues[0];
-
-        double index = (percentile / 100.0) * (n - 1);
-        int lower = (int)Math.Floor(index);
-        int upper = (int)Math.Ceiling(index);
-
-        if (lower == upper)
-        {
-            return sortedValues[lower];
-        }
-
-        double fraction = index - lower;
-        return sortedValues[lower] * (1 - fraction) + sortedValues[upper] * fraction;
+        // Non-processed columns get infinite bounds (no clipping).
+        _lowerBounds = ScalerTensorOps.MaskedParameters(
+            mask, Engine.TensorSubtract(q1, spread), NumOps.FromDouble(double.NegativeInfinity));
+        _upperBounds = ScalerTensorOps.MaskedParameters(
+            mask, Engine.TensorAdd(q3, spread), NumOps.FromDouble(double.PositiveInfinity));
     }
 
     /// <summary>
@@ -177,21 +147,13 @@ public class IQRClipper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("IQRClipper has not been fitted.");
         }
 
-        int numRows = data.Rows;
-        int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-
-        for (int i = 0; i < numRows; i++)
+        ScalerTensorOps.EnsureColumnCount(data, _lowerBounds.Length);
+        if (data.Rows == 0 || data.Columns == 0)
         {
-            for (int j = 0; j < numColumns; j++)
-            {
-                double value = NumOps.ToDouble(data[i, j]);
-                double clipped = Math.Max(_lowerBounds[j], Math.Min(_upperBounds[j], value));
-                result[i, j] = NumOps.FromDouble(clipped);
-            }
+            return new Matrix<T>(data.Rows, data.Columns);
         }
 
-        return new Matrix<T>(result);
+        return ScalerTensorOps.ClipColumns(Tensor<T>.FromMatrix(data), _lowerBounds, _upperBounds).ToMatrix();
     }
 
     /// <summary>
@@ -222,20 +184,14 @@ public class IQRClipper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("IQRClipper has not been fitted.");
         }
 
-        int numRows = data.Rows;
-        int numColumns = data.Columns;
-        var mask = new bool[numRows, numColumns];
-
-        for (int i = 0; i < numRows; i++)
+        ScalerTensorOps.EnsureColumnCount(data, _lowerBounds.Length);
+        if (data.Rows == 0 || data.Columns == 0)
         {
-            for (int j = 0; j < numColumns; j++)
-            {
-                double value = NumOps.ToDouble(data[i, j]);
-                mask[i, j] = value < _lowerBounds[j] || value > _upperBounds[j];
-            }
+            return new bool[data.Rows, data.Columns];
         }
 
-        return mask;
+        return ScalerTensorOps.ToBoolMatrix(
+            ScalerTensorOps.OutsideMask(Tensor<T>.FromMatrix(data), _lowerBounds, _upperBounds));
     }
 
     /// <summary>
@@ -245,18 +201,18 @@ public class IQRClipper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <returns>Array of outlier counts per feature.</returns>
     public int[] CountOutliersPerFeature(Matrix<T> data)
     {
-        var mask = GetOutlierMask(data);
-        int numColumns = data.Columns;
-        var counts = new int[numColumns];
-
-        for (int j = 0; j < numColumns; j++)
+        if (_lowerBounds is null || _upperBounds is null)
         {
-            for (int i = 0; i < data.Rows; i++)
-            {
-                if (mask[i, j]) counts[j]++;
-            }
+            throw new InvalidOperationException("IQRClipper has not been fitted.");
         }
 
-        return counts;
+        ScalerTensorOps.EnsureColumnCount(data, _lowerBounds.Length);
+        if (data.Rows == 0 || data.Columns == 0)
+        {
+            return new int[data.Columns];
+        }
+
+        return ScalerTensorOps.CountPerColumn(
+            ScalerTensorOps.OutsideMask(Tensor<T>.FromMatrix(data), _lowerBounds, _upperBounds));
     }
 }

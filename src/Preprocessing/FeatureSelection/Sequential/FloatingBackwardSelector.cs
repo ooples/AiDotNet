@@ -25,13 +25,13 @@ public class FloatingBackwardSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
     private readonly int _nFeaturesToSelect;
     private readonly int _maxBacktracks;
 
-    private double[]? _featureImportances;
+    private Vector<T>? _featureImportances;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FeatureImportances => _featureImportances;
+    public Vector<T>? FeatureImportances => _featureImportances;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -67,33 +67,27 @@ public class FloatingBackwardSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var x = Tensor<T>.FromMatrix(data);
+        var y = Engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 });
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
         var selected = new HashSet<int>(Enumerable.Range(0, p));
         var removed = new HashSet<int>();
-        _featureImportances = new double[p];
-
-        double currentScore = EvaluateSubset(X, y, selected, n);
+        var importances = new Dictionary<int, T>();
+        T currentScore = SelectorTensorOps.RidgeRSquared(x, y, selected, 1e-6);
+        T lowest = NumOps.FromDouble(double.MinValue);
 
         while (selected.Count > numToSelect && selected.Count > 1)
         {
-            // Backward step: remove worst feature
+            // Backward step: remove worst feature (over a snapshot, since each trial edits the set)
             int bestRemove = -1;
-            double bestRemoveScore = double.MinValue;
+            T bestRemoveScore = lowest;
 
-            foreach (int j in selected)
+            foreach (int j in selected.ToArray())
             {
                 selected.Remove(j);
-                double score = EvaluateSubset(X, y, selected, n);
-                if (score > bestRemoveScore)
+                T score = SelectorTensorOps.RidgeRSquared(x, y, selected, 1e-6);
+                if (PreprocessingTensorOps.IsAbove(score, bestRemoveScore))
                 {
                     bestRemoveScore = score;
                     bestRemove = j;
@@ -105,22 +99,22 @@ public class FloatingBackwardSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
 
             selected.Remove(bestRemove);
             removed.Add(bestRemove);
-            _featureImportances[bestRemove] = currentScore - bestRemoveScore;
+            importances[bestRemove] = SelectorTensorOps.Difference(currentScore, bestRemoveScore);
             currentScore = bestRemoveScore;
 
             // Forward steps: try adding features back
             for (int backtrack = 0; backtrack < _maxBacktracks && removed.Count > 0; backtrack++)
             {
                 int bestAdd = -1;
-                double bestAddScore = currentScore;
+                T bestAddScore = currentScore;
 
                 foreach (int j in removed)
                 {
                     if (j == bestRemove) continue;
 
                     selected.Add(j);
-                    double score = EvaluateSubset(X, y, selected, n);
-                    if (score > bestAddScore)
+                    T score = SelectorTensorOps.RidgeRSquared(x, y, selected, 1e-6);
+                    if (PreprocessingTensorOps.IsAbove(score, bestAddScore))
                     {
                         bestAddScore = score;
                         bestAdd = j;
@@ -141,102 +135,12 @@ public class FloatingBackwardSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
             }
         }
 
-        _selectedIndices = selected.OrderBy(x => x).ToArray();
+        _selectedIndices = selected.OrderBy(index => index).ToArray();
 
         // Normalize feature importances
-        double maxImportance = _featureImportances.Max();
-        if (maxImportance > 0)
-        {
-            for (int j = 0; j < p; j++)
-                _featureImportances[j] /= maxImportance;
-        }
+        _featureImportances = SelectorTensorOps.NormalizeByPositiveMax(SelectorTensorOps.FromSparse(importances, p)).ToVector();
 
         IsFitted = true;
-    }
-
-    private double EvaluateSubset(double[,] X, double[] y, HashSet<int> selected, int n)
-    {
-        if (selected.Count == 0) return 0;
-
-        var selectedList = selected.ToList();
-        int k = selectedList.Count;
-
-        var XtX = new double[k, k];
-        var Xty = new double[k];
-
-        for (int i = 0; i < k; i++)
-        {
-            int ji = selectedList[i];
-            for (int j = 0; j < k; j++)
-            {
-                int jj = selectedList[j];
-                for (int row = 0; row < n; row++)
-                    XtX[i, j] += X[row, ji] * X[row, jj];
-            }
-            XtX[i, i] += 1e-6;
-
-            for (int row = 0; row < n; row++)
-                Xty[i] += X[row, ji] * y[row];
-        }
-
-        var beta = SolveSystem(XtX, Xty, k);
-
-        double yMean = y.Average();
-        double ssTot = 0, ssRes = 0;
-
-        for (int row = 0; row < n; row++)
-        {
-            double pred = 0;
-            for (int i = 0; i < k; i++)
-                pred += beta[i] * X[row, selectedList[i]];
-
-            ssRes += (y[row] - pred) * (y[row] - pred);
-            ssTot += (y[row] - yMean) * (y[row] - yMean);
-        }
-
-        return ssTot > 0 ? 1 - ssRes / ssTot : 0;
-    }
-
-    private double[] SolveSystem(double[,] A, double[] b, int n)
-    {
-        var aug = new double[n, n + 1];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-                aug[i, j] = A[i, j];
-            aug[i, n] = b[i];
-        }
-
-        for (int col = 0; col < n; col++)
-        {
-            int maxRow = col;
-            for (int row = col + 1; row < n; row++)
-                if (Math.Abs(aug[row, col]) > Math.Abs(aug[maxRow, col]))
-                    maxRow = row;
-
-            for (int j = 0; j <= n; j++)
-                (aug[col, j], aug[maxRow, j]) = (aug[maxRow, j], aug[col, j]);
-
-            if (Math.Abs(aug[col, col]) < 1e-10) continue;
-
-            for (int row = col + 1; row < n; row++)
-            {
-                double factor = aug[row, col] / aug[col, col];
-                for (int j = col; j <= n; j++)
-                    aug[row, j] -= factor * aug[col, j];
-            }
-        }
-
-        var x = new double[n];
-        for (int i = n - 1; i >= 0; i--)
-        {
-            x[i] = aug[i, n];
-            for (int j = i + 1; j < n; j++)
-                x[i] -= aug[i, j] * x[j];
-            x[i] /= (Math.Abs(aug[i, i]) > 1e-10 ? aug[i, i] : 1);
-        }
-
-        return x;
     }
 
     /// <inheritdoc />
@@ -252,15 +156,7 @@ public class FloatingBackwardSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         if (_selectedIndices is null)
             throw new InvalidOperationException("FloatingBackwardSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

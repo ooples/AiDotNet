@@ -165,42 +165,14 @@ public class AttentionDistillationStrategy<T> : DistillationStrategyBase<T>, IIn
             throw new ArgumentException("Batch labels must match student output dimensions");
 
         int batchSize = studentBatchOutput.Rows;
-        T totalLoss = NumOps.Zero;
 
         // This method only computes output loss
         // Attention loss must be computed separately via ComputeAttentionLoss
         // and manually combined by the user
 
-        for (int r = 0; r < batchSize; r++)
-        {
-            Vector<T> studentRow = studentBatchOutput.GetRow(r);
-            Vector<T> teacherRow = teacherBatchOutput.GetRow(r);
-            Vector<T>? labelRow = trueLabelsBatch?.GetRow(r);
-
-            // Soft loss with temperature scaling
-            var studentSoft = DistillationHelper<T>.Softmax(studentRow, Temperature);
-            var teacherSoft = DistillationHelper<T>.Softmax(teacherRow, Temperature);
-            var softLoss = DistillationHelper<T>.KLDivergence(teacherSoft, studentSoft);
-            softLoss = NumOps.Multiply(softLoss, NumOps.FromDouble(Temperature * Temperature));
-
-            T sampleLoss = softLoss;
-
-            // Hard loss if labels provided
-            if (labelRow != null)
-            {
-                var studentProbs = DistillationHelper<T>.Softmax(studentRow, 1.0);
-                var hardLoss = DistillationHelper<T>.CrossEntropy(studentProbs, labelRow);
-
-                var alphaT = NumOps.FromDouble(Alpha);
-                var oneMinusAlpha = NumOps.FromDouble(1.0 - Alpha);
-
-                sampleLoss = NumOps.Add(
-                    NumOps.Multiply(alphaT, hardLoss),
-                    NumOps.Multiply(oneMinusAlpha, softLoss));
-            }
-
-            totalLoss = NumOps.Add(totalLoss, sampleLoss);
-        }
+        // Soft loss with temperature scaling, blended with the hard loss if labels provided
+        T totalLoss = Engine.Sum(DistillationHelper<T>.StandardSampleLosses(
+            studentBatchOutput, teacherBatchOutput, trueLabelsBatch, Temperature, Alpha));
 
         return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
     }
@@ -221,64 +193,13 @@ public class AttentionDistillationStrategy<T> : DistillationStrategyBase<T>, IIn
         if (trueLabelsBatch != null && (trueLabelsBatch.Rows != studentBatchOutput.Rows || trueLabelsBatch.Columns != studentBatchOutput.Columns))
             throw new ArgumentException("Batch labels must match student output dimensions");
 
-        int batchSize = studentBatchOutput.Rows;
-        int outputDim = studentBatchOutput.Columns;
-        var batchGradient = new Matrix<T>(batchSize, outputDim);
+        // Soft gradient, blended with the hard gradient if labels provided
+        var batchGradient = DistillationHelper<T>.StandardSampleGradients(
+            studentBatchOutput, teacherBatchOutput, trueLabelsBatch, Temperature, Alpha);
 
-        for (int r = 0; r < batchSize; r++)
-        {
-            Vector<T> studentRow = studentBatchOutput.GetRow(r);
-            Vector<T> teacherRow = teacherBatchOutput.GetRow(r);
-            Vector<T>? labelRow = trueLabelsBatch?.GetRow(r);
-
-            int n = studentRow.Length;
-            var gradient = new Vector<T>(n);
-
-            // Soft gradient
-            var studentSoft = DistillationHelper<T>.Softmax(studentRow, Temperature);
-            var teacherSoft = DistillationHelper<T>.Softmax(teacherRow, Temperature);
-
-            for (int i = 0; i < n; i++)
-            {
-                var diff = NumOps.Subtract(studentSoft[i], teacherSoft[i]);
-                gradient[i] = NumOps.Multiply(diff, NumOps.FromDouble(Temperature));
-            }
-
-            // Add hard gradient if labels provided
-            if (labelRow != null)
-            {
-                var studentProbs = DistillationHelper<T>.Softmax(studentRow, 1.0);
-                var hardGradient = new Vector<T>(n);
-
-                for (int i = 0; i < n; i++)
-                {
-                    hardGradient[i] = NumOps.Subtract(studentProbs[i], labelRow[i]);
-                }
-
-                var alphaT = NumOps.FromDouble(Alpha);
-                var oneMinusAlpha = NumOps.FromDouble(1.0 - Alpha);
-
-                for (int i = 0; i < n; i++)
-                {
-                    gradient[i] = NumOps.Add(
-                        NumOps.Multiply(alphaT, hardGradient[i]),
-                        NumOps.Multiply(oneMinusAlpha, gradient[i]));
-                }
-            }
-
-            // Scale by (1 - attentionWeight)
-            var scale = NumOps.FromDouble(1.0 - _attentionWeight);
-            for (int i = 0; i < n; i++)
-            {
-                gradient[i] = NumOps.Multiply(gradient[i], scale);
-            }
-
-            // Store in batch gradient matrix
-            for (int c = 0; c < outputDim; c++)
-            {
-                batchGradient[r, c] = gradient[c];
-            }
-        }
+        // Scale by (1 - attentionWeight)
+        var scale = NumOps.FromDouble(1.0 - _attentionWeight);
+        batchGradient = Engine.MatrixMultiplyScalar(batchGradient, scale);
 
         return batchGradient;
     }
@@ -303,7 +224,7 @@ public class AttentionDistillationStrategy<T> : DistillationStrategyBase<T>, IIn
         if (teacherAttentionExtractor == null) throw new ArgumentNullException(nameof(teacherAttentionExtractor));
         if (studentAttentionExtractor == null) throw new ArgumentNullException(nameof(studentAttentionExtractor));
 
-        T totalLoss = NumOps.Zero;
+        var layerLosses = new List<T>(_attentionLayers.Length);
 
         foreach (var layerName in _attentionLayers)
         {
@@ -317,9 +238,10 @@ public class AttentionDistillationStrategy<T> : DistillationStrategyBase<T>, IIn
                     $"Teacher: {teacherAttention.Length}, Student: {studentAttention.Length}");
             }
 
-            T layerLoss = ComputeAttentionMatchingLoss(studentAttention, teacherAttention);
-            totalLoss = NumOps.Add(totalLoss, layerLoss);
+            layerLosses.Add(ComputeAttentionMatchingLoss(studentAttention, teacherAttention));
         }
+
+        T totalLoss = Engine.Sum(new Vector<T>(layerLosses));
 
         // Average across layers
         totalLoss = NumOps.Divide(totalLoss, NumOps.FromDouble(_attentionLayers.Length));
@@ -352,8 +274,7 @@ public class AttentionDistillationStrategy<T> : DistillationStrategyBase<T>, IIn
         if (teacherIntermediateActivations == null)
             throw new ArgumentNullException(nameof(teacherIntermediateActivations));
 
-        T totalLoss = NumOps.Zero;
-        int layersFound = 0;
+        var layerLosses = new List<T>(_attentionLayers.Length);
 
         foreach (var layerName in _attentionLayers)
         {
@@ -378,21 +299,11 @@ public class AttentionDistillationStrategy<T> : DistillationStrategyBase<T>, IIn
                 continue;
 
             // Average attention matching loss across all samples in batch
-            T layerBatchLoss = NumOps.Zero;
-            for (int sampleIdx = 0; sampleIdx < batchSize; sampleIdx++)
-            {
-                var studentAttention = studentMatrix.GetRow(sampleIdx);
-                var teacherAttention = teacherMatrix.GetRow(sampleIdx);
-
-                T sampleLoss = ComputeAttentionMatchingLoss(studentAttention, teacherAttention);
-                layerBatchLoss = NumOps.Add(layerBatchLoss, sampleLoss);
-            }
-
-            // Average over batch
-            layerBatchLoss = NumOps.Divide(layerBatchLoss, NumOps.FromDouble(batchSize));
-            totalLoss = NumOps.Add(totalLoss, layerBatchLoss);
-            layersFound++;
+            layerLosses.Add(ComputeLayerAttentionLoss(studentMatrix, teacherMatrix));
         }
+
+        int layersFound = layerLosses.Count;
+        T totalLoss = Engine.Sum(new Vector<T>(layerLosses));
 
         // Return zero if no layers found
         if (layersFound == 0)
@@ -405,6 +316,52 @@ public class AttentionDistillationStrategy<T> : DistillationStrategyBase<T>, IIn
         totalLoss = NumOps.Multiply(totalLoss, NumOps.FromDouble(_attentionWeight));
 
         return totalLoss;
+    }
+
+    /// <summary>
+    /// Mean over the batch rows of the per-sample attention matching loss for one layer.
+    /// </summary>
+    private T ComputeLayerAttentionLoss(Matrix<T> studentMatrix, Matrix<T> teacherMatrix)
+    {
+        T layerBatchLoss = Engine.Sum(ComputeAttentionMatchingLossRows(studentMatrix, teacherMatrix));
+
+        // Average over batch
+        return NumOps.Divide(layerBatchLoss, NumOps.FromDouble(studentMatrix.Rows));
+    }
+
+    /// <summary>
+    /// <see cref="ComputeAttentionMatchingLoss"/> for every row (sample) of the two attention matrices.
+    /// </summary>
+    private Vector<T> ComputeAttentionMatchingLossRows(Matrix<T> studentMatrix, Matrix<T> teacherMatrix)
+    {
+        switch (_matchingMode)
+        {
+            case AttentionMatchingMode.MSE:
+            {
+                var diff = Engine.TensorSubtract(Tensor<T>.FromMatrix(studentMatrix), Tensor<T>.FromMatrix(teacherMatrix));
+                return Engine.Divide(
+                    DistillationHelper<T>.RowSums(Engine.TensorMultiply(diff, diff)), NumOps.FromDouble(studentMatrix.Columns));
+            }
+
+            case AttentionMatchingMode.KL:
+                return DistillationHelper<T>.KLDivergenceRows(teacherMatrix, studentMatrix);
+
+            case AttentionMatchingMode.Cosine:
+            {
+                var student = Tensor<T>.FromMatrix(studentMatrix);
+                var teacher = Tensor<T>.FromMatrix(teacherMatrix);
+                var dot = DistillationHelper<T>.RowSums(Engine.TensorMultiply(student, teacher));
+                var normStudent = Engine.Sqrt(DistillationHelper<T>.RowSums(Engine.TensorMultiply(student, student)));
+                var normTeacher = Engine.Sqrt(DistillationHelper<T>.RowSums(Engine.TensorMultiply(teacher, teacher)));
+                var denominator = Engine.Add(
+                    Engine.Multiply(normStudent, normTeacher), Vector<T>.CreateDefault(dot.Length, NumOps.FromDouble(Epsilon)));
+                // Loss: 1 - similarity
+                return Engine.Subtract(Vector<T>.CreateDefault(dot.Length, NumOps.One), Engine.Divide(dot, denominator));
+            }
+
+            default:
+                throw new ArgumentOutOfRangeException(nameof(_matchingMode), _matchingMode, $"Unrecognised AttentionMatchingMode '{_matchingMode}'. Valid modes: MSE, KL, Cosine.");
+        }
     }
 
     /// <summary>
@@ -430,13 +387,8 @@ public class AttentionDistillationStrategy<T> : DistillationStrategyBase<T>, IIn
 
     private T ComputeMSE(Vector<T> student, Vector<T> teacher)
     {
-        T sum = NumOps.Zero;
-        for (int i = 0; i < student.Length; i++)
-        {
-            var diff = NumOps.Subtract(student[i], teacher[i]);
-            var squared = NumOps.Multiply(diff, diff);
-            sum = NumOps.Add(sum, squared);
-        }
+        var diff = Engine.Subtract(student, teacher);
+        T sum = Engine.DotProduct(diff, diff);
         return NumOps.Divide(sum, NumOps.FromDouble(student.Length));
     }
 
@@ -445,16 +397,9 @@ public class AttentionDistillationStrategy<T> : DistillationStrategyBase<T>, IIn
         // Cosine similarity: dot(a,b) / (||a|| * ||b||)
         // Loss: 1 - similarity
 
-        T dot = NumOps.Zero;
-        T normStudent = NumOps.Zero;
-        T normTeacher = NumOps.Zero;
-
-        for (int i = 0; i < student.Length; i++)
-        {
-            dot = NumOps.Add(dot, NumOps.Multiply(student[i], teacher[i]));
-            normStudent = NumOps.Add(normStudent, NumOps.Multiply(student[i], student[i]));
-            normTeacher = NumOps.Add(normTeacher, NumOps.Multiply(teacher[i], teacher[i]));
-        }
+        T dot = Engine.DotProduct(student, teacher);
+        T normStudent = Engine.DotProduct(student, student);
+        T normTeacher = Engine.DotProduct(teacher, teacher);
 
         double dotVal = Convert.ToDouble(dot);
         double normStudentVal = Math.Sqrt(Convert.ToDouble(normStudent));
@@ -506,29 +451,8 @@ public class AttentionDistillationStrategy<T> : DistillationStrategyBase<T>, IIn
             if (batchSize == 0)
                 continue;
 
-            int attentionDim = studentMatrix.Columns;
-            var layerGradient = new Matrix<T>(batchSize, attentionDim);
-
-            // Compute gradient for each sample in batch
-            for (int sampleIdx = 0; sampleIdx < batchSize; sampleIdx++)
-            {
-                var studentAttention = studentMatrix.GetRow(sampleIdx);
-                var teacherAttention = teacherMatrix.GetRow(sampleIdx);
-
-                var sampleGradient = ComputeAttentionMatchingGradient(studentAttention, teacherAttention);
-                layerGradient.SetRow(sampleIdx, sampleGradient);
-            }
-
-            // Average over batch and layers (will divide by layersFound at the end)
-            for (int r = 0; r < batchSize; r++)
-            {
-                for (int c = 0; c < attentionDim; c++)
-                {
-                    layerGradient[r, c] = NumOps.Divide(layerGradient[r, c], NumOps.FromDouble(batchSize));
-                }
-            }
-
-            gradients.Add(layerName, layerGradient);
+            // Gradient for each sample in batch, averaged over batch (layers are averaged below)
+            gradients.Add(layerName, ComputeLayerAttentionGradient(studentMatrix, teacherMatrix));
             layersFound++;
         }
 
@@ -536,20 +460,15 @@ public class AttentionDistillationStrategy<T> : DistillationStrategyBase<T>, IIn
         if (layersFound == 0)
             return gradients;
 
-        // Scale by 1/layersFound to average across layers, and by attentionWeight
-        var totalScale = _attentionWeight / layersFound;
-        foreach (var layerName in _attentionLayers)
+        // Scale by 1/layersFound to average across layers, and by attentionWeight. Get returns a copy, so
+        // the scaled matrix is stored back (each distinct layer is scaled once).
+        var totalScale = NumOps.FromDouble(_attentionWeight / layersFound);
+        foreach (var layerName in _attentionLayers.Distinct())
         {
             var layerGrad = gradients.Get(layerName);
             if (layerGrad != null)
             {
-                for (int r = 0; r < layerGrad.Rows; r++)
-                {
-                    for (int c = 0; c < layerGrad.Columns; c++)
-                    {
-                        layerGrad[r, c] = NumOps.Multiply(layerGrad[r, c], NumOps.FromDouble(totalScale));
-                    }
-                }
+                gradients.Add(layerName, Engine.MatrixMultiplyScalar(layerGrad, totalScale));
             }
         }
 
@@ -557,73 +476,68 @@ public class AttentionDistillationStrategy<T> : DistillationStrategyBase<T>, IIn
     }
 
     /// <summary>
-    /// Computes gradient of attention matching loss for a single sample.
+    /// Gradient of the attention matching loss for one layer, averaged over the batch rows.
     /// </summary>
-    private Vector<T> ComputeAttentionMatchingGradient(Vector<T> studentAttention, Vector<T> teacherAttention)
+    private Matrix<T> ComputeLayerAttentionGradient(Matrix<T> studentMatrix, Matrix<T> teacherMatrix)
     {
-        var gradient = new Vector<T>(studentAttention.Length);
+        var layerGradient = ComputeAttentionMatchingGradientRows(studentMatrix, teacherMatrix);
+
+        // Average over batch
+        return Engine.TensorDivideScalar(layerGradient, NumOps.FromDouble(studentMatrix.Rows)).ToMatrix();
+    }
+
+    /// <summary>
+    /// Per-sample gradient of the attention matching loss for every row of the two attention matrices.
+    /// </summary>
+    private Tensor<T> ComputeAttentionMatchingGradientRows(Matrix<T> studentMatrix, Matrix<T> teacherMatrix)
+    {
+        var student = Tensor<T>.FromMatrix(studentMatrix);
+        var teacher = Tensor<T>.FromMatrix(teacherMatrix);
+        int attentionDim = studentMatrix.Columns;
 
         switch (_matchingMode)
         {
             case AttentionMatchingMode.MSE:
                 // MSE gradient: ∂L/∂student = 2 * (student - teacher) / dim
-                for (int i = 0; i < studentAttention.Length; i++)
-                {
-                    var diff = NumOps.Subtract(studentAttention[i], teacherAttention[i]);
-                    gradient[i] = NumOps.Multiply(NumOps.FromDouble(2.0 / studentAttention.Length), diff);
-                }
-                break;
+                return Engine.TensorMultiplyScalar(
+                    Engine.TensorSubtract(student, teacher), NumOps.FromDouble(2.0 / attentionDim));
 
             case AttentionMatchingMode.KL:
+            {
                 // KL divergence gradient: ∂L/∂student = log(student/teacher) + 1
                 // This assumes student and teacher are probability distributions
-                for (int i = 0; i < studentAttention.Length; i++)
-                {
-                    double s = Convert.ToDouble(studentAttention[i]) + Epsilon;
-                    double t = Convert.ToDouble(teacherAttention[i]) + Epsilon;
-                    double grad = Math.Log(s / t) + 1.0;
-                    gradient[i] = NumOps.FromDouble(grad);
-                }
-                break;
+                T epsilon = NumOps.FromDouble(Epsilon);
+                var ratio = Engine.TensorDivide(
+                    Engine.TensorAddScalar(student, epsilon), Engine.TensorAddScalar(teacher, epsilon));
+                return Engine.TensorAddScalar(Engine.TensorLog(ratio), NumOps.One);
+            }
 
             case AttentionMatchingMode.Cosine:
+            {
                 // Cosine loss gradient: ∂(1 - cos)/∂student
                 // cos(s,t) = dot(s,t) / (||s|| * ||t||)
                 // ∂cos/∂s_i = (t_i / (||s|| * ||t||)) - (dot(s,t) * s_i) / (||s||^3 * ||t||)
+                T epsilon = NumOps.FromDouble(Epsilon);
+                int[] shape = student.Shape.ToArray();
+                var dot = Engine.ReduceSum(Engine.TensorMultiply(student, teacher), [1], keepDims: true);
+                var normS = Engine.TensorAddScalar(
+                    Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(student, student), [1], keepDims: true)), epsilon);
+                var normT = Engine.TensorAddScalar(
+                    Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(teacher, teacher), [1], keepDims: true)), epsilon);
+                var normProduct = Engine.TensorMultiply(normS, normT);
+                var cubedProduct = Engine.TensorMultiply(Engine.TensorMultiply(Engine.TensorMultiply(normS, normS), normS), normT);
 
-                T dot = NumOps.Zero;
-                T normStudent = NumOps.Zero;
-                T normTeacher = NumOps.Zero;
+                var dcosDs = Engine.TensorSubtract(
+                    Engine.TensorDivide(teacher, Engine.TensorBroadcastTo(normProduct, shape)),
+                    Engine.TensorMultiply(student, Engine.TensorBroadcastTo(Engine.TensorDivide(dot, cubedProduct), shape)));
 
-                for (int i = 0; i < studentAttention.Length; i++)
-                {
-                    dot = NumOps.Add(dot, NumOps.Multiply(studentAttention[i], teacherAttention[i]));
-                    normStudent = NumOps.Add(normStudent, NumOps.Multiply(studentAttention[i], studentAttention[i]));
-                    normTeacher = NumOps.Add(normTeacher, NumOps.Multiply(teacherAttention[i], teacherAttention[i]));
-                }
-
-                double dotVal = Convert.ToDouble(dot);
-                double normS = Math.Sqrt(Convert.ToDouble(normStudent)) + Epsilon;
-                double normT = Math.Sqrt(Convert.ToDouble(normTeacher)) + Epsilon;
-
-                for (int i = 0; i < studentAttention.Length; i++)
-                {
-                    double s_i = Convert.ToDouble(studentAttention[i]);
-                    double t_i = Convert.ToDouble(teacherAttention[i]);
-
-                    // ∂cos/∂s_i
-                    double dcos_dsi = (t_i / (normS * normT)) - (dotVal * s_i) / (normS * normS * normS * normT);
-
-                    // Loss is (1 - cos), so ∂L/∂s_i = -∂cos/∂s_i
-                    gradient[i] = NumOps.FromDouble(-dcos_dsi);
-                }
-                break;
+                // Loss is (1 - cos), so ∂L/∂s_i = -∂cos/∂s_i
+                return Engine.TensorNegate(dcosDs);
+            }
 
             default:
                 throw new ArgumentOutOfRangeException(nameof(_matchingMode), _matchingMode, $"Gradient is not defined for AttentionMatchingMode '{_matchingMode}'. Valid modes: MSE, KL, Cosine.");
         }
-
-        return gradient;
     }
 
 }

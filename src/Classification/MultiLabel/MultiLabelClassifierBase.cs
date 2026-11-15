@@ -86,6 +86,82 @@ public abstract partial class MultiLabelClassifierBase<T> : IMultiLabelClassifie
     protected IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>
+    /// Stacks equal-length column vectors into a [length, columns.Count] matrix.
+    /// </summary>
+    /// <param name="columns">The columns, in order (at least one).</param>
+    /// <returns>The matrix whose j-th column is <paramref name="columns"/>[j].</returns>
+    private protected Matrix<T> StackColumns(IReadOnlyList<Vector<T>> columns)
+    {
+        var stacked = new Tensor<T>[columns.Count];
+        for (int k = 0; k < stacked.Length; k++)
+        {
+            stacked[k] = columns[k].AsTensor();
+        }
+
+        return Engine.TensorStack(stacked, 1).ToMatrix();
+    }
+
+    /// <summary>
+    /// 1 where <paramref name="values"/>[i] &gt;= <paramref name="threshold"/>, otherwise 0 (NaN gives 0).
+    /// </summary>
+    /// <param name="values">The values to threshold.</param>
+    /// <param name="threshold">The threshold.</param>
+    /// <returns>The 0/1 indicator vector.</returns>
+    private protected Vector<T> AtLeast(Vector<T> values, T threshold)
+    {
+        if (values.Length == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        var thresholds = new Tensor<T>(new[] { values.Length });
+        Engine.TensorFill(thresholds, threshold);
+        return Engine.TensorGreaterEqual(values.AsTensor(), thresholds).ToVector();
+    }
+
+    /// <summary>
+    /// Converts a tensor of exact 0/1 values to the matching integer indicators (same shape).
+    /// </summary>
+    /// <param name="zeroOne">Values that are exactly 0 or 1.</param>
+    /// <returns>The 0/1 integers.</returns>
+    private protected Tensor<int> ZeroOneToInt(Tensor<T> zeroOne)
+    {
+        // argmax over [1 - b, b] picks index b
+        int axis = zeroOne.Shape.Length;
+        var absent = Engine.ScalarMinusTensor(NumOps.One, zeroOne);
+        return Engine.TensorArgMax(Engine.TensorStack(new[] { absent, zeroOne }, axis), axis);
+    }
+
+    /// <summary>
+    /// <paramref name="epsilon"/> as a T, raised to Half's smallest positive normal value (2^-14) for Half,
+    /// where 1e-10 and similar guards would otherwise round to zero; float, double and decimal keep it unchanged.
+    /// </summary>
+    private protected static T Tolerance(double epsilon)
+    {
+        const double HalfSmallestNormal = 6.103515625e-05;
+        return MathHelper.GetNumericOperations<T>().FromDouble(
+            typeof(T) == typeof(Half) ? Math.Max(epsilon, HalfSmallestNormal) : epsilon);
+    }
+
+    /// <summary>
+    /// <paramref name="values"/> truncated or zero-padded to <paramref name="length"/> elements.
+    /// </summary>
+    private protected static Vector<T> FitToLength(Vector<T> values, int length)
+    {
+        if (values.Length == length)
+        {
+            return values;
+        }
+
+        if (values.Length > length)
+        {
+            return values.GetSubVector(0, length);
+        }
+
+        return Vector<T>.Concatenate(values, new Vector<T>(length - values.Length));
+    }
+
+    /// <summary>
     /// Gets the numeric operations provider for type T.
     /// </summary>
     protected INumericOperations<T> NumOps { get; }
@@ -189,17 +265,23 @@ public abstract partial class MultiLabelClassifierBase<T> : IMultiLabelClassifie
         }
 
         var probabilities = PredictProbabilities(features);
-        var predictions = new Matrix<T>(features.Rows, NumLabels);
-
-        for (int i = 0; i < features.Rows; i++)
+        if (features.Rows == 0)
         {
-            for (int l = 0; l < NumLabels; l++)
-            {
-                predictions[i, l] = NumOps.GreaterThan(probabilities[i, l], NumOps.FromDouble(0.5)) ? NumOps.One : NumOps.Zero;
-            }
+            return new Matrix<T>(features.Rows, NumLabels);
         }
 
-        return predictions;
+        // Label present when its probability is strictly above 0.5
+        var probs = LeadingBlock(Tensor<T>.FromMatrix(probabilities), features.Rows, NumLabels);
+        return Engine.TensorGreaterThan(probs, NumOps.FromDouble(0.5)).ToMatrix();
+    }
+
+    /// <summary>
+    /// The leading [rows, columns] block of a 2-D tensor (the tensor itself when it already has that shape).
+    /// </summary>
+    private static Tensor<T> LeadingBlock(Tensor<T> values, int rows, int columns)
+    {
+        var block = values.Shape[0] == rows ? values : values.Slice(0, 0, rows);
+        return block.Shape[1] == columns ? block : block.Slice(1, 0, columns);
     }
 
     /// <summary>
@@ -392,7 +474,7 @@ public abstract partial class MultiLabelClassifierBase<T> : IMultiLabelClassifie
             { "NumClasses", NumClasses },
             { "TaskType", (int)TaskType },
             { "LabelNames", LabelNames ?? Array.Empty<string>() },
-            { "Parameters", GetParameters().ToArray().Select(NumOps.ToDouble).ToArray() },
+            { "Parameters", GetParameters().ToArray() },
             { "RegularizationOptions", Regularization.GetOptions() }
         };
 
@@ -443,15 +525,10 @@ public abstract partial class MultiLabelClassifierBase<T> : IMultiLabelClassifie
         TaskType = (ClassificationTaskType)(modelDataObj["TaskType"]?.ToObject<int>() ?? 0);
         LabelNames = modelDataObj["LabelNames"]?.ToObject<string[]>();
 
-        var parametersAsDoubles = modelDataObj["Parameters"]?.ToObject<double[]>() ?? Array.Empty<double>();
-        if (parametersAsDoubles.Length > 0)
+        var parameterValues = modelDataObj["Parameters"]?.ToObject<T[]>() ?? Array.Empty<T>();
+        if (parameterValues.Length > 0)
         {
-            var parameters = new Vector<T>(parametersAsDoubles.Length);
-            for (int i = 0; i < parametersAsDoubles.Length; i++)
-            {
-                parameters[i] = NumOps.FromDouble(parametersAsDoubles[i]);
-            }
-            SetParameters(parameters);
+            SetParameters(Vector<T>.Wrap(parameterValues));
         }
     }
 
@@ -622,26 +699,28 @@ public abstract partial class MultiLabelClassifierBase<T> : IMultiLabelClassifie
         var loss = lossFunction ?? _defaultLossFunction;
         var predictions = PredictProbabilities(input);
         var parameters = GetParameters();
+        if (parameters.Length == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        // Mean of (pred - actual) / (pred * (1 - pred) + 1e-15) over all samples and labels, divided
+        // before summing (the sum and the rows x labels x parameters count overflow Half past 65504)
+        var engine = Engine;
+        T meanGradient = NumOps.Zero;
+        if (input.Rows > 0 && NumLabels > 0)
+        {
+            var pred = LeadingBlock(Tensor<T>.FromMatrix(predictions), input.Rows, NumLabels);
+            var actual = LeadingBlock(Tensor<T>.FromMatrix(target), input.Rows, NumLabels);
+            var variance = engine.TensorMultiply(pred, engine.ScalarMinusTensor(NumOps.One, pred));
+            var deriv = engine.TensorDivide(engine.TensorSubtract(pred, actual),
+                engine.TensorAddScalar(variance, Tolerance(1e-15)));
+            meanGradient = engine.TensorSum(engine.TensorMultiplyScalar(deriv, NumOps.FromDouble(1.0 / ((double)input.Rows * NumLabels))));
+        }
+
+        // Average gradient, spread evenly over every parameter
         var gradients = new Vector<T>(parameters.Length);
-
-        double totalGradient = 0;
-        for (int i = 0; i < input.Rows; i++)
-        {
-            for (int l = 0; l < NumLabels; l++)
-            {
-                double pred = NumOps.ToDouble(predictions[i, l]);
-                double actual = NumOps.ToDouble(target[i, l]);
-                double deriv = (pred - actual) / (pred * (1 - pred) + 1e-15);
-                totalGradient += deriv;
-            }
-        }
-
-        double avgGradient = parameters.Length > 0 ? totalGradient / ((double)input.Rows * NumLabels * parameters.Length) : 0;
-        for (int i = 0; i < gradients.Length; i++)
-        {
-            gradients[i] = NumOps.FromDouble(avgGradient);
-        }
-
+        engine.TensorFill(gradients.AsTensor(), NumOps.FromDouble(NumOps.ToDouble(meanGradient) / parameters.Length));
         return gradients;
     }
 

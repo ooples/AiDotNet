@@ -280,6 +280,16 @@ public abstract partial class VideoNeuralNetworkBase<T> : NeuralNetworkBase<T>
     /// <param name="flow">Optical flow tensor [2, height, width] (dx, dy).</param>
     /// <returns>Warped feature tensor with the same shape as input.</returns>
     protected Tensor<T> WarpFeature(Tensor<T> feature, Tensor<T> flow)
+        => WarpByFlow(feature, flow, GridSamplePadding.Border);
+
+    /// <summary>
+    /// Backward-warps a feature map by a pixel-unit flow with bilinear sampling at <c>(w + dx, h + dy)</c>,
+    /// grid_sample(align_corners=True) with the given out-of-image <paramref name="padding"/>.
+    /// </summary>
+    /// <param name="feature">Feature tensor [channels, height, width] or [batch, channels, height, width].</param>
+    /// <param name="flow">Flow whose first batch x 2 planes are dx then dy.</param>
+    /// <param name="padding">Border clamps samples to the edge pixels; Zeros treats outside pixels as zero.</param>
+    private protected Tensor<T> WarpByFlow(Tensor<T> feature, Tensor<T> flow, GridSamplePadding padding)
     {
         bool hasBatch = feature.Rank == 4;
         int batch = hasBatch ? feature.Shape[0] : 1;
@@ -287,40 +297,53 @@ public abstract partial class VideoNeuralNetworkBase<T> : NeuralNetworkBase<T>
         int height = hasBatch ? feature.Shape[2] : feature.Shape[1];
         int width = hasBatch ? feature.Shape[3] : feature.Shape[2];
 
-        var warped = new Tensor<T>(feature._shape);
+        int pixels = height * width;
 
-        for (int b = 0; b < batch; b++)
+        // Check the layout before it is flattened: an element count alone let a [1,2,3,2] flow warp a [1,1,2,3]
+        // feature by reading its values in the wrong spatial order.
+        int flowRank = flow.Rank;
+        if (flowRank < 3 || flowRank > 4
+            || flow.Shape[flowRank - 3] != 2
+            || flow.Shape[flowRank - 2] != height || flow.Shape[flowRank - 1] != width
+            || (flowRank == 4 ? flow.Shape[0] : 1) < batch)
         {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    int flowIdxX = hasBatch
-                        ? b * 2 * height * width + h * width + w
-                        : h * width + w;
-                    int flowIdxY = hasBatch
-                        ? b * 2 * height * width + height * width + h * width + w
-                        : height * width + h * width + w;
-
-                    double dx = NumOps.ToDouble(flow.Data.Span[flowIdxX]);
-                    double dy = NumOps.ToDouble(flow.Data.Span[flowIdxY]);
-
-                    double srcX = w + dx;
-                    double srcY = h + dy;
-
-                    for (int c = 0; c < channels; c++)
-                    {
-                        T value = BilinearSample(feature, b, c, srcY, srcX, hasBatch, height, width, channels);
-                        int outIdx = hasBatch
-                            ? b * channels * height * width + c * height * width + h * width + w
-                            : c * height * width + h * width + w;
-                        warped.Data.Span[outIdx] = value;
-                    }
-                }
-            }
+            throw new ArgumentException(
+                $"A flow shaped [{string.Join(", ", flow.Shape.ToArray())}] does not warp a feature with {batch} " +
+                $"sample(s) of {height}x{width}; expected [{batch}, 2, {height}, {width}] (or [2, {height}, {width}]).",
+                nameof(flow));
         }
 
-        return warped;
+        // The flow is read as its first batch x 2 planes, dx then dy.
+        var flowPlanes = Engine.Reshape(
+            Engine.TensorNarrow(Engine.Reshape(flow, [flow.Length]), 0, 0, batch * 2 * pixels),
+            [batch, 2, height, width]);
+        var (gridX, gridY) = Engine.TensorMeshgrid(
+            Engine.TensorArange<T>(0, width, 1), Engine.TensorArange<T>(0, height, 1));
+        var srcX = Engine.TensorAdd(Engine.Reshape(Engine.TensorNarrow(flowPlanes, 1, 0, 1), [batch, height, width]),
+            Engine.TensorBroadcastTo(gridX, [batch, height, width]));
+        var srcY = Engine.TensorAdd(Engine.Reshape(Engine.TensorNarrow(flowPlanes, 1, 1, 1), [batch, height, width]),
+            Engine.TensorBroadcastTo(gridY, [batch, height, width]));
+
+        var grid = Engine.TensorStack([AlignedCornerCoordinate(srcX, width), AlignedCornerCoordinate(srcY, height)], 3);
+        var input = hasBatch ? feature : Engine.Reshape(feature, [1, channels, height, width]);
+        var warped = Engine.GridSample(input, grid, GridSampleMode.Bilinear, padding, true);
+
+        return hasBatch ? warped : Engine.Reshape(warped, [channels, height, width]);
+    }
+
+    /// <summary>
+    /// Maps pixel coordinates to GridSample's [-1, 1] range with the align_corners=True convention,
+    /// <c>2p / (extent - 1) - 1</c>; a single-pixel axis maps everything to its one pixel.
+    /// </summary>
+    private Tensor<T> AlignedCornerCoordinate(Tensor<T> pixels, int extent)
+    {
+        if (extent <= 1)
+        {
+            return Engine.TensorMultiplyScalar(pixels, NumOps.Zero);
+        }
+
+        return Engine.TensorAddScalar(
+            Engine.TensorMultiplyScalar(pixels, NumOps.FromDouble(2.0 / (extent - 1))), NumOps.FromDouble(-1.0));
     }
 
     /// <summary>

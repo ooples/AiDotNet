@@ -17,6 +17,7 @@ public class OWLViTOptions : GroundingVLMOptions
         TextEmbeddingDim = other.TextEmbeddingDim;
         DetectionDim = other.DetectionDim;
         NumFusionLayers = other.NumFusionLayers;
+        NumTextLayers = other.NumTextLayers;
         NumClassEmbeddings = other.NumClassEmbeddings;
     }
 
@@ -43,4 +44,7 @@ public class OWLViTOptions : GroundingVLMOptions
 
     /// <summary>Gets or sets the number of cross-modal fusion layers.</summary>
     public int NumFusionLayers { get; set; } = 6;
+
+    /// <summary>Gets or sets the number of layers of the CLIP text transformer that embeds the text queries (12).</summary>
+    public int NumTextLayers { get; set; } = 12;
 }

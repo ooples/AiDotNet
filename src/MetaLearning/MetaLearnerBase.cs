@@ -203,7 +203,7 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
             throw new ArgumentException(
                 $"{GetType().Name} has no inner-loop gradient step for an inner optimizer to take; leave InnerOptimizer null.",
                 nameof(innerOptimizer));
-        if (metaOptimizer is not null && ReferenceEquals(metaOptimizer, innerOptimizer))
+        if (metaOptimizer is not null && (object)metaOptimizer == (object?)innerOptimizer)
             throw new ArgumentException(
                 "MetaOptimizer and InnerOptimizer must be separate instances: every adaptation resets the inner " +
                 "optimizer's state, which would erase the outer optimizer's moments.",
@@ -241,8 +241,7 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
             throw new ArgumentException("Task batch cannot be empty.", nameof(taskBatch));
         }
 
-        T totalLoss = NumOps.Zero;
-        int taskCount = 0;
+        var queryLosses = new List<T>();
 
         foreach (var task in taskBatch.Tasks)
         {
@@ -251,16 +250,11 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
 
             // Evaluate on query set
             var queryPredictions = adaptedModel.Predict(task.QueryInput);
-            var queryLoss = ComputeLossFromOutput(queryPredictions, task.QueryOutput);
-
-            totalLoss = NumOps.Add(totalLoss, queryLoss);
-            taskCount++;
+            queryLosses.Add(ComputeLossFromOutput(queryPredictions, task.QueryOutput));
         }
 
         // Return average loss
-        return taskCount > 0
-            ? NumOps.Divide(totalLoss, NumOps.FromDouble(taskCount))
-            : NumOps.Zero;
+        return ComputeMean(queryLosses);
     }
 
     /// <inheritdoc/>
@@ -283,8 +277,10 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
         var taskBatch = CreateTaskBatch(tasks);
 
         // Perform meta-training
+        // An algorithm whose MetaTrain advances the iteration itself (for its own schedule) is not counted twice.
+        int previousIteration = _currentIteration;
         var metaLoss = MetaTrain(taskBatch);
-        _currentIteration++;
+        if (_currentIteration == previousIteration) _currentIteration++;
 
         stopwatch.Stop();
 
@@ -320,8 +316,10 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
         var taskBatch = sampler.SampleBatch(batchSize);
         if (taskBatch.Tasks.Length == 0)
             throw new InvalidOperationException("Sampler returned an empty task batch.");
+        // An algorithm whose MetaTrain advances the iteration itself (for its own schedule) is not counted twice.
+        int previousIteration = _currentIteration;
         var metaLoss = MetaTrain(taskBatch);
-        _currentIteration++;
+        if (_currentIteration == previousIteration) _currentIteration++;
 
         stopwatch.Stop();
 
@@ -402,8 +400,7 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
             losses.Add(loss);
 
             // Compute accuracy if applicable
-            var accuracy = ComputeAccuracy(predictions, task.QuerySetY);
-            accuracies.Add(NumOps.FromDouble(accuracy));
+            accuracies.Add(ComputeAccuracy(predictions, task.QuerySetY));
         }
 
         stopwatch.Stop();
@@ -439,9 +436,9 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
 
         // MetaAdaptationResult constructor: queryAccuracy, queryLoss, supportAccuracy, supportLoss, adaptationSteps, adaptationTimeMs
         return new MetaAdaptationResult<T>(
-            queryAccuracy: NumOps.FromDouble(queryAccuracy),
+            queryAccuracy: queryAccuracy,
             queryLoss: queryLoss,
-            supportAccuracy: NumOps.FromDouble(supportAccuracy),
+            supportAccuracy: supportAccuracy,
             supportLoss: supportLoss,
             adaptationSteps: _options.AdaptationSteps,
             adaptationTimeMs: stopwatch.Elapsed.TotalMilliseconds
@@ -457,91 +454,103 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
         Guard.NotNull(model);
         MetaModel = model;
 
+        // The cached parameter view and the registered components still point at the old model; drop both so
+        // GetParameters, SetParameters and Serialize read the replacement.
+        _cachedParamModel = null;
+        InvalidateParameterComponents();
+
         // Reset optimizer state when the model changes to avoid stale momentum/velocity vectors
         // from the previous model's parameter space
         ResetOptimizerState();
     }
 
+    // Distinguishes complete learner checkpoints from legacy encoder-only files.
+    private const int LearnerCheckpointMagic = unchecked((int)0xA1D04D4C);
+    private const int LearnerCheckpointVersion = 1;
+
     /// <inheritdoc/>
     /// <remarks>
-    /// <para>
-    /// This method saves the meta-model parameters. Note that optimizer state (momentum, velocity)
-    /// is not persisted and will be reset when loading. For production use, consider implementing
-    /// a custom serialization scheme that saves:
-    /// </para>
-    /// <list type="bullet">
-    /// <item>Model parameters (saved here)</item>
-    /// <item>Optimizer state (momentum, velocity vectors)</item>
-    /// <item>Current iteration count</item>
-    /// <item>Learning rate schedules</item>
-    /// </list>
+    /// Saves the learner's complete model serialization, including encoder parameters, learner-owned
+    /// weights and declared state, plus its training iteration. Declared optimizer buffers are retained.
     /// </remarks>
     public virtual void Save(string filePath)
     {
-        // Basic serialization - saves model parameters
-        // Note: Optimizer state is not persisted (will be reset on load)
-        var serializer = MetaModel as IModelSerializer;
-        if (serializer != null)
-        {
-            serializer.SaveModel(filePath);
-
-            // Save iteration count in a companion file for training resumption
-            var metaPath = filePath + ".meta";
-            try
-            {
-                System.IO.File.WriteAllText(metaPath, _currentIteration.ToString());
-            }
-            catch
-            {
-                // Non-critical: continue even if metadata save fails
-            }
-        }
-        else
-        {
-            throw new NotSupportedException("The meta-model does not support serialization.");
-        }
+        byte[] payload = Serialize();
+        using var stream = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None);
+        using var writer = new BinaryWriter(stream);
+        writer.Write(LearnerCheckpointMagic);
+        writer.Write(LearnerCheckpointVersion);
+        writer.Write(_currentIteration);
+        writer.Write(payload.Length);
+        writer.Write(payload);
     }
 
     /// <inheritdoc/>
     /// <remarks>
-    /// <para>
-    /// This method loads the meta-model parameters. Note that optimizer state is not restored
-    /// and will be reset after loading. Call <see cref="Reset"/> after loading if you want
-    /// to ensure a clean training state.
-    /// </para>
+    /// Complete checkpoints restore learner-owned state. Legacy encoder-only checkpoints and their
+    /// optional .meta iteration files remain readable, with transient optimizer state reset.
     /// </remarks>
     public virtual void Load(string filePath)
     {
-        var serializer = MetaModel as IModelSerializer;
-        if (serializer != null)
+        byte[]? payload = null;
+        int iteration = 0;
+        using (var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+        using (var reader = new BinaryReader(stream))
         {
-            serializer.LoadModel(filePath);
-
-            // Try to restore iteration count from companion file
-            var metaPath = filePath + ".meta";
-            if (System.IO.File.Exists(metaPath))
+            if (stream.Length >= sizeof(int) && reader.ReadInt32() == LearnerCheckpointMagic)
             {
-                try
-                {
-                    var content = System.IO.File.ReadAllText(metaPath);
-                    if (int.TryParse(content, out int iteration))
-                    {
-                        _currentIteration = iteration;
-                    }
-                }
-                catch
-                {
-                    // Non-critical: continue even if metadata load fails
-                }
+                if (stream.Length - stream.Position < 3 * sizeof(int))
+                    throw new InvalidDataException("Truncated meta-learner checkpoint header.");
+                int version = reader.ReadInt32();
+                if (version != LearnerCheckpointVersion)
+                    throw new InvalidDataException($"Unsupported meta-learner checkpoint version {version}.");
+                iteration = reader.ReadInt32();
+                int length = reader.ReadInt32();
+                if (length < 0 || length != stream.Length - stream.Position)
+                    throw new InvalidDataException("Invalid meta-learner checkpoint payload length.");
+                payload = reader.ReadBytes(length);
             }
-
-            // Reset optimizer state since it's not persisted
-            ResetOptimizerState();
         }
-        else
+        if (payload is null)
         {
-            throw new NotSupportedException("The meta-model does not support serialization.");
+            LoadLegacyCheckpoint(filePath);
+            return;
         }
+        ResetOptimizerState();
+        Deserialize(payload);
+        _currentIteration = iteration;
+    }
+
+    private void LoadLegacyCheckpoint(string filePath)
+    {
+        if (MetaModel is not IModelSerializer serializer)
+            throw new NotSupportedException("The meta-model does not support serialization.");
+        serializer.LoadModel(filePath);
+
+        // A legacy file carries no iteration of its own: start from zero unless a valid sidecar supplies one.
+        _currentIteration = 0;
+        var metaPath = filePath + ".meta";
+        if (File.Exists(metaPath))
+        {
+            try
+            {
+                if (int.TryParse(File.ReadAllText(metaPath), out int iteration))
+                    _currentIteration = iteration;
+            }
+            catch (IOException ex)
+            {
+                // Legacy iteration metadata is optional; encoder restoration has already succeeded.
+                System.Diagnostics.Trace.TraceWarning(
+                    $"Meta-learner legacy checkpoint: the iteration sidecar could not be read; starting from 0. {ex}");
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                // Preserve legacy loading when only the optional sidecar is inaccessible.
+                System.Diagnostics.Trace.TraceWarning(
+                    $"Meta-learner legacy checkpoint: the iteration sidecar is not accessible; starting from 0. {ex}");
+            }
+        }
+        ResetOptimizerState();
     }
 
     /// <inheritdoc/>
@@ -795,10 +804,11 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
 
         // First, perform adaptation
         var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
+        double innerStep = NumOps.ToDouble(innerLearningRate);
         foreach (var (input, target) in adaptationSteps)
         {
             var gradients = ComputeGradients(model, input, target);
-            parameters = ApplyGradients(parameters, gradients, NumOps.ToDouble(innerLearningRate));
+            parameters = ApplyGradients(parameters, gradients, innerStep);
             InterfaceGuard.Parameterizable(model).SetParameters(parameters);
         }
 
@@ -1007,39 +1017,28 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
         IGradientBasedOptimizer<T, TInput, TOutput> optimizer,
         (Vector<T> Parameters, Vector<T> Gradients)[] groups)
     {
-        int total = 0;
-        foreach (var (parameters, gradients) in groups)
+        var parameterParts = new Vector<T>[groups.Length];
+        var gradientParts = new Vector<T>[groups.Length];
+        for (int g = 0; g < groups.Length; g++)
         {
+            var (parameters, gradients) = groups[g];
             // An empty group (a disabled component) contributes nothing, whatever its gradient holds.
             if (parameters.Length > 0 && parameters.Length != gradients.Length)
                 throw new ArgumentException("Each group's gradient must have its parameters' length.", nameof(groups));
-            total += parameters.Length;
+            parameterParts[g] = parameters;
+            gradientParts[g] = parameters.Length == 0 ? new Vector<T>(0) : gradients;
         }
 
-        var allParameters = new Vector<T>(total);
-        var allGradients = new Vector<T>(total);
-        int offset = 0;
-        foreach (var (parameters, gradients) in groups)
-        {
-            for (int i = 0; i < parameters.Length; i++)
-            {
-                allParameters[offset + i] = parameters[i];
-                allGradients[offset + i] = gradients[i];
-            }
-
-            offset += parameters.Length;
-        }
+        var allParameters = Vector<T>.Concatenate(parameterParts);
+        var allGradients = Vector<T>.Concatenate(gradientParts);
 
         var stepped = optimizer.UpdateParameters(allParameters, allGradients);
         var updated = new Vector<T>[groups.Length];
-        offset = 0;
+        int offset = 0;
         for (int g = 0; g < groups.Length; g++)
         {
             int length = groups[g].Parameters.Length;
-            var group = new Vector<T>(length);
-            for (int i = 0; i < length; i++)
-                group[i] = stepped[offset + i];
-            updated[g] = group;
+            updated[g] = length == 0 ? new Vector<T>(0) : stepped.GetSubVector(offset, length);
             offset += length;
         }
 
@@ -1095,11 +1094,7 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
         }
 
         var allLayerInfo = layeredModel.GetAllLayerInfo();
-        var updated = new Vector<T>(parameters.Length);
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            updated[i] = parameters[i];
-        }
+        var updated = parameters.Clone();
 
         foreach (var info in allLayerInfo.Where(l => l.ParameterCount > 0 && l.IsTrainable))
         {
@@ -1120,14 +1115,13 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
                 ? layerLr
                 : defaultLearningRate;
 
-            T lrT = NumOps.FromDouble(lr);
-
-            for (int i = 0; i < info.ParameterCount; i++)
-            {
-                int idx = info.ParameterOffset + i;
-                updated[idx] = NumOps.Subtract(parameters[idx],
-                    NumOps.Multiply(gradients[idx], lrT));
-            }
+            // Offsets were bounds-checked against the int-sized vectors above.
+            int offset = checked((int)info.ParameterOffset);
+            int count = checked((int)info.ParameterCount);
+            var layerStep = Engine.Subtract(
+                parameters.GetSubVector(offset, count),
+                ScaleVector(gradients.GetSubVector(offset, count), lr));
+            layerStep.AsSpan().CopyTo(updated.AsWritableSpan().Slice(offset, count));
         }
 
         return updated;
@@ -1153,11 +1147,7 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
         var squaredGradients = Engine.Multiply(gradients, gradients);
 
         // Sum all squared elements to get ||gradients||²
-        T sumSquared = NumOps.Zero;
-        for (int i = 0; i < squaredGradients.Length; i++)
-        {
-            sumSquared = NumOps.Add(sumSquared, squaredGradients[i]);
-        }
+        T sumSquared = Engine.Sum(squaredGradients);
 
         double norm = Math.Sqrt(NumOps.ToDouble(sumSquared));
 
@@ -1274,16 +1264,18 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
         if (vectors.Count == 0) return new Vector<T>(0);
         int expectedLength = vectors[0].Length;
         var result = new Vector<T>(expectedLength);
+        if (expectedLength == 0) return result;
         foreach (var v in vectors)
         {
-            int len = Math.Min(v.Length, expectedLength);
-            for (int i = 0; i < len; i++)
-                result[i] = NumOps.Add(result[i], v[i]);
+            // A longer vector is truncated to the first vector's length; a shorter one is padded with zeros.
+            var aligned = v.Length == expectedLength
+                ? v
+                : v.Length > expectedLength
+                    ? v.GetSubVector(0, expectedLength)
+                    : Vector<T>.Concatenate(v, new Vector<T>(expectedLength - v.Length));
+            result = Engine.Add(result, aligned);
         }
-        var scale = NumOps.FromDouble(1.0 / vectors.Count);
-        for (int i = 0; i < result.Length; i++)
-            result[i] = NumOps.Multiply(result[i], scale);
-        return result;
+        return Engine.Multiply(result, NumOps.FromDouble(1.0 / vectors.Count));
     }
 
     /// <summary>
@@ -1322,7 +1314,7 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
     /// predicted class matches the true class. For example, 0.85 means 85% correct predictions.
     /// </para>
     /// </remarks>
-    protected virtual double ComputeAccuracy(TOutput predictions, TOutput labels)
+    protected virtual T ComputeAccuracy(TOutput predictions, TOutput labels)
     {
         // Convert to vectors for comparison
         var predVector = ConvertToVector(predictions);
@@ -1330,7 +1322,7 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
 
         if (predVector == null || labelVector == null)
         {
-            return 0.0;
+            return NumOps.Zero;
         }
 
         // Handle different data layouts:
@@ -1341,48 +1333,41 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
         // If lengths match and are small (likely single sample classification)
         if (predVector.Length == labelVector.Length && predVector.Length > 0)
         {
-            // Check if it's one-hot encoded (values are 0 or 1) or class indices
-            bool isOneHot = true;
-            for (int i = 0; i < labelVector.Length && isOneHot; i++)
-            {
-                double val = NumOps.ToDouble(labelVector[i]);
-                if (val != 0.0 && val != 1.0)
-                {
-                    isOneHot = false;
-                }
-            }
+            // One-hot encoded when every label is exactly 0 or 1 (a NaN label is neither).
+            var labelTensor = Tensor<T>.FromVector(labelVector);
+            var zeroOrOne = Engine.TensorAdd(
+                Engine.TensorEquals(labelTensor, NumOps.Zero),
+                Engine.TensorEquals(labelTensor, NumOps.One));
+            bool isOneHot = NumOps.GreaterThan(Engine.TensorMinValue(zeroOrOne), NumOps.Zero);
 
             if (isOneHot && predVector.Length > 1)
             {
                 // One-hot encoded: find argmax of both and compare
                 int predClass = FindArgmax(predVector);
                 int labelClass = FindArgmax(labelVector);
-                return predClass == labelClass ? 1.0 : 0.0;
+                return predClass == labelClass ? NumOps.One : NumOps.Zero;
             }
             else
             {
-                // Likely class indices or regression - compare directly
-                int correct = 0;
-                for (int i = 0; i < predVector.Length; i++)
-                {
-                    int predClass = (int)Math.Round(NumOps.ToDouble(predVector[i]));
-                    int labelClass = (int)Math.Round(NumOps.ToDouble(labelVector[i]));
-                    if (predClass == labelClass)
-                    {
-                        correct++;
-                    }
-                }
-                return (double)correct / predVector.Length;
+                // Likely class indices or regression - compare the values rounded half to even (Math.Round's mode).
+                var matches = Engine.TensorEquals(
+                    Engine.TensorRound(Tensor<T>.FromVector(predVector)),
+                    Engine.TensorRound(labelTensor));
+                // Count the matches with an integer op: a sum of the 0/1 mask in T stops being exact past 2048
+                // under Half, and the length itself is not representable there either.
+                int matched = Engine.TensorCountNonzero(matches);
+                return NumOps.FromDouble((double)matched / predVector.Length);
             }
         }
 
         // Cannot compute accuracy - different layouts or unsupported format
-        return 0.0;
+        return NumOps.Zero;
     }
 
     /// <summary>
     /// Finds the index of the maximum value in a vector (argmax).
     /// </summary>
+    /// <remarks>The first maximum wins a tie, as the engine's TensorArgMax keeps it.</remarks>
     private int FindArgmax(Vector<T> vector)
     {
         if (vector.Length == 0)
@@ -1390,19 +1375,7 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
             return -1;
         }
 
-        int maxIndex = 0;
-        T maxValue = vector[0];
-
-        for (int i = 1; i < vector.Length; i++)
-        {
-            if (NumOps.GreaterThan(vector[i], maxValue))
-            {
-                maxValue = vector[i];
-                maxIndex = i;
-            }
-        }
-
-        return maxIndex;
+        return Engine.TensorArgMax(Tensor<T>.FromVector(vector), 0)[0];
     }
 
     /// <summary>
@@ -1465,12 +1438,7 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
             return NumOps.Zero;
         }
 
-        T sum = NumOps.Zero;
-        foreach (var value in values)
-        {
-            sum = NumOps.Add(sum, value);
-        }
-
+        T sum = Engine.Sum(new Vector<T>(values));
         return NumOps.Divide(sum, NumOps.FromDouble(values.Count));
     }
 
@@ -1484,10 +1452,7 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
     {
         if (a == null) return b;
         if (b == null) return a;
-        var result = new Vector<T>(a.Length + b.Length);
-        for (int i = 0; i < a.Length; i++) result[i] = a[i];
-        for (int i = 0; i < b.Length; i++) result[a.Length + i] = b[i];
-        return result;
+        return Vector<T>.Concatenate(a, b);
     }
 
     /// <summary>
@@ -1495,29 +1460,28 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
     /// </summary>
     protected Vector<T> ScaleVector(Vector<T> parameters, double scale)
     {
-        var scaled = new Vector<T>(parameters.Length);
-        var scaleT = NumOps.FromDouble(scale);
-        for (int i = 0; i < parameters.Length; i++)
-            scaled[i] = NumOps.Multiply(parameters[i], scaleT);
-        return scaled;
+        return Engine.Multiply(parameters, NumOps.FromDouble(scale));
     }
 
     /// <summary>
     /// Computes cosine similarity between two Vector&lt;T&gt; instances.
     /// </summary>
+    /// <remarks>Only the first min(|a|, |b|) entries take part, so vectors of different lengths compare their overlap.</remarks>
     protected double CosineSimilarity(Vector<T> a, Vector<T> b, double epsilon = 1e-8)
     {
-        double dot = 0, normA = 0, normB = 0;
         int len = Math.Min(a.Length, b.Length);
-        for (int i = 0; i < len; i++)
+        if (len == 0)
         {
-            double ai = NumOps.ToDouble(a[i]);
-            double bi = NumOps.ToDouble(b[i]);
-            dot += ai * bi;
-            normA += ai * ai;
-            normB += bi * bi;
+            return 0.0;
         }
-        return dot / (Math.Sqrt(normA) * Math.Sqrt(normB) + epsilon);
+
+        var aHead = a.Length == len ? a : a.GetSubVector(0, len);
+        var bHead = b.Length == len ? b : b.GetSubVector(0, len);
+        T dot = Engine.DotProduct(aHead, bHead);
+        T norms = NumOps.Multiply(
+            NumOps.Sqrt(Engine.DotProduct(aHead, aHead)),
+            NumOps.Sqrt(Engine.DotProduct(bHead, bHead)));
+        return NumOps.ToDouble(NumOps.Divide(dot, NumOps.Add(norms, NumOps.FromDouble(epsilon))));
     }
 
     /// <summary>
@@ -1525,13 +1489,7 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
     /// </summary>
     protected double L2NormSquared(Vector<T> vector)
     {
-        double sum = 0;
-        for (int i = 0; i < vector.Length; i++)
-        {
-            double v = NumOps.ToDouble(vector[i]);
-            sum += v * v;
-        }
-        return sum;
+        return NumOps.ToDouble(Engine.DotProduct(vector, vector));
     }
 
     /// <summary>
@@ -1539,36 +1497,36 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
     /// </summary>
     protected Vector<T> L2Normalize(Vector<T> vector, double epsilon = 1e-10)
     {
-        double norm = 0;
-        for (int i = 0; i < vector.Length; i++)
-        {
-            double v = NumOps.ToDouble(vector[i]);
-            norm += v * v;
-        }
-        norm = Math.Sqrt(norm) + epsilon;
-        var result = new Vector<T>(vector.Length);
-        for (int i = 0; i < vector.Length; i++)
-            result[i] = NumOps.FromDouble(NumOps.ToDouble(vector[i]) / norm);
-        return result;
+        T norm = NumOps.Add(NumOps.Sqrt(Engine.DotProduct(vector, vector)), NumOps.FromDouble(epsilon));
+        return Engine.Divide(vector, norm);
     }
 
     /// <summary>
     /// Compresses a Vector&lt;T&gt; into a smaller Vector&lt;T&gt; of target dimension using bucket averaging with tanh.
     /// Used for gradient compression and embedding.
     /// </summary>
+    /// <remarks>
+    /// Entry e is tanh(sum(vector[e*b .. e*b+b-1]) / b) with b = max(1, |vector| / targetDim); entries past the end of
+    /// the vector count as zero and a trailing remainder beyond targetDim * b is dropped.
+    /// </remarks>
     protected Vector<T> CompressVector(Vector<T> vector, int targetDim)
     {
-        var result = new Vector<T>(targetDim);
-        int bucketSize = Math.Max(1, vector.Length / targetDim);
-        for (int e = 0; e < targetDim; e++)
+        if (targetDim < 0)
         {
-            double sum = 0;
-            int start = e * bucketSize;
-            for (int d = start; d < start + bucketSize && d < vector.Length; d++)
-                sum += NumOps.ToDouble(vector[d]);
-            result[e] = ScalarTanh(NumOps.FromDouble(sum / bucketSize));
+            throw new ArgumentOutOfRangeException(nameof(targetDim), targetDim, "Target dimension must be non-negative.");
         }
-        return result;
+
+        int bucketSize = Math.Max(1, vector.Length / targetDim);
+        int covered = targetDim * bucketSize;
+        Vector<T> window = covered == vector.Length
+            ? vector
+            : covered < vector.Length
+                ? vector.GetSubVector(0, covered)
+                : Vector<T>.Concatenate(vector, new Vector<T>(covered - vector.Length));
+        var bucketSums = Engine.ReduceSum(
+            Engine.Reshape(Tensor<T>.FromVector(window), new[] { targetDim, bucketSize }), new[] { 1 }, false);
+        var bucketMeans = Engine.TensorDivideScalar(bucketSums, NumOps.FromDouble(bucketSize));
+        return Engine.Tanh(bucketMeans).ToVector();
     }
 
     /// <summary>
@@ -1728,14 +1686,14 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
     protected double StandardAuxLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
         var ip = ParamModel.GetParameters();
-        double total = 0;
+        var losses = new List<T>(taskBatch.Tasks.Length);
         foreach (var t in taskBatch.Tasks)
         {
             ParamModel.SetParameters(ip);
-            total += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(t.QueryInput), t.QueryOutput));
+            losses.Add(ComputeLossFromOutput(MetaModel.Predict(t.QueryInput), t.QueryOutput));
         }
         ParamModel.SetParameters(ip);
-        return total / Math.Max(taskBatch.Tasks.Length, 1);
+        return NumOps.ToDouble(ComputeMean(losses));
     }
 
     #endregion

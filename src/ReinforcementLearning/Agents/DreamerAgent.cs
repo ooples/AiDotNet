@@ -409,17 +409,13 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
         // The mode action: tanh of the Gaussian's mean (Equation 3 with epsilon = 0).
         var mode = Engine.TensorTanh(actionMean).ToVector();
 
-        var action = new Vector<T>(_options.ActionSize);
-        T low = NumOps.FromDouble(-1.0);
-        for (int i = 0; i < action.Length; i++)
+        var action = RLTensorOps.Head(mode, _options.ActionSize);
+        if (explore)
         {
-            T value = mode[i];
-            if (explore)
-            {
-                value = NumOps.Add(value, NumOps.Multiply(NumOps.FromDouble(ExplorationStd), StandardNormal()));
-                value = MathHelper.Clamp<T>(value, low, NumOps.One);
-            }
-            action[i] = value;
+            // clip(mode + sigma * N(0, 1), -1, 1), one draw per dimension in order
+            var noise = StandardNormalTensor(1, _options.ActionSize).ToVector();
+            action = Engine.Clamp(
+                Engine.Add(action, Engine.Multiply(noise, NumOps.FromDouble(ExplorationStd))), NumOps.FromDouble(-1.0), NumOps.One);
         }
 
         return (action, h.ToVector(), z.ToVector());
@@ -495,30 +491,22 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
         int obsSize = _options.ObservationSize;
         int actionSize = _options.ActionSize;
 
-        var observations = new Tensor<T>([(length + 1) * batch, obsSize]);
-        var actions = new Tensor<T>[length];
-        var rewards = new Tensor<T>([length * batch, 1]);
-        var discounts = new Tensor<T>([length * batch, 1]);
-        for (int t = 0; t < length; t++) actions[t] = new Tensor<T>([batch, actionSize]);
-
-        for (int b = 0; b < batch; b++)
-        {
-            var first = _replay.At(starts[b]);
-            for (int j = 0; j < obsSize; j++) observations[b, j] = first.State[j];
-
-            for (int t = 0; t < length; t++)
-            {
-                var transition = _replay.At(starts[b] + t);
-                int nextRow = (t + 1) * batch + b;
-                for (int j = 0; j < obsSize; j++) observations[nextRow, j] = transition.NextState[j];
-                for (int j = 0; j < actionSize; j++) actions[t][b, j] = transition.Action[j];
-
-                int row = t * batch + b;
-                rewards[row, 0] = transition.Reward;
-                // "a binary classifier that is trained towards the soft labels of 0 and gamma" (Appendix A).
-                discounts[row, 0] = transition.Done ? NumOps.Zero : gamma;
-            }
-        }
+        // Row t * batch + b holds sequence b at step t; observation row 0 * batch + b is the first state and
+        // row (t + 1) * batch + b the state after transition t.
+        var observations = RLTensorOps.Batch(
+            Enumerable.Range(0, (length + 1) * batch).Select(row => row < batch
+                ? _replay.At(starts[row]).State
+                : _replay.At(starts[row % batch] + row / batch - 1).NextState),
+            obsSize);
+        var actions = Enumerable.Range(0, length)
+            .Select(t => RLTensorOps.Batch(starts.Select(start => _replay.At(start + t).Action), actionSize))
+            .ToArray();
+        var transitions = Enumerable.Range(0, length * batch)
+            .Select(row => _replay.At(starts[row % batch] + row / batch)).ToList();
+        var rewards = new Tensor<T>([length * batch, 1], Vector<T>.FromEnumerable(transitions.Select(transition => transition.Reward)));
+        // "a binary classifier that is trained towards the soft labels of 0 and gamma" (Appendix A).
+        var discounts = new Tensor<T>([length * batch, 1], Vector<T>.FromEnumerable(
+            transitions.Select(transition => transition.Done ? NumOps.Zero : gamma)));
 
         return new SequenceBatch(observations, actions, rewards, discounts, batch, length);
     }
@@ -831,17 +819,18 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// The weight of each imagined step: the cumulative product of the predicted discounts before it, with the
     /// gradient stopped (Section 3; w_t = 1).
     /// </summary>
-    private Tensor<T>[] CumulativeDiscountWeights(Tensor<T>[] discounts)
+    internal Tensor<T>[] CumulativeDiscountWeights(Tensor<T>[] discounts)
     {
+        // w_0 = 1, w_k = prod_{j<k} discount_j per row. The weights are constants of the actor objective (Hafner et
+        // al. 2020, Section 3 and the authors' stop_gradient(weights)): the discounts' gradient is stopped so the
+        // actor does not learn to raise its objective by moving the continue model's predictions.
         int rows = discounts[0].Shape[0];
         var weights = new Tensor<T>[discounts.Length];
-        var running = new T[rows];
-        for (int i = 0; i < rows; i++) running[i] = NumOps.One;
+        var running = new Tensor<T>([rows, 1], Vector<T>.CreateDefault(rows, NumOps.One));
         for (int k = 0; k < discounts.Length; k++)
         {
-            weights[k] = new Tensor<T>((T[])running.Clone(), [rows, 1]);
-            var discount = discounts[k].ToVector();
-            for (int i = 0; i < rows; i++) running[i] = NumOps.Multiply(running[i], discount[i]);
+            weights[k] = running;
+            running = Engine.TensorMultiply(running, Engine.Reshape(Engine.StopGradient(discounts[k]), [rows, 1]));
         }
         return weights;
     }

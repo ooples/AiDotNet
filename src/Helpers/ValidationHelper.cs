@@ -160,21 +160,40 @@ public static class ValidationHelper<T>
         // validator to do it for them. Method name "Validate" implies
         // a fail-fast throw contract; coercion would be a separate
         // method (CoercePoissonData) if/when we need that path.
-        for (int i = 0; i < y.Length; i++)
+        // The first offending sample is the first one that is negative or non-integral (the value
+        // differs from its rounding, MathHelper.IsInteger's test); its own test picks the message.
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        var values = Tensor<T>.FromVector(y);
+        var negative = engine.TensorLessThan(values, _numOps.Zero);
+        var fractional = engine.TensorNotEquals(values, engine.TensorRound(values));
+        int firstBad = FirstNonzeroIndex(engine, engine.TensorAdd(negative, fractional));
+        if (firstBad < 0)
         {
-            if (_numOps.LessThan(y[i], _numOps.Zero))
-            {
-                throw new ArgumentException(
-                    $"Poisson regression requires non-negative count data; got {_numOps.ToDouble(y[i])} at index {i}.",
-                    nameof(y));
-            }
-            if (!MathHelper.IsInteger(y[i]))
-            {
-                throw new ArgumentException(
-                    $"Poisson regression requires integer count data; got {_numOps.ToDouble(y[i])} at index {i}.",
-                    nameof(y));
-            }
+            return;
         }
+
+        T offending = y[firstBad];
+        if (_numOps.LessThan(offending, _numOps.Zero))
+        {
+            throw new ArgumentException(
+                $"Poisson regression requires non-negative count data; got {_numOps.ToDouble(offending)} at index {firstBad}.",
+                nameof(y));
+        }
+
+        throw new ArgumentException(
+            $"Poisson regression requires integer count data; got {_numOps.ToDouble(offending)} at index {firstBad}.",
+            nameof(y));
+    }
+
+    /// <summary>
+    /// Index of the first nonzero entry of a 1-D 0/1 mask, or -1 when there is none.
+    /// </summary>
+    /// <remarks>TensorNonzero lists coordinates in row-major order, so its first row is the lowest index.</remarks>
+    private static int FirstNonzeroIndex(IEngine engine, Tensor<T> mask)
+    {
+        var hits = engine.TensorNonzero(mask);
+        return hits.Shape[0] > 0 ? hits.GetFlat(0) : -1;
     }
 
     private static void ValidateDataPair<TInput, TOutput>(TInput x, TOutput y, string datasetName)
@@ -300,36 +319,16 @@ public static class ValidationHelper<T>
         // This check must precede the distinct-count check -- see the remarks above. It is MathHelper.IsInteger's test
         // (the value equals its rounding). The loops read a span: through the vector indexer, validating a 20,000-row
         // target took 1.9 ms, as long as fitting the logistic regression it was validating; over the span, 0.4 ms.
-        ReadOnlySpan<T> values = y.AsSpan();
-        for (int i = 0; i < values.Length; i++)
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        var values = Tensor<T>.FromVector(y);
+        if (engine.TensorCountNonzero(engine.TensorNotEquals(values, engine.TensorRound(values))) > 0)
         {
-            T value = values[i];
-            if (!_numOps.Equals(value, _numOps.Round(value)))
-            {
-                return (TargetKind.Continuous, new List<T>());
-            }
+            return (TargetKind.Continuous, new List<T>());
         }
 
-        var classes = new List<T>();
-        for (int i = 0; i < values.Length; i++)
-        {
-            bool seen = false;
-            for (int c = 0; c < classes.Count; c++)
-            {
-                if (_numOps.Equals(classes[c], values[i]))
-                {
-                    seen = true;
-                    break;
-                }
-            }
-
-            if (!seen)
-            {
-                classes.Add(values[i]);
-            }
-        }
-
-        classes.Sort((a, b) => _numOps.LessThan(a, b) ? -1 : (_numOps.Equals(a, b) ? 0 : 1));
+        // Distinct labels, ascending.
+        var classes = new List<T>(engine.TensorUnique(values, true).ToVector());
 
         TargetKind kind = classes.Count == 1
             ? TargetKind.SingleClass
@@ -352,21 +351,21 @@ public static class ValidationHelper<T>
     {
         double min = double.MaxValue;
         double max = double.MinValue;
-        var distinct = new List<double>();
-        for (int i = 0; i < y.Length; i++)
+        string sample = " (values: )";
+        if (y.Length > 0)
         {
-            double v = _numOps.ToDouble(y[i]);
-            if (v < min) min = v;
-            if (v > max) max = v;
-            if (distinct.Count <= 8 && !distinct.Contains(v))
-            {
-                distinct.Add(v);
-            }
-        }
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var engine = AiDotNetEngine.Current;
+            var values = Tensor<T>.FromVector(y);
+            min = _numOps.ToDouble(engine.TensorMinValue(values));
+            max = _numOps.ToDouble(engine.TensorMaxValue(values));
 
-        string sample = distinct.Count <= 8
-            ? " (values: " + string.Join(", ", distinct.Select(v => v.ToString("G6")).ToArray()) + ")"
-            : string.Empty;
+            // Distinct values in first-seen order; listed only when there are at most eight.
+            var distinct = engine.TensorUnique(values, false).ToVector();
+            sample = distinct.Length <= 8
+                ? " (values: " + string.Join(", ", distinct.Select(v => string.Format("{0:G6}", v)).ToArray()) + ")"
+                : string.Empty;
+        }
 
         return $"{y.Length} samples in range [{min:G6}, {max:G6}]{sample}";
     }
@@ -426,14 +425,9 @@ public static class ValidationHelper<T>
                     nameof(y));
         }
 
-        var encoded = new Vector<T>(y.Length);
-        ReadOnlySpan<T> labels = y.AsSpan();
-        Span<T> target = encoded.AsWritableSpan();
-        T first = classes[0];
-        for (int i = 0; i < labels.Length; i++)
-        {
-            target[i] = _numOps.Equals(labels[i], first) ? _numOps.Zero : _numOps.One;
-        }
+        // 0 for the lower label, 1 for the other.
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var encoded = AiDotNetEngine.Current.TensorNotEquals(Tensor<T>.FromVector(y), classes[0]).ToVector();
 
         return (encoded, classes);
     }
@@ -475,18 +469,11 @@ public static class ValidationHelper<T>
                 nameof(y));
         }
 
-        var encoded = new Vector<T>(y.Length);
-        for (int i = 0; i < y.Length; i++)
-        {
-            for (int c = 0; c < classes.Count; c++)
-            {
-                if (_numOps.Equals(y[i], classes[c]))
-                {
-                    encoded[i] = _numOps.FromDouble(c);
-                    break;
-                }
-            }
-        }
+        // Classes are ascending and hold every label, so each label's left insertion point is its class index.
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var classTensor = Tensor<T>.FromVector(new Vector<T>(classes));
+        var encoded = AiDotNetEngine.Current.TensorSearchSorted(classTensor, Tensor<T>.FromVector(y), false)
+            .Cast<T>().ToVector();
 
         return (encoded, classes);
     }
@@ -529,25 +516,26 @@ public static class ValidationHelper<T>
             throw new ArgumentException("Target vector cannot be empty.", nameof(y));
         }
 
-        bool touchesBoundary = false;
-        for (int i = 0; i < y.Length; i++)
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        var values = Tensor<T>.FromVector(y);
+        var outside = engine.TensorAdd(engine.TensorLessThan(values, _numOps.Zero),
+            engine.TensorGreaterThan(values, _numOps.One));
+        int firstOutside = FirstNonzeroIndex(engine, outside);
+        if (firstOutside >= 0)
         {
-            double v = _numOps.ToDouble(y[i]);
-            if (v < 0.0 || v > 1.0)
-            {
-                throw new ArgumentException(
-                    $"{modelName} models proportions and requires every target value in [0,1], but found " +
-                    $"{v:G6} at index {i}: {DescribeTarget(y)}. Rescale the target to a proportion " +
-                    "(for example y / max) before fitting, or use a regression model such as MultipleRegression " +
-                    "for an unbounded target.",
-                    nameof(y));
-            }
-
-            if (v <= 0.0 || v >= 1.0)
-            {
-                touchesBoundary = true;
-            }
+            double v = _numOps.ToDouble(y[firstOutside]);
+            throw new ArgumentException(
+                $"{modelName} models proportions and requires every target value in [0,1], but found " +
+                $"{v:G6} at index {firstOutside}: {DescribeTarget(y)}. Rescale the target to a proportion " +
+                "(for example y / max) before fitting, or use a regression model such as MultipleRegression " +
+                "for an unbounded target.",
+                nameof(y));
         }
+
+        // Every value now lies in [0,1] (or is NaN), so touching the boundary means equalling 0 or 1.
+        bool touchesBoundary = engine.TensorCountNonzero(engine.TensorEquals(values, _numOps.Zero)) > 0
+            || engine.TensorCountNonzero(engine.TensorEquals(values, _numOps.One)) > 0;
 
         if (!touchesBoundary)
         {
@@ -566,13 +554,13 @@ public static class ValidationHelper<T>
 
         // Smithson & Verkuilen (2006), eq. 4: shrink the whole sample toward 0.5 by one half-observation,
         // which lifts 0 and 1 off the boundary while preserving the ordering and very nearly the spacing.
+        // Written as y + (0.5 - y) / n, the same value, so no intermediate grows with n: y(n - 1) and n
+        // themselves overflow a narrow T such as Half past 65504.
         int n = y.Length;
-        var compressed = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            double v = _numOps.ToDouble(y[i]);
-            compressed[i] = _numOps.FromDouble((v * (n - 1) + 0.5) / n);
-        }
+        var compressed = engine.TensorAdd(
+            values,
+            engine.TensorMultiplyScalar(engine.ScalarMinusTensor(_numOps.FromDouble(0.5), values), _numOps.FromDouble(1.0 / n)))
+            .ToVector();
 
         return compressed;
     }

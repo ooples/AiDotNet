@@ -188,12 +188,7 @@ public partial class VoiceFlow<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcousticM
 
     private static int CompatibleLength(int length) => (length + 3) / 4 * 4;
 
-    private Tensor<T> FrameMask(int frames, int padded)
-    {
-        var mask = new Tensor<T>(new[] { 1, 1, 1, padded });
-        for (int i = 0; i < frames; i++) mask[0, 0, 0, i] = NumOps.One;
-        return mask;
-    }
+    private Tensor<T> FrameMask(int frames, int padded) => PaddedFrameMask(frames, padded);
 
     private Tensor<T> MaskRows(Tensor<T> mask, int padded)
         => Engine.TensorTranspose(Engine.TensorTile(Engine.Reshape(mask, new[] { 1, padded }), new[] { _options.MelChannels, 1 }));
@@ -219,10 +214,11 @@ public partial class VoiceFlow<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcousticM
     private Tensor<T> Solve(Tensor<T> x0, Tensor<T> condition, Tensor<T> mask, Tensor<T> maskRows, int steps)
     {
         var x = Engine.TensorMultiply(x0, maskRows);
+        var stepSize = NumOps.FromDouble(1.0 / steps);
         for (int k = 0; k < steps; k++)
         {
             var velocity = _estimator!.Estimate(x, condition, (double)k / steps, mask);
-            x = Engine.TensorMultiply(Engine.TensorAdd(x, Engine.TensorMultiplyScalar(velocity, NumOps.FromDouble(1.0 / steps))), maskRows);
+            x = Engine.TensorMultiply(Engine.TensorAdd(x, Engine.TensorMultiplyScalar(velocity, stepSize)), maskRows);
         }
         return x;
     }
@@ -250,9 +246,7 @@ public partial class VoiceFlow<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcousticM
         using var _ = new NoGradScope<T>();
         var (hidden, means) = Encode(input);
         var logDurations = LogDurations(hidden);
-        var durations = new int[logDurations.Length];
-        for (int i = 0; i < durations.Length; i++)
-            durations[i] = (int)(Math.Ceiling(Math.Exp(NumOps.ToDouble(logDurations[i]))) * _options.LengthScale);
+        var durations = CeilScaledDurations(logDurations, _options.LengthScale);
         if (durations.Sum() == 0) durations[durations.Length - 1] = 1;
         int frames = durations.Sum(), padded = CompatibleLength(frames);
         var condition = PadFrames(LengthRegulator.Expand(means, durations), padded);
@@ -377,8 +371,7 @@ public partial class VoiceFlow<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcousticM
         int padded = CompatibleLength(length);
         var freshNoise = Gaussian(new[] { padded, channels }, random);
         var pathNoise = Gaussian(new[] { padded, channels }, random);
-        var logTargets = new Tensor<T>(new[] { durations.Length });
-        for (int i = 0; i < durations.Length; i++) logTargets[i] = NumOps.FromDouble(Math.Log(1e-8 + durations[i]));
+        var logTargets = LogDurationTarget(durations, 1e-8);
 
         Tensor<T> Objective(Tensor<T> tokens, Tensor<T> mel)
         {

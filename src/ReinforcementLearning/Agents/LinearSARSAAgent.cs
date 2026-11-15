@@ -73,16 +73,8 @@ public partial class LinearSARSAAgent<T> : ReinforcementLearningAgentBase<T>
         Guard.NotNull(options);
         _options = options;
         Options = _options;
-        _weights = new Matrix<T>(_options.ActionSize, _options.FeatureSize);
-
         // Initialize weights to zero
-        for (int a = 0; a < _options.ActionSize; a++)
-        {
-            for (int f = 0; f < _options.FeatureSize; f++)
-            {
-                _weights[a, f] = NumOps.Zero;
-            }
-        }
+        _weights = Matrix<T>.CreateDefault(_options.ActionSize, _options.FeatureSize, NumOps.Zero);
 
         _epsilon = options.EpsilonStart;
     }
@@ -139,11 +131,7 @@ public partial class LinearSARSAAgent<T> : ReinforcementLearningAgentBase<T>
 
         // Update weights: w_a ← w_a + α * δ * φ(s)
         T learningRateT = NumOps.Multiply(LearningRate, tdError);
-        for (int f = 0; f < _options.FeatureSize; f++)
-        {
-            T update = NumOps.Multiply(learningRateT, _lastState[f]);
-            _weights[_lastAction, f] = NumOps.Add(_weights[_lastAction, f], update);
-        }
+        RLTensorOps.AddScaledToRow(_weights, _lastAction, _lastState, learningRateT);
 
         if (done)
         {
@@ -158,35 +146,16 @@ public partial class LinearSARSAAgent<T> : ReinforcementLearningAgentBase<T>
 
     private T ComputeQValue(Vector<T> features, int actionIndex)
     {
-        T qValue = NumOps.Zero;
-        for (int f = 0; f < _options.FeatureSize; f++)
-        {
-            T weightedFeature = NumOps.Multiply(_weights[actionIndex, f], features[f]);
-            qValue = NumOps.Add(qValue, weightedFeature);
-        }
-        return qValue;
+        // Q(s,a) = w_a . phi(s)
+        return RLTensorOps.LinearQValue(_weights, actionIndex, features);
     }
 
     private int GetGreedyAction(Vector<T> state)
     {
-        int bestAction = 0;
-        T bestValue = ComputeQValue(state, 0);
-        bool allEqual = true;
-
-        for (int a = 1; a < _options.ActionSize; a++)
-        {
-            T value = ComputeQValue(state, a);
-            if (NumOps.GreaterThan(value, bestValue))
-            {
-                bestValue = value;
-                bestAction = a;
-                allEqual = false;
-            }
-            else if (!NumOps.Equals(value, bestValue))
-            {
-                allEqual = false;
-            }
-        }
+        // First arg-max of W * phi(s), and whether every action value is tied.
+        var qValues = RLTensorOps.LinearQValues(_weights, state);
+        int bestAction = RLTensorOps.ArgMax(qValues);
+        bool allEqual = RLTensorOps.AllEqual(qValues, NumOps);
 
         // Sutton & Barto §2.3 tie-break — break ties using a state-dependent
         // hash so untrained agents don't return action 0 for every input.
@@ -215,16 +184,7 @@ public partial class LinearSARSAAgent<T> : ReinforcementLearningAgentBase<T>
 
     private T ComputeWeightNorm()
     {
-        T sumSquares = NumOps.Zero;
-        for (int a = 0; a < _options.ActionSize; a++)
-        {
-            for (int f = 0; f < _options.FeatureSize; f++)
-            {
-                T squared = NumOps.Multiply(_weights[a, f], _weights[a, f]);
-                sumSquares = NumOps.Add(sumSquares, squared);
-            }
-        }
-        return NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(sumSquares)));
+        return RLTensorOps.FrobeniusNorm(_weights);
     }
 
     /// <inheritdoc />

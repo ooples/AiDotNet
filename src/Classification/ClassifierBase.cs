@@ -276,13 +276,8 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     /// </remarks>
     protected virtual ClassificationTaskType InferTaskType(Vector<T> y)
     {
-        var uniqueClasses = new HashSet<double>();
-        for (int i = 0; i < y.Length; i++)
-        {
-            uniqueClasses.Add(NumOps.ToDouble(y[i]));
-        }
-
-        return uniqueClasses.Count == 2 ? ClassificationTaskType.Binary : ClassificationTaskType.MultiClass;
+        int uniqueCount = y.Length == 0 ? 0 : Engine.TensorUnique(y.AsTensor(), sorted: false).Length;
+        return uniqueCount == 2 ? ClassificationTaskType.Binary : ClassificationTaskType.MultiClass;
     }
 
     /// <summary>
@@ -292,20 +287,12 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     /// <returns>A sorted vector of unique class labels.</returns>
     protected virtual Vector<T> ExtractClassLabels(Vector<T> y)
     {
-        var uniqueClasses = new HashSet<double>();
-        for (int i = 0; i < y.Length; i++)
+        if (y.Length == 0)
         {
-            uniqueClasses.Add(NumOps.ToDouble(y[i]));
+            return new Vector<T>(0);
         }
 
-        var sortedClasses = uniqueClasses.OrderBy(x => x).ToArray();
-        var labels = new Vector<T>(sortedClasses.Length);
-        for (int i = 0; i < sortedClasses.Length; i++)
-        {
-            labels[i] = NumOps.FromDouble(sortedClasses[i]);
-        }
-
-        return labels;
+        return Engine.TensorUnique(y.AsTensor(), sorted: true).AsVector();
     }
 
     /// <summary>
@@ -331,14 +318,13 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
         }
 
         // Count samples per class
+        // Unknown labels map to -1; shifting by one sends them to bin 0, which is dropped.
         var classCounts = new int[NumClasses];
-        for (int i = 0; i < y.Length; i++)
+        if (y.Length > 0)
         {
-            int classIdx = GetClassIndexFromLabel(y[i]);
-            if (classIdx >= 0)
-            {
-                classCounts[classIdx]++;
-            }
+            var shifted = Engine.TensorAddScalar(GetClassIndexTensor(y), 1);
+            var binCounts = Engine.TensorBinCount(shifted, NumClasses + 1).ToArray();
+            Array.Copy(binCounts, 1, classCounts, 0, Math.Min(NumClasses, binCounts.Length - 1));
         }
 
         // Compute weights: n_samples / (n_classes * n_samples_per_class)
@@ -373,20 +359,1058 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     /// </remarks>
     protected int GetClassIndexFromLabel(T label)
     {
-        if (ClassLabels is null)
+        if (ClassLabels is null || ClassLabels.Length == 0)
         {
             return -1;
         }
 
-        for (int i = 0; i < ClassLabels.Length; i++)
+        return GetClassIndicesFromLabels(Vector<T>.FromArray(new[] { label }))[0];
+    }
+
+    /// <summary>
+    /// Maps every label in <paramref name="labels"/> to its class index in <see cref="ClassLabels"/>.
+    /// </summary>
+    /// <param name="labels">The label values to look up.</param>
+    /// <returns>The class index of each label, or -1 where a label is not a known class.</returns>
+    /// <remarks>
+    /// Batched form of <see cref="GetClassIndexFromLabel"/>: the known labels are sorted once and every
+    /// query is located with a single sorted search, so the lookup is a handful of engine calls instead
+    /// of a scan per sample. <see cref="ClassLabels"/> does not have to be sorted.
+    /// </remarks>
+    private protected int[] GetClassIndicesFromLabels(Vector<T> labels)
+    {
+        return GetClassIndexTensor(labels).ToArray();
+    }
+
+    /// <summary>
+    /// Tensor form of <see cref="GetClassIndicesFromLabels"/>: a rank-1 <see cref="Tensor{T}"/> of class
+    /// indices with -1 for labels that are not known classes.
+    /// </summary>
+    /// <param name="labels">The label values to look up.</param>
+    /// <returns>The class index of each label, or -1 where a label is not a known class.</returns>
+    private protected Tensor<int> GetClassIndexTensor(Vector<T> labels)
+    {
+        int n = labels.Length;
+        var result = new Tensor<int>(new[] { n });
+        Engine.TensorFill(result, -1);
+        if (ClassLabels is null || ClassLabels.Length == 0 || n == 0)
         {
-            if (NumOps.Compare(ClassLabels[i], label) == 0)
+            return result;
+        }
+
+        var engine = Engine;
+        var (sortedLabels, order) = engine.TensorSort(ClassLabels.AsTensor(), 0, false);
+        var query = labels.AsTensor();
+        var position = engine.TensorClamp(
+            engine.TensorSearchSorted(sortedLabels, query, false), 0, ClassLabels.Length - 1);
+        var found = engine.TensorEq(engine.TensorGather(sortedLabels, position, 0), query);
+        return engine.TensorWhere(found, engine.TensorGather(order, position, 0), result);
+    }
+
+    /// <summary>
+    /// Returns, for each row of <paramref name="scores"/>, the column holding the largest value
+    /// (the first one on ties), as a rank-1 index tensor.
+    /// </summary>
+    /// <param name="scores">A [samples, classes] score or probability matrix.</param>
+    /// <returns>The arg-max column of each row.</returns>
+    private protected Tensor<int> ArgMaxRows(Matrix<T> scores)
+    {
+        return Engine.TensorArgMax(Tensor<T>.FromMatrix(scores), 1);
+    }
+
+    /// <summary>
+    /// Converts class indices to their numeric index values (0, 1, 2, ...) as a <see cref="Vector{T}"/>,
+    /// by gathering from the index range rather than converting one element at a time.
+    /// </summary>
+    /// <param name="indices">Class indices in [0, <paramref name="numClasses"/>).</param>
+    /// <param name="numClasses">The number of classes.</param>
+    /// <returns>The index values as T.</returns>
+    private protected Vector<T> ClassIndicesToValues(Tensor<int> indices, int numClasses)
+    {
+        if (indices.Length == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        var range = Engine.TensorArange<T>(0, Math.Max(1, numClasses));
+        return Engine.TensorGather(range, indices.Reshape(indices.Length), 0).AsVector();
+    }
+
+    /// <summary>
+    /// Computes sum_k weights[k] * vectors[k] as one matrix-vector product.
+    /// </summary>
+    /// <param name="vectors">Equal-length vectors (for example per-tree predictions).</param>
+    /// <param name="weights">One weight per vector.</param>
+    /// <param name="length">The vector length, used when <paramref name="vectors"/> is empty.</param>
+    /// <returns>The weighted sum, or a zero vector when there is nothing to add.</returns>
+    private protected Vector<T> WeightedSumOfVectors(IReadOnlyList<Vector<T>> vectors, Vector<T> weights, int length)
+    {
+        if (vectors.Count == 0 || length == 0)
+        {
+            return new Vector<T>(length);
+        }
+
+        var engine = Engine;
+        var stacked = new Tensor<T>[vectors.Count];
+        for (int k = 0; k < stacked.Length; k++)
+        {
+            stacked[k] = vectors[k].AsTensor();
+        }
+
+        var rows = engine.TensorStack(stacked, 0);
+        var sum = engine.TensorMatMul(weights.AsTensor().Reshape(1, vectors.Count), rows);
+        return sum.Reshape(length).ToVector();
+    }
+
+    /// <summary>
+    /// Truncates or zero-pads <paramref name="values"/> to exactly <paramref name="length"/> elements.
+    /// </summary>
+    private protected static Vector<T> FitToLength(Vector<T> values, int length)
+    {
+        if (values.Length == length)
+        {
+            return values;
+        }
+
+        if (values.Length > length)
+        {
+            return values.GetSubVector(0, length);
+        }
+
+        return Vector<T>.Concatenate(values, new Vector<T>(length - values.Length));
+    }
+
+    /// <summary>
+    /// One-hot encodes the class of every label as a [samples, NumClasses] matrix (all-zero rows for labels
+    /// that are not known classes).
+    /// </summary>
+    /// <param name="y">The label vector.</param>
+    /// <returns>The one-hot class membership matrix.</returns>
+    private protected Tensor<T> ClassMembership(Vector<T> y)
+    {
+        var engine = Engine;
+        if (y.Length == 0 || NumClasses == 0)
+        {
+            return new Tensor<T>(new[] { y.Length, NumClasses });
+        }
+
+        // Unknown labels (-1) are shifted into an extra leading column that is then dropped.
+        var shifted = engine.TensorAddScalar(GetClassIndexTensor(y), 1);
+        var oneHot = engine.TensorOneHot<T>(shifted, NumClasses + 1);
+        return oneHot.Slice(1, 1, NumClasses + 1);
+    }
+
+    /// <summary>
+    /// Class counts of the samples in <paramref name="samples"/> (class indices outside [0, NumClasses) are ignored).
+    /// </summary>
+    /// <param name="classes">The class index of every training sample.</param>
+    /// <param name="samples">The samples to count.</param>
+    /// <returns>The [NumClasses] counts.</returns>
+    /// <remarks>
+    /// Counted in int: a sum of ones in T stops growing at 2048 for Half.
+    /// </remarks>
+    private protected Tensor<int> CountClassSamples(Tensor<int> classes, int[] samples)
+    {
+        var engine = Engine;
+        if (samples.Length == 0 || NumClasses == 0)
+        {
+            return new Tensor<int>(new[] { NumClasses });
+        }
+
+        // Shift by one so -1 (unknown) lands in a dropped bin; indices >= NumClasses land in a dropped last bin
+        var selected = engine.TensorGather(classes, new Tensor<int>(samples, new[] { samples.Length }), 0);
+        var shifted = engine.TensorClamp(engine.TensorAddScalar(selected, 1), 0, NumClasses + 1);
+        return engine.TensorBinCount(shifted, NumClasses + 2).Slice(0, 1, NumClasses + 1);
+    }
+
+    /// <summary>
+    /// The class counts of <paramref name="y"/> (labels that are not known classes are ignored).
+    /// </summary>
+    /// <param name="y">The label vector.</param>
+    /// <returns>The [NumClasses] counts.</returns>
+    /// <remarks>
+    /// Counted in int: a sum of one-hot rows in T stops growing at 2048 for Half.
+    /// </remarks>
+    internal Tensor<int> CountClasses(Vector<T> y)
+    {
+        if (y.Length == 0 || NumClasses == 0)
+        {
+            return new Tensor<int>(new[] { NumClasses });
+        }
+
+        var shifted = Engine.TensorAddScalar(GetClassIndexTensor(y), 1);
+        // Contiguous: Tensor.Cast reads a sliced view from the start of its storage (the dropped "unknown" bin),
+        // which shifted every count by one class and made the first class's prior 0
+        return Engine.TensorBinCount(shifted, NumClasses + 1).Slice(0, 1, NumClasses + 1).Contiguous();
+    }
+
+    /// <summary>
+    /// <paramref name="votes"/> plus one vote per entry of <paramref name="predictions"/> for its class
+    /// (labels that are not known classes get no vote). The votes stay in int: a sum of one-hot rows
+    /// in T stops growing at 2048 for Half.
+    /// </summary>
+    /// <param name="votes">The running [predictions.Length, NumClasses] vote counts.</param>
+    /// <param name="predictions">The predicted label of every row.</param>
+    /// <returns>The updated vote counts.</returns>
+    internal Tensor<int> AddClassVotes(Tensor<int> votes, Vector<T> predictions)
+    {
+        if (predictions.Length == 0 || NumClasses == 0)
+        {
+            return votes;
+        }
+
+        var shifted = Engine.TensorAddScalar(GetClassIndexTensor(predictions), 1);
+        return Engine.TensorAdd(votes, Engine.TensorOneHot<int>(shifted, NumClasses + 1).Slice(1, 1, NumClasses + 1));
+    }
+
+    private const double EuclideanNormOrder = 2.0;
+    private const double NormOrderTolerance = 1e-12;
+
+    /// <summary>
+    /// p-norms (sum |x|^p)^(1/p) along <paramref name="axis"/>, computed as s * (sum (|x| / s)^p)^(1/p)
+    /// with s = max |x| along that axis, so that the powers cannot overflow (a Half square overflows
+    /// once |x| exceeds 255); all-zero slices get norm 0.
+    /// </summary>
+    /// <param name="values">The values.</param>
+    /// <param name="axis">The axis to reduce.</param>
+    /// <param name="p">The norm order (2 for Euclidean).</param>
+    /// <returns>The norms, with <paramref name="axis"/> removed.</returns>
+    internal static Tensor<T> ScaledNorms(Tensor<T> values, int axis, double p)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        // The Euclidean order squares instead of calling pow, as the scalar loop did. A tolerance rather than ==:
+        // both branches compute the same norm, so an order within rounding of 2 may take either.
+        bool euclidean = Math.Abs(p - EuclideanNormOrder) <= NormOrderTolerance;
+        var magnitudes = engine.TensorAbs(values);
+        var scale = engine.ReduceMax(magnitudes, new[] { axis }, true);
+        var ones = new Tensor<T>(scale.Shape.ToArray());
+        engine.TensorFill(ones, numOps.One);
+        var safeScale = engine.TensorWhere(engine.TensorGreaterThan(scale, numOps.Zero), scale, ones);
+        var unit = engine.TensorDivide(magnitudes, engine.TensorBroadcastTo(safeScale, values.Shape.ToArray()));
+        var powered = euclidean ? engine.TensorMultiply(unit, unit) : engine.TensorPower(unit, numOps.FromDouble(p));
+        var sums = engine.ReduceSum(powered, new[] { axis }, false);
+        var norms = euclidean ? engine.TensorSqrt(sums) : engine.TensorPower(sums, numOps.FromDouble(1.0 / p));
+        var scaled = engine.TensorMultiply(norms, safeScale.Reshape(norms.Shape.ToArray()));
+
+        // The scaled form rounds differently for every slice (s differs), so two slices with the same exact norm,
+        // for instance offsets (2, 9) and (6, 7), can come out one ulp apart and a distance tie is then decided by
+        // rounding instead of by index. Where the direct powers neither overflow nor underflow, the direct norm is
+        // used, as the scalar loop computed it; the scaled norm only covers the remaining slices.
+        var plainPowered = euclidean
+            ? engine.TensorMultiply(magnitudes, magnitudes)
+            : engine.TensorPower(magnitudes, numOps.FromDouble(p));
+        var plainSums = engine.ReduceSum(plainPowered, new[] { axis }, false);
+        var plain = euclidean ? engine.TensorSqrt(plainSums) : engine.TensorPower(plainSums, numOps.FromDouble(1.0 / p));
+        var usable = engine.TensorMultiply(
+            engine.TensorGreaterThan(plainSums, numOps.Zero), engine.TensorLessThan(plainSums, numOps.MaxValue));
+        return engine.TensorWhere(usable, plain, scaled);
+    }
+
+    /// <summary>
+    /// The [y.Length, NumClasses] class membership with every entry divided by its class count (computed
+    /// in double), so that weights^T * X gives the class means (zero for empty classes) without forming
+    /// per-class sums, which overflow Half past 65504.
+    /// </summary>
+    /// <param name="y">The label vector.</param>
+    /// <returns>The membership weights.</returns>
+    private protected Tensor<T> ClassMeanWeights(Vector<T> y)
+    {
+        var engine = Engine;
+        if (y.Length == 0 || NumClasses == 0)
+        {
+            return new Tensor<T>(new[] { y.Length, NumClasses });
+        }
+
+        var inverseCounts = engine.TensorReciprocal(engine.TensorClampMin(CountClasses(y), 1).Cast<double>()).Cast<T>();
+        return engine.TensorMultiply(ClassMembership(y),
+            engine.TensorBroadcastTo(inverseCounts.Reshape(1, NumClasses), new[] { y.Length, NumClasses }));
+    }
+
+    /// <summary>
+    /// Integer counts as T values.
+    /// </summary>
+    private protected static Tensor<T> CountsToValues(Tensor<int> counts) => counts.Contiguous().Cast<T>();
+
+    /// <summary>
+    /// counts / total as T, with the division done in double so large counts and totals keep their ratio.
+    /// </summary>
+    /// <param name="counts">Integer counts.</param>
+    /// <param name="total">The total to divide by (must be positive).</param>
+    /// <returns>The fractions, same shape as <paramref name="counts"/>.</returns>
+    private protected static Tensor<T> CountFractions(Tensor<int> counts, int total)
+    {
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorDivideScalar(counts.Contiguous().Cast<double>(), (double)total).Cast<T>();
+    }
+
+    /// <summary>
+    /// <paramref name="epsilon"/> as a T, raised to Half's smallest positive normal value (2^-14) for Half,
+    /// where 1e-10 and similar guards would otherwise round to zero; float, double and decimal keep it unchanged.
+    /// </summary>
+    private protected static T Tolerance(double epsilon)
+    {
+        const double HalfSmallestNormal = 6.103515625e-05;
+        return MathHelper.GetNumericOperations<T>().FromDouble(
+            typeof(T) == typeof(Half) ? Math.Max(epsilon, HalfSmallestNormal) : epsilon);
+    }
+
+    /// <summary>
+    /// 1 - <paramref name="epsilon"/> as a T, moved down to the largest T below 1 where 1 - epsilon would round
+    /// to 1 (float and Half cannot hold 1 - 1e-10), so clamping a probability to it keeps log(1 - p) finite.
+    /// </summary>
+    private protected static T OneMinusTolerance(double epsilon)
+    {
+        // The gap below 1: 2^-24 for float, 2^-11 for Half; double keeps epsilon (1 - 1e-10 is representable)
+        double gap = typeof(T) == typeof(float) ? 5.9604644775390625e-08
+            : typeof(T) == typeof(Half) ? 4.8828125e-04
+            : 0.0;
+        return MathHelper.GetNumericOperations<T>().FromDouble(1.0 - Math.Max(epsilon, gap));
+    }
+
+    /// <summary>
+    /// The split threshold between consecutive distinct values lower &lt; upper: their midpoint, computed as
+    /// lower / 2 + upper / 2 so it cannot overflow, and replaced by <paramref name="lower"/> when rounding
+    /// pushes it up to <paramref name="upper"/> (as scikit-learn's tree splitter does), so x &lt;= threshold
+    /// always separates the two values.
+    /// </summary>
+    /// <param name="lower">The lower values, any shape.</param>
+    /// <param name="upper">The upper values, same shape.</param>
+    /// <returns>The thresholds.</returns>
+    private protected Tensor<T> SplitThresholds(Tensor<T> lower, Tensor<T> upper)
+    {
+        var engine = Engine;
+        T half = NumOps.FromDouble(0.5);
+        var midpoint = engine.TensorAdd(engine.TensorMultiplyScalar(lower, half), engine.TensorMultiplyScalar(upper, half));
+        return engine.TensorWhere(engine.TensorGreaterEqual(midpoint, upper), lower, midpoint);
+    }
+
+    /// <summary>
+    /// The best axis-aligned split of <paramref name="samples"/> by weighted Gini impurity.
+    /// </summary>
+    /// <remarks>
+    /// Candidate thresholds are the midpoints between consecutive distinct feature values; a sample goes
+    /// left when its value is &lt;= the threshold. Splits leaving fewer than <paramref name="minSamplesLeaf"/>
+    /// samples on a side are skipped. Features are tried in the given order and thresholds in increasing
+    /// order; the first strictly lowest weighted Gini wins.
+    /// </remarks>
+    /// <param name="x">The [n, features] training features.</param>
+    /// <param name="classes">The class index of every training sample.</param>
+    /// <param name="samples">The samples at this node.</param>
+    /// <param name="features">The features to try, in order.</param>
+    /// <param name="minSamplesLeaf">The minimum number of samples on each side.</param>
+    /// <returns>The feature (-1 when no valid split exists) and threshold.</returns>
+    private protected (int Feature, T Threshold) BestGiniSplit(Tensor<T> x, Tensor<int> classes, int[] samples,
+        IEnumerable<int> features, int minSamplesLeaf)
+    {
+        var engine = Engine;
+        int total = samples.Length;
+        int bestFeature = -1;
+        T bestThreshold = NumOps.Zero;
+        if (total < 2 || NumClasses == 0)
+        {
+            return (bestFeature, bestThreshold);
+        }
+
+        var sampleTensor = new Tensor<int>(samples, new[] { total });
+        var nodeClasses = engine.TensorClamp(engine.TensorGather(classes, sampleTensor, 0), -1, NumClasses);
+        var nodeRows = engine.TensorGather(x, sampleTensor, 0);
+        var featureScores = new List<Tensor<double>>();
+        var featureThresholds = new List<Tensor<T>>();
+        var featureIds = new List<int>();
+
+        foreach (int j in features)
+        {
+            // Sorted values and the class membership of each sorted sample (out-of-range classes count for none)
+            var column = nodeRows.Slice(1, j, j + 1).Reshape(total);
+            var (sortedValues, order) = engine.TensorSort(column, 0, false);
+            var distinct = engine.TensorUniqueConsecutive(sortedValues);
+            int numDistinct = distinct.Length;
+            if (numDistinct < 2)
             {
-                return i;
+                continue;
+            }
+
+            var sortedClasses = engine.TensorAddScalar(engine.TensorGather(nodeClasses, order, 0), 1);
+            var membership = engine.TensorOneHot<int>(sortedClasses, NumClasses + 2).Slice(1, 1, NumClasses + 1);
+
+            // Left side of the split after distinct value v: every sample with value <= distinct[v]. Counts are
+            // kept in int (a running count in T stops at 2048 for Half) and the impurity is evaluated in double.
+            int candidates = numDistinct - 1;
+            var lastLeft = engine.TensorAddScalar(
+                engine.TensorSearchSorted(sortedValues, distinct.Slice(0, 0, candidates), true), -1);
+            var leftCounts = engine.TensorGather(engine.TensorCumSum(membership, 0), lastLeft, 0).Cast<double>();
+            var leftTotal = engine.TensorAddScalar(lastLeft, 1).Cast<double>().Reshape(candidates, 1);
+            var rightCounts = engine.TensorSubtract(engine.ReduceSum(membership, new[] { 0 }, true).Cast<double>(), leftCounts);
+            var rightTotal = engine.ScalarMinusTensor((double)total, leftTotal);
+
+            // weighted Gini = (nL / n) * (1 - sum pL^2) + (nR / n) * (1 - sum pR^2)
+            var leftShare = engine.TensorDivide(leftCounts, leftTotal);
+            var rightShare = engine.TensorDivide(rightCounts, rightTotal);
+            var leftGini = engine.ScalarMinusTensor(1.0, engine.ReduceSum(engine.TensorMultiply(leftShare, leftShare), new[] { 1 }, true));
+            var rightGini = engine.ScalarMinusTensor(1.0, engine.ReduceSum(engine.TensorMultiply(rightShare, rightShare), new[] { 1 }, true));
+            var weighted = engine.TensorAdd(
+                engine.TensorMultiply(engine.TensorDivideScalar(leftTotal, (double)total), leftGini),
+                engine.TensorMultiply(engine.TensorDivideScalar(rightTotal, (double)total), rightGini)).Reshape(candidates);
+
+            var minLeaf = engine.TensorAddScalar(new Tensor<double>(new[] { candidates, 1 }), (double)minSamplesLeaf);
+            var allowed = engine.TensorMultiply(
+                engine.TensorGreaterEqual(leftTotal, minLeaf),
+                engine.TensorGreaterEqual(rightTotal, minLeaf)).Reshape(candidates);
+            var maxValues = engine.TensorAddScalar(new Tensor<double>(new[] { candidates }), double.MaxValue);
+            var scores = engine.TensorWhere(allowed, weighted, maxValues);
+            int v = engine.TensorArgMin(scores, 0).ToArray()[0];
+
+            // Disallowed splits score double.MaxValue, so they never win below
+            featureScores.Add(engine.TensorSlice(scores, new[] { v }, new[] { 1 }));
+            featureThresholds.Add(SplitThresholds(
+                engine.TensorSlice(distinct, new[] { v }, new[] { 1 }),
+                engine.TensorSlice(distinct, new[] { v + 1 }, new[] { 1 })));
+            featureIds.Add(j);
+        }
+
+        // First feature with the strictly lowest weighted Gini wins
+        if (featureScores.Count > 0)
+        {
+            var allScores = engine.TensorConcatenate(featureScores.ToArray(), 0);
+            int best = engine.TensorArgMin(allScores, 0).ToArray()[0];
+            if (allScores[best] < double.MaxValue)
+            {
+                bestFeature = featureIds[best];
+                bestThreshold = featureThresholds[best][0];
             }
         }
 
-        return -1;
+        return (bestFeature, bestThreshold);
+    }
+
+    /// <summary>
+    /// Splits <paramref name="samples"/> into those with x[i, feature] &lt;= threshold and the rest, keeping order.
+    /// </summary>
+    private protected (int[] Left, int[] Right) PartitionByThreshold(Tensor<T> x, int[] samples, int feature, T threshold)
+    {
+        if (samples.Length == 0)
+        {
+            return (Array.Empty<int>(), Array.Empty<int>());
+        }
+
+        var engine = Engine;
+        var column = engine.TensorGather(x.Slice(1, feature, feature + 1).Reshape(x.Shape[0]),
+            new Tensor<int>(samples, new[] { samples.Length }), 0);
+        var goesLeft = engine.TensorLessEqual(column, FilledVector(samples.Length, threshold).AsTensor());
+        var sampleTensor = new Tensor<int>(samples, new[] { samples.Length });
+        return (SelectWhereNonzero(sampleTensor, goesLeft), SelectWhereNonzero(sampleTensor, engine.ScalarMinusTensor(NumOps.One, goesLeft)));
+    }
+
+    /// <summary>
+    /// The entries of <paramref name="values"/> whose 0/1 <paramref name="mask"/> entry is nonzero, in order.
+    /// </summary>
+    private int[] SelectWhereNonzero(Tensor<int> values, Tensor<T> mask)
+    {
+        var engine = Engine;
+        var positions = engine.TensorNonzero(mask);
+        return positions.Length == 0
+            ? Array.Empty<int>()
+            : engine.TensorGather(values, positions.Reshape(positions.Length), 0).ToArray();
+    }
+
+    /// <summary>
+    /// Inverts a square matrix by Gauss-Jordan elimination with partial pivoting. A pivot smaller than
+    /// 1e-12 in magnitude is replaced by +/-1e-12 (keeping its sign, + for zero), so a singular matrix
+    /// yields a large but finite result instead of an exception.
+    /// </summary>
+    /// <param name="matrix">The square matrix.</param>
+    /// <returns>The inverse.</returns>
+    private protected Matrix<T> InvertMatrix(Matrix<T> matrix)
+    {
+        var engine = Engine;
+        int n = matrix.Rows;
+        if (n == 0)
+        {
+            return new Matrix<T>(0, 0);
+        }
+
+        // Augmented matrix [A | I]
+        var identity = engine.TensorEye<T>(n);
+        var augmented = engine.TensorConcatenate(new[] { Tensor<T>.FromMatrix(matrix), identity }, 1);
+        T minimum = Tolerance(1e-12);
+        for (int col = 0; col < n; col++)
+        {
+            augmented = SwapInPivotRow(augmented, col, n);
+            var pivot = ClampPivot(engine.TensorSlice(augmented, new[] { col, col }, new[] { 1, 1 }), minimum);
+
+            // Scale the pivot row, then eliminate the column from every other row (the pivot row's factor is 0)
+            var pivotRow = engine.TensorDivide(augmented.Slice(0, col, col + 1), engine.TensorBroadcastTo(pivot, new[] { 1, 2 * n }));
+            var column = augmented.Slice(1, col, col + 1);
+            var factors = engine.TensorSubtract(column, engine.TensorMultiply(column, identity.Slice(1, col, col + 1)));
+            var eliminated = engine.TensorSubtract(augmented, engine.TensorMultiply(factors, pivotRow));
+            augmented = ReplaceRow(eliminated, col, pivotRow);
+        }
+
+        return augmented.Slice(1, n, 2 * n).ToMatrix();
+    }
+
+    /// <summary>
+    /// Solves a x = b by Gaussian elimination with partial pivoting and back substitution.
+    /// </summary>
+    /// <param name="a">The [n, n] coefficient matrix.</param>
+    /// <param name="b">The length-n right-hand side.</param>
+    /// <param name="handling">How pivots and diagonal entries near zero are treated.</param>
+    /// <returns>The solution x.</returns>
+    private protected Vector<T> SolveByElimination(Tensor<T> a, Vector<T> b, SmallPivotHandling handling)
+    {
+        var engine = Engine;
+        int n = a.Shape[0];
+        if (n == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        T clampThreshold = Tolerance(1e-12);
+        T skipThreshold = Tolerance(1e-10);
+        var augmented = ForwardEliminate(
+            engine.TensorConcatenate(new[] { a, b.AsTensor().Reshape(n, 1) }, 1), n, handling, out _);
+        var upper = augmented.Slice(1, 0, n);
+        var rhs = augmented.Slice(1, n, n + 1);
+
+        // Divisor per row: ClampToMinimum turns |diag| < 1e-12 into +1e-12; SkipColumn solves rows with
+        // |diag| <= 1e-10 as 0 (divide by 1, then multiply by the 0 keep flag)
+        var diag = engine.TensorDiagonal(upper).Reshape(n, 1);
+        var absDiag = engine.TensorAbs(diag);
+        Tensor<T>? keep = null;
+        Tensor<T> divisor;
+        if (handling == SmallPivotHandling.ClampToMinimum)
+        {
+            divisor = engine.TensorWhere(engine.TensorLessThan(absDiag, clampThreshold), Filled(new[] { n, 1 }, clampThreshold), diag);
+        }
+        else
+        {
+            keep = engine.TensorGreaterThan(absDiag, skipThreshold);
+            divisor = engine.TensorWhere(keep, diag, Filled(new[] { n, 1 }, NumOps.One));
+        }
+
+        // Back substitution, one [1, 1] row of the [n, 1] solution at a time
+        var solution = new Tensor<T>(new[] { n, 1 });
+        for (int i = n - 1; i >= 0; i--)
+        {
+            var sum = rhs.Slice(0, i, i + 1);
+            if (i < n - 1)
+            {
+                var upperRow = upper.Slice(0, i, i + 1).Slice(1, i + 1, n);
+                sum = engine.TensorSubtract(sum, engine.TensorMatMul(upperRow, solution.Slice(0, i + 1, n)));
+            }
+
+            var value = engine.TensorDivide(sum, divisor.Slice(0, i, i + 1));
+            if (keep is not null)
+            {
+                value = engine.TensorMultiply(value, keep.Slice(0, i, i + 1));
+            }
+
+            solution = ReplaceRow(solution, i, value);
+        }
+
+        return solution.Reshape(n).ToVector();
+    }
+
+    /// <summary>
+    /// Forward Gaussian elimination with partial pivoting on the first <paramref name="n"/> columns of
+    /// <paramref name="augmented"/> ([n, m], m &gt;= n): for each column the row with the largest |value| at or
+    /// below the diagonal is swapped in, then (row[col] / pivot) * pivotRow is subtracted from every row below.
+    /// Entries left of the diagonal in those rows are not meaningful afterwards.
+    /// </summary>
+    /// <param name="augmented">The [n, m] matrix to reduce.</param>
+    /// <param name="n">The number of rows (and eliminated columns).</param>
+    /// <param name="handling">How pivots near zero are treated.</param>
+    /// <param name="pivots">The pivot used for each column (after any adjustment).</param>
+    /// <returns>The reduced matrix.</returns>
+    private protected Tensor<T> ForwardEliminate(Tensor<T> augmented, int n, SmallPivotHandling handling, out Tensor<T> pivots)
+    {
+        var engine = Engine;
+        T minimum = NumOps.FromDouble(handling == SmallPivotHandling.SkipColumn ? 1e-10 : 1e-12);
+        var pivotList = new List<Tensor<T>>(n);
+        for (int col = 0; col < n; col++)
+        {
+            augmented = SwapInPivotRow(augmented, col, n);
+            var pivot = engine.TensorSlice(augmented, new[] { col, col }, new[] { 1, 1 });
+
+            // SkipColumn: a column whose pivot is at most the minimum in magnitude is left as is
+            // (its factors are multiplied by the 0 keep flag; the divisor becomes 1)
+            Tensor<T>? keep = null;
+            switch (handling)
+            {
+                case SmallPivotHandling.ClampToMinimum:
+                    pivot = ClampPivot(pivot, minimum);
+                    break;
+                case SmallPivotHandling.FloorMagnitude:
+                    pivot = engine.TensorWhere(engine.TensorLessThan(engine.TensorAbs(pivot), minimum), Filled(new[] { 1, 1 }, minimum), pivot);
+                    break;
+                default:
+                    keep = engine.TensorGreaterThan(engine.TensorAbs(pivot), minimum);
+                    break;
+            }
+
+            pivotList.Add(pivot);
+            if (col == n - 1)
+            {
+                continue;
+            }
+
+            // row -= (row[col] / pivot) * pivotRow for every row below the pivot
+            var pivotRow = augmented.Slice(0, col, col + 1);
+            var below = augmented.Slice(0, col + 1, n);
+            var divisor = keep is null ? pivot : engine.TensorWhere(keep, pivot, Filled(new[] { 1, 1 }, NumOps.One));
+            var factors = engine.TensorDivide(below.Slice(1, col, col + 1), engine.TensorBroadcastTo(divisor, new[] { n - col - 1, 1 }));
+            if (keep is not null)
+            {
+                factors = engine.TensorMultiply(factors, engine.TensorBroadcastTo(keep, new[] { n - col - 1, 1 }));
+            }
+
+            var reduced = engine.TensorSubtract(below, engine.TensorMultiply(factors, pivotRow));
+            augmented = engine.TensorConcatenate(new[] { augmented.Slice(0, 0, col + 1), reduced }, 0);
+        }
+
+        pivots = n == 0 ? new Tensor<T>(new[] { 0 }) : engine.TensorConcatenate(pivotList.ToArray(), 0).Reshape(n);
+        return augmented;
+    }
+
+    /// <summary>
+    /// How <see cref="SolveByElimination"/> and <see cref="ForwardEliminate"/> treat pivots and diagonal entries near zero.
+    /// </summary>
+    private protected enum SmallPivotHandling
+    {
+        /// <summary>
+        /// Pivots below 1e-12 in magnitude become +/-1e-12 (sign kept, + for zero); diagonal entries
+        /// below 1e-12 in magnitude become +1e-12 in back substitution.
+        /// </summary>
+        ClampToMinimum,
+
+        /// <summary>
+        /// Columns whose pivot is at most 1e-10 in magnitude are not eliminated, and their solution
+        /// component is 0.
+        /// </summary>
+        SkipColumn,
+
+        /// <summary>
+        /// Pivots below 1e-12 in magnitude become +1e-12 (the sign is dropped).
+        /// </summary>
+        FloorMagnitude
+    }
+
+    /// <summary>
+    /// Swaps row <paramref name="col"/> with the row at or below it holding the largest |value| in
+    /// column <paramref name="col"/> (the first such row on ties).
+    /// </summary>
+    private Tensor<T> SwapInPivotRow(Tensor<T> augmented, int col, int n)
+    {
+        var engine = Engine;
+        var candidates = engine.TensorAbs(augmented.Slice(0, col, n).Slice(1, col, col + 1).Reshape(n - col));
+        int maxRow = col + engine.TensorArgMax(candidates, 0).ToArray()[0];
+        if (maxRow == col)
+        {
+            return augmented;
+        }
+
+        var order = Enumerable.Range(0, n).ToArray();
+        order[col] = maxRow;
+        order[maxRow] = col;
+        return engine.TensorGather(augmented, new Tensor<int>(order, new[] { n }), 0);
+    }
+
+    /// <summary>
+    /// Replaces a [1, 1] pivot smaller than <paramref name="minimum"/> in magnitude by +/-minimum
+    /// (sign kept, + for zero).
+    /// </summary>
+    private Tensor<T> ClampPivot(Tensor<T> pivot, T minimum)
+    {
+        var engine = Engine;
+        var shape = pivot.Shape.ToArray();
+        var signed = engine.TensorWhere(
+            engine.TensorLessThan(pivot, NumOps.Zero), Filled(shape, NumOps.Negate(minimum)), Filled(shape, minimum));
+        return engine.TensorWhere(engine.TensorLessThan(engine.TensorAbs(pivot), minimum), signed, pivot);
+    }
+
+    /// <summary>
+    /// A tensor of the given shape with every entry equal to <paramref name="value"/>.
+    /// </summary>
+    private Tensor<T> Filled(int[] shape, T value) => Engine.TensorAddScalar(new Tensor<T>(shape), value);
+
+    /// <summary>
+    /// Returns <paramref name="tensor"/> with row <paramref name="row"/> replaced by the [1, columns] <paramref name="newRow"/>.
+    /// </summary>
+    private Tensor<T> ReplaceRow(Tensor<T> tensor, int row, Tensor<T> newRow)
+    {
+        int rows = tensor.Shape[0];
+        var parts = new List<Tensor<T>>();
+        if (row > 0)
+        {
+            parts.Add(tensor.Slice(0, 0, row));
+        }
+
+        parts.Add(newRow);
+        if (row + 1 < rows)
+        {
+            parts.Add(tensor.Slice(0, row + 1, rows));
+        }
+
+        return parts.Count == 1 ? parts[0] : Engine.TensorConcatenate(parts.ToArray(), 0);
+    }
+
+    /// <summary>
+    /// Selects the rows of <paramref name="x"/> and elements of <paramref name="y"/> at <paramref name="indices"/>
+    /// (repeats allowed, in the given order).
+    /// </summary>
+    /// <param name="x">The feature matrix.</param>
+    /// <param name="y">The label vector.</param>
+    /// <param name="indices">The sample indices to take.</param>
+    /// <returns>The selected rows and labels.</returns>
+    private protected (Matrix<T> X, Vector<T> Y) SelectSamples(Matrix<T> x, Vector<T> y, int[] indices)
+    {
+        if (indices.Length == 0)
+        {
+            return (new Matrix<T>(0, x.Columns), new Vector<T>(0));
+        }
+
+        return (x.GetRows(indices), SelectElements(y, indices));
+    }
+
+    /// <summary>
+    /// Selects the elements of <paramref name="values"/> at <paramref name="indices"/>.
+    /// </summary>
+    /// <param name="values">The source vector.</param>
+    /// <param name="indices">The indices to take (repeats allowed).</param>
+    /// <returns>The gathered elements.</returns>
+    private protected Vector<T> SelectElements(Vector<T> values, int[] indices)
+    {
+        if (indices.Length == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        return Engine.TensorGather(values.AsTensor(), new Tensor<int>(indices, new[] { indices.Length }), 0).ToVector();
+    }
+
+    /// <summary>
+    /// Selects the columns of <paramref name="x"/> at <paramref name="columns"/> (in the given order).
+    /// </summary>
+    /// <param name="x">The source matrix.</param>
+    /// <param name="columns">The column indices to take.</param>
+    /// <returns>The [x.Rows, columns.Length] matrix of selected columns.</returns>
+    private protected Matrix<T> SelectColumns(Matrix<T> x, int[] columns)
+    {
+        if (x.Rows == 0 || columns.Length == 0)
+        {
+            return new Matrix<T>(x.Rows, columns.Length);
+        }
+
+        return Engine.TensorIndexSelect(Tensor<T>.FromMatrix(x),
+            new Tensor<int>(columns, new[] { columns.Length }), 1).ToMatrix();
+    }
+
+    /// <summary>
+    /// Re-orders the probability columns of an estimator (whose columns follow
+    /// <paramref name="sourceLabels"/>) into this model's <see cref="ClassLabels"/> order.
+    /// Classes the estimator does not know get probability zero.
+    /// </summary>
+    /// <param name="probabilities">The estimator's [n, k] probabilities.</param>
+    /// <param name="sourceLabels">The estimator's class labels (column order of <paramref name="probabilities"/>).</param>
+    /// <returns>The [n, NumClasses] aligned probabilities.</returns>
+    private protected Matrix<T> AlignProbabilities(Matrix<T> probabilities, Vector<T>? sourceLabels)
+    {
+        var aligned = new Tensor<T>(new[] { probabilities.Rows, NumClasses });
+        int usable = sourceLabels is null ? 0 : Math.Min(sourceLabels.Length, probabilities.Columns);
+        if (sourceLabels is null || usable == 0 || probabilities.Rows == 0 || NumClasses == 0)
+        {
+            return aligned.ToMatrix();
+        }
+
+        var targets = GetClassIndicesFromLabels(FitToLength(sourceLabels, usable));
+        var sourceColumns = new List<int>(usable);
+        var targetColumns = new List<int>(usable);
+        for (int k = 0; k < targets.Length; k++)
+        {
+            if (targets[k] >= 0)
+            {
+                sourceColumns.Add(k);
+                targetColumns.Add(targets[k]);
+            }
+        }
+
+        if (sourceColumns.Count == 0)
+        {
+            return aligned.ToMatrix();
+        }
+
+        var picked = SelectColumns(probabilities, sourceColumns.ToArray());
+        var targetIndex = new Tensor<int>(targetColumns.ToArray(), new[] { targetColumns.Count });
+        return Engine.TensorScatterAdd(aligned, targetIndex, Tensor<T>.FromMatrix(picked), 1).ToMatrix();
+    }
+
+    /// <summary>
+    /// 1 where <paramref name="values"/>[i] &gt;= <paramref name="threshold"/>, otherwise 0 (NaN gives 0).
+    /// </summary>
+    /// <param name="values">The values to threshold.</param>
+    /// <param name="threshold">The threshold.</param>
+    /// <returns>The 0/1 indicator vector.</returns>
+    private protected Vector<T> AtLeast(Vector<T> values, T threshold)
+    {
+        if (values.Length == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        return Engine.TensorGreaterEqual(values.AsTensor(), FilledVector(values.Length, threshold).AsTensor()).ToVector();
+    }
+
+    /// <summary>
+    /// The first <paramref name="count"/> columns of <paramref name="x"/> (x itself when it has exactly that many).
+    /// </summary>
+    /// <param name="x">The source matrix.</param>
+    /// <param name="count">The number of leading columns to keep.</param>
+    /// <returns>The leading columns.</returns>
+    private protected Matrix<T> LeadingColumns(Matrix<T> x, int count)
+    {
+        return x.Columns == count ? x : SelectColumns(x, Enumerable.Range(0, count).ToArray());
+    }
+
+    /// <summary>
+    /// Converts a tensor of exact 0/1 values to the matching integer indicators (same shape).
+    /// </summary>
+    /// <param name="zeroOne">Values that are exactly 0 or 1.</param>
+    /// <returns>The 0/1 integers.</returns>
+    private protected Tensor<int> ZeroOneToInt(Tensor<T> zeroOne)
+    {
+        // argmax over [1 - b, b] picks index b
+        int axis = zeroOne.Shape.Length;
+        var absent = Engine.ScalarMinusTensor(NumOps.One, zeroOne);
+        return Engine.TensorArgMax(Engine.TensorStack(new[] { absent, zeroOne }, axis), axis);
+    }
+
+    /// <summary>
+    /// Serializes a matrix as its row-major T values plus its shape.
+    /// </summary>
+    private protected static void SerializeMatrixValues(Dictionary<string, object> data, string name, Matrix<T>? matrix)
+    {
+        if (matrix is null) return;
+        data[name] = matrix.Rows == 0 || matrix.Columns == 0 ? Array.Empty<T>() : Tensor<T>.FromMatrix(matrix).ToArray();
+        data[$"{name}Rows"] = matrix.Rows;
+        data[$"{name}Cols"] = matrix.Columns;
+    }
+
+    /// <summary>
+    /// Restores a matrix written by <see cref="SerializeMatrixValues"/> (null when absent or empty).
+    /// </summary>
+    private protected static Matrix<T>? DeserializeMatrixValues(Newtonsoft.Json.Linq.JObject obj, string name)
+    {
+        var token = obj[name];
+        if (token is null) return null;
+        var arr = token.ToObject<T[]>() ?? Array.Empty<T>();
+        int rows = obj[$"{name}Rows"]?.ToObject<int>() ?? 0;
+        int cols = obj[$"{name}Cols"]?.ToObject<int>() ?? 0;
+        if (rows <= 0 || cols <= 0) return null;
+        if (arr.Length < rows * cols)
+        {
+            throw new InvalidOperationException(
+                $"Deserialization failed: {name} array length {arr.Length} is less than expected {rows}x{cols}={rows * cols}.");
+        }
+
+        var values = new T[rows * cols];
+        Array.Copy(arr, values, values.Length);
+        return new Tensor<T>(values, new[] { rows, cols }).ToMatrix();
+    }
+
+    /// <summary>
+    /// Serializes a vector as its T values.
+    /// </summary>
+    private protected static void SerializeVectorValues(Dictionary<string, object> data, string name, Vector<T>? vector)
+    {
+        if (vector is null) return;
+        data[name] = vector.ToArray();
+    }
+
+    /// <summary>
+    /// Restores a vector written by <see cref="SerializeVectorValues"/> (null when absent or empty).
+    /// </summary>
+    private protected static Vector<T>? DeserializeVectorValues(Newtonsoft.Json.Linq.JObject obj, string name)
+    {
+        var token = obj[name];
+        if (token is null) return null;
+        var arr = token.ToObject<T[]>() ?? Array.Empty<T>();
+        return arr.Length == 0 ? null : Vector<T>.Wrap(arr);
+    }
+
+    /// <summary>
+    /// Majority vote: the label with the most votes per row (ties go to the lowest class index).
+    /// </summary>
+    /// <param name="votes">The [n, NumClasses] vote counts.</param>
+    /// <returns>The winning class label per row.</returns>
+    private protected Vector<T> MajorityVoteLabels(Tensor<T> votes)
+    {
+        if (votes.Shape[0] == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        return ClassIndicesToLabels(ArgMaxRows(votes.ToMatrix()));
+    }
+
+    /// <summary>
+    /// Majority vote over integer vote counts: the label with the most votes per row (ties go to the lowest
+    /// class index).
+    /// </summary>
+    /// <param name="votes">The [n, NumClasses] vote counts.</param>
+    /// <returns>The winning class label per row.</returns>
+    private protected Vector<T> MajorityVoteLabels(Tensor<int> votes)
+    {
+        if (votes.Shape[0] == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        return ClassIndicesToLabels(Engine.TensorArgMax(votes, 1));
+    }
+
+    /// <summary>
+    /// Adds one vote per row for the class at <paramref name="predicted"/>[row] to the [n, NumClasses] counts.
+    /// </summary>
+    /// <param name="votes">The running [n, NumClasses] vote counts.</param>
+    /// <param name="predicted">The class index voted for by each row, in [0, NumClasses).</param>
+    /// <returns>The updated counts.</returns>
+    private protected Tensor<int> AddVotes(Tensor<int> votes, int[] predicted)
+    {
+        return Engine.TensorAdd(votes,
+            Engine.TensorOneHot<int>(new Tensor<int>(predicted, new[] { predicted.Length }), NumClasses));
+    }
+
+    /// <summary>
+    /// How often each feature index occurs in <paramref name="splitFeatures"/>, divided by the number of
+    /// entries (all zero when there are none).
+    /// </summary>
+    /// <param name="splitFeatures">The feature index of every split.</param>
+    /// <param name="featureCount">The number of features.</param>
+    /// <returns>The [featureCount] usage fractions.</returns>
+    private protected Tensor<T> FeatureUsageFractions(List<int> splitFeatures, int featureCount)
+    {
+        if (splitFeatures.Count == 0 || featureCount == 0)
+        {
+            return new Tensor<T>(new[] { featureCount });
+        }
+
+        var counts = Engine.TensorBinCount(new Tensor<int>(splitFeatures.ToArray(), new[] { splitFeatures.Count }), featureCount);
+        return CountFractions(counts.Slice(0, 0, featureCount), splitFeatures.Count);
+    }
+
+    /// <summary>
+    /// Creates a vector of <paramref name="length"/> elements all equal to <paramref name="value"/>.
+    /// </summary>
+    private protected static Vector<T> FilledVector(int length, T value)
+    {
+        var result = new Vector<T>(length);
+        if (length > 0)
+        {
+            result.Fill(value);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Binary decision from a [samples, 2] probability matrix: P(positive) &gt;= 0.5 selects the last class
+    /// label, otherwise the first.
+    /// </summary>
+    /// <param name="probabilities">The probability matrix; column 1 holds P(positive).</param>
+    /// <returns>The predicted class labels.</returns>
+    private protected Vector<T> PredictBinaryLabels(Matrix<T> probabilities)
+    {
+        var classLabels = ClassLabels ?? throw new InvalidOperationException("Model must be trained before making predictions.");
+        int n = probabilities.Rows;
+        if (n == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        var engine = Engine;
+        var below = engine.TensorLessThan(probabilities.GetColumn(1).AsTensor(), NumOps.FromDouble(0.5));
+        var negative = FilledVector(n, classLabels[0]);
+        var positive = FilledVector(n, classLabels[classLabels.Length - 1]);
+        return engine.TensorWhere(below, negative.AsTensor(), positive.AsTensor()).ToVector();
+    }
+
+    /// <summary>
+    /// Converts log-odds to a [samples, 2] probability matrix [1 - sigmoid(z), sigmoid(z)].
+    /// </summary>
+    /// <param name="logOdds">The log-odds of the positive class per sample.</param>
+    /// <returns>The probability matrix.</returns>
+    private protected Matrix<T> BinaryProbabilitiesFromLogOdds(Vector<T> logOdds)
+    {
+        if (logOdds.Length == 0)
+        {
+            return new Matrix<T>(0, 2);
+        }
+
+        var engine = Engine;
+        var prob1 = engine.Sigmoid(logOdds);
+        var prob0 = engine.ScalarMinusTensor(NumOps.One, prob1.AsTensor()).ToVector();
+        return StackColumns(new[] { prob0, prob1 });
+    }
+
+    /// <summary>
+    /// Mean binary log loss -mean(y * log(p) + (1 - y) * log(1 - p)) with p = sigmoid(logOdds) clamped to
+    /// [1e-10, 1 - 1e-10] (the bounds move inward where float or Half cannot hold them).
+    /// </summary>
+    /// <param name="logOdds">The log-odds of the positive class per sample.</param>
+    /// <param name="yBinary">The 0/1 targets.</param>
+    /// <returns>The mean log loss (zero for no samples).</returns>
+    private protected T ComputeBinaryLogLoss(Vector<T> logOdds, Vector<T> yBinary)
+    {
+        if (logOdds.Length == 0)
+        {
+            return NumOps.Zero;
+        }
+
+        var engine = Engine;
+        var p = engine.TensorClamp(engine.Sigmoid(logOdds).AsTensor(), Tolerance(1e-10), OneMinusTolerance(1e-10));
+        var yT = yBinary.AsTensor();
+        var oneMinusY = engine.ScalarMinusTensor(NumOps.One, yT);
+        var logP = engine.TensorLog(p);
+        var logOneMinusP = engine.TensorLog(engine.ScalarMinusTensor(NumOps.One, p));
+        var perSample = engine.TensorAdd(engine.TensorMultiply(yT, logP), engine.TensorMultiply(oneMinusY, logOneMinusP));
+        return NumOps.Negate(engine.TensorMean(perSample));
+    }
+
+    /// <summary>
+    /// Stacks equal-length column vectors into a [length, columns.Count] matrix.
+    /// </summary>
+    /// <param name="columns">The columns, in order.</param>
+    /// <returns>The matrix whose j-th column is <paramref name="columns"/>[j].</returns>
+    private protected Matrix<T> StackColumns(IReadOnlyList<Vector<T>> columns)
+    {
+        var stacked = new Tensor<T>[columns.Count];
+        for (int k = 0; k < stacked.Length; k++)
+        {
+            stacked[k] = columns[k].AsTensor();
+        }
+
+        return Engine.TensorStack(stacked, 1).ToMatrix();
+    }
+
+    /// <summary>
+    /// Converts class indices to their class label values from <see cref="ClassLabels"/>.
+    /// </summary>
+    /// <param name="indices">Class indices in [0, ClassLabels.Length).</param>
+    /// <returns>The class labels as T.</returns>
+    private protected Vector<T> ClassIndicesToLabels(Tensor<int> indices)
+    {
+        if (ClassLabels is null || ClassLabels.Length == 0)
+        {
+            return ClassIndicesToValues(indices, NumClasses);
+        }
+
+        if (indices.Length == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        return Engine.TensorGather(ClassLabels.AsTensor(), indices.Reshape(indices.Length), 0).AsVector();
     }
 
     /// <summary>
@@ -547,14 +1571,11 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
 
         if (classLabelsToken != null)
         {
-            var classLabelsAsDoubles = classLabelsToken.ToObject<double[]>() ?? Array.Empty<double>();
-            if (classLabelsAsDoubles.Length > 0)
+            // Serialized as T[] (see Serialize), so it is read back as T[] in one call.
+            var classLabelValues = classLabelsToken.ToObject<T[]>() ?? Array.Empty<T>();
+            if (classLabelValues.Length > 0)
             {
-                ClassLabels = new Vector<T>(classLabelsAsDoubles.Length);
-                for (int i = 0; i < classLabelsAsDoubles.Length; i++)
-                {
-                    ClassLabels[i] = NumOps.FromDouble(classLabelsAsDoubles[i]);
-                }
+                ClassLabels = Vector<T>.Wrap(classLabelValues);
             }
         }
 

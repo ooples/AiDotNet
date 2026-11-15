@@ -370,4 +370,18 @@ public class Mars5ReferenceTests
             Mars5Sampler<double>.FrequencyPenalty(Vec(new double[3]), new[] { 1, 5 }, 3, 0.4, 6));
         Assert.Equal("previous", error.ParamName);
     }
+
+    // torch.multinomial never draws a zero-probability category. u = 1 - 1e-9 is 1 in float, so d = u * sum(w) is the
+    // whole mass and no running sum exceeds it: the draw must fall back to the last positive weight (1), not to the
+    // removed token after it (2).
+    [Fact(Timeout = 120000)]
+    public async Task DrawPosition_NeverLandsOnARemovedToken()
+    {
+        await Task.Yield();
+        var weights = new Tensor<float>(new[] { 1f, 1f, 0f }, new[] { 3 });
+        Assert.Equal(1, AiDotNet.TextToSpeech.TtsSampling<float>.DrawPosition(weights, 1 - 1e-9, inclusive: false));
+        Assert.Equal(1, AiDotNet.TextToSpeech.TtsSampling<float>.DrawPosition(weights, 1 - 1e-9, inclusive: true));
+        Assert.Equal(0, AiDotNet.TextToSpeech.TtsSampling<float>.DrawPosition(weights, 0.25, inclusive: false));
+        Assert.Equal(1, AiDotNet.TextToSpeech.TtsSampling<float>.DrawPosition(weights, 0.75, inclusive: false));
+    }
 }

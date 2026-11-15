@@ -248,8 +248,7 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>, IShapeContract
         _inputGateBias.Fill(NumOps.Zero);
         InitializeTensor(_forgetGateWeights);
         // Forget gate bias initialized to positive values for long memory (LSTM best practice)
-        for (int i = 0; i < _forgetGateBias.Length; i++)
-            _forgetGateBias[i] = NumOps.FromDouble(1.0);
+        _forgetGateBias.Fill(NumOps.FromDouble(1.0));
         InitializeTensor(_outputGateWeights);
         _outputGateBias.Fill(NumOps.Zero);
         InitializeTensor(_queryWeights);
@@ -326,11 +325,7 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>, IShapeContract
         {
             var gamma = new Tensor<T>(new[] { _modelDimension });
             var beta = new Tensor<T>(new[] { _modelDimension });
-            for (int j = 0; j < _modelDimension; j++)
-            {
-                gamma[j] = NumOps.One;
-                beta[j] = NumOps.Zero;
-            }
+            gamma.Fill(NumOps.One);
             _outputNormGamma = gamma;
             _outputNormBeta = beta;
         }

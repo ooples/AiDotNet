@@ -77,6 +77,32 @@ public class SPIRALPaperTests
         Assert.Equal(new[] { (features.GetLength(0) + 7) / 8, 8 }, logits.Shape.ToArray());     // 80 ms frames
     }
 
+    /// <summary>
+    /// Position randomization draws each end's padding uniformly from 0 to MaxTeacherPaddingUnits units of the total
+    /// stride, whatever the utterance's length: the reference's RandomShift (uniform, truncate False) caps only negative
+    /// shifts at max_ratio of the utterance, never the positive padding SPIRAL uses.
+    /// </summary>
+    [Fact(Timeout = 60000)]
+    public async Task TeacherPadding_ReachesMaxTeacherPaddingUnits_EvenBeyondHalfAShortUtterance()
+    {
+        await Task.Yield();
+        using var model = Create();
+        const int stride = 8, frames = 4 * stride;                    // a short utterance: half of it is 2 units
+        int most = Tiny().MaxTeacherPaddingUnits;
+        Assert.True(most > frames / 2 / stride, "the test needs a padding bound above half the utterance");
+        var random = Tensors.Helpers.RandomHelper.CreateSeededRandom(3);
+        int widest = 0;
+        for (int draw = 0; draw < 200; draw++)
+        {
+            var (left, right) = model.TeacherPadding(random);
+            Assert.InRange(left, 0, most);
+            Assert.InRange(right, 0, most);
+            widest = Math.Max(widest, Math.Max(left, right));
+        }
+        Assert.True(widest * stride > frames / 2, $"the widest padding drawn was {widest} units, within half the utterance");
+        Assert.Equal(most, widest);
+    }
+
     [Fact(Timeout = 300000)]
     public async Task Pretraining_LowersTheContrastiveLoss_AndTheTeacherFollowsTheStudent()
     {

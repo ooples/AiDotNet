@@ -120,11 +120,12 @@ public class GemmaTextConditioner<T> : TextConditioningBase<T>
         int batch = sequenceEmbeddings.Shape[0];
         int seqLen = sequenceEmbeddings.Shape[1];
         int dim = sequenceEmbeddings.Shape[2];
-        var pooled = new Vector<T>(batch * dim);
-        for (int b = 0; b < batch; b++)
-            for (int d = 0; d < dim; d++)
-                pooled[b * dim + d] = sequenceEmbeddings[b * seqLen * dim + (seqLen - 1) * dim + d];
-        return new Tensor<T>(new[] { batch, dim }, pooled);
+        // The last-token embedding as a fresh [B, D] tensor, off the gradient tape like the copy it replaces.
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            var engine = AiDotNetEngine.Current;
+            return engine.Reshape(engine.TensorNarrow(sequenceEmbeddings, 1, seqLen - 1, 1), new[] { batch, dim }).Clone();
+        }
     }
 
     private static NeuralNetworkArchitecture<T> BuildDefaultArchitecture(GemmaVariant variant) =>

@@ -179,23 +179,9 @@ public partial class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBas
     /// </summary>
     private int SelectGreedyActionForStateKey(string stateKey)
     {
-        int greedyAction = 0;
-        T bestValue = _qTable[stateKey][0];
-        bool allEqual = true;
-
-        for (int a = 1; a < _options.ActionSize; a++)
-        {
-            if (NumOps.GreaterThan(_qTable[stateKey][a], bestValue))
-            {
-                bestValue = _qTable[stateKey][a];
-                greedyAction = a;
-                allEqual = false;
-            }
-            else if (!NumOps.Equals(_qTable[stateKey][a], bestValue))
-            {
-                allEqual = false;
-            }
-        }
+        var qRow = RLTensorOps.Row(_qTable[stateKey], _options.ActionSize);
+        int greedyAction = RLTensorOps.ArgMax(qRow);
+        bool allEqual = RLTensorOps.AllEqual(qRow, NumOps);
 
         if (allEqual)
         {
@@ -250,19 +236,7 @@ public partial class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBas
 
     private int ArgMax(Vector<T> values)
     {
-        int maxIndex = 0;
-        T maxValue = values[0];
-
-        for (int i = 1; i < values.Length; i++)
-        {
-            if (NumOps.GreaterThan(values[i], maxValue))
-            {
-                maxValue = values[i];
-                maxIndex = i;
-            }
-        }
-
-        return maxIndex;
+        return RLTensorOps.ArgMax(values);
     }
 
     /// <inheritdoc />

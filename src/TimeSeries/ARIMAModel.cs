@@ -398,9 +398,7 @@ public partial class ARIMAModel<T> : TimeSeriesModelBase<T>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
         // Store original training series for Predict(Matrix) in-sample support
-        _trainingSeries = new Vector<T>(y.Length);
-        for (int i = 0; i < y.Length; i++)
-            _trainingSeries[i] = y[i];
+        _trainingSeries = y.Clone();
 
         int p = _arimaOptions.P; // AR order
         int d = _arimaOptions.D; // Differencing order
@@ -420,19 +418,9 @@ public partial class ARIMAModel<T> : TimeSeriesModelBase<T>
         _constant = EstimateConstant(diffY, _arCoefficients, _maCoefficients);
 
         // Step 5: Store last P differenced values and last Q residuals for Predict(Matrix) initialization
-        int pLen = Math.Min(p, diffY.Length);
-        _lastTrainDiffValues = new Vector<T>(p);
-        for (int i = 0; i < pLen; i++)
-        {
-            _lastTrainDiffValues[i] = diffY[diffY.Length - 1 - i];
-        }
-
-        int qLen = Math.Min(q, arResiduals.Length);
-        _lastTrainResiduals = new Vector<T>(q);
-        for (int i = 0; i < qLen; i++)
-        {
-            _lastTrainResiduals[i] = arResiduals[arResiduals.Length - 1 - i];
-        }
+        // (newest first, zero-filled when the series is shorter than the order)
+        _lastTrainDiffValues = TimeSeriesEngineOps<T>.NewestFirst(diffY, p);
+        _lastTrainResiduals = TimeSeriesEngineOps<T>.NewestFirst(arResiduals, q);
 
         // Step 6: If anomaly detection is enabled, compute threshold from residuals
         if (_arimaOptions.EnableAnomalyDetection)
@@ -441,14 +429,8 @@ public partial class ARIMAModel<T> : TimeSeriesModelBase<T>
         }
 
         // Store learned coefficients as ModelParameters for GetParameters() / serialization
-        int totalParams = _arCoefficients.Length + _maCoefficients.Length + 1; // +1 for constant
-        ModelParameters = new Vector<T>(totalParams);
-        int idx = 0;
-        ModelParameters[idx++] = _constant;
-        for (int i = 0; i < _arCoefficients.Length; i++)
-            ModelParameters[idx++] = _arCoefficients[i];
-        for (int i = 0; i < _maCoefficients.Length; i++)
-            ModelParameters[idx++] = _maCoefficients[i];
+        // [constant, AR..., MA...]
+        ModelParameters = Vector<T>.Concatenate(new Vector<T>(new[] { _constant }), _arCoefficients, _maCoefficients);
     }
 
     /// <summary>
@@ -472,21 +454,12 @@ public partial class ARIMAModel<T> : TimeSeriesModelBase<T>
         }
 
         // Compute mean of absolute residuals
-        T sum = NumOps.Zero;
-        for (int i = 0; i < residuals.Length; i++)
-        {
-            sum = NumOps.Add(sum, NumOps.Abs(residuals[i]));
-        }
-        _residualMean = NumOps.Divide(sum, NumOps.FromDouble(residuals.Length));
+        var absResiduals = Engine.Abs(residuals);
+        _residualMean = NumOps.Divide(Engine.Sum(absResiduals), NumOps.FromDouble(residuals.Length));
 
         // Compute standard deviation of absolute residuals
-        T sumSquaredDiff = NumOps.Zero;
-        for (int i = 0; i < residuals.Length; i++)
-        {
-            T diff = NumOps.Subtract(NumOps.Abs(residuals[i]), _residualMean);
-            sumSquaredDiff = NumOps.Add(sumSquaredDiff, NumOps.Multiply(diff, diff));
-        }
-        _residualStdDev = NumOps.Sqrt(NumOps.Divide(sumSquaredDiff, NumOps.FromDouble(residuals.Length)));
+        var diff = Engine.Subtract(absResiduals, Engine.Fill(residuals.Length, _residualMean));
+        _residualStdDev = NumOps.Sqrt(NumOps.Divide(Engine.DotProduct(diff, diff), NumOps.FromDouble(residuals.Length)));
 
         // If std dev is zero (all residuals are the same), use a small default
         if (NumOps.Equals(_residualStdDev, NumOps.Zero))
@@ -531,9 +504,11 @@ public partial class ARIMAModel<T> : TimeSeriesModelBase<T>
         }
 
         // Add AR component using input as recent observations (reverse order)
-        for (int j = 0; j < _arCoefficients.Length && j < input.Length; j++)
+        int count = Math.Min(_arCoefficients.Length, input.Length);
+        if (count > 0)
         {
-            prediction = NumOps.Add(prediction, NumOps.Multiply(_arCoefficients[j], input[j]));
+            prediction = NumOps.Add(prediction,
+                Engine.DotProduct(_arCoefficients.GetSubVector(0, count), input.GetSubVector(0, count)));
         }
 
         return prediction;
@@ -624,58 +599,34 @@ public partial class ARIMAModel<T> : TimeSeriesModelBase<T>
     /// <returns>A vector of forecasts on the original (undifferenced) scale.</returns>
     private Vector<T> UndifferenceForecasts(Vector<T> diffForecasts, Vector<T> history, int d, int steps)
     {
-        T[] tailValues = ComputeIntegrationTailValues(history, d);
+        var tailValues = ComputeIntegrationTailValues(history, d);
 
-        // Undifference d times (in reverse order of differencing)
-        var currentForecasts = new List<T>(steps);
-        for (int i = 0; i < steps; i++)
-        {
-            currentForecasts.Add(diffForecasts[i]);
-        }
-
+        // Undifference d times (in reverse order of differencing): each level is a running sum that
+        // continues from the last value of that differencing level.
+        var currentForecasts = diffForecasts.GetSubVector(0, steps);
         for (int level = d - 1; level >= 0; level--)
         {
-            T lastVal = tailValues[level];
-            for (int i = 0; i < currentForecasts.Count; i++)
-            {
-                T undiff = NumOps.Add(currentForecasts[i], lastVal);
-                currentForecasts[i] = undiff;
-                lastVal = undiff;
-            }
+            currentForecasts = TimeSeriesEngineOps<T>.Integrate(currentForecasts, tailValues[level]);
         }
 
-        Vector<T> result = new Vector<T>(steps);
-        for (int i = 0; i < steps; i++)
-        {
-            result[i] = currentForecasts[i];
-        }
-
-        return result;
+        return currentForecasts;
     }
 
     /// <summary>
     /// Computes the tail value at each integration (differencing) level from the history,
     /// needed for undifferencing forecasts back to the original scale.
     /// </summary>
-    private T[] ComputeIntegrationTailValues(Vector<T> history, int d)
+    private List<Vector<T>> ComputeIntegrationTailValues(Vector<T> history, int d)
     {
-        var tailValues = new T[d];
-        var tempTail = new List<T>();
+        // tailValues[level] is the last value of the level-times differenced tail, as a 1-element vector.
+        var tailValues = new List<Vector<T>>(d);
         int tailStart = Math.Max(0, history.Length - d);
-        for (int i = tailStart; i < history.Length; i++)
-        {
-            tempTail.Add(history[i]);
-        }
+        var tempTail = history.GetSubVector(tailStart, history.Length - tailStart);
 
         for (int level = 0; level < d; level++)
         {
-            tailValues[level] = tempTail[tempTail.Count - 1];
-            var newTail = new List<T>();
-            for (int i = 1; i < tempTail.Count; i++)
-            {
-                newTail.Add(NumOps.Subtract(tempTail[i], tempTail[i - 1]));
-            }
-            tempTail = newTail;
+            tailValues.Add(tempTail.GetSubVector(tempTail.Length - 1, 1));
+            tempTail = TimeSeriesEngineOps<T>.Difference(tempTail, 1);
         }
 
         return tailValues;
@@ -790,14 +741,7 @@ public partial class ARIMAModel<T> : TimeSeriesModelBase<T>
         }
 
         var scores = ComputeAnomalyScores(timeSeries);
-        bool[] anomalies = new bool[scores.Length];
-
-        for (int i = 0; i < scores.Length; i++)
-        {
-            anomalies[i] = NumOps.GreaterThan(scores[i], _anomalyThreshold);
-        }
-
-        return anomalies;
+        return TimeSeriesEngineOps<T>.GreaterThan(scores, _anomalyThreshold);
     }
 
     /// <summary>
@@ -835,31 +779,14 @@ public partial class ARIMAModel<T> : TimeSeriesModelBase<T>
             throw new ArgumentException($"Time series must have more than {lagOrder} points (the lag order).");
         }
 
-        Vector<T> scores = new Vector<T>(timeSeries.Length);
-
-        // First lagOrder points can't have scores computed (not enough history)
-        for (int i = 0; i < lagOrder; i++)
-        {
-            scores[i] = NumOps.Zero;
-        }
-
-        // Compute scores for the rest of the series
-        for (int i = lagOrder; i < timeSeries.Length; i++)
-        {
-            // Create input vector from previous lagOrder values in reverse order
-            // (most recent first, as expected by PredictSingle)
-            Vector<T> input = new Vector<T>(lagOrder);
-            for (int j = 0; j < lagOrder; j++)
-            {
-                input[j] = timeSeries[i - 1 - j];
-            }
-
-            T prediction = PredictSingle(input);
-            T actual = timeSeries[i];
-            scores[i] = NumOps.Abs(NumOps.Subtract(actual, prediction));
-        }
-
-        return scores;
+        // First lagOrder points can't have scores computed (not enough history); they stay zero.
+        // For the rest, the input is the previous lagOrder values in reverse order (most recent first,
+        // as expected by PredictSingle) and the score is |actual - prediction|.
+        int count = timeSeries.Length - lagOrder;
+        var inputs = TimeSeriesEngineOps<T>.LagMatrix(timeSeries, lagOrder, lagOrder, count);
+        var predictions = TimeSeriesEngineOps<T>.PredictRows(inputs, PredictSingle);
+        var scores = Engine.Abs(Engine.Subtract(timeSeries.GetSubVector(lagOrder, count), predictions));
+        return Vector<T>.Concatenate(new Vector<T>(lagOrder), scores);
     }
 
     /// <summary>
@@ -891,28 +818,19 @@ public partial class ARIMAModel<T> : TimeSeriesModelBase<T>
         }
 
         int lagOrder = _arimaOptions.LagOrder;
-        var anomalies = new List<(int Index, T Actual, T Predicted, T Score)>();
-
-        for (int i = lagOrder; i < timeSeries.Length; i++)
+        int count = timeSeries.Length - lagOrder;
+        if (count <= 0)
         {
-            // Create input vector in reverse order (most recent first, as expected by PredictSingle)
-            Vector<T> input = new Vector<T>(lagOrder);
-            for (int j = 0; j < lagOrder; j++)
-            {
-                input[j] = timeSeries[i - 1 - j];
-            }
-
-            T prediction = PredictSingle(input);
-            T actual = timeSeries[i];
-            T score = NumOps.Abs(NumOps.Subtract(actual, prediction));
-
-            if (NumOps.GreaterThan(score, _anomalyThreshold))
-            {
-                anomalies.Add((i, actual, prediction, score));
-            }
+            return new List<(int Index, T Actual, T Predicted, T Score)>();
         }
 
-        return anomalies;
+        // Input rows in reverse order (most recent first, as expected by PredictSingle).
+        var inputs = TimeSeriesEngineOps<T>.LagMatrix(timeSeries, lagOrder, lagOrder, count);
+        var predictions = TimeSeriesEngineOps<T>.PredictRows(inputs, PredictSingle);
+        var actuals = timeSeries.GetSubVector(lagOrder, count);
+        var scores = Engine.Abs(Engine.Subtract(actuals, predictions));
+        var flagged = TimeSeriesEngineOps<T>.GreaterThan(scores, _anomalyThreshold);
+        return TimeSeriesEngineOps<T>.SelectFlagged(actuals, predictions, scores, flagged, lagOrder);
     }
 
     /// <summary>

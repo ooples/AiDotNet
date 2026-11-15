@@ -109,13 +109,11 @@ public partial class GandalfGFLULayer<T> : LayerBase<T>, IShapeContract
         // Constant 0/1 selection matrices for the tape-safe GLU column split of the [*, 2F] linear
         // output into value/gate halves (a matmul split keeps the autodiff chain connected, unlike
         // a manual element copy).
-        _valueSelector = new Tensor<T>(new[] { 2 * numFeatures, numFeatures });
-        _gateSelector = new Tensor<T>(new[] { 2 * numFeatures, numFeatures });
-        for (int i = 0; i < numFeatures; i++)
-        {
-            _valueSelector[i, i] = NumOps.One;
-            _gateSelector[numFeatures + i, i] = NumOps.One;
-        }
+        // value = [I; 0] picks columns 0..F-1, gate = [0; I] picks columns F..2F-1.
+        var identity = Engine.TensorEye<T>(numFeatures);
+        var zeros = new Tensor<T>(new[] { numFeatures, numFeatures });
+        _valueSelector = Engine.TensorConcatenate(new[] { identity, zeros }, 0);
+        _gateSelector = Engine.TensorConcatenate(new[] { zeros, identity }, 0);
 
         ResolveShapes(new[] { numFeatures }, new[] { numFeatures });
         _built = true;

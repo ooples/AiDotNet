@@ -719,16 +719,11 @@ public partial class Conv3DLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> ComputeBiasGradient(Tensor<T> delta)
     {
         int channels = delta.Shape[1];
-        var biasGrad = new T[channels];
 
         var sumOverBatchAndSpatial = Engine.ReduceSum(delta, [0, 2, 3, 4], keepDims: false);
 
-        for (int c = 0; c < channels; c++)
-        {
-            biasGrad[c] = sumOverBatchAndSpatial[c];
-        }
-
-        return new Tensor<T>(biasGrad, [channels]);
+        // A fresh [channels] tensor holding the sums, as before.
+        return new Tensor<T>([channels], sumOverBatchAndSpatial.ToVector());
     }
 
     #endregion

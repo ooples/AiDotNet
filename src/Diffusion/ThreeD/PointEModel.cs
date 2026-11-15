@@ -321,6 +321,28 @@ public partial class PointEModel<T> : ThreeDDiffusionModelBase<T>
     #region Generation Methods
 
     /// <summary>
+    /// Not supported: image-to-3D is not part of this model's published pipeline.
+    /// </summary>
+    /// <remarks>
+    /// Point-E (Nichol et al., 2022) maps an image to a coloured point cloud; its meshes come from a separately
+    /// trained SDF regression model that this implementation does not include (SupportsMesh is false), so
+    /// image-to-mesh is not available.
+    /// </remarks>
+    /// <exception cref="NotSupportedException">Always; the message names the supported entry point.</exception>
+    public override Mesh3D<T> ImageTo3D(
+        Tensor<T> inputImage,
+        int numViews = 4,
+        int numInferenceSteps = 50,
+        double guidanceScale = 3.0,
+        int? seed = null)
+        => throw new NotSupportedException(ImageTo3DUnsupportedMessage);
+
+    /// <summary>The reason <see cref="ImageTo3D"/> is unsupported, naming the supported entry point.</summary>
+    internal const string ImageTo3DUnsupportedMessage =
+        "Point-E's image-to-3D output is a point cloud; use GenerateFromImage. Image-to-mesh needs Point-E's separate SDF regression model, which is not implemented.";
+
+
+    /// <summary>
     /// Generates a colored point cloud from a text prompt.
     /// </summary>
     /// <param name="prompt">Text description of the 3D object.</param>
@@ -569,32 +591,14 @@ public partial class PointEModel<T> : ThreeDDiffusionModelBase<T>
     /// </summary>
     private new Tensor<T> NormalizePointCloud(Tensor<T> points)
     {
-        var result = new Tensor<T>(points._shape);
-        var resultSpan = result.AsWritableSpan();
-        var pointsSpan = points.AsSpan();
-
-        var numPoints = points.Shape[1];
-
-        for (int i = 0; i < resultSpan.Length; i++)
-        {
-            var channelIdx = i % POINTE_LATENT_CHANNELS;
-            var val = NumOps.ToDouble(pointsSpan[i]);
-
-            if (channelIdx < 3)
-            {
-                // XYZ: normalize to [-1, 1]
-                val = Math.Tanh(val);
-            }
-            else
-            {
-                // RGB: normalize to [0, 1]
-                val = 0.5 * (Math.Tanh(val) + 1.0);
-            }
-
-            resultSpan[i] = NumOps.FromDouble(val);
-        }
-
-        return result;
+        // XYZ channels -> tanh in [-1, 1]; the remaining (RGB) channels -> 0.5 * (tanh + 1) in [0, 1].
+        int channels = POINTE_LATENT_CHANNELS;
+        int rows = points.Length / channels;
+        var squashed = Engine.TensorTanh(points.Reshape(new[] { rows, channels }));
+        var xyz = Engine.TensorSlice(squashed, new[] { 0, 0 }, new[] { rows, 3 });
+        var rgb = Engine.TensorSlice(squashed, new[] { 0, 3 }, new[] { rows, channels - 3 });
+        var colors = Engine.TensorMultiplyScalar(Engine.TensorAddScalar(rgb, NumOps.One), NumOps.FromDouble(0.5));
+        return Engine.TensorConcatenate(new[] { xyz, colors }, 1).Reshape(points._shape);
     }
 
     /// <summary>

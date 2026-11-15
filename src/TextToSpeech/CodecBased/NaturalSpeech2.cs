@@ -249,7 +249,7 @@ public partial class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
     protected override Tensor<T> PreprocessText(string text)
     {
         if (!HasPaperLayers) return base.PreprocessText(text);
-        return Wave(TextToPhonemes(text).Select(i => (double)i).ToArray());
+        return IdTensor(TextToPhonemes(text));
     }
 
     private static Tensor<T> Wave(IReadOnlyList<double> samples) =>
@@ -257,10 +257,9 @@ public partial class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
 
     private int[] PhonemeIds(Tensor<T> input, string name)
     {
-        var ids = new int[input.Length];
+        var ids = RoundedIds(input);
         for (int i = 0; i < ids.Length; i++)
         {
-            ids[i] = (int)Math.Round(Ops.ToDouble(input.GetFlat(i)));
             if (ids[i] < 0 || ids[i] >= _options.VocabSize) throw new ArgumentOutOfRangeException(name, $"Phoneme ids lie in [0, {_options.VocabSize}).");
         }
         if (ids.Length == 0) throw new ArgumentException("There are no phonemes.", name);
@@ -290,14 +289,9 @@ public partial class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
         if (tokens.Rank != 2) throw new ArgumentException("Codec tokens are [frames, codebooks].", name);
         int frames = tokens.Shape[0], codebooks = tokens.Shape[1];
         if (codebooks != Codebooks) throw new ArgumentException($"Expected {Codebooks} codebooks, got {codebooks}.", name);
-        var codes = new int[codebooks, frames];
-        for (int f = 0; f < frames; f++)
-            for (int q = 0; q < codebooks; q++)
-            {
-                int c = (int)Math.Round(Ops.ToDouble(tokens[f, q]));
-                if (c < 0 || c >= Codec.CodebookSize) throw new ArgumentOutOfRangeException(name, $"Codes lie in [0, {Codec.CodebookSize}).");
-                codes[q, f] = c;
-            }
+        var codes = LevelMajorCodes(tokens);
+        foreach (int c in codes)
+            if (c < 0 || c >= Codec.CodebookSize) throw new ArgumentOutOfRangeException(name, $"Codes lie in [0, {Codec.CodebookSize}).");
         return codes;
     }
 
@@ -364,13 +358,14 @@ public partial class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
         var o = _options;
         double h = 1.0 / Math.Max(steps, 1);
         var xt = start;
+        var half = Ops.FromDouble(0.5);
         for (int i = 0; i < steps; i++)
         {
             double t = 1.0 - (i + 0.5) * h;
             var dxt = Drift(xt, condition, query, t, h);
             if (o.Diffusion == NaturalSpeech2Diffusion.ScoreSde && o.Solver == NaturalSpeech2Solver.Midpoint)
             {
-                var middle = Engine.TensorMultiplyScalar(Engine.TensorAdd(Engine.TensorSubtract(xt, dxt), xt), Ops.FromDouble(0.5));
+                var middle = Engine.TensorMultiplyScalar(Engine.TensorAdd(Engine.TensorSubtract(xt, dxt), xt), half);
                 dxt = Drift(middle, condition, query, t + 0.5 * h, h);
             }
             xt = Engine.TensorSubtract(xt, dxt);

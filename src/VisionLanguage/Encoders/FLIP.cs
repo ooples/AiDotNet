@@ -184,13 +184,8 @@ public partial class FLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLan
     {
         var imageEmb = EncodeImage(image);
         var textEmbs = EncodeTexts(labels);
-        var logits = new Tensor<T>([labels.Length]);
-        double temp = _options.Temperature;
-        for (int i = 0; i < labels.Length; i++)
-            logits[i] = NumOps.FromDouble(
-                NumOps.ToDouble(CosineSimilarity(imageEmb, textEmbs[i])) / temp
-            );
-        var probs = Softmax(logits);
+        var logits = Engine.TensorDivideScalar(EmbeddingScores<T>.CosineToEach(Engine, imageEmb, textEmbs), NumOps.FromDouble(_options.Temperature));
+        T[] probs = Softmax(logits).ToArray();
         var result = new Dictionary<string, T>();
         for (int i = 0; i < labels.Length; i++)
             result[labels[i]] = probs[i];
@@ -293,9 +288,7 @@ public partial class FLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLan
             throw new InvalidOperationException("Tokenizer not initialized.");
         var enc = _tokenizer.Encode(text);
         int sl = Math.Min(enc.TokenIds.Count, _options.MaxSequenceLength);
-        var tk = new Tensor<T>([sl]);
-        for (int i = 0; i < sl; i++)
-            tk[i] = NumOps.FromDouble(enc.TokenIds[i]);
+        var tk = TokenIdsToTensor(enc.TokenIds, sl);
         return tk;
     }
 

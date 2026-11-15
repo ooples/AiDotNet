@@ -115,11 +115,7 @@ public abstract partial class VideoStabilizationBase<T> : VideoNeuralNetworkBase
         // Default: identity transforms
         for (int i = 0; i < numFrames; i++)
         {
-            var identity = new Tensor<T>([3, 3]);
-            identity.Data.Span[0] = NumOps.FromDouble(1.0); // [0,0]
-            identity.Data.Span[4] = NumOps.FromDouble(1.0); // [1,1]
-            identity.Data.Span[8] = NumOps.FromDouble(1.0); // [2,2]
-            trajectory.Add(identity);
+            trajectory.Add(Engine.TensorEye<T>(3));
         }
 
         return trajectory;
@@ -136,31 +132,27 @@ public abstract partial class VideoStabilizationBase<T> : VideoNeuralNetworkBase
         var smoothed = new List<Tensor<T>>();
 
         int halfWindow = SmoothingWindowSize / 2;
+        if (numFrames == 0)
+        {
+            return smoothed;
+        }
 
+        // [numFrames, 9]: the 3x3 transforms, one row per frame
+        var rows = new Tensor<T>[numFrames];
         for (int i = 0; i < numFrames; i++)
         {
-            var avgTransform = new Tensor<T>([3, 3]);
-            int count = 0;
+            rows[i] = Engine.TensorNarrow(Engine.Reshape(trajectory[i], [trajectory[i].Length]), 0, 0, 9);
+        }
 
-            for (int j = Math.Max(0, i - halfWindow); j <= Math.Min(numFrames - 1, i + halfWindow); j++)
-            {
-                for (int k = 0; k < 9; k++)
-                {
-                    avgTransform.Data.Span[k] = NumOps.Add(
-                        avgTransform.Data.Span[k],
-                        trajectory[j].Data.Span[k]);
-                }
-                count++;
-            }
+        var stacked = Engine.TensorStack(rows, 0);
 
-            for (int k = 0; k < 9; k++)
-            {
-                avgTransform.Data.Span[k] = NumOps.Multiply(
-                    avgTransform.Data.Span[k],
-                    NumOps.FromDouble(1.0 / count));
-            }
-
-            smoothed.Add(avgTransform);
+        // Mean over the window clipped to the sequence
+        for (int i = 0; i < numFrames; i++)
+        {
+            int start = Math.Max(0, i - halfWindow);
+            int end = Math.Min(numFrames - 1, i + halfWindow);
+            var window = Engine.TensorNarrow(stacked, 0, start, end - start + 1);
+            smoothed.Add(Engine.Reshape(Engine.ReduceMean(window, [0], false), [3, 3]));
         }
 
         return smoothed;

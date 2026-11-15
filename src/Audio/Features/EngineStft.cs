@@ -46,7 +46,7 @@ internal static class EngineStft<T>
     /// <paramref name="padMode"/> on each side. The magnitude of each bin is taken by <see cref="Hypot"/>, so a 16-bit
     /// T neither overflows on a loud bin nor underflows on a quiet one.
     /// </summary>
-    public static Tensor<T> Magnitude(Tensor<T> audio, int fftSize, int hop, Tensor<T> window, EnginePadMode padMode)
+    public static Tensor<T> Magnitude(Tensor<T> audio, int fftSize, int hop, Tensor<T> window, EnginePadMode padMode, double epsilon = 0.0)
     {
         if (audio is null) throw new ArgumentNullException(nameof(audio));
         var engine = AiDotNetEngine.Current;
@@ -74,7 +74,12 @@ internal static class EngineStft<T>
             re = engine.TensorMatMul(framed, cos);
             im = engine.TensorMatMul(framed, sin);
         }
-        return Hypot(engine, re, im);
+        if (epsilon == 0.0) return Hypot(engine, re, im);
+        // Retain the caller's epsilon before narrowing: Half cannot represent 1e-10, but can hold sqrt(1e-10).
+        var wideRe = AiDotNet.Helpers.TensorCopyHelper.CastLogical<T, double>(re);
+        var wideIm = AiDotNet.Helpers.TensorCopyHelper.CastLogical<T, double>(im);
+        var squares = engine.TensorAdd(engine.TensorSquare(wideRe), engine.TensorSquare(wideIm));
+        return engine.TensorSqrt(engine.TensorAddScalar(squares, epsilon)).Cast<T>();
     }
 
     /// <summary>

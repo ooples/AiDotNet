@@ -17,6 +17,7 @@
 param(
     [string] $ValidationWorkflow = '.github/workflows/sonarcloud.yml',
     [string] $MapWorkflow = '.github/workflows/test-impact-map.yml',
+    [string] $CodeQlWorkflow = '.github/workflows/codeql.yml',
     [string] $Selector = 'tools/TestImpact/Select-Shards.ps1',
     [string] $CertifiedMapResolver = 'tools/TestImpact/Resolve-CertifiedShardMap.ps1',
     [string] $RequiredArtifactReceiver = 'tools/TestImpact/Receive-RequiredArtifact.ps1',
@@ -176,6 +177,7 @@ function Test-MapSelectorPullRequestScope {
 
 $validation = Get-Content -LiteralPath $ValidationWorkflow -Raw
 $map = Get-Content -LiteralPath $MapWorkflow -Raw
+$codeql = Get-Content -LiteralPath $CodeQlWorkflow -Raw
 $selectorText = Get-Content -LiteralPath $Selector -Raw
 $certifiedMapResolverText = Get-Content -LiteralPath $CertifiedMapResolver -Raw
 $requiredArtifactReceiverText = Get-Content -LiteralPath $RequiredArtifactReceiver -Raw
@@ -197,7 +199,7 @@ $validationJobs = @(
     'paper-fidelity-plan',
     'paper-fidelity'
 )
-$qualityJobs = @('codeql', 'sonarcloud')
+$qualityJobs = @('sonarcloud')
 $expensiveJobs = @($validationJobs) + @($qualityJobs)
 
 foreach ($job in $expensiveJobs) {
@@ -224,20 +226,45 @@ foreach ($job in $expensiveJobs) {
     }
 }
 
-# The active repository ruleset requires a CodeQL result for the candidate commit, even when no
-# runtime files changed. Keep it as one mandatory job while suppressing every model/test matrix.
-$codeqlJob = Get-JobBlock -WorkflowText $validation -Job 'codeql'
-$codeqlHeader = Get-JobHeader -JobBlock $codeqlJob
-Assert-Contract (-not $codeqlHeader.Contains(
-        'fromJSON(needs.select-shards.outputs.requires_validation')) `
-    'CodeQL can be skipped even though the Main ruleset requires its result'
-Assert-Contract ($codeqlHeader.Contains('always()') -and $codeqlHeader.Contains('!cancelled()')) `
-    'CodeQL cannot publish its required result after a selector failure'
+# CodeQL runs after merge, never on a pull request (owner decision, 2026-11-14): the traced analysis held
+# every non-draft pull request for 80-95 minutes whatever it changed. Both analyses live in their own
+# workflow, so nothing in the validation workflow may run CodeQL or wait for it.
+Assert-Contract (-not [Regex]::IsMatch($validation, '(?m)^  codeql(-traced)?:\s*\r?$')) `
+    'the validation workflow still defines a CodeQL job, so pull requests wait for it again'
+Assert-Contract (-not $validation.Contains('github/codeql-action/')) `
+    'the validation workflow still runs a CodeQL action'
+Assert-Contract (-not [Regex]::IsMatch($validation, '(?m)^      - codeql(-traced)?\s*\r?$') -and
+    -not $validation.Contains('needs.codeql')) `
+    'a validation job still waits for a CodeQL job that no longer exists in that workflow'
+
+# The trigger policy is checked on the parsed workflow, so a quoted key ('pull_request':) or a flow mapping
+# cannot slip a pull-request trigger past a spelling-sensitive match.
+$codeqlJson = $codeql | & yq -o=json -I=0 '.' '-'
+Assert-Contract ($LASTEXITCODE -eq 0) 'the CodeQL workflow is not valid YAML'
+$codeqlOn = ($codeqlJson | ConvertFrom-Json -AsHashtable)['on']
+Assert-Contract ($codeqlOn -is [System.Collections.IDictionary]) 'the CodeQL workflow has no trigger mapping'
+$codeqlEvents = @($codeqlOn.Keys | ForEach-Object { [string] $_ })
+foreach ($forbiddenTrigger in 'pull_request', 'pull_request_target', 'merge_group') {
+    Assert-Contract ($codeqlEvents -cnotcontains $forbiddenTrigger) "CodeQL runs on $forbiddenTrigger again"
+}
+foreach ($requiredTrigger in 'push', 'schedule', 'workflow_dispatch') {
+    Assert-Contract ($codeqlEvents -ccontains $requiredTrigger) "the CodeQL workflow lost its $requiredTrigger trigger"
+}
+$codeqlPush = $codeqlOn['push']
+$codeqlPushBranches = if ($codeqlPush -is [System.Collections.IDictionary]) { @($codeqlPush['branches']) } else { @() }
+Assert-Contract ($codeqlPushBranches -ccontains 'master') 'CodeQL does not run on pushes to master'
+# A master scan that has started must finish: the validation workflow's master runs are cancelled by the
+# next push, which is why the scan does not live there.
+$codeqlConcurrency = [Regex]::Match($codeql, '(?ms)^concurrency:\s*\r?\n(?<body>(?:  [^\r\n]*\r?\n)+)').Groups['body'].Value
+Assert-Contract ($codeqlConcurrency.Contains('group: codeql-') -and
+    [Regex]::IsMatch($codeqlConcurrency, '(?m)^  cancel-in-progress: false\s*\r?$')) `
+    'a newer push can cancel a running CodeQL scan of master'
 
 # The traced analysis runs in its own job. It analyzes only what its build compiles: a project dropped from
 # the build step silently disappears from code scanning instead of failing, which is how the Serving API and
 # the playground functions went unanalyzed. Every build must also be restored first (--no-restore).
-$tracedJob = Get-JobBlock -WorkflowText $validation -Job 'codeql-traced'
+$codeqlJob = Get-JobBlock -WorkflowText $codeql -Job 'codeql'
+$tracedJob = Get-JobBlock -WorkflowText $codeql -Job 'codeql-traced'
 $codeqlBuild = Get-StepBlock -JobBlock $tracedJob -Step 'Build for CodeQL (net10.0)'
 $codeqlRestore = Get-StepBlock -JobBlock $tracedJob -Step 'Restore dependencies'
 Assert-Contract ([bool] $codeqlBuild) 'the traced CodeQL job has no build step'
@@ -253,35 +280,27 @@ foreach ($codeqlProject in @(
         "CodeQL builds '$projectPath' with --no-restore but never restores it"
 }
 
-# THE REQUIRED RESULT AND ITS BASELINE ARE PRODUCED THE SAME WAY. Build-less and traced extraction do not
-# report the same alerts on the same code (380 error-level alerts existed only in build-less results), so a
-# pull request compared build-less against a traced master baseline was blamed for alerts in lines it never
-# touched (#2136). The codeql job is build-less on every event under the standard category; the traced
-# analysis runs only off pull requests, under its own category, so it can never be that baseline, and a
-# pull request never pays for a traced build.
-$codeqlPrInit = Get-StepBlock -JobBlock $codeqlJob -Step 'Initialize CodeQL (build-less, pull requests)'
+# Build-less and traced extraction do not report the same alerts on the same code (380 error-level alerts
+# existed only in build-less results, #2136), so each analysis keeps the category it has always uploaded
+# under: alert history on master continues, and neither can replace the other's results.
 $codeqlFullInit = Get-StepBlock -JobBlock $codeqlJob -Step 'Initialize CodeQL (build-less, whole library)'
 $codeqlAnalyze = Get-StepBlock -JobBlock $codeqlJob -Step 'Perform CodeQL Analysis'
-Assert-Contract ($codeqlPrInit.Contains("if: github.event_name == 'pull_request'") -and $codeqlPrInit.Contains('build-mode: none')) `
-    'pull-request CodeQL is not build-less'
-Assert-Contract ($codeqlFullInit.Contains("if: github.event_name != 'pull_request'") -and $codeqlFullInit.Contains('build-mode: none')) `
-    'the master/nightly CodeQL baseline is not build-less, so pull requests are compared with a different extractor'
+Assert-Contract ($codeqlFullInit.Contains('build-mode: none') -and -not $codeqlFullInit.Contains('      if:')) `
+    'the build-less CodeQL analysis is not build-less on every event'
 Assert-Contract ($codeqlAnalyze.Contains('category: "/language:csharp"')) `
-    'the required CodeQL result is not uploaded under the standard category'
+    'the build-less CodeQL result is not uploaded under the standard category'
 Assert-Contract (-not $codeqlJob.Contains('build-mode: manual') -and -not $codeqlJob.Contains('dotnet build ')) `
-    'the required CodeQL job traces a build'
-$tracedHeader = Get-JobHeader -JobBlock $tracedJob
+    'the build-less CodeQL job traces a build'
 $tracedInit = Get-StepBlock -JobBlock $tracedJob -Step 'Initialize CodeQL (traced build)'
 $tracedAnalyze = Get-StepBlock -JobBlock $tracedJob -Step 'Perform CodeQL Analysis'
 Assert-Contract ($tracedInit.Contains('build-mode: manual')) 'master/nightly CodeQL lost its traced analysis'
-Assert-Contract (-not $tracedHeader.Contains("github.event_name != 'pull_request'")) `
-    'the required traced CodeQL category is skipped on pull requests'
 Assert-Contract ($tracedAnalyze.Contains('category: "/language:csharp-traced"')) `
-    'the traced CodeQL analysis shares the build-less baseline category'
-Assert-Contract (Test-JobDependency -JobHeader $tracedHeader -Dependency 'validation-source') `
-    'the traced CodeQL job does not depend on validation-source'
-Assert-Contract ($tracedHeader.Contains('fromJSON(needs.validation-source.outputs.execute_quality)')) `
-    'the traced CodeQL job ignores the reuse decision'
+    'the traced CodeQL analysis shares the build-less category'
+foreach ($init in $codeqlFullInit, $tracedInit) {
+    Assert-Contract ($init.Contains('config-file: ./.github/codeql/codeql-config.yml') -and
+        $init.Contains('queries: security-and-quality') -and $init.Contains('languages: csharp')) `
+        'a CodeQL analysis no longer uses the shared config, query suite and language'
+}
 
 # Every Sonar step parses this value with fromJSON. It must therefore be defined on the Sonar job,
 # not on a neighboring job where it is invisible and becomes a null template value at runtime.
@@ -549,6 +568,44 @@ Assert-Contract ($selectStep.Contains('$deltaPartial') -and $selectStep.Contains
 $mapDownload = Get-StepBlock -JobBlock $selectorJob -Step 'Download the shard map'
 Assert-Contract ($mapDownload.Contains("MAP_BRANCH: `${{ startsWith(github.base_ref, 'ci-proof/') && 'master' || github.base_ref || 'master' }}")) `
     'a canary into a ci-proof/** branch looks for maps built on that branch, finds none, and cannot prove selection'
+# A stacked pull request's base branch never has a map. It may use master's, but only when its own
+# branch has no evidence at all, and only while the selector is told the map is master's so it selects
+# for everything the stack adds to master.
+Assert-Contract ($mapDownload.Contains("[ `"`$(jq -r '.status // empty' map-resolution.json)`" = 'NoCertifiedRun' ]") -and
+        $mapDownload.Contains("[ `"`$MAP_BRANCH`" != 'master' ]") -and
+        $mapDownload.Contains('-ResultFile map-resolution.json -MapBranch master')) `
+    'a stacked pull request cannot fall back to the certified map on master, or falls back past negative evidence on its base branch'
+Assert-Contract ($mapDownload.Contains("lineage_ref='origin/master'") -and
+        $mapDownload.Contains('echo "lineage_ref=$lineage_ref" >> "$GITHUB_OUTPUT"') -and
+        ([regex]::Matches($mapDownload, "lineage_ref='origin/master'")).Count -eq 1) `
+    'the fallback to the map on master does not tell the selector which branch the map is from'
+Assert-Contract ($selectStep.Contains('MAP_LINEAGE_REF: ${{ steps.map.outputs.lineage_ref }}') -and
+        $selectStep.Contains("`$lineage['MapLineageRef'] = [string] `$env:MAP_LINEAGE_REF") -and
+        $selectStep.Contains('@lineage `')) `
+    'a stacked pull request selecting with the map on master is scoped to its own diff, which that map has never measured'
+# A map that stands in for newer failed map runs must be visible: the report is handed the resolver's
+# result, and the workflow leaves the age cap to the resolver's one documented setting.
+Assert-Contract ($selectStep.Contains('-MapResolutionFile map-resolution.json -ReportFile selection-report.json')) `
+    'the selection report is not told which certified map was used, so a failed-map-run fallback is invisible'
+Assert-Contract (-not $validation.Contains('-FailedRunFallbackMaxAgeDays ')) `
+    'the workflow overrides the failed-map-run age cap instead of leaving it to the single setting in Resolve-CertifiedShardMap.ps1'
+# The Build job's test-level selection diffs against the base branch only, so it must learn of the lineage
+# and keep that selection whole instead of narrowing away what the base branch adds.
+Assert-Contract ($selectorHeader.Contains('map_lineage_ref: ${{ steps.map.outputs.lineage_ref }}') -and
+        $impactStep.Contains('MAP_LINEAGE_REF: ${{ needs.select-shards.outputs.map_lineage_ref }}')) `
+    'test-level selection narrows a stacked pull request against its base branch, dropping tests only the lineage selected'
+$affectedLineageText = Get-Content -LiteralPath 'tools/TestImpact/Select-AffectedTests.ps1' -Raw
+Assert-Contract ($affectedLineageText.Contains('if (-not [string]::IsNullOrWhiteSpace($env:MAP_LINEAGE_REF)) {')) `
+    'Select-AffectedTests does not pass a lineage selection through'
+$selectorLineageText = Get-Content -LiteralPath 'tools/TestImpact/Select-Shards.ps1' -Raw
+Assert-Contract ($selectorLineageText.Contains('& git merge-base --is-ancestor $MapSha HEAD') -and
+        $selectorLineageText.Contains('$BaseSha = Resolve-MapLineageBase -LineageRef $MapLineageRef -MapSha $mapSha')) `
+    'the selector accepts a map from another branch without requiring the checkout to contain its commit'
+# The precise fallbacks can be turned off from the repository settings: the select step hands the selector
+# the repository variable, and the selector reads exactly that name.
+Assert-Contract ($selectStep.Contains('TEST_IMPACT_PRECISE_FALLBACKS: ${{ vars.TEST_IMPACT_PRECISE_FALLBACKS }}') -and
+        $selectorLineageText.Contains('return ([string] $env:TEST_IMPACT_PRECISE_FALLBACKS) -notmatch')) `
+    'the precise-fallback kill switch does not reach the selector, so turning it off needs a revert'
 Assert-Contract (-not $selectStep.Contains('-DeltaFromTree')) `
     'the select step computes its own master delta - a second, unaudited reuse mechanism'
 Assert-Contract ($selectStep.Contains('foreach ($name in $importShards) { [void] $running.Add($name) }')) `
@@ -1011,8 +1068,9 @@ Assert-Contract ($ciGatePolicyText.Contains('enum CiValidationReuseScope')) `
     'CI Gate reuse control flow is represented by strings instead of a closed enum'
 Assert-Contract ($ciGatePolicyText.Contains('([CiValidationReuseScope]::Validation)')) `
     'CI Gate has no validation-only reuse mode'
-Assert-Contract ($ciGatePolicyText.Contains("Add-RequiredSuccess `$requirements 'codeql' `$codeql")) `
-    'validation-only reuse does not rerun CodeQL'
+Assert-Contract (-not $ciGatePolicyText.Contains("Add-RequiredSuccess `$requirements 'codeql'") -and
+    -not $ciGatePolicyText.Contains('CodeQLResult')) `
+    'CI Gate requires CodeQL, which no longer runs in the workflow it judges'
 # SonarCloud is advisory: the gate reports it but must never require it, or its unfinished
 # analysis blocks every merge again.
 Assert-Contract (-not $ciGatePolicyText.Contains("Add-RequiredSuccess `$requirements 'sonarcloud'")) `
@@ -1178,6 +1236,54 @@ foreach ($command in $apiCommands) {
         "coverage-run has a gh api command without an explicit repository endpoint: $command"
 }
 
+# MAP FRESHNESS. One coverage-everywhere run a week is the map's only source. Each failure below
+# is a way a single lost run left the map stale, or unbuildable, until the following weekend.
+$compatCanceller = Get-JobBlock -WorkflowText $validation -Job 'cancel-after-compat-build-failure'
+Assert-Contract ($compatCanceller -match "(?m)^    if: \`$\{\{ always\(\) && needs\.build-compat\.result == 'failure' && !inputs\.collect_coverage_everywhere \}\}\s*$") `
+    'a compat build failure cancels the coverage-everywhere shard matrix that feeds the map'
+$shardJobHeader = Get-JobHeader -JobBlock (Get-JobBlock -WorkflowText $validation -Job 'test-net10-sharded')
+$shardNeeds = [regex]::Match($shardJobHeader, '(?m)^    needs: \[(?<needs>[^\]]*)\]\s*$')
+Assert-Contract ($shardNeeds.Success -and
+        @($shardNeeds.Groups['needs'].Value -split ',' | ForEach-Object { $_.Trim() }) -cnotcontains 'build-compat') `
+    'the shard matrix depends on the compat build, so a coverage run can no longer outlive its failure'
+
+# The source must outlive more than one weekly cycle, or a single lost run leaves nothing to rebuild from.
+$coverageSourceUploads = @(
+    @{ Job = 'select-shards'; Step = 'Upload carried digests' },
+    @{ Job = 'select-shards'; Step = 'Upload coverage-source marker' },
+    @{ Job = 'test-net10-sharded'; Step = 'Upload test-impact digest' }
+)
+foreach ($upload in $coverageSourceUploads) {
+    $uploadStep = Get-StepBlock -JobBlock (Get-JobBlock -WorkflowText $validation -Job $upload.Job) -Step $upload.Step
+    $retention = [regex]::Match($uploadStep,
+        '(?m)^          retention-days: (?:(?<days>\d+)|\$\{\{ inputs\.collect_coverage_everywhere && (?<days>\d+) \|\| (?:\(.+\) \|\| )?\d+ \}\})\s*$')
+    Assert-Contract ($retention.Success -and [int] $retention.Groups['days'].Value -ge 21) `
+        "'$($upload.Step)' keeps a coverage-everywhere source for less than three weekly cycles"
+}
+
+# The map workflow runs on every master push, so the resolver's window is counted in merges.
+$resolverWindow = [regex]::Match($certifiedMapResolverText, '--status completed --limit (?<limit>\d+) ')
+Assert-Contract ($resolverWindow.Success -and [int] $resolverWindow.Groups['limit'].Value -ge 60) `
+    'the certified map resolver looks back fewer than 60 map runs, so a few merges without a harvestable source hide the last certified map'
+
+Assert-Contract ($map.Contains('source_run_id: ${{ steps.source.outputs.run_id }}')) `
+    'the map build no longer reports which coverage run it harvested'
+$coverageRunHeader = Get-JobHeader -JobBlock $coverageRun
+Assert-Contract (-not $coverageRunHeader.Contains("github.event.schedule != '0 0 * * 0'")) `
+    'the Sunday schedule can never dispatch, so a lost Saturday coverage run is not retried for a week'
+Assert-Contract ($coverageRunHeader.Contains("github.event_name != 'push'")) `
+    'a merge can dispatch the instrumented matrix'
+$sundayGate = $coverageRun.IndexOf('if [ "$EVENT_SCHEDULE" = ''0 0 * * 0'' ]; then', [StringComparison]::Ordinal)
+$firstDispatch = $coverageRun.IndexOf('gh workflow run sonarcloud.yml', [StringComparison]::Ordinal)
+Assert-Contract ($sundayGate -ge 0 -and $firstDispatch -gt $sundayGate) `
+    'the Sunday schedule dispatches a second weekly run instead of only a retry'
+Assert-Contract ($coverageRun.Contains('SOURCE_RUN_ID: ${{ needs.build-map.outputs.source_run_id }}') -and
+        $coverageRun.Contains("date -u -d '2 days ago' +%s") -and
+        $coverageRun.Contains('if [ "$fresh" = ''true'' ]; then')) `
+    'the Sunday retry is not decided by the age of the harvested coverage run'
+Assert-Contract ($map.Contains("- cron: '0 0 * * 6'") -and $map.Contains("- cron: '0 0 * * 0'")) `
+    'the Saturday dispatch or the Sunday harvest-and-retry schedule is gone'
+
 # NIGHTLY AUXILIARY WORKLOADS. The census, samples and docs wiki are not pull-request work: a PR's
 # runner time goes to the tests its change can affect. Each failure below is a way one of them
 # could come back onto every pull request, or silently stop running at all.
@@ -1210,6 +1316,118 @@ Assert-Contract ($censusPrepare.Contains('./tools/ModelPerfProbe/Select-CensusFi
 Assert-Contract ($censusPrepare.Contains("-Destination 'artifacts/model-performance/test-bundle/test-list.txt'") -and
         $censusPrepare.Contains("'artifacts/model-performance/inventory/test-list.txt'")) `
     'the shards or the verifier read a different inventory than the scoped one'
+
+# ROLLING MAP: WITH THE FLAG OFF, NOTHING CHANGES. Repository variable TEST_IMPACT_ROLLING_MAP is unset by
+# default. These hold the workflow to that: every rolling step is skipped, the Select step reads the rolling
+# tooling only behind its mode, the selection file handed to the matrix is the weekly map's, and the list of
+# shards to instrument is empty - which Test-RollingShardMap.ps1 proves leaves Invoke-Shard.ps1's coverage
+# decision, for every shard kind and event, exactly the rule it was.
+$rollingFlag = "(vars.TEST_IMPACT_ROLLING_MAP == 'shadow' || vars.TEST_IMPACT_ROLLING_MAP == 'on')"
+$rollingMarkers = @('rolling-shard-map', 'rolling-source', 'rolling-shadow-outcome', 'Invoke-RollingSelection', 'New-RollingShardMap',
+    'Select-RollingCoverageShards')
+# The steps allowed to mention the rolling map without being skipped by the flag: they only carry values that
+# are empty when it is off, and each is checked below.
+$rollingUnguarded = @('Select', 'Upload shard selection report')
+$rollingSteps = 0
+foreach ($workflowText in $validation, $map) {
+    foreach ($step in [regex]::Matches($workflowText, '(?ms)^      - name: (?<name>[^\r\n]+)\r?\n.*?(?=^      - [A-Za-z0-9_-]+:|^  [A-Za-z0-9_-]+:\s*\r?\n|\z)')) {
+        $body = $step.Value
+        if (@($rollingMarkers | Where-Object { $body.Contains($_) }).Count -eq 0) { continue }
+        $name = $step.Groups['name'].Value.Trim()
+        if ($name -cin $rollingUnguarded) { continue }
+        $rollingSteps++
+        $condition = [regex]::Match($body, '(?m)^        if: (?<if>.+)$').Groups['if'].Value
+        Assert-Contract ($condition.Contains($rollingFlag)) "step '$name' touches the rolling map but is not skipped when TEST_IMPACT_ROLLING_MAP is off"
+        Assert-Contract ($body -match '(?m)^        continue-on-error: true\s*$') "step '$name' is part of the rolling map and can fail its job"
+    }
+}
+Assert-Contract ($rollingSteps -eq 6) "expected 6 flag-guarded rolling steps across the two workflows, found $rollingSteps"
+Assert-Contract ($selectStep.Contains('TEST_IMPACT_ROLLING_MAP: ${{ vars.TEST_IMPACT_ROLLING_MAP }}')) 'the Select step does not read the rolling-map flag from the repository variable'
+
+# The mode, evaluated exactly as the step computes it: anything but shadow and on is off.
+$modeBlock = [regex]::Match($selectStep, '(?ms)^          \$rollingMode = ''off''\r?\n.*?^          \}\r?\n')
+Assert-Contract $modeBlock.Success 'the Select step does not compute the rolling mode in one block'
+if ($modeBlock.Success) {
+    $savedRollingFlag = $env:TEST_IMPACT_ROLLING_MAP
+    try {
+        foreach ($case in @(@{ Value = $null; Mode = 'off' }, @{ Value = ''; Mode = 'off' }, @{ Value = ' '; Mode = 'off' }, @{ Value = 'off'; Mode = 'off' },
+                @{ Value = 'true'; Mode = 'off' }, @{ Value = 'shadow'; Mode = 'shadow' }, @{ Value = 'On'; Mode = 'on' })) {
+            $env:TEST_IMPACT_ROLLING_MAP = $case.Value
+            $computed = & ([scriptblock]::Create($modeBlock.Value + "`n`$rollingMode"))
+            Assert-Contract ([string] $computed -ceq $case.Mode) "TEST_IMPACT_ROLLING_MAP='$($case.Value)' is read by the Select step as '$computed', not '$($case.Mode)'"
+        }
+    }
+    finally { $env:TEST_IMPACT_ROLLING_MAP = $savedRollingFlag }
+}
+# Between the weekly map's selector call and the parse of its output there is the guarded rolling block and
+# nothing else, and it sits inside the certified-map branch: no certified anchor, no rolling selection.
+Assert-Contract ($selectStep -match '(?s)-OutFile selection\.json\r?\n\s+if \(\$LASTEXITCODE -ne 0\) \{ throw "shard selector exited \$LASTEXITCODE" \}\r?\n\s+if \(\$rollingMode -ne ''off''\) \{.*?Invoke-RollingSelection\.ps1.*?\r?\n                \}\r?\n\s+\$result = Get-Content selection\.json -Raw \| ConvertFrom-Json') `
+    'the rolling selection is not confined to one guarded block between the weekly map''s selector call and the parse of selection.json'
+Assert-Contract ([regex]::Matches($selectStep, 'Invoke-RollingSelection\.ps1').Count -eq 1 -and
+        $selectStep.IndexOf('elseif ($mapCertified) {') -lt $selectStep.IndexOf('Invoke-RollingSelection.ps1') -and
+        $selectStep.IndexOf('Invoke-RollingSelection.ps1') -lt $selectStep.IndexOf("Write-Host '::warning::no certified shard map - running the full matrix'")) `
+    'the rolling selection can run without a certified weekly map to fall back to'
+Assert-Contract ($selectStep.Contains('-AnchorMapFile map/shard-map.json -AnchorRunId ([long] $env:MAP_RUN_ID)') -and
+        $selectStep.Contains('-RollingDirectory rolling-map -AnchorSelectionFile selection.json')) `
+    'the rolling selection is not bound to the certified map run the resolver returned'
+$rollingDownload = Get-StepBlock -JobBlock $selectorJob -Step 'Download the rolling shard map'
+Assert-Contract ($rollingDownload.Contains('gh run download "$MAP_RUN_ID"') -and $rollingDownload.Contains('MAP_RUN_ID: ${{ steps.map.outputs.run_id }}') -and
+        $rollingDownload.Contains("steps.map.outputs.kind == 'certified'")) `
+    'the rolling map is not fetched from exactly the run that certified the weekly map in use'
+
+# The nightly's list of shards to instrument, evaluated as written: empty with the flag off on every event,
+# and empty on every event but the schedule whatever the flag says.
+$rollingBlock = [regex]::Match($selectStep, '(?ms)^          \$rollingCoverage = @\(\)\r?\n.*?^          "coverage_rolling=[^\r\n]+\r?\n\s+Out-File[^\r\n]+\r?\n')
+Assert-Contract $rollingBlock.Success 'the Select step does not emit coverage_rolling from one block'
+if ($rollingBlock.Success) {
+    $savedRollingEnvironment = @{ Event = $env:GITHUB_EVENT_NAME; Output = $env:GITHUB_OUTPUT; Everywhere = $env:COLLECT_COVERAGE_EVERYWHERE; Summary = $env:GITHUB_STEP_SUMMARY }
+    $rollingOutput = Join-Path ([IO.Path]::GetTempPath()) "rolling-contract-$PID.txt"
+    try {
+        $env:GITHUB_OUTPUT = $rollingOutput
+        $env:GITHUB_STEP_SUMMARY = "$rollingOutput.summary"
+        foreach ($case in @(
+            @{ Mode = 'off'; Event = 'schedule' }, @{ Mode = 'off'; Event = 'pull_request' }, @{ Mode = 'off'; Event = 'push' }, @{ Mode = 'off'; Event = 'workflow_dispatch' },
+            @{ Mode = 'shadow'; Event = 'pull_request' }, @{ Mode = 'on'; Event = 'push' }, @{ Mode = 'on'; Event = 'workflow_dispatch' }, @{ Mode = 'on'; Event = 'merge_group' },
+            # On the schedule with the flag on but nothing to refresh, the block fails closed to an empty list.
+            @{ Mode = 'on'; Event = 'schedule' }
+        )) {
+            Remove-Item -LiteralPath $rollingOutput -ErrorAction SilentlyContinue
+            $env:GITHUB_EVENT_NAME = $case.Event
+            $env:COLLECT_COVERAGE_EVERYWHERE = ''
+            $rollingMode = $case.Mode
+            $selectorTrusted = $true
+            $mapCertified = $false
+            & ([scriptblock]::Create($rollingBlock.Value)) 6>$null
+            $emitted = if (Test-Path -LiteralPath $rollingOutput) { (Get-Content -LiteralPath $rollingOutput -Raw).Trim() } else { '' }
+            Assert-Contract ($emitted -ceq 'coverage_rolling=[]') "with the rolling map '$($case.Mode)' on a '$($case.Event)' event the Select step emitted '$emitted', not an empty instrumentation list"
+        }
+    }
+    finally {
+        Remove-Item -LiteralPath $rollingOutput, "$rollingOutput.summary" -ErrorAction SilentlyContinue
+        $env:GITHUB_EVENT_NAME = $savedRollingEnvironment.Event; $env:GITHUB_OUTPUT = $savedRollingEnvironment.Output
+        $env:COLLECT_COVERAGE_EVERYWHERE = $savedRollingEnvironment.Everywhere; $env:GITHUB_STEP_SUMMARY = $savedRollingEnvironment.Summary
+    }
+}
+$selectorOutputs = [regex]::Match($selectorJob, '(?ms)^    outputs:\r?\n.*?^    steps:').Value
+Assert-Contract ($selectorOutputs.Contains('coverage_rolling: ${{ steps.select.outputs.coverage_rolling }}')) 'select-shards does not publish coverage_rolling'
+# The test job: an empty list makes the timeout's middle term false, so the expression is the one it was; and
+# the list reaches Invoke-Shard.ps1, which instruments nothing extra for an empty one.
+Assert-Contract ($shardJobHeader.Contains("timeout-minutes: `${{ inputs.collect_coverage_everywhere && 90 || (contains(fromJSON(needs.select-shards.outputs.coverage_rolling || '[]'), matrix.shard.name) && 90) || matrix.shard.timeout || 60 }}")) `
+    'the shard job''s timeout is not the previous expression with one term that is false for an empty rolling list'
+Assert-Contract ($testConsumer.Contains('COVERAGE_ROLLING: ${{ needs.select-shards.outputs.coverage_rolling }}')) 'the shard job does not receive the rolling instrumentation list'
+$rollingShardScript = Get-Content -LiteralPath '.github/scripts/Invoke-Shard.ps1' -Raw
+Assert-Contract ($rollingShardScript -match '(?s)\$rollingCoverage = \$false\r?\nif \(\$env:COVERAGE_ROLLING -and -not \$forcedCoverageRun -and -not \$measuresTiming -and\r?\n\s+"\$\(\$env:GITHUB_EVENT_NAME\)" -eq ''schedule''\)') `
+    'Invoke-Shard.ps1 can instrument for the rolling map outside a scheduled run, on a timing shard, or without a list'
+$rollingDigestUpload = Get-StepBlock -JobBlock (Get-JobBlock -WorkflowText $validation -Job 'test-net10-sharded') -Step 'Upload test-impact digest'
+Assert-Contract ($rollingDigestUpload.Contains("retention-days: `${{ inputs.collect_coverage_everywhere && 30 || (github.event_name == 'schedule' && $rollingFlag && 14) || 7 }}")) `
+    'digest retention is not the previous expression with one term that is false when the rolling map is off'
+# The map workflow builds the rolling map only on top of a map it has just certified, and uploads it from the same run.
+$rollingBuild = Get-StepBlock -JobBlock (Get-JobBlock -WorkflowText $map -Job 'build-map') -Step 'Build the rolling map'
+Assert-Contract ($rollingBuild.Contains("if: `${{ steps.audit.outputs.certified == 'true' && $rollingFlag }}") -and
+        $rollingBuild.Contains('-AnchorRunId ([long] $env:GITHUB_RUN_ID)') -and
+        $rollingBuild.Contains('-AnchorMapFile certified-map/shard-map.json -AnchorCertificateFile certified-map/certification.json') -and
+        $map.IndexOf('- name: Upload certified map') -lt $map.IndexOf('- name: Build the rolling map')) `
+    'the rolling map is not built by, and bound to, the run that certified its anchor, after that anchor is uploaded'
 
 if ($failures.Count -gt 0) {
     Write-Host 'CI impact workflow contract FAILED:'

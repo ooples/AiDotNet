@@ -85,18 +85,21 @@ internal sealed partial class GroundingDinoNetwork<T>
     private Tensor<T> Dropout(Tensor<T> x, double rate)
     {
         if (!Training || rate <= 0) return x;
-        var keep = new Tensor<T>(x.Shape.ToArray());
-        var scale = NumOps.FromDouble(1.0 / (1 - rate));
-        for (int i = 0; i < keep.Length; i++) keep[i] = _dropRandom.NextDouble() < rate ? NumOps.Zero : scale;
-        return _engine.TensorMultiply(x, keep);
+        // A per-step draw: a compiled training plan refills the mask before every replay.
+        return _engine.TensorMultiply(x, AiDotNet.Training.CompiledStepRandom<T>.InvertedDropoutMask(x.Shape.ToArray(), _dropRandom, rate));
     }
 
     private Tensor<T> DropPath(Tensor<T> x, double rate)
     {
         if (!Training || rate <= 0) return x;
         int b = x.Shape[0];
-        var keep = new Tensor<T>(new[] { b, 1, 1 });
-        for (int i = 0; i < b; i++) keep[i, 0, 0] = NumOps.FromDouble(_dropRandom.NextDouble() < 1 - rate ? 1.0 / (1 - rate) : 0.0);
+        // A per-step draw: a compiled training plan refills the per-sample keep mask before every replay.
+        var keepValue = NumOps.FromDouble(1.0 / (1 - rate));
+        var keep = AiDotNet.Training.CompiledStepRandom<T>.Draw(new[] { b, 1, 1 }, m =>
+        {
+            var span = m.AsWritableSpan();
+            for (int i = 0; i < span.Length; i++) span[i] = _dropRandom.NextDouble() < 1 - rate ? keepValue : NumOps.Zero;
+        });
         return _engine.TensorMultiply(x, _engine.TensorBroadcastTo(keep, x.Shape.ToArray()));
     }
 

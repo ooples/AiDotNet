@@ -220,8 +220,8 @@ internal static class AudioEventDetectionOps
         var isMax = engine.TensorEquals(v, engine.TensorIndexSelect(segMax, seg, 0));
         // Rank r(i) = i + 1 to prefer later indices, n - i to prefer earlier ones; both are >= 1, so a
         // masked-out element (rank 0) never wins.
-        var rank = last ? engine.TensorArange<T>(1, n + 1) : engine.TensorArange<T>(n, 0, -1);
-        int[] best = engine.ScatterMax(engine.TensorMultiply(isMax, rank), seg, out _, 0, segmentCount).Cast<int>().ToArray();
+        var rank = last ? engine.TensorArange<int>(1, n + 1) : engine.TensorArange<int>(n, 0, -1);
+        int[] best = engine.ScatterMax(engine.TensorMultiply(isMax.Cast<int>(), rank), seg, out _, 0, segmentCount).ToArray();
         var result = new int[segmentCount];
         for (int s = 0; s < segmentCount; s++) result[s] = last ? best[s] - 1 : n - best[s];
         return result;
@@ -239,7 +239,7 @@ internal static class AudioEventDetectionOps
         var groupOf = groups.SelectMany((g, gi) => Enumerable.Repeat(gi, g.Count)).ToArray();
         var c = new Tensor<T>(confidences, new[] { confidences.Length });
         var ids = new Tensor<int>(groupOf, new[] { groupOf.Length });
-        T[] means = engine.ScatterMean(c, ids, out _, 0, groups.Count).ToArray();
+        T[] means = engine.ScatterMean(c.Cast<double>(), ids, out _, 0, groups.Count).Cast<T>().ToArray();
         T[] maxima = engine.ScatterMax(c, ids, out _, 0, groups.Count).ToArray();
         for (int g = 0; g < groups.Count; g++)
         {

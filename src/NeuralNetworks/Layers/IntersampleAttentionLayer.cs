@@ -193,14 +193,6 @@ public partial class IntersampleAttentionLayer<T> : LayerBase<T>, IShapeContract
         _outputProjection.UpdateParameters(learningRate);
     }
 
-    private static void CopyVectorToVector(Vector<T> source, Vector<T> target, ref int offset)
-    {
-        for (int i = 0; i < source.Length; i++)
-        {
-            target[offset++] = source[i];
-        }
-    }
-
     /// <summary>
     /// Persists the head count and dropout rate so the Clone serialize→deserialize round-trip
     /// can reconstruct the layer (embedding dim is recoverable from the saved shape).

@@ -202,11 +202,11 @@ public partial class GOTOCR2<T> : VisionLanguageModelBase<T>, IDocumentUnderstan
     /// <summary>Reads the page and decodes the answer to text.</summary>
     public string ReadText(Tensor<T> documentImage, string? prompt = null)
     {
-        var ids = GenerateFromImage(documentImage, prompt);
+        int[] ids = Engine.TensorRound(GenerateFromImage(documentImage, prompt)).Cast<int>().ToArray();
         var tokens = new List<int>();
         for (int i = 0; i < ids.Length; i++)
         {
-            int id = (int)Math.Round(NumOps.ToDouble(ids[i]));
+            int id = ids[i];
             if (id == _options.ImEndTokenId || id == _options.EndOfTextTokenId) break;
             if (id < TextLimit) tokens.Add(id);
         }

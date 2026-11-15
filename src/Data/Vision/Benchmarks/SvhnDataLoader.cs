@@ -28,6 +28,9 @@ public class SvhnDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
     private const int NumClasses = 10;
     private const int PixelsPerImage = ImageSize * ImageSize * 3;
 
+    // Samples gathered per block: the staging buffer is 256 * 3,072 bytes (768 KB) whatever the slab size.
+    private const int SamplesPerBlock = 256;
+
     private static readonly string TrainUrl = "http://ufldl.stanford.edu/housenumbers/train_32x32.mat";
     private static readonly string TestUrl = "http://ufldl.stanford.edu/housenumbers/test_32x32.mat";
     private static readonly string ExtraUrl = "http://ufldl.stanford.edu/housenumbers/extra_32x32.mat";
@@ -87,36 +90,58 @@ public class SvhnDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
             totalSamples = _options.MaxSamples.Value;
         _sampleCount = totalSamples;
 
+        T[] lookup = PixelByteLookup.Create<T>(_options.Normalize);
         var featuresData = new T[totalSamples * PixelsPerImage];
-        var labelsData = new T[totalSamples * NumClasses];
+        var labelsData = new int[totalSamples * NumClasses];
+        byte[]? staging = null;
 
         int dst = 0;
         foreach (var (X, y) in slabs)
         {
             int n = y.Length;
+            int take = Math.Min(n, totalSamples - dst);
+            if (take > 0)
+            {
+                if (X.GetLength(0) != ImageSize || X.GetLength(1) != ImageSize || X.GetLength(2) != 3 || X.GetLength(3) != n)
+                    throw new InvalidDataException(
+                        $"SVHN image block has shape [{X.GetLength(0)}, {X.GetLength(1)}, {X.GetLength(2)}, {X.GetLength(3)}], " +
+                        $"expected [{ImageSize}, {ImageSize}, 3, {n}].");
+
+                // X is (h, w, c, n) row-major, i.e. [pixel, sample]: pixel p of sample s is at p * n + s. Blocks of
+                // samples are gathered into one reused [pixel, sample] buffer and written sample-major in (h, w, c)
+                // HWC order through the byte-to-T table, so peak memory is the output plus one block rather than
+                // whole-slab byte, int and T copies.
+                int blockSize = Math.Min(SamplesPerBlock, take);
+                if (staging is null || staging.Length < blockSize * PixelsPerImage)
+                    staging = new byte[blockSize * PixelsPerImage];
+                for (int first = 0; first < take; first += blockSize)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    int count = Math.Min(blockSize, take - first);
+                    for (int p = 0; p < PixelsPerImage; p++)
+                        Buffer.BlockCopy(X, p * n + first, staging, p * count, count);
+                    for (int s = 0; s < count; s++)
+                    {
+                        int outBase = (dst + first + s) * PixelsPerImage;
+                        for (int p = 0; p < PixelsPerImage; p++)
+                            featuresData[outBase + p] = lookup[staging[p * count + s]];
+                    }
+                }
+            }
+
             for (int i = 0; i < n && dst < totalSamples; i++, dst++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                int dstBase = dst * PixelsPerImage;
-                // X is (h, w, c, n) byte tensor; we transpose to (h, w, c) row-major HWC.
-                for (int h = 0; h < ImageSize; h++)
-                    for (int w = 0; w < ImageSize; w++)
-                        for (int c = 0; c < 3; c++)
-                        {
-                            byte b = X[h, w, c, i];
-                            double v = _options.Normalize ? b / 255.0 : b;
-                            featuresData[dstBase + (h * ImageSize + w) * 3 + c] = NumOps.FromDouble(v);
-                        }
                 int label1 = y[i];           // 1..10 in source
                 int label = label1 == 10 ? 0 : label1; // map 10 -> 0 (digit 0)
                 if (label >= 0 && label < NumClasses)
-                    labelsData[dst * NumClasses + label] = NumOps.One;
+                    labelsData[dst * NumClasses + label] = 1;
             }
             if (dst >= totalSamples) break;
         }
 
         LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, ImageSize, ImageSize, 3 });
-        LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, NumClasses });
+        LoadedLabels = new Tensor<int>(labelsData, new[] { totalSamples, NumClasses }).Cast<T>();
         InitializeIndices(totalSamples);
         await Task.CompletedTask;
     }

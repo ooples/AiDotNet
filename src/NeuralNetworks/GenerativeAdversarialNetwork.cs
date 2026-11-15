@@ -640,9 +640,9 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
 
         // Convert to list for statistical calculations
         var scoresList = new List<double>(sampleSize);
-        for (int i = 0; i < sampleSize; i++)
+        if (sampleSize > 0)
         {
-            scoresList.Add(Convert.ToDouble(discriminatorScores[i, 0]));
+            scoresList.AddRange(Engine.TensorSlice(discriminatorScores, [0, 0], [sampleSize, 1]).Cast<double>().ToVector().ToArray());
         }
 
         // Calculate metrics
@@ -1112,20 +1112,18 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
         T totalLoss = NumOps.Zero;
         T epsilon = NumOps.FromDouble(1e-10); // Small value to prevent log(0)
 
-        for (int i = 0; i < batchSize; i++)
+        if (batchSize > 0)
         {
-            T prediction = predictions[i, 0];
-            T target = targets[i, 0];
-
-            // Binary cross-entropy: -target * log(prediction) - (1-target) * log(1-prediction)
-            T logP = NumOps.Log(NumOps.Add(prediction, epsilon));
-            T logOneMinusP = NumOps.Log(NumOps.Add(NumOps.Subtract(NumOps.One, prediction), epsilon));
-
-            T termOne = NumOps.Multiply(target, logP);
-            T termTwo = NumOps.Multiply(NumOps.Subtract(NumOps.One, target), logOneMinusP);
-
-            T sampleLoss = NumOps.Negate(NumOps.Add(termOne, termTwo));
-            totalLoss = NumOps.Add(totalLoss, sampleLoss);
+            // Binary cross-entropy on column 0: -target * log(prediction) - (1-target) * log(1-prediction)
+            var prediction = Engine.TensorSlice(predictions, [0, 0], [batchSize, 1]);
+            var target = Engine.TensorSlice(targets, [0, 0], [batchSize, 1]);
+            var ones = new Tensor<T>([batchSize, 1]);
+            ones.Fill(NumOps.One);
+            var logP = Engine.TensorLog(Engine.TensorAddScalar(prediction, epsilon));
+            var logOneMinusP = Engine.TensorLog(Engine.TensorAddScalar(Engine.TensorSubtract(ones, prediction), epsilon));
+            var termOne = Engine.TensorMultiply(target, logP);
+            var termTwo = Engine.TensorMultiply(Engine.TensorSubtract(ones, target), logOneMinusP);
+            totalLoss = Engine.TensorSum(Engine.TensorNegate(Engine.TensorAdd(termOne, termTwo)));
         }
 
         // Average the loss across the batch
@@ -1157,15 +1155,15 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
     {
         // Calculate gradients for binary cross-entropy: (prediction - target)
         int batchSize = predictions.Shape[0];
-        var gradients = new Tensor<T>(predictions._shape);
+        if (batchSize == 0) return new Tensor<T>(predictions._shape);
 
-        for (int i = 0; i < batchSize; i++)
-        {
-            // For binary cross-entropy, the gradient simplifies to (prediction - target)
-            gradients[i, 0] = NumOps.Subtract(predictions[i, 0], targets[i, 0]);
-        }
-
-        return gradients;
+        // For binary cross-entropy, the gradient simplifies to (prediction - target), in column 0 only
+        var column = Engine.TensorSubtract(
+            Engine.TensorSlice(predictions, [0, 0], [batchSize, 1]), Engine.TensorSlice(targets, [0, 0], [batchSize, 1]));
+        int width = predictions.Shape[1];
+        return width == 1
+            ? column
+            : Engine.TensorConcatenate(new[] { column, new Tensor<T>([batchSize, width - 1]) }, 1);
     }
 
     /// <summary>
@@ -1334,9 +1332,9 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
 
         // Extract scores for calculations
         var scoresList = new List<double>(sampleSize);
-        for (int i = 0; i < sampleSize; i++)
+        if (sampleSize > 0)
         {
-            scoresList.Add(Convert.ToDouble(discriminatorScores[i, 0]));
+            scoresList.AddRange(Engine.TensorSlice(discriminatorScores, [0, 0], [sampleSize, 1]).Cast<double>().ToVector().ToArray());
         }
 
         // Calculate metrics
@@ -1402,9 +1400,15 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
         var threshold = NumOps.FromDouble(minDiscriminatorScore);
         var qualityImages = new List<Tensor<T>>();
 
+        // score >= threshold per candidate (NaN is not)
+        var passes = oversampling > 0
+            ? Engine.TensorMax(
+                Engine.TensorGreaterThan(Engine.TensorSlice(scores, [0, 0], [oversampling, 1]), threshold),
+                Engine.TensorEquals(Engine.TensorSlice(scores, [0, 0], [oversampling, 1]), threshold)).Cast<int>().ToVector().ToArray()
+            : Array.Empty<int>();
         for (int i = 0; i < oversampling && qualityImages.Count < count; i++)
         {
-            if (NumOps.GreaterThanOrEquals(scores[i, 0], threshold))
+            if (passes[i] != 0)
             {
                 qualityImages.Add(candidateImages.GetSlice(i));
             }
@@ -1414,11 +1418,10 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
         if (qualityImages.Count < count)
         {
             // Create pairs of (index, score) and sort by score
-            var scoreIndexPairs = new List<(int index, double score)>();
-            for (int i = 0; i < oversampling; i++)
-            {
-                scoreIndexPairs.Add((i, Convert.ToDouble(scores[i, 0])));
-            }
+            var candidateScores = oversampling > 0
+                ? Engine.TensorSlice(scores, [0, 0], [oversampling, 1]).Cast<double>().ToVector().ToArray()
+                : Array.Empty<double>();
+            var scoreIndexPairs = candidateScores.Select((score, index) => (index, score)).ToList();
 
             // Sort by score descending
             scoreIndexPairs.Sort((a, b) => b.score.CompareTo(a.score));
@@ -2172,36 +2175,40 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
 
         // Work on a copy to avoid modifying the input tensor
         var inputCopy = new Tensor<T>(input._shape);
-        for (int idx = 0; idx < input.Length; idx++)
-        {
-            inputCopy[idx] = input[idx];
-        }
+        input.CopyTo(inputCopy.AsWritableSpan());
+        var originalValues = inputCopy.ToVector().ToArray();
+        var plusValues = Engine.TensorAddScalar(inputCopy, epsilon).ToVector().ToArray();
+        var minusValues = Engine.TensorSubtractScalar(inputCopy, epsilon).ToVector().ToArray();
+        var plusOutputs = new T[inputCopy.Length];
+        var minusOutputs = new T[inputCopy.Length];
 
-        // Compute gradient for each input element using central differences
+        // Compute gradient for each input element using central differences (one perturbation at a time)
         for (int i = 0; i < inputCopy.Length; i++)
         {
-            // Save original value
-            T originalValue = inputCopy[i];
-
             // Compute f(x + epsilon)
-            inputCopy[i] = NumOps.Add(originalValue, epsilon);
+            inputCopy.AsWritableSpan()[i] = plusValues[i];
             var outputPlus = Discriminator.Predict(inputCopy);
 
             // Compute f(x - epsilon)
-            inputCopy[i] = NumOps.Subtract(originalValue, epsilon);
+            inputCopy.AsWritableSpan()[i] = minusValues[i];
             var outputMinus = Discriminator.Predict(inputCopy);
 
             // Restore original value
-            inputCopy[i] = originalValue;
+            inputCopy.AsWritableSpan()[i] = originalValues[i];
 
-            // Central difference: (f(x+h) - f(x-h)) / (2h)
-            // For discriminator, we use the first output element (real/fake score)
-            // Handle both 1D and 2D output tensors
-            T plusValue = outputPlus.Shape.Length >= 2 ? outputPlus[0, 0] : outputPlus[0];
-            T minusValue = outputMinus.Shape.Length >= 2 ? outputMinus[0, 0] : outputMinus[0];
-            T outputDiff = NumOps.Subtract(plusValue, minusValue);
+            // For discriminator, we use the first output element (real/fake score); [0, 0] of a 2D
+            // output and [0] of a 1D output are both its first element
+            plusOutputs[i] = outputPlus.GetFlat(0);
+            minusOutputs[i] = outputMinus.GetFlat(0);
+        }
+
+        // Central difference: (f(x+h) - f(x-h)) / (2h)
+        if (inputCopy.Length > 0)
+        {
             T twoEpsilon = NumOps.Multiply(epsilon, NumOps.FromDouble(2.0));
-            gradients[i] = NumOps.Divide(outputDiff, twoEpsilon);
+            Engine.TensorDivideScalar(
+                Engine.TensorSubtract(new Tensor<T>(plusOutputs, [plusOutputs.Length]), new Tensor<T>(minusOutputs, [minusOutputs.Length])),
+                twoEpsilon).CopyTo(gradients.AsWritableSpan());
         }
 
         // Restore original training mode

@@ -63,7 +63,7 @@ internal static class TtsSampling<T>
     /// The position a multinomial draw lands on over non-negative <paramref name="weights"/> (in visiting order):
     /// with <c>d = u · Σw</c>, the first position whose running sum exceeds d (<paramref name="inclusive"/>: reaches d,
     /// skipping zero weights); the last positive weight when rounding leaves none, so a zero-weight (removed) position
-    /// is never drawn, as with <c>torch.multinomial</c>.
+    /// is never drawn, as with <c>torch.multinomial</c>. Weights with no positive entry are rejected.
     /// </summary>
     /// <remarks>Σw is the running sum's last value, so d is compared with the very sums it was scaled from; a total
     /// summed in another order can round above the last running sum and leave every position below d.</remarks>
@@ -91,7 +91,8 @@ internal static class TtsSampling<T>
                 if (positive[j] != 0) return j;
         }
         int last = Array.LastIndexOf(positive, 1);
-        return last >= 0 ? last : n - 1;
+        if (last < 0) throw new ArgumentException("The weights have no positive entry to draw.", nameof(weights));
+        return last;
     }
 
     /// <summary>A <c>[n]</c> tensor of <paramref name="values"/> with <paramref name="fill"/> where <paramref name="mask"/> is set.</summary>

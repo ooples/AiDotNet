@@ -419,21 +419,18 @@ public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         var configured = _prophetOptions.Changepoints;
         if (configured != null && configured.Count > 0)
         {
-            var explicitCps = new Vector<T>(configured.Count);
-            for (int i = 0; i < configured.Count; i++) explicitCps[i] = configured[i];
-            return explicitCps;
+            return new Vector<T>(configured);
         }
 
         int count = Math.Min(DefaultChangepointCount, Math.Max(0, n - 2));
         if (count <= 0) return new Vector<T>(0);
 
+        // Evenly spaced over the first 80% of the time range: tMin + span · j / count for j = 1..count
         double span = 0.8 * (tMax - tMin);
-        var times = new Vector<T>(count);
-        for (int j = 1; j <= count; j++)
-        {
-            times[j - 1] = NumOps.FromDouble(tMin + span * ((double)j / count));
-        }
-        return times;
+        var steps = new Tensor<int>(new[] { count }, new Vector<int>(Enumerable.Range(1, count).ToArray())).Cast<T>();
+        var fractions = Engine.TensorDivideScalar(steps, NumOps.FromDouble(count));
+        return Engine.TensorAddScalar(
+            Engine.TensorMultiplyScalar(fractions, NumOps.FromDouble(span)), NumOps.FromDouble(tMin)).ToVector();
     }
 
     /// <summary>
@@ -526,15 +523,15 @@ public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     {
         T trend = NumOps.Add(_m, NumOps.Multiply(_k, t));
         int count = Math.Min(_delta.Length, _changepointTimes.Length);
-        for (int j = 0; j < count; j++)
+        if (count == 0)
         {
-            T diff = NumOps.Subtract(t, _changepointTimes[j]);
-            if (NumOps.GreaterThan(diff, NumOps.Zero))
-            {
-                trend = NumOps.Add(trend, NumOps.Multiply(_delta[j], diff));
-            }
+            return trend;
         }
-        return trend;
+
+        // + Σ_j δ_j · max(0, t - s_j) over the changepoints already passed
+        var diff = Tensor<T>.FromVector(Engine.Subtract(Engine.Fill(count, t), _changepointTimes.GetSubVector(0, count)));
+        var hinge = Engine.TensorWhere(Engine.TensorGreaterThan(diff, NumOps.Zero), diff, Engine.TensorZerosLike(diff)).ToVector();
+        return NumOps.Add(trend, Engine.DotProduct(_delta.GetSubVector(0, count), hinge));
     }
 
     /// <summary>
@@ -610,15 +607,7 @@ public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        int n = input.Rows;
-        Vector<T> predictions = new Vector<T>(n);
-
-        for (int i = 0; i < n; i++)
-        {
-            predictions[i] = PredictSingle(input.GetRow(i));
-        }
-
-        return predictions;
+        return TimeSeriesEngineOps<T>.PredictRows(input, PredictSingle);
     }
 
     /// <summary>
@@ -712,13 +701,11 @@ public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         T _holidayComponent = NumOps.Zero;
         DateTime _currentDate = DateTime.FromOADate(Convert.ToDouble(x[0])); // Assume the date is the first element of x
 
-        for (int _i = 0; _i < _prophetOptions.Holidays.Count; _i++)
+        // Assume only one holiday per day: the first matching holiday contributes
+        int holiday = _prophetOptions.Holidays.FindIndex(h => _currentDate.Date == h.Date);
+        if (holiday >= 0)
         {
-            if (_currentDate.Date == _prophetOptions.Holidays[_i].Date)
-            {
-                _holidayComponent = NumOps.Add(_holidayComponent, _holidayComponents[_i]);
-                break; // Assume only one holiday per day
-            }
+            _holidayComponent = NumOps.Add(_holidayComponent, _holidayComponents[holiday]);
         }
 
         return _holidayComponent;
@@ -743,10 +730,11 @@ public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     {
         T _regressorEffect = NumOps.Zero;
 
-        for (int _i = 0; _i < _regressors.Length; _i++)
+        // Assume regressors start from the second element of x
+        if (_regressors.Length > 0)
         {
-            // Assume regressors start from the second element of x
-            _regressorEffect = NumOps.Add(_regressorEffect, NumOps.Multiply(_regressors[_i], x[_i + 1]));
+            _regressorEffect = NumOps.Add(_regressorEffect,
+                Engine.DotProduct(_regressors, x.GetSubVector(1, _regressors.Length)));
         }
 
         return _regressorEffect;
@@ -787,30 +775,9 @@ public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     /// </remarks>
     private Vector<T> GetCurrentState()
     {
-        int _stateSize = GetStateSize();
-        Vector<T> _currentState = new Vector<T>(_stateSize);
-        int _index = 0;
-
-        _currentState[_index++] = _m;
-        _currentState[_index++] = _k;
-        for (int _i = 0; _i < _delta.Length; _i++)
-        {
-            _currentState[_index++] = _delta[_i];
-        }
-        for (int _i = 0; _i < _seasonalComponents.Length; _i++)
-        {
-            _currentState[_index++] = _seasonalComponents[_i];
-        }
-        for (int _i = 0; _i < _holidayComponents.Length; _i++)
-        {
-            _currentState[_index++] = _holidayComponents[_i];
-        }
-        for (int _i = 0; _i < _regressors.Length; _i++)
-        {
-            _currentState[_index++] = _regressors[_i];
-        }
-
-        return _currentState;
+        // [m, k, delta(changepoints), seasonal, holiday, regressors] (GetStateSize elements)
+        return Vector<T>.Concatenate(
+            new Vector<T>(new[] { _m, _k }), _delta, _seasonalComponents, _holidayComponents, _regressors);
     }
 
     /// <summary>
@@ -994,15 +961,7 @@ public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         // Compute predictions for training data
         Vector<T> predictions = Predict(x);
 
-        // Compute residuals (absolute errors)
-        List<T> absResiduals = new List<T>();
-        for (int i = 0; i < y.Length; i++)
-        {
-            T residual = NumOps.Abs(NumOps.Subtract(y[i], predictions[i]));
-            absResiduals.Add(residual);
-        }
-
-        if (absResiduals.Count == 0)
+        if (y.Length == 0)
         {
             _residualMean = NumOps.Zero;
             _residualStdDev = NumOps.One;
@@ -1010,22 +969,15 @@ public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
             return;
         }
 
+        // Compute residuals (absolute errors)
+        var absResiduals = Engine.Abs(Engine.Subtract(y, predictions.GetSubVector(0, y.Length)));
+
         // Compute mean of absolute residuals
-        T sum = NumOps.Zero;
-        for (int i = 0; i < absResiduals.Count; i++)
-        {
-            sum = NumOps.Add(sum, absResiduals[i]);
-        }
-        _residualMean = NumOps.Divide(sum, NumOps.FromDouble(absResiduals.Count));
+        _residualMean = NumOps.Divide(Engine.Sum(absResiduals), NumOps.FromDouble(absResiduals.Length));
 
         // Compute standard deviation of absolute residuals
-        T sumSquaredDiff = NumOps.Zero;
-        for (int i = 0; i < absResiduals.Count; i++)
-        {
-            T diff = NumOps.Subtract(absResiduals[i], _residualMean);
-            sumSquaredDiff = NumOps.Add(sumSquaredDiff, NumOps.Multiply(diff, diff));
-        }
-        _residualStdDev = NumOps.Sqrt(NumOps.Divide(sumSquaredDiff, NumOps.FromDouble(absResiduals.Count)));
+        var diff = Engine.Subtract(absResiduals, Engine.Fill(absResiduals.Length, _residualMean));
+        _residualStdDev = NumOps.Sqrt(NumOps.Divide(Engine.DotProduct(diff, diff), NumOps.FromDouble(absResiduals.Length)));
 
         // If std dev is zero (all residuals are the same), use a small default
         if (NumOps.Equals(_residualStdDev, NumOps.Zero))
@@ -1064,24 +1016,11 @@ public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         _m = parameters[index++];
         _k = parameters[index++];
 
-        for (int i = 0; i < _delta.Length; i++)
+        // Written into the existing component vectors, in layout order
+        foreach (var component in new[] { _delta, _seasonalComponents, _holidayComponents, _regressors })
         {
-            _delta[i] = parameters[index++];
-        }
-
-        for (int i = 0; i < _seasonalComponents.Length; i++)
-        {
-            _seasonalComponents[i] = parameters[index++];
-        }
-
-        for (int i = 0; i < _holidayComponents.Length; i++)
-        {
-            _holidayComponents[i] = parameters[index++];
-        }
-
-        for (int i = 0; i < _regressors.Length; i++)
-        {
-            _regressors[i] = parameters[index++];
+            parameters.AsSpan().Slice(index, component.Length).CopyTo(component.AsWritableSpan());
+            index += component.Length;
         }
 
         base.ApplyParameters(parameters);
@@ -1208,9 +1147,10 @@ public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         metadata.AdditionalInfo["RegressorCount"] = _prophetOptions.RegressorCount;
         if (_prophetOptions.RegressorCount > 0 && _regressors != null)
         {
-            for (int i = 0; i < _prophetOptions.RegressorCount && i < _regressors.Length; i++)
+            int shown = Math.Min(_prophetOptions.RegressorCount, _regressors.Length);
+            foreach (var (coefficient, i) in _regressors.Take(shown).Select((coefficient, i) => (coefficient, i)))
             {
-                metadata.AdditionalInfo[$"RegressorCoefficient_{i}"] = Convert.ToDouble(_regressors[i]);
+                metadata.AdditionalInfo[$"RegressorCoefficient_{i}"] = Convert.ToDouble(coefficient);
             }
         }
 
@@ -1286,10 +1226,12 @@ public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         int fourierTerms = _prophetOptions.FourierOrder * 2;
 
         // Compute average over all Fourier terms
-        for (int j = 0; j < Math.Min(fourierTerms, _seasonalComponents.Length); j++)
+        // Average contribution of sin/cos terms is approximately 0.5 * coefficient
+        int terms = Math.Min(fourierTerms, _seasonalComponents.Length);
+        if (terms > 0)
         {
-            // Average contribution of sin/cos terms is approximately 0.5 * coefficient
-            avgEffect = NumOps.Add(avgEffect, NumOps.Multiply(_seasonalComponents[j], NumOps.FromDouble(0.5)));
+            avgEffect = NumOps.Add(avgEffect,
+                Engine.Sum(Engine.Multiply(_seasonalComponents.GetSubVector(0, terms), NumOps.FromDouble(0.5))));
         }
 
         return avgEffect;
@@ -1303,11 +1245,7 @@ public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         if (_holidayComponents == null || _holidayComponents.Length == 0)
             return NumOps.Zero;
 
-        T sum = NumOps.Zero;
-        for (int i = 0; i < _holidayComponents.Length; i++)
-        {
-            sum = NumOps.Add(sum, _holidayComponents[i]);
-        }
+        T sum = Engine.Sum(_holidayComponents);
 
         // Average holiday effect weighted by probability of holiday
         // Assumes holidays are relatively rare (approx 10-15 days per year)
@@ -1325,11 +1263,7 @@ public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         if (_delta == null || _delta.Length == 0)
             return NumOps.Zero;
 
-        T sum = NumOps.Zero;
-        for (int i = 0; i < _delta.Length; i++)
-        {
-            sum = NumOps.Add(sum, _delta[i]);
-        }
+        T sum = Engine.Sum(_delta);
 
         return NumOps.Multiply(sum, NumOps.FromDouble(0.5));
     }
@@ -1375,14 +1309,7 @@ public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         }
 
         var scores = ComputeAnomalyScores(x, y);
-        bool[] anomalies = new bool[scores.Length];
-
-        for (int i = 0; i < scores.Length; i++)
-        {
-            anomalies[i] = NumOps.GreaterThan(scores[i], _anomalyThreshold);
-        }
-
-        return anomalies;
+        return TimeSeriesEngineOps<T>.GreaterThan(scores, _anomalyThreshold);
     }
 
     /// <summary>
@@ -1424,14 +1351,7 @@ public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
 
         // Get predictions for all points
         Vector<T> predictions = Predict(x);
-        Vector<T> scores = new Vector<T>(y.Length);
-
-        for (int i = 0; i < y.Length; i++)
-        {
-            scores[i] = NumOps.Abs(NumOps.Subtract(y[i], predictions[i]));
-        }
-
-        return scores;
+        return Engine.Abs(Engine.Subtract(y, predictions.GetSubVector(0, y.Length)));
     }
 
     /// <summary>
@@ -1465,22 +1385,10 @@ public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
             throw new InvalidOperationException("Anomaly detection was not enabled during training.");
         }
 
-        Vector<T> predictions = Predict(x);
-        var anomalies = new List<(int Index, T Actual, T Predicted, T Score)>();
-
-        for (int i = 0; i < y.Length; i++)
-        {
-            T prediction = predictions[i];
-            T actual = y[i];
-            T score = NumOps.Abs(NumOps.Subtract(actual, prediction));
-
-            if (NumOps.GreaterThan(score, _anomalyThreshold))
-            {
-                anomalies.Add((i, actual, prediction, score));
-            }
-        }
-
-        return anomalies;
+        Vector<T> predictions = Predict(x).GetSubVector(0, y.Length);
+        var scores = Engine.Abs(Engine.Subtract(y, predictions));
+        var flagged = TimeSeriesEngineOps<T>.GreaterThan(scores, _anomalyThreshold);
+        return TimeSeriesEngineOps<T>.SelectFlagged(y, predictions, scores, flagged, 0);
     }
 
     /// <summary>
@@ -1558,8 +1466,6 @@ public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         }
 
         Vector<T> predictions = Predict(x);
-        Vector<T> lowerBound = new Vector<T>(predictions.Length);
-        Vector<T> upperBound = new Vector<T>(predictions.Length);
 
         // Calculate z-score from confidence level using inverse normal CDF
         // For confidence level c, z = Φ^(-1)((1 + c) / 2)
@@ -1570,12 +1476,9 @@ public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         T zScore = StatisticsHelper<T>.CalculateInverseNormalCDF(probability);
 
         T halfWidth = NumOps.Multiply(zScore, _residualStdDev);
-
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            lowerBound[i] = NumOps.Subtract(predictions[i], halfWidth);
-            upperBound[i] = NumOps.Add(predictions[i], halfWidth);
-        }
+        var halfWidths = Engine.Fill(predictions.Length, halfWidth);
+        Vector<T> lowerBound = Engine.Subtract(predictions, halfWidths);
+        Vector<T> upperBound = Engine.Add(predictions, halfWidths);
 
         return (predictions, lowerBound, upperBound);
     }

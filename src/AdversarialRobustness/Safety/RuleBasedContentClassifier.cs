@@ -176,7 +176,7 @@ public partial class RuleBasedContentClassifier<T> : ContentClassifierBase<T>
 
             if (totalPatterns == 0)
             {
-                categoryScores[category] = NumOps.Zero;
+                categoryScores[category] = MatchProportion(0, 1);
                 continue;
             }
 
@@ -196,12 +196,19 @@ public partial class RuleBasedContentClassifier<T> : ContentClassifierBase<T>
             }
 
             // Score is proportion of patterns matched
-            double score = (double)matchCount / totalPatterns;
-            categoryScores[category] = NumOps.FromDouble(score);
+            categoryScores[category] = MatchProportion(matchCount, totalPatterns);
         }
 
         return CreateResultFromScores(categoryScores);
     }
+
+    /// <summary>The proportion of patterns matched, in T.</summary>
+    /// <remarks>
+    /// Divided while both counts are exact (in double) and rounded to T once: Half represents integers above
+    /// 2048 only approximately, so converting the counts first could move the ratio across the threshold.
+    /// </remarks>
+    internal static T MatchProportion(int matched, int total) =>
+        NumOps.FromDouble((double)matched / total);
 
     private void InitializeDefaultPatterns()
     {

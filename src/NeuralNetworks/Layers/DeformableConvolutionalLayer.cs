@@ -554,27 +554,14 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IShapeContr
 
     private Tensor<T> AddBiasToTensor(Tensor<T> output, Tensor<T> bias)
     {
-        int batch = output.Shape[0];
         int channels = output.Shape[1];
-        int height = output.Shape[2];
-        int width = output.Shape[3];
 
-        for (int b = 0; b < batch; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                T biasVal = bias.Data.Span[c];
-                for (int h = 0; h < height; h++)
-                {
-                    for (int w = 0; w < width; w++)
-                    {
-                        int idx = b * channels * height * width + c * height * width + h * width + w;
-                        output.Data.Span[idx] = NumOps.Add(output.Data.Span[idx], biasVal);
-                    }
-                }
-            }
-        }
-        return output;
+        // Adds bias[c] to channel c as a broadcast add recorded on the tape, so the main, offset and
+        // mask biases all receive gradient (an in-place write would detach them).
+        var channelBias = _engine.Reshape(
+            _engine.TensorSlice(_engine.Reshape(bias, new[] { bias.Length }), new[] { 0 }, new[] { channels }),
+            new[] { 1, channels, 1, 1 });
+        return _engine.TensorAdd(output, channelBias);
     }
 
     private static Tensor<T> EnsureBatchDimension(Tensor<T> tensor)
@@ -608,28 +595,13 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IShapeContr
 
     private void ComputeBiasGradients(Tensor<T> gradOutput)
     {
-        int batch = gradOutput.Shape[0];
         int channels = gradOutput.Shape[1];
-        int outH = gradOutput.Shape[2];
-        int outW = gradOutput.Shape[3];
+        if (channels == 0) return;
 
-        for (int c = 0; c < channels; c++)
-        {
-            T sum = NumOps.Zero;
-            for (int b = 0; b < batch; b++)
-            {
-                for (int h = 0; h < outH; h++)
-                {
-                    for (int w = 0; w < outW; w++)
-                    {
-                        int idx = b * channels * outH * outW + c * outH * outW + h * outW + w;
-                        sum = NumOps.Add(sum, gradOutput.Data.Span[idx]);
-                    }
-                }
-            }
-            var biasGrad = _biasGradients ?? throw new InvalidOperationException("_biasGradients has not been initialized.");
-            biasGrad.Data.Span[c] = sum;
-        }
+        var biasGrad = _biasGradients ?? throw new InvalidOperationException("_biasGradients has not been initialized.");
+        // Per-channel sums over batch and space, written into the first channels entries.
+        var sums = _engine.ReduceSum(gradOutput, new[] { 0, 2, 3 }, false);
+        sums.CopyTo(biasGrad.AsWritableSpan().Slice(0, channels));
     }
 
     private Tensor<T> BackpropConvolution(
@@ -658,32 +630,14 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IShapeContr
             dilation: new[] { 1, 1 });
 
         // Copy to weight gradient tensor
-        for (int i = 0; i < weightGrad.Length; i++)
-        {
-            weightGrad.Data.Span[i] = computedWeightGrad.Data.Span[i];
-        }
+        computedWeightGrad.AsSpan().Slice(0, weightGrad.Length).CopyTo(weightGrad.AsWritableSpan());
 
         // Compute bias gradients (sum over batch and spatial)
-        int batch = gradOutput.Shape[0];
         int channels = gradOutput.Shape[1];
-        int outH = gradOutput.Shape[2];
-        int outW = gradOutput.Shape[3];
-
-        for (int c = 0; c < channels; c++)
+        if (channels > 0)
         {
-            T sum = NumOps.Zero;
-            for (int b = 0; b < batch; b++)
-            {
-                for (int h = 0; h < outH; h++)
-                {
-                    for (int w = 0; w < outW; w++)
-                    {
-                        int idx = b * channels * outH * outW + c * outH * outW + h * outW + w;
-                        sum = NumOps.Add(sum, gradOutput.Data.Span[idx]);
-                    }
-                }
-            }
-            biasGrad.Data.Span[c] = sum;
+            var sums = _engine.ReduceSum(gradOutput, new[] { 0, 2, 3 }, false);
+            sums.CopyTo(biasGrad.AsWritableSpan().Slice(0, channels));
         }
 
         return gradInput;

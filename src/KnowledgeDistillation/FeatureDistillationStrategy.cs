@@ -159,8 +159,6 @@ public class FeatureDistillationStrategy<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         if (studentFeatureExtractor == null) throw new ArgumentNullException(nameof(studentFeatureExtractor));
         if (input == null) throw new ArgumentNullException(nameof(input));
 
-        T totalLoss = _numOps.Zero;
-
         // Parse layer pairs into structured format using explicit Select
         var parsedPairs = _layerPairs.Select(pair =>
         {
@@ -168,16 +166,14 @@ public class FeatureDistillationStrategy<T> : ModelBase<T, Tensor<T>, Tensor<T>>
             return (TeacherLayer: parts[0].Trim(), StudentLayer: parts[1].Trim());
         });
 
-        foreach (var (teacherLayer, studentLayer) in parsedPairs)
+        // Per pair (in order): extract features from both models, then the MSE between them
+        var pairLosses = new Vector<T>(parsedPairs.Select(layers =>
         {
-            // Extract features from both models
-            var teacherFeatures = teacherFeatureExtractor(teacherLayer);
-            var studentFeatures = studentFeatureExtractor(studentLayer);
-
-            // Compute MSE between feature vectors
-            var loss = ComputeMSE(studentFeatures, teacherFeatures);
-            totalLoss = _numOps.Add(totalLoss, loss);
-        }
+            var teacherFeatures = teacherFeatureExtractor(layers.TeacherLayer);
+            var studentFeatures = studentFeatureExtractor(layers.StudentLayer);
+            return ComputeMSE(studentFeatures, teacherFeatures);
+        }));
+        T totalLoss = Engine.Sum(pairLosses);
 
         // Average across all layer pairs
         totalLoss = _numOps.Divide(totalLoss, _numOps.FromDouble(_layerPairs.Length));
@@ -212,14 +208,8 @@ public class FeatureDistillationStrategy<T> : ModelBase<T, Tensor<T>, Tensor<T>>
                 $"Consider adding a projection layer to the student.");
         }
 
-        T sumSquaredDiff = _numOps.Zero;
-
-        for (int i = 0; i < studentFeatures.Length; i++)
-        {
-            var diff = _numOps.Subtract(studentFeatures[i], teacherFeatures[i]);
-            var squared = _numOps.Multiply(diff, diff);
-            sumSquaredDiff = _numOps.Add(sumSquaredDiff, squared);
-        }
+        Vector<T> diff = Engine.Subtract(studentFeatures, teacherFeatures);
+        T sumSquaredDiff = Engine.DotProduct(diff, diff);
 
         return _numOps.Divide(sumSquaredDiff, _numOps.FromDouble(studentFeatures.Length));
     }
@@ -245,15 +235,10 @@ public class FeatureDistillationStrategy<T> : ModelBase<T, Tensor<T>, Tensor<T>>
             throw new ArgumentException("Feature dimensions must match");
 
         int n = studentFeatures.Length;
-        var gradient = new Vector<T>(n);
         // ComputeFeatureLoss averages the pairs, so each pair's share of the gradient is 1/pairs of it.
         var scale = _numOps.FromDouble((2.0 / n) * _featureWeight / _layerPairs.Length);
 
-        for (int i = 0; i < n; i++)
-        {
-            var diff = _numOps.Subtract(studentFeatures[i], teacherFeatures[i]);
-            gradient[i] = _numOps.Multiply(scale, diff);
-        }
+        var gradient = Engine.Multiply(Engine.Subtract(studentFeatures, teacherFeatures), scale);
 
         return gradient;
     }

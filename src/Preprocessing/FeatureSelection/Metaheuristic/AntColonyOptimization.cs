@@ -3,6 +3,7 @@ using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Metaheuristic;
 
@@ -34,8 +35,8 @@ public class AntColonyOptimization<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly double _rho;   // Evaporation rate
     private readonly int? _randomState;
 
-    private double[]? _pheromones;
-    private double[]? _featureScores;
+    private Vector<T>? _pheromones;
+    private Vector<T>? _featureScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -43,8 +44,8 @@ public class AntColonyOptimization<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NAnts => _nAnts;
     public int NIterations => _nIterations;
-    public double[]? Pheromones => _pheromones;
-    public double[]? FeatureScores => _featureScores;
+    public Vector<T>? Pheromones => _pheromones;
+    public Vector<T>? FeatureScores => _featureScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -91,46 +92,61 @@ public class AntColonyOptimization<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
+        var engine = Engine;
 
         var random = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
         // Initialize pheromone trails
-        _pheromones = new double[p];
-        for (int j = 0; j < p; j++)
-            _pheromones[j] = 1.0;
+        var pheromones = PreprocessingTensorOps.Filled(new[] { p }, NumOps.One);
 
         // Compute heuristic information (correlation-based)
-        _featureScores = ComputeHeuristicInfo(data, target);
+        var heuristic = PopulationSearchOps.AbsTargetCorrelations(data, target, NumOps.FromDouble(0.01));
+        _featureScores = heuristic.ToVector();
 
         int[]? bestSubset = null;
-        double bestFitness = double.MinValue;
+        Tensor<T>? bestFitness = null;
+        T alpha = NumOps.FromDouble(_alpha);
+        T beta = NumOps.FromDouble(_beta);
+        T retention = NumOps.FromDouble(1 - _rho);
+        T minimumPheromone = NumOps.FromDouble(0.01);
+        var desirability = engine.TensorPower(heuristic, beta);
 
         for (int iter = 0; iter < _nIterations; iter++)
         {
-            var antSubsets = new List<int[]>();
-            var antFitness = new double[_nAnts];
-
-            // Each ant constructs a solution
+            // Each ant constructs a solution with the transition weights tau^alpha * eta^beta of this iteration
+            var weights = TransitionWeights(pheromones, desirability, alpha);
+            var antSubsets = new int[_nAnts][];
+            var masks = new Tensor<T>[_nAnts];
             for (int ant = 0; ant < _nAnts; ant++)
             {
-                var subset = ConstructSolution(p, random);
-                antSubsets.Add(subset);
-                antFitness[ant] = EvaluateFitness(data, target, subset);
-
-                if (antFitness[ant] > bestFitness)
-                {
-                    bestFitness = antFitness[ant];
-                    bestSubset = (int[])subset.Clone();
-                }
+                antSubsets[ant] = ConstructSolution(weights, random);
+                masks[ant] = engine.Reshape(PopulationSearchOps.IndexMask<T>(antSubsets[ant], p), new[] { 1, p });
             }
 
-            // Update pheromones
-            UpdatePheromones(antSubsets, antFitness, p);
+            // Fitness: mean heuristic value of the chosen features
+            var antMasks = engine.TensorConcatenate(masks, 0);
+            var antFitness = PopulationSearchOps.SubsetFitness(antMasks, heuristic, 0, NumOps.Zero, NumOps.Zero);
+
+            int iterBest = PopulationSearchOps.ArgMax(antFitness);
+            var iterBestFitness = PopulationSearchOps.At(antFitness, iterBest);
+            if (bestFitness is null || PopulationSearchOps.Greater(iterBestFitness, bestFitness))
+            {
+                bestFitness = iterBestFitness;
+                bestSubset = (int[])antSubsets[iterBest].Clone();
+            }
+
+            // Evaporation, deposit of each ant's fitness on its features, and the minimum pheromone level
+            var deposit = engine.Reshape(
+                engine.TensorMatMul(engine.TensorTranspose(antMasks), engine.Reshape(antFitness, new[] { _nAnts, 1 })),
+                new[] { p });
+            pheromones = engine.TensorMax(
+                engine.TensorAdd(engine.TensorMultiplyScalar(pheromones, retention), deposit), minimumPheromone);
         }
+
+        _pheromones = pheromones.ToVector();
 
         // Use best found subset
         if (bestSubset is not null)
@@ -145,127 +161,59 @@ public class AntColonyOptimization<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         IsFitted = true;
     }
 
-    private double[] ComputeHeuristicInfo(Matrix<T> data, Vector<T> target)
+    /// <summary>
+    /// The roulette weights tau^alpha * eta^beta of every feature, with tau divided by its largest value first.
+    /// The roulette depends only on the ratios, and in Half the pheromone of 20 ants at rho = 0.1 settles near
+    /// 200, so the weight total over a few hundred features passed 65504 and every draw landed on the last one.
+    /// </summary>
+    internal static Tensor<T> TransitionWeights(Tensor<T> pheromones, Tensor<T> desirability, T alpha)
     {
-        int n = data.Rows;
-        int p = data.Columns;
-        var scores = new double[p];
-
-        double yMean = 0;
-        for (int i = 0; i < n; i++)
-            yMean += NumOps.ToDouble(target[i]);
-        yMean /= n;
-
-        for (int j = 0; j < p; j++)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++)
-                xMean += NumOps.ToDouble(data[i, j]);
-            xMean /= n;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = NumOps.ToDouble(data[i, j]) - xMean;
-                double yDiff = NumOps.ToDouble(target[i]) - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-                syy += yDiff * yDiff;
-            }
-
-            scores[j] = (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0.01;
-        }
-
-        return scores;
+        var engine = AiDotNetEngine.Current;
+        var largest = engine.TensorBroadcastTo(engine.ReduceMax(pheromones, new[] { 0 }, true), new[] { pheromones.Length });
+        return engine.TensorMultiply(engine.TensorPower(engine.TensorDivide(pheromones, largest), alpha), desirability);
     }
 
-    private int[] ConstructSolution(int p, Random random)
+    /// <summary>
+    /// One ant's tour: features are added one at a time by roulette over the unselected features, with probability
+    /// proportional to <paramref name="weights"/>; when every remaining weight is zero the feature is drawn
+    /// uniformly.
+    /// </summary>
+    private int[] ConstructSolution(Tensor<T> weights, Random random)
     {
-        var pheromones = _pheromones ?? throw new InvalidOperationException("Pheromones have not been initialized.");
-        var featureScores = _featureScores ?? throw new InvalidOperationException("Feature scores have not been computed.");
-        var selected = new List<int>();
-        var available = Enumerable.Range(0, p).ToList();
-
+        var engine = Engine;
+        int p = weights.Length;
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
+        var selected = new int[numToSelect];
+        var available = PreprocessingTensorOps.Filled(new[] { p }, NumOps.One);
+        var zero = new Tensor<T>(new[] { 1 });
 
-        while (selected.Count < numToSelect && available.Count > 0)
+        for (int step = 0; step < numToSelect; step++)
         {
-            // Compute selection probabilities
-            var probabilities = new double[available.Count];
-            double total = 0;
+            var masked = engine.TensorMultiply(weights, available);
+            var total = engine.ReduceSum(masked, new[] { 0 }, true);
+            var availablePositions = PreprocessingTensorOps.MaskPositions(available);
 
-            for (int i = 0; i < available.Count; i++)
+            int chosen;
+            if (PopulationSearchOps.Greater(total, zero))
             {
-                int j = available[i];
-                double tau = Math.Pow(pheromones[j], _alpha);
-                double eta = Math.Pow(featureScores[j], _beta);
-                probabilities[i] = tau * eta;
-                total += probabilities[i];
-            }
-
-            // Normalize and select
-            if (total > 0)
-            {
-                double r = random.NextDouble() * total;
-                double cumulative = 0;
-                int selectedIdx = available.Count - 1;
-
-                for (int i = 0; i < available.Count; i++)
-                {
-                    cumulative += probabilities[i];
-                    if (r <= cumulative)
-                    {
-                        selectedIdx = i;
-                        break;
-                    }
-                }
-
-                selected.Add(available[selectedIdx]);
-                available.RemoveAt(selectedIdx);
+                // r = u * total; the feature is the first available one whose cumulative weight reaches r
+                var r = engine.TensorMultiply(PopulationSearchOps.Uniform<T>(random, 1), total);
+                var cumulative = engine.TensorCumSum(masked, 0);
+                var below = engine.TensorMultiply(
+                    engine.TensorLessThan(cumulative, engine.TensorBroadcastTo(r, new[] { p })), available);
+                int rank = Math.Min(engine.TensorCountNonzero(below), availablePositions.Length - 1);
+                chosen = availablePositions[rank];
             }
             else
             {
-                int idx = random.Next(available.Count);
-                selected.Add(available[idx]);
-                available.RemoveAt(idx);
+                chosen = availablePositions[random.Next(availablePositions.Length)];
             }
+
+            selected[step] = chosen;
+            available = engine.TensorSubtract(available, FeatureSelectionTensorOps.OneHot<T>(chosen, p));
         }
 
-        return selected.ToArray();
-    }
-
-    private double EvaluateFitness(Matrix<T> data, Vector<T> target, int[] subset)
-    {
-        if (subset.Length == 0) return 0;
-
-        // Use sum of correlations as fitness
-        var featureScores = _featureScores ?? throw new InvalidOperationException("Feature scores have not been computed.");
-        double fitness = 0;
-        foreach (int j in subset)
-            fitness += featureScores[j];
-
-        return fitness / subset.Length;
-    }
-
-    private void UpdatePheromones(List<int[]> antSubsets, double[] antFitness, int p)
-    {
-        // Evaporation
-        var pheromones = _pheromones ?? throw new InvalidOperationException("Pheromones have not been initialized.");
-
-        for (int j = 0; j < p; j++)
-            pheromones[j] *= (1 - _rho);
-
-        // Deposit
-        for (int ant = 0; ant < antSubsets.Count; ant++)
-        {
-            double deposit = antFitness[ant];
-            foreach (int j in antSubsets[ant])
-                pheromones[j] += deposit;
-        }
-
-        // Ensure minimum pheromone level
-        for (int j = 0; j < p; j++)
-            if (pheromones[j] < 0.01) pheromones[j] = 0.01;
+        return selected;
     }
 
     /// <inheritdoc />
@@ -281,15 +229,7 @@ public class AntColonyOptimization<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         if (_selectedIndices is null)
             throw new InvalidOperationException("AntColonyOptimization has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

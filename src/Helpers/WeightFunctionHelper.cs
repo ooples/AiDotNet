@@ -69,15 +69,15 @@ public static class WeightFunctionHelper<T>
     private static Vector<T> CalculateHuberWeights(Vector<T> residuals, double tuningConstant)
     {
         T k = _numOps.FromDouble(tuningConstant);
-        Vector<T> weights = new(residuals.Length);
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        var absRes = engine.TensorAbs(Tensor<T>.FromVector(residuals));
+        var kFull = Filled(absRes._shape, k);
 
-        for (int i = 0; i < residuals.Length; i++)
-        {
-            T absRes = _numOps.Abs(residuals[i]);
-            weights[i] = _numOps.LessThanOrEquals(absRes, k) ? _numOps.One : _numOps.Divide(k, absRes);
-        }
-
-        return weights;
+        // 1 inside the threshold, k/|r| outside (NaN residuals fall outside, as with the scalar test).
+        var inside = engine.TensorLessEqual(absRes, kFull);
+        return engine.TensorWhere(inside, Filled(absRes._shape, _numOps.One), engine.TensorDivide(kFull, absRes))
+            .ToVector();
     }
 
     /// <summary>
@@ -99,24 +99,16 @@ public static class WeightFunctionHelper<T>
     private static Vector<T> CalculateBisquareWeights(Vector<T> residuals, double tuningConstant)
     {
         T k = _numOps.FromDouble(tuningConstant);
-        Vector<T> weights = new(residuals.Length);
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        var r = Tensor<T>.FromVector(residuals);
+        var absRes = engine.TensorAbs(r);
 
-        for (int i = 0; i < residuals.Length; i++)
-        {
-            T absRes = _numOps.Abs(residuals[i]);
-            if (_numOps.LessThanOrEquals(absRes, k))
-            {
-                T u = _numOps.Divide(residuals[i], k);
-                T w = _numOps.Subtract(_numOps.One, _numOps.Multiply(u, u));
-                weights[i] = _numOps.Multiply(w, w);
-            }
-            else
-            {
-                weights[i] = _numOps.Zero;
-            }
-        }
-
-        return weights;
+        // (1 - u^2)^2 with u = r/k inside the threshold, 0 outside.
+        var u = engine.TensorDivideScalar(r, k);
+        var w = engine.TensorSubtract(Filled(r._shape, _numOps.One), engine.TensorMultiply(u, u));
+        var inside = engine.TensorLessEqual(absRes, Filled(r._shape, k));
+        return engine.TensorWhere(inside, engine.TensorMultiply(w, w), new Tensor<T>(r._shape)).ToVector();
     }
 
     /// <summary>
@@ -137,22 +129,19 @@ public static class WeightFunctionHelper<T>
     private static Vector<T> CalculateAndrewsWeights(Vector<T> residuals, double tuningConstant)
     {
         T k = _numOps.FromDouble(tuningConstant);
-        Vector<T> weights = new(residuals.Length);
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        var r = Tensor<T>.FromVector(residuals);
+        var absRes = engine.TensorAbs(r);
 
-        for (int i = 0; i < residuals.Length; i++)
-        {
-            T absRes = _numOps.Abs(residuals[i]);
-            if (_numOps.LessThanOrEquals(absRes, _numOps.Multiply(k, MathHelper.Pi<T>())))
-            {
-                T u = _numOps.Divide(residuals[i], k);
-                weights[i] = _numOps.Divide(MathHelper.Sin(u), u);
-            }
-            else
-            {
-                weights[i] = _numOps.Zero;
-            }
-        }
-
-        return weights;
+        // sin(u)/u with u = r/k inside |r| <= k*pi, 0 outside.
+        var u = engine.TensorDivideScalar(r, k);
+        var inside = engine.TensorLessEqual(absRes, Filled(r._shape, _numOps.Multiply(k, MathHelper.Pi<T>())));
+        return engine.TensorWhere(inside, engine.TensorDivide(engine.TensorSin(u), u), new Tensor<T>(r._shape))
+            .ToVector();
     }
+
+    /// <summary>A tensor of the given shape with every element equal to <paramref name="value"/>.</summary>
+    private static Tensor<T> Filled(int[] shape, T value)
+        => AiDotNetEngine.Current.TensorAddScalar(new Tensor<T>(shape), value);
 }

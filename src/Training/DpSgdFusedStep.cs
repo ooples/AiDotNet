@@ -80,10 +80,9 @@ public sealed class DpSgdFusedStep<T> : IDisposable
     /// <param name="batchSize">Number of per-example passes to run.</param>
     /// <param name="clipNorm">Per-example L2 norm clip (Abadi 2016's C).</param>
     /// <param name="noiseMultiplier">Gaussian noise multiplier (Abadi 2016's σ).</param>
-    /// <param name="rng">Retained for API compatibility. Noise is now sampled
-    /// on-device via <c>Engine.TensorRandomNormalInto</c> so it dispatches to
-    /// the engine's RNG (which supports vectorized / on-device random draws).
-    /// The caller's <c>rng</c> parameter is not used by the fused path.</param>
+    /// <param name="rng">The model's generator. Each noise tensor is sampled by the engine
+    /// (<c>Engine.TensorRandnLike</c>, vectorized / on-device) from a seed drawn from it, so a seeded
+    /// model's DP noise is reproducible.</param>
     /// <param name="aggregatedGradients">On success, the per-example-clipped +
     /// noised + averaged gradients keyed by parameter tensor reference. Feed
     /// directly into the caller's configured optimizer (via TapeStepContext,
@@ -215,7 +214,7 @@ public sealed class DpSgdFusedStep<T> : IDisposable
 
             // Build the DP-SGD-clean aggregated gradient dictionary using
             // vectorized IEngine ops: noise is sampled on-device via
-            // TensorRandomNormalInto, aggregate is TensorMultiplyScalar(sum, 1/B)
+            // TensorRandnLike seeded from the caller's generator, aggregate is TensorMultiplyScalar(sum, 1/B)
             // + TensorAdd(scaled, noise). Preserves the caller's optimizer
             // choice (Adam / AdamW / SGD) by returning gradients instead of
             // applying an SGD update here.
@@ -223,15 +222,13 @@ public sealed class DpSgdFusedStep<T> : IDisposable
             double noiseStdD = clipNorm * noiseMultiplier * invBatch;
             var invBatchT = Ops.FromDouble(invBatch);
             var noiseStdT = Ops.FromDouble(noiseStdD);
-            var zeroMean = Ops.Zero;
             for (int p = 0; p < _cachedParameters.Length; p++)
             {
                 var scaledSum = Engine.TensorMultiplyScalar(clippedSums[p], invBatchT);
                 Tensor<T> noisyAvg;
                 if (noiseStdD > 0)
                 {
-                    var noise = new Tensor<T>(clippedSums[p]._shape);
-                    Engine.TensorRandomNormalInto(noise, zeroMean, noiseStdT);
+                    var noise = Engine.TensorMultiplyScalar(Engine.TensorRandnLike(clippedSums[p], rng.Next()), noiseStdT);
                     noisyAvg = Engine.TensorAdd(scaledSum, noise);
                 }
                 else

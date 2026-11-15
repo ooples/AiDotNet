@@ -100,27 +100,31 @@ public class F1ScoreMetric<T> : IClassificationMetric<T>
             return NumOps.Zero;
         }
 
+        var predictionTensor = EvaluationTensorOps<T>.ToTensor(predictions);
+        var actualTensor = EvaluationTensorOps<T>.ToTensor(actuals);
+
         if (_averaging == AveragingMethod.Binary || _averaging == AveragingMethod.None)
         {
-            return ComputeBinaryF1(predictions, actuals, _positiveLabel);
+            return ComputeBinaryF1(predictionTensor, actualTensor, _positiveLabel);
         }
 
         // Get unique classes from both predictions and actuals
-        var classes = GetUniqueClasses(predictions, actuals);
+        var classes = EvaluationTensorOps<T>.UniqueLabels(predictionTensor, actualTensor);
 
         if (_averaging == AveragingMethod.Micro)
         {
-            return ComputeMicroF1(predictions, actuals, classes);
+            return ComputeMicroF1(predictionTensor, actualTensor, classes);
         }
 
         // Macro or Weighted averaging
         double sumF1 = 0;
         double sumWeights = 0;
 
-        foreach (var cls in classes)
+        foreach (T cls in classes)
         {
-            var f1 = NumOps.ToDouble(ComputeBinaryF1(predictions, actuals, NumOps.FromDouble(cls)));
-            int classCount = CountClass(actuals, cls);
+            var counts = EvaluationTensorOps<T>.LabelCounts(predictionTensor, actualTensor, cls);
+            double f1 = BinaryF1FromCounts(counts.TruePositives, counts.PredictedPositives, counts.ActualPositives);
+            int classCount = counts.ActualPositives;
 
             if (_averaging == AveragingMethod.Macro)
             {
@@ -137,26 +141,17 @@ public class F1ScoreMetric<T> : IClassificationMetric<T>
         return sumWeights > 0 ? NumOps.FromDouble(sumF1 / sumWeights) : NumOps.Zero;
     }
 
-    private T ComputeBinaryF1(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals, T positiveLabel)
+    private static T ComputeBinaryF1(Tensor<T> predictions, Tensor<T> actuals, T positiveLabel)
     {
-        int truePositives = 0;
-        int predictedPositives = 0;
-        int actualPositives = 0;
-        double positiveLabelValue = NumOps.ToDouble(positiveLabel);
+        var counts = EvaluationTensorOps<T>.LabelCounts(predictions, actuals, positiveLabel);
+        return NumOps.FromDouble(BinaryF1FromCounts(counts.TruePositives, counts.PredictedPositives, counts.ActualPositives));
+    }
 
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            bool predicted = NumOps.Compare(predictions[i], NumOps.FromDouble(positiveLabelValue)) == 0;
-            bool actual = NumOps.Compare(actuals[i], NumOps.FromDouble(positiveLabelValue)) == 0;
-
-            if (predicted) predictedPositives++;
-            if (actual) actualPositives++;
-            if (predicted && actual) truePositives++;
-        }
-
+    private static double BinaryF1FromCounts(int truePositives, int predictedPositives, int actualPositives)
+    {
         if (predictedPositives == 0 && actualPositives == 0)
         {
-            return NumOps.One; // Perfect case: no positives and none predicted
+            return 1; // Perfect case: no positives and none predicted
         }
 
         double precision = predictedPositives > 0 ? (double)truePositives / predictedPositives : 0;
@@ -164,29 +159,24 @@ public class F1ScoreMetric<T> : IClassificationMetric<T>
 
         if (precision + recall == 0)
         {
-            return NumOps.Zero;
+            return 0;
         }
 
-        return NumOps.FromDouble(2 * precision * recall / (precision + recall));
+        return 2 * precision * recall / (precision + recall);
     }
 
-    private T ComputeMicroF1(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals, HashSet<double> classes)
+    private static T ComputeMicroF1(Tensor<T> predictions, Tensor<T> actuals, Tensor<T> classes)
     {
         int totalTruePositives = 0;
         int totalPredictedPositives = 0;
         int totalActualPositives = 0;
 
-        foreach (var cls in classes)
+        foreach (T cls in classes)
         {
-            for (int i = 0; i < predictions.Length; i++)
-            {
-                bool predicted = NumOps.Compare(predictions[i], NumOps.FromDouble(cls)) == 0;
-                bool actual = NumOps.Compare(actuals[i], NumOps.FromDouble(cls)) == 0;
-
-                if (predicted) totalPredictedPositives++;
-                if (actual) totalActualPositives++;
-                if (predicted && actual) totalTruePositives++;
-            }
+            var counts = EvaluationTensorOps<T>.LabelCounts(predictions, actuals, cls);
+            totalPredictedPositives += counts.PredictedPositives;
+            totalActualPositives += counts.ActualPositives;
+            totalTruePositives += counts.TruePositives;
         }
 
         double precision = totalPredictedPositives > 0 ? (double)totalTruePositives / totalPredictedPositives : 0;
@@ -198,33 +188,6 @@ public class F1ScoreMetric<T> : IClassificationMetric<T>
         }
 
         return NumOps.FromDouble(2 * precision * recall / (precision + recall));
-    }
-
-    private static HashSet<double> GetUniqueClasses(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals)
-    {
-        var classes = new HashSet<double>();
-        for (int i = 0; i < predictions.Length; i++)
-        {
-            classes.Add(NumOps.ToDouble(predictions[i]));
-        }
-        for (int i = 0; i < actuals.Length; i++)
-        {
-            classes.Add(NumOps.ToDouble(actuals[i]));
-        }
-        return classes;
-    }
-
-    private static int CountClass(ReadOnlySpan<T> values, double cls)
-    {
-        int count = 0;
-        for (int i = 0; i < values.Length; i++)
-        {
-            if (NumOps.Compare(values[i], NumOps.FromDouble(cls)) == 0)
-            {
-                count++;
-            }
-        }
-        return count;
     }
 
     /// <inheritdoc/>
@@ -264,7 +227,7 @@ public class F1ScoreMetric<T> : IClassificationMetric<T>
             ? RandomHelper.CreateSeededRandom(randomSeed.Value)
             : RandomHelper.CreateSecureRandom();
 
-        var bootstrapValues = new double[bootstrapSamples];
+        var bootstrapValues = new List<T>(bootstrapSamples);
         var predArray = predictions.ToArray();
         var actualArray = actuals.ToArray();
 
@@ -280,10 +243,8 @@ public class F1ScoreMetric<T> : IClassificationMetric<T>
                 sampledActual[i] = actualArray[idx];
             }
 
-            bootstrapValues[b] = NumOps.ToDouble(Compute(sampledPred, sampledActual));
+            bootstrapValues.Add(Compute(sampledPred, sampledActual));
         }
-
-        Array.Sort(bootstrapValues);
 
         double alpha = 1 - confidenceLevel;
         int lowerIdx = (int)Math.Floor(alpha / 2 * bootstrapSamples);
@@ -292,6 +253,6 @@ public class F1ScoreMetric<T> : IClassificationMetric<T>
         lowerIdx = Math.Max(0, Math.Min(bootstrapSamples - 1, lowerIdx));
         upperIdx = Math.Max(0, Math.Min(bootstrapSamples - 1, upperIdx));
 
-        return (NumOps.FromDouble(bootstrapValues[lowerIdx]), NumOps.FromDouble(bootstrapValues[upperIdx]));
+        return EvaluationTensorOps<T>.OrderStatistics(bootstrapValues, lowerIdx, upperIdx);
     }
 }

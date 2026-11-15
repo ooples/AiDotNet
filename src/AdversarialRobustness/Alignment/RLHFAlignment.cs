@@ -5,6 +5,9 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.Safety;
+using AiDotNet.Safety.Benchmarking;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
@@ -40,6 +43,8 @@ namespace AiDotNet.AdversarialRobustness.Alignment;
 public class RLHFAlignment<T> : IAlignmentMethod<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    private static IEngine Engine => AiDotNetEngine.Current;
 
     private AlignmentMethodOptions<T> options;
     private Func<Vector<T>, Vector<T>, double>? rewardModel;
@@ -165,102 +170,19 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
     }
 
     /// <inheritdoc/>
-    public RedTeamingResults<T> PerformRedTeaming(IPredictiveModel<T, Vector<T>, Vector<T>> model, Matrix<T> adversarialPrompts)
+    public RedTeamingResults PerformRedTeaming(Func<string, string> model, SafetyPipeline<T> pipeline)
     {
         if (model == null)
         {
             throw new ArgumentNullException(nameof(model));
         }
 
-        if (adversarialPrompts == null)
+        if (pipeline == null)
         {
-            throw new ArgumentNullException(nameof(adversarialPrompts));
+            throw new ArgumentNullException(nameof(pipeline));
         }
 
-        if (adversarialPrompts.Rows == 0)
-        {
-            return new RedTeamingResults<T>
-            {
-                AdversarialPrompts = adversarialPrompts,
-                ModelResponses = Matrix<T>.Empty(),
-                SuccessfulAttacks = Array.Empty<bool>(),
-                SeverityScores = Array.Empty<double>(),
-                VulnerabilityTypes = Array.Empty<string>(),
-                Vulnerabilities = new List<VulnerabilityReport>(),
-                SuccessRate = 0.0,
-                AverageSeverity = 0.0
-            };
-        }
-
-        var firstResponse = model.Predict(adversarialPrompts.GetRow(0));
-        var responseLength = firstResponse.Length;
-        var modelResponses = new Matrix<T>(adversarialPrompts.Rows, responseLength);
-        modelResponses.SetRow(0, firstResponse);
-
-        var results = new RedTeamingResults<T>
-        {
-            AdversarialPrompts = adversarialPrompts,
-            ModelResponses = modelResponses,
-            SuccessfulAttacks = new bool[adversarialPrompts.Rows],
-            SeverityScores = new double[adversarialPrompts.Rows],
-            VulnerabilityTypes = new string[adversarialPrompts.Rows],
-            Vulnerabilities = new List<VulnerabilityReport>()
-        };
-
-        int successfulAttacks = 0;
-        double totalSeverity = 0.0;
-
-        for (int i = 0; i < adversarialPrompts.Rows; i++)
-        {
-            Vector<T> response;
-            if (i == 0)
-            {
-                response = firstResponse;
-            }
-            else
-            {
-                response = model.Predict(adversarialPrompts.GetRow(i));
-                if (response.Length != responseLength)
-                {
-                    throw new InvalidOperationException("Model output length must be consistent across prompts.");
-                }
-
-                modelResponses.SetRow(i, response);
-            }
-
-            // Analyze response for misalignment
-            var (isVulnerable, severity, vulnType) = AnalyzeResponseForVulnerability(response);
-
-            results.SuccessfulAttacks[i] = isVulnerable;
-            results.SeverityScores[i] = severity;
-            results.VulnerabilityTypes[i] = vulnType;
-
-            if (isVulnerable)
-            {
-                successfulAttacks++;
-                totalSeverity += severity;
-
-                results.Vulnerabilities.Add(new VulnerabilityReport
-                {
-                    Type = vulnType,
-                    Severity = severity,
-                    Description = $"Model showed misaligned behavior of type: {vulnType}",
-                    ExamplePrompt = ConvertToString(adversarialPrompts.GetRow(i)),
-                    ProblematicResponse = ConvertToString(response),
-                    Recommendations = new[]
-                    {
-                        "Add safety filters",
-                        "Improve RLHF training data",
-                        "Strengthen constitutional principles"
-                    }
-                });
-            }
-        }
-
-        results.SuccessRate = (double)successfulAttacks / adversarialPrompts.Rows;
-        results.AverageSeverity = successfulAttacks > 0 ? totalSeverity / successfulAttacks : 0.0;
-
-        return results;
+        return SafetyRedTeamer.RedTeamModel(model, pipeline, options);
     }
 
     /// <inheritdoc/>
@@ -382,31 +304,81 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
         }
     }
 
+    /// <summary>
+    /// Fits a Bradley-Terry reward model to the preference pairs (Christiano et al. 2017; Ouyang et al. 2022, eq. 1).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The reward is linear in the response, r(x, y) = w . y, and w maximizes the preference log-likelihood
+    /// sum log sigmoid(r(y_preferred) - r(y_rejected)) by <see cref="AlignmentMethodOptions{T}.TrainingIterations"/>
+    /// full-batch gradient-ascent steps of size <see cref="AlignmentMethodOptions{T}.RewardModelLearningRate"/>. Without
+    /// preference pairs the reward is zero, so alignment leaves the model's distribution unchanged. The reward scores
+    /// responses of the width of <c>AlignmentFeedbackData.Outputs</c> only: a response of another width is an error,
+    /// not truncated or zero-padded.
+    /// </para>
+    /// </remarks>
     private Func<Vector<T>, Vector<T>, double> TrainRewardModel(AlignmentFeedbackData<T> feedbackData)
     {
-        // Train a reward model from human preference comparisons
-        // This is a simplified placeholder - real implementation would use neural networks
+        Guard.NotNull(feedbackData);
+        var pairs = feedbackData.Preferences ?? Array.Empty<(int preferred, int notPreferred)>();
+        int dimension = feedbackData.Outputs.Columns;
+        if (pairs.Length == 0 || dimension == 0)
+        {
+            return (input, output) => 0.0;
+        }
 
+        if (double.IsNaN(options.RewardModelLearningRate) || double.IsInfinity(options.RewardModelLearningRate)
+            || options.RewardModelLearningRate <= 0)
+        {
+            throw new InvalidOperationException(
+                $"AlignmentMethodOptions.RewardModelLearningRate must be positive and finite (was {options.RewardModelLearningRate}).");
+        }
+
+        if (!feedbackData.ValidatePreferences())
+        {
+            throw new ArgumentException("A preference pair indexes a row outside AlignmentFeedbackData.Outputs.", nameof(feedbackData));
+        }
+
+        // D = Y_preferred - Y_rejected, one row per pair.
+        var outputs = Tensor<T>.FromMatrix(feedbackData.Outputs);
+        var preferred = Engine.TensorIndexSelect(outputs, new Tensor<int>(pairs.Select(p => p.preferred).ToArray(), new[] { pairs.Length }), 0);
+        var rejected = Engine.TensorIndexSelect(outputs, new Tensor<int>(pairs.Select(p => p.notPreferred).ToArray(), new[] { pairs.Length }), 0);
+        var differences = Engine.TensorSubtract(preferred, rejected);
+        var differencesT = Engine.TensorTranspose(differences);
+        var weights = new Tensor<T>(new[] { dimension, 1 });
+        T step = NumOps.FromDouble(options.RewardModelLearningRate / pairs.Length);
+
+        for (int iteration = 0; iteration < options.TrainingIterations; iteration++)
+        {
+            // d/dw sum log sigmoid(D w) = D^T (1 - sigmoid(D w)).
+            var margins = Engine.TensorMatMul(differences, weights);
+            var residual = Engine.TensorAddScalar(Engine.TensorNegate(Engine.TensorSigmoid(margins)), NumOps.One);
+            var gradient = Engine.TensorMatMul(differencesT, residual);
+            weights = Engine.TensorAdd(weights, Engine.TensorMultiplyScalar(gradient, step));
+        }
+
+        var w = Engine.Reshape(weights, new[] { dimension });
         return (input, output) =>
         {
-            // Simple reward heuristic based on output characteristics
-            double sum = 0.0;
-            for (int i = 0; i < output.Length; i++)
+            if (output.Length != dimension)
             {
-                sum += NumOps.ToDouble(output[i]);
+                throw new InvalidOperationException(
+                    $"The reward model was fit on responses of width {dimension} (AlignmentFeedbackData.Outputs columns) " +
+                    $"but was asked to score one of width {output.Length}: the model's outputs and the feedback responses " +
+                    "must have the same width.");
             }
-            var outputMean = output.Length > 0 ? (sum / output.Length) : 0.0;
 
-            // Higher reward for moderate values (heuristic for "reasonable" outputs)
-            var reward = 1.0 - Math.Abs(outputMean - 0.5);
-            return MathHelper.Clamp(reward, 0.0, 1.0);
+            T mean = Engine.TensorMean(Engine.TensorMultiply(output.AsTensor(), w));
+            return NumOps.ToDouble(mean) * dimension;
         };
     }
 
+    /// <summary>
+    /// The aligned policy: the optimum of the KL-regularized RLHF objective, softmax(z + r / KLCoefficient), over the
+    /// reference model's output classes (see <see cref="KlRegularizedPolicy{T}"/>).
+    /// </summary>
     private IPredictiveModel<T, Vector<T>, Vector<T>> FinetuneWithRL(IPredictiveModel<T, Vector<T>, Vector<T>> baseModel, AlignmentFeedbackData<T> feedbackData, Func<Vector<T>, Vector<T>, double> rewardModelFunc)
     {
-        // Simplified PPO-like fine-tuning.
-        // Real implementation would integrate with a RL framework.
         _ = feedbackData;
         return new RlhfFineTunedPredictiveModel(baseModel, rewardModelFunc, options.KLCoefficient);
     }
@@ -438,16 +410,15 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
 
     private bool IsHarmless(Vector<T> output)
     {
-        // Check for harmful patterns (simplified)
-        double maxValue = double.NegativeInfinity;
-        double minValue = double.PositiveInfinity;
-        for (int i = 0; i < output.Length; i++)
+        // Check for harmful patterns (simplified): the output range is a heuristic for extremity.
+        if (output.Length == 0)
         {
-            var v = NumOps.ToDouble(output[i]);
-            if (v > maxValue) maxValue = v;
-            if (v < minValue) minValue = v;
+            return true;
         }
-        return (maxValue - minValue) < 0.9; // Heuristic for extremity
+
+        var values = output.AsTensor();
+        T range = NumOps.Subtract(Engine.TensorMaxValue(values), Engine.TensorMinValue(values));
+        return NumOps.LessThan(range, NumOps.FromDouble(0.9));
     }
 
     private bool IsHonest(Vector<T> output, Vector<T> input)
@@ -463,19 +434,16 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
         // strictly a structural sanity gate, not an honesty metric.
         if (output is null || output.Length == 0) return false;
 
-        bool anyFinite = false;
-        double absMax = 0.0;
-        double sumAbs = 0.0;
-        for (int i = 0; i < output.Length; i++)
-        {
-            double v = NumOps.ToDouble(output[i]);
-            if (double.IsNaN(v) || double.IsInfinity(v)) return false;
-            anyFinite = true;
-            double absV = Math.Abs(v);
-            if (absV > absMax) absMax = absV;
-            sumAbs += absV;
-        }
-        if (!anyFinite || sumAbs == 0.0) return false;
+        var outputTensor = output.AsTensor();
+        var finite = Engine.TensorWhere(Engine.TensorIsFinite(outputTensor), Engine.TensorOnesLike(outputTensor), Engine.TensorZerosLike(outputTensor));
+        if (NumOps.LessThan(Engine.TensorMinValue(finite), NumOps.One)) return false;
+        var magnitudes = Engine.TensorAbs(outputTensor);
+        double absMax = NumOps.ToDouble(Engine.TensorMaxValue(magnitudes));
+        // Summed in double: in Half four magnitudes of 32768 already sum past 65504, and an infinite sum let a
+        // saturated output pass the engagement check below.
+        double sumAbs = Engine.TensorSum(magnitudes.Cast<double>());
+        // A sum of magnitudes is never negative, so this is the all-zero output (NaN still falls through).
+        if (sumAbs <= 0.0) return false;
 
         // Input-conditioned engagement: an output uncorrelated with the input
         // (cosine ≈ 0) and saturated to one extreme is a tell-tale "ignore the
@@ -522,62 +490,6 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
     // fires once per call rather than once per process lifetime.
     private bool _hasLoggedNonComparableHonestyWarning;
 
-    private (bool isVulnerable, double severity, string type) AnalyzeResponseForVulnerability(Vector<T> response)
-    {
-        // Analyze response for potential misalignment
-        double sum = 0.0;
-        for (int i = 0; i < response.Length; i++)
-        {
-            sum += NumOps.ToDouble(response[i]);
-        }
-        var mean = response.Length > 0 ? (sum / response.Length) : 0.0;
-
-        double varianceSum = 0.0;
-        for (int i = 0; i < response.Length; i++)
-        {
-            var delta = NumOps.ToDouble(response[i]) - mean;
-            varianceSum += delta * delta;
-        }
-        var variance = response.Length > 0 ? (varianceSum / response.Length) : 0.0;
-
-        if (variance > 0.3)
-        {
-            return (true, 0.7, "HighVariance");
-        }
-
-        if (mean < 0.2 || mean > 0.8)
-        {
-            return (true, 0.6, "ExtremeBias");
-        }
-
-        return (false, 0.0, "None");
-    }
-
-    private static string ConvertToString(Vector<T> data)
-    {
-        if (data == null || data.Length == 0)
-            return string.Empty;
-
-        var builder = new StringBuilder();
-        for (int i = 0; i < data.Length; i++)
-        {
-            if (i > 0)
-            {
-                builder.Append(',');
-            }
-
-            object? value = data[i];
-            builder.Append(value?.ToString() ?? string.Empty);
-        }
-
-        return builder.ToString();
-    }
-
-    private static T Clip01(T value)
-    {
-        return MathHelper.Clamp(value, NumOps.Zero, NumOps.One);
-    }
-
     private sealed class RlhfFineTunedPredictiveModel : IPredictiveModel<T, Vector<T>, Vector<T>>
     {
         private readonly IPredictiveModel<T, Vector<T>, Vector<T>> _baseModel;
@@ -595,21 +507,7 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
 
         public Vector<T> Predict(Vector<T> input)
         {
-            var output = _baseModel.Predict(input);
-
-            // Apply KL penalty to stay close to base model (placeholder, kept for future integration).
-            _ = _klCoefficient;
-
-            var reward = _rewardModel(input, output);
-            var adjusted = new Vector<T>(output.Length);
-            var adjustment = NumOps.FromDouble(reward * 0.1);
-
-            for (int i = 0; i < output.Length; i++)
-            {
-                adjusted[i] = Clip01(NumOps.Add(output[i], adjustment));
-            }
-
-            return adjusted;
+            return KlRegularizedPolicy<T>.Apply(input, _baseModel.Predict(input), _rewardModel, _klCoefficient);
         }
 
         public ModelMetadata<T> GetModelMetadata()

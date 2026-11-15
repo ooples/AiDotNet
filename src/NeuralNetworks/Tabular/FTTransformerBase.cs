@@ -303,44 +303,23 @@ public abstract class FTTransformerBase<T> : IParameterSource<T>
     public virtual Vector<T> GetParameters()
     {
         MaterializeParameterComponents();
-        var allParams = new List<T>();
 
-        // Tokenizer parameters
-        var tokenizerParams = Tokenizer.GetParameters();
-        for (int i = 0; i < tokenizerParams.Length; i++)
-        {
-            allParams.Add(tokenizerParams[i]);
-        }
-
-        // Encoder layer parameters
+        // Tokenizer, encoder layers, final layer norm, then the subclass head, in the same
+        // order ParameterCount and SetParameters use.
+        var parts = new List<Vector<T>> { Tokenizer.GetParameters() };
         foreach (var layer in EncoderLayers)
         {
-            var layerParams = layer.GetParameters();
-            for (int i = 0; i < layerParams.Length; i++)
-            {
-                allParams.Add(layerParams[i]);
-            }
+            parts.Add(layer.GetParameters());
         }
 
-        // Final layer norm parameters
-        var normParams = FinalLayerNorm.GetParameters();
-        for (int i = 0; i < normParams.Length; i++)
-        {
-            allParams.Add(normParams[i]);
-        }
-
-        // Subclass head, last, in the same position ParameterCount and SetParameters put it.
+        parts.Add(FinalLayerNorm.GetParameters());
         foreach (var extra in GetExtraTrainableLayers())
         {
             if (extra is null) continue;
-            var extraParams = extra.GetParameters();
-            for (int i = 0; i < extraParams.Length; i++)
-            {
-                allParams.Add(extraParams[i]);
-            }
+            parts.Add(extra.GetParameters());
         }
 
-        return new Vector<T>([.. allParams]);
+        return Vector<T>.Concatenate(parts);
     }
 
     /// <summary>
@@ -353,35 +332,20 @@ public abstract class FTTransformerBase<T> : IParameterSource<T>
 
         // Tokenizer parameters
         int tokenizerCount = checked((int)Tokenizer.ParameterCount);
-        var tokenizerParams = new Vector<T>(tokenizerCount);
-        for (int i = 0; i < tokenizerCount; i++)
-        {
-            tokenizerParams[i] = parameters[offset + i];
-        }
-        Tokenizer.SetParameters(tokenizerParams);
+        Tokenizer.SetParameters(parameters.GetSubVector(offset, tokenizerCount));
         offset += tokenizerCount;
 
         // Encoder layer parameters
         foreach (var layer in EncoderLayers)
         {
             int layerCount = checked((int)layer.ParameterCount);
-            var layerParams = new Vector<T>(layerCount);
-            for (int i = 0; i < layerCount; i++)
-            {
-                layerParams[i] = parameters[offset + i];
-            }
-            layer.SetParameters(layerParams);
+            layer.SetParameters(parameters.GetSubVector(offset, layerCount));
             offset += layerCount;
         }
 
         // Final layer norm parameters
         int normCount = checked((int)FinalLayerNorm.ParameterCount);
-        var normParams = new Vector<T>(normCount);
-        for (int i = 0; i < normCount; i++)
-        {
-            normParams[i] = parameters[offset + i];
-        }
-        FinalLayerNorm.SetParameters(normParams);
+        FinalLayerNorm.SetParameters(parameters.GetSubVector(offset, normCount));
         offset += normCount;
 
         // Subclass head, last, matching GetParameters and ParameterCount.
@@ -389,12 +353,7 @@ public abstract class FTTransformerBase<T> : IParameterSource<T>
         {
             if (extra is null) continue;
             int extraCount = checked((int)extra.ParameterCount);
-            var extraParams = new Vector<T>(extraCount);
-            for (int i = 0; i < extraCount; i++)
-            {
-                extraParams[i] = parameters[offset + i];
-            }
-            extra.SetParameters(extraParams);
+            extra.SetParameters(parameters.GetSubVector(offset, extraCount));
             offset += extraCount;
         }
     }
@@ -404,33 +363,15 @@ public abstract class FTTransformerBase<T> : IParameterSource<T>
     /// </summary>
     public virtual Vector<T> GetParameterGradients()
     {
-        var allGrads = new List<T>();
-
-        // Tokenizer gradients
-        var tokenizerGrads = Tokenizer.GetParameterGradients();
-        for (int i = 0; i < tokenizerGrads.Length; i++)
-        {
-            allGrads.Add(tokenizerGrads[i]);
-        }
-
-        // Encoder layer gradients
+        // Tokenizer, encoder layers, then the final layer norm.
+        var parts = new List<Vector<T>> { Tokenizer.GetParameterGradients() };
         foreach (var layer in EncoderLayers)
         {
-            var layerGrads = layer.GetParameterGradients();
-            for (int i = 0; i < layerGrads.Length; i++)
-            {
-                allGrads.Add(layerGrads[i]);
-            }
+            parts.Add(layer.GetParameterGradients());
         }
 
-        // Final layer norm gradients
-        var normGrads = FinalLayerNorm.GetParameterGradients();
-        for (int i = 0; i < normGrads.Length; i++)
-        {
-            allGrads.Add(normGrads[i]);
-        }
-
-        return new Vector<T>([.. allGrads]);
+        parts.Add(FinalLayerNorm.GetParameterGradients());
+        return Vector<T>.Concatenate(parts);
     }
 
     /// <summary>
@@ -487,11 +428,7 @@ public abstract class FTTransformerBase<T> : IParameterSource<T>
         // This is a simplified version - actual implementation would aggregate attention
         // weights from the [CLS] token to each feature token across all layers
         var importance = new Vector<T>(NumFeatures);
-        var equalWeight = NumOps.FromDouble(1.0 / NumFeatures);
-        for (int i = 0; i < NumFeatures; i++)
-        {
-            importance[i] = equalWeight;
-        }
+        importance.Fill(NumOps.FromDouble(1.0 / NumFeatures));
         return importance;
     }
 

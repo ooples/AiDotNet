@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.MultiObjective;
 
@@ -28,13 +29,13 @@ public class MOEADSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
     private readonly int _nGenerations;
     private readonly int _neighborhoodSize;
 
-    private double[]? _featureImportances;
+    private Vector<T>? _featureImportances;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FeatureImportances => _featureImportances;
+    public Vector<T>? FeatureImportances => _featureImportances;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -50,6 +51,10 @@ public class MOEADSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
     {
         if (nFeaturesToSelect < 1)
             throw new ArgumentException("Number of features must be at least 1.", nameof(nFeaturesToSelect));
+        if (populationSize < 2)
+            throw new ArgumentException("Population size must be at least 2 to spread the weight vectors.", nameof(populationSize));
+        if (neighborhoodSize < 1)
+            throw new ArgumentException("Neighborhood size must be at least 1.", nameof(neighborhoodSize));
 
         _nFeaturesToSelect = nFeaturesToSelect;
         _populationSize = populationSize;
@@ -71,186 +76,176 @@ public class MOEADSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
+        var engine = Engine;
 
         var rand = RandomHelper.CreateSecureRandom();
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var scores = PopulationSearchOps.AbsTargetCorrelations(data, target, NumOps.Zero);
 
-        // Generate weight vectors
-        var weights = new double[_populationSize, 2];
-        for (int i = 0; i < _populationSize; i++)
-        {
-            weights[i, 0] = (double)i / (_populationSize - 1);
-            weights[i, 1] = 1.0 - weights[i, 0];
-        }
+        // Evenly spread weight vectors (i / (N - 1), 1 - i / (N - 1))
+        var weights = WeightVectors(_populationSize);
 
-        // Compute neighborhoods
-        var neighborhoods = ComputeNeighborhoods(weights);
+        // Compute neighborhoods: the T weight vectors closest to each one (itself included)
+        var neighborhoods = ComputeNeighborhoods(weights, Math.Min(_neighborhoodSize, _populationSize));
 
         // Initialize population
-        var population = new bool[_populationSize][];
-        var objectives = new (double acc, double nFeat)[_populationSize];
-        for (int i = 0; i < _populationSize; i++)
-        {
-            population[i] = new bool[p];
-            int numToSelect = rand.Next(1, Math.Min(p, _nFeaturesToSelect) + 1);
-            var indices = Enumerable.Range(0, p).OrderBy(_ => rand.Next()).Take(numToSelect);
-            foreach (int idx in indices) population[i][idx] = true;
-            objectives[i] = EvaluateObjectives(X, y, population[i], n, p);
-        }
+        var population = ParetoOps.RandomSubsets<T>(rand, _populationSize, p, _nFeaturesToSelect);
+        var (accuracy, featureCount) = EvaluateObjectives(population, scores);
 
         // Reference point
-        double zAcc = objectives.Max(o => o.acc);
-        double zFeat = objectives.Min(o => o.nFeat);
+        var zAcc = ParetoOps.Max(accuracy);
+        var zFeat = ParetoOps.Min(featureCount);
 
-        // MOEA/D main loop
+        // MOEA/D main loop (Zhang and Li 2007)
         for (int gen = 0; gen < _nGenerations; gen++)
         {
             for (int i = 0; i < _populationSize; i++)
             {
                 // Select parents from neighborhood
-                int p1 = neighborhoods[i, rand.Next(_neighborhoodSize)];
-                int p2 = neighborhoods[i, rand.Next(_neighborhoodSize)];
+                var neighbors = neighborhoods[i];
+                int p1 = neighbors[rand.Next(neighbors.Length)];
+                int p2 = neighbors[rand.Next(neighbors.Length)];
 
                 // Crossover and mutation
-                var child = Crossover(population[p1], population[p2], p, rand);
-                Mutate(child, p, rand);
-
-                var childObj = EvaluateObjectives(X, y, child, n, p);
+                var child = ParetoOps.EnsureNonEmpty(
+                    ParetoOps.OnePointCrossover(
+                        PopulationSearchOps.Row(population, p1), PopulationSearchOps.Row(population, p2), rand.Next(1, p)),
+                    rand);
+                child = ParetoOps.EnsureNonEmpty(ParetoOps.BitFlip(child, PopulationSearchOps.Uniform<T>(rand, p), 0.1), rand);
+                var (childAcc, childFeat) = EvaluateObjectives(engine.Reshape(child, new[] { 1, p }), scores);
 
                 // Update reference point
-                zAcc = Math.Max(zAcc, childObj.acc);
-                zFeat = Math.Min(zFeat, childObj.nFeat);
+                zAcc = engine.TensorMax(zAcc, childAcc);
+                zFeat = engine.TensorMin(zFeat, childFeat);
 
-                // Update neighbors
-                foreach (int j in Enumerable.Range(0, _neighborhoodSize).Select(k => neighborhoods[i, k]))
-                {
-                    double childScalar = ComputeTchebycheff(childObj, weights, j, zAcc, zFeat);
-                    double currentScalar = ComputeTchebycheff(objectives[j], weights, j, zAcc, zFeat);
+                // Update neighbors whose Tchebycheff value the child improves
+                var index = new Tensor<int>((int[])neighbors.Clone(), new[] { neighbors.Length });
+                var neighborWeights = engine.TensorIndexSelect(weights, index, 0);
+                var childScalar = Tchebycheff(
+                    engine.TensorBroadcastTo(childAcc, new[] { neighbors.Length }),
+                    engine.TensorBroadcastTo(childFeat, new[] { neighbors.Length }),
+                    neighborWeights, zAcc, zFeat);
+                var currentScalar = Tchebycheff(
+                    engine.TensorIndexSelect(accuracy, index, 0), engine.TensorIndexSelect(featureCount, index, 0),
+                    neighborWeights, zAcc, zFeat);
+                var improved = PreprocessingTensorOps.MaskPositions(engine.TensorLessThan(childScalar, currentScalar));
+                if (improved.Length == 0)
+                    continue;
 
-                    if (childScalar < currentScalar)
-                    {
-                        population[j] = (bool[])child.Clone();
-                        objectives[j] = childObj;
-                    }
-                }
+                var replaced = new int[improved.Length];
+                for (int r = 0; r < improved.Length; r++)
+                    replaced[r] = neighbors[improved[r]];
+
+                population = PopulationSearchOps.ScatterRows(
+                    population, replaced,
+                    engine.TensorBroadcastTo(engine.Reshape(child, new[] { 1, p }), new[] { replaced.Length, p }));
+                accuracy = PopulationSearchOps.ScatterAt(
+                    accuracy, replaced, engine.TensorBroadcastTo(childAcc, new[] { replaced.Length }));
+                featureCount = PopulationSearchOps.ScatterAt(
+                    featureCount, replaced, engine.TensorBroadcastTo(childFeat, new[] { replaced.Length }));
             }
         }
 
         // Track feature importance
-        _featureImportances = new double[p];
-        for (int i = 0; i < _populationSize; i++)
-            for (int j = 0; j < p; j++)
-                if (population[i][j])
-                    _featureImportances[j] += objectives[i].acc;
+        var importances = engine.Reshape(
+            engine.TensorMatMul(engine.TensorTranspose(population), engine.Reshape(accuracy, new[] { _populationSize, 1 })),
+            new[] { p });
+        _featureImportances = importances.ToVector();
 
-        // Select best solution
-        int bestIdx = FindBestSolution(objectives, weights, zAcc, zFeat);
-        _selectedIndices = Enumerable.Range(0, p)
-            .Where(j => population[bestIdx][j])
-            .Take(_nFeaturesToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        // Select best solution: the smallest Tchebycheff value under the middle weight vector
+        var middle = engine.TensorBroadcastTo(
+            PopulationSearchOps.Rows(weights, new[] { _populationSize / 2 }), new[] { _populationSize, 2 });
+        int bestIdx = PopulationSearchOps.ArgMin(Tchebycheff(accuracy, featureCount, middle, zAcc, zFeat));
+        _selectedIndices = CompleteSelection(
+            PopulationSearchOps.Row(population, bestIdx), scores, Math.Min(_nFeaturesToSelect, p));
 
         IsFitted = true;
     }
 
-    private int[,] ComputeNeighborhoods(double[,] weights)
+    /// <summary>
+    /// The features of the 0/1 solution <paramref name="best"/> [p], cut to the first <paramref name="count"/> or,
+    /// when it holds fewer, completed with the unselected features of highest <paramref name="scores"/> (ties to
+    /// the lower index), in ascending index order. The selector keeps a fixed number of columns, and neither the
+    /// initial subsets (1 to k features) nor crossover and bit-flip mutation keep a solution at k features.
+    /// </summary>
+    internal static int[] CompleteSelection(Tensor<T> best, Tensor<T> scores, int count)
     {
-        var neighborhoods = new int[_populationSize, _neighborhoodSize];
-        for (int i = 0; i < _populationSize; i++)
-        {
-            var distances = Enumerable.Range(0, _populationSize)
-                .Select(j => (j, Math.Sqrt(Math.Pow(weights[i, 0] - weights[j, 0], 2) + Math.Pow(weights[i, 1] - weights[j, 1], 2))))
-                .OrderBy(x => x.Item2)
-                .Take(_neighborhoodSize)
-                .ToList();
+        var chosen = PreprocessingTensorOps.MaskPositions(best);
+        if (chosen.Length >= count)
+            return chosen.Take(count).ToArray();
 
-            for (int k = 0; k < _neighborhoodSize; k++)
-                neighborhoods[i, k] = distances[k].j;
+        var taken = new HashSet<int>(chosen);
+        var completed = chosen
+            .Concat(PreprocessingTensorOps.StableOrder(scores, descending: true).Where(j => !taken.Contains(j)))
+            .Take(count)
+            .ToArray();
+        Array.Sort(completed);
+        return completed;
+    }
+
+    /// <summary>The weight vectors [N, 2] with rows (i / (N - 1), 1 - i / (N - 1)).</summary>
+    internal static Tensor<T> WeightVectors(int count)
+    {
+        var engine = AiDotNetEngine.Current;
+        // i / (N - 1) formed in double and rounded to T once: in Half the positions past 2048 are not exact (2999
+        // rounds to 3000), which pushed the last weight past 1 and its complement below 0
+        var first = engine.TensorDivideScalar(engine.TensorArange<double>(0, count, 1), count - 1.0).Cast<T>();
+        return engine.TensorConcatenate(
+            new[]
+            {
+                engine.Reshape(first, new[] { count, 1 }),
+                engine.Reshape(PreprocessingTensorOps.OneMinus(first), new[] { count, 1 }),
+            },
+            1);
+    }
+
+    /// <summary>For each weight vector, the indices of the <paramref name="size"/> closest ones (stable order).</summary>
+    private static int[][] ComputeNeighborhoods(Tensor<T> weights, int size)
+    {
+        int count = weights.Shape[0];
+        var distances = FeatureSelectionTensorOps.PairwiseDistances(weights);
+        var neighborhoods = new int[count][];
+        for (int i = 0; i < count; i++)
+        {
+            neighborhoods[i] = PreprocessingTensorOps.StableOrder(PopulationSearchOps.Row(distances, i), descending: false)
+                .Take(size)
+                .ToArray();
         }
+
         return neighborhoods;
     }
 
-    private (double acc, double nFeat) EvaluateObjectives(double[,] X, double[] y, bool[] selected, int n, int p)
+    /// <summary>
+    /// The two objectives of every row of a 0/1 mask [m, p]: the mean absolute target correlation of the selected
+    /// features (to maximize) and the number of selected features (to minimize); an empty row scores (0, p).
+    /// </summary>
+    internal static (Tensor<T> Accuracy, Tensor<T> FeatureCount) EvaluateObjectives(Tensor<T> masks, Tensor<T> scores)
     {
-        var indices = Enumerable.Range(0, p).Where(j => selected[j]).ToList();
-        if (indices.Count == 0) return (0, p);
-
-        double acc = ComputeCorrelationScore(X, y, indices, n);
-        return (acc, indices.Count);
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int m = masks.Shape[0];
+        // counted in int: a 0/1 sum in T stops counting at 2048 for Half
+        var count = engine.ReduceSum(masks.Cast<int>(), new[] { 1 }, false).Cast<T>();
+        var emptyCount = PreprocessingTensorOps.Filled(new[] { m }, ops.FromDouble(masks.Shape[1]));
+        return (PopulationSearchOps.SubsetFitness(masks, scores, 0, ops.Zero, ops.Zero),
+                engine.TensorWhere(engine.TensorGreaterThan(count, ops.Zero), count, emptyCount));
     }
 
-    private double ComputeCorrelationScore(double[,] X, double[] y, List<int> features, int n)
+    /// <summary>
+    /// The Tchebycheff scalarization max(w1 |z_acc - acc|, w2 |features - z_feat|) of each solution with the
+    /// weight vector of the same row of <paramref name="weights"/> [m, 2].
+    /// </summary>
+    internal static Tensor<T> Tchebycheff(
+        Tensor<T> accuracy, Tensor<T> featureCount, Tensor<T> weights, Tensor<T> zAcc, Tensor<T> zFeat)
     {
-        double yMean = y.Average();
-        double totalScore = 0;
-
-        foreach (int j in features)
-        {
-            double xMean = 0;
-            for (int i = 0; i < n; i++) xMean += X[i, j];
-            xMean /= n;
-
-            double sxy = 0, sxx = 0, syy = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double xDiff = X[i, j] - xMean;
-                double yDiff = y[i] - yMean;
-                sxy += xDiff * yDiff;
-                sxx += xDiff * xDiff;
-                syy += yDiff * yDiff;
-            }
-
-            totalScore += (sxx > 1e-10 && syy > 1e-10) ? Math.Abs(sxy / Math.Sqrt(sxx * syy)) : 0;
-        }
-
-        return totalScore / features.Count;
-    }
-
-    private double ComputeTchebycheff((double acc, double nFeat) obj, double[,] weights, int idx, double zAcc, double zFeat)
-    {
-        double d1 = weights[idx, 0] * Math.Abs(zAcc - obj.acc);
-        double d2 = weights[idx, 1] * Math.Abs(obj.nFeat - zFeat);
-        return Math.Max(d1, d2);
-    }
-
-    private bool[] Crossover(bool[] p1, bool[] p2, int p, Random rand)
-    {
-        var child = new bool[p];
-        int point = rand.Next(1, p);
-        for (int i = 0; i < p; i++)
-            child[i] = i < point ? p1[i] : p2[i];
-        if (!child.Any(x => x)) child[rand.Next(p)] = true;
-        return child;
-    }
-
-    private void Mutate(bool[] individual, int p, Random rand)
-    {
-        for (int i = 0; i < p; i++)
-            if (rand.NextDouble() < 0.1)
-                individual[i] = !individual[i];
-        if (!individual.Any(x => x)) individual[rand.Next(p)] = true;
-    }
-
-    private int FindBestSolution((double acc, double nFeat)[] objectives, double[,] weights, double zAcc, double zFeat)
-    {
-        int best = 0;
-        double bestScore = double.MaxValue;
-        for (int i = 0; i < _populationSize; i++)
-        {
-            double score = ComputeTchebycheff(objectives[i], weights, _populationSize / 2, zAcc, zFeat);
-            if (score < bestScore) { bestScore = score; best = i; }
-        }
-        return best;
+        var engine = AiDotNetEngine.Current;
+        int m = accuracy.Length;
+        var shape = new[] { m };
+        var w1 = engine.Reshape(engine.TensorSlice(weights, new[] { 0, 0 }, new[] { m, 1 }), shape);
+        var w2 = engine.Reshape(engine.TensorSlice(weights, new[] { 0, 1 }, new[] { m, 1 }), shape);
+        var d1 = engine.TensorMultiply(w1, engine.TensorAbs(engine.TensorSubtract(engine.TensorBroadcastTo(zAcc, shape), accuracy)));
+        var d2 = engine.TensorMultiply(w2, engine.TensorAbs(engine.TensorSubtract(featureCount, engine.TensorBroadcastTo(zFeat, shape))));
+        return engine.TensorMax(d1, d2);
     }
 
     /// <inheritdoc />
@@ -266,15 +261,7 @@ public class MOEADSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         if (_selectedIndices is null)
             throw new InvalidOperationException("MOEADSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

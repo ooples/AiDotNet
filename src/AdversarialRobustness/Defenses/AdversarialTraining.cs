@@ -48,31 +48,53 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private AdversarialDefenseOptions<T> options;
-    private readonly IAdversarialAttack<T, TInput, TOutput> attackMethod;
+    private readonly IAdversarialAttack<T, TInput, TOutput>? customAttack;
 
     /// <summary>
-    /// Initializes a new instance of adversarial training.
+    /// Initializes a new instance of adversarial training that generates its training examples with
+    /// <see cref="AdversarialDefenseOptions{T}.AttackMethod"/>.
     /// </summary>
     /// <param name="options">The defense configuration options.</param>
     public AdversarialTraining(AdversarialDefenseOptions<T> options)
     {
         Guard.NotNull(options);
         this.options = options;
-
-        // Initialize the attack method to use during training
-        var attackOptions = new AdversarialAttackOptions<T>
-        {
-            Epsilon = options.Epsilon,
-            StepSize = options.Epsilon / 4.0,
-            Iterations = 10,
-            UseRandomStart = true
-        };
-
-        // Use PGD attack as the default for adversarial training
-        attackMethod = new PGDAttack<T, TInput, TOutput>(attackOptions);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Initializes a new instance of adversarial training that generates its training examples with a custom attack.
+    /// </summary>
+    /// <param name="options">The defense configuration options.</param>
+    /// <param name="trainingAttack">The attack that replaces <see cref="AdversarialDefenseOptions{T}.AttackMethod"/>.</param>
+    public AdversarialTraining(AdversarialDefenseOptions<T> options, IAdversarialAttack<T, TInput, TOutput> trainingAttack)
+        : this(options)
+    {
+        Guard.NotNull(trainingAttack);
+        customAttack = trainingAttack;
+    }
+
+    /// <summary>
+    /// Adversarially trains <paramref name="model"/> (or an ensemble of copies of it) and wraps the result with the
+    /// configured preprocessing defense.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For <see cref="AdversarialDefenseOptions{T}.TrainingEpochs"/> epochs the data is shuffled and split into
+    /// mini-batches of <see cref="AdversarialDefenseOptions{T}.BatchSize"/>. In each batch the first
+    /// round(<see cref="AdversarialDefenseOptions{T}.AdversarialRatio"/> * size) samples are replaced by adversarial
+    /// examples generated against the current model (Madry et al. 2018; mixed clean and adversarial batches per
+    /// Goodfellow et al. 2015). A model that computes gradients takes one step of
+    /// <see cref="AdversarialDefenseOptions{T}.LearningRate"/> on the batch-mean gradient; any other model is
+    /// trained once per epoch on the stacked mixed epoch (matrix rows or tensor slices), or sample by sample through
+    /// its own <c>Train</c> for other input types.
+    /// </para>
+    /// <para>
+    /// With <see cref="AdversarialDefenseOptions{T}.UseEnsemble"/> the procedure runs on
+    /// <see cref="AdversarialDefenseOptions{T}.EnsembleSize"/> deep copies, each with its own shuffling and attack
+    /// random starts, and the returned model predicts the mean of their outputs. The returned model applies
+    /// <see cref="PreprocessInput"/> before every prediction.
+    /// </para>
+    /// </remarks>
     public IFullModel<T, TInput, TOutput> ApplyDefense(TInput[] trainingData, TOutput[] labels, IFullModel<T, TInput, TOutput> model)
     {
         if (model == null)
@@ -95,14 +117,203 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
             throw new ArgumentException("Number of labels must match number of training samples.", nameof(labels));
         }
 
-        // Training-time adversarial example augmentation requires integration with a trainer.
-        // For now, return a runtime defense wrapper that applies preprocessing before inference.
-        if (!options.UsePreprocessing)
+        ValidateOptions();
+
+        int memberCount = options.UseEnsemble ? options.EnsembleSize : 1;
+        var members = new IFullModel<T, TInput, TOutput>[memberCount];
+        int baseSeed = options.Seed ?? RandomHelper.CreateSecureRandom().Next();
+        for (int m = 0; m < memberCount; m++)
+        {
+            // Ensemble members are independent copies; a single model is trained in place, as before.
+            members[m] = options.UseEnsemble ? model.DeepCopy() : model;
+            Train(members[m], trainingData, labels, unchecked(baseSeed + 7919 * m));
+        }
+
+        if (!options.UseEnsemble && !options.UsePreprocessing)
         {
             return model;
         }
 
-        return new PreprocessingFullModel(model, this);
+        return new PreprocessingFullModel(members, this);
+    }
+
+    /// <summary>
+    /// Runs the mixed clean/adversarial training loop on one model.
+    /// </summary>
+    private void Train(IFullModel<T, TInput, TOutput> model, TInput[] trainingData, TOutput[] labels, int seed)
+    {
+        int n = trainingData.Length;
+        if (options.TrainingEpochs == 0 || n == 0)
+        {
+            return;
+        }
+
+        var random = RandomHelper.CreateSeededRandom(seed);
+        var attack = customAttack ?? CreateTrainingAttack(seed);
+        var gradientModel = model as IGradientComputable<T, TInput, TOutput>;
+        T learningRate = NumOps.FromDouble(options.LearningRate);
+        T fullBatch = NumOps.FromDouble(Math.Min(options.BatchSize, n));
+        T lastBatch = NumOps.FromDouble(n % options.BatchSize == 0 ? Math.Min(options.BatchSize, n) : n % options.BatchSize);
+        var order = Enumerable.Range(0, n).ToArray();
+
+        for (int epoch = 0; epoch < options.TrainingEpochs; epoch++)
+        {
+            Shuffle(order, random);
+            var epochInputs = new List<TInput>(gradientModel is null ? n : 0);
+            var epochLabels = new List<TOutput>(gradientModel is null ? n : 0);
+            for (int start = 0; start < n; start += options.BatchSize)
+            {
+                int size = Math.Min(options.BatchSize, n - start);
+                int adversarialCount = (int)Math.Round(options.AdversarialRatio * size, MidpointRounding.AwayFromZero);
+                Vector<T>? gradientSum = null;
+                for (int b = 0; b < size; b++)
+                {
+                    int index = order[start + b];
+                    var sample = b < adversarialCount
+                        ? attack.GenerateAdversarialExample(trainingData[index], labels[index], model)
+                        : trainingData[index];
+                    if (gradientModel is null)
+                    {
+                        epochInputs.Add(sample);
+                        epochLabels.Add(labels[index]);
+                        continue;
+                    }
+
+                    var gradient = gradientModel.ComputeGradients(sample, labels[index]);
+                    gradientSum = gradientSum is null ? gradient : Engine.Add<T>(gradientSum, gradient);
+                }
+
+                if (gradientModel is not null && gradientSum is not null)
+                {
+                    gradientModel.ApplyGradients(Engine.Divide<T>(gradientSum, size == options.BatchSize ? fullBatch : lastBatch), learningRate);
+                }
+            }
+
+            if (gradientModel is null)
+            {
+                TrainOnEpoch(model, epochInputs, epochLabels);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Trains a model without gradients on one epoch of mixed samples: one <c>Train</c> call on the stacked epoch when
+    /// the samples are matrix rows or tensor slices (so a model that refits from scratch, such as a closed-form
+    /// regression, fits the whole adversarially augmented epoch), otherwise one call per sample.
+    /// </summary>
+    private void TrainOnEpoch(IFullModel<T, TInput, TOutput> model, List<TInput> inputs, List<TOutput> labels)
+    {
+        if (inputs.Count == 0)
+        {
+            return;
+        }
+
+        var matrices = inputs.OfType<Matrix<T>>().ToArray();
+        var vectors = labels.OfType<Vector<T>>().ToArray();
+        if (matrices.Length == inputs.Count && vectors.Length == labels.Count)
+        {
+            int columns = matrices[0].Columns;
+            var stacked = new Matrix<T>(matrices.Sum(m => m.Rows), columns);
+            int row = 0;
+            foreach (var m in matrices)
+            {
+                for (int i = 0; i < m.Rows; i++)
+                {
+                    stacked.SetRow(row++, m.GetRow(i));
+                }
+            }
+
+            var targets = Engine.TensorConcatenate(vectors.Select(v => v.AsTensor()).ToArray(), 0).ToVector();
+            model.Train((TInput)(object)stacked, (TOutput)(object)targets);
+            return;
+        }
+
+        var tensors = inputs.OfType<Tensor<T>>().ToArray();
+        var tensorLabels = labels.OfType<Tensor<T>>().ToArray();
+        if (tensors.Length == inputs.Count && tensorLabels.Length == labels.Count)
+        {
+            model.Train((TInput)(object)Engine.TensorConcatenate(tensors, 0), (TOutput)(object)Engine.TensorConcatenate(tensorLabels, 0));
+            return;
+        }
+
+        for (int i = 0; i < inputs.Count; i++)
+        {
+            model.Train(inputs[i], labels[i]);
+        }
+    }
+
+    /// <summary>
+    /// The training attack named by <see cref="AdversarialDefenseOptions{T}.AttackMethod"/>: epsilon from the options,
+    /// step epsilon / 4, <see cref="AdversarialDefenseOptions{T}.AttackIterations"/> iterations, a random start.
+    /// </summary>
+    private IAdversarialAttack<T, TInput, TOutput> CreateTrainingAttack(int seed)
+    {
+        var attackOptions = new AdversarialAttackOptions<T>
+        {
+            Epsilon = options.Epsilon,
+            StepSize = options.Epsilon / 4.0,
+            Iterations = options.AttackIterations,
+            UseRandomStart = true,
+            RandomSeed = seed
+        };
+
+        return options.AttackMethod switch
+        {
+            AdversarialAttackMethod.Fgsm => new FGSMAttack<T, TInput, TOutput>(attackOptions),
+            AdversarialAttackMethod.Pgd => new PGDAttack<T, TInput, TOutput>(attackOptions),
+            AdversarialAttackMethod.CarliniWagner => new CWAttack<T, TInput, TOutput>(attackOptions),
+            AdversarialAttackMethod.AutoAttack => new AutoAttack<T, TInput, TOutput>(attackOptions),
+            _ => throw new InvalidOperationException(
+                $"AdversarialDefenseOptions.AttackMethod has the undefined value {(int)options.AttackMethod}.")
+        };
+    }
+
+    private static void Shuffle(int[] order, Random random)
+    {
+        for (int i = order.Length - 1; i > 0; i--)
+        {
+            int j = random.Next(i + 1);
+            (order[i], order[j]) = (order[j], order[i]);
+        }
+    }
+
+    private void ValidateOptions()
+    {
+        if (!(options.AdversarialRatio >= 0.0 && options.AdversarialRatio <= 1.0))
+        {
+            throw new InvalidOperationException(
+                $"AdversarialDefenseOptions.AdversarialRatio must lie in [0, 1] (was {options.AdversarialRatio}).");
+        }
+
+        if (options.TrainingEpochs < 0)
+        {
+            throw new InvalidOperationException(
+                $"AdversarialDefenseOptions.TrainingEpochs must not be negative (was {options.TrainingEpochs}).");
+        }
+
+        if (options.BatchSize < 1)
+        {
+            throw new InvalidOperationException(
+                $"AdversarialDefenseOptions.BatchSize must be at least 1 (was {options.BatchSize}).");
+        }
+
+        if (options.AttackIterations < 1)
+        {
+            throw new InvalidOperationException(
+                $"AdversarialDefenseOptions.AttackIterations must be at least 1 (was {options.AttackIterations}).");
+        }
+
+        if (!(options.LearningRate > 0.0 && !double.IsInfinity(options.LearningRate)))
+        {
+            throw new InvalidOperationException(
+                $"AdversarialDefenseOptions.LearningRate must be a positive finite number (was {options.LearningRate}).");
+        }
+
+        if (options.UseEnsemble && options.EnsembleSize < 1)
+        {
+            throw new InvalidOperationException(
+                $"AdversarialDefenseOptions.EnsembleSize must be at least 1 (was {options.EnsembleSize}).");
+        }
     }
 
     /// <inheritdoc/>
@@ -113,17 +324,19 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
             return input;
         }
 
-        // Apply preprocessing based on the method
         // Convert to vector for preprocessing, then convert back
         var vectorInput = ConversionsHelper.ConvertToVector<T, TInput>(input);
 
-        var preprocessed = options.PreprocessingMethod.ToLowerInvariant() switch
-        {
-            "jpeg" => ApplyJPEGCompression(vectorInput),
-            "bit_depth_reduction" => ApplyBitDepthReduction(vectorInput),
-            "denoising" => ApplyDenoising(vectorInput),
-            _ => vectorInput
-        };
+        var preprocessed = options.CustomPreprocessor is { } custom
+            ? custom.Preprocess(vectorInput)
+            : options.PreprocessingMethod switch
+            {
+                AdversarialPreprocessingMethod.JpegCompression => ApplyJPEGCompression(vectorInput),
+                AdversarialPreprocessingMethod.BitDepthReduction => ApplyBitDepthReduction(vectorInput),
+                AdversarialPreprocessingMethod.MedianSmoothing => ApplyMedianSmoothing(vectorInput, MedianImageLayout(input, vectorInput.Length)),
+                _ => throw new InvalidOperationException(
+                    $"AdversarialDefenseOptions.PreprocessingMethod has the undefined value {(int)options.PreprocessingMethod}.")
+            };
 
         return ConversionsHelper.ConvertVectorToInput<T, TInput>(preprocessed, input);
     }
@@ -163,7 +376,7 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
         var metrics = new RobustnessMetrics<T>();
         int cleanCorrect = 0;
         int adversarialCorrect = 0;
-        var perturbationSizes = new List<double>();
+        var perturbationSizes = new List<T>();
 
         for (int i = 0; i < testData.Length; i++)
         {
@@ -184,40 +397,30 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
                 cleanCorrect++;
             }
 
-            // Generate and evaluate on adversarial example
-            try
-            {
-                var adversarial = attack.GenerateAdversarialExample(input, label, model);
-                var advOutput = model.Predict(adversarial);
-                var advOutputVector = ConversionsHelper.ConvertToVector<T, TOutput>(advOutput);
-                var advPrediction = ArgMaxVector(advOutputVector);
+            // Generate and evaluate on adversarial example. A failing attack propagates its exception: counting
+            // it as a successful defense would overstate the robustness.
+            var adversarial = attack.GenerateAdversarialExample(input, label, model);
+            var advOutput = model.Predict(adversarial);
+            var advOutputVector = ConversionsHelper.ConvertToVector<T, TOutput>(advOutput);
+            var advPrediction = ArgMaxVector(advOutputVector);
 
-                if (advPrediction == trueClass)
-                {
-                    adversarialCorrect++;
-                }
-
-                // Calculate perturbation size using vectorized operations
-                var adversarialVector = ConversionsHelper.ConvertToVector<T, TInput>(adversarial);
-                var perturbation = Engine.Subtract<T>(adversarialVector, inputVector);
-                var l2Norm = Engine.Norm<T>(perturbation);
-                perturbationSizes.Add(NumOps.ToDouble(l2Norm));
-            }
-            catch (ArgumentException)
+            if (advPrediction == trueClass)
             {
-                // Count as defended if attack fails
                 adversarialCorrect++;
             }
-            catch (InvalidOperationException)
-            {
-                // Count as defended if attack fails
-                adversarialCorrect++;
-            }
+
+            // Calculate perturbation size using vectorized operations
+            var adversarialVector = ConversionsHelper.ConvertToVector<T, TInput>(adversarial);
+            var perturbation = Engine.Subtract<T>(adversarialVector, inputVector);
+            var l2Norm = Engine.Norm<T>(perturbation);
+            perturbationSizes.Add(l2Norm);
         }
 
         metrics.CleanAccuracy = (double)cleanCorrect / testData.Length;
         metrics.AdversarialAccuracy = (double)adversarialCorrect / testData.Length;
-        metrics.AveragePerturbationSize = perturbationSizes.Count > 0 ? perturbationSizes.Average() : 0.0;
+        metrics.AveragePerturbationSize = perturbationSizes.Count > 0
+            ? NumOps.ToDouble(Engine.Mean<T>(new Vector<T>(perturbationSizes)))
+            : 0.0;
         metrics.AttackSuccessRate = 1.0 - metrics.AdversarialAccuracy;
         metrics.RobustnessScore = (metrics.CleanAccuracy + metrics.AdversarialAccuracy) / 2.0;
 
@@ -280,12 +483,13 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
         // high-frequency adversarial perturbations like real JPEG does.
         //
         // Algorithm (per JPEG standard ISO/IEC 10918-1):
-        //   1. Partition the flattened image into 8×8 blocks.
-        //   2. For each block: compute the 2D DCT-II.
-        //   3. Quantize DCT coefficients using the JPEG luminance table
+        //   1. Map [0, 1] intensities to the 8-bit range and level-shift by 128.
+        //   2. Partition the image into 8×8 blocks (edge blocks replicate the last row/column).
+        //   3. For each block: compute the 2D DCT-II.
+        //   4. Quantize DCT coefficients using the JPEG luminance table
         //      scaled by the quality factor.
-        //   4. Inverse-quantize (multiply back) and inverse-DCT.
-        //   5. Reassemble the blocks.
+        //   5. Inverse-quantize (multiply back) and inverse-DCT.
+        //   6. Reassemble the blocks and undo the level shift and scaling.
         //
         // Since the public surface here is a 1D Vector<T>, we assume a
         // square image of side √Length. Non-square inputs fall back to the
@@ -329,179 +533,128 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
         int imgW = side * side == n ? side : rectW;
 
         // Track the observed input range so the reconstruction can be
-        // clamped back to whatever the caller fed in, instead of the
-        // hard-wired [0, 1] image-pixel assumption. JPEG defenses are
-        // commonly applied to non-pixel features (preprocessed audio,
-        // tabular embeddings) where a fixed [0, 1] clip would silently
-        // erase legitimate values.
-        double minValue = double.PositiveInfinity;
-        double maxValue = double.NegativeInfinity;
-        for (int i = 0; i < n; i++)
-        {
-            double v = NumOps.ToDouble(input[i]);
-            if (v < minValue) minValue = v;
-            if (v > maxValue) maxValue = v;
-        }
+        // clamped back to whatever the caller fed in.
+        var flat = input.AsTensor();
+        T minValue = Engine.TensorMinValue(flat);
+        T maxValue = Engine.TensorMaxValue(flat);
 
-        // Quality factor from quantization level: 0.1 → high compression (Q≈20),
-        // 0.05 → moderate (Q≈50). Lower quality = stronger defense.
-        double quality = MathHelper.Clamp(100.0 - 800.0 * 0.1, 1.0, 99.0); // ≈20
+        // JPEG's quantization table is defined for 8-bit samples level-shifted by 128
+        // (ISO/IEC 10918-1, A.3.1). Quantizing [0, 1] intensities against it directly
+        // rounds every coefficient but DC to zero, so map to [0, 255] - 128 first.
+        T pixelScale = NumOps.FromDouble(255.0);
+        T levelShift = NumOps.FromDouble(128.0);
+        var image = Engine.TensorAddScalar(
+            Engine.TensorMultiplyScalar(Engine.Reshape(flat, new[] { imgH, imgW }), pixelScale),
+            NumOps.Negate(levelShift));
 
-        // JPEG standard luminance quantization table (ISO/IEC 10918-1 Annex K).
-        double[,] qTable =
-        {
-            { 16, 11, 10, 16, 24, 40, 51, 61 },
-            { 12, 12, 14, 19, 26, 58, 60, 55 },
-            { 14, 13, 16, 24, 40, 57, 69, 56 },
-            { 14, 17, 22, 29, 51, 87, 80, 62 },
-            { 18, 22, 37, 56, 68,109,103, 77 },
-            { 24, 35, 55, 64, 81,104,113, 92 },
-            { 49, 64, 78, 87,103,121,120,101 },
-            { 72, 92, 95, 98,112,100,103, 99 }
-        };
-        // Quality scaling per IJG libjpeg convention.
-        double scale = quality < 50 ? 5000.0 / quality : 200.0 - 2.0 * quality;
-        for (int i = 0; i < 8; i++)
-            for (int j = 0; j < 8; j++)
-                qTable[i, j] = Math.Max(1, Math.Floor((qTable[i, j] * scale + 50) / 100.0));
+        // Pad to whole blocks by replicating the last row and column, so an adversary
+        // cannot hide a perturbation in an unprocessed edge fragment.
+        int blocksH = (imgH + 7) / 8;
+        int blocksW = (imgW + 7) / 8;
+        var padded = Engine.TensorGather(image, ClampedIndices(blocksH * 8, imgH), 0);
+        padded = Engine.TensorGather(padded, ClampedIndices(blocksW * 8, imgW), 1);
 
-        // Copy pixels into a 2D buffer for in-place block processing.
-        var image = new double[imgH, imgW];
-        for (int i = 0; i < n; i++)
-            image[i / imgW, i % imgW] = NumOps.ToDouble(input[i]);
+        // [Bh*8, Bw*8] -> [Bh, 8, Bw, 8] -> [Bh, Bw, 8, 8] -> [N, 8, 8]
+        int blockCount = blocksH * blocksW;
+        var blocks = Engine.Reshape(
+            Engine.TensorPermute(Engine.Reshape(padded, new[] { blocksH, 8, blocksW, 8 }), new[] { 0, 2, 1, 3 }),
+            new[] { blockCount, 8, 8 });
 
-        var block = new double[8, 8];
-        for (int by = 0; by < imgH; by += 8)
-        {
-            for (int bx = 0; bx < imgW; bx += 8)
-            {
-                int blockH = Math.Min(8, imgH - by);
-                int blockW = Math.Min(8, imgW - bx);
+        var basis = DctBasis();
+        var coefficients = BlockTransform(blocks, Engine.TensorTranspose(basis), blockCount);
 
-                // Pull block (centred on 0 — JPEG subtracts 128 from [0..255]
-                // range; we keep the [0,1]-style centring symmetric and skip
-                // the shift). For partial edge blocks (image side not a
-                // multiple of 8), use edge-replication so the DCT still
-                // processes every pixel. The previous `continue` left edge
-                // fragments unmodified — an adversary could concentrate
-                // perturbations there to bypass the JPEG compression
-                // defense entirely. Standard JPEG implementations
-                // replicate / mirror edge pixels to complete the 8×8 block.
-                for (int y = 0; y < 8; y++)
-                {
-                    int srcY = by + Math.Min(y, blockH - 1);
-                    for (int x = 0; x < 8; x++)
-                    {
-                        int srcX = bx + Math.Min(x, blockW - 1);
-                        block[y, x] = image[srcY, srcX];
-                    }
-                }
+        // Quantize then dequantize against the quality-scaled table.
+        var table = Engine.TensorBroadcastTo(QuantizationTable(), new[] { blockCount, 8, 8 });
+        var quantized = Engine.TensorMultiply(Engine.TensorRound(Engine.TensorDivide(coefficients, table)), table);
+        var restored = BlockTransform(quantized, basis, blockCount);
 
-                Dct2D(block);
-
-                // Quantize then dequantize.
-                for (int y = 0; y < 8; y++)
-                    for (int x = 0; x < 8; x++)
-                        block[y, x] = Math.Round(block[y, x] / qTable[y, x]) * qTable[y, x];
-
-                InverseDct2D(block);
-
-                // Write only the cells within the original image extent
-                // (don't overrun past the right/bottom edge with the
-                // replicated pixels).
-                for (int y = 0; y < blockH; y++)
-                    for (int x = 0; x < blockW; x++)
-                        image[by + y, bx + x] = block[y, x];
-            }
-        }
-
-        var output = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-            output[i] = NumOps.FromDouble(MathHelper.Clamp(image[i / imgW, i % imgW], minValue, maxValue));
-        return output;
+        // [N, 8, 8] -> [Bh, Bw, 8, 8] -> [Bh, 8, Bw, 8] -> [Bh*8, Bw*8], then crop the padding.
+        var reassembled = Engine.Reshape(
+            Engine.TensorPermute(Engine.Reshape(restored, new[] { blocksH, blocksW, 8, 8 }), new[] { 0, 2, 1, 3 }),
+            new[] { blocksH * 8, blocksW * 8 });
+        var cropped = Engine.TensorSlice(reassembled, new[] { 0, 0 }, new[] { imgH, imgW });
+        var pixels = Engine.TensorDivideScalar(Engine.TensorAddScalar(cropped, levelShift), pixelScale);
+        return Engine.TensorClamp(Engine.Reshape(pixels, new[] { n }), minValue, maxValue).ToVector();
     }
 
-    // Precomputed 8x8 cosine basis: DctBasis[k, i] = cos((2*i + 1) * k * pi / 16).
-    // The 2D type-II DCT/IDCT each touch every (k, i) pair once per block; on a
-    // 224x224 ImageNet input that's 784 8x8 blocks * 8 * 8 * 2 passes * 8 inner
-    // = ~800k Math.Cos calls per defense step. Computing the basis once amortises
-    // that to 64 cosines for the lifetime of the type.
-    private static readonly double[,] DctBasis = BuildDctBasis();
-
-    private static double[,] BuildDctBasis()
+    /// <summary>min(i, limit - 1) for i in [0, count): the edge-replicating gather indices.</summary>
+    private static Tensor<int> ClampedIndices(int count, int limit)
     {
-        var basis = new double[8, 8];
-        for (int k = 0; k < 8; k++)
-            for (int i = 0; i < 8; i++)
-                basis[k, i] = Math.Cos((2 * i + 1) * k * Math.PI / 16.0);
-        return basis;
+        var indices = new int[count];
+        for (int i = 0; i < count; i++)
+        {
+            indices[i] = Math.Min(i, limit - 1);
+        }
+
+        return new Tensor<int>(indices, new[] { count });
     }
 
     /// <summary>
-    /// 2D type-II DCT (the JPEG DCT) computed via the separable two-pass form
-    /// over an 8×8 block. Operates in-place.
+    /// M^T B M for every 8x8 block B, as two batched matrix products with per-block transposes:
+    /// T(T(B M) M) = M^T B M. With M = D^T this is the 2D DCT D B D^T; with M = D, its inverse D^T Y D.
     /// </summary>
-    private static void Dct2D(double[,] block)
+    private Tensor<T> BlockTransform(Tensor<T> blocks, Tensor<T> transform, int blockCount)
     {
-        var tmp = new double[8, 8];
-        // Rows.
-        for (int y = 0; y < 8; y++)
-        {
-            for (int u = 0; u < 8; u++)
-            {
-                double sum = 0.0;
-                for (int x = 0; x < 8; x++)
-                    sum += block[y, x] * DctBasis[u, x];
-                double cu = u == 0 ? 1.0 / Math.Sqrt(2) : 1.0;
-                tmp[y, u] = 0.5 * cu * sum;
-            }
-        }
-        // Columns.
-        for (int u = 0; u < 8; u++)
-        {
-            for (int v = 0; v < 8; v++)
-            {
-                double sum = 0.0;
-                for (int y = 0; y < 8; y++)
-                    sum += tmp[y, u] * DctBasis[v, y];
-                double cv = v == 0 ? 1.0 / Math.Sqrt(2) : 1.0;
-                block[v, u] = 0.5 * cv * sum;
-            }
-        }
+        var rows = Engine.Reshape(Engine.TensorMatMul(Engine.Reshape(blocks, new[] { blockCount * 8, 8 }), transform), new[] { blockCount, 8, 8 });
+        var flipped = Engine.Reshape(Engine.TensorPermute(rows, new[] { 0, 2, 1 }), new[] { blockCount * 8, 8 });
+        var columns = Engine.Reshape(Engine.TensorMatMul(flipped, transform), new[] { blockCount, 8, 8 });
+        return Engine.TensorPermute(columns, new[] { 0, 2, 1 });
     }
 
-    /// <summary>Inverse 2D DCT (IDCT) — the JPEG decode step. Operates in-place.</summary>
-    private static void InverseDct2D(double[,] block)
+    /// <summary>
+    /// The orthonormal 8-point DCT-II matrix D[k, i] = c_k cos((2i + 1) k pi / 16), c_0 = sqrt(1/8), c_k = 1/2.
+    /// </summary>
+    private Tensor<T> DctBasis() => DctMatrix(8, 8, 0, 8);
+
+    /// <summary>
+    /// Rows [first, first + count) of the orthonormal n-point DCT-II matrix
+    /// C[k, i] = c_k cos(pi (i + 1/2) k / n), c_0 = sqrt(1/n), c_k = sqrt(2/n).
+    /// </summary>
+    /// <remarks>
+    /// The basis is built in double and converted to T once: in Half the angles k (i + 1/2) pi / n reach
+    /// tens of radians, where the spacing of Half is 1/64 to 1/16, so cosines computed in T were off by
+    /// several thousandths.
+    /// </remarks>
+    internal Tensor<T> DctMatrix(int n, int count, int first, int columns)
     {
-        var tmp = new double[8, 8];
-        // Inverse columns.
-        for (int u = 0; u < 8; u++)
+        var k = Engine.Reshape(Engine.TensorArange<double>(first, first + count, 1), new[] { count, 1 });
+        var position = Engine.Reshape(Engine.TensorArange<double>(0.5, columns + 0.5, 1), new[] { 1, columns });
+        var angles = Engine.TensorMultiplyScalar(Engine.TensorMatMul(k, position), Math.PI / n);
+        var cosines = Engine.TensorCos(angles);
+        var scale = Engine.TensorAddScalar(new Tensor<double>(new[] { count, 1 }), Math.Sqrt(2.0 / n));
+        if (first == 0)
         {
-            for (int y = 0; y < 8; y++)
-            {
-                double sum = 0.0;
-                for (int v = 0; v < 8; v++)
-                {
-                    double cv = v == 0 ? 1.0 / Math.Sqrt(2) : 1.0;
-                    sum += cv * block[v, u] * DctBasis[v, y];
-                }
-                tmp[y, u] = 0.5 * sum;
-            }
+            scale = Engine.TensorSetSlice(scale, Engine.TensorAddScalar(new Tensor<double>(new[] { 1, 1 }), Math.Sqrt(1.0 / n)), new[] { 0, 0 });
         }
-        // Inverse rows.
-        for (int y = 0; y < 8; y++)
+
+        return Engine.TensorMultiply(cosines, Engine.TensorBroadcastTo(scale, new[] { count, columns })).Contiguous().Cast<T>();
+    }
+
+    /// <summary>
+    /// The JPEG luminance table (ISO/IEC 10918-1 Annex K) scaled for quality 20 per the IJG libjpeg convention.
+    /// </summary>
+    private static Tensor<T> QuantizationTable()
+    {
+        // Quality factor from quantization level: 0.1 → high compression (Q≈20).
+        double quality = MathHelper.Clamp(100.0 - 800.0 * 0.1, 1.0, 99.0); // ≈20
+        double[] luminance =
         {
-            for (int x = 0; x < 8; x++)
-            {
-                double sum = 0.0;
-                for (int u = 0; u < 8; u++)
-                {
-                    double cu = u == 0 ? 1.0 / Math.Sqrt(2) : 1.0;
-                    sum += cu * tmp[y, u] * DctBasis[u, x];
-                }
-                block[y, x] = 0.5 * sum;
-            }
+            16, 11, 10, 16, 24, 40, 51, 61,
+            12, 12, 14, 19, 26, 58, 60, 55,
+            14, 13, 16, 24, 40, 57, 69, 56,
+            14, 17, 22, 29, 51, 87, 80, 62,
+            18, 22, 37, 56, 68, 109, 103, 77,
+            24, 35, 55, 64, 81, 104, 113, 92,
+            49, 64, 78, 87, 103, 121, 120, 101,
+            72, 92, 95, 98, 112, 100, 103, 99
+        };
+        double scale = quality < 50 ? 5000.0 / quality : 200.0 - 2.0 * quality;
+        for (int i = 0; i < luminance.Length; i++)
+        {
+            luminance[i] = Math.Max(1, Math.Floor((luminance[i] * scale + 50) / 100.0));
         }
+
+        return new Tensor<double>(luminance, new[] { 1, 8, 8 }).Cast<T>();
     }
 
     /// <summary>
@@ -509,72 +662,163 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
     /// Same idea (kill high-frequency components via coarse quantization in
     /// the DCT domain) without requiring an image-shape assumption.
     /// </summary>
+    /// <remarks>
+    /// The reconstruction is clamped to the observed [min, max] of the input, as the 2D JPEG path does, so the
+    /// output range does not depend on whether the input length factorises into 8 x 8 blocks.
+    /// </remarks>
     private Vector<T> Apply1DDCTQuantization(Vector<T> input)
     {
         int n = input.Length;
-        var x = new double[n];
-        for (int i = 0; i < n; i++) x[i] = NumOps.ToDouble(input[i]);
-
-        // 1D DCT-II.
-        var X = new double[n];
-        for (int k = 0; k < n; k++)
+        if (n == 0)
         {
-            double sum = 0.0;
-            for (int i = 0; i < n; i++)
-                sum += x[i] * Math.Cos(Math.PI * (i + 0.5) * k / n);
-            double c = k == 0 ? 1.0 / Math.Sqrt(n) : Math.Sqrt(2.0 / n);
-            X[k] = c * sum;
+            return input;
         }
 
-        // Coarsely quantize higher-frequency coefficients (proxy for JPEG's
-        // quality-controlled quantization table).
-        for (int k = 0; k < n; k++)
+        T minValue = Engine.TensorMinValue(input.AsTensor());
+        T maxValue = Engine.TensorMaxValue(input.AsTensor());
+        var x = Engine.Reshape(input.AsTensor(), new[] { n, 1 });
+        var reconstruction = new Tensor<T>(new[] { n, 1 });
+
+        // The orthonormal DCT-II in row chunks so the n x n matrix is never materialized at once.
+        const int chunk = 512;
+        for (int first = 0; first < n; first += chunk)
         {
-            double step = 0.01 + 0.1 * ((double)k / n);
-            X[k] = Math.Round(X[k] / step) * step;
+            reconstruction = Engine.TensorAdd(reconstruction, QuantizedChunk(x, n, first, Math.Min(chunk, n - first)));
         }
 
-        // Inverse 1D DCT.
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            double sum = 0.0;
-            for (int k = 0; k < n; k++)
-            {
-                double c = k == 0 ? 1.0 / Math.Sqrt(n) : Math.Sqrt(2.0 / n);
-                sum += c * X[k] * Math.Cos(Math.PI * (i + 0.5) * k / n);
-            }
-            y[i] = sum;
-        }
+        return Engine.TensorClamp(Engine.Reshape(reconstruction, new[] { n }), minValue, maxValue).ToVector();
+    }
 
-        var output = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-            output[i] = NumOps.FromDouble(MathHelper.Clamp(y[i], 0.0, 1.0));
-        return output;
+    /// <summary>
+    /// The contribution C_rows^T q(C_rows x) of DCT rows [first, first + count): coefficient k is quantized with
+    /// step 0.01 + 0.1 k / n (a proxy for JPEG's quality-controlled table).
+    /// </summary>
+    private Tensor<T> QuantizedChunk(Tensor<T> x, int n, int first, int count)
+    {
+        var rows = DctMatrix(n, count, first, n);
+        var coefficients = Engine.TensorMatMul(rows, x);
+        var steps = Engine.TensorAddScalar(
+            Engine.TensorMultiplyScalar(Engine.Reshape(Engine.TensorArange<T>(first, first + count, 1), new[] { count, 1 }), NumOps.FromDouble(0.1 / n)),
+            NumOps.FromDouble(0.01));
+        var quantized = Engine.TensorMultiply(Engine.TensorRound(Engine.TensorDivide(coefficients, steps)), steps);
+        return Engine.TensorMatMul(Engine.TensorTranspose(rows), quantized);
     }
 
     private Vector<T> ApplyBitDepthReduction(Vector<T> input)
     {
-        // Reduce bit depth to remove fine-grained adversarial perturbations
-        var levels = 16.0; // Reduce to 4-bit color depth
-        var reduced = new Vector<T>(input.Length);
-
-        for (int i = 0; i < input.Length; i++)
+        // Feature squeezing (Xu et al. 2018): b-bit depth keeps 2^b levels, x -> round(x (2^b - 1)) / (2^b - 1).
+        if (options.BitDepth < 1 || options.BitDepth > 30)
         {
-            var v = NumOps.ToDouble(input[i]);
-            var quantized = Math.Round(v * levels) / levels;
-            reduced[i] = NumOps.FromDouble(MathHelper.Clamp(quantized, 0.0, 1.0));
+            throw new InvalidOperationException(
+                $"AdversarialDefenseOptions.BitDepth must lie in [1, 30] (was {options.BitDepth}).");
         }
 
-        return reduced;
+        int levelCount = (1 << options.BitDepth) - 1;
+        T levels = NumOps.FromDouble(levelCount);
+        if (NumOps.ToDouble(levels) != levelCount)
+        {
+            // Half holds integers exactly only up to 2048 and overflows past 65504: 2^b - 1 levels would be rounded
+            // (or become infinity, turning every value into NaN) instead of quantizing to b bits.
+            throw new InvalidOperationException(
+                $"AdversarialDefenseOptions.BitDepth {options.BitDepth} needs {levelCount} levels, which {typeof(T).Name} " +
+                "cannot represent exactly. Use a smaller bit depth or a wider numeric type.");
+        }
+
+        var scaled = Engine.TensorMultiplyScalar(Engine.TensorClamp(input.AsTensor(), NumOps.Zero, NumOps.One), levels);
+        var reduced = Engine.TensorDivideScalar(Engine.TensorRound(scaled), levels);
+        return Engine.TensorClamp(reduced, NumOps.Zero, NumOps.One).ToVector();
     }
 
-    private Vector<T> ApplyDenoising(Vector<T> input)
+    /// <summary>
+    /// Local spatial smoothing (Xu et al. 2018, Section 3.2): every pixel becomes the median of its k x k window.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The window and border follow scipy.ndimage.median_filter, the implementation Xu et al. use: the window covers
+    /// offsets [-(k / 2), k - 1 - k / 2] on each axis, borders are reflected (d c b a | a b c d), and the median of an
+    /// even-sized window is the upper middle value (rank k*k / 2). The input is filtered as
+    /// <paramref name="layout"/>.Slices independent height x width images (see <see cref="MedianImageLayout"/>), so a
+    /// window never crosses a channel or a sample.
+    /// </para>
+    /// </remarks>
+    private Vector<T> ApplyMedianSmoothing(Vector<T> input, (int Slices, int Height, int Width) layout)
     {
-        // Simple moving average denoising (for demonstration)
-        // Use Engine to clone the vector
-        var zeros = Engine.FillZero<T>(input.Length);
-        return Engine.Add<T>(input, zeros);
+        int k = options.MedianFilterSize;
+        if (k < 1)
+        {
+            throw new InvalidOperationException(
+                $"AdversarialDefenseOptions.MedianFilterSize must be at least 1 (was {k}).");
+        }
+
+        int n = input.Length;
+        if (n == 0 || k == 1)
+        {
+            return input;
+        }
+
+        var (slices, height, width) = layout;
+        int rowsWindow = height > 1 ? k : 1;
+        var image = Engine.Reshape(input.AsTensor(), new[] { slices, height, width });
+        var shifted = new List<Tensor<T>>(rowsWindow * k);
+        for (int dy = -(rowsWindow / 2); dy <= rowsWindow - 1 - rowsWindow / 2; dy++)
+        {
+            var rows = Engine.TensorGather(image, ReflectedIndices(height, dy), 1);
+            for (int dx = -(k / 2); dx <= k - 1 - k / 2; dx++)
+            {
+                shifted.Add(Engine.TensorGather(rows, ReflectedIndices(width, dx), 2));
+            }
+        }
+
+        var (sorted, _) = Engine.TensorSort(Engine.TensorStack(shifted.ToArray(), 0), 0, false);
+        int rank = shifted.Count / 2;
+        var median = Engine.TensorSlice(sorted, new[] { rank, 0, 0, 0 }, new[] { 1, slices, height, width });
+        return Engine.Reshape(median, new[] { n }).ToVector();
+    }
+
+    /// <summary>
+    /// The images an input of <paramref name="length"/> values holds, for median smoothing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A <see cref="Tensor{T}"/> of rank 2 or more is a stack of images over its last two axes (C x H x W, or
+    /// N x C x H x W): every leading index is one image. A <see cref="Matrix{T}"/> holds one sample per row, and a
+    /// vector is one sample; a sample of a square length s * s is an s x s image, any other a 1 x n row.
+    /// </para>
+    /// </remarks>
+    private static (int Slices, int Height, int Width) MedianImageLayout(TInput input, int length)
+    {
+        if (input is Tensor<T> tensor && tensor.Shape.Length >= 2)
+        {
+            int height = tensor.Shape[tensor.Shape.Length - 2];
+            int width = tensor.Shape[tensor.Shape.Length - 1];
+            if (height > 0 && width > 0 && length % (height * width) == 0)
+            {
+                return (length / (height * width), height, width);
+            }
+        }
+
+        int samples = input is Matrix<T> matrix && matrix.Rows > 0 && length % matrix.Rows == 0 ? matrix.Rows : 1;
+        int sampleLength = length / samples;
+        int side = (int)Math.Sqrt(sampleLength);
+        return side > 1 && side * side == sampleLength
+            ? (samples, side, side)
+            : (samples, 1, sampleLength);
+    }
+
+    /// <summary>
+    /// The indices i + offset for i in [0, count), reflected at the borders as scipy's "reflect" mode does.
+    /// </summary>
+    private static Tensor<int> ReflectedIndices(int count, int offset)
+    {
+        var indices = new int[count];
+        int period = 2 * count;
+        for (int i = 0; i < count; i++)
+        {
+            int j = ((i + offset) % period + period) % period;
+            indices[i] = j < count ? j : period - 1 - j;
+        }
+
+        return new Tensor<int>(indices, new[] { count });
     }
 
     private static int ArgMaxVector(Vector<T> vector)
@@ -584,35 +828,41 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
             return 0;
         }
 
-        int maxIndex = 0;
-        double maxValue = NumOps.ToDouble(vector[0]);
-
-        for (int i = 1; i < vector.Length; i++)
-        {
-            var v = NumOps.ToDouble(vector[i]);
-            if (v > maxValue)
-            {
-                maxValue = v;
-                maxIndex = i;
-            }
-        }
-
-        return maxIndex;
+        return AiDotNetEngine.Current.TensorArgMax(vector.AsTensor(), 0).GetFlat(0);
     }
 
     [AiDotNet.Attributes.ModelMetadataExempt]
     private sealed class PreprocessingFullModel : IFullModel<T, TInput, TOutput>
     {
         private readonly IFullModel<T, TInput, TOutput> _inner;
+        private readonly IFullModel<T, TInput, TOutput>[] _members;
         private readonly AdversarialTraining<T, TInput, TOutput> _defense;
 
         public PreprocessingFullModel(IFullModel<T, TInput, TOutput> inner, AdversarialTraining<T, TInput, TOutput> defense)
+            : this(new[] { inner }, defense)
         {
-            Guard.NotNull(inner);
-            _inner = inner;
+        }
+
+        /// <summary>
+        /// Wraps one model or an ensemble. Predictions average the members' outputs; every other member of the
+        /// model contract (parameters, persistence, gradients) is the first member's.
+        /// </summary>
+        public PreprocessingFullModel(IFullModel<T, TInput, TOutput>[] members, AdversarialTraining<T, TInput, TOutput> defense)
+        {
+            Guard.NotNull(members);
+            if (members.Length == 0)
+            {
+                throw new ArgumentException("At least one model is required.", nameof(members));
+            }
+
+            _members = members;
+            _inner = members[0];
             Guard.NotNull(defense);
             _defense = defense;
         }
+
+        /// <summary>The ensemble members (one entry when no ensemble is used).</summary>
+        internal IReadOnlyList<IFullModel<T, TInput, TOutput>> Members => _members;
 
         /// <inheritdoc/>
         public ILossFunction<T> DefaultLossFunction => _inner.DefaultLossFunction;
@@ -631,7 +881,20 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
         public TOutput Predict(TInput input)
         {
             var preprocessed = _defense.PreprocessInput(input);
-            return _inner.Predict(preprocessed);
+            var first = _inner.Predict(preprocessed);
+            if (_members.Length == 1)
+            {
+                return first;
+            }
+
+            var sum = ConversionsHelper.ConvertToVector<T, TOutput>(first);
+            for (int m = 1; m < _members.Length; m++)
+            {
+                sum = AiDotNetEngine.Current.Add<T>(sum, ConversionsHelper.ConvertToVector<T, TOutput>(_members[m].Predict(preprocessed)));
+            }
+
+            var mean = AiDotNetEngine.Current.Divide<T>(sum, NumOps.FromDouble(_members.Length));
+            return ConversionsHelper.ConvertVectorToInput<T, TOutput>(mean, first);
         }
 
         /// <inheritdoc/>
@@ -729,15 +992,13 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
         /// <inheritdoc/>
         public IFullModel<T, TInput, TOutput> DeepCopy()
         {
-            var innerCopy = _inner.DeepCopy();
-            return new PreprocessingFullModel(innerCopy, _defense);
+            return new PreprocessingFullModel(_members.Select(m => m.DeepCopy()).ToArray(), _defense);
         }
 
         /// <inheritdoc/>
         public IFullModel<T, TInput, TOutput> Clone()
         {
-            var innerClone = _inner.Clone();
-            return new PreprocessingFullModel(innerClone, _defense);
+            return new PreprocessingFullModel(_members.Select(m => m.Clone()).ToArray(), _defense);
         }
 
         /// <inheritdoc/>
@@ -755,13 +1016,26 @@ public class AdversarialTraining<T, TInput, TOutput> : IAdversarialDefense<T, TI
 
         /// <inheritdoc/>
         /// <remarks>
-        /// Issue #1136 plan part 3: forwards Dispose to the inner
-        /// model when it implements IDisposable. The preprocessing
+        /// Issue #1136 plan part 3: forwards Dispose to every ensemble
+        /// member that implements IDisposable (each once). The preprocessing
         /// wrapper itself owns no additional disposable state.
         /// </remarks>
         public void Dispose()
         {
-            (_inner as System.IDisposable)?.Dispose();
+            for (int i = 0; i < _members.Length; i++)
+            {
+                bool seen = false;
+                for (int j = 0; j < i && !seen; j++)
+                {
+                    seen = ReferenceEquals(_members[i], _members[j]);
+                }
+
+                if (!seen)
+                {
+                    (_members[i] as System.IDisposable)?.Dispose();
+                }
+            }
+
             System.GC.SuppressFinalize(this);
         }
 

@@ -318,36 +318,34 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
             var clientModels = new Dictionary<int, IFullModel<T, TInput, TOutput>>();
             var clientWeights = new Dictionary<int, double>();
-            var maskedParameters = new Dictionary<int, Vector<T>>();
+            var maskedParameters = new List<SecureAggregationMaskedInput>();
             var heClientParameters = useHomomorphicEncryption ? new Dictionary<int, Vector<T>>() : null;
             double uploadRatioSum = 0.0;
             int uploadRatioCount = 0;
 
-            SecureAggregationVector<T>? secureAggregation = null;
-            ThresholdSecureAggregationVector<T>? thresholdSecureAggregation = null;
+            SecureAggregation<T>? secureAggregation = null;
+            var secureAggregationWeights = new Dictionary<int, double>();
+            double secureAggregationTotalWeight = 0.0;
             if (useSecureAggregation)
             {
-                if (secureAggregationMode == SecureAggregationMode.ThresholdDropoutResilient)
+                // Bonawitz et al. (2017): rounds 0 (AdvertiseKeys) and 1 (ShareKeys) run for every selected client
+                // that has data. Clients pre-weight their update by their share of the total sample count so the
+                // encoded values stay within the clip bound, and the server divides by the survivors' total share.
+                var participants = selectedClientIds.Where(clientData.ContainsKey).ToList();
+                foreach (var id in participants)
                 {
-                    thresholdSecureAggregation = new ThresholdSecureAggregationVector<T>((int)InterfaceGuard.Parameterizable(globalBefore).ParameterCount, _randomSeed);
-                    thresholdSecureAggregation.InitializeRound(
-                        selectedClientIds,
-                        minimumUploaderCount: secureAggregationOptions?.MinimumUploaderCount ?? 0,
-                        reconstructionThreshold: secureAggregationOptions?.ReconstructionThreshold ?? 0,
-                        maxDropoutFraction: secureAggregationOptions?.MaxDropoutFraction ?? 0.2);
-
-                    metadata.SecureAggregationMinimumUploaderCountUsed = thresholdSecureAggregation.MinimumUploaderCount;
-                    metadata.SecureAggregationReconstructionThresholdUsed = thresholdSecureAggregation.ReconstructionThreshold;
+                    secureAggregationTotalWeight += Math.Max(1.0, clientData[id].SampleCount);
                 }
-                else
-                {
-                    secureAggregation = new SecureAggregationVector<T>((int)InterfaceGuard.Parameterizable(globalBefore).ParameterCount, _randomSeed);
-                    secureAggregation.GeneratePairwiseSecrets(selectedClientIds);
 
-                    // Full participation mode: "threshold" is effectively the entire selected set.
-                    metadata.SecureAggregationMinimumUploaderCountUsed = selectedClientIds.Count;
-                    metadata.SecureAggregationReconstructionThresholdUsed = selectedClientIds.Count;
-                }
+                secureAggregation = new SecureAggregation<T>(
+                    (int)InterfaceGuard.Parameterizable(globalBefore).ParameterCount,
+                    secureAggregationOptions ?? new SecureAggregationOptions { Mode = secureAggregationMode });
+                secureAggregation.InitializeRound(participants);
+
+                // Every round of the protocol needs at least t clients, so t is both the minimum uploader count and
+                // the reconstruction threshold.
+                metadata.SecureAggregationMinimumUploaderCountUsed = secureAggregation.Threshold;
+                metadata.SecureAggregationReconstructionThresholdUsed = secureAggregation.Threshold;
             }
 
             int privacyEventsThisRound = 0;
@@ -448,19 +446,14 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
 
                 if (useSecureAggregation)
                 {
-                    if (thresholdSecureAggregation is not null)
+                    if (secureAggregation is null || secureAggregationTotalWeight <= 0.0)
                     {
-                        maskedParameters[clientId] = thresholdSecureAggregation.MaskUpdate(clientId, parametersForAggregation, weight);
+                        throw new InvalidOperationException("Secure aggregation is enabled but was not initialized for this round.");
                     }
-                    else if (secureAggregation is not null)
-                    {
-                        maskedParameters[clientId] = secureAggregation.MaskUpdate(clientId, parametersForAggregation, weight);
-                    }
-                    else
-                    {
-                        throw new InvalidOperationException(
-                            "Secure aggregation is enabled but neither threshold nor standard secure aggregation was initialized.");
-                    }
+
+                    double normalizedWeight = weight / secureAggregationTotalWeight;
+                    secureAggregationWeights[clientId] = normalizedWeight;
+                    maskedParameters.Add(secureAggregation.MaskUpdate(clientId, parametersForAggregation, normalizedWeight));
                 }
                 else
                 {
@@ -500,21 +493,15 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
             }
             else if (useSecureAggregation)
             {
+                if (secureAggregation is null)
+                {
+                    throw new InvalidOperationException("Secure aggregation is enabled but was not initialized for this round.");
+                }
+
                 Vector<T> averagedParameters;
-                if (thresholdSecureAggregation is not null)
+                using (secureAggregation)
                 {
-                    averagedParameters = thresholdSecureAggregation.AggregateSecurely(maskedParameters, clientWeights);
-                    thresholdSecureAggregation.ClearSecrets();
-                }
-                else if (secureAggregation is not null)
-                {
-                    averagedParameters = secureAggregation.AggregateSecurely(maskedParameters, clientWeights);
-                    secureAggregation.ClearSecrets();
-                }
-                else
-                {
-                    throw new InvalidOperationException(
-                        "Secure aggregation is enabled but neither threshold nor standard secure aggregation was initialized.");
+                    averagedParameters = secureAggregation.AggregateWeightedAverage(maskedParameters, secureAggregationWeights);
                 }
 
                 newGlobalModel = InterfaceGuard.Parameterizable(globalBefore).WithParameters(averagedParameters);

@@ -504,8 +504,8 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
         // Tacotron 2's 8 kHz mel ceiling assumes 22.05 kHz audio; at lower rates the bands stop at Nyquist.
         var spectrogram = new TacotronSpectrogram(SampleRate, TargetFftSize, HopSize, TargetWindowSize, MelChannels,
             maxFrequency: Math.Min(8000.0, SampleRate / 2.0));
-        double[]? audio = sample.Audio is null ? null : ToDoubles(sample.Audio);
-        double[,]? magnitude = audio is null ? null : spectrogram.Magnitude(PreEmphasize(audio));
+        Tensor<T>? audio = sample.Audio is null ? null : Engine.Reshape(sample.Audio, new[] { sample.Audio.Length });
+        Tensor<T>? magnitude = audio is null ? null : spectrogram.Magnitude(PreEmphasize(audio));
 
         Tensor<T> mel;
         if (sample.Mel is not null)
@@ -516,30 +516,20 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
         {
             if (magnitude is null)
                 throw new ArgumentException("Supply the recording or its mel spectrogram.", nameof(sample));
-            var logMel = spectrogram.LogMel(magnitude);
-            mel = new Tensor<T>(new[] { logMel.GetLength(0), logMel.GetLength(1) });
-            for (int f = 0; f < logMel.GetLength(0); f++)
-                for (int m = 0; m < logMel.GetLength(1); m++)
-                    mel[f, m] = NumOps.FromDouble(logMel[f, m]);
+            mel = spectrogram.LogMelOfMagnitude(magnitude);
         }
         int frames = mel.Shape[0];
 
-        double[]? pitch = sample.Pitch;
+        Tensor<T>? pitch = sample.Pitch;
         if (pitch is null && audio is not null)
             pitch = new AiDotNet.Audio.Pitch.WorldPitchDetector<T>(SampleRate).EstimateF0(audio, spectrogram.FramePeriodMs).F0;
-        double[]? energy = sample.Energy;
+        Tensor<T>? energy = sample.Energy;
         if (energy is null && magnitude is not null)
             energy = spectrogram.Energy(magnitude);
 
         Tensor<T>? linear = sample.LinearSpectrogram;
         if (linear is null && magnitude is not null)
-        {
-            int rows = magnitude.GetLength(0), bins = magnitude.GetLength(1);
-            linear = new Tensor<T>(new[] { rows, bins });
-            for (int f = 0; f < rows; f++)
-                for (int k = 0; k < bins; k++)
-                    linear[f, k] = NumOps.FromDouble(Math.Log(Math.Max(spectrogram.ClipValue, magnitude[f, k])));
-        }
+            linear = Engine.TensorLog(Engine.TensorMax(magnitude, NumOps.FromDouble(spectrogram.ClipValue)));
 
         return new AcousticTargets<T>(mel, frames,
             pitch is null ? null : AlignToFrames(pitch, frames),
@@ -557,35 +547,31 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
     /// <summary>Bins of the linear spectrogram target, <c>fftSize / 2 + 1</c>.</summary>
     public int LinearSpectrogramBins => TargetFftSize / 2 + 1;
 
-    private double[] PreEmphasize(double[] audio)
+    // y[0] = x[0], y[n] = x[n] − k x[n − 1].
+    private Tensor<T> PreEmphasize(Tensor<T> audio)
     {
         double k = PreEmphasis;
-        if (k == 0.0)
+        int length = audio.Length;
+        if (k == 0.0 || length < 2)
             return audio;
-        var y = new double[audio.Length];
-        if (audio.Length > 0) y[0] = audio[0];
-        for (int n = 1; n < audio.Length; n++) y[n] = audio[n] - k * audio[n - 1];
-        return y;
+        var current = Engine.TensorSlice(audio, new[] { 1 }, new[] { length - 1 });
+        var previous = Engine.TensorSlice(audio, new[] { 0 }, new[] { length - 1 });
+        var emphasized = Engine.TensorSubtract(current, Engine.TensorMultiplyScalar(previous, NumOps.FromDouble(k)));
+        return Engine.TensorConcatenate(new[] { Engine.TensorSlice(audio, new[] { 0 }, new[] { 1 }), emphasized }, 0);
     }
 
     /// <summary>FFT and window size used to derive targets from a recording (Tacotron 2: 1024).</summary>
     protected virtual int TargetFftSize => 1024;
 
-    private static double[] AlignToFrames(double[] values, int frames)
+    private Tensor<T> AlignToFrames(Tensor<T> values, int frames)
     {
-        if (values.Length == frames) return values;
+        int count = values.Length;
+        var flat = Engine.Reshape(values, new[] { count });
+        if (count == frames) return flat;
+        if (count == 0) throw new ArgumentException("Per-frame pitch or energy targets are empty.", nameof(values));
         // The pitch tracker and the STFT can disagree by a frame at the end; repeat or drop the last value.
-        var aligned = new double[frames];
-        for (int i = 0; i < frames; i++) aligned[i] = values[Math.Min(i, values.Length - 1)];
-        return aligned;
-    }
-
-    private double[] ToDoubles(Tensor<T> tensor)
-    {
-        var span = tensor.AsSpan();
-        var values = new double[span.Length];
-        for (int i = 0; i < values.Length; i++) values[i] = NumOps.ToDouble(span[i]);
-        return values;
+        var rows = Engine.TensorMin(Engine.TensorArange<int>(0, frames, 1), count - 1);
+        return Engine.TensorIndexSelect(flat, rows, 0);
     }
 
 
@@ -852,22 +838,71 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
     }
 
     /// <summary>
-    /// The Glow-TTS search scores <c>−½ ‖y_j − μ_i‖²</c> <c>[tokens, frames]</c> of token means <c>[tokens, ≥ C]</c>
-    /// against frames <c>[frames, C]</c> (the first C channels of the means), off the gradient tape.
+    /// The phoneme-average weights <c>[durations.Length, frames]</c>: row p is 1 / d_p on phoneme p's frames of
+    /// <see cref="DurationAlignment(int[])"/> and 0 on the frames past <c>sum(durations)</c>, so their product with a
+    /// <c>[frames, C]</c> sequence is each phoneme's mean frame. A phoneme with no frames keeps its zero row (no 0 · ∞).
     /// </summary>
-    protected Tensor<T> AlignmentScores(Tensor<T> means, Tensor<T> frames)
+    internal static Tensor<T> DurationAverage(AiDotNet.Tensors.Engines.IEngine engine, int[] durations, int frames)
     {
+        Guard.NotNull(engine);
+        Guard.NotNull(durations);
+        int total = durations.Sum();
+        if (total > frames)
+            throw new ArgumentOutOfRangeException(nameof(durations), $"The durations cover {total} frames but there are {frames}.");
+        var ops = MathHelper.GetNumericOperations<T>();
+        var alignment = DurationAlignment(engine, durations);                                           // [L, total]
+        if (total < frames)
+            alignment = engine.TensorConcatenate(new[] { alignment, new Tensor<T>(new[] { durations.Length, frames - total }) }, 1);
+        var counts = new Tensor<int>((int[])durations.Clone(), new[] { durations.Length, 1 }).Cast<T>();
+        var inverse = engine.TensorWhere(engine.TensorEquals(counts, ops.Zero), counts, engine.TensorReciprocal(counts));
+        return engine.TensorMultiply(alignment, engine.TensorTile(inverse, new[] { 1, frames }));
+    }
+
+    /// <summary>The most pairwise differences one block of <see cref="AlignmentScores"/> holds at a time.</summary>
+    private const int AlignmentBlockEntries = 1 << 20;
+
+    /// <summary>
+    /// The durations of the monotonic alignment (<see cref="MonotonicDurations(Tensor{T})"/>) of token means
+    /// <c>[tokens, ≥ C]</c> against frames <c>[frames, C]</c>, scored by <see cref="AlignmentScores"/>. The scores and the
+    /// search both stay in double, so a narrow T neither overflows a distance nor rounds a poor score to −∞.
+    /// </summary>
+    protected int[] AlignmentDurations(Tensor<T> means, Tensor<T> frames) =>
+        TtsModelBase<double>.MonotonicDurations(Engine, AlignmentScores(Engine, means, frames));
+
+    /// <summary>
+    /// The Glow-TTS search scores <c>−½ ‖y_j − μ_i‖²</c> <c>[tokens, frames]</c> of token means <c>[tokens, ≥ C]</c>
+    /// against frames <c>[frames, C]</c> (the first C channels of the means), in double and off the gradient tape.
+    /// </summary>
+    /// <remarks>
+    /// The squared distances are summed and scaled by −½ in double: in Half, 80 channels of 30 against a zero mean sum to
+    /// 72,000, past Half's 65,504, although the score −36,000 is representable. The means are compared with the frames a
+    /// block of tokens at a time: tiling every token against every frame at once holds tokens × frames × C values
+    /// (640 MB of float for [500, 2000, 80]); a block holds at most <see cref="AlignmentBlockEntries"/> of them, or one
+    /// token's frames × C.
+    /// </remarks>
+    internal static Tensor<double> AlignmentScores(AiDotNet.Tensors.Engines.IEngine engine, Tensor<T> means, Tensor<T> frames)
+    {
+        Guard.NotNull(engine);
         Guard.NotNull(means);
         Guard.NotNull(frames);
         int tokens = means.Shape[0], count = frames.Shape[0], channels = frames.Shape[1];
         using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<double>())
         {
-            var mu = Engine.TensorSlice(means, new[] { 0, 0 }, new[] { tokens, channels });
-            // [tokens, frames, C] pairwise differences, squared and summed over the channels.
-            var tiledMeans = Engine.TensorTile(Engine.Reshape(mu, new[] { tokens, 1, channels }), new[] { 1, count, 1 });
-            var tiledFrames = Engine.TensorTile(Engine.Reshape(frames, new[] { 1, count, channels }), new[] { tokens, 1, 1 });
-            var squared = Engine.ReduceSum(Engine.TensorSquare(Engine.TensorSubtract(tiledFrames, tiledMeans)), new[] { 2 }, keepDims: false);
-            return Engine.TensorMultiplyScalar(squared, NumOps.FromDouble(-0.5));
+            var mu = engine.TensorSlice(means, new[] { 0, 0 }, new[] { tokens, channels }).Cast<double>();
+            var y = engine.Reshape(frames.Cast<double>(), new[] { 1, count, channels });
+            int blockTokens = Math.Max(1, AlignmentBlockEntries / Math.Max(1, count * channels));
+            var blocks = new List<Tensor<double>>();
+            for (int start = 0; start < tokens; start += blockTokens)
+            {
+                int rows = Math.Min(blockTokens, tokens - start);
+                // [rows, frames, C] pairwise differences, squared and summed over the channels.
+                var blockMeans = engine.Reshape(engine.TensorSlice(mu, new[] { start, 0 }, new[] { rows, channels }), new[] { rows, 1, channels });
+                var difference = engine.TensorSubtract(engine.TensorTile(y, new[] { rows, 1, 1 }), engine.TensorTile(blockMeans, new[] { 1, count, 1 }));
+                var squared = engine.ReduceSum(engine.TensorSquare(difference), new[] { 2 }, keepDims: false);
+                blocks.Add(engine.TensorMultiplyScalar(squared, -0.5));
+            }
+            return blocks.Count == 1 ? blocks[0] : engine.TensorConcatenate(blocks.ToArray(), 0);
         }
     }
 
@@ -880,11 +915,20 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
     protected int[] MonotonicDurations(Tensor<T> scores) => MonotonicDurations(Engine, scores);
 
     /// <summary>The search of <see cref="MonotonicDurations(Tensor{T})"/> on <paramref name="engine"/>.</summary>
+    /// <remarks>
+    /// Off the gradient tape: the result is a host <c>int[]</c>. A T other than double is searched in double. The
+    /// per-frame renormalization below bounds the totals after each frame, but not the addition that forms them: in Half,
+    /// a frontier of [−60,000, 0] plus a frame score of −60,000 is −∞ on token 0 before the renormalization, and the
+    /// trace-back then takes a worse path.
+    /// </remarks>
     internal static int[] MonotonicDurations(AiDotNet.Tensors.Engines.IEngine engine, Tensor<T> scores)
     {
         Guard.NotNull(engine);
-        var ops = MathHelper.GetNumericOperations<T>();
         Guard.NotNull(scores);
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        if (typeof(T) != typeof(double))
+            return TtsModelBase<double>.MonotonicDurations(engine, scores.Cast<double>());
+        var ops = MathHelper.GetNumericOperations<T>();
         if (scores.Rank != 2) throw new ArgumentException("Expected [tokens, frames] scores.", nameof(scores));
         int tokens = scores.Shape[0], frames = scores.Shape[1];
         if (tokens == 0 || frames < tokens)

@@ -148,9 +148,10 @@ public partial class PrependCLSTokenLayer<T> : LayerBase<T>, IShapeContract
             throw new InvalidOperationException(
                 $"PrependCLSTokenLayer.UpdateParameters: gradient buffer length " +
                 $"{ParameterGradients.Length} does not match ParameterCount {ParameterCount}.");
-        for (int i = 0; i < _embedDim; i++)
-            _cls[0, i] = NumOps.Subtract(_cls[0, i],
-                NumOps.Multiply(learningRate, ParameterGradients[i]));
+        // cls -= learningRate * grad over the first embedDim gradient entries, in place.
+        var gradient = Tensor<T>.FromVector(ParameterGradients.SubVector(0, _embedDim), [1, _embedDim]);
+        Engine.TensorCopy(
+            Engine.TensorSubtract(_cls, Engine.TensorMultiplyScalar(gradient, learningRate)), _cls);
     }
 
     /// <inheritdoc/>

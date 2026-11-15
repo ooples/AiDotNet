@@ -3,6 +3,8 @@ using AiDotNet.Enums;
 using AiDotNet.Models;
 using AiDotNet.Safety;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Safety.Image;
 
@@ -60,9 +62,7 @@ internal class CLIPImageSafetyClassifier<T> : ImageSafetyModuleBase<T>
     // Pre-computed constants in generic T
     private static readonly T Zero = NumOps.Zero;
     private static readonly T One = NumOps.One;
-    private static readonly T Half = NumOps.FromDouble(0.5);
     private static readonly T TwoFiftyFive = NumOps.FromDouble(255.0);
-    private static readonly T NormalizeThreshold = One; // Pixels <= 1.0 need scaling
 
     /// <inheritdoc />
     public override string ModuleName => "CLIPImageSafetyClassifier";
@@ -107,18 +107,19 @@ internal class CLIPImageSafetyClassifier<T> : ImageSafetyModuleBase<T>
     {
         var findings = new List<SafetyFinding>();
 
-        var span = image.Data.Span;
-        if (span.Length == 0)
+        if (image.Length == 0)
         {
             return findings;
         }
 
+        using var noGrad = new NoGradScope<T>();
         int[] shape = image._shape;
-        var layout = DetermineImageLayout(shape, span.Length);
+        var layout = DetermineImageLayout(shape, image.Length);
+        var data = Engine.Reshape(image.Contiguous(), new[] { image.Length });
 
         if (_detectNSFW)
         {
-            T nsfwScore = ComputeNSFWScore(span, layout);
+            T nsfwScore = ComputeNSFWScore(data, layout);
             if (NumOps.GreaterThanOrEquals(nsfwScore, _nsfwThreshold))
             {
                 double scoreDouble = NumOps.ToDouble(nsfwScore);
@@ -137,7 +138,7 @@ internal class CLIPImageSafetyClassifier<T> : ImageSafetyModuleBase<T>
 
         if (_detectViolence)
         {
-            T violenceScore = ComputeViolenceScore(span, layout);
+            T violenceScore = ComputeViolenceScore(data, layout);
             if (NumOps.GreaterThanOrEquals(violenceScore, _violenceThreshold))
             {
                 double scoreDouble = NumOps.ToDouble(violenceScore);
@@ -160,7 +161,7 @@ internal class CLIPImageSafetyClassifier<T> : ImageSafetyModuleBase<T>
     /// <summary>
     /// Computes NSFW score using skin-tone color distribution analysis in HSV space.
     /// </summary>
-    private T ComputeNSFWScore(ReadOnlySpan<T> data, ImageLayout layout)
+    private T ComputeNSFWScore(Tensor<T> data, ImageLayout layout)
     {
         if (layout.Channels < 3)
         {
@@ -170,52 +171,15 @@ internal class CLIPImageSafetyClassifier<T> : ImageSafetyModuleBase<T>
         int totalPixels = layout.Height * layout.Width;
         if (totalPixels == 0) return Zero;
 
-        T skinCount = Zero;
         T totalCount = NumOps.FromDouble(totalPixels);
-
-        // Skin-tone thresholds in T
-        T rMin = NumOps.FromDouble(95);
-        T gMin = NumOps.FromDouble(40);
-        T bMin = NumOps.FromDouble(20);
-        T minDiffThreshold = NumOps.FromDouble(15);
-        T hMax = NumOps.FromDouble(50);
-        T sMin = NumOps.FromDouble(0.1);
-        T sMax = NumOps.FromDouble(0.8);
-        T vMin = NumOps.FromDouble(0.2);
-        T vMax = NumOps.FromDouble(0.95);
-        T onePointFive = NumOps.FromDouble(1.5);
-
-        for (int y = 0; y < layout.Height; y++)
-        {
-            for (int x = 0; x < layout.Width; x++)
-            {
-                T r = GetPixelChannel(data, layout, y, x, 0);
-                T g = GetPixelChannel(data, layout, y, x, 1);
-                T b = GetPixelChannel(data, layout, y, x, 2);
-
-                // Normalize to [0,255] if data is in [0,1] range
-                if (NumOps.LessThanOrEquals(r, NormalizeThreshold) &&
-                    NumOps.LessThanOrEquals(g, NormalizeThreshold) &&
-                    NumOps.LessThanOrEquals(b, NormalizeThreshold))
-                {
-                    r = NumOps.Multiply(r, TwoFiftyFive);
-                    g = NumOps.Multiply(g, TwoFiftyFive);
-                    b = NumOps.Multiply(b, TwoFiftyFive);
-                }
-
-                if (IsSkinPixel(r, g, b, rMin, gMin, bMin, minDiffThreshold,
-                    hMax, sMin, sMax, vMin, vMax, onePointFive))
-                {
-                    skinCount = NumOps.Add(skinCount, One);
-                }
-            }
-        }
+        var (r, g, b) = GetRgbPlanes(data, layout);
+        var skin = SkinMask(r, g, b);
 
         // Skin fraction as the primary NSFW indicator
-        T skinFraction = NumOps.Divide(skinCount, totalCount);
+        T skinFraction = NumOps.Divide(Engine.TensorSum(skin), totalCount);
 
         // Compute skin clustering factor (contiguous skin = higher risk)
-        T clusterFactor = ComputeSkinClustering(data, layout);
+        T clusterFactor = ComputeSkinClustering(skin, layout);
 
         // Weighted: 60% skin fraction + 40% clustering
         T w1 = NumOps.FromDouble(0.6);
@@ -228,7 +192,7 @@ internal class CLIPImageSafetyClassifier<T> : ImageSafetyModuleBase<T>
     /// <summary>
     /// Computes violence score using red-channel dominance and high-contrast features.
     /// </summary>
-    private T ComputeViolenceScore(ReadOnlySpan<T> data, ImageLayout layout)
+    private T ComputeViolenceScore(Tensor<T> data, ImageLayout layout)
     {
         if (layout.Channels < 3)
         {
@@ -238,71 +202,31 @@ internal class CLIPImageSafetyClassifier<T> : ImageSafetyModuleBase<T>
         int totalPixels = layout.Height * layout.Width;
         if (totalPixels == 0) return Zero;
 
-        T redSum = Zero, greenSum = Zero, blueSum = Zero;
-        T darkRedCount = Zero;
-        T highContrastCount = Zero;
-        T prevLuminance = Zero;
+        var engine = Engine;
         T totalCount = NumOps.FromDouble(totalPixels);
+        var (r, g, b) = GetRgbPlanes(data, layout);
 
-        T darkRedRThreshold = NumOps.FromDouble(100);
-        T darkRedGBThreshold = NumOps.FromDouble(80);
-        T contrastThreshold = NumOps.FromDouble(80);
-        T lumR = NumOps.FromDouble(0.299);
-        T lumG = NumOps.FromDouble(0.587);
-        T lumB = NumOps.FromDouble(0.114);
+        T redSum = engine.TensorSum(r);
+        T greenSum = engine.TensorSum(g);
+        T blueSum = engine.TensorSum(b);
+
+        // Dark red detection (blood-like: high R, low G, low B)
         T onePointFive = NumOps.FromDouble(1.5);
-        bool isFirst = true;
+        var darkRed = SafetyTensorOps<T>.And(
+            SafetyTensorOps<T>.And(
+                SafetyTensorOps<T>.And(SafetyTensorOps<T>.Gt(r, 100), SafetyTensorOps<T>.Lt(g, 80)),
+                SafetyTensorOps<T>.Lt(b, 80)),
+            SafetyTensorOps<T>.And(
+                engine.TensorGreaterThan(r, engine.TensorMultiplyScalar(g, onePointFive)),
+                engine.TensorGreaterThan(r, engine.TensorMultiplyScalar(b, onePointFive))));
+        T darkRedCount = engine.TensorSum(darkRed);
 
-        for (int y = 0; y < layout.Height; y++)
-        {
-            for (int x = 0; x < layout.Width; x++)
-            {
-                T r = GetPixelChannel(data, layout, y, x, 0);
-                T g = GetPixelChannel(data, layout, y, x, 1);
-                T b = GetPixelChannel(data, layout, y, x, 2);
-
-                if (NumOps.LessThanOrEquals(r, NormalizeThreshold) &&
-                    NumOps.LessThanOrEquals(g, NormalizeThreshold) &&
-                    NumOps.LessThanOrEquals(b, NormalizeThreshold))
-                {
-                    r = NumOps.Multiply(r, TwoFiftyFive);
-                    g = NumOps.Multiply(g, TwoFiftyFive);
-                    b = NumOps.Multiply(b, TwoFiftyFive);
-                }
-
-                redSum = NumOps.Add(redSum, r);
-                greenSum = NumOps.Add(greenSum, g);
-                blueSum = NumOps.Add(blueSum, b);
-
-                // Dark red detection (blood-like: high R, low G, low B)
-                if (NumOps.GreaterThan(r, darkRedRThreshold) &&
-                    NumOps.LessThan(g, darkRedGBThreshold) &&
-                    NumOps.LessThan(b, darkRedGBThreshold) &&
-                    NumOps.GreaterThan(r, NumOps.Multiply(g, onePointFive)) &&
-                    NumOps.GreaterThan(r, NumOps.Multiply(b, onePointFive)))
-                {
-                    darkRedCount = NumOps.Add(darkRedCount, One);
-                }
-
-                // Luminance contrast
-                T luminance = NumOps.Add(NumOps.Add(
-                    NumOps.Multiply(lumR, r),
-                    NumOps.Multiply(lumG, g)),
-                    NumOps.Multiply(lumB, b));
-
-                if (!isFirst)
-                {
-                    T diff = NumOps.Abs(NumOps.Subtract(luminance, prevLuminance));
-                    if (NumOps.GreaterThan(diff, contrastThreshold))
-                    {
-                        highContrastCount = NumOps.Add(highContrastCount, One);
-                    }
-                }
-
-                prevLuminance = luminance;
-                isFirst = false;
-            }
-        }
+        // Luminance contrast between consecutive pixels in raster order
+        var luminance = engine.TensorAdd(engine.TensorAdd(
+            engine.TensorMultiplyScalar(r, NumOps.FromDouble(0.299)),
+            engine.TensorMultiplyScalar(g, NumOps.FromDouble(0.587))),
+            engine.TensorMultiplyScalar(b, NumOps.FromDouble(0.114)));
+        T highContrastCount = CountContrastSteps(engine.Reshape(luminance, new[] { totalPixels }), 80);
 
         // Red dominance ratio: (R / (R+G+B)) - 0.333, scaled
         T totalColor = NumOps.Add(NumOps.Add(redSum, greenSum), blueSum);
@@ -334,49 +258,51 @@ internal class CLIPImageSafetyClassifier<T> : ImageSafetyModuleBase<T>
         return Clamp01(score);
     }
 
-    private static bool IsSkinPixel(T r, T g, T b,
-        T rMin, T gMin, T bMin, T minDiffThreshold,
-        T hMax, T sMin, T sMax, T vMin, T vMax, T onePointFive)
+    /// <summary>
+    /// RGB-space skin detection (Peer et al., 2003) with an HSV bounds check, per pixel: 1 for
+    /// skin. Each rejection test is applied exactly as the scalar test is written, so a NaN
+    /// channel fails the same comparisons it failed there.
+    /// </summary>
+    private Tensor<T> SkinMask(Tensor<T> r, Tensor<T> g, Tensor<T> b)
     {
-        // RGB-space skin detection (Peer et al., 2003)
-        if (NumOps.LessThanOrEquals(r, rMin)) return false;
-        if (NumOps.LessThanOrEquals(g, gMin)) return false;
-        if (NumOps.LessThanOrEquals(b, bMin)) return false;
+        var engine = Engine;
 
-        T maxRgb = r;
-        if (NumOps.GreaterThan(g, maxRgb)) maxRgb = g;
-        if (NumOps.GreaterThan(b, maxRgb)) maxRgb = b;
+        var maxRgb = SafetyTensorOps<T>.Where(engine.TensorGreaterThan(g, r), g, r);
+        maxRgb = SafetyTensorOps<T>.Where(engine.TensorGreaterThan(b, maxRgb), b, maxRgb);
+        var minRgb = SafetyTensorOps<T>.Where(engine.TensorLessThan(g, r), g, r);
+        minRgb = SafetyTensorOps<T>.Where(engine.TensorLessThan(b, minRgb), b, minRgb);
 
-        T minRgb = r;
-        if (NumOps.LessThan(g, minRgb)) minRgb = g;
-        if (NumOps.LessThan(b, minRgb)) minRgb = b;
+        // HSV conversion
+        var delta = engine.TensorSubtract(maxRgb, minRgb);
+        var positiveMax = SafetyTensorOps<T>.Gt(maxRgb, 0.0);
+        var s = SafetyTensorOps<T>.Where(positiveMax,
+            engine.TensorDivide(delta, SafetyTensorOps<T>.Where(positiveMax, maxRgb, 1.0)), 0.0);
+        var v = engine.TensorDivideScalar(maxRgb, NumOps.FromDouble(255.0));
 
-        if (NumOps.LessThanOrEquals(NumOps.Subtract(maxRgb, minRgb), minDiffThreshold)) return false;
-        if (NumOps.LessThanOrEquals(r, g) || NumOps.LessThanOrEquals(r, b)) return false;
+        // Compute hue (simplified — R is max for skin tones). Grey pixels (delta 0) divide by one instead: decimal
+        // throws on division by zero, and those pixels are rejected by the delta test below either way.
+        var safeDelta = SafetyTensorOps<T>.Where(SafetyTensorOps<T>.Gt(delta, 0.0), delta, 1.0);
+        var h = engine.TensorMultiplyScalar(engine.TensorDivide(engine.TensorSubtract(g, b), safeDelta),
+            NumOps.FromDouble(60.0));
+        h = SafetyTensorOps<T>.Where(SafetyTensorOps<T>.Lt(h, 0.0),
+            engine.TensorAddScalar(h, NumOps.FromDouble(360.0)), h);
 
-        // HSV conversion and bounds check
-        T delta = NumOps.Subtract(maxRgb, minRgb);
-        T s = NumOps.GreaterThan(maxRgb, NumOps.Zero)
-            ? NumOps.Divide(delta, maxRgb)
-            : NumOps.Zero;
-        T v = NumOps.Divide(maxRgb, NumOps.FromDouble(255.0));
+        var rejected = SafetyTensorOps<T>.Le(r, 95);
+        rejected = SafetyTensorOps<T>.Or(rejected, SafetyTensorOps<T>.Le(g, 40));
+        rejected = SafetyTensorOps<T>.Or(rejected, SafetyTensorOps<T>.Le(b, 20));
+        rejected = SafetyTensorOps<T>.Or(rejected, SafetyTensorOps<T>.Le(delta, 15));
+        rejected = SafetyTensorOps<T>.Or(rejected,
+            SafetyTensorOps<T>.Or(engine.TensorLessEqual(r, g), engine.TensorLessEqual(r, b)));
+        rejected = SafetyTensorOps<T>.Or(rejected, SafetyTensorOps<T>.Gt(h, 50));
+        rejected = SafetyTensorOps<T>.Or(rejected,
+            SafetyTensorOps<T>.Or(SafetyTensorOps<T>.Lt(s, 0.1), SafetyTensorOps<T>.Gt(s, 0.8)));
+        rejected = SafetyTensorOps<T>.Or(rejected,
+            SafetyTensorOps<T>.Or(SafetyTensorOps<T>.Lt(v, 0.2), SafetyTensorOps<T>.Gt(v, 0.95)));
 
-        // Compute hue (simplified — R is max for skin tones)
-        T sixty = NumOps.FromDouble(60.0);
-        T h = NumOps.Multiply(sixty, NumOps.Divide(NumOps.Subtract(g, b), delta));
-        if (NumOps.LessThan(h, NumOps.Zero))
-        {
-            h = NumOps.Add(h, NumOps.FromDouble(360.0));
-        }
-
-        if (NumOps.GreaterThan(h, hMax)) return false;
-        if (NumOps.LessThan(s, sMin) || NumOps.GreaterThan(s, sMax)) return false;
-        if (NumOps.LessThan(v, vMin) || NumOps.GreaterThan(v, vMax)) return false;
-
-        return true;
+        return SafetyTensorOps<T>.Not(rejected);
     }
 
-    private T ComputeSkinClustering(ReadOnlySpan<T> data, ImageLayout layout)
+    private T ComputeSkinClustering(Tensor<T> skin, ImageLayout layout)
     {
         int totalPixels = layout.Height * layout.Width;
         if (totalPixels == 0 || layout.Height < 4 || layout.Width < 4) return Zero;
@@ -387,103 +313,29 @@ internal class CLIPImageSafetyClassifier<T> : ImageSafetyModuleBase<T>
         int cellPixels = cellH * cellW;
         if (cellPixels == 0) return Zero;
 
-        T rMin = NumOps.FromDouble(95);
-        T gMin = NumOps.FromDouble(40);
-        T bMin = NumOps.FromDouble(20);
-        T minDiff = NumOps.FromDouble(15);
-        T hMax = NumOps.FromDouble(50);
-        T sMin = NumOps.FromDouble(0.1);
-        T sMax = NumOps.FromDouble(0.8);
-        T vMin = NumOps.FromDouble(0.2);
-        T vMax = NumOps.FromDouble(0.95);
-        T onePointFive = NumOps.FromDouble(1.5);
-        T halfT = NumOps.FromDouble(0.5);
+        // Skin count of every grid cell: [gridRows, cellH, gridCols, cellW] summed over the cell axes.
+        var engine = Engine;
+        var grid = engine.TensorSlice(skin, new[] { 0, 0 }, new[] { gridRows * cellH, gridCols * cellW });
+        var cells = engine.ReduceSum(
+            engine.Reshape(grid.Contiguous(), new[] { gridRows, cellH, gridCols, cellW }), new[] { 1, 3 }, false);
+        var cellFraction = engine.TensorDivideScalar(cells, NumOps.FromDouble(cellPixels));
+        T highSkinCells = engine.TensorSum(SafetyTensorOps<T>.Gt(cellFraction, 0.5));
 
-        int highSkinCells = 0;
-        T cellPixelsT = NumOps.FromDouble(cellPixels);
-
-        for (int gr = 0; gr < gridRows; gr++)
-        {
-            for (int gc = 0; gc < gridCols; gc++)
-            {
-                T cellSkinCount = Zero;
-                int startY = gr * cellH;
-                int startX = gc * cellW;
-
-                for (int y = startY; y < startY + cellH && y < layout.Height; y++)
-                {
-                    for (int x = startX; x < startX + cellW && x < layout.Width; x++)
-                    {
-                        T r = GetPixelChannel(data, layout, y, x, 0);
-                        T g = GetPixelChannel(data, layout, y, x, 1);
-                        T b = GetPixelChannel(data, layout, y, x, 2);
-
-                        if (NumOps.LessThanOrEquals(r, NormalizeThreshold) &&
-                            NumOps.LessThanOrEquals(g, NormalizeThreshold) &&
-                            NumOps.LessThanOrEquals(b, NormalizeThreshold))
-                        {
-                            r = NumOps.Multiply(r, TwoFiftyFive);
-                            g = NumOps.Multiply(g, TwoFiftyFive);
-                            b = NumOps.Multiply(b, TwoFiftyFive);
-                        }
-
-                        if (IsSkinPixel(r, g, b, rMin, gMin, bMin, minDiff,
-                            hMax, sMin, sMax, vMin, vMax, onePointFive))
-                        {
-                            cellSkinCount = NumOps.Add(cellSkinCount, One);
-                        }
-                    }
-                }
-
-                T cellFraction = NumOps.Divide(cellSkinCount, cellPixelsT);
-                if (NumOps.GreaterThan(cellFraction, halfT))
-                {
-                    highSkinCells++;
-                }
-            }
-        }
-
-        return NumOps.FromDouble((double)highSkinCells / (gridRows * gridCols));
+        return NumOps.Divide(highSkinCells, NumOps.FromDouble(gridRows * gridCols));
     }
 
-    private T ComputeGrayscaleViolenceScore(ReadOnlySpan<T> data, ImageLayout layout)
+    private T ComputeGrayscaleViolenceScore(Tensor<T> data, ImageLayout layout)
     {
         int totalPixels = layout.Height * layout.Width;
         if (totalPixels == 0) return Zero;
 
-        T contrastThreshold = NumOps.FromDouble(80);
-        T darkThreshold = NumOps.FromDouble(30);
-        T highContrastCount = Zero;
-        T veryDarkCount = Zero;
-        T prevVal = Zero;
+        var engine = Engine;
         T totalCount = NumOps.FromDouble(data.Length);
-        bool isFirst = true;
 
-        for (int i = 0; i < data.Length; i++)
-        {
-            T val = data[i];
-            if (NumOps.LessThanOrEquals(val, NormalizeThreshold))
-            {
-                val = NumOps.Multiply(val, TwoFiftyFive);
-            }
-
-            if (NumOps.LessThan(val, darkThreshold))
-            {
-                veryDarkCount = NumOps.Add(veryDarkCount, One);
-            }
-
-            if (!isFirst)
-            {
-                T diff = NumOps.Abs(NumOps.Subtract(val, prevVal));
-                if (NumOps.GreaterThan(diff, contrastThreshold))
-                {
-                    highContrastCount = NumOps.Add(highContrastCount, One);
-                }
-            }
-
-            prevVal = val;
-            isFirst = false;
-        }
+        var val = SafetyTensorOps<T>.Where(engine.TensorLessEqual(data, SafetyTensorOps<T>.FullLike(data, 1.0)),
+            engine.TensorMultiplyScalar(data, TwoFiftyFive), data);
+        T veryDarkCount = engine.TensorSum(SafetyTensorOps<T>.Lt(val, 30));
+        T highContrastCount = CountContrastSteps(val, 80);
 
         T five = NumOps.FromDouble(5.0);
         T three = NumOps.FromDouble(3.0);
@@ -495,20 +347,49 @@ internal class CLIPImageSafetyClassifier<T> : ImageSafetyModuleBase<T>
         return Clamp01(NumOps.Add(NumOps.Multiply(w1, contrastScore), NumOps.Multiply(w2, darkScore)));
     }
 
-    private T GetPixelChannel(ReadOnlySpan<T> data, ImageLayout layout, int y, int x, int c)
+    /// <summary>Number of consecutive-element steps <c>|x[i] - x[i-1]| &gt; threshold</c>.</summary>
+    private T CountContrastSteps(Tensor<T> values, double threshold)
     {
-        int idx;
+        if (values.Length < 2) return Zero;
+        var engine = Engine;
+        return engine.TensorSum(SafetyTensorOps<T>.Gt(engine.TensorAbs(engine.TensorDiff(values, 1, 0)), threshold));
+    }
+
+    /// <summary>
+    /// The R, G and B planes (<c>[height, width]</c>) of the image, each scaled from [0, 1] to
+    /// [0, 255] where all three channels of a pixel are at most 1.
+    /// </summary>
+    private (Tensor<T> R, Tensor<T> G, Tensor<T> B) GetRgbPlanes(Tensor<T> data, ImageLayout layout)
+    {
+        var engine = Engine;
+        int pixels = layout.Height * layout.Width;
+        var planeShape = new[] { layout.Height, layout.Width };
+        var planes = new Tensor<T>[3];
         if (layout.Format == PixelFormat.CHW)
         {
-            idx = layout.ChannelOffset + c * layout.Height * layout.Width + y * layout.Width + x;
+            for (int c = 0; c < 3; c++)
+                planes[c] = engine.Reshape(engine.TensorNarrow(data, 0, layout.ChannelOffset + c * pixels, pixels), planeShape);
         }
         else
         {
-            idx = layout.ChannelOffset + (y * layout.Width + x) * layout.Channels + c;
+            var interleaved = engine.Reshape(
+                engine.TensorNarrow(data, 0, layout.ChannelOffset, pixels * layout.Channels),
+                new[] { pixels, layout.Channels });
+            for (int c = 0; c < 3; c++)
+                planes[c] = engine.Reshape(engine.TensorNarrow(interleaved, 1, c, 1).Contiguous(), planeShape);
         }
 
-        if (idx < 0 || idx >= data.Length) return Zero;
-        return data[idx];
+        var r = planes[0];
+        var g = planes[1];
+        var b = planes[2];
+
+        // Normalize to [0,255] if data is in [0,1] range
+        var normalized = SafetyTensorOps<T>.And(SafetyTensorOps<T>.And(
+            SafetyTensorOps<T>.Le(r, 1.0), SafetyTensorOps<T>.Le(g, 1.0)), SafetyTensorOps<T>.Le(b, 1.0));
+        r = SafetyTensorOps<T>.Where(normalized, engine.TensorMultiplyScalar(r, TwoFiftyFive), r);
+        g = SafetyTensorOps<T>.Where(normalized, engine.TensorMultiplyScalar(g, TwoFiftyFive), g);
+        b = SafetyTensorOps<T>.Where(normalized, engine.TensorMultiplyScalar(b, TwoFiftyFive), b);
+        return (r, g, b);
     }
 
     private static T Clamp01(T value)

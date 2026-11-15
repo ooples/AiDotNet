@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Attributes;
 using AiDotNet.Clustering.Interfaces;
 using AiDotNet.Clustering.Options;
@@ -80,21 +81,10 @@ public class GapStatistic<T>
             : RandomHelper.CreateSecureRandom();
 
         // Compute data bounds for uniform reference generation
-        var minBounds = new double[d];
-        var maxBounds = new double[d];
-
-        for (int j = 0; j < d; j++)
-        {
-            minBounds[j] = double.MaxValue;
-            maxBounds[j] = double.MinValue;
-
-            for (int i = 0; i < n; i++)
-            {
-                double val = _numOps.ToDouble(data[i, j]);
-                minBounds[j] = Math.Min(minBounds[j], val);
-                maxBounds[j] = Math.Max(maxBounds[j], val);
-            }
-        }
+        var engine = AiDotNetEngine.Current;
+        var columns = Tensor<T>.FromMatrix(data);
+        var minBounds = engine.TensorAmin(columns, new[] { 0 }, false).ToVector();
+        var ranges = engine.TensorSubtract(engine.ReduceMax(columns, new[] { 0 }, false), minBounds.AsTensor()).ToVector();
 
         var kValues = new List<int>();
         var gapValues = new List<double>();
@@ -112,7 +102,9 @@ public class GapStatistic<T>
 
             for (int b = 0; b < _numReferences; b++)
             {
-                var refData = GenerateUniformReference(n, d, minBounds, maxBounds, rand);
+                // [n, d] rand.NextDouble() draws in row-major order (keeps the seeded stream order).
+                var uniforms = Matrix<T>.CreateRandom(rand, n, d);
+                var refData = GenerateUniformReference(n, d, minBounds, ranges, uniforms);
                 double refWk = ComputeWCSS(refData, k);
                 refLogWk[b] = Math.Log(Math.Max(refWk, 1e-10));
             }
@@ -200,20 +192,18 @@ public class GapStatistic<T>
         }
     }
 
-    private Matrix<T> GenerateUniformReference(int n, int d, double[] minBounds, double[] maxBounds, Random rand)
+    /// <summary>
+    /// Uniform reference data: min_j + u * range_j per entry, from the caller's [n, d] uniform draws.
+    /// </summary>
+    private Matrix<T> GenerateUniformReference(int n, int d, Vector<T> minBounds, Vector<T> ranges, Matrix<T> draws)
     {
-        var refData = new Matrix<T>(n, d);
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                double val = minBounds[j] + rand.NextDouble() * (maxBounds[j] - minBounds[j]);
-                refData[i, j] = _numOps.FromDouble(val);
-            }
-        }
-
-        return refData;
+        var engine = AiDotNetEngine.Current;
+        var uniforms = Tensor<T>.FromMatrix(draws);
+        var shape = new[] { n, d };
+        var scaled = engine.TensorMultiply(
+            uniforms, engine.TensorBroadcastTo(Tensor<T>.FromVector(ranges, new[] { 1, d }), shape));
+        return engine.TensorAdd(
+            engine.TensorBroadcastTo(Tensor<T>.FromVector(minBounds, new[] { 1, d }), shape), scaled).ToMatrix();
     }
 
     private double ComputeStd(double[] values)

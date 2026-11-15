@@ -251,19 +251,12 @@ public partial class LoRAPlusAdapter<T> : LoRAAdapterBase<T>
         // Get current LoRA parameters
         Vector<T> loraParams = _loraLayer.GetParameters();
 
-        // Update matrix A with base learning rate
-        for (int i = 0; i < matrixASize; i++)
-        {
-            T update = NumOps.Multiply(loraGrads[i], _baseLearningRate);
-            loraParams[i] = NumOps.Subtract(loraParams[i], update);
-        }
-
-        // Update matrix B with scaled learning rate (higher rate)
-        for (int i = matrixASize; i < matrixASize + matrixBSize; i++)
-        {
-            T update = NumOps.Multiply(loraGrads[i], _scaledLearningRate);
-            loraParams[i] = NumOps.Subtract(loraParams[i], update);
-        }
+        // Update matrix A with base learning rate and matrix B with the scaled (higher) rate:
+        // params -= [lrA * gradA, lrB * gradB]
+        Vector<T> scaledGrads = Vector<T>.Concatenate(
+            Engine.Multiply(loraGrads.GetSubVector(0, matrixASize), _baseLearningRate),
+            Engine.Multiply(loraGrads.GetSubVector(matrixASize, matrixBSize), _scaledLearningRate));
+        loraParams = Engine.Subtract(loraParams, scaledGrads);
 
         // Apply updated parameters to LoRA layer
         _loraLayer.SetParameters(loraParams);

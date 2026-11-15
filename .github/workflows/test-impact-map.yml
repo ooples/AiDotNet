@@ -22,9 +22,11 @@ on:
     # WEEKLY, on the weekend. The instrumented run is ~3450 runner-minutes; nightly it ran from
     # 02:21 to 13:06 UTC on 2026-09-29 and held the shared 20-runner pool through the working day,
     # queueing every pull request behind it. Saturday 00:00 harvests last week's run and dispatches
-    # the next; Sunday 00:00 only harvests, so the map built from that run is in effect by Sunday
-    # instead of a week later. The map artifacts are kept 14 days, so a missed week still leaves
-    # one in effect.
+    # the next; Sunday 00:00 harvests, so the map built from that run is in effect by Sunday
+    # instead of a week later. Sunday dispatches only as a RETRY, when Saturday's run left nothing
+    # to harvest (see the coverage-run job): a lost Saturday run used to mean no attempt for a
+    # week and a map two weeks behind master. The map artifacts are kept 14 days and a coverage
+    # run's digests 30, so a missed week still leaves a map in effect.
     - cron: '0 0 * * 6'
     - cron: '0 0 * * 0'
   workflow_dispatch:
@@ -50,6 +52,9 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       candidate_ready: ${{ steps.source.outputs.found }}
+      # The coverage run this invocation harvested; empty when there was none. The Sunday retry
+      # decision in coverage-run reads its age.
+      source_run_id: ${{ steps.source.outputs.run_id }}
     permissions:
       actions: read
       contents: read
@@ -583,6 +588,43 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      # ROLLING MAP (tools/TestImpact/RollingShardMap.ps1), behind repository variable
+      # TEST_IMPACT_ROLLING_MAP (shadow or on; unset or off skips both steps). The map this run just
+      # certified is the anchor; the newest valid digest per shard from the scheduled nightlies since is
+      # laid over it, replayed against the newest complete nightly, and certified only on a clean reducing
+      # replay. It is uploaded by THIS run on purpose: selection fetches it from whichever run the
+      # certified-map resolver returns, so the anchor's revocation rules cover the rolling map too.
+      # The certified map is already uploaded and nothing here can change it.
+      - name: Build the rolling map
+        id: rolling
+        if: ${{ steps.audit.outputs.certified == 'true' && (vars.TEST_IMPACT_ROLLING_MAP == 'shadow' || vars.TEST_IMPACT_ROLLING_MAP == 'on') }}
+        continue-on-error: true
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The audit step left the source run's tree checked out; this needs the tooling of this commit.
+          & git checkout --quiet $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'could not return to the workflow commit' }
+          ./tools/TestImpact/New-RollingShardMap.ps1 -Repository $env:GITHUB_REPOSITORY `
+              -AnchorMapFile certified-map/shard-map.json -AnchorCertificateFile certified-map/certification.json `
+              -AnchorRunId ([long] $env:GITHUB_RUN_ID) -OutDirectory rolling-map `
+              -WorkDirectory (Join-Path $env:RUNNER_TEMP 'rolling-map-work')
+          if ($LASTEXITCODE -ne 0) { throw "New-RollingShardMap exited $LASTEXITCODE" }
+          $decision = Get-Content rolling-map/rolling-decision.json -Raw | ConvertFrom-Json
+          "### Rolling map`n`n- $($decision.disposition): $($decision.reason)`n- $(@($decision.sources).Count) nightly source run(s); $(@($decision.rejected).Count) digest(s) not used" |
+            Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      - name: Upload rolling map
+        if: ${{ always() && (vars.TEST_IMPACT_ROLLING_MAP == 'shadow' || vars.TEST_IMPACT_ROLLING_MAP == 'on') && hashFiles('rolling-map/rolling-decision.json') != '' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
+        with:
+          name: rolling-shard-map
+          path: rolling-map/
+          if-no-files-found: ignore
+          retention-days: 14
+
   coverage-run:
     name: Dispatch next coverage-everywhere run
     needs: build-map
@@ -590,8 +632,9 @@ jobs:
     # Never on a merge: instrumenting the whole matrix is ~5 hours of runner occupancy, and the
     # push trigger exists to re-certify from evidence that already exists, not to gather new
     # evidence. The schedule and an explicit dispatch remain the only ways to start one.
-    # The Sunday schedule is harvest-only (see the schedule above).
-    if: ${{ always() && github.event_name != 'push' && github.event.schedule != '0 0 * * 0' && !inputs.skip_coverage_run && !inputs.run_id }}
+    # The Sunday schedule only retries: the step below dispatches then only when Saturday's run
+    # left nothing to harvest.
+    if: ${{ always() && github.event_name != 'push' && !inputs.skip_coverage_run && !inputs.run_id }}
     runs-on: ubuntu-latest
     permissions:
       actions: write
@@ -600,7 +643,47 @@ jobs:
       - name: Dispatch coverage run
         env:
           GH_TOKEN: ${{ github.token }}
+          EVENT_SCHEDULE: ${{ github.event.schedule }}
+          BUILD_MAP_RESULT: ${{ needs.build-map.result }}
+          SOURCE_RUN_ID: ${{ needs.build-map.outputs.source_run_id }}
         run: |
+          # SUNDAY IS A RETRY, NOT A SECOND WEEKLY RUN. Saturday's coverage run is the only attempt
+          # of the week, and two of the seven up to 2026-11-14 were lost to a broken build on
+          # master (38010106532, 43536907336). Nothing dispatched again until the next Saturday,
+          # so the map fell two weeks behind and, once the older run's digests expired, could not
+          # be rebuilt at all. Retry when this invocation harvested no coverage run created in the
+          # last two days: Saturday's is about a day old by now, last week's is eight.
+          if [ "$EVENT_SCHEDULE" = '0 0 * * 0' ]; then
+            if [ "$BUILD_MAP_RESULT" != 'success' ]; then
+              # The build failed for its own reasons (an audit miss, a broken self-test). Whether
+              # Saturday's run was usable is unknown, and a retry would not repair the build.
+              echo "Sunday retry not considered: the map build ended in '$BUILD_MAP_RESULT'."
+              exit 0
+            fi
+            fresh=false
+            case "${SOURCE_RUN_ID:-}" in
+              ''|*[!0-9]*) ;;
+              *)
+                created=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}" --jq '.created_at' 2>/dev/null || true)
+                if [ -z "$created" ] || ! created_s=$(date -u -d "$created" +%s 2>/dev/null); then
+                  # A retry is ~4300 runner-minutes: dispatch one on evidence, not on an API error.
+                  echo "::warning::could not read the age of harvested coverage run $SOURCE_RUN_ID - not retrying"
+                  exit 0
+                fi
+                if [ "$created_s" -ge "$(date -u -d '2 days ago' +%s)" ]; then
+                  fresh=true
+                fi
+                ;;
+            esac
+            if [ "$fresh" = 'true' ]; then
+              echo "Sunday harvest used this week's coverage run $SOURCE_RUN_ID - no retry needed."
+              echo "No retry: this week's coverage run $SOURCE_RUN_ID was harvested." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            echo "::warning::no coverage run from this week was harvested (harvested: ${SOURCE_RUN_ID:-none}) - dispatching a retry"
+            echo "Retry: no coverage run from this week was harvested (harvested: ${SOURCE_RUN_ID:-none})." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
           if [ '${{ needs.build-map.result }}' = 'success' ] && [ '${{ needs.build-map.outputs.candidate_ready }}' = 'true' ]; then
             # This workflow is not marked successful until this dispatch job exits. Pass its id
             # explicitly so the child cannot race and record the previous successful map.
@@ -610,7 +693,7 @@ jobs:
             # artifact remains in effect, so that is the only map the next run may claim.
             map_run_id=''
             candidates=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow test-impact-map.yml \
-              --branch master --status success --limit 20 --json databaseId \
+              --branch master --status success --limit 60 --json databaseId \
               --jq '.[].databaseId' 2>/dev/null || true)
             for candidate in $candidates; do
               has_candidate=$(gh api \

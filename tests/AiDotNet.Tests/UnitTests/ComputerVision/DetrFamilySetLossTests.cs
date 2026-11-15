@@ -91,6 +91,26 @@ public sealed class DetrFamilySetLossTests
             Near(FiniteDifference(Boxes, index, boxes => BoxObjective(boxes, query, options)), boxGradient[index], 2e-5);
     }
 
+    [Fact]
+    public void VariFocal_HalfIdenticalSmallBox_KeepsQualityOne()
+    {
+        // In Half the corners of a 0.0002-wide box centred at 0.5 all round to 0.5, so an IoU formed in T was 0 and
+        // the matched positive got weight and target 0. Formed in double, identical boxes have quality 1, so the
+        // positive logit's derivative is q (sigmoid(0) - q) = -0.5 (one target, so no further normalization).
+        var loss = new DETRSetLoss<Half>(1, DetrSetLossOptions.ForRtDetr());
+        var logits = new Tensor<Half>(new[] { (Half)0 }, new[] { 1, 1, 1 });
+        var box = new[] { (Half)0.5, (Half)0.5, (Half)0.0002, (Half)0.0002 };
+        var boxes = new Tensor<Half>(box, new[] { 1, 1, 4 });
+        var gold = new DetectionTrainingBatch<Half>(new[] { new[] { new DetectionTrainingTarget<Half>(0, box[0], box[1], box[2], box[3]) } });
+        using var tape = new GradientTape<Half>();
+        var objective = loss.ComputeTapeLoss(logits, boxes, gold);
+        var gradients = tape.ComputeGradients(objective, new[] { logits });
+
+        Assert.True(gradients.TryGetValue(logits, out var logitGradient));
+        Assert.NotNull(logitGradient);
+        Near(-0.5, (double)logitGradient[0], 1e-3);
+    }
+
     [Theory]
     [InlineData(SetPredictionClassificationLoss.SigmoidFocal)]
     [InlineData(SetPredictionClassificationLoss.VariFocal)]

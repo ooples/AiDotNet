@@ -293,29 +293,17 @@ public partial class UViTNoisePredictor<T> : NoisePredictorBase<T>
                 // or apply to the first posLen tokens only (seqLen > posLen)
                 int applyLen = Math.Min(seqLen, posLen);
                 int hiddenDim = _posEmbed.Shape[2];
-                var posEmbedSpan = _posEmbed.AsSpan();
 
-                // Copy all patch data (preserving batch dimension)
-                var patchSpan = patches.AsSpan();
-                int totalLen = batch * seqLen * hiddenDim;
-                var resultData = new T[totalLen];
-                patchSpan.Slice(0, totalLen).CopyTo(resultData);
-
-                // Add position embeddings to the first applyLen tokens for each batch element
-                for (int b = 0; b < batch; b++)
+                // Add position embeddings to the first applyLen tokens of every batch element, as a fresh tensor
+                // off the tape like the copy it replaces
+                using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
                 {
-                    int batchOffset = b * seqLen * hiddenDim;
-                    for (int s = 0; s < applyLen; s++)
-                    {
-                        int patchIdx = batchOffset + s * hiddenDim;
-                        int posIdx = s * hiddenDim; // posEmbed is [1, posLen, hidden], shared across batch
-                        for (int d = 0; d < hiddenDim; d++)
-                        {
-                            resultData[patchIdx + d] = NumOps.Add(resultData[patchIdx + d], posEmbedSpan[posIdx + d]);
-                        }
-                    }
+                    var position = Engine.TensorBroadcastTo(Engine.TensorNarrow(_posEmbed, 1, 0, applyLen), new[] { batch, applyLen, hiddenDim });
+                    var head = Engine.TensorAdd(Engine.TensorNarrow(patches, 1, 0, applyLen), position);
+                    patches = applyLen < seqLen
+                        ? Engine.TensorConcatenate(new[] { head, Engine.TensorNarrow(patches, 1, applyLen, seqLen - applyLen) }, 1)
+                        : head.Clone();
                 }
-                patches = new Tensor<T>(patches._shape, new Vector<T>(resultData));
             }
         }
 
@@ -576,17 +564,15 @@ public partial class UViTNoisePredictor<T> : NoisePredictorBase<T>
 
     private static void AddLayerParams(List<T> list, ILayer<T> layer)
     {
-        var p = layer.GetParameters();
-        for (int i = 0; i < p.Length; i++) list.Add(p[i]);
+        list.AddRange(layer.GetParameters().AsSpan().ToArray());
     }
 
     private static int SetLayerParams(ILayer<T> layer, Vector<T> parameters, int offset)
     {
         int count = checked((int)layer.ParameterCount);
-        var p = new T[count];
-        for (int i = 0; i < count && offset + i < parameters.Length; i++)
-            p[i] = parameters[offset + i];
-        layer.SetParameters(new Vector<T>(p));
+        int available = Math.Max(0, Math.Min(count, parameters.Length - offset));
+        var p = available > 0 ? parameters.GetSubVector(offset, available) : new Vector<T>(0);
+        layer.SetParameters(DiffusionVectorOps.Fit(p, count));
         return offset + count;
     }
 
@@ -618,8 +604,7 @@ public partial class UViTNoisePredictor<T> : NoisePredictorBase<T>
 
     private static void AddLayerGrads(List<T> list, ILayer<T> layer)
     {
-        var g = layer.GetParameterGradients();
-        for (int i = 0; i < g.Length; i++) list.Add(g[i]);
+        list.AddRange(layer.GetParameterGradients().AsSpan().ToArray());
     }
 
     private static void AddBlockGrads(List<T> list, UViTBlock block)

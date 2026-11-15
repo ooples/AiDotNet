@@ -27,13 +27,13 @@ public class PartialCorrelation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
     private readonly int _nFeaturesToSelect;
     private readonly bool _controlForAllOthers;
 
-    private double[]? _partialCorrelations;
+    private Vector<T>? _partialCorrelations;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? PartialCorrelations => _partialCorrelations;
+    public Vector<T>? PartialCorrelations => _partialCorrelations;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -69,198 +69,67 @@ public class PartialCorrelation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         int n = data.Rows;
         int p = data.Columns;
 
-        // Convert to arrays
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
-
-        _partialCorrelations = new double[p];
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+        var y = Tensor<T>.FromVector(target);
+        Tensor<T> partialCorrelations;
 
         if (_controlForAllOthers && p > 1)
         {
-            // Compute full correlation matrix including target
-            var fullMatrix = new double[n, p + 1];
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < p; j++)
-                    fullMatrix[i, j] = X[i, j];
-                fullMatrix[i, p] = y[i];
-            }
+            // Correlation matrix of [X | y] (a column whose population std is below 1e-10 correlates 0)
+            var fullMatrix = engine.TensorConcatenate(new[] { X, engine.Reshape(y, new[] { n, 1 }) }, 1);
+            var corrMatrix = FeatureScoringTensorOps.CorrelationMatrix(fullMatrix, n * 1e-20);
+            var targetColumn = engine.Reshape(
+                engine.TensorSlice(corrMatrix, new[] { 0, p }, new[] { p, 1 }), new[] { p });
 
-            var corrMatrix = ComputeCorrelationMatrix(fullMatrix, n, p + 1);
-            var precisionMatrix = InvertMatrix(corrMatrix, p + 1);
+            // Precision matrix via partially pivoted LU. The engine factorizations run only in float and double, so
+            // a Half, BFloat16 or decimal matrix is factored in double and the result cast back.
+            var precisionPartials = typeof(T) == typeof(float) || typeof(T) == typeof(double)
+                ? PrecisionPartialCorrelations(corrMatrix, p)
+                : PrecisionPartialCorrelations(corrMatrix.Cast<double>(), p)?.Cast<T>();
 
-            if (precisionMatrix is not null)
-            {
-                // Partial correlation from precision matrix
-                for (int j = 0; j < p; j++)
-                {
-                    double pjj = precisionMatrix[j, j];
-                    double pyy = precisionMatrix[p, p];
-                    double pjy = precisionMatrix[j, p];
-
-                    if (pjj > 1e-10 && pyy > 1e-10)
-                        _partialCorrelations[j] = -pjy / Math.Sqrt(pjj * pyy);
-                    else
-                        _partialCorrelations[j] = 0;
-                }
-            }
-            else
-            {
-                // Fallback to simple correlation if matrix inversion fails
-                for (int j = 0; j < p; j++)
-                    _partialCorrelations[j] = Math.Abs(corrMatrix[j, p]);
-            }
+            // Fallback to simple correlation if matrix inversion fails
+            partialCorrelations = precisionPartials ?? engine.TensorAbs(targetColumn);
         }
         else
         {
             // Simple correlation when not controlling for others
-            for (int j = 0; j < p; j++)
-                _partialCorrelations[j] = Math.Abs(ComputeSimpleCorrelation(X, y, j, n));
+            partialCorrelations = engine.TensorAbs(PreprocessingTensorOps.TargetCorrelations(X, y));
         }
 
+        _partialCorrelations = partialCorrelations.ToVector();
+
         int nToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _partialCorrelations
-            .Select((pc, idx) => (PCorr: Math.Abs(pc), Index: idx))
-            .OrderByDescending(x => x.PCorr)
-            .Take(nToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(engine.TensorAbs(partialCorrelations), nToSelect);
 
         IsFitted = true;
     }
-
-    private double[,] ComputeCorrelationMatrix(double[,] data, int n, int p)
+    /// <summary>
+    /// Partial correlations <c>-P_jy / sqrt(P_jj P_yy)</c> of the first <paramref name="p"/> variables with the last
+    /// one, from the precision (inverse) of the [p + 1, p + 1] correlation matrix; null when a pivot of its
+    /// partially pivoted LU factorization is below 1e-10 (singular matrix).
+    /// </summary>
+    private static Tensor<TS>? PrecisionPartialCorrelations<TS>(Tensor<TS> corrMatrix, int p)
     {
-        var means = new double[p];
-        var stds = new double[p];
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<TS>();
+        int size = p + 1;
+        TS tolerance = PreprocessingTensorOps.Tolerance<TS>(1e-10);
+        var (lu, pivots) = AiDotNet.Helpers.LinalgDispatch<TS>.LuFactor(corrMatrix);
+        var pivotMagnitudes = engine.TensorAbs(AiDotNet.Helpers.LinalgDispatch<TS>.Diagonal(lu));
+        if (PreprocessingTensorOps.CountNonZero(PreprocessingTensorOps.AtLeast(pivotMagnitudes, tolerance)) != size)
+            return null;
 
-        // Compute means
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++)
-                means[j] += data[i, j];
-            means[j] /= n;
-        }
-
-        // Compute standard deviations
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++)
-                stds[j] += Math.Pow(data[i, j] - means[j], 2);
-            stds[j] = Math.Sqrt(stds[j] / n);
-            if (stds[j] < 1e-10) stds[j] = 1;
-        }
-
-        // Compute correlation matrix
-        var corr = new double[p, p];
-        for (int i = 0; i < p; i++)
-        {
-            corr[i, i] = 1;
-            for (int j = i + 1; j < p; j++)
-            {
-                double cov = 0;
-                for (int k = 0; k < n; k++)
-                    cov += (data[k, i] - means[i]) * (data[k, j] - means[j]);
-                cov /= n;
-                corr[i, j] = corr[j, i] = cov / (stds[i] * stds[j]);
-            }
-        }
-
-        return corr;
-    }
-
-    private double[,]? InvertMatrix(double[,] matrix, int size)
-    {
-        // Simple matrix inversion using Gauss-Jordan elimination
-        var augmented = new double[size, 2 * size];
-
-        // Create augmented matrix [A|I]
-        for (int i = 0; i < size; i++)
-        {
-            for (int j = 0; j < size; j++)
-                augmented[i, j] = matrix[i, j];
-            augmented[i, size + i] = 1;
-        }
-
-        // Forward elimination with partial pivoting
-        for (int col = 0; col < size; col++)
-        {
-            // Find pivot
-            int maxRow = col;
-            for (int row = col + 1; row < size; row++)
-                if (Math.Abs(augmented[row, col]) > Math.Abs(augmented[maxRow, col]))
-                    maxRow = row;
-
-            if (Math.Abs(augmented[maxRow, col]) < 1e-10)
-                return null;  // Singular matrix
-
-            // Swap rows
-            if (maxRow != col)
-            {
-                for (int j = 0; j < 2 * size; j++)
-                {
-                    double temp = augmented[col, j];
-                    augmented[col, j] = augmented[maxRow, j];
-                    augmented[maxRow, j] = temp;
-                }
-            }
-
-            // Scale pivot row
-            double pivot = augmented[col, col];
-            for (int j = 0; j < 2 * size; j++)
-                augmented[col, j] /= pivot;
-
-            // Eliminate column
-            for (int row = 0; row < size; row++)
-            {
-                if (row != col)
-                {
-                    double factor = augmented[row, col];
-                    for (int j = 0; j < 2 * size; j++)
-                        augmented[row, j] -= factor * augmented[col, j];
-                }
-            }
-        }
-
-        // Extract inverse
-        var inverse = new double[size, size];
-        for (int i = 0; i < size; i++)
-            for (int j = 0; j < size; j++)
-                inverse[i, j] = augmented[i, size + j];
-
-        return inverse;
-    }
-
-    private double ComputeSimpleCorrelation(double[,] X, double[] y, int j, int n)
-    {
-        double xMean = 0, yMean = 0;
-        for (int i = 0; i < n; i++)
-        {
-            xMean += X[i, j];
-            yMean += y[i];
-        }
-        xMean /= n;
-        yMean /= n;
-
-        double ssXY = 0, ssXX = 0, ssYY = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double dx = X[i, j] - xMean;
-            double dy = y[i] - yMean;
-            ssXY += dx * dy;
-            ssXX += dx * dx;
-            ssYY += dy * dy;
-        }
-
-        if (ssXX < 1e-10 || ssYY < 1e-10) return 0;
-        return ssXY / Math.Sqrt(ssXX * ssYY);
+        var precision = AiDotNet.Helpers.LinalgDispatch<TS>.LuSolve(lu, pivots, engine.TensorEye<TS>(size));
+        var diagonal = AiDotNet.Helpers.LinalgDispatch<TS>.Diagonal(precision);
+        var pjj = engine.TensorSlice(diagonal, new[] { 0 }, new[] { p });
+        TS pyy = engine.TensorMaxValue(engine.TensorSlice(diagonal, new[] { p }, new[] { 1 }));
+        var pjy = engine.Reshape(engine.TensorSlice(precision, new[] { 0, p }, new[] { p, 1 }), new[] { p });
+        var zeros = new Tensor<TS>(new[] { p });
+        var usable = ops.GreaterThan(pyy, tolerance) ? engine.TensorGreaterThan(pjj, tolerance) : zeros;
+        var safe = engine.TensorWhere(usable, pjj, PreprocessingTensorOps.Filled(new[] { p }, ops.One));
+        return engine.TensorWhere(usable, engine.TensorNegate(engine.TensorDivide(pjy,
+            engine.TensorSqrt(engine.TensorMultiplyScalar(safe, pyy)))), zeros);
     }
 
     /// <inheritdoc />
@@ -276,15 +145,7 @@ public class PartialCorrelation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
         if (_selectedIndices is null)
             throw new InvalidOperationException("PartialCorrelation has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

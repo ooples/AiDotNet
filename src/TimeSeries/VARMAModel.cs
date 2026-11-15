@@ -215,14 +215,11 @@ public partial class VARMAModel<T> : VectorAutoRegressionModel<T>
 
         // PredictMA returns one correction per output dimension, formed from the most recent
         // residuals. It applies to the forecast, so add it to each predicted step.
-        var result = new Vector<T>(arPrediction.Length);
-        for (int i = 0; i < arPrediction.Length; i++)
-        {
-            T correction = maCorrection[i % maCorrection.Length];
-            result[i] = NumOps.Add(arPrediction[i], correction);
-        }
-
-        return result;
+        int correctionCount = maCorrection.Length;
+        var cycle = Enumerable.Range(0, arPrediction.Length).Select(i => i % correctionCount).ToArray();
+        var corrections = Engine.TensorTake(
+            Tensor<T>.FromVector(maCorrection), new Tensor<int>(cycle, new[] { cycle.Length }));
+        return Engine.TensorAdd(Tensor<T>.FromVector(arPrediction), corrections).ToVector();
     }
 
     /// <summary>
@@ -337,42 +334,28 @@ public partial class VARMAModel<T> : VectorAutoRegressionModel<T>
     /// </remarks>
     private Vector<T> PredictMA()
     {
-        Vector<T> maPrediction = new Vector<T>(_varmaOptions.OutputDimension);
-
         // Build flattened residual vector matching the training feature layout
-        // (concatenate the last MaLag residual rows in the same order as PrepareLaggedResiduals)
+        // (concatenate the last MaLag residual rows, newest first, as PrepareLaggedResiduals does),
+        // zero-padded when fewer than MaLag residual rows exist.
         int m = _varmaOptions.OutputDimension;
         int p = _varmaOptions.MaLag;
         int availableLags = Math.Min(p, _residuals.Rows);
+        int newest = _residuals.Rows - 1;
 
-        List<T> laggedResidualData = new List<T>(m * p);
-        for (int j = 0; j < p; j++)
-        {
-            if (j < availableLags)
-            {
-                Vector<T> laggedRow = _residuals.GetRow(_residuals.Rows - 1 - j);
-                laggedResidualData.AddRange(laggedRow);
-            }
-            else
-            {
-                // Pad with zeros if fewer than MaLag residuals available
-                for (int k = 0; k < m; k++)
-                {
-                    laggedResidualData.Add(NumOps.Zero);
-                }
-            }
-        }
+        var residuals = Tensor<T>.FromMatrix(_residuals);
+        var rows = Enumerable.Range(0, availableLags).Select(j => newest - j).ToArray();
+        var recent = Engine.Reshape(
+            Engine.TensorIndexSelect(residuals, new Tensor<int>(rows, new[] { rows.Length }), 0),
+            new[] { availableLags * _residuals.Columns });
+        var lagged = availableLags == p
+            ? recent
+            : Engine.TensorConcatenate(new[] { recent, new Tensor<T>(new[] { (p - availableLags) * m }) }, 0);
 
-        Vector<T> laggedResidualVector = new Vector<T>(laggedResidualData.ToArray());
-
-        // VECTORIZED: Use Engine.DotProduct to compute MA prediction for each output
-        for (int i = 0; i < m; i++)
-        {
-            Vector<T> maCoeffsRow = _maCoefficients.GetRow(i);
-            maPrediction[i] = Engine.DotProduct(maCoeffsRow, laggedResidualVector);
-        }
-
-        return maPrediction;
+        // One MA dot product per output: the first m coefficient rows times the lagged residuals.
+        var coefficients = Engine.TensorSlice(
+            Tensor<T>.FromMatrix(_maCoefficients), new[] { 0, 0 }, new[] { m, _maCoefficients.Columns });
+        var prediction = Engine.TensorMatMul(coefficients, Engine.Reshape(lagged, new[] { lagged.Length, 1 }));
+        return Engine.Reshape(prediction, new[] { m }).ToVector();
     }
 
     /// <summary>
@@ -442,21 +425,20 @@ public partial class VARMAModel<T> : VectorAutoRegressionModel<T>
         // Residual-lag columns are frequently collinear (especially in the univariate family-test
         // data). Solving the raw normal equations with LU then yields NaN/Infinity. A scale-aware
         // ridge makes the system positive and bounded without changing the VARMA model class.
-        double diagonalScale = 0.0;
-        for (int i = 0; i < normal.Rows; i++)
-            diagonalScale = Math.Max(diagonalScale, Math.Abs(NumOps.ToDouble(normal[i, i])));
-        T ridge = NumOps.FromDouble(Math.Max(1.0, diagonalScale) * 1e-8);
-        for (int i = 0; i < normal.Rows; i++)
-            normal[i, i] = NumOps.Add(normal[i, i], ridge);
+        var normalTensor = Tensor<T>.FromMatrix(normal);
+        T diagonalScale = Engine.TensorMaxValue(Engine.TensorAbs(Engine.TensorDiagonal(normalTensor)));
+        T ridge = NumOps.Multiply(
+            NumOps.GreaterThan(diagonalScale, NumOps.One) ? diagonalScale : NumOps.One, NumOps.FromDouble(1e-8));
+        var regularized = Engine.TensorAdd(
+            normalTensor, Engine.TensorMultiplyScalar(Engine.TensorEye<T>(normal.Rows), ridge));
 
         Vector<T> coefficients = MatrixSolutionHelper.SolveLinearSystem(
-            normal, rhs, MatrixDecompositionType.Qr);
-        for (int i = 0; i < coefficients.Length; i++)
-        {
-            if (!NumericalStabilityHelper.IsFinite(coefficients[i]))
-                coefficients[i] = NumOps.Zero;
-        }
-        return coefficients;
+            regularized.ToMatrix(), rhs, MatrixDecompositionType.Qr);
+
+        // Non-finite coefficients (NaN, or +/-inf, where x - x is NaN) become zero.
+        var solved = Tensor<T>.FromVector(coefficients);
+        var nonFinite = Engine.TensorIsNan(Engine.TensorSubtract(solved, solved));
+        return Engine.TensorWhere(nonFinite, new Tensor<T>(new[] { solved.Length }), solved).ToVector();
     }
 
     /// <summary>

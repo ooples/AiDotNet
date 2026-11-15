@@ -172,29 +172,22 @@ namespace AiDotNet.NeuralNetworks
             var tokens = tokenResult.TokenIds.Take(MaxTokens).ToList();
             if (tokens.Count == 0) tokens.Add(0);
 
-            var inputTensor = Tensor<T>.FromVector(new Vector<T>(tokens.Select(id => NumOps.FromDouble(id)).ToArray()), [1, tokens.Count]);
+            var inputTensor = new Tensor<int>(tokens.ToArray(), [1, tokens.Count]).Cast<T>();
 
             // For SPLADE, the last layer is a DenseLayer projecting to vocabSize with ReLU activation
             var tokenExpansions = Predict(inputTensor); // [1, seqLen, vocabSize]
 
-            var sparseVector = new Vector<T>(_vocabSize);
-            for (int v = 0; v < _vocabSize; v++)
-            {
-                T maxVal = NumOps.Zero;
-                for (int s = 0; s < tokenExpansions.Shape[1]; s++)
-                {
-                    T val = tokenExpansions[0, s, v];
-                    if (NumOps.GreaterThan(val, maxVal))
-                    {
-                        maxVal = val;
-                    }
-                }
-
-                // Apply SPLADE log-saturation: log(1 + weight)
-                sparseVector[v] = NumOps.FromDouble(Math.Log(1.0 + NumOps.ToDouble(maxVal)));
-            }
-
-            return sparseVector;
+            // Max pooling over the sequence of max(0, w) (NaN never wins), then the SPLADE
+            // log-saturation log(1 + weight).
+            int seqLen = tokenExpansions.Shape[1];
+            if (seqLen == 0)
+                return new Vector<T>(_vocabSize);
+            var vocabWeights = Engine.TensorSlice(tokenExpansions, [0, 0, 0], [1, seqLen, _vocabSize]);
+            var nonNegative = Engine.TensorClampMin(
+                Engine.TensorWhere(Engine.TensorIsNan(vocabWeights), Engine.TensorZerosLike(vocabWeights), vocabWeights),
+                NumOps.Zero);
+            var pooled = Engine.Reshape(Engine.ReduceMax(nonNegative, [1], false), [_vocabSize]);
+            return Engine.TensorLog1p(pooled).ToVector();
         }
 
         /// <summary>

@@ -62,7 +62,7 @@ public abstract class VolatilityModelTestBase
     private ClassicalVolatilityModelBase<double> FittedModel(double[] returns)
     {
         var model = CreateModel();
-        model.FitReturns(returns);
+        model.FitReturns(new Vector<double>(returns));
         return model;
     }
 
@@ -89,7 +89,7 @@ public abstract class VolatilityModelTestBase
         var returns = SimulateReturns();
         var model = FittedModel(returns);
 
-        double variance = model.ForecastNextVariance(returns);
+        double variance = model.ForecastNextVariance(new Vector<double>(returns));
 
         Assert.True(variance > 0 && !double.IsInfinity(variance),
             $"The one-step variance forecast is {variance}; a conditional variance is positive and finite.");
@@ -102,8 +102,8 @@ public abstract class VolatilityModelTestBase
         var returns = SimulateReturns(scale: 0.01);
         var scaled = SimulateReturns(scale: 0.10);
 
-        double baseVariance = FittedModel(returns).ForecastNextVariance(returns);
-        double scaledVariance = FittedModel(scaled).ForecastNextVariance(scaled);
+        double baseVariance = FittedModel(returns).ForecastNextVariance(new Vector<double>(returns));
+        double scaledVariance = FittedModel(scaled).ForecastNextVariance(new Vector<double>(scaled));
 
         // Returns scaled by 10 must give a variance forecast scaled by 100. The tolerance covers the
         // simplex optimizer converging along a different path, not a different optimum.
@@ -131,8 +131,8 @@ public abstract class VolatilityModelTestBase
         calm[returns.Length] = 0.0;
         shocked[returns.Length] = -5.0 * Math.Sqrt(spread);
 
-        double afterCalm = model.ForecastNextVariance(calm);
-        double afterShock = model.ForecastNextVariance(shocked);
+        double afterCalm = model.ForecastNextVariance(new Vector<double>(calm));
+        double afterShock = model.ForecastNextVariance(new Vector<double>(shocked));
 
         Assert.True(afterShock > afterCalm,
             $"A five-sigma shock left the next variance forecast at {afterShock} against {afterCalm} after a " +
@@ -162,8 +162,8 @@ public abstract class VolatilityModelTestBase
         await Task.Yield();
         var returns = SimulateReturns();
 
-        double first = FittedModel(returns).ForecastNextVariance(returns);
-        double second = FittedModel(returns).ForecastNextVariance(returns);
+        double first = FittedModel(returns).ForecastNextVariance(new Vector<double>(returns));
+        double second = FittedModel(returns).ForecastNextVariance(new Vector<double>(returns));
 
         Assert.Equal(first, second, 12);
     }
@@ -182,7 +182,7 @@ public abstract class VolatilityModelTestBase
         // fitted parameters, so on the fitting series a restore that lost them would refit to the same
         // answer and pass. Here a lost restore refits to the new series and disagrees.
         var other = SimulateReturns(scale: 0.02);
-        Assert.Equal(model.ForecastNextVariance(other), restored.ForecastNextVariance(other), 12);
+        Assert.Equal(model.ForecastNextVariance(new Vector<double>(other)), restored.ForecastNextVariance(new Vector<double>(other)), 12);
     }
 
     [Fact(Timeout = 120000)]
@@ -191,6 +191,6 @@ public abstract class VolatilityModelTestBase
         await Task.Yield();
         var model = CreateModel();
 
-        Assert.Throws<ArgumentException>(() => model.FitReturns(new double[5]));
+        Assert.Throws<ArgumentException>(() => model.FitReturns(new Vector<double>(5)));
     }
 }
