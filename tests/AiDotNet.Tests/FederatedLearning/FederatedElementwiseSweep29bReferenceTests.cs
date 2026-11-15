@@ -1051,6 +1051,25 @@ public class FederatedElementwiseSweep29bReferenceTests
     }
 
     [Fact(Timeout = 60000)]
+    public async Task FedAGC_HalfFisherMeanFitsWhileItsSumOverflows()
+    {
+        await Task.Yield();
+
+        // One parameter theta = 10 and 1000 samples x = 1: every gradient is 2 * 10 * 1 + 1e-5 * 1 = 20, so the
+        // Fisher mean is 400. The sum over samples, 400,000, is past Half's 65504 and made the importance infinite.
+        var strategy = new AiDotNet.FederatedLearning.ContinualLearning.FedAGCContinualLearning<Half>();
+        var data = new Matrix<Half>(1000, 1);
+        for (int i = 0; i < 1000; i++)
+        {
+            data[i, 0] = HalfOps.One;
+        }
+
+        var importance = strategy.ComputeImportance(new Vector<Half>(HalfArray(10)), data);
+
+        Assert.Equal(400.0, HalfOps.ToDouble(importance[0]));
+    }
+
+    [Fact(Timeout = 60000)]
     public async Task Flame_HalfModelsAboveHalfSquareRangeAreClusteredAndClipped()
     {
         await Task.Yield();
