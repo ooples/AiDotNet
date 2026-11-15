@@ -113,6 +113,9 @@ public static class CompiledTapeTrainingStep<T>
         internal int planOptimizerStep = -1;
         internal System.Collections.Generic.HashSet<AiDotNet.Tensors.Engines.Compilation.OptimizerType>? fusedUnavailableTypes;
         internal System.Exception? lastFallbackException;
+        // The last call declined because no compiled plan can replay the closure objective this step (see
+        // LastFallbackWasUnreplayableClosureStep).
+        internal bool lastFallbackUnreplayableClosureStep;
         internal object? mpPlan;
         internal int[]? mpKey;
         [AiDotNet.Attributes.Scratch] internal Tensor<float>? mpInput;
@@ -520,6 +523,27 @@ public static class CompiledTapeTrainingStep<T>
     /// <summary>The compiled plan the last fused step configured (null if none), compared by reference: a session that
     /// verified one plan's updates numerically trusts its later replays, but not a plan compiled since.</summary>
     internal static object? ConfiguredPlanIdentity => _configuredPlan;
+
+    /// <summary>
+    /// Whether the last call declined because no compiled plan can replay the closure objective this step: its probe
+    /// aborted (the objective read its own forward on the host) or was unsignable, its data could not be copied into
+    /// the matching plan, or it drew a signature past the per-lifecycle cap. The configured plan itself is intact.
+    /// </summary>
+    internal static bool LastFallbackWasUnreplayableClosureStep => CurrentState.lastFallbackUnreplayableClosureStep;
+
+    /// <summary>
+    /// Applies gradients computed on the eager tape through the configured plan's own optimizer (with its clip and L2
+    /// term), for a step no plan can replay: the optimizer's moments, step count and schedule stay in the plan, so
+    /// the run continues as one optimizer that saw those gradients would. False when no configured plan can.
+    /// </summary>
+    internal static bool TryApplyGradientsThroughConfiguredPlan(IReadOnlyDictionary<Tensor<T>, Tensor<T>> gradients)
+    {
+        if (_configuredPlan is not AiDotNet.Tensors.Engines.Compilation.CompiledTrainingPlan<T> plan
+            || !plan.TryApplyGradients(gradients))
+            return false;
+        if (CurrentState.planOptimizerStep >= 0) CurrentState.planOptimizerStep++;
+        return true;
+    }
 
     internal static bool? ConfiguredPlanTrainsLiveParameters(IEnumerable<Tensor<T>> liveParameters)
     {
@@ -1194,6 +1218,7 @@ public static class CompiledTapeTrainingStep<T>
         // call. (Cleared on entry, not on success, so a successful step doesn't
         // leak a stale exception from earlier.)
         _lastFallbackException = null;
+        CurrentState.lastFallbackUnreplayableClosureStep = false;
 
         if (!TensorCodecOptions.Current.EnableCompilation) { Fd("EnableCompilation=false"); return false; }
         // Fused optimizer kernels support float and double on the Tensors
@@ -1555,6 +1580,7 @@ public static class CompiledTapeTrainingStep<T>
                 {
                     _lastFallbackException = new InvalidOperationException(
                         "the closure objective cannot replay a compiled plan this step (" + probe + "): " + probeReason);
+                    CurrentState.lastFallbackUnreplayableClosureStep = true;
                     Fd(_lastFallbackException.Message);
                     return false;
                 }
@@ -1567,6 +1593,7 @@ public static class CompiledTapeTrainingStep<T>
                     {
                         _lastFallbackException = new InvalidOperationException(
                             "the closure objective's data cannot be copied into its compiled plan: " + copyReason);
+                        CurrentState.lastFallbackUnreplayableClosureStep = true;
                         Fd(_lastFallbackException.Message);
                         return false;
                     }
@@ -1578,6 +1605,7 @@ public static class CompiledTapeTrainingStep<T>
                         $"the closure objective traced {variants.Count + 1} distinct signatures; past "
                         + $"{MaxClosureVariantsPerLifecycle} it is not compiled again: "
                         + (variants[0].Guard.Signature.DescribeDifference(probed) ?? "signatures differ"));
+                    CurrentState.lastFallbackUnreplayableClosureStep = true;
                     Fd(_lastFallbackException.Message);
                     return false;
                 }

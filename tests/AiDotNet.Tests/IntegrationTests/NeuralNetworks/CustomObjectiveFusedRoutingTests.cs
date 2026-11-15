@@ -25,7 +25,7 @@ public class CustomObjectiveFusedRoutingTests
 {
     private const int Steps = 6;
 
-    public enum Objective { Arguments, CapturedTarget, CapturedScale, HostRead }
+    public enum Objective { Arguments, CapturedTarget, CapturedScale, HostRead, HostReadOnStep3 }
 
     private sealed class ObjectiveNetwork : FeedForwardNeuralNetwork<float>
     {
@@ -61,6 +61,16 @@ public class CustomObjectiveFusedRoutingTests
             {
                 float first = prediction[0];
                 var loss = new MeanSquaredErrorLoss<float>().ComputeTapeLoss(prediction, y);
+                return Engine.TensorMultiplyScalar(loss, first > 0 ? 1.5f : 0.5f);
+            });
+
+        // Reads its own forward on the host only when asked (as Paraformer's sampler does on some steps).
+        internal float SometimesHostReadStep(Tensor<float> x, Tensor<float> y, bool read)
+            => TrainWithCustomLoss(x, prediction =>
+            {
+                var loss = new MeanSquaredErrorLoss<float>().ComputeTapeLoss(prediction, y);
+                if (!read) return loss;
+                float first = prediction[0];
                 return Engine.TensorMultiplyScalar(loss, first > 0 ? 1.5f : 0.5f);
             });
 
@@ -133,6 +143,7 @@ public class CustomObjectiveFusedRoutingTests
                     case Objective.CapturedTarget: model.CapturedTargetStep(x, y); break;
                     case Objective.CapturedScale: model.CapturedScaleStep(x, y, s % 3 == 0 ? 2f : 0.5f); break;
                     case Objective.HostRead: model.HostReadStep(x, y); break;
+                    case Objective.HostReadOnStep3: model.SometimesHostReadStep(x, y, read: s == 3); break;
                 }
             }
             return (model.GetParameters(), model);
@@ -184,6 +195,23 @@ public class CustomObjectiveFusedRoutingTests
         Assert.False(fused.ObjectiveSessionCommitted, "a host-reading objective was replayed from a compiled plan.");
         Assert.True(divergence < 1e-4, $"a host-reading objective diverged from eager by {divergence:E3} "
             + "(" + (fused.LastObjectiveMissReason ?? "no reason") + ")");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async System.Threading.Tasks.Task AStepNoPlanCanReplay_AfterFusedSteps_RunsThroughThePlansOptimizer()
+    {
+        await System.Threading.Tasks.Task.CompletedTask;
+        // Steps 0-2 commit and replay the plan; step 3 reads its forward on the host, which no plan can replay. The
+        // plan's moments cannot move to the eager optimizer, so that step used to throw. The eager tape now takes its
+        // gradients and the plan's own optimizer applies them, and steps 4-5 replay the plan again: the run matches
+        // pure eager.
+        var (fused, divergence) = FusedVersusEager(Objective.HostReadOnStep3);
+        Assert.True(fused.ObjectiveSessionCommitted, "the objective did not stay on its fused plan: "
+            + (fused.LastObjectiveMissReason ?? "no reason recorded"));
+        Assert.Equal(1, fused.CustomOutsidePlanStepCount);
+        Assert.Equal(Steps - 1, fused.CustomFusedStepCount);
+        Assert.Equal(0, fused.CustomEagerStepCount);
+        Assert.True(divergence < 1e-4, $"the run with a step outside the plan diverged from eager by {divergence:E3}");
     }
 
     [Fact(Timeout = 120000)]

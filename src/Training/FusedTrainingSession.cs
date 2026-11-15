@@ -195,6 +195,12 @@ internal sealed class FusedTrainingSession<T>
     /// steps go to the eager tape.</summary>
     public bool IsDisabled { get; set; }
 
+    /// <summary>
+    /// Whether the last <see cref="FusedStepOutcome.Stepped"/> step ran outside the compiled plan: the eager tape took
+    /// its gradients and the plan's optimizer applied them (a closure objective no plan could replay that step).
+    /// </summary>
+    public bool LastStepRanOutsidePlan { get; private set; }
+
     /// <summary>Why the most recent step did not run fused, for diagnostics.</summary>
     public string? LastMissReason { get; private set; }
 
@@ -284,6 +290,7 @@ internal sealed class FusedTrainingSession<T>
         loss = NumOps.Zero;
         lossTensor = null;
         LastFallbackException = null;
+        LastStepRanOutsidePlan = false;
 
         // The compiled plan carries the optimizer's moments. A different optimizer instance (a new Train call, a
         // learning-rate overload, an optimizer override) starts from its own fresh state, as it would eagerly, so
@@ -488,6 +495,22 @@ internal sealed class FusedTrainingSession<T>
             if (IsCommitted && _pendingTrace is not null)
                 return UndoTraceAndDecline(optimizer, null, "the compiled plan cannot replay the objective's next step ("
                     + (LastFallbackException?.Message ?? "no reason") + ")");
+            // Later, a step no plan can replay (the objective read its own forward on the host this step) runs on the
+            // eager tape, and the configured plan's own optimizer applies its gradients: the plan's moments and step
+            // count carry on, and the next step replays again.
+            if (IsCommitted && request.ClosureObjective && CompiledTapeTrainingStep<T>.LastFallbackWasUnreplayableClosureStep
+                && TryStepOutsideThePlan(request, OnGradients, out var outsideLoss))
+            {
+                LastStepRanOutsidePlan = true;
+                LastMissReason = null;
+                loss = outsideLoss.Length > 0 ? outsideLoss[0] : NumOps.Zero;
+                lossTensor = outsideLoss;
+                InvalidateDerivedWeightCaches();
+                if (optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> outsideScheduled)
+                    outsideScheduled.OnBatchEnd();
+                AiDotNet.Configuration.TrainingDiagnosticsConfig.RecordFusedOptimizerPath(hit: true, reason: null);
+                return FusedStepOutcome.Stepped;
+            }
             if (IsCommitted)
                 return FusedStepOutcome.CommittedFailure;
             IsDisabled = true;
@@ -770,6 +793,27 @@ internal sealed class FusedTrainingSession<T>
 
     // Reduced on the engine to ONE scalar, like AnySampleChanged: reading each gradient on the host downloaded the
     // whole gradient set every probed step (on a GPU MLP, most of the per-step device-to-host copies).
+    // One training step of a committed plan's request on the eager tape, applied by the plan's optimizer. Its random
+    // draws are the step's own: the eager tape runs the objective for real. The gradients reach the model's gradient
+    // surface first, as a fused step's do. False, with nothing applied, when the configured plan cannot take them.
+    private static bool TryStepOutsideThePlan(FusedTrainingStepRequest<T> request,
+        Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>> onGradients, out Tensor<T> loss)
+    {
+        var parameters = ((IEnumerable<Tensor<T>>?)request.Selection ?? EnumerateLiveParameters(request)).ToArray();
+        Dictionary<Tensor<T>, Tensor<T>> gradients;
+        using (var tape = new GradientTape<T>(TrainingTapeOptions.Step))
+        {
+            loss = request.ComputeLoss(request.Forward(request.Input), request.Target);
+            gradients = tape.ComputeGradients(loss, parameters);
+        }
+        var trained = new Dictionary<Tensor<T>, Tensor<T>>(parameters.Length, TensorReferenceComparer<Tensor<T>>.Instance);
+        foreach (var parameter in parameters)
+            if (gradients.TryGetValue(parameter, out var gradient) && gradient is not null)
+                trained[parameter] = gradient;
+        onGradients(trained);
+        return CompiledTapeTrainingStep<T>.TryApplyGradientsThroughConfiguredPlan(trained);
+    }
+
     // The eager tape's gradient of the request's loss, with the same random draws suppressed as the replay check.
     private static bool EagerGradientNonZero(FusedTrainingStepRequest<T> request)
     {

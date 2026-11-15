@@ -12800,6 +12800,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// <summary>Custom-objective training steps this network has run on the eager tape.</summary>
     internal int CustomEagerStepCount { get; private set; }
 
+    /// <summary>
+    /// Custom-objective steps no compiled plan could replay, run on the eager tape with the fused plan's optimizer
+    /// applying their gradients (see FusedTrainingSession.LastStepRanOutsidePlan).
+    /// </summary>
+    internal int CustomOutsidePlanStepCount { get; private set; }
+
     // The custom-objective forwards that have already resolved their lazily shaped layers.
     private readonly HashSet<System.Reflection.MethodInfo> _warmedCustomForwards = new();
 
@@ -12943,7 +12949,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             : session.TryStep(request, out lossValue);
         if (outcome == Training.FusedStepOutcome.Stepped)
         {
-            CustomFusedStepCount++;
+            if (session.LastStepRanOutsidePlan) CustomOutsidePlanStepCount++;
+            else CustomFusedStepCount++;
             InvalidateWeightCachesAfterSuccessfulWeightUpdate(updatedOnDevice: true);
         }
         else

@@ -1594,11 +1594,12 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                     committed = "yes";
                     reason = "";
                 }
-                else if (nn.CustomFusedStepCount > 0 || nn.CustomEagerStepCount > 0)
+                else if (nn.CustomFusedStepCount > 0 || nn.CustomEagerStepCount > 0 || nn.CustomOutsidePlanStepCount > 0)
                 {
                     // A custom or declared objective (TrainCustomTapeStep), on its own objective session.
                     committed = nn.ObjectiveSessionCommitted ? "yes" : "no";
                     reason = $"custom objective: fused {nn.CustomFusedStepCount}, eager {nn.CustomEagerStepCount}"
+                        + (nn.CustomOutsidePlanStepCount > 0 ? $", outside the plan {nn.CustomOutsidePlanStepCount}" : "")
                         + (nn.ObjectiveSessionCommitted ? "" : "; " + (nn.LastObjectiveMissReason ?? "no reason recorded"));
                 }
                 else
