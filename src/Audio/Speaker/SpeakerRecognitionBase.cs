@@ -80,17 +80,9 @@ public abstract partial class SpeakerRecognitionBase<T> : AudioNeuralNetworkBase
             throw new ArgumentException("Embeddings must have the same dimension.");
         }
 
-        // The norms are reduced in double (TensorNorm), so squares above T's range (65504 in Half) do not
-        // overflow, and the dot product is taken between the unit vectors.
-        T norm1 = Engine.TensorNorm(embedding1.AsTensor()).GetFlat(0);
-        T norm2 = Engine.TensorNorm(embedding2.AsTensor()).GetFlat(0);
-
-        if (NumOps.Equals(norm1, NumOps.Zero) || NumOps.Equals(norm2, NumOps.Zero))
-        {
-            return NumOps.Zero;
-        }
-
-        return Engine.DotProduct(Engine.Divide(embedding1, norm1), Engine.Divide(embedding2, norm2));
+        // Each vector is divided by its largest magnitude before it is squared, so the norms stay inside T's
+        // range (a norm above 65504 is infinite in Half), and the dot product is taken between the unit vectors.
+        return SpeakerScoring.Cosine(Engine, embedding1.AsTensor(), embedding2.AsTensor(), out _);
     }
 
     /// <summary>
@@ -120,19 +112,9 @@ public abstract partial class SpeakerRecognitionBase<T> : AudioNeuralNetworkBase
     /// </remarks>
     protected Tensor<T> NormalizeEmbedding(Tensor<T> embedding)
     {
-        var data = embedding.ToArray();
-
-        // L2 norm reduced in double, so the sum of squares cannot overflow T.
-        T norm = Engine.TensorNorm(new Tensor<T>(data, [data.Length])).GetFlat(0);
-
-        if (NumOps.Equals(norm, NumOps.Zero))
-        {
-            // Return a defensive copy to avoid aliasing issues
-            return new Tensor<T>(data, embedding._shape);
-        }
-
-        // New tensor with the same shape holding the normalized values
-        return Engine.TensorDivideScalar(new Tensor<T>(data, embedding._shape), norm);
+        // A new tensor with the same shape (a defensive copy when the norm is zero). The embedding is divided by its
+        // largest magnitude before it is squared, so the norm cannot overflow T (Half: above 65504).
+        return SpeakerScoring.L2Normalize(Engine, embedding);
     }
 
     /// <summary>
