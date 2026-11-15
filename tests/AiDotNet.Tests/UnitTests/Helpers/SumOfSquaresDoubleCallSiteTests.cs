@@ -2,16 +2,24 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using AiDotNet.AnomalyDetection.TimeSeries;
+using AiDotNet.Audio.Enhancement;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Evaluation;
+using AiDotNet.Finance.Forecasting.Foundation;
+using AiDotNet.Finance.Forecasting.Transformers;
+using AiDotNet.Finance.Interfaces;
 using AiDotNet.Finance.Portfolio;
 using AiDotNet.Finance.Risk;
+using AiDotNet.Interfaces;
 using AiDotNet.Models;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.SyntheticData;
 using AiDotNet.Optimizers;
 using AiDotNet.Regression;
+using Moq;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.Helpers;
@@ -426,6 +434,179 @@ public class SumOfSquaresDoubleCallSiteTests
             double expected = i % 4 == 0 ? Math.Abs(100.0 * residuals[i / 4]) / deviation : 0.0;
             Assert.True(Math.Abs((double)scores[i] - expected) <= HalfTolerance * Math.Max(expected, 1.0),
                 $"score {i}: expected {expected:R}, got {(double)scores[i]:R}");
+        }
+    }
+
+    // ---- Half model sites ----
+    //
+    // The model sites below are private members of networks whose constructors build full layer stacks. They are
+    // reached on an uninitialized instance whose NumOps field is set by hand: every member under test reads only
+    // NumOps and the Engine property (AiDotNetEngine.Current), so nothing else of the instance is touched.
+
+    private static TModel UninitializedHalfNetwork<TModel>() where TModel : NeuralNetworkBase<Half>
+    {
+        var model = (TModel)RuntimeHelpers.GetUninitializedObject(typeof(TModel));
+        GC.SuppressFinalize(model);
+        var numOps = typeof(NeuralNetworkBase<Half>).GetField("NumOps", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("NeuralNetworkBase.NumOps was not found.");
+        numOps.SetValue(model, AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>());
+        return model;
+    }
+
+    private static object? InvokePrivate(object target, string name, params object[] arguments)
+    {
+        var method = target.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException($"{target.GetType().Name}.{name} was not found.");
+        return method.Invoke(target, arguments);
+    }
+
+    // Errors of about 100 at 40 points: each squared error (up to 1.44e4) fits Half, their sum (about 4e5) does not.
+    private static (Tensor<Half> Predictions, Tensor<Half> Actuals, double Mse, double Mae) LargeErrors(int n)
+    {
+        var predictions = new Half[n];
+        var actuals = new Half[n];
+        double sumSquared = 0, sumAbsolute = 0;
+        for (int i = 0; i < n; i++)
+        {
+            actuals[i] = (Half)(50.0 + i);
+            predictions[i] = (Half)((double)actuals[i] + 100.0 + 20.0 * Math.Sin(0.9 * i));
+            double error = (double)predictions[i] - (double)actuals[i];
+            sumSquared += error * error;
+            sumAbsolute += Math.Abs(error);
+        }
+
+        Assert.True(sumSquared > (double)Half.MaxValue);
+        return (new Tensor<Half>(predictions, new[] { n }), new Tensor<Half>(actuals, new[] { n }), sumSquared / n, sumAbsolute / n);
+    }
+
+    [Fact]
+    public void FinancialModelBase_Evaluate_Half_ReportsAFiniteMseWhereTheSumPassesHalfMaxValue()
+    {
+        // TimesNet.Evaluate is the plain FinancialModelBase error path: MeanSquaredAndAbsoluteError, then RMSE.
+        var (predictions, actuals, mse, mae) = LargeErrors(Count);
+        var model = UninitializedHalfNetwork<TimesNet<Half>>();
+
+        var metrics = model.Evaluate(predictions, actuals);
+
+        AssertClose(mse, (double)metrics["MSE"], HalfTolerance);
+        AssertClose(mae, (double)metrics["MAE"], HalfTolerance);
+        AssertClose(Math.Sqrt(mse), (double)metrics["RMSE"], HalfTolerance);
+    }
+
+    [Fact]
+    public void MultiTaskEvaluationHarness_EvaluateForecasting_Half_ReportsAFiniteMse()
+    {
+        var (predictions, actuals, mse, mae) = LargeErrors(Count);
+        var model = new Mock<ITimeSeriesFoundationModel<Half>>();
+        model.Setup(m => m.Forecast(It.IsAny<Tensor<Half>>(), It.IsAny<double[]>())).Returns(predictions);
+
+        var metrics = new MultiTaskEvaluationHarness<Half>().EvaluateForecasting(
+            model.Object, new[] { (new Tensor<Half>(new[] { Count }), actuals) });
+
+        AssertClose(mse, (double)metrics["MSE"], HalfTolerance);
+        AssertClose(mae, (double)metrics["MAE"], HalfTolerance);
+        AssertClose(Math.Sqrt(mse), (double)metrics["RMSE"], HalfTolerance);
+    }
+
+    [Fact]
+    public void Optimizer_R2OnlyDataSetStats_Half_IsFiniteWhereBothSumsPassHalfMaxValue()
+    {
+        // Residuals up to 80 and a spread near 150 over 40 rows: both sums of squares pass Half.MaxValue.
+        var x = new Matrix<Half>(Count, 1);
+        var y = new Half[Count];
+        var predicted = new Half[Count];
+        for (int i = 0; i < Count; i++)
+        {
+            x[i, 0] = (Half)i;
+            y[i] = (Half)(200.0 + 150.0 * Math.Sin(0.9 * i));
+            predicted[i] = (Half)((double)y[i] + 80.0 * Math.Cos(1.3 * i));
+        }
+
+        double meanY = y.Average(v => (double)v), ssRes = 0, ssTot = 0;
+        for (int i = 0; i < Count; i++)
+        {
+            ssRes += ((double)y[i] - (double)predicted[i]) * ((double)y[i] - (double)predicted[i]);
+            ssTot += ((double)y[i] - meanY) * ((double)y[i] - meanY);
+        }
+
+        Assert.True(ssRes > (double)Half.MaxValue && ssTot > (double)Half.MaxValue);
+
+        var model = new Mock<IFullModel<Half, Matrix<Half>, Vector<Half>>>();
+        model.Setup(m => m.Predict(It.IsAny<Matrix<Half>>())).Returns(new Vector<Half>(predicted));
+        var optimizer = new AdamOptimizer<Half, Matrix<Half>, Vector<Half>>(null);
+        var method = typeof(OptimizerBase<Half, Matrix<Half>, Vector<Half>>).GetMethod(
+            "CalculateR2OnlyStatsForOptimizer", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new InvalidOperationException("OptimizerBase.CalculateR2OnlyStatsForOptimizer was not found.");
+        var stats = Assert.IsType<DataSetStats<Half, Matrix<Half>, Vector<Half>>>(
+            method.Invoke(optimizer, new object[] { model.Object, x, new Vector<Half>(y), PredictionType.Regression }));
+
+        AssertClose(1.0 - ssRes / ssTot, (double)stats.PredictionStats.R2, HalfTolerance);
+    }
+
+    [Fact]
+    public void TFGridNet_Rms_Half_IsFiniteWhereTheSumOfSquaresPassesHalfMaxValue()
+    {
+        // A spectrogram-sized input of magnitudes near 50: sum of squares about 1e7, RMS about 50.
+        const int n = 4000;
+        var values = Enumerable.Range(0, n).Select(i => (Half)(50.0 + 10.0 * Math.Sin(0.37 * i))).ToArray();
+        double expected = Math.Sqrt(values.Sum(v => (double)v * (double)v) / n);
+        var model = UninitializedHalfNetwork<TFGridNet<Half>>();
+
+        double rms = Assert.IsType<double>(InvokePrivate(model, "ComputeRms", new Tensor<Half>(values, new[] { n })));
+
+        AssertClose(expected, rms, HalfTolerance);
+    }
+
+    [Fact]
+    public void MGTSD_InstanceStats_Half_GiveAFiniteStd()
+    {
+        var series = LargeSeries(Count, seed: 12);
+        double expectedStd = Math.Sqrt(SumSquaredDeviations(series) / Count + 1e-5);
+        var model = UninitializedHalfNetwork<MGTSD<Half>>();
+
+        var (mean, std) = Assert.IsType<ValueTuple<Half, Half>>(
+            InvokePrivate(model, "ComputeInstanceStats", new Tensor<Half>(ToHalf(series), new[] { Count })));
+
+        AssertClose(Mean(series), (double)mean, HalfTolerance);
+        AssertClose(expectedStd, (double)std, HalfTolerance);
+    }
+
+    [Fact]
+    public void NonStationaryTransformer_Stationarization_Half_NormalizesWithAFiniteStd()
+    {
+        var series = LargeSeries(Count, seed: 13);
+        var model = UninitializedHalfNetwork<NonStationaryTransformer<Half>>();
+
+        var normalized = Assert.IsAssignableFrom<Tensor<Half>>(InvokePrivate(
+            model, "ApplySeriesStationarization", new Tensor<Half>(ToHalf(series), new[] { Count }), true));
+
+        AssertNormalized(series, normalized);
+    }
+
+    [Fact]
+    public void TSMixer_RevIN_Half_NormalizesWithAFiniteStd()
+    {
+        var series = LargeSeries(Count, seed: 14);
+        var model = UninitializedHalfNetwork<TSMixer<Half>>();
+
+        var normalized = Assert.IsAssignableFrom<Tensor<Half>>(InvokePrivate(
+            model, "ApplyRevIN", new Tensor<Half>(ToHalf(series), new[] { Count }), true));
+
+        AssertNormalized(series, normalized);
+    }
+
+    // (x - mean) / (population std + 1e-5), the stationarization both models apply. An infinite std made it all zeros.
+    private static void AssertNormalized(double[] series, Tensor<Half> normalized)
+    {
+        double mean = Mean(series);
+        double std = Math.Sqrt(SumSquaredDeviations(series) / series.Length) + 1e-5;
+        var actual = normalized.ToArray();
+        Assert.Equal(series.Length, actual.Length);
+        for (int i = 0; i < series.Length; i++)
+        {
+            double expected = (series[i] - mean) / std;
+            Assert.True(Math.Abs((double)actual[i] - expected) <= HalfTolerance * Math.Max(Math.Abs(expected), 1.0),
+                $"element {i}: expected {expected:R}, got {(double)actual[i]:R}");
         }
     }
 #endif
