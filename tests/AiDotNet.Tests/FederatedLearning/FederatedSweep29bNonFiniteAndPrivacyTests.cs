@@ -51,8 +51,8 @@ public class FederatedSweep29bNonFiniteAndPrivacyTests
     {
         await Task.Yield();
 
-        // Weighted DP-FedAvg: the release is sum_k (w_k / W) * clip(x_k, C). Replacing client k's update moves
-        // it by at most (w_k / W) * C, so the L2 sensitivity is C * max_k w_k / W, not C / n.
+        // Weighted DP-FedAvg: the release is sum_k (w_k / W) * clip(x_k, C). Adding or removing client k's update
+        // (add/remove adjacency, W fixed) moves it by at most (w_k / W) * C, so the L2 sensitivity is C * max_k w_k / W, not C / n.
         // Weights 9 and 1: sensitivity 0.9 C. With sigma = 1 and C = 1 every coordinate gets std 0.9
         // (C / n would give 0.5, which under-noises the client that carries 90% of the average).
         // Client 0 = [3, 4, 0, 0] (norm 5) clips to [0.6, 0.8, 0, 0]; client 1 = [0, 0, 0.3, 0.4] is kept.

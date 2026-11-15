@@ -231,9 +231,12 @@ public class DPFedLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, IF
         }
 
         // Step 3: Gaussian mechanism on the weighted average of n clipped vectors. Every client's whole adapter
-        // vector is clipped to clipNorm, so replacing client k moves the average by at most
+        // vector is clipped to clipNorm, so adding or removing client k (add/remove adjacency, the DP-FedAvg
+        // convention, with the normalizer W treated as fixed) moves the average by at most
         // (w_k / W) * clipNorm: the L2 sensitivity is clipNorm * max_k w_k / W, which is clipNorm / n only for
-        // equal weights. Every coordinate gets N(0, (sigma * sensitivity)^2). The noise scale depends on the
+        // equal weights. Replacing one client's update with another can move it by twice that, so an epsilon
+        // accounted from this noise holds for add/remove adjacency, not for replace-one adjacency.
+        // Every coordinate gets N(0, (sigma * sensitivity)^2). The noise scale depends on the
         // weights but not on the updates: a per-layer split of the clip budget taken from the clients' own
         // norms under-noises the release, and so does clipNorm / n when one client carries most of the weight.
         if (_noiseMultiplier > 0 && n > 0)
