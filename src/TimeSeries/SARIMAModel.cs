@@ -336,7 +336,17 @@ public partial class SARIMAModel<T> : TimeSeriesModelBase<T>
             Y[i - _P * _m] = y[i];
         }
 
-        return MatrixSolutionHelper.SolveLinearSystem(X, Y, MatrixDecompositionType.Qr);
+        try
+        {
+            return MatrixSolutionHelper.SolveLinearSystem(X, Y, MatrixDecompositionType.Qr);
+        }
+        catch (AiDotNet.Exceptions.MatrixFactorizationException)
+        {
+            // The seasonal lag matrix is rank deficient (a flat series differences to all zeros, for one), which
+            // the QR solve rejects. As TimeSeriesHelper.EstimateARCoefficients does for the non-seasonal lags, take
+            // the minimum-norm least-squares solution (numpy.linalg.lstsq, statsmodels OLS "pinv").
+            return new SvdDecomposition<T>(X).Solve(Y);
+        }
     }
 
     /// <summary>
