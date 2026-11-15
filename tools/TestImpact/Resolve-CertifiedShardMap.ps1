@@ -155,6 +155,12 @@ function Resolve-CertifiedShardMapRun {
             return New-Resolution ([CertifiedShardMapResolutionStatus]::FailedRunFallbackExpired) $skippedFailures[0] $candidate
         }
         $decisionObject = & $DownloadDecision $runId
+        # $null is confirmed absence only. A decision that exists but could not be retrieved may be a
+        # RevokedMiss, so it blocks the fallback to an older certificate as an unreadable one does.
+        if ($null -ne $decisionObject -and $decisionObject.PSObject.Properties['retrievalFailed'] -and
+            [bool] $decisionObject.retrievalFailed) {
+            return New-Resolution ([CertifiedShardMapResolutionStatus]::UnclassifiedFailure) $runId
+        }
         if ($null -ne $decisionObject) {
             try { $disposition = ConvertTo-AuditDecision $decisionObject $runId }
             catch {
@@ -374,12 +380,18 @@ try {
     } -DownloadDecision {
         param([long] $RunId)
         $directory = Join-Path $decisionRoot ([string] $RunId)
+        # Whether the run uploaded a decision is read from its artifact list first: a failed download
+        # of an existing decision is a retrieval failure, not an absent decision.
+        $names = @(& gh api "repos/$Repository/actions/runs/$RunId/artifacts" --paginate `
+            --jq '.artifacts[] | select(.expired | not) | .name' 2>$null)
+        if ($LASTEXITCODE -ne 0) { return [pscustomobject]@{ retrievalFailed = $true } }
+        if ($names -cnotcontains 'shard-map-audit-decision') { return $null }
         & gh run download $RunId --repo $Repository --name shard-map-audit-decision `
             --dir $directory *> $null
-        if ($LASTEXITCODE -ne 0) { return $null }
+        if ($LASTEXITCODE -ne 0) { return [pscustomobject]@{ retrievalFailed = $true } }
         $file = @(Get-ChildItem -LiteralPath $directory -Filter map-audit-decision.json -File -Recurse |
             Select-Object -First 1)
-        if ($file.Count -eq 0) { return $null }
+        if ($file.Count -eq 0) { return [pscustomobject]@{ retrievalFailed = $true } }
         try { return (Get-Content -LiteralPath $file[0].FullName -Raw | ConvertFrom-Json) }
         catch { return [pscustomobject]@{ malformed = $true } }
     }
