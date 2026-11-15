@@ -110,14 +110,22 @@ internal static class ScalerTensorOps
     /// </summary>
     internal static bool ReducesInFloat<T>() => typeof(T) == typeof(Half);
 
+    /// <summary>
+    /// Whether the column mean / variance of <typeparamref name="T"/> are accumulated in float64, as scikit-learn's
+    /// <c>_incremental_mean_and_var</c> does (<c>_safe_accumulator_op</c> upcasts float16 and float32 to float64).
+    /// A float sum of n equal values is not n times the value, so a constant float column came out with a tiny
+    /// non-zero variance above the <see cref="ConstantFeatureMask{T}"/> bound and was scaled by it.
+    /// </summary>
+    internal static bool ReducesInDouble<T>() => typeof(T) == typeof(Half) || typeof(T) == typeof(float);
+
     /// <summary>Number of non-NaN entries per column of an [n, p] tensor, as [p] (counted in int).</summary>
     public static Tensor<T> NanColumnCount<T>(Tensor<T> x) =>
         new Tensor<int>(CountPerColumn(PreprocessingTensorOps.OneMinus(NanMask(x))), new[] { x.Shape[1] }).Cast<T>();
 
-    /// <summary>Mean of the non-NaN entries per column (NaN for an all-NaN column), as [p].</summary>
+    /// <summary>Mean of the non-NaN entries per column (NaN for an all-NaN column), as [p], accumulated in float64 for Half and float.</summary>
     public static Tensor<T> NanColumnMean<T>(Tensor<T> x) =>
-        ReducesInFloat<T>()
-            ? Engine.TensorNanMean(x.Cast<float>(), new[] { 0 }, false).Cast<T>()
+        ReducesInDouble<T>()
+            ? Engine.TensorNanMean(x.Cast<double>(), new[] { 0 }, false).Cast<T>()
             : Engine.TensorNanMean(x, new[] { 0 }, false);
 
     /// <summary>Mean of every column of an [n, p] tensor (NaN propagates), as [p].</summary>
@@ -155,14 +163,15 @@ internal static class ScalerTensorOps
     /// <summary>
     /// Per column of an [n, p] tensor, ignoring NaN: the mean, the population (ddof = 0) standard deviation
     /// (numpy <c>nanmean</c> / <c>nanstd</c>) and scikit-learn's constant-feature mask (see
-    /// <see cref="ConstantFeatureMask{T}"/>), each [p]. Half is reduced in float (see <see cref="ReducesInFloat{T}"/>);
-    /// its standard deviation is rounded to Half after the square root, so a variance past 65504 does not overflow.
+    /// <see cref="ConstantFeatureMask{T}"/>), each [p]. Half and float are reduced in float64 like scikit-learn (see
+    /// <see cref="ReducesInDouble{T}"/>); the standard deviation is rounded to T after the square root, so a Half
+    /// variance past 65504 does not overflow.
     /// </summary>
     public static (Tensor<T> Mean, Tensor<T> Std, Tensor<T> Constant) NanColumnMoments<T>(Tensor<T> x)
     {
-        if (ReducesInFloat<T>())
+        if (ReducesInDouble<T>())
         {
-            var (mean, std, constant) = NanColumnMomentsCore(x.Cast<float>());
+            var (mean, std, constant) = NanColumnMomentsCore(x.Cast<double>());
             return (mean.Cast<T>(), std.Cast<T>(), constant.Cast<T>());
         }
 

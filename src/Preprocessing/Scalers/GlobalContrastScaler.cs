@@ -76,11 +76,12 @@ public class GlobalContrastScaler<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             return;
         }
 
-        // Column mean and population standard deviation (NaN is treated as missing); a zero std becomes 1.
+        // Column mean and population standard deviation (NaN is treated as missing). A constant column (variance
+        // within floating-point error of zero, scikit-learn's _is_constant_feature) gets std 1: an exact zero test
+        // missed the ~1e-17 rounding-noise std of a constant double column and scaled the column by it.
         var x = Tensor<T>.FromMatrix(data);
-        var (mean, std, _) = ScalerTensorOps.NanColumnMoments(x);
-        var zeroStd = Engine.TensorEquals(std, NumOps.Zero);
-        std = Engine.TensorWhere(zeroStd, PreprocessingTensorOps.Filled(std.Shape.ToArray(), NumOps.One), std);
+        var (mean, std, constant) = ScalerTensorOps.NanColumnMoments(x);
+        std = ScalerTensorOps.HandleZerosInScale(std, constant);
 
         _mean = ScalerTensorOps.MaskedParameters(mask, mean, NumOps.Zero);
         _stdDev = ScalerTensorOps.MaskedParameters(mask, std, NumOps.One);

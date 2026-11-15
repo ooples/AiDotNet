@@ -117,7 +117,12 @@ public class ZScoreClipper<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         }
         else
         {
-            (mean, std, _) = ScalerTensorOps.NanColumnMoments(Tensor<T>.FromMatrix(data));
+            Tensor<T> constant;
+            (mean, std, constant) = ScalerTensorOps.NanColumnMoments(Tensor<T>.FromMatrix(data));
+
+            // A constant column (variance within floating-point error of zero, scikit-learn's _is_constant_feature)
+            // has std 0: its ~1e-17 rounding-noise std otherwise gave every value a Z-score of +/-1.
+            std = Engine.TensorWhere(constant, new Tensor<T>(std.Shape.ToArray()), std);
         }
 
         _means = ScalerTensorOps.MaskedParameters(mask, mean, NumOps.Zero);
