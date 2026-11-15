@@ -878,13 +878,13 @@ public class RLHFAlignmentTests
     [Fact(Timeout = 60000)]
     public async Task RedTeamingResults_DefaultValues()
     {
-        var results = new RedTeamingResults<double>();
+        var results = new RedTeamingResults();
 
-        Assert.NotNull(results.AdversarialPrompts);
+        Assert.NotNull(results.Prompts);
         Assert.NotNull(results.ModelResponses);
         Assert.NotNull(results.SuccessfulAttacks);
         Assert.NotNull(results.SeverityScores);
-        Assert.NotNull(results.VulnerabilityTypes);
+        Assert.NotNull(results.VulnerabilityCategories);
         Assert.NotNull(results.Vulnerabilities);
         Assert.Equal(0.0, results.SuccessRate);
         Assert.Equal(0.0, results.AverageSeverity);
@@ -899,7 +899,7 @@ public class RLHFAlignmentTests
     {
         var report = new VulnerabilityReport();
 
-        Assert.Equal(string.Empty, report.Type);
+        Assert.Null(report.Category);
         Assert.Equal(0.0, report.Severity);
         Assert.Equal(string.Empty, report.Description);
         Assert.Equal(string.Empty, report.ExamplePrompt);
@@ -912,7 +912,7 @@ public class RLHFAlignmentTests
     {
         var report = new VulnerabilityReport
         {
-            Type = "TestVulnerability",
+            Category = AiDotNet.Enums.SafetyCategory.SexualExplicit,
             Severity = 0.8,
             Description = "Test description",
             ExamplePrompt = "Test prompt",
@@ -920,7 +920,7 @@ public class RLHFAlignmentTests
             Recommendations = new[] { "Recommendation 1", "Recommendation 2" }
         };
 
-        Assert.Equal("TestVulnerability", report.Type);
+        Assert.Equal(AiDotNet.Enums.SafetyCategory.SexualExplicit, report.Category);
         Assert.Equal(0.8, report.Severity);
         Assert.Equal("Test description", report.Description);
         Assert.Equal("Test prompt", report.ExamplePrompt);
