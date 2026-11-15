@@ -420,7 +420,7 @@ public partial class ProximalGradientDescentOptimizer<T, TInput, TOutput> : Grad
     protected override void InitializeAdaptiveParameters()
     {
         base.InitializeAdaptiveParameters();
-        CurrentLearningRate = NumOps.FromDouble(_options.InitialLearningRate);
+        ResetLearningRateToSchedule();
         _iteration = 0;
     }
 

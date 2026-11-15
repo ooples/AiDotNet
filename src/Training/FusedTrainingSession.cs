@@ -91,6 +91,30 @@ internal sealed class FusedTrainingStepRequest<T>
     /// construction and conservatively stays eager.
     /// </remarks>
     public bool VerifyReplayAgreement { get; init; }
+
+    /// <summary>
+    /// The caller's own eager step on this request's data, for <see cref="VerifyReplayAgreement"/>: when the plan this
+    /// step traces later fails its replay check, the session restores the model and optimizer to before this step and
+    /// re-runs it with this, so the run matches one that was eager from the start. Null runs
+    /// <see cref="TapeTrainingStepper{T}.EagerStep"/> on a copy of this step's input and target.
+    /// </summary>
+    public Func<T>? EagerReplay { get; init; }
+
+    /// <summary>
+    /// What identifies the objective this step trains, for <see cref="VerifyReplayAgreement"/> (a custom objective's
+    /// method). Objectives that share an optimizer share its session and its plan, and the plan is not keyed by the
+    /// objective: when this differs from the previous step's, the next replay is checked against the eager forward
+    /// again, so a plan traced for one objective is never replayed unchecked as another. Null never re-checks.
+    /// </summary>
+    public object? ObjectiveKey { get; init; }
+
+    /// <summary>
+    /// The forward and loss are one closure objective that builds its per-step data (a batch, noise, a drawn count)
+    /// inside itself. Every replay is then guarded: before each step the objective is probed and signed
+    /// (<c>ClosureObjectiveGuard</c>), and only a plan compiled for that exact signature, refilled with this step's
+    /// data, steps. A step no plan can replay declines.
+    /// </summary>
+    public bool ClosureObjective { get; init; }
 }
 
 /// <summary>
@@ -130,7 +154,20 @@ internal sealed class FusedTrainingSession<T>
     private object? _verifiedPlan;
     private int _stepsSincePersistenceCheck;
     private bool _replayAgreementVerified;
+    private object? _objectiveKey;
     private bool _zeroGradientCrossChecked;
+
+    // The state before the trace step of a plan whose replay is still to be checked, and that step's eager redo: on a
+    // disagreeing replay both fused updates are undone and the trace step re-runs eagerly. Dropped once the replay
+    // agrees.
+    private PendingTrace? _pendingTrace;
+
+    private sealed class PendingTrace
+    {
+        public required (Tensor<T> Live, Tensor<T> Saved)[] Weights { get; init; }
+        public required object OptimizerPosition { get; init; }
+        public required Func<T> EagerRedo { get; init; }
+    }
 
     // Relative tolerance for the replay-agreement check: fusion reassociates sums, so float losses differ in the
     // last few digits; a plan replaying stale host-side decisions differs at the scale of the loss itself.
@@ -158,6 +195,12 @@ internal sealed class FusedTrainingSession<T>
     /// steps go to the eager tape.</summary>
     public bool IsDisabled { get; set; }
 
+    /// <summary>
+    /// Whether the last <see cref="FusedStepOutcome.Stepped"/> step ran outside the compiled plan: the eager tape took
+    /// its gradients and the plan's optimizer applied them (a closure objective no plan could replay that step).
+    /// </summary>
+    public bool LastStepRanOutsidePlan { get; private set; }
+
     /// <summary>Why the most recent step did not run fused, for diagnostics.</summary>
     public string? LastMissReason { get; private set; }
 
@@ -179,6 +222,14 @@ internal sealed class FusedTrainingSession<T>
         _stepsSincePersistenceCheck = 0;
         _replayAgreementVerified = false;
         _zeroGradientCrossChecked = false;
+        _pendingTrace = null;
+    }
+
+    /// <summary>Turns the fused path off for this session's later steps, recording why (a caller-side decline).</summary>
+    public void Disable(string reason)
+    {
+        IsDisabled = true;
+        LastMissReason = reason;
     }
 
     /// <summary>Re-enables the fused path after an explicit model reset (new layers, new optimizer).</summary>
@@ -191,6 +242,7 @@ internal sealed class FusedTrainingSession<T>
         _stepsSincePersistenceCheck = 0;
         _replayAgreementVerified = false;
         _zeroGradientCrossChecked = false;
+        _pendingTrace = null;
         LastMissReason = null;
         LastFallbackException = null;
     }
@@ -238,6 +290,7 @@ internal sealed class FusedTrainingSession<T>
         loss = NumOps.Zero;
         lossTensor = null;
         LastFallbackException = null;
+        LastStepRanOutsidePlan = false;
 
         // The compiled plan carries the optimizer's moments. A different optimizer instance (a new Train call, a
         // learning-rate overload, an optimizer override) starts from its own fresh state, as it would eagerly, so
@@ -252,6 +305,14 @@ internal sealed class FusedTrainingSession<T>
             _lastOptimizer = request.Optimizer;
         }
 
+        // A different objective on this session's plan: its replay has to pass the agreement check again.
+        if (request.VerifyReplayAgreement && request.ObjectiveKey is { } objectiveKey)
+        {
+            if (IsCommitted && _objectiveKey is not null && !_objectiveKey.Equals(objectiveKey))
+                _replayAgreementVerified = false;
+            _objectiveKey = objectiveKey;
+        }
+
         if (request.GraphBreakReason is { } graphBreak)
         {
             if (!IsCommitted)
@@ -262,13 +323,22 @@ internal sealed class FusedTrainingSession<T>
         }
 
         if (IsDisabled)
-            return Decline("fused path sticky-disabled from a prior fallback");
+        {
+            // Keep the cause: the step that disabled the path recorded why, and a bare "disabled" on every later step
+            // hid it from the audit and from the model's diagnostics.
+            const string sticky = "fused path sticky-disabled from a prior fallback";
+            string? prior = LastMissReason;
+            return Decline(prior is null || prior.StartsWith(sticky, StringComparison.Ordinal) ? prior ?? sticky : sticky + ": " + prior);
+        }
         if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
             return Decline("TensorCodecOptions.EnableCompilation = false");
         if (typeof(T) != typeof(float) && typeof(T) != typeof(double))
             return Decline($"numeric type {typeof(T).Name} not supported by fused kernel");
 
         var optimizer = request.Optimizer;
+        if (OverridesStepBelowFusedSpec(optimizer.GetType()))
+            return Decline($"optimizer {optimizer.GetType().Name} overrides its step below its fused mapping; the fused "
+                + "kernel would run the base algorithm and bypass that step");
         if (!TryMapToFusedOptimizerConfig(optimizer, out var config))
             return Decline($"optimizer {optimizer.GetType().Name} not compatible with fused kernel");
         if (request.Layers.Count == 0 && (request.ExtraParameters is null || request.ExtraParameters.Count == 0))
@@ -340,11 +410,36 @@ internal sealed class FusedTrainingSession<T>
         (Tensor<T> Live, Tensor<T> Saved)[]? snapshot = null;
         if (checkReplay)
         {
-            using var noGrad = new NoGradScope<T>();
-            using var noDraws = CompiledStepRandom<T>.SuppressDraws();
-            var eager = request.ComputeLoss(request.Forward(request.Input), request.Target);
-            eagerLoss = eager.Length > 0 ? NumOps.ToDouble(eager[0]) : 0.0;
+            try
+            {
+                using var noGrad = new NoGradScope<T>();
+                using var noDraws = CompiledStepRandom<T>.SuppressDraws();
+                var eager = request.ComputeLoss(request.Forward(request.Input), request.Target);
+                eagerLoss = eager.Length > 0 ? NumOps.ToDouble(eager[0]) : 0.0;
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException)
+            {
+                // The forward cannot run outside a tape (a gradient penalty's nested tape records nothing under the
+                // no-grad scope), so the replay cannot be checked: undo the traced step and train eagerly.
+                return UndoTraceAndDecline(optimizer, null, "the replay check's eager forward failed ("
+                    + ex.GetType().Name + ": " + ex.Message + "), so the compiled plan's replay cannot be checked");
+            }
             snapshot = SnapshotTrainedTensors(request);
+        }
+
+        // The trace step of a plan whose replay will be checked (against the eager forward, or by a closure
+        // objective's signature): keep what it takes to redo it eagerly.
+        bool wasCommitted = IsCommitted;
+        PendingTrace? trace = null;
+        if ((request.VerifyReplayAgreement || request.ClosureObjective) && !IsCommitted
+            && optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> positioned)
+        {
+            trace = new PendingTrace
+            {
+                Weights = SnapshotTrainedTensors(request),
+                OptimizerPosition = positioned.CaptureStepPosition(),
+                EagerRedo = request.EagerReplay ?? EagerRedoOnCopies(request),
+            };
         }
 
         // Each step's transient activations are reclaimed when it returns, the way PyTorch's caching allocator
@@ -384,7 +479,8 @@ internal sealed class FusedTrainingSession<T>
                 l2Regularization: l2,
                 deferredLoss: deferredLoss,
                 l2AfterClip: l2AfterClip,
-                stateKey: _stateKey);
+                stateKey: _stateKey,
+                closureObjective: request.ClosureObjective);
         }
         finally
         {
@@ -394,6 +490,27 @@ internal sealed class FusedTrainingSession<T>
         if (!ran)
         {
             LastFallbackException = CompiledTapeTrainingStep<T>.GetLastFallbackException();
+            // The first replay after the trace could not run (a closure objective whose next step no guarded plan can
+            // replay): the traced step is undone and redone eagerly, as for a disagreeing replay.
+            if (IsCommitted && _pendingTrace is not null)
+                return UndoTraceAndDecline(optimizer, null, "the compiled plan cannot replay the objective's next step ("
+                    + (LastFallbackException?.Message ?? "no reason") + ")");
+            // Later, a step no plan can replay (the objective read its own forward on the host this step) runs on the
+            // eager tape, and the configured plan's own optimizer applies its gradients: the plan's moments and step
+            // count carry on, and the next step replays again.
+            if (IsCommitted && request.ClosureObjective && CompiledTapeTrainingStep<T>.LastFallbackWasUnreplayableClosureStep
+                && TryStepOutsideThePlan(request, OnGradients, out var outsideLoss))
+            {
+                LastStepRanOutsidePlan = true;
+                LastMissReason = null;
+                loss = outsideLoss.Length > 0 ? outsideLoss[0] : NumOps.Zero;
+                lossTensor = outsideLoss;
+                InvalidateDerivedWeightCaches();
+                if (optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> outsideScheduled)
+                    outsideScheduled.OnBatchEnd();
+                AiDotNet.Configuration.TrainingDiagnosticsConfig.RecordFusedOptimizerPath(hit: true, reason: null);
+                return FusedStepOutcome.Stepped;
+            }
             if (IsCommitted)
                 return FusedStepOutcome.CommittedFailure;
             IsDisabled = true;
@@ -405,21 +522,21 @@ internal sealed class FusedTrainingSession<T>
         if (checkReplay && snapshot is not null)
         {
             double replayLoss = NumOps.ToDouble(ReadLoss(stepLoss, deferredLoss.Value));
-            double scale = Math.Max(1.0, Math.Max(Math.Abs(eagerLoss), Math.Abs(replayLoss)));
+            // Relative to the losses themselves, with no floor: floored at 1, a loss below 1e-3 (a small-magnitude
+            // regression target, a model near convergence) passed whatever the plan had frozen, and the stale plan
+            // was committed for the rest of the run.
+            double scale = Math.Max(Math.Abs(eagerLoss), Math.Abs(replayLoss));
             bool agree = (double.IsNaN(eagerLoss) && double.IsNaN(replayLoss))
                 || Math.Abs(eagerLoss - replayLoss) <= ReplayAgreementTolerance * scale;
             if (!agree)
             {
-                RestoreTrainedTensors(snapshot);
-                string reason = "the compiled plan's loss on new data (" + replayLoss.ToString("G6")
-                    + ") disagrees with the eager forward (" + eagerLoss.ToString("G6") + "): the training forward "
-                    + "depends on more than its input tensor (a host-side read or captured per-step state), so the "
-                    + "replay's update was undone and training continues on the eager tape";
-                Warn(reason);
-                Reset(stickyDisable: true);
-                return Decline(reason);
+                return UndoTraceAndDecline(optimizer, snapshot, "the compiled plan's loss on new data ("
+                    + replayLoss.ToString("G6") + ") disagrees with the eager forward (" + eagerLoss.ToString("G6")
+                    + "): the training forward depends on more than its input tensor (a host-side read or captured "
+                    + "per-step state)");
             }
             _replayAgreementVerified = true;
+            _pendingTrace = null;
         }
 
         if (structuralRecheck)
@@ -503,6 +620,8 @@ internal sealed class FusedTrainingSession<T>
         }
 
         IsCommitted = true;
+        if (trace is not null) _pendingTrace = trace;
+        else if (wasCommitted && request.ClosureObjective && !checkReplay) _pendingTrace = null;   // a replay ran
         LastMissReason = null;
         loss = stepLoss;
         lossTensor = deferredLoss.Value;
@@ -522,6 +641,34 @@ internal sealed class FusedTrainingSession<T>
         return FusedStepOutcome.Stepped;
     }
 
+    // A checked plan failed its replay check. Undo its fused updates and drop it for good. When the pre-trace state is
+    // known (the same tensors as now; a layer the trace materialized has no pre-trace value), restore it, put the
+    // optimizer back at its pre-trace position and redo the traced step eagerly, so the run matches one that was
+    // eager from the start; otherwise restore the pre-replay state (null when the replay never ran).
+    private FusedStepOutcome UndoTraceAndDecline(
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
+        (Tensor<T> Live, Tensor<T> Saved)[]? beforeReplay,
+        string cause)
+    {
+        var pending = _pendingTrace;
+        bool redo = pending is not null && (beforeReplay is null || SameTensors(pending.Weights, beforeReplay));
+        if (redo) RestoreTrainedTensors(pending!.Weights);
+        else if (beforeReplay is not null) RestoreTrainedTensors(beforeReplay);
+        string reason = cause + ", so "
+            + (redo ? "the fused updates were undone, the traced step was redone on the eager tape, and "
+                : beforeReplay is not null ? "the replay's update was undone and " : "")
+            + "training continues on the eager tape";
+        Warn(reason);
+        Reset(stickyDisable: true);
+        if (redo)
+        {
+            ((Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>>)optimizer).RestoreStepPosition(pending!.OptimizerPosition);
+            InvalidateDerivedWeightCaches();
+            pending.EagerRedo();
+        }
+        return Decline(reason);
+    }
+
     // The step's loss as a scalar: the deferred tensor's value when the step returned one, else the scalar it produced.
     private static T ReadLoss(T scalar, Tensor<T>? deferred)
         => deferred is null ? scalar : deferred.Length > 0 ? deferred[0] : NumOps.Zero;
@@ -533,6 +680,28 @@ internal sealed class FusedTrainingSession<T>
         (AiDotNet.Tensors.Engines.AiDotNetEngine.Current as AiDotNet.Tensors.Engines.DirectGpuTensorEngine)?.InvalidateAllWeightCaches();
         AiDotNet.Tensors.Engines.InferenceWeightCache.InvalidateAll();
     }
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, bool> s_overridesStepBelowSpec = new();
+
+    /// <summary>
+    /// Whether this optimizer type overrides its tape step (<c>StepCore</c>) in a class below the one that maps it to a
+    /// fused kernel: a subclass of a fused-mapped optimizer with its own update (a user's, a test's observing double).
+    /// The mapping it inherits describes the base algorithm, so the fused kernel would bypass the override.
+    /// </summary>
+    internal static bool OverridesStepBelowFusedSpec(Type optimizerType)
+        => s_overridesStepBelowSpec.GetOrAdd(optimizerType, static type =>
+        {
+            if (!typeof(Optimizers.Fused.IFusedOptimizerSpec).IsAssignableFrom(type)) return false;
+            var map = type.GetInterfaceMap(typeof(Optimizers.Fused.IFusedOptimizerSpec));
+            Type? specType = null;
+            for (int i = 0; i < map.InterfaceMethods.Length; i++)
+                if (map.InterfaceMethods[i].Name == nameof(Optimizers.Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig))
+                    specType = map.TargetMethods[i].DeclaringType;
+            var step = type.GetMethod("StepCore", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic
+                | System.Reflection.BindingFlags.Public, null, new[] { typeof(TapeStepContext<T>) }, null);
+            return specType is not null && step?.DeclaringType is { } stepType
+                && stepType != specType && specType.IsAssignableFrom(stepType);
+        });
 
     internal static bool TryMapToFusedOptimizerConfig(
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
@@ -624,6 +793,27 @@ internal sealed class FusedTrainingSession<T>
 
     // Reduced on the engine to ONE scalar, like AnySampleChanged: reading each gradient on the host downloaded the
     // whole gradient set every probed step (on a GPU MLP, most of the per-step device-to-host copies).
+    // One training step of a committed plan's request on the eager tape, applied by the plan's optimizer. Its random
+    // draws are the step's own: the eager tape runs the objective for real. The gradients reach the model's gradient
+    // surface first, as a fused step's do. False, with nothing applied, when the configured plan cannot take them.
+    private static bool TryStepOutsideThePlan(FusedTrainingStepRequest<T> request,
+        Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>> onGradients, out Tensor<T> loss)
+    {
+        var parameters = ((IEnumerable<Tensor<T>>?)request.Selection ?? EnumerateLiveParameters(request)).ToArray();
+        Dictionary<Tensor<T>, Tensor<T>> gradients;
+        using (var tape = new GradientTape<T>(TrainingTapeOptions.Step))
+        {
+            loss = request.ComputeLoss(request.Forward(request.Input), request.Target);
+            gradients = tape.ComputeGradients(loss, parameters);
+        }
+        var trained = new Dictionary<Tensor<T>, Tensor<T>>(parameters.Length, TensorReferenceComparer<Tensor<T>>.Instance);
+        foreach (var parameter in parameters)
+            if (gradients.TryGetValue(parameter, out var gradient) && gradient is not null)
+                trained[parameter] = gradient;
+        onGradients(trained);
+        return CompiledTapeTrainingStep<T>.TryApplyGradientsThroughConfiguredPlan(trained);
+    }
+
     // The eager tape's gradient of the request's loss, with the same random draws suppressed as the replay check.
     private static bool EagerGradientNonZero(FusedTrainingStepRequest<T> request)
     {
@@ -683,6 +873,39 @@ internal sealed class FusedTrainingSession<T>
         var live = trained.Where(p => p is not null && p.Length != 0 && p is not SparseTensor<T>).ToArray();
         var saved = TensorCheckpoint<T>.Capture(live);
         return live.Select((tensor, i) => (tensor, saved[i])).ToArray();
+    }
+
+    private static bool SameTensors((Tensor<T> Live, Tensor<T> Saved)[] a, (Tensor<T> Live, Tensor<T> Saved)[] b)
+    {
+        if (a.Length != b.Length) return false;
+        for (int i = 0; i < a.Length; i++)
+            if (!ReferenceEquals(a[i].Live, b[i].Live) || a[i].Saved.Length != b[i].Saved.Length) return false;
+        return true;
+    }
+
+    // The default eager redo of a trace step: the eager step on copies of its input and target, taken now, since the
+    // caller may refill those tensors for later steps.
+    private static Func<T> EagerRedoOnCopies(FusedTrainingStepRequest<T> request)
+    {
+        var copies = TensorCheckpoint<T>.Capture(ReferenceEquals(request.Input, request.Target)
+            ? new[] { request.Input }
+            : new[] { request.Input, request.Target });
+        var redo = new FusedTrainingStepRequest<T>
+        {
+            Layers = request.Layers,
+            Input = copies[0],
+            Target = copies.Length > 1 ? copies[1] : copies[0],
+            Forward = request.Forward,
+            ComputeLoss = request.ComputeLoss,
+            Optimizer = request.Optimizer,
+            ExtraParameters = request.ExtraParameters,
+            Selection = request.Selection,
+            ModelGradientClip = request.ModelGradientClip,
+            ExcludesParametersFromWeightDecay = request.ExcludesParametersFromWeightDecay,
+            OnGradients = request.OnGradients,
+            RegularizeGradients = request.RegularizeGradients,
+        };
+        return () => TapeTrainingStepper<T>.EagerStep(redo);
     }
 
     private static void RestoreTrainedTensors((Tensor<T> Live, Tensor<T> Saved)[] snapshot)

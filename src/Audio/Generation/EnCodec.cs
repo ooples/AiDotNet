@@ -291,11 +291,12 @@ public partial class EnCodec<T> : NeuralAudioCodecBase<T>
             ["feat"] = x => FeatureLoss(discriminator, realFeatures, x),
         };
         var commitment = Engine.TensorMultiplyScalar(Quantizer!.CommitmentLoss ?? new Tensor<T>(new[] { 1 }), NumOps.FromDouble(o.CommitmentLossWeight));
-        double commitmentValue = NumOps.ToDouble(commitment[0]);
         if (o.UseBalancer)
         {
+            // The balancer (Eq. 5) takes each loss's gradient at the output on a nested tape and averages its norm on the
+            // host, so this step trains on the eager tape.
             var surrogate = _balancer!.Surrogate(generated, losses);
-            _reported = _balancer.LastWeightedLoss + commitmentValue;
+            _reported = _balancer.LastWeightedLoss + NumOps.ToDouble(commitment[0]);
             return Engine.TensorAdd(surrogate, commitment);
         }
         var weights = new Dictionary<string, double>
@@ -306,7 +307,8 @@ public partial class EnCodec<T> : NeuralAudioCodecBase<T>
             ["feat"] = o.FeatureLossWeight,
         };
         var total = Engine.TensorAdd(Sum(losses.Select(l => Engine.TensorMultiplyScalar(l.Value(generated), NumOps.FromDouble(weights[l.Key])))), commitment);
-        _reported = NumOps.ToDouble(total[0]);
+        // The returned loss is the reported one; nothing is read on the host, so a compiled plan replays this objective.
+        _reported = null;
         return total;
     }
 

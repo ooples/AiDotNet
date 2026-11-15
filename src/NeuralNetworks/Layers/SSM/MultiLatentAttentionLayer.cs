@@ -284,7 +284,7 @@ public partial class MultiLatentAttentionLayer<T> : LayerBase<T>, IShapeContract
         var gate = Engine.Swish(gateRaw);
 
         // Step 5: Causal multi-head attention
-        var attnOutput = CausalMultiHeadAttention(q, k, v, batchSize, seqLen);
+        var attnOutput = CausalMultiHeadAttention(q, k, v);
 
         // Step 6: Gated output
         var gatedOutput = Engine.TensorMultiply(attnOutput, gate);
@@ -310,11 +310,9 @@ public partial class MultiLatentAttentionLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
-    /// Causal multi-head attention: softmax(Q*K^T / sqrt(d_k)) * V with causal mask.
+    /// Causal multi-head attention: softmax(Q*K^T / sqrt(d_k)) * V, query i attending keys j &lt;= i.
     /// </summary>
-    private Tensor<T> CausalMultiHeadAttention(
-        Tensor<T> q, Tensor<T> k, Tensor<T> v,
-        int batchSize, int seqLen)
+    private Tensor<T> CausalMultiHeadAttention(Tensor<T> q, Tensor<T> k, Tensor<T> v)
     {
         // ENGINE OPS, NOT A SCALAR LOOP NEST. This computed the whole scaled-dot-product attention
         // with NumOps.Multiply/Exp over element indices, which produces tensors the autodiff tape
@@ -329,59 +327,18 @@ public partial class MultiLatentAttentionLayer<T> : LayerBase<T>, IShapeContract
         // So the compression and Q/K/V projections that define Multi-head Latent Attention received
         // no gradient at all through the tape path.
         //
-        // Engine.ScaledDotProductAttention is what the attention layers that already pass their
-        // gradcheck use (AttentionLayer, CrossAttentionLayer, GroupedQueryAttentionLayer). It is
-        // recorded, and it allocates through TensorAllocator.Rent internally exactly as the hand
-        // written version did, so nothing is given up on the allocation path.
+        // Engine.MultiHeadAttentionCore is recorded on the tape (MultiHeadAttentionLayer's fused path uses it too).
         //
         // Semantics preserved: per-head scaling by 1/sqrt(headDim) and strict causality (a query at
         // position i attends to keys j <= i), matching DeepSeek-V2's MLA, which differs from vanilla
         // MHA only in reconstructing K/V from the compressed latent -- that reconstruction already
         // happens in ForwardTraced above and is unchanged here.
-        var qh = SplitHeads(q, batchSize, seqLen);
-        var kh = SplitHeads(k, batchSize, seqLen);
-        var vh = SplitHeads(v, batchSize, seqLen);
-
-        var attended = Engine.FlashAttention(
-            qh, kh, vh,
-            scale: 1.0 / Math.Sqrt(_headDimension),
-            isCausal: true,
-            out _,
-            attentionBias: null);
-
-        return MergeHeads(attended, batchSize, seqLen);
-    }
-
-    /// <summary>[B, S, H*hd] -> [B, H, S, hd], the layout ScaledDotProductAttention expects.</summary>
-    private Tensor<T> SplitHeads(Tensor<T> x, int batchSize, int seqLen)
-    {
-        var byHead = Engine.Reshape(x, new[] { batchSize, seqLen, _numHeads, _headDimension });
-        return Engine.TensorPermute(byHead, new[] { 0, 2, 1, 3 });
-    }
-
-    /// <summary>[B, H, S, hd] -> [B, S, H*hd], the inverse of <see cref="SplitHeads"/>.</summary>
-    private Tensor<T> MergeHeads(Tensor<T> x, int batchSize, int seqLen)
-    {
-        var bySeq = Engine.TensorPermute(x, new[] { 0, 2, 1, 3 });
-        return Engine.Reshape(bySeq, new[] { batchSize, seqLen, _modelDimension });
-    }
-
-    /// <summary>
-    /// Causal mask: query i may attend to keys j &lt;= i. Built with plain loops deliberately -- a
-    /// bool mask carries no gradient, so it is not part of the differentiable graph.
-    /// </summary>
-    private static Tensor<bool> BuildCausalMask(int batchSize, int heads, int seqLen)
-    {
-        var data = new bool[batchSize * heads * seqLen * seqLen];
-        for (int b = 0; b < batchSize; b++)
-            for (int h = 0; h < heads; h++)
-            {
-                int planeBase = ((b * heads) + h) * seqLen * seqLen;
-                for (int i = 0; i < seqLen; i++)
-                    for (int j = 0; j <= i; j++)
-                        data[planeBase + (i * seqLen) + j] = true;
-            }
-        return new Tensor<bool>(data, new[] { batchSize, heads, seqLen, seqLen });
+        //
+        // Causality is the engine's flag, not a mask tensor, and the heads stay interleaved in [B, S, H*hd]: a GPU
+        // engine runs one fused FlashAttention-2 kernel (causal in the kernel, device backward) with no head permutes.
+        // The [B, H, S, S] bool mask this built on every forward was 2M bools at B8 H4 S256, converted to float and
+        // uploaded each call.
+        return Engine.MultiHeadAttentionCore(q, k, v, _numHeads, 1.0 / Math.Sqrt(_headDimension), causal: true);
     }
 
     private Tensor<T> ComputeSiLUDerivative(Tensor<T> x)
