@@ -26648,3 +26648,4 @@ override AiDotNet.Diffusion.ThreeD.ShapEModel<T>.ImageTo3D(AiDotNet.Tensors.Line
 override AiDotNet.Diffusion.ThreeD.Magic3DModel<T>.ImageTo3D(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputImage, int numViews = 4, int numInferenceSteps = 50, double guidanceScale = 3, int? seed = null) -> AiDotNet.Interfaces.Mesh3D<T>!
 override AiDotNet.Diffusion.ThreeD.Instant3DModel<T>.ImageTo3D(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputImage, int numViews = 4, int numInferenceSteps = 50, double guidanceScale = 3, int? seed = null) -> AiDotNet.Interfaces.Mesh3D<T>!
 override AiDotNet.Diffusion.ThreeD.PointEModel<T>.ImageTo3D(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputImage, int numViews = 4, int numInferenceSteps = 50, double guidanceScale = 3, int? seed = null) -> AiDotNet.Interfaces.Mesh3D<T>!
+override AiDotNet.Audio.Fingerprinting.CLAPModel<T>.SupportsFusedCompiledTraining.get -> bool

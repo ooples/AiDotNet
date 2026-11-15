@@ -942,11 +942,25 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     /// SpecAugment stripes already are, so they need no break.
     /// </para>
     /// </remarks>
+    /// <seealso cref="SupportsFusedCompiledTraining"/>
     internal string FusedTrainingBreakReason()
         => _options.EnableFeatureFusion
             ? "CLAP's log-mel front end is not recorded in training traces before AiDotNet.Tensors #1750 (#2592), and "
               + "its feature-fusion crops are drawn on the host each step"
             : "CLAP's log-mel front end is not recorded in training traces before AiDotNet.Tensors #1750 (#2592)";
+
+    /// <summary>
+    /// TEMPORARY OPT-OUT (#2592): the fused compiled training path is off for every entry point until the pinned
+    /// AiDotNet.Tensors contains ooples/AiDotNet.Tensors#1750 and the feature-fusion crops are drawn through
+    /// <see cref="AiDotNet.Training.CompiledStepRandom{T}"/>. Remove this override then.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="FusedTrainingBreakReason"/> breaks only the contrastive step's own request. The base class's custom
+    /// and declared-objective steps (<c>TrainWithCustomLossFused</c>, <c>TrainObjectiveFused</c>) build their own
+    /// request around <see cref="ForwardForTraining"/>, which runs the same log-mel front end, and consult only this
+    /// flag. With it left on, those steps compiled a plan that kept the traced step's spectra.
+    /// </remarks>
+    protected override bool SupportsFusedCompiledTraining => false;
 
     /// <summary>
     /// The symmetric contrastive loss of paired, L2-normalised embeddings (Radford 2021 Eq. 1; Wu 2023 §3.2):
