@@ -300,4 +300,35 @@ public class FeatureSelectionTensorOpsTests
         Assert.Equal(0.0, (double)vectors[0, 0], 1e-3);
         Assert.Equal(1.0, Math.Abs((double)vectors[1, 0]), 1e-3);
     }
+
+    // A path 0 - 1 - 2 with edges of length 40000: the path 0 - 2 is 80000, past Half's 65504. It was summed in Half
+    // to +infinity, the no-edge value, so the connected pair read as unreachable with length 0. It is connected,
+    // and its length is Half's +infinity.
+    [Fact(Timeout = 60000)]
+    public async Task ShortestPaths_Half_KeepsAConnectedPairWhosePathOverflows()
+    {
+        await Task.CompletedTask;
+        const int n = 3;
+        var lengthValues = new Half[n * n];
+        var edgeValues = new Half[n * n];
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < n; j++)
+            {
+                lengthValues[i * n + j] = (Half)(i == j ? 0 : 40000);
+                edgeValues[i * n + j] = (Half)(Math.Abs(i - j) == 1 ? 1 : 0);
+            }
+        }
+
+        var geodesic = FeatureSelectionTensorOps.ShortestPaths(
+            new Tensor<Half>(lengthValues, new[] { n, n }), new Tensor<Half>(edgeValues, new[] { n, n }), out var reachable);
+
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < n; j++)
+                Assert.Equal(1.0, (double)reachable[i, j]);
+        Assert.Equal(40000.0, (double)geodesic[0, 1]);
+        Assert.Equal(40000.0, (double)geodesic[1, 2]);
+        Assert.True(double.IsPositiveInfinity((double)geodesic[0, 2]));
+        Assert.True(double.IsPositiveInfinity((double)geodesic[2, 0]));
+    }
 }

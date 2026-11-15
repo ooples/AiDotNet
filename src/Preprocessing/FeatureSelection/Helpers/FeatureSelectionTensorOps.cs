@@ -167,10 +167,20 @@ internal static class FeatureSelectionTensorOps
     /// <remarks>
     /// Pairs without an edge start at +infinity (half the largest value for types without an infinity) and are
     /// built with a where, not a mask multiply: a finite sentinel such as the sum of all edge lengths overflows
-    /// Half past 65504, and 0 * infinity in a mask multiply is NaN on every edge.
+    /// Half past 65504, and 0 * infinity in a mask multiply is NaN on every edge. The path sums are formed in
+    /// double for any other T: two Half edges of 40000 sum to +infinity, the no-edge value itself, so a connected
+    /// pair read as unconnected. A connected pair whose path length is past T's range comes back as T's
+    /// infinity (connected), not as 0.
     /// </remarks>
     public static Tensor<T> ShortestPaths<T>(Tensor<T> lengths, Tensor<T> edges, out Tensor<T> reachable)
     {
+        if (typeof(T) != typeof(double))
+        {
+            var wide = ShortestPaths(lengths.Cast<double>(), edges.Cast<double>(), out var wideReachable);
+            reachable = wideReachable.Cast<T>();
+            return wide.Cast<T>();
+        }
+
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
         int n = lengths.Shape[0];
