@@ -926,55 +926,19 @@ public partial class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
     }
 
     /// <summary>
-    /// Transforms a point from camera space to world space.
+    /// Transforms a point from camera space (looking down -Z, +Y up) to world space with the same
+    /// camera-to-world matrix the camera embedding conditions generation on
+    /// (<see cref="CameraEmbedding{T}.CameraToWorld"/>), so reconstruction and conditioning share one basis.
     /// </summary>
-    private (double x, double y, double z) TransformCameraToWorld(
+    internal static (double x, double y, double z) TransformCameraToWorld(
         double camX, double camY, double camZ,
         double azimuth, double elevation, double radius)
     {
-        // Camera position in world space
-        double posX = radius * Math.Cos(elevation) * Math.Sin(azimuth);
-        double posY = radius * Math.Sin(elevation);
-        double posZ = radius * Math.Cos(elevation) * Math.Cos(azimuth);
-
-        // Camera forward direction (pointing at origin)
-        double fwdX = -posX, fwdY = -posY, fwdZ = -posZ;
-        double fwdLen = Math.Sqrt(fwdX * fwdX + fwdY * fwdY + fwdZ * fwdZ);
-        fwdX /= fwdLen; fwdY /= fwdLen; fwdZ /= fwdLen;
-
-        // World up
-        double upX = 0, upY = 1, upZ = 0;
-
-        // Camera right
-        double rightX = upY * fwdZ - upZ * fwdY;
-        double rightY = upZ * fwdX - upX * fwdZ;
-        double rightZ = upX * fwdY - upY * fwdX;
-        double rightLen = Math.Sqrt(rightX * rightX + rightY * rightY + rightZ * rightZ);
-        if (rightLen > 1e-6)
-        {
-            rightX /= rightLen; rightY /= rightLen; rightZ /= rightLen;
-        }
-        else
-        {
-            // Camera looking straight up/down - use different up vector
-            upX = 0; upY = 0; upZ = 1;
-            rightX = upY * fwdZ - upZ * fwdY;
-            rightY = upZ * fwdX - upX * fwdZ;
-            rightZ = upX * fwdY - upY * fwdX;
-            rightLen = Math.Sqrt(rightX * rightX + rightY * rightY + rightZ * rightZ);
-            rightX /= rightLen; rightY /= rightLen; rightZ /= rightLen;
-        }
-
-        // Camera up (recomputed to be orthogonal)
-        double camUpX = fwdY * rightZ - fwdZ * rightY;
-        double camUpY = fwdZ * rightX - fwdX * rightZ;
-        double camUpZ = fwdX * rightY - fwdY * rightX;
-
-        // Transform point from camera to world
-        double worldX = posX + rightX * camX + camUpX * camY - fwdX * camZ;
-        double worldY = posY + rightY * camX + camUpY * camY - fwdY * camZ;
-        double worldZ = posZ + rightZ * camX + camUpZ * camY - fwdZ * camZ;
-
+        // Row-major [right | up | back | position]: world = right * x + up * y + back * z + position.
+        var m = CameraEmbedding<T>.CameraToWorld(azimuth, elevation, radius);
+        double worldX = (m[0] * camX) + (m[1] * camY) + (m[2] * camZ) + m[3];
+        double worldY = (m[4] * camX) + (m[5] * camY) + (m[6] * camZ) + m[7];
+        double worldZ = (m[8] * camX) + (m[9] * camY) + (m[10] * camZ) + m[11];
         return (worldX, worldY, worldZ);
     }
 
@@ -1297,7 +1261,7 @@ public class MultiViewUNet<T> : IParameterSource<T>, ICloneable<MultiViewUNet<T>
     /// <param name="timestep">The timestep.</param>
     /// <param name="viewConditions">Per-view cross-attention conditioning.</param>
     /// <param name="cameraEmbeddings">Per-view camera embeddings of the U-Net's time-embedding width.</param>
-    public Tensor<T> PredictNoiseMultiView(
+    internal Tensor<T> PredictNoiseMultiView(
         Tensor<T> multiViewInput, int timestep, Tensor<T>[] viewConditions, Tensor<T>[] cameraEmbeddings)
     {
         var numViews = multiViewInput.Shape[0];
@@ -1516,7 +1480,7 @@ public class CameraEmbedding<T> : IParameterSource<T>
     /// <summary>
     /// Size of the camera description: the flattened 4x4 extrinsic matrix.
     /// </summary>
-    public const int CameraDim = 16;
+    internal const int CameraDim = 16;
 
     private readonly Matrix<T> _projectionWeights;
     private readonly Vector<T> _projectionBias;
@@ -1562,8 +1526,19 @@ public class CameraEmbedding<T> : IParameterSource<T>
     /// <param name="azimuth">Azimuth in radians.</param>
     /// <param name="elevation">Elevation in radians.</param>
     /// <param name="radius">Distance from the origin.</param>
-    public static double[] CameraToWorld(double azimuth, double elevation, double radius)
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The radius is zero, negative or not finite (the camera would have no direction to the origin), or an angle
+    /// is not finite.
+    /// </exception>
+    internal static double[] CameraToWorld(double azimuth, double elevation, double radius)
     {
+        if (double.IsNaN(radius) || double.IsInfinity(radius) || radius <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(radius), radius, "The camera radius must be positive and finite.");
+        if (double.IsNaN(azimuth) || double.IsInfinity(azimuth))
+            throw new ArgumentOutOfRangeException(nameof(azimuth), azimuth, "The camera azimuth must be finite.");
+        if (double.IsNaN(elevation) || double.IsInfinity(elevation))
+            throw new ArgumentOutOfRangeException(nameof(elevation), elevation, "The camera elevation must be finite.");
+
         double px = radius * Math.Cos(elevation) * Math.Sin(azimuth);
         double py = radius * Math.Sin(elevation);
         double pz = radius * Math.Cos(elevation) * Math.Cos(azimuth);

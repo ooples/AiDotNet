@@ -259,9 +259,16 @@ public partial class SDXLModel<T> : LatentDiffusionModelBase<T>
     private readonly int _additionTimeEmbedDim;
 
     /// <summary>
-    /// Width of the pooled text embedding fed to the add-embedding MLP.
+    /// Width of the pooled text embedding fed to the add-embedding MLP (the pooling encoder's projected width,
+    /// which can differ from its sequence width: 512 against 1024 for the CLIP x4-upscaler encoder).
     /// </summary>
     private readonly int _pooledTextDim;
+
+    /// <summary>
+    /// Width of the pooling encoder's own columns in the text embedding (its sequence width), narrowed out of a
+    /// dual-encoder concatenation before pooling.
+    /// </summary>
+    private readonly int _pooledSequenceDim;
 
     /// <summary>
     /// The text encoder whose pooled output conditions the add-embedding (OpenCLIP bigG when dual), or null
@@ -364,7 +371,10 @@ public partial class SDXLModel<T> : LatentDiffusionModelBase<T>
         // sized from the U-Net's configured time-embedding width rather than the paper's fixed 1280.
         var pooledCandidate = _useDualEncoder && _conditioner2 is not null ? _conditioner2 : _conditioner1;
         _pooledTextSource = pooledCandidate is not null && pooledCandidate.ProducesPooledOutput ? pooledCandidate : null;
-        _pooledTextDim = _pooledTextSource?.EmbeddingDimension ?? _crossAttentionDim;
+        _pooledSequenceDim = _pooledTextSource?.EmbeddingDimension ?? _crossAttentionDim;
+        _pooledTextDim = _pooledTextSource is AiDotNet.Diffusion.Conditioning.TextConditioningBase<T> textSource
+            ? textSource.PooledEmbeddingDimension
+            : _pooledSequenceDim;
         int timeEmbeddingDim = _unet.TimeEmbeddingDim;
         _additionTimeEmbedDim = AdditionTimeEmbedDim(timeEmbeddingDim);
         _addEmbeddingLinear1 = new AiDotNet.NeuralNetworks.Layers.DenseLayer<T>(
@@ -785,14 +795,27 @@ public partial class SDXLModel<T> : LatentDiffusionModelBase<T>
                 // wash, but for GPU engines with separate streams the second
                 // PredictNoise's queue submission overlaps with the first's
                 // tail kernels.
-                // The add-embedding enters through the synchronous overload, which runs the two branches in turn.
-                var condPred = _unet.PredictNoiseWithAddedTimeEmbedding(latents, timestep, promptEmbedding, promptAdded);
-                var uncondPred = _unet.PredictNoiseWithAddedTimeEmbedding(latents, timestep, negativeEmbedding, negativeAdded);
+                // The add-embedding enters through the synchronous U-Net overload, so each prediction is dispatched
+                // to a worker and the caller of GenerateAsync is not blocked for the denoising loop. The two
+                // branches stay sequential: they share one U-Net and its activation state.
+                var stepLatents = latents;
+                int stepTimestep = timestep;
+                var condPred = await System.Threading.Tasks.Task.Run(
+                    () => _unet.PredictNoiseWithAddedTimeEmbedding(stepLatents, stepTimestep, promptEmbedding, promptAdded),
+                    cancellationToken).ConfigureAwait(false);
+                var negative = negativeEmbedding;
+                var uncondPred = await System.Threading.Tasks.Task.Run(
+                    () => _unet.PredictNoiseWithAddedTimeEmbedding(stepLatents, stepTimestep, negative, negativeAdded),
+                    cancellationToken).ConfigureAwait(false);
                 noisePrediction = ApplyGuidance(uncondPred, condPred, effectiveGuidanceScale);
             }
             else
             {
-                noisePrediction = _unet.PredictNoiseWithAddedTimeEmbedding(latents, timestep, promptEmbedding, promptAdded);
+                var stepLatents = latents;
+                int stepTimestep = timestep;
+                noisePrediction = await System.Threading.Tasks.Task.Run(
+                    () => _unet.PredictNoiseWithAddedTimeEmbedding(stepLatents, stepTimestep, promptEmbedding, promptAdded),
+                    cancellationToken).ConfigureAwait(false);
             }
 
             var latentVector = latents.ToVector();
@@ -1109,18 +1132,23 @@ public partial class SDXLModel<T> : LatentDiffusionModelBase<T>
         int width = shape[shape.Length - 1];
         int batch = shape.Length >= 2 ? shape[0] : 1;
         int tokens = textEmbedding.Length / (batch * width);
-        if (width < _pooledTextDim || (_pooledTextSource is null && width != _pooledTextDim))
+        if (width < _pooledSequenceDim || (_pooledTextSource is null && width != _pooledSequenceDim))
             throw new ArgumentException(
-                $"The text embedding is {width} wide but the SDXL add-embedding expects {_pooledTextDim}.",
+                $"The text embedding is {width} wide but the SDXL add-embedding expects {_pooledSequenceDim}.",
                 nameof(textEmbedding));
 
         var sequence = textEmbedding.Reshape(new[] { batch, tokens, width });
         if (_pooledTextSource is not null)
         {
-            var own = width == _pooledTextDim
+            var own = width == _pooledSequenceDim
                 ? sequence
-                : Engine.TensorNarrow(sequence, 2, width - _pooledTextDim, _pooledTextDim);
-            return _pooledTextSource.GetPooledEmbedding(own).Reshape(new[] { batch, _pooledTextDim });
+                : Engine.TensorNarrow(sequence, 2, width - _pooledSequenceDim, _pooledSequenceDim);
+            var pooled = _pooledTextSource.GetPooledEmbedding(own);
+            if (pooled.Length != batch * _pooledTextDim)
+                throw new InvalidOperationException(
+                    $"The pooled text embedding has {pooled.Length} values for {batch} item(s); the SDXL add-embedding " +
+                    $"expects {_pooledTextDim} per item.");
+            return pooled.Reshape(new[] { batch, _pooledTextDim });
         }
 
         return Engine.ReduceMean(sequence, new[] { 1 }, false);

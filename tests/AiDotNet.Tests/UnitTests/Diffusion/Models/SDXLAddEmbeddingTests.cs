@@ -154,4 +154,58 @@ public class SDXLAddEmbeddingTests
             difference += Math.Abs(plain[i] - moved[i]);
         Assert.True(difference > 0, "A non-zero added embedding must change the prediction.");
     }
+
+    [Theory]
+    [InlineData(new[] { 2, 16 }, 1)]
+    [InlineData(new[] { 3, 32 }, 2)]
+    [InlineData(new[] { 64 }, 1)]
+    public void UNet_AddedTimeEmbedding_RejectsShapesThatAreNotOnePerBatchItem(int[] shape, int batch)
+    {
+        // An equal element count is not enough: [2, 16] for a 32-wide embedding would fold two half rows into one
+        // shared row, and [3, 32] does not belong to a batch of two.
+        Assert.Throws<ArgumentException>(
+            () => UNetNoisePredictor<double>.ValidateAddedTimeEmbedding(new Tensor<double>(shape), 32, batch));
+    }
+
+    [Theory]
+    [InlineData(new[] { 32 }, 2)]
+    [InlineData(new[] { 1, 32 }, 2)]
+    [InlineData(new[] { 2, 32 }, 2)]
+    public void UNet_AddedTimeEmbedding_AcceptsSharedAndPerItemRows(int[] shape, int batch)
+    {
+        UNetNoisePredictor<double>.ValidateAddedTimeEmbedding(new Tensor<double>(shape), 32, batch);
+    }
+
+    [Fact]
+    public void PoolTextEmbedding_ProjectedPooledWidthCanDifferFromSequenceWidth()
+    {
+        // The CLIP x4-upscaler encoder has 1024-wide sequence embeddings but a 512-wide text projection, so the
+        // pooled embedding (and the add-embedding input) is 512 wide; reshaping it to the sequence width failed.
+        var clip = new AiDotNet.Diffusion.Conditioning.CLIPTextConditioner<double>(
+            AiDotNet.Tokenization.ClipTokenizerFactory.CreateSimple(),
+            options: new AiDotNet.Diffusion.Conditioning.CLIPTextConditionerOptions
+            {
+                Variant = AiDotNet.Enums.CLIPVariant.StableDiffusionX4Upscaler
+            });
+        var unet = SmallUNet();
+        var model = new SDXLModel<double>(
+            unet: unet,
+            vae: new StandardVAE<double>(
+                inputChannels: 3, latentChannels: 4,
+                baseChannels: 32, channelMultipliers: [1, 2],
+                numResBlocksPerLevel: 1, latentScaleFactor: 0.18215, seed: 3),
+            conditioner1: clip,
+            useDualEncoder: false,
+            crossAttentionDim: 1024,
+            seed: 3);
+        var text = new Tensor<double>(new[] { 1, 2, 1024 });
+        for (int i = 0; i < text.Length; i++)
+            text[i] = Math.Sin(i * 0.01);
+
+        var pooled = model.PoolTextEmbedding(text);
+        Assert.Equal(new[] { 1, 512 }, pooled.Shape.ToArray());
+
+        var added = model.ComputeAddedTimeEmbedding(text, model.CreateMicroCondition(512, 512, 0, 0, 512, 512));
+        Assert.Equal(unet.TimeEmbeddingDim, added.Length);
+    }
 }

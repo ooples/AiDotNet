@@ -251,6 +251,36 @@ public class ThreeDGeometryTests
         Assert.Equal(new[] { 0.0, 0.0, 0.0, 1.0 }, new[] { m[12], m[13], m[14], m[15] });
     }
 
+    [Theory]
+    [InlineData(0.0)]
+    [InlineData(-1.0)]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    public void CameraToWorld_RejectsARadiusWithNoDirectionToTheOrigin(double radius)
+    {
+        // radius 0 normalized the zero position vector, filling the matrix and the embedding with NaN.
+        Assert.Throws<ArgumentOutOfRangeException>(() => CameraEmbedding<double>.CameraToWorld(0.0, 0.0, radius));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new CameraEmbedding<double>(4, seed: 1).Embed(0.0, 0.0, radius));
+    }
+
+    [Theory]
+    [InlineData(0.0, 0.0, 2.0)]
+    [InlineData(1.2, 0.4, 1.5)]
+    [InlineData(-2.5, -0.7, 3.0)]
+    public void MVDream_ReconstructionUsesTheConditioningCameraMatrix(double azimuth, double elevation, double radius)
+    {
+        // Generation is conditioned on CameraToWorld, so back-projection must map camera space to world space with
+        // the same basis; the old reconstruction basis had the opposite right vector ((-1, 0, 0) at azimuth 0).
+        var m = CameraEmbedding<double>.CameraToWorld(azimuth, elevation, radius);
+        double camX = 0.25, camY = -0.4, camZ = -1.3;
+        var (x, y, z) = AiDotNet.Diffusion.ThreeD.MVDreamModel<double>.TransformCameraToWorld(
+            camX, camY, camZ, azimuth, elevation, radius);
+
+        Assert.Equal((m[0] * camX) + (m[1] * camY) + (m[2] * camZ) + m[3], x, 12);
+        Assert.Equal((m[4] * camX) + (m[5] * camY) + (m[6] * camZ) + m[7], y, 12);
+        Assert.Equal((m[8] * camX) + (m[9] * camY) + (m[10] * camZ) + m[11], z, 12);
+    }
+
     [Fact]
     public void CameraEmbedding_IsTwoLayerMlpOfTheExtrinsics()
     {
