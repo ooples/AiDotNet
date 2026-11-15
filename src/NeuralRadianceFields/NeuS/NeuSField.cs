@@ -143,7 +143,8 @@ internal sealed class NeuSField<T> : ISignedDistanceField<T>
             throw new ArgumentException("Origins and directions must both be [R, 3].", nameof(directions));
         int rays = origins.Length / 3;
         var o = Options;
-        var (near, far) = NeuSSampling.NearFarFromSphere(origins, directions);
+        bool syncDreamer = o.RendererVariant == NeuSRendererVariant.SyncDreamer;
+        var (near, far) = NeuSSampling.NearFarFromSphere(origins, directions, o.NearFarRadius);
         var z = NeuSSampling.UniformDepths(near, far, o.Samples, perturb);
         int samples = o.Samples;
         if (o.ImportanceSamples > 0)
@@ -152,8 +153,11 @@ internal sealed class NeuSField<T> : ISignedDistanceField<T>
             int perStep = o.ImportanceSamples / o.UpSampleSteps;
             for (int i = 0; i < o.UpSampleSteps; i++)
             {
+                var sectionValid = syncDreamer
+                    ? NeuSSampling.SectionsTouchingCube(origins, directions, z, samples, o.CubeHalfSide)
+                    : null;
                 var newZ = NeuSSampling.UpSample(origins, directions, z, sdf, samples, perStep, 64.0 * Math.Pow(2.0, i),
-                    -1e3, null);
+                    -1e3, sectionValid, zeroInvalidAlpha: false);
                 bool last = i + 1 == o.UpSampleSteps;
                 double[]? newSdf = last ? null : HostSdf(NeuSSampling.Points(origins, directions, newZ, perStep), rays * perStep);
                 var merged = NeuSSampling.Merge(z, last ? null : sdf, samples, newZ, newSdf, perStep);
@@ -163,8 +167,9 @@ internal sealed class NeuSField<T> : ISignedDistanceField<T>
             }
         }
 
-        // NeuS assumes the region of interest is the unit sphere: the last section is 2 / n_samples long.
-        var (dists, mid) = NeuSRenderer<T>.Sections(z, samples, 2.0 / o.Samples);
+        // NeuS assumes the region of interest is the unit sphere: the last section is 2 / n_samples long. SyncDreamer
+        // repeats the previous section instead.
+        var (dists, mid) = NeuSRenderer<T>.Sections(z, samples, syncDreamer ? (double?)null : 2.0 / o.Samples);
         int n = rays * samples;
         var pointsHost = NeuSSampling.Points(origins, directions, mid, samples);
         var dirsHost = new double[n * 3];
@@ -180,7 +185,10 @@ internal sealed class NeuSField<T> : ISignedDistanceField<T>
                     radius2 += pointsHost[i * 3 + c] * pointsHost[i * 3 + c];
                 }
 
-                relaxInside[i] = Math.Sqrt(radius2) < 1.2 ? 1.0 : 0.0;
+                relaxInside[i] = syncDreamer
+                    ? (Math.Abs(pointsHost[i * 3]) <= o.CubeHalfSide && Math.Abs(pointsHost[i * 3 + 1]) <= o.CubeHalfSide
+                        && Math.Abs(pointsHost[i * 3 + 2]) <= o.CubeHalfSide ? 1.0 : 0.0)
+                    : Math.Sqrt(radius2) < 1.2 ? 1.0 : 0.0;
             }
 
         var e = _engine;
@@ -188,10 +196,13 @@ internal sealed class NeuSField<T> : ISignedDistanceField<T>
         var dirs = NeuSHost<T>.FromDoubles(dirsHost, n, 3);
         var output = SdfNetwork.Forward(e, points, null, null, withGradient: true);
         var gradients = output.Gradient ?? throw new InvalidOperationException("The SDF network returned no gradient.");
-        var sampledColor = ColorNetwork.Forward(e, points, gradients, dirs, output.Features);
+        // SyncDreamer's color network reads -dirs (color_network(points, gradients, -dirs, feature_vector)).
+        var sampledColor = ColorNetwork.Forward(e, points, gradients, syncDreamer ? e.TensorNegate(dirs) : dirs, output.Features);
         var trueCos = e.ReduceSum(e.TensorMultiply(dirs, gradients), new[] { 1 }, true);
+        // SyncDreamer evaluates only the samples inside its cube; the others keep zero opacity.
         var alpha = NeuSRenderer<T>.Alpha(e, output.Sdf, trueCos, NeuSHost<T>.FromDoubles(dists, n, 1),
-            NeuSRenderer<T>.InverseS(e, Variance), cosAnnealRatio, null, null);
+            NeuSRenderer<T>.InverseS(e, Variance), cosAnnealRatio, null,
+            syncDreamer ? NeuSHost<T>.FromDoubles(relaxInside, n, 1) : null);
         var weights = NeuSRenderer<T>.Weights(e, e.Reshape(alpha, new[] { rays, samples }));
         var weightSum = e.ReduceSum(weights, new[] { 1 }, true);
         var color = NeuSRenderer<T>.Composite(e, weights, sampledColor);
@@ -210,7 +221,7 @@ internal sealed class NeuSField<T> : ISignedDistanceField<T>
             WeightSum = weightSum,
             Depth = NeuSRenderer<T>.Composite(e, weights, NeuSHost<T>.FromDoubles(mid, n, 1)),
             Normal = NeuSRenderer<T>.Composite(e, weights, unitNormals),
-            GradientError = NeuSRenderer<T>.EikonalError(e, gradients, relaxInside),
+            GradientError = NeuSRenderer<T>.EikonalError(e, gradients, relaxInside, perSampleEpsilon: syncDreamer),
             Sdf = e.Reshape(output.Sdf, new[] { rays, samples }),
             MidDepths = mid,
             SamplesPerRay = samples,

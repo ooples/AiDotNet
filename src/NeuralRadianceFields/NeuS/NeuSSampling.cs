@@ -13,12 +13,13 @@ namespace AiDotNet.NeuralRadianceFields.NeuS;
 internal static class NeuSSampling
 {
     /// <summary>
-    /// The near and far depths of each ray's chord through the unit sphere's bounding interval: the ray's closest
-    /// approach to the origin ∓ 1 (reference <c>near_far_from_sphere</c>).
+    /// The near and far depths of each ray's chord through the sphere's bounding interval: the ray's closest
+    /// approach to the origin ∓ <paramref name="radius"/> (reference <c>near_far_from_sphere</c>).
     /// </summary>
     /// <param name="origins">Ray origins, <c>[R, 3]</c>.</param>
     /// <param name="directions">Ray directions, <c>[R, 3]</c>.</param>
-    public static (double[] Near, double[] Far) NearFarFromSphere(double[] origins, double[] directions)
+    /// <param name="radius">The sphere radius (1 in NeuS).</param>
+    public static (double[] Near, double[] Far) NearFarFromSphere(double[] origins, double[] directions, double radius = 1.0)
     {
         int rays = origins.Length / 3;
         var near = new double[rays];
@@ -33,8 +34,8 @@ internal static class NeuSSampling
             }
 
             double mid = 0.5 * (-b) / a;
-            near[r] = mid - 1.0;
-            far[r] = mid + 1.0;
+            near[r] = mid - radius;
+            far[r] = mid + radius;
         }
 
         return (near, far);
@@ -98,8 +99,10 @@ internal static class NeuSSampling
     /// <param name="inverseS">The S-density sharpness for this round (64·2ⁱ in the reference).</param>
     /// <param name="minSlope">The slope clamp's lower end (−1000 in NeuS, −10 in SparseNeuS).</param>
     /// <param name="sectionValid">Per section <c>[R, S − 1]</c> validity, or null for NeuS's rule (either end inside the unit sphere).</param>
+    /// <param name="zeroInvalidAlpha">Whether an invalid section also gets zero opacity (SparseNeuS) rather than only a
+    /// zero slope (SyncDreamer). Applies only with <paramref name="sectionValid"/>.</param>
     public static double[] UpSample(double[] origins, double[] directions, double[] z, double[] sdf, int samples, int count,
-        double inverseS, double minSlope, bool[]? sectionValid)
+        double inverseS, double minSlope, bool[]? sectionValid, bool zeroInvalidAlpha = true)
     {
         int rays = origins.Length / 3;
         int sections = samples - 1;
@@ -126,13 +129,43 @@ internal static class NeuSSampling
                 double prevCdf = Sigmoid((mid - used * dist * 0.5) * inverseS);
                 double nextCdf = Sigmoid((mid + used * dist * 0.5) * inverseS);
                 double alpha = (prevCdf - nextCdf + 1e-5) / (prevCdf + 1e-5);
-                if (sectionValid is not null && !valid) alpha = 0.0;
+                if (sectionValid is not null && zeroInvalidAlpha && !valid) alpha = 0.0;
                 weights[r * sections + s] = alpha * transmittance;
                 transmittance *= 1.0 - alpha + 1e-7;
             }
         }
 
         return SamplePdf(z, weights, samples, count, null);
+    }
+
+    /// <summary>
+    /// Whether each sample of <c>[R, S]</c> depths lies in the cube <c>|x|, |y|, |z| &lt;= halfSide</c>, row-major
+    /// (SyncDreamer's <c>get_inner_mask</c>).
+    /// </summary>
+    public static bool[] InsideCube(double[] origins, double[] directions, double[] z, int samples, double halfSide)
+    {
+        var points = Points(origins, directions, z, samples);
+        int n = points.Length / 3;
+        var inside = new bool[n];
+        for (int i = 0; i < n; i++)
+            inside[i] = Math.Abs(points[i * 3]) <= halfSide && Math.Abs(points[i * 3 + 1]) <= halfSide
+                && Math.Abs(points[i * 3 + 2]) <= halfSide;
+        return inside;
+    }
+
+    /// <summary>
+    /// Per section <c>[R, S − 1]</c>, whether either end is inside the cube (SyncDreamer's <c>upsample</c>:
+    /// <c>inner_mask[:, :-1] | inner_mask[:, 1:]</c>).
+    /// </summary>
+    public static bool[] SectionsTouchingCube(double[] origins, double[] directions, double[] z, int samples, double halfSide)
+    {
+        var inside = InsideCube(origins, directions, z, samples, halfSide);
+        int rays = z.Length / samples, sections = samples - 1;
+        var valid = new bool[rays * sections];
+        for (int r = 0; r < rays; r++)
+            for (int s = 0; s < sections; s++)
+                valid[r * sections + s] = inside[r * samples + s] || inside[r * samples + s + 1];
+        return valid;
     }
 
     /// <summary>

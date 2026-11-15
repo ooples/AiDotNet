@@ -42404,4 +42404,25 @@
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:AiDotNet.Diffusion.ThreeD.SyncDreamerModel`1.#ctor(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},AiDotNet.Models.Options.DiffusionModelOptions{`0},AiDotNet.Interfaces.INoiseScheduler{`0},AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor{`0},AiDotNet.Diffusion.VAE.StandardVAE{`0},AiDotNet.Interfaces.IConditioningModule{`0},System.Int32,System.Nullable{System.Int32})</Target>
+    <Left>lib/net10.0/AiDotNet.dll</Left>
+    <Right>lib/net10.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:AiDotNet.Diffusion.ThreeD.SyncDreamerModel`1.#ctor(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},AiDotNet.Models.Options.DiffusionModelOptions{`0},AiDotNet.Interfaces.INoiseScheduler{`0},AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor{`0},AiDotNet.Diffusion.VAE.StandardVAE{`0},AiDotNet.Interfaces.IConditioningModule{`0},System.Int32,System.Nullable{System.Int32})</Target>
+    <Left>lib/net471/AiDotNet.dll</Left>
+    <Right>lib/net471/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:AiDotNet.Diffusion.ThreeD.SyncDreamerModel`1.#ctor(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},AiDotNet.Models.Options.DiffusionModelOptions{`0},AiDotNet.Interfaces.INoiseScheduler{`0},AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor{`0},AiDotNet.Diffusion.VAE.StandardVAE{`0},AiDotNet.Interfaces.IConditioningModule{`0},System.Int32,System.Nullable{System.Int32})</Target>
+    <Left>lib/net8.0/AiDotNet.dll</Left>
+    <Right>lib/net8.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
 </Suppressions>
