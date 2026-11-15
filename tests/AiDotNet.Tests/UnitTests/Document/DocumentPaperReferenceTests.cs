@@ -84,6 +84,20 @@ public sealed class DocumentPaperReferenceTests
     }
 
     [Fact]
+    public void Pse_EveryLabelledPixelSeedsTheNextKernel()
+    {
+        // Three nested kernels: the seed row 5, columns 0-4; the middle kernel adds (5, 5); the complete map adds
+        // column 4 of rows 0-4. (5, 4) claims (5, 5) in the middle kernel. If it then left the frontier, nothing
+        // could reach column 4 above it, the instance stayed at 6 pixels and the 10-pixel minimum dropped it.
+        var seed = Enumerable.Range(0, 5).Select(x => (5, x)).ToArray();
+        var middle = seed.Append((5, 5)).ToArray();
+        var complete = middle.Concat(Enumerable.Range(0, 5).Select(y => (y, 4))).ToArray();
+        using var model = SmallPseNet(3);
+        var region = Assert.Single(model.ParsePSENetOutput(KernelLogits(Map(seed), Map(middle), Map(complete)), 0.5));
+        Assert.Equal(new[] { 0.0, 0.0, 5.0, 5.0 }, region.BoundingBox.ToArray());
+    }
+
+    [Fact]
     public void Pse_KeepsAnInstanceOnlyWhenItsMeanTextProbabilityReachesTheThreshold()
     {
         // A 4x4 square instance whose complete-map logit is 10: its mean probability is sigmoid(10) ~ 1, so a
@@ -107,6 +121,7 @@ public sealed class DocumentPaperReferenceTests
             inputSize: 16, outputSize: 4),
             options: new LayoutLMv3Options { NumClasses = 4, ImageSize = 32, PatchSize = 16, MaxSequenceLength = 64, HiddenDim = 64, NumLayers = 2, NumHeads = 4, VocabSize = 100 });
         var processed = model.PreprocessForInspection(ConstantPage(32, 0.75));
+        Assert.Equal(3 * 32 * 32, processed.Length);
         Assert.All(processed.ToArray(), v => Assert.Equal(0.5, v, 12));
     }
 
@@ -119,6 +134,7 @@ public sealed class DocumentPaperReferenceTests
             inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4),
             options: new DiTOptions { NumClasses = 4, ImageSize = 32, PatchSize = 16, HiddenDim = 32, NumLayers = 1, NumHeads = 2 });
         var processed = model.PreprocessForInspection(ConstantPage(32, 0.25));
+        Assert.Equal(3 * 32 * 32, processed.Length);
         Assert.All(processed.ToArray(), v => Assert.Equal(-0.5, v, 12));
     }
 
@@ -131,6 +147,7 @@ public sealed class DocumentPaperReferenceTests
             inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 64),
             options: new UDOPOptions { ImageSize = 32, PatchSize = 16, MaxSequenceLength = 16, HiddenDim = 32, NumEncoderLayers = 2, NumDecoderLayers = 2, NumHeads = 4, KeyValueDim = 8, FeedForwardDim = 64, VocabSize = 64, RelativeAttentionBuckets = 8, RelativeAttentionMaxDistance = 16, RelativeAttentionMaxDistance2D = 10, Max2DPositions = 64, NumLocationBins = 16, MaxGenerationLength = 8 });
         var processed = model.PreprocessForInspection(ConstantPage(32, 1.0));
+        Assert.Equal(3 * 32 * 32, processed.Length);
         Assert.All(processed.ToArray(), v => Assert.Equal(1.0, v, 12));
     }
 
@@ -150,6 +167,19 @@ public sealed class DocumentPaperReferenceTests
         Assert.Equal("ab", text);
         Assert.Equal(new[] { pa, pb }, perCharacter, new Tolerance(1e-12));
         Assert.Equal((pa + pb) / 2, confidence, 12);
+    }
+
+    [Fact]
+    public void Svtr_InHalf_TakesTheGreedyTokenFromTheLogits()
+    {
+        // Half's softmax of [0, 2^-14, 2^-13] is 0.33325 three times; the first-index tie picked the blank and the
+        // 'b' frame was lost.
+        using var model = new SVTR<Half>(new NeuralNetworkArchitecture<Half>(
+            inputType: InputType.TwoDimensional, taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 32, inputWidth: 100, outputSize: 3),
+            options: new SVTROptions { Charset = "ab" });
+        var logits = new Tensor<Half>(new[] { 1, 3 }, new Vector<Half>(new[] { (Half)0.0, (Half)0.00006103515625, (Half)0.0001220703125 }));
+        Assert.Equal("b", model.CTCDecode(logits).text);
     }
 
     [Fact]
@@ -247,11 +277,18 @@ public sealed class DocumentPaperReferenceTests
             inputSize: 16, outputSize: 4),
             options: new DocGCNOptions { NodeDim = 16, EdgeDim = 8, GcnLayers = 1, NumClasses = 4, MaxNodes = 16 });
         var logits = new Tensor<double>(new[] { 3, 4 }, new Vector<double>(new[] { 3.0, 0, 0, 0, 0, 3.0, 0, 0, 0.1, 0, 0, 0 }));
-        var regions = model.ParseLayoutOutput(logits, 0.5);
+        // Each node's normalized box, as the node features carry it; the head has no box columns.
+        var nodeBoxes = new Tensor<double>(new[] { 3, 4 }, new Vector<double>(new[] { 0, 0, 0.5, 0.25, 0.5, 0.5, 1, 0.75, 0, 0.75, 1, 1 }));
+        var regions = model.ParseLayoutOutput(logits, 0.5, nodeBoxes);
 
         Assert.Equal(new[] { 0, 1 }, regions.Select(r => r.Index).ToArray());
         Assert.Equal(new[] { LayoutElementType.Text, LayoutElementType.Title }, regions.Select(r => r.ElementType).ToArray());
         Assert.All(regions, r => Assert.Equal(Math.Exp(3) / (Math.Exp(3) + 3), r.Confidence, 12));
+        int size = model.ImageSize;
+        Assert.Equal(new[] { 0.0, 0.0, 0.5 * size, 0.25 * size }, regions[0].BoundingBox.ToArray());
+        Assert.Equal(new[] { 0.5 * size, 0.5 * size, 1.0 * size, 0.75 * size }, regions[1].BoundingBox.ToArray());
+        // Without a box head or node boxes there is no geometry, and no grid cell is invented for it.
+        Assert.Throws<InvalidOperationException>(() => model.ParseLayoutOutput(logits, 0.5, null));
     }
 
     [Fact]
@@ -284,9 +321,12 @@ public sealed class DocumentPaperReferenceTests
             : new AiDotNet.Document.PixelToSequence.Pix2Struct<double>(arch, options: new Pix2StructOptions { ImageSize = 32, PatchSize = 16, MaxPatches = 4, MaxSequenceLength = 8, HiddenDim = 32, NumEncoderLayers = 1, NumDecoderLayers = 1, NumHeads = 2, VocabSize = 64 });
         var page = new Tensor<double>(new[] { 3, 32, 32 }, new Vector<double>(Enumerable.Range(0, 3 * 32 * 32).Select(i => (double)(i % 2)).ToArray()));
         var processed = model.PreprocessForInspection(page).ToArray();
+        Assert.Equal(page.Length, processed.Length);
         Assert.All(processed.Select((v, i) => (v, i)), p => Assert.Equal(p.i % 2 == 0 ? -1.0 : 1.0, p.v, 12));
 
-        Assert.All(model.PreprocessForInspection(ConstantPage(32, 0.7)).ToArray(), v => Assert.Equal(0.0, v, 12));
+        var flat = model.PreprocessForInspection(ConstantPage(32, 0.7)).ToArray();
+        Assert.Equal(page.Length, flat.Length);
+        Assert.All(flat, v => Assert.Equal(0.0, v, 12));
     }
 
     [Fact]
@@ -315,6 +355,32 @@ public sealed class DocumentPaperReferenceTests
         Assert.Equal("7", field.FieldValue);
         Assert.Equal("name", field.FieldType);
         Assert.Equal(0.9, field.Confidence, 12);
+        Assert.Equal(0.9, field.ConfidenceValue, 12);
+    }
+
+    [Fact]
+    public void Trie_RejectsRowsWithoutTheTextReadingLayout_AndLocatesTextRegionsByTheirBox()
+    {
+        const int vocabulary = 215, types = 4, keySteps = 32, valueSteps = 64;
+        using var model = new AiDotNet.Document.GraphBased.TRIE<double>(new NeuralNetworkArchitecture<double>(
+            inputType: InputType.ThreeDimensional, taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: types),
+            options: new TRIEOptions { ImageSize = 64, VisualDim = 16, TextDim = 16, GraphDim = 16, NumEntityTypes = types, MaxEntities = 8 });
+
+        // The native head's rows are the entity-type scores alone: no text reading, no box.
+        var typeScores = new Tensor<double>(new[] { 2, types }, new Vector<double>(new[] { 0.9, 2.0, 0, 0, 0.8, 0, 2.0, 0 }));
+        Assert.Throws<NotSupportedException>(() => model.ParseFormFields(typeScores, 0.5));
+        Assert.Throws<NotSupportedException>(() => model.ParseTextRegions(typeScores, 0.5));
+
+        // A full row: confidence 0.9 and the normalized box [0.1, 0.2, 0.5, 0.6] in its last four values.
+        int width = 1 + types + ((keySteps + valueSteps) * vocabulary) + 4;
+        var row = new double[width];
+        row[0] = 0.9;
+        row[width - 4] = 0.1; row[width - 3] = 0.2; row[width - 2] = 0.5; row[width - 1] = 0.6;
+        var region = Assert.Single(model.ParseTextRegions(new Tensor<double>(new[] { 1, width }, new Vector<double>(row)), 0.5));
+        Assert.Equal(new[] { 6.4, 12.8, 32.0, 38.4 }, region.BoundingBox.ToArray(), new Tolerance(1e-12));
+        var polygon = Assert.IsAssignableFrom<System.Collections.Generic.IReadOnlyList<Vector<double>>>(region.PolygonPoints);
+        Assert.Equal(new[] { 6.4, 12.8, 32.0, 12.8, 32.0, 38.4, 6.4, 38.4 }, polygon.SelectMany(p => p.ToArray()).ToArray(), new Tolerance(1e-12));
     }
 
     [Fact]
@@ -452,6 +518,7 @@ public sealed class DocumentPaperReferenceTests
         int n = 3 * 64 * 64;
         var page = new Tensor<Half>(Enumerable.Range(0, n).Select(i => (Half)(i % 2 == 0 ? 0.25 : 0.75)).ToArray(), new[] { 1, 3, 64, 64 });
         var processed = DocumentTensorOps.StandardizePerImage(CpuEngine, page).ToArray();
+        Assert.Equal(n, processed.Length);
         Assert.All(processed.Select((v, i) => (v, i)), p => Assert.Equal(p.i % 2 == 0 ? -1.0 : 1.0, (double)p.v, 12));
     }
 

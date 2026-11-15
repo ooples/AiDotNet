@@ -374,6 +374,11 @@ public partial class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
         };
     }
 
+    /// <summary>
+    /// The rows whose first value reaches <paramref name="threshold"/>, as text regions. DocOwl's output holds no
+    /// coordinates, so the regions carry no box (<see cref="LayoutRegion{T}.HasBoundingBox"/> is false) rather than an
+    /// invented one.
+    /// </summary>
     private List<LayoutRegion<T>> ParseLayoutOutput(Tensor<T> output, double threshold)
     {
         var (rows, scores) = DocumentTensorOps.RowsAtLeast(Engine, output, 100, 0, NumOps.FromDouble(threshold));

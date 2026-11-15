@@ -370,8 +370,13 @@ public partial class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
         var preprocessed = PreprocessDocument(documentImage);
         var output = _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
 
-        // Apply softmax for classification probabilities
-        var probs = ApplySoftmax(output);
+        // The head scores every token row ([L, NumClasses]). It is linear, so the mean of the rows' logits is the head
+        // applied to the mean-pooled encoder output: the document's one class vector, ranked over the class dimension.
+        int classDimension = output.Shape[output.Rank - 1];
+        var documentLogits = output.Rank < 2 || classDimension == 0
+            ? output
+            : Engine.ReduceMean(Engine.Reshape(output, new[] { output.Length / classDimension, classDimension }), new[] { 0 }, keepDims: false);
+        var probs = ApplySoftmax(documentLogits);
 
         // Get top-K predictions
         var topPredictions = GetTopKPredictions(probs, topK);

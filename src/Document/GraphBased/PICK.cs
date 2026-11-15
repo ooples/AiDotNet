@@ -724,6 +724,7 @@ public partial class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
                 FieldValue = lines[k.Line].Text,
                 FieldType = entityType,
                 Confidence = confidences[j],
+                ConfidenceValue = k.Confidence,
                 BoundingBox = lines[k.Line].BoundingBox
             };
         }).ToList();

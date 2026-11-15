@@ -3,6 +3,7 @@ using System.Linq;
 using AiDotNet.Document;
 using AiDotNet.Document.Analysis.PageSegmentation;
 using AiDotNet.Document.GraphBased;
+using AiDotNet.Document.OCR.TextDetection;
 using AiDotNet.Document.Options;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
@@ -29,6 +30,70 @@ public sealed class DocumentSweepRegressionTests
         // dividing the (zero) length by the (zero) row count to find the row width threw DivideByZeroException.
         var empty = new Tensor<double>(new[] { 0, 4 });
         Assert.Empty(DocumentTensorOps.GraphLayoutRegions(Cpu, empty, maxNodes: 16, classes: 4, imageSize: 64, threshold: 0.5));
+    }
+
+    [Fact]
+    public void DecodeRows_DropsTheSinglePageBatchAxis()
+    {
+        // [Batch = 1, Time = 3, Classes = 4] with step argmaxes 2, 0, 3: flattened as one row it gave a single token
+        // indexing the flattened tensor.
+        var output = new Tensor<double>(new[] { 1, 3, 4 }, new Vector<double>(new[] { 0, 0, 5.0, 0, 5.0, 0, 0, 0, 0, 0, 0, 5.0 }));
+        Assert.Equal(new[] { 2, 0, 3 }, DocumentTensorOps.DecodeRows(Cpu, output, maxLength: 10, temperature: 0.0, seed: 0).Tokens);
+    }
+
+    [Fact]
+    public void GraphLayoutRegions_TakeTheBoxHead_OrTheNodeBoxes_AndInventNoGeometry()
+    {
+        // Two classes plus a box head: node 0's box [0.1, 0.1, 0.5, 0.5] is [10, 10, 50, 50] on a 100-pixel page;
+        // node 1's [1.2, 0.2, 1.4, 0.4] clamps to x1 = x2 = 100, no area, so it is not a region.
+        var withHead = new Tensor<double>(new[] { 2, 6 }, new Vector<double>(new[] { 3.0, 0, 0.1, 0.1, 0.5, 0.5, 3.0, 0, 1.2, 0.2, 1.4, 0.4 }));
+        var region = Assert.Single(DocumentTensorOps.GraphLayoutRegions(Cpu, withHead, maxNodes: 8, classes: 2, imageSize: 100, threshold: 0.5));
+        Assert.Equal(0, region.Index);
+        Assert.Equal(new[] { 10.0, 10.0, 50.0, 50.0 }, region.BoundingBox.ToArray().Select(v => Math.Round(v, 9)).ToArray());
+        Assert.True(region.HasBoundingBox);
+
+        var logits = new Tensor<double>(new[] { 2, 2 }, new Vector<double>(new[] { 3.0, 0, 0, 3.0 }));
+        var boxes = new Tensor<double>(new[] { 2, 4 }, new Vector<double>(new[] { 0, 0, 0.5, 0.5, 0.5, 0.5, 1, 1 }));
+        var located = DocumentTensorOps.GraphLayoutRegions(Cpu, logits, maxNodes: 8, classes: 2, imageSize: 100, threshold: 0.5, nodeBoxes: boxes);
+        Assert.Equal(new[] { 0.0, 0.0, 50.0, 50.0, 50.0, 50.0, 100.0, 100.0 }, located.SelectMany(r => r.BoundingBox.ToArray()).ToArray());
+
+        // Five nodes without either source used to get grid cells, node 4 at [0, 100, 50, 150] off a 100-pixel page.
+        var noGeometry = new Tensor<double>(new[] { 5, 2 }, new Vector<double>(Enumerable.Repeat(new[] { 3.0, 0 }, 5).SelectMany(r => r).ToArray()));
+        Assert.Throws<InvalidOperationException>(() => DocumentTensorOps.GraphLayoutRegions(Cpu, noGeometry, maxNodes: 8, classes: 2, imageSize: 100, threshold: 0.5));
+    }
+
+    [Fact]
+    public void PageBoxes_ClampEveryCoordinateToThePage_AndFlagBoxesWithoutArea()
+    {
+        // At 224 pixels [1.2, 0.2, 1.4, 0.4] is [268.8, 44.8, 313.6, 89.6]: clamped to [224, 44.8, 224, 89.6], no width.
+        // [-0.1, 0.1, 0.5, 0.6] keeps its area once x1 is clamped to 0.
+        var normalized = new Tensor<double>(new[] { 2, 4 }, new Vector<double>(new[] { 1.2, 0.2, 1.4, 0.4, -0.1, 0.1, 0.5, 0.6 }));
+        var (corners, hasArea) = DocumentTensorOps.PageBoxes(Cpu, normalized, 224);
+        Assert.Equal(new[] { 224.0, 44.8, 224.0, 89.6, 0.0, 22.4, 112.0, 134.4 }, corners.Select(v => Math.Round(v, 9)).ToArray());
+        Assert.Equal(new[] { false, true }, hasArea);
+    }
+
+    [Fact]
+    public void SampleWithProbabilities_InHalf_ShiftsTheLogitsBeforeTheTemperature()
+    {
+        // [20, 10] / 0.0001 overflows Half to [+inf, +inf]; inf - inf made the row NaN and it returned token 0 with
+        // probability 0. Shifted first, the best token is drawn with probability 1.
+        var logits = new Tensor<Half>(new[] { 1, 2 }, new Vector<Half>(new[] { (Half)20.0, (Half)10.0 }));
+        var (tokens, probabilities) = DocumentTensorOps.SampleWithProbabilities(Cpu, logits, (Half)0.0001, seed: 7);
+        Assert.Equal(new[] { 0 }, tokens);
+        Assert.Equal(1.0, (double)probabilities.ToArray()[0], 12);
+    }
+
+    [Fact]
+    public void PseNetLoss_InHalf_ReducesInDouble()
+    {
+        // 40,000 confident positives: the intersection (~40,000) and the denominator (~80,000) pass Half's 65,504.
+        const int n = 40000;
+        var logits = new Vector<Half>(Enumerable.Repeat((Half)10.0, n).ToArray());
+        var targets = new Vector<Half>(Enumerable.Repeat((Half)1.0, n).ToArray());
+        double loss = (double)new PSENetLoss<Half>().CalculateLoss(logits, targets);
+        Assert.False(double.IsNaN(loss));
+        Assert.InRange(loss, 0.0, 1e-3);
     }
 
     [Fact]

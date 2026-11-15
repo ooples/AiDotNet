@@ -305,7 +305,7 @@ public partial class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T
         var preprocessed = PreprocessDocument(documentImage);
         var output = _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
 
-        var regions = ParseLayoutOutput(output, confidenceThreshold);
+        var regions = ParseLayoutOutput(output, confidenceThreshold, null);
 
         return new DocumentLayoutResult<T>
         {
@@ -314,8 +314,13 @@ public partial class DocGCN<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T
         };
     }
 
-    internal List<LayoutRegion<T>> ParseLayoutOutput(Tensor<T> output, double threshold)
-        => DocumentTensorOps.GraphLayoutRegions(Engine, output, _maxNodes, _numClasses, ImageSize, threshold);
+    /// <summary>
+    /// The layout regions of a node-classification output, located by the box head when the output has one, otherwise
+    /// by the nodes' own normalized boxes <paramref name="nodeBoxes"/> <c>[N, 4]</c> (see
+    /// <see cref="DocumentTensorOps.GraphLayoutRegions{T}"/>). A page image carries no node boxes.
+    /// </summary>
+    internal List<LayoutRegion<T>> ParseLayoutOutput(Tensor<T> output, double threshold, Tensor<T>? nodeBoxes)
+        => DocumentTensorOps.GraphLayoutRegions(Engine, output, _maxNodes, _numClasses, ImageSize, threshold, nodeBoxes);
 
     #endregion
 

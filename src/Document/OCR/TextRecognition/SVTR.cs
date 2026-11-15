@@ -584,7 +584,11 @@ public partial class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>,
         var logits = Engine.Reshape(output, new[] { seqLen, output.Length / seqLen });
         if (logits.Shape[1] != vocabSize)
             logits = Engine.TensorSlice(logits, new[] { 0, 0 }, new[] { seqLen, vocabSize });
-        var (best, probability) = DocumentTensorOps.RowMax(Engine, Engine.Softmax(logits, 1), vocabSize);
+        // The token is the argmax of the logits: a narrow T can round distinct logits' softmax to equal probabilities
+        // (Half [0, 2^-14, 2^-13] all give 0.33325), and the first-index tie then picks the blank. The softmax gives
+        // only the probability.
+        int[] best = DocumentTensorOps.RowArgMax(Engine, logits);
+        var probability = Engine.ReduceMax(Engine.Softmax(logits, 1), new[] { 1 }, false);
 
         int prevIdx = -1;
         for (int t = 0; t < seqLen; t++)

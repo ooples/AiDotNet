@@ -70,6 +70,9 @@ internal static class DocumentTensorOps
     /// </summary>
     internal static (int[] Tokens, T[] Probabilities) DecodeRows<T>(IEngine engine, Tensor<T> output, int maxLength, double temperature, int seed)
     {
+        // Document decoders emit [Batch, Time, Classes]; a single page's batch axis is dropped so the rows are the steps.
+        if (output.Rank == 3 && output.Shape[0] == 1)
+            output = engine.Reshape(output, new[] { output.Shape[1], output.Shape[2] });
         int rows = output.Rank == 0 ? 0 : Math.Min(output.Shape[0], maxLength);
         if (rows <= 0 || output.Length == 0)
             return (Array.Empty<int>(), Array.Empty<T>());
@@ -156,9 +159,11 @@ internal static class DocumentTensorOps
         int vocab = logits.Shape[1];
         var shape = new[] { rows, vocab };
         var column = new[] { rows, 1 };
-        var scaled = engine.TensorDivideScalar(logits, temperature);
-        var scores = engine.TensorExp(engine.TensorSubtract(scaled,
-            engine.TensorBroadcastTo(engine.ReduceMax(scaled, new[] { 1 }, true), shape))).Cast<double>();
+        // Shifted by the row maximum before the temperature, so every shifted logit is at most 0, then divided in
+        // double: a quotient past Half's 65,504 was +inf, inf - inf made the row NaN and it fell to the zero-mass branch.
+        var shifted = engine.TensorSubtract(logits, engine.TensorBroadcastTo(engine.ReduceMax(logits, new[] { 1 }, true), shape));
+        var scores = engine.TensorExp(engine.TensorDivideScalar(
+            shifted.Cast<double>(), MathHelper.GetNumericOperations<T>().ToDouble(temperature)));
         var cumulative = engine.TensorCumSum(scores, 1);
         var sum = engine.TensorSlice(cumulative, new[] { 0, vocab - 1 }, column);
         var positive = engine.TensorGreaterThan(sum, 0.0);
@@ -379,11 +384,13 @@ internal static class DocumentTensorOps
     /// <paramref name="maxNodes"/> rows of a <c>[nodes, width]</c> head holds <paramref name="classes"/> class logits,
     /// optionally followed by a normalized <c>[x1, y1, x2, y2]</c> box in its last four columns. A node's class is
     /// its softmax argmax (every class is a real layout class, so none is skipped as background) and it is kept
-    /// when that probability reaches <paramref name="threshold"/>. Without a box head the node's cell of a square
-    /// grid over the page stands in for its box.
+    /// when that probability reaches <paramref name="threshold"/>. Its box is the box head's when the output has
+    /// one, otherwise the node's own normalized box from <paramref name="nodeBoxes"/> <c>[N, 4]</c>, scaled to the page
+    /// and clamped to it; a node whose box has no area is dropped. With neither there is no geometry to report.
     /// </summary>
+    /// <exception cref="InvalidOperationException">The output has no box head and no node boxes are given.</exception>
     internal static List<LayoutRegion<T>> GraphLayoutRegions<T>(
-        IEngine engine, Tensor<T> output, int maxNodes, int classes, int imageSize, double threshold)
+        IEngine engine, Tensor<T> output, int maxNodes, int classes, int imageSize, double threshold, Tensor<T>? nodeBoxes = null)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
         // A page with no nodes has no regions (and no row width to divide the length by).
@@ -401,32 +408,41 @@ internal static class DocumentTensorOps
         int[] kept = Hits(engine, AtLeast(engine, scores, numOps.FromDouble(threshold)));
         T[] confidences = Pick(engine, scores, kept);
 
-        T[] boxes;
+        Tensor<T> normalized;
         if (width >= classes + 4)
-        {
-            T size = numOps.FromDouble(imageSize);
-            var corners = engine.TensorMultiplyScalar(engine.TensorSlice(rows, new[] { 0, width - 4 }, new[] { numNodes, 4 }), size);
-            var lower = engine.TensorMax(engine.TensorSlice(corners, new[] { 0, 0 }, new[] { numNodes, 2 }), numOps.Zero);
-            var upper = engine.TensorMin(engine.TensorSlice(corners, new[] { 0, 2 }, new[] { numNodes, 2 }), size);
-            boxes = engine.TensorConcatenate(new[] { lower, upper }, 1).ToArray();
-        }
+            normalized = engine.TensorSlice(rows, new[] { 0, width - 4 }, new[] { numNodes, 4 });
+        else if (nodeBoxes is not null && nodeBoxes.Rank == 2 && nodeBoxes.Shape[0] >= numNodes && nodeBoxes.Shape[1] == 4)
+            normalized = engine.TensorSlice(nodeBoxes, new[] { 0, 0 }, new[] { numNodes, 4 });
         else
-        {
-            int gridSize = Math.Max(1, (int)Math.Sqrt(numNodes));
-            int cellSize = imageSize / gridSize;
-            boxes = ToT<T>(Enumerable.Range(0, numNodes).SelectMany(i => new[]
-            {
-                (i % gridSize) * cellSize, (i / gridSize) * cellSize, ((i % gridSize) + 1) * cellSize, ((i / gridSize) + 1) * cellSize
-            }).ToArray());
-        }
+            throw new InvalidOperationException(
+                $"Layout regions need a bounding-box head (rows of at least {classes} + 4 values, got {width}) or the nodes' [N, 4] boxes.");
+        var (boxes, hasArea) = PageBoxes(engine, normalized, imageSize);
 
-        return kept.Select((node, k) => new LayoutRegion<T>
+        return kept.Select((node, k) => (node, k)).Where(p => hasArea[p.node]).Select(p => new LayoutRegion<T>
         {
-            ElementType = (LayoutElementType)Math.Min(labels[node], (int)LayoutElementType.Other),
-            Confidence = confidences[k],
-            Index = node,
-            BoundingBox = new Vector<T>(boxes.Skip(4 * node).Take(4).ToArray())
+            ElementType = (LayoutElementType)Math.Min(labels[p.node], (int)LayoutElementType.Other),
+            Confidence = confidences[p.k],
+            Index = p.node,
+            BoundingBox = new Vector<T>(boxes.Skip(4 * p.node).Take(4).ToArray())
         }).ToList();
+    }
+
+    /// <summary>
+    /// Normalized <c>[x1, y1, x2, y2]</c> boxes <c>[n, 4]</c> scaled to a page of <paramref name="imageSize"/> pixels with
+    /// every coordinate clamped to <c>[0, imageSize]</c> (flat, 4 per box), and whether each clamped box has positive
+    /// width and height (a NaN coordinate never does).
+    /// </summary>
+    internal static (T[] Corners, bool[] HasArea) PageBoxes<T>(IEngine engine, Tensor<T> normalized, int imageSize)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = normalized.Shape[0];
+        T size = ops.FromDouble(imageSize);
+        var box = engine.TensorClamp(engine.TensorMultiplyScalar(normalized, size), ops.Zero, size);
+        var extent = engine.TensorGreaterThan(
+            engine.TensorSlice(box, new[] { 0, 2 }, new[] { n, 2 }), engine.TensorSlice(box, new[] { 0, 0 }, new[] { n, 2 }));
+        int[] area = engine.TensorMultiply(engine.TensorSlice(extent, new[] { 0, 0 }, new[] { n, 1 }),
+            engine.TensorSlice(extent, new[] { 0, 1 }, new[] { n, 1 })).Cast<int>().ToArray();
+        return (box.ToArray(), area.Select(a => a != 0).ToArray());
     }
 
     /// <summary>

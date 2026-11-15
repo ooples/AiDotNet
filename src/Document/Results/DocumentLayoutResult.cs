@@ -77,6 +77,12 @@ public class LayoutRegion<T>
     public Vector<T> BoundingBox { get; init; } = Vector<T>.Empty();
 
     /// <summary>
+    /// Gets whether the region is located on the page: <see cref="BoundingBox"/> holds its four corners. A model whose
+    /// output carries no coordinates (a page or token classifier, a language model) reports its regions without a box.
+    /// </summary>
+    public bool HasBoundingBox => BoundingBox.Length == 4;
+
+    /// <summary>
     /// Gets the confidence score for this detection (0-1).
     /// </summary>
     public required T Confidence { get; init; }

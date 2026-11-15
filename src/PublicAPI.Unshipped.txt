@@ -22940,3 +22940,4 @@ AiDotNet.Document.Options.DocBankOptions.TokenClassifierOptions.set -> void
 override AiDotNet.Document.Analysis.PageSegmentation.DocBank<T>.GetExtraTrainableTensors() -> System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
 override AiDotNet.Document.Analysis.PageSegmentation.DocBank<T>.GetGeneratedNestedNetworkLayerViews() -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>?>!
 static AiDotNet.Document.Analysis.PageSegmentation.DocBank<T>.TokenLabels.get -> System.Collections.Generic.IReadOnlyList<AiDotNet.Document.DocumentRegionType>!
+AiDotNet.Document.LayoutRegion<T>.HasBoundingBox.get -> bool

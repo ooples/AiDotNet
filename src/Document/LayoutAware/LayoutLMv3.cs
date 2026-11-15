@@ -389,16 +389,14 @@ public partial class LayoutLMv3<T> : DocumentNeuralNetworkBase<T>, ILayoutDetect
         var (maxClass, rowMax) = DocumentTensorOps.RowMax(Engine, rows, numClasses);
         var positive = Engine.TensorGreaterThan(rowMax, NumOps.Zero);
         var maxConf = Engine.TensorMax(rowMax, NumOps.Zero);
-        int[] kept = DocumentTensorOps.Hits(Engine, DocumentTensorOps.AtLeast(Engine, maxConf, NumOps.FromDouble(threshold)));
+        // The bounding box is the last 4 values (normalized coordinates) scaled to the page, every coordinate clamped
+        // to it; a detection whose clamped box has no width or height is dropped.
+        var (corners, hasArea) = DocumentTensorOps.PageBoxes(Engine,
+            Engine.TensorSlice(rows, new[] { 0, numValues - 4 }, new[] { numDetections, 4 }), ImageSize);
+        var reaches = DocumentTensorOps.Hits(Engine, DocumentTensorOps.AtLeast(Engine, maxConf, NumOps.FromDouble(threshold)));
+        int[] kept = reaches.Where(i => hasArea[i]).ToArray();
         T[] confidence = DocumentTensorOps.Pick(Engine, maxConf, kept);
         int[] bestClass = Engine.TensorMultiply(positive, DocumentTensorOps.IntTensor<T>(maxClass)).Cast<int>().ToArray();
-
-        // The bounding box is the last 4 values (normalized coordinates) scaled to the page and clipped to it.
-        T size = NumOps.FromDouble(ImageSize);
-        var box = Engine.TensorMultiplyScalar(Engine.TensorSlice(rows, new[] { 0, numValues - 4 }, new[] { numDetections, 4 }), size);
-        var lower = Engine.TensorMax(Engine.TensorSlice(box, new[] { 0, 0 }, new[] { numDetections, 2 }), NumOps.Zero);
-        var upper = Engine.TensorMin(Engine.TensorSlice(box, new[] { 0, 2 }, new[] { numDetections, 2 }), size);
-        T[] corners = Engine.TensorConcatenate(new[] { lower, upper }, 1).ToArray();
 
         var regions = kept.Select((i, k) => new LayoutRegion<T>
         {

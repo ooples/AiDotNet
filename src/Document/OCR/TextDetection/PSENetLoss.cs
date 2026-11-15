@@ -39,13 +39,13 @@ public sealed class PSENetLoss<T> : LossFunctionBase<T>
     public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
-        var s = Engine.Sigmoid(predicted.AsTensor());
-        var g = actual.AsTensor();
-        T inter = Engine.TensorSum(Engine.TensorMultiply(s, g));
-        T smooth = NumOps.FromDouble(Smooth);
-        T denominator = NumOps.Add(NumOps.Add(Engine.TensorSum(Engine.TensorMultiply(s, s)), smooth),
-            NumOps.Add(Engine.TensorSum(Engine.TensorMultiply(g, g)), smooth));
-        return NumOps.Subtract(NumOps.One, NumOps.Divide(NumOps.Multiply(NumOps.FromDouble(2.0), inter), denominator));
+        // The three reductions and the ratio in double: in Half, 40,000 positive pixels put the intersection near
+        // 40,000 and the denominator near 80,000, past Half's 65,504, and a finite input gave a NaN loss.
+        var s = Engine.Sigmoid(predicted.AsTensor()).Cast<double>();
+        var g = actual.AsTensor().Cast<double>();
+        double inter = Engine.TensorSum(Engine.TensorMultiply(s, g));
+        double denominator = Engine.TensorSum(Engine.TensorMultiply(s, s)) + Smooth + Engine.TensorSum(Engine.TensorMultiply(g, g)) + Smooth;
+        return NumOps.FromDouble(1.0 - (2.0 * inter / denominator));
     }
 
     /// <inheritdoc />

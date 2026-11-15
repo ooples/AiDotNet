@@ -370,26 +370,23 @@ public partial class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         for (int p = 0; p < plane; p++)
             if (labels[p] == Dropped) labels[p] = 0;
 
-        // Step 2: progressive scale expansion through the larger kernels, seeded in raster order.
-        var frontier = new Queue<int>(Enumerable.Range(0, plane).Where(p => labels[p] != 0));
+        // Step 2: progressive scale expansion through the larger kernels (Wang et al. 2019, Alg. 1). Each kernel's
+        // breadth-first search starts from every pixel labelled so far, in raster order: a pixel that grew into the
+        // previous kernel can still be the only way into the next one, so no labelled pixel leaves the frontier.
         for (int k = 1; k < _numKernels; k++)
         {
             int offset = k * plane;
-            var edge = new Queue<int>();
+            var frontier = new Queue<int>(Enumerable.Range(0, plane).Where(p => labels[p] != 0));
             while (frontier.Count > 0)
             {
                 int q = frontier.Dequeue();
-                bool isEdge = true;
                 foreach (int n in Neighbours(q, outH, outW))
                 {
                     if (kernels[offset + n] == 0 || labels[n] != 0) continue;
                     labels[n] = labels[q];
                     frontier.Enqueue(n);
-                    isEdge = false;
                 }
-                if (isEdge) edge.Enqueue(q);
             }
-            frontier = edge;
         }
 
         // Step 3: area filter, mean complete-map score, bounding box and polygon of each instance.

@@ -234,7 +234,7 @@ public partial class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetec
         var preprocessed = PreprocessDocument(documentImage);
         var output = _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
 
-        var regions = ParseLayoutOutput(output, confidenceThreshold);
+        var regions = ParseLayoutOutput(output, confidenceThreshold, NodeBoxes(preprocessed));
 
         return new DocumentLayoutResult<T>
         {
@@ -243,8 +243,16 @@ public partial class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetec
         };
     }
 
-    private List<LayoutRegion<T>> ParseLayoutOutput(Tensor<T> output, double threshold)
-        => DocumentTensorOps.GraphLayoutRegions(Engine, output, _maxNodes, _numClasses, ImageSize, threshold);
+    /// <summary>
+    /// The nodes' normalized boxes <c>[N, 4]</c> of a node-feature input, the first four columns as in
+    /// <see cref="WireSpatialGraph"/>; null for any other input (a page image), which carries no node boxes.
+    /// </summary>
+    private Tensor<T>? NodeBoxes(Tensor<T> input) => input.Rank == 2 && input.Shape[0] > 0 && input.Shape[1] >= 4
+        ? Engine.TensorSlice(input, new[] { 0, 0 }, new[] { input.Shape[0], 4 })
+        : null;
+
+    private List<LayoutRegion<T>> ParseLayoutOutput(Tensor<T> output, double threshold, Tensor<T>? nodeBoxes)
+        => DocumentTensorOps.GraphLayoutRegions(Engine, output, _maxNodes, _numClasses, ImageSize, threshold, nodeBoxes);
 
     #endregion
 

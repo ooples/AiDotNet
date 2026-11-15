@@ -290,20 +290,45 @@ public partial class TRIE<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
         return Array.Empty<SignatureResult<T>>();
     }
 
+    /// <summary>
+    /// The width of one row of TRIE's end-to-end output (Zhang et al. 2020): the detection confidence, the
+    /// entity-type scores, the key and value text-reading logits and the normalized <c>[x1, y1, x2, y2]</c> box.
+    /// </summary>
+    private int ReadingRowWidth => 1 + _numEntityTypes + ((KeySteps + ValueSteps) * CharacterVocabulary) + 4;
+
+    /// <summary>The output viewed as <c>[rows, ReadingRowWidth]</c>, the layout the field and text-region readers decode.</summary>
+    /// <exception cref="NotSupportedException">
+    /// The rows have another width. The native head (<c>CreateDefaultTRIELayers</c>) ends in the entity-type scores
+    /// alone, so its rows hold no text reading and no box to decode.
+    /// </exception>
+    private Tensor<T> ReadingRows(Tensor<T> output)
+    {
+        int width = output.Length / output.Shape[0];
+        if (width != ReadingRowWidth)
+            throw new NotSupportedException(
+                $"TRIE reads fields and text regions from rows of {ReadingRowWidth} values (a confidence, {_numEntityTypes} entity-type scores, " +
+                $"{KeySteps} + {ValueSteps} steps of {CharacterVocabulary} character logits and a box), but this output's rows hold {width}. " +
+                "The native head scores entity types only; load a model whose output carries the text reading and the boxes.");
+        return Engine.Reshape(output, new[] { output.Shape[0], width });
+    }
+
     internal IList<FormField<T>> ParseFormFields(Tensor<T> output, double threshold)
     {
-        int numEntities = Math.Min(output.Shape[0], _maxEntities);
-        int hiddenDim = output.Shape.Length > 1 ? output.Shape[1] : _textDim;
-        var (rows, scores) = DocumentTensorOps.RowsAtLeast(Engine, output, numEntities, 0, NumOps.FromDouble(threshold));
+        if (output.Rank == 0 || output.Length == 0)
+            return new List<FormField<T>>();
+        var matrix = ReadingRows(output);
+        int numEntities = Math.Min(matrix.Shape[0], _maxEntities);
+        var (rows, scores) = DocumentTensorOps.RowsAtLeast(Engine, matrix, numEntities, 0, NumOps.FromDouble(threshold));
         if (rows.Length == 0)
             return new List<FormField<T>>();
+        double[] scoreValues = new Tensor<T>(scores, new[] { scores.Length }).Cast<double>().ToArray();
 
         // Entity type: the first best of the type scores in columns 1 .. numEntityTypes.
-        int typeColumns = Math.Min(_numEntityTypes, hiddenDim - 1);
-        var matrix = Engine.Reshape(output, new[] { output.Shape[0], output.Length / output.Shape[0] });
-        int[] types = typeColumns <= 0
+        int[] types = _numEntityTypes <= 0
             ? new int[numEntities]
-            : DocumentTensorOps.RowArgMax(Engine, Engine.TensorSlice(matrix, new[] { 0, 1 }, new[] { numEntities, typeColumns }));
+            : DocumentTensorOps.RowArgMax(Engine, Engine.TensorSlice(matrix, new[] { 0, 1 }, new[] { numEntities, _numEntityTypes }));
+        var (boxes, _) = DocumentTensorOps.PageBoxes(Engine,
+            Engine.TensorSlice(matrix, new[] { 0, ReadingRowWidth - 4 }, new[] { numEntities, 4 }), ImageSize);
 
         return rows.Select((i, k) =>
         {
@@ -335,7 +360,8 @@ public partial class TRIE<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
                 FieldValue = fieldValue,
                 FieldType = fieldType,
                 Confidence = scores[k],
-                BoundingBox = ExtractBoundingBox(output, i, hiddenDim)
+                ConfidenceValue = scoreValues[k],
+                BoundingBox = new Vector<T>(boxes.Skip(4 * i).Take(4).ToArray())
             };
         }).ToList<FormField<T>>();
     }
@@ -361,19 +387,6 @@ public partial class TRIE<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
             new[] { available, CharacterVocabulary });
         return DecodeTokensToText(DocumentTensorOps.RowArgMax(Engine, logits)
             .TakeWhile(t => t != EosToken).Where(t => t > BosToken).ToList());
-    }
-
-    /// <summary>
-    /// Extracts bounding box coordinates from output.
-    /// </summary>
-    private Vector<T> ExtractBoundingBox(Tensor<T> output, int entityIdx, int hiddenDim)
-    {
-        // Last 4 values in hidden dimension represent normalized bbox [x1, y1, x2, y2]
-        if (hiddenDim < 4) return Vector<T>.Empty();
-
-        var matrix = Engine.Reshape(output, new[] { output.Shape[0], output.Length / output.Shape[0] });
-        var box = Engine.TensorSlice(matrix, new[] { entityIdx, hiddenDim - 4 }, new[] { 1, 4 });
-        return new Vector<T>(Engine.TensorMultiplyScalar(box, NumOps.FromDouble(ImageSize)).ToArray());
     }
 
     /// <summary>
@@ -451,16 +464,36 @@ public partial class TRIE<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
         return Tensor<T>.CreateDefault([ImageSize, ImageSize], NumOps.Zero);
     }
 
-    private List<TextRegion<T>> ParseTextRegions(Tensor<T> output, double threshold)
+    /// <summary>
+    /// The detections of rows in <see cref="ReadingRows"/>'s layout whose confidence reaches
+    /// <paramref name="threshold"/>, each located by its row's box scaled to the page and clamped to it (a box with no
+    /// area is no detection), its polygon the box's four corners clockwise from the top left.
+    /// </summary>
+    internal List<TextRegion<T>> ParseTextRegions(Tensor<T> output, double threshold)
     {
-        int numDetections = Math.Min(output.Shape[0], _maxEntities);
-        var (rows, scores) = DocumentTensorOps.RowsAtLeast(Engine, output, numDetections, 0, NumOps.FromDouble(threshold));
-        return rows.Select((i, k) => new TextRegion<T>
+        if (output.Rank == 0 || output.Length == 0)
+            return new List<TextRegion<T>>();
+        var matrix = ReadingRows(output);
+        int numDetections = Math.Min(matrix.Shape[0], _maxEntities);
+        var (rows, scores) = DocumentTensorOps.RowsAtLeast(Engine, matrix, numDetections, 0, NumOps.FromDouble(threshold));
+        if (rows.Length == 0)
+            return new List<TextRegion<T>>();
+        var (boxes, hasArea) = DocumentTensorOps.PageBoxes(Engine,
+            Engine.TensorSlice(matrix, new[] { 0, ReadingRowWidth - 4 }, new[] { numDetections, 4 }), ImageSize);
+        return rows.Select((i, k) => (i, k)).Where(p => hasArea[p.i]).Select(p =>
         {
-            Confidence = scores[k],
-            BoundingBox = Vector<T>.Empty(),
-            PolygonPoints = [],
-            Index = i
+            T[] b = boxes.Skip(4 * p.i).Take(4).ToArray();
+            return new TextRegion<T>
+            {
+                Confidence = scores[p.k],
+                BoundingBox = new Vector<T>(b),
+                PolygonPoints = new[]
+                {
+                    new Vector<T>(new[] { b[0], b[1] }), new Vector<T>(new[] { b[2], b[1] }),
+                    new Vector<T>(new[] { b[2], b[3] }), new Vector<T>(new[] { b[0], b[3] })
+                },
+                Index = p.i
+            };
         }).ToList();
     }
 
