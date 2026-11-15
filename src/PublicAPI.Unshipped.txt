@@ -23103,12 +23103,8 @@ AiDotNet.Diffusion.ThreeD.Wonder3DOptions.SdfHiddenDim.get -> int
 AiDotNet.Diffusion.ThreeD.Wonder3DOptions.SdfHiddenDim.set -> void
 AiDotNet.Diffusion.ThreeD.Wonder3DOptions.SdfHiddenLayers.get -> int
 AiDotNet.Diffusion.ThreeD.Wonder3DOptions.SdfHiddenLayers.set -> void
-AiDotNet.Diffusion.ThreeD.Wonder3DOptions.SdfSkipLayers.get -> int[]!
-AiDotNet.Diffusion.ThreeD.Wonder3DOptions.SdfSkipLayers.set -> void
 AiDotNet.Diffusion.ThreeD.Wonder3DOptions.SdfFeatureDim.get -> int
 AiDotNet.Diffusion.ThreeD.Wonder3DOptions.SdfFeatureDim.set -> void
-AiDotNet.Diffusion.ThreeD.Wonder3DOptions.SdfFrequencies.get -> int
-AiDotNet.Diffusion.ThreeD.Wonder3DOptions.SdfFrequencies.set -> void
 AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ColorHiddenDim.get -> int
 AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ColorHiddenDim.set -> void
 AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ColorHiddenLayers.get -> int
@@ -23123,6 +23119,56 @@ AiDotNet.Diffusion.ThreeD.Wonder3DOptions.UpSampleSteps.get -> int
 AiDotNet.Diffusion.ThreeD.Wonder3DOptions.UpSampleSteps.set -> void
 AiDotNet.Diffusion.ThreeD.Wonder3DOptions.MeshResolution.get -> int
 AiDotNet.Diffusion.ThreeD.Wonder3DOptions.MeshResolution.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.SchedulerTimestepSpacing.get -> AiDotNet.Enums.TimestepSpacing
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.SchedulerTimestepSpacing.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.SchedulerStepsOffset.get -> int
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.SchedulerStepsOffset.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.SchedulerSetAlphaToOne.get -> bool
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.SchedulerSetAlphaToOne.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.DynamicRaySampling.get -> bool
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.DynamicRaySampling.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ReconstructionMaxBatchSize.get -> int
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ReconstructionMaxBatchSize.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.SamplesPerRayBudget.get -> int
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.SamplesPerRayBudget.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ColorLearningRate.get -> double
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ColorLearningRate.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.VarianceLearningRate.get -> double
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.VarianceLearningRate.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.AdamBeta2.get -> double
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.AdamBeta2.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.AdamEpsilon.get -> double
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.AdamEpsilon.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.WeightDecay.get -> double
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.WeightDecay.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ConstantLearningRateIterations.get -> int
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.ConstantLearningRateIterations.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.InitialVariance.get -> double
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.InitialVariance.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.HashGridLevels.get -> int
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.HashGridLevels.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.HashGridFeaturesPerLevel.get -> int
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.HashGridFeaturesPerLevel.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.HashGridLog2TableSize.get -> int
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.HashGridLog2TableSize.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.HashGridBaseResolution.get -> int
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.HashGridBaseResolution.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.HashGridPerLevelScale.get -> double
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.HashGridPerLevelScale.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.HashGridStartLevel.get -> int
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.HashGridStartLevel.set -> void
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.HashGridUpdateIterations.get -> int
+AiDotNet.Diffusion.ThreeD.Wonder3DOptions.HashGridUpdateIterations.set -> void
+AiDotNet.Diffusion.Schedulers.SchedulerConfig<T>.TimestepSpacing.get -> AiDotNet.Enums.TimestepSpacing
+AiDotNet.Diffusion.Schedulers.SchedulerConfig<T>.TimestepSpacing.init -> void
+AiDotNet.Diffusion.Schedulers.SchedulerConfig<T>.StepsOffset.get -> int
+AiDotNet.Diffusion.Schedulers.SchedulerConfig<T>.StepsOffset.init -> void
+AiDotNet.Diffusion.Schedulers.SchedulerConfig<T>.SetAlphaToOne.get -> bool
+AiDotNet.Diffusion.Schedulers.SchedulerConfig<T>.SetAlphaToOne.init -> void
+AiDotNet.Enums.TimestepSpacing
+AiDotNet.Enums.TimestepSpacing.Trailing = 0 -> AiDotNet.Enums.TimestepSpacing
+AiDotNet.Enums.TimestepSpacing.Leading = 1 -> AiDotNet.Enums.TimestepSpacing
+AiDotNet.Enums.TimestepSpacing.Linspace = 2 -> AiDotNet.Enums.TimestepSpacing
 AiDotNet.Enums.Wonder3DDomain
 AiDotNet.Enums.Wonder3DDomain.Normal = 0 -> AiDotNet.Enums.Wonder3DDomain
 AiDotNet.Enums.Wonder3DDomain.Color = 1 -> AiDotNet.Enums.Wonder3DDomain

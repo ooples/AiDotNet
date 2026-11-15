@@ -1,4 +1,5 @@
 using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.Diffusion.ThreeD;
@@ -34,6 +35,7 @@ public class Wonder3DOptions : ModelOptions
     private const string UNetConfig = "Wonder3D unet/config.json (flamehaze1115/wonder3d-v1.0)";
     private const string RunConfig = "Wonder3D configs/mvdiffusion-joint-ortho-6views.yaml";
     private const string NeuSConfig = "Wonder3D instant-nsr-pl/configs/neuralangelo-ortho-wmask.yaml";
+    private const string SchedulerConfigSource = "Wonder3D scheduler/scheduler_config.json (flamehaze1115/wonder3d-v1.0)";
 
     #region Views
 
@@ -135,6 +137,18 @@ public class Wonder3DOptions : ModelOptions
     [PaperDefault(1.0, Source = RunConfig + ": pipe_validation_kwargs eta 1.0")]
     public double Eta { get; set; } = 1.0;
 
+    /// <summary>How DDIM spreads its timesteps over the 1000 training steps (50 leading steps: 981, 961, …, 1).</summary>
+    [PaperDefault(TimestepSpacing.Leading, Source = SchedulerConfigSource + ": timestep_spacing leading")]
+    public TimestepSpacing SchedulerTimestepSpacing { get; set; } = TimestepSpacing.Leading;
+
+    /// <summary>The offset added to every leading timestep.</summary>
+    [PaperDefault(1, Source = SchedulerConfigSource + ": steps_offset 1")]
+    public int SchedulerStepsOffset { get; set; } = 1;
+
+    /// <summary>Whether the final DDIM step uses alpha_cumprod = 1 instead of the first training step's.</summary>
+    [PaperDefault(false, Source = SchedulerConfigSource + ": set_alpha_to_one false")]
+    public bool SchedulerSetAlphaToOne { get; set; } = false;
+
     #endregion
 
     #region Reconstruction
@@ -143,8 +157,23 @@ public class Wonder3DOptions : ModelOptions
     [PaperDefault(3000, Source = NeuSConfig + ": trainer max_steps 3000")]
     public int ReconstructionIterations { get; set; } = 3000;
 
-    /// <summary>Rays per NeuS iteration (the reference starts at 256 and grows dynamically to at most 8192).</summary>
-    public int ReconstructionBatchSize { get; set; } = 512;
+    /// <summary>The starting rays per NeuS iteration (the dynamic batch's initial size).</summary>
+    [PaperDefault(256, Source = NeuSConfig + ": model train_num_rays 256")]
+    public int ReconstructionBatchSize { get; set; } = 256;
+
+    /// <summary>
+    /// Whether the ray batch adapts to keep <c>ReconstructionBatchSize · SamplesPerRayBudget</c> samples per iteration.
+    /// </summary>
+    [PaperDefault(true, Source = NeuSConfig + ": model dynamic_ray_sampling true")]
+    public bool DynamicRaySampling { get; set; } = true;
+
+    /// <summary>The largest dynamic ray batch.</summary>
+    [PaperDefault(8192, Source = NeuSConfig + ": model max_train_num_rays 8192")]
+    public int ReconstructionMaxBatchSize { get; set; } = 8192;
+
+    /// <summary>The samples per ray the dynamic batch budgets for.</summary>
+    [PaperDefault(1024, Source = NeuSConfig + ": model num_samples_per_ray 1024")]
+    public int SamplesPerRayBudget { get; set; } = 1024;
 
     /// <summary>The per-view weights of the mask and normal terms.</summary>
     [PaperDefault(new[] { 1.0, 0.8, 0.2, 1.0, 0.4, 0.7 }, Source = NeuSConfig + ": view_weights")]
@@ -159,12 +188,41 @@ public class Wonder3DOptions : ModelOptions
     /// <summary>A pixel is background where all three channels of its generated normal map exceed this (white).</summary>
     public double BackgroundThreshold { get; set; } = 250.0 / 255.0;
 
-    /// <summary>The NeuS learning rate (the reference's geometry learning rate).</summary>
+    /// <summary>The geometry's (hash grid and SDF network) AdamW learning rate.</summary>
     [PaperDefault(1e-3, Source = NeuSConfig + ": optimizer params geometry lr 0.001")]
     public double ReconstructionLearningRate { get; set; } = 1e-3;
 
-    /// <summary>The final learning-rate fraction (the reference decays to 0.1 by the last step).</summary>
+    /// <summary>The color network's AdamW learning rate.</summary>
+    [PaperDefault(1e-2, Source = NeuSConfig + ": optimizer params texture lr 0.01")]
+    public double ColorLearningRate { get; set; } = 1e-2;
+
+    /// <summary>The S-density variance's AdamW learning rate.</summary>
+    [PaperDefault(1e-3, Source = NeuSConfig + ": optimizer params variance lr 0.001")]
+    public double VarianceLearningRate { get; set; } = 1e-3;
+
+    /// <summary>AdamW's beta2.</summary>
+    [PaperDefault(0.99, Source = NeuSConfig + ": optimizer args betas [0.9, 0.99]")]
+    public double AdamBeta2 { get; set; } = 0.99;
+
+    /// <summary>AdamW's epsilon.</summary>
+    [PaperDefault(1e-15, Source = NeuSConfig + ": optimizer args eps 1e-15")]
+    public double AdamEpsilon { get; set; } = 1e-15;
+
+    /// <summary>AdamW's decoupled weight decay (the config sets none, so PyTorch's default applies).</summary>
+    [PaperDefault(0.01, Source = "torch.optim.AdamW default weight_decay 0.01")]
+    public double WeightDecay { get; set; } = 0.01;
+
+    /// <summary>The iterations at the full learning rate before the exponential decay.</summary>
+    [PaperDefault(500, Source = NeuSConfig + ": system constant_steps 500")]
+    public int ConstantLearningRateIterations { get; set; } = 500;
+
+    /// <summary>The learning-rate fraction the exponential decay reaches at the last iteration.</summary>
+    [PaperDefault(0.1, Source = NeuSConfig + ": ExponentialLR gamma calc_exp_lr_decay_rate(0.1, max_steps - constant_steps)")]
     public double ReconstructionLearningRateAlpha { get; set; } = 0.1;
+
+    /// <summary>The initial S-density variance parameter (sharpness exp(10 · v)).</summary>
+    [PaperDefault(0.3, Source = NeuSConfig + ": model variance init_val 0.3")]
+    public double InitialVariance { get; set; } = 0.3;
 
     /// <summary>The SDF slope annealing length in iterations.</summary>
     [PaperDefault(20000, Source = NeuSConfig + ": cos_anneal_end 20000")]
@@ -217,26 +275,53 @@ public class Wonder3DOptions : ModelOptions
     /// <summary>The largest ray-to-normal cosine for a ray to supervise normals.</summary>
     public double NormalVisibleCosine { get; set; } = -0.1;
 
-    /// <summary>The NeuS SDF network's hidden width.</summary>
-    public int SdfHiddenDim { get; set; } = 256;
+    /// <summary>The hash grid's level count.</summary>
+    [PaperDefault(10, Source = NeuSConfig + ": xyz_encoding_config n_levels 10")]
+    public int HashGridLevels { get; set; } = 10;
 
-    /// <summary>The NeuS SDF network's hidden layers.</summary>
-    public int SdfHiddenLayers { get; set; } = 8;
+    /// <summary>The hash grid's features per level.</summary>
+    [PaperDefault(2, Source = NeuSConfig + ": xyz_encoding_config n_features_per_level 2")]
+    public int HashGridFeaturesPerLevel { get; set; } = 2;
 
-    /// <summary>The layers of the SDF network that take the embedded input again.</summary>
-    public int[] SdfSkipLayers { get; set; } = { 4 };
+    /// <summary>The base-2 logarithm of the hash grid's largest table.</summary>
+    [PaperDefault(19, Source = NeuSConfig + ": xyz_encoding_config log2_hashmap_size 19")]
+    public int HashGridLog2TableSize { get; set; } = 19;
 
-    /// <summary>The SDF network's geometry feature width.</summary>
-    public int SdfFeatureDim { get; set; } = 256;
+    /// <summary>The hash grid's coarsest resolution.</summary>
+    [PaperDefault(32, Source = NeuSConfig + ": xyz_encoding_config base_resolution 32")]
+    public int HashGridBaseResolution { get; set; } = 32;
 
-    /// <summary>The point embedding's frequency count.</summary>
-    public int SdfFrequencies { get; set; } = 6;
+    /// <summary>The hash grid's per-level scale.</summary>
+    [PaperDefault(1.3195079107728942, Source = NeuSConfig + ": xyz_encoding_config per_level_scale 1.3195079107728942")]
+    public double HashGridPerLevelScale { get; set; } = 1.3195079107728942;
+
+    /// <summary>The hash grid levels active at the start (ProgressiveBandHashGrid).</summary>
+    [PaperDefault(4, Source = NeuSConfig + ": xyz_encoding_config start_level 4")]
+    public int HashGridStartLevel { get; set; } = 4;
+
+    /// <summary>The iterations between switching on successive hash grid levels.</summary>
+    [PaperDefault(1000, Source = NeuSConfig + ": xyz_encoding_config update_steps 1000")]
+    public int HashGridUpdateIterations { get; set; } = 1000;
+
+    /// <summary>The SDF network's hidden width.</summary>
+    [PaperDefault(64, Source = NeuSConfig + ": geometry mlp_network_config n_neurons 64")]
+    public int SdfHiddenDim { get; set; } = 64;
+
+    /// <summary>The SDF network's hidden layers.</summary>
+    [PaperDefault(1, Source = NeuSConfig + ": geometry mlp_network_config n_hidden_layers 1")]
+    public int SdfHiddenLayers { get; set; } = 1;
+
+    /// <summary>The SDF network's geometry feature width (its output is the SDF and these features).</summary>
+    [PaperDefault(12, Source = NeuSConfig + ": geometry feature_dim 13 (the SDF and 12 features)")]
+    public int SdfFeatureDim { get; set; } = 12;
 
     /// <summary>The color network's hidden width.</summary>
-    public int ColorHiddenDim { get; set; } = 256;
+    [PaperDefault(64, Source = NeuSConfig + ": texture mlp_network_config n_neurons 64")]
+    public int ColorHiddenDim { get; set; } = 64;
 
     /// <summary>The color network's hidden layers.</summary>
-    public int ColorHiddenLayers { get; set; } = 4;
+    [PaperDefault(2, Source = NeuSConfig + ": texture mlp_network_config n_hidden_layers 2")]
+    public int ColorHiddenLayers { get; set; } = 2;
 
     /// <summary>The view-direction embedding's frequency count.</summary>
     public int ViewFrequencies { get; set; } = 4;

@@ -37,7 +37,8 @@ namespace AiDotNet.Diffusion.ThreeD;
 /// </para>
 /// <para>
 /// <b>Geometry-aware normal fusion.</b> The views are orthographic, so the reconstruction fits NeuS to them with
-/// orthographic rays. The generated normal maps (in the front camera's frame) are rotated to world space and
+/// orthographic rays, on instant-nsr-pl's SDF: a progressive multiresolution hash grid into a small MLP, trained with
+/// AdamW, a constant-then-exponential schedule and a dynamic ray batch. The generated normal maps (in the front camera's frame) are rotated to world space and
 /// supervise the rendered normals with Wonder3D's geometry-aware, outlier-dropping normal loss, alongside its color,
 /// mask, Eikonal, sparsity and smoothness terms; the zero level set is meshed with marching cubes and colored by the
 /// NeuS color network.
@@ -126,12 +127,13 @@ public partial class Wonder3DModel<T> : ThreeDDiffusionModelBase<T>
                 TrainTimesteps = 1000, BetaStart = 0.00085, BetaEnd = 0.012,
                 BetaSchedule = BetaSchedule.ScaledLinear, Seed = options?.Seed
             },
-            scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
+            scheduler ?? new DDIMScheduler<T>(SamplerConfig(options ?? new Wonder3DOptions())),
             DefaultPointBudget, architecture)
     {
         _options = options ?? new Wonder3DOptions();
         Validate(_options);
         var o = _options;
+        ReconstructionOptions(o.Seed).Validate();
         int? seed = o.Seed;
 
         _vae = vae ?? new StandardVAE<T>(inputChannels: 3, latentChannels: o.LatentChannels,
@@ -165,6 +167,23 @@ public partial class Wonder3DModel<T> : ThreeDDiffusionModelBase<T>
 
         _imageEncoder = imageEncoder;
         AttentionBlockCount = DecorateAttention(seed);
+    }
+
+    /// <summary>
+    /// Wonder3D's DDIM configuration (<c>scheduler_config.json</c>): Stable Diffusion's scaled-linear betas over 1000
+    /// steps with epsilon prediction, <c>timestep_spacing = "leading"</c>, <c>steps_offset = 1</c> and
+    /// <c>set_alpha_to_one = false</c>.
+    /// </summary>
+    internal static SchedulerConfig<T> SamplerConfig(Wonder3DOptions o)
+    {
+        var stableDiffusion = SchedulerConfig<T>.CreateStableDiffusion();
+        return new SchedulerConfig<T>(stableDiffusion.TrainTimesteps, stableDiffusion.BetaStart, stableDiffusion.BetaEnd,
+            stableDiffusion.BetaSchedule, stableDiffusion.ClipSample, stableDiffusion.PredictionType)
+        {
+            TimestepSpacing = o.SchedulerTimestepSpacing,
+            StepsOffset = o.SchedulerStepsOffset,
+            SetAlphaToOne = o.SchedulerSetAlphaToOne,
+        };
     }
 
     private static int LatentSize(Wonder3DOptions o) => o.ImageSize >> (o.VaeChannelMultipliers.Length - 1);
@@ -204,7 +223,6 @@ public partial class Wonder3DModel<T> : ThreeDDiffusionModelBase<T>
         if (o.VaeChannelMultipliers is null || o.VaeChannelMultipliers.Length == 0)
             throw new ArgumentException("VaeChannelMultipliers needs at least one level.", nameof(o));
         if (o.AttentionLevels is null) throw new ArgumentException("AttentionLevels cannot be null.", nameof(o));
-        if (o.SdfSkipLayers is null) throw new ArgumentException("SdfSkipLayers cannot be null.", nameof(o));
         int factor = 1 << (o.VaeChannelMultipliers.Length - 1);
         if (o.ImageSize % factor != 0)
             throw new ArgumentException($"ImageSize {o.ImageSize} must be a multiple of the VAE's downscale {factor}.", nameof(o));
@@ -501,11 +519,21 @@ public partial class Wonder3DModel<T> : ThreeDDiffusionModelBase<T>
         var o = _options;
         return new NeuSOptions
         {
+            // volume-sdf: a ProgressiveBandHashGrid into a one-hidden-layer sphere-initialized softplus MLP.
+            SdfBackbone = NeuSSdfBackbone.HashGrid,
+            HashGridLevels = o.HashGridLevels,
+            HashGridFeaturesPerLevel = o.HashGridFeaturesPerLevel,
+            HashGridLog2TableSize = o.HashGridLog2TableSize,
+            HashGridBaseResolution = o.HashGridBaseResolution,
+            HashGridPerLevelScale = o.HashGridPerLevelScale,
+            HashGridStartLevel = o.HashGridStartLevel,
+            HashGridStartIteration = 0,
+            HashGridUpdateIterations = o.HashGridUpdateIterations,
             SdfHiddenDim = o.SdfHiddenDim,
             SdfHiddenLayers = o.SdfHiddenLayers,
             SdfFeatureDim = o.SdfFeatureDim,
-            SdfSkipLayers = (int[])o.SdfSkipLayers.Clone(),
-            SdfFrequencies = o.SdfFrequencies,
+            SdfSkipLayers = Array.Empty<int>(),
+            InitialVariance = o.InitialVariance,
             ColorHiddenDim = o.ColorHiddenDim,
             ColorHiddenLayers = o.ColorHiddenLayers,
             ViewFrequencies = o.ViewFrequencies,
@@ -514,11 +542,23 @@ public partial class Wonder3DModel<T> : ThreeDDiffusionModelBase<T>
             UpSampleSteps = o.UpSampleSteps,
             // background_color: black, with the targets composited onto it (apply_mask).
             BackgroundColor = new[] { 0.0, 0.0, 0.0 },
+            // AdamW with the geometry / texture / variance groups, constant then exponential decay.
+            Optimizer = NeuSOptimizer.AdamW,
+            LearningRateSchedule = NeuSLearningRateSchedule.ConstantThenExponential,
             LearningRate = o.ReconstructionLearningRate,
+            ColorLearningRate = o.ColorLearningRate,
+            VarianceLearningRate = o.VarianceLearningRate,
+            AdamBeta2 = o.AdamBeta2,
+            AdamEpsilon = o.AdamEpsilon,
+            WeightDecay = o.WeightDecay,
+            ConstantLearningRateIterations = o.ConstantLearningRateIterations,
             LearningRateAlpha = o.ReconstructionLearningRateAlpha,
             WarmUpIterations = 0,
             Iterations = o.ReconstructionIterations,
             BatchSize = o.ReconstructionBatchSize,
+            DynamicRaySampling = o.DynamicRaySampling,
+            MaxBatchSize = o.ReconstructionMaxBatchSize,
+            SamplesPerRayBudget = o.SamplesPerRayBudget,
             AnnealIterations = o.ReconstructionAnnealIterations,
             ColorL1Weight = 0.0,
             ColorMseWeight = o.ColorMseWeight,
