@@ -23,7 +23,7 @@ public partial class Elementwise01NumericalRegressionTests
         var view = LastTwoRowsView(100f, 200f, 300f, 400f, 2f, 4f, 6f, 10f);
         var model = NumericModel<float, DeepBeliefNetwork<float>>();
 
-        var scaled = (Tensor<float>)Invoke(typeof(DeepBeliefNetwork<float>), model, "NormalizeBernoulliVisibleInput", view)!;
+        var scaled = Assert.IsType<Tensor<float>>(Invoke(typeof(DeepBeliefNetwork<float>), model, "NormalizeBernoulliVisibleInput", view));
 
         // (x - 2) / (10 - 2) for x = 2, 4, 6, 10
         Assert.Equal(new[] { 0f, 0.25f, 0.5f, 1f }, scaled.ToArray());
@@ -35,7 +35,7 @@ public partial class Elementwise01NumericalRegressionTests
         var view = LastTwoRowsView(100f, 200f, 300f, 400f, 2f, 4f, 6f, 10f);
         var model = NumericModel<float, Gpt4VisionNeuralNetwork<float>>();
 
-        var scaled = (Tensor<float>)Invoke(typeof(Gpt4VisionNeuralNetwork<float>), model, "NormalizeTensor", view)!;
+        var scaled = Assert.IsType<Tensor<float>>(Invoke(typeof(Gpt4VisionNeuralNetwork<float>), model, "NormalizeTensor", view));
 
         Assert.Equal(new[] { 0f, 0.25f, 0.5f, 1f }, scaled.ToArray());
     }
