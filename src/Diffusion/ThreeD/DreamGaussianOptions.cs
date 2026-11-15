@@ -224,4 +224,79 @@ public class DreamGaussianOptions
 
     /// <summary>Denoising schedule length of each refinement (<c>refine(steps=50)</c>). Default: 50.</summary>
     public int RefineDenoisingSteps { get; set; } = 50;
+
+    /// <summary>Texture Adam beta1 (<c>torch.optim.Adam</c>'s default, as <c>main2.py</c> uses). Default: 0.9.</summary>
+    public double TextureAdamBeta1 { get; set; } = 0.9;
+
+    /// <summary>Texture Adam beta2 (<c>torch.optim.Adam</c>'s default). Default: 0.999.</summary>
+    public double TextureAdamBeta2 { get; set; } = 0.999;
+
+    /// <summary>Texture Adam epsilon (<c>torch.optim.Adam</c>'s default). Default: 1e-8.</summary>
+    public double TextureAdamEpsilon { get; set; } = 1e-8;
+
+    // ---- Input -----------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// For an RGB input without an alpha channel, pixels whose three channels are all at least this value are taken
+    /// as background. The reference removes the background with <c>rembg</c> instead, which is not available here;
+    /// pass an RGBA image for the paper's behaviour. Default: 0.98.
+    /// </summary>
+    public double WhiteBackgroundThreshold { get; set; } = 0.98;
+
+    internal double CameraRadius(DreamGaussianMode mode) => mode == DreamGaussianMode.ImageTo3D ? ImageCameraRadius : TextCameraRadius;
+
+    internal int PositionLearningRateMaxSteps(DreamGaussianMode mode)
+        => mode == DreamGaussianMode.ImageTo3D ? ImagePositionLearningRateMaxSteps : TextPositionLearningRateMaxSteps;
+
+    internal int DensifyStartIteration(DreamGaussianMode mode)
+        => mode == DreamGaussianMode.ImageTo3D ? ImageDensifyStartIteration : TextDensifyStartIteration;
+
+    internal int DensificationInterval(DreamGaussianMode mode)
+        => mode == DreamGaussianMode.ImageTo3D ? ImageDensificationInterval : TextDensificationInterval;
+
+    internal double GuidanceWeight(DreamGaussianMode mode) => mode == DreamGaussianMode.ImageTo3D ? ImageGuidanceWeight : TextGuidanceWeight;
+
+    /// <summary>The novel-view render resolution at a step ratio.</summary>
+    internal int RenderResolution(double stepRatio)
+    {
+        var resolutions = RenderResolutions;
+        if (resolutions is null || resolutions.Length == 0)
+            throw new InvalidOperationException("At least one render resolution is needed.");
+        var thresholds = RenderResolutionThresholds ?? new double[0];
+        for (int i = 0; i < resolutions.Length - 1 && i < thresholds.Length; i++)
+        {
+            if (stepRatio < thresholds[i])
+                return resolutions[i];
+        }
+
+        return resolutions[Math.Min(resolutions.Length - 1, thresholds.Length)];
+    }
+
+    /// <summary>A member-wise copy (arrays and <see cref="MeshExtraction"/> shared).</summary>
+    internal DreamGaussianOptions ShallowCopy() => (DreamGaussianOptions)MemberwiseClone();
+
+    /// <summary>Checks the settings the pipeline cannot run without.</summary>
+    internal void Validate()
+    {
+        if (InitialGaussianCount < 1) throw new InvalidOperationException("InitialGaussianCount must be positive.");
+        if (Iterations < 0 || RefineIterations < 0) throw new InvalidOperationException("Iteration counts cannot be negative.");
+        if (BatchSize < 1) throw new InvalidOperationException("BatchSize must be positive.");
+        if (ReferenceSize < 1 || BakeRenderResolution < 1 || RefineRenderResolution < 1 || TextureSize < 2)
+            throw new InvalidOperationException("Resolutions must be positive and the texture at least 2 texels wide.");
+        if (BakeElevations is null || BakeAzimuths is null || BakeElevations.Length != BakeAzimuths.Length)
+            throw new InvalidOperationException("BakeElevations and BakeAzimuths must have the same length.");
+        if (MeshExtraction is null) throw new InvalidOperationException("MeshExtraction is required.");
+        if (RenderResolutions is null || RenderResolutions.Length == 0)
+            throw new InvalidOperationException("At least one render resolution is needed.");
+    }
+}
+
+/// <summary>Which DreamGaussian pipeline runs: image-to-3D (Zero-1-to-3 guidance) or text-to-3D (Stable Diffusion).</summary>
+public enum DreamGaussianMode
+{
+    /// <summary>Image-to-3D: Zero-1-to-3 guidance plus the reference-view losses (<c>configs/image.yaml</c>).</summary>
+    ImageTo3D,
+
+    /// <summary>Text-to-3D: Stable Diffusion guidance only (<c>configs/text.yaml</c>).</summary>
+    TextTo3D,
 }

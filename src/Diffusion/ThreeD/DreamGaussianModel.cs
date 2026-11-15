@@ -10,92 +10,54 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.Diffusion.ThreeD.Meshing;
+using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.Diffusion.ThreeD;
 
 /// <summary>
-/// DreamGaussian model for fast 3D Gaussian splatting generation with Score Distillation Sampling.
+/// DreamGaussian: generative 3D Gaussian splatting with Score Distillation Sampling, mesh extraction and UV texture
+/// refinement (Tang et al., ICLR 2024).
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
-/// DreamGaussian combines 3D Gaussian Splatting with Score Distillation Sampling (SDS)
-/// from a pretrained diffusion model for fast text-to-3D and image-to-3D generation.
-/// A second stage refines UV-space textures on the extracted mesh.
+/// Stage 1 (<c>main.py</c>) starts from <see cref="DreamGaussianOptions.InitialGaussianCount"/> random Gaussians in a
+/// ball of radius 0.5 and optimises them with Adam for <see cref="DreamGaussianOptions.Iterations"/> steps (500): each
+/// step renders random orbit views and back-propagates the SDS gradient <c>w(t) (eps_hat - eps)</c> of a frozen 2D
+/// prior through the VAE encoder and a differentiable tile rasterizer, with the timestep annealed from 980 to 20.
+/// Image-to-3D uses Zero-1-to-3 (camera-conditioned, guidance 5, 256 x 256) plus RGB and mask losses on the input
+/// view; text-to-3D uses Stable Diffusion (guidance 100, 512 x 512). Gaussians are densified, pruned and their
+/// opacities reset on the 3DGS schedule.
 /// </para>
 /// <para>
-/// Architecture components:
-/// <list type="bullet">
-/// <item><description>SD 1.5 U-Net backbone for SDS guidance (320 base channels, 768-dim CLIP)</description></item>
-/// <item><description>3D Gaussian Splatting as 3D representation</description></item>
-/// <item><description>SDS loss from pretrained 2D diffusion model for 3D optimization</description></item>
-/// <item><description>UV-space texture refinement stage for mesh appearance</description></item>
-/// <item><description>Differentiable rasterization for Gaussian rendering</description></item>
-/// <item><description>Marching cubes mesh extraction from opacity field</description></item>
-/// </list>
+/// The mesh is extracted from the Gaussians' density grid (<see cref="GaussianMeshExtractor"/>, marching cubes at
+/// level 1). Stage 2 (<c>main2.py</c>) unwraps it into a UV atlas, back-projects 26 Gaussian renders into a 1024 x
+/// 1024 texture, inpaints the seams, then refines the texture for <see cref="DreamGaussianOptions.RefineIterations"/>
+/// steps (50) against SDEdit-denoised renders of the mesh (strength 0.8 to 0.95), plus the reference view in
+/// image-to-3D.
 /// </para>
 /// <para>
-/// <b>For Beginners:</b> DreamGaussian creates 3D objects using Gaussian splats in ~2 minutes.
-///
-/// How DreamGaussian works:
-/// 1. Initialize random 3D Gaussians (position, color, opacity, covariance)
-/// 2. Render Gaussians from random viewpoints using differentiable rasterization
-/// 3. Compute SDS loss by comparing renders against the diffusion model's guidance
-/// 4. Optimize Gaussian parameters via gradient descent (~500 steps)
-/// 5. Extract mesh via marching cubes on the Gaussian opacity field
-/// 6. Refine UV textures using a second SDS stage on the extracted mesh
-///
-/// Key characteristics:
-/// - ~2 minutes total generation (vs hours for NeRF-based methods)
-/// - Gaussian splatting is much faster to optimize than NeRF
-/// - Two-stage: Gaussian optimization + UV texture refinement
-/// - Supports text-to-3D and image-to-3D
-/// - Produces textured meshes ready for rendering
-///
-/// When to use DreamGaussian:
-/// - Fast 3D content prototyping
-/// - Text-to-3D generation with reasonable quality
-/// - Image-to-3D reconstruction
-/// - When speed matters more than maximum quality
-///
-/// Limitations:
-/// - Lower quality than longer optimization methods (DreamFusion, Magic3D)
-/// - Janus problem (multi-face artifacts) from SDS loss
-/// - Mesh quality depends on Gaussian-to-mesh conversion
-/// - Texture refinement is limited by UV unwrapping quality
+/// <b>For Beginners:</b> DreamGaussian turns one picture (or a sentence) into a textured 3D model. It first grows a
+/// cloud of soft coloured blobs until pictures of it look right to a 2D diffusion model from every side, then turns
+/// the cloud into a mesh and paints the mesh's texture.
 /// </para>
 /// <para>
-/// Technical specifications:
-/// - 3D representation: 3D Gaussian Splatting (~10,000 Gaussians)
-/// - Guidance backbone: SD 1.5 U-Net (320 base channels, 768-dim CLIP)
-/// - Optimization: ~500 SDS steps for Gaussians + UV refinement
-/// - Total time: ~2 minutes on a single GPU
-/// - Mesh extraction: Marching cubes from opacity field
-/// - Texture: UV-space refinement with SDS
-/// - Noise schedule: Scaled linear beta [0.00085, 0.012], 1000 timesteps
-/// - Scheduler: DDIM
-///
+/// The 2D priors are networks of this library and start untrained; load pretrained weights into
+/// <see cref="ImageGuidanceModel"/> (Zero-1-to-3) and this model's U-Net, VAE and conditioner (Stable Diffusion) for
+/// meaningful shapes, or supply any prior through <see cref="ImageGuidanceFactory"/> / <see cref="TextGuidanceFactory"/>.
+/// </para>
+/// <para>
 /// Reference: Tang et al., "DreamGaussian: Generative Gaussian Splatting for Efficient 3D Content Creation", ICLR 2024
+/// (arXiv 2309.16653); official code github.com/dreamgaussian/dreamgaussian.
 /// </para>
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create with industry-standard defaults
-/// var dreamGaussian = new DreamGaussianModel&lt;float&gt;();
-///
-/// // Generate 3D point cloud from text
-/// var points = dreamGaussian.GeneratePointCloud(
-///     prompt: "A detailed steampunk robot",
-///     numPoints: 10000,
-///     numInferenceSteps: 500,
-///     guidanceScale: 7.5);
-///
-/// // Generate textured mesh
-/// var mesh = dreamGaussian.GenerateMesh(
-///     prompt: "A cute corgi figurine",
-///     resolution: 256,
-///     numInferenceSteps: 500,
-///     guidanceScale: 7.5);
+/// var dreamGaussian = new DreamGaussianModel&lt;float&gt;(seed: 0);
+/// var result = dreamGaussian.RunImageTo3D(rgbaImage);   // [1, 4, H, W] in [0, 1]
+/// var mesh = result.FinalMesh;                          // UV-textured mesh
+/// var points = result.PointCloud;                       // [1, N, 6] Gaussian centres and colours
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -135,9 +97,9 @@ public partial class DreamGaussianModel<T> : ThreeDDiffusionModelBase<T>
     private const int BASE_CHANNELS = 320;
 
     /// <summary>
-    /// Default number of 3D Gaussian points (10,000).
+    /// Initial number of Gaussians (<c>num_pts</c> = 5000 in the official configs).
     /// </summary>
-    private const int DEFAULT_POINT_COUNT = 10000;
+    private const int DEFAULT_POINT_COUNT = 5000;
 
     #endregion
 
@@ -190,7 +152,30 @@ public partial class DreamGaussianModel<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override bool SupportsScoreDistillation => true;
 
+    /// <summary>
+    /// The pipeline settings; every default is the official code's. The generation methods' arguments override the
+    /// corresponding settings for one call.
+    /// </summary>
+    public DreamGaussianOptions Settings { get; set; }
 
+    /// <summary>
+    /// The Zero-1-to-3 model of the image-to-3D guidance. Null creates a default one on first use. It is used, not
+    /// owned: its weights are not part of this model's parameters.
+    /// </summary>
+    [ExternalState]
+    public Zero123Model<T>? ImageGuidanceModel { get; set; }
+
+    /// <summary>
+    /// Builds the image-to-3D guidance from the reference image ([1, 3, S, S] on white) and the run's random source.
+    /// Null uses Zero-1-to-3 (<see cref="ImageGuidanceModel"/>).
+    /// </summary>
+    public Func<Tensor<T>, Random, IScoreDistillationGuidance<T>>? ImageGuidanceFactory { get; set; }
+
+    /// <summary>
+    /// Builds the text-to-3D guidance from the prompt and negative prompt. Null uses Stable Diffusion with this
+    /// model's U-Net, VAE, scheduler and conditioner.
+    /// </summary>
+    public Func<string, string?, IScoreDistillationGuidance<T>>? TextGuidanceFactory { get; set; }
 
     #endregion
 
@@ -207,8 +192,8 @@ public partial class DreamGaussianModel<T> : ThreeDDiffusionModelBase<T>
     /// <param name="scheduler">Noise scheduler. If null, uses DDIM.</param>
     /// <param name="unet">Custom U-Net. If null, creates SD 1.5 backbone for SDS.</param>
     /// <param name="vae">Custom VAE. If null, creates standard SD VAE.</param>
-    /// <param name="conditioner">CLIP text encoder conditioning module.</param>
-    /// <param name="defaultPointCount">Default number of 3D Gaussian points (default: 10,000).</param>
+    /// <param name="conditioner">CLIP text encoder conditioning module (needed for text-to-3D).</param>
+    /// <param name="defaultPointCount">Initial number of Gaussians (official: 5000).</param>
     /// <param name="seed">Optional random seed for reproducibility.</param>
     public DreamGaussianModel(
         NeuralNetworkArchitecture<T>? architecture = null,
@@ -233,6 +218,7 @@ public partial class DreamGaussianModel<T> : ThreeDDiffusionModelBase<T>
     {
         _conditioner = conditioner;
         _seed = seed;
+        Settings = new DreamGaussianOptions { InitialGaussianCount = defaultPointCount };
 
         if (unet is not null || vae is not null)
             InitializeLayers(unet, vae, seed);
@@ -280,45 +266,210 @@ public partial class DreamGaussianModel<T> : ThreeDDiffusionModelBase<T>
 
     #endregion
 
+    #region DreamGaussian Pipeline
+
+    /// <summary>
+    /// Image-to-3D with <see cref="Settings"/>: stage 1, mesh extraction and (when enabled) the texture stage.
+    /// </summary>
+    /// <param name="image">
+    /// The input image in [0, 1], [1, 4, H, W] RGBA (the alpha is the foreground mask, as the reference's
+    /// background-removed input) or [1, 3, H, W] RGB on a white background (the mask is the non-white pixels, see
+    /// <see cref="DreamGaussianOptions.WhiteBackgroundThreshold"/>); [C, H, W] is accepted too.
+    /// </param>
+    /// <param name="seed">Random seed; null uses the model's seed, or a secure random source when that is null too.</param>
+    /// <returns>The Gaussians, point cloud, mesh and textured mesh.</returns>
+    public DreamGaussianResult<T> RunImageTo3D(Tensor<T> image, int? seed = null)
+        => RunImage(image, Settings, seed, includeMesh: true);
+
+    /// <summary>Text-to-3D with <see cref="Settings"/>.</summary>
+    /// <param name="prompt">The prompt.</param>
+    /// <param name="negativePrompt">The negative prompt; null uses the unconditional embedding.</param>
+    /// <param name="seed">Random seed; null uses the model's seed, or a secure random source when that is null too.</param>
+    /// <returns>The Gaussians, point cloud, mesh and textured mesh.</returns>
+    public DreamGaussianResult<T> RunTextTo3D(string prompt, string? negativePrompt = null, int? seed = null)
+        => RunText(prompt, negativePrompt, Settings, seed, includeMesh: true);
+
+    private DreamGaussianResult<T> RunImage(Tensor<T> image, DreamGaussianOptions settings, int? seed, bool includeMesh)
+    {
+        if (image is null) throw new ArgumentNullException(nameof(image));
+        if (settings is null) throw new InvalidOperationException("Settings must not be null.");
+        var random = CreateRandom(seed);
+        var (reference, mask) = PrepareReference(image, settings);
+        var referenceTensor = DreamGaussianPipeline<T>.ToBatch(new[] { reference }, settings.ReferenceSize);
+        var guidance = ImageGuidanceFactory is not null
+            ? ImageGuidanceFactory(referenceTensor, random)
+            : new Zero123ScoreDistillationGuidance<T>(
+                ImageGuidanceModel ??= new Zero123Model<T>(seed: _seed), referenceTensor, random, settings.ImageGuidanceScale,
+                settings.ImageGuidanceResolution, settings.MinTimestepRatio, settings.MaxTimestepRatio);
+        var pipeline = new DreamGaussianPipeline<T>(settings, DreamGaussianMode.ImageTo3D, guidance, reference, mask, random);
+        return includeMesh ? pipeline.Run() : pipeline.RunGaussiansOnly();
+    }
+
+    private DreamGaussianResult<T> RunText(string prompt, string? negativePrompt, DreamGaussianOptions settings, int? seed, bool includeMesh)
+    {
+        if (prompt is null) throw new ArgumentNullException(nameof(prompt));
+        if (settings is null) throw new InvalidOperationException("Settings must not be null.");
+        var random = CreateRandom(seed);
+        IScoreDistillationGuidance<T> guidance;
+        if (TextGuidanceFactory is not null)
+        {
+            guidance = TextGuidanceFactory(prompt, negativePrompt);
+        }
+        else
+        {
+            var conditioner = Conditioner
+                ?? throw new InvalidOperationException(
+                    "Text-to-3D needs a text conditioner: pass one to the constructor or set TextGuidanceFactory.");
+            var promptEmbedding = conditioner.EncodeText(conditioner.Tokenize(prompt));
+            var negativeEmbedding = string.IsNullOrEmpty(negativePrompt)
+                ? conditioner.GetUnconditionalEmbedding(1)
+                : conditioner.EncodeText(conditioner.Tokenize(negativePrompt ?? string.Empty));
+            guidance = new StableDiffusionScoreDistillationGuidance<T>(
+                NoisePredictor, VAE, Scheduler, promptEmbedding, negativeEmbedding, settings.TextGuidanceScale,
+                settings.TextGuidanceResolution, settings.MinTimestepRatio, settings.MaxTimestepRatio);
+        }
+
+        var pipeline = new DreamGaussianPipeline<T>(settings, DreamGaussianMode.TextTo3D, guidance, null, null, random);
+        return includeMesh ? pipeline.Run() : pipeline.RunGaussiansOnly();
+    }
+
+    private Random CreateRandom(int? seed)
+    {
+        int? effective = seed ?? _seed;
+        return effective.HasValue ? RandomHelper.CreateSeededRandom(effective.Value) : RandomHelper.CreateSecureRandom();
+    }
+
+    /// <summary>
+    /// The reference's <c>load_input</c>: resize to <see cref="DreamGaussianOptions.ReferenceSize"/> (area filter when
+    /// shrinking), take the alpha as the mask and composite the colour onto white.
+    /// </summary>
+    /// <returns>The image [S, S, 3] on white and the mask [S, S].</returns>
+    internal static (double[] Image, double[] Mask) PrepareReference(Tensor<T> image, DreamGaussianOptions settings)
+    {
+        var batch = image.Rank == 3 ? image.Reshape(new[] { 1, image.Shape[0], image.Shape[1], image.Shape[2] }) : image;
+        if (batch.Rank != 4 || batch.Shape[0] != 1 || (batch.Shape[1] != 3 && batch.Shape[1] != 4))
+            throw new ArgumentException("The input image must be [1, 3, H, W] or [1, 4, H, W] (or without the batch axis).", nameof(image));
+        int size = settings.ReferenceSize;
+        int channels = batch.Shape[1];
+        bool shrinking = batch.Shape[2] >= size && batch.Shape[3] >= size;
+        var resized = batch.Shape[2] == size && batch.Shape[3] == size
+            ? batch
+            : AiDotNetEngine.Current.Interpolate(
+                batch, new[] { size, size }, shrinking ? InterpolateMode.Area : InterpolateMode.Bilinear, false);
+        var data = resized.Cast<double>().ToArray();
+        int pixels = size * size;
+        var rgb = new double[3 * pixels];
+        var mask = new double[pixels];
+        for (int p = 0; p < pixels; p++)
+        {
+            double r = data[p], g = data[pixels + p], b = data[(2 * pixels) + p];
+            double alpha = channels == 4
+                ? Math.Min(1.0, Math.Max(0.0, data[(3 * pixels) + p]))
+                : (r >= settings.WhiteBackgroundThreshold && g >= settings.WhiteBackgroundThreshold
+                   && b >= settings.WhiteBackgroundThreshold ? 0.0 : 1.0);
+            mask[p] = alpha;
+            rgb[3 * p] = (r * alpha) + (1.0 - alpha);
+            rgb[(3 * p) + 1] = (g * alpha) + (1.0 - alpha);
+            rgb[(3 * p) + 2] = (b * alpha) + (1.0 - alpha);
+        }
+
+        return (rgb, mask);
+    }
+
+    private static DreamGaussianOptions CopySettings(DreamGaussianOptions settings)
+    {
+        if (settings is null) throw new InvalidOperationException("Settings must not be null.");
+        var copy = settings.ShallowCopy();
+        var extraction = settings.MeshExtraction ?? new GaussianMeshExtractionOptions();
+        copy.MeshExtraction = new GaussianMeshExtractionOptions
+        {
+            Resolution = extraction.Resolution,
+            BlockCount = extraction.BlockCount,
+            RelaxRatio = extraction.RelaxRatio,
+            DensityThreshold = extraction.DensityThreshold,
+            OpacityCullThreshold = extraction.OpacityCullThreshold,
+            NormalizedHalfExtent = extraction.NormalizedHalfExtent,
+        };
+        return copy;
+    }
+
+    #endregion
+
     #region Generation Methods
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Image-to-3D: the textured mesh of <see cref="RunImageTo3D"/>.
+    /// </summary>
+    /// <param name="inputImage">The input image, as for <see cref="RunImageTo3D"/>.</param>
+    /// <param name="numViews">Novel views per stage-1 and stage-2 step (<c>batch_size</c>; official: 1).</param>
+    /// <param name="numInferenceSteps">Denoising steps of each stage-2 SDEdit refinement (official: 50).</param>
+    /// <param name="guidanceScale">Zero-1-to-3 classifier-free guidance scale (official: 5).</param>
+    /// <param name="seed">Random seed.</param>
+    /// <returns>The textured mesh (the extracted mesh when the texture stage is off).</returns>
+    public override Mesh3D<T> ImageTo3D(
+        Tensor<T> inputImage,
+        int numViews = 1,
+        int numInferenceSteps = 50,
+        double guidanceScale = 5.0,
+        int? seed = null)
+    {
+        var settings = CopySettings(Settings);
+        settings.BatchSize = numViews;
+        settings.RefineDenoisingSteps = numInferenceSteps;
+        settings.ImageGuidanceScale = guidanceScale;
+        return RunImage(inputImage, settings, seed, includeMesh: true).FinalMesh;
+    }
+
+    /// <summary>
+    /// Text-to-3D point cloud: the centres and colours of the stage-1 Gaussians.
+    /// </summary>
+    /// <param name="prompt">The prompt.</param>
+    /// <param name="negativePrompt">The negative prompt.</param>
+    /// <param name="numPoints">Initial number of Gaussians (null: <see cref="DreamGaussianOptions.InitialGaussianCount"/>);
+    /// densification and pruning change the final count.</param>
+    /// <param name="numInferenceSteps">Stage-1 optimisation steps (official: 500).</param>
+    /// <param name="guidanceScale">Stable Diffusion classifier-free guidance scale (official: 100).</param>
+    /// <param name="seed">Random seed.</param>
+    /// <returns>[1, N, 6] (x, y, z, r, g, b).</returns>
     public override Tensor<T> GeneratePointCloud(
         string prompt,
         string? negativePrompt = null,
         int? numPoints = null,
         int numInferenceSteps = 500,
-        double guidanceScale = 7.5,
+        double guidanceScale = 100.0,
         int? seed = null)
     {
-        return new Tensor<T>(new[] { 1, numPoints ?? DefaultPointCount, 6 });
+        var settings = CopySettings(Settings);
+        if (numPoints.HasValue) settings.InitialGaussianCount = numPoints.Value;
+        settings.Iterations = numInferenceSteps;
+        settings.TextGuidanceScale = guidanceScale;
+        return RunText(prompt, negativePrompt, settings, seed, includeMesh: false).PointCloud;
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Text-to-3D mesh: the textured mesh of <see cref="RunTextTo3D"/>.
+    /// </summary>
+    /// <param name="prompt">The prompt.</param>
+    /// <param name="negativePrompt">The negative prompt.</param>
+    /// <param name="resolution">Density grid resolution of the mesh extraction (official: 128).</param>
+    /// <param name="numInferenceSteps">Stage-1 optimisation steps (official: 500).</param>
+    /// <param name="guidanceScale">Stable Diffusion classifier-free guidance scale (official: 100).</param>
+    /// <param name="seed">Random seed.</param>
+    /// <returns>The textured mesh (the extracted mesh when the texture stage is off).</returns>
     public override Mesh3D<T> GenerateMesh(
         string prompt,
         string? negativePrompt = null,
-        int resolution = 256,
+        int resolution = 128,
         int numInferenceSteps = 500,
-        double guidanceScale = 7.5,
+        double guidanceScale = 100.0,
         int? seed = null)
     {
-        return new Mesh3D<T>
-        {
-            Vertices = new Tensor<T>(new[] { 1, 3 }),
-            Faces = new int[0, 3]
-        };
+        var settings = CopySettings(Settings);
+        settings.MeshExtraction.Resolution = resolution;
+        settings.Iterations = numInferenceSteps;
+        settings.TextGuidanceScale = guidanceScale;
+        return RunText(prompt, negativePrompt, settings, seed, includeMesh: true).FinalMesh;
     }
-
-    #endregion
-
-    #region IParameterizable Implementation
-
-
-
-    #endregion
-
-    #region ICloneable Implementation
 
     #endregion
 
@@ -327,25 +478,27 @@ public partial class DreamGaussianModel<T> : ThreeDDiffusionModelBase<T>
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
+        var settings = Settings ?? new DreamGaussianOptions();
         var metadata = new ModelMetadata<T>
         {
             Name = "DreamGaussian",
             Version = "1.0",
-            Description = "DreamGaussian 3D Gaussian splatting generation with SDS optimization",
+            Description = "DreamGaussian generative Gaussian splatting with SDS, mesh extraction and UV texture refinement",
             FeatureCount = (int)System.Math.Min((long)int.MaxValue, ParameterCount),
             Complexity = ParameterCount
         };
 
         metadata.SetProperty("architecture", "gaussian-splatting-sds");
         metadata.SetProperty("representation", "3d-gaussian-splatting");
-        metadata.SetProperty("guidance_backbone", "SD-1.5");
+        metadata.SetProperty("guidance_backbone", "SD-1.5 (text), Zero-1-to-3 (image)");
         metadata.SetProperty("cross_attention_dim", CROSS_ATTENTION_DIM);
-        metadata.SetProperty("optimization_steps", 500);
-        metadata.SetProperty("generation_time_seconds", 120);
+        metadata.SetProperty("optimization_steps", settings.Iterations);
+        metadata.SetProperty("refinement_steps", settings.RefineIterations);
         metadata.SetProperty("mesh_extraction", "marching-cubes");
-        metadata.SetProperty("texture_refinement", "uv-space-sds");
+        metadata.SetProperty("texture_refinement", "uv-space-sdedit-mse");
+        metadata.SetProperty("texture_size", settings.TextureSize);
         metadata.SetProperty("scheduler", "DDIM");
-        metadata.SetProperty("default_points", DEFAULT_POINT_COUNT);
+        metadata.SetProperty("default_points", settings.InitialGaussianCount);
 
         return metadata;
     }

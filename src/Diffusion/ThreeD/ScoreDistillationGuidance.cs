@@ -333,8 +333,15 @@ public sealed class StableDiffusionScoreDistillationGuidance<T> : IScoreDistilla
     public int Resolution { get; }
 
     /// <inheritdoc />
+    /// <remarks>The reference's Stable Diffusion loss is divided by the batch size (<c>/ latents.shape[0]</c>), unlike
+    /// its Zero-1-to-3 loss, so the gradient is too.</remarks>
     public Tensor<T> ComputeImageGradient(Tensor<T> images, IReadOnlyList<GuidanceViewOffset> views, int timestep, Random random)
-        => LatentScoreDistillation<T>.ImageGradient(_vae, _scheduler, Resolution, images, timestep, random, PredictGuided);
+    {
+        var gradient = LatentScoreDistillation<T>.ImageGradient(_vae, _scheduler, Resolution, images, timestep, random, PredictGuided);
+        return images.Shape[0] == 1
+            ? gradient
+            : AiDotNetEngine.Current.TensorMultiplyScalar(gradient, MathHelper.GetNumericOperations<T>().FromDouble(1.0 / images.Shape[0]));
+    }
 
     /// <inheritdoc />
     public Tensor<T> Refine(Tensor<T> images, IReadOnlyList<GuidanceViewOffset> views, double strength, int steps, Random random)

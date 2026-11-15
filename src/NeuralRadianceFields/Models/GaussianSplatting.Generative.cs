@@ -402,8 +402,8 @@ public partial class GaussianSplatting<T>
     /// </summary>
     /// <remarks>
     /// The order is the reference's: densification resets <c>max_radii2D</c> (<c>densification_postfix</c>) before the
-    /// prune reads it, so with DreamGaussian's call order the screen-size rule only removes Gaussians when no clone and
-    /// no split ran. New Gaussians start with zero Adam moments, as <c>cat_tensors_to_optimizer</c> gives them.
+    /// prune reads it (the postfix runs even when nothing was cloned or split), so with DreamGaussian's call order the
+    /// screen-size rule never removes a Gaussian. New Gaussians start with zero Adam moments, as <c>cat_tensors_to_optimizer</c> gives them.
     /// </remarks>
     [ScalarKernel("Clones, splits and prunes Gaussians one at a time over the optimiser's arrays, as the reference's masked copies do.")]
     internal GaussianDensificationReport DensifyAndPruneGenerative(GaussianDensificationSettings settings, Random random)
