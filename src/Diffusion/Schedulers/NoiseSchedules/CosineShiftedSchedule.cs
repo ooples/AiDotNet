@@ -26,8 +26,6 @@ namespace AiDotNet.Diffusion.Schedulers.NoiseSchedules;
 [PipelineStage(PipelineStage.Training)]
 public class CosineShiftedSchedule<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
     private readonly double _shift;
 
     /// <summary>
@@ -46,20 +44,28 @@ public class CosineShiftedSchedule<T>
     /// <returns>Alpha cumulative product values with resolution-aware cosine schedule.</returns>
     public Vector<T> ComputeAlphasCumprod(int numTimesteps)
     {
-        // Improved-DDPM cosine schedule (Nichol and Dhariwal, 2021): alpha_cumprod(t) = f(t) / f(0) with
-        // f(t) = cos^2((t + s) / (1 + s) * pi / 2), t = i / numTimesteps. The resolution shift follows simple
-        // diffusion (Hoogeboom et al., 2023), which divides the SNR by shift^2:
+        // Improved-DDPM cosine schedule (Nichol and Dhariwal, 2021, eq. 17) as diffusers' betas_for_alpha_bar builds
+        // it: f(t) = cos^2((t + s) / (1 + s) * pi / 2), beta_i = min(1 - f((i + 1) / N) / f(i / N), 0.999) and
+        // alpha_cumprod_i = prod_{j <= i} (1 - beta_j), so entry i is the paper's alpha_bar at t = i + 1 (never 1,
+        // which would make sigma_0 = 0) and the last beta is clipped as the paper prescribes. The resolution shift
+        // follows simple diffusion (Hoogeboom et al., 2023), which divides the SNR by shift^2:
         // alpha_cumprod_shifted = alpha_cumprod / (alpha_cumprod + shift^2 * (1 - alpha_cumprod)).
+        // The table is formed in double and rounded to T once, as diffusers forms it in float64: in T (Half) the
+        // index ramp stops being exact past 2048 and every intermediate would be rounded again.
+        if (numTimesteps <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numTimesteps), "The number of timesteps must be positive.");
+
         var engine = AiDotNetEngine.Current;
-        double s = 0.008; // Small offset to prevent singularity at t=0
+        const double s = 0.008; // Small offset to prevent singularity at t=0
+        const double maxBeta = 0.999;
         double angleScale = Math.PI / 2.0 / (1.0 + s);
-        var t = engine.TensorMultiplyScalar(engine.TensorArange<T>(0.0, numTimesteps, 1.0), NumOps.FromDouble(1.0 / numTimesteps));
-        var angle = engine.TensorMultiplyScalar(engine.TensorAddScalar(t, NumOps.FromDouble(s)), NumOps.FromDouble(angleScale));
-        double f0 = Math.Cos(s * angleScale);
-        var alphas = engine.TensorMultiplyScalar(engine.TensorSquare(engine.TensorCos(angle)), NumOps.FromDouble(1.0 / (f0 * f0)));
-        var shiftSquared = NumOps.FromDouble(_shift * _shift);
-        var denominator = engine.TensorAdd(alphas,
-            engine.TensorMultiplyScalar(engine.ScalarMinusTensor(NumOps.One, alphas), shiftSquared));
-        return engine.TensorDivide(alphas, denominator).ToVector();
+        var t = engine.TensorMultiplyScalar(engine.TensorArange<double>(0.0, numTimesteps + 1, 1.0), 1.0 / numTimesteps);
+        var f = engine.TensorSquare(engine.TensorCos(engine.TensorMultiplyScalar(engine.TensorAddScalar(t, s), angleScale)));
+        var ratio = engine.TensorDivide(engine.TensorNarrow(f, 0, 1, numTimesteps), engine.TensorNarrow(f, 0, 0, numTimesteps));
+        var betas = engine.TensorClamp(engine.ScalarMinusTensor(1.0, ratio), 0.0, maxBeta);
+        var alphasCumprod = engine.TensorCumProd(engine.ScalarMinusTensor(1.0, betas), 0);
+        var denominator = engine.TensorAdd(alphasCumprod,
+            engine.TensorMultiplyScalar(engine.ScalarMinusTensor(1.0, alphasCumprod), _shift * _shift));
+        return engine.TensorDivide(alphasCumprod, denominator).Cast<T>().ToVector();
     }
 }
