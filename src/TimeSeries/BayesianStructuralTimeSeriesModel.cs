@@ -769,7 +769,7 @@ public partial class BayesianStructuralTimeSeriesModel<T> : TimeSeriesModelBase<
 
         var current = states.GetSubMatrix(1, column, steps, width);
         var previous = states.GetSubMatrix(0, column, steps, width);
-        return Engine.TensorSumOfSquares(Tensor<T>.FromMatrix(Engine.MatrixSubtract(current, previous)));
+        return TensorReductionHelper.SumOfSquares(Engine, Tensor<T>.FromMatrix(Engine.MatrixSubtract(current, previous)));
     }
 
     /// <summary>

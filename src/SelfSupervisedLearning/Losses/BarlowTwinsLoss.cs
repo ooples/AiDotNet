@@ -149,11 +149,11 @@ public class BarlowTwinsLoss<T> : ContrastiveLossBase<T>
 
         // Compute loss: invariance (diagonal) + redundancy (off-diagonal)
         // Invariance term: sum_i (1 - C_ii)^2
-        T invarianceLoss = Engine.TensorSumOfSquares(
+        T invarianceLoss = TensorReductionHelper.SumOfSquares(Engine,
             Engine.ScalarMinusTensor(NumOps.One, Engine.TensorDiagonal(crossCorr)));
 
         // Redundancy term: sum_{i != j} C_ij^2
-        T redundancyLoss = Engine.TensorSumOfSquares(OffDiagonal(crossCorr));
+        T redundancyLoss = TensorReductionHelper.SumOfSquares(Engine, OffDiagonal(crossCorr));
 
         // Total loss = invariance + lambda * redundancy
         var lambdaT = NumOps.FromDouble(_lambda);
@@ -178,9 +178,9 @@ public class BarlowTwinsLoss<T> : ContrastiveLossBase<T>
         var crossCorr = ComputeCrossCorrelation(z1Norm, z2Norm, batchSize);
 
         // Compute loss components
-        T invarianceLoss = Engine.TensorSumOfSquares(
+        T invarianceLoss = TensorReductionHelper.SumOfSquares(Engine,
             Engine.ScalarMinusTensor(NumOps.One, Engine.TensorDiagonal(crossCorr)));
-        T redundancyLoss = Engine.TensorSumOfSquares(OffDiagonal(crossCorr));
+        T redundancyLoss = TensorReductionHelper.SumOfSquares(Engine, OffDiagonal(crossCorr));
 
         // Gradient of cross-correlation w.r.t. loss:
         // diagonal -2 * (1 - C_ii), off-diagonal 2 * lambda * C_ij
@@ -245,7 +245,7 @@ public class BarlowTwinsLoss<T> : ContrastiveLossBase<T>
     public T OffDiagonalSum(Tensor<T> matrix)
     {
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        return Engine.TensorSumOfSquares(OffDiagonal(matrix));
+        return TensorReductionHelper.SumOfSquares(Engine, OffDiagonal(matrix));
     }
 
     /// <summary>

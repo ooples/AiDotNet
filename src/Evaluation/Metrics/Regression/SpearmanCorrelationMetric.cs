@@ -58,8 +58,8 @@ public class SpearmanCorrelationMetric<T> : IRegressionMetric<T>
         var dp = engine.TensorSubtractScalar(predictedRanks, engine.TensorMean(predictedRanks));
         var da = engine.TensorSubtractScalar(actualRanks, engine.TensorMean(actualRanks));
         double covariance = engine.TensorSum(engine.TensorMultiply(dp, da));
-        double predictedVariance = engine.TensorSumOfSquares(dp);
-        double actualVariance = engine.TensorSumOfSquares(da);
+        double predictedVariance = TensorReductionHelper.SumOfSquares(engine, dp);
+        double actualVariance = TensorReductionHelper.SumOfSquares(engine, da);
         if (predictedVariance < 1e-12 || actualVariance < 1e-12) return NumOps.Zero;
         return NumOps.FromDouble(covariance / (Math.Sqrt(predictedVariance) * Math.Sqrt(actualVariance)));
     }

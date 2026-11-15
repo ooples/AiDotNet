@@ -120,7 +120,7 @@ public class SpikeAndSlabSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
 
         // Residual variance estimate
         TC residualVariance = ops.Add(
-            ops.Divide(engine.TensorSumOfSquares(engine.TensorSubtractScalar(y, engine.TensorMean(y))), ops.FromDouble(n - 1)),
+            ops.Divide(TensorReductionHelper.SumOfSquares(engine, engine.TensorSubtractScalar(y, engine.TensorMean(y))), ops.FromDouble(n - 1)),
             eps);
 
         // Marginal likelihood ratio per feature. Every sweep of the sampler sees the same data, so each

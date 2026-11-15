@@ -367,7 +367,7 @@ public class LearningWithoutForgetting<T, TInput, TOutput>
         var softTeacher = SoftmaxWithTemperature(teacherLogits, _temperature);
         var softStudent = SoftmaxWithTemperature(studentLogits, _temperature);
 
-        T mse = Engine.TensorSumOfSquares(Engine.Subtract(softTeacher, softStudent).AsTensor());
+        T mse = TensorReductionHelper.SumOfSquares(Engine, Engine.Subtract(softTeacher, softStudent).AsTensor());
 
         return NumOps.Divide(mse, NumOps.FromDouble(softTeacher.Length));
     }

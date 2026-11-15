@@ -171,8 +171,8 @@ public class PermutationImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         var predictions = engine.TensorAdd(engine.TensorBroadcastTo(yMean, new[] { n }), engine.ReduceSum(
             engine.TensorMultiply(zScores, engine.TensorBroadcastTo(engine.Reshape(weights, new[] { 1, p }), shape)),
             new[] { 1 }, false));
-        T ssRes = engine.TensorSumOfSquares(engine.TensorSubtract(y, predictions));
-        T ssTot = engine.TensorSumOfSquares(yDiff);
+        T ssRes = TensorReductionHelper.SumOfSquares(engine, engine.TensorSubtract(y, predictions));
+        T ssTot = TensorReductionHelper.SumOfSquares(engine, yDiff);
 
         return PreprocessingTensorOps.IsAbove(ssTot, floor) ? NumOps.Subtract(NumOps.One, NumOps.Divide(ssRes, ssTot)) : NumOps.Zero;
     }

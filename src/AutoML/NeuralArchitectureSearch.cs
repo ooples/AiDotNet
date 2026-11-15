@@ -243,7 +243,7 @@ public class NeuralArchitectureSearch<T>
     {
         var ops = MathHelper.GetNumericOperations<T>();
         var engine = AiDotNetEngine.Current;
-        var squaredNorms = new Vector<T>(gradients.Select(g => engine.TensorSumOfSquares(g.AsTensor())));
+        var squaredNorms = new Vector<T>(gradients.Select(g => TensorReductionHelper.SumOfSquares(engine, g.AsTensor())));
         T norm = ops.Sqrt(squaredNorms.Length == 0 ? ops.Zero : engine.Sum(squaredNorms));
         T scale = ops.Divide(maxNorm, ops.Add(norm, ops.FromDouble(1e-6)));
         return ops.LessThan(scale, ops.One) ? scale : ops.One;

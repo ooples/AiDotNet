@@ -89,7 +89,7 @@ public static class InterpretableModelHelper
             var residual = AiDotNetEngine.Current.TensorSubtract(actual.AsTensor(), predicted.GetSubVector(0, actual.Length).AsTensor());
             // mean of r^2 as the sum of (r / sqrt(n))^2, so the running sum stays at the scale of the mean (Half)
             var scaledResidual = AiDotNetEngine.Current.TensorDivideScalar(residual, numOps.FromDouble(Math.Sqrt(actual.Length)));
-            T mse = AiDotNetEngine.Current.TensorSumOfSquares(scaledResidual);
+            T mse = TensorReductionHelper.SumOfSquares(AiDotNetEngine.Current, scaledResidual);
             return numOps.Negate(mse); // Negative MSE (higher is better)
         };
 

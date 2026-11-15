@@ -132,7 +132,7 @@ public class StackingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         T weightSum = engine.TensorSum(topScores);
         if (PreprocessingTensorOps.IsAbove(weightSum, PreprocessingTensorOps.Tolerance<T>(1e-10)))
             pred = engine.TensorDivideScalar(pred, weightSum);
-        T ssRes = engine.TensorSumOfSquares(engine.TensorSubtract(y, pred));
+        T ssRes = TensorReductionHelper.SumOfSquares(engine, engine.TensorSubtract(y, pred));
 
         return PreprocessingTensorOps.IsAbove(ssTot, PreprocessingTensorOps.Tolerance<T>(1e-10))
             ? PreprocessingTensorOps.ScalarMax(NumOps.Zero, NumOps.Subtract(NumOps.One, NumOps.Divide(ssRes, ssTot)))

@@ -83,8 +83,8 @@ internal static class ExplainerTensorOps<T>
             return (NumOps.Zero, NumOps.Zero, true);
         }
 
-        T scaledNumerator = engine.TensorSumOfSquares(engine.TensorDivideScalar(numerator, scale));
-        T scaledDenominator = engine.TensorSumOfSquares(engine.TensorDivideScalar(denominator, scale));
+        T scaledNumerator = TensorReductionHelper.SumOfSquares(engine, engine.TensorDivideScalar(numerator, scale));
+        T scaledDenominator = TensorReductionHelper.SumOfSquares(engine, engine.TensorDivideScalar(denominator, scale));
 
         // The unscaled denominator, in double so the product cannot overflow a narrow T
         double scaleValue = NumOps.ToDouble(scale);

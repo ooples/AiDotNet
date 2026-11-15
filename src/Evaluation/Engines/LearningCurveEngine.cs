@@ -217,7 +217,7 @@ public class LearningCurveEngine<T>
         var tensor = new Tensor<T>(values.ToArray(), new[] { values.Count }).Cast<double>();
         double mean = engine.TensorMean(tensor);
         if (values.Count <= 1) return (mean, 0);
-        double sumSq = engine.TensorSumOfSquares(engine.TensorSubtractScalar(tensor, mean));
+        double sumSq = TensorReductionHelper.SumOfSquares(engine, engine.TensorSubtractScalar(tensor, mean));
         return (mean, Math.Sqrt(sumSq / (values.Count - 1)));
     }
 

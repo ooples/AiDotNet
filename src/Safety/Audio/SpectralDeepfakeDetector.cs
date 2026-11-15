@@ -322,7 +322,7 @@ internal class SpectralDeepfakeDetector<T> : AudioSafetyModuleBase<T>
         var window = engine.Reshape(
             engine.TensorNarrow(SafetyTensorOps<T>.AsTensor(samples), 0, 0, analysisLength),
             new[] { 1, analysisLength });
-        T r0 = engine.TensorSumOfSquares(window);
+        T r0 = TensorReductionHelper.SumOfSquares(engine, window);
 
         if (NumOps.LessThan(r0, Epsilon)) return Zero;
 

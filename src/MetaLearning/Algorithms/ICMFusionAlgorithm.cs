@@ -325,7 +325,7 @@ public partial class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
         var reconstruction = Decode(decoder, latent, taskVector);
 
         var residual = Engine.TensorSubtract(reconstruction, adapter);
-        T recon = NumOps.Divide(Engine.TensorSumOfSquares(residual), NumOps.FromDouble(c));
+        T recon = NumOps.Divide(TensorReductionHelper.SumOfSquares(Engine, residual), NumOps.FromDouble(c));
         var variance = Engine.TensorExp(second.LogVar);
         var klTerms = Engine.TensorSubtract(
             Engine.TensorSubtract(Engine.TensorAddScalar(second.LogVar, NumOps.One), Engine.TensorMultiply(second.Mean, second.Mean)),
@@ -418,11 +418,11 @@ public partial class ICMFusionAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
     /// <summary>H(point) * direction as a central difference of task gradients along the direction.</summary>
     private Tensor<T> HessianVectorProduct(Tensor<T> point, Tensor<T> direction, IMetaLearningTask<T, TInput, TOutput> task)
     {
-        T directionNorm = NumOps.Sqrt(Engine.TensorSumOfSquares(direction));
+        T directionNorm = NumOps.Sqrt(TensorReductionHelper.SumOfSquares(Engine, direction));
         if (NumOps.Equals(directionNorm, NumOps.Zero)) return new Tensor<T>(new[] { direction.Length });
 
         T h = NumOps.Divide(
-            NumOps.Multiply(NumOps.FromDouble(1e-4), NumOps.Add(NumOps.One, NumOps.Sqrt(Engine.TensorSumOfSquares(point)))),
+            NumOps.Multiply(NumOps.FromDouble(1e-4), NumOps.Add(NumOps.One, NumOps.Sqrt(TensorReductionHelper.SumOfSquares(Engine, point)))),
             directionNorm);
         var offset = Engine.TensorMultiplyScalar(direction, h);
         var gradientPlus = AdapterGradient(Engine.TensorAdd(point, offset), task);

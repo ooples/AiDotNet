@@ -130,7 +130,7 @@ public class ShapleyFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
             _gram = engine.TensorMatMul(engine.TensorTranspose(x), x);
             _cross = engine.Reshape(
                 engine.TensorMatMul(engine.TensorTranspose(x), engine.Reshape(_centered, new[] { n, 1 })), new[] { x.Shape[1] });
-            _totalSquares = engine.TensorSumOfSquares(_centered);
+            _totalSquares = TensorReductionHelper.SumOfSquares(engine, _centered);
         }
 
         public T RSquared(int[] subset)
@@ -147,7 +147,7 @@ public class ShapleyFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
             var beta = PreprocessingTensorOps.Solve(system, engine.Reshape(engine.TensorIndexSelect(_cross, index, 0), new[] { k, 1 }));
             var columns = engine.TensorIndexSelect(_x, index, 1);
             var fitted = engine.Reshape(engine.TensorMatMul(columns, beta), new[] { _x.Shape[0] });
-            T residual = engine.TensorSumOfSquares(engine.TensorSubtract(_centered, fitted));
+            T residual = TensorReductionHelper.SumOfSquares(engine, engine.TensorSubtract(_centered, fitted));
             T rSquared = ops.Subtract(ops.One, ops.Divide(residual, _totalSquares));
             return ops.GreaterThan(rSquared, ops.Zero) ? rSquared : ops.Zero;
         }

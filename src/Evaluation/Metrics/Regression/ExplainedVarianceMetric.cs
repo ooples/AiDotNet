@@ -47,8 +47,8 @@ public class ExplainedVarianceMetric<T> : IRegressionMetric<T>
         var pred = EvaluationTensorOps<T>.ToTensor(predictions).Cast<double>();
         var actual = EvaluationTensorOps<T>.ToTensor(actuals).Cast<double>();
         var residual = engine.TensorSubtract(actual, pred);
-        double total = engine.TensorSumOfSquares(engine.TensorSubtractScalar(actual, engine.TensorMean(actual)));
-        double error = engine.TensorSumOfSquares(engine.TensorSubtractScalar(residual, engine.TensorMean(residual)));
+        double total = TensorReductionHelper.SumOfSquares(engine, engine.TensorSubtractScalar(actual, engine.TensorMean(actual)));
+        double error = TensorReductionHelper.SumOfSquares(engine, engine.TensorSubtractScalar(residual, engine.TensorMean(residual)));
         return Math.Abs(total) < 1e-10 ? NumOps.One : NumOps.FromDouble(1 - error / total);
     }
 
