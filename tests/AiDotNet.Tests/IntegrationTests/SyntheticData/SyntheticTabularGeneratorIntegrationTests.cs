@@ -623,6 +623,156 @@ public class SyntheticTabularGeneratorIntegrationTests
                 Assert.Equal(shorter.Adjacency[i, j], longer.Adjacency[i, j]);
     }
 
+    private static CausalGANGenerator<double> FitCausalGan(int epochs)
+    {
+        var (data, columns) = CreateTestData();
+        var generator = new CausalGANGenerator<double>(CreateArchitecture(TotalCols, TotalCols), new CausalGANOptions<double>
+        {
+            Seed = Seed,
+            EmbeddingDimension = 4,
+            HiddenDimensions = [8, 8],
+            BatchSize = 50
+        });
+        generator.Fit(data, columns, epochs);
+        return generator;
+    }
+
+    private static void SetPrivateField(object instance, string fieldName, object value)
+    {
+        var field = instance.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new MissingFieldException(instance.GetType().Name, fieldName);
+        field.SetValue(instance, value);
+    }
+
+    private static void RunAdjacencyDualIteration(object generator)
+    {
+        var method = generator.GetType().GetMethod("UpdateAdjacencyAugmentedLagrangian", BindingFlags.Instance | BindingFlags.NonPublic)
+            ?? throw new MissingMethodException(generator.GetType().Name, "UpdateAdjacencyAugmentedLagrangian");
+        method.Invoke(generator, null);
+    }
+
+    /// <summary>
+    /// One epoch runs one outer iteration of the reference's notears_linear, inner loop included: the subproblem is
+    /// re-solved with rho raised tenfold until h(W) is at most a quarter of the previous iteration's, or rho is at its
+    /// cap. The subproblem reads only the data and the dual variables, so a fit of k epochs holds the state after k
+    /// outer iterations. One solve per epoch broke this: it accepted a solve whose h had not fallen and moved alpha
+    /// on it.
+    /// </summary>
+    [Fact(Timeout = 300000)]
+    public async Task CausalGANGenerator_AdjacencyDualAscent_EveryIterationQuartersTheAcyclicityOrCapsRho()
+    {
+        await Task.Yield();
+        double previous = double.PositiveInfinity;
+        for (int epochs = 1; epochs <= 6; epochs++)
+        {
+            var generator = FitCausalGan(epochs);
+            if (generator.AdjacencyDualRounds < epochs) break; // the termination test stopped the iterations earlier
+            double h = Math.Abs(GetPrivateField<double>(generator, "_prevDagConstraint"));
+            double rho = GetPrivateField<double>(generator, "_lagrangeRho");
+            Assert.False(generator.AdjacencyDualAscentDiverged);
+            Assert.True(generator.AdjacencySubproblemSolves >= generator.AdjacencyDualRounds);
+            Assert.True(h <= 0.25 * previous || rho >= 1e16,
+                $"iteration {epochs}: h = {h:R} is above a quarter of the previous {previous:R} with rho = {rho:R} below its cap.");
+            previous = h;
+        }
+
+        // The same from a cyclic adjacency whose previous h was just above the tolerance: one call must bring h under
+        // a quarter of it, however many solves and rho raises that takes.
+        var cyclic = FitCausalGan(1);
+        int width = GetPrivateField<Matrix<double>>(cyclic, "_adjacency").Rows;
+        var start = new Matrix<double>(width, width);
+        for (int i = 0; i < width; i++)
+            for (int j = 0; j < width; j++)
+                start[i, j] = i == j ? 0.0 : 0.5;
+        SetPrivateField(cyclic, "_adjacency", start);
+        SetPrivateField(cyclic, "_prevDagConstraint", 1e-7);
+        SetPrivateField(cyclic, "_lagrangeAlpha", 0.0);
+        SetPrivateField(cyclic, "_lagrangeRho", 1.0);
+        int roundsBefore = cyclic.AdjacencyDualRounds;
+
+        RunAdjacencyDualIteration(cyclic);
+
+        Assert.Equal(roundsBefore + 1, cyclic.AdjacencyDualRounds);
+        double after = Math.Abs(GetPrivateField<double>(cyclic, "_prevDagConstraint"));
+        double rhoAfter = GetPrivateField<double>(cyclic, "_lagrangeRho");
+        Assert.True(after <= 0.25 * 1e-7 || rhoAfter >= 1e16,
+            $"h = {after:R} is above a quarter of 1e-7 with rho = {rhoAfter:R} below its cap.");
+    }
+
+    /// <summary>
+    /// An adjacency whose h(W) is not finite stops the dual ascent. It used to count as neither converged nor
+    /// failed: alpha became NaN and every later epoch ran another solve, up to the cap of 100.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task CausalGANGenerator_AdjacencyDualAscent_StopsOnANonFiniteAcyclicity()
+    {
+        await Task.Yield();
+        var generator = FitCausalGan(1);
+        int width = GetPrivateField<Matrix<double>>(generator, "_adjacency").Rows;
+
+        // Cyclic weights this large overflow e^(W o W), so h(W) is not finite and no solve can leave this point.
+        var overflowing = new Matrix<double>(width, width);
+        for (int i = 0; i < width; i++)
+            for (int j = 0; j < width; j++)
+                overflowing[i, j] = i == j ? 0.0 : 1e10;
+        SetPrivateField(generator, "_adjacency", overflowing);
+        SetPrivateField(generator, "_prevDagConstraint", 1.0);
+        SetPrivateField(generator, "_lagrangeAlpha", 0.0);
+        SetPrivateField(generator, "_lagrangeRho", 1.0);
+        int roundsBefore = generator.AdjacencyDualRounds;
+
+        for (int call = 0; call < 3; call++) RunAdjacencyDualIteration(generator);
+
+        Assert.True(generator.AdjacencyDualAscentDiverged, "a non-finite h(W) was not reported as divergence.");
+        Assert.Equal(roundsBefore + 1, generator.AdjacencyDualRounds);
+        Assert.Equal(0.0, GetPrivateField<double>(generator, "_lagrangeAlpha"));
+        Assert.Equal(1.0, GetPrivateField<double>(generator, "_lagrangeRho"));
+        Assert.Equal(1.0, GetPrivateField<double>(generator, "_prevDagConstraint"));
+        Assert.Same(overflowing, GetPrivateField<Matrix<double>>(generator, "_adjacency"));
+    }
+
+#if NET5_0_OR_GREATER
+    /// <summary>
+    /// A solve whose double solution is finite but outside T's range is not adopted. The Gram here makes the
+    /// least-squares weight of the edge 0 -> 1 the regression coefficient G01 / G00 = 100 / 2^-14, about 1.6e6: finite
+    /// in double, above Half's maximum of 65504. It used to be cast to T and stored as infinity, with h(W) NaN from
+    /// then on.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task CausalGANGenerator_AdjacencyDualAscent_KeepsTheLastFiniteAdjacencyWhenASolveOverflowsT()
+    {
+        await Task.Yield();
+        const int width = 4;
+        var generator = new CausalGANGenerator<Half>(
+            new NeuralNetworkArchitecture<Half>(width, width, NetworkComplexity.Simple),
+            new CausalGANOptions<Half> { Seed = Seed, EmbeddingDimension = 4, HiddenDimensions = [8, 8], BatchSize = 50 });
+
+        var lastFinite = new Matrix<Half>(width, width);
+        lastFinite[0, 1] = (Half)0.005;
+        var gram = new Matrix<Half>(width, width);
+        gram[0, 0] = (Half)(1.0 / 16384.0);
+        gram[0, 1] = (Half)100.0;
+        gram[1, 0] = (Half)100.0;
+        gram[1, 1] = (Half)60000.0;
+        SetPrivateField(generator, "_dataWidth", width);
+        SetPrivateField(generator, "_adjacency", lastFinite);
+        SetPrivateField(generator, "_dataGram", gram);
+        SetPrivateField(generator, "_prevDagConstraint", 1.0);
+        SetPrivateField(generator, "_lagrangeAlpha", 0.0);
+        SetPrivateField(generator, "_lagrangeRho", 1.0);
+
+        RunAdjacencyDualIteration(generator);
+
+        var adjacency = GetPrivateField<Matrix<Half>>(generator, "_adjacency");
+        for (int i = 0; i < width; i++)
+            for (int j = 0; j < width; j++)
+                Assert.True(Half.IsFinite(adjacency[i, j]), $"adjacency[{i}, {j}] = {adjacency[i, j]} was adopted from a diverged solve.");
+        Assert.True(generator.AdjacencyDualAscentDiverged, "the solve did not leave Half's range; the test no longer drives the overflow.");
+        Assert.Same(lastFinite, adjacency);
+        Assert.Equal(0.0, GetPrivateField<double>(generator, "_lagrangeAlpha"));
+    }
+#endif
+
     [Fact(Timeout = 120000)]
     public async Task MisGANGenerator_FitAndGenerate_ProducesValidOutput()
     {
