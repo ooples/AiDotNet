@@ -12365,7 +12365,6 @@
 3	ADNELEM002|AiDotNet.FederatedLearning.ServerOptimizers.FedAvgMServerOptimizer<T>.Step(AiDotNet.Tensors.LinearAlgebra.Vector<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>)
 1	ADNELEM002|AiDotNet.FederatedLearning.TEE.TeeSecureAggregation<T>.Aggregate()
 1	ADNELEM002|AiDotNet.FederatedLearning.TEE.TeeSecureAggregation<T>.SerializeTensor(AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
-2	ADNELEM002|AiDotNet.FederatedLearning.Trainers.AsyncFedEDTrainer<T>.AggregateWithEntropyWeights(System.Collections.Generic.Dictionary<int, System.Collections.Generic.Dictionary<string, T[]>>, int)
 1	ADNELEM002|AiDotNet.FederatedLearning.Trainers.BufferedAsyncFederatedTrainer<T>.AggregateBuffer()
 2	ADNELEM002|AiDotNet.FederatedLearning.Trainers.InMemoryFederatedTrainer<T, TInput, TOutput>.CompressDelta(AiDotNet.Tensors.LinearAlgebra.Vector<T>, AiDotNet.Models.Options.FederatedCompressionOptions, System.Random, out double)
 1	ADNELEM002|AiDotNet.FederatedLearning.Trainers.InMemoryFederatedTrainer<T, TInput, TOutput>.ComputeClientSampleIdentities(System.Collections.Generic.Dictionary<int, AiDotNet.Models.FederatedClientDataset<TInput, TOutput>>)
