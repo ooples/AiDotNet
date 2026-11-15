@@ -63,6 +63,28 @@ internal static class SpeechRecognitionEngineOps
     }
 
     /// <summary>
+    /// The mean of <paramref name="rows"/> per-utterance losses, each divided by the count before it is added (the
+    /// result stays on the gradient tape). Summing first and dividing after overflows T (Half: 65504) for a batch
+    /// whose losses are each representable, the way the double sum it replaces did not.
+    /// </summary>
+    internal static Tensor<T> MeanLoss<T>(IEngine engine, int rows, Func<int, Tensor<T>> lossOfRow)
+    {
+        if (rows < 1) throw new ArgumentException("No audio.", nameof(rows));
+        if (lossOfRow is null) throw new ArgumentNullException(nameof(lossOfRow));
+
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var share = numOps.FromDouble(1.0 / rows);
+        Tensor<T>? total = null;
+        for (int r = 0; r < rows; r++)
+        {
+            var part = engine.TensorMultiplyScalar(lossOfRow(r), share);
+            total = total is null ? part : engine.TensorAdd(total, part);
+        }
+
+        return total ?? throw new ArgumentException("No audio.", nameof(rows));
+    }
+
+    /// <summary>
     /// CTC prefix beam search (Graves et al. 2006; Hannun et al. 2014, "First-Pass Large Vocabulary
     /// Continuous Speech Recognition using Bi-Directional Recurrent DNNs", Algorithm 1).
     /// </summary>

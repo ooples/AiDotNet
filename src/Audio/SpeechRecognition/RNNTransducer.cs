@@ -368,13 +368,7 @@ public partial class RNNTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     private Tensor<T> MeanTransducerLoss(ConformerAsrNetwork<T> network, Tensor<T> input, int[][] labels, bool training)
     {
         int rows = labels.Length;
-        Tensor<T>? total = null;
-        for (int r = 0; r < rows; r++)
-        {
-            var loss = network.TransducerLoss(Encoded(network, Row(input, r, rows), training), labels[r]);
-            total = total is null ? loss : Engine.TensorAdd(total, loss);
-        }
-        return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / rows));
+        return SpeechRecognitionEngineOps.MeanLoss(Engine, rows, r => network.TransducerLoss(Encoded(network, Row(input, r, rows), training), labels[r]));
     }
 
     private int[][] RowLabels(Tensor<T> target, int rows)

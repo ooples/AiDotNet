@@ -246,16 +246,13 @@ public partial class Conformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
         var network = _network ?? throw new NotSupportedException("The objective is defined on the native network.");
         using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
         int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows, perRow = target.Length / rows;
-        Tensor<T>? total = null;
-        for (int r = 0; r < rows; r++)
+        var mean = SpeechRecognitionEngineOps.MeanLoss(Engine, rows, r =>
         {
             var row = rows == 1 ? target : Engine.Reshape(Engine.TensorSlice(Engine.Reshape(target, new[] { rows, perRow }), new[] { r, 0 }, new[] { 1, perRow }),
                 target.Rank >= 3 ? target.Shape.ToArray().Skip(1).ToArray() : new[] { perRow });
             var features = network.Features(Samples(input, r * samples, samples));
-            var loss = network.TransducerLoss(network.Encode(features, training: false), Labels(row));
-            total = total is null ? loss.Clone() : Engine.TensorAdd(total, loss);
-        }
-        var mean = Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / rows));
+            return network.TransducerLoss(network.Encode(features, training: false), Labels(row));
+        });
         return mean.GetFlat(0);
     }
 

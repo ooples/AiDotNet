@@ -6,7 +6,9 @@ namespace AiDotNet.Audio.VoiceActivity;
 internal static class VadEngineOps
 {
     /// <summary>
-    /// 1 for every frame whose probability is at least <paramref name="threshold"/>, else 0 (NaN is 0).
+    /// 1 for every frame whose probability is at least <paramref name="threshold"/>, else 0 (NaN is 0). The
+    /// comparison is made in double, against the threshold itself: rounding the threshold to T first moves it
+    /// (Half holds 0.3 as 0.2998), so a frame just below the threshold would count as speech.
     /// </summary>
     internal static int[] SpeechMask<T>(T[] probabilities, double threshold)
     {
@@ -16,10 +18,9 @@ internal static class VadEngineOps
         }
 
         var engine = AiDotNetEngine.Current;
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var probs = new Tensor<T>((T[])probabilities.Clone(), [probabilities.Length]);
-        var limit = new Tensor<T>([probabilities.Length]);
-        limit.Fill(numOps.FromDouble(threshold));
+        var probs = new Tensor<T>((T[])probabilities.Clone(), [probabilities.Length]).Cast<double>();
+        var limit = new Tensor<double>([probabilities.Length]);
+        limit.Fill(threshold);
         return engine.TensorGreaterEqual(probs, limit).Cast<int>().ToArray();
     }
 
