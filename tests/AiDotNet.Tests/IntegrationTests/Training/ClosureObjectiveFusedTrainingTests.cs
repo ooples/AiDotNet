@@ -85,7 +85,7 @@ public class ClosureObjectiveFusedTrainingTests
         int GeneratorNext = 0);
 
     private static RunResult Run(bool compile, int steps, Func<int, int> batchOf, int? noiseSeed = null,
-        int? dropoutSeed = null, bool perStepScale = false)
+        int? dropoutSeed = null, bool perStepScale = false, Func<int, double>? clipOf = null)
     {
         var original = TensorCodecOptions.Current;
         try
@@ -100,7 +100,8 @@ public class ClosureObjectiveFusedTrainingTests
             dropout?.SetTrainingMode(true);
             var objective = Objective(weights, () => step, batchOf, noise, dropout, perStepScale);
             for (step = 0; step < steps; step++)
-                TapeTrainingStepper<double>.EagerObjectiveStep(() => weights, objective, optimizer);
+                TapeTrainingStepper<double>.EagerObjectiveStep(() => weights, objective, optimizer,
+                    modelGradientClip: clipOf?.Invoke(step) ?? 0.0);
             var stepper = TapeTrainingStepper<double>.ForOwner(optimizer);
             return new RunResult(weights, stepper.FusedStepCount,
                 CompiledTapeTrainingStep<double>.LastClosurePlanCount, CompiledTapeTrainingStep<double>.LastClosureIsDynamic,
@@ -134,6 +135,18 @@ public class ClosureObjectiveFusedTrainingTests
         Assert.Equal(0, eager.FusedSteps);
         Assert.Equal(6, compiled.FusedSteps);
         Assert.Equal(1, compiled.PlanCount);
+        AssertSameWeights(eager.Weights, compiled.Weights);
+    }
+
+    [Fact]
+    public void Clip_threshold_that_changes_between_steps_is_applied_as_eager_applies_it()
+    {
+        // The plan is configured unclipped on step 0; the threshold of every later call must still reach it.
+        static double Clip(int step) => step == 0 ? 0.0 : step < 4 ? 1e-3 : 0.0;
+        var eager = Run(compile: false, steps: 6, batchOf: _ => 8, clipOf: Clip);
+        var compiled = Run(compile: true, steps: 6, batchOf: _ => 8, clipOf: Clip);
+
+        Assert.Equal(6, compiled.FusedSteps);
         AssertSameWeights(eager.Weights, compiled.Weights);
     }
 

@@ -107,6 +107,7 @@ public static class CompiledTapeTrainingStep<T>
         internal (int OptType, double Lr, double B1, double B2, double Eps, double Wd)? configuredOptimizerConfig;
         internal double configuredL2;
         internal bool configuredL2AfterClip;
+        internal double configuredMaxGradNorm;
         internal long fusedStepCount;
         // The configured plan's optimizer step (1-based after its first Step), counted from configuration; -1 when it
         // is unknown (an imported checkpoint set it, or the last fused step ran a different plan).
@@ -460,6 +461,9 @@ public static class CompiledTapeTrainingStep<T>
 
     /// <summary>Whether the configured plan adds its L2 term after the gradient clip (PyTorch's order) rather than before.</summary>
     private static bool _configuredL2AfterClip { get => CurrentState.configuredL2AfterClip; set => CurrentState.configuredL2AfterClip = value; }
+
+    /// <summary>The global-norm clip threshold the configured plan applies (0 = none).</summary>
+    private static double _configuredMaxGradNorm { get => CurrentState.configuredMaxGradNorm; set => CurrentState.configuredMaxGradNorm = value; }
 
     /// <summary>
     /// Counter of successful fused-step executions on this thread. Exposed
@@ -1762,6 +1766,10 @@ public static class CompiledTapeTrainingStep<T>
                 InvokePlanMethod(s_continueOptimizerMethod, "ContinueOptimizerFrom", plan, switchedFrom);
                 _configuredPlan = plan;
                 isFirstStepForConfiguredPlan = compiledThisCall;
+                // The optimizer's link exports from the plan it was attached with; point it at the plan that now
+                // holds the moments, or a checkpoint written after the switch has no fused optimizer state.
+                if (eagerOptimizer is AiDotNet.Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> continued)
+                    AttachFusedOptimizerStateLink(plan, continued);
             }
             _shapeSwitchFrom = null;
             _retiringCache?.Invalidate();
@@ -1824,6 +1832,7 @@ public static class CompiledTapeTrainingStep<T>
                 // fused. Pass 0 to disable.
                 if (maxGradNorm > 0.0)
                     TrySetPlanMaxGradNorm(plan, maxGradNorm);
+                _configuredMaxGradNorm = maxGradNorm;
                 if (l2AfterClip)
                 {
                     // PyTorch's order: clip the loss gradient, then add the L2 term.
@@ -1860,6 +1869,14 @@ public static class CompiledTapeTrainingStep<T>
                 // handle the drift.
                 Fd("optimizer config drift between steps");
                 return false;
+            }
+
+            // The eager tape clips by the threshold of each call, so a threshold that changed since the plan was
+            // configured (or since the plan this one continues was) is applied before the step, 0 included.
+            if (!_configuredMaxGradNorm.Equals(maxGradNorm))
+            {
+                TrySetPlanMaxGradNorm(plan, maxGradNorm);
+                _configuredMaxGradNorm = maxGradNorm;
             }
 
             // The trace captured stochastic layer tensors by reference. A static replay
@@ -2007,6 +2024,15 @@ public static class CompiledTapeTrainingStep<T>
             optimizer.EnsureRestoredStateUsableByFusedPlan();
         }
 
+        AttachFusedOptimizerStateLink(plan, optimizer);
+        return imported;
+    }
+
+    /// <summary>Makes <paramref name="plan"/> the one <paramref name="optimizer"/> exports its fused state from and releases.</summary>
+    private static void AttachFusedOptimizerStateLink(
+        ICompiledTrainingPlan<T> plan,
+        AiDotNet.Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> optimizer)
+    {
         var state = CurrentState;
         optimizer.AttachFusedOptimizerState(new AiDotNet.Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>>.FusedOptimizerStateLink(
             export: () => ReferenceEquals(state.configuredPlan, plan) ? plan.ExportOptimizerState() : null,
@@ -2021,7 +2047,6 @@ public static class CompiledTapeTrainingStep<T>
                 }
                 finally { _currentState = previous; }
             }));
-        return imported;
     }
 
     private static void RefreshCompiledStochasticState(IReadOnlyList<ITrainableLayer<T>> layers)
