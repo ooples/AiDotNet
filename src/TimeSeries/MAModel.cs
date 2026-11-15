@@ -777,18 +777,15 @@ public partial class MAModel<T> : TimeSeriesModelBase<T>
             errors[t] = residuals[t];
         }
 
-        // Calculate variance starting after the initial q values
-        T sumSquaredResiduals = NumOps.Zero;
+        // Calculate variance starting after the initial q values, the sum of squares in double: in Half it passes
+        // 65504 long before the variance does.
         int effectiveN = n - q;
-
-        for (int t = q; t < n; t++)
-        {
-            sumSquaredResiduals = NumOps.Add(sumSquaredResiduals,
-                NumOps.Multiply(residuals[t], residuals[t]));
-        }
+        double sumSquaredResiduals = effectiveN > 0
+            ? TensorReductionHelper.SumOfSquaresAsDouble(Engine, residuals.Slice(q, effectiveN).AsTensor())
+            : 0.0;
 
         // Adjust for degrees of freedom
-        return NumOps.Divide(sumSquaredResiduals, NumOps.FromDouble(effectiveN));
+        return NumOps.FromDouble(sumSquaredResiduals / effectiveN);
     }
 
     /// <summary>

@@ -114,6 +114,9 @@ public static class CompiledTapeTrainingStep<T>
         internal int planOptimizerStep = -1;
         internal System.Collections.Generic.HashSet<AiDotNet.Tensors.Engines.Compilation.OptimizerType>? fusedUnavailableTypes;
         internal System.Exception? lastFallbackException;
+        // The last call declined because no compiled plan can replay the closure objective this step (see
+        // LastFallbackWasUnreplayableClosureStep).
+        internal bool lastFallbackUnreplayableClosureStep;
         internal object? mpPlan;
         internal int[]? mpKey;
         [AiDotNet.Attributes.Scratch] internal Tensor<float>? mpInput;
@@ -129,6 +132,7 @@ public static class CompiledTapeTrainingStep<T>
         // Plans replaying a closure objective, keyed by its traced signature (see ClosureObjectiveState).
         internal ClosureObjectiveState<T>? closureState;
     }
+
 
     /// <summary>
     /// Every compiled-training state of ONE owner (a model), one per layer set it trains. A GAN's discriminator and
@@ -506,6 +510,27 @@ public static class CompiledTapeTrainingStep<T>
     /// <summary>The compiled plan the last fused step configured (null if none), compared by reference: a session that
     /// verified one plan's updates numerically trusts its later replays, but not a plan compiled since.</summary>
     internal static object? ConfiguredPlanIdentity => _configuredPlan;
+
+    /// <summary>
+    /// Whether the last call declined because no compiled plan can replay the closure objective this step: its probe
+    /// aborted (the objective read its own forward on the host) or was unsignable, its data could not be copied into
+    /// the matching plan, or it drew a signature past the per-lifecycle cap. The configured plan itself is intact.
+    /// </summary>
+    internal static bool LastFallbackWasUnreplayableClosureStep => CurrentState.lastFallbackUnreplayableClosureStep;
+
+    /// <summary>
+    /// Applies gradients computed on the eager tape through the configured plan's own optimizer (with its clip and L2
+    /// term), for a step no plan can replay: the optimizer's moments, step count and schedule stay in the plan, so
+    /// the run continues as one optimizer that saw those gradients would. False when no configured plan can.
+    /// </summary>
+    internal static bool TryApplyGradientsThroughConfiguredPlan(IReadOnlyDictionary<Tensor<T>, Tensor<T>> gradients)
+    {
+        if (_configuredPlan is not AiDotNet.Tensors.Engines.Compilation.CompiledTrainingPlan<T> plan
+            || !plan.TryApplyGradients(gradients))
+            return false;
+        if (CurrentState.planOptimizerStep >= 0) CurrentState.planOptimizerStep++;
+        return true;
+    }
 
     internal static bool? ConfiguredPlanTrainsLiveParameters(IEnumerable<Tensor<T>> liveParameters)
     {
@@ -1107,9 +1132,7 @@ public static class CompiledTapeTrainingStep<T>
         object? stateKey = null,
         // Add the L2 term after the gradient clip (PyTorch's order) instead of before it.
         bool l2AfterClip = false,
-        // A closure objective: the step's loss, built with its per-step data inside the closure. When set, forward and
-        // computeLoss are not called for the compiled step (input/target may be placeholders); each step re-probes the
-        // closure and replays a plan only when its traced structure matches (see ClosureObjectiveGuard).
+        // The closure owns per-step data and is probed before selecting or compiling its plan.
         Func<Tensor<T>>? closureObjective = null)
     {
         if (layers is null) throw new ArgumentNullException(nameof(layers));
@@ -1351,6 +1374,7 @@ public static class CompiledTapeTrainingStep<T>
         // call. (Cleared on entry, not on success, so a successful step doesn't
         // leak a stale exception from earlier.)
         _lastFallbackException = null;
+        CurrentState.lastFallbackUnreplayableClosureStep = false;
 
         if (!TensorCodecOptions.Current.EnableCompilation) { Fd("EnableCompilation=false"); return false; }
         // Fused optimizer kernels support float and double on the Tensors
@@ -1497,7 +1521,12 @@ public static class CompiledTapeTrainingStep<T>
             // run; only stochastic ops short-circuit. Restore training mode
             // before the trace lambda fires so the actual training forward
             // sees the same RNG state the eager path would.
-            if (_cachedParameters is null)
+            // A closure objective is more than a forward (its own draws, a nested tape): its caller sized the lazy layers
+            // already (NeuralNetworkBase.TrainCustomTapeStep), so it is not run an extra time here.
+            // With no layers the parameters are exactly the caller's extras (DDPM's U-Net), collected before this step,
+            // so a sizing forward cannot change them; it only left a batch of eval-mode scratch (1.1 GB on DDPM at
+            // batch 64) on the device for the model's life.
+            if (_cachedParameters is null && closureObjective is null && layers.Count > 0)
             {
                 // TryStepWithFusedOptimizer is the training entry — every layer
                 // is in training mode here by precondition (NeuralNetworkBase
@@ -1699,6 +1728,7 @@ public static class CompiledTapeTrainingStep<T>
             // activation storage, ~half the activation VRAM). Distinct from AIDOTNET_FP16_ACTIVATIONS, which
             // routes to the separate, capture-incompatible MixedPrecisionCompiledPlan handled above. The scope
             // is active only during the (once-per-shape) trace+compile; Step() replays without it.
+
             ICompiledTrainingPlan<T> plan;
             bool compiledThisCall = false;
             if (closureObjective is not null)

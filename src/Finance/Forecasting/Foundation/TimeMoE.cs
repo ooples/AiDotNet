@@ -314,13 +314,7 @@ public partial class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
     public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals)
     {
         var metrics = new Dictionary<string, T>();
-        var (mse, mae, count) = SumSquaredAndAbsoluteError(predictions, actuals);
-
-        if (count > 0)
-        {
-            mse = NumOps.Divide(mse, NumOps.FromDouble(count));
-            mae = NumOps.Divide(mae, NumOps.FromDouble(count));
-        }
+        var (mse, mae, count) = MeanSquaredAndAbsoluteError(predictions, actuals);
 
         metrics["MSE"] = mse;
         metrics["MAE"] = mae;
@@ -459,8 +453,17 @@ public partial class TimeMoE<T> : TimeSeriesFoundationModelBase<T>
         var mean = Engine.TensorDivideScalar(Engine.ReduceSum(rows, new[] { 1 }, true), count);
         var centered = Engine.TensorSubtract(rows, Engine.TensorBroadcastTo(mean, rows._shape));
         var variance = Engine.TensorDivideScalar(Engine.ReduceSum(Engine.TensorMultiply(centered, centered), new[] { 1 }, true), count);
+        var std = Engine.TensorSqrt(Engine.TensorAddScalar(variance, NumOps.FromDouble(InstanceVarianceEpsilon)));
+        if ((!TensorReductionHelper.AllFinite(Engine, mean) || !TensorReductionHelper.AllFinite(Engine, std))
+            && TensorReductionHelper.AllFinite(Engine, rows))
+        {
+            // In Half the sum of squared deviations passes 65504 long before the std does, which made the std
+            // infinite: take the statistics in units of each row's max |x| instead.
+            (_, mean, std) = TensorReductionHelper.StandardizeRescaled(Engine, rows, new[] { 1 }, InstanceVarianceEpsilon, seqLen);
+        }
+
         means = mean.ToArray();
-        stds = Engine.TensorSqrt(Engine.TensorAddScalar(variance, NumOps.FromDouble(InstanceVarianceEpsilon))).ToArray();
+        stds = std.ToArray();
     }
 
     /// <summary>

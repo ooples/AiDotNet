@@ -131,7 +131,7 @@ public partial class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOp
     protected override void InitializeAdaptiveParameters()
     {
         base.InitializeAdaptiveParameters();
-        CurrentLearningRate = NumOps.FromDouble(_options.InitialLearningRate);
+        ResetLearningRateToSchedule();
         _iteration = 0;
     }
 

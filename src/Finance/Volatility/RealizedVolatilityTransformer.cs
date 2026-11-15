@@ -362,22 +362,20 @@ public partial class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, I
     /// </remarks>
     public Tensor<T> ComputeCorrelationMatrix(Tensor<T> returns)
     {
-        var covariance = ComputeCovarianceMatrix(returns);
-        int assets = covariance.Shape[0];
-        var data = new T[assets * assets];
-
+        // From the covariance in double: in Half a variance past 65504 (a std past 256) made the denominator
+        // infinite, so the correlation was 0.
+        var covariance = CovarianceAsDouble(returns, out int assets);
+        var data = new double[assets * assets];
         for (int i = 0; i < assets; i++)
         {
-            T varI = covariance.Data.Span[i * assets + i];
             for (int j = 0; j < assets; j++)
             {
-                T varJ = covariance.Data.Span[j * assets + j];
-                T denom = NumOps.Multiply(NumOps.Sqrt(varI), NumOps.Sqrt(varJ));
-                data[(i * assets) + j] = NumOps.Divide(covariance.Data.Span[(i * assets) + j], denom);
+                data[(i * assets) + j] = covariance[(i * assets) + j]
+                    / (Math.Sqrt(covariance[(i * assets) + i]) * Math.Sqrt(covariance[(j * assets) + j]));
             }
         }
 
-        return new Tensor<T>(new[] { assets, assets }, new Vector<T>(data));
+        return new Tensor<double>(new[] { assets, assets }, new Vector<double>(data)).Cast<T>();
     }
 
     /// <summary>
@@ -388,37 +386,54 @@ public partial class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, I
     /// </remarks>
     public Tensor<T> ComputeCovarianceMatrix(Tensor<T> returns)
     {
-        GetReturnMatrixShape(returns, out int samples, out int assets);
-        var means = new T[assets];
+        var covariance = CovarianceAsDouble(returns, out int assets);
+        return new Tensor<double>(new[] { assets, assets }, new Vector<double>(covariance)).Cast<T>();
+    }
 
+    /// <summary>
+    /// The sample covariance matrix of the returns, row-major [assets, assets], in double.
+    /// </summary>
+    /// <remarks>
+    /// Every sum is taken in double: in Half the sum of squared deviations of 40 returns near 0.1 apart is fine, but
+    /// of price-scale series (or 40 values of 50) it passes 65504 long before the covariance does, and the infinite
+    /// sum made the covariance infinite. Each asset's mean is <c>SumAsDouble</c> / samples, the deviations are taken
+    /// in T (they fit wherever the returns do), and each entry is <c>DotAsDouble</c> of two deviation columns.
+    /// </remarks>
+    private double[] CovarianceAsDouble(Tensor<T> returns, out int assets)
+    {
+        GetReturnMatrixShape(returns, out int samples, out assets);
+        var engine = Engine;
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var matrix = engine.Reshape(returns.Contiguous(), new[] { samples, assets });
+        var means = new double[assets];
         for (int a = 0; a < assets; a++)
-        {
-            T sum = NumOps.Zero;
-            for (int s = 0; s < samples; s++)
-                sum = NumOps.Add(sum, GetReturnAt(returns, s, a, assets));
-            means[a] = NumOps.Divide(sum, NumOps.FromDouble(samples));
-        }
+            means[a] = TensorReductionHelper.SumAsDouble(engine, Column(engine, matrix, a, samples)) / samples;
 
-        var cov = new T[assets * assets];
+        var meanRow = new Tensor<double>(new[] { 1, assets }, new Vector<double>(means)).Cast<T>();
+        var centered = engine.TensorSubtract(matrix, engine.TensorBroadcastTo(meanRow, new[] { samples, assets }));
+        var deviations = new Tensor<T>[assets];
+        for (int a = 0; a < assets; a++)
+            deviations[a] = Column(engine, centered, a, samples);
+
+        var covariance = new double[assets * assets];
         double denom = Math.Max(1, samples - 1);
-
         for (int i = 0; i < assets; i++)
         {
-            for (int j = 0; j < assets; j++)
+            covariance[(i * assets) + i] = TensorReductionHelper.SumOfSquaresAsDouble(engine, deviations[i]) / denom;
+            for (int j = i + 1; j < assets; j++)
             {
-                T sum = NumOps.Zero;
-                for (int s = 0; s < samples; s++)
-                {
-                    T xi = NumOps.Subtract(GetReturnAt(returns, s, i, assets), means[i]);
-                    T xj = NumOps.Subtract(GetReturnAt(returns, s, j, assets), means[j]);
-                    sum = NumOps.Add(sum, NumOps.Multiply(xi, xj));
-                }
-                cov[(i * assets) + j] = NumOps.Divide(sum, NumOps.FromDouble(denom));
+                double value = TensorReductionHelper.DotAsDouble(engine, deviations[i], deviations[j]) / denom;
+                covariance[(i * assets) + j] = value;
+                covariance[(j * assets) + i] = value;
             }
         }
 
-        return new Tensor<T>(new[] { assets, assets }, new Vector<T>(cov));
+        return covariance;
     }
+
+    /// <summary>Column <paramref name="index"/> of a [samples, assets] matrix, as a contiguous rank-1 tensor.</summary>
+    private static Tensor<T> Column(IEngine engine, Tensor<T> matrix, int index, int samples)
+        => engine.Reshape(engine.TensorSlice(matrix, new[] { 0, index }, new[] { samples, 1 }).Contiguous(), new[] { samples });
 
     /// <summary>
     /// Calculates realized volatility from high-frequency returns.
@@ -428,22 +443,19 @@ public partial class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, I
     /// </remarks>
     public Tensor<T> CalculateRealizedVolatility(Tensor<T> highFrequencyReturns)
     {
+        // sqrt(mean of squared returns) per asset, the sum of squares in double: in Half it passes 65504 long before
+        // the volatility does, and the infinite sum made the volatility infinite.
         GetReturnMatrixShape(highFrequencyReturns, out int samples, out int assets);
-        var data = new T[assets];
-
+        var engine = Engine;
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var matrix = engine.Reshape(highFrequencyReturns.Contiguous(), new[] { samples, assets });
+        var data = new double[assets];
         for (int a = 0; a < assets; a++)
         {
-            T sumSq = NumOps.Zero;
-            for (int s = 0; s < samples; s++)
-            {
-                T r = GetReturnAt(highFrequencyReturns, s, a, assets);
-                sumSq = NumOps.Add(sumSq, NumOps.Multiply(r, r));
-            }
-            T meanSq = NumOps.Divide(sumSq, NumOps.FromDouble(samples));
-            data[a] = NumOps.Sqrt(meanSq);
+            data[a] = Math.Sqrt(TensorReductionHelper.SumOfSquaresAsDouble(engine, Column(engine, matrix, a, samples)) / samples);
         }
 
-        return new Tensor<T>(new[] { assets }, new Vector<T>(data));
+        return new Tensor<double>(new[] { assets }, new Vector<double>(data)).Cast<T>();
     }
 
     /// <summary>
@@ -551,25 +563,6 @@ public partial class RealizedVolatilityTransformer<T> : FinancialModelBase<T>, I
         throw new ArgumentException("Returns tensor must be 2D or 3D.");
     }
 
-    /// <summary>
-    /// Reads a return value at the given sample and asset index.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This handles both 2D and 3D return tensors.</para>
-    /// </remarks>
-    private static T GetReturnAt(Tensor<T> returns, int sampleIndex, int assetIndex, int assets)
-    {
-        if (returns.Rank == 2)
-        {
-            return returns.Data.Span[(sampleIndex * assets) + assetIndex];
-        }
-
-        int seqLen = returns.Shape[1];
-        int batch = sampleIndex / seqLen;
-        int step = sampleIndex % seqLen;
-        int idx = (batch * seqLen * assets) + (step * assets) + assetIndex;
-        return returns.Data.Span[idx];
-    }
 
     #endregion
 }

@@ -703,6 +703,41 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         if (_epochLrSchedule is not null) _epochLrSchedule.LearningRate = learningRate;
     }
 
+    /// <summary>
+    /// Restores the learning rate to the schedule's current rate (the initial rate when no scheduler is set), in both
+    /// learning-rate fields, for an optimizer's <see cref="OptimizerBase{T, TInput, TOutput}.InitializeAdaptiveParameters"/>.
+    /// </summary>
+    /// <remarks>
+    /// Those overrides used to assign <c>CurrentLearningRate = InitialLearningRate</c>. Called from the constructor,
+    /// after this base had synced the rate to the scheduler, that put a warmup schedule's first step at the full rate
+    /// instead of its starting rate (0 for WSD and linear warmup), and left <c>CurrentLearningRate</c> (the eager step)
+    /// disagreeing with <see cref="GetCurrentLearningRate"/> (the fused step).
+    /// </remarks>
+    private protected void ResetLearningRateToSchedule()
+        => SetLearningRate(_learningRateScheduler?.CurrentLearningRate ?? GradientOptions.InitialLearningRate);
+
+    /// <summary>
+    /// The optimizer's step position: its batch counter, learning rate, last schedule metric and the schedule's own
+    /// state. A fused step advances these (<see cref="OnBatchEnd"/>) without touching the eager moments, so restoring
+    /// them puts the optimizer back where it was before the fused steps, for the fused session to redo them eagerly.
+    /// </summary>
+    internal object CaptureStepPosition()
+        => new StepPosition(_currentStep, _currentLearningRate, _lastSchedulerMetric,
+            _learningRateScheduler?.GetState() is { } state ? new Dictionary<string, object>(state) : null);
+
+    /// <summary>Restores a position <see cref="CaptureStepPosition"/> returned.</summary>
+    internal void RestoreStepPosition(object position)
+    {
+        var p = (StepPosition)position;
+        _currentStep = p.Step;
+        _lastSchedulerMetric = p.SchedulerMetric;
+        if (p.SchedulerState is not null) _learningRateScheduler?.LoadState(new Dictionary<string, object>(p.SchedulerState));
+        SetLearningRate(p.LearningRate);
+    }
+
+    private sealed record StepPosition(int Step, double LearningRate, double SchedulerMetric,
+        Dictionary<string, object>? SchedulerState);
+
     #region DataLoader Integration
 
     /// <summary>

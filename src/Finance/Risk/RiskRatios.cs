@@ -92,10 +92,11 @@ public class RiskRatios<T> : IRiskRatioCalculator<T>
         // Downside: the excesses that are not positive.
         var downside = engine.TensorWhere(
             engine.TensorGreaterThan(excess, NumOps.Zero), engine.TensorZerosLike(excess), excess);
-        var downsideSq = engine.TensorSumOfSquares(downside);
+        // Summed in double, so a Half sum of squares past 65504 does not make the deviation infinite.
+        double downsideSq = TensorReductionHelper.SumOfSquaresAsDouble(engine, downside);
 
         mean = NumOps.Divide(mean, n);
-        var downsideDev = NumOps.Sqrt(NumOps.Divide(downsideSq, n));
+        var downsideDev = NumOps.FromDouble(Math.Sqrt(downsideSq / returns.Count));
         if (!NumOps.GreaterThan(downsideDev, NumOps.Zero))
         {
             return NumOps.Zero;
@@ -147,10 +148,11 @@ public class RiskRatios<T> : IRiskRatioCalculator<T>
         var engine = AiDotNetEngine.Current;
         var excess = engine.TensorSubtractScalar(ToTensor(returns), riskFree);
         var mean = NumOps.Divide(engine.TensorSum(excess), NumOps.FromDouble(returns.Count));
-        var sse = engine.TensorSumOfSquares(engine.TensorSubtractScalar(excess, mean));
+        // Summed in double, so a Half sum of squares past 65504 does not make the deviation infinite.
+        double sse = TensorReductionHelper.SumOfSquaresAsDouble(engine, engine.TensorSubtractScalar(excess, mean));
 
         // Sample standard deviation (n-1) — unbiased for a return sample.
-        var std = NumOps.Sqrt(NumOps.Divide(sse, NumOps.FromDouble(returns.Count - 1)));
+        var std = NumOps.FromDouble(Math.Sqrt(sse / (returns.Count - 1)));
         return (mean, std);
     }
 

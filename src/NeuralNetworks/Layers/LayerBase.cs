@@ -5684,8 +5684,14 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         //     IsTrainingMode is also true, so checking training-mode alone
         //     isn't sufficient.
         //
+        //   - A compiled-plan trace (GraphMode): the forward is recorded into a plan whose backward runs the
+        //     engine's own backward functions, never ApplyActivationDerivativeFromOutput. DDPM's trace pushed one
+        //     batch-sized pre-activation per activating layer and kept them for the model's life: about 1.4 GB of
+        //     a 6.7 GB step at batch 64.
+        //
         // Only push when we know the eager backward will drain it: training
-        // mode ON, not capturing, not inside an inference or no-grad scope, no tape recording.
+        // mode ON, not capturing, not tracing a compiled plan, not inside an inference or no-grad scope, no tape
+        // recording.
         // The tape path already preserves the pre-activation reference through its
         // recorded GradFn closures; the capture path encodes it into the graph node;
         // an InferenceMode scope guarantees no backward at all — all three make the
@@ -5694,6 +5700,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         bool eagerBackwardWillRun =
             IsTrainingMode
             && !IsCapturing
+            && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
             && !InferenceMode.IsActive
             && !NoGradScope<T>.IsSuppressed
             && GradientTape<T>.Current is null;

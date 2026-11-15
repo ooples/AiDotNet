@@ -75,8 +75,9 @@ public class SharpeRatioPortfolioObjective<T>
         var returns = Tensor<T>.FromVector(portfolioReturns);
         T mean = Engine.TensorMean(returns);
         var centred = Engine.TensorSubtractScalar(returns, mean);
-        T variance = NumOps.Divide(Engine.TensorSumOfSquares(centred), NumOps.FromDouble(portfolioReturns.Length));
-        return (mean, NumOps.Sqrt(variance));
+        // The variance in double, so a Half sum of squares past 65504 does not make the volatility infinite.
+        double variance = TensorReductionHelper.SumOfSquaresAsDouble(Engine, centred) / portfolioReturns.Length;
+        return (mean, NumOps.FromDouble(Math.Sqrt(variance)));
     }
 
     /// <summary>

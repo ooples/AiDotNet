@@ -413,9 +413,10 @@ internal sealed class InformerNetwork<T>
         var normed = _engine.Reshape(l.Norm.Forward(_engine.Reshape(conv, new[] { batch * length, d })), new[] { batch, length, d });
         var activated = _engine.ELU(normed);
         int pooled = (length - 1) / 2 + 1;
-        // Padding never wins the max: ELU outputs are above −1.
+        // Padding never wins the max: ELU outputs are above −1. It has to be finite in every element type, because
+        // the one-hot pick below multiplies it by 0: −1e30 is −∞ in Half, and 0 · −∞ made every pooled value NaN.
         var padding = new Tensor<T>(new[] { batch, 1, d });
-        padding.Fill(NumOps.FromDouble(-1e30));
+        padding.Fill(NumOps.FromDouble(-2.0));
         var padded = _engine.TensorConcatenate(new[] { padding, activated, padding }, 1);                       // [B, L + 2, D]
         var windows = new Tensor<T>[3];
         for (int w = 0; w < 3; w++)
