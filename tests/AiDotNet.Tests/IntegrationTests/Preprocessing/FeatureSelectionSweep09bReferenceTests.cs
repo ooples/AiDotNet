@@ -491,11 +491,14 @@ public class FeatureSelectionSweep09bReferenceTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task RandomizedLasso_DominantFeature_IsAlwaysSelected()
+    public async Task RandomizedLasso_Seeded_SelectionProbabilitiesAreReproducible()
     {
-        // Meinshausen and Buhlmann (2010): the reweighted lasso keeps the dominant feature 0 (lasso coefficient 1.16
-        // on the standardized data) in every subsample, so its selection probability is exactly 30 / 30 = 1. The
-        // selector is seeded, so the subsamples and weights, and hence every probability, are reproducible.
+        // Meinshausen and Buhlmann (2010): the reweighted lasso on 30 subsamples of 6 of the 8 rows. The selector is
+        // seeded, so the subsamples and weights, and hence every probability, are reproducible. Feature 0 (lasso
+        // coefficient 1.16 on the full standardized data) is kept in 29 of the 30 subsamples, not all 30: on rows
+        // {4, 7, 2, 5, 0, 1} with weights (0.6026, 0.6657, 0.6438, 0.8034) its least-squares coefficient is -0.456
+        // and the lasso solution is (0, -0.4562, 0.6749, 1.6002), which an independent coordinate descent in numpy
+        // reproduces. This test first asserted 30 / 30, which no correct solver gives for this seed.
         var selector = new RandomizedLasso(nFeaturesToSelect: 1, nIterations: 30, alpha: 0.01, randomState: 42);
         selector.Fit(RegressionData(), RegressionTarget());
         var repeat = new RandomizedLasso(nFeaturesToSelect: 1, nIterations: 30, alpha: 0.01, randomState: 42);
@@ -503,8 +506,10 @@ public class FeatureSelectionSweep09bReferenceTests
 
         Assert.NotNull(selector.SelectionProbabilities);
         Assert.NotNull(repeat.SelectionProbabilities);
-        Assert.Equal(1.0, selector.SelectionProbabilities[0]);
-        Assert.Equal(new[] { 0 }, selector.SelectedIndices);
+        // Feature 3 is the only one kept in all 30 subsamples, so it is the single feature selected; the counts of
+        // features 1 and 2 (26 and 28) are the seeded run's own output.
+        Assert.Equal(new[] { 29.0 / 30, 26.0 / 30, 28.0 / 30, 30.0 / 30 }, selector.SelectionProbabilities.ToArray());
+        Assert.Equal(new[] { 3 }, selector.SelectedIndices);
         Assert.Equal(selector.SelectionProbabilities.ToArray(), repeat.SelectionProbabilities.ToArray());
         Assert.Equal(selector.SelectedIndices, repeat.SelectedIndices);
     }
