@@ -84,7 +84,8 @@ public sealed class TtsTrainingSample<T>
 
     /// <summary>
     /// The utterance's text, for models that run their own front end and text encoders on it during training (MeloTTS
-    /// reads its phonemes, tones and BERT features from the sentence); models trained on token ids ignore it.
+    /// reads its phonemes, tones and BERT features from the sentence). OuteTTS uses it as the lossless transcript
+    /// when supplied; otherwise OuteTTS decodes Tokens.
     /// </summary>
     public string? Text { get; init; }
 }

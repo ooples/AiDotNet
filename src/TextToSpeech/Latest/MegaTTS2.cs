@@ -412,36 +412,46 @@ public partial class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
             }
             return cache;
         }
-        var targetCache = Prefill(target);
-        var styleCache = style is null ? null : Prefill(style);
-        T gamma = NumOps.FromDouble(style is null ? 0 : _options.ProsodyInterpolation);
-        int n = pooled.Shape[0], h = pooled.Shape[1], v = _options.Codes + 1;
-        var codes = new int[n];
-        int token = Network.StartToken;
-        var startMask = new bool[v];
-        startMask[0] = true;
-        Tensor<T> Probabilities(MegaTts3DurationCache<T> cache, Tensor<T> row)
+        // Widen before the exponential: widening only in DrawPosition cannot recover probabilities that
+        // already underflowed in Half, especially after excluding the much more likely start token.
+        return TtsSampling<T>.SumsInFloat ? Sample<float>() : Sample<T>();
+
+        int[] Sample<TProbability>()
         {
-            var logits = Engine.Reshape(Engine.TensorSlice(model.Extend(new[] { token }, row, cache), new[] { 0, 0 }, new[] { 1, v }), new[] { v });
-            var e = Engine.TensorExp(Engine.TensorAddScalar(logits, NumOps.Negate(Engine.TensorMaxValue(logits))));
-            return Engine.TensorDivideScalar(e, Engine.TensorSum(e));
-        }
-        T keep = NumOps.Subtract(NumOps.One, gamma);
-        for (int i = 0; i < n; i++)
-        {
-            var row = Engine.TensorSlice(pooled, new[] { i, 0 }, new[] { 1, h });
-            var p = Probabilities(targetCache, row);
-            if (styleCache is not null)
+            var targetCache = Prefill(target);
+            var styleCache = style is null ? null : Prefill(style);
+            var ops = MathHelper.GetNumericOperations<TProbability>();
+            TProbability gamma = ops.FromDouble(style is null ? 0 : _options.ProsodyInterpolation);
+            TProbability keep = ops.Subtract(ops.One, gamma);
+            int n = pooled.Shape[0], h = pooled.Shape[1], v = _options.Codes + 1;
+            var codes = new int[n];
+            int token = Network.StartToken;
+            var startMask = new bool[v];
+            startMask[0] = true;
+            Tensor<TProbability> Probabilities(MegaTts3DurationCache<T> cache, Tensor<T> row)
             {
-                var q = Probabilities(styleCache, row);
-                p = Engine.TensorAdd(Engine.TensorMultiplyScalar(p, keep), Engine.TensorMultiplyScalar(q, gamma));
+                var output = Engine.Reshape(Engine.TensorSlice(model.Extend(new[] { token }, row, cache), new[] { 0, 0 }, new[] { 1, v }), new[] { v });
+                var logits = new Tensor<T>(output.ToArray(), new[] { v }).Cast<TProbability>();
+                var e = Engine.TensorExp(Engine.TensorAddScalar(logits, ops.Negate(Engine.TensorMaxValue(logits))));
+                return Engine.TensorDivideScalar(e, Engine.TensorSum(e));
             }
-            p = TtsSampling<T>.Fill(p, startMask, NumOps.Zero);
-            observeDistribution?.Invoke(p);
-            codes[i] = TopK(p, _options.TopK, random) - 1;
-            token = codes[i] + 1;
+            for (int i = 0; i < n; i++)
+            {
+                var row = Engine.TensorSlice(pooled, new[] { i, 0 }, new[] { 1, h });
+                var p = Probabilities(targetCache, row);
+                if (styleCache is not null)
+                {
+                    var q = Probabilities(styleCache, row);
+                    p = Engine.TensorAdd(Engine.TensorMultiplyScalar(p, keep), Engine.TensorMultiplyScalar(q, gamma));
+                }
+                p = TtsSampling<TProbability>.Fill(p, startMask, ops.Zero);
+                // This copy is observational; selection continues to use the widened probabilities.
+                observeDistribution?.Invoke(p.Cast<T>());
+                codes[i] = MegaTTS2<TProbability>.TopK(p, _options.TopK, random) - 1;
+                token = codes[i] + 1;
+            }
+            return codes;
         }
-        return codes;
     }
 
     // Top-k random sampling (Fan et al. 2018): the k most probable tokens, renormalized, one draw.

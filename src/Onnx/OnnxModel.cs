@@ -253,7 +253,7 @@ public class OnnxModel<T> : IOnnxModel<T>
     /// <param name="inputs">The inputs carried in T.</param>
     /// <param name="integerInputs">The integer inputs.</param>
     /// <returns>The outputs, as ints.</returns>
-    public IReadOnlyDictionary<string, Tensor<int>> RunToIntegers(
+    internal IReadOnlyDictionary<string, Tensor<int>> RunToIntegers(
         IReadOnlyDictionary<string, Tensor<T>> inputs,
         IReadOnlyDictionary<string, Tensor<int>> integerInputs)
     {
