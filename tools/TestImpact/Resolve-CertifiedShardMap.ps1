@@ -349,6 +349,15 @@ if ($SelfTest) {
     Assert-True ($result.Status -eq [CertifiedShardMapResolutionStatus]::CertificateUnavailable) `
         'a typed Certified decision was accepted without its certificate artifact'
 
+    # The audit ran (a RevokedMiss may have been recorded) but its decision could not be published or read.
+    $result = Resolve-CertifiedShardMapRun -Runs @(
+        (New-Run 400 'failure' '2026-09-08T04:00:00Z'),
+        (New-Run 100 'success' '2026-09-08T01:00:00Z')
+    ) -DownloadDecision { param($RunId) if ($RunId -eq 400) { [pscustomobject]@{ retrievalFailed = $true } } } `
+      -DownloadCertificate { param($RunId) return $true }
+    Assert-True ($result.Status -eq [CertifiedShardMapResolutionStatus]::UnclassifiedFailure -and $result.RunId -eq 400) `
+        'an executed audit whose decision was not published let an older certificate stand in'
+
     if ($failures.Count -gt 0) {
         Write-Host 'Resolve-CertifiedShardMap self-test FAILED:'
         foreach ($failure in $failures) { Write-Host "  - $failure" }
@@ -390,7 +399,16 @@ try {
         $names = @(& gh api "repos/$Repository/actions/runs/$RunId/artifacts" --paginate `
             --jq '.artifacts[] | select(.expired | not) | .name' 2>$null)
         if ($LASTEXITCODE -ne 0) { return [pscustomobject]@{ retrievalFailed = $true } }
-        if ($names -cnotcontains 'shard-map-audit-decision') { return $null }
+        if ($names -cnotcontains 'shard-map-audit-decision') {
+            # No decision artifact. That is confirmed absence only when the audit never ran: an audit that
+            # executed and then failed to publish (or whose artifact expired) may have recorded a RevokedMiss.
+            $audit = @(& gh api "repos/$Repository/actions/runs/$RunId/jobs" --paginate `
+                --jq '.jobs[].steps[]? | select(.name == "Audit selection against the source run") | .conclusion // "running"' 2>$null)
+            if ($LASTEXITCODE -ne 0) { return [pscustomobject]@{ retrievalFailed = $true } }
+            $executed = @($audit | Where-Object { $_ -cne 'skipped' })
+            if ($executed.Count -gt 0) { return [pscustomobject]@{ retrievalFailed = $true } }
+            return $null
+        }
         & gh run download $RunId --repo $Repository --name shard-map-audit-decision `
             --dir $directory *> $null
         if ($LASTEXITCODE -ne 0) { return [pscustomobject]@{ retrievalFailed = $true } }

@@ -21,6 +21,9 @@ It never influences the matrix: it only reads the decision files. Missing or mal
 .PARAMETER EffectiveFile      type-impact-effective.json: what actually ran after Select-AffectedTests post-processing.
 .PARAMETER MapResolutionFile  map-resolution.json from Resolve-CertifiedShardMap.ps1: which certified map was used, its age,
                               and whether it stands in for newer map runs that failed.
+.PARAMETER RollingComparisonFile  rolling-comparison.json from Invoke-RollingSelection.ps1 (TEST_IMPACT_ROLLING_MAP shadow or on):
+                              what the weekly map and the rolling map each selected, and which decided. Absent, the report
+                              is exactly the report without it.
 .PARAMETER SummaryFile        Markdown destination; defaults to GITHUB_STEP_SUMMARY.
 .PARAMETER ReportFile         JSON report destination.
 #>
@@ -34,6 +37,7 @@ param(
     [Parameter(ParameterSetName = 'Report')] [string] $TypeImpactPlanFile = '',
     [Parameter(ParameterSetName = 'Report')] [string] $EffectiveFile = '',
     [Parameter(ParameterSetName = 'Report')] [string] $MapResolutionFile = '',
+    [Parameter(ParameterSetName = 'Report')] [string] $RollingComparisonFile = '',
     [Parameter(ParameterSetName = 'Report')] [string] $SummaryFile = $env:GITHUB_STEP_SUMMARY,
     [Parameter(ParameterSetName = 'Report')] [string] $ReportFile = '',
     [Parameter(Mandatory, ParameterSetName = 'SelfTest')] [switch] $SelfTest
@@ -173,6 +177,55 @@ function New-SelectionReport($Selection, [int] $Total, [int] $FinalCount, [bool]
     }
 }
 
+function ConvertTo-RollingMarkdown($Rolling) {
+    # Both selections side by side, which one decided the matrix, and every shard they disagree on.
+    $sb = [System.Text.StringBuilder]::new()
+    $comparison = Get-Prop $Rolling 'comparison'
+    $anchor = Get-Prop $comparison 'anchor'
+    $rollingSide = Get-Prop $comparison 'rolling'
+    [void] $sb.AppendLine("#### Rolling coverage map ($([string] (Get-Prop $Rolling 'mode')) mode)")
+    [void] $sb.AppendLine()
+    $decider = if ([string] (Get-Prop $Rolling 'decides') -ceq 'rolling') { 'the rolling map' } else { 'the certified weekly map' }
+    [void] $sb.AppendLine("**Decided by $decider.** $(Format-Cell ([string] (Get-Prop $Rolling 'reason')))")
+    if ($null -eq $rollingSide) {
+        [void] $sb.AppendLine()
+        [void] $sb.AppendLine("No rolling selection to compare: $(Format-Cell ([string] (Get-Prop $Rolling 'rollingProblem'))). The weekly map selected $($anchor.shardCount) shard(s).")
+        return $sb.ToString()
+    }
+    function Format-Matrix($Side) { if ($Side.escalated) { "full matrix ($($Side.shardCount))" } else { "$($Side.shardCount)" } }
+    [void] $sb.AppendLine()
+    [void] $sb.AppendLine('| | Weekly map | Rolling map |'); [void] $sb.AppendLine('| --- | ---: | ---: |')
+    [void] $sb.AppendLine("| Shards selected | $(Format-Matrix $anchor) | $(Format-Matrix $rollingSide) |")
+    $dropped = @(Get-Prop $comparison 'droppedByRolling' | Where-Object { $_ })
+    $added = @(Get-Prop $comparison 'addedByRolling' | Where-Object { $_ })
+    [void] $sb.AppendLine("| Selected by both | $([int] (Get-Prop $comparison 'inBoth')) | $([int] (Get-Prop $comparison 'inBoth')) |")
+    [void] $sb.AppendLine("| Selected only by this map | $($dropped.Count) | $($added.Count) |")
+    $layers = @(Get-Prop (Get-Prop $rollingSide 'layers') 'layers' | Where-Object { $_ })
+    if ($layers.Count -gt 0) {
+        [void] $sb.AppendLine()
+        [void] $sb.AppendLine("The rolling map holds $($layers.Count) measured commit(s); the change was translated to each one separately.")
+        [void] $sb.AppendLine(); [void] $sb.AppendLine('| Measured at | Shards | Selected | Files changed since |'); [void] $sb.AppendLine('| --- | ---: | ---: | ---: |')
+        foreach ($layer in $layers) {
+            $selected = if ($layer.escalated) { "all $($layer.shards) (cannot be bounded here)" } else { "$($layer.selected)" }
+            [void] $sb.AppendLine("| ``$(([string] $layer.sha).Substring(0, [Math]::Min(8, ([string] $layer.sha).Length)))`` | $($layer.shards) | $selected | $($layer.changedSinceMeasured) |")
+        }
+    }
+    foreach ($group in @(@{ Title = 'Shards the rolling map would not run'; Names = $dropped }, @{ Title = 'Shards only the rolling map runs'; Names = $added })) {
+        if ($group.Names.Count -eq 0) { continue }
+        [void] $sb.AppendLine()
+        [void] $sb.AppendLine("<details><summary>$($group.Title) ($($group.Names.Count))</summary>")
+        [void] $sb.AppendLine()
+        foreach ($name in @($group.Names | Select-Object -First $MaxRows)) { [void] $sb.AppendLine("- $(Format-Cell $name)") }
+        if ($group.Names.Count -gt $MaxRows) { [void] $sb.AppendLine("- ... and $($group.Names.Count - $MaxRows) more") }
+        [void] $sb.AppendLine(); [void] $sb.AppendLine('</details>')
+    }
+    if ([string] (Get-Prop $Rolling 'decides') -cne 'rolling' -and $dropped.Count -gt 0) {
+        [void] $sb.AppendLine()
+        [void] $sb.AppendLine('Every shard the rolling map would not run still runs here. If one fails, the test-analysis job names it (rolling-shadow-outcome).')
+    }
+    return $sb.ToString()
+}
+
 function ConvertTo-SelectionMarkdown($Report) {
     $sb = [System.Text.StringBuilder]::new()
     $v = $Report.verdict
@@ -209,6 +262,11 @@ function ConvertTo-SelectionMarkdown($Report) {
         else {
             [void] $sb.AppendLine("No usable certified map: resolver status ``$(Format-Cell $mr.status)``$(if ($mr.runId) { " (map run ``$($mr.runId)``)" }).")
         }
+    }
+    $rollingSection = Get-Prop $Report 'rolling'
+    if ($null -ne $rollingSection) {
+        [void] $sb.AppendLine()
+        [void] $sb.Append((ConvertTo-RollingMarkdown $rollingSection))
     }
     $pr = $Report.packageRouting
     if ($null -ne $pr) {
@@ -377,7 +435,29 @@ if ($SelfTest) {
         newTypePaths = @('src/B.cs'); preciseFallbacks = 'off (TEST_IMPACT_PRECISE_FALLBACKS)' }
     $untestedReport = New-SelectionReport $untestedFixture 5 1 $false '' $null
     $untestedMd = ConvertTo-SelectionMarkdown $untestedReport
+    $rollingFixture = [pscustomobject]@{ mode = 'shadow'; decides = 'anchor'; reason = 'shadow mode: the certified weekly map decides and the rolling map is only compared'; rollingProblem = ''
+        comparison = [pscustomobject]@{
+            anchor = [pscustomobject]@{ escalated = $false; shardCount = 3; shards = @('Alpha', 'Always', 'Beta') }
+            rolling = [pscustomobject]@{ escalated = $false; shardCount = 3; shards = @('Alpha', 'Always', 'Gamma')
+                layers = [pscustomobject]@{ anchorSha = 'a' * 40; anchorRunId = 7; layers = @(
+                    [pscustomobject]@{ sha = 'a' * 40; shards = 2; selected = 1; escalated = $false; changedSinceMeasured = 40 },
+                    [pscustomobject]@{ sha = 'b' * 40; shards = 1; selected = 1; escalated = $false; changedSinceMeasured = 3 }) } }
+            droppedByRolling = @('Beta'); addedByRolling = @('Gamma'); inBoth = 2 } }
+    $rollingReport = New-SelectionReport $fixture 5 3 $false '' $null
+    $rollingReport | Add-Member -NotePropertyName rolling -NotePropertyValue $rollingFixture
+    $rollingMd = ConvertTo-SelectionMarkdown $rollingReport
+    $noRollingMd = ConvertTo-SelectionMarkdown (New-SelectionReport $fixture 5 3 $false '' $null)
+    $unusableReport = New-SelectionReport $fixture 5 3 $false '' $null
+    $unusableReport | Add-Member -NotePropertyName rolling -NotePropertyValue ([pscustomobject]@{ mode = 'on'; decides = 'anchor'
+        reason = 'the certified weekly map decides: the anchor run published no certified rolling map'; rollingProblem = 'the anchor run published no certified rolling map'
+        comparison = [pscustomobject]@{ anchor = [pscustomobject]@{ escalated = $false; shardCount = 3; shards = @('Alpha', 'Always', 'Beta') }
+            rolling = $null; droppedByRolling = @(); addedByRolling = @(); inBoth = 0 } })
+    $unusableMd = ConvertTo-SelectionMarkdown $unusableReport
     $checks = @(
+        (Check 'a rolling comparison shows both selections, which decided, and each measured commit' ($rollingMd -match 'Rolling coverage map \(shadow mode\)' -and $rollingMd -match '\*\*Decided by the certified weekly map\.\*\*' -and $rollingMd -match '\| Shards selected \| 3 \| 3 \|' -and $rollingMd -match '\| `bbbbbbbb` \| 1 \| 1 \| 3 \|')),
+        (Check 'a rolling comparison names the shards each map alone selects' ($rollingMd -match 'Shards the rolling map would not run \(1\)</summary>\s+- Beta' -and $rollingMd -match 'Shards only the rolling map runs \(1\)</summary>\s+- Gamma')),
+        (Check 'an unusable rolling map says why and that the weekly map decided' ($unusableMd -match 'No rolling selection to compare: the anchor run published no certified rolling map' -and $unusableMd -match 'Decided by the certified weekly map')),
+        (Check 'without a rolling comparison the report has no rolling section' ($noRollingMd -notmatch 'Rolling coverage map' -and -not $r.PSObject.Properties['rolling'])),
         (Check 'untested code changed lists the file, the member and its changed lines' ($untestedMd -match '#### Untested code changed \(1\)' -and $untestedMd -match '\| `src/A\.cs` \| `A\.Unused` \| 9-9 \|')),
         (Check 'the report JSON carries untested and newTypePaths' (@($untestedReport.untested).Count -eq 1 -and (@($untestedReport.newTypePaths) -join ',') -ceq 'src/B.cs')),
         (Check 'precise fallbacks that are off are named; a report with nothing untested has no such section' (($untestedMd -match 'Precise fallbacks: off') -and ($md -notmatch 'Untested code changed') -and ($md -notmatch 'Precise fallbacks'))),
@@ -412,6 +492,9 @@ try {
     $finalCount = if ($FinalShardCount -ge 0) { $FinalShardCount } else { @(Get-Prop $selection 'shards').Count }
     $effective = Read-JsonFile $EffectiveFile
     $report = New-SelectionReport $selection $TotalShards $finalCount ([bool] $FinalEscalated) $WorkflowReason $plan $effective (Read-JsonFile $MapResolutionFile)
+    # Only with the rolling map in shadow or on: without the file the report has no such member at all.
+    $rollingComparison = Read-JsonFile $RollingComparisonFile
+    if ($null -ne $rollingComparison) { $report | Add-Member -NotePropertyName rolling -NotePropertyValue $rollingComparison }
     if ($ReportFile) { $report | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $ReportFile -Encoding utf8 }
     if ($SummaryFile) {
         # With a plan, the Build job appends only the test-level section; the selection part is Select shards' own.
