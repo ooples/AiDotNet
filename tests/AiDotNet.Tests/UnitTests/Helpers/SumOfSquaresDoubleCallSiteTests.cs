@@ -12,6 +12,7 @@ using AiDotNet.Finance.Forecasting.Transformers;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Finance.Portfolio;
 using AiDotNet.Finance.Risk;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.NeuralNetworks;
@@ -980,6 +981,383 @@ public class SumOfSquaresDoubleCallSiteTests
             model, "ComputeLogLikelihood", new Vector<Half>(ToHalf(residuals))));
 
         AssertClose(expected, (double)logLikelihood, HalfTolerance);
+    }
+
+    // ---- Half variances and standardizations in src/Finance and src/TimeSeries ----
+    //
+    // 400 sin(.): a std near 280 fits Half, the variance (8e4) does not, and neither do the larger squared deviations,
+    // so the statistics overflow however the engine accumulates them.
+    private static double[] WideSeries(int n, int seed)
+        => Enumerable.Range(0, n).Select(i => (double)(Half)(400.0 * Math.Sin(0.9 * i + seed) + 20.0)).ToArray();
+
+    private static double PopulationVariance(double[] values) => SumSquaredDeviations(values) / values.Length;
+
+    private static Tensor<Half> Series3D(double[] values) => new Tensor<Half>(ToHalf(values), new[] { 1, values.Length, 1 });
+
+    // (x - mean) / sqrt(variance + epsilon), element by element; an infinite std made every value 0.
+    private static void AssertStandardized(double[] series, IEnumerable<Half> standardized, double std)
+    {
+        double mean = Mean(series);
+        var actual = standardized.ToArray();
+        Assert.Equal(series.Length, actual.Length);
+        for (int i = 0; i < series.Length; i++)
+        {
+            double expected = (series[i] - mean) / std;
+            Assert.True(Math.Abs((double)actual[i] - expected) <= HalfTolerance * Math.Max(Math.Abs(expected), 1.0),
+                $"element {i}: expected {expected:R}, got {(double)actual[i]:R}");
+        }
+    }
+
+    private static void AssertRevIN(double[] series, Tensor<Half> standardized)
+        => AssertStandardized(series, standardized.ToArray(), Math.Sqrt(PopulationVariance(series) + 1e-5));
+
+    // A private or protected member with out parameters: returns the result and the arguments as written back.
+    private static (object? Result, object?[] Arguments) InvokeWithOut(
+        Type declaringType, object target, string name, Type[] parameterTypes, params object?[] arguments)
+    {
+        var method = declaringType.GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic, null, parameterTypes, null)
+            ?? throw new InvalidOperationException($"{declaringType.Name}.{name} was not found.");
+        return (method.Invoke(target, arguments), arguments);
+    }
+
+    [Fact]
+    public void TimeSeriesTokenizer_ApplyInstanceNorm_Half_HasAFiniteStd()
+    {
+        var series = WideSeries(Count, seed: 30);
+        double std = Math.Sqrt(PopulationVariance(series) + 1e-5);
+
+        var (normalized, mean, actualStd) = new AiDotNet.Finance.Tokenization.TimeSeriesTokenizer<Half>()
+            .ApplyInstanceNorm(new Tensor<Half>(ToHalf(series), new[] { Count }));
+
+        AssertClose(Mean(series), (double)mean, HalfTolerance);
+        AssertClose(std, (double)actualStd, HalfTolerance);
+        AssertStandardized(series, normalized.ToArray(), std);
+    }
+
+    private static void AssertNormalizationStatistics<TModel>(string methodName) where TModel : AiDotNet.TimeSeries.TimeSeriesModelBase<Half>
+    {
+        var series = WideSeries(Count, seed: 31);
+        var model = UninitializedHalfTimeSeries<TModel>();
+
+        InvokeDeclared(typeof(TModel), model, methodName, new Vector<Half>(ToHalf(series)));
+
+        AssertClose(Mean(series), (double)GetPrivate<Half>(model, "_normMean"), HalfTolerance);
+        AssertClose(Math.Sqrt(PopulationVariance(series)), (double)GetPrivate<Half>(model, "_normStd"), HalfTolerance);
+    }
+
+    [Fact]
+    public void NBEATS_NormalizationStatistics_Half_HaveAFiniteStd()
+        => AssertNormalizationStatistics<AiDotNet.TimeSeries.NBEATSModel<Half>>("ComputeNormalizationStatistics");
+
+    [Fact]
+    public void NHiTS_NormalizationStatistics_Half_HaveAFiniteStd()
+        => AssertNormalizationStatistics<AiDotNet.TimeSeries.NHiTSModel<Half>>("ComputeNormalizationStatistics");
+
+    [Fact]
+    public void TemporalFusionTransformer_NormStats_Half_HaveAFiniteStd()
+        => AssertNormalizationStatistics<AiDotNet.TimeSeries.TemporalFusionTransformer<Half>>("ComputeNormStats");
+
+    // Two assets, 40 samples each, both with a spread near 280: every sum of squares passes Half.MaxValue.
+    private static (Tensor<Half> Returns, double[] First, double[] Second) TwoWideAssets()
+    {
+        var first = WideSeries(Count, seed: 32);
+        var second = WideSeries(Count, seed: 33);
+        var data = new Half[2 * Count];
+        for (int s = 0; s < Count; s++)
+        {
+            data[2 * s] = (Half)first[s];
+            data[(2 * s) + 1] = (Half)second[s];
+        }
+
+        return (new Tensor<Half>(data, new[] { Count, 2 }), first, second);
+    }
+
+    private static double SampleCovariance(double[] a, double[] b)
+    {
+        double meanA = Mean(a), meanB = Mean(b), sum = 0;
+        for (int i = 0; i < a.Length; i++) sum += (a[i] - meanA) * (b[i] - meanB);
+        return sum / (a.Length - 1);
+    }
+
+    private static void AssertVolatilityModel(
+        Func<Tensor<Half>, Tensor<Half>> realized, Func<Tensor<Half>, Tensor<Half>> covariance, Func<Tensor<Half>, Tensor<Half>> correlation)
+    {
+        var (returns, first, second) = TwoWideAssets();
+
+        var volatility = realized(returns).ToArray();
+        AssertClose(Math.Sqrt(first.Average(r => r * r)), (double)volatility[0], HalfTolerance);
+        AssertClose(Math.Sqrt(second.Average(r => r * r)), (double)volatility[1], HalfTolerance);
+
+        var cov = covariance(returns).ToArray();
+        AssertClose(SampleCovariance(first, first), (double)cov[0], HalfTolerance);
+        AssertClose(SampleCovariance(first, second), (double)cov[1], HalfTolerance);
+        AssertClose(SampleCovariance(second, first), (double)cov[2], HalfTolerance);
+        AssertClose(SampleCovariance(second, second), (double)cov[3], HalfTolerance);
+
+        var corr = correlation(returns).ToArray();
+        double expected = SampleCovariance(first, second)
+            / Math.Sqrt(SampleCovariance(first, first) * SampleCovariance(second, second));
+        AssertClose(1.0, (double)corr[0], HalfTolerance);
+        Assert.True(Math.Abs(expected - (double)corr[1]) <= HalfTolerance, $"correlation: expected {expected:R}, got {(double)corr[1]:R}");
+    }
+
+    [Fact]
+    public void NeuralGARCH_VolatilityAndCovariance_Half_AreFiniteWhereTheSumsPassHalfMaxValue()
+    {
+        var model = UninitializedHalfNetwork<AiDotNet.Finance.Volatility.NeuralGARCH<Half>>();
+        AssertVolatilityModel(model.CalculateRealizedVolatility, model.ComputeCovarianceMatrix, model.ComputeCorrelationMatrix);
+    }
+
+    [Fact]
+    public void RealizedVolatilityTransformer_VolatilityAndCovariance_Half_AreFiniteWhereTheSumsPassHalfMaxValue()
+    {
+        var model = UninitializedHalfNetwork<AiDotNet.Finance.Volatility.RealizedVolatilityTransformer<Half>>();
+        AssertVolatilityModel(model.CalculateRealizedVolatility, model.ComputeCovarianceMatrix, model.ComputeCorrelationMatrix);
+    }
+
+    [Fact]
+    public void TradingAgent_SharpeRatio_Half_IsFiniteWhereTheSumOfSquaredDeviationsPassesHalfMaxValue()
+    {
+        // A portfolio alternating between 1 and 120: returns of 119 and -0.99, squared deviations near 3600 each.
+        var values = Enumerable.Range(0, Count + 1).Select(i => (Half)(i % 2 == 0 ? 1.0 : 120.0)).ToList();
+        var returns = new double[Count];
+        for (int i = 1; i <= Count; i++)
+            returns[i - 1] = (double)(Half)(((double)values[i] - (double)values[i - 1]) / (double)values[i - 1]);
+        Assert.True(SumSquaredDeviations(returns) > (double)Half.MaxValue);
+        var options = new AiDotNet.Models.Options.TradingAgentOptions<Half>();
+        double std = Math.Sqrt(SumSquaredDeviations(returns) / (Count - 1));
+        double expected = (Mean(returns) - options.RiskFreeRate / 252.0) / std * Math.Sqrt(252);
+
+        var agent = (AiDotNet.Finance.Trading.Agents.FinancialDQNAgent<Half>)RuntimeHelpers.GetUninitializedObject(
+            typeof(AiDotNet.Finance.Trading.Agents.FinancialDQNAgent<Half>));
+        GC.SuppressFinalize(agent);
+        SetPrivate(agent, "NumOps", AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<Half>());
+        SetPrivate(agent, "PortfolioHistory", values);
+        SetPrivate(agent, "TradingOptions", options);
+
+        var sharpe = Assert.IsType<Half>(InvokeDeclared(
+            typeof(AiDotNet.Finance.Trading.Agents.TradingAgentBase<Half>), agent, "CalculateSharpeRatio"));
+
+        AssertClose(expected, (double)sharpe, HalfTolerance);
+    }
+
+    [Fact]
+    public void STL_SeasonalEvolution_Half_IsFiniteWhereTheSumOfSquaresPassesHalfMaxValue()
+    {
+        // Three cycles of 12: the middle one about 100 above the others, so each change sums 12 squares near 1e4.
+        const int period = 12;
+        var seasonal = Enumerable.Range(0, 3 * period)
+            .Select(i => (Half)((i / period == 1 ? 100.0 : 0.0) + 5.0 * Math.Sin(i))).ToArray();
+        var expected = new double[2];
+        for (int cycle = 0; cycle < 2; cycle++)
+        {
+            double sum = 0;
+            for (int i = 0; i < period; i++)
+            {
+                double step = (double)seasonal[((cycle + 1) * period) + i] - (double)seasonal[(cycle * period) + i];
+                sum += step * step;
+            }
+
+            Assert.True(sum > (double)Half.MaxValue);
+            expected[cycle] = Math.Sqrt(sum);
+        }
+
+        var model = UninitializedHalfTimeSeries<AiDotNet.TimeSeries.STLDecomposition<Half>>();
+        SetPrivate(model, "_stlOptions", new AiDotNet.Models.Options.STLDecompositionOptions<Half> { SeasonalPeriod = period });
+        SetPrivate(model, "_seasonal", new Vector<Half>(seasonal));
+
+        var changes = Assert.IsType<Vector<Half>>(InvokeDeclared(
+            typeof(AiDotNet.TimeSeries.STLDecomposition<Half>), model, "AnalyzeSeasonalEvolution"));
+
+        Assert.Equal(2, changes.Length);
+        AssertClose(expected[0], (double)changes[0], HalfTolerance);
+        AssertClose(expected[1], (double)changes[1], HalfTolerance);
+    }
+
+    [Fact]
+    public void Crossformer_RevIN_Half_StandardizesWithAFiniteStd()
+    {
+        var series = WideSeries(Count, seed: 34);
+        var model = UninitializedHalfNetwork<Crossformer<Half>>();
+        AssertRevIN(series, Assert.IsAssignableFrom<Tensor<Half>>(InvokePrivate(model, "ApplyRevIN", Series3D(series), true)));
+    }
+
+    [Fact]
+    public void ETSformer_InstanceNormalization_Half_StandardizesWithAFiniteStd()
+    {
+        var series = WideSeries(Count, seed: 35);
+        AssertRevIN(series, UninitializedHalfNetwork<ETSformer<Half>>().ApplyInstanceNormalization(Series3D(series)));
+    }
+
+    [Fact]
+    public void TFT_RevIN_Half_StandardizesWithAFiniteStd()
+    {
+        var series = WideSeries(Count, seed: 36);
+        var model = UninitializedHalfNetwork<AiDotNet.Finance.Forecasting.Transformers.TFT<Half>>();
+        AssertRevIN(series, Assert.IsAssignableFrom<Tensor<Half>>(InvokePrivate(model, "ApplyRevIN", Series3D(series), true)));
+    }
+
+    [Fact]
+    public void TimesNet_RevIN_Half_StandardizesWithAFiniteStd()
+    {
+        var series = WideSeries(Count, seed: 37);
+        var model = UninitializedHalfNetwork<TimesNet<Half>>();
+        AssertRevIN(series, Assert.IsAssignableFrom<Tensor<Half>>(InvokePrivate(model, "ApplyRevIN", Series3D(series), true)));
+    }
+
+    [Fact]
+    public void TimeMoE_InstanceStats_Half_HaveAFiniteStd()
+    {
+        var series = WideSeries(Count, seed: 38);
+        var model = UninitializedHalfNetwork<TimeMoE<Half>>();
+
+        var (_, arguments) = InvokeWithOut(typeof(TimeMoE<Half>), model, "ComputeInstanceStats",
+            new[] { typeof(Tensor<Half>), typeof(Half[]).MakeByRefType(), typeof(Half[]).MakeByRefType() },
+            new Tensor<Half>(ToHalf(series), new[] { 1, Count }), null, null);
+
+        var means = Assert.IsType<Half[]>(arguments[1]);
+        var stds = Assert.IsType<Half[]>(arguments[2]);
+        AssertClose(Mean(series), (double)Assert.Single(means), HalfTolerance);
+        AssertClose(Math.Sqrt(PopulationVariance(series) + 1e-5), (double)Assert.Single(stds), HalfTolerance);
+    }
+
+    // FEDformer, ITransformer and PatchTST take their RevIN statistics per feature from a flat input.
+    private static void AssertFeatureStatistics<TModel>(string featureCountField) where TModel : NeuralNetworkBase<Half>
+    {
+        var series = WideSeries(Count, seed: 39);
+        var model = UninitializedHalfNetwork<TModel>();
+        SetPrivate(model, featureCountField, 1);
+        var input = new Tensor<Half>(ToHalf(series), new[] { 1, Count, 1 });
+
+        var mean = Assert.IsAssignableFrom<Tensor<Half>>(InvokePrivate(model, "CalculateInstanceMean", input));
+        var std = Assert.IsAssignableFrom<Tensor<Half>>(InvokeDeclared(typeof(TModel), model, "CalculateInstanceStd", input, mean));
+
+        AssertClose(Mean(series), (double)Assert.Single(mean.ToArray()), HalfTolerance);
+        AssertClose(Math.Sqrt(PopulationVariance(series) + 1e-5), (double)Assert.Single(std.ToArray()), HalfTolerance);
+    }
+
+    [Fact]
+    public void FEDformer_InstanceStatistics_Half_HaveAFiniteStd() => AssertFeatureStatistics<FEDformer<Half>>("_numFeatures");
+
+    [Fact]
+    public void ITransformer_InstanceStatistics_Half_HaveAFiniteStd() => AssertFeatureStatistics<ITransformer<Half>>("_numFeatures");
+
+    [Fact]
+    public void PatchTST_InstanceStatistics_Half_HaveAFiniteStd() => AssertFeatureStatistics<PatchTST<Half>>("_baseNumFeatures");
+
+    [Fact]
+    public void FinancialPreprocessor_NormalizeZScore_Half_HasAFiniteStd()
+    {
+        var series = WideSeries(Count, seed: 40);
+        double std = Math.Sqrt(SumSquaredDeviations(series) / (Count - 1));
+
+        var normalized = new AiDotNet.Finance.Data.FinancialPreprocessor<Half>().NormalizeZScore(
+            new Tensor<Half>(ToHalf(series), new[] { Count, 1 }), out var stats);
+
+        AssertClose(Mean(series), (double)stats.Mean[0], HalfTolerance);
+        AssertClose(std, (double)stats.StdDev[0], HalfTolerance);
+        AssertStandardized(series, normalized.ToArray(), std);
+    }
+
+    private static void AssertOnTapeNormalization(string methodName, Tensor<Half> input, double[] series)
+    {
+        var model = UninitializedHalfNetwork<TimesNet<Half>>();
+        var (result, arguments) = InvokeWithOut(typeof(AiDotNet.Finance.Base.ForecastingModelBase<Half>), model, methodName,
+            new[] { typeof(Tensor<Half>), typeof(double), typeof(Vector<Half>).MakeByRefType(), typeof(Vector<Half>).MakeByRefType() },
+            input, 1e-5, null, null);
+
+        double std = Math.Sqrt(PopulationVariance(series) + 1e-5);
+        AssertClose(Mean(series), (double)Assert.IsType<Vector<Half>>(arguments[2])[0], HalfTolerance);
+        AssertClose(std, (double)Assert.IsType<Vector<Half>>(arguments[3])[0], HalfTolerance);
+        AssertStandardized(series, Assert.IsAssignableFrom<Tensor<Half>>(result).ToArray(), std);
+    }
+
+    [Fact]
+    public void ForecastingModelBase_NormalizeInstanceOnTape_Half_HasAFiniteStd()
+    {
+        var series = WideSeries(Count, seed: 41);
+        AssertOnTapeNormalization("NormalizeInstanceOnTape", new Tensor<Half>(ToHalf(series), new[] { 1, Count }), series);
+    }
+
+    [Fact]
+    public void ForecastingModelBase_NormalizePerFeatureOnTape_Half_HasAFiniteStd()
+    {
+        var series = WideSeries(Count, seed: 42);
+        AssertOnTapeNormalization("NormalizePerFeatureOnTape", new Tensor<Half>(ToHalf(series), new[] { Count, 1 }), series);
+    }
+
+    [Theory]
+    [InlineData(2.0)]
+    [InlineData(-0.1)]
+    [InlineData(double.NaN)]
+    public void GIFTEval_RejectsQuantileLevelsOutsideZeroToOne(double level)
+    {
+        var (predictions, actuals, _, _) = LargeErrors(GiftHorizon);
+        var benchmark = new GIFTEvalBenchmark<Half>();
+        var series = new Tensor<Half>(NaiveHistory().Concat(actuals.ToArray()).ToArray(), new[] { 2 * GiftHorizon });
+        var model = new Mock<ITimeSeriesFoundationModel<Half>>();
+        model.Setup(m => m.Forecast(It.IsAny<Tensor<Half>>(), It.IsAny<double[]>())).Returns(predictions);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => benchmark.ComputeQuantileLoss(predictions, actuals, level));
+        Assert.Throws<ArgumentOutOfRangeException>(() => benchmark.ComputeCRPS(
+            new Dictionary<double, Tensor<Half>> { [0.5] = predictions, [level] = predictions }, actuals));
+        Assert.Throws<ArgumentOutOfRangeException>(() => benchmark.RunBenchmark(
+            model.Object, new[] { series }, new[] { GiftHorizon }, new[] { 1 }, new[] { 0.5, level }));
+    }
+
+    // One outlier of 100 in each series and sin(i) elsewhere: scaled by max |x| and sqrt(n), every Half cross-product
+    // of the shared sin terms fell below Half's smallest subnormal and the correlation (0.166) came back as 0.
+    [Fact]
+    public void InformationCoefficient_Pearson_Half_KeepsSmallCrossProducts()
+    {
+        const int n = 4000;
+        var x = new double[n];
+        var y = new double[n];
+        x[0] = 100.0;
+        y[1] = 100.0;
+        for (int i = 2; i < n; i++)
+        {
+            x[i] = (double)(Half)Math.Sin(i);
+            y[i] = x[i];
+        }
+
+        double mx = Mean(x), my = Mean(y), sxy = 0, sxx = 0, syy = 0;
+        for (int i = 0; i < n; i++)
+        {
+            sxy += (x[i] - mx) * (y[i] - my);
+            sxx += (x[i] - mx) * (x[i] - mx);
+            syy += (y[i] - my) * (y[i] - my);
+        }
+
+        double expected = sxy / Math.Sqrt(sxx * syy);
+        Assert.True(expected > 0.1);
+        AssertClose(expected, (double)InformationCoefficient<Half>.Pearson(ToHalf(x), ToHalf(y)), HalfTolerance);
+    }
+
+    // 256^2 + 200^2 = 105536 passes Half.MaxValue; scaled by 256 and sqrt(2^20) each square rounded to a Half
+    // subnormal step (2^-24), so the restored sum was off by percent. Widened to double it is exact.
+    [Fact]
+    public void SumOfSquaresAsDouble_Half_OverflowFallbackKeepsSmallSquaresExact()
+    {
+        var values = new Half[1 << 20];
+        values[0] = (Half)256.0;
+        values[1] = (Half)200.0;
+
+        Assert.Equal(105536.0, TensorReductionHelper.SumOfSquaresAsDouble(new CpuEngine(), new Tensor<Half>(values, new[] { values.Length })));
+    }
+
+    // |r| of 2048 and 2050: the mean (2049) rounds to 2048 in Half, and centring at it gave a std of sqrt(2), not 1.
+    [Fact]
+    public void ARIMA_AnomalyThreshold_Half_CentresTheResidualsInDouble()
+    {
+        var model = UninitializedHalfTimeSeries<AiDotNet.TimeSeries.ARIMAModel<Half>>();
+        SetPrivate(model, "_arimaOptions", new AiDotNet.Models.Options.ARIMAOptions<Half>());
+
+        InvokeDeclared(typeof(AiDotNet.TimeSeries.ARIMAModel<Half>), model, "ComputeAnomalyThreshold",
+            new Vector<Half>(new[] { (Half)2048.0, (Half)(-2050.0) }));
+
+        Assert.Equal(1.0, (double)GetPrivate<Half>(model, "_residualStdDev"));
+        Assert.Equal(2048.0, (double)GetPrivate<Half>(model, "_residualMean"));
     }
 #endif
 }
