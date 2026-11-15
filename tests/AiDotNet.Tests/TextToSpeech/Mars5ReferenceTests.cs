@@ -269,7 +269,9 @@ public class Mars5ReferenceTests
         for (int i = 0; i < ones.Length; i++) ones[i] = 1.0;
         Assert.Equal(3750, AiDotNet.TextToSpeech.TtsSampling<double>.DrawPosition(Vec(ones), 0.75, inclusive: false));
         Assert.Equal(3750, AiDotNet.TextToSpeech.TtsSampling<Half>.DrawPosition(HalfVec(ones), 0.75, inclusive: false));
-        Assert.Equal(3750, AiDotNet.TextToSpeech.TtsSampling<Half>.DrawPosition(HalfVec(ones), 0.75, inclusive: true));
+        // Inclusive: the running sum reaches d = 3,750 one position earlier (1 + ... + 1 over positions 0 to 3,749).
+        Assert.Equal(3749, AiDotNet.TextToSpeech.TtsSampling<double>.DrawPosition(Vec(ones), 0.75, inclusive: true));
+        Assert.Equal(3749, AiDotNet.TextToSpeech.TtsSampling<Half>.DrawPosition(HalfVec(ones), 0.75, inclusive: true));
     }
 
     // top-p 0.5 over 5,000 equal logits keeps the first 2,501 in index order. In Half the running sum stalled at
