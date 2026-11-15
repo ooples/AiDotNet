@@ -35,7 +35,7 @@ public class ModelResultArchitectureRoundTripTests
 
     private static Tensor<float> Random(int seed, params int[] shape)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var t = new Tensor<float>(shape);
         for (int i = 0; i < t.Length; i++) t[i] = (float)(rng.NextDouble() * 2 - 1);
         return t;
@@ -126,8 +126,9 @@ public class ModelResultArchitectureRoundTripTests
         var restored = RoundTrip(result, how);
 
         AssertSameArchitecture(network.Architecture, restored.Model);
-        Assert.Equal(network.LayerCount, ((NeuralNetworkBase<float>)restored.Model!).LayerCount);
-        Assert.Equal(network.GetParameters().ToArray(), restored.Model!.GetParameters().ToArray());
+        var restoredNetwork = Assert.IsAssignableFrom<NeuralNetworkBase<float>>(restored.Model);
+        Assert.Equal(network.LayerCount, restoredNetwork.LayerCount);
+        Assert.Equal(network.GetParameters().ToArray(), restoredNetwork.GetParameters().ToArray());
         for (int i = 0; i < inputs.Count; i++)
         {
             AssertClose(expected[i], restored.Predict(inputs[i]));
@@ -214,7 +215,7 @@ public class ModelResultArchitectureRoundTripTests
     {
         // Degree 3 differs from the options default, so a skeleton built with default options would predict
         // through the wrong feature expansion unless the model's own payload restores it.
-        var rng = new Random(7);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7);
         var x = new Matrix<double>(30, 2);
         var y = new Vector<double>(30);
         for (int i = 0; i < 30; i++)
@@ -253,7 +254,8 @@ public class ModelResultArchitectureRoundTripTests
         var degreeField = typeof(PolynomialRegression<double>).GetField("_polyOptions",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
         Assert.NotNull(degreeField);
-        Assert.Equal(3, ((PolynomialRegressionOptions<double>)degreeField!.GetValue(restoredModel)!).Degree);
+        var restoredOptions = Assert.IsType<PolynomialRegressionOptions<double>>(degreeField?.GetValue(restoredModel));
+        Assert.Equal(3, restoredOptions.Degree);
     }
 
     [Theory]
@@ -343,5 +345,104 @@ public class ModelResultArchitectureRoundTripTests
             var error = Assert.Throws<InvalidDataException>(() => target.Deserialize(bytes));
             Assert.Contains($"version {written + 1}", error.Message);
         }
+    }
+
+    // Reads past the architecture descriptor that format v10 writes after the encoding byte; returns where it ends.
+    private static int SkipDescriptorAndMirrorCount(byte[] bytes, int descriptorStart)
+    {
+        using var reader = new BinaryReader(
+            new MemoryStream(bytes, descriptorStart, bytes.Length - descriptorStart, writable: false));
+        reader.ReadString(); // magic
+        reader.ReadString(); // the writer's architecture type
+        int count = reader.ReadInt32();
+        for (int i = 0; i < count; i++)
+        {
+            reader.ReadString(); // field key
+            switch (reader.ReadByte())
+            {
+                case 0: break;
+                case 1: reader.ReadBoolean(); break;
+                case 2: reader.ReadInt64(); break;
+                case 3: reader.ReadDouble(); break;
+                case 4: reader.ReadString(); break;
+                default: throw new InvalidDataException("unexpected descriptor value kind");
+            }
+        }
+        reader.ReadInt32(); // how many architecture layers mirror the network's
+        return descriptorStart + (int)reader.BaseStream.Position;
+    }
+
+    [Fact]
+    public void Network_FromTheFormatBeforeTheDescriptor_StillLoads()
+    {
+        // Format v9 has no architecture descriptor. Rebuild one from a current payload by dropping the descriptor and
+        // writing version 9: the reader must take the old layout, not read the layer count as a descriptor.
+        var original = FeedForward();
+        var x = Random(31, 3, 4);
+        var before = original.Predict(x);
+        var bytes = original.Serialize();
+
+        int at = -1;
+        for (int i = 0; i + 8 <= bytes.Length && at < 0; i++)
+            if (BitConverter.ToInt32(bytes, i) == 0x4E444941) at = i; // "AIDN", the network payload header
+        Assert.True(at >= 0, "the serialized network carries no payload header");
+        int version = BitConverter.ToInt32(bytes, at + 4);
+        Assert.True(version >= 10, $"expected a payload that carries the descriptor, got version {version}");
+        int descriptorStart = at + 9; // magic, version, encoding byte
+        int descriptorEnd = SkipDescriptorAndMirrorCount(bytes, descriptorStart);
+
+        var v9 = new byte[bytes.Length - (descriptorEnd - descriptorStart)];
+        Array.Copy(bytes, 0, v9, 0, descriptorStart);
+        Array.Copy(bytes, descriptorEnd, v9, descriptorStart, bytes.Length - descriptorEnd);
+        Array.Copy(BitConverter.GetBytes(9), 0, v9, at + 4, 4);
+
+        var target = FeedForward(); // the same architecture, freshly initialised weights
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            target.Deserialize(v9);
+        }
+
+        Assert.Equal(original.GetParameters().ToArray(), target.GetParameters().ToArray());
+        AssertClose(before, target.Predict(x));
+    }
+
+    public static IEnumerable<object[]> CorruptDescriptorValues()
+    {
+        yield return new object[] { (byte)4, "not a number" }; // a string where the field is an int
+        yield return new object[] { (byte)2, long.MaxValue };  // an integer the int field cannot hold
+    }
+
+    [Theory]
+    [MemberData(nameof(CorruptDescriptorValues))]
+    public void ArchitectureDescriptor_WithAValueTheFieldCannotHold_IsRejectedAsInvalidData(byte kind, object value)
+    {
+        // A corrupt payload must fail as bad data (InvalidDataException, like every other malformed part of the
+        // network payload), not as a FormatException or OverflowException from deep inside the restore.
+        var architecture = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.Regression, inputSize: 4, outputSize: 1);
+        var intField = Array.Find(
+            typeof(NeuralNetworkArchitecture<float>).GetFields(
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public
+                | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.DeclaredOnly),
+            f => f.FieldType == typeof(int));
+        Assert.NotNull(intField);
+        string key = typeof(NeuralNetworkArchitecture<>).FullName + "::" + (intField?.Name ?? string.Empty);
+
+        using var payload = new MemoryStream();
+        using (var writer = new BinaryWriter(payload, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            writer.Write("NNARCH1");
+            writer.Write(typeof(NeuralNetworkArchitecture<>).FullName ?? string.Empty);
+            writer.Write(1);
+            writer.Write(key);
+            writer.Write(kind);
+            if (value is string text) writer.Write(text);
+            else writer.Write(Convert.ToInt64(value, System.Globalization.CultureInfo.InvariantCulture));
+        }
+        payload.Position = 0;
+
+        using var reader = new BinaryReader(payload);
+        var error = Assert.Throws<InvalidDataException>(() => architecture.ReadAndRestoreDescriptor(reader));
+        Assert.Contains(key, error.Message);
     }
 }
