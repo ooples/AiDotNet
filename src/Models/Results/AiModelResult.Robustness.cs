@@ -1,4 +1,5 @@
 using AiDotNet.AdversarialRobustness.Attacks;
+using AiDotNet.AdversarialRobustness.CertifiedRobustness;
 using AiDotNet.AdversarialRobustness.Defenses;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -63,14 +64,83 @@ public partial class AiModelResult<T, TInput, TOutput>
 
     /// <summary>
     /// The certified defense of <see cref="PredictCertified"/>: <c>ConfigureCertifiedDefense</c>, the robustness
-    /// configuration's <c>CustomCertifiedDefense</c>, or the <c>CertificationMethod</c> engine. Not persisted.
+    /// configuration's <c>CustomCertifiedDefense</c>, or the <c>CertificationMethod</c> engine. Persisted through <see cref="CertifiedDefenseState"/>.
     /// </summary>
     [JsonIgnore]
     internal ICertifiedDefense<T, TInput, TOutput>? CertifiedDefense { get; private set; }
 
-    /// <summary>The inference-time certification settings of the robustness configuration. Not persisted.</summary>
-    [JsonIgnore]
+    /// <summary>The inference-time certification settings of the robustness configuration.</summary>
+    [JsonProperty]
     internal CertifiedInferenceSettings? CertifiedInference { get; private set; }
+
+    /// <summary>
+    /// The persisted form of <see cref="CertifiedDefense"/>: written from the live defense on save, read back into
+    /// <see cref="_loadedCertifiedDefenseState"/> on load and rebuilt by <see cref="RestoreCertificationStateFrom"/>.
+    /// </summary>
+    [JsonProperty]
+    internal CertifiedDefenseSnapshot<T>? CertifiedDefenseState
+    {
+        get => CertifiedDefense is null ? null : CertifiedDefenseSnapshot<T>.Capture(CertifiedDefense);
+        private set => _loadedCertifiedDefenseState = value;
+    }
+
+    [JsonIgnore]
+    private CertifiedDefenseSnapshot<T>? _loadedCertifiedDefenseState;
+
+    /// <summary>Why the persisted certified defense could not be rebuilt on load, or null.</summary>
+    [JsonIgnore]
+    private string? _certifiedDefenseRestoreFailure;
+
+    /// <summary>
+    /// Takes the certification state of a deserialized result: the settings as read, and a defense rebuilt from its
+    /// persisted options and state. A defense that cannot be rebuilt makes <see cref="PredictCertified"/> say why.
+    /// </summary>
+    internal void RestoreCertificationStateFrom(AiModelResult<T, TInput, TOutput> loaded)
+    {
+        CertifiedInference = loaded.CertifiedInference;
+        CertifiedDefense = null;
+        _certifiedDefenseRestoreFailure = null;
+        if (loaded._loadedCertifiedDefenseState is { } snapshot)
+        {
+            CertifiedDefense = TryRebuildCertifiedDefense(snapshot);
+        }
+    }
+
+    /// <summary>
+    /// Carries the robustness state of this result to a copy of it (<see cref="DeepCopy"/>, <see cref="Clone"/>,
+    /// <see cref="WithParameters"/>). The certified defense is rebuilt, so the copy's randomized-smoothing
+    /// generator is its own and starts from the configured seed.
+    /// </summary>
+    internal void CopyRobustnessStateTo(AiModelResult<T, TInput, TOutput> target)
+    {
+        target.AdversarialRobustnessOptions = AdversarialRobustnessOptions;
+        target.AdversarialDefense = AdversarialDefense;
+        target.SetSafetyFilter(SafetyFilter);
+        target.CertifiedInference = CertifiedInference;
+        target._certifiedDefenseRestoreFailure = _certifiedDefenseRestoreFailure;
+        target.CertifiedDefense = CertifiedDefense is null
+            ? null
+            : target.TryRebuildCertifiedDefense(CertifiedDefenseSnapshot<T>.Capture(CertifiedDefense)) ?? CertifiedDefense;
+        target.RedTeamingReport = RedTeamingReport;
+        target.RobustnessModelCard = RobustnessModelCard;
+    }
+
+    private ICertifiedDefense<T, TInput, TOutput>? TryRebuildCertifiedDefense(CertifiedDefenseSnapshot<T> snapshot)
+    {
+        try
+        {
+            return snapshot.Restore<TInput, TOutput>();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException || ex is JsonException
+            || ex is System.Reflection.TargetInvocationException)
+        {
+            _certifiedDefenseRestoreFailure =
+                $"The persisted certified defense ({snapshot.CustomTypeName ?? snapshot.BuiltInMethod?.ToString()}) " +
+                "could not be rebuilt on load. Rebuild the model with the defense configured.";
+            System.Diagnostics.Trace.TraceWarning($"Certified defense restore failed: {ex}");
+            return null;
+        }
+    }
 
     internal void SetCertifiedDefense(ICertifiedDefense<T, TInput, TOutput>? defense)
     {
@@ -140,6 +210,7 @@ public partial class AiModelResult<T, TInput, TOutput>
         }
 
         var defense = CertifiedDefense ?? throw new InvalidOperationException(
+            _certifiedDefenseRestoreFailure ??
             "No certified defense is configured. Set AdversarialRobustnessOptions.EnableCertifiedRobustness, " +
             "AdversarialRobustnessConfiguration.CustomCertifiedDefense, or call ConfigureCertifiedDefense on the builder.");
 
@@ -663,6 +734,7 @@ public partial class AiModelResult<T, TInput, TOutput>
 /// </summary>
 internal sealed class CertifiedInferenceSettings
 {
+    [JsonConstructor]
     public CertifiedInferenceSettings(bool useCertifiedInference, double minimumCertifiedRadius, bool rejectNonRobustPredictions)
     {
         if (!(minimumCertifiedRadius >= 0.0 && !double.IsInfinity(minimumCertifiedRadius)))

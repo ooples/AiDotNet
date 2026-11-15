@@ -10,6 +10,7 @@ using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 
 namespace AiDotNet.AdversarialRobustness.Safety;
@@ -53,6 +54,13 @@ public class SafetyFilter<T> : ISafetyFilter<T>
     private readonly IContentClassifier<T>? contentClassifier;
     private readonly List<string> jailbreakPatterns;
     private readonly Dictionary<string, List<string>> harmfulContentPatterns;
+    private readonly ILogger? logger;
+
+    /// <summary>1 once prompt text has been screened through <see cref="DetectJailbreak(string)"/>.</summary>
+    private int textScreened;
+
+    /// <summary>1 once the vector-only <see cref="SafetyFilterOptions{T}.JailbreakSensitivity"/> warning is logged.</summary>
+    private int vectorSensitivityWarned;
 
     /// <summary>
     /// Initializes a new instance of the safety filter.
@@ -72,10 +80,26 @@ public class SafetyFilter<T> : ISafetyFilter<T>
     /// are merged (by maximum) with the pattern scores. Null uses the patterns alone.
     /// </param>
     public SafetyFilter(SafetyFilterOptions<T> options, IContentClassifier<T>? classifier)
+        : this(options, classifier, null)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new safety filter with a classifier and a logger for configuration warnings.
+    /// </summary>
+    /// <param name="options">The safety filter configuration options.</param>
+    /// <param name="classifier">The classifier consulted when <see cref="SafetyFilterOptions{T}.UseClassifier"/> is true, or null.</param>
+    /// <param name="logger">
+    /// Receives the warning that a non-default <see cref="SafetyFilterOptions{T}.JailbreakSensitivity"/> is screening
+    /// numeric vectors only (see <see cref="DetectJailbreak(Vector{T})"/>). Null writes it to
+    /// <see cref="System.Diagnostics.Trace"/>.
+    /// </param>
+    public SafetyFilter(SafetyFilterOptions<T> options, IContentClassifier<T>? classifier, ILogger? logger)
     {
         Guard.NotNull(options);
         this.options = options;
         contentClassifier = classifier;
+        this.logger = logger;
         jailbreakPatterns = new List<string>();
         harmfulContentPatterns = new Dictionary<string, List<string>>();
         InitializePatterns();
@@ -296,22 +320,70 @@ public class SafetyFilter<T> : ISafetyFilter<T>
         return result;
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Detects jailbreak attempts in a numeric vector by screening its text form.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="SafetyFilterOptions{T}.JailbreakSensitivity"/> applies through the text path: jailbreak detection
+    /// matches English prompt patterns, and this overload only screens the vector's numbers written out as text, which
+    /// never match them. On numeric vectors the sensitivity therefore changes nothing. Screen prompt text with
+    /// <see cref="DetectJailbreak(string)"/> (or the <c>ConfigureSafety</c> text pipeline) for it to take effect.
+    /// </para>
+    /// <para>
+    /// So the option does not go unnoticed: when the sensitivity is not the default and this filter has seen vectors
+    /// but no text, the first call logs a warning (to the constructor's logger, else to
+    /// <see cref="System.Diagnostics.Trace"/>).
+    /// </para>
+    /// </remarks>
+    /// <param name="input">The vector to screen.</param>
+    /// <returns>The detection result.</returns>
     public JailbreakDetectionResult<T> DetectJailbreak(Vector<T> input)
     {
-        return DetectJailbreak(ConvertToText(input));
+        WarnIfSensitivityOnlySeesVectors();
+        return DetectJailbreakInText(ConvertToText(input));
     }
 
     /// <summary>
     /// Detects jailbreak attempts in text with the filter's patterns and <see cref="SafetyFilterOptions{T}.JailbreakSensitivity"/>.
     /// </summary>
     /// <remarks>
-    /// <para>The numeric overload stringifies the vector, which suits token text but never matches the English
-    /// patterns on raw numbers; call this overload to screen prompt text directly.</para>
+    /// <para>This is the path the sensitivity applies through. The numeric overload stringifies the vector, which
+    /// never matches the English patterns on raw numbers; call this overload to screen prompt text directly.</para>
     /// </remarks>
     /// <param name="text">The text to screen.</param>
     /// <returns>The detection result.</returns>
     public JailbreakDetectionResult<T> DetectJailbreak(string text)
+    {
+        Interlocked.Exchange(ref textScreened, 1);
+        return DetectJailbreakInText(text);
+    }
+
+    private void WarnIfSensitivityOnlySeesVectors()
+    {
+        if (options.JailbreakSensitivity == SafetyFilterOptions<T>.DefaultJailbreakSensitivity
+            || Volatile.Read(ref textScreened) != 0
+            || Interlocked.Exchange(ref vectorSensitivityWarned, 1) != 0)
+        {
+            return;
+        }
+
+        const string Warning =
+            "SafetyFilterOptions.JailbreakSensitivity is {Sensitivity}, but this safety filter has only screened numeric " +
+            "vectors, on which jailbreak patterns never match: the sensitivity applies through the text path " +
+            "(SafetyFilter.DetectJailbreak(string) or the ConfigureSafety text pipeline).";
+        if (logger is not null)
+        {
+            logger.LogWarning(Warning, options.JailbreakSensitivity);
+        }
+        else
+        {
+            System.Diagnostics.Trace.TraceWarning(Warning.Replace("{Sensitivity}",
+                options.JailbreakSensitivity.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        }
+    }
+
+    private JailbreakDetectionResult<T> DetectJailbreakInText(string text)
     {
         var result = new JailbreakDetectionResult<T>
         {

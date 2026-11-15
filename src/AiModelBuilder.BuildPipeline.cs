@@ -2468,6 +2468,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         IStreamingDataLoader<T, TInput, TOutput> streamingLoader,
         CancellationToken cancellationToken = default)
     {
+        RejectBuildTimeAdversarialTraining(RobustnessBuildPath.StreamingSupervised);
+
         // ConfigureAugmentation isn't wired into the streaming path —
         // BuildSupervisedInternalAsync's one-shot offline augmentation
         // applies to the materialised X tensor, which a streaming loader
@@ -3355,6 +3357,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// </summary>
     private Task<AiModelResult<T, TInput, TOutput>> BuildImageOnlyInternalAsync(CancellationToken cancellationToken)
     {
+        RejectBuildTimeAdversarialTraining(RobustnessBuildPath.ImageSpace);
+
         cancellationToken.ThrowIfCancellationRequested();
 
         if (_model is null)

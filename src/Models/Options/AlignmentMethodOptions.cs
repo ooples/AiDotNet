@@ -84,6 +84,7 @@ public class AlignmentMethodOptions<T> : ModelOptions
     /// </summary>
     /// <value>True to enable red teaming, false otherwise (default: true).</value>
     /// <remarks>
+    /// <para>Gates <c>IAlignmentMethod.PerformRedTeaming</c>: with false it throws instead of red teaming.</para>
     /// <para><b>For Beginners:</b> Red teaming tries to find ways to make the model misbehave,
     /// helping you discover and fix problems before deployment.</para>
     /// </remarks>
@@ -94,9 +95,29 @@ public class AlignmentMethodOptions<T> : ModelOptions
     /// </summary>
     /// <value>The number of attempts, defaulting to 100.</value>
     /// <remarks>
+    /// <para>The number of safety-benchmark prompts <c>PerformRedTeaming</c> sends to the model, drawn round-robin
+    /// from <see cref="RedTeamingCategories"/>; capped by the size of their benchmarks.</para>
     /// <para><b>For Beginners:</b> More attempts mean more thorough testing but take longer.</para>
     /// </remarks>
     public int RedTeamingAttempts { get; set; } = 100;
+
+    /// <summary>
+    /// Gets or sets the safety-benchmark categories red teaming draws its prompts from.
+    /// </summary>
+    /// <value>Every category by default.</value>
+    /// <remarks>
+    /// <para>Jailbreaking uses the jailbreak benchmark, HarmfulContent the toxicity benchmark, Misinformation the
+    /// hallucination benchmark, PrivacyViolation the PII benchmark and BiasExploration the bias benchmark: the same
+    /// pools as <c>AdversarialRobustnessOptions.RedTeamingCategories</c>.</para>
+    /// </remarks>
+    public RedTeamingCategory[] RedTeamingCategories { get; set; } = new[]
+    {
+        RedTeamingCategory.Jailbreaking,
+        RedTeamingCategory.HarmfulContent,
+        RedTeamingCategory.Misinformation,
+        RedTeamingCategory.PrivacyViolation,
+        RedTeamingCategory.BiasExploration
+    };
 
     /// <summary>
     /// Gets or sets the reward model architecture.

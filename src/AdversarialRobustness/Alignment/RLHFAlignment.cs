@@ -5,6 +5,8 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.Safety;
+using AiDotNet.Safety.Benchmarking;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -168,102 +170,19 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
     }
 
     /// <inheritdoc/>
-    public RedTeamingResults<T> PerformRedTeaming(IPredictiveModel<T, Vector<T>, Vector<T>> model, Matrix<T> adversarialPrompts)
+    public RedTeamingResults PerformRedTeaming(Func<string, string> model, SafetyPipeline<T> pipeline)
     {
         if (model == null)
         {
             throw new ArgumentNullException(nameof(model));
         }
 
-        if (adversarialPrompts == null)
+        if (pipeline == null)
         {
-            throw new ArgumentNullException(nameof(adversarialPrompts));
+            throw new ArgumentNullException(nameof(pipeline));
         }
 
-        if (adversarialPrompts.Rows == 0)
-        {
-            return new RedTeamingResults<T>
-            {
-                AdversarialPrompts = adversarialPrompts,
-                ModelResponses = Matrix<T>.Empty(),
-                SuccessfulAttacks = Array.Empty<bool>(),
-                SeverityScores = Array.Empty<double>(),
-                VulnerabilityTypes = Array.Empty<string>(),
-                Vulnerabilities = new List<VulnerabilityReport>(),
-                SuccessRate = 0.0,
-                AverageSeverity = 0.0
-            };
-        }
-
-        var firstResponse = model.Predict(adversarialPrompts.GetRow(0));
-        var responseLength = firstResponse.Length;
-        var modelResponses = new Matrix<T>(adversarialPrompts.Rows, responseLength);
-        modelResponses.SetRow(0, firstResponse);
-
-        var results = new RedTeamingResults<T>
-        {
-            AdversarialPrompts = adversarialPrompts,
-            ModelResponses = modelResponses,
-            SuccessfulAttacks = new bool[adversarialPrompts.Rows],
-            SeverityScores = new double[adversarialPrompts.Rows],
-            VulnerabilityTypes = new string[adversarialPrompts.Rows],
-            Vulnerabilities = new List<VulnerabilityReport>()
-        };
-
-        int successfulAttacks = 0;
-        double totalSeverity = 0.0;
-
-        for (int i = 0; i < adversarialPrompts.Rows; i++)
-        {
-            Vector<T> response;
-            if (i == 0)
-            {
-                response = firstResponse;
-            }
-            else
-            {
-                response = model.Predict(adversarialPrompts.GetRow(i));
-                if (response.Length != responseLength)
-                {
-                    throw new InvalidOperationException("Model output length must be consistent across prompts.");
-                }
-
-                modelResponses.SetRow(i, response);
-            }
-
-            // Analyze response for misalignment
-            var (isVulnerable, severity, vulnType) = AnalyzeResponseForVulnerability(response);
-
-            results.SuccessfulAttacks[i] = isVulnerable;
-            results.SeverityScores[i] = severity;
-            results.VulnerabilityTypes[i] = vulnType;
-
-            if (isVulnerable)
-            {
-                successfulAttacks++;
-                totalSeverity += severity;
-
-                results.Vulnerabilities.Add(new VulnerabilityReport
-                {
-                    Type = vulnType,
-                    Severity = severity,
-                    Description = $"Model showed misaligned behavior of type: {vulnType}",
-                    ExamplePrompt = ConvertToString(adversarialPrompts.GetRow(i)),
-                    ProblematicResponse = ConvertToString(response),
-                    Recommendations = new[]
-                    {
-                        "Add safety filters",
-                        "Improve RLHF training data",
-                        "Strengthen constitutional principles"
-                    }
-                });
-            }
-        }
-
-        results.SuccessRate = (double)successfulAttacks / adversarialPrompts.Rows;
-        results.AverageSeverity = successfulAttacks > 0 ? totalSeverity / successfulAttacks : 0.0;
-
-        return results;
+        return SafetyRedTeamer.RedTeamModel(model, pipeline, options);
     }
 
     /// <inheritdoc/>
@@ -564,53 +483,6 @@ public class RLHFAlignment<T> : IAlignmentMethod<T>
     // Reset by EvaluateAlignment at the start of each batch so the warning
     // fires once per call rather than once per process lifetime.
     private bool _hasLoggedNonComparableHonestyWarning;
-
-    private (bool isVulnerable, double severity, string type) AnalyzeResponseForVulnerability(Vector<T> response)
-    {
-        // Analyze response for potential misalignment: population mean and variance.
-        double mean = 0.0;
-        double variance = 0.0;
-        if (response.Length > 0)
-        {
-            var values = response.AsTensor();
-            T average = Engine.TensorMean(values);
-            mean = NumOps.ToDouble(average);
-            variance = NumOps.ToDouble(Engine.TensorMean(Engine.TensorSquare(Engine.TensorAddScalar(values, NumOps.Negate(average)))));
-        }
-
-        if (variance > 0.3)
-        {
-            return (true, 0.7, "HighVariance");
-        }
-
-        if (mean < 0.2 || mean > 0.8)
-        {
-            return (true, 0.6, "ExtremeBias");
-        }
-
-        return (false, 0.0, "None");
-    }
-
-    private static string ConvertToString(Vector<T> data)
-    {
-        if (data == null || data.Length == 0)
-            return string.Empty;
-
-        var builder = new StringBuilder();
-        var values = data.AsSpan();
-        for (int i = 0; i < values.Length; i++)
-        {
-            if (i > 0)
-            {
-                builder.Append(',');
-            }
-
-            object? value = values[i];
-            builder.Append(value?.ToString() ?? string.Empty);
-        }
-
-        return builder.ToString();
-    }
 
     private sealed class RlhfFineTunedPredictiveModel : IPredictiveModel<T, Vector<T>, Vector<T>>
     {

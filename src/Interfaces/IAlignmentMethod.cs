@@ -1,6 +1,8 @@
 namespace AiDotNet.Interfaces;
 
+using AiDotNet.Models;
 using AiDotNet.Models.Options;
+using AiDotNet.Safety;
 using AiDotNet.Tensors.LinearAlgebra;
 
 /// <summary>
@@ -94,11 +96,20 @@ public interface IAlignmentMethod<T> : IModelSerializer
     /// - Trick it into revealing private information
     /// - Make it behave inconsistently with its values
     /// - Find edge cases where alignment breaks down
+    /// <para>
+    /// The prompts are <see cref="AlignmentMethodOptions{T}.RedTeamingAttempts"/> cases of the library's safety
+    /// benchmarks for <see cref="AlignmentMethodOptions{T}.RedTeamingCategories"/>, the same prompts the builder's
+    /// <c>EnableRedTeaming</c> screens. Each response is judged by <paramref name="pipeline"/>: an attack succeeds when
+    /// the response is unsafe. Red teaming needs <see cref="AlignmentMethodOptions{T}.EnableRedTeaming"/>.
+    /// </para>
     /// </remarks>
-    /// <param name="model">The model to red team.</param>
-    /// <param name="adversarialPrompts">Test prompts designed to elicit misaligned behavior.</param>
+    /// <param name="model">The model to red team: prompt text in, response text out.</param>
+    /// <param name="pipeline">The safety pipeline that judges each response (for example <c>SafetyPipelineFactory.Create</c>).</param>
     /// <returns>Red teaming results identifying vulnerabilities and failure modes.</returns>
-    RedTeamingResults<T> PerformRedTeaming(IPredictiveModel<T, Vector<T>, Vector<T>> model, Matrix<T> adversarialPrompts);
+    /// <exception cref="System.InvalidOperationException">
+    /// <see cref="AlignmentMethodOptions{T}.EnableRedTeaming"/> is false, or the red-teaming options are invalid.
+    /// </exception>
+    RedTeamingResults PerformRedTeaming(Func<string, string> model, SafetyPipeline<T> pipeline);
 
     /// <summary>
     /// Gets the configuration options for the alignment method.
