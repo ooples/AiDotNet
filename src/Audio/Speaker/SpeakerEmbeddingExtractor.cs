@@ -473,10 +473,7 @@ public partial class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, I
 
             var adjusted = new Tensor<T>([EmbeddingDimension]);
             int copyLen = Math.Min(modelOutput.Length, EmbeddingDimension);
-            for (int i = 0; i < copyLen; i++)
-            {
-                adjusted[i] = modelOutput[i];
-            }
+            modelOutput.AsSpan().Slice(0, copyLen).CopyTo(adjusted.AsWritableSpan());
             // Remaining elements are default (zero) if output was shorter
             modelOutput = adjusted;
         }
@@ -606,11 +603,7 @@ public partial class SpeakerEmbeddingExtractor<T> : SpeakerRecognitionBase<T>, I
     /// <returns>Speaker embedding result.</returns>
     public SpeakerEmbedding<T> Extract(Vector<T> audio)
     {
-        var tensor = new Tensor<T>([audio.Length]);
-        for (int i = 0; i < audio.Length; i++)
-        {
-            tensor[i] = audio[i];
-        }
+        var tensor = new Tensor<T>(audio.ToArray(), [audio.Length]);
         return Extract(tensor);
     }
 

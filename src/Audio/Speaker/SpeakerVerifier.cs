@@ -525,15 +525,9 @@ public partial class SpeakerVerifier<T> : SpeakerRecognitionBase<T>, ISpeakerVer
             throw new ArgumentException("At least one embedding required for enrollment.", nameof(embeddings));
 
         // Convert to tensor embeddings and aggregate
-        var tensorEmbeddings = embeddings.Select(e =>
-        {
-            var tensor = new Tensor<T>([e.Vector.Length]);
-            for (int i = 0; i < e.Vector.Length; i++)
-            {
-                tensor[i] = e.Vector[i];
-            }
-            return tensor;
-        }).ToList();
+        var tensorEmbeddings = embeddings
+            .Select(e => new Tensor<T>((T[])e.Vector.Clone(), [e.Vector.Length]))
+            .ToList();
 
         var aggregatedEmbedding = ((ISpeakerEmbeddingExtractor<T>)_embeddingExtractor).AggregateEmbeddings(tensorEmbeddings);
 
@@ -568,11 +562,7 @@ public partial class SpeakerVerifier<T> : SpeakerRecognitionBase<T>, ISpeakerVer
         }
 
         // Convert test embedding to tensor
-        var testTensor = new Tensor<T>([testEmbedding.Vector.Length]);
-        for (int i = 0; i < testEmbedding.Vector.Length; i++)
-        {
-            testTensor[i] = testEmbedding.Vector[i];
-        }
+        var testTensor = new Tensor<T>((T[])testEmbedding.Vector.Clone(), [testEmbedding.Vector.Length]);
 
         // Compute similarity
         double score = NumOps.ToDouble(ComputeCosineSimilarity(testTensor, profile.Embedding));
@@ -587,23 +577,71 @@ public partial class SpeakerVerifier<T> : SpeakerRecognitionBase<T>, ISpeakerVer
     }
 
     /// <summary>
+    /// Each row of the <c>[rows, cols]</c> <paramref name="values"/> divided by its largest absolute entry; a row
+    /// whose largest entry is zero (or not finite) is left as it is.
+    /// </summary>
+    private Tensor<T> ScaleRowsToUnitMax(Tensor<T> values)
+    {
+        if (values.Length == 0)
+        {
+            return values;
+        }
+
+        int rows = values.Shape[0], cols = values.Shape[1];
+        var largest = Engine.ReduceMax(Engine.TensorAbs(values), [1], true);
+        var usable = Engine.TensorMultiply(
+            Engine.TensorGreaterThan(largest, NumOps.Zero),
+            Engine.TensorLessThan(largest, NumOps.FromDouble(double.PositiveInfinity)));
+        var ones = new Tensor<T>([rows, 1]);
+        ones.Fill(NumOps.One);
+        var divisor = Engine.TensorWhere(Engine.TensorEquals(usable, NumOps.One), largest, ones);
+        return Engine.TensorDivide(values, Engine.TensorBroadcastTo(divisor, [rows, cols]));
+    }
+
+    /// <summary>
     /// Identifies the most likely speaker from enrolled set (legacy API).
     /// </summary>
     public IdentificationResult Identify(SpeakerEmbedding<T> testEmbedding)
     {
         var scores = new List<(string speakerId, double score)>();
 
-        // Convert test embedding to tensor
-        var testTensor = new Tensor<T>([testEmbedding.Vector.Length]);
-        for (int i = 0; i < testEmbedding.Vector.Length; i++)
+        // Score every enrolled profile at once: stack the profiles into an [n, d] matrix, take the
+        // dot products with one matmul and divide by the norm products (zero norm product -> 0).
+        var profiles = _enrolledSpeakers.ToArray();
+        int dim = testEmbedding.Vector.Length;
+        if (profiles.Length > 0)
         {
-            testTensor[i] = testEmbedding.Vector[i];
-        }
+            var stackedData = new T[profiles.Length * dim];
+            for (int p = 0; p < profiles.Length; p++)
+            {
+                var embedding = profiles[p].Value.Embedding;
+                if (embedding.Length != dim)
+                {
+                    throw new ArgumentException("Embeddings must have the same dimension.");
+                }
 
-        foreach (var (speakerId, profile) in _enrolledSpeakers)
-        {
-            double score = NumOps.ToDouble(ComputeCosineSimilarity(testTensor, profile.Embedding));
-            scores.Add((speakerId, score));
+                Array.Copy(embedding.ToArray(), 0, stackedData, p * dim, dim);
+            }
+
+            // Cosine is scale invariant, so every profile and the test vector are each divided by their own largest
+            // magnitude first: the squares then stay at most 1 and cannot overflow T (65504 in Half).
+            var stacked = ScaleRowsToUnitMax(new Tensor<T>(stackedData, [profiles.Length, dim]));
+            var testTensor = ScaleRowsToUnitMax(new Tensor<T>((T[])testEmbedding.Vector.Clone(), [1, dim])).Reshape([dim, 1]);
+            var dots = Engine.TensorMatMul(stacked, testTensor);
+            var profileNorms = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorSquare(stacked), [1], true));
+            T testNorm = NumOps.Sqrt(Engine.TensorSum(Engine.TensorSquare(testTensor)));
+            var normProducts = Engine.TensorMultiplyScalar(profileNorms, testNorm);
+            var zeroNorm = Engine.TensorEquals(normProducts, NumOps.Zero);
+            var cosine = Engine.TensorWhere(
+                zeroNorm,
+                new Tensor<T>([profiles.Length, 1]),
+                Engine.TensorDivide(dots, normProducts));
+            var scoreValues = cosine.Cast<double>().ToArray();
+
+            for (int p = 0; p < profiles.Length; p++)
+            {
+                scores.Add((profiles[p].Key, scoreValues[p]));
+            }
         }
 
         var ranked = scores.OrderByDescending(s => s.score).ToList();
