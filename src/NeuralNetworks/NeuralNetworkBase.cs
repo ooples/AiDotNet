@@ -5051,12 +5051,26 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// therefore keep device-resident gradients by reference and read them only if something asks.
     /// </remarks>
     private protected void ScatterFusedGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
+        => PublishFusedRequestGradients(grads, sourcesOutliveStep: true);
+
+    /// <summary>
+    /// Publishes the gradients of a fused request's eager fallback (<see cref="Training.TapeTrainingStepper{T}.EagerStep"/>).
+    /// </summary>
+    /// <remarks>
+    /// They are the tape's own tensors, which the step then clips in place (the model's MaxGradNorm and the optimizer's
+    /// own clip), so they are copied like every other eager step's. Referencing them as a plan's buffers are referenced
+    /// published the clipped gradient, on the CPU and the GPU engine alike.
+    /// </remarks>
+    private void PublishEagerFallbackGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
+        => PublishFusedRequestGradients(grads, sourcesOutliveStep: false);
+
+    private void PublishFusedRequestGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads, bool sourcesOutliveStep)
     {
         // A step that ran on the fused session (or its eager twin) never reaches ComputeAndPublishParameterGradients,
         // so the reachability probe is told here. A tensor the step's loss does not reach gets an all-zero
         // gradient from the plan, which the probe counts as unreached.
         TapeReachabilityProbe<T>.Current?.Record(this, grads);
-        PublishParameterGradients(grads, sourcesOutliveStep: true);
+        PublishParameterGradients(grads, sourcesOutliveStep);
     }
 
     private void ClearPublishedLayerGradientSlices()
@@ -12887,6 +12901,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // The eager fallback regularizes as TrainWithTape does, sparing the parameters excluded from weight decay.
             RegularizeGradients = OptimizerRegularizer(resolvedOptimizer),
             OnGradients = ScatterFusedGradients,
+            OnEagerGradients = PublishEagerFallbackGradients,
             // The opt-out TryTrainWithFusedOptimizer honours applies to custom and declared-objective steps as well: a
             // model whose step builds its batch on the host (a posterior sample, timesteps, noise or flows drawn per
             // step) would otherwise replay the first step's draw for the whole run and descend a frozen objective.
@@ -14627,6 +14642,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             ModelGradientClip = MaxGradNormValue,
             ExcludesParametersFromWeightDecay = () => DecayExcludedParameters().Count > 0,
             OnGradients = ScatterFusedGradients,
+            OnEagerGradients = PublishEagerFallbackGradients,
         };
 
         var outcome = FusedSession.TryStep(request, out T lossValue, out var lossTensor);

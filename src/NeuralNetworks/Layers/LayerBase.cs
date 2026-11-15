@@ -7938,6 +7938,11 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         if (sourcesOutliveStep && TryReferenceHostGradients(grads, out int hostMatched))
             return hostMatched;
 
+        // Withdraw the previous publish before anything is written. A reused buffer below is that publish's storage, so
+        // a fill that throws partway would otherwise leave a surface mixing this step's slots with the last step's, and
+        // a step with nothing keyed to this layer would leave the last step's surface zeroed by the fill.
+        ParameterGradients = null;
+
         int ignored = 0;
         int total = FillParameterGradients(null, 0, grads, ref ignored);
         if (total <= 0) return 0;

@@ -62,6 +62,17 @@ internal sealed class FusedTrainingStepRequest<T>
     public Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? OnGradients { get; init; }
 
     /// <summary>
+    /// Receives the gradients, before clipping, when the step runs on the eager tape instead
+    /// (<see cref="TapeTrainingStepper{T}.EagerStep"/>). Null = <see cref="OnGradients"/>.
+    /// </summary>
+    /// <remarks>
+    /// These are the tape's own tensors, not a plan's persistent buffers: the step clips them in place right after this
+    /// call, and their arena storage is reissued a step later. A receiver must copy what it keeps, so one that keeps a
+    /// plan's buffers by reference (as <see cref="OnGradients"/> may) needs this separate callback.
+    /// </remarks>
+    public Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? OnEagerGradients { get; init; }
+
+    /// <summary>
     /// Adds the optimizer's regularization to the gradients when the step runs eager, before clipping, as the fused plan
     /// adds its L2. Null = the optimizer's plain regularization on every reached parameter.
     /// </summary>

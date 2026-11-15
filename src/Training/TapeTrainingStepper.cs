@@ -190,7 +190,8 @@ internal sealed class TapeTrainingStepper<T>
             (predicted, y) => request.ComputeLoss(predicted, y),
             new EagerStepHooks
             {
-                OnGradients = request.OnGradients,
+                // The tape's gradients, which the clip below rewrites in place: never a plan's referenced buffers.
+                OnGradients = request.OnEagerGradients ?? request.OnGradients,
                 // The fused plan adds the optimizer's L2 on the same side of its clip; the eager step it falls back to
                 // must too, or a model trains on a different objective whenever compilation declines.
                 RegularizeGradients = request.RegularizeGradients ?? OptimizerRegularization(request.Optimizer),
