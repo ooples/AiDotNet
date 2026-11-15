@@ -1,4 +1,5 @@
 using AiDotNet.Clustering.Interfaces;
+using AiDotNet.Clustering.Base;
 using AiDotNet.Tensors.Engines;
 
 namespace AiDotNet.Clustering.DistanceMetrics;
@@ -45,8 +46,8 @@ public abstract class DistanceMetricBase<T> : IDistanceMetric<T>
 
     /// <inheritdoc />
     /// <remarks>
-    /// Default implementation uses Euclidean distance inline.
-    /// Override in subclasses for Manhattan, Cosine, etc.
+    /// Wraps the arrays without copying and evaluates <see cref="Compute"/>, so every metric (including custom
+    /// ones that only override <see cref="Compute"/>) measures its own distance here.
     /// </remarks>
     public virtual T ComputeInline(T[] a, T[] b, int length)
     {
@@ -54,17 +55,7 @@ public abstract class DistanceMetricBase<T> : IDistanceMetric<T>
             throw new ArgumentOutOfRangeException(nameof(length),
                 $"Length ({length}) must be non-negative and within bounds of both arrays (a={a.Length}, b={b.Length}).");
 
-        // Direct sum-of-squares loop — see VectorHelper.EuclideanDistance
-        // for the rationale (clustering distance computations dispatch to
-        // GPU per call when AutoDetectAndConfigureGpu has switched
-        // backends, surfaced as the issue #1224 Cluster B regression).
-        T sumSq = NumOps.Zero;
-        for (int i = 0; i < length; i++)
-        {
-            T diffI = NumOps.Subtract(a[i], b[i]);
-            sumSq = NumOps.Add(sumSq, NumOps.Multiply(diffI, diffI));
-        }
-        return NumOps.Sqrt(sumSq);
+        return Compute(Vector<T>.Wrap(a, 0, length), Vector<T>.Wrap(b, 0, length));
     }
 
     /// <inheritdoc />
@@ -76,37 +67,16 @@ public abstract class DistanceMetricBase<T> : IDistanceMetric<T>
                 $"Point dimension ({point.Length}) must match data columns ({data.Columns}).");
         }
 
-        var distances = new Vector<T>(data.Rows);
-        for (int i = 0; i < data.Rows; i++)
-        {
-            var row = GetRow(data, i);
-            distances[i] = Compute(point, row);
-        }
-
-        return distances;
+        return ClusteringTensorOps.PointRowReduce(point, data, ComputeRowPairs);
     }
 
     /// <inheritdoc />
     public virtual Matrix<T> ComputePairwise(Matrix<T> data)
     {
-        int n = data.Rows;
-        var distances = new Matrix<T>(n, n);
-
-        for (int i = 0; i < n; i++)
-        {
-            var rowI = GetRow(data, i);
-            distances[i, i] = NumOps.Zero;
-
-            for (int j = i + 1; j < n; j++)
-            {
-                var rowJ = GetRow(data, j);
-                var dist = Compute(rowI, rowJ);
-                distances[i, j] = dist;
-                distances[j, i] = dist; // Symmetric
-            }
-        }
-
-        return distances;
+        // Distances above the diagonal mirrored below it, with a zero diagonal.
+        var full = Tensor<T>.FromMatrix(ComputePairwise(data, data));
+        var upper = Engine.TensorTriu(full, 1);
+        return Engine.TensorAdd(upper, Engine.TensorTranspose(upper)).ToMatrix();
     }
 
     /// <inheritdoc />
@@ -118,19 +88,25 @@ public abstract class DistanceMetricBase<T> : IDistanceMetric<T>
                 $"Matrix columns must match: x has {x.Columns}, y has {y.Columns}.");
         }
 
-        var distances = new Matrix<T>(x.Rows, y.Rows);
+        return ClusteringTensorOps.PairwiseRowReduce(x, y, ComputeRowPairs);
+    }
 
-        for (int i = 0; i < x.Rows; i++)
-        {
-            var rowX = GetRow(x, i);
-            for (int j = 0; j < y.Rows; j++)
-            {
-                var rowY = GetRow(y, j);
-                distances[i, j] = Compute(rowX, rowY);
-            }
-        }
-
-        return distances;
+    /// <summary>
+    /// Computes the distance between every pair of corresponding rows of two [p, d] tensors.
+    /// </summary>
+    /// <param name="a">The first set of points, one per row.</param>
+    /// <param name="b">The second set of points, one per row, paired with <paramref name="a"/> by row index.</param>
+    /// <returns>A [p] tensor whose entry i is the distance between row i of a and row i of b.</returns>
+    /// <remarks>
+    /// The built-in metrics override this with whole-tensor engine operations. The default evaluates the
+    /// metric's own <see cref="Compute"/> once per row pair, which keeps custom metrics that only implement
+    /// <see cref="Compute"/> working with every batched API.
+    /// </remarks>
+    protected virtual Tensor<T> ComputeRowPairs(Tensor<T> a, Tensor<T> b)
+    {
+        var left = a.ToMatrix();
+        var right = b.ToMatrix();
+        return Vector<T>.FromEnumerable(left.GetRows().Zip(right.GetRows(), Compute)).AsTensor();
     }
 
     /// <summary>
@@ -139,30 +115,14 @@ public abstract class DistanceMetricBase<T> : IDistanceMetric<T>
     /// <param name="matrix">The source matrix.</param>
     /// <param name="rowIndex">The row index to extract.</param>
     /// <returns>A vector containing the row data.</returns>
-    protected Vector<T> GetRow(Matrix<T> matrix, int rowIndex)
-    {
-        var row = new Vector<T>(matrix.Columns);
-        for (int j = 0; j < matrix.Columns; j++)
-        {
-            row[j] = matrix[rowIndex, j];
-        }
-        return row;
-    }
+    protected Vector<T> GetRow(Matrix<T> matrix, int rowIndex) => matrix.GetRow(rowIndex);
 
     /// <summary>
     /// Computes the sum of elements in a vector.
     /// </summary>
     /// <param name="vector">The vector to sum.</param>
     /// <returns>The sum of all elements.</returns>
-    protected T Sum(Vector<T> vector)
-    {
-        T sum = NumOps.Zero;
-        for (int i = 0; i < vector.Length; i++)
-        {
-            sum = NumOps.Add(sum, vector[i]);
-        }
-        return sum;
-    }
+    protected T Sum(Vector<T> vector) => Engine.Sum(vector);
 
     /// <summary>
     /// Computes the square root of a value.

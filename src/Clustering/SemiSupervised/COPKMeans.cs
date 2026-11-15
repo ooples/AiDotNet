@@ -129,33 +129,23 @@ public partial class COPKMeans<T> : ClusteringBase<T>
             changed = false;
             iterations++;
 
-            // Cache point array for allocation-free distance
-            var pointArr = new T[d];
+            // Centers are fixed during the assignment pass
+            var distances = metric.ComputePairwise(x, centers);
 
-            // Assign points to clusters respecting constraints
+            // Assign points to clusters respecting constraints (in order: each assignment constrains later points)
+            var allowed = new List<int>(k);
             for (int i = 0; i < n; i++)
             {
-                for (int j = 0; j < d; j++)
-                    pointArr[j] = x[i, j];
-                int bestCluster = -1;
-                T bestDist = NumOps.MaxValue;
-
-                // Try each cluster
+                allowed.Clear();
                 for (int c = 0; c < k; c++)
                 {
-                    if (ViolatesConstraints(i, c, labels))
+                    if (!ViolatesConstraints(i, c, labels))
                     {
-                        continue;
-                    }
-
-                    T dist = metric.ComputeInline(pointArr, centers[c], d);
-                    if (NumOps.LessThan(dist, bestDist))
-                    {
-                        bestDist = dist;
-                        bestCluster = c;
+                        allowed.Add(c);
                     }
                 }
 
+                int bestCluster = NearestAllowed(distances.GetRow(i), allowed);
                 if (bestCluster != -1 && bestCluster != labels[i])
                 {
                     labels[i] = bestCluster;
@@ -163,41 +153,9 @@ public partial class COPKMeans<T> : ClusteringBase<T>
                 }
             }
 
-            // Update centers
-            var counts = new int[k];
-            var newCenters = new T[k][];
-            for (int c = 0; c < k; c++)
-            {
-                newCenters[c] = new T[d];
-                for (int j = 0; j < d; j++)
-                {
-                    newCenters[c][j] = NumOps.Zero;
-                }
-            }
-
-            for (int i = 0; i < n; i++)
-            {
-                int li = (int)labels[i];
-                if (li >= 0)
-                {
-                    counts[li]++;
-                    for (int j = 0; j < d; j++)
-                    {
-                        newCenters[li][j] = NumOps.Add(newCenters[li][j], x[i, j]);
-                    }
-                }
-            }
-
-            for (int c = 0; c < k; c++)
-            {
-                if (counts[c] > 0)
-                {
-                    for (int j = 0; j < d; j++)
-                    {
-                        centers[c][j] = NumOps.Divide(newCenters[c][j], NumOps.FromDouble(counts[c]));
-                    }
-                }
-            }
+            // Update centers (empty clusters keep their previous center)
+            var means = ClusteringTensorOps.ClusterMeans(x, ClusteringTensorOps.FromIntArray<T>(labels), k, out var counts);
+            centers = ClusteringTensorOps.RowsWherePositive(counts, means, centers);
         }
 
         // Count violations
@@ -205,35 +163,34 @@ public partial class COPKMeans<T> : ClusteringBase<T>
         ConstraintsSatisfied = ConstraintViolations == 0;
 
         // Set results
-        ClusterCenters = new Matrix<T>(k, d);
-        Labels = new Vector<T>(n);
-
-        for (int c = 0; c < k; c++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                ClusterCenters[c, j] = centers[c][j];
-            }
-        }
-
-        for (int i = 0; i < n; i++)
-        {
-            Labels[i] = NumOps.FromDouble(labels[i]);
-        }
+        ClusterCenters = centers;
+        Labels = ClusteringTensorOps.FromIntArray<T>(labels);
 
         MergeDegenerateClusters(x);
 
         // Recompute constraint status after merge since labels may have changed
         if (Labels is not null)
         {
-            var mergedLabels = new int[Labels.Length];
-            for (int i = 0; i < Labels.Length; i++)
-                mergedLabels[i] = (int)Math.Round(NumOps.ToDouble(Labels[i]));
-            ConstraintViolations = CountViolations(mergedLabels);
+            ConstraintViolations = CountViolations(ClusteringTensorOps.ToIntArray(Labels));
             ConstraintsSatisfied = ConstraintViolations == 0;
         }
 
         IsTrained = true;
+    }
+
+    /// <summary>
+    /// The allowed cluster with the smallest distance (first on ties), or -1 when none is allowed or reachable.
+    /// </summary>
+    private int NearestAllowed(Vector<T> distances, List<int> allowed)
+    {
+        if (allowed.Count == 0)
+        {
+            return -1;
+        }
+
+        var candidates = ClusteringTensorOps.SelectElements(distances, allowed.ToArray());
+        int best = ClusteringTensorOps.ArgMin(candidates);
+        return NumOps.LessThan(candidates[best], NumOps.MaxValue) ? allowed[best] : -1;
     }
 
     private void ComputeConstraintClosures(int n)
@@ -381,65 +338,28 @@ public partial class COPKMeans<T> : ClusteringBase<T>
         return violations;
     }
 
-    private T[][] InitializeCenters(Matrix<T> x, int k, int n, int d, Random rand, IDistanceMetric<T> metric)
+    private Matrix<T> InitializeCenters(Matrix<T> x, int k, int n, int d, Random rand, IDistanceMetric<T> metric)
     {
-        var centers = new T[k][];
+        if (k <= 0)
+        {
+            return new Matrix<T>(0, d);
+        }
 
         // K-Means++ initialization
-        int firstIdx = rand.Next(n);
-        centers[0] = new T[d];
-        for (int j = 0; j < d; j++)
-        {
-            centers[0][j] = x[firstIdx, j];
-        }
+        var chosen = new int[k];
+        chosen[0] = rand.Next(n);
 
-        // Keep distances as double at random selection boundary
-        var distances = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            distances[i] = double.MaxValue;
-        }
-
+        // Squared distance of every point to its nearest chosen center
+        Vector<T>? distances = null;
         for (int c = 1; c < k; c++)
         {
-            double totalWeight = 0;
-
-            for (int i = 0; i < n; i++)
-            {
-                var point = GetRow(x, i);
-                var center = new Vector<T>(d);
-                for (int j = 0; j < d; j++)
-                {
-                    center[j] = centers[c - 1][j];
-                }
-
-                double dist = NumOps.ToDouble(metric.Compute(point, center));
-                distances[i] = Math.Min(distances[i], dist * dist);
-                totalWeight += distances[i];
-            }
-
-            double threshold = rand.NextDouble() * totalWeight;
-            double cumWeight = 0;
-            int selected = 0;
-
-            for (int i = 0; i < n; i++)
-            {
-                cumWeight += distances[i];
-                if (cumWeight >= threshold)
-                {
-                    selected = i;
-                    break;
-                }
-            }
-
-            centers[c] = new T[d];
-            for (int j = 0; j < d; j++)
-            {
-                centers[c][j] = x[selected, j];
-            }
+            var toLast = ClusteringTensorOps.DistancesToPoint(metric, x, x.GetRow(chosen[c - 1]));
+            var squared = Engine.Multiply(toLast, toLast);
+            distances = distances is null ? squared : Engine.Min(distances, squared);
+            chosen[c] = ClusteringTensorOps.SampleProportional(distances, rand);
         }
 
-        return centers;
+        return ClusteringTensorOps.SelectRows(x, chosen);
     }
 
     /// <inheritdoc />
@@ -447,34 +367,16 @@ public partial class COPKMeans<T> : ClusteringBase<T>
     {
         ValidateIsTrained();
 
-        var labels = new Vector<T>(x.Rows);
-        var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
-
-        for (int i = 0; i < x.Rows; i++)
+        if (ClusterCenters is null || NumClusters == 0)
         {
-            var point = GetRow(x, i);
-            T minDist = NumOps.MaxValue;
-            int nearestCluster = 0;
-
-            if (ClusterCenters is not null)
-            {
-                for (int c = 0; c < NumClusters; c++)
-                {
-                    var center = GetRow(ClusterCenters, c);
-                    T dist = metric.Compute(point, center);
-
-                    if (NumOps.LessThan(dist, minDist))
-                    {
-                        minDist = dist;
-                        nearestCluster = c;
-                    }
-                }
-            }
-
-            labels[i] = NumOps.FromDouble(nearestCluster);
+            return new Vector<T>(x.Rows);
         }
 
-        return labels;
+        var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
+        var centers = ClusterCenters.Rows == NumClusters
+            ? ClusterCenters
+            : ClusterCenters.GetSubMatrix(0, 0, NumClusters, ClusterCenters.Columns);
+        return ClusteringTensorOps.FromIntArray<T>(ClusteringTensorOps.NearestCenters(metric, x, centers));
     }
 
     /// <inheritdoc />

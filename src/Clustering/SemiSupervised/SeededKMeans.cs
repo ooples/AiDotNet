@@ -126,6 +126,7 @@ public partial class SeededKMeans<T> : ClusteringBase<T>
             iterations++;
 
             // Assign points to nearest cluster
+            var nearest = ClusteringTensorOps.NearestCenters(metric, x, centers);
             for (int i = 0; i < n; i++)
             {
                 // Skip constrained seeds
@@ -134,99 +135,35 @@ public partial class SeededKMeans<T> : ClusteringBase<T>
                     continue;
                 }
 
-                var pointArr = new T[d];
-                for (int j = 0; j < d; j++) pointArr[j] = x[i, j];
-                int bestCluster = 0;
-                T bestDist = NumOps.MaxValue;
-
-                for (int c = 0; c < k; c++)
+                if (nearest[i] != labels[i])
                 {
-                    T dist = metric.ComputeInline(pointArr, centers[c], d);
-                    if (NumOps.LessThan(dist, bestDist))
-                    {
-                        bestDist = dist;
-                        bestCluster = c;
-                    }
-                }
-
-                if (bestCluster != labels[i])
-                {
-                    labels[i] = bestCluster;
+                    labels[i] = nearest[i];
                     changed = true;
                 }
             }
 
-            // Update centers
-            var counts = new int[k];
-            var newCenters = new T[k][];
-            for (int c = 0; c < k; c++)
-            {
-                newCenters[c] = new T[d];
-                for (int j = 0; j < d; j++)
-                {
-                    newCenters[c][j] = NumOps.Zero;
-                }
-            }
-
-            for (int i = 0; i < n; i++)
-            {
-                int c = labels[i];
-                counts[c]++;
-                for (int j = 0; j < d; j++)
-                {
-                    newCenters[c][j] = NumOps.Add(newCenters[c][j], x[i, j]);
-                }
-            }
-
-            for (int c = 0; c < k; c++)
-            {
-                if (counts[c] > 0)
-                {
-                    for (int j = 0; j < d; j++)
-                    {
-                        centers[c][j] = NumOps.Divide(newCenters[c][j], NumOps.FromDouble(counts[c]));
-                    }
-                }
-            }
+            // Update centers (empty clusters keep their previous center)
+            var means = ClusteringTensorOps.ClusterMeans(x, ClusteringTensorOps.FromIntArray<T>(labels), k, out var counts);
+            centers = ClusteringTensorOps.RowsWherePositive(counts, means, centers);
         }
 
         // Set results
-        ClusterCenters = new Matrix<T>(k, d);
-        Labels = new Vector<T>(n);
-
-        for (int c = 0; c < k; c++)
-        {
-            for (int j = 0; j < d; j++)
-            {
-                ClusterCenters[c, j] = centers[c][j];
-            }
-        }
-
-        for (int i = 0; i < n; i++)
-        {
-            Labels[i] = NumOps.FromDouble(labels[i]);
-        }
+        ClusterCenters = centers;
+        Labels = ClusteringTensorOps.FromIntArray<T>(labels);
 
         MergeDegenerateClusters(x);
         IsTrained = true;
     }
 
-    private T[][] InitializeCentersFromSeeds(Matrix<T> x, Dictionary<int, int> seeds, int k, int n, int d)
+    private Matrix<T> InitializeCentersFromSeeds(Matrix<T> x, Dictionary<int, int> seeds, int k, int n, int d)
     {
-        var centers = new T[k][];
-        var counts = new int[k];
-
-        // Initialize arrays
-        for (int c = 0; c < k; c++)
+        // Seed label per point (-1 for unseeded points and out-of-range seeds)
+        var seedLabels = new int[n];
+        for (int i = 0; i < n; i++)
         {
-            centers[c] = new T[d];
-            for (int j = 0; j < d; j++)
-            {
-                centers[c][j] = NumOps.Zero;
-            }
+            seedLabels[i] = -1;
         }
 
-        // Compute centers from seeds
         foreach (var kvp in seeds)
         {
             int pointIdx = kvp.Key;
@@ -234,40 +171,27 @@ public partial class SeededKMeans<T> : ClusteringBase<T>
 
             if (clusterLabel >= 0 && clusterLabel < k && pointIdx >= 0 && pointIdx < n)
             {
-                counts[clusterLabel]++;
-                for (int j = 0; j < d; j++)
-                {
-                    centers[clusterLabel][j] = NumOps.Add(centers[clusterLabel][j], x[pointIdx, j]);
-                }
+                seedLabels[pointIdx] = clusterLabel;
             }
         }
 
-        // Average the sums
+        // Average the seeds of each cluster
+        var means = ClusteringTensorOps.ClusterMeans(x, ClusteringTensorOps.FromIntArray<T>(seedLabels), k, out var counts);
+
         var rand = Options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(Options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
 
+        // Clusters without seeds start at a random data point
+        var seedCounts = ClusteringTensorOps.ToIntArray(counts);
+        var fallbackRows = new int[k];
         for (int c = 0; c < k; c++)
         {
-            if (counts[c] > 0)
-            {
-                for (int j = 0; j < d; j++)
-                {
-                    centers[c][j] = NumOps.Divide(centers[c][j], NumOps.FromDouble(counts[c]));
-                }
-            }
-            else
-            {
-                // No seeds for this cluster, initialize randomly
-                int randomIdx = rand.Next(n);
-                for (int j = 0; j < d; j++)
-                {
-                    centers[c][j] = x[randomIdx, j];
-                }
-            }
+            fallbackRows[c] = seedCounts[c] > 0 ? 0 : rand.Next(n);
         }
 
-        return centers;
+        var fallback = n > 0 ? ClusteringTensorOps.SelectRows(x, fallbackRows) : new Matrix<T>(k, d);
+        return ClusteringTensorOps.RowsWherePositive(counts, means, fallback);
     }
 
     /// <inheritdoc />
@@ -275,34 +199,16 @@ public partial class SeededKMeans<T> : ClusteringBase<T>
     {
         ValidateIsTrained();
 
-        var labels = new Vector<T>(x.Rows);
-        var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
-
-        for (int i = 0; i < x.Rows; i++)
+        if (ClusterCenters is null || NumClusters == 0)
         {
-            var point = GetRow(x, i);
-            T minDist = NumOps.MaxValue;
-            int nearestCluster = 0;
-
-            if (ClusterCenters is not null)
-            {
-                for (int c = 0; c < NumClusters; c++)
-                {
-                    var center = GetRow(ClusterCenters, c);
-                    T dist = metric.Compute(point, center);
-
-                    if (NumOps.LessThan(dist, minDist))
-                    {
-                        minDist = dist;
-                        nearestCluster = c;
-                    }
-                }
-            }
-
-            labels[i] = NumOps.FromDouble(nearestCluster);
+            return new Vector<T>(x.Rows);
         }
 
-        return labels;
+        var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
+        var centers = ClusterCenters.Rows == NumClusters
+            ? ClusterCenters
+            : ClusterCenters.GetSubMatrix(0, 0, NumClusters, ClusterCenters.Columns);
+        return ClusteringTensorOps.FromIntArray<T>(ClusteringTensorOps.NearestCenters(metric, x, centers));
     }
 
     /// <inheritdoc />

@@ -1,3 +1,4 @@
+using AiDotNet.Clustering.Base;
 using AiDotNet.Attributes;
 using AiDotNet.Clustering.Interfaces;
 using AiDotNet.Enums;
@@ -249,9 +250,10 @@ public class ClusteringEvaluator<T>
     private int CountUniqueClusters(Vector<T> labels)
     {
         var unique = new HashSet<int>();
+        var labelsIds = ClusteringTensorOps.ToIntArray(labels);
         for (int i = 0; i < labels.Length; i++)
         {
-            int label = (int)_numOps.ToDouble(labels[i]);
+            int label = labelsIds[i];
             if (label >= 0)
             {
                 unique.Add(label);
@@ -263,9 +265,10 @@ public class ClusteringEvaluator<T>
     private int[] ComputeClusterSizes(Vector<T> labels, int numClusters)
     {
         var sizes = new int[numClusters];
+        var labelsIds = ClusteringTensorOps.ToIntArray(labels);
         for (int i = 0; i < labels.Length; i++)
         {
-            int label = (int)_numOps.ToDouble(labels[i]);
+            int label = labelsIds[i];
             if (label >= 0 && label < numClusters)
             {
                 sizes[label]++;
