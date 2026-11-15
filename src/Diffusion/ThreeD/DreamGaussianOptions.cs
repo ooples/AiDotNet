@@ -80,6 +80,15 @@ public class DreamGaussianOptions
     /// <summary>Resolution of the reference view (<c>ref_size</c>). Default: 256.</summary>
     public int ReferenceSize { get; set; } = 256;
 
+    /// <summary>
+    /// Whether the background-removed input is recentred as <c>process.py</c> does (<c>--recenter</c>): the object's
+    /// mask box scaled so its longer side fills <c>1 - RecenterBorderRatio</c> of the reference and centred. Default: true.
+    /// </summary>
+    public bool RecenterReference { get; set; } = true;
+
+    /// <summary>The empty border of the recentred input (<c>--border_ratio</c>). Default: 0.2.</summary>
+    public double RecenterBorderRatio { get; set; } = 0.2;
+
     /// <summary>Probability that a novel view is rendered on black instead of white (<c>invert_bg_prob</c>). Default: 0.5.</summary>
     public double InvertBackgroundProbability { get; set; } = 0.5;
 
@@ -272,6 +281,8 @@ public class DreamGaussianOptions
         if (InitialGaussianCount < 1) throw new InvalidOperationException("InitialGaussianCount must be positive.");
         if (Iterations < 0 || RefineIterations < 0) throw new InvalidOperationException("Iteration counts cannot be negative.");
         if (BatchSize < 1) throw new InvalidOperationException("BatchSize must be positive.");
+        if (!(RecenterBorderRatio >= 0.0 && RecenterBorderRatio < 1.0))
+            throw new InvalidOperationException("RecenterBorderRatio must be in [0, 1).");
         if (ReferenceSize < 1 || BakeRenderResolution < 1 || RefineRenderResolution < 1 || TextureSize < 2)
             throw new InvalidOperationException("Resolutions must be positive and the texture at least 2 texels wide.");
         if (BakeElevations is null || BakeAzimuths is null || BakeElevations.Length != BakeAzimuths.Length)

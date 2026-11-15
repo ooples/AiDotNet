@@ -12044,6 +12044,10 @@ AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.ReferenceElevation.get -> double
 AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.ReferenceElevation.set -> void
 AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.ReferenceSize.get -> int
 AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.ReferenceSize.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.RecenterReference.get -> bool
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.RecenterReference.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.RecenterBorderRatio.get -> double
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.RecenterBorderRatio.set -> void
 AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.InvertBackgroundProbability.get -> double
 AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.InvertBackgroundProbability.set -> void
 AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.RenderResolutions.get -> int[]!
