@@ -158,12 +158,15 @@ public class TabRRegression<T> : TabRBase<T>
     /// <param name="features">Input features [batch_size, num_features].</param>
     /// <param name="targets">Target values [batch_size, output_dim].</param>
     /// <param name="learningRate">The learning rate.</param>
-    /// <param name="sampleIndices">Indices of samples for leave-one-out retrieval.</param>
+    /// <param name="sampleIndices">Each row's index in <c>BuildIndex</c>, excluded from its own candidates (leave-one-out).
+    /// When omitted, a row is matched to the indexed sample with exactly its features; a row matching several (duplicates)
+    /// throws, since its own label would otherwise leak into its prediction.</param>
     /// <returns>The training loss.</returns>
     public T TrainStep(Tensor<T> features, Tensor<T> targets, T learningRate, Vector<int>? sampleIndices = null)
     {
+        var exclusions = ResolveTrainingExclusions(features, sampleIndices);
         return TrainWithTape(
-            () => TabularTraining.MeanSquaredErrorObjective(Forward(features, sampleIndices), targets),
+            () => TabularTraining.MeanSquaredErrorObjective(Forward(features, exclusions), targets),
             learningRate);
     }
 

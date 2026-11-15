@@ -22975,3 +22975,18 @@ override AiDotNet.NeuralNetworks.Tabular.GhostBatchNormalization<T>.SetTrainable
 override AiDotNet.NeuralNetworks.Tabular.GhostBatchNormalization<T>.ZeroGrad() -> void
 override AiDotNet.NeuralNetworks.Tabular.GhostBatchNormalization<T>.ReturnPooledParameters() -> void
 virtual AiDotNet.NeuralNetworks.Tabular.GhostBatchNormalization<T>.GetParameterRoles() -> System.Collections.Generic.Dictionary<string!, string!>!
+AiDotNet.NeuralNetworks.Layers.FullyConnectedLayer<T>.UseBias.get -> bool
+AiDotNet.Models.Options.TabROptions<T>.ValueOutputBiasMode.get -> AiDotNet.Enums.BiasMode
+AiDotNet.Models.Options.TabROptions<T>.ValueOutputBiasMode.set -> void
+AiDotNet.NeuralNetworks.Tabular.TabRBase<T>.ResolveTrainingExclusions(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! features, AiDotNet.Tensors.LinearAlgebra.Vector<int>? sampleIndices) -> AiDotNet.Tensors.LinearAlgebra.Vector<int>?
+AiDotNet.NeuralNetworks.Layers.FullyConnectedLayer<T>.FullyConnectedLayer(int outputSize, AiDotNet.Interfaces.IActivationFunction<T>? activationFunction, AiDotNet.Enums.BiasMode biasMode) -> void
+AiDotNet.NeuralNetworks.Layers.FullyConnectedLayer<T>.FullyConnectedLayer(int inputSize, int outputSize, AiDotNet.Interfaces.IActivationFunction<T>? activationFunction, AiDotNet.Enums.BiasMode biasMode) -> void
+AiDotNet.NeuralNetworks.Layers.FullyConnectedLayer<T>.FullyConnectedLayer(AiDotNet.Interfaces.IVectorActivationFunction<T>! vectorActivationFunction, int inputSize, int outputSize, AiDotNet.Enums.BiasMode biasMode) -> void
+AiDotNet.NeuralNetworks.Layers.FullyConnectedLayer<T>.FullyConnectedLayer(int outputSize, AiDotNet.Interfaces.IVectorActivationFunction<T>! vectorActivationFunction, AiDotNet.Enums.BiasMode biasMode) -> void
+static AiDotNet.NeuralNetworks.Layers.FullyConnectedLayer<T>.WithVectorActivation(int inputSize, int outputSize, AiDotNet.Interfaces.IVectorActivationFunction<T>! vectorActivationFunction, AiDotNet.Enums.BiasMode biasMode) -> AiDotNet.NeuralNetworks.Layers.FullyConnectedLayer<T>!
+*REMOVED*AiDotNet.NeuralNetworks.Layers.FullyConnectedLayer<T>.FullyConnectedLayer(int inputSize, int outputSize, AiDotNet.Interfaces.IActivationFunction<T>? activationFunction = null) -> void
+*REMOVED*AiDotNet.NeuralNetworks.Layers.FullyConnectedLayer<T>.FullyConnectedLayer(int outputSize, AiDotNet.Interfaces.IActivationFunction<T>? activationFunction = null) -> void
+AiDotNet.NeuralNetworks.Layers.FullyConnectedLayer<T>.FullyConnectedLayer(int inputSize, int outputSize, AiDotNet.Interfaces.IActivationFunction<T>? activationFunction) -> void
+AiDotNet.NeuralNetworks.Layers.FullyConnectedLayer<T>.FullyConnectedLayer(int outputSize, AiDotNet.Interfaces.IActivationFunction<T>? activationFunction) -> void
+AiDotNet.NeuralNetworks.Layers.FullyConnectedLayer<T>.FullyConnectedLayer(int inputSize, int outputSize) -> void
+AiDotNet.NeuralNetworks.Layers.FullyConnectedLayer<T>.FullyConnectedLayer(int outputSize) -> void

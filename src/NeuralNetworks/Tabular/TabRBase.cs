@@ -99,6 +99,9 @@ public abstract partial class TabRBase<T> : IParameterSource<T>
     private readonly FullyConnectedLayer<T> _valueProjection;
     private readonly FullyConnectedLayer<T> _outputProjection;
 
+    // The dropout between the two linear maps of T; null when DropoutRate is 0. It drops only inside a training step.
+    private readonly DropoutLayer<T>? _valueDropout;
+
     // Cache for backward pass
     [Scratch]
     private Tensor<T>? _attentionWeightsCache;
@@ -271,7 +274,15 @@ public abstract partial class TabRBase<T> : IParameterSource<T>
         int embDim = Options.EmbeddingDimension;
         _keyProjection = new FullyConnectedLayer<T>(embDim, embDim, (IActivationFunction<T>?)null);
         _valueProjection = new FullyConnectedLayer<T>(embDim, embDim, (IActivationFunction<T>?)null);
-        _outputProjection = new FullyConnectedLayer<T>(embDim, embDim, (IActivationFunction<T>?)null);
+        // T = LinearWithoutBias(Dropout(ReLU(Linear(.)))) (Gorishniy et al. 2023; reference tabr.py builds the last map
+        // with nn.Linear(d_block, d_main, bias=False)); the bias stays configurable through ValueOutputBiasMode
+        _outputProjection = new FullyConnectedLayer<T>(
+            embDim, embDim, (IActivationFunction<T>?)null, Options.ValueOutputBiasMode);
+        if (Options.DropoutRate > 0)
+        {
+            _valueDropout = new DropoutLayer<T>(Options.DropoutRate);
+            _valueDropout.SetTrainingMode(false);
+        }
 
         if (Options.IncludeNeighborTargets && labelDimension > 0)
         {
@@ -484,9 +495,15 @@ public abstract partial class TabRBase<T> : IParameterSource<T>
         var attentionWeights = Engine.Softmax(scores, -1);
         _attentionWeightsCache = TabularMetrics.KeptCopy(attentionWeights);
 
-        // V_i = T(k - k_i) + W_Y(y_i), with T = Linear(ReLU(Linear(.)))
+        // V_i = T(k - k_i) + W_Y(y_i), with T = LinearWithoutBias(Dropout(ReLU(Linear(.))))
         var differenceRows = difference.Reshape(batchSize * k, embDim);
-        var values = _outputProjection.Forward(Engine.ReLU(_valueProjection.Forward(differenceRows)));
+        var hidden = Engine.ReLU(_valueProjection.Forward(differenceRows));
+        if (_valueDropout != null)
+        {
+            hidden = _valueDropout.Forward(hidden);
+        }
+
+        var values = _outputProjection.Forward(hidden);
         if (_labelEmbedding != null && neighborLabels != null)
         {
             values = Engine.TensorAdd(values, _labelEmbedding.Forward(neighborLabels));
@@ -575,14 +592,73 @@ public abstract partial class TabRBase<T> : IParameterSource<T>
     /// <returns>The loss before the update.</returns>
     protected T TrainWithTape(Func<Tensor<T>> objective, T learningRate)
     {
+        // The value MLP's dropout is active for the step only; prediction never drops
+        _valueDropout?.SetTrainingMode(true);
         try
         {
             return TabularTraining.SgdStep(GetTrainableTensors, objective, learningRate);
         }
         finally
         {
+            _valueDropout?.SetTrainingMode(false);
             ResetState();
         }
+    }
+
+    /// <summary>
+    /// The candidates a training batch must not retrieve: <paramref name="sampleIndices"/> when given, otherwise each
+    /// row's own entry in the index.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The paper (section 3.1) and the reference code exclude every training object from its own candidate set.
+    /// Values carry the label embedding <c>W_Y(y_i)</c>, so a row that retrieves itself (at distance 0, with the
+    /// largest weight) is trained on its own label. Without indices, a row is identified with the indexed sample whose
+    /// features it matches exactly; a row matching none is not in the index and excludes nothing.
+    /// </para>
+    /// <para>
+    /// A row matching several indexed samples exactly (duplicate rows) cannot be told apart from its twins, so its own
+    /// entry is unknown; that throws rather than silently leaking a label. Pass <paramref name="sampleIndices"/> then.
+    /// </para>
+    /// </remarks>
+    /// <returns>The per-row excluded index (-1 for none), or null when no row needs one.</returns>
+    protected Vector<int>? ResolveTrainingExclusions(Tensor<T> features, Vector<int>? sampleIndices)
+    {
+        if (features is null) throw new ArgumentNullException(nameof(features));
+        if (sampleIndices != null) return sampleIndices;
+        if (_indexFeatures == null || _numIndexedSamples == 0)
+        {
+            throw new InvalidOperationException("Retrieval index has not been built. Call BuildIndex first.");
+        }
+
+        int batchSize = features.Shape[0];
+        int numFeatures = _indexFeatures.Shape[1];
+        if (batchSize == 0) return null;
+
+        int probe = Math.Min(2, _numIndexedSamples);
+        Tensor<int> nearest;
+        Tensor<T> exact;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            var rows = TabularMetrics.Flat(features, batchSize * numFeatures).Reshape(batchSize, numFeatures);
+            var distances = TabularMetrics.SquaredDistances(rows, _indexFeatures);
+            nearest = TieBreakArgMax.StableSmallestK(distances, probe);
+            exact = Engine.TensorEquals(Engine.TensorTakeAlongDim(distances, nearest, 1), NumOps.Zero);
+        }
+
+        if (probe > 1 && Engine.TensorCountNonzero(Engine.TensorNarrow(exact, 1, 1, 1)) > 0)
+        {
+            throw new InvalidOperationException(
+                "A training row matches several indexed samples exactly, so its own index entry cannot be identified " +
+                "and it would retrieve its own label. Pass sampleIndices with each row's index in BuildIndex.");
+        }
+
+        var matched = Engine.TensorNarrow(exact, 1, 0, 1).Reshape(batchSize);
+        if (Engine.TensorCountNonzero(matched) == 0) return null;
+
+        var self = Engine.TensorNarrow(nearest, 1, 0, 1).Reshape(batchSize);
+        var none = Engine.TensorFullLike(self, -1);
+        return Engine.TensorWhere(matched.Cast<int>(), self, none).ToVector();
     }
 
     /// <summary>

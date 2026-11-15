@@ -167,15 +167,18 @@ public class TabRClassifier<T> : TabRBase<T>
     /// <param name="features">Input features [batch_size, num_features].</param>
     /// <param name="targets">Target class indices [batch_size].</param>
     /// <param name="learningRate">The learning rate.</param>
-    /// <param name="sampleIndices">Indices of samples for leave-one-out retrieval.</param>
+    /// <param name="sampleIndices">Each row's index in <c>BuildIndex</c>, excluded from its own candidates (leave-one-out).
+    /// When omitted, a row is matched to the indexed sample with exactly its features; a row matching several (duplicates)
+    /// throws, since its own label would otherwise leak into its prediction.</param>
     /// <returns>The training loss.</returns>
     public T TrainStep(Tensor<T> features, int[] targets, T learningRate, Vector<int>? sampleIndices = null)
     {
         int batchSize = features.Shape[0];
         var labels = TabularTraining.OneHotTargets<T>(Vector<int>.Wrap(targets), batchSize, _numClasses);
         var epsilon = NumOps.FromDouble(1e-15);
+        var exclusions = ResolveTrainingExclusions(features, sampleIndices);
         return TrainWithTape(
-            () => TabularTraining.CrossEntropyObjective(ApplySoftmax(Forward(features, sampleIndices)), labels, epsilon),
+            () => TabularTraining.CrossEntropyObjective(ApplySoftmax(Forward(features, exclusions)), labels, epsilon),
             learningRate);
     }
 

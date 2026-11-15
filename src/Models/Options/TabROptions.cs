@@ -96,7 +96,23 @@ public class TabROptions<T> : RiskModelOptions<T>
     /// Gets or sets the dropout rate.
     /// </summary>
     /// <value>The dropout rate, defaulting to 0.1.</value>
+    /// <remarks>
+    /// Applied inside the value MLP <c>T = LinearWithoutBias(Dropout(ReLU(Linear(.))))</c> during training steps, as in
+    /// the reference implementation's <c>dropout0</c>; prediction never drops.
+    /// </remarks>
     public double DropoutRate { get; set; } = 0.1;
+
+    /// <summary>
+    /// Gets or sets whether the last linear layer of the value MLP <c>T</c> carries a bias.
+    /// </summary>
+    /// <value><see cref="BiasMode.Never"/> by default, the paper's bias-free output layer.</value>
+    /// <remarks>
+    /// Gorishniy et al. (2023) define <c>T(.) = LinearWithoutBias(Dropout(ReLU(Linear(.))))</c>, and the reference
+    /// <c>yandex-research/tabular-dl-tabr</c> builds it with <c>nn.Linear(d_block, d_main, bias=False)</c>: a bias
+    /// there adds one constant to every neighbour's value, which the attention weights (summing to 1) pass straight
+    /// into the context. Set <see cref="BiasMode.Always"/> to keep one anyway.
+    /// </remarks>
+    public BiasMode ValueOutputBiasMode { get; set; } = BiasMode.Never;
 
     /// <summary>
     /// Gets or sets whether to include target values of retrieved neighbors.
@@ -177,6 +193,7 @@ public class TabROptions<T> : RiskModelOptions<T>
             NumLayers = NumLayers,
             NumAttentionHeads = NumAttentionHeads,
             DropoutRate = DropoutRate,
+            ValueOutputBiasMode = ValueOutputBiasMode,
             IncludeNeighborTargets = IncludeNeighborTargets,
             RetrievalTemperature = RetrievalTemperature,
             NormalizeEmbeddings = NormalizeEmbeddings,

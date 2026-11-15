@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Tabular;
 using AiDotNet.NeuralNetworks.Tasks.Graph;
 using AiDotNet.Tensors.Engines;
@@ -322,6 +325,107 @@ public class NeuralNetworkSweepAdversarialTests
         var after = model.PredictProbabilities(query).ToArray();
 
         Assert.Equal(before, after);
+    }
+
+    [Fact]
+    public void FullyConnectedLayer_BiasModeNever_IsTheBiasFreeLinearMap()
+    {
+        // nn.Linear(bias=False): no bias slot at all, and the output is exactly x W^T.
+        var biased = new FullyConnectedLayer<double>(2, 3, (IActivationFunction<double>?)null);
+        var layer = new FullyConnectedLayer<double>(2, 3, (IActivationFunction<double>?)null, BiasMode.Never);
+        Assert.Equal(9, biased.ParameterCount);
+        Assert.Equal(6, layer.ParameterCount);
+        Assert.False(layer.UseBias);
+        Assert.Null(layer.GetBiases());
+
+        layer.SetParameters(new Vector<double>(new[] { 1.0, 2.0, 3.0, 4.0, 5.0, 6.0 }));
+        var output = layer.Forward(Doubles(new[] { 1, 2 }, 10, 1)).ToArray();
+
+        Assert.Equal(new[] { 12.0, 34.0, 56.0 }, output);
+    }
+
+    [Fact]
+    public void TabR_ValueMlpOutputLayer_IsBiasFreeByDefault()
+    {
+        // T = LinearWithoutBias(Dropout(ReLU(Linear(.)))) (Gorishniy et al. 2023; tabr.py: nn.Linear(d_block, d_main,
+        // bias=False)); keeping the bias is an explicit option that adds exactly embeddingDimension parameters.
+        Assert.Equal(BiasMode.Never, new TabROptions<double>().ValueOutputBiasMode);
+        var withBias = SmallTabROptions(neighbors: 2);
+        withBias.ValueOutputBiasMode = BiasMode.Always;
+
+        var paperModel = new TabRRegression<double>(2, 1, SmallTabROptions(neighbors: 2));
+        var biasedModel = new TabRRegression<double>(2, 1, withBias);
+
+        Assert.Equal(
+            biasedModel.GetParameters().Length - withBias.EmbeddingDimension,
+            paperModel.GetParameters().Length);
+    }
+
+    [Fact]
+    public void TabR_ValueMlpDropout_DropsInsideATrainingStepOnly()
+    {
+        var options = SmallTabROptions(neighbors: 2);
+        options.EmbeddingDimension = 16;
+        options.DropoutRate = 0.5;
+        var model = new TabRRegression<double>(2, 1, options);
+        var features = Doubles(new[] { 3, 2 }, 0.4, 0.7, 1.1, 0.2, 0.6, 0.9);
+        var targets = Doubles(new[] { 3, 1 }, 0.1, 0.5, 0.9);
+        var indices = new Vector<int>(new[] { 0, 1, 2 });
+        model.BuildIndex(features, targets);
+
+        double evaluation = model.ComputeMSELoss(model.Forward(features, indices), targets);
+        Assert.Equal(evaluation, model.ComputeMSELoss(model.Forward(features, indices), targets));
+
+        // A zero-rate step changes nothing but reports the loss of its own (dropped) forward
+        double stepLoss = model.TrainStep(features, targets, 0.0, indices);
+
+        Assert.NotEqual(evaluation, stepLoss);
+        Assert.Equal(evaluation, model.ComputeMSELoss(model.Forward(features, indices), targets));
+    }
+
+    [Fact]
+    public void TabR_TrainStepWithoutSampleIndices_ExcludesEachRowsOwnEntry()
+    {
+        // Paper section 3.1 / tabr.py: a training object is never its own candidate. Without the exclusion every row
+        // retrieves itself at distance 0 and its own label reaches the prediction through W_Y.
+        var model = new TabRRegression<double>(2, 1, SmallTabROptions(neighbors: 2));
+        var features = Doubles(new[] { 3, 2 }, 0.4, 0.7, 1.1, 0.2, 0.6, 0.9);
+        var targets = Doubles(new[] { 3, 1 }, 0.1, 0.5, 0.9);
+        model.BuildIndex(features, targets);
+        double leaveOneOut = model.ComputeMSELoss(model.Forward(features, new Vector<int>(new[] { 0, 1, 2 })), targets);
+        double selfIncluded = model.ComputeMSELoss(model.Forward(features), targets);
+        Assert.NotEqual(leaveOneOut, selfIncluded);
+
+        double stepLoss = model.TrainStep(features, targets, 0.0);
+
+        Assert.Equal(leaveOneOut, stepLoss, 12);
+    }
+
+    [Fact]
+    public void TabRClassifier_TrainStepWithoutSampleIndices_ExcludesEachRowsOwnEntry()
+    {
+        var model = new TabRClassifier<double>(2, 2, SmallTabROptions(neighbors: 2));
+        var features = Doubles(new[] { 3, 2 }, 0.4, 0.7, 1.1, 0.2, 0.6, 0.9);
+        var labels = new[] { 0, 1, 1 };
+        model.BuildIndex(features, labels);
+        var reference = model.TrainStep(features, labels, 0.0, new Vector<int>(new[] { 0, 1, 2 }));
+
+        double stepLoss = model.TrainStep(features, labels, 0.0);
+
+        Assert.Equal(reference, stepLoss, 12);
+    }
+
+    [Fact]
+    public void TabR_TrainStepWithoutSampleIndices_DuplicateRowsFailLoudly()
+    {
+        // Rows 0 and 2 are identical, so neither one's own entry can be identified; guessing would leak a label.
+        var model = new TabRRegression<double>(2, 1, SmallTabROptions(neighbors: 2));
+        var features = Doubles(new[] { 3, 2 }, 0.4, 0.7, 1.1, 0.2, 0.4, 0.7);
+        var targets = Doubles(new[] { 3, 1 }, 0.1, 0.5, 0.9);
+        model.BuildIndex(features, targets);
+
+        Assert.Throws<InvalidOperationException>(() => model.TrainStep(features, targets, 0.0));
+        _ = model.TrainStep(features, targets, 0.0, new Vector<int>(new[] { 0, 1, 2 }));
     }
 
     [Fact]
