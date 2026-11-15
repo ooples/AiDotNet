@@ -2,7 +2,6 @@
 using AiDotNet.LearningRateSchedulers;
 using System;
 using System.IO;
-using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.LossFunctions;

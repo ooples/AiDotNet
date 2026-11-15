@@ -1,7 +1,6 @@
 ﻿#pragma warning disable CS0649, CS0414, CS0169
 using System;
 using System.Collections.Generic;
-using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;

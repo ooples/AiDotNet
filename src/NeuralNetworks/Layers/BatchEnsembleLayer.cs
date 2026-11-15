@@ -1,5 +1,4 @@
-﻿using AiDotNet.Autodiff;
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 

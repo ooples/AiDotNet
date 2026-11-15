@@ -443,6 +443,11 @@ public class TransformerArchitecture<T> : NeuralNetworkArchitecture<T>
     {
     }
 
+    // The canonical constructor is the one a JSON reader must use. With two public constructors and no
+    // marker Newtonsoft refuses to choose, so every saved AiModelResult whose model is a Transformer failed to
+    // load at all: its JSON skeleton could not be built ("Unable to find a constructor to use for type
+    // TransformerArchitecture").
+    [Newtonsoft.Json.JsonConstructor]
     public TransformerArchitecture(
         InputType inputType,
         NeuralNetworkTaskType taskType,

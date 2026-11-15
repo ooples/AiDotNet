@@ -1,6 +1,5 @@
 using System.IO;
 using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
 using AiDotNet.Finance.Interfaces;
 using AiDotNet.Helpers;
 using AiDotNet.LossFunctions;

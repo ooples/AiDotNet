@@ -1,5 +1,4 @@
-﻿using AiDotNet.Autodiff;
-using AiDotNet.Enums;
+﻿using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Attributes;
@@ -418,10 +417,6 @@ public partial class OnlineSGDRegressor<T> : OnlineLearningModelBase<T>
 
         return result;
     }
-
-    #endregion
-
-    #region JIT Compilation Support
 
     #endregion
 

@@ -1,6 +1,5 @@
 #pragma warning disable CS0649, CS0414, CS0169
 using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Autodiff;
@@ -639,7 +638,7 @@ public partial class Conv3DLayer<T> : LayerBase<T>, IShapeContract
         // 0.127.0 owns the bounded im2col/GEMM forward and both gradient contractions, so the
         // layer no longer duplicates that implementation with a consumer-side custom graph node.
         // Keep FusedConv3D for no-grad inference, where bias and activation fusion still wins.
-        bool tapeActive = AiDotNet.Autodiff.GradientRecording.IsRecording<T>();
+        bool tapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsRecording<T>();
         bool useEagerOrTracePath = tapeActive || IsTrainingMode;
 
         Tensor<T> activated;

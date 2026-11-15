@@ -1,6 +1,5 @@
 ﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
 using AiDotNet.Engines;
 using AiDotNet.Interfaces;
 using AiDotNet.Helpers;
@@ -537,39 +536,6 @@ public partial class ResidualDenseBlock<T> : LayerBase<T>, IShapeContract
         }
     }
 
-
-    /// <summary>
-    /// Builds a Conv2D computation node from a ConvolutionalLayer.
-    /// </summary>
-    private ComputationNode<T> BuildConvNode(ConvolutionalLayer<T> conv, ComputationNode<T> input, string namePrefix)
-    {
-        var biases = conv.GetBiases();
-        return TensorOperations<T>.Conv2D(
-            input,
-            TensorOperations<T>.Constant(conv.GetFilters(), $"{namePrefix}kernel"),
-            biases is not null ? TensorOperations<T>.Constant(biases, $"{namePrefix}bias") : null,
-            stride: new int[] { conv.Stride, conv.Stride },
-            padding: new int[] { conv.Padding, conv.Padding });
-    }
-
-    /// <summary>
-    /// Scales a computation node by a scalar value using element-wise multiplication.
-    /// </summary>
-    private static ComputationNode<T> ScaleNode(ComputationNode<T> node, double scale, string name)
-    {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var scaleValue = numOps.FromDouble(scale);
-
-        // Create a constant tensor filled with the scale value matching the input shape
-        var scaleTensor = new Tensor<T>(node.Value._shape);
-        for (int i = 0; i < scaleTensor.Length; i++)
-        {
-            scaleTensor.Data.Span[i] = scaleValue;
-        }
-
-        var scaleNode = TensorOperations<T>.Constant(scaleTensor, name);
-        return TensorOperations<T>.ElementwiseMultiply(node, scaleNode);
-    }
 
     #endregion
 

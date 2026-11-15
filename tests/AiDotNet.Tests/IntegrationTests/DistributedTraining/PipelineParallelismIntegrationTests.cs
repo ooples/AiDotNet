@@ -5,7 +5,6 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Enums;
-using AiDotNet.Autodiff;
 using AiDotNet.LossFunctions;
 using Xunit;
 using System.Threading.Tasks;

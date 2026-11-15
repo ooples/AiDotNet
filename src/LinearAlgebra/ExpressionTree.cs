@@ -1,5 +1,4 @@
 using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.Models;
 using AiDotNet.Models.Parameters;

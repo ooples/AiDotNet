@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using AiDotNet.Autodiff;
 using AiDotNet.Finance.Trading.Evaluation;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;

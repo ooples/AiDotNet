@@ -398,6 +398,7 @@ public class LayerStateGenerator : IIncrementalGenerator
                 info.Key = StateKey(p) ?? p.Name;
                 info.OmitWhenNonPositive = OmitWhenNonPositive(p);
                 info.Kind = Classify(p.Type);
+                info.IsDelegate = p.Type.TypeKind == TypeKind.Delegate;
                 if (info.Kind == ValueKind.Unsupported)
                 {
                     model.Diagnostics.Add(new PendingDiagnostic(
@@ -1194,7 +1195,10 @@ public class LayerStateGenerator : IIncrementalGenerator
                 string componentFormatter = p.Kind == ValueKind.CloneObject
                     ? "FormatCloneObject"
                     : "FormatType";
-                sb.AppendLine($"            __metadata[\"{p.Key}\"] = global::AiDotNet.Serialization.LayerStateBag.{componentFormatter}(this.{p.BackingMember});");
+                if (p.IsDelegate)
+                    sb.AppendLine($"            __metadata[\"{p.Key}\"] = global::AiDotNet.Serialization.LayerStateBag.FormatDelegate(this.{p.BackingMember}, this.GetInputShape());");
+                else
+                    sb.AppendLine($"            __metadata[\"{p.Key}\"] = global::AiDotNet.Serialization.LayerStateBag.{componentFormatter}(this.{p.BackingMember});");
                 sb.AppendLine("        }");
                 continue;
             }
@@ -1814,6 +1818,9 @@ public class LayerStateGenerator : IIncrementalGenerator
         // For ValueKind.Expression: the TDelegate of Expression<TDelegate>, and the owning layer
         // name that ExpressionState.Load reports in its rejection message.
         public string DelegateFqn = string.Empty;
+        // A delegate-typed construction value: saved through DelegateState with the layer's input shape, so a
+        // Func<Tensor<T>, Tensor<T>> written in engine ops is traced into a portable tensor program.
+        public bool IsDelegate;
         public string OwnerName = string.Empty;
         /// <summary>Whether this activation has an exact constructor-argument backing member.</summary>
         public bool UseBackedActivation;

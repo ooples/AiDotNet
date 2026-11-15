@@ -1,4 +1,3 @@
-using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines.Autodiff;
@@ -20,8 +19,8 @@ namespace AiDotNet.Interpretability.Helpers;
 /// The helper automatically chooses the best available method:
 /// 1. <b>Native Backpropagation</b>: If the model is a neural network with backprop support,
 ///    uses the efficient built-in gradient computation.
-/// 2. <b>GradientTape</b>: If the model uses the autodiff system with TensorOperations,
-///    uses tape-based automatic differentiation.
+/// 2. <b>GradientTape</b>: If the model is a tensor function written in engine ops, uses the
+///    AiDotNet.Tensors gradient tape, verified once against a directional finite difference.
 /// 3. <b>Numerical Gradients</b>: As a fallback, computes approximate gradients by
 ///    slightly perturbing each input (slower but works with any model).
 ///
@@ -51,8 +50,14 @@ public class InputGradientHelper<T>
     /// which is fast and accurate. Numerical gradients are approximations that require many
     /// forward passes and can have numerical precision issues.
     /// </para>
+    /// <para>
+    /// A tensor prediction function gets exact gradients from the gradient tape when it is written in engine ops: the
+    /// first gradient is checked against one directional finite difference, and the helper falls back to numerical
+    /// gradients for good if the function's output is not on the tape or the check disagrees (work done outside the
+    /// engine). Until that first gradient, this reports false for a tensor function.
+    /// </para>
     /// </remarks>
-    public bool SupportsExactGradients => _neuralNetwork != null;
+    public bool SupportsExactGradients => _neuralNetwork != null || _tensorFunctionIsExact == true;
 
     /// <summary>
     /// Gets the method name used for gradient computation.
@@ -61,10 +66,13 @@ public class InputGradientHelper<T>
     {
         get
         {
-            if (_neuralNetwork != null) return "Backpropagation";
+            if (_neuralNetwork != null || _tensorFunctionIsExact == true) return "Backpropagation";
             return "NumericalApproximation";
         }
     }
+
+    // For a tensor prediction function: null until the first gradient, then whether tape gradients were verified.
+    private bool? _tensorFunctionIsExact;
 
     /// <summary>
     /// Creates a gradient helper from a neural network model.
@@ -188,10 +196,11 @@ public class InputGradientHelper<T>
     {
         if (_neuralNetwork != null)
         {
+            return ComputeTensorGradientViaBackprop(input, outputIndex);
         }
         else if (_tensorPredictFunction != null)
         {
-            return ComputeNumericalGradientTensor(input, outputIndex);
+            return ComputeTensorFunctionGradient(input, outputIndex);
         }
         else if (_predictFunction != null)
         {
@@ -239,7 +248,10 @@ public class InputGradientHelper<T>
         // Compute gradient of specific output w.r.t. input using tape
         var eng = AiDotNetEngine.Current;
         using var tape = new GradientTape<T>();
-        var output = _neuralNetwork?.Predict(inputTensor) ?? inputTensor;
+        // Predict runs under a no-grad scope; the differentiable forward is what connects the output to the input.
+        var output = _neuralNetwork is NeuralNetworks.NeuralNetworkBase<T> differentiable
+            ? differentiable.PredictWithGradients(inputTensor)
+            : _neuralNetwork?.Predict(inputTensor) ?? inputTensor;
 
         // Create a selector that extracts the target output index
         // Loss = output[outputIndex] (we want gradient of this single output w.r.t. input)
@@ -260,6 +272,25 @@ public class InputGradientHelper<T>
         }
 
         return gradient;
+    }
+
+    // d output[outputIndex] / d input for a tensor input of any shape, through the network's differentiable forward.
+    private Tensor<T> ComputeTensorGradientViaBackprop(Tensor<T> input, int outputIndex)
+    {
+        var eng = AiDotNetEngine.Current;
+        var leaf = input.Clone();
+        using var tape = new GradientTape<T>();
+        // Predict runs under a no-grad scope; the differentiable forward is what connects the output to the input.
+        var output = _neuralNetwork is NeuralNetworks.NeuralNetworkBase<T> differentiable
+            ? differentiable.PredictWithGradients(leaf)
+            : _neuralNetwork?.Predict(leaf) ?? leaf;
+        if (outputIndex < 0 || outputIndex >= output.Length) return new Tensor<T>(input._shape);
+
+        var oneHot = new Tensor<T>(output._shape);
+        oneHot[outputIndex] = NumOps.One;
+        var loss = eng.ReduceSum(eng.TensorMultiply(output, oneHot), Enumerable.Range(0, output.Rank).ToArray(), keepDims: false);
+        var grads = tape.ComputeGradients(loss, [leaf]);
+        return grads.TryGetValue(leaf, out var g) ? g : new Tensor<T>(input._shape);
     }
 
     /// <summary>
@@ -310,6 +341,64 @@ public class InputGradientHelper<T>
         }
 
         return gradient;
+    }
+
+    // Tape gradients for a tensor function when they are verified to be exact, else numerical gradients. An output
+    // index the function does not produce has no gradient (zeros, as the numerical path gives) and says nothing about
+    // whether the function is on the tape, so it neither verifies nor disables the tape path.
+    private Tensor<T> ComputeTensorFunctionGradient(Tensor<T> input, int outputIndex)
+    {
+        if (_tensorFunctionIsExact != false)
+        {
+            var exact = TryTapeGradient(input, outputIndex, out bool indexInRange);
+            if (!indexInRange) return new Tensor<T>(input._shape);
+            if (exact is not null && (_tensorFunctionIsExact == true || AgreesWithDirectionalDerivative(input, outputIndex, exact)))
+            {
+                _tensorFunctionIsExact = true;
+                return exact;
+            }
+            _tensorFunctionIsExact = false;
+        }
+        return ComputeNumericalGradientTensor(input, outputIndex);
+    }
+
+    // d output[outputIndex] / d input through the gradient tape, or null when the output is not on the tape.
+    private Tensor<T>? TryTapeGradient(Tensor<T> input, int outputIndex, out bool indexInRange)
+    {
+        var function = _tensorPredictFunction
+            ?? throw new InvalidOperationException("Tensor predict function not configured.");
+        var eng = AiDotNetEngine.Current;
+        var leaf = input.Clone();
+        using var tape = new GradientTape<T>();
+        var output = function(leaf);
+        indexInRange = output is not null && outputIndex >= 0 && outputIndex < output.Length;
+        if (output is null || !indexInRange || output.GradFn is null) return null;
+        var oneHot = new Tensor<T>(output._shape);
+        oneHot[outputIndex] = NumOps.One;
+        var loss = eng.ReduceSum(eng.TensorMultiply(output, oneHot), Enumerable.Range(0, output.Rank).ToArray(), keepDims: false);
+        var grads = tape.ComputeGradients(loss, [leaf]);
+        return grads.TryGetValue(leaf, out var g) ? g : new Tensor<T>(input._shape);
+    }
+
+    // One central difference along a fixed pseudo-random direction v must match grad . v; a tape that misses part of
+    // the function (values read out of a tensor, a model holding its own engine) fails this on the first call.
+    private bool AgreesWithDirectionalDerivative(Tensor<T> input, int outputIndex, Tensor<T> gradient)
+    {
+        var function = _tensorPredictFunction
+            ?? throw new InvalidOperationException("Tensor predict function not configured.");
+        var eng = AiDotNetEngine.Current;
+        var rng = RandomHelper.CreateSeededRandom(0x5eed);
+        var dir = new double[input.Length];
+        for (int i = 0; i < dir.Length; i++) dir[i] = rng.NextDouble() * 2 - 1;
+        var direction = new Tensor<double>(dir, input._shape).Cast<T>();
+        var step = eng.TensorMultiplyScalar(direction, NumOps.FromDouble(_epsilon));
+        var plus = function(eng.TensorAdd(input, step));
+        var minus = function(eng.TensorSubtract(input, step));
+        if (outputIndex >= plus.Length || outputIndex >= minus.Length) return false;
+        double numeric = (NumOps.ToDouble(plus.ToArray()[outputIndex]) - NumOps.ToDouble(minus.ToArray()[outputIndex])) / (2 * _epsilon);
+        double analytic = NumOps.ToDouble(eng.TensorSum(eng.TensorMultiply(gradient, direction)));
+        double scale = Math.Max(1.0, Math.Max(Math.Abs(numeric), Math.Abs(analytic)));
+        return Math.Abs(numeric - analytic) <= 1e-2 * scale;
     }
 
     /// <summary>

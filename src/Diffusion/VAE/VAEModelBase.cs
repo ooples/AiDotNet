@@ -1,4 +1,3 @@
-using AiDotNet.Autodiff;
 using AiDotNet.Engines;
 using AiDotNet.Extensions;
 using AiDotNet.Interfaces;
@@ -161,7 +160,7 @@ public abstract partial class VAEModelBase<T> : IVAEModel<T>, IModelShape,
     /// recording too: through the inference plan, every fused VAE training step computed zero gradients and
     /// moved no weight.
     /// </remarks>
-    private static bool IsRecordingGradients => AiDotNet.Autodiff.GradientRecording.IsRecording<T>();
+    private static bool IsRecordingGradients => AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsRecording<T>();
 
     /// <summary>
     /// Routes <paramref name="eagerDecode"/> through the decoder compile host.

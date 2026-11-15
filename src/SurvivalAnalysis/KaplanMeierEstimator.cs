@@ -1,5 +1,4 @@
 ﻿using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -289,10 +288,6 @@ public partial class KaplanMeierEstimator<T> : SurvivalModelBase<T>
     /// </summary>
     /// <returns>Vector of survival probabilities.</returns>
     public Vector<T>? GetSurvivalProbabilities() => _survivalProbabilities;
-
-    #region JIT Compilation Support
-
-    #endregion
 
     #region IFullModel Implementation
 

@@ -1,5 +1,4 @@
-﻿using AiDotNet.Autodiff;
-using AiDotNet.Enums;
+﻿using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors.Helpers;
@@ -360,10 +359,6 @@ public partial class OnlineSGDClassifier<T> : OnlineLearningModelBase<T>
 
         return result;
     }
-
-    #endregion
-
-    #region JIT Compilation Support
 
     #endregion
 

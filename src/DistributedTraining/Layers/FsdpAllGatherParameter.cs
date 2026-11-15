@@ -1,4 +1,4 @@
-using AiDotNet.Autodiff;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.DistributedTraining.Layers;
@@ -54,7 +54,7 @@ internal sealed class FsdpAllGatherParameter<T> : AutogradFunction<T>
         return Tensor<T>.FromVector(new Vector<T>(trimmed)).Reshape(_fullShape);
     }
 
-    public override Tensor<T>[] Backward(AutogradContext ctx, Tensor<T> gradOutput)
+    public override Tensor<T>?[] Backward(AutogradContext ctx, Tensor<T> gradOutput)
     {
         // gradOutput = d(full parameter). Reduce-scatter (Average) so each rank keeps its shard grad.
         var gradFlat = gradOutput.ToVector();
@@ -63,9 +63,10 @@ internal sealed class FsdpAllGatherParameter<T> : AutogradFunction<T>
 
         // Pad to worldSize * shardLen before ReduceScatter (which requires divisibility).
         int padded = _shardLen * _backend.WorldSize;
-        var ops = MathHelper.GetNumericOperations<T>();
         var buf = new T[padded];
-        for (int i = 0; i < padded; i++) buf[i] = i < gradFlat.Length ? gradFlat[i] : ops.Zero;
+        int copied = Math.Min(gradFlat.Length, padded);
+        gradFlat.AsSpan().Slice(0, copied).CopyTo(buf);
+        buf.AsSpan(copied).Fill(MathHelper.GetNumericOperations<T>().Zero);
         var myShardGrad = _backend.ReduceScatter(new Vector<T>(buf), ReductionOperation.Average);
         return [Tensor<T>.FromVector(myShardGrad).Reshape(new[] { _shardLen })];
     }

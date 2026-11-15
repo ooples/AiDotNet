@@ -1,6 +1,5 @@
 using System.Linq;
 using AiDotNet.Attributes;
-using AiDotNet.Autodiff;
 using AiDotNet.Engines;
 using AiDotNet.Extensions;
 using AiDotNet.Initialization;
@@ -415,7 +414,7 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
         // train step (CompiledModelHost.Predict + LazyNode.Realize) — on top of the eager op
         // record the backward needs anyway. Eager records the identical ops on the tape, so the
         // gradients are unchanged; inference (no tape / NoGradScope) still gets the fast replay.
-        if (AiDotNet.Autodiff.GradientRecording.IsRecording<T>())
+        if (AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsRecording<T>())
             return eagerFallback();
 
         // Compiled inference replay is opt-in (see s_autoCompiledInferenceEnabled): the verify pass
@@ -588,7 +587,7 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
         // InferenceMode activations and arena memory the Reset below recycles, and a backward over that yields wrong
         // or missing gradients with nothing raised. Returned RAW, not through DetachPlanOutput, because that clones
         // and a clone is off the tape.
-        if (AiDotNet.Autodiff.GradientRecording.IsRecording<T>())
+        if (AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsRecording<T>())
             return eagerFallback();
 
         if (!InferenceArenaEnabled || TensorArena.Current is not null
