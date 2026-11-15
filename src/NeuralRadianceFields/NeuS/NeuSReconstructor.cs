@@ -1,6 +1,7 @@
 using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.NeuralRadianceFields.NeuS;
 
@@ -37,6 +38,8 @@ internal sealed class NeuSReconstructor<T>
     private readonly IEngine _engine;
     private readonly Random _random;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _colorOptimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _varianceOptimizer;
     private readonly Dictionary<NeuSView<T>, HostView> _hostViews = new();
     private int[] _permutation = Array.Empty<int>();
     private IReadOnlyList<NeuSView<T>>? _permutedViews;
@@ -44,8 +47,8 @@ internal sealed class NeuSReconstructor<T>
     /// <summary>Creates a reconstructor with a freshly initialized field.</summary>
     /// <param name="options">The configuration, or null for the paper's.</param>
     /// <param name="engine">The engine, or null for the current one.</param>
-    /// <param name="optimizerFactory">Builds the optimizer from the field's options, or null for the reference's Adam
-    /// with its warm-up and cosine schedule.</param>
+    /// <param name="optimizerFactory">Builds the optimizer from the field's options, or null for the configured one:
+    /// the reference's Adam with its warm-up and cosine schedule, or AdamW with instant-nsr-pl's parameter groups.</param>
     public NeuSReconstructor(NeuSOptions? options = null, IEngine? engine = null,
         Func<NeuSOptions, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>? optimizerFactory = null)
     {
@@ -54,7 +57,47 @@ internal sealed class NeuSReconstructor<T>
         _engine = engine ?? AiDotNetEngine.Current;
         _random = Options.Seed.HasValue ? RandomHelper.CreateSeededRandom(Options.Seed.Value) : RandomHelper.CreateSecureRandom();
         Field = new NeuSField<T>(Options, _random, _engine);
-        _optimizer = optimizerFactory?.Invoke(Options) ?? CreateReferenceOptimizer(Options);
+        if (optimizerFactory is not null)
+        {
+            _optimizer = optimizerFactory(Options);
+        }
+        else if (Options.Optimizer == NeuSOptimizer.AdamW)
+        {
+            // instant-nsr-pl: AdamW(betas, eps) with the geometry, texture and variance groups at their own rates.
+            _optimizer = CreateAdamW(Options, Options.LearningRate);
+            _colorOptimizer = CreateAdamW(Options, Options.ColorLearningRate ?? Options.LearningRate);
+            _varianceOptimizer = CreateAdamW(Options, Options.VarianceLearningRate ?? Options.LearningRate);
+        }
+        else
+        {
+            _optimizer = CreateReferenceOptimizer(Options);
+        }
+
+        CurrentBatchSize = Options.BatchSize;
+    }
+
+    /// <summary>
+    /// The rays the next iteration draws: <c>BatchSize</c>, or with <see cref="NeuSOptions.DynamicRaySampling"/> the
+    /// batch the dynamic rule has adapted to.
+    /// </summary>
+    public int CurrentBatchSize { get; private set; }
+
+    /// <summary>
+    /// instant-nsr-pl's dynamic ray batch (<c>systems/neus.py</c> <c>training_step</c>): the batch that would have spent
+    /// <paramref name="sampleBudget"/> samples, blended 1:9 into the current batch and capped,
+    /// <c>min(int(0.9·b + 0.1·int(b · budget / used)), max)</c>.
+    /// </summary>
+    /// <param name="current">The current batch b.</param>
+    /// <param name="sampleBudget">The samples per iteration to aim for (<c>train_num_rays · num_samples_per_ray</c>).</param>
+    /// <param name="samplesUsed">The samples the last iteration evaluated (<c>num_samples_full</c>).</param>
+    /// <param name="maxBatch">The cap (<c>max_train_num_rays</c>).</param>
+    internal static int NextDynamicBatchSize(int current, long sampleBudget, long samplesUsed, int maxBatch)
+    {
+        if (current <= 0) throw new ArgumentOutOfRangeException(nameof(current));
+        if (samplesUsed <= 0) return Math.Min(current, maxBatch);
+        long proposed = (long)(current * ((double)sampleBudget / samplesUsed));
+        long blended = (long)(current * 0.9 + proposed * 0.1);
+        return (int)Math.Max(1, Math.Min(blended, maxBatch));
     }
 
     /// <summary>The configuration.</summary>
@@ -92,7 +135,8 @@ internal sealed class NeuSReconstructor<T>
         if (views.Count == 0) throw new ArgumentException("At least one view is needed.", nameof(views));
         var view = NextView(views);
         var host = Host(view);
-        var batch = DrawBatch(host, Options.BatchSize);
+        Field.UpdateHashGridLevels(Iteration);
+        var batch = DrawBatch(host, CurrentBatchSize);
         int perturbSeed = _random.Next();
         // Drawn after the perturbation seed, and only when a term reads them, so a plain NeuS run draws exactly the
         // reference's sequence.
@@ -105,11 +149,85 @@ internal sealed class NeuSReconstructor<T>
             return Loss(batch, Field.Render(batch.Origins, batch.Directions, annealRatio, perturb));
         }
 
-        var loss = AiDotNet.Training.TapeTrainingStepper<T>.EagerObjectiveStep(
-            () => Field.Parameters, Objective, _optimizer, applyOptimizerRegularization: false);
+        T loss;
+        if (_colorOptimizer is { } colorOptimizer && _varianceOptimizer is { } varianceOptimizer)
+        {
+            var placeholder = new Tensor<T>(new[] { 1 });
+            loss = AiDotNet.Training.TapeTrainingStepper<T>.EagerTapeStep(
+                Objective,
+                () => Field.Parameters,
+                context =>
+                {
+                    // One backward, then each parameter group steps with its own optimizer and rate.
+                    Step(_optimizer, Field.GeometryParameters, context);
+                    Step(colorOptimizer, Field.ColorNetwork.Parameters.ToList(), context);
+                    Step(varianceOptimizer, new[] { Field.Variance }, context);
+                },
+                placeholder,
+                placeholder,
+                (_, _) => Objective(),
+                (value, _) => value);
+        }
+        else
+        {
+            loss = AiDotNet.Training.TapeTrainingStepper<T>.EagerObjectiveStep(
+                () => Field.Parameters, Objective, _optimizer, applyOptimizerRegularization: false);
+        }
+
         Iteration++;
-        if (_optimizer is GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> scheduled) scheduled.StepScheduler();
+        foreach (var optimizer in new[] { _optimizer, _colorOptimizer, _varianceOptimizer })
+            if (optimizer is GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> scheduled) scheduled.StepScheduler();
+        if (Options.DynamicRaySampling)
+        {
+            long used = (long)batch.Count * (Options.Samples + Options.ImportanceSamples);
+            long budget = (long)Options.BatchSize * Options.SamplesPerRayBudget;
+            CurrentBatchSize = NextDynamicBatchSize(CurrentBatchSize, budget, used, Options.MaxBatchSize);
+        }
+
         return loss;
+    }
+
+    private static void Step(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer, IReadOnlyList<Tensor<T>> group,
+        TapeStepContext<T> context)
+    {
+        // Only the group's tensors the backward reached (an inactive hash-grid level has no gradient).
+        var reached = new List<Tensor<T>>(group.Count);
+        var gradients = new Dictionary<Tensor<T>, Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
+        foreach (var parameter in group)
+        {
+            if (gradients.ContainsKey(parameter) || !context.Gradients.TryGetValue(parameter, out var gradient)) continue;
+            gradients[parameter] = gradient;
+            reached.Add(parameter);
+        }
+
+        if (reached.Count == 0) return;
+        optimizer.Step(new TapeStepContext<T>(reached, gradients, context.Loss));
+        if (optimizer is GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> scheduled) scheduled.OnBatchEnd();
+    }
+
+    // AdamW(lr, betas = (0.9, AdamBeta2), eps = AdamEpsilon, weight_decay = WeightDecay) on the configured schedule.
+    private static IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateAdamW(NeuSOptions options, double learningRate)
+    {
+        var schedule = new LambdaLRScheduler(learningRate, step => options.LearningRateFactor(Math.Max(0, step - 1)));
+        var optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+            model: null,
+            options: new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = learningRate,
+                Beta1 = 0.9,
+                Beta2 = options.AdamBeta2,
+                Epsilon = options.AdamEpsilon,
+                WeightDecay = options.WeightDecay,
+                UseAdaptiveBetas = false,
+                UseAdaptiveLearningRate = false,
+                UseAMSGrad = false,
+                EnableGradientClipping = false,
+                LearningRateScheduler = schedule,
+                // TrainStep steps the schedule once per iteration; StepPerBatch would step it again in OnBatchEnd.
+                SchedulerStepMode = SchedulerStepMode.StepPerEpoch,
+            });
+        optimizer.StepScheduler();
+        return optimizer;
     }
 
     /// <summary>
@@ -185,7 +303,7 @@ internal sealed class NeuSReconstructor<T>
         {
             int n = batch.RandomPoints.Length / 3;
             bool smooth = o.NormalSmoothWeight > 0 && batch.PerturbedPoints is not null;
-            var output = Field.SdfNetwork.Forward(e, NeuSHost<T>.FromDoubles(batch.RandomPoints, n, 3), null, null,
+            var output = Field.QueryNetwork(e, NeuSHost<T>.FromDoubles(batch.RandomPoints, n, 3),
                 withGradient: smooth);
             if (o.SparsityWeight > 0)
             {
@@ -199,7 +317,7 @@ internal sealed class NeuSReconstructor<T>
             if (smooth && batch.PerturbedPoints is not null)
             {
                 var gradient = output.Gradient ?? throw new InvalidOperationException("The SDF network returned no gradient.");
-                var perturbed = Field.SdfNetwork.Forward(e, NeuSHost<T>.FromDoubles(batch.PerturbedPoints, n, 3), null, null,
+                var perturbed = Field.QueryNetwork(e, NeuSHost<T>.FromDoubles(batch.PerturbedPoints, n, 3),
                     withGradient: true).Gradient ?? throw new InvalidOperationException("The SDF network returned no gradient.");
                 // (∇f(p) − ∇f(p + ε)).abs().mean() over every component.
                 var difference = e.TensorAbs(e.TensorSubtract(gradient, perturbed));
@@ -436,15 +554,16 @@ internal sealed class NeuSReconstructor<T>
             {
                 InitialLearningRate = options.LearningRate,
                 Beta1 = 0.9,
-                Beta2 = 0.999,
-                Epsilon = 1e-8,
+                Beta2 = options.AdamBeta2,
+                Epsilon = options.AdamEpsilon,
                 UseAdaptiveBetas = false,
                 UseAdaptiveLearningRate = false,
                 UseAMSGrad = false,
                 AnomalyGuardMode = AdamAnomalyGuardMode.Never,
                 EnableGradientClipping = false,
                 LearningRateScheduler = schedule,
-                SchedulerStepMode = SchedulerStepMode.StepPerBatch,
+                // TrainStep steps the schedule once per iteration; StepPerBatch would step it again in OnBatchEnd.
+                SchedulerStepMode = SchedulerStepMode.StepPerEpoch,
             });
         optimizer.StepScheduler();
         return optimizer;

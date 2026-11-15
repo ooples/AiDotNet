@@ -188,6 +188,68 @@ internal sealed class NeuSSdfMlp<T>
     }
 
     /// <summary>
+    /// instant-nsr-pl's <c>VolumeSDF</c> network (Wonder3D's reconstruction): <c>[x, hash-grid features]</c> through a
+    /// <c>VanillaMLP</c> of <paramref name="hiddenLayers"/> hidden layers with the sphere initialization, which makes the
+    /// activation <c>Softplus(β = 100)</c> and zeroes the first layer's grid columns so the network starts as the
+    /// sphere SDF of radius <paramref name="bias"/>.
+    /// </summary>
+    /// <param name="hidden">The hidden width (<c>n_neurons</c> = 64).</param>
+    /// <param name="hiddenLayers">The hidden layer count (<c>n_hidden_layers</c> = 1).</param>
+    /// <param name="outputDims">The output width (<c>feature_dim</c> = 13: the SDF and 12 features).</param>
+    /// <param name="gridDims">The hash-grid encoding's width (the latent input of the first layer).</param>
+    /// <param name="bias">The sphere-initialization radius (<c>sphere_init_radius</c> = 0.5).</param>
+    /// <param name="geometricInit">Whether to use the sphere initialization.</param>
+    /// <param name="weightNorm">Whether to weight-normalize (<c>weight_norm</c> = true).</param>
+    /// <param name="insideOutside">Whether the camera is inside the surface (flips the initial sphere).</param>
+    /// <param name="beta">The softplus β (100).</param>
+    /// <param name="random">The initialization generator.</param>
+    public static NeuSSdfMlp<T> CreateHashGrid(int hidden, int hiddenLayers, int outputDims, int gridDims, double bias,
+        bool geometricInit, bool weightNorm, bool insideOutside, double beta, Random random)
+    {
+        if (hidden <= 0) throw new ArgumentOutOfRangeException(nameof(hidden), "The hidden width must be positive.");
+        if (hiddenLayers <= 0) throw new ArgumentOutOfRangeException(nameof(hiddenLayers), "At least one hidden layer is needed.");
+        if (outputDims < 1) throw new ArgumentOutOfRangeException(nameof(outputDims), "The output needs the SDF channel.");
+        if (gridDims <= 0) throw new ArgumentOutOfRangeException(nameof(gridDims), "The grid encoding must be non-empty.");
+        var embedder = new NeuSFrequencyEmbedder<T>(3, 0);
+        int numLinear = hiddenLayers + 1;
+        var latent = new bool[numLinear];
+        latent[0] = true;
+        var layers = new NeuSLinear<T>[numLinear];
+        for (int l = 0; l < numLinear; l++)
+        {
+            int inDim = l == 0 ? 3 + gridDims : hidden;
+            int outDim = l == numLinear - 1 ? outputDims : hidden;
+            double[] weight, layerBias;
+            if (!geometricInit)
+            {
+                (weight, layerBias) = NeuSLinear<T>.DefaultInit(inDim, outDim, random);
+            }
+            else
+            {
+                weight = new double[outDim * inDim];
+                layerBias = new double[outDim];
+                if (l == numLinear - 1)
+                {
+                    double mean = (insideOutside ? -1.0 : 1.0) * Math.Sqrt(Math.PI) / Math.Sqrt(inDim);
+                    for (int i = 0; i < weight.Length; i++) weight[i] = mean + 1e-4 * NeuSHost<T>.NextGaussian(random);
+                    for (int o = 0; o < outDim; o++) layerBias[o] = insideOutside ? bias : -bias;
+                }
+                else
+                {
+                    double std = Math.Sqrt(2.0) / Math.Sqrt(outDim);
+                    for (int o = 0; o < outDim; o++)
+                        for (int i = 0; i < inDim; i++)
+                            weight[o * inDim + i] = l == 0 && i >= 3 ? 0.0 : std * NeuSHost<T>.NextGaussian(random);
+                }
+            }
+
+            layers[l] = new NeuSLinear<T>(weight, layerBias, inDim, outDim, weightNorm);
+        }
+
+        return new NeuSSdfMlp<T>(embedder, layers, new bool[numLinear], latent, gridDims, 1.0, beta, string.Empty);
+    }
+
+    /// <summary>
     /// SparseNeuS's <c>LatentSDFLayer</c>: <c>layers − 1</c> linear layers; every layer but the first takes the latent
     /// feature concatenated to its input (<c>dims_in = [γ(3)] + [hidden + latent]·(layers − 2)</c>), and every layer
     /// outputs <c>hidden</c> channels (the reference's <c>dims_out[layers − 2]</c> is <c>hidden</c>, so the SDF network
