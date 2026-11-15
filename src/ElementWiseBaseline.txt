@@ -4174,7 +4174,6 @@
 1	ADNELEM002|AiDotNet.Diffusion.StyleTransfer.TimestepDependentLora<T>.OrthonormalRows(int, int, System.Random)
 1	ADNELEM002|AiDotNet.Diffusion.TextToImage.SDXLRefiner<T>.SampleNoise(int[], System.Random)
 6	ADNELEM002|AiDotNet.Diffusion.ThreeD.CameraPoseEncoder<T>.Encode(double, double, double)
-2	ADNELEM002|AiDotNet.Diffusion.ThreeDDiffusionModelBase<T>.ReconstructFromViews(AiDotNet.Tensors.LinearAlgebra.Tensor<T>[], (double azimuth, double elevation)[])
 1	ADNELEM002|AiDotNet.Diffusion.VAE.LazyWeight<T>.Uniform(int[], int)
 1	ADNELEM002|AiDotNet.Diffusion.VAE.VAEEncoder<T>.SampleNoise(int[], System.Random)
 1	ADNELEM002|AiDotNet.Diffusion.VAE.VAEModelBase<T>.SampleNoise(int[], System.Random?)

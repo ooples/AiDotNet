@@ -21,6 +21,12 @@ internal static class PreprocessingTensorOps
         MathHelper.GetNumericOperations<T>().FromDouble(typeof(T) == typeof(Half) ? Math.Max(epsilon, HalfSmallestNormal) : epsilon);
 
     /// <summary>
+    /// The sum of the squares of every element, through <see cref="TensorReductionHelper.SumOfSquares{T}"/>, which
+    /// works around the engine op being wrong for <c>double</c> in AiDotNet.Tensors 0.150.0.
+    /// </summary>
+    public static T SumOfSquares<T>(Tensor<T> x) => TensorReductionHelper.SumOfSquares(AiDotNetEngine.Current, x);
+
+    /// <summary>
     /// Whether <typeparamref name="T"/> is a 16-bit float (Half or BFloat16). Sums of squares and their products
     /// overflow Half's 65504 maximum and lose BFloat16's 8-bit mantissa, so second-moment statistics are evaluated in
     /// float for these types and cast back once.
