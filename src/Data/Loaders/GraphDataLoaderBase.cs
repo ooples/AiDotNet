@@ -352,7 +352,7 @@ public abstract class GraphDataLoaderBase<T> : DataLoaderBase<T>, IGraphDataLoad
     private Tensor<T> ExtractEdges(Tensor<T> edgeIndex, int[] indices)
     {
         var rows = BatchGather.Rows(edgeIndex, indices);
-        return edgeIndex.Shape[1] == 2 ? rows : rows.Slice(1, 0, 2);
+        return edgeIndex.Shape[1] == 2 ? rows : rows.Slice(1, 0, 2).Contiguous();
     }
 
     /// <summary>

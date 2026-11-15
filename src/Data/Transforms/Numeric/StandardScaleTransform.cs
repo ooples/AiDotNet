@@ -16,7 +16,6 @@ namespace AiDotNet.Data.Transforms.Numeric;
 /// </remarks>
 public class StandardScaleTransform<T> : ITransform<T[], T[]>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly Tensor<T> _mean;
     private readonly Tensor<T> _std;
 
@@ -60,24 +59,27 @@ public class StandardScaleTransform<T> : ITransform<T[], T[]>
         }
         else
         {
+            // The statistics are fitted in double (one cast of the data, one cast of the results), like the
+            // scalar fit: in T the squared deviations overflow half precision past 256 and the 1e-12 guard
+            // underflows to zero.
             var engine = AiDotNetEngine.Current;
-            var data = TransformTensors.Rows(referenceData, featureCount);
+            var data = TransformTensors.Rows(referenceData, featureCount).Cast<double>();
             var shape = new[] { rows, featureCount };
 
             // Compute mean (column sums / rows)
-            var mean = engine.TensorDivideScalar(engine.ReduceSum(data, new[] { 0 }, keepDims: true), NumOps.FromDouble(rows));
+            var mean = engine.TensorDivideScalar(engine.ReduceSum(data, new[] { 0 }, keepDims: true), (double)rows);
 
             // Compute (population) standard deviation; near-zero deviations fall back to 1
             var centered = engine.TensorSubtract(data, engine.TensorBroadcastTo(mean, shape));
             var variance = engine.TensorDivideScalar(
-                engine.ReduceSum(engine.TensorMultiply(centered, centered), new[] { 0 }, keepDims: false), NumOps.FromDouble(rows));
+                engine.ReduceSum(engine.TensorMultiply(centered, centered), new[] { 0 }, keepDims: false), (double)rows);
             var std = engine.TensorSqrt(variance);
-            var tiny = engine.TensorLessThan(std, NumOps.FromDouble(1e-12));
-            var ones = new Tensor<T>(new[] { featureCount });
-            ones.Fill(NumOps.One);
+            var tiny = engine.TensorLessThan(std, 1e-12);
+            var ones = new Tensor<double>(new[] { featureCount });
+            ones.Fill(1.0);
 
-            _mean = mean.Reshape(new[] { featureCount });
-            _std = engine.TensorWhere(tiny, ones, std);
+            _mean = mean.Reshape(new[] { featureCount }).Cast<T>();
+            _std = engine.TensorWhere(tiny, ones, std).Cast<T>();
         }
     }
 

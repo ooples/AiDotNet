@@ -11479,7 +11479,6 @@
 1	ADNELEM002|AiDotNet.Data.Pipeline.SnapshotPipeline<T>.WriteTensorToFile(string, AiDotNet.Tensors.LinearAlgebra.Tensor<T>)
 1	ADNELEM002|AiDotNet.Data.Sampling.ActiveLearningSampler<T>.SelectByUncertainty(System.Collections.Generic.List<int>, int)
 2	ADNELEM002|AiDotNet.Data.Sampling.SelfPacedSampler<T>.GetIndicesCore()
-2	ADNELEM002|AiDotNet.Data.Sampling.WeightedSampler<T>.GetIndicesCore()
 1	ADNELEM002|AiDotNet.Data.Text.Benchmarks.GlueDataLoader<T>.LoadDataCoreAsync(System.Threading.CancellationToken)
 1	ADNELEM002|AiDotNet.Data.TimeSeries.M4DatasetLoader<T>.ParseM4CsvAsync(string, System.Threading.CancellationToken)
 1	ADNELEM002|AiDotNet.Data.Vision.Benchmarks.CheXpertDataLoader<T>.LoadDataCoreAsync(System.Threading.CancellationToken)

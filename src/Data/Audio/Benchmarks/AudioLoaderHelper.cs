@@ -121,14 +121,13 @@ internal static class AudioLoaderHelper
         int frames = Math.Min(Math.Min(totalFrames, maxSamples), framesInBuffer);
         if (frames <= 0) return new Tensor<T>(new[] { 0 });
 
-        var samples = DecodePcmSamples<T>(rawBytes, dataOffset, frames * numChannels, bitsPerSample, bytesPerSample);
-        if (numChannels == 1) return samples;
+        var samples = DecodePcmSamplesDouble(rawBytes, dataOffset, frames * numChannels, bitsPerSample, bytesPerSample, true);
+        if (numChannels == 1) return samples.Cast<T>();
 
-        // Multi-channel to mono: average all channels of each frame
+        // Multi-channel to mono: average all channels of each frame (in double, then one cast to T)
         var engine = AiDotNetEngine.Current;
-        var numOps = MathHelper.GetNumericOperations<T>();
         var channelSums = engine.ReduceSum(samples.Reshape(new[] { frames, numChannels }), new[] { 1 }, false);
-        return engine.TensorDivideScalar(channelSums, numOps.FromDouble(numChannels));
+        return engine.TensorDivideScalar(channelSums, (double)numChannels).Cast<T>();
     }
 
     /// <summary>
@@ -140,15 +139,22 @@ internal static class AudioLoaderHelper
     /// The sample bytes are widened to a <c>[count, bytes]</c> tensor and combined with the byte place
     /// values (a fixed coefficient table) in one matrix product; the sign comes from the top byte. With
     /// <paramref name="normalize"/> false the signed (8-bit: centred) integer sample values are returned.
+    /// The decode runs in double and is cast to <typeparamref name="T"/> once, like the scalar decoder: in
+    /// half precision the 24/32-bit place values (65,536 and up) overflow.
     /// </remarks>
     internal static Tensor<T> DecodePcmSamples<T>(byte[] rawBytes, int start, int count, int bitsPerSample,
         int bytesPerSample, bool normalize = true)
     {
+        return DecodePcmSamplesDouble(rawBytes, start, count, bitsPerSample, bytesPerSample, normalize).Cast<T>();
+    }
+
+    private static Tensor<double> DecodePcmSamplesDouble(byte[] rawBytes, int start, int count, int bitsPerSample,
+        int bytesPerSample, bool normalize)
+    {
         var engine = AiDotNetEngine.Current;
-        var numOps = MathHelper.GetNumericOperations<T>();
         bool standardDepth = bitsPerSample == 8 || bitsPerSample == 16 || bitsPerSample == 24 || bitsPerSample == 32;
 
-        Tensor<T> sampleBytes;
+        Tensor<double> sampleBytes;
         int width;
         bool lastSampleMissing = false;
         if (standardDepth)
@@ -156,7 +162,7 @@ internal static class AudioLoaderHelper
             width = bytesPerSample;
             var bytes = new int[count * width];
             Array.Copy(rawBytes, start, bytes, 0, bytes.Length);
-            sampleBytes = new Tensor<int>(bytes, new[] { count, width }).Cast<T>();
+            sampleBytes = new Tensor<int>(bytes, new[] { count, width }).Cast<double>();
         }
         else
         {
@@ -170,47 +176,45 @@ internal static class AudioLoaderHelper
             Array.Copy(rawBytes, start, region, 0, available);
             var lowIndex = Enumerable.Range(0, count).Select(s => s * bytesPerSample).ToArray();
             var highIndex = Enumerable.Range(0, count).Select(s => s * bytesPerSample + 1).ToArray();
-            var regionTensor = new Tensor<int>(region, new[] { span }).Cast<T>();
+            var regionTensor = new Tensor<int>(region, new[] { span }).Cast<double>();
             var low = engine.TensorIndexSelect(regionTensor, new Tensor<int>(lowIndex, new[] { count }), 0);
             var high = engine.TensorIndexSelect(regionTensor, new Tensor<int>(highIndex, new[] { count }), 0);
             sampleBytes = engine.TensorStack(new[] { low, high }, 1);
         }
 
-        Tensor<T> signedValue;
+        Tensor<double> signedValue;
         double fullScale;
         if (width == 1)
         {
             // 8-bit PCM is unsigned (0-255, centered at 128)
-            signedValue = engine.TensorSubtractScalar(sampleBytes.Reshape(new[] { count }), numOps.FromDouble(128.0));
+            signedValue = engine.TensorSubtractScalar(sampleBytes.Reshape(new[] { count }), 128.0);
             fullScale = 128.0;
         }
         else
         {
             // Two's complement. The bytes below the top one form an unsigned value below 2^24 (sum of
-            // byte * 256^k, little-endian place values), which every floating-point T holds exactly. The top
-            // byte carries the sign: it is made signed first (minus 256 when its sign bit is set) and then
-            // added at its place value, so the result is rounded once. Building the unsigned 32-bit value and
-            // subtracting 2^32 afterwards rounds twice in single precision and cancels the low bits: -100
-            // decoded to 0.
+            // byte * 256^k, little-endian place values). The top byte carries the sign: it is made signed first
+            // (minus 256 when its sign bit is set) and then added at its place value. Everything is exact in
+            // double, so the single cast to T at the end rounds once.
             var lowPlaces = new[] { 1, 256, 65536, 16777216 }.Take(width).ToArray();
             lowPlaces[width - 1] = 0;
             var lowValue = engine.TensorMatMul(
-                sampleBytes, new Tensor<int>(lowPlaces, new[] { width, 1 }).Cast<T>()).Reshape(new[] { count });
+                sampleBytes, new Tensor<int>(lowPlaces, new[] { width, 1 }).Cast<double>()).Reshape(new[] { count });
             var topByte = sampleBytes.Slice(1, width - 1, width).Contiguous().Reshape(new[] { count });
-            var signBit = engine.TensorGreaterThan(topByte, numOps.FromDouble(127.0));
-            var signedTop = engine.TensorSubtract(topByte, engine.TensorMultiplyScalar(signBit, numOps.FromDouble(256.0)));
+            var signBit = engine.TensorGreaterThan(topByte, 127.0);
+            var signedTop = engine.TensorSubtract(topByte, engine.TensorMultiplyScalar(signBit, 256.0));
             signedValue = engine.TensorAdd(
-                lowValue, engine.TensorMultiplyScalar(signedTop, numOps.FromDouble(Math.Pow(2, 8 * (width - 1)))));
+                lowValue, engine.TensorMultiplyScalar(signedTop, Math.Pow(2, 8 * (width - 1))));
             fullScale = Math.Pow(2, 8 * width - 1);
         }
 
         var normalized = normalize
-            ? engine.TensorDivideScalar(signedValue, numOps.FromDouble(fullScale))
+            ? engine.TensorDivideScalar(signedValue, fullScale)
             : signedValue;
 
         if (lastSampleMissing)
         {
-            normalized[count - 1] = numOps.Zero;
+            normalized[count - 1] = 0.0;
         }
 
         return normalized;

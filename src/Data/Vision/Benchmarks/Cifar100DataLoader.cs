@@ -81,7 +81,8 @@ public class Cifar100DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
         var labelsData = new int[totalSamples * _numClasses];
 
         bool nchw = _options.Layout == ImageTensorLayout.NCHW;
-        T scale = NumOps.FromDouble(_options.Normalize ? 1.0 / 255.0 : 1.0);
+        // Divide by 255 (one rounding, matching the scalar b / 255.0) rather than multiply by fl(1/255)
+        T divisor = NumOps.FromDouble(_options.Normalize ? 255.0 : 1.0);
         for (int i = 0; i < totalSamples; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -95,7 +96,7 @@ public class Cifar100DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
             var pixelValues = new int[ppi];
             Array.Copy(data, pixelStart, pixelValues, 0, ppi);
             var sampleTensor = AiDotNetEngine.Current
-                .TensorMultiplyScalar(new Tensor<int>(pixelValues, new[] { 3, 32, 32 }).Cast<T>(), scale);
+                .TensorDivideScalar(new Tensor<int>(pixelValues, new[] { 3, 32, 32 }).Cast<T>(), divisor);
 
             if (!nchw)
                 sampleTensor = AiDotNetEngine.Current.TensorPermute(sampleTensor, [1, 2, 0]);

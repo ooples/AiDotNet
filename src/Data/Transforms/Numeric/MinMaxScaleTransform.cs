@@ -159,7 +159,7 @@ public class MinMaxScaleTransform<T> : ITransform<T[], T[]>
             var scaled = engine.TensorAddScalar(
                 engine.TensorMultiplyScalar(engine.TensorDivide(engine.TensorSubtract(values, min), range), targetRange),
                 targetMin);
-            var constant = engine.TensorLessThan(engine.TensorAbs(range), NumOps.FromDouble(1e-12));
+            var constant = TransformTensors.NearZero(engine.TensorAbs(range), 1e-12);
             var targetMinFill = new Tensor<T>(shape);
             targetMinFill.Fill(targetMin);
             engine.TensorWhere(constant, targetMinFill, scaled).AsSpan().CopyTo(result.AsSpan(0, len));

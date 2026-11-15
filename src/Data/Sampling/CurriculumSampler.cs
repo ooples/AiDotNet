@@ -165,10 +165,13 @@ public class CurriculumSampler<T> : EpochAdaptiveSamplerBase<T>
         // If no samples are eligible (threshold too low), include easiest samples
         if (eligibleIndices.Count == 0 && _difficulties.Length > 0)
         {
-            // Find minimum difficulty and include all samples within 1e-9 of it
+            // Find minimum difficulty and include all samples within 1e-9 of it. Exact matches are OR-ed in
+            // because 1e-9 is zero in half precision, where "< 1e-9" alone would exclude the minimum itself.
             T minDifficulty = engine.TensorMinValue(difficulties);
             var distance = engine.TensorAbs(engine.TensorSubtractScalar(difficulties, minDifficulty));
-            var atMinimum = engine.TensorEqScalar(engine.TensorLessThan(distance, NumOps.FromDouble(1e-9)), NumOps.One);
+            var atMinimum = engine.TensorLogicalOr(
+                engine.TensorEqScalar(engine.TensorLessThan(distance, NumOps.FromDouble(1e-9)), NumOps.One),
+                engine.TensorEqScalar(distance, NumOps.Zero));
             eligibleIndices.AddRange(MaskedIndices(atMinimum));
         }
 

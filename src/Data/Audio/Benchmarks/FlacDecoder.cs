@@ -194,7 +194,6 @@ internal static class FlacDecoder
         if (samplesToWrite <= 0) return samplesToWrite;
 
         var engine = AiDotNetEngine.Current;
-        var numOps = MathHelper.GetNumericOperations<T>();
         var shape = new[] { samplesToWrite };
         var channels = new Tensor<int>[numChannels];
         for (int ch = 0; ch < numChannels; ch++)
@@ -225,17 +224,25 @@ internal static class FlacDecoder
             channels[1] = engine.TensorFloorDivide(engine.TensorSubtract(mid, side), twos);
         }
 
-        // Output: average channels to mono, normalize and clamp to [-1, 1]
-        var mono = numChannels == 1
-            ? channels[0].Cast<T>()
-            : engine.TensorDivideScalar(
-                engine.ReduceSum(engine.TensorStack(channels, 0), new[] { 0 }, false).Cast<T>(),
-                numOps.FromDouble(numChannels));
-        var normalized = engine.TensorClamp(
-            engine.TensorMultiplyScalar(mono, numOps.FromDouble(normFactor)), numOps.FromDouble(-1.0), numOps.One);
-        normalized.AsSpan().CopyTo(target.AsSpan(offset, samplesToWrite));
+        MixToMono<T>(channels, normFactor).AsSpan().CopyTo(target.AsSpan(offset, samplesToWrite));
 
         return samplesToWrite;
+    }
+
+    /// <summary>
+    /// Averages the decoded integer channels to mono, scales by <paramref name="normFactor"/> and clamps to
+    /// [-1, 1]. The mix runs in double and is cast to <typeparamref name="T"/> once, like the scalar decoder:
+    /// casting the raw 24-bit samples (or a 16-bit stereo sum) to half precision first overflows it.
+    /// </summary>
+    internal static Tensor<T> MixToMono<T>(Tensor<int>[] channels, double normFactor)
+    {
+        var engine = AiDotNetEngine.Current;
+        var mono = channels.Length == 1
+            ? channels[0].Cast<double>()
+            : engine.TensorDivideScalar(
+                engine.ReduceSum(engine.TensorStack(channels, 0), new[] { 0 }, false).Cast<double>(),
+                (double)channels.Length);
+        return engine.TensorClamp(engine.TensorMultiplyScalar(mono, normFactor), -1.0, 1.0).Cast<T>();
     }
 
     private static int[] DecodeSubframe(BitReader reader, int blockSize, int bps)

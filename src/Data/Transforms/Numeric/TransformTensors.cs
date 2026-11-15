@@ -1,3 +1,5 @@
+using AiDotNet.Tensors;
+
 namespace AiDotNet.Data.Transforms.Numeric;
 
 /// <summary>
@@ -39,5 +41,20 @@ internal static class TransformTensors
     internal static Tensor<T> FromStatistics<T>(T[] values)
     {
         return new Tensor<T>((T[])values.Clone(), new[] { values.Length });
+    }
+
+    /// <summary>
+    /// Mask of the entries of <paramref name="magnitudes"/> (non-negative values) below
+    /// <paramref name="threshold"/>. When the threshold underflows <typeparamref name="T"/> to zero (1e-12 in
+    /// half precision) the mask still catches exact zeros, which is what the double comparison caught there.
+    /// </summary>
+    internal static Tensor<Bit> NearZero<T>(Tensor<T> magnitudes, double threshold)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var engine = AiDotNetEngine.Current;
+        T limit = numOps.FromDouble(threshold);
+        return numOps.GreaterThan(limit, numOps.Zero)
+            ? engine.TensorEqScalar(engine.TensorLessThan(magnitudes, limit), numOps.One)
+            : engine.TensorEqScalar(magnitudes, numOps.Zero);
     }
 }

@@ -123,7 +123,11 @@ public abstract class WeightedSamplerBase<T> : DataSamplerBase, IWeightedSampler
     /// <summary>
     /// Cumulative probabilities for weighted sampling.
     /// </summary>
-    protected Tensor<T> CumulativeProbabilities;
+    /// <remarks>
+    /// Kept in double whatever <typeparamref name="T"/> is: a running sum of probabilities in single or half
+    /// precision drifts (and in half precision saturates), which skews every draw toward the last index.
+    /// </remarks>
+    protected Tensor<double> CumulativeProbabilities;
 
     /// <summary>
     /// Whether to sample with replacement.
@@ -162,7 +166,7 @@ public abstract class WeightedSamplerBase<T> : DataSamplerBase, IWeightedSampler
 
         NumSamplesOverride = numSamples;
         ReplacementEnabled = replacement;
-        CumulativeProbabilities = new Tensor<T>(new[] { WeightsArray.Length });
+        CumulativeProbabilities = new Tensor<double>(new[] { WeightsArray.Length });
         // Call the private core method directly to avoid virtual call in constructor
         ComputeCumulativeProbabilitiesCore();
     }
@@ -216,17 +220,18 @@ public abstract class WeightedSamplerBase<T> : DataSamplerBase, IWeightedSampler
     /// </summary>
     private void ComputeCumulativeProbabilitiesCore()
     {
-        CumulativeProbabilities = new Tensor<T>(new[] { WeightsArray.Length });
+        CumulativeProbabilities = new Tensor<double>(new[] { WeightsArray.Length });
         if (WeightsArray.Length == 0)
         {
             throw new ArgumentException("Total weight must be greater than zero.");
         }
 
-        // Validate the weights with engine ops
+        // Validate the weights with engine ops. The distribution is built in double (one cast), as the scalar
+        // accumulation was: in T the running sum drifts for large datasets and saturates in half precision.
         var engine = AiDotNetEngine.Current;
-        var weights = new Tensor<T>((T[])WeightsArray.Clone(), new[] { WeightsArray.Length });
-        var negative = engine.TensorLessThan(weights, NumOps.Zero);
-        if (NumOps.GreaterThan(engine.TensorMaxValue(negative), NumOps.Zero))
+        var weights = new Tensor<T>((T[])WeightsArray.Clone(), new[] { WeightsArray.Length }).Cast<double>();
+        var negative = engine.TensorLessThan(weights, 0.0);
+        if (engine.TensorMaxValue(negative) > 0.0)
         {
             // ArgMax returns the first maximum, i.e. the first negative weight.
             int i = engine.TensorArgMax(negative, 0).AsSpan()[0];
@@ -236,9 +241,9 @@ public abstract class WeightedSamplerBase<T> : DataSamplerBase, IWeightedSampler
 
         // Running sum (left to right, like the previous scalar accumulation); its last entry is the total
         var runningSum = engine.TensorCumSum(weights, 0);
-        T sum = runningSum.AsSpan()[WeightsArray.Length - 1];
+        double sum = runningSum.AsSpan()[WeightsArray.Length - 1];
 
-        if (NumOps.LessThanOrEquals(sum, NumOps.Zero))
+        if (sum <= 0.0)
         {
             throw new ArgumentException("Total weight must be greater than zero.");
         }
@@ -247,7 +252,7 @@ public abstract class WeightedSamplerBase<T> : DataSamplerBase, IWeightedSampler
         CumulativeProbabilities = engine.TensorCumSum(engine.TensorDivideScalar(weights, sum), 0);
 
         // Ensure last element is exactly 1.0 to avoid floating point issues
-        CumulativeProbabilities[WeightsArray.Length - 1] = NumOps.One;
+        CumulativeProbabilities[WeightsArray.Length - 1] = 1.0;
     }
 
     /// <summary>
@@ -257,7 +262,7 @@ public abstract class WeightedSamplerBase<T> : DataSamplerBase, IWeightedSampler
     protected int SampleWeightedIndex()
     {
         // First entry with r <= cumulative, capped at the last index like the former binary search.
-        return CumulativeSearch.FirstAtOrAbove(CumulativeProbabilities.AsSpan(), NumOps.FromDouble(Random.NextDouble()));
+        return CumulativeSearch.FirstAtOrAbove<double>(CumulativeProbabilities.AsSpan(), Random.NextDouble());
     }
 }
 

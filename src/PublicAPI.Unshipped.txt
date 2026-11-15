@@ -22921,7 +22921,7 @@ AiDotNet.Enums.MixtureOfExpertsGatingNoise.SoftplusOfRouterLogits = 1 -> AiDotNe
 AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.Entmax15 = 0 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
 AiDotNet.Enums.ObliviousTreeChoiceFunction.SoftmaxSigmoid = 1 -> AiDotNet.Enums.ObliviousTreeChoiceFunction
-AiDotNet.Data.Sampling.WeightedSamplerBase<T>.CumulativeProbabilities -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Data.Sampling.WeightedSamplerBase<T>.CumulativeProbabilities -> AiDotNet.Tensors.LinearAlgebra.Tensor<double>!
 *REMOVED*AiDotNet.Data.Transforms.Numeric.MinMaxScaleTransform<T>.MinMaxScaleTransform(double[]! min, double[]! max, double targetMin = 0, double targetMax = 1) -> void
 *REMOVED*AiDotNet.Data.Transforms.Numeric.StandardScaleTransform<T>.StandardScaleTransform(double[]! mean, double[]! std) -> void
 AiDotNet.Data.Transforms.Numeric.MinMaxScaleTransform<T>.MinMaxScaleTransform(T[]! min, T[]! max) -> void

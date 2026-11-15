@@ -123,7 +123,9 @@ public class TemporalGraphDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>
         var labelsData = new int[totalSamples];
 
         // Hash embedding for unknown nodes: sin((node + 1) * (f + 1)), f = 0 .. halfNode - 1, for every
-        // distinct unknown node at once as one engine outer product in T; rows are then copied out.
+        // distinct unknown node at once as one engine outer product; rows are then copied out. It is formed
+        // in double and cast to T once, like the scalar Math.Sin: in half precision the product overflows to
+        // infinity (and sin to NaN) and node ids above 2048 are not exact.
         int halfNodeDim = nodeFeatDim / 2;
         var hashRow = new Dictionary<int, int>();
         var hashNodes = new List<int>();
@@ -139,14 +141,7 @@ public class TemporalGraphDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>
             }
         }
 
-        var hashEmbeddings = new T[0];
-        if (halfNodeDim > 0 && hashNodes.Count > 0)
-        {
-            var engine = AiDotNetEngine.Current;
-            var ramp = new Tensor<int>(Enumerable.Range(1, halfNodeDim).ToArray(), new[] { halfNodeDim }).Cast<T>();
-            var nodes = new Tensor<int>(hashNodes.ToArray(), new[] { hashNodes.Count }).Cast<T>();
-            hashEmbeddings = engine.TensorSin(engine.TensorOuter(nodes, ramp)).Contiguous().AsSpan().ToArray();
-        }
+        var hashEmbeddings = HashEmbeddings(hashNodes.ToArray(), halfNodeDim);
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -256,5 +251,19 @@ public class TemporalGraphDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>
     {
         var (bf, bl) = ExtractBatch(indices);
         return new InMemoryDataLoader<T, Tensor<T>, Tensor<T>>(bf, bl);
+    }
+
+    /// <summary>
+    /// Row-major <c>[nodes, halfNodeDim]</c> table of <c>sin(node * (f + 1))</c> for the given (already
+    /// one-based) node values, formed in double and cast to <typeparamref name="T"/> once.
+    /// </summary>
+    internal static T[] HashEmbeddings(int[] nodesPlusOne, int halfNodeDim)
+    {
+        if (halfNodeDim <= 0 || nodesPlusOne.Length == 0) return new T[0];
+
+        var engine = AiDotNetEngine.Current;
+        var ramp = new Tensor<int>(Enumerable.Range(1, halfNodeDim).ToArray(), new[] { halfNodeDim }).Cast<double>();
+        var nodes = new Tensor<int>(nodesPlusOne, new[] { nodesPlusOne.Length }).Cast<double>();
+        return engine.TensorSin(engine.TensorOuter(nodes, ramp)).Cast<T>().Contiguous().AsSpan().ToArray();
     }
 }

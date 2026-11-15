@@ -188,6 +188,16 @@ public class OGBDatasetLoader<T> : GraphDataLoaderBase<T>
     {
         string datasetDir = Path.Combine(_dataPath, _datasetName);
 
+        // Set number of classes first: the parsers one-hot encode the labels with it
+        if (DatasetStats.TryGetValue(_datasetName, out var stats))
+        {
+            _numClasses = stats.classes;
+        }
+        else
+        {
+            _numClasses = 2; // Default for binary classification
+        }
+
         // Ensure data exists (download if needed)
         await EnsureDataExistsAsync(datasetDir, cancellationToken);
 
@@ -198,16 +208,6 @@ public class OGBDatasetLoader<T> : GraphDataLoaderBase<T>
         if (LoadedGraphs.Count > 0)
         {
             LoadedGraphData = LoadedGraphs[0];
-        }
-
-        // Set number of classes
-        if (DatasetStats.TryGetValue(_datasetName, out var stats))
-        {
-            _numClasses = stats.classes;
-        }
-        else
-        {
-            _numClasses = 2; // Default for binary classification
         }
     }
 

@@ -71,7 +71,9 @@ public class WeightedSampler<T> : WeightedSamplerBase<T>
             // For efficiency, we track which indices have been selected
             var availableIndices = Enumerable.Range(0, WeightsArray.Length).ToList();
             var engine = AiDotNetEngine.Current;
-            var allWeights = new Tensor<T>((T[])WeightsArray.Clone(), new[] { WeightsArray.Length });
+            // The draw runs in double, like the scalar loop it replaced: in T the remaining-weight total
+            // overflows half precision and the running sum drifts for large datasets.
+            var allWeights = new Tensor<T>((T[])WeightsArray.Clone(), new[] { WeightsArray.Length }).Cast<double>();
 
             for (int i = 0; i < Math.Min(numToSample, WeightsArray.Length); i++)
             {
@@ -79,20 +81,18 @@ public class WeightedSampler<T> : WeightedSamplerBase<T>
                 // their left-to-right running sum (its last entry is the total).
                 var available = engine.TensorIndexSelect(
                     allWeights, new Tensor<int>(availableIndices.ToArray(), new[] { availableIndices.Count }), 0);
-                T sum = engine.TensorCumSum(available, 0).AsSpan()[availableIndices.Count - 1];
+                double sum = engine.TensorCumSum(available, 0).AsSpan()[availableIndices.Count - 1];
 
-                if (NumOps.LessThanOrEquals(sum, NumOps.Zero))
+                if (sum <= 0)
                 {
                     yield break;
                 }
 
                 // Build cumulative distribution over available indices and pick the first entry with
                 // u <= cumulative (left search-sorted); default to the last if none qualifies.
-                T u = NumOps.FromDouble(Random.NextDouble());
+                double u = Random.NextDouble();
                 var cumulative = engine.TensorCumSum(engine.TensorDivideScalar(available, sum), 0);
-                int firstAtOrAbove = engine.TensorSearchSorted(
-                    cumulative, new Tensor<T>(new[] { u }, new[] { 1 }), right: false).AsSpan()[0];
-                int selectedLocalIndex = Math.Min(firstAtOrAbove, availableIndices.Count - 1);
+                int selectedLocalIndex = CumulativeSearch.FirstAtOrAbove<double>(cumulative.AsSpan(), u);
 
                 int selectedIndex = availableIndices[selectedLocalIndex];
                 yield return selectedIndex;
@@ -137,18 +137,19 @@ public class WeightedSampler<T> : WeightedSamplerBase<T>
             return Array.Empty<T>();
         }
 
-        // Weight per class (inverse of frequency): total / (numClasses * count) in T, zero for empty
-        // classes and for the extra slot.
+        // Weight per class (inverse of frequency): total / (numClasses * count), zero for empty classes and
+        // for the extra slot. Built in double like the scalar table (numClasses * count overflows half
+        // precision) and cast to T once after the gather.
         var engine = AiDotNetEngine.Current;
         var countTable = new int[numClasses + 1];
         Array.Copy(classCounts, countTable, numClasses);
-        var counts = new Tensor<int>(countTable, new[] { countTable.Length }).Cast<T>();
-        var total = new Tensor<T>(new[] { countTable.Length });
-        total.Fill(NumOps.FromDouble(totalSamples));
+        var counts = new Tensor<int>(countTable, new[] { countTable.Length }).Cast<double>();
+        var total = new Tensor<double>(new[] { countTable.Length });
+        total.Fill(totalSamples);
         var weightTable = engine.TensorWhere(
-            engine.TensorGreaterThan(counts, NumOps.Zero),
-            engine.TensorDivide(total, engine.TensorMultiplyScalar(counts, NumOps.FromDouble(numClasses))),
-            new Tensor<T>(new[] { countTable.Length }));
+            engine.TensorGreaterThan(counts, 0.0),
+            engine.TensorDivide(total, engine.TensorMultiplyScalar(counts, (double)numClasses)),
+            new Tensor<double>(new[] { countTable.Length }));
         var slots = new int[labels.Count];
         for (int i = 0; i < labels.Count; i++)
         {
@@ -157,6 +158,6 @@ public class WeightedSampler<T> : WeightedSamplerBase<T>
         }
 
         var gathered = engine.TensorIndexSelect(weightTable, new Tensor<int>(slots, new[] { slots.Length }), 0);
-        return gathered.AsSpan().ToArray();
+        return gathered.Cast<T>().AsSpan().ToArray();
     }
 }

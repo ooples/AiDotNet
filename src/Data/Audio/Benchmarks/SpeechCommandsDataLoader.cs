@@ -585,7 +585,7 @@ public class SpeechCommandsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T
     /// When <paramref name="nativeRate"/> equals <paramref name="targetRate"/> this
     /// collapses to a plain copy loop (still honors nativeOffset for silence crops).
     /// </summary>
-    private void ResampleIntoDestination(
+    internal static void ResampleIntoDestination(
         T[] nativeBuf, int nativeOffset, T[] dst, int dstOffset, int targetLen, int nativeRate, int targetRate)
     {
         int lastIdx = nativeBuf.Length - 1;
@@ -608,7 +608,8 @@ public class SpeechCommandsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T
         // with per-output weights (1 - frac, frac). The source position is
         // nativeOffset + t * nativeRate / targetRate, so its floor is nativeOffset plus the integer
         // quotient and frac is the integer remainder / targetRate: the index bookkeeping is integer-only
-        // and the weights are built in T.
+        // and the weights and the blend are formed in double (cast to T once), like the scalar code: half
+        // precision cannot hold remainders above 2048 or a target rate above 65504.
         var floorIdx = new int[targetLen];
         var ceilIdx = new int[targetLen];
         var remainders = new int[targetLen];
@@ -627,12 +628,13 @@ public class SpeechCommandsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T
         var shape = new[] { targetLen };
         var v0 = engine.TensorIndexSelect(source, new Tensor<int>(floorIdx, shape), 0);
         var v1 = engine.TensorIndexSelect(source, new Tensor<int>(ceilIdx, shape), 0);
-        var remainder = new Tensor<int>(remainders, shape).Cast<T>();
-        T rate = NumOps.FromDouble(targetRate);
+        var remainder = new Tensor<int>(remainders, shape).Cast<double>();
+        double rate = targetRate;
         var w1 = engine.TensorDivideScalar(remainder, rate);
         var w0 = engine.TensorDivideScalar(engine.TensorSubtract(engine.TensorFullLike(remainder, rate), remainder), rate);
-        var blended = engine.TensorAdd(engine.TensorMultiply(v0, w0), engine.TensorMultiply(v1, w1));
-        blended.AsSpan().CopyTo(dst.AsSpan(dstOffset, targetLen));
+        var blended = engine.TensorAdd(
+            engine.TensorMultiply(v0.Cast<double>(), w0), engine.TensorMultiply(v1.Cast<double>(), w1));
+        blended.Cast<T>().AsSpan().CopyTo(dst.AsSpan(dstOffset, targetLen));
     }
 
     /// <inheritdoc/>

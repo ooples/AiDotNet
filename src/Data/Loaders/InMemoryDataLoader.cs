@@ -193,8 +193,8 @@ public class InMemoryDataLoader<T, TInput, TOutput> : InputOutputDataLoaderBase<
 
         if (_features is Tensor<T> tensor)
         {
-            // Clone shape but change first dimension
-            var newShape = (int[])tensor._shape;
+            // Clone shape but change first dimension (_shape is the tensor's own array: never write to it)
+            var newShape = (int[])tensor._shape.Clone();
             newShape[0] = indices.Length;
             var result = new Tensor<T>(newShape);
 
@@ -221,8 +221,8 @@ public class InMemoryDataLoader<T, TInput, TOutput> : InputOutputDataLoaderBase<
 
         if (_labels is Tensor<T> tensor)
         {
-            // Clone shape but change first dimension
-            var newShape = (int[])tensor._shape;
+            // Clone shape but change first dimension (_shape is the tensor's own array: never write to it)
+            var newShape = (int[])tensor._shape.Clone();
             newShape[0] = indices.Length;
             var result = new Tensor<T>(newShape);
 

@@ -15,7 +15,6 @@ namespace AiDotNet.Data.Transforms.Numeric;
 /// </remarks>
 public class NormalizeTransform<T> : ITransform<T[], T[]>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly T[] _mean;
     private readonly T[] _std;
 
@@ -95,7 +94,7 @@ public class NormalizeTransform<T> : ITransform<T[], T[]>
         var diff = engine.TensorSubtract(new Tensor<T>(input, shape), new Tensor<T>(_mean, shape));
 
         // Features whose std is (numerically) zero are only centred, not divided.
-        var zeroStd = engine.TensorLessThan(engine.TensorAbs(std), NumOps.FromDouble(1e-12));
+        var zeroStd = TransformTensors.NearZero(engine.TensorAbs(std), 1e-12);
         var result = engine.TensorWhere(zeroStd, diff, engine.TensorDivide(diff, std));
 
         return result.AsSpan().ToArray();
