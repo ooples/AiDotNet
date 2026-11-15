@@ -93,13 +93,13 @@ public class PrototypicalContributionEvaluator<T> : FederatedLearningComponentBa
         var (units, magnitudes) = Infrastructure.FederatedTensorMath<T>.NormalizeRows(Engine.TensorConcatenate(prototypes, 0));
         var (globalUnit, _) = Infrastructure.FederatedTensorMath<T>.NormalizeRows(FitToLength(globalModel, modelSize).Reshape(new[] { 1, modelSize }));
         var alignments = Engine.TensorMatMul(units, Engine.TensorTranspose(globalUnit)).Cast<double>().ToArray();
-        var cosines = Engine.TensorMatMul(units, Engine.TensorTranspose(units)).Cast<double>().ToArray();
+        var diversities = ComputeDiversities(units, k);
 
         // Score each client
         for (int c = 0; c < k; c++)
         {
             double alignment = alignments[c];
-            double diversity = ComputeDiversity(c, cosines, k);
+            double diversity = diversities[c];
             double magnitude = magnitudes[c];
 
             // Contribution = alignment * diversity * magnitude
@@ -139,23 +139,50 @@ public class PrototypicalContributionEvaluator<T> : FederatedLearningComponentBa
 
         return freeRiders;
     }
-    private static double ComputeDiversity(int index, double[] cosines, int count)
+
+    /// <summary>Cosine entries per block of <see cref="ComputeDiversities"/>.</summary>
+    private const int CosineBlockEntries = 1 << 20;
+
+    /// <summary>
+    /// Diversity of every client: its average angular distance 1 - |cos| from the other clients (higher means a
+    /// more unique contribution).
+    /// </summary>
+    /// <remarks>
+    /// The k x k cosine matrix is formed in row blocks of about <see cref="CosineBlockEntries"/> entries and each
+    /// block is reduced to its rows' off-diagonal sums before the next, so memory does not grow as k² (10,000
+    /// clients would be 100 million cosines).
+    /// </remarks>
+    private static double[] ComputeDiversities(Tensor<T> units, int count)
     {
-        // Diversity: average angular distance from other clients
-        // Higher = more unique contribution
+        var diversities = new double[count];
         if (count < 2)
         {
-            return 0;
+            return diversities;
         }
 
-        double totalDistance = 0;
-        for (int other = 0; other < count; other++)
+        var unitsT = Engine.TensorTranspose(units);
+        int modelSize = units.Shape[1];
+        int blockRows = Math.Max(1, CosineBlockEntries / count);
+        for (int first = 0; first < count; first += blockRows)
         {
-            if (other == index) continue;
-            totalDistance += 1.0 - Math.Abs(cosines[index * count + other]); // Angular distance
+            int rows = Math.Min(blockRows, count - first);
+            var block = Engine.TensorSlice(units, new[] { first, 0 }, new[] { rows, modelSize });
+            var cosines = Engine.TensorMatMul(block, unitsT).Cast<double>().ToArray();
+            for (int r = 0; r < rows; r++)
+            {
+                int index = first + r;
+                double totalDistance = 0;
+                for (int other = 0; other < count; other++)
+                {
+                    if (other == index) continue;
+                    totalDistance += 1.0 - Math.Abs(cosines[r * count + other]); // Angular distance
+                }
+
+                diversities[index] = totalDistance / (count - 1);
+            }
         }
 
-        return totalDistance / (count - 1);
+        return diversities;
     }
 
     /// <summary>

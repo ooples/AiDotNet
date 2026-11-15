@@ -22937,6 +22937,10 @@ AiDotNet.Enums.ObliviousTreeChoiceFunction.SoftmaxSigmoid = 1 -> AiDotNet.Enums.
 *REMOVED*AiDotNet.FederatedLearning.ContinualLearning.DataFreeFCL<T>.ComputeDistillationLoss(double[]! teacherLogits, double[]! studentLogits) -> double
 AiDotNet.FederatedLearning.Adapters.DPFedLoRA<T>.LoraScaling.get -> double
 AiDotNet.FederatedLearning.Adapters.SparseLoRA<T>.LoraScaling.get -> double
+AiDotNet.Models.Options.FederatedGraphOptions.LocalEpochs.get -> int
+AiDotNet.Models.Options.FederatedGraphOptions.LocalEpochs.set -> void
+AiDotNet.Models.Options.FederatedGraphOptions.LocalLearningRate.get -> double
+AiDotNet.Models.Options.FederatedGraphOptions.LocalLearningRate.set -> void
 AiDotNet.FederatedLearning.Aggregators.FlameAggregationStrategy<T>.SetGlobalModel(System.Collections.Generic.Dictionary<string!, T[]!>! globalModel) -> void
 AiDotNet.FederatedLearning.Compression.FetchSGDCompressor<T>.FetchSGDCompressor(int sketchRows = 5, int sketchCols = 10000, int topK = 1000, int seed = 42, double momentum = 0.9, double learningRate = 1) -> void
 AiDotNet.FederatedLearning.Compression.FetchSGDCompressor<T>.MergeSketches(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Matrix<T>!>! sketches) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!

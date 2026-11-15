@@ -891,14 +891,52 @@ public class FederatedElementwiseSweep29bReferenceTests
     }
 
     [Fact(Timeout = 60000)]
-    public async Task SubgraphFederatedTrainer_RoundWithMultiFeatureNodesScalesModelByLabelError()
+    public async Task SubgraphFederatedTrainer_LocalStepIsTheGcnMseGradient()
     {
         await Task.Yield();
 
-        // Two linked nodes with flattened features [1, 2 | 3, 4]. Each embedding is the mean summed features of
-        // the neighbors: node 0 -> 7, node 1 -> 3. Labels [7, 0] give squared errors 0 and 9, mean 4.5, so the
-        // local update scales every parameter by 1 - 0.01 * 4.5 * 0.01. The old embedding loop took the node
-        // count from the flattened feature length and indexed past the adjacency.
+        // One feature, hidden size 1, two GCN layers: parameters [W_1, W_2, w] = [1, 2, 0.5]. Two linked nodes
+        // with features [1, 3] give Â = D^-1 (A + I) = [[0.5, 0.5], [0.5, 0.5]], so P_1 = Â X = [2, 2],
+        // H_1 = ReLU(2 * 1) = [2, 2], P_2 = [2, 2], H_2 = ReLU(2 * 2) = [4, 4] and ŷ = 0.5 * H_2 = [2, 2].
+        // Labels [1, 0]: g_ŷ = 2 (ŷ - y) / 2 = [1, 2].
+        //   g_w   = H_2^T g_ŷ = 4 + 8 = 12
+        //   g_W_2 = P_2^T (g_ŷ w) = 2 * 0.5 + 2 * 1 = 3
+        //   g_W_1 = P_1^T (Â^T (g_ŷ w W_2)) = P_1^T [1.5, 1.5] = 6
+        // One step at lr 0.01 gives [1 - 0.06, 2 - 0.03, 0.5 - 0.12]. Every parameter moves by its own gradient,
+        // so the ratios change: a uniform shrink of the whole vector could not learn the weights.
+        var options = new AiDotNet.Models.Options.FederatedGraphOptions
+        {
+            PseudoNodeStrategy = AiDotNet.Models.Options.PseudoNodeStrategy.None,
+            HiddenDimension = 1,
+            NumGnnLayers = 2,
+            LocalLearningRate = 0.01,
+            LocalEpochs = 1,
+        };
+        var trainer = new AiDotNet.FederatedLearning.Graph.SubgraphFederatedTrainer<double>(
+            options, new AiDotNet.FederatedLearning.Graph.FedGnnAggregationStrategy<double>());
+        var expanded = new AiDotNet.FederatedLearning.Graph.ExpandedSubgraph<double>
+        {
+            Adjacency = new Tensor<double>(new[] { 0.0, 1.0, 1.0, 0.0 }, new[] { 4 }),
+            NodeFeatures = new Tensor<double>(new[] { 1.0, 3.0 }, new[] { 2 }),
+        };
+
+        var updated = trainer.TrainLocalGnn(
+            expanded, new Tensor<double>(new[] { 1.0, 0.0 }, new[] { 2 }), new Tensor<double>(new[] { 1.0, 2.0, 0.5 }, new[] { 3 }));
+
+        Assert.Equal(new[] { 3 }, updated.Shape.ToArray());
+        Assert.Equal(0.94, updated[0], Precision);
+        Assert.Equal(1.97, updated[1], Precision);
+        Assert.Equal(0.38, updated[2], Precision);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task SubgraphFederatedTrainer_FlattenedMultiFeatureNodesSizeTheModelPerNode()
+    {
+        await Task.Yield();
+
+        // Two linked nodes with flattened features [1, 2 | 3, 4] have 2 features each, so hidden size 2 gives
+        // W_1 [2 x 2] + W_2 [2 x 2] + w [2] = 10 parameters. Taking the feature width from the flattened length
+        // (4) gave 14, and the local step could not read the features as nodes x width.
         var options = new AiDotNet.Models.Options.FederatedGraphOptions
         {
             PseudoNodeStrategy = AiDotNet.Models.Options.PseudoNodeStrategy.None,
@@ -912,15 +950,10 @@ public class FederatedElementwiseSweep29bReferenceTests
             new Tensor<double>(new[] { 1.0, 2.0, 3.0, 4.0 }, new[] { 4 }),
             new Tensor<double>(new[] { 7.0, 0.0 }, new[] { 2 }));
 
-        var before = trainer.GetGlobalModel().ToArray();
+        Assert.Equal(10, trainer.GetGlobalModel().Length);
         var after = trainer.ExecuteRound(0).ToArray();
-
-        double factor = 1.0 - 0.01 * 4.5 * 0.01;
-        Assert.Equal(before.Length, after.Length);
-        for (int i = 0; i < before.Length; i++)
-        {
-            Assert.Equal(before[i] * factor, after[i], Precision);
-        }
+        Assert.Equal(10, after.Length);
+        Assert.All(after, v => Assert.False(double.IsNaN(v) || double.IsInfinity(v)));
     }
 
     [Fact(Timeout = 60000)]

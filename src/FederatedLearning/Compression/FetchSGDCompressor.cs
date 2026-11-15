@@ -44,11 +44,10 @@ public class FetchSGDCompressor<T> : Infrastructure.FederatedLearningComponentBa
     private readonly long[] _signB;
     private const long LARGE_PRIME = 2147483647L; // 2^31 - 1 (Mersenne prime)
 
-    // Hash tables for the last gradient length: flat sketch index r * cols + h_r(i) and sign s_r(i),
-    // both laid out [rows, length].
-    private int _hashedLength = -1;
-    private Tensor<int> _flatIndices = new Tensor<int>(new[] { 0 });
-    private Tensor<int> _signs = new Tensor<int>(new[] { 0 });
+    // Coordinates hashed per batch. The hash tables are regenerated batch by batch rather than kept for the whole
+    // gradient: retained [rows, length] tables grow with the model (5 rows of 10M parameters is 400 MB), which
+    // defeats the point of a sketch whose own size is rows * cols.
+    private const int HashBatchSize = 1 << 16;
 
     // Server state (sketch space), [rows, cols]. Half and BFloat16 keep it in float, as the former double
     // accumulator did: the error sketch S_e grows while the per-round increments eta * S_u stay small, and in Half
@@ -306,14 +305,17 @@ public class FetchSGDCompressor<T> : Infrastructure.FederatedLearningComponentBa
     {
         int length = values.Length;
         var sketch = new Tensor<TV>(new[] { _sketchRows * _sketchCols });
-        if (length > 0)
+        var flat = values.Reshape(new[] { length });
+        for (int start = 0; start < length; start += HashBatchSize)
         {
-            EnsureHashTables(length);
+            int count = Math.Min(HashBatchSize, length - start);
+            var (flatIndices, signs) = HashBatch(start, count);
 
-            // Every row adds s_r(i) * g_i into bucket h_r(i); one index-add covers all rows.
-            var signed = Engine.TensorMultiply(_signs.Cast<TV>(), values.Reshape(new[] { 1, length }));
+            // Every row adds s_r(i) * g_i into bucket h_r(i); one index-add covers all rows of the batch.
+            var batch = Engine.TensorSlice(flat, new[] { start }, new[] { count });
+            var signed = Engine.TensorMultiply(signs.Cast<TV>(), batch.Reshape(new[] { 1, count }));
             sketch = Engine.TensorIndexAdd(
-                sketch, 0, _flatIndices.Reshape(new[] { _sketchRows * length }), signed.Reshape(new[] { _sketchRows * length }));
+                sketch, 0, flatIndices.Reshape(new[] { _sketchRows * count }), signed.Reshape(new[] { _sketchRows * count }));
         }
 
         return sketch.Reshape(new[] { _sketchRows, _sketchCols });
@@ -329,16 +331,22 @@ public class FetchSGDCompressor<T> : Infrastructure.FederatedLearningComponentBa
 
         var ops = MathHelper.GetNumericOperations<TV>();
 
-        EnsureHashTables(length);
-
         // Estimates per row: s_r(i) * S[r, h_r(i)]; the estimate is the median over rows
-        // (the upper middle value for an even row count).
-        var bucketValues = Engine.TensorGather(
-            sketch.Reshape(new[] { _sketchRows * _sketchCols }), _flatIndices.Reshape(new[] { _sketchRows * length }), 0);
-        var rowEstimates = Engine.TensorMultiply(_signs.Cast<TV>(), bucketValues.Reshape(new[] { _sketchRows, length }));
-        var (sortedEstimates, _) = Engine.TensorSort(rowEstimates, 0, false);
-        var estimates = Engine.TensorSlice(sortedEstimates, new[] { _sketchRows / 2, 0 }, new[] { 1, length })
-            .Reshape(new[] { length });
+        // (the upper middle value for an even row count). Batched, so only one batch of row estimates is live.
+        var flatSketch = sketch.Reshape(new[] { _sketchRows * _sketchCols });
+        var batches = new List<Tensor<TV>>((length + HashBatchSize - 1) / HashBatchSize);
+        for (int start = 0; start < length; start += HashBatchSize)
+        {
+            int count = Math.Min(HashBatchSize, length - start);
+            var (flatIndices, signs) = HashBatch(start, count);
+            var bucketValues = Engine.TensorGather(flatSketch, flatIndices.Reshape(new[] { _sketchRows * count }), 0);
+            var rowEstimates = Engine.TensorMultiply(signs.Cast<TV>(), bucketValues.Reshape(new[] { _sketchRows, count }));
+            var (sortedEstimates, _) = Engine.TensorSort(rowEstimates, 0, false);
+            batches.Add(Engine.TensorSlice(sortedEstimates, new[] { _sketchRows / 2, 0 }, new[] { 1, count })
+                .Reshape(new[] { count }));
+        }
+
+        var estimates = batches.Count == 1 ? batches[0] : Engine.TensorConcatenate(batches.ToArray(), 0);
 
         // Keep the k largest magnitudes: everything above the k-th largest, then ties in index order.
         int k = Math.Min(_topK, length);
@@ -363,27 +371,24 @@ public class FetchSGDCompressor<T> : Infrastructure.FederatedLearningComponentBa
         return Engine.TensorWhere(keep, estimates, new Tensor<TV>(new[] { length }));
     }
 
-    private void EnsureHashTables(int length)
+    /// <summary>
+    /// Hash tables for coordinates [start, start + count): flat sketch index r * cols + h_r(i) and sign s_r(i),
+    /// both laid out [rows, count].
+    /// </summary>
+    private (Tensor<int> FlatIndices, Tensor<int> Signs) HashBatch(int start, int count)
     {
-        if (_hashedLength == length)
-        {
-            return;
-        }
-
-        var flatIndices = new int[_sketchRows * length];
-        var signs = new int[_sketchRows * length];
+        var flatIndices = new int[_sketchRows * count];
+        var signs = new int[_sketchRows * count];
         for (int r = 0; r < _sketchRows; r++)
         {
-            for (int i = 0; i < length; i++)
+            for (int i = 0; i < count; i++)
             {
-                flatIndices[r * length + i] = r * _sketchCols + HashColumn(i, r);
-                signs[r * length + i] = HashSign(i, r);
+                flatIndices[r * count + i] = r * _sketchCols + HashColumn(start + i, r);
+                signs[r * count + i] = HashSign(start + i, r);
             }
         }
 
-        _flatIndices = new Tensor<int>(flatIndices, new[] { _sketchRows, length });
-        _signs = new Tensor<int>(signs, new[] { _sketchRows, length });
-        _hashedLength = length;
+        return (new Tensor<int>(flatIndices, new[] { _sketchRows, count }), new Tensor<int>(signs, new[] { _sketchRows, count }));
     }
 
     private int HashColumn(int index, int row)

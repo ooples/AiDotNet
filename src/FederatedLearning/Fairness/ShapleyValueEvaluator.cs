@@ -160,39 +160,53 @@ public class ShapleyValueEvaluator<T> : FederatedLearningComponentBase<T>, IClie
                 (perm[i], perm[j]) = (perm[j], perm[i]);
             }
 
-            // Prefix means of the permuted clients: row i is the coalition of the first i + 1 clients, formed as
-            // a lower-triangular 1 / (i + 1) weight matrix times the client matrix. Weighting before summing keeps
-            // every partial sum within max |x|; a running sum in narrow T overflows long before the mean does.
-            var ordered = new Tensor<T>[n];
-            for (int i = 0; i < n; i++)
-            {
-                ordered[i] = FitToLength(clientModels[perm[i]], modelSize).Reshape(new[] { 1, modelSize });
-            }
-
-            var prefixWeights = new double[n * n];
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j <= i; j++)
-                {
-                    prefixWeights[i * n + j] = 1.0 / (i + 1);
-                }
-            }
-
-            var prefixMeans = Engine.TensorMatMul(
-                new Tensor<double>(prefixWeights, new[] { n, n }).Cast<T>(), Engine.TensorConcatenate(ordered, 0));
-            var performances = NegativeRowDistances(prefixMeans, reference);
-
+            // Prefix means of the permuted clients: row i is the coalition of the first i + 1 clients. They are
+            // formed in blocks of PrefixBlock rows that carry the previous block's last mean m_{s-1}:
+            // m_i = (s / (i + 1)) m_{s-1} + sum_{j = s..i} x_j / (i + 1). Every row's coefficients sum to 1, so each
+            // partial sum stays within max |x| (a running sum in narrow T overflows long before the mean does),
+            // and the weights are [block, block + 1] rather than n x n (10,000 clients would be 800 MB).
             double prevPerformance = emptyPerformance;
-            for (int i = 0; i < n; i++)
+            var carried = new Tensor<T>(new[] { 1, modelSize });
+            for (int s = 0; s < n; s += PrefixBlock)
             {
-                shapleyValues[perm[i]] += (performances[i] - prevPerformance) / rounds;
-                prevPerformance = performances[i];
+                int rows = Math.Min(PrefixBlock, n - s);
+                var block = new Tensor<T>[rows + 1];
+                block[0] = carried;
+                for (int r = 0; r < rows; r++)
+                {
+                    block[r + 1] = FitToLength(clientModels[perm[s + r]], modelSize).Reshape(new[] { 1, modelSize });
+                }
+
+                var prefixWeights = new double[rows * (rows + 1)];
+                for (int r = 0; r < rows; r++)
+                {
+                    double size = s + r + 1;
+                    prefixWeights[r * (rows + 1)] = s / size;
+                    for (int j = 0; j <= r; j++)
+                    {
+                        prefixWeights[r * (rows + 1) + j + 1] = 1.0 / size;
+                    }
+                }
+
+                var prefixMeans = Engine.TensorMatMul(
+                    new Tensor<double>(prefixWeights, new[] { rows, rows + 1 }).Cast<T>(), Engine.TensorConcatenate(block, 0));
+                var performances = NegativeRowDistances(prefixMeans, reference);
+                for (int r = 0; r < rows; r++)
+                {
+                    shapleyValues[perm[s + r]] += (performances[r] - prevPerformance) / rounds;
+                    prevPerformance = performances[r];
+                }
+
+                carried = Engine.TensorSlice(prefixMeans, new[] { rows - 1, 0 }, new[] { 1, modelSize });
             }
         }
 
         NormalizeScores(shapleyValues);
         return shapleyValues;
     }
+
+    /// <summary>Prefix-mean rows per block of the sampled path.</summary>
+    private const int PrefixBlock = 256;
 
     /// <summary>
     /// Values v(S) = -‖mean(S) - global‖ of every coalition bit mask; the empty coalition is the zero model.

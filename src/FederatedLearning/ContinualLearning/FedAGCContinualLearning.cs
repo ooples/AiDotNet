@@ -69,42 +69,21 @@ public class FedAGCContinualLearning<T> : Infrastructure.FederatedLearningCompon
         // gradient of a randomly sampled parameter is its forward difference (L(θ + ε e_idx) - L(θ)) / ε,
         // which is exactly 2 (θ·x) x_idx + ε x_idx² (zero for parameters past the feature width).
         int d = modelParameters.Length;
-        int numSamples = taskData.Rows;
-        int columns = taskData.Columns;
-        int featureDim = Math.Min(d, columns);
+        int featureDim = Math.Min(d, taskData.Columns);
 
         double epsilon = 1e-5;
         int paramSubsample = Math.Min(d, 200); // Subsample parameters for efficiency.
         var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
-
-        // Draw the sampled parameter of every (sample, draw) pair in the original order.
-        var sampledParams = new int[numSamples * paramSubsample];
-        var flatFeatureIndex = new int[numSamples * paramSubsample];
-        var inFeatures = new int[numSamples * paramSubsample];
-        for (int s = 0; s < numSamples; s++)
-        {
-            for (int p = 0; p < paramSubsample; p++)
-            {
-                int idx = rng.Next(d);
-                int k = s * paramSubsample + p;
-                sampledParams[k] = idx;
-                inFeatures[k] = idx < featureDim ? 1 : 0;
-                flatFeatureIndex[k] = s * columns + (idx < featureDim ? idx : 0);
-            }
-        }
 
         // Half and BFloat16 form the Fisher diagonal in float, as the former double loop did: the per-parameter
         // sum of squared gradients over N samples passes Half's 65504 (or stops growing at 2048) while the mean
         // (1 / N) of it still fits.
         var data = Tensor<T>.FromMatrix(taskData);
         var parameters = modelParameters.AsTensor();
-        var sampled = new Tensor<int>(sampledParams, new[] { numSamples * paramSubsample });
-        var draw = new Tensor<int>(flatFeatureIndex, new[] { numSamples * paramSubsample });
-        var inside = new Tensor<int>(inFeatures, new[] { numSamples * paramSubsample });
         var resultVec = typeof(T) == typeof(Half) || typeof(T) == typeof(AiDotNet.Tensors.NumericOperations.BFloat16)
-            ? FisherDiagonal(data.Cast<float>(), parameters.Cast<float>(), sampled, draw, inside, featureDim, paramSubsample, epsilon)
+            ? FisherDiagonal(data.Cast<float>(), parameters.Cast<float>(), featureDim, paramSubsample, epsilon, rng)
                 .Cast<T>().ToVector()
-            : FisherDiagonal(data, parameters, sampled, draw, inside, featureDim, paramSubsample, epsilon).ToVector();
+            : FisherDiagonal(data, parameters, featureDim, paramSubsample, epsilon, rng).ToVector();
 
         // Accumulate importance across tasks (EWC-style online accumulation).
         if (_accumulatedImportance == null)
@@ -122,7 +101,58 @@ public class FedAGCContinualLearning<T> : Infrastructure.FederatedLearningCompon
     /// <summary>
     /// The sampled Fisher diagonal (1 / N) sum_s (dL_s / dθ_idx)^2 of the surrogate loss, per parameter.
     /// </summary>
+    /// <remarks>
+    /// Samples are processed in chunks of about <see cref="FisherDrawBatch"/> (sample, draw) pairs, so the index
+    /// arrays and draw intermediates stay bounded instead of growing as N * paramSubsample (a million rows of
+    /// 200 draws is 600 million indices). The draws are taken from <paramref name="rng"/> sample by sample in
+    /// the original order, and the per-chunk sums are added before the single 1 / N normalization.
+    /// </remarks>
     private static Tensor<TV> FisherDiagonal<TV>(
+        Tensor<TV> data, Tensor<TV> parameters, int featureDim, int paramSubsample, double epsilon, Random rng)
+    {
+        var ops = MathHelper.GetNumericOperations<TV>();
+        int numSamples = data.Shape[0];
+        int columns = data.Shape[1];
+        int d = parameters.Length;
+        int chunkRows = Math.Max(1, FisherDrawBatch / paramSubsample);
+        var importance = new Tensor<TV>(new[] { d });
+        for (int first = 0; first < numSamples; first += chunkRows)
+        {
+            int rows = Math.Min(chunkRows, numSamples - first);
+            var sampledParams = new int[rows * paramSubsample];
+            var flatFeatureIndex = new int[rows * paramSubsample];
+            var inFeatures = new int[rows * paramSubsample];
+            for (int s = 0; s < rows; s++)
+            {
+                for (int p = 0; p < paramSubsample; p++)
+                {
+                    int idx = rng.Next(d);
+                    int k = s * paramSubsample + p;
+                    sampledParams[k] = idx;
+                    inFeatures[k] = idx < featureDim ? 1 : 0;
+                    flatFeatureIndex[k] = s * columns + (idx < featureDim ? idx : 0);
+                }
+            }
+
+            var chunk = Engine.TensorSlice(data, new[] { first, 0 }, new[] { rows, columns });
+            importance = Engine.TensorAdd(importance, FisherSum(
+                chunk, parameters,
+                new Tensor<int>(sampledParams, new[] { sampledParams.Length }),
+                new Tensor<int>(flatFeatureIndex, new[] { flatFeatureIndex.Length }),
+                new Tensor<int>(inFeatures, new[] { inFeatures.Length }),
+                featureDim, paramSubsample, epsilon));
+        }
+
+        return Engine.TensorMultiplyScalar(importance, ops.FromDouble(1.0 / numSamples));
+    }
+
+    /// <summary>(sample, draw) pairs per chunk of <see cref="FisherDiagonal"/>.</summary>
+    private const int FisherDrawBatch = 1 << 16;
+
+    /// <summary>
+    /// The unnormalized sum_s (dL_s / dθ_idx)^2 over one chunk of samples, per parameter.
+    /// </summary>
+    private static Tensor<TV> FisherSum<TV>(
         Tensor<TV> data, Tensor<TV> parameters, Tensor<int> sampledParams, Tensor<int> drawIndex, Tensor<int> inFeatures,
         int featureDim, int paramSubsample, double epsilon)
     {
@@ -144,11 +174,10 @@ public class FedAGCContinualLearning<T> : Infrastructure.FederatedLearningCompon
             Engine.TensorMultiply(sampledFeatures, twoBase),
             Engine.TensorMultiplyScalar(Engine.TensorSquare(sampledFeatures), ops.FromDouble(epsilon)));
 
-        // Fisher ≈ gradient squared (diagonal approximation), accumulated per parameter and normalized by
-        // the number of samples.
+        // Fisher ≈ gradient squared (diagonal approximation), accumulated per parameter; the caller normalizes by
+        // the total number of samples.
         var squared = Engine.TensorSquare(gradients).Reshape(new[] { draws });
-        var importance = Engine.TensorIndexAdd(new Tensor<TV>(new[] { parameters.Length }), 0, sampledParams, squared);
-        return Engine.TensorMultiplyScalar(importance, ops.FromDouble(1.0 / numSamples));
+        return Engine.TensorIndexAdd(new Tensor<TV>(new[] { parameters.Length }), 0, sampledParams, squared);
     }
 
     /// <inheritdoc/>
