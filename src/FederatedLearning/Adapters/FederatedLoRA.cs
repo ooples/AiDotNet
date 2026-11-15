@@ -134,7 +134,7 @@ public class FederatedLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>
     /// <param name="clientAdapters">Adapter parameters from each client (layout per layer: B then A).</param>
     /// <param name="clientWeights">Optional per-client weights.</param>
     /// <returns>Residuals of shape [numAdaptedLayers, layerOutputDim, layerInputDim].</returns>
-    public Tensor<T> ComputeExactAggregationResidual(
+    internal Tensor<T> ComputeExactAggregationResidual(
         Dictionary<int, Vector<T>> clientAdapters,
         Dictionary<int, double>? clientWeights)
     {
@@ -169,27 +169,28 @@ public class FederatedLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>
             throw new ArgumentException("Total client weight must be positive.", nameof(clientWeights));
         }
 
-        // Batched over layers: B is [layers, out, rank] and A is [layers, rank, in].
+        // Batched over layers: B is [layers, out, rank] and A is [layers, rank, in]. The three means are running
+        // sums, so memory is one product, one B and one A whatever the client count.
         var bShape = new[] { _numAdaptedLayers, _layerOutputDim, _rank };
         var aShape = new[] { _numAdaptedLayers, _rank, _layerInputDim };
-        var products = new List<Tensor<T>>(clientAdapters.Count);
-        var factorsB = new List<Tensor<T>>(clientAdapters.Count);
-        var factorsA = new List<Tensor<T>>(clientAdapters.Count);
-        var weights = new List<double>(clientAdapters.Count);
+        var productShape = new[] { _numAdaptedLayers, _layerOutputDim, _layerInputDim };
+        int productSize = _numAdaptedLayers * _layerOutputDim * _layerInputDim;
+        var meanProduct = new Infrastructure.FederatedTensorMath<T>.Accumulator(productSize);
+        var meanB = new Infrastructure.FederatedTensorMath<T>.Accumulator(_numAdaptedLayers * bSize);
+        var meanA = new Infrastructure.FederatedTensorMath<T>.Accumulator(_numAdaptedLayers * aSize);
         foreach (var (clientId, adapters) in clientAdapters)
         {
+            double share = (clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0) / totalWeight;
             var layers = new Tensor<T>(new[] { _numAdaptedLayers, paramsPerLayer }, adapters.GetSubVector(0, required));
-            var b = Engine.TensorSlice(layers, new[] { 0, 0 }, new[] { _numAdaptedLayers, bSize }).Reshape(bShape);
-            var a = Engine.TensorSlice(layers, new[] { 0, bSize }, new[] { _numAdaptedLayers, aSize }).Reshape(aShape);
-            products.Add(Engine.TensorMatMul(b, a));
-            factorsB.Add(b);
-            factorsA.Add(a);
-            weights.Add(clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0);
+            var b = Engine.TensorSlice(layers, new[] { 0, 0 }, new[] { _numAdaptedLayers, bSize });
+            var a = Engine.TensorSlice(layers, new[] { 0, bSize }, new[] { _numAdaptedLayers, aSize });
+            meanProduct.Add(Engine.TensorMatMul(b.Reshape(bShape), a.Reshape(aShape)).Reshape(new[] { productSize }), share);
+            meanB.Add(b.Reshape(new[] { _numAdaptedLayers * bSize }), share);
+            meanA.Add(a.Reshape(new[] { _numAdaptedLayers * aSize }), share);
         }
 
-        var meanProduct = Infrastructure.FederatedTensorMath<T>.WeightedSum(products, weights, totalWeight);
-        var meanB = Infrastructure.FederatedTensorMath<T>.WeightedSum(factorsB, weights, totalWeight);
-        var meanA = Infrastructure.FederatedTensorMath<T>.WeightedSum(factorsA, weights, totalWeight);
-        return Engine.TensorSubtract(meanProduct, Engine.TensorMatMul(meanB, meanA));
+        return Engine.TensorSubtract(
+            meanProduct.ToTensor().Reshape(productShape),
+            Engine.TensorMatMul(meanB.ToTensor().Reshape(bShape), meanA.ToTensor().Reshape(aShape)));
     }
 }

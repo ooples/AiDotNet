@@ -50,8 +50,9 @@ public class FedMDDistillation<T> : Infrastructure.FederatedLearningComponentBas
 
     /// <inheritdoc/>
     /// <remarks>
-    /// Class scores z / τ with z = X Wᵀ, where W[j, k] = θ[j·C + k] for the C public-data columns while
-    /// j·C + k &lt; d, and 0 beyond the parameter count.
+    /// The local model is the flattened linear classifier W [outputDim x C] over the C public-data columns,
+    /// W[j, k] = θ[j·C + k], so outputDim = d / C and d must be a multiple of C. The class scores are z / τ
+    /// with z = X Wᵀ.
     /// </remarks>
     public Matrix<T> ExtractKnowledge(Vector<T> localModelParameters, Matrix<T>? publicData)
     {
@@ -60,9 +61,7 @@ public class FedMDDistillation<T> : Infrastructure.FederatedLearningComponentBas
             throw new ArgumentException("FedMD requires a public dataset for logit extraction.", nameof(publicData));
         ValidateInputs(localModelParameters, publicData);
 
-        // Compute logits: simple linear projection of public data through model parameters
-        // In production, this would use the actual model forward pass
-        return ComputeScaledLogits(localModelParameters, publicData, out _, out _).ToMatrix();
+        return ComputeScaledLogits(localModelParameters, publicData).ToMatrix();
     }
 
     /// <inheritdoc/>
@@ -103,8 +102,10 @@ public class FedMDDistillation<T> : Infrastructure.FederatedLearningComponentBas
     /// <inheritdoc/>
     /// <remarks>
     /// The digest step: gradient descent on α/(2n) Σ ‖z/τ − consensus‖² over the public samples, so
-    /// ∇W = α (z/τ − consensus)ᵀ X / (n τ), scattered into the parameters W was read from. The scores and the
-    /// consensus share the constructor temperature, so <paramref name="temperature"/> is not used.
+    /// ∇W = α (z/τ − consensus)ᵀ X / (n τ) over every weight of W. The consensus was built from scores at the
+    /// constructor temperature by <see cref="ExtractKnowledge"/>, which takes no temperature, so the digest uses
+    /// the same one and <paramref name="temperature"/> is not used: a per-call value here would compare scores
+    /// at one temperature against a consensus at another.
     /// </remarks>
     public Vector<T> ApplyKnowledge(Vector<T> localModelParameters, Matrix<T> globalKnowledge,
         Matrix<T>? publicData, double temperature)
@@ -118,7 +119,7 @@ public class FedMDDistillation<T> : Infrastructure.FederatedLearningComponentBas
         int d = localModelParameters.Length;
         int n = publicData.Rows;
         int columns = publicData.Columns;
-        int outputDim = OutputDimension(d);
+        int outputDim = d / columns;
         if (globalKnowledge.Rows != n || globalKnowledge.Columns != outputDim)
         {
             throw new ArgumentException(
@@ -134,18 +135,14 @@ public class FedMDDistillation<T> : Infrastructure.FederatedLearningComponentBas
         var parameters = localModelParameters.Clone();
         for (int epoch = 0; epoch < _distillationEpochs; epoch++)
         {
-            var scores = ComputeScaledLogits(parameters, publicData, out var weightIndex, out var weightMask);
+            var scores = ComputeScaledLogits(parameters, publicData);
             var residual = Engine.TensorMultiplyScalar(Engine.TensorSubtract(scores, consensus), step);
-            var gradWeights = Engine.TensorMultiply(Engine.TensorMatMul(Engine.TensorTranspose(residual), data), weightMask);
-            var gradParams = Engine.TensorIndexAdd(new Tensor<T>(new[] { d }), 0, weightIndex,
-                gradWeights.Reshape(new[] { outputDim * columns }));
-            parameters = Engine.Subtract(parameters, gradParams.ToVector());
+            var gradWeights = Engine.TensorMatMul(Engine.TensorTranspose(residual), data); // [outputDim, C]
+            parameters = Engine.Subtract(parameters, gradWeights.Reshape(new[] { d }).ToVector());
         }
 
         return parameters;
     }
-
-    private static int OutputDimension(int parameterCount) => Math.Max(1, parameterCount / 10); // Heuristic: output dim is a fraction of params
 
     private static void ValidateInputs(Vector<T> parameters, Matrix<T> publicData)
     {
@@ -153,27 +150,19 @@ public class FedMDDistillation<T> : Infrastructure.FederatedLearningComponentBas
             throw new ArgumentException("Model parameters cannot be empty.", nameof(parameters));
         if (publicData.Rows == 0 || publicData.Columns == 0)
             throw new ArgumentException("Public data cannot be empty.", nameof(publicData));
+        if (parameters.Length % publicData.Columns != 0)
+        {
+            throw new ArgumentException(
+                $"FedMD's local model is a linear classifier [outputDim x {publicData.Columns}], so its " +
+                $"{parameters.Length} parameters must be a multiple of the {publicData.Columns} public-data columns.",
+                nameof(parameters));
+        }
     }
 
-    private Tensor<T> ComputeScaledLogits(Vector<T> parameters, Matrix<T> publicData, out Tensor<int> weightIndex, out Tensor<T> weightMask)
+    private Tensor<T> ComputeScaledLogits(Vector<T> parameters, Matrix<T> publicData)
     {
-        int d = parameters.Length;
         int columns = publicData.Columns;
-        int outputDim = OutputDimension(d);
-
-        var index = new int[outputDim * columns];
-        var mask = new int[outputDim * columns];
-        for (int k = 0; k < index.Length; k++)
-        {
-            bool inRange = k < d;
-            index[k] = inRange ? k : 0;
-            mask[k] = inRange ? 1 : 0;
-        }
-
-        weightIndex = new Tensor<int>(index, new[] { index.Length });
-        weightMask = new Tensor<int>(mask, new[] { outputDim, columns }).Cast<T>();
-        var weights = Engine.TensorMultiply(
-            Engine.TensorGather(parameters.AsTensor(), weightIndex, 0).Reshape(new[] { outputDim, columns }), weightMask);
+        var weights = parameters.AsTensor().Reshape(new[] { parameters.Length / columns, columns });
 
         // Apply temperature scaling
         var logits = Engine.TensorMatMul(Tensor<T>.FromMatrix(publicData), Engine.TensorTranspose(weights));

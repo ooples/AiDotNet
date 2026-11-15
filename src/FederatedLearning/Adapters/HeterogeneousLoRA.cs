@@ -57,10 +57,35 @@ public class HeterogeneousLoRA<T> : Infrastructure.FederatedLearningComponentBas
     }
 
     /// <inheritdoc/>
+    /// <remarks>Extracts adapters at the server's target rank; see <see cref="ExtractAdapterParametersForRank"/>.</remarks>
     public Vector<T> ExtractAdapterParameters(Vector<T> fullModelParameters)
     {
+        return ExtractAdapterParametersForRank(fullModelParameters, _targetRank);
+    }
+
+    /// <summary>
+    /// Extracts a client's adapters at its own rank: the trailing 2 * layerDim * rank parameters, B then A.
+    /// </summary>
+    /// <remarks>
+    /// A client of rank r_k loads the rank-r_k global adapters from <see cref="AggregateAdaptersForRank"/>,
+    /// so its next extraction has to read 2 * layerDim * r_k entries: reading the target-rank count instead
+    /// would split a rank-2 A factor into a rank-1 B and A.
+    /// </remarks>
+    internal Vector<T> ExtractAdapterParametersForRank(Vector<T> fullModelParameters, int rank)
+    {
+        Guard.NotNull(fullModelParameters);
+        if (rank <= 0 || rank > _maxRank)
+            throw new ArgumentOutOfRangeException(nameof(rank), $"Rank must be in [1, {_maxRank}].");
+
         int totalParams = fullModelParameters.Length;
-        int adapterCount = Math.Min(AdapterParameterCount, totalParams);
+        int adapterCount = checked(2 * _layerDim * rank);
+        if (adapterCount > totalParams)
+        {
+            throw new ArgumentException(
+                $"The model has {totalParams} parameters, fewer than the {adapterCount} adapters of rank {rank}.",
+                nameof(fullModelParameters));
+        }
+
         int start = totalParams - adapterCount;
 
         var adapterParams = new Vector<T>(adapterCount);
@@ -104,7 +129,7 @@ public class HeterogeneousLoRA<T> : Infrastructure.FederatedLearningComponentBas
     /// <param name="clientWeights">Optional per-client weights.</param>
     /// <param name="rank">Rank of the returned adapters.</param>
     /// <returns>Adapters [B (layerDim x rank), A (rank x layerDim)] of length 2 * layerDim * rank.</returns>
-    public Vector<T> AggregateAdaptersForRank(
+    internal Vector<T> AggregateAdaptersForRank(
         Dictionary<int, Vector<T>> clientAdapters,
         Dictionary<int, double>? clientWeights,
         int rank)
@@ -142,20 +167,21 @@ public class HeterogeneousLoRA<T> : Infrastructure.FederatedLearningComponentBas
             throw new ArgumentException("Total client weight must be positive.", nameof(clientWeights));
         }
 
-        // Step 1: reconstruct and average the full-size updates dW = sum_k p_k B_k A_k.
-        var updates = new List<Tensor<T>>(clientAdapters.Count);
-        var weights = new List<double>(clientAdapters.Count);
+        // Step 1: reconstruct and average the full-size updates dW = sum_k p_k B_k A_k as a running sum, so the
+        // server holds one dense update whatever the client count.
+        int denseSize = checked(_layerDim * _layerDim);
+        var sum = new Infrastructure.FederatedTensorMath<T>.Accumulator(denseSize);
         foreach (var (clientId, adapters) in clientAdapters)
         {
             int clientRank = adapters.Length / blockSize;
             int factorSize = _layerDim * clientRank;
             var b = new Tensor<T>(new[] { _layerDim, clientRank }, adapters.GetSubVector(0, factorSize));
             var a = new Tensor<T>(new[] { clientRank, _layerDim }, adapters.GetSubVector(factorSize, factorSize));
-            updates.Add(Engine.TensorMatMul(b, a));
-            weights.Add(clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0);
+            double share = (clientWeights?.GetValueOrDefault(clientId, 1.0) ?? 1.0) / totalWeight;
+            sum.Add(Engine.TensorMatMul(b, a).Reshape(new[] { denseSize }), share);
         }
 
-        var deltaW = Infrastructure.FederatedTensorMath<T>.WeightedSum(updates, weights, totalWeight);
+        var deltaW = sum.ToTensor().Reshape(new[] { _layerDim, _layerDim });
 
         // Step 2: SVD and rank-r truncation, B = U_r S_r, A = V_r^T.
         var (u, s, vh) = LinalgDispatch<T>.Svd(deltaW, fullMatrices: false);

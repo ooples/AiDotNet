@@ -714,20 +714,26 @@ public class FederatedElementwiseSweep29bReferenceTests
     {
         await Task.Yield();
 
-        // d = 10 -> one output; C = 2 columns read theta[0..1]. tau = 2, alpha = 1, lr = 1, one epoch.
+        // d = 4 over C = 2 columns is the linear classifier W = [[1, 2], [0, 0]] (two outputs).
+        // tau = 2, alpha = 1, lr = 1, one epoch.
         var fedMd = new AiDotNet.FederatedLearning.Distillation.FedMDDistillation<double>(
             temperature: 2.0, distillationAlpha: 1.0, distillationEpochs: 1, learningRate: 1.0);
-        var theta = new Vector<double>(new[] { 1.0, 2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0 });
+        var theta = new Vector<double>(new[] { 1.0, 2.0, 0.0, 0.0 });
         var publicData = new Matrix<double>(new[,] { { 1.0, 1.0 } });
 
-        // z = 1 + 2 = 3, scaled by 1 / tau -> 1.5.
-        Assert.Equal(1.5, fedMd.ExtractKnowledge(theta, publicData)[0, 0], Precision);
+        // z = [1 + 2, 0] = [3, 0], scaled by 1 / tau -> [1.5, 0].
+        var scores = fedMd.ExtractKnowledge(theta, publicData);
+        Assert.Equal(2, scores.Columns);
+        Assert.Equal(1.5, scores[0, 0], Precision);
+        Assert.Equal(0.0, scores[0, 1], Precision);
 
-        // Consensus 0.5: grad W = alpha (1.5 - 0.5) x / (n tau) = [0.5, 0.5] -> theta[0..1] = [0.5, 1.5].
-        var updated = fedMd.ApplyKnowledge(theta, new Matrix<double>(new[,] { { 0.5 } }), publicData, 1.0);
+        // Consensus [0.5, 0]: grad W = alpha (z / tau - consensus)^T x / (n tau) = [[0.5, 0.5], [0, 0]]
+        // -> theta = [0.5, 1.5, 0, 0].
+        var updated = fedMd.ApplyKnowledge(theta, new Matrix<double>(new[,] { { 0.5, 0.0 } }), publicData, 1.0);
         Assert.Equal(0.5, updated[0], Precision);
         Assert.Equal(1.5, updated[1], Precision);
         Assert.Equal(0.0, updated[2], Precision);
+        Assert.Equal(0.0, updated[3], Precision);
 
         // Consensus is the normalized weighted mean: (1 * 2 + 3 * 6) / 4 = 5.
         var consensus = fedMd.AggregateKnowledge(new Dictionary<int, Matrix<double>>
@@ -736,6 +742,37 @@ public class FederatedElementwiseSweep29bReferenceTests
             [1] = new Matrix<double>(new[,] { { 6.0 } }),
         }, new Dictionary<int, double> { [0] = 1.0, [1] = 3.0 });
         Assert.Equal(5.0, consensus[0, 0], Precision);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task FedMD_EveryParameterOfTheLinearClassifierIsReadAndDigested()
+    {
+        await Task.Yield();
+
+        // 20 parameters over 2 columns are a [10 x 2] classifier. A parameter-count heuristic gave 20 / 10 = 2
+        // outputs, which read 4 parameters and left the other 16 out of extraction and the digest step.
+        var fedMd = new AiDotNet.FederatedLearning.Distillation.FedMDDistillation<double>(
+            temperature: 1.0, distillationAlpha: 1.0, distillationEpochs: 1, learningRate: 1.0);
+        var theta = new Vector<double>(Enumerable.Range(1, 20).Select(i => (double)i).ToArray());
+        var publicData = new Matrix<double>(new[,] { { 1.0, 1.0 } });
+
+        // Row j of W is [2j + 1, 2j + 2], so z_j = 4j + 3.
+        var scores = fedMd.ExtractKnowledge(theta, publicData);
+        Assert.Equal(10, scores.Columns);
+        for (int j = 0; j < 10; j++)
+        {
+            Assert.Equal(4.0 * j + 3.0, scores[0, j], Precision);
+        }
+
+        // Against a zero consensus every weight moves by z_j * x_k = z_j (n = 1, tau = 1, alpha = lr = 1).
+        var updated = fedMd.ApplyKnowledge(theta, new Matrix<double>(1, 10), publicData, 1.0);
+        for (int i = 0; i < 20; i++)
+        {
+            Assert.Equal(theta[i] - (4.0 * (i / 2) + 3.0), updated[i], Precision);
+        }
+
+        // A parameter count that is not a multiple of the column count is not a linear classifier.
+        Assert.Throws<ArgumentException>(() => fedMd.ExtractKnowledge(new Vector<double>(5), publicData));
     }
 
     [Fact(Timeout = 60000)]

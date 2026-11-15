@@ -58,7 +58,7 @@ public class FedDFDistillation<T> : Infrastructure.FederatedLearningComponentBas
             throw new ArgumentException("FedDF requires unlabeled public data.", nameof(publicData));
         ValidateInputs(localModelParameters, publicData);
 
-        return ComputeLogits(localModelParameters, publicData, out _).ToMatrix();
+        return ComputeLogits(localModelParameters, publicData).ToMatrix();
     }
 
     /// <inheritdoc/>
@@ -117,7 +117,7 @@ public class FedDFDistillation<T> : Infrastructure.FederatedLearningComponentBas
 
         int d = localModelParameters.Length;
         int n = publicData.Rows;
-        int outputDim = OutputDimension(d);
+        int outputDim = d / publicData.Columns;
         if (globalKnowledge.Rows != n || globalKnowledge.Columns != outputDim)
         {
             throw new ArgumentException(
@@ -133,21 +133,18 @@ public class FedDFDistillation<T> : Infrastructure.FederatedLearningComponentBas
         var parameters = localModelParameters.Clone();
         for (int epoch = 0; epoch < _serverDistillationEpochs; epoch++)
         {
-            var logits = ComputeLogits(parameters, publicData, out var weightIndex);
+            var logits = ComputeLogits(parameters, publicData);
             var student = Engine.Softmax(Engine.TensorMultiplyScalar(logits, invTau), 1);
 
             // dKL/dz = (p - q) / τ, averaged over samples, chained through z = X Wᵀ.
             var gradLogits = Engine.TensorMultiplyScalar(Engine.TensorSubtract(student, target), step);
             var gradWeights = Engine.TensorMatMul(Engine.TensorTranspose(gradLogits), data);
-            var gradParams = Engine.TensorIndexAdd(new Tensor<T>(new[] { d }), 0, weightIndex,
-                gradWeights.Reshape(new[] { outputDim * publicData.Columns }));
-            parameters = Engine.Subtract(parameters, gradParams.ToVector());
+            parameters = Engine.Subtract(parameters, gradWeights.Reshape(new[] { d }).ToVector());
         }
 
         return parameters;
     }
 
-    private static int OutputDimension(int parameterCount) => Math.Max(2, (int)Math.Sqrt(parameterCount));
 
     private static void ValidateInputs(Vector<T> parameters, Matrix<T> publicData)
     {
@@ -155,25 +152,23 @@ public class FedDFDistillation<T> : Infrastructure.FederatedLearningComponentBas
             throw new ArgumentException("Model parameters cannot be empty.", nameof(parameters));
         if (publicData.Rows == 0 || publicData.Columns == 0)
             throw new ArgumentException("Public data cannot be empty.", nameof(publicData));
+        if (parameters.Length % publicData.Columns != 0)
+        {
+            throw new ArgumentException(
+                $"FedDF's local model is a linear classifier [outputDim x {publicData.Columns}], so its " +
+                $"{parameters.Length} parameters must be a multiple of the {publicData.Columns} public-data columns.",
+                nameof(parameters));
+        }
     }
 
     /// <summary>
-    /// Linear projection logits z = X Wᵀ, where W[j, k] = θ[(j·C + k) mod d] for C public-data columns.
+    /// Linear projection logits z = X Wᵀ of the flattened linear classifier W [d / C x C], W[j, k] = θ[j·C + k],
+    /// over the C public-data columns: every parameter is one weight.
     /// </summary>
-    private Tensor<T> ComputeLogits(Vector<T> parameters, Matrix<T> publicData, out Tensor<int> weightIndex)
+    private Tensor<T> ComputeLogits(Vector<T> parameters, Matrix<T> publicData)
     {
-        int d = parameters.Length;
         int columns = publicData.Columns;
-        int outputDim = OutputDimension(d);
-
-        var index = new int[outputDim * columns];
-        for (int k = 0; k < index.Length; k++)
-        {
-            index[k] = k % d;
-        }
-
-        weightIndex = new Tensor<int>(index, new[] { index.Length });
-        var weights = Engine.TensorGather(parameters.AsTensor(), weightIndex, 0).Reshape(new[] { outputDim, columns });
+        var weights = parameters.AsTensor().Reshape(new[] { parameters.Length / columns, columns });
         return Engine.TensorMatMul(Tensor<T>.FromMatrix(publicData), Engine.TensorTranspose(weights));
     }
 }

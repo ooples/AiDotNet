@@ -22936,8 +22936,7 @@ AiDotNet.Enums.ObliviousTreeChoiceFunction.SoftmaxSigmoid = 1 -> AiDotNet.Enums.
 *REMOVED*AiDotNet.FederatedLearning.Compression.FedDTCompressor<T>.CompressedTree.SplitPoints.get -> System.Collections.Generic.Dictionary<string!, double[]!>!
 *REMOVED*AiDotNet.FederatedLearning.ContinualLearning.DataFreeFCL<T>.ComputeDistillationLoss(double[]! teacherLogits, double[]! studentLogits) -> double
 AiDotNet.FederatedLearning.Adapters.DPFedLoRA<T>.LoraScaling.get -> double
-AiDotNet.FederatedLearning.Adapters.FederatedLoRA<T>.ComputeExactAggregationResidual(System.Collections.Generic.Dictionary<int, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>! clientAdapters, System.Collections.Generic.Dictionary<int, double>? clientWeights) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-AiDotNet.FederatedLearning.Adapters.HeterogeneousLoRA<T>.AggregateAdaptersForRank(System.Collections.Generic.Dictionary<int, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>! clientAdapters, System.Collections.Generic.Dictionary<int, double>? clientWeights, int rank) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.FederatedLearning.Adapters.SparseLoRA<T>.LoraScaling.get -> double
 AiDotNet.FederatedLearning.Aggregators.FlameAggregationStrategy<T>.SetGlobalModel(System.Collections.Generic.Dictionary<string!, T[]!>! globalModel) -> void
 AiDotNet.FederatedLearning.Compression.FetchSGDCompressor<T>.FetchSGDCompressor(int sketchRows = 5, int sketchCols = 10000, int topK = 1000, int seed = 42, double momentum = 0.9, double learningRate = 1) -> void
 AiDotNet.FederatedLearning.Compression.FetchSGDCompressor<T>.MergeSketches(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Matrix<T>!>! sketches) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!

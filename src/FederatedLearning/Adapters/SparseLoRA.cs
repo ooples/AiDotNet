@@ -125,8 +125,8 @@ public class SparseLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, I
     /// <inheritdoc/>
     /// <remarks>
     /// The stored LoRA factors are written back unscaled. LoRA (Hu et al. 2021) applies alpha / rank to the
-    /// product B*A in the forward pass; scaling both stored factors here would apply it squared and compound
-    /// it every round.
+    /// product B*A in the forward pass (see <see cref="LoraScaling"/>); scaling both stored factors here would
+    /// apply it squared and compound it every round.
     /// </remarks>
     public Vector<T> MergeAdapterParameters(Vector<T> fullModelParameters, Vector<T> aggregatedAdapters)
     {
@@ -371,6 +371,11 @@ public class SparseLoRA<T> : Infrastructure.FederatedLearningComponentBase<T>, I
 
     /// <summary>Gets the LoRA rank.</summary>
     public int Rank => _rank;
+
+    /// <summary>
+    /// Gets the LoRA output scaling alpha / rank that the forward pass applies to B*A.
+    /// </summary>
+    public double LoraScaling => _alpha / _rank;
 }
 
 /// <summary>

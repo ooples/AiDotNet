@@ -246,7 +246,14 @@ public class FetchSGDCompressor<T> : Infrastructure.FederatedLearningComponentBa
         errorSketch = Engine.TensorAdd(Engine.TensorMultiplyScalar(momentumSketch, ops.FromDouble(_learningRate)), errorSketch);
 
         // Delta = Top-k(U(S_e));  S_e = S_e - S(Delta).
+        // For Half and BFloat16 the step runs in float and the caller receives the delta rounded to T: the error
+        // sketch removes that rounded update, so the part rounding drops stays in the sketch for later rounds.
         var delta = UnsketchTopK(errorSketch, gradientLength);
+        if (typeof(TV) != typeof(T))
+        {
+            delta = delta.Cast<T>().Cast<TV>();
+        }
+
         errorSketch = Engine.TensorSubtract(errorSketch, SketchTensor(delta));
 
         momentumState = momentumSketch;
