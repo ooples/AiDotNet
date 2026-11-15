@@ -311,7 +311,7 @@ public partial class TFGridNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     {
         int n = input.Length;
         if (n == 0) return 0.0;
-        double sumSq = NumOps.ToDouble(Engine.TensorSumOfSquares(input));
+        double sumSq = NumOps.ToDouble(TensorReductionHelper.SumOfSquares(Engine, input));
         return Math.Sqrt(sumSq / n);
     }
 

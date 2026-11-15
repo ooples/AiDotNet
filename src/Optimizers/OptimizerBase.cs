@@ -1007,8 +1007,8 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         {
             var engine = Engine;
             T meanActual = NumOps.Divide(engine.Sum(actual), NumOps.FromDouble(actual.Length));
-            ssRes = engine.TensorSumOfSquares(engine.Subtract(actual, predicted).AsTensor());
-            ssTot = engine.TensorSumOfSquares(engine.TensorSubtractScalar(actual.AsTensor(), meanActual));
+            ssRes = TensorReductionHelper.SumOfSquares(engine, engine.Subtract(actual, predicted).AsTensor());
+            ssTot = TensorReductionHelper.SumOfSquares(engine, engine.TensorSubtractScalar(actual.AsTensor(), meanActual));
         }
         T r2 = NumOps.Equals(ssTot, NumOps.Zero)
             ? NumOps.Zero

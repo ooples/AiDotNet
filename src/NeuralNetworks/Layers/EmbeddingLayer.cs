@@ -774,7 +774,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         int embeddingDim = _embeddingTensor.Shape[1];
 
         // Compute L2 regularization on embedding weights using Engine operation: (1/2) * Σ||embedding||²
-        T sumSquaredNorms = Engine.TensorSumOfSquares(_embeddingTensor);
+        T sumSquaredNorms = TensorReductionHelper.SumOfSquares(Engine, _embeddingTensor);
 
         // Average over all embedding values and scale by 0.5 (standard L2 regularization)
         int totalElements = vocabSize * embeddingDim;
@@ -830,7 +830,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
 
         // Calculate average embedding magnitude using Engine operations
         // Sum of squares gives us Σ||embedding_i||² across all embeddings
-        T totalSumOfSquares = Engine.TensorSumOfSquares(_embeddingTensor);
+        T totalSumOfSquares = TensorReductionHelper.SumOfSquares(Engine, _embeddingTensor);
 
         // For average magnitude: sqrt(sum_of_squares / num_elements) * num_rows / num_rows
         // Simplified: average magnitude ≈ sqrt(total_sum_of_squares / total_elements) * sqrt(embedding_dim)

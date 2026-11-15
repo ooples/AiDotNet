@@ -78,7 +78,7 @@ public static class InformationCoefficient<T>
         var engine = AiDotNetEngine.Current;
         var ics = ToTensor(perPeriodIcs);
         double mean = engine.TensorMean(ics);
-        double sse = engine.TensorSumOfSquares(engine.TensorSubtractScalar(ics, mean));
+        double sse = TensorReductionHelper.SumOfSquares(engine, engine.TensorSubtractScalar(ics, mean));
 
         // Sample standard deviation (n-1), consistent with the rest of the Finance utilities.
         double std = Math.Sqrt(sse / (periods - 1));
@@ -112,8 +112,8 @@ public static class InformationCoefficient<T>
         var dx = engine.TensorSubtractScalar(xs, engine.TensorMean(xs));
         var dy = engine.TensorSubtractScalar(ys, engine.TensorMean(ys));
         double sxy = engine.TensorSum(engine.TensorMultiply(dx, dy));
-        double sxx = engine.TensorSumOfSquares(dx);
-        double syy = engine.TensorSumOfSquares(dy);
+        double sxx = TensorReductionHelper.SumOfSquares(engine, dx);
+        double syy = TensorReductionHelper.SumOfSquares(engine, dy);
         double denom = Math.Sqrt(sxx) * Math.Sqrt(syy);
         if (denom <= 0) return 0.0;
         double r = sxy / denom;
