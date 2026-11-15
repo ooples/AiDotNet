@@ -175,7 +175,7 @@ public class CrossValidationEngine<T>
         var tensor = new Tensor<T>(values.ToArray(), new[] { count }).Cast<double>();
         double mean = engine.TensorMean(tensor);
         double variance = count > 1
-            ? engine.TensorSumOfSquares(engine.TensorSubtractScalar(tensor, mean)) / (count - 1)
+            ? TensorReductionHelper.SumOfSquares(engine, engine.TensorSubtractScalar(tensor, mean)) / (count - 1)
             : 0;
         double std = Math.Sqrt(variance);
 

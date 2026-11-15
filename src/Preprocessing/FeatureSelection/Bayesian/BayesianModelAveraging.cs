@@ -100,7 +100,7 @@ public class BayesianModelAveraging<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         // Model likelihood (R-squared proxy from per-feature squared correlations) with a BIC-like penalty.
         T eps = PreprocessingTensorOps.Tolerance<T>(1e-10);
         Tensor<T> modelWeights;
-        T ssTot = engine.TensorSumOfSquares(engine.TensorSubtractScalar(y, engine.TensorMean(y)));
+        T ssTot = TensorReductionHelper.SumOfSquares(engine, engine.TensorSubtractScalar(y, engine.TensorMean(y)));
         if (PreprocessingTensorOps.IsBelow(ssTot, eps))
         {
             modelWeights = PreprocessingTensorOps.Filled(new[] { _nModels, 1 }, eps);

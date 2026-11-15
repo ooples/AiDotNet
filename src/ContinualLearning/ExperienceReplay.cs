@@ -180,7 +180,7 @@ public class ExperienceReplay<T> : IContinualLearningStrategy<T>
 
         // Compute MSE loss
         var diffs = Engine.TensorSubtract(outputs, targets.Reshape(outputs._shape));
-        var loss = Engine.TensorSumOfSquares(diffs);
+        var loss = TensorReductionHelper.SumOfSquares(Engine, diffs);
 
         var n = _numOps.FromDouble(outputs.Length);
         loss = _numOps.Divide(loss, n);

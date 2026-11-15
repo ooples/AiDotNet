@@ -266,7 +266,7 @@ public class ProbabilityCalibrator<T>
         using var noGrad = new NoGradScope<T>();
         var predicted = Tensor<T>.FromVector(scores).Cast<double>();
         var actual = engine.TensorNarrow(Tensor<T>.FromVector(labels).Cast<double>(), 0, 0, scores.Length);
-        return engine.TensorSumOfSquares(engine.TensorSubtract(predicted, actual)) / scores.Length;
+        return TensorReductionHelper.SumOfSquares(engine, engine.TensorSubtract(predicted, actual)) / scores.Length;
     }
 
     /// <summary>Returns mean predictions, positive fractions and exact counts per uniform bin.</summary>

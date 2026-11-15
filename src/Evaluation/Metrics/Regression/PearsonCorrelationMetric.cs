@@ -58,8 +58,8 @@ public class PearsonCorrelationMetric<T> : IRegressionMetric<T>
         var diffPred = engine.TensorSubtractScalar(pred, engine.TensorMean(pred));
         var diffActual = engine.TensorSubtractScalar(actual, engine.TensorMean(actual));
         double covariance = engine.TensorSum(engine.TensorMultiply(diffPred, diffActual));
-        double stdPred = Math.Sqrt(engine.TensorSumOfSquares(diffPred));
-        double stdActual = Math.Sqrt(engine.TensorSumOfSquares(diffActual));
+        double stdPred = Math.Sqrt(TensorReductionHelper.SumOfSquares(engine, diffPred));
+        double stdActual = Math.Sqrt(TensorReductionHelper.SumOfSquares(engine, diffActual));
 
         if (stdPred < 1e-10 || stdActual < 1e-10)
             return NumOps.Zero;

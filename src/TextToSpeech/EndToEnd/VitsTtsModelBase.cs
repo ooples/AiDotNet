@@ -646,7 +646,7 @@ public abstract partial class VitsTtsModelBase<T> : TtsModelBase<T>, IEndToEndTt
             {
                 // ε = std(P) · N(0, 1) · scale (torch.std, unbiased), drawn in the alignment seed's order.
                 var centred = Engine.TensorSubtractScalar(scores, Engine.TensorMean(scores));
-                double std = Math.Sqrt(Engine.TensorSumOfSquares(centred) / (n - 1));
+                double std = Math.Sqrt(TensorReductionHelper.SumOfSquares(Engine, centred) / (n - 1));
                 var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(draw.AlignmentSeed);
                 var draws = new double[n];
                 for (int i = 0; i < n; i++)

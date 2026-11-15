@@ -134,7 +134,7 @@ public class TemporalConsistencyDetector<T> : VideoSafetyModuleBase<T>
 
         var frameDiffs = new Tensor<T>(new[] { diffValues.Count }, new Vector<T>(diffValues));
         T totalDiffSum = pairCount > 0 ? engine.TensorSum(frameDiffs) : Zero;
-        T totalDiffSumSq = pairCount > 0 ? engine.TensorSumOfSquares(frameDiffs) : Zero;
+        T totalDiffSumSq = pairCount > 0 ? TensorReductionHelper.SumOfSquares(engine, frameDiffs) : Zero;
 
         T pairCountT = NumOps.FromDouble(pairCount);
         T meanDiff = NumOps.Divide(totalDiffSum, pairCountT);
@@ -144,7 +144,7 @@ public class TemporalConsistencyDetector<T> : VideoSafetyModuleBase<T>
 
         // Compute jitter: variation in frame differences (should be smooth for real video)
         T jitter = pairCount > 1
-            ? NumOps.Divide(engine.TensorSumOfSquares(engine.TensorDiff(frameDiffs, 1, 0)), NumOps.FromDouble(pairCount - 1))
+            ? NumOps.Divide(TensorReductionHelper.SumOfSquares(engine, engine.TensorDiff(frameDiffs, 1, 0)), NumOps.FromDouble(pairCount - 1))
             : Zero;
 
         // Detect discontinuities: frames where difference is > 3x the mean
@@ -208,7 +208,7 @@ public class TemporalConsistencyDetector<T> : VideoSafetyModuleBase<T>
 
         // Compute autocorrelation at lag 0 (variance)
         var centered = engine.Reshape(engine.TensorSubtractScalar(frameDiffs, mean), new[] { 1, count });
-        T r0 = engine.TensorSumOfSquares(centered);
+        T r0 = TensorReductionHelper.SumOfSquares(engine, centered);
 
         T epsilon = NumOps.FromDouble(1e-10);
         if (NumOps.LessThan(r0, epsilon)) return Zero;

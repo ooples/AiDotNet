@@ -1156,7 +1156,7 @@ internal static class FeatureScoringTensorOps
 
         // parent Gini impurity 1 - sum q_c^2
         var classCounts = Counts(classOneHot, 0);
-        T parentGini = ops.Subtract(ops.One, engine.TensorSumOfSquares(engine.TensorDivideScalar(classCounts, total)));
+        T parentGini = ops.Subtract(ops.One, TensorReductionHelper.SumOfSquares(engine, engine.TensorDivideScalar(classCounts, total)));
         var allCounts = FilterStatisticTensorOps.RowBroadcast(classCounts, p);
 
         var min = PreprocessingTensorOps.ColumnMin(x);
@@ -1228,7 +1228,7 @@ internal static class FeatureScoringTensorOps
         var products = engine.Reshape(engine.TensorMatMul(engine.TensorTranspose(u), v), new[] { p });
         var norms = engine.TensorMultiplyScalar(
             engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(u), new[] { 0 }, false)),
-            ops.Sqrt(engine.TensorSumOfSquares(v)));
+            ops.Sqrt(TensorReductionHelper.SumOfSquares(engine, v)));
         var r = FilterStatisticTensorOps.GuardedDivide(products, norms, 0.0, ops.Zero);
         return engine.TensorWhere(constant, FilterStatisticTensorOps.FilledLike(r, ops.Zero), r);
     }
@@ -1916,7 +1916,7 @@ internal static class FeatureScoringTensorOps
             engine.TensorMultiply(leftGini, engine.TensorBroadcastTo(engine.Reshape(leftSizes, new[] { 1, m - 1 }), sizeShape)),
             engine.TensorMultiply(rightGini, engine.TensorBroadcastTo(engine.Reshape(rightSizes, new[] { 1, m - 1 }), sizeShape))),
             ops.FromDouble(m));
-        T overall = ops.Subtract(ops.One, engine.TensorSumOfSquares(engine.TensorDivideScalar(totals, ops.FromDouble(m))));
+        T overall = ops.Subtract(ops.One, TensorReductionHelper.SumOfSquares(engine, engine.TensorDivideScalar(totals, ops.FromDouble(m))));
         var reduction = engine.TensorAddScalar(engine.TensorNegate(weighted), overall);
 
         // Valid thresholds: consecutive sorted values at least 1e-10 apart
@@ -2067,14 +2067,14 @@ internal static class FeatureScoringTensorOps
         if (m == 0)
             return ops.Zero;
         var proportions = engine.TensorDivideScalar(engine.ReduceSum(oneHot, new[] { 0 }, false), ops.FromDouble(m));
-        return ops.Subtract(ops.One, engine.TensorSumOfSquares(proportions));
+        return ops.Subtract(ops.One, TensorReductionHelper.SumOfSquares(engine, proportions));
     }
 
     /// <summary>Sum of squared deviations from the mean of a 1-D tensor (two-pass).</summary>
     public static T SumSquaredDeviations<T>(Tensor<T> values)
     {
         var engine = AiDotNetEngine.Current;
-        return engine.TensorSumOfSquares(engine.TensorSubtractScalar(values, engine.TensorMean(values)));
+        return TensorReductionHelper.SumOfSquares(engine, engine.TensorSubtractScalar(values, engine.TensorMean(values)));
     }
 
     /// <summary>

@@ -56,8 +56,8 @@ public class R2ScoreMetric<T> : IRegressionMetric<T>
 
         // SS_res and SS_tot, the latter around the mean of actuals
         double mean = engine.TensorMean(actual);
-        double ssRes = engine.TensorSumOfSquares(engine.TensorSubtract(actual, pred));
-        double ssTot = engine.TensorSumOfSquares(engine.TensorSubtractScalar(actual, mean));
+        double ssRes = TensorReductionHelper.SumOfSquares(engine, engine.TensorSubtract(actual, pred));
+        double ssTot = TensorReductionHelper.SumOfSquares(engine, engine.TensorSubtractScalar(actual, mean));
 
         // If actuals are constant (zero variance), R² is only 1 if predictions are also perfect
         if (Math.Abs(ssTot) < tolerance)

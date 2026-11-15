@@ -331,7 +331,7 @@ internal static class StatisticalTestHelper
 
         var unit = engine.TensorDivideScalar(centered, largest);
         T std = ops.Multiply(largest,
-            ops.Divide(ops.Sqrt(engine.TensorSumOfSquares(unit)), ops.FromDouble(Math.Sqrt(values.Length))));
+            ops.Divide(ops.Sqrt(TensorReductionHelper.SumOfSquares(engine, unit)), ops.FromDouble(Math.Sqrt(values.Length))));
         return ops.GreaterThan(std, ops.Zero) ? engine.TensorDivideScalar(values, std) : values;
     }
 

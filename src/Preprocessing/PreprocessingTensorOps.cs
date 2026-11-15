@@ -265,7 +265,7 @@ internal static class PreprocessingTensorOps
         var xc = engine.TensorSubtract(x, engine.ReduceMean(x, new[] { 0 }, true));
         var yc = engine.Reshape(engine.TensorSubtractScalar(y, engine.TensorMean(y)), new[] { n, 1 });
         var sxx = engine.ReduceSum(engine.TensorSquare(xc), new[] { 0 }, false);
-        T syy = engine.TensorSumOfSquares(yc);
+        T syy = TensorReductionHelper.SumOfSquares(engine, yc);
         var zeros = new Tensor<T>(new[] { x.Shape[1] });
         if (!ops.GreaterThan(syy, eps))
             return zeros;
@@ -289,7 +289,7 @@ internal static class PreprocessingTensorOps
         var sxx = engine.ReduceSum(engine.TensorSquare(xc), new[] { 0 }, false);
         // sqrt(sxx) sqrt(syy): the product sxx syy overflows a narrow T such as Half long before either factor does
         var denom = engine.TensorMultiplyScalar(
-            engine.TensorSqrt(sxx), MathHelper.GetNumericOperations<T>().Sqrt(engine.TensorSumOfSquares(yc)));
+            engine.TensorSqrt(sxx), MathHelper.GetNumericOperations<T>().Sqrt(TensorReductionHelper.SumOfSquares(engine, yc)));
         return engine.TensorWhere(
             engine.TensorGreaterThan(denom, Tolerance<T>(epsilon)), CenteredCorrelations(xc, yc), new Tensor<T>(new[] { p }));
     }

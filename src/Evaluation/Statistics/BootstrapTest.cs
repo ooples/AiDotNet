@@ -203,7 +203,7 @@ public class BootstrapTest<T> : IStatisticalTest<T>
         int n = scores.Length;
         if (n < 2) return 0;
         var engine = AiDotNetEngine.Current;
-        double sumSq = engine.TensorSumOfSquares(engine.TensorSubtractScalar(scores, engine.TensorMean(scores)));
+        double sumSq = TensorReductionHelper.SumOfSquares(engine, engine.TensorSubtractScalar(scores, engine.TensorMean(scores)));
         return Math.Sqrt(sumSq / (n - 1));
     }
 }

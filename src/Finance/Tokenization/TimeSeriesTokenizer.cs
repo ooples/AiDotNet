@@ -184,7 +184,7 @@ public class TimeSeriesTokenizer<T>
         var engine = AiDotNetEngine.Current;
         T mean = engine.TensorMean(series);
         var centred = engine.TensorSubtractScalar(series, mean);
-        T variance = NumOps.Divide(engine.TensorSumOfSquares(centred), NumOps.FromDouble(len));
+        T variance = NumOps.Divide(TensorReductionHelper.SumOfSquares(engine, centred), NumOps.FromDouble(len));
         T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-5)));
 
         return (engine.TensorDivideScalar(centred, std), mean, std);

@@ -73,8 +73,8 @@ public class CochranQTest<T> : IClassifierComparisonTest<T>
         int grandTotal = EvaluationTensorOps<double>.Count(X);
 
         // Cochran's Q statistic
-        double sumColSquares = engine.TensorSumOfSquares(colTotals);
-        double sumRowSquares = engine.TensorSumOfSquares(rowTotals);
+        double sumColSquares = TensorReductionHelper.SumOfSquares(engine, colTotals);
+        double sumRowSquares = TensorReductionHelper.SumOfSquares(engine, rowTotals);
         double sumRowTotals = grandTotal;
 
         double numerator = (k - 1) * (k * sumColSquares - (double)grandTotal * grandTotal);

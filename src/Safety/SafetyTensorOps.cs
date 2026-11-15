@@ -415,7 +415,7 @@ internal static class SafetyTensorOps<T>
     /// </summary>
     internal static Tensor<T> DivideByNorm(Tensor<T> v)
     {
-        T norm = NumOps.Sqrt(Engine.TensorSumOfSquares(v));
+        T norm = NumOps.Sqrt(TensorReductionHelper.SumOfSquares(Engine, v));
         return NumOps.GreaterThan(norm, C(1e-10)) ? Engine.TensorDivideScalar(v, norm) : v;
     }
 
@@ -425,7 +425,7 @@ internal static class SafetyTensorOps<T>
     /// </summary>
     internal static Tensor<T> NormalizeUnlessTiny(Tensor<T> v)
     {
-        T norm = NumOps.Sqrt(MaxZero(Engine.TensorSumOfSquares(v)));
+        T norm = NumOps.Sqrt(MaxZero(TensorReductionHelper.SumOfSquares(Engine, v)));
         if (NumOps.LessThan(norm, C(1e-10))) return v;
         return Engine.TensorMultiplyScalar(v, NumOps.Divide(NumOps.One, norm));
     }

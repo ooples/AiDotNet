@@ -178,7 +178,7 @@ public class ValidationCurveEngine<T>
         {
             var engine = AiDotNetEngine.Current;
             var deviations = engine.TensorSubtractScalar(new Tensor<T>(values.ToArray(), new[] { values.Count }), mean);
-            variance = NumOps.Divide(engine.TensorSumOfSquares(deviations), NumOps.FromDouble(values.Count - 1));
+            variance = NumOps.Divide(TensorReductionHelper.SumOfSquares(engine, deviations), NumOps.FromDouble(values.Count - 1));
         }
         return NumOps.Sqrt(variance);
     }

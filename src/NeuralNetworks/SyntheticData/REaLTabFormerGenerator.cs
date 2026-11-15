@@ -697,8 +697,8 @@ public partial class REaLTabFormerGenerator<T> : NeuralSyntheticTabularGenerator
 
         // A narrow T (Half, BFloat16) is squared and summed in float: its sum of squares overflows past 65504.
         double norm = Math.Sqrt((typeof(T) == typeof(Half) || typeof(T) == typeof(AiDotNet.Tensors.NumericOperations.BFloat16)
-            ? (double)Engine.TensorSumOfSquares(result.Cast<float>())
-            : NumOps.ToDouble(Engine.TensorSumOfSquares(result))) + 1e-12);
+            ? (double)TensorReductionHelper.SumOfSquares(Engine, result.Cast<float>())
+            : NumOps.ToDouble(TensorReductionHelper.SumOfSquares(Engine, result))) + 1e-12);
         if (norm > maxNorm)
         {
             result = Engine.TensorMultiplyScalar(result, NumOps.FromDouble(maxNorm / norm));
