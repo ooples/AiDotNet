@@ -93,14 +93,26 @@ public class TabROptions<T> : RiskModelOptions<T>
     public int NumAttentionHeads { get; set; } = 8;
 
     /// <summary>
-    /// Gets or sets the dropout rate.
+    /// Gets or sets the dropout rate after every hidden activation: the reference implementation's <c>dropout0</c>.
     /// </summary>
-    /// <value>The dropout rate, defaulting to 0.1.</value>
+    /// <value>0.38852797479169876 by default, the paper's default TabR-S configuration.</value>
     /// <remarks>
-    /// Applied inside the value MLP <c>T = LinearWithoutBias(Dropout(ReLU(Linear(.))))</c> during training steps, as in
-    /// the reference implementation's <c>dropout0</c>; prediction never drops.
+    /// The reference <c>make_block</c> is <c>Linear -&gt; ReLU -&gt; Dropout(dropout0) -&gt; Linear -&gt; Dropout(dropout1)</c>,
+    /// and the value MLP is <c>T = LinearWithoutBias(Dropout(dropout0)(ReLU(Linear(.))))</c>. Here it follows each
+    /// encoder and predictor layer's ReLU and T's ReLU. The default TabR-S uses <c>dropout1 = 0</c>, and these layers
+    /// have no second linear map for it. It drops only inside training steps; prediction never drops. Must lie in [0, 1).
     /// </remarks>
-    public double DropoutRate { get; set; } = 0.1;
+    public double DropoutRate { get; set; } = 0.38852797479169876;
+
+    /// <summary>
+    /// Gets or sets the dropout rate on the retrieval weights: the reference implementation's <c>context_dropout</c>.
+    /// </summary>
+    /// <value>0.38920071545944357 by default, the paper's default TabR-S configuration.</value>
+    /// <remarks>
+    /// The reference drops the softmax weights over the retrieved neighbours (<c>probs = self.dropout(probs)</c>) before
+    /// they weight the values. It drops only inside training steps. Must lie in [0, 1).
+    /// </remarks>
+    public double ContextDropoutRate { get; set; } = 0.38920071545944357;
 
     /// <summary>
     /// Gets or sets whether the last linear layer of the value MLP <c>T</c> carries a bias.
@@ -193,6 +205,7 @@ public class TabROptions<T> : RiskModelOptions<T>
             NumLayers = NumLayers,
             NumAttentionHeads = NumAttentionHeads,
             DropoutRate = DropoutRate,
+            ContextDropoutRate = ContextDropoutRate,
             ValueOutputBiasMode = ValueOutputBiasMode,
             IncludeNeighborTargets = IncludeNeighborTargets,
             RetrievalTemperature = RetrievalTemperature,

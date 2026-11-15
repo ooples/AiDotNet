@@ -225,7 +225,8 @@ public class NeuralNetworkSweepReferenceTests
         NumNeighbors = neighbors,
         UseLayerNorm = false,
         NormalizeEmbeddings = false,
-        DropoutRate = 0
+        DropoutRate = 0,
+        ContextDropoutRate = 0
     };
 
     private static Tensor<double> ThreeSamples() =>

@@ -99,8 +99,11 @@ public abstract partial class TabRBase<T> : IParameterSource<T>
     private readonly FullyConnectedLayer<T> _valueProjection;
     private readonly FullyConnectedLayer<T> _outputProjection;
 
-    // The dropout between the two linear maps of T; null when DropoutRate is 0. It drops only inside a training step.
-    private readonly DropoutLayer<T>? _valueDropout;
+    // The generator of the training-step dropout masks, which are drawn through CompiledStepRandom
+    private readonly Random _dropoutRandom;
+
+    // True only while a training step runs: the reference model drops in train mode and never at prediction
+    private bool _inTrainingStep;
 
     // Cache for backward pass
     [Scratch]
@@ -278,11 +281,11 @@ public abstract partial class TabRBase<T> : IParameterSource<T>
         // with nn.Linear(d_block, d_main, bias=False)); the bias stays configurable through ValueOutputBiasMode
         _outputProjection = new FullyConnectedLayer<T>(
             embDim, embDim, (IActivationFunction<T>?)null, Options.ValueOutputBiasMode);
-        if (Options.DropoutRate > 0)
-        {
-            _valueDropout = new DropoutLayer<T>(Options.DropoutRate);
-            _valueDropout.SetTrainingMode(false);
-        }
+        ValidateDropoutRate(Options.DropoutRate, nameof(TabROptions<T>.DropoutRate));
+        ValidateDropoutRate(Options.ContextDropoutRate, nameof(TabROptions<T>.ContextDropoutRate));
+        _dropoutRandom = Options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(Options.Seed.Value)
+            : RandomHelper.CreateSecureRandom();
 
         if (Options.IncludeNeighborTargets && labelDimension > 0)
         {
@@ -299,10 +302,10 @@ public abstract partial class TabRBase<T> : IParameterSource<T>
     {
         var x = features;
 
-        // Pass through encoder layers
+        // Pass through encoder layers, each Linear -> ReLU -> Dropout(dropout0) as in the reference make_block
         foreach (var layer in _encoderLayers)
         {
-            x = layer.Forward(x);
+            x = TrainingDropout(layer.Forward(x), Options.DropoutRate);
         }
 
         // Apply layer normalization
@@ -495,14 +498,12 @@ public abstract partial class TabRBase<T> : IParameterSource<T>
         var attentionWeights = Engine.Softmax(scores, -1);
         _attentionWeightsCache = TabularMetrics.KeptCopy(attentionWeights);
 
+        // The reference applies context_dropout to the retrieval weights (probs = self.dropout(probs))
+        attentionWeights = TrainingDropout(attentionWeights, Options.ContextDropoutRate);
+
         // V_i = T(k - k_i) + W_Y(y_i), with T = LinearWithoutBias(Dropout(ReLU(Linear(.))))
         var differenceRows = difference.Reshape(batchSize * k, embDim);
-        var hidden = Engine.ReLU(_valueProjection.Forward(differenceRows));
-        if (_valueDropout != null)
-        {
-            hidden = _valueDropout.Forward(hidden);
-        }
-
+        var hidden = TrainingDropout(Engine.ReLU(_valueProjection.Forward(differenceRows)), Options.DropoutRate);
         var values = _outputProjection.Forward(hidden);
         if (_labelEmbedding != null && neighborLabels != null)
         {
@@ -535,7 +536,11 @@ public abstract partial class TabRBase<T> : IParameterSource<T>
         // Encode the targets and, with the same encoder, every candidate; keys k = W_K(x~)
         var queryEmbedding = EncodeFeatures(features).Reshape(batchSize, embDim);
         var candidateEmbedding = EncodeFeatures(_indexFeatures).Reshape(_numIndexedSamples, embDim);
-        _indexEmbeddings = TabularMetrics.KeptCopy(candidateEmbedding);
+        // A training step encodes the candidates with dropout, so only an inference encoding refreshes the index
+        if (!_inTrainingStep)
+        {
+            _indexEmbeddings = TabularMetrics.KeptCopy(candidateEmbedding);
+        }
         var queryKeys = _keyProjection.Forward(queryEmbedding);
         var candidateKeys = _keyProjection.Forward(candidateEmbedding);
 
@@ -556,7 +561,7 @@ public abstract partial class TabRBase<T> : IParameterSource<T>
         var context = Engine.TensorAdd(queryEmbedding, AggregateNeighbors(queryKeys, neighborKeys, neighborLabels));
         foreach (var layer in _contextLayers)
         {
-            context = layer.Forward(context);
+            context = TrainingDropout(layer.Forward(context), Options.DropoutRate);
         }
 
         if (_contextNorm != null)
@@ -592,16 +597,45 @@ public abstract partial class TabRBase<T> : IParameterSource<T>
     /// <returns>The loss before the update.</returns>
     protected T TrainWithTape(Func<Tensor<T>> objective, T learningRate)
     {
-        // The value MLP's dropout is active for the step only; prediction never drops
-        _valueDropout?.SetTrainingMode(true);
+        // Dropout is active for the step only; prediction never drops
+        _inTrainingStep = true;
         try
         {
             return TabularTraining.SgdStep(GetTrainableTensors, objective, learningRate);
         }
         finally
         {
-            _valueDropout?.SetTrainingMode(false);
+            _inTrainingStep = false;
             ResetState();
+        }
+    }
+
+    /// <summary>
+    /// The reference TabR's dropout (<c>nn.Dropout</c> in train mode): inside a training step each element is kept with
+    /// probability 1 - <paramref name="rate"/> and scaled by 1 / (1 - <paramref name="rate"/>); otherwise the input.
+    /// </summary>
+    /// <remarks>
+    /// The uniform draws come from <see cref="AiDotNet.Training.CompiledStepRandom{T}.Uniform"/>, so a compiled training plan records them
+    /// and refills them before every replay instead of freezing the first step's mask into the plan. The mask is a
+    /// constant of the step, and the gradient flows through the kept elements.
+    /// </remarks>
+    private Tensor<T> TrainingDropout(Tensor<T> input, double rate)
+    {
+        if (!_inTrainingStep || rate <= 0)
+        {
+            return input;
+        }
+
+        var draws = AiDotNet.Training.CompiledStepRandom<T>.Uniform(input.Shape.ToArray(), _dropoutRandom);
+        var keep = Engine.ScalarMinusTensor(NumOps.One, Engine.TensorLessThan(draws, NumOps.FromDouble(rate)));
+        return Engine.TensorMultiply(input, Engine.TensorMultiplyScalar(keep, NumOps.FromDouble(1.0 / (1.0 - rate))));
+    }
+
+    private static void ValidateDropoutRate(double rate, string name)
+    {
+        if (double.IsNaN(rate) || rate < 0 || rate >= 1)
+        {
+            throw new ArgumentOutOfRangeException(name, rate, "A dropout rate must lie in [0, 1).");
         }
     }
 

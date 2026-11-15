@@ -32,7 +32,8 @@ public class NeuralNetworkSweepAdversarialTests
         NumNeighbors = neighbors,
         UseLayerNorm = false,
         NormalizeEmbeddings = false,
-        DropoutRate = 0
+        DropoutRate = 0,
+        ContextDropoutRate = 0
     };
 
     private static TabPFNOptions<double> SmallTabPFNOptions() => new TabPFNOptions<double>
@@ -381,6 +382,46 @@ public class NeuralNetworkSweepAdversarialTests
 
         Assert.NotEqual(evaluation, stepLoss);
         Assert.Equal(evaluation, model.ComputeMSELoss(model.Forward(features, indices), targets));
+    }
+
+    [Fact]
+    public void TabR_TrainingStepDrawsThePaperDropoutMasksThroughCompiledStepRandom()
+    {
+        // tabr.py: Dropout(dropout0) after the ReLU of every encoder and predictor block and inside T, and
+        // Dropout(context_dropout) on the retrieval weights. Each mask must be a CompiledStepRandom draw so a compiled
+        // plan redraws it per step, and a prediction must draw nothing.
+        var options = SmallTabROptions(neighbors: 2);
+        options.EmbeddingDimension = 4;
+        options.DropoutRate = 0.4;
+        options.ContextDropoutRate = 0.3;
+        var model = new TabRRegression<double>(2, 1, options);
+        var features = Doubles(new[] { 3, 2 }, 0.4, 0.7, 1.1, 0.2, 0.6, 0.9);
+        var targets = Doubles(new[] { 3, 1 }, 0.1, 0.5, 0.9);
+        var indices = new Vector<int>(new[] { 0, 1, 2 });
+        model.BuildIndex(features, targets);
+
+        int[][] stepShapes;
+        using (var recording = AiDotNet.Training.CompiledStepRandom<double>.BeginRecording())
+        {
+            _ = model.TrainStep(features, targets, 0.01, indices);
+            stepShapes = recording.Draws.Select(draw => draw.Tensor.Shape.ToArray()).ToArray();
+        }
+
+        int predictDraws;
+        using (var recording = AiDotNet.Training.CompiledStepRandom<double>.BeginRecording())
+        {
+            _ = model.Predict(features);
+            predictDraws = recording.Draws.Count;
+        }
+
+        // Query encoder layer, candidate encoder layer (the same encoder, in train mode), retrieval weights [3, 2],
+        // T's hidden layer over the 3 x 2 neighbour rows, then the predictor layer.
+        Assert.Equal(
+            new[] { new[] { 3, 4 }, new[] { 3, 4 }, new[] { 3, 2 }, new[] { 6, 4 }, new[] { 3, 4 } },
+            stepShapes);
+        Assert.Equal(0, predictDraws);
+        Assert.Equal(0.38852797479169876, new TabROptions<double>().DropoutRate);
+        Assert.Equal(0.38920071545944357, new TabROptions<double>().ContextDropoutRate);
     }
 
     [Fact]

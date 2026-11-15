@@ -22990,3 +22990,5 @@ AiDotNet.NeuralNetworks.Layers.FullyConnectedLayer<T>.FullyConnectedLayer(int in
 AiDotNet.NeuralNetworks.Layers.FullyConnectedLayer<T>.FullyConnectedLayer(int outputSize, AiDotNet.Interfaces.IActivationFunction<T>? activationFunction) -> void
 AiDotNet.NeuralNetworks.Layers.FullyConnectedLayer<T>.FullyConnectedLayer(int inputSize, int outputSize) -> void
 AiDotNet.NeuralNetworks.Layers.FullyConnectedLayer<T>.FullyConnectedLayer(int outputSize) -> void
+AiDotNet.Models.Options.TabROptions<T>.ContextDropoutRate.get -> double
+AiDotNet.Models.Options.TabROptions<T>.ContextDropoutRate.set -> void
