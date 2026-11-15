@@ -148,15 +148,11 @@ public class DivideAndConquerAggregationStrategy<T> : ParameterDictionaryAggrega
             var coordinates = SampleSortedCoordinates(rng, totalParams, subDim);
             var sub = Engine.TensorIndexSelect(updates, Vector<int>.Wrap(coordinates).AsTensor(), 1);
 
-            var mu = Engine.ReduceMean(sub, new[] { 0 }, true);
-            var centered = Engine.TensorSubtract(sub, Engine.TensorBroadcastTo(mu, new[] { n, subDim }));
-
-            // Top right singular vector v of the centered sub-sampled updates.
-            var (_, _, vh) = AiDotNet.Helpers.LinalgDispatch<T>.Svd(centered, false);
-            var topRight = Engine.TensorSlice(vh, new[] { 0, 0 }, new[] { 1, subDim }).Reshape(subDim, 1);
-
-            // s_i = ((g_i - mu) . v)^2
-            var scores = Engine.TensorSquare(Engine.TensorMatMul(centered, topRight)).ToVector().ToArray();
+            // Half / BFloat16 are scored in float: a squared projection passes Half's 65504 at a deviation of
+            // 256, and every overflowing score ties at +infinity, which the stable order breaks by client index.
+            var scores = AiDotNet.FederatedLearning.Infrastructure.FederatedReductions.IsNarrowFloat<T>()
+                ? OutlierScores(sub.Cast<float>())
+                : OutlierScores(sub);
 
             // LINQ OrderBy is stable: equal scores keep the lower client index first.
             var kept = Enumerable.Range(0, n).OrderBy(i => scores[i]).Take(n - removeCount);
@@ -205,6 +201,23 @@ public class DivideAndConquerAggregationStrategy<T> : ParameterDictionaryAggrega
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Outlier scores <c>s_i = ((g_i - mu) . v)^2</c> of the [n, b] sub-sampled updates, with <c>v</c> the top
+    /// right singular vector of the centered matrix.
+    /// </summary>
+    private static double[] OutlierScores<TV>(Tensor<TV> sub)
+    {
+        int n = sub.Shape[0];
+        int subDim = sub.Shape[1];
+        var mu = Engine.ReduceMean(sub, new[] { 0 }, true);
+        var centered = Engine.TensorSubtract(sub, Engine.TensorBroadcastTo(mu, new[] { n, subDim }));
+
+        var (_, _, vh) = AiDotNet.Helpers.LinalgDispatch<TV>.Svd(centered, false);
+        var topRight = Engine.TensorSlice(vh, new[] { 0, 0 }, new[] { 1, subDim }).Reshape(subDim, 1);
+
+        return Engine.TensorSquare(Engine.TensorMatMul(centered, topRight)).Reshape(n).Cast<double>().ToArray();
     }
 
     /// <summary>

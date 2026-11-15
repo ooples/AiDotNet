@@ -61,6 +61,30 @@ public class FederatedHalfPrecisionReferenceTests
     }
 
     [Fact(Timeout = 60000)]
+    public async Task DivideAndConquer_SquaredScoresPastHalfRange_KeepTheHonestClients()
+    {
+        await Task.Yield();
+
+        // Shejwalkar & Houmansadr 2021, Algorithm 2 with niters = 1, c = 1, m = 2 on 1-D updates
+        // {30000, 32000, 16000, 16016, 16032, 16048}: mu = 21016, deviations {8984, 10984, -5016, -5000, -4984,
+        // -4968}. Every squared score passes Half's 65504; in Half they all tie at +infinity and the stable order
+        // kept clients 0..3 (mean 23504). Scored in float, the four honest clients are kept: mean 16024.
+        var aggregator = new DivideAndConquerAggregationStrategy<Half>(numByzantine: 2);
+        var values = new[] { 30000.0, 32000.0, 16000.0, 16016.0, 16032.0, 16048.0 };
+        var models = new Dictionary<int, Dictionary<string, Half[]>>();
+        var weights = new Dictionary<int, double>();
+        for (int i = 0; i < values.Length; i++)
+        {
+            models[i] = new Dictionary<string, Half[]> { ["w"] = new[] { (Half)values[i] } };
+            weights[i] = 1.0;
+        }
+
+        var aggregated = aggregator.Aggregate(models, weights);
+
+        AssertClose(16024, (double)aggregated["w"][0], HalfRelTol);
+    }
+
+    [Fact(Timeout = 60000)]
     public async Task Bulyan_DoesNotOverflowHalf()
     {
         await Task.Yield();
