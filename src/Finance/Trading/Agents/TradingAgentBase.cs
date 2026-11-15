@@ -551,33 +551,21 @@ public abstract partial class TradingAgentBase<T> : ReinforcementLearningAgentBa
 
         if (returns.Count < 2) return NumOps.Zero;
 
-        // Calculate mean return
-        T sumReturns = NumOps.Zero;
-        foreach (var r in returns)
-        {
-            sumReturns = NumOps.Add(sumReturns, r);
-        }
-        T meanReturn = NumOps.Divide(sumReturns, NumOps.FromDouble(returns.Count));
+        // Mean return and sample standard deviation, in double and rounded once: in Half the sum of squared
+        // deviations passes 65504 long before the standard deviation does, and the infinite std made the ratio 0.
+        int count = returns.Count;
+        var (meanReturn, variance) = TensorReductionHelper.MeanAndPopulationVarianceAsDouble(
+            AiDotNetEngine.Current, new Tensor<T>(new[] { count }, new Vector<T>(returns.ToArray())));
+        double stdDev = Math.Sqrt(variance * count / (count - 1));
 
-        // Calculate standard deviation
-        T sumSquaredDiff = NumOps.Zero;
-        foreach (var r in returns)
-        {
-            T diff = NumOps.Subtract(r, meanReturn);
-            sumSquaredDiff = NumOps.Add(sumSquaredDiff, NumOps.Multiply(diff, diff));
-        }
-        T variance = NumOps.Divide(sumSquaredDiff, NumOps.FromDouble(returns.Count - 1));
-        T stdDev = NumOps.FromDouble(Math.Sqrt(NumOps.ToDouble(variance)));
+        if (stdDev < 1e-10) return NumOps.Zero;
 
-        if (NumOps.LessThan(stdDev, NumOps.FromDouble(1e-10))) return NumOps.Zero;
-
-        // Calculate Sharpe ratio (annualized, assuming risk-free rate = 0)
-        T riskFreeRate = NumOps.FromDouble(TradingOptions.RiskFreeRate / 252.0); // Daily rate
-        T excessReturn = NumOps.Subtract(meanReturn, riskFreeRate);
-        T sharpe = NumOps.Divide(excessReturn, stdDev);
+        // Calculate Sharpe ratio (annualized)
+        double riskFreeRate = TradingOptions.RiskFreeRate / 252.0; // Daily rate
+        double sharpe = (meanReturn - riskFreeRate) / stdDev;
 
         // Annualize
-        return NumOps.Multiply(sharpe, NumOps.FromDouble(Math.Sqrt(252)));
+        return NumOps.FromDouble(sharpe * Math.Sqrt(252));
     }
 
     /// <summary>

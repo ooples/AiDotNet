@@ -814,10 +814,20 @@ public partial class Crossformer<T> : ForecastingModelBase<T>
             var variance = Engine.TensorDivideScalar(
                 Engine.ReduceSum(Engine.TensorMultiply(centered, centered), new[] { 1 }, true), count);
             var std = Engine.TensorSqrt(Engine.TensorAddScalar(variance, epsilon));
+            var normalized = Engine.TensorDivide(centered, Engine.TensorBroadcastTo(std, shape));
+            if ((!TensorReductionHelper.AllFinite(Engine, mean) || !TensorReductionHelper.AllFinite(Engine, std))
+                && TensorReductionHelper.AllFinite(Engine, x))
+            {
+                // In Half the sum of squared deviations over time passes 65504 long before the std does (40 steps near
+                // 200 give 9e5), so the std was infinite and every normalized value 0: take the statistics in units of
+                // each series' max |x| instead.
+                (normalized, mean, std) = TensorReductionHelper.StandardizeRescaled(Engine, x, new[] { 1 }, 1e-5, seqLen);
+            }
+
             _instanceMean = mean;
             _instanceStd = std;
 
-            return Engine.Reshape(Engine.TensorDivide(centered, Engine.TensorBroadcastTo(std, shape)), input._shape);
+            return Engine.Reshape(normalized, input._shape);
         }
         else
         {

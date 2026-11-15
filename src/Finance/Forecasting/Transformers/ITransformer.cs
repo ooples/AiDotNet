@@ -1089,8 +1089,21 @@ public partial class ITransformer<T> : ForecastingModelBase<T>
         var counts = FeatureSampleCounts(input.Length);
         var (rows, tail) = FeatureRows(input);
         var sum = AddFeatureTail(Engine.ReduceSum(rows, new[] { 0 }, false), tail);
-        return Engine.TensorDivide(sum, counts);
+        var mean = Engine.TensorDivide(sum, counts);
+        if (TensorReductionHelper.AllFinite(Engine, mean) || !TensorReductionHelper.AllFinite(Engine, input))
+            return mean;
+
+        // In Half a feature's sum passes 65504 long before its mean does: sum in units of c = max |x| + 1 instead,
+        // where a sum of n values is at most n.
+        T scale = InstanceScale(input);
+        var (unitRows, unitTail) = FeatureRows(Engine.TensorDivideScalar(input, scale));
+        var unitSum = AddFeatureTail(Engine.ReduceSum(unitRows, new[] { 0 }, false), unitTail);
+        return Engine.TensorMultiplyScalar(Engine.TensorDivide(unitSum, counts), scale);
     }
+
+    /// <summary>The unit, max |x| + 1, the instance statistics fall back to when their direct sums overflow.</summary>
+    private T InstanceScale(Tensor<T> input)
+        => NumOps.Add(Engine.TensorMaxValue(Engine.TensorAbs(input)), NumOps.One);
 
     /// <summary>
     /// Calculates the standard deviation for each feature across the time dimension.
@@ -1120,7 +1133,28 @@ public partial class ITransformer<T> : ForecastingModelBase<T>
         var sumSq = AddFeatureTail(
             Engine.ReduceSum(Engine.TensorMultiply(centered, centered), new[] { 0 }, false),
             centeredTail is null ? null : Engine.TensorMultiply(centeredTail, centeredTail));
-        return Engine.TensorSqrt(Engine.TensorAddScalar(Engine.TensorDivide(sumSq, counts), NumOps.FromDouble(RevINEpsilon)));
+        var std = Engine.TensorSqrt(Engine.TensorAddScalar(Engine.TensorDivide(sumSq, counts), NumOps.FromDouble(RevINEpsilon)));
+        if (TensorReductionHelper.AllFinite(Engine, std)
+            || !TensorReductionHelper.AllFinite(Engine, input) || !TensorReductionHelper.AllFinite(Engine, mean))
+            return std;
+
+        // In Half the sum of squared deviations passes 65504 long before the std does (40 values near 200 give 9e5),
+        // so the std was infinite and every normalized value 0. In units of c = max |x| + 1 every squared deviation
+        // is at most 4, and std = c * sqrt(sum (u - mean(u))^2 / n + eps / c^2).
+        T scale = InstanceScale(input);
+        var unitMean = Engine.TensorDivideScalar(mean, scale);
+        var (unitRows, unitTail) = FeatureRows(Engine.TensorDivideScalar(input, scale));
+        var unitCentered = Engine.TensorSubtract(
+            unitRows, Engine.TensorBroadcastTo(Engine.Reshape(unitMean, new[] { 1, _numFeatures }), unitRows._shape));
+        Tensor<T>? unitCenteredTail = unitTail is null
+            ? null
+            : Engine.TensorSubtract(unitTail, Engine.TensorNarrow(unitMean, 0, 0, unitTail.Length).Contiguous());
+        var unitSumSq = AddFeatureTail(
+            Engine.ReduceSum(Engine.TensorMultiply(unitCentered, unitCentered), new[] { 0 }, false),
+            unitCenteredTail is null ? null : Engine.TensorMultiply(unitCenteredTail, unitCenteredTail));
+        T unitEpsilon = NumOps.Divide(NumOps.FromDouble(RevINEpsilon), NumOps.Multiply(scale, scale));
+        return Engine.TensorMultiplyScalar(
+            Engine.TensorSqrt(Engine.TensorAddScalar(Engine.TensorDivide(unitSumSq, counts), unitEpsilon)), scale);
     }
 
     /// <summary>Added to each feature's variance before the square root (the RevIN reference's eps).</summary>
