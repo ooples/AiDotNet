@@ -535,7 +535,9 @@ public class AdversarialRobustnessIntegrationTests
     public async Task AdversarialTraining_PreprocessingMethods_AllSupported()
     {
         // Test different preprocessing methods
-        var methods = new[] { "jpeg", "bit_depth_reduction", "denoising" };
+        var methods = new[] { AiDotNet.Enums.AdversarialPreprocessingMethod.JpegCompression,
+            AiDotNet.Enums.AdversarialPreprocessingMethod.BitDepthReduction,
+            AiDotNet.Enums.AdversarialPreprocessingMethod.MedianSmoothing };
 
         foreach (var method in methods)
         {

@@ -1275,7 +1275,7 @@ public class RobustnessOptionsWiringTests
         builder.ConfigureProgramSynthesis(new AiDotNet.ProgramSynthesis.Options.ProgramSynthesisOptions
         {
             TargetLanguage = AiDotNet.ProgramSynthesis.Enums.ProgramLanguage.CSharp,
-            ModelKind = AiDotNet.ProgramSynthesis.Enums.ProgramSynthesisModelKind.CodeBERT,
+            ModelKind = AiDotNet.ProgramSynthesis.Options.ProgramSynthesisModelKind.CodeBERT,
             MaxSequenceLength = 32,
             VocabularySize = 2048,
             NumEncoderLayers = 1

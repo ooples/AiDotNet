@@ -206,7 +206,7 @@ internal sealed class TapeTrainingStepper<T>
     /// does not apply; the caller then takes its eager step.
     /// </summary>
     /// <remarks>
-    /// Before the first compiled step the closure runs once without recording (and without consuming per-step random
+    /// Before the first compiled step the closure runs once on a disposable tape (without consuming per-step random
     /// draws) so a lazily shaped layer allocates the weights the plan must train; the trained set is read after it.
     /// </remarks>
     private bool TryClosureObjectiveStep(
@@ -223,7 +223,9 @@ internal sealed class TapeTrainingStepper<T>
 
         if (!_closureObjectiveWarmed)
         {
-            using (new NoGradScope<T>())
+            // Objectives such as WGAN-GP need their own inner derivatives even during warmup.
+            // A throwaway tape isolates warmup without suppressing those nested tapes.
+            using (new GradientTape<T>())
             using (CompiledStepRandom<T>.SuppressDraws())
                 objective();
             _closureObjectiveWarmed = true;

@@ -583,7 +583,8 @@ public class TabularDataTransformer<T> : IModelSerializer
                 {
                     if (counts[m] == 0) continue;
                     double distance = Math.Abs(sortedValues[i] - centers[m]);
-                    if (distance < bestDistance) { best = m; bestDistance = distance; }
+                    if (distance < bestDistance || (distance == bestDistance && m < best))
+                    { best = m; bestDistance = distance; }
                 }
                 if (best != labels[i]) { labels[i] = best; changed = true; }
             }

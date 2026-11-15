@@ -38,8 +38,8 @@ public class SyntheticDataEngineOpsReferenceTests
                 BitConverter.ToInt32(BitConverter.GetBytes(restored[i]), 0));
         }
 
-        // count (4) + element size (4) + 5 four-byte floats
-        Assert.Equal(4 + 4 + 5 * sizeof(float), (int)stream.Length);
+        // format marker (4) + count (4) + element size (4) + 5 four-byte floats
+        Assert.Equal(4 + 4 + 4 + 5 * sizeof(float), (int)stream.Length);
     }
 
     [Fact]
@@ -57,7 +57,7 @@ public class SyntheticDataEngineOpsReferenceTests
     }
 
     [Fact]
-    public void AuxElements_Empty_WritesOnlyTheCount()
+    public void AuxElements_Empty_WritesMarkerAndCount()
     {
         using var stream = new MemoryStream();
         using (var writer = new BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true))
@@ -65,7 +65,7 @@ public class SyntheticDataEngineOpsReferenceTests
             AuxLayerSerialization.WriteElements(writer, new Vector<double>(0));
         }
 
-        Assert.Equal(4, (int)stream.Length);
+        Assert.Equal(8, (int)stream.Length);
         stream.Position = 0;
         using var reader = new BinaryReader(stream);
         Assert.Equal(0, AuxLayerSerialization.ReadElements<double>(reader).Length);
