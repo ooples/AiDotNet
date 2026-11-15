@@ -11999,6 +11999,255 @@ AiDotNet.SpeechRecognition.ConformerFamily.ConformerTransducerOptions.Prediction
 AiDotNet.SpeechRecognition.ConformerFamily.ConformerTransducerOptions.PredictionLayers.set -> void
 AiDotNet.SpeechRecognition.ConformerFamily.ConformerTransducerOptions.FrequencyMasks.get -> int
 AiDotNet.SpeechRecognition.ConformerFamily.ConformerTransducerOptions.FrequencyMasks.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianMode
+AiDotNet.Diffusion.ThreeD.DreamGaussianMode.ImageTo3D = 0 -> AiDotNet.Diffusion.ThreeD.DreamGaussianMode
+AiDotNet.Diffusion.ThreeD.DreamGaussianMode.TextTo3D = 1 -> AiDotNet.Diffusion.ThreeD.DreamGaussianMode
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.DreamGaussianOptions() -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.InitialGaussianCount.get -> int
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.InitialGaussianCount.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.InitialRadius.get -> double
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.InitialRadius.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.InitialOpacity.get -> double
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.InitialOpacity.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.Iterations.get -> int
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.Iterations.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.BatchSize.get -> int
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.BatchSize.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.AnnealTimestep.get -> bool
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.AnnealTimestep.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.WarmupReferenceLoss.get -> bool
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.WarmupReferenceLoss.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.ReferenceRgbLossWeight.get -> double
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.ReferenceRgbLossWeight.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.ReferenceMaskLossWeight.get -> double
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.ReferenceMaskLossWeight.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.ImageGuidanceWeight.get -> double
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.ImageGuidanceWeight.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.TextGuidanceWeight.get -> double
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.TextGuidanceWeight.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.ImageGuidanceScale.get -> double
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.ImageGuidanceScale.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.TextGuidanceScale.get -> double
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.TextGuidanceScale.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.ImageGuidanceResolution.get -> int
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.ImageGuidanceResolution.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.TextGuidanceResolution.get -> int
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.TextGuidanceResolution.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.FovYDegrees.get -> double
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.FovYDegrees.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.MinElevation.get -> double
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.MinElevation.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.MaxElevation.get -> double
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.MaxElevation.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.ReferenceElevation.get -> double
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.ReferenceElevation.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.ReferenceSize.get -> int
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.ReferenceSize.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.InvertBackgroundProbability.get -> double
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.InvertBackgroundProbability.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.RenderResolutions.get -> int[]!
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.RenderResolutions.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.RenderResolutionThresholds.get -> double[]!
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.RenderResolutionThresholds.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.ImageCameraRadius.get -> double
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.ImageCameraRadius.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.TextCameraRadius.get -> double
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.TextCameraRadius.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.PositionLearningRateInit.get -> double
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.PositionLearningRateInit.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.PositionLearningRateFinal.get -> double
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.PositionLearningRateFinal.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.PositionLearningRateDelayMultiplier.get -> double
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.PositionLearningRateDelayMultiplier.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.ImagePositionLearningRateMaxSteps.get -> int
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.ImagePositionLearningRateMaxSteps.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.TextPositionLearningRateMaxSteps.get -> int
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.TextPositionLearningRateMaxSteps.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.FeatureLearningRate.get -> double
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.FeatureLearningRate.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.OpacityLearningRate.get -> double
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.OpacityLearningRate.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.ScalingLearningRate.get -> double
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.ScalingLearningRate.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.RotationLearningRate.get -> double
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.RotationLearningRate.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.PercentDense.get -> double
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.PercentDense.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.ImageDensifyStartIteration.get -> int
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.ImageDensifyStartIteration.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.TextDensifyStartIteration.get -> int
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.TextDensifyStartIteration.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.DensifyEndIteration.get -> int
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.DensifyEndIteration.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.ImageDensificationInterval.get -> int
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.ImageDensificationInterval.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.TextDensificationInterval.get -> int
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.TextDensificationInterval.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.OpacityResetInterval.get -> int
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.OpacityResetInterval.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.DensifyGradientThreshold.get -> double
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.DensifyGradientThreshold.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.PruneMinOpacity.get -> double
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.PruneMinOpacity.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.SceneExtent.get -> double
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.SceneExtent.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.MaxScreenSize.get -> double
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.MaxScreenSize.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.MinTimestepRatio.get -> double
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.MinTimestepRatio.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.MaxTimestepRatio.get -> double
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.MaxTimestepRatio.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.MeshExtraction.get -> AiDotNet.Diffusion.ThreeD.Meshing.GaussianMeshExtractionOptions!
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.MeshExtraction.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.RefineTexture.get -> bool
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.RefineTexture.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.TextureSize.get -> int
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.TextureSize.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.UvPaddingTexels.get -> int
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.UvPaddingTexels.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.BakeRenderResolution.get -> int
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.BakeRenderResolution.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.BakeMinResolution.get -> int
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.BakeMinResolution.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.BakeElevations.get -> double[]!
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.BakeElevations.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.BakeAzimuths.get -> double[]!
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.BakeAzimuths.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.ViewCosineThreshold.get -> double
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.ViewCosineThreshold.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.InpaintDilation.get -> int
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.InpaintDilation.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.InpaintSearchErosion.get -> int
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.InpaintSearchErosion.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.RefineIterations.get -> int
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.RefineIterations.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.TextureLearningRate.get -> double
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.TextureLearningRate.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.RefineRenderResolution.get -> int
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.RefineRenderResolution.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.RefineStrengthStart.get -> double
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.RefineStrengthStart.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.RefineStrengthRange.get -> double
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.RefineStrengthRange.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.RefineDenoisingSteps.get -> int
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.RefineDenoisingSteps.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.TextureAdamBeta1.get -> double
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.TextureAdamBeta1.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.TextureAdamBeta2.get -> double
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.TextureAdamBeta2.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.TextureAdamEpsilon.get -> double
+AiDotNet.Diffusion.ThreeD.DreamGaussianOptions.TextureAdamEpsilon.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianResult<T>
+AiDotNet.Diffusion.ThreeD.DreamGaussianResult<T>.Gaussians.get -> AiDotNet.NeuralRadianceFields.Models.GaussianSplatting<T>!
+AiDotNet.Diffusion.ThreeD.DreamGaussianResult<T>.PointCloud.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Diffusion.ThreeD.DreamGaussianResult<T>.Mesh.get -> AiDotNet.Interfaces.Mesh3D<T>!
+AiDotNet.Diffusion.ThreeD.DreamGaussianResult<T>.TexturedMesh.get -> AiDotNet.Interfaces.Mesh3D<T>?
+AiDotNet.Diffusion.ThreeD.DreamGaussianResult<T>.ReferenceLossHistory.get -> System.Collections.Generic.IReadOnlyList<double>!
+AiDotNet.Diffusion.ThreeD.DreamGaussianResult<T>.FinalMesh.get -> AiDotNet.Interfaces.Mesh3D<T>!
+AiDotNet.Diffusion.ThreeD.DreamGaussianModel<T>.Settings.get -> AiDotNet.Diffusion.ThreeD.DreamGaussianOptions!
+AiDotNet.Diffusion.ThreeD.DreamGaussianModel<T>.Settings.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianModel<T>.ImageGuidanceModel.get -> AiDotNet.Diffusion.ThreeD.Zero123Model<T>?
+AiDotNet.Diffusion.ThreeD.DreamGaussianModel<T>.ImageGuidanceModel.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianModel<T>.ForegroundSegmenter.get -> AiDotNet.ComputerVision.Segmentation.Salient.IForegroundSegmenter<T>?
+AiDotNet.Diffusion.ThreeD.DreamGaussianModel<T>.ForegroundSegmenter.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianModel<T>.ImageGuidanceFactory.get -> System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, System.Random!, AiDotNet.Diffusion.ThreeD.IScoreDistillationGuidance<T>!>?
+AiDotNet.Diffusion.ThreeD.DreamGaussianModel<T>.ImageGuidanceFactory.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianModel<T>.TextGuidanceFactory.get -> System.Func<string!, string?, AiDotNet.Diffusion.ThreeD.IScoreDistillationGuidance<T>!>?
+AiDotNet.Diffusion.ThreeD.DreamGaussianModel<T>.TextGuidanceFactory.set -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianModel<T>.RunImageTo3D(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? mask = null, int? seed = null) -> AiDotNet.Diffusion.ThreeD.DreamGaussianResult<T>!
+AiDotNet.Diffusion.ThreeD.DreamGaussianModel<T>.RunTextTo3D(string! prompt, string? negativePrompt = null, int? seed = null) -> AiDotNet.Diffusion.ThreeD.DreamGaussianResult<T>!
+override AiDotNet.Diffusion.ThreeD.DreamGaussianModel<T>.ImageTo3D(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputImage, int numViews = 1, int numInferenceSteps = 50, double guidanceScale = 5, int? seed = null) -> AiDotNet.Interfaces.Mesh3D<T>!
+*REMOVED*AiDotNet.Diffusion.ThreeD.DreamGaussianModel<T>.DreamGaussianModel(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>? architecture = null, AiDotNet.Models.Options.DiffusionModelOptions<T>? options = null, AiDotNet.Interfaces.INoiseScheduler<T>? scheduler = null, AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<T>? unet = null, AiDotNet.Diffusion.VAE.StandardVAE<T>? vae = null, AiDotNet.Interfaces.IConditioningModule<T>? conditioner = null, int defaultPointCount = 10000, int? seed = null) -> void
+AiDotNet.Diffusion.ThreeD.DreamGaussianModel<T>.DreamGaussianModel(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>? architecture = null, AiDotNet.Models.Options.DiffusionModelOptions<T>? options = null, AiDotNet.Interfaces.INoiseScheduler<T>? scheduler = null, AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<T>? unet = null, AiDotNet.Diffusion.VAE.StandardVAE<T>? vae = null, AiDotNet.Interfaces.IConditioningModule<T>? conditioner = null, int defaultPointCount = 5000, int? seed = null) -> void
+*REMOVED*override AiDotNet.Diffusion.ThreeD.DreamGaussianModel<T>.GenerateMesh(string! prompt, string? negativePrompt = null, int resolution = 256, int numInferenceSteps = 500, double guidanceScale = 7.5, int? seed = null) -> AiDotNet.Interfaces.Mesh3D<T>!
+override AiDotNet.Diffusion.ThreeD.DreamGaussianModel<T>.GenerateMesh(string! prompt, string? negativePrompt = null, int resolution = 128, int numInferenceSteps = 500, double guidanceScale = 100, int? seed = null) -> AiDotNet.Interfaces.Mesh3D<T>!
+*REMOVED*override AiDotNet.Diffusion.ThreeD.DreamGaussianModel<T>.GeneratePointCloud(string! prompt, string? negativePrompt = null, int? numPoints = null, int numInferenceSteps = 500, double guidanceScale = 7.5, int? seed = null) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Diffusion.ThreeD.DreamGaussianModel<T>.GeneratePointCloud(string! prompt, string? negativePrompt = null, int? numPoints = null, int numInferenceSteps = 500, double guidanceScale = 100, int? seed = null) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.Diffusion.ThreeD.CameraPoseEncoder<T>
+*REMOVED*AiDotNet.Diffusion.ThreeD.CameraPoseEncoder<T>.CameraPoseEncoder(int embedDim = 768, int? seed = null) -> void
+*REMOVED*AiDotNet.Diffusion.ThreeD.CameraPoseEncoder<T>.Encode(double polarAngle, double azimuthAngle, double radius) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.Diffusion.ThreeD.CameraPoseEncoder<T>.GetParameters() -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+*REMOVED*AiDotNet.Diffusion.ThreeD.CameraPoseEncoder<T>.ParameterCount.get -> long
+*REMOVED*AiDotNet.Diffusion.ThreeD.CameraPoseEncoder<T>.SetParameters(AiDotNet.Tensors.LinearAlgebra.Vector<T>! parameters) -> void
+*REMOVED*virtual AiDotNet.Diffusion.ThreeD.Zero123Model<T>.GenerateNovelView(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputImage, double polarAngle, double azimuthAngle, double radius = 1, int numInferenceSteps = 50, double? guidanceScale = null, int? seed = null) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Diffusion.ThreeD.ClipCameraProjection<T>
+const AiDotNet.Diffusion.ThreeD.ClipCameraProjection<T>.CameraFeatureCount = 4 -> int
+AiDotNet.Diffusion.ThreeD.ClipCameraProjection<T>.ClipCameraProjection(int embedDim = 768, int? seed = null) -> void
+AiDotNet.Diffusion.ThreeD.ClipCameraProjection<T>.EmbeddingDimension.get -> int
+AiDotNet.Diffusion.ThreeD.ClipCameraProjection<T>.ParameterCount.get -> long
+static AiDotNet.Diffusion.ThreeD.ClipCameraProjection<T>.CameraFeatures(AiDotNet.Diffusion.ThreeD.GuidanceViewOffset view) -> double[]!
+AiDotNet.Diffusion.ThreeD.ClipCameraProjection<T>.Project(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! imageEmbedding, System.Collections.Generic.IReadOnlyList<AiDotNet.Diffusion.ThreeD.GuidanceViewOffset>! views) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Diffusion.ThreeD.ClipCameraProjection<T>.LoadWeights(double[]! weight, double[]! bias) -> void
+AiDotNet.Diffusion.ThreeD.ClipCameraProjection<T>.GetParameters() -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.Diffusion.ThreeD.ClipCameraProjection<T>.SetParameters(AiDotNet.Tensors.LinearAlgebra.Vector<T>! parameters) -> void
+AiDotNet.ComputerVision.Segmentation.Salient.IForegroundSegmenter<T>
+AiDotNet.ComputerVision.Segmentation.Salient.IForegroundSegmenter<T>.Segment(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.ComputerVision.Segmentation.Salient.U2NetConfiguration
+AiDotNet.ComputerVision.Segmentation.Salient.U2NetConfiguration.U2NetConfiguration() -> void
+AiDotNet.ComputerVision.Segmentation.Salient.U2NetConfiguration.InputChannels.get -> int
+AiDotNet.ComputerVision.Segmentation.Salient.U2NetConfiguration.InputChannels.set -> void
+AiDotNet.ComputerVision.Segmentation.Salient.U2NetConfiguration.OutputChannels.get -> int
+AiDotNet.ComputerVision.Segmentation.Salient.U2NetConfiguration.OutputChannels.set -> void
+AiDotNet.ComputerVision.Segmentation.Salient.U2NetConfiguration.EncoderMiddle.get -> int[]!
+AiDotNet.ComputerVision.Segmentation.Salient.U2NetConfiguration.EncoderMiddle.set -> void
+AiDotNet.ComputerVision.Segmentation.Salient.U2NetConfiguration.EncoderOutput.get -> int[]!
+AiDotNet.ComputerVision.Segmentation.Salient.U2NetConfiguration.EncoderOutput.set -> void
+AiDotNet.ComputerVision.Segmentation.Salient.U2NetConfiguration.DecoderMiddle.get -> int[]!
+AiDotNet.ComputerVision.Segmentation.Salient.U2NetConfiguration.DecoderMiddle.set -> void
+AiDotNet.ComputerVision.Segmentation.Salient.U2NetConfiguration.DecoderOutput.get -> int[]!
+AiDotNet.ComputerVision.Segmentation.Salient.U2NetConfiguration.DecoderOutput.set -> void
+AiDotNet.ComputerVision.Segmentation.Salient.U2NetConfiguration.BatchNormEpsilon.get -> double
+AiDotNet.ComputerVision.Segmentation.Salient.U2NetConfiguration.BatchNormEpsilon.set -> void
+static AiDotNet.ComputerVision.Segmentation.Salient.U2NetConfiguration.Full() -> AiDotNet.ComputerVision.Segmentation.Salient.U2NetConfiguration!
+static AiDotNet.ComputerVision.Segmentation.Salient.U2NetConfiguration.Small() -> AiDotNet.ComputerVision.Segmentation.Salient.U2NetConfiguration!
+AiDotNet.ComputerVision.Segmentation.Salient.U2Net<T>
+AiDotNet.ComputerVision.Segmentation.Salient.U2Net<T>.U2Net(AiDotNet.ComputerVision.Segmentation.Salient.U2NetConfiguration? configuration = null, int? seed = null) -> void
+AiDotNet.ComputerVision.Segmentation.Salient.U2Net<T>.Configuration.get -> AiDotNet.ComputerVision.Segmentation.Salient.U2NetConfiguration!
+AiDotNet.ComputerVision.Segmentation.Salient.U2Net<T>.ParameterCount.get -> long
+AiDotNet.ComputerVision.Segmentation.Salient.U2Net<T>.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.ComputerVision.Segmentation.Salient.U2Net<T>.LoadTorchWeights(System.Func<string!, int[]!, double[]!>! read) -> void
+AiDotNet.ComputerVision.Segmentation.Salient.U2Net<T>.GetParameters() -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.ComputerVision.Segmentation.Salient.U2Net<T>.SetParameters(AiDotNet.Tensors.LinearAlgebra.Vector<T>! parameters) -> void
+AiDotNet.ComputerVision.Segmentation.Salient.U2NetForegroundSegmenter<T>
+AiDotNet.ComputerVision.Segmentation.Salient.U2NetForegroundSegmenter<T>.U2NetForegroundSegmenter(AiDotNet.ComputerVision.Segmentation.Salient.U2Net<T>? network = null, int inputSize = 320, int? seed = null) -> void
+AiDotNet.ComputerVision.Segmentation.Salient.U2NetForegroundSegmenter<T>.Network.get -> AiDotNet.ComputerVision.Segmentation.Salient.U2Net<T>!
+AiDotNet.ComputerVision.Segmentation.Salient.U2NetForegroundSegmenter<T>.InputSize.get -> int
+AiDotNet.ComputerVision.Segmentation.Salient.U2NetForegroundSegmenter<T>.Segment(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Diffusion.ThreeD.Zero123Model<T>.LoadCameraProjectionWeights(System.Func<string!, int[]!, double[]!>! read, string! prefix = "cc_projection.") -> void
+virtual AiDotNet.Diffusion.ThreeD.Zero123Model<T>.GenerateNovelView(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputImage, double polarAngle, double azimuthAngle, double radius = 0, int numInferenceSteps = 50, double? guidanceScale = null, int? seed = null) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Diffusion.ThreeD.GuidanceViewOffset
+AiDotNet.Diffusion.ThreeD.GuidanceViewOffset.GuidanceViewOffset() -> void
+AiDotNet.Diffusion.ThreeD.GuidanceViewOffset.GuidanceViewOffset(double elevation, double azimuth, double radius) -> void
+AiDotNet.Diffusion.ThreeD.GuidanceViewOffset.Elevation.get -> double
+AiDotNet.Diffusion.ThreeD.GuidanceViewOffset.Azimuth.get -> double
+AiDotNet.Diffusion.ThreeD.GuidanceViewOffset.Radius.get -> double
+AiDotNet.Diffusion.ThreeD.IScoreDistillationGuidance<T>
+AiDotNet.Diffusion.ThreeD.IScoreDistillationGuidance<T>.ComputeImageGradient(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! images, System.Collections.Generic.IReadOnlyList<AiDotNet.Diffusion.ThreeD.GuidanceViewOffset>! views, int timestep, System.Random! random) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Diffusion.ThreeD.IScoreDistillationGuidance<T>.Refine(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! images, System.Collections.Generic.IReadOnlyList<AiDotNet.Diffusion.ThreeD.GuidanceViewOffset>! views, double strength, int steps, System.Random! random) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Diffusion.ThreeD.IScoreDistillationGuidance<T>.TrainTimesteps.get -> int
+AiDotNet.Diffusion.ThreeD.IScoreDistillationGuidance<T>.MinStep.get -> int
+AiDotNet.Diffusion.ThreeD.IScoreDistillationGuidance<T>.MaxStep.get -> int
+AiDotNet.Diffusion.ThreeD.IScoreDistillationGuidance<T>.Resolution.get -> int
+AiDotNet.Diffusion.ThreeD.StableDiffusionScoreDistillationGuidance<T>
+AiDotNet.Diffusion.ThreeD.StableDiffusionScoreDistillationGuidance<T>.ComputeImageGradient(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! images, System.Collections.Generic.IReadOnlyList<AiDotNet.Diffusion.ThreeD.GuidanceViewOffset>! views, int timestep, System.Random! random) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Diffusion.ThreeD.StableDiffusionScoreDistillationGuidance<T>.Refine(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! images, System.Collections.Generic.IReadOnlyList<AiDotNet.Diffusion.ThreeD.GuidanceViewOffset>! views, double strength, int steps, System.Random! random) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Diffusion.ThreeD.StableDiffusionScoreDistillationGuidance<T>.GuidanceScale.get -> double
+AiDotNet.Diffusion.ThreeD.StableDiffusionScoreDistillationGuidance<T>.TrainTimesteps.get -> int
+AiDotNet.Diffusion.ThreeD.StableDiffusionScoreDistillationGuidance<T>.MinStep.get -> int
+AiDotNet.Diffusion.ThreeD.StableDiffusionScoreDistillationGuidance<T>.MaxStep.get -> int
+AiDotNet.Diffusion.ThreeD.StableDiffusionScoreDistillationGuidance<T>.Resolution.get -> int
+AiDotNet.Diffusion.ThreeD.Zero123ScoreDistillationGuidance<T>
+AiDotNet.Diffusion.ThreeD.Zero123ScoreDistillationGuidance<T>.ComputeImageGradient(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! images, System.Collections.Generic.IReadOnlyList<AiDotNet.Diffusion.ThreeD.GuidanceViewOffset>! views, int timestep, System.Random! random) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Diffusion.ThreeD.Zero123ScoreDistillationGuidance<T>.Refine(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! images, System.Collections.Generic.IReadOnlyList<AiDotNet.Diffusion.ThreeD.GuidanceViewOffset>! views, double strength, int steps, System.Random! random) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Diffusion.ThreeD.Zero123ScoreDistillationGuidance<T>.GuidanceScale.get -> double
+AiDotNet.Diffusion.ThreeD.Zero123ScoreDistillationGuidance<T>.TrainTimesteps.get -> int
+AiDotNet.Diffusion.ThreeD.Zero123ScoreDistillationGuidance<T>.MinStep.get -> int
+AiDotNet.Diffusion.ThreeD.Zero123ScoreDistillationGuidance<T>.MaxStep.get -> int
+AiDotNet.Diffusion.ThreeD.Zero123ScoreDistillationGuidance<T>.Resolution.get -> int
+AiDotNet.Diffusion.ThreeD.StableDiffusionScoreDistillationGuidance<T>.StableDiffusionScoreDistillationGuidance(AiDotNet.Interfaces.INoisePredictor<T>! noisePredictor, AiDotNet.Interfaces.IVAEModel<T>! vae, AiDotNet.Interfaces.INoiseScheduler<T>! scheduler, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! promptEmbedding, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! negativeEmbedding, double guidanceScale = 100, int resolution = 512, double minTimestepRatio = 0.02, double maxTimestepRatio = 0.98) -> void
+static AiDotNet.Diffusion.ThreeD.StableDiffusionScoreDistillationGuidance<T>.FromPipeline(AiDotNet.Diffusion.LatentDiffusionModelBase<T>! pipeline, string! prompt, string? negativePrompt = null, double guidanceScale = 100, int resolution = 512) -> AiDotNet.Diffusion.ThreeD.StableDiffusionScoreDistillationGuidance<T>!
+AiDotNet.Diffusion.ThreeD.Zero123ScoreDistillationGuidance<T>.Zero123ScoreDistillationGuidance(AiDotNet.Diffusion.ThreeD.Zero123Model<T>! model, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! referenceImage, System.Random! random, double guidanceScale = 5, int resolution = 256, double minTimestepRatio = 0.02, double maxTimestepRatio = 0.98) -> void
 AiDotNet.SpeechRecognition.ConformerFamily.ConformerTransducerOptions.FrequencyMaskWidth.get -> int
 AiDotNet.SpeechRecognition.ConformerFamily.ConformerTransducerOptions.FrequencyMaskWidth.set -> void
 AiDotNet.SpeechRecognition.ConformerFamily.ConformerTransducerOptions.TimeMasks.get -> int
