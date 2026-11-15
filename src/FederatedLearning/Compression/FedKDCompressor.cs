@@ -108,6 +108,13 @@ public class FedKDCompressor<T> : Infrastructure.FederatedLearningComponentBase<
             throw new ArgumentException($"Expected {samples} labels for a non-empty batch.", nameof(labels));
         }
 
+        if (teacherHidden.Rank < 1 || studentHidden.Rank < 1
+            || teacherHidden.Shape[0] != samples || studentHidden.Shape[0] != samples)
+        {
+            throw new ArgumentException(
+                $"Teacher and student hidden states must both have {samples} rows, one per logit row.", nameof(studentHidden));
+        }
+
         // One-hot labels via a single index-copy.
         var flatLabelIndex = new int[samples];
         for (int i = 0; i < samples; i++)
@@ -132,8 +139,9 @@ public class FedKDCompressor<T> : Infrastructure.FederatedLearningComponentBase<
         // Task losses: cross-entropy with the labels.
         var teacherLogProbs = Engine.TensorLogSoftmax(teacherLogits, 1);
         var studentLogProbs = Engine.TensorLogSoftmax(studentLogits, 1);
-        T teacherTask = NumOps.Negate(NumOps.Multiply(Engine.TensorSum(Engine.TensorMultiply(oneHot, teacherLogProbs)), invSamples));
-        T studentTask = NumOps.Negate(NumOps.Multiply(Engine.TensorSum(Engine.TensorMultiply(oneHot, studentLogProbs)), invSamples));
+        // (summed and averaged in double: 4096 Half samples with a cross-entropy of 32 sum past 65504)
+        T teacherTask = NumOps.FromDouble(-Infrastructure.FederatedTensorMath<T>.Sum(Engine.TensorMultiply(oneHot, teacherLogProbs)) / samples);
+        T studentTask = NumOps.FromDouble(-Infrastructure.FederatedTensorMath<T>.Sum(Engine.TensorMultiply(oneHot, studentLogProbs)) / samples);
 
         // 1 / (L_t^t + L_t^s). When both models are confident and correct every label log-probability rounds
         // to 0 (in float, at a logit margin of about 17), the sum is exactly 0, and 1 / 0 = Infinity would turn

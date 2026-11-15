@@ -24,6 +24,141 @@ internal static class FederatedTensorMath<T>
     private static readonly bool AccumulateInDouble =
         typeof(T) == typeof(Half) || typeof(T) == typeof(AiDotNet.Tensors.NumericOperations.BFloat16);
 
+    /// <summary>True for Half and BFloat16, whose intermediates the callers form in float or double.</summary>
+    internal static bool IsNarrow => AccumulateInDouble;
+
+    /// <summary>
+    /// x * factor. Half and BFloat16 multiply in double: a factor below the smallest Half (a clip scale of 1e-8)
+    /// would round to zero before it reached a value it scales back into range.
+    /// </summary>
+    internal static Tensor<T> Scale(Tensor<T> values, double factor)
+    {
+        return AccumulateInDouble
+            ? Engine.TensorMultiplyScalar(values.Cast<double>(), factor).Cast<T>()
+            : Engine.TensorMultiplyScalar(values, NumOps.FromDouble(factor));
+    }
+
+    /// <summary>Σ x in double; Half and BFloat16 are widened first (a Half total overflows at 65504).</summary>
+    internal static double Sum(Tensor<T> values)
+    {
+        return AccumulateInDouble
+            ? Engine.TensorSum(values.Cast<double>())
+            : NumOps.ToDouble(Engine.TensorSum(values));
+    }
+
+    /// <summary>a · b in double; Half and BFloat16 are widened before the products are formed.</summary>
+    internal static double Dot(Vector<T> a, Vector<T> b)
+    {
+        return AccumulateInDouble
+            ? Engine.TensorSum(Engine.TensorMultiply(a.AsTensor().Cast<double>(), b.AsTensor().Cast<double>()))
+            : NumOps.ToDouble(Engine.DotProduct(a, b));
+    }
+
+    /// <summary>
+    /// Σ w (a - b)² in double (w = 1 when <paramref name="importance"/> is null). Half and BFloat16 subtract,
+    /// square and sum in double: a difference of 300 squares past Half's 65504.
+    /// </summary>
+    internal static double WeightedSquaredDistance(Vector<T> a, Vector<T> b, Vector<T>? importance)
+    {
+        if (AccumulateInDouble)
+        {
+            var squared = Engine.TensorSquare(Engine.TensorSubtract(a.AsTensor().Cast<double>(), b.AsTensor().Cast<double>()));
+            return Engine.TensorSum(importance is null
+                ? squared
+                : Engine.TensorMultiply(importance.AsTensor().Cast<double>(), squared));
+        }
+
+        var diff = Engine.Subtract(a, b);
+        return NumOps.ToDouble(importance is null
+            ? Engine.DotProduct(diff, diff)
+            : Engine.Sum(Engine.Multiply(importance, Engine.Multiply(diff, diff))));
+    }
+
+    /// <summary>
+    /// ||a - b|| for two flat tensors of one length, in double. Half and BFloat16 subtract in double: the
+    /// difference of two in-range values (40000 and -40000) is out of range.
+    /// </summary>
+    internal static double Distance(Tensor<T> a, Tensor<T> b)
+    {
+        return AccumulateInDouble
+            ? FederatedTensorMath<double>.ScaledNorm(Engine.TensorSubtract(a.Cast<double>(), b.Cast<double>()).ToVector())
+            : ScaledNorm(Engine.TensorSubtract(a, b).ToVector());
+    }
+
+    /// <summary>
+    /// The pseudo-Fisher diagonal theta_j² * mean_i(x_{i, j mod C}²) of a [N, C] sample block. Callers pass
+    /// float tensors for Half and BFloat16, where x² overflows at 256 and 0 * infinity would be NaN.
+    /// </summary>
+    internal static Tensor<TV> PseudoFisherDiagonal<TV>(Tensor<TV> samples, Tensor<TV> parameters, int[] featureIndex)
+    {
+        var columnMeanSquares = Engine.ReduceMean(Engine.TensorSquare(samples), new[] { 0 }, false); // [C]
+        var perParameter = Engine.TensorGather(columnMeanSquares, new Tensor<int>(featureIndex, new[] { featureIndex.Length }), 0);
+        return Engine.TensorMultiply(Engine.TensorSquare(parameters), perParameter);
+    }
+
+    /// <summary>
+    /// Σ_k (w_k / W) x_k over the clients' vectors (their first <paramref name="length"/> entries), W = Σ w_k.
+    /// The weights are normalized in double before they touch T and the sum runs through
+    /// <see cref="Accumulator"/>; a total that is not positive gives zeros.
+    /// </summary>
+    internal static Vector<T> WeightedAverage(Dictionary<int, Vector<T>> items, Dictionary<int, double>? weights, int length)
+    {
+        double total = 0;
+        foreach (var id in items.Keys)
+        {
+            total += weights?.GetValueOrDefault(id, 1.0) ?? 1.0;
+        }
+
+        var sum = new Accumulator(length);
+        if (total > 0)
+        {
+            foreach (var (id, item) in items)
+            {
+                var head = item.Length == length ? item : item.GetSubVector(0, length);
+                sum.Add(head.AsTensor(), (weights?.GetValueOrDefault(id, 1.0) ?? 1.0) / total);
+            }
+        }
+
+        return sum.ToTensor().ToVector();
+    }
+
+    /// <summary>
+    /// A running Σ c_k x_k over flat tensors of one length. Half and BFloat16 accumulate in double: a product
+    /// below 2^-24 rounds to zero and a Half running sum stops growing once it dwarfs the next term (0.5 plus
+    /// 1/4096 is 0.5), so the mean of thousands of clients is wrong although it is in range.
+    /// </summary>
+    internal sealed class Accumulator
+    {
+        private Tensor<T>? _sum;
+        private Tensor<double>? _wideSum;
+
+        internal Accumulator(int length)
+        {
+            if (AccumulateInDouble)
+            {
+                _wideSum = new Tensor<double>(new[] { length });
+            }
+            else
+            {
+                _sum = new Tensor<T>(new[] { length });
+            }
+        }
+
+        internal void Add(Tensor<T> values, double coefficient)
+        {
+            if (_wideSum is not null)
+            {
+                _wideSum = Engine.TensorAdd(_wideSum, Engine.TensorMultiplyScalar(values.Cast<double>(), coefficient));
+            }
+            else if (_sum is not null)
+            {
+                _sum = Engine.TensorAdd(_sum, Engine.TensorMultiplyScalar(values, NumOps.FromDouble(coefficient)));
+            }
+        }
+
+        internal Tensor<T> ToTensor() => _wideSum is not null ? _wideSum.Cast<T>() : _sum ?? new Tensor<T>(new[] { 0 });
+    }
+
     /// <summary>
     /// The L2 norm m * ||x / m|| with m = max |x| (the scaling LAPACK's nrm2 uses), returned in double so a norm
     /// above the range of T is still finite. A NaN entry gives NaN and an infinite entry gives infinity.
@@ -128,6 +263,18 @@ internal static class FederatedTensorMath<T>
         for (int k = 0; k < normalized.Length; k++)
         {
             normalized[k] = weights[k] / normalizer;
+        }
+
+        if (AccumulateInDouble)
+        {
+            // Half and BFloat16: a coefficient below the smallest Half rounds to zero, so multiply in double.
+            var wide = Engine.TensorMultiplyScalar(items[0].Cast<double>(), normalized[0]);
+            for (int k = 1; k < normalized.Length; k++)
+            {
+                wide = Engine.TensorAdd(wide, Engine.TensorMultiplyScalar(items[k].Cast<double>(), normalized[k]));
+            }
+
+            return wide.Cast<T>();
         }
 
         var stacked = Engine.TensorStack(items.ToArray(), 0); // [K, ...]

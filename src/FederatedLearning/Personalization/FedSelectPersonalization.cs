@@ -242,7 +242,7 @@ public class FedSelectPersonalization<T> : Infrastructure.FederatedLearningCompo
         int copied = Math.Min(length, source.Length);
         if (copied > 0)
         {
-            var converted = new Tensor<T>((T[])source.Clone(), new[] { source.Length }).Cast<double>().ToArray();
+            var converted = new Tensor<T>(source.AsSpan(0, copied).ToArray(), new[] { copied }).Cast<double>().ToArray();
             Array.Copy(converted, result, copied);
         }
 

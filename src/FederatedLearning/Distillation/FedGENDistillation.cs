@@ -121,6 +121,8 @@ public class FedGENDistillation<T> : Infrastructure.FederatedLearningComponentBa
         if (batchSize < 1) throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be positive.");
         if (generatorEpochs < 0) throw new ArgumentOutOfRangeException(nameof(generatorEpochs));
         if (distillationEpochs < 0) throw new ArgumentOutOfRangeException(nameof(distillationEpochs));
+        if (!(distillationLearningRate >= 0) || double.IsInfinity(distillationLearningRate))
+            throw new ArgumentOutOfRangeException(nameof(distillationLearningRate), "Distillation learning rate must be finite and non-negative.");
 
         _numClasses = numClasses;
         _featureDim = featureDim;
@@ -199,7 +201,9 @@ public class FedGENDistillation<T> : Infrastructure.FederatedLearningComponentBa
     public double AdamEpsilon
     {
         get => _adamEpsilon;
-        set => _adamEpsilon = NonNegative(value, nameof(AdamEpsilon));
+        set => _adamEpsilon = value > 0 && !double.IsInfinity(value)
+            ? value
+            : throw new ArgumentOutOfRangeException(nameof(AdamEpsilon), "Adam epsilon must be finite and positive (0 gives 0 / 0 for a zero gradient).");
     }
 
     /// <summary>L2 weight decay added to the generator gradient (weight_decay in the official configs). Default: 1e-2.</summary>
@@ -406,6 +410,22 @@ public class FedGENDistillation<T> : Infrastructure.FederatedLearningComponentBa
         var packed = Tensor<T>.FromMatrix(globalKnowledge).Reshape(new[] { generatorCount + _numClasses });
         var generator = UnpackGenerator(packed);
         var labelDistribution = Engine.TensorSlice(packed, new[] { generatorCount }, new[] { _numClasses }).Cast<double>().ToArray();
+
+        // The distribution arrives rounded to T (Half turns [0.1, 0.9, 0] into a total of 0.99988), so it is
+        // renormalized in double before sampling.
+        double distributionTotal = 0;
+        foreach (double probability in labelDistribution)
+        {
+            distributionTotal += probability;
+        }
+
+        if (distributionTotal > 0 && !double.IsInfinity(distributionTotal))
+        {
+            for (int c = 0; c < labelDistribution.Length; c++)
+            {
+                labelDistribution[c] /= distributionTotal;
+            }
+        }
 
         var (weights, bias) = ReadHead(localModelParameters);
         var learningRate = NumOps.FromDouble(_distillationLearningRate);
@@ -777,12 +797,24 @@ public class FedGENDistillation<T> : Infrastructure.FederatedLearningComponentBa
 
     private int[] SampleLabels(double[] distribution)
     {
+        // A draw at or past the rounded cumulative total goes to the last class that has probability, never
+        // to a class no client reported.
+        int fallback = _numClasses - 1;
+        for (int c = _numClasses - 1; c >= 0; c--)
+        {
+            if (distribution[c] > 0)
+            {
+                fallback = c;
+                break;
+            }
+        }
+
         var labels = new int[_batchSize];
         for (int i = 0; i < _batchSize; i++)
         {
             double u = _rng.NextDouble();
             double cumulative = 0;
-            int label = _numClasses - 1;
+            int label = fallback;
             for (int c = 0; c < _numClasses; c++)
             {
                 cumulative += distribution[c];

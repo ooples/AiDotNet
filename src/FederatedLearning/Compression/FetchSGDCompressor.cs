@@ -206,6 +206,16 @@ public class FetchSGDCompressor<T> : Infrastructure.FederatedLearningComponentBa
     public T[] ServerStep(Matrix<T> aggregatedSketch, int gradientLength)
     {
         var sketch = ValidateSketch(aggregatedSketch, gradientLength);
+
+        // A NaN or infinite sketch would stay in the momentum and error sketches for every later round
+        // (0 * NaN is NaN even with zero momentum), so it is rejected before it reaches the server state.
+        // RecoverTopK is stateless and keeps ranking NaN estimates last instead.
+        double sketchNorm = Infrastructure.FederatedTensorMath<T>.ScaledNorm(sketch.Reshape(new[] { sketch.Length }).ToVector());
+        if (double.IsNaN(sketchNorm) || double.IsInfinity(sketchNorm))
+        {
+            throw new ArgumentException("The aggregated sketch contains a NaN or infinite value.", nameof(aggregatedSketch));
+        }
+
         if (IsNarrowFloat)
         {
             var momentumWide = _momentumSketchWide;

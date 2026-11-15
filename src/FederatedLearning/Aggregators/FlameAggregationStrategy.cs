@@ -148,12 +148,44 @@ public class FlameAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
             admitted = Enumerable.Range(0, n).ToArray();
         }
 
+        // Steps 2-4 run in float for Half and BFloat16: the delta of two in-range models (60000 and -60000) is
+        // out of Half's range, and so is a Half mean over many admitted clients.
+        var previousGlobal = GetPreviousGlobal(layerNames, referenceModel, totalParams);
+        var aggregatedTensor = Infrastructure.FederatedTensorMath<T>.IsNarrow
+            ? ClipAverageAndNoise(models.Cast<float>(), previousGlobal.Cast<float>(), admitted).Cast<T>()
+            : ClipAverageAndNoise(models, previousGlobal, admitted);
+
+        var aggregated = aggregatedTensor.ToVector();
+
+        // Unflatten into the layer dictionary.
+        var result = new Dictionary<string, T[]>(referenceModel.Count, referenceModel.Comparer);
+        var aggregatedSpan = aggregated.AsSpan();
+        int resultOffset = 0;
+        foreach (var layerName in layerNames)
+        {
+            int length = referenceModel[layerName].Length;
+            result[layerName] = aggregatedSpan.Slice(resultOffset, length).ToArray();
+            resultOffset += length;
+        }
+
+        RememberGlobalModel(result);
+        return result;
+    }
+
+    /// <summary>
+    /// FLAME steps 2-4 on the flattened models [n, totalParams]: clip the admitted deltas to the median distance
+    /// from G_{t-1}, average them onto G_{t-1} and add the calibrated noise.
+    /// </summary>
+    private Tensor<TV> ClipAverageAndNoise<TV>(Tensor<TV> models, Tensor<TV> previousGlobal, int[] admitted)
+    {
+        int n = models.Shape[0];
+        int totalParams = models.Shape[1];
+
         // Step 2: Adaptive clipping bound S_t = median distance of all models to G_{t-1}. The distances are taken
         // pre-scaled and kept in double: a squared Half distance overflows once a model is ~256 away from G_{t-1}.
-        var previousGlobal = GetPreviousGlobal(layerNames, referenceModel, totalParams);
         var deltas = Engine.TensorSubtract(
             models, Engine.TensorBroadcastTo(previousGlobal.Reshape(new[] { 1, totalParams }), new[] { n, totalParams }));
-        var distances = Infrastructure.FederatedTensorMath<T>.NormalizeRows(deltas).Norms;
+        var distances = Infrastructure.FederatedTensorMath<TV>.NormalizeRows(deltas).Norms;
 
         // A model with a NaN or infinite parameter has a non-finite distance. It cannot be clipped to S_t (every
         // comparison with NaN is false, so its factor would stay 1) and a single such row makes the mean NaN, so
@@ -187,7 +219,7 @@ public class FlameAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
         // Step 3: G_t = G_{t-1} + mean over admitted models of the clipped deltas.
         var admittedIndex = new Tensor<int>(admitted, new[] { admitted.Length });
         var admittedDeltas = Engine.TensorIndexSelect(deltas, admittedIndex, 0);
-        var factorColumn = new Tensor<double>(admittedFactors, new[] { admitted.Length, 1 }).Cast<T>();
+        var factorColumn = new Tensor<double>(admittedFactors, new[] { admitted.Length, 1 }).Cast<TV>();
         var clippedDeltas = Engine.TensorMultiply(
             admittedDeltas, Engine.TensorBroadcastTo(factorColumn, new[] { admitted.Length, totalParams }));
         var meanClippedDelta = Engine.ReduceMean(clippedDeltas, new[] { 0 }, false);
@@ -198,30 +230,16 @@ public class FlameAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
         {
             double noiseStd = _noiseMultiplier * clipBound;
             var rng = RandomHelper.CreateSeededRandom(_seed + _roundCounter++);
-            aggregatedTensor = Engine.TensorAdd(aggregatedTensor, GaussianNoise(rng, totalParams, noiseStd));
+            aggregatedTensor = Engine.TensorAdd(aggregatedTensor, GaussianNoise<TV>(rng, totalParams, noiseStd));
         }
 
-        var aggregated = aggregatedTensor.ToVector();
-
-        // Unflatten into the layer dictionary.
-        var result = new Dictionary<string, T[]>(referenceModel.Count, referenceModel.Comparer);
-        var aggregatedSpan = aggregated.AsSpan();
-        int resultOffset = 0;
-        foreach (var layerName in layerNames)
-        {
-            int length = referenceModel[layerName].Length;
-            result[layerName] = aggregatedSpan.Slice(resultOffset, length).ToArray();
-            resultOffset += length;
-        }
-
-        RememberGlobalModel(result);
-        return result;
+        return aggregatedTensor;
     }
 
     /// <summary>
     /// Box-Muller draws N(0, std^2), one (u1, u2) pair per element in order.
     /// </summary>
-    private static Tensor<T> GaussianNoise(Random rng, int count, double std)
+    private static Tensor<TV> GaussianNoise<TV>(Random rng, int count, double std)
     {
         var noise = new double[count];
         for (int i = 0; i < count; i++)
@@ -231,7 +249,7 @@ public class FlameAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
             noise[i] = std * Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
         }
 
-        return new Tensor<double>(noise, new[] { count }).Cast<T>();
+        return new Tensor<double>(noise, new[] { count }).Cast<TV>();
     }
 
     /// <summary>
@@ -241,11 +259,23 @@ public class FlameAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
     public void SetGlobalModel(Dictionary<string, T[]> globalModel)
     {
         Guard.NotNull(globalModel);
+        if (!IsFiniteModel(globalModel))
+        {
+            throw new ArgumentException("The global model contains a NaN or infinite parameter.", nameof(globalModel));
+        }
+
         RememberGlobalModel(globalModel);
     }
 
     private void RememberGlobalModel(Dictionary<string, T[]> model)
     {
+        // Every later round takes the client deltas against this snapshot, so a NaN or infinite one could never
+        // be recovered from: the last finite global model is kept instead.
+        if (!IsFiniteModel(model))
+        {
+            return;
+        }
+
         _previousGlobal = new Dictionary<string, T[]>(model.Count, model.Comparer);
         foreach (var kv in model)
         {
@@ -382,6 +412,21 @@ public class FlameAggregationStrategy<T> : ParameterDictionaryAggregationStrateg
     }
 
     private static bool IsFinite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
+
+    private static bool IsFiniteModel(Dictionary<string, T[]> model)
+    {
+        foreach (var layer in model.Values)
+        {
+            // The scaled norm is NaN for a NaN entry and infinite for an infinite one, for every T.
+            if (layer.Length > 0
+                && !IsFinite(Infrastructure.FederatedTensorMath<T>.ScaledNorm(new Tensor<T>(layer, new[] { layer.Length }).ToVector())))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     private static int Find(int[] parent, int x)
     {

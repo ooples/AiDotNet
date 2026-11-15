@@ -86,7 +86,9 @@ public class PrototypeFederatedGraphLearning<T> : FederatedLearningComponentBase
             }
         }
 
-        _clientPrototypes[clientId] = prototypes;
+        // Both maps are snapshotted: a caller that reuses its dictionary for other classes would otherwise
+        // leave prototypes here that have no count.
+        _clientPrototypes[clientId] = new Dictionary<int, Tensor<T>>(prototypes);
         _clientClassCounts[clientId] = new Dictionary<int, int>(classSampleCounts);
     }
 
@@ -238,10 +240,8 @@ public class PrototypeFederatedGraphLearning<T> : FederatedLearningComponentBase
     {
         Guard.NotNull(clientPrototypes);
 
-        // Every matched class contributes one row diff_c = local_c - global_c (both cut to the shorter length);
-        // rows are zero-padded to a common width, which leaves their norms unchanged.
-        var diffs = new List<Tensor<T>>();
-        int width = 0;
+        // Every matched class contributes lambda * ||local_c - global_c||^2 (both cut to the shorter length).
+        double loss = 0;
         foreach (var kvp in clientPrototypes)
         {
             if (!_globalPrototypes.TryGetValue(kvp.Key, out var globalProto))
@@ -255,25 +255,9 @@ public class PrototypeFederatedGraphLearning<T> : FederatedLearningComponentBase
                 continue;
             }
 
-            diffs.Add(Engine.TensorSubtract(FitToLength(kvp.Value, dim), FitToLength(globalProto, dim)));
-            width = Math.Max(width, dim);
-        }
-
-        if (diffs.Count == 0)
-        {
-            return 0;
-        }
-
-        var rows = new Tensor<T>[diffs.Count];
-        for (int r = 0; r < rows.Length; r++)
-        {
-            rows[r] = FitToLength(diffs[r], width);
-        }
-
-        // ||diff_c|| is formed as max|diff_c| * ||diff_c / max|diff_c||| in double, so squaring cannot overflow T.
-        double loss = 0;
-        foreach (double norm in Infrastructure.FederatedTensorMath<T>.NormalizeRows(Engine.TensorStack(rows, 0)).Norms)
-        {
+            // The norm is pre-scaled and returned in double, so squaring cannot overflow T; Half and BFloat16
+            // also subtract in double, where 50000 minus -50000 is out of range.
+            double norm = Infrastructure.FederatedTensorMath<T>.Distance(FitToLength(kvp.Value, dim), FitToLength(globalProto, dim));
             loss += lambda * norm * norm;
         }
 

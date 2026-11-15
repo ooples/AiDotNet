@@ -66,7 +66,8 @@ public class FedCILContinualLearning<T> : Infrastructure.FederatedLearningCompon
         if (noiseDim < 1) throw new ArgumentOutOfRangeException(nameof(noiseDim), "Noise dimension must be positive.");
         if (hiddenDim < 1) throw new ArgumentOutOfRangeException(nameof(hiddenDim), "Hidden dimension must be positive.");
         if (batchSize < 1) throw new ArgumentOutOfRangeException(nameof(batchSize), "Batch size must be positive.");
-        if (consistencyWeight < 0) throw new ArgumentOutOfRangeException(nameof(consistencyWeight), "Consistency weight must be non-negative.");
+        if (double.IsNaN(learningRate) || double.IsInfinity(learningRate)) throw new ArgumentOutOfRangeException(nameof(learningRate), "Learning rate must be finite.");
+        if (!(consistencyWeight >= 0) || double.IsInfinity(consistencyWeight)) throw new ArgumentOutOfRangeException(nameof(consistencyWeight), "Consistency weight must be finite and non-negative.");
         if (consolidationSteps < 0) throw new ArgumentOutOfRangeException(nameof(consolidationSteps));
 
         _numClasses = numClasses;
@@ -533,10 +534,10 @@ public class FedCILContinualLearning<T> : Infrastructure.FederatedLearningCompon
 
         var current = currentParameters.Length == len ? currentParameters : currentParameters.GetSubVector(0, len);
         var reference = referenceParameters.Length == len ? referenceParameters : referenceParameters.GetSubVector(0, len);
-        var diff = Engine.Subtract(current, reference);
-        T penalty = Engine.DotProduct(diff, diff);
 
-        return NumOps.Multiply(penalty, NumOps.FromDouble(regularizationStrength * 0.5));
+        // Formed and scaled in double: a Half difference of 300 squares past 65504.
+        double penalty = Infrastructure.FederatedTensorMath<T>.WeightedSquaredDistance(current, reference, null);
+        return NumOps.FromDouble(penalty * regularizationStrength * 0.5);
     }
 
     /// <inheritdoc/>

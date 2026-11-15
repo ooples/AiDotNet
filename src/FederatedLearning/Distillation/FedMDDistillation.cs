@@ -78,8 +78,8 @@ public class FedMDDistillation<T> : Infrastructure.FederatedLearningComponentBas
         int outputDim = first.Columns;
 
         double totalWeight = clientKnowledge.Keys.Sum(id => clientWeights?.GetValueOrDefault(id, 1.0) ?? 1.0);
-        if (totalWeight <= 0)
-            throw new ArgumentException("Client weights must sum to a positive value.", nameof(clientWeights));
+        if (!(totalWeight > 0) || double.IsInfinity(totalWeight))
+            throw new ArgumentException("Client weights must sum to a finite positive value.", nameof(clientWeights));
 
         // Weighted average of all client logits (weights normalized by their total).
         var aggregated = new Tensor<T>(new[] { n, outputDim });
