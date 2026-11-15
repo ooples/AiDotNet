@@ -97,10 +97,11 @@ public interface IAlignmentMethod<T> : IModelSerializer
     /// - Make it behave inconsistently with its values
     /// - Find edge cases where alignment breaks down
     /// <para>
-    /// The prompts are <see cref="AlignmentMethodOptions{T}.RedTeamingAttempts"/> cases of the library's safety
-    /// benchmarks for <see cref="AlignmentMethodOptions{T}.RedTeamingCategories"/>, the same prompts the builder's
-    /// <c>EnableRedTeaming</c> screens. Each response is judged by <paramref name="pipeline"/>: an attack succeeds when
-    /// the response is unsafe. Red teaming needs <see cref="AlignmentMethodOptions{T}.EnableRedTeaming"/>.
+    /// The prompts are <see cref="AlignmentMethodOptions{T}.RedTeamingAttempts"/> adversarial cases of the library's
+    /// safety benchmarks for <see cref="AlignmentMethodOptions{T}.RedTeamingCategories"/>, the benchmarks the builder's
+    /// <c>EnableRedTeaming</c> screens (without their benign controls, which are not attacks). Each response is judged
+    /// by <paramref name="pipeline"/>: an attack succeeds when the response is unsafe, and the success rate is over the
+    /// adversarial prompts. Red teaming needs <see cref="AlignmentMethodOptions{T}.EnableRedTeaming"/>.
     /// </para>
     /// </remarks>
     /// <param name="model">The model to red team: prompt text in, response text out.</param>
