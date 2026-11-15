@@ -913,7 +913,7 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
                 ExtraParameters = allParams,
                 OnGradients = gradients => PublishParameterGradients(gradients),
                 VerifyReplayAgreement = true,
-                GraphBreakReason = HostDrawnTrainingRandomness(),
+                GraphBreakReason = FusedTrainingBreakReason(),
             });
         }
         finally
@@ -925,19 +925,28 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     }
 
     /// <summary>
-    /// Why the training forward cannot be compiled once and replayed, or null when it can: the Swin blocks' drop-path
-    /// masks, the SpecAugment stripes and the feature-fusion crop offsets are drawn on the host every step, and a
-    /// compiled plan would keep the traced step's draws. Two identically seeded models then trained to different
-    /// weights, because whether the traced step's plan update was kept depended on that plan, not on the seed.
+    /// Why the training forward cannot be compiled once and replayed. With the pinned AiDotNet.Tensors it never can.
     /// </summary>
-    private string? HostDrawnTrainingRandomness()
-    {
-        bool stripes = _options.SpecAugmentTimeStripes > 0 && _options.SpecAugmentTimeDropWidth > 0
-            || _options.SpecAugmentFreqStripes > 0 && _options.SpecAugmentFreqDropWidth > 0;
-        return _options.AudioDropPathRate > 0 || stripes || _options.EnableFeatureFusion
-            ? "CLAP's training forward draws drop-path masks, SpecAugment stripes and fusion crops on the host each step"
-            : null;
-    }
+    /// <remarks>
+    /// <para>
+    /// TEMPORARY OPT-OUT (#2592): remove the front-end clause once the pinned AiDotNet.Tensors contains
+    /// ooples/AiDotNet.Tensors#1750. In 0.150.0 the log-mel front end's STFT has no training-trace graph branch, and
+    /// host-scalar reductions read unrealized lazy buffers inside a training trace. A compiled plan therefore keeps the
+    /// traced step's spectra as constants, and every later step trains on them (a different value per instance, some
+    /// steps with all-zero gradients). The front end runs on every training forward, so this applies whatever the
+    /// options are. It must not be gated on the regularization settings.
+    /// </para>
+    /// <para>
+    /// The feature-fusion crop offsets are drawn on the host every step. That clause stays after #1750 until the crops
+    /// are drawn through <see cref="AiDotNet.Training.CompiledStepRandom{T}"/>. The Swin drop-path masks and the
+    /// SpecAugment stripes already are, so they need no break.
+    /// </para>
+    /// </remarks>
+    internal string FusedTrainingBreakReason()
+        => _options.EnableFeatureFusion
+            ? "CLAP's log-mel front end is not recorded in training traces before AiDotNet.Tensors #1750 (#2592), and "
+              + "its feature-fusion crops are drawn on the host each step"
+            : "CLAP's log-mel front end is not recorded in training traces before AiDotNet.Tensors #1750 (#2592)";
 
     /// <summary>
     /// The symmetric contrastive loss of paired, L2-normalised embeddings (Radford 2021 Eq. 1; Wu 2023 §3.2):
