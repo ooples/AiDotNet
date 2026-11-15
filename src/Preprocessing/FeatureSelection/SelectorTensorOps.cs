@@ -82,21 +82,69 @@ internal static class SelectorTensorOps
         return engine.ReduceSum(engine.TensorMultiply(x, x), new[] { 0 }, false);
     }
 
-    /// <summary>Column sample variances (divisor n - 1) of an [n, m] tensor, as [m].</summary>
-    public static Tensor<T> ColumnSampleVariance<T>(Tensor<T> x)
+    /// <summary>
+    /// Column sums of squares of an [n, m] tensor divided by <paramref name="divisor"/>, as [m]. Half and BFloat16
+    /// are summed in float and converted once: the sum of squares passes Half's 65504 (1,000 rows of magnitude 10)
+    /// while the mean itself still fits, and a running sum in Half stops growing at 2048.
+    /// </summary>
+    public static Tensor<T> ColumnMeanOfSquares<T>(Tensor<T> x, int divisor)
     {
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+            return ColumnMeanOfSquares(x.Cast<float>(), divisor).Cast<T>();
+
         var ops = MathHelper.GetNumericOperations<T>();
-        return AiDotNetEngine.Current.TensorDivideScalar(
-            ColumnSumOfSquares(FilterStatisticTensorOps.CenterColumns(x)), ops.FromDouble(x.Shape[0] - 1));
+        return AiDotNetEngine.Current.TensorDivideScalar(ColumnSumOfSquares(x), ops.FromDouble(divisor));
     }
 
-    /// <summary>Column population variances (divisor n) of an [n, m] tensor, as [m].</summary>
-    public static Tensor<T> ColumnVariance<T>(Tensor<T> x)
+    /// <summary>
+    /// The population covariance <c>X'X / n</c> of the centred columns of an [n, m] tensor, as [m, m], widened as
+    /// <see cref="ColumnMeanOfSquares{T}"/> is.
+    /// </summary>
+    public static Tensor<T> CenteredCovariance<T>(Tensor<T> centered)
     {
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+            return CenteredCovariance(centered.Cast<float>()).Cast<T>();
+
+        var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
-        return AiDotNetEngine.Current.TensorDivideScalar(
-            ColumnSumOfSquares(FilterStatisticTensorOps.CenterColumns(x)), ops.FromDouble(x.Shape[0]));
+        return engine.TensorDivideScalar(
+            engine.TensorMatMul(engine.TensorTranspose(centered), centered), ops.FromDouble(centered.Shape[0]));
     }
+
+    /// <summary>
+    /// Lag means <c>sum_{i &lt; n - lag} x[i, j] * x[i + lag, j] / (n - lag)</c> of every column of an [n, m] tensor,
+    /// as [m], widened as <see cref="ColumnMeanOfSquares{T}"/> is.
+    /// </summary>
+    public static Tensor<T> LagMeans<T>(Tensor<T> x, int lag)
+    {
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+            return LagMeans(x.Cast<float>(), lag).Cast<T>();
+
+        var ops = MathHelper.GetNumericOperations<T>();
+        return AiDotNetEngine.Current.TensorDivideScalar(LagProducts(x, lag), ops.FromDouble(x.Shape[0] - lag));
+    }
+
+    /// <summary>
+    /// <see cref="FrequencyPower{T}"/> divided by n^2, widened as <see cref="ColumnMeanOfSquares{T}"/> is: the power
+    /// itself reaches n^2 times the squared amplitude.
+    /// </summary>
+    public static Tensor<T> FrequencyPowerPerSquaredLength<T>(Tensor<T> x, Tensor<T> frequencies)
+    {
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+            return FrequencyPowerPerSquaredLength(x.Cast<float>(), frequencies.Cast<float>()).Cast<T>();
+
+        var ops = MathHelper.GetNumericOperations<T>();
+        double n = x.Shape[0];
+        return AiDotNetEngine.Current.TensorDivideScalar(FrequencyPower(x, frequencies), ops.FromDouble(n * n));
+    }
+
+    /// <summary>Column sample variances (divisor n - 1) of an [n, m] tensor, as [m].</summary>
+    public static Tensor<T> ColumnSampleVariance<T>(Tensor<T> x) =>
+        ColumnMeanOfSquares(FilterStatisticTensorOps.CenterColumns(x), x.Shape[0] - 1);
+
+    /// <summary>Column population variances (divisor n) of an [n, m] tensor, as [m].</summary>
+    public static Tensor<T> ColumnVariance<T>(Tensor<T> x) =>
+        ColumnMeanOfSquares(FilterStatisticTensorOps.CenterColumns(x), x.Shape[0]);
 
     /// <summary>
     /// Lag products <c>sum_{i &lt; n - lag} x[i, j] * x[i + lag, j]</c> of every column of an [n, m] tensor, as [m].
@@ -199,8 +247,7 @@ internal static class SelectorTensorOps
         int n = x.Shape[0];
         int m = x.Shape[1];
         var centered = FilterStatisticTensorOps.CenterColumns(x);
-        var std = engine.TensorSqrt(engine.TensorDivideScalar(
-            ColumnSumOfSquares(centered), ops.FromDouble(sample ? n - 1 : n)));
+        var std = engine.TensorSqrt(ColumnMeanOfSquares(centered, sample ? n - 1 : n));
         std = engine.TensorWhere(engine.TensorLessThan(std, PreprocessingTensorOps.Tolerance<T>(minStd)),
             PreprocessingTensorOps.Filled(new[] { m }, ops.One), std);
         return engine.TensorDivide(centered, engine.Reshape(std, new[] { 1, m }));
@@ -577,6 +624,28 @@ internal static class SelectorTensorOps
     }
 
     /// <summary>
+    /// The digamma function of positive integer counts, <c>psi(k) = H_(k-1) - gamma</c>, read from a table of the
+    /// harmonic numbers up to the largest count (built in double, where it is exact to rounding). The engine's
+    /// <c>TensorDigamma</c> is 2.4e-9 off for arguments below about 6 in AiDotNet.Tensors 0.150.0
+    /// (psi(3) = 0.9227843327 instead of 0.9227843351), which is where the neighbour counts of the estimator below
+    /// sit. A count of 0 gives negative infinity, as scipy does.
+    /// </summary>
+    private static Tensor<T> IntegerDigamma<T>(Tensor<int> counts)
+    {
+        const double eulerGamma = 0.57721566490153286;
+        var engine = AiDotNetEngine.Current;
+        int largest = Math.Max(engine.TensorMaxValue(counts), 1);
+        // psi(k) = H_k - 1 / k - gamma for k = 1 .. largest, behind psi(0) = -infinity
+        var reciprocals = engine.TensorReciprocal(engine.TensorArange<double>(1, largest + 1, 1));
+        var positive = engine.TensorSubtractScalar(
+            engine.TensorSubtract(engine.TensorCumSum(reciprocals, 0), reciprocals), eulerGamma);
+        var table = engine.TensorConcatenate(
+            new[] { PreprocessingTensorOps.Filled(new[] { 1 }, double.NegativeInfinity), positive }, 0);
+        var flat = engine.Reshape(counts, new[] { counts.Length });
+        return engine.Reshape(engine.TensorIndexSelect(table, flat, 0), counts.Shape.ToArray()).Cast<T>();
+    }
+
+    /// <summary>
     /// Mutual information (nats) between every continuous column of <paramref name="x"/> and the integer classes of
     /// <paramref name="target"/> by the nearest-neighbour estimator of Ross (2014), as scikit-learn
     /// <c>mutual_info_classif</c> with <c>n_neighbors = 3</c>:
@@ -615,9 +684,9 @@ internal static class SelectorTensorOps
         var labelCounts = engine.TensorIndexSelect(rowClassCount, keptIndex, 0);
         var neighbours = engine.TensorMin(engine.TensorSubtractScalar(labelCounts, 1), 3);
         T constant = ops.Subtract(
-            ops.Add(engine.TensorSum(engine.TensorDigamma(PreprocessingTensorOps.Filled(new[] { 1 }, ops.FromDouble(m)))),
-                engine.TensorMean(engine.TensorDigamma(neighbours.Cast<T>()))),
-            engine.TensorMean(engine.TensorDigamma(labelCounts.Cast<T>())));
+            ops.Add(engine.TensorSum(IntegerDigamma<T>(new Tensor<int>(new[] { m }, new[] { 1 }))),
+                engine.TensorMean(IntegerDigamma<T>(neighbours))),
+            engine.TensorMean(IntegerDigamma<T>(labelCounts)));
         var constantTensor = PreprocessingTensorOps.Filled(new[] { 1 }, constant);
 
         // Group the kept rows by class; the order inside a class is irrelevant because each block is sorted next
@@ -650,7 +719,7 @@ internal static class SelectorTensorOps
                 engine.TensorSliceAxis(centres, 1, j), engine.TensorSliceAxis(radii, 1, j),
                 engine.TensorSliceAxis(positive, 1, j));
             results[j] = engine.TensorSubtract(constantTensor,
-                engine.Reshape(engine.ReduceMean(engine.TensorDigamma(counts.Cast<T>()), new[] { 0 }, false), new[] { 1 }));
+                engine.Reshape(engine.ReduceMean(IntegerDigamma<T>(counts), new[] { 0 }, false), new[] { 1 }));
         }
 
         return engine.TensorMax(engine.TensorConcatenate(results, 0), ops.Zero);
