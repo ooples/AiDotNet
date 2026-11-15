@@ -1320,14 +1320,28 @@ internal static class NvidiaSmi
         return named.Count == 1 ? named[0].Index : null;
     }
 
+    /// <summary>A timed-out nvidia-smi could not be confirmed terminated; no further child is started.</summary>
+    private static volatile bool _childLeftRunning;
+
     private static List<string>? Query(List<string> arguments)
     {
+        if (_childLeftRunning) return null;
         try
         {
             var start = new ProcessStartInfo { FileName = "nvidia-smi", RedirectStandardOutput = true, RedirectStandardError = true };
             foreach (var argument in arguments) start.ArgumentList.Add(argument);
             using var process = Process.Start(start);
-            if (process is null || !process.WaitForExit(1000) || process.ExitCode != 0) return null;
+            if (process is null) return null;
+            if (!process.WaitForExit(1000))
+            {
+                // Disposing the handle leaves the child running, and the sampler asks again every 100 ms: end it, and
+                // start no further queries unless it is confirmed gone (a failed Kill throws and leaves the flag set).
+                _childLeftRunning = true;
+                process.Kill(entireProcessTree: true);
+                _childLeftRunning = !process.WaitForExit(1000);
+                return null;
+            }
+            if (process.ExitCode != 0) return null;
             var lines = new List<string>();
             for (string? line = process.StandardOutput.ReadLine(); line is not null; line = process.StandardOutput.ReadLine())
                 if (line.Trim().Length > 0) lines.Add(line);
