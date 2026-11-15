@@ -423,7 +423,7 @@ Whether a file under a pathspec at HEAD passes a directory name as a Path.Combin
 git grep matches one line at a time, so `Path.Combine(root,` on one line and `"benchmarks", "data")` on the next was
 never seen. A fixed-string search finds the few files that hold the name as a whole string literal ("benchmarks" or
 'benchmarks'); each is then read whole from HEAD and matched as complete text. The argument may follow others that
-are themselves calls: Path.Combine(GetRoot(), "benchmarks"). A failed search or read counts as a reference.
+are themselves calls, nested to any depth: Path.Combine(FindRoot(Path.GetFullPath(".")), "benchmarks"). A failed search or read counts as a reference.
 #>
 function Test-HeadTextJoinsDirectory {
     param(
@@ -433,8 +433,9 @@ function Test-HeadTextJoinsDirectory {
     $naming = @(& git -c core.quotepath=false grep -l -i -F -e ('"' + $Name + '"') -e ("'" + $Name + "'") HEAD -- $Pathspec 2>$null)
     if ($LASTEXITCODE -gt 1) { return $true }
     if ($LASTEXITCODE -ne 0 -or $naming.Count -eq 0) { return $false }
-    # The argument list before the name: anything but parentheses, or a parenthesised call one level deep.
-    $pattern = 'Path\.(Combine|Join)\s*\((?:[^()]|\([^()]*\))*?["'']' + [regex]::Escape($Name) + '["'']'
+    # The argument list before the name, with calls nested to any depth: the balancing group d counts the open
+    # parentheses, and the name must sit at the call's own level (an argument of the Combine/Join itself).
+    $pattern = 'Path\.(Combine|Join)\s*\((?:[^()]|(?<d>\()|(?<-d>\)))*?(?(d)(?!))["'']' + [regex]::Escape($Name) + '["'']'
     $regex = [regex]::new($pattern, [Text.RegularExpressions.RegexOptions]::IgnoreCase, [TimeSpan]::FromSeconds(5))
     foreach ($entry in $naming) {
         $file = ([string] $entry) -replace '^HEAD:', ''
@@ -763,7 +764,10 @@ function Get-PackagePropsVerdict {
         # Each ProjectReference element's own Include, in either quote style: a line can also hold other reference
         # kinds, whose Include is not a project target. One unresolvable element makes the line's targets unknown.
         $targets = [System.Collections.Generic.List[string]]::new()
-        foreach ($element in [regex]::Matches($text, '<ProjectReference\b[^>]*>')) {
+        $elements = [regex]::Matches($text, '<ProjectReference\b[^>]*>')
+        # An element split across lines is not complete on this one, so its target is unknown here.
+        if ($elements.Count -lt [regex]::Matches($text, '<ProjectReference\b').Count) { $targets = $null }
+        foreach ($element in $(if ($null -ne $targets) { $elements } else { @() })) {
             $include = [regex]::Match($element.Value, '\bInclude\s*=\s*(?:"(?<v>[^"]+)"|''(?<v>[^'']+)'')')
             $resolved = if ($include.Success) { Resolve-ReferenceTargets $file $include.Groups['v'].Value } else { $null }
             if ($null -eq $resolved) { $targets = $null; break }
@@ -806,6 +810,10 @@ function Get-PackagePropsVerdict {
             if ($file -ceq $script:PackagePropsPath) { continue }
             if ($text -match '<PackageReference\b' -and $text -notmatch '\b(Include|Update)\s*=') {
                 return & $full "$file declares a PackageReference across several lines, so its package cannot be read"
+            }
+            # Include="$(SharedPackage)" can name this package through a property, so its identity is unbounded.
+            if ($text -imatch '<PackageReference\b[^>]*\b(Include|Update)\s*=\s*["''][^"'']*\$\(') {
+                return & $full "$file names a PackageReference through an MSBuild property, so whether it is this package cannot be read"
             }
             if ($text -inotmatch $quoted) { continue }
             if (-not $file.EndsWith('.csproj', [StringComparison]::OrdinalIgnoreCase)) {
@@ -1751,6 +1759,32 @@ function Resolve-UncoveredChangeScope {
         $oldItems = Get-CSharpTokenContexts -Tokens $old.Tokens -From $prefix -To ($old.Tokens.Count - 1 - $suffix)
         $newItems = Get-CSharpTokenContexts -Tokens $new.Tokens -From $prefix -To ($new.Tokens.Count - 1 - $suffix)
         if ($oldItems.Count -eq 0 -and $newItems.Count -eq 0) {
+            # A comment delimiter can turn code outside the hunk into a comment or back into code (replace the
+            # /* that opens a block comment with //, and the lines up to its */ execute), so an edit touching
+            # /* or */ is inert only when every token before and after the hunk is unchanged.
+            $delimiter = $false
+            foreach ($pair in @(@($BaseModel, $Hunk[0], $Hunk[1]), @($HeadModel, $Hunk[2], $Hunk[3]))) {
+                for ($line = $pair[1]; $line -lt $pair[1] + $pair[2]; $line++) {
+                    if ($line -ge 1 -and $line -le $pair[0].Lines.Count -and $pair[0].Lines[$line - 1].ToString() -match '/\*|\*/') {
+                        $delimiter = $true
+                    }
+                }
+            }
+            if ($delimiter) {
+                $oldEnd = $Hunk[0] + [Math]::Max($Hunk[1], 0)
+                $newEnd = $Hunk[2] + [Math]::Max($Hunk[3], 0)
+                $outside = @(
+                    @((Get-CSharpChangeSide -Model $BaseModel -StartLine 1 -Count ($Hunk[0] - 1)),
+                      (Get-CSharpChangeSide -Model $HeadModel -StartLine 1 -Count ($Hunk[2] - 1))),
+                    @((Get-CSharpChangeSide -Model $BaseModel -StartLine $oldEnd -Count ($BaseModel.Lines.Count - $oldEnd + 1)),
+                      (Get-CSharpChangeSide -Model $HeadModel -StartLine $newEnd -Count ($HeadModel.Lines.Count - $newEnd + 1))))
+                foreach ($region in $outside) {
+                    if ($region[0].Blocker -or $region[1].Blocker -or
+                        (@($region[0].Keys) -join "`u{1}") -cne (@($region[1].Keys) -join "`u{1}")) {
+                        return New-Scope 'File' 'a comment delimiter changed and the code outside the hunk did not stay the same'
+                    }
+                }
+            }
             return New-Scope 'Inert' 'only comments or whitespace changed'
         }
 

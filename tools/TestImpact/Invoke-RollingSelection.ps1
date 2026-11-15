@@ -78,7 +78,12 @@ if ($PSCmdlet.ParameterSetName -ceq 'Outcome') {
         Write-Host "::warning::rolling map shadow: $(@($outcome.droppedThenFailed).Count) shard(s) it would have dropped failed: $(@($outcome.droppedThenFailed) -join ', ')"
     }
     else {
-        [void] $lines.Add("The rolling map would not have run $(@($outcome.dropped).Count) shard(s) the weekly map ran. None of them failed.")
+        $notRun = @($outcome.droppedNotRun)
+        $ran = @($outcome.dropped).Count - $notRun.Count
+        [void] $lines.Add("The rolling map would not have run $(@($outcome.dropped).Count) shard(s) the weekly map selected. $ran ran and none of them failed.")
+        if ($notRun.Count -gt 0) {
+            [void] $lines.Add("$($notRun.Count) of them have no outcome in this run, so they are no evidence: $($notRun -join ', ')")
+        }
     }
     if ($SummaryFile) { Add-Content -LiteralPath $SummaryFile -Value ($lines -join "`n") -Encoding utf8 }
     Write-Host ($lines -join "`n")

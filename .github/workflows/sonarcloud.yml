@@ -1815,6 +1815,11 @@ jobs:
         shard: ${{ fromJSON(needs.build.outputs.matrix || needs.select-shards.outputs.matrix) }}
 
     steps:
+      # Invoke-Shard.ps1 counts a packed job's slice deadline from here, so the setup steps below are inside it.
+      - name: Record job start
+        shell: pwsh
+        run: '"SHARD_JOB_STARTED=$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())" >> $env:GITHUB_ENV'
+
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
 

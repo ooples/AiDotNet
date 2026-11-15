@@ -24,7 +24,12 @@ if ($packedSegments -and $packedSegments -cne 'null') {
   if ($segments.Count -eq 0) { throw 'SHARD_SEGMENTS holds no slices' }
   $packName = "$($env:SHARD_NAME)"
   $packRoot = if ($env:SHARD_RESULTS_ROOT) { "$($env:SHARD_RESULTS_ROOT)" } else { 'TestResults' }
-  $packStarted = [DateTime]::UtcNow
+  # The deadline counts from the job's start (recorded by the workflow's first step), not this script's: the
+  # checkout, SDK setup, artifact download and restore before it run against the same job timeout.
+  $jobStartedUnix = 0L
+  $packStarted = if ([long]::TryParse("$($env:SHARD_JOB_STARTED)", [ref] $jobStartedUnix) -and $jobStartedUnix -gt 0) {
+      [DateTimeOffset]::FromUnixTimeSeconds($jobStartedUnix).UtcDateTime
+  } else { [DateTime]::UtcNow }
   $packMinutes = 0
   [void] [int]::TryParse("$($env:SHARD_PACK_TIMEOUT)", [ref] $packMinutes)
   $packDeadline = if ($packMinutes -gt 0) { $packStarted.AddMinutes([Math]::Max(0, $packMinutes - 12)) } else { [DateTime]::MaxValue }
