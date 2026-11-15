@@ -3,6 +3,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Diffusion.Schedulers;
+using AiDotNet.Diffusion.ThreeD.Meshing;
 
 namespace AiDotNet.Diffusion;
 
@@ -301,7 +302,7 @@ public abstract partial class ThreeDDiffusionModelBase<T> : LatentDiffusionModel
             SurfaceReconstructionMethod.BallPivoting => PointCloudToMeshBallPivoting(pointCloud),
             SurfaceReconstructionMethod.MarchingCubes => PointCloudToMeshMarchingCubes(pointCloud),
             SurfaceReconstructionMethod.AlphaShape => PointCloudToMeshAlphaShape(pointCloud),
-            _ => PointCloudToMeshPoisson(pointCloud)
+            _ => throw new ArgumentOutOfRangeException(nameof(method), method, "Unknown surface reconstruction method.")
         };
     }
 
@@ -541,80 +542,48 @@ public abstract partial class ThreeDDiffusionModelBase<T> : LatentDiffusionModel
     #region Surface Reconstruction Methods
 
     /// <summary>
-    /// Converts point cloud to mesh using Poisson surface reconstruction.
+    /// Settings for <see cref="PointCloudToMesh"/>: the screened Poisson depth and point weight, the ball-pivoting
+    /// radii, the signed-distance grid and the alpha radius. The defaults follow the papers (see
+    /// <see cref="SurfaceReconstructionOptions"/>).
+    /// </summary>
+    public SurfaceReconstructionOptions SurfaceReconstruction { get; set; } = new SurfaceReconstructionOptions();
+
+    /// <summary>
+    /// Converts a point cloud to a mesh by screened Poisson surface reconstruction (Kazhdan &amp; Hoppe 2013), with
+    /// normals estimated and oriented as in Hoppe et al. (1992).
     /// </summary>
     protected virtual Mesh3D<T> PointCloudToMeshPoisson(Tensor<T> pointCloud)
     {
-        // Simplified Poisson reconstruction
-        // Real implementation would use proper octree and Poisson solver
-        return CreateSimpleMeshFromPoints(pointCloud);
+        return PointCloudSurfaceReconstruction.Reconstruct(
+            pointCloud, SurfaceReconstructionMethod.Poisson, SurfaceReconstruction);
     }
 
     /// <summary>
-    /// Converts point cloud to mesh using ball pivoting algorithm.
+    /// Converts a point cloud to a mesh by the ball-pivoting algorithm (Bernardini et al. 1999).
     /// </summary>
     protected virtual Mesh3D<T> PointCloudToMeshBallPivoting(Tensor<T> pointCloud)
     {
-        return CreateSimpleMeshFromPoints(pointCloud);
+        return PointCloudSurfaceReconstruction.Reconstruct(
+            pointCloud, SurfaceReconstructionMethod.BallPivoting, SurfaceReconstruction);
     }
 
     /// <summary>
-    /// Converts point cloud to mesh using marching cubes on a voxel grid.
+    /// Converts a point cloud to a mesh by marching cubes over the signed distance to the samples' tangent planes
+    /// (Hoppe et al. 1992).
     /// </summary>
     protected virtual Mesh3D<T> PointCloudToMeshMarchingCubes(Tensor<T> pointCloud)
     {
-        return CreateSimpleMeshFromPoints(pointCloud);
+        return PointCloudSurfaceReconstruction.Reconstruct(
+            pointCloud, SurfaceReconstructionMethod.MarchingCubes, SurfaceReconstruction);
     }
 
     /// <summary>
-    /// Converts point cloud to mesh using alpha shape algorithm.
+    /// Converts a point cloud to a mesh as its regularised alpha shape (Edelsbrunner &amp; Muecke 1994).
     /// </summary>
     protected virtual Mesh3D<T> PointCloudToMeshAlphaShape(Tensor<T> pointCloud)
     {
-        return CreateSimpleMeshFromPoints(pointCloud);
-    }
-
-    /// <summary>
-    /// Creates a simple triangulated mesh from point cloud using nearest neighbors.
-    /// </summary>
-    protected virtual Mesh3D<T> CreateSimpleMeshFromPoints(Tensor<T> pointCloud)
-    {
-        var pointShape = pointCloud._shape;
-        var numPoints = pointShape[1];
-        var pointSpan = pointCloud.AsSpan();
-
-        // Create vertices tensor
-        var vertices = new Tensor<T>(new[] { numPoints, 3 });
-        var vertexSpan = vertices.AsWritableSpan();
-
-        for (int i = 0; i < numPoints * 3; i++)
-        {
-            vertexSpan[i] = pointSpan[i];
-        }
-
-        // Create simple triangulation (placeholder - connects nearby points)
-        var faceList = new List<(int, int, int)>();
-        var gridSize = (int)Math.Ceiling(Math.Pow(numPoints, 1.0 / 3.0));
-
-        // Simple grid-based triangulation for demonstration
-        for (int i = 0; i < numPoints - gridSize - 1; i++)
-        {
-            if ((i + 1) % gridSize != 0)
-            {
-                faceList.Add((i, i + 1, i + gridSize));
-                faceList.Add((i + 1, i + gridSize + 1, i + gridSize));
-            }
-        }
-
-        var faces = new int[faceList.Count, 3];
-        for (int i = 0; i < faceList.Count; i++)
-        {
-            faces[i, 0] = faceList[i].Item1;
-            faces[i, 1] = faceList[i].Item2;
-            faces[i, 2] = faceList[i].Item3;
-        }
-
-        return new Mesh3D<T>(vertices, faces);
+        return PointCloudSurfaceReconstruction.Reconstruct(
+            pointCloud, SurfaceReconstructionMethod.AlphaShape, SurfaceReconstruction);
     }
 
     #endregion
