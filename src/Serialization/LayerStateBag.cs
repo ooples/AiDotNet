@@ -329,9 +329,21 @@ public readonly struct LayerStateBag
         if (typeof(Delegate).IsAssignableFrom(typeof(TObject)) && value is string savedDelegate
             && IsDelegateStateForm(savedDelegate))
         {
-            return (TObject)(object)typeof(DelegateState).GetMethod(nameof(DelegateState.Load))!
-                .MakeGenericMethod(typeof(TObject))
-                .Invoke(null, [savedDelegate, _layerName, key])!;
+            var load = typeof(DelegateState).GetMethod(nameof(DelegateState.Load))
+                ?? throw new InvalidOperationException("DelegateState.Load is missing.");
+            try
+            {
+                return load.MakeGenericMethod(typeof(TObject)).Invoke(null, [savedDelegate, _layerName, key]) is TObject rebuilt
+                    ? rebuilt
+                    : throw new InvalidOperationException(
+                        $"Cannot rebuild {_layerName}: delegate '{key}' did not rebuild as {typeof(TObject).Name}.");
+            }
+            catch (TargetInvocationException ex) when (ex.InnerException is not null)
+            {
+                // Surface DelegateState's own InvalidOperationException (with its reason), not the reflection wrapper.
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+                throw;
+            }
         }
         if (value is string text && text.StartsWith(LayerObjectPrefix, StringComparison.Ordinal))
         {

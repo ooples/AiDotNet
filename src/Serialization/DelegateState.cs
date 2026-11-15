@@ -85,10 +85,9 @@ public static class DelegateState
         if (value is null) return string.Empty;
         if (inputShape is not null && TensorFunctionElementType(value.GetType()) is { } element)
         {
-            var saved = (string?)typeof(DelegateState)
-                .GetMethod(nameof(SaveProgram), BindingFlags.NonPublic | BindingFlags.Static)!
-                .MakeGenericMethod(element)
-                .Invoke(null, [value, inputShape]);
+            var saveProgram = typeof(DelegateState).GetMethod(nameof(SaveProgram), BindingFlags.NonPublic | BindingFlags.Static)
+                ?? throw new InvalidOperationException("DelegateState.SaveProgram is missing.");
+            var saved = (string?)saveProgram.MakeGenericMethod(element).Invoke(null, [value, inputShape]);
             if (saved is not null) return saved;
         }
         return SaveMethodReference(value) ?? string.Empty;
@@ -120,7 +119,10 @@ public static class DelegateState
                                            or NotSupportedException or IndexOutOfRangeException)
             {
                 // Not traceable at this rank (the function expects the other one, or does work outside the
-                // engine): try the next description.
+                // engine): try the next description. Recorded so a closure that never saves can be diagnosed.
+                System.Diagnostics.Trace.TraceInformation(
+                    $"DelegateState: {function.Method.Name} not traced at shape [{string.Join(", ", probeShape)}]: "
+                    + $"{ex.GetType().Name}: {ex.Message}");
             }
         }
         if (packages.Count == 0) return null;
@@ -143,12 +145,10 @@ public static class DelegateState
     {
         int length = shape.Aggregate(1, (a, b) => checked(a * b));
         var data = new double[length];
-        var rng = new Random(0x0A1D);
+        var rng = RandomHelper.CreateSeededRandom(0x0A1D);
         for (int i = 0; i < length; i++) data[i] = rng.NextDouble() * 2 - 1;
         return new Tensor<double>(data, shape).Cast<T>();
     }
-
-
 
     /// <summary>
     /// A named static method, as its declaring type, name and parameter types.
@@ -222,12 +222,15 @@ public static class DelegateState
         var element = TensorFunctionElementType(typeof(TDelegate))
             ?? throw Unsaveable(layerName, key,
                 $"it was saved as a tensor program, which only rebuilds a Func<Tensor<T>, Tensor<T>>, not a {typeof(TDelegate).Name}.");
-        var method = typeof(DelegateState).GetMethod(
-            legacy ? nameof(LoadLegacyGraph) : nameof(LoadPrograms), BindingFlags.NonPublic | BindingFlags.Static)!
-            .MakeGenericMethod(element);
+        var loader = typeof(DelegateState).GetMethod(
+            legacy ? nameof(LoadLegacyGraph) : nameof(LoadPrograms), BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new InvalidOperationException("DelegateState's tensor-function loader is missing.");
+        var method = loader.MakeGenericMethod(element);
         try
         {
-            return (TDelegate)method.Invoke(null, [body, layerName, key])!;
+            return method.Invoke(null, [body, layerName, key]) is TDelegate rebuilt
+                ? rebuilt
+                : throw Unsaveable(layerName, key, $"its saved tensor program did not rebuild as a {typeof(TDelegate).Name}.");
         }
         catch (TargetInvocationException ex) when (ex.InnerException is not null)
         {
