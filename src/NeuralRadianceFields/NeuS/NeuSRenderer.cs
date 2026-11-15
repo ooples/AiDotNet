@@ -28,8 +28,11 @@ internal sealed class NeuSRenderResult<T>
     /// <summary>The section midpoint depths, <c>[R·S]</c> on the host.</summary>
     public double[] MidDepths { get; init; } = Array.Empty<double>();
 
-    /// <summary>The samples per ray.</summary>
+    /// <summary>The samples per ray (with marching, the longest ray's; shorter rays are padded).</summary>
     public int SamplesPerRay { get; init; }
+
+    /// <summary>The samples evaluated (instant-nsr-pl's <c>num_samples</c>, which drives the dynamic ray batch).</summary>
+    public int SampleCount { get; init; }
 }
 
 /// <summary>

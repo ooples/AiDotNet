@@ -111,6 +111,29 @@ public sealed class SchedulerConfig<T>
     public DiffusionPredictionType PredictionType { get; }
 
     /// <summary>
+    /// Gets how <see cref="Interfaces.INoiseScheduler{T}.SetTimesteps"/> spreads the inference timesteps (diffusers'
+    /// <c>timestep_spacing</c>).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>Default:</b> <see cref="TimestepSpacing.Trailing"/>, this library's historical spacing; Stable
+    /// Diffusion 1.x and Wonder3D were released with <see cref="TimestepSpacing.Leading"/> and an offset of 1.</para>
+    /// </remarks>
+    public TimestepSpacing TimestepSpacing { get; init; } = TimestepSpacing.Trailing;
+
+    /// <summary>
+    /// Gets the offset added to every <see cref="TimestepSpacing.Leading"/> timestep (diffusers' <c>steps_offset</c>).
+    /// </summary>
+    /// <remarks><para><b>Default:</b> 0 (Stable Diffusion 1.x and Wonder3D: 1).</para></remarks>
+    public int StepsOffset { get; init; }
+
+    /// <summary>
+    /// Gets whether the step past the last timestep uses <c>alpha_cumprod = 1</c> (diffusers' <c>set_alpha_to_one</c>)
+    /// rather than the first training step's.
+    /// </summary>
+    /// <remarks><para><b>Default:</b> false, the first training step's (Stable Diffusion 1.x and Wonder3D).</para></remarks>
+    public bool SetAlphaToOne { get; init; }
+
+    /// <summary>
     /// Initializes a new scheduler configuration.
     /// </summary>
     /// <param name="trainTimesteps">Number of timesteps for training. Must be greater than 1. Default: 1000.</param>

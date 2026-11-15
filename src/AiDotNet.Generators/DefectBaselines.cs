@@ -575,7 +575,6 @@ internal static class DefectBaselines
             "global::AiDotNet.Diffusion.ThreeD.ShapEModel<T>",
             "global::AiDotNet.Diffusion.ThreeD.SyncDreamerModel<T>",
             "global::AiDotNet.Diffusion.ThreeD.TripoSRModel<T>",
-            "global::AiDotNet.Diffusion.ThreeD.Wonder3DModel<T>",
             "global::AiDotNet.Diffusion.ThreeD.Zero123Model<T>",
             "global::AiDotNet.Diffusion.VAE.AudioVAE<T>",
             "global::AiDotNet.Diffusion.VAE.AutoencoderKL<T>",

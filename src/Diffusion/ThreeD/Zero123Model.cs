@@ -51,7 +51,10 @@ namespace AiDotNet.Diffusion.ThreeD;
 /// Technical details:
 /// - Fine-tuned from Stable Diffusion
 /// - Uses CLIP image encoder for conditioning
-/// - Camera pose embedding via sinusoidal encoding
+/// - Camera conditioning as in the official code: the CLIP image embedding concatenated with
+///   [delta polar (rad), sin delta azimuth, cos delta azimuth, delta radius] through cc_projection
+///   (Linear 772 -> 768, identity-initialised), plus the input image's VAE latent concatenated to the
+///   denoiser input; classifier-free guidance zeroes both
 /// - Supports arbitrary viewpoint changes
 /// - Can be used iteratively for 360° reconstruction
 ///
@@ -67,9 +70,9 @@ namespace AiDotNet.Diffusion.ThreeD;
 /// var inputImage = ImageHelper&lt;float&gt;.LoadImage("object.png");
 /// var novelView = zero123.GenerateNovelView(
 ///     inputImage: inputImage,
-///     polarAngle: 30.0,    // Rotate up 30 degrees
-///     azimuthAngle: 45.0,  // Rotate right 45 degrees
-///     radius: 1.0);        // Keep same distance
+///     polarAngle: 30.0,    // Polar change in degrees
+///     azimuthAngle: 45.0,  // Azimuth change in degrees
+///     radius: 0.0);        // Same distance (radius change 0)
 ///
 /// // Generate multiple views for 3D reconstruction
 /// var views = zero123.Generate360Views(inputImage, numViews: 8);
@@ -93,7 +96,7 @@ public partial class Zero123Model<T> : LatentDiffusionModelBase<T>
         RegisterParameterComponent(_unet);
         RegisterParameterComponent(_vae);
         RegisterParameterComponent(_imageEncoder);
-        RegisterParameterComponent(_poseEncoder);
+        RegisterParameterComponent(_cameraProjection);
     }
 
     #region Constants
@@ -147,7 +150,7 @@ public partial class Zero123Model<T> : LatentDiffusionModelBase<T>
     /// <summary>
     /// The camera pose encoder.
     /// </summary>
-    private CameraPoseEncoder<T> _poseEncoder;
+    private ClipCameraProjection<T> _cameraProjection;
 
     #endregion
 
@@ -210,7 +213,7 @@ public partial class Zero123Model<T> : LatentDiffusionModelBase<T>
     /// <summary>
     /// Initializes the U-Net, VAE, image encoder, and camera pose encoder.
     /// </summary>
-    [MemberNotNull(nameof(_unet), nameof(_vae), nameof(_imageEncoder), nameof(_poseEncoder))]
+    [MemberNotNull(nameof(_unet), nameof(_vae), nameof(_imageEncoder), nameof(_cameraProjection))]
     private void InitializeLayers(
         UNetNoisePredictor<T>? unet,
         StandardVAE<T>? vae,
@@ -247,9 +250,8 @@ public partial class Zero123Model<T> : LatentDiffusionModelBase<T>
             seed: seed);
 
         // Camera pose encoder for viewpoint control
-        _poseEncoder = new CameraPoseEncoder<T>(
-            embedDim: 768,
-            seed: seed);
+        // cc_projection: Linear(768 + 4 -> 768), identity-initialised as the official code does.
+        _cameraProjection = new ClipCameraProjection<T>(embedDim: 768, seed: seed);
     }
 
     #endregion
@@ -271,19 +273,14 @@ public partial class Zero123Model<T> : LatentDiffusionModelBase<T>
         Tensor<T> inputImage,
         double polarAngle,
         double azimuthAngle,
-        double radius = 1.0,
+        double radius = 0.0,
         int numInferenceSteps = 50,
         double? guidanceScale = null,
         int? seed = null)
     {
-        // Encode input image
-        var imageEmbedding = _imageEncoder.Encode(inputImage);
-
-        // Encode camera pose
-        var poseEmbedding = _poseEncoder.Encode(polarAngle, azimuthAngle, radius);
-
-        // Combine embeddings
-        var conditioning = CombineEmbeddings(imageEmbedding, poseEmbedding);
+        // The image embedding [1, 1, D] and the camera-conditioned projection of it (cc_projection).
+        var imageEmbedding = EncodeImageEmbedding(inputImage);
+        var conditioning = _cameraProjection.Project(imageEmbedding, new[] { new GuidanceViewOffset(polarAngle, azimuthAngle, radius) });
 
         // Encode input image to latent
         var inputLatent = EncodeToLatent(inputImage);
@@ -314,12 +311,12 @@ public partial class Zero123Model<T> : LatentDiffusionModelBase<T>
 
             if (effectiveGuidanceScale > 1.0)
             {
-                // Unconditional with zero pose
-                var zeroPose = _poseEncoder.Encode(0, 0, 1.0);
-                var uncondConditioning = CombineEmbeddings(imageEmbedding, zeroPose);
+                // The official unconditional branch zeroes both the projected embedding and the image latent.
+                var uncondConditioning = new Tensor<T>(conditioning._shape);
+                var uncondLatent = ConcatenateLatents(latents, new Tensor<T>(inputLatent._shape));
 
                 var condPred = _unet.PredictNoise(concatenatedLatent, timestep, conditioning);
-                var uncondPred = _unet.PredictNoise(concatenatedLatent, timestep, uncondConditioning);
+                var uncondPred = _unet.PredictNoise(uncondLatent, timestep, uncondConditioning);
                 noisePrediction = ApplyGuidance(uncondPred, condPred, effectiveGuidanceScale);
             }
             else
@@ -366,7 +363,7 @@ public partial class Zero123Model<T> : LatentDiffusionModelBase<T>
                 inputImage,
                 polarAngle,
                 azimuth,
-                radius: 1.0,
+                radius: 0.0,
                 numInferenceSteps,
                 guidanceScale,
                 viewSeed);
@@ -406,7 +403,7 @@ public partial class Zero123Model<T> : LatentDiffusionModelBase<T>
                 inputImage,
                 polar,
                 azimuthAngles[i],
-                radius: 1.0,
+                radius: 0.0,
                 numInferenceSteps,
                 guidanceScale,
                 viewSeed);
@@ -422,12 +419,36 @@ public partial class Zero123Model<T> : LatentDiffusionModelBase<T>
     #region Helper Methods
 
     /// <summary>
-    /// Combines image and pose embeddings.
+    /// The image embedding Zero-1-to-3 conditions on, [1, 1, D]: the image encoder's tokens mean-pooled into one
+    /// vector (the role of CLIP's pooled, projected <c>image_embeds</c>).
     /// </summary>
-    private Tensor<T> CombineEmbeddings(Tensor<T> imageEmbed, Tensor<T> poseEmbed)
+    internal Tensor<T> EncodeImageEmbedding(Tensor<T> image)
     {
-        // Add embeddings (simplified combination)
-        return AddTensors(imageEmbed, poseEmbed);
+        var tokens = _imageEncoder.Encode(image);
+        int dim = tokens._shape[tokens._shape.Length - 1];
+        var flat = Engine.Reshape(tokens, new[] { tokens.Length / dim, dim });
+        var pooled = Engine.ReduceMean(flat, new[] { 0 }, true);
+        return Engine.Reshape(pooled, new[] { 1, 1, dim });
+    }
+
+    /// <summary>The camera-conditioned projection (<c>cc_projection</c>).</summary>
+    internal ClipCameraProjection<T> CameraProjection => _cameraProjection;
+
+    /// <summary>
+    /// Loads the official <c>cc_projection</c> weights (<c>weight</c> [768, 772] and <c>bias</c> [768], PyTorch
+    /// <c>nn.Linear</c> layout) from a state-dict reader.
+    /// </summary>
+    /// <param name="read">Reads a named tensor of the given shape as row-major values.</param>
+    /// <param name="prefix">The key prefix: <c>cc_projection.</c> in the original checkpoint,
+    /// <c>clip_camera_projection.proj.</c> in the diffusers conversion.</param>
+    public void LoadCameraProjectionWeights(Func<string, int[], double[]> read, string prefix = "cc_projection.")
+    {
+        if (read is null) throw new ArgumentNullException(nameof(read));
+        if (prefix is null) throw new ArgumentNullException(nameof(prefix));
+        int d = _cameraProjection.EmbeddingDimension;
+        var weight = read(prefix + "weight", new[] { d, d + ClipCameraProjection<T>.CameraFeatureCount });
+        var bias = read(prefix + "bias", new[] { d });
+        _cameraProjection.LoadWeights(weight, bias);
     }
 
     /// <summary>
@@ -437,14 +458,6 @@ public partial class Zero123Model<T> : LatentDiffusionModelBase<T>
     {
         // Concatenate along channel dimension (axis 1) using hardware-accelerated engine
         return Engine.TensorConcatenate<T>(new[] { a, b }, axis: 1);
-    }
-
-    /// <summary>
-    /// Adds two tensors element-wise.
-    /// </summary>
-    private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
-    {
-        return Engine.TensorAdd(a, b);
     }
 
     #endregion
@@ -461,90 +474,143 @@ public partial class Zero123Model<T> : LatentDiffusionModelBase<T>
 }
 
 /// <summary>
-/// Encodes camera pose (polar, azimuth, radius) into embeddings.
+/// Zero-1-to-3's camera-conditioned projection (<c>cc_projection</c> in the official code,
+/// <c>CLIPCameraProjection</c> in the diffusers conversion): the image embedding concatenated with the relative camera
+/// <c>[delta polar (radians), sin(delta azimuth), cos(delta azimuth), delta radius]</c> and mapped back to the embedding
+/// width by one linear layer.
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
-public class CameraPoseEncoder<T> : IParameterSource<T>
+/// <remarks>
+/// <para>
+/// The official initialisation (<c>ldm/models/diffusion/ddpm.py</c>) sets the embedding block of the weight to the
+/// identity (<c>nn.init.eye_(weight[:768, :768])</c>) and the bias to zero; the four camera columns keep PyTorch's
+/// default <c>nn.Linear</c> initialisation, U(-1/sqrt(fan_in), 1/sqrt(fan_in)).
+/// </para>
+/// <para><b>For Beginners:</b> this small layer mixes "what the object looks like" with "how far the camera moved", so
+/// the denoiser knows which view to draw.</para>
+/// </remarks>
+public class ClipCameraProjection<T> : IParameterSource<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    /// <summary>The number of camera features appended to the embedding (4).</summary>
+    public const int CameraFeatureCount = 4;
 
     private readonly int _embedDim;
-    private readonly DenseLayer<T> _projection;
+    private Tensor<T> _weight;
+    private Tensor<T> _bias;
 
-    /// <summary>
-    /// Gets the number of parameters.
-    /// </summary>
-    public long ParameterCount => _projection.ParameterCount;
-
-    /// <summary>
-    /// Initializes a new CameraPoseEncoder.
-    /// </summary>
-    public CameraPoseEncoder(int embedDim = 768, int? seed = null)
+    /// <summary>Creates the projection with the official initialisation.</summary>
+    /// <param name="embedDim">The image-embedding width (768 for CLIP ViT-L/14).</param>
+    /// <param name="seed">Seed of the camera columns' default initialisation.</param>
+    public ClipCameraProjection(int embedDim = 768, int? seed = null)
     {
+        if (embedDim < 1) throw new ArgumentOutOfRangeException(nameof(embedDim), "embedDim must be positive.");
         _embedDim = embedDim;
-        // Input: sinusoidal encoding of polar, azimuth, radius (3 * 64 = 192)
-        _projection = new DenseLayer<T>(embedDim, (IActivationFunction<T>?)null);
+        int inputs = embedDim + CameraFeatureCount;
+        var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
+        double bound = 1.0 / Math.Sqrt(inputs);
+        var weight = new double[embedDim * inputs];
+        for (int row = 0; row < embedDim; row++)
+        {
+            weight[(row * inputs) + row] = 1.0;
+            for (int k = 0; k < CameraFeatureCount; k++)
+                weight[(row * inputs) + embedDim + k] = ((2.0 * random.NextDouble()) - 1.0) * bound;
+        }
+
+        _weight = new Tensor<double>(new[] { embedDim, inputs }, new Vector<double>(weight)).Cast<T>();
+        _bias = new Tensor<T>(new[] { embedDim });
     }
 
+    /// <summary>The embedding width.</summary>
+    public int EmbeddingDimension => _embedDim;
+
+    /// <inheritdoc />
+    public long ParameterCount => ((long)_embedDim * (_embedDim + CameraFeatureCount)) + _embedDim;
+
     /// <summary>
-    /// Encodes camera pose into an embedding.
+    /// The camera features of a relative view, <c>[deg2rad(delta polar), sin(deg2rad(delta azimuth)),
+    /// cos(deg2rad(delta azimuth)), delta radius]</c>.
     /// </summary>
-    /// <param name="polarAngle">Polar angle in degrees.</param>
-    /// <param name="azimuthAngle">Azimuth angle in degrees.</param>
-    /// <param name="radius">Relative radius.</param>
-    /// <returns>Pose embedding tensor.</returns>
-    public Tensor<T> Encode(double polarAngle, double azimuthAngle, double radius)
+    public static double[] CameraFeatures(GuidanceViewOffset view)
     {
-        // Convert angles to radians
-        var polar = polarAngle * Math.PI / 180.0;
-        var azimuth = azimuthAngle * Math.PI / 180.0;
-
-        // Create sinusoidal encoding for each value
-        var encoding = new T[192]; // 64 dimensions per value * 3 values
-        var idx = 0;
-
-        // Encode polar angle
-        for (int i = 0; i < 32; i++)
-        {
-            var freq = Math.Pow(10000, -2.0 * i / 64);
-            encoding[idx++] = NumOps.FromDouble(Math.Sin(polar * freq));
-            encoding[idx++] = NumOps.FromDouble(Math.Cos(polar * freq));
-        }
-
-        // Encode azimuth angle
-        for (int i = 0; i < 32; i++)
-        {
-            var freq = Math.Pow(10000, -2.0 * i / 64);
-            encoding[idx++] = NumOps.FromDouble(Math.Sin(azimuth * freq));
-            encoding[idx++] = NumOps.FromDouble(Math.Cos(azimuth * freq));
-        }
-
-        // Encode radius (log scale)
-        var logRadius = Math.Log(Math.Max(radius, 0.01));
-        for (int i = 0; i < 32; i++)
-        {
-            var freq = Math.Pow(10000, -2.0 * i / 64);
-            encoding[idx++] = NumOps.FromDouble(Math.Sin(logRadius * freq));
-            encoding[idx++] = NumOps.FromDouble(Math.Cos(logRadius * freq));
-        }
-
-        var inputTensor = new Tensor<T>(new[] { 1, 192 }, new Vector<T>(encoding));
-        return _projection.Forward(inputTensor);
+        double polar = view.Elevation * Math.PI / 180.0;
+        double azimuth = view.Azimuth * Math.PI / 180.0;
+        return new[] { polar, Math.Sin(azimuth), Math.Cos(azimuth), view.Radius };
     }
 
     /// <summary>
-    /// Gets all parameters.
+    /// Projects the image embedding for each view: <c>W [e; c] + b</c>.
     /// </summary>
+    /// <param name="imageEmbedding">The image embedding, [1, 1, D] (repeated for every view) or [B, 1, D].</param>
+    /// <param name="views">The relative cameras, one per output.</param>
+    /// <returns>The conditioning, [B, 1, D].</returns>
+    public Tensor<T> Project(Tensor<T> imageEmbedding, IReadOnlyList<GuidanceViewOffset> views)
+    {
+        if (imageEmbedding is null) throw new ArgumentNullException(nameof(imageEmbedding));
+        if (views is null) throw new ArgumentNullException(nameof(views));
+        int batch = views.Count;
+        if (batch < 1) throw new ArgumentException("At least one view is needed.", nameof(views));
+        if (imageEmbedding.Length % _embedDim != 0)
+            throw new ArgumentException($"The image embedding must have width {_embedDim}.", nameof(imageEmbedding));
+        int given = imageEmbedding.Length / _embedDim;
+        if (given != 1 && given != batch)
+            throw new ArgumentException("Give one image embedding, or one per view.", nameof(imageEmbedding));
+
+        var engine = AiDotNetEngine.Current;
+        var embedding = engine.Reshape(imageEmbedding, new[] { given, _embedDim });
+        if (given != batch)
+            embedding = engine.TensorBroadcastTo(embedding, new[] { batch, _embedDim });
+        var cameras = new double[batch * CameraFeatureCount];
+        for (int b = 0; b < batch; b++)
+            Array.Copy(CameraFeatures(views[b]), 0, cameras, b * CameraFeatureCount, CameraFeatureCount);
+        var camera = new Tensor<double>(new[] { batch, CameraFeatureCount }, new Vector<double>(cameras)).Cast<T>();
+        var input = engine.TensorConcatenate(new[] { embedding, camera }, 1);
+        var projected = engine.TensorMatMulTransposed(input, _weight);
+        var bias = engine.TensorBroadcastTo(engine.Reshape(_bias, new[] { 1, _embedDim }), new[] { batch, _embedDim });
+        return engine.Reshape(engine.TensorAdd(projected, bias), new[] { batch, 1, _embedDim });
+    }
+
+    /// <summary>
+    /// Loads official weights in PyTorch <c>nn.Linear</c> layout: <paramref name="weight"/> [D, D + 4] row-major and
+    /// <paramref name="bias"/> [D].
+    /// </summary>
+    public void LoadWeights(double[] weight, double[] bias)
+    {
+        if (weight is null) throw new ArgumentNullException(nameof(weight));
+        if (bias is null) throw new ArgumentNullException(nameof(bias));
+        int inputs = _embedDim + CameraFeatureCount;
+        if (weight.Length != _embedDim * inputs)
+            throw new ArgumentException($"The weight must be [{_embedDim}, {inputs}].", nameof(weight));
+        if (bias.Length != _embedDim)
+            throw new ArgumentException($"The bias must be [{_embedDim}].", nameof(bias));
+        _weight = new Tensor<double>(new[] { _embedDim, inputs }, new Vector<double>((double[])weight.Clone())).Cast<T>();
+        _bias = new Tensor<double>(new[] { _embedDim }, new Vector<double>((double[])bias.Clone())).Cast<T>();
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The weight (row-major, PyTorch layout) followed by the bias.</remarks>
     public Vector<T> GetParameters()
     {
-        return _projection.GetParameters();
+        var weight = _weight.ToArray();
+        var bias = _bias.ToArray();
+        var all = new T[weight.Length + bias.Length];
+        Array.Copy(weight, all, weight.Length);
+        Array.Copy(bias, 0, all, weight.Length, bias.Length);
+        return new Vector<T>(all);
     }
 
-    /// <summary>
-    /// Sets all parameters.
-    /// </summary>
+    /// <inheritdoc />
     public void SetParameters(Vector<T> parameters)
     {
-        _projection.SetParameters(parameters);
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        if (parameters.Length != ParameterCount)
+            throw new ArgumentException($"Expected {ParameterCount} parameters, got {parameters.Length}.", nameof(parameters));
+        var values = parameters.ToArray();
+        int weightCount = _embedDim * (_embedDim + CameraFeatureCount);
+        var weight = new T[weightCount];
+        var bias = new T[_embedDim];
+        Array.Copy(values, weight, weightCount);
+        Array.Copy(values, weightCount, bias, 0, _embedDim);
+        _weight = new Tensor<T>(new[] { _embedDim, _embedDim + CameraFeatureCount }, new Vector<T>(weight));
+        _bias = new Tensor<T>(new[] { _embedDim }, new Vector<T>(bias));
     }
 }

@@ -11,6 +11,53 @@ internal enum NeuSRenderingMode
 
     /// <summary>Point, view direction and feature.</summary>
     NoNormal,
+
+    /// <summary>
+    /// instant-nsr-pl's <c>VolumeRadiance</c>: the SDF network's whole output (SDF and features), optionally the view
+    /// direction's spherical harmonics (<see cref="NeuSOptions.RadianceUsesViewDirection"/>), and the unit normal, into
+    /// a ReLU MLP (Kaiming-uniform weights, zero biases, no weight normalization) with a sigmoid.
+    /// </summary>
+    VolumeRadiance,
+}
+
+/// <summary>What encodes a point before NeuS's SDF network.</summary>
+internal enum NeuSSdfBackbone
+{
+    /// <summary>NeuS's frequency (positional) embedding into the deep softplus MLP (the paper's setting).</summary>
+    FrequencyMlp,
+
+    /// <summary>
+    /// A multiresolution hash grid (Müller et al. 2022) into a small softplus MLP: instant-nsr-pl's <c>volume-sdf</c>
+    /// with a <c>HashGrid</c> / <c>ProgressiveBandHashGrid</c> encoding, as Wonder3D reconstructs.
+    /// </summary>
+    HashGrid,
+}
+
+/// <summary>The optimizer of a NeuS reconstruction.</summary>
+internal enum NeuSOptimizer
+{
+    /// <summary>Adam with one learning rate for every parameter (the NeuS reference).</summary>
+    Adam,
+
+    /// <summary>
+    /// AdamW with separate learning rates for the geometry, the color network and the variance (instant-nsr-pl's
+    /// parameter groups).
+    /// </summary>
+    AdamW,
+}
+
+/// <summary>The learning-rate schedule of a NeuS reconstruction.</summary>
+internal enum NeuSLearningRateSchedule
+{
+    /// <summary>Linear warm-up, then cosine decay to <c>LearningRateAlpha</c> (the NeuS reference).</summary>
+    WarmUpCosine,
+
+    /// <summary>
+    /// Constant for <c>ConstantLearningRateIterations</c>, then exponential decay reaching
+    /// <c>LearningRateAlpha</c> at <c>Iterations</c> (instant-nsr-pl's <c>SequentialLR</c> of <c>ConstantLR</c> and
+    /// <c>ExponentialLR</c> with <c>calc_exp_lr_decay_rate</c>).
+    /// </summary>
+    ConstantThenExponential,
 }
 
 /// <summary>Which NeuS renderer's sampling region and section rules a field follows.</summary>
@@ -58,6 +105,36 @@ internal sealed class NeuSOptions
     /// <summary>The layers that take the embedded input again (<c>skip_in</c> = [4]).</summary>
     public int[] SdfSkipLayers { get; set; } = new[] { 4 };
 
+    /// <summary>What encodes a point before the SDF network (NeuS: the frequency embedding).</summary>
+    public NeuSSdfBackbone SdfBackbone { get; set; } = NeuSSdfBackbone.FrequencyMlp;
+
+    /// <summary>The hash grid's level count (Instant-NGP: 16; Wonder3D: 10).</summary>
+    public int HashGridLevels { get; set; } = 16;
+
+    /// <summary>The hash grid's features per level (2).</summary>
+    public int HashGridFeaturesPerLevel { get; set; } = 2;
+
+    /// <summary>The base-2 logarithm of the hash grid's largest table (Instant-NGP: 19).</summary>
+    public int HashGridLog2TableSize { get; set; } = 19;
+
+    /// <summary>The hash grid's coarsest resolution (Instant-NGP: 16; Wonder3D: 32).</summary>
+    public int HashGridBaseResolution { get; set; } = 16;
+
+    /// <summary>The hash grid's per-level scale (Instant-NGP: 2; Wonder3D: 1.3195079107728942).</summary>
+    public double HashGridPerLevelScale { get; set; } = 2.0;
+
+    /// <summary>
+    /// The levels active at the start (instant-nsr-pl <c>ProgressiveBandHashGrid.start_level</c>; null for all levels
+    /// from the start, a plain <c>HashGrid</c>; Wonder3D: 4).
+    /// </summary>
+    public int? HashGridStartLevel { get; set; }
+
+    /// <summary>The iteration the progressive band starts growing at (<c>start_step</c> = 0).</summary>
+    public int HashGridStartIteration { get; set; }
+
+    /// <summary>The iterations between switching on successive levels (<c>update_steps</c>; Wonder3D: 1000).</summary>
+    public int HashGridUpdateIterations { get; set; } = 1000;
+
     /// <summary>The point embedding's frequency count (<c>multires</c> = 6).</summary>
     public int SdfFrequencies { get; set; } = 6;
 
@@ -96,6 +173,16 @@ internal sealed class NeuSOptions
     /// <summary>Whether the color passes through a sigmoid (<c>squeeze_out</c> = true).</summary>
     public bool SqueezeColor { get; set; } = true;
 
+    /// <summary>
+    /// Whether <see cref="NeuSRenderingMode.VolumeRadiance"/> reads the view direction's spherical harmonics.
+    /// instant-nsr-pl's <c>VolumeRadiance</c> sets <c>self.with_viewdir = False</c> (so its <c>dir_encoding_config</c>
+    /// is never used); true restores the encoding.
+    /// </summary>
+    public bool RadianceUsesViewDirection { get; set; }
+
+    /// <summary>The spherical-harmonics degree of the view encoding (<c>dir_encoding_config.degree</c> = 4: 16 terms).</summary>
+    public int RadianceShDegree { get; set; } = 4;
+
     // ---- Variance network ----
 
     /// <summary>The initial log-variance parameter; the S-density's sharpness is <c>s = exp(10 · v)</c> (<c>init_val</c> = 0.3).</summary>
@@ -118,7 +205,97 @@ internal sealed class NeuSOptions
     /// <summary>A constant background color composited behind the surface (<c>background_rgb</c>), or null for none.</summary>
     public double[]? BackgroundColor { get; set; }
 
+    /// <summary>How the samples along each ray are placed (NeuS's hierarchical sampler by default).</summary>
+    public NeuSRaySampler Sampler { get; set; } = NeuSRaySampler.Hierarchical;
+
+    /// <summary>
+    /// The scene's half extent r (instant-nsr-pl <c>model.radius</c>): the marching box <c>[−r, r]³</c>, the hash
+    /// grid's domain (<c>contract_to_unisphere</c> maps it to the unit cube) and the finite-difference clamp.
+    /// </summary>
+    public double SceneRadius { get; set; } = 1.0;
+
+    /// <summary>Whether <see cref="NeuSRaySampler.OccupancyGrid"/> skips empty cells (<c>grid_prune</c> = true).</summary>
+    public bool UseOccupancyGrid { get; set; } = true;
+
+    /// <summary>The occupancy grid's cells per axis (instant-nsr-pl: 128).</summary>
+    public int OccupancyGridResolution { get; set; } = 128;
+
+    /// <summary>The iterations between occupancy-grid updates (nerfacc <c>every_n_step</c> n = 16).</summary>
+    public int OccupancyGridUpdateInterval { get; set; } = 16;
+
+    /// <summary>
+    /// The occupancy threshold: a cell is occupied when its value exceeds <c>min(mean, threshold)</c>
+    /// (<c>grid_prune_occ_thre</c>; nerfacc's default 0.01).
+    /// </summary>
+    public double OccupancyGridThreshold { get; set; } = 0.01;
+
+    /// <summary>The decay of a cell's running occupancy, <c>max(decay · old, new)</c> (nerfacc <c>ema_decay</c> = 0.95).</summary>
+    public double OccupancyGridEmaDecay { get; set; } = 0.95;
+
+    /// <summary>The iterations during which every cell is re-evaluated (nerfacc <c>warmup_steps</c> = 256).</summary>
+    public int OccupancyGridWarmUpIterations { get; set; } = 256;
+
+    /// <summary>
+    /// The transmittance below which marched samples get no weight (nerfacc <c>render_weight_from_alpha</c>
+    /// <c>early_stop_eps</c> = 1e-4).
+    /// </summary>
+    public double TransmittanceEarlyStop { get; set; } = 1e-4;
+
+    /// <summary>How the SDF gradient is computed (NeuS: analytic).</summary>
+    public NeuSGradientMode GradientMode { get; set; } = NeuSGradientMode.Analytic;
+
+    /// <summary>How the finite-difference step is chosen (a fixed step by default).</summary>
+    public NeuSFiniteDifferenceStep FiniteDifferenceStep { get; set; } = NeuSFiniteDifferenceStep.Fixed;
+
+    /// <summary>The fixed finite-difference step (instant-nsr-pl's default <c>finite_difference_eps</c> = 1e-3).</summary>
+    public double FiniteDifferenceEpsilon { get; set; } = 1e-3;
+
     // ---- Training (train) ----
+
+    /// <summary>The optimizer (NeuS: Adam).</summary>
+    public NeuSOptimizer Optimizer { get; set; } = NeuSOptimizer.Adam;
+
+    /// <summary>The learning-rate schedule (NeuS: warm-up and cosine).</summary>
+    public NeuSLearningRateSchedule LearningRateSchedule { get; set; } = NeuSLearningRateSchedule.WarmUpCosine;
+
+    /// <summary>The iterations at the full rate before the exponential decay (instant-nsr-pl <c>constant_steps</c> = 500).</summary>
+    public int ConstantLearningRateIterations { get; set; } = 500;
+
+    /// <summary>
+    /// The color network's learning rate under <see cref="NeuSOptimizer.AdamW"/>, or null for <c>LearningRate</c>
+    /// (instant-nsr-pl <c>texture.lr</c> = 0.01); <c>LearningRate</c> is the geometry's.
+    /// </summary>
+    public double? ColorLearningRate { get; set; }
+
+    /// <summary>
+    /// The variance's learning rate under <see cref="NeuSOptimizer.AdamW"/>, or null for <c>LearningRate</c>
+    /// (instant-nsr-pl <c>variance.lr</c> = 0.001).
+    /// </summary>
+    public double? VarianceLearningRate { get; set; }
+
+    /// <summary>Adam's β₂ (NeuS: 0.999; instant-nsr-pl: 0.99).</summary>
+    public double AdamBeta2 { get; set; } = 0.999;
+
+    /// <summary>Adam's ε (NeuS: 10⁻⁸; instant-nsr-pl: 10⁻¹⁵).</summary>
+    public double AdamEpsilon { get; set; } = 1e-8;
+
+    /// <summary>AdamW's decoupled weight decay (PyTorch's default 0.01, which instant-nsr-pl keeps).</summary>
+    public double WeightDecay { get; set; } = 0.01;
+
+    /// <summary>
+    /// Whether the ray batch adapts to keep the samples per iteration near <c>BatchSize · SamplesPerRayBudget</c>
+    /// (instant-nsr-pl <c>dynamic_ray_sampling</c>; NeuS: false). <c>BatchSize</c> is then the starting batch.
+    /// </summary>
+    public bool DynamicRaySampling { get; set; }
+
+    /// <summary>The largest dynamic ray batch (instant-nsr-pl <c>max_train_num_rays</c> = 8192).</summary>
+    public int MaxBatchSize { get; set; } = 8192;
+
+    /// <summary>
+    /// The samples per ray the dynamic batch budgets for (instant-nsr-pl <c>num_samples_per_ray</c> = 1024): the target
+    /// is <c>BatchSize · SamplesPerRayBudget</c> samples per iteration.
+    /// </summary>
+    public int SamplesPerRayBudget { get; set; } = 1024;
 
     /// <summary>The peak learning rate (<c>learning_rate</c> = 5e-4).</summary>
     public double LearningRate { get; set; } = 5e-4;
@@ -138,6 +315,30 @@ internal sealed class NeuSOptions
     /// <summary>The cosine-annealing length; 0 disables the annealing (<c>anneal_end</c> = 0 with masks, 50000 without).</summary>
     public int AnnealIterations { get; set; }
 
+    /// <summary>
+    /// The weight of NeuS's L1 color term, <c>Σ|ĉ − c|</c> per ray averaged over the color rays (NeuS: 1; Wonder3D's
+    /// <c>lambda_rgb_l1</c> = 0).
+    /// </summary>
+    public double ColorL1Weight { get; set; } = 1.0;
+
+    /// <summary>
+    /// The weight of a squared color term, <c>Σ(ĉ − c)²</c> per ray averaged over the color rays (not part of NeuS, so
+    /// 0; Wonder3D's <c>lambda_rgb_mse</c> = 0.5).
+    /// </summary>
+    public double ColorMseWeight { get; set; }
+
+    /// <summary>
+    /// Whether the color terms count only foreground rays (NeuS: true). Wonder3D composites its targets onto the
+    /// background color and supervises every ray (false).
+    /// </summary>
+    public bool ColorOnForegroundOnly { get; set; } = true;
+
+    /// <summary>
+    /// The fraction of the color rays, smallest error first, the color terms keep; the rest are dropped as outliers
+    /// (1 keeps all, as NeuS; Wonder3D's <c>rgb_p_ratio</c> = 0.8).
+    /// </summary>
+    public double ColorKeepRatio { get; set; } = 1.0;
+
     /// <summary>The Eikonal loss weight (<c>igr_weight</c> = 0.1).</summary>
     public double EikonalWeight { get; set; } = 0.1;
 
@@ -145,10 +346,57 @@ internal sealed class NeuSOptions
     public double MaskWeight { get; set; } = 0.1;
 
     /// <summary>
+    /// The fraction of rays, smallest cross-entropy first, the mask term keeps (1 keeps all, as NeuS; Wonder3D's
+    /// <c>mask_p_ratio</c> = 0.9).
+    /// </summary>
+    public double MaskKeepRatio { get; set; } = 1.0;
+
+    /// <summary>
     /// The weight of a normal-map term <c>1 − cos(n̂_rendered, n_target)</c> over foreground rays, for views that carry
     /// normals (Wonder3D's geometry fusion; not part of NeuS, so 0 by default).
     /// </summary>
     public double NormalWeight { get; set; }
+
+    /// <summary>
+    /// The fraction of the normal rays, smallest error first, the normal term keeps; the rest are dropped as outliers
+    /// (1 keeps all; Wonder3D's <c>normal_p_ratio</c> = 0.8).
+    /// </summary>
+    public double NormalKeepRatio { get; set; } = 1.0;
+
+    /// <summary>
+    /// Wonder3D's geometry-aware normal loss (<c>geo_aware</c>): each ray's error is weighted by
+    /// <c>exp(|cos θ|) / Σ exp(|cos θ|)</c>, θ the angle between the ray and its target normal, and the kept errors
+    /// are summed rather than averaged. Off by default.
+    /// </summary>
+    public bool GeometryAwareNormals { get; set; }
+
+    /// <summary>
+    /// The largest <c>cos θ</c> between a ray and its target normal for the ray to supervise normals, or null for no
+    /// limit. Wonder3D uses −0.1: a surface seen at a grazing angle or from behind gives an unreliable normal, so
+    /// those rays are dropped and their <c>cos θ</c> is zeroed in the geometry-aware weights.
+    /// </summary>
+    public double? NormalVisibleCosine { get; set; }
+
+    /// <summary>
+    /// The weight of Wonder3D's sparsity term <c>mean(exp(−SparsityScale · |f(p)|))</c> over random points of the
+    /// unit cube, which pushes empty space away from the surface (<c>lambda_sparsity</c>; 0 in NeuS, 0.5 in Wonder3D).
+    /// </summary>
+    public double SparsityWeight { get; set; }
+
+    /// <summary>The sparsity term's sharpness (<c>sparsity_scale</c> = 100).</summary>
+    public double SparsityScale { get; set; } = 100.0;
+
+    /// <summary>
+    /// The weight of Wonder3D's 3D normal-smoothness term <c>mean|∇f(p) − ∇f(p + ε)|</c>, ε ~ N(0, σ²) per coordinate,
+    /// over the same random points (<c>lambda_3d_normal_smooth</c>; 0 in NeuS, 1 in Wonder3D).
+    /// </summary>
+    public double NormalSmoothWeight { get; set; }
+
+    /// <summary>The perturbation σ of the normal-smoothness term (0.01).</summary>
+    public double NormalSmoothNoise { get; set; } = 0.01;
+
+    /// <summary>The random points per iteration of the sparsity and smoothness terms (Wonder3D: 2048).</summary>
+    public int RegularizationPoints { get; set; } = 2048;
 
     /// <summary>Points per query when sampling a dense grid (NeuS's <c>extract_fields</c> uses 64³-point blocks).</summary>
     public int GridChunkSize { get; set; } = 64 * 64 * 64;
@@ -175,6 +423,25 @@ internal sealed class NeuSOptions
         if (SdfHiddenLayers <= 0) throw new ArgumentOutOfRangeException(nameof(SdfHiddenLayers));
         if (SdfFeatureDim < 0) throw new ArgumentOutOfRangeException(nameof(SdfFeatureDim));
         if (SdfFrequencies < 0) throw new ArgumentOutOfRangeException(nameof(SdfFrequencies));
+        if (HashGridLevels <= 0) throw new ArgumentOutOfRangeException(nameof(HashGridLevels));
+        if (HashGridFeaturesPerLevel <= 0) throw new ArgumentOutOfRangeException(nameof(HashGridFeaturesPerLevel));
+        if (HashGridLog2TableSize <= 0 || HashGridLog2TableSize > 30) throw new ArgumentOutOfRangeException(nameof(HashGridLog2TableSize));
+        if (HashGridBaseResolution <= 0) throw new ArgumentOutOfRangeException(nameof(HashGridBaseResolution));
+        if (!(HashGridPerLevelScale >= 1) || double.IsInfinity(HashGridPerLevelScale))
+            throw new ArgumentOutOfRangeException(nameof(HashGridPerLevelScale));
+        if (HashGridStartLevel is int start && (start < 0 || start > HashGridLevels))
+            throw new ArgumentOutOfRangeException(nameof(HashGridStartLevel));
+        if (HashGridStartIteration < 0) throw new ArgumentOutOfRangeException(nameof(HashGridStartIteration));
+        if (HashGridUpdateIterations <= 0) throw new ArgumentOutOfRangeException(nameof(HashGridUpdateIterations));
+        if (ConstantLearningRateIterations < 0) throw new ArgumentOutOfRangeException(nameof(ConstantLearningRateIterations));
+        if (ColorLearningRate is double colorRate && !(colorRate > 0)) throw new ArgumentOutOfRangeException(nameof(ColorLearningRate));
+        if (VarianceLearningRate is double varianceRate && !(varianceRate > 0))
+            throw new ArgumentOutOfRangeException(nameof(VarianceLearningRate));
+        if (!(AdamBeta2 > 0 && AdamBeta2 < 1)) throw new ArgumentOutOfRangeException(nameof(AdamBeta2));
+        if (!(AdamEpsilon > 0)) throw new ArgumentOutOfRangeException(nameof(AdamEpsilon));
+        if (!(WeightDecay >= 0)) throw new ArgumentOutOfRangeException(nameof(WeightDecay));
+        if (MaxBatchSize <= 0) throw new ArgumentOutOfRangeException(nameof(MaxBatchSize));
+        if (SamplesPerRayBudget <= 0) throw new ArgumentOutOfRangeException(nameof(SamplesPerRayBudget));
         if (!(SdfScale > 0)) throw new ArgumentOutOfRangeException(nameof(SdfScale));
         if (!(SoftplusBeta > 0)) throw new ArgumentOutOfRangeException(nameof(SoftplusBeta));
         if (ColorHiddenDim <= 0) throw new ArgumentOutOfRangeException(nameof(ColorHiddenDim));
@@ -196,10 +463,69 @@ internal sealed class NeuSOptions
         if (EikonalWeight < 0) throw new ArgumentOutOfRangeException(nameof(EikonalWeight));
         if (MaskWeight < 0) throw new ArgumentOutOfRangeException(nameof(MaskWeight));
         if (NormalWeight < 0) throw new ArgumentOutOfRangeException(nameof(NormalWeight));
+        if (ColorL1Weight < 0) throw new ArgumentOutOfRangeException(nameof(ColorL1Weight));
+        if (ColorMseWeight < 0) throw new ArgumentOutOfRangeException(nameof(ColorMseWeight));
+        if (!(ColorKeepRatio > 0 && ColorKeepRatio <= 1)) throw new ArgumentOutOfRangeException(nameof(ColorKeepRatio));
+        if (!(MaskKeepRatio > 0 && MaskKeepRatio <= 1)) throw new ArgumentOutOfRangeException(nameof(MaskKeepRatio));
+        if (!(NormalKeepRatio > 0 && NormalKeepRatio <= 1)) throw new ArgumentOutOfRangeException(nameof(NormalKeepRatio));
+        if (NormalVisibleCosine is double limit && (double.IsNaN(limit) || limit < -1 || limit > 1))
+            throw new ArgumentOutOfRangeException(nameof(NormalVisibleCosine));
+        if (SparsityWeight < 0) throw new ArgumentOutOfRangeException(nameof(SparsityWeight));
+        if (!(SparsityScale > 0)) throw new ArgumentOutOfRangeException(nameof(SparsityScale));
+        if (NormalSmoothWeight < 0) throw new ArgumentOutOfRangeException(nameof(NormalSmoothWeight));
+        if (!(NormalSmoothNoise > 0)) throw new ArgumentOutOfRangeException(nameof(NormalSmoothNoise));
+        if (RegularizationPoints <= 0) throw new ArgumentOutOfRangeException(nameof(RegularizationPoints));
         if (GridChunkSize <= 0) throw new ArgumentOutOfRangeException(nameof(GridChunkSize));
         if (!(NearFarRadius > 0)) throw new ArgumentOutOfRangeException(nameof(NearFarRadius));
         if (!(CubeHalfSide > 0)) throw new ArgumentOutOfRangeException(nameof(CubeHalfSide));
+        if (RadianceShDegree < 1 || RadianceShDegree > NeuSSphericalHarmonics.MaxDegree)
+            throw new ArgumentOutOfRangeException(nameof(RadianceShDegree), $"The degree must be 1 to {NeuSSphericalHarmonics.MaxDegree}.");
+        if (!(SceneRadius > 0) || double.IsInfinity(SceneRadius)) throw new ArgumentOutOfRangeException(nameof(SceneRadius));
+        if (OccupancyGridResolution <= 0 || OccupancyGridResolution > 1024)
+            throw new ArgumentOutOfRangeException(nameof(OccupancyGridResolution));
+        if (OccupancyGridUpdateInterval <= 0) throw new ArgumentOutOfRangeException(nameof(OccupancyGridUpdateInterval));
+        if (!(OccupancyGridThreshold >= 0)) throw new ArgumentOutOfRangeException(nameof(OccupancyGridThreshold));
+        if (!(OccupancyGridEmaDecay >= 0 && OccupancyGridEmaDecay <= 1)) throw new ArgumentOutOfRangeException(nameof(OccupancyGridEmaDecay));
+        if (OccupancyGridWarmUpIterations < 0) throw new ArgumentOutOfRangeException(nameof(OccupancyGridWarmUpIterations));
+        if (!(TransmittanceEarlyStop >= 0 && TransmittanceEarlyStop < 1))
+            throw new ArgumentOutOfRangeException(nameof(TransmittanceEarlyStop));
+        if (!(FiniteDifferenceEpsilon > 0) || double.IsInfinity(FiniteDifferenceEpsilon))
+            throw new ArgumentOutOfRangeException(nameof(FiniteDifferenceEpsilon));
+        if (GradientMode == NeuSGradientMode.FiniteDifference && FiniteDifferenceStep == NeuSFiniteDifferenceStep.Progressive
+            && SdfBackbone != NeuSSdfBackbone.HashGrid)
+            throw new ArgumentException("The progressive finite-difference step follows the hash grid's levels; use the hash-grid backbone.",
+                nameof(FiniteDifferenceStep));
     }
+
+    /// <summary>
+    /// The hash grid's active levels at <paramref name="iteration"/> (instant-nsr-pl's <c>ProgressiveBandHashGrid</c>):
+    /// <c>min(start + max(iteration − startIteration, 0) / updateIterations, levels)</c>, or every level without a
+    /// start level.
+    /// </summary>
+    /// <param name="iteration">The training iteration.</param>
+    public int ActiveHashGridLevels(int iteration)
+    {
+        if (HashGridStartLevel is not int start) return HashGridLevels;
+        int grown = Math.Max(iteration - HashGridStartIteration, 0) / HashGridUpdateIterations;
+        return (int)Math.Min((long)start + grown, HashGridLevels);
+    }
+
+    /// <summary>
+    /// The finite-difference step at <paramref name="iteration"/> (instant-nsr-pl <c>VolumeSDF.update_step</c>): the
+    /// fixed <see cref="FiniteDifferenceEpsilon"/>, or with <see cref="NeuSFiniteDifferenceStep.Progressive"/> the
+    /// finest active level's cell, <c>2r / (b · σ^(level − 1))</c>.
+    /// </summary>
+    /// <param name="iteration">The training iteration.</param>
+    public double FiniteDifferenceEpsilonAt(int iteration)
+    {
+        if (FiniteDifferenceStep == NeuSFiniteDifferenceStep.Fixed) return FiniteDifferenceEpsilon;
+        int level = ActiveHashGridLevels(iteration);
+        double resolution = HashGridBaseResolution * Math.Pow(HashGridPerLevelScale, level - 1);
+        return 2.0 * SceneRadius / resolution;
+    }
+
+    /// <summary>The ray-marching step <c>√3 · 2r / num_samples_per_ray</c> (instant-nsr-pl <c>render_step_size</c>).</summary>
+    public double MarchingStepSize => 1.732 * 2.0 * SceneRadius / SamplesPerRayBudget;
 
     /// <summary>
     /// The learning-rate factor at <paramref name="iteration"/>: linear warm-up, then cosine decay to
@@ -208,6 +534,14 @@ internal sealed class NeuSOptions
     /// <param name="iteration">The iteration (0-based).</param>
     public double LearningRateFactor(int iteration)
     {
+        if (LearningRateSchedule == NeuSLearningRateSchedule.ConstantThenExponential)
+        {
+            // SequentialLR([ConstantLR(1), ExponentialLR(γ)], milestones=[c]) with γ = alpha^(1 / (iterations − c)).
+            int decaying = Math.Max(1, Iterations - ConstantLearningRateIterations);
+            int past = Math.Max(0, iteration - ConstantLearningRateIterations);
+            return Math.Pow(LearningRateAlpha, (double)past / decaying);
+        }
+
         if (iteration < WarmUpIterations) return (double)iteration / WarmUpIterations;
         double span = Math.Max(1, Iterations - WarmUpIterations);
         double progress = Math.Min(1.0, (iteration - WarmUpIterations) / span);

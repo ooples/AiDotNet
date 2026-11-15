@@ -253,17 +253,46 @@ public abstract class NoiseSchedulerBase<T> : INoiseScheduler<T>
             throw new ArgumentOutOfRangeException(nameof(inferenceSteps),
                 $"Inference steps ({inferenceSteps}) cannot exceed training timesteps ({Config.TrainTimesteps}).");
 
-        int totalSteps = Config.TrainTimesteps;
-        int stride = totalSteps / inferenceSteps;
-        if (stride < 1) stride = 1;
+        _timesteps = SpacedTimesteps(Config.TrainTimesteps, inferenceSteps, Config.TimestepSpacing, Config.StepsOffset);
+    }
 
-        var timestepList = new List<int>();
-        for (int i = totalSteps - 1; i >= 0 && timestepList.Count < inferenceSteps; i -= stride)
+    /// <summary>
+    /// The descending inference timesteps of <paramref name="spacing"/>, as diffusers' <c>set_timesteps</c> computes
+    /// them (see <see cref="TimestepSpacing"/>), each clamped to the training range.
+    /// </summary>
+    /// <param name="trainTimesteps">The training step count T.</param>
+    /// <param name="inferenceSteps">The inference step count n.</param>
+    /// <param name="spacing">The spacing.</param>
+    /// <param name="stepsOffset">The offset added to leading timesteps.</param>
+    internal static int[] SpacedTimesteps(int trainTimesteps, int inferenceSteps, TimestepSpacing spacing, int stepsOffset)
+    {
+        int stride = Math.Max(1, trainTimesteps / inferenceSteps);
+        var timesteps = new int[inferenceSteps];
+        switch (spacing)
         {
-            timestepList.Add(i);
+            case TimestepSpacing.Leading:
+                // (np.arange(0, n) * ratio).round()[::-1] + steps_offset
+                for (int i = 0; i < inferenceSteps; i++) timesteps[i] = (inferenceSteps - 1 - i) * stride + stepsOffset;
+                break;
+            case TimestepSpacing.Linspace:
+                // np.linspace(0, T - 1, n).round()[::-1]
+                for (int i = 0; i < inferenceSteps; i++)
+                {
+                    double position = inferenceSteps == 1
+                        ? 0.0
+                        : (double)(inferenceSteps - 1 - i) * (trainTimesteps - 1) / (inferenceSteps - 1);
+                    timesteps[i] = (int)Math.Round(position, MidpointRounding.ToEven);
+                }
+
+                break;
+            default:
+                // T - 1 down by the stride: diffusers' trailing spacing for an integer ratio.
+                for (int i = 0; i < inferenceSteps; i++) timesteps[i] = trainTimesteps - 1 - i * stride;
+                break;
         }
 
-        _timesteps = timestepList.ToArray();
+        for (int i = 0; i < inferenceSteps; i++) timesteps[i] = Math.Max(0, Math.Min(trainTimesteps - 1, timesteps[i]));
+        return timesteps;
     }
 
     /// <inheritdoc />
