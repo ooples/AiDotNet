@@ -66,6 +66,7 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
     private readonly int _timeEmbedDim;
     private readonly int _numGroups;
     private readonly double _epsilon;
+    private readonly DiffusionResBlockInitialization _initialization;
 
     // First conv block: GroupNorm → SiLU → Conv3x3
     private readonly GroupNormalizationLayer<T> _norm1;
@@ -113,6 +114,9 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
 
     /// <summary>Gets the timestep-embedding width.</summary>
     public int TimeEmbeddingDimension => _timeEmbedDim;
+
+    /// <summary>Gets how the block's convolutions are initialized.</summary>
+    public DiffusionResBlockInitialization Initialization => _initialization;
     /// <summary>
     /// Creates a new diffusion residual block per the DDPM/Stable Diffusion paper.
     /// </summary>
@@ -121,13 +125,17 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
     /// <param name="spatialSize">Spatial size (height = width) of feature maps at this level.</param>
     /// <param name="timeEmbedDim">Dimension of the time embedding vector. Default: 0 (no time conditioning).</param>
     /// <param name="numGroups">Number of groups for GroupNorm. Default: 32 (SD standard).</param>
+    /// <param name="epsilon">GroupNorm epsilon.</param>
+    /// <param name="initialization">How the convolutions are initialized; the default zeroes the second
+    /// convolution, as diffusion U-Nets do.</param>
     public DiffusionResBlock(
         int inChannels,
         int outChannels,
         int spatialSize,
         int timeEmbedDim = 0,
         int numGroups = 32,
-        double epsilon = 1e-5)
+        double epsilon = 1e-5,
+        DiffusionResBlockInitialization initialization = DiffusionResBlockInitialization.ZeroResidual)
         : base(
             [1, inChannels, spatialSize, spatialSize],
             [1, outChannels, spatialSize, spatialSize])
@@ -138,6 +146,8 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
         _timeEmbedDim = timeEmbedDim;
         _numGroups = numGroups;
         _epsilon = epsilon;
+        _initialization = initialization;
+        bool torchDefault = initialization == DiffusionResBlockInitialization.TorchDefault;
 
         // Compute actual group count: SD uses 32, but fall back to largest divisor if needed
         int groups1 = ComputeNumGroups(inChannels, numGroups);
@@ -154,7 +164,7 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
             stride: 1,
             padding: 1,
             activationFunction: new IdentityActivation<T>(),
-            initializationStrategy: InitializationStrategies<T>.Lazy);
+            initializationStrategy: ConvolutionInitialization(torchDefault, zeroed: false));
 
         // Time embedding projection: projects time embed to outChannels for additive conditioning
         // The released DDPM/Stable-Diffusion ResNet applies SiLU BEFORE the
@@ -172,7 +182,7 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
         // Second block: GroupNorm(out) → SiLU → Conv3x3(out→out). The conv starts at zero, so the block starts
         // as the identity (its skip path): Ho et al.'s diffusion_tf zeroes it (init_scale=0.), and so does every
         // later diffusion U-Net (guided-diffusion and LDM's zero_module). Without it each block adds a full-size
-        // residual and the stream's variance grows with depth.
+        // residual and the stream's variance grows with depth. TorchDefault keeps PyTorch's default init instead.
         _norm2 = new GroupNormalizationLayer<T>(groups2, outChannels, epsilon);
         _conv2 = ConvolutionalLayer<T>.WithInputDepth(
             inputDepth: outChannels,
@@ -181,7 +191,7 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
             stride: 1,
             padding: 1,
             activationFunction: new IdentityActivation<T>(),
-            initializationStrategy: InitializationStrategies<T>.Zero);
+            initializationStrategy: ConvolutionInitialization(torchDefault, zeroed: true));
 
         // Skip connection: 1x1 conv if channels differ
         if (inChannels != outChannels)
@@ -193,7 +203,7 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
                 stride: 1,
                 padding: 0,
                 activationFunction: new IdentityActivation<T>(),
-                initializationStrategy: InitializationStrategies<T>.Lazy);
+                initializationStrategy: ConvolutionInitialization(torchDefault, zeroed: false));
         }
 
         // A timestep projection has one architecture-fixed feature width, so shape-only
@@ -214,6 +224,13 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
         // and SetParameters share one stable order; actual storage remains lazy until a parameter
         // value is requested or the first forward executes.
     }
+
+    // Lazy and TorchDefault both defer allocation to the convolution's first use; the convolution draws a
+    // TorchDefault kernel and bias from its own seeded stream when it has a seed.
+    private static IInitializationStrategy<T> ConvolutionInitialization(bool torchDefault, bool zeroed)
+        => torchDefault
+            ? new TorchDefaultInitializationStrategy<T>()
+            : zeroed ? InitializationStrategies<T>.Zero : InitializationStrategies<T>.Lazy;
 
     /// <summary>
     /// Propagates eval/training mode to the block's nested sublayers.
@@ -541,6 +558,7 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
         metadata["TimeEmbedDim"] = _timeEmbedDim.ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata["NumGroups"] = _numGroups.ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata["Epsilon"] = _epsilon.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+        metadata["Initialization"] = _initialization.ToString();
         return metadata;
     }
     private static void AddParams(List<T> list, ILayer<T> layer)

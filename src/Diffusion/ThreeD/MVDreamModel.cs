@@ -85,11 +85,15 @@ namespace AiDotNet.Diffusion.ThreeD;
 public partial class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
 {
     /// <inheritdoc />
-    /// <remarks>Registration order is serialization order, and matches the
-    /// concatenation the previous hand-written GetParameters performed.</remarks>
+    /// <remarks>
+    /// Each module is registered once. The base U-Net already reaches the surface through the
+    /// <see cref="NoisePredictor"/> slot (and the VAE through <see cref="VAE"/>), so the multi-view U-Net contributes
+    /// only its multi-view attention here; registering the whole multi-view U-Net as well counted every base U-Net
+    /// weight twice. Order: base U-Net, VAE, multi-view attention, camera embedding.
+    /// </remarks>
     protected override void RegisterComponents()
     {
-        RegisterParameterComponent(_multiViewUNet);
+        RegisterParameterComponent(_multiViewUNet.MultiViewAttention);
         RegisterParameterComponent(_imageVAE);
         RegisterParameterComponent(_cameraEmbedding);
     }
@@ -439,89 +443,91 @@ public partial class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
             guidanceScale,
             seed);
 
-        // Reconstruct 3D from multi-view images
-        var cameraPositions = GenerateCameraPositions(numViews, 30.0);
+        // Reconstruct 3D from multi-view images, seen from the cameras that generated them
+        var cameraPositions = GenerateCameraPositions(numViews, _config.DefaultElevation);
         return ReconstructFromMultiView(views, cameraPositions);
     }
 
     /// <summary>
-    /// Generates novel views from a single input image.
+    /// Generates novel views from a single input image, conditioned the way ImageDream (Wang and Shi, 2023)
+    /// conditions MVDream on an image.
     /// </summary>
-    /// <param name="inputImage">Input image tensor.</param>
-    /// <param name="numViews">Number of views to generate.</param>
+    /// <param name="inputImage">Input image [1, 3, H, W] in the VAE's range: the object seen from azimuth 0.</param>
+    /// <param name="numViews">Number of views to generate, at azimuths <c>360 v / numViews</c> degrees.</param>
     /// <param name="numInferenceSteps">Number of denoising steps.</param>
-    /// <param name="guidanceScale">Guidance scale.</param>
+    /// <param name="guidanceScale">Classifier-free guidance scale. Above 1 the unconditional branch has the image
+    /// inputs zeroed, as ImageDream's pipeline does.</param>
     /// <param name="seed">Optional random seed.</param>
-    /// <returns>Array of generated views.</returns>
+    /// <param name="elevation">Camera elevation in degrees (positive looks down); null for
+    /// <see cref="MVDreamConfig.DefaultElevation"/>.</param>
+    /// <returns>The <paramref name="numViews"/> generated views, each [1, 3, H, W].</returns>
+    /// <remarks>
+    /// <para>
+    /// ImageDream's pixel controller: the clean VAE latent of the input image is appended as an extra frame after
+    /// the generated views, with an all-zero camera, and written back into that frame before every denoiser call,
+    /// so the multi-view attention lets every generated view see the image. Its global controller: the image
+    /// conditioner's tokens (<see cref="ImageConditioner"/>, a CLIP image encoder) follow the text tokens of an
+    /// empty prompt in the cross-attention context. The extra frame is dropped from the result.
+    /// </para>
+    /// <para>
+    /// ImageDream passes the CLIP features through a learned resampler into decoupled image cross-attention layers;
+    /// this U-Net has one cross-attention per block, so the image tokens share it with the text tokens and must
+    /// already have the U-Net's context width. Without an image conditioner the image enters through the pixel
+    /// controller alone.
+    /// </para>
+    /// </remarks>
     public virtual Tensor<T>[] GenerateNovelViewsFromImage(
         Tensor<T> inputImage,
         int numViews = 4,
         int numInferenceSteps = 50,
         double guidanceScale = 3.0,
-        int? seed = null)
+        int? seed = null,
+        double? elevation = null)
     {
-        // Encode input image
-        var imageLatent = _imageVAE.Encode(inputImage, sampleMode: false);
+        if (inputImage is null) throw new ArgumentNullException(nameof(inputImage));
+        if (numViews <= 0) throw new ArgumentOutOfRangeException(nameof(numViews), "At least one view is required.");
 
-        // Generate camera positions (input is at front)
-        var cameraPositions = GenerateCameraPositions(numViews, 30.0);
+        var engine = AiDotNetEngine.Current;
+        var imageLatent = _imageVAE.ScaleLatent(_imageVAE.Encode(inputImage, sampleMode: false));
+        var emptyFrame = new Tensor<T>(imageLatent.Shape.ToArray());
+        int frames = numViews + 1;
 
-        // Get image conditioning if available
-        Tensor<T>? imageCondition = null;
-        if (_imageConditioner != null)
-        {
-            imageCondition = _imageConditioner.Encode(inputImage);
-        }
-        else
-        {
-            // Use VAE latent as conditioning
-            imageCondition = FlattenLatent(imageLatent);
-        }
-
-        // Compute camera embeddings
-        var cameraEmbeddings = new Tensor<T>[numViews];
+        // The generated views' cameras, then ImageDream's extra image view with the all-zero camera.
+        var cameraPositions = GenerateCameraPositions(numViews, elevation ?? _config.DefaultElevation);
+        var cameraEmbeddings = new Tensor<T>[frames];
         for (int v = 0; v < numViews; v++)
         {
             var (azimuth, elev, radius) = cameraPositions[v];
             cameraEmbeddings[v] = _cameraEmbedding.Embed(azimuth, elev, radius);
         }
+        cameraEmbeddings[numViews] = _cameraEmbedding.EmbedExtrinsic(new double[CameraEmbedding<T>.CameraDim]);
 
-        // Initialize latents
-        var latentH = inputImage.Shape[2] / 8;
-        var latentW = inputImage.Shape[3] / 8;
-        var latentShape = new[] { numViews, MVDREAM_LATENT_CHANNELS, latentH, latentW };
+        bool guided = guidanceScale > 1.0;
+        var (context, unconditionalContext) = ImagePromptContexts(inputImage, guided);
+        var conditions = RepeatCondition(context, frames);
+        var unconditionalConditions = RepeatCondition(unconditionalContext, frames);
 
+        var latentShape = new[] { frames, imageLatent.Shape[1], imageLatent.Shape[2], imageLatent.Shape[3] };
         var rng = CreateInferenceRng(seed);
         var latents = SampleNoiseTensor(latentShape, rng);
 
-        // Set input view latent (first view is the input)
-        SetView(latents, 0, _imageVAE.ScaleLatent(imageLatent));
-
-        // Set up scheduler
         Scheduler.SetTimesteps(numInferenceSteps);
-
-        // Denoising loop
         foreach (var timestep in Scheduler.Timesteps)
         {
-            var combinedConditions = new Tensor<T>[numViews];
-            for (int v = 0; v < numViews; v++)
+            var noisePrediction = _multiViewUNet.PredictNoiseMultiView(
+                WithLastFrame(engine, latents, numViews, imageLatent), timestep, conditions, cameraEmbeddings);
+            if (guided)
             {
-                combinedConditions[v] = imageCondition;
+                var unconditional = _multiViewUNet.PredictNoiseMultiView(
+                    WithLastFrame(engine, latents, numViews, emptyFrame), timestep, unconditionalConditions,
+                    cameraEmbeddings);
+                noisePrediction = ApplyGuidance(unconditional, noisePrediction, guidanceScale);
             }
 
-            var noisePrediction = _multiViewUNet.PredictNoiseMultiView(latents, timestep, combinedConditions, cameraEmbeddings);
-
-            // Scheduler step (skip first view which is fixed)
-            var latentVector = latents.ToVector();
-            var noiseVector = noisePrediction.ToVector();
-            latentVector = Scheduler.Step(noiseVector, timestep, latentVector, NumOps.Zero);
+            var latentVector = Scheduler.Step(noisePrediction.ToVector(), timestep, latents.ToVector(), NumOps.Zero);
             latents = new Tensor<T>(latentShape, latentVector);
-
-            // Restore input view
-            SetView(latents, 0, _imageVAE.ScaleLatent(imageLatent));
         }
 
-        // Decode views
         var views = new Tensor<T>[numViews];
         for (int v = 0; v < numViews; v++)
         {
@@ -531,6 +537,64 @@ public partial class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
 
         return views;
     }
+
+    /// <summary>
+    /// The cross-attention contexts of the image path: the empty prompt's text tokens followed by the image
+    /// conditioner's tokens, and, for guidance, the unconditional text tokens followed by zeros in place of the image
+    /// tokens. Null when this model has neither conditioner.
+    /// </summary>
+    private (Tensor<T>? Conditional, Tensor<T>? Unconditional) ImagePromptContexts(Tensor<T> inputImage, bool guided)
+    {
+        var engine = AiDotNetEngine.Current;
+        var conditional = new List<Tensor<T>>(2);
+        var unconditional = new List<Tensor<T>>(2);
+
+        if (_textConditioner is not null)
+        {
+            conditional.Add(_textConditioner.EncodeText(_textConditioner.Tokenize(string.Empty)));
+            if (guided) unconditional.Add(_textConditioner.GetUnconditionalEmbedding(1));
+        }
+
+        if (_imageConditioner is not null)
+        {
+            var imageTokens = _imageConditioner.Encode(inputImage);
+            if (imageTokens.Rank != 3)
+                throw new InvalidOperationException(
+                    $"The image conditioner must return [1, tokens, width] embeddings; got rank {imageTokens.Rank}.");
+            conditional.Add(imageTokens);
+            if (guided) unconditional.Add(new Tensor<T>(imageTokens.Shape.ToArray()));
+        }
+
+        return (JoinTokens(engine, conditional), guided ? JoinTokens(engine, unconditional) : null);
+    }
+
+    private static Tensor<T>? JoinTokens(IEngine engine, List<Tensor<T>> parts)
+    {
+        if (parts.Count == 0) return null;
+        if (parts.Count == 1) return parts[0];
+        int rank = parts[0].Rank;
+        int width = parts[0].Shape[rank - 1];
+        for (int i = 1; i < parts.Count; i++)
+        {
+            if (parts[i].Rank != rank || parts[i].Shape[rank - 1] != width)
+                throw new InvalidOperationException(
+                    "The text and image conditioners must produce tokens of the same rank and width to share the " +
+                    $"U-Net's cross-attention context; got width {width} and width {parts[i].Shape[parts[i].Rank - 1]}.");
+        }
+
+        return engine.TensorConcatenate(parts.ToArray(), rank - 2);
+    }
+
+    private static Tensor<T>?[] RepeatCondition(Tensor<T>? condition, int frames)
+    {
+        var repeated = new Tensor<T>?[frames];
+        for (int v = 0; v < frames; v++) repeated[v] = condition;
+        return repeated;
+    }
+
+    /// <summary>The first <paramref name="views"/> frames of the latents followed by <paramref name="frame"/>.</summary>
+    private static Tensor<T> WithLastFrame(IEngine engine, Tensor<T> latents, int views, Tensor<T> frame)
+        => engine.TensorConcatenate(new[] { engine.TensorNarrow(latents, 0, 0, views).Contiguous(), frame }, 0);
 
     /// <summary>
     /// Computes Score Distillation Sampling gradients for 3D optimization.
@@ -685,15 +749,6 @@ public partial class MVDreamModel<T> : ThreeDDiffusionModelBase<T>
 
         int count = Math.Max(0, Math.Min(Math.Min(viewSize, viewSpan.Length), multiSpan.Length - viewOffset));
         viewSpan.Slice(0, count).CopyTo(multiSpan.Slice(viewOffset, count));
-    }
-
-    /// <summary>
-    /// Flattens latent for conditioning.
-    /// </summary>
-    private Tensor<T> FlattenLatent(Tensor<T> latent)
-    {
-        var flat = latent.ToVector();
-        return new Tensor<T>(new[] { 1, flat.Length }, flat);
     }
 
     /// <summary>
@@ -1120,6 +1175,11 @@ public class MultiViewUNet<T> : IParameterSource<T>, ICloneable<MultiViewUNet<T>
     public UNetNoisePredictor<T> BaseUNet => _baseUNet;
 
     /// <summary>
+    /// Gets the multi-view attention applied across the per-view predictions.
+    /// </summary>
+    public MultiViewAttention<T> MultiViewAttention => _mvAttention;
+
+    /// <summary>
     /// Creates a new multi-view U-Net.
     /// </summary>
     public MultiViewUNet(
@@ -1262,7 +1322,7 @@ public class MultiViewUNet<T> : IParameterSource<T>, ICloneable<MultiViewUNet<T>
     /// <param name="viewConditions">Per-view cross-attention conditioning.</param>
     /// <param name="cameraEmbeddings">Per-view camera embeddings of the U-Net's time-embedding width.</param>
     internal Tensor<T> PredictNoiseMultiView(
-        Tensor<T> multiViewInput, int timestep, Tensor<T>[] viewConditions, Tensor<T>[] cameraEmbeddings)
+        Tensor<T> multiViewInput, int timestep, Tensor<T>?[] viewConditions, Tensor<T>[] cameraEmbeddings)
     {
         var numViews = multiViewInput.Shape[0];
         if (cameraEmbeddings.Length != numViews)
@@ -1324,7 +1384,7 @@ public class MultiViewUNet<T> : IParameterSource<T>, ICloneable<MultiViewUNet<T>
 /// spatial position attends across the views with learned query/key/value/output projections of the channel
 /// vectors it receives: <c>x + W_o softmax(Q K^T / sqrt(C)) V</c>, computed per position over the view axis.
 /// </remarks>
-public class MultiViewAttention<T>
+public class MultiViewAttention<T> : IParameterSource<T>
 {
     private readonly INumericOperations<T> _numOps;
     private readonly Matrix<T> _queryWeights;
@@ -1576,12 +1636,23 @@ public class CameraEmbedding<T> : IParameterSource<T>
     /// </summary>
     /// <returns>The embedding [1, embeddingDim].</returns>
     public Tensor<T> Embed(double azimuth, double elevation, double radius)
+        => EmbedExtrinsic(CameraToWorld(azimuth, elevation, radius));
+
+    /// <summary>
+    /// Embeds a flattened (row-major) 4x4 camera description directly; ImageDream's extra image view uses the
+    /// all-zero camera.
+    /// </summary>
+    /// <param name="extrinsic">The 16 camera values.</param>
+    /// <returns>The embedding [1, embeddingDim].</returns>
+    internal Tensor<T> EmbedExtrinsic(double[] extrinsic)
     {
+        if (extrinsic is null) throw new ArgumentNullException(nameof(extrinsic));
+        if (extrinsic.Length != CameraDim)
+            throw new ArgumentException($"A camera has {CameraDim} values; got {extrinsic.Length}.", nameof(extrinsic));
         var engine = AiDotNetEngine.Current;
-        var extrinsic = new Tensor<double>(new[] { 1, CameraDim }, new Vector<double>(CameraToWorld(azimuth, elevation, radius)))
-            .Cast<T>();
+        var extrinsicTensor = new Tensor<double>(new[] { 1, CameraDim }, new Vector<double>(extrinsic)).Cast<T>();
         var hidden = engine.TensorAdd(
-            engine.TensorMatMul(extrinsic, engine.TensorTranspose(Tensor<T>.FromMatrix(_projectionWeights))),
+            engine.TensorMatMul(extrinsicTensor, engine.TensorTranspose(Tensor<T>.FromMatrix(_projectionWeights))),
             _projectionBias.AsTensor().Reshape(new[] { 1, _embeddingDim }));
         hidden = engine.TensorMultiply(hidden, engine.TensorSigmoid(hidden));
         return engine.TensorAdd(
