@@ -789,4 +789,61 @@ public sealed class DeepScaleTrack2UpstreamTests
             streamNet.Dispose();
         }
     }
+
+    [Fact]
+    public void SequentialBlockCredit_LocalObjectiveThrows_ReleasesDetachedNextBlockInput()
+    {
+        // Embedding + two dense layers are three hidden layers; detaching before every hidden layer after the first
+        // makes three blocks, so block 0 detaches the next block's input before its local objective runs. The rule
+        // throws from that objective: the detached tensor exists but has not yet become the next block's input.
+        var (net, tokens, targets) = BuildLm(blocks: 2, width: 8, vocab: 16, tiedHead: false, seed: 515);
+        var detached = new List<Tensor<float>>();
+        try
+        {
+            net.SetCreditRule(new ThrowingSequentialBlockCreditRule());
+            LocalObjectiveGradientComputer<float>.BlockInputDetachedObserver = detached.Add;
+
+            var thrown = Record.Exception(() => net.Train(tokens, targets));
+
+            Assert.NotNull(thrown);
+            Assert.Contains(ThrowingSequentialBlockCreditRule.Marker, thrown?.ToString() ?? string.Empty);
+            Assert.NotEmpty(detached);
+            Assert.All(detached, t => Assert.True(t.IsDisposed, "The detached next-block input leaked on the throw path."));
+        }
+        finally
+        {
+            LocalObjectiveGradientComputer<float>.BlockInputDetachedObserver = null;
+            net.Dispose();
+        }
+    }
+
+    private sealed class ThrowingSequentialBlockCreditRule : ILocalObjectiveCreditRule<float>, ISequentialBlockLocalCreditRule
+    {
+        public const string Marker = "ThrowingSequentialBlockCreditRule local objective failure";
+
+        public string Name => "ThrowingSequentialBlock";
+
+        public bool IsExactBackprop => false;
+
+        public int ReadoutLayerCount => 2;
+
+        public IReadOnlyList<Tensor<float>> AuxiliaryParameters => Array.Empty<Tensor<float>>();
+
+        public bool StreamBlocksSequentially => true;
+
+        public bool ShouldDetachBeforeHiddenLayer(int hiddenIndex, int hiddenLayerCount) => hiddenIndex > 0;
+
+        public void Initialize(ICreditAssignmentContext<float> context) { }
+
+        public void ComputeTeachingSignals(ICreditAssignmentContext<float> context) =>
+            throw new NotSupportedException("Local-objective rule.");
+
+        public Tensor<float>? BuildLocalObjective(LocalObjectiveContext<float> context) =>
+            throw new InvalidOperationException(Marker);
+
+        public Tensor<float>? BuildOutputObjective(LocalObjectiveStep<float> step, Tensor<float> prediction, Tensor<float> defaultLoss) =>
+            null;
+
+        public void ApplyAuxiliaryGradients(IReadOnlyDictionary<Tensor<float>, Tensor<float>> gradients) { }
+    }
 }

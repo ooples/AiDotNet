@@ -7726,18 +7726,12 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // held until the layer is disposed. The surface below references only this step's buffers.
         if (buffers.Count > owned.Count)
         {
-            List<Tensor<T>>? stale = null;
-            foreach (var key in buffers.Keys)
+            // Materialised before the loop because the loop removes from the dictionary being filtered.
+            var stale = buffers.Keys.Where(key => !owned.ContainsKey(key)).ToList();
+            foreach (var key in stale)
             {
-                if (!owned.ContainsKey(key)) (stale ??= new List<Tensor<T>>()).Add(key);
-            }
-            if (stale is not null)
-            {
-                foreach (var key in stale)
-                {
-                    buffers[key].Dispose();
-                    buffers.Remove(key);
-                }
+                buffers[key].Dispose();
+                buffers.Remove(key);
             }
         }
 

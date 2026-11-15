@@ -54,12 +54,11 @@ internal sealed class LocalObjectiveGradients<T> : IDisposable
             ? new HashSet<Tensor<T>>(_protectedTensors, TensorReferenceComparer<Tensor<T>>.Instance)
             : new HashSet<Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
 
-        foreach (var grad in Gradients.Values)
+        // Where is lazy, so a tensor that appears under two keys is skipped once the first visit has added it.
+        foreach (var grad in Gradients.Values.Where(g => g is not null && !seen.Contains(g)))
         {
-            if (grad is not null && seen.Add(grad))
-            {
-                grad.Dispose();
-            }
+            seen.Add(grad);
+            grad.Dispose();
         }
 
         if (OutputLoss is not null && seen.Add(OutputLoss))
@@ -84,6 +83,13 @@ internal sealed class LocalObjectiveGradients<T> : IDisposable
 /// </summary>
 internal static class LocalObjectiveGradientComputer<T>
 {
+    /// <summary>
+    /// Test seam: when set on the current thread, receives each detached next-block input the sequential block path
+    /// creates, so a test can check the tensor is released on every exit path. Null outside tests.
+    /// </summary>
+    [ThreadStatic]
+    internal static Action<Tensor<T>>? BlockInputDetachedObserver;
+
     public static LocalObjectiveGradients<T> Compute(
         NeuralNetworkBase<T> network,
         Tensor<T> input,
@@ -814,6 +820,9 @@ internal static class LocalObjectiveGradientComputer<T>
 
         Tensor<T> blockInput = input;
         Tensor<T>? ownedBlockInput = null;
+        // The detached input of the next block lives here from the moment it is created until it becomes
+        // ownedBlockInput, so the finally below releases it when the rest of its block throws.
+        Tensor<T>? nextOwnedBlockInput = null;
         Tensor<T>? finalOutputObjective = null;
         Tensor<T>? finalPrediction = null;
         int totalLocals = 0;
@@ -824,7 +833,6 @@ internal static class LocalObjectiveGradientComputer<T>
         {
             var block = blocks[b];
             bool isTerminalBlock = b == blocks.Count - 1;
-            Tensor<T>? nextOwnedBlockInput = null;
 
             using var blockTape = new GradientTape<T>();
             using var blockScope = TensorScope.Begin();
@@ -1141,6 +1149,7 @@ internal static class LocalObjectiveGradientComputer<T>
                 {
                     nextOwnedBlockInput = engine.StopGradient(current);
                 }
+                BlockInputDetachedObserver?.Invoke(nextOwnedBlockInput);
             }
 
             for (int k = block.StartHiddenK; k <= block.EndHiddenK; k++)
@@ -1189,6 +1198,7 @@ internal static class LocalObjectiveGradientComputer<T>
             ownedBlockInput = nextOwnedBlockInput;
             if (nextOwnedBlockInput is not null)
                 blockInput = nextOwnedBlockInput;
+            nextOwnedBlockInput = null;
         }
         }
         catch
@@ -1217,6 +1227,11 @@ internal static class LocalObjectiveGradientComputer<T>
                 && !TensorReferenceComparer<Tensor<T>>.Instance.Equals(remainingBlockInput, input))
             {
                 remainingBlockInput.Dispose();
+            }
+            if (nextOwnedBlockInput is { } pendingBlockInput
+                && !TensorReferenceComparer<Tensor<T>>.Instance.Equals(pendingBlockInput, input))
+            {
+                pendingBlockInput.Dispose();
             }
             cachedDetachedSampledWeight?.Dispose();
             cachedDetachedSampledBias?.Dispose();

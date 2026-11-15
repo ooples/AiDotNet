@@ -5097,12 +5097,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     {
         if (snapshots is null || snapshots.Count == 0) return;
 
-        List<Tensor<T>>? stale = null;
-        foreach (var kvp in snapshots)
-        {
-            if (!liveBag.ContainsKey(kvp.Key)) (stale ??= new List<Tensor<T>>()).Add(kvp.Key);
-        }
-        if (stale is null) return;
+        // Materialised before the loop because the loop removes from the dictionary being filtered.
+        var stale = snapshots.Keys.Where(key => !liveBag.ContainsKey(key)).ToList();
         foreach (var key in stale)
         {
             snapshots[key].Dispose();
@@ -12850,18 +12846,23 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                         {
                             using var suspendScope = TensorScope.Suspend();
                             using var noGrad = new NoGradScope<T>();
-                            var sq = Engine.TensorMultiply(grad, grad);
-                            var axes = Enumerable.Range(0, sq.Rank).ToArray();
-                            var sum = Engine.ReduceSum(sq, axes, keepDims: false);
-                            sq.Dispose();
+                            // using releases the temporaries even when ReduceSum or TensorAdd throws.
+                            Tensor<T> sum;
+                            using (var sq = Engine.TensorMultiply(grad, grad))
+                            {
+                                sum = Engine.ReduceSum(sq, Enumerable.Range(0, sq.Rank).ToArray(), keepDims: false);
+                            }
                             if (gpuNormSqAcc is null)
                             {
                                 gpuNormSqAcc = sum;
                             }
                             else
                             {
-                                var nextAcc = Engine.TensorAdd(gpuNormSqAcc, sum);
-                                sum.Dispose();
+                                Tensor<T> nextAcc;
+                                using (sum)
+                                {
+                                    nextAcc = Engine.TensorAdd(gpuNormSqAcc, sum);
+                                }
                                 gpuNormSqAcc.Dispose();
                                 gpuNormSqAcc = nextAcc;
                             }
@@ -14032,8 +14033,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
             allGrads.Clear();
             grads.Clear();
-            localCreditResult?.Dispose();
-            localCreditResult = null;
+            // localCreditResult is released only by the finally below, so every exit path disposes it exactly once.
             // Keep the GPU activation cache across steps by default (its buffers are reused for the next
             // stable-shape step); only drop per-step when the aggressive memory-reclaim knob is opted in.
             // Genuinely-stale caches are already dropped by the fused-plan failure recovery path.
