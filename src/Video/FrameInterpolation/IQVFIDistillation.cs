@@ -60,16 +60,27 @@ public class IQVFIDistillation<T>
                 $"Frames must align: student {studentFrame.Length}, teacher {teacherFrame.Length}, " +
                 $"ground truth {groundTruth.Length}.", nameof(teacherFrame));
 
-        var mask = new Tensor<T>(studentFrame.Shape.ToArray());
-        for (int i = 0; i < mask.Length; i++)
+        // 1 where the student is further from the ground truth than the teacher
+        var engine = AiDotNetEngine.Current;
+        var truth = Flat(groundTruth);
+        var studentError = engine.TensorAbs(engine.TensorSubtract(Flat(studentFrame), truth));
+        var teacherError = engine.TensorAbs(engine.TensorSubtract(Flat(teacherFrame), truth));
+        return engine.Reshape(engine.TensorGreaterThan(studentError, teacherError), studentFrame.Shape.ToArray());
+    }
+
+    /// <summary>The tensor's elements as a vector-shaped tensor.</summary>
+    private static Tensor<T> Flat(Tensor<T> tensor) => AiDotNetEngine.Current.Reshape(tensor, new[] { tensor.Length });
+
+    /// <summary>Mean absolute difference of two equally long tensors, 0 when they are empty.</summary>
+    private static double MeanAbsoluteDifference(Tensor<T> a, Tensor<T> b)
+    {
+        if (a.Length == 0)
         {
-            double gt = NumOps.ToDouble(groundTruth[i]);
-            double studentError = Math.Abs(NumOps.ToDouble(studentFrame[i]) - gt);
-            double teacherError = Math.Abs(NumOps.ToDouble(teacherFrame[i]) - gt);
-            mask[i] = studentError > teacherError ? NumOps.One : NumOps.Zero;
+            return 0.0;
         }
 
-        return mask;
+        var engine = AiDotNetEngine.Current;
+        return NumOps.ToDouble(engine.TensorMean(engine.TensorAbs(engine.TensorSubtract(Flat(a), Flat(b)))));
     }
 
     /// <summary>
@@ -88,11 +99,7 @@ public class IQVFIDistillation<T>
                 $"Priors must align; got {studentPrior.Length} and {teacherPrior.Length}.",
                 nameof(teacherPrior));
 
-        double sum = 0.0;
-        for (int i = 0; i < studentPrior.Length; i++)
-            sum += Math.Abs(NumOps.ToDouble(studentPrior[i]) - NumOps.ToDouble(teacherPrior[i]));
-
-        return sum / Math.Max(1, studentPrior.Length);
+        return MeanAbsoluteDifference(studentPrior, teacherPrior);
     }
 
     /// <summary>
@@ -123,25 +130,89 @@ public class IQVFIDistillation<T>
         if (teacherForward.Length != n || studentBackward.Length != n || teacherBackward.Length != n)
             throw new ArgumentException("All four flow fields must have the same element count.");
 
+        // Empty fields carry no error; return before any tensor work on empty intermediates.
+        if (n == 0) return 0.0;
+
         // The mask is derived from a FRAME while the flows are 2-channel fields, so it may be smaller.
-        // Tiling it keeps a single mask governing both flow channels, which is the intent: the gate is
+        // Expanding it keeps a single mask governing both flow channels, which is the intent: the gate is
         // a per-pixel decision about reconstruction quality, not a per-channel one.
-        if (mask.Length == 0 || n % mask.Length != 0)
-            throw new ArgumentException(
-                $"A mask of {mask.Length} elements does not tile flows of {n} elements.", nameof(mask));
+        var engine = AiDotNetEngine.Current;
+        var m = ExpandMaskToFlow(mask, studentForward);
+        var error = engine.TensorAdd(
+            engine.TensorAbs(engine.TensorSubtract(Flat(studentForward), Flat(teacherForward))),
+            engine.TensorAbs(engine.TensorSubtract(Flat(studentBackward), Flat(teacherBackward))));
 
-        int repeat = n / mask.Length;
-        double sum = 0.0;
-        for (int i = 0; i < n; i++)
+        // Masked-out pixels contribute exactly nothing, even where an error is not finite
+        var gated = engine.TensorWhere(
+            engine.TensorEquals(m, NumOps.Zero), engine.TensorZerosLike(error), engine.TensorMultiply(m, error));
+        return NumOps.ToDouble(engine.TensorSum(gated)) / n;
+    }
+
+    /// <summary>
+    /// The mask laid over every element of <paramref name="flow"/>, flattened. Which flow elements share a mask
+    /// pixel depends on where the flow keeps its channel axis, so the expansion follows the shapes: a mask of the
+    /// flow's own size is used as is; one of equal rank broadcasts along its size-1 axes ([B,1,H,W] over channel-first
+    /// [B,2,H,W], [B,H,W,1] over channel-last [B,H,W,2]); a lower-rank mask is aligned with the flow's trailing axes
+    /// (channel-first, [H,W] over [2,H,W]) or, failing that, its leading axes (channel-last, [H,W] over [H,W,2]).
+    /// A flat mask shorter than a flat flow names no layout and is rejected.
+    /// </summary>
+    private static Tensor<T> ExpandMaskToFlow(Tensor<T> mask, Tensor<T> flow)
+    {
+        int n = flow.Length;
+        if (mask.Length == n)
+            return Flat(mask);
+
+        int[] maskShape = mask.Shape.ToArray();
+        int[] flowShape = flow.Shape.ToArray();
+        int[]? aligned = null;
+        if (mask.Length > 0 && maskShape.Length <= flowShape.Length)
         {
-            double m = NumOps.ToDouble(mask[i / repeat]);
-            if (m == 0.0) continue;
-
-            sum += m * Math.Abs(NumOps.ToDouble(studentForward[i]) - NumOps.ToDouble(teacherForward[i]));
-            sum += m * Math.Abs(NumOps.ToDouble(studentBackward[i]) - NumOps.ToDouble(teacherBackward[i]));
+            int extra = flowShape.Length - maskShape.Length;
+            if (BroadcastsOver(maskShape, flowShape, extra))
+                aligned = Prepend(maskShape, extra);
+            else if (extra > 0 && BroadcastsOver(maskShape, flowShape, 0))
+                aligned = Append(maskShape, extra);
         }
 
-        return sum / Math.Max(1, n);
+        if (aligned is null)
+            throw new ArgumentException(
+                $"A mask shaped [{string.Join(", ", maskShape)}] does not broadcast over flows shaped " +
+                $"[{string.Join(", ", flowShape)}].", nameof(mask));
+
+        var repeats = new int[flowShape.Length];
+        for (int axis = 0; axis < repeats.Length; axis++)
+            repeats[axis] = flowShape[axis] / aligned[axis];
+        var engine = AiDotNetEngine.Current;
+        return Flat(engine.TensorTile(engine.Reshape(mask, aligned), repeats));
+    }
+
+    /// <summary>True when every axis of <paramref name="mask"/>, placed at <paramref name="offset"/> in
+    /// <paramref name="flow"/>, equals the flow's axis or is 1.</summary>
+    private static bool BroadcastsOver(int[] mask, int[] flow, int offset)
+    {
+        for (int axis = 0; axis < mask.Length; axis++)
+        {
+            if (mask[axis] != flow[axis + offset] && mask[axis] != 1)
+                return false;
+        }
+
+        return true;
+    }
+
+    private static int[] Prepend(int[] shape, int count)
+    {
+        var result = new int[shape.Length + count];
+        for (int i = 0; i < count; i++) result[i] = 1;
+        Array.Copy(shape, 0, result, count, shape.Length);
+        return result;
+    }
+
+    private static int[] Append(int[] shape, int count)
+    {
+        var result = new int[shape.Length + count];
+        Array.Copy(shape, result, shape.Length);
+        for (int i = shape.Length; i < result.Length; i++) result[i] = 1;
+        return result;
     }
 
     /// <summary>
@@ -175,12 +246,8 @@ public class IQVFIDistillation<T>
                 throw new ArgumentException(
                     $"Level {level} mismatch: {s.Length} vs {g.Length}.", nameof(truthLevels));
 
-            double sum = 0.0;
-            for (int i = 0; i < s.Length; i++)
-                sum += Math.Abs(NumOps.ToDouble(s[i]) - NumOps.ToDouble(g[i]));
-
             double weight = Math.Pow(2.0, level);
-            total += weight * (sum / Math.Max(1, s.Length));
+            total += weight * MeanAbsoluteDifference(s, g);
         }
 
         return total;

@@ -30,6 +30,9 @@ public abstract class SafetyBenchmarkBase<T> : ISafetyBenchmark<T>
     /// <returns>A list of benchmark test cases with expected outcomes.</returns>
     protected abstract IReadOnlyList<SafetyBenchmarkCase> GetTestCases();
 
+    /// <summary>The benchmark's cases, for red teaming a pipeline with a mix of benchmarks.</summary>
+    internal IReadOnlyList<SafetyBenchmarkCase> TestCases => GetTestCases();
+
     /// <summary>
     /// Runs all test cases against the pipeline and computes metrics.
     /// </summary>

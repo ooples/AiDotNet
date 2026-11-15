@@ -371,38 +371,29 @@ public partial class GraphSAGENetwork<T> : GraphModelLayoutBase<T>
         if (count == 0) return gradient;
 
         var scale = NumOps.Divide(NumOps.One, NumOps.FromDouble(count));
+        if (numNodes == 0 || numClasses == 0) return gradient;
 
-        for (int i = 0; i < numNodes; i++)
-        {
-            if (mask != null && !mask[i]) continue;
+        // Row softmax with the max as the scan from MinValue found it (strictly larger values only, so NaN
+        // is skipped): a MinValue column in front and ArgMax (first of ties) reproduce it.
+        var logits = Engine.TensorSlice(predictions, [0, 0], [numNodes, numClasses]);
+        var floor = new Tensor<T>([numNodes, 1]);
+        floor.Fill(NumOps.MinValue);
+        var withFloor = Engine.TensorConcatenate(new[] { floor, logits }, 1);
+        var maxIndex = Engine.Reshape(Engine.TensorArgMax(withFloor, 1), [numNodes, 1]);
+        var maxLogit = Engine.TensorTakeAlongDim(withFloor, maxIndex, 1);   // [numNodes, 1]
+        var probs = Engine.TensorExp(Engine.TensorSubtract(logits, maxLogit));
+        var prob = Engine.TensorDivide(probs, Engine.ReduceSum(probs, new[] { 1 }, keepDims: true));
 
-            // Compute softmax probabilities
-            var maxLogit = NumOps.MinValue;
-            for (int c = 0; c < numClasses; c++)
-            {
-                if (NumOps.GreaterThan(predictions[i, c], maxLogit))
-                {
-                    maxLogit = predictions[i, c];
-                }
-            }
+        // Gradient = (softmax - label) / count, on the masked rows only
+        var rowGradient = Engine.TensorMultiplyScalar(
+            Engine.TensorSubtract(prob, Engine.TensorSlice(labels, [0, 0], [numNodes, numClasses])), scale);
+        if (mask == null)
+            return rowGradient;
 
-            var sumExp = NumOps.Zero;
-            var probs = new T[numClasses];
-            for (int c = 0; c < numClasses; c++)
-            {
-                probs[c] = NumOps.Exp(NumOps.Subtract(predictions[i, c], maxLogit));
-                sumExp = NumOps.Add(sumExp, probs[c]);
-            }
-
-            // Gradient = (softmax - label) / count
-            for (int c = 0; c < numClasses; c++)
-            {
-                var prob = NumOps.Divide(probs[c], sumExp);
-                gradient[i, c] = NumOps.Multiply(scale, NumOps.Subtract(prob, labels[i, c]));
-            }
-        }
-
-        return gradient;
+        var rowMask = new Tensor<bool>(
+            Enumerable.Range(0, numNodes * numClasses).Select(flat => mask[flat / numClasses]).ToArray(),
+            [numNodes, numClasses]);
+        return Engine.TensorWhere(rowMask, rowGradient, gradient);
     }
 
     /// <summary>
@@ -601,32 +592,20 @@ public partial class GraphSAGENetwork<T> : GraphModelLayoutBase<T>
         int numNodes = predictions.Shape[0];
         int numClasses = predictions.Shape[1];
 
+        // Predicted class: the first strictly largest prediction. True class: the first positive label (0 if none).
+        var predictedClasses = numNodes == 0 ? Array.Empty<int>()
+            : Engine.TensorArgMax(Engine.TensorSlice(predictions, [0, 0], [numNodes, numClasses]), 1).ToVector().ToArray();
+        var trueClasses = numNodes == 0 ? Array.Empty<int>()
+            : Engine.TensorArgMax(
+                Engine.TensorGreaterThan(Engine.TensorSlice(labels, [0, 0], [numNodes, numClasses]), NumOps.Zero), 1)
+                .ToVector().ToArray();
+
         for (int i = 0; i < numNodes; i++)
         {
             if (!testMask[i]) continue;
 
-            // Find predicted class
-            int predClass = 0;
-            var maxProb = predictions[i, 0];
-            for (int c = 1; c < numClasses; c++)
-            {
-                if (NumOps.GreaterThan(predictions[i, c], maxProb))
-                {
-                    maxProb = predictions[i, c];
-                    predClass = c;
-                }
-            }
-
-            // Find true class
-            int trueClass = 0;
-            for (int c = 0; c < numClasses; c++)
-            {
-                if (NumOps.GreaterThan(labels[i, c], NumOps.Zero))
-                {
-                    trueClass = c;
-                    break;
-                }
-            }
+            int predClass = predictedClasses[i];
+            int trueClass = trueClasses[i];
 
             if (predClass == trueClass) correct++;
             total++;

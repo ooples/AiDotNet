@@ -68,6 +68,10 @@ public partial class GroundingDINO15<T> : VisionLanguageModelBase<T>, IVisualGro
     private bool _useNativeMode;
     private bool _disposed;
     private int _encoderLayerEnd;
+    private readonly List<ILayer<T>> _groundingHeadLayers = new();
+    private GroundingQueryDecoder<T>? _groundingHead;
+    // Grounding DINO's special tokens ([CLS], [SEP], ".", "?") in this model's tokenizer.
+    private readonly HashSet<int> _promptSpecialTokens;
 
     public GroundingDINO15(
         NeuralNetworkArchitecture<T> architecture,
@@ -88,7 +92,8 @@ public partial class GroundingDINO15<T> : VisionLanguageModelBase<T>, IVisualGro
             throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options.ModelPath = modelPath;
         OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        _tokenizer = GroundingPrompt.CreateTokenizer(_options.VocabSize);
+        _promptSpecialTokens = GroundingPrompt.SpecialTokenIds(_tokenizer);
         InitializeLayers();
     }
 
@@ -106,7 +111,8 @@ public partial class GroundingDINO15<T> : VisionLanguageModelBase<T>, IVisualGro
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
-        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        _tokenizer = GroundingPrompt.CreateTokenizer(_options.VocabSize);
+        _promptSpecialTokens = GroundingPrompt.SpecialTokenIds(_tokenizer);
         InitializeLayers();
     }
 
@@ -145,37 +151,36 @@ public partial class GroundingDINO15<T> : VisionLanguageModelBase<T>, IVisualGro
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(PreprocessImage(image));
 
-        var p = PreprocessImage(image);
-        int numQueries = _options.NumQueryPositions;
-        double confThreshold = _options.ConfidenceThreshold;
-        double nmsThreshold = _options.NmsThreshold;
+        var prediction = Detect(image, TokenIds(textQuery));
+        return GroundingDetections<T>.Ranked(Engine, GroundingHeadModule<T>.Corners(Engine, prediction.Boxes),
+            prediction.Scores(Engine), _options.ConfidenceThreshold, _options.MaxDetections, _options.NmsThreshold);
+    }
 
-        // Step 1: Multi-scale visual feature extraction
-        var visualFeatures = p;
+    /// <summary>
+    /// The training loss of one image (Grounding DINO section 3.5): the head's queries matched one-to-one to the
+    /// ground-truth boxes by the Hungarian algorithm, then the contrastive focal loss, L1 and GIoU, on the last decoder
+    /// layer, every earlier decoder layer (auxiliary losses) and the encoder proposals.
+    /// </summary>
+    /// <param name="image">The image.</param>
+    /// <param name="textQuery">The text prompt.</param>
+    /// <param name="targetBoxes">The ground-truth boxes <c>[G, 4]</c>, normalized (cx, cy, w, h).</param>
+    /// <param name="targetTokens">Each box's phrase as 0/1 over the prompt's tokens <c>[G, L]</c>.</param>
+    internal GroundingDetectorLoss<T> GroundingLoss(Tensor<T> image, string textQuery, Tensor<T> targetBoxes, Tensor<T> targetTokens)
+    {
+        ThrowIfDisposed();
+        var prediction = Detect(image, TokenIds(textQuery));
+        return new GroundingSetLoss<T>(Engine).Compute(prediction, targetBoxes, targetTokens);
+    }
+
+    // The backbone's image tokens, then the feature enhancer, language-guided query selection, cross-modality decoder
+    // and box / contrastive heads.
+    private GroundingQueryPrediction<T> Detect(Tensor<T> image, IReadOnlyList<int> tokenIds)
+    {
+        var visualFeatures = PreprocessImage(image);
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-
-        // Step 2: Cross-modal feature enhancement via ConcatenateTensors
-        var textTokens = TokenizeText(textQuery);
-        var fusedInput = visualFeatures.ConcatenateTensors(textTokens);
-
-        // Step 3: Decoder with cross-modal queries
-        var decoderOut = fusedInput;
-        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
-            decoderOut = Layers[i].Forward(decoderOut);
-
-        // Step 5: Query decoding with box prediction
-        int maxDet = Math.Min(numQueries, _options.MaxDetections);
-        if (maxDet <= 0)
-            return new Tensor<T>([GroundingDetections<T>.FieldsPerDetection]);
-
-        GroundingDetections<T>.QuarterBlockQueries(Engine, decoderOut, maxDet, out var boxes, out var confidences);
-        var eligible = Engine.TensorMultiply(
-            GroundingDetections<T>.AtLeast(Engine, confidences, NumOps.FromDouble(confThreshold)),
-            GroundingDetections<T>.HasArea(Engine, boxes));
-
-        // Step 6: NMS, highest confidence first
-        return GroundingDetections<T>.Select(Engine, boxes, confidences, eligible, maxDet, nmsThreshold);
+        var head = _groundingHead ?? throw new InvalidOperationException("The grounding head is not initialized.");
+        return head.Forward(visualFeatures, tokenIds, _promptSpecialTokens);
     }
 
     /// <inheritdoc />
@@ -212,6 +217,15 @@ public partial class GroundingDINO15<T> : VisionLanguageModelBase<T>, IVisualGro
             );
             ComputeEncoderDecoderBoundary();
         }
+        if (_groundingHead is null)
+        {
+            // Grounding DINO's head (Liu et al. 2023, §3): Grounding DINO-T's 6 enhancer and 6 decoder layers, 8 heads,
+            // FFN 2048 and 900 queries at width 256 in the paper configuration.
+            _groundingHead = new GroundingQueryDecoder<T>(Engine, _groundingHeadLayers, new GroundingQueryDecoderConfiguration(
+                _options.DecoderDim, _options.NumHeads, 8 * _options.DecoderDim, _options.NumDecoderLayers, _options.NumDecoderLayers,
+                _options.NumQueryPositions, _options.VocabSize, _options.MaxSequenceLength));
+            RegisterAuxiliaryEncoderStream(_groundingHeadLayers);
+        }
     }
 
     private void ComputeEncoderDecoderBoundary()
@@ -223,15 +237,22 @@ public partial class GroundingDINO15<T> : VisionLanguageModelBase<T>, IVisualGro
         _encoderLayerEnd = 2 + _options.NumVisionLayers * lpb;
     }
 
-    private Tensor<T> TokenizeText(string text)
+    private List<int> TokenIds(string text)
     {
         if (_tokenizer is null)
             throw new InvalidOperationException("Tokenizer not initialized.");
-        var encoding = _tokenizer.Encode(text);
-        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
-        var tokens = TokenIdsToTensor(encoding.TokenIds, seqLen);
-        return tokens;
+        return GroundingPrompt.Encode(_tokenizer, text);
     }
+
+    /// <summary>The prompt's token ids and Grounding DINO's sub-sentence structure of them.</summary>
+    internal (List<int> TokenIds, GroundingTextStructure Structure) PromptStructure(string text)
+    {
+        var ids = TokenIds(text);
+        return (ids, GroundingTextStructure.Build(ids.Take(Math.Min(ids.Count, _options.MaxSequenceLength)).ToList(), _promptSpecialTokens));
+    }
+
+    /// <summary>Grounding DINO's special tokens ([CLS], [SEP], ".", "?") in this model's tokenizer.</summary>
+    internal IReadOnlyCollection<int> PromptSpecialTokenIds => _promptSpecialTokens;
 
     /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)

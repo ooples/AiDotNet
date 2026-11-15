@@ -92,14 +92,12 @@ public class ImplicitQuadraticMotion<T>
                 "the acceleration prior is a per-pixel field and must match the flow.",
                 nameof(acceleration));
 
-        var result = new Tensor<T>(flow.Shape.ToArray());
-        for (int i = 0; i < result.Length; i++)
-        {
-            double v = (linearScale * NumOps.ToDouble(flow[i]))
-                       + (accelerationWeight * NumOps.ToDouble(acceleration[i]));
-            result[i] = NumOps.FromDouble(v);
-        }
-        return result;
+        // linearScale * flow + accelerationWeight * acceleration, element by element in the flow's shape
+        var engine = AiDotNetEngine.Current;
+        var alignedAcceleration = engine.Reshape(acceleration, flow.Shape.ToArray());
+        return engine.TensorAdd(
+            engine.TensorMultiplyScalar(flow, NumOps.FromDouble(linearScale)),
+            engine.TensorMultiplyScalar(alignedAcceleration, NumOps.FromDouble(accelerationWeight)));
     }
 
     /// <summary>

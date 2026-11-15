@@ -20,53 +20,89 @@ public sealed class Garch11Model<T> : ClassicalVolatilityModelBase<T>
 {
     /// <inheritdoc/>
     public override string ModelName => "GARCH(1,1)";
-    /// <inheritdoc/>
-    public override int ParameterCount => 3; // ω, α, β
 
     /// <inheritdoc/>
-    protected override double[] InitialGuess(double sampleVariance)
-        => [0.1 * Math.Max(sampleVariance, 1e-8), 0.08, 0.90];
+    public override int ParameterCount => 4; // μ, ω, α, β
 
     /// <inheritdoc/>
-    protected override double[] ToNatural(double[] u)
+    protected override Vector<T> InitialGuess(T sampleVariance)
+        => new(new[]
+        {
+            NumOps.Multiply(NumOps.FromDouble(0.1), Floor(sampleVariance, 1e-8)),
+            NumOps.FromDouble(0.08),
+            NumOps.FromDouble(0.90),
+        });
+
+    /// <inheritdoc/>
+    protected override Vector<T> ToNatural(Vector<T> u)
     {
-        double omega = Math.Exp(u[0]);                 // ω > 0
-        double persistence = Sigmoid(u[1]);            // α + β ∈ (0, 1)  → stationary
-        double weight = Sigmoid(u[2]);                 // split between α and β
-        double alpha = persistence * weight;
-        double beta = persistence * (1.0 - weight);
-        return [omega, alpha, beta];
+        T omega = NumOps.Exp(u[0]);                    // ω > 0
+        T persistence = Sigmoid(u[1]);                 // α + β ∈ (0, 1)  → stationary
+        T weight = Sigmoid(u[2]);                      // split between α and β
+        T alpha = NumOps.Multiply(persistence, weight);
+        T beta = NumOps.Multiply(persistence, NumOps.Subtract(NumOps.One, weight));
+        return new Vector<T>(new[] { omega, alpha, beta });
     }
 
     /// <inheritdoc/>
-    protected override double[] ToUnconstrained(double[] p)
+    protected override Vector<T> ToUnconstrained(Vector<T> p)
     {
-        double persistence = p[1] + p[2];
-        double weight = persistence > 1e-12 ? p[1] / persistence : 0.5;
-        return [Math.Log(Math.Max(p[0], 1e-12)), Logit(persistence), Logit(weight)];
+        T persistence = NumOps.Add(p[1], p[2]);
+        T weight = NumOps.GreaterThan(persistence, NumOps.FromDouble(1e-12))
+            ? NumOps.Divide(p[1], persistence)
+            : NumOps.FromDouble(0.5);
+        return new Vector<T>(new[] { NumOps.Log(Floor(p[0], 1e-12)), Logit(persistence), Logit(weight) });
     }
 
     /// <inheritdoc/>
-    protected override double NextVariance(double prevVariance, double prevReturn, double[] p)
-        => p[0] + (p[1] * prevReturn * prevReturn) + (p[2] * prevVariance);
+    protected override T NextVariance(T prevVariance, T prevResidual, Vector<T> p)
+        => NumOps.Add(NumOps.Add(p[0], NumOps.Multiply(p[1], NumOps.Multiply(prevResidual, prevResidual))),
+            NumOps.Multiply(p[2], prevVariance));
 
     /// <inheritdoc/>
-    protected override double UnconditionalVariance(double[] p)
+    /// <remarks>arch's <c>garch_recursion</c>: σ²_0 = ω + (α + β)·backcast, then
+    /// σ²_t = ω + α·ε²_(t-1) + β·σ²_(t-1).</remarks>
+    protected override Tensor<T> VariancePath(Tensor<T> residuals, T backcast, Vector<T> p)
     {
-        double denom = 1.0 - p[1] - p[2];
-        return denom > 1e-9 ? p[0] / denom : p[0] / 1e-9;
+        var engine = AiDotNetEngine.Current;
+        var drive = engine.TensorAddScalar(
+            engine.TensorMultiplyScalar(Lagged(engine.TensorSquare(residuals), backcast), p[1]), p[0]);
+        return LinearRecurrence(drive, p[2], backcast);
     }
 
     /// <inheritdoc/>
-    protected override double MeanReversionSpeed(double[] p) => p[1] + p[2];
+    protected override T UnconditionalVariance(Vector<T> p)
+    {
+        T denom = NumOps.Subtract(NumOps.Subtract(NumOps.One, p[1]), p[2]);
+        return NumOps.Divide(p[0], Floor(denom, 1e-9));
+    }
+
+    /// <inheritdoc/>
+    protected override T MeanReversionSpeed(Vector<T> p) => NumOps.Add(p[1], p[2]);
 
     /// <inheritdoc/>
     protected override ClassicalVolatilityModelBase<T> CreateInstance() => new Garch11Model<T>();
 
-    internal static double Sigmoid(double x) => 1.0 / (1.0 + Math.Exp(-x));
-    internal static double Logit(double p)
+    internal static T Sigmoid(T x)
     {
-        double c = Math.Min(Math.Max(p, 1e-6), 1.0 - 1e-6);
-        return Math.Log(c / (1.0 - c));
+        var ops = MathHelper.GetNumericOperations<T>();
+        return ops.Divide(ops.One, ops.Add(ops.One, ops.Exp(ops.Negate(x))));
+    }
+
+    internal static T Logit(T p)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        T low = ops.FromDouble(1e-6);
+        T high = ops.FromDouble(1.0 - 1e-6);
+        T c = ops.LessThan(p, low) ? low : ops.GreaterThan(p, high) ? high : p;
+        return ops.Log(ops.Divide(c, ops.Subtract(ops.One, c)));
+    }
+
+    /// <summary>max(x, floor).</summary>
+    internal static T Floor(T x, double floor)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        T f = ops.FromDouble(floor);
+        return ops.GreaterThan(x, f) ? x : f;
     }
 }

@@ -913,6 +913,7 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
                 ExtraParameters = allParams,
                 OnGradients = gradients => PublishParameterGradients(gradients),
                 VerifyReplayAgreement = true,
+                GraphBreakReason = FusedTrainingBreakReason(),
             });
         }
         finally
@@ -922,6 +923,30 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
 
         return true;
     }
+
+    /// <summary>
+    /// Why the training forward cannot be compiled once and replayed. With the pinned AiDotNet.Tensors it never can.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// TEMPORARY OPT-OUT (#2592): remove the front-end clause once the pinned AiDotNet.Tensors contains
+    /// ooples/AiDotNet.Tensors#1750. In 0.150.0 the log-mel front end's STFT has no training-trace graph branch, and
+    /// host-scalar reductions read unrealized lazy buffers inside a training trace. A compiled plan therefore keeps the
+    /// traced step's spectra as constants, and every later step trains on them (a different value per instance, some
+    /// steps with all-zero gradients). The front end runs on every training forward, so this applies whatever the
+    /// options are. It must not be gated on the regularization settings.
+    /// </para>
+    /// <para>
+    /// The feature-fusion crop offsets are drawn on the host every step. That clause stays after #1750 until the crops
+    /// are drawn through <see cref="AiDotNet.Training.CompiledStepRandom{T}"/>. The Swin drop-path masks and the
+    /// SpecAugment stripes already are, so they need no break.
+    /// </para>
+    /// </remarks>
+    internal string FusedTrainingBreakReason()
+        => _options.EnableFeatureFusion
+            ? "CLAP's log-mel front end is not recorded in training traces before AiDotNet.Tensors #1750 (#2592), and "
+              + "its feature-fusion crops are drawn on the host each step"
+            : "CLAP's log-mel front end is not recorded in training traces before AiDotNet.Tensors #1750 (#2592)";
 
     /// <summary>
     /// The symmetric contrastive loss of paired, L2-normalised embeddings (Radford 2021 Eq. 1; Wu 2023 §3.2):
@@ -956,6 +981,9 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     {
         Guard.NotNull(proposedTarget);
         // min(round(|x|), VocabSize - 1) with banker's rounding; NaN stays NaN (a fresh tensor)
+        // The ids outlive this call -- every later step trains on them -- so they are not taken from a step arena,
+        // which would reissue their buffer to the next allocation and hand the text encoder whatever was written there.
+        using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         using var noGrad = new NoGradScope<T>();
         var id = Engine.TensorRound(Engine.TensorAbs(proposedTarget));
         T cap = NumOps.FromDouble(_options.VocabSize - 1);

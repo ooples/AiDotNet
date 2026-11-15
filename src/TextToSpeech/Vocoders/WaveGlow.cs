@@ -1,3 +1,4 @@
+using AiDotNet.Helpers;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
@@ -42,7 +43,9 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 public partial class WaveGlow<T> : SegmentVocoderBase<T>
 {
     private WaveGlowFlow<T>? _flow;
+    private WaveGlowFlow<T> RequiredFlow => _flow ?? throw new InvalidOperationException("The network has not been created.");
     private TacotronSpectrogram? _features;
+    private TacotronSpectrogram RequiredFeatures => _features ?? throw new InvalidOperationException("The network has not been created.");
 
     /// <summary>Creates a WaveGlow that runs an exported ONNX graph.</summary>
     public WaveGlow(NeuralNetworkArchitecture<T> architecture, string modelPath, WaveGlowOptions? options = null)
@@ -87,14 +90,11 @@ public partial class WaveGlow<T> : SegmentVocoderBase<T>
     /// <remarks>Tacotron 2's log-mel spectrogram (reference <c>mel2samp.py</c>).</remarks>
     protected override Tensor<T> ComputeInputMel(Tensor<T> audio)
     {
-        var samples = new double[audio.Length];
-        for (int i = 0; i < samples.Length; i++) samples[i] = NumOps.ToDouble(audio[i]);
-        var rows = _features!.LogMel(samples);
-        int frames = rows.GetLength(0), bands = rows.GetLength(1);
-        var mel = new Tensor<T>(new[] { 1, bands, frames });
-        for (int f = 0; f < frames; f++)
-            for (int m = 0; m < bands; m++) mel[0, m, f] = NumOps.FromDouble(rows[f, m]);
-        return mel;
+        // Computed in double and narrowed once, as the reference computes it in float32 whatever T is.
+        var rows = RequiredFeatures.LogMel(TensorCopyHelper.CastLogical<T, double>(Engine.Reshape(audio, new[] { audio.Length })));
+        int frames = rows.Shape[0], bands = rows.Shape[1];                                     // [frames, bands]
+        return TensorCopyHelper.CastLogical<double, T>(
+            Engine.Reshape(Engine.TensorTranspose(rows), new[] { 1, bands, frames }));
     }
 
     /// <inheritdoc />
@@ -149,7 +149,7 @@ public partial class WaveGlow<T> : SegmentVocoderBase<T>
     {
         mel = MelInput(mel);
         var flat = Flat(audio);
-        return _flow!.Forward(_flow.Squeeze(flat), _flow.Condition(mel, flat.Length));
+        return RequiredFlow.Forward(RequiredFlow.Squeeze(flat), RequiredFlow.Condition(mel, flat.Length));
     }
 
     /// <summary>The waveform <c>[1, 1, samples]</c> of a latent z <c>[1, group, samples / group]</c> (laid out as
@@ -158,15 +158,15 @@ public partial class WaveGlow<T> : SegmentVocoderBase<T>
     {
         mel = MelInput(mel);
         var o = PaperOptions;
-        int t = z.Shape[2], remaining = _flow!.RemainingChannels;
+        int t = z.Shape[2], remaining = RequiredFlow.RemainingChannels;
         // Encode emits the early outputs first, in order, then the remaining channels; the inverse consumes them in
         // reverse.
         var blocks = new Stack<Tensor<T>>();
         for (int from = 0; from < o.GroupSize - remaining; from += o.EarlyOutputChannels)
             blocks.Push(Engine.TensorSlice(z, new[] { 0, from, 0 }, new[] { 1, o.EarlyOutputChannels, t }));
         blocks.Push(Engine.TensorSlice(z, new[] { 0, o.GroupSize - remaining, 0 }, new[] { 1, remaining, t }));
-        var x = _flow.Inverse(_ => blocks.Pop(), _flow.Condition(mel, t * o.GroupSize));
-        return _flow.Unsqueeze(x);
+        var x = RequiredFlow.Inverse(_ => blocks.Pop(), RequiredFlow.Condition(mel, t * o.GroupSize));
+        return RequiredFlow.Unsqueeze(x);
     }
 
     /// <inheritdoc />
@@ -187,9 +187,9 @@ public partial class WaveGlow<T> : SegmentVocoderBase<T>
     {
         double sigma = PaperOptions.InferenceSigma;
         int samples = mel.Shape[2] * UpsampleFactor;
-        var condition = _flow!.Condition(mel, samples);
-        var x = _flow.Inverse(shape => Engine.TensorMultiplyScalar(Gaussian(shape, random), NumOps.FromDouble(sigma)), condition);
-        return _flow.Unsqueeze(x);
+        var condition = RequiredFlow.Condition(mel, samples);
+        var x = RequiredFlow.Inverse(shape => Engine.TensorMultiplyScalar(Gaussian(shape, random), NumOps.FromDouble(sigma)), condition);
+        return RequiredFlow.Unsqueeze(x);
     }
 
     /// <inheritdoc />

@@ -745,29 +745,15 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
 
         var output = OnnxEncoder.Run(input);
 
-        // Apply sigmoid to get probabilities (multi-label)
-        var scores = new T[ClassLabels.Count];
-        for (int i = 0; i < Math.Min(output.Length, scores.Length); i++)
-        {
-            double logit = NumOps.ToDouble(output[i]);
-            scores[i] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-logit)));
-        }
-
-        return scores;
+        // Apply sigmoid to get probabilities (multi-label); labels past the output score zero
+        return AudioEventDetectionOps.SigmoidScores(Engine, output, ClassLabels.Count);
     }
 
     private T[] ClassifyWithNative(Tensor<T> melSpec)
     {
         // One 96 x 64 patch per 960 ms window; PredictCore already applies the per-label sigmoid, so these are the
         // presence probabilities.
-        var output = Predict(Patch(melSpec));
-        var scores = new T[ClassLabels.Count];
-        for (int i = 0; i < Math.Min(output.Length, scores.Length); i++)
-        {
-            scores[i] = output[i];
-        }
-
-        return scores;
+        return AudioEventDetectionOps.HeadScores(Engine, Predict(Patch(melSpec)), ClassLabels.Count);
     }
 
     /// <summary>
@@ -816,7 +802,7 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
     private double ComputeEnergy(Tensor<T> audio)
     {
         if (audio.Length == 0) return 0.0 / audio.Length;
-        return NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(audio))) / audio.Length;
+        return Engine.TensorSum(Engine.TensorSquare(audio.Cast<double>())) / audio.Length;
     }
 
     private double ComputeZeroCrossingRate(Tensor<T> audio)
@@ -828,9 +814,9 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
         if (frames == 0 || bins == 0) return 0;
 
         // weightedSum = sum_f f * (sum_t mag[t, f]); totalSum = sum of all magnitudes.
-        var binTotals = Engine.ReduceSum(melSpec, [0], keepDims: false);
-        double weightedSum = NumOps.ToDouble(Engine.TensorSum(Engine.TensorMultiply(binTotals, Engine.TensorArange<T>(0, bins))));
-        double totalSum = NumOps.ToDouble(Engine.TensorSum(binTotals));
+        var binTotals = Engine.ReduceSum(melSpec.Cast<double>(), [0], keepDims: false);
+        double weightedSum = Engine.TensorSum(Engine.TensorMultiply(binTotals, Engine.TensorArange<double>(0, bins)));
+        double totalSum = Engine.TensorSum(binTotals);
 
         return totalSum > 0 ? weightedSum / totalSum : 0;
     }
@@ -840,9 +826,9 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
         int count = melSpec.Shape[0] * melSpec.Shape[1];
         if (count == 0) return 0;
 
-        var mag = Engine.TensorMax(melSpec, NumOps.FromDouble(1e-10));
-        double logSum = NumOps.ToDouble(Engine.TensorSum(Engine.TensorLog(mag)));
-        double sum = NumOps.ToDouble(Engine.TensorSum(mag));
+        var mag = Engine.TensorMax(melSpec.Cast<double>(), 1e-10);
+        double logSum = Engine.TensorSum(Engine.TensorLog(mag));
+        double sum = Engine.TensorSum(mag);
 
         double geometricMean = Math.Exp(logSum / count);
         double arithmeticMean = sum / count;
@@ -857,8 +843,8 @@ public partial class AudioEventDetector<T> : AudioClassifierBase<T>, IAudioEvent
         int width = stop - startBin;
         if (frames == 0 || width <= 0) return 0;
 
-        var band = Engine.TensorSlice(melSpec, [0, startBin], [frames, width]);
-        return NumOps.ToDouble(Engine.TensorSum(band)) / (frames * width);
+        var band = Engine.TensorSlice(melSpec, [0, startBin], [frames, width]).Cast<double>();
+        return Engine.TensorSum(band) / ((long)frames * width);
     }
 
     private static double ComputeEventScore(

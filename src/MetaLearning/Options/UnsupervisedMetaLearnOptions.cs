@@ -8,10 +8,8 @@ namespace AiDotNet.MetaLearning.Options;
 /// Configuration options for Unsupervised Meta-Learning (Hsu et al., 2019).
 /// </summary>
 /// <remarks>
-/// Unsupervised meta-learning constructs pseudo-tasks by clustering gradients in a
-/// low-dimensional space. Tasks within the same cluster share similar gradient structure
-/// and are treated as the same "class" for self-supervised meta-training. Prediction
-/// consistency regularization encourages stable cluster assignments.
+/// CACTUs (Hsu, Levine and Finn, ICLR 2019) builds pseudo-tasks by k-means clustering the unlabeled
+/// meta-training inputs and treating clusters as classes, then meta-trains MAML on them.
 /// </remarks>
 public class UnsupervisedMetaLearnOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<T>
 {
@@ -59,28 +57,15 @@ public class UnsupervisedMetaLearnOptions<T, TInput, TOutput> : ModelOptions, IM
     public IEpisodicDataLoader<T, TInput, TOutput>? DataLoader { get; set; }
 
     /// <summary>
-    /// Number of gradient clusters (pseudo-classes) for self-supervised task construction.
-    /// Default: 4.
+    /// k, the number of k-means clusters each CACTUs partition of the unlabeled pool has. 0 picks it so the
+    /// average cluster holds one pseudo-class's K + Q examples. Default: 0.
     /// </summary>
-    public int NumClusters { get; set; } = 4;
+    public int NumClusters { get; set; } = 0;
 
     /// <summary>
-    /// Dimensionality of the compressed gradient space for clustering.
-    /// Default: 32.
+    /// Lloyd iterations per k-means partition. Default: 20.
     /// </summary>
-    public int ClusteringDim { get; set; } = 32;
-
-    /// <summary>
-    /// Weight on prediction consistency regularization between support and query
-    /// adapted models. Default: 0.5.
-    /// </summary>
-    public double ConsistencyWeight { get; set; } = 0.5;
-
-    /// <summary>
-    /// EMA rate for updating cluster centroids. Default: 0.1.
-    /// </summary>
-    public double ClusterUpdateRate { get; set; } = 0.1;
-
+    public int KMeansIterations { get; set; } = 20;
     /// <summary>Creates options for meta-learning <paramref name="metaModel"/>, with the default settings.</summary>
     /// <param name="metaModel">The model whose parameters are meta-learned.</param>
     public UnsupervisedMetaLearnOptions(IFullModel<T, TInput, TOutput> metaModel)
@@ -89,8 +74,7 @@ public class UnsupervisedMetaLearnOptions<T, TInput, TOutput> : ModelOptions, IM
     /// <inheritdoc/>
     public bool IsValid() =>
         MetaModel != null && OuterLearningRate > 0 && MetaBatchSize > 0 &&
-        NumClusters > 0 && ClusteringDim > 0 && ConsistencyWeight >= 0 &&
-        ClusterUpdateRate > 0 && ClusterUpdateRate <= 1;
+        NumClusters >= 0 && KMeansIterations > 0;
     /// <inheritdoc/>
     public IMetaLearnerOptions<T> Clone() => new UnsupervisedMetaLearnOptions<T, TInput, TOutput>(MetaModel)
     {
@@ -100,7 +84,6 @@ public class UnsupervisedMetaLearnOptions<T, TInput, TOutput> : ModelOptions, IM
         GradientClipThreshold = GradientClipThreshold, RandomSeed = RandomSeed, EvaluationTasks = EvaluationTasks,
         EvaluationFrequency = EvaluationFrequency, EnableCheckpointing = EnableCheckpointing,
         CheckpointFrequency = CheckpointFrequency, UseFirstOrder = UseFirstOrder,
-        NumClusters = NumClusters, ClusteringDim = ClusteringDim,
-        ConsistencyWeight = ConsistencyWeight, ClusterUpdateRate = ClusterUpdateRate
+        NumClusters = NumClusters, KMeansIterations = KMeansIterations
     };
 }

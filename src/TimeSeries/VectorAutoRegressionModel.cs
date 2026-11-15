@@ -161,26 +161,21 @@ public partial class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>, IMul
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
+        var engine = AiDotNetEngine.Current;
         int n = input.Rows;
         int trainN = _trainingSeries.Length;
 
-        // In-sample: return training values directly (fitted values approach)
+        // In-sample: return training values directly (fitted values approach); out-of-sample rows get the first
+        // intercept.
         if (trainN > 0)
         {
-            var predictions = new Vector<T>(n);
-            for (int t = 0; t < n; t++)
-            {
-                if (t < trainN)
-                {
-                    predictions[t] = _trainingSeries[t];
-                }
-                else
-                {
-                    // Out-of-sample: use intercept + last known value
-                    predictions[t] = _intercepts.Length > 0 ? _intercepts[0] : NumOps.Zero;
-                }
-            }
-            return predictions;
+            int known = Math.Min(n, trainN);
+            T fill = _intercepts.Length > 0 ? _intercepts[0] : NumOps.Zero;
+            var parts = new List<Tensor<T>>();
+            if (known > 0) parts.Add(engine.TensorSlice(_trainingSeries.AsTensor(), new[] { 0 }, new[] { known }));
+            if (n > known) parts.Add(Filled(new[] { n - known }, fill));
+            return parts.Count == 0 ? new Vector<T>(0)
+                : (parts.Count == 1 ? parts[0] : engine.TensorConcatenate(parts.ToArray(), 0)).ToVector();
         }
 
         // Fallback: standard VAR prediction when no training series stored
@@ -189,21 +184,25 @@ public partial class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>, IMul
             throw new ArgumentException("Input dimensions do not match the model.");
         }
 
+        // Rows before the first full lag window get the first intercept; every later row t gets the first
+        // variable's one-step prediction from rows t - p .. t - 1.
         int p = _varOptions.Lag;
-        var fallback = new Vector<T>(n);
-        for (int t = 0; t < n; t++)
+        int warmup = Math.Min(n, p);
+        var head = Filled(new[] { warmup }, _intercepts[0]);
+        if (n <= p)
         {
-            if (t < p)
-            {
-                fallback[t] = _intercepts[0];
-                continue;
-            }
-            var window = input.Slice(t - p, p);
-            var stepPrediction = PredictSingleStep(window);
-            fallback[t] = stepPrediction[0];
+            return head.ToVector();
         }
 
-        return fallback;
+        var lagged = Tensor<T>.FromMatrix(PrepareLaggedData(input));
+        var firstEquation = engine.TensorConcatenate(new[]
+        {
+            engine.TensorSlice(_intercepts.AsTensor(), new[] { 0 }, new[] { 1 }),
+            engine.Reshape(engine.TensorSlice(Tensor<T>.FromMatrix(_coefficients), new[] { 0, 0 }, new[] { 1, _coefficients.Columns }), new[] { _coefficients.Columns })
+        }, 0);
+        var steps = engine.Reshape(
+            engine.TensorMatMul(lagged, engine.Reshape(firstEquation, new[] { firstEquation.Length, 1 })), new[] { n - p });
+        return engine.TensorConcatenate(new[] { head, steps }, 0).ToVector();
     }
 
     /// <summary>
@@ -213,28 +212,20 @@ public partial class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>, IMul
     /// <returns>A vector of size OutputDimension with the next-step prediction for each variable.</returns>
     private Vector<T> PredictSingleStep(Matrix<T> lagWindow)
     {
+        var engine = AiDotNetEngine.Current;
         int m = _varOptions.OutputDimension;
         int p = _varOptions.Lag;
 
-        var prediction = new Vector<T>(m);
-        var laggedValues = new Vector<T>(m * p);
-        for (int lag = 0; lag < p; lag++)
-        {
-            int rowIndex = lagWindow.Rows - lag - 1;
-            for (int col = 0; col < m; col++)
-            {
-                laggedValues[lag * m + col] = lagWindow[rowIndex, col];
-            }
-        }
+        // Lag 1 is the window's last row, lag p its p-th from last: the rows in reverse, flattened lag-major.
+        var window = engine.TensorSlice(Tensor<T>.FromMatrix(lagWindow), new[] { lagWindow.Rows - p, 0 }, new[] { p, m });
+        var newestFirst = new Tensor<int>(Enumerable.Range(0, p).Reverse().ToArray(), new[] { p });
+        var reversed = engine.TensorGather(window, newestFirst, 0);
+        var laggedValues = engine.Reshape(reversed, new[] { m * p, 1 });
 
-        for (int i = 0; i < m; i++)
-        {
-            var coeffRow = _coefficients.GetRow(i);
-            T dotProductResult = Engine.DotProduct(coeffRow, laggedValues);
-            prediction[i] = NumOps.Add(_intercepts[i], dotProductResult);
-        }
-
-        return prediction;
+        var prediction = engine.TensorAdd(
+            _intercepts.AsTensor(),
+            engine.Reshape(engine.TensorMatMul(Tensor<T>.FromMatrix(_coefficients), laggedValues), new[] { m }));
+        return prediction.ToVector();
     }
 
     /// <summary>
@@ -364,30 +355,30 @@ public partial class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>, IMul
     /// </remarks>
     private Matrix<T> PrepareLaggedData(Matrix<T> x)
     {
+        var engine = AiDotNetEngine.Current;
         int n = x.Rows;
         int m = x.Columns;
-        Matrix<T> laggedData = new Matrix<T>(n - _varOptions.Lag, m * _varOptions.Lag + 1);
+        int p = _varOptions.Lag;
+        int rows = n - p;
+        var series = Tensor<T>.FromMatrix(x);
 
-        for (int i = _varOptions.Lag; i < n; i++)
+        // Row t - p holds [1, x[t - 1], x[t - 2], ..., x[t - p]]: a column of ones, then lag j's block is rows
+        // p - j .. n - j - 1 of x.
+        var blocks = new Tensor<T>[p + 1];
+        blocks[0] = Filled(new[] { rows, 1 }, NumOps.One);
+        for (int j = 0; j < p; j++)
         {
-            laggedData[i - _varOptions.Lag, 0] = NumOps.One;
-            for (int j = 0; j < _varOptions.Lag; j++)
-            {
-                for (int k = 0; k < m; k++)
-                {
-                    laggedData[i - _varOptions.Lag, j * m + k + 1] = x[i - j - 1, k];
-                }
-            }
+            blocks[j + 1] = engine.TensorSlice(series, new[] { p - j - 1, 0 }, new[] { rows, m });
         }
 
-        return laggedData;
+        return engine.TensorConcatenate(blocks, 1).ToMatrix();
     }
 
     /// <summary>
     /// Estimates coefficients using Ordinary Least Squares (OLS) regression.
     /// </summary>
-    /// <param name="x">The input features matrix.</param>
-    /// <param name="y">The target values vector.</param>
+    /// <param name="xTx">The Gram matrix X'X of the lagged design.</param>
+    /// <param name="xTy">X'y for this equation's dependent variable.</param>
     /// <returns>A vector of regression coefficients.</returns>
     /// <remarks>
     /// <para>
@@ -410,11 +401,8 @@ public partial class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>, IMul
     /// effects of lagged values of all variables.
     /// </para>
     /// </remarks>
-    private Vector<T> EstimateOLS(Matrix<T> x, Vector<T> y)
+    private Vector<T> EstimateOLS(Matrix<T> xTx, Vector<T> xTy)
     {
-        Matrix<T> xTx = x.Transpose().Multiply(x);
-        Vector<T> xTy = x.Transpose().Multiply(y);
-
         return MatrixSolutionHelper.SolveLinearSystem(xTx, xTy, _varOptions.DecompositionType);
     }
 
@@ -422,6 +410,7 @@ public partial class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>, IMul
     /// Calculates the residuals (errors) between the model's predictions and the actual values.
     /// </summary>
     /// <param name="x">The input matrix where each column represents a different time series variable.</param>
+    /// <param name="laggedData">The lagged design of <paramref name="x"/> (<see cref="PrepareLaggedData"/>).</param>
     /// <returns>A matrix of residuals.</returns>
     /// <remarks>
     /// <para>
@@ -446,20 +435,23 @@ public partial class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>, IMul
     /// - They can be used to estimate the variance-covariance matrix of the VAR system
     /// </para>
     /// </remarks>
-    private Matrix<T> CalculateResiduals(Matrix<T> x)
+    private Matrix<T> CalculateResiduals(Matrix<T> x, Tensor<T> laggedData)
     {
-        int n = x.Rows;
+        var engine = AiDotNetEngine.Current;
+        int p = _varOptions.Lag;
+        int rows = x.Rows - p;
         int m = x.Columns;
-        Matrix<T> residuals = new Matrix<T>(n - _varOptions.Lag, m);
 
-        for (int i = _varOptions.Lag; i < n; i++)
+        // Each row's one-step prediction is [1, lags] times [intercepts; coefficients^T]; the residual is the
+        // actual row minus it.
+        var equations = engine.TensorConcatenate(new[]
         {
-            Vector<T> predicted = PredictSingleStep(x.Slice(i - _varOptions.Lag, _varOptions.Lag));
-            Vector<T> actual = x.GetRow(i);
-            residuals.SetRow(i - _varOptions.Lag, actual.Subtract(predicted));
-        }
-
-        return residuals;
+            engine.Reshape(_intercepts.AsTensor(), new[] { m, 1 }),
+            Tensor<T>.FromMatrix(_coefficients)
+        }, 1);
+        var predicted = engine.TensorMatMul(laggedData, engine.TensorTranspose(equations));
+        var actual = engine.TensorSlice(Tensor<T>.FromMatrix(x), new[] { p, 0 }, new[] { rows, m });
+        return HeapMatrix(engine.TensorSubtract(actual, predicted));
     }
 
     /// <summary>
@@ -490,10 +482,12 @@ public partial class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>, IMul
     /// </remarks>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
-        // Store training series for in-sample predictions
+        var engine = AiDotNetEngine.Current;
+
+        // Store training series for in-sample predictions. Model state is copied into plain-heap storage: engine
+        // results inside TrainCore live in the training arena, which is recycled when training ends.
         _trainingSeries = new Vector<T>(y.Length);
-        for (int i = 0; i < y.Length; i++)
-            _trainingSeries[i] = y[i];
+        y.AsSpan().CopyTo(_trainingSeries.AsWritableSpan());
 
         // For univariate mode: if x contains only feature indices (1 column)
         // and y contains the actual time series, use y as the observation column.
@@ -502,8 +496,7 @@ public partial class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>, IMul
         if (x.Columns == 1 && y.Length == x.Rows)
         {
             observations = new Matrix<T>(x.Rows, 1);
-            for (int i = 0; i < x.Rows; i++)
-                observations[i, 0] = y[i];
+            y.AsSpan().CopyTo(observations.AsWritableSpan());
         }
 
         // Auto-configure OutputDimension from the data if it doesn't match.
@@ -520,54 +513,40 @@ public partial class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>, IMul
 
         int n = x.Rows;
         int m = x.Columns;
+        int p = _varOptions.Lag;
 
         // Validate sufficient observations
-        if (n <= _varOptions.Lag)
+        if (n <= p)
         {
-            throw new ArgumentException($"Not enough data points. Need more than {_varOptions.Lag} observations for a VAR({_varOptions.Lag}) model. Found {n} observations.");
+            throw new ArgumentException($"Not enough data points. Need more than {p} observations for a VAR({p}) model. Found {n} observations.");
         }
 
-        // Check for missing values
-        for (int i = 0; i < n; i++)
+        // Check for missing values: the first NaN or infinity in row-major order is reported.
+        var series = Tensor<T>.FromMatrix(x);
+        var invalid = engine.TensorWhere(engine.TensorIsFinite(series), engine.TensorZerosLike(series), engine.TensorOnesLike(series));
+        if (NumOps.GreaterThan(engine.TensorSum(invalid), NumOps.Zero))
         {
-            for (int j = 0; j < m; j++)
-            {
-                // Check if the value is NaN or infinity (implementation depends on type T)
-                if (!IsValidValue(x[i, j]))
-                {
-                    throw new ArgumentException($"Invalid value detected at position ({i},{j}). VAR models cannot handle missing values.");
-                }
-            }
+            int position = FirstArgMax(engine.Reshape(invalid, new[] { n * m }));
+            throw new ArgumentException($"Invalid value detected at position ({position / m},{position % m}). VAR models cannot handle missing values.");
         }
 
         try
         {
             // Prepare lagged data
-            Matrix<T> laggedData = PrepareLaggedData(x);
+            var laggedData = Tensor<T>.FromMatrix(PrepareLaggedData(x));
 
-            // Initialize matrices
-            _coefficients = new Matrix<T>(m, m * _varOptions.Lag);
-            _intercepts = new Vector<T>(m);
+            // OLS for every equation shares X'X; the right-hand sides are the columns of X'Y over rows p .. n - 1.
+            var laggedT = engine.TensorTranspose(laggedData);
+            var xTx = engine.TensorMatMul(laggedT, laggedData).ToMatrix();
+            var xTy = engine.TensorMatMul(laggedT, engine.TensorSlice(series, new[] { p, 0 }, new[] { n - p, m })).ToMatrix();
 
             // Estimate coefficients using OLS for each equation
+            var solutions = new Tensor<T>[m];
             for (int i = 0; i < m; i++)
             {
-                // Extract the dependent variable for the current equation
-                Vector<T> yi = x.GetColumn(i).Slice(_varOptions.Lag, n - _varOptions.Lag);
-
                 try
                 {
-                    // Estimate coefficients for this equation
-                    Vector<T> coeffs = EstimateOLS(laggedData, yi);
-
-                    // Store intercept
-                    _intercepts[i] = coeffs[0];
-
-                    // Store coefficients for lagged variables
-                    for (int j = 0; j < m * _varOptions.Lag; j++)
-                    {
-                        _coefficients[i, j] = coeffs[j + 1];
-                    }
+                    solutions[i] = EstimateOLS(xTx, xTy.GetColumn(i)).AsTensor();
                 }
                 catch (Exception ex)
                 {
@@ -575,8 +554,13 @@ public partial class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>, IMul
                 }
             }
 
+            // Row i of the stacked solutions is [intercept_i, coefficients_i].
+            var stacked = engine.TensorStack(solutions, 0);
+            _intercepts = HeapVector(engine.Reshape(engine.TensorSlice(stacked, new[] { 0, 0 }, new[] { m, 1 }), new[] { m }));
+            _coefficients = HeapMatrix(engine.TensorSlice(stacked, new[] { 0, 1 }, new[] { m, m * p }));
+
             // Calculate residuals
-            _residuals = CalculateResiduals(x);
+            _residuals = CalculateResiduals(x, laggedData);
         }
         catch (Exception ex)
         {
@@ -589,14 +573,11 @@ public partial class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>, IMul
         }
 
         // Populate ModelParameters from intercepts + coefficient matrix for GetParameters()
-        int m2 = _coefficients.Rows;
-        int cols = _coefficients.Columns;
-        ModelParameters = new Vector<T>(m2 + m2 * cols);
-        for (int i = 0; i < m2; i++)
-            ModelParameters[i] = _intercepts[i];
-        for (int i = 0; i < m2; i++)
-            for (int j = 0; j < cols; j++)
-                ModelParameters[m2 + i * cols + j] = _coefficients[i, j];
+        ModelParameters = HeapVector(engine.TensorConcatenate(new[]
+        {
+            _intercepts.AsTensor(),
+            engine.Reshape(Tensor<T>.FromMatrix(_coefficients), new[] { _coefficients.Rows * _coefficients.Columns })
+        }, 0));
     }
 
     /// <summary>
@@ -655,23 +636,15 @@ public partial class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>, IMul
         }
 
         // Verify input length (should contain lagged values for all variables + variable index)
-        int expectedLength = _varOptions.OutputDimension * _varOptions.Lag + 1;
+        int lagged = _varOptions.OutputDimension * _varOptions.Lag;
+        int expectedLength = lagged + 1;
         if (input.Length != expectedLength)
         {
             throw new ArgumentException($"Input vector length ({input.Length}) does not match expected length ({expectedLength}).", nameof(input));
         }
 
-        // Start with the intercept term
-        T prediction = _intercepts[variableIndex];
-
-        // Add contributions from lagged variables
-        for (int j = 0; j < _varOptions.OutputDimension * _varOptions.Lag; j++)
-        {
-            // Input vector contains lagged values first, then variable index
-            prediction = NumOps.Add(prediction, NumOps.Multiply(_coefficients[variableIndex, j], input[j]));
-        }
-
-        return prediction;
+        // The intercept plus the equation's coefficients times the lagged values (the input before the index).
+        return NumOps.Add(_intercepts[variableIndex], Engine.DotProduct(_coefficients.GetRow(variableIndex), input.Slice(0, lagged)));
     }
 
     /// <summary>
@@ -839,72 +812,52 @@ public partial class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>, IMul
             throw new ArgumentException("Horizon must be positive.", nameof(horizon));
         }
 
+        var engine = AiDotNetEngine.Current;
         Dictionary<string, Matrix<T>> impulseResponses = new Dictionary<string, Matrix<T>>();
         int k = _varOptions.OutputDimension;
+        int kp = k * _varOptions.Lag;
 
         // Estimate residual covariance matrix
         Matrix<T> residCov = EstimateResidualCovariance();
 
         // Get Cholesky decomposition of residual covariance for orthogonalized impulses
-        Matrix<T> cholesky;
+        Tensor<T> cholesky;
         try
         {
-            cholesky = CholeskyDecomposition(residCov);
+            cholesky = Tensor<T>.FromMatrix(CholeskyDecomposition(residCov));
         }
-        catch (Exception)
+        catch (ArgumentException)
         {
-            // If Cholesky fails, use diagonal matrix instead
-            var diagValues = new Vector<T>(k);
-            for (int i = 0; i < k; i++)
+            // Not positive definite: the shocks are scaled by the residual standard deviations instead.
+            var identity = Tensor<T>.FromMatrix(Matrix<T>.CreateIdentity(k));
+            cholesky = engine.TensorMultiply(
+                engine.TensorBroadcastTo(
+                    engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(Tensor<T>.FromMatrix(residCov), identity), new[] { 1 }, true)),
+                    new[] { k, k }),
+                identity);
+        }
+
+        // statsmodels orth_irfs: Phi_h P, with Phi_h the top-left k x k block of the h-th power of the companion
+        // matrix and P the Cholesky factor; entry [response, shock].
+        var companion = Tensor<T>.FromMatrix(ConstructVARMatrix());
+        var power = Tensor<T>.FromMatrix(Matrix<T>.CreateIdentity(kp));
+        var periods = new Tensor<T>[horizon + 1];
+        for (int h = 0; h <= horizon; h++)
+        {
+            if (h > 0)
             {
-                diagValues[i] = NumOps.Sqrt(residCov[i, i]);
+                power = engine.TensorMatMul(power, companion);
             }
 
-            cholesky = Matrix<T>.CreateDiagonal(diagValues);
+            periods[h] = engine.TensorMatMul(engine.TensorSlice(power, new[] { 0, 0 }, new[] { k, k }), cholesky);
         }
 
-        // For each variable, create a shock and compute responses
+        // [period, response, shock] -> one [period, response] matrix per shock.
+        var responses = engine.TensorStack(periods, 0);
         for (int shockVar = 0; shockVar < k; shockVar++)
         {
-            // Create impulse vector (one unit shock to variable shockVar)
-            Vector<T> impulse = new Vector<T>(k);
-            for (int i = 0; i < k; i++)
-            {
-                impulse[i] = cholesky[i, shockVar];
-            }
-
-            // Compute impulse responses for all variables over the horizon
-            Matrix<T> responses = new Matrix<T>(horizon + 1, k); // +1 for initial period
-
-            // Initial period: direct impact of shock
-            for (int i = 0; i < k; i++)
-            {
-                responses[0, i] = impulse[i];
-            }
-
-            // Compute responses for each subsequent period
-            Matrix<T> varMatrix = ConstructVARMatrix();
-            Matrix<T> currentImpact = Matrix<T>.CreateIdentity(k);
-
-            for (int h = 1; h <= horizon; h++)
-            {
-                // Calculate impact matrix for period h
-                currentImpact = currentImpact.Multiply(varMatrix);
-
-                // Calculate responses for all variables at horizon h
-                for (int respVar = 0; respVar < k; respVar++)
-                {
-                    T response = NumOps.Zero;
-                    for (int j = 0; j < k; j++)
-                    {
-                        response = NumOps.Add(response, NumOps.Multiply(currentImpact[respVar, j], impulse[j]));
-                    }
-                    responses[h, respVar] = response;
-                }
-            }
-
-            // Store the impulse response matrix for this shock variable
-            impulseResponses[$"Variable_{shockVar}"] = responses;
+            impulseResponses[$"Variable_{shockVar}"] = engine.Reshape(
+                engine.TensorSlice(responses, new[] { 0, 0, shockVar }, new[] { horizon + 1, k, 1 }), new[] { horizon + 1, k }).ToMatrix();
         }
 
         return impulseResponses;
@@ -941,36 +894,17 @@ public partial class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>, IMul
             throw new InvalidOperationException("No residuals available. The model must be trained first.");
         }
 
+        var engine = AiDotNetEngine.Current;
         int n = _residuals.Rows;
         int k = _residuals.Columns;
-        Matrix<T> covariance = new Matrix<T>(k, k);
 
-        // Calculate degrees of freedom adjustment
-        int dof = n - _varOptions.Lag * k - 1; // Subtract number of estimated parameters per equation
+        // Degrees of freedom: observations less the parameters per equation (statsmodels df_resid).
+        int dof = n - _varOptions.Lag * k - 1;
         if (dof <= 0) dof = 1; // Prevent division by zero
-        T dofAdjustment = NumOps.Divide(NumOps.One, NumOps.FromDouble(dof));
 
-        // Calculate covariance matrix
-        for (int i = 0; i < k; i++)
-        {
-            for (int j = 0; j <= i; j++) // Take advantage of symmetry
-            {
-                T sum = NumOps.Zero;
-                for (int t = 0; t < n; t++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(_residuals[t, i], _residuals[t, j]));
-                }
-
-                // Apply degrees of freedom adjustment
-                T cov = NumOps.Multiply(sum, dofAdjustment);
-
-                // Set both (i,j) and (j,i) elements due to symmetry
-                covariance[i, j] = cov;
-                covariance[j, i] = cov;
-            }
-        }
-
-        return covariance;
+        var residuals = Tensor<T>.FromMatrix(_residuals);
+        return engine.TensorDivideScalar(
+            engine.TensorMatMul(engine.TensorTranspose(residuals), residuals), NumOps.FromDouble(dof)).ToMatrix();
     }
 
     /// <summary>
@@ -997,32 +931,24 @@ public partial class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>, IMul
     /// </remarks>
     private Matrix<T> ConstructVARMatrix()
     {
+        var engine = AiDotNetEngine.Current;
         int k = _varOptions.OutputDimension;
         int p = _varOptions.Lag;
         int kp = k * p;
 
-        // Create matrix of size (k*p × k*p)
-        Matrix<T> companion = new Matrix<T>(kp, kp);
-
-        // Fill in the coefficient blocks
-        for (int i = 0; i < k; i++)
+        // [A_1 ... A_p] on top; below it the identity that shifts each lag down one block.
+        var coefficients = Tensor<T>.FromMatrix(_coefficients);
+        if (p == 1)
         {
-            for (int j = 0; j < k * p; j++)
-            {
-                if (j < k * p)
-                {
-                    companion[i, j] = _coefficients[i, j];
-                }
-            }
+            return coefficients.ToMatrix();
         }
 
-        // Fill in the identity blocks
-        for (int i = k; i < kp; i++)
+        var shift = engine.TensorConcatenate(new[]
         {
-            companion[i, i - k] = NumOps.One;
-        }
-
-        return companion;
+            Tensor<T>.FromMatrix(Matrix<T>.CreateIdentity(kp - k)),
+            new Tensor<T>(new[] { kp - k, k })
+        }, 1);
+        return engine.TensorConcatenate(new[] { coefficients, shift }, 0).ToMatrix();
     }
 
     /// <summary>
@@ -1056,96 +982,47 @@ public partial class VectorAutoRegressionModel<T> : TimeSeriesModelBase<T>, IMul
             throw new ArgumentException("Matrix must be square for Cholesky decomposition.");
         }
 
-        int n = matrix.Rows;
-        Matrix<T> result = new Matrix<T>(n, n);
-
-        for (int i = 0; i < n; i++)
+        var (factor, info) = LinalgDispatch<T>.CholeskyEx(Tensor<T>.FromMatrix(matrix), upper: false);
+        if (AiDotNetEngine.Current.TensorCountNonzero(info) > 0)
         {
-            for (int j = 0; j <= i; j++)
-            {
-                T sum = NumOps.Zero;
-
-                if (j == i) // Diagonal elements
-                {
-                    for (int k = 0; k < j; k++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Square(result[j, k]));
-                    }
-
-                    T diagonal = NumOps.Subtract(matrix[j, j], sum);
-                    if (NumOps.LessThanOrEquals(diagonal, NumOps.Zero))
-                    {
-                        throw new ArgumentException("Matrix is not positive definite.");
-                    }
-
-                    result[j, j] = NumOps.Sqrt(diagonal);
-                }
-                else // Off-diagonal elements
-                {
-                    for (int k = 0; k < j; k++)
-                    {
-                        sum = NumOps.Add(sum, NumOps.Multiply(result[i, k], result[j, k]));
-                    }
-
-                    if (!NumOps.Equals(result[j, j], NumOps.Zero))
-                    {
-                        result[i, j] = NumOps.Divide(NumOps.Subtract(matrix[i, j], sum), result[j, j]);
-                    }
-                    else
-                    {
-                        result[i, j] = NumOps.Zero;
-                    }
-                }
-            }
+            throw new ArgumentException("Matrix is not positive definite.");
         }
 
-        return result;
+        return factor.ToMatrix();
     }
 
-    /// <summary>
-    /// Checks if a value is valid (not NaN or infinity).
-    /// </summary>
-    /// <param name="value">The value to check.</param>
-    /// <returns>True if the value is valid, false otherwise.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method determines whether a value is valid for use in the VAR model.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b>
-    /// This is a helper method that checks if a value is suitable for use in the model.
-    /// It makes sure there are no missing or invalid values in your data.
-    /// 
-    /// VAR models require complete data without any missing values or infinities,
-    /// as these would distort the estimated relationships between variables.
-    /// </para>
-    /// </remarks>
-    private bool IsValidValue(T value)
+    private static Tensor<T> Filled(int[] shape, T value)
     {
-        // Implementation depends on type T - this shows a general approach
-        // For floating point types, you'd check for NaN and infinity
-        // For this generic implementation, we'll use a simple non-zero check
-        try
-        {
-            double doubleValue = Convert.ToDouble(value);
-            return !double.IsNaN(doubleValue) && !double.IsInfinity(doubleValue);
-        }
-        catch (InvalidCastException)
-        {
-            // If conversion fails for non-numeric types, assume valid
-            // This is expected behavior for types that cannot be converted to double
-            return true;
-        }
-        catch (FormatException)
-        {
-            // If format conversion fails, assume valid for non-numeric types
-            return true;
-        }
-        catch (OverflowException)
-        {
-            // If value is too large or small for double, it's invalid
-            return false;
-        }
+        var tensor = new Tensor<T>(shape);
+        AiDotNetEngine.Current.TensorFill(tensor, value);
+        return tensor;
+    }
+
+    /// <summary>A plain-heap copy of a [rows, columns] engine result (training-arena buffers are recycled).</summary>
+    private static Matrix<T> HeapMatrix(Tensor<T> values)
+    {
+        var matrix = new Matrix<T>(values.Shape[0], values.Shape[1]);
+        values.CopyTo(matrix.AsWritableSpan());
+        return matrix;
+    }
+
+    /// <summary>A plain-heap copy of a 1-D engine result (training-arena buffers are recycled).</summary>
+    private static Vector<T> HeapVector(Tensor<T> values)
+    {
+        var vector = new Vector<T>(values.Length);
+        values.CopyTo(vector.AsWritableSpan());
+        return vector;
+    }
+
+    /// <summary>The index of the first maximum of a 1-D tensor: the earliest maximal entry carries the largest weight.</summary>
+    private static int FirstArgMax(Tensor<T> values)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        int length = values.Length;
+        var isMax = engine.TensorEquals(values, engine.TensorMaxValue(values));
+        var descending = engine.TensorAddScalar(engine.TensorNegate(engine.TensorArange<T>(0, length, 1)), numOps.FromDouble(length));
+        return engine.TensorArgMax(engine.TensorMultiply(isMax, descending), 0).GetFlat(0);
     }
 
     /// <summary>

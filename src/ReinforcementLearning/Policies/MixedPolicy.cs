@@ -163,14 +163,9 @@ namespace AiDotNet.ReinforcementLearning.Policies
         // The one-hot of the most probable discrete action.
         private Vector<T> OneHotArgMax(Vector<T> logits)
         {
-            int best = 0;
             // The argmax of the logits: softmax preserves their order, and a rounded probability can tie two
             // logits that differ.
-            for (int k = 1; k < logits.Length; k++)
-                if (NumOps.GreaterThan(logits[k], logits[best])) best = k;
-            var oneHot = new Vector<T>(logits.Length);
-            oneHot[best] = NumOps.One;
-            return oneHot;
+            return RLTensorOps.OneHot<T>(logits.Length, RLTensorOps.ArgMax(logits));
         }
 
         /// <summary>
@@ -195,17 +190,11 @@ namespace AiDotNet.ReinforcementLearning.Policies
 
             // Get continuous action (Gaussian)
 
-            var continuousAction = new Vector<T>(_continuousActionSize);
-            for (int i = 0; i < _continuousActionSize; i++)
-            {
-                double meanValue = NumOps.ToDouble(continuousOutput[i]);
-                double logStdValue = NumOps.ToDouble(continuousOutput[_continuousActionSize + i]);
-                double stdValue = Math.Exp(logStdValue);
-
-                double sampledValue = training ? meanValue + stdValue * _random.NextGaussian() : meanValue;
-
-                continuousAction[i] = NumOps.FromDouble(sampledValue);
-            }
+            // Training samples mean + sigma * N(0, 1); inference takes the mean.
+            var continuousMean = continuousOutput.GetSubVector(0, _continuousActionSize);
+            var continuousAction = training
+                ? RLTensorOps.SampleGaussian(continuousMean, continuousOutput.GetSubVector(_continuousActionSize, _continuousActionSize), _random)
+                : continuousMean;
 
             if (training)
             {
@@ -213,15 +202,9 @@ namespace AiDotNet.ReinforcementLearning.Policies
             }
 
             // Concatenate: [discrete, continuous]
-            var mixedAction = new Vector<T>(_discreteActionSize + _continuousActionSize);
-            for (int i = 0; i < _discreteActionSize; i++)
-            {
-                mixedAction[i] = discreteAction[i];
-            }
-            for (int i = 0; i < _continuousActionSize; i++)
-            {
-                mixedAction[_discreteActionSize + i] = continuousAction[i];
-            }
+            var mixedAction = RLTensorOps.Concat(
+                RLTensorOps.Head(discreteAction, _discreteActionSize),
+                RLTensorOps.Head(continuousAction, _continuousActionSize));
 
             return mixedAction;
         }
@@ -237,54 +220,23 @@ namespace AiDotNet.ReinforcementLearning.Policies
             var stateTensor = Tensor<T>.FromVector(state);
 
             // Split action into discrete and continuous parts
-            var discreteAction = new Vector<T>(_discreteActionSize);
-            var continuousAction = new Vector<T>(_continuousActionSize);
-
-            for (int i = 0; i < _discreteActionSize; i++)
-            {
-                discreteAction[i] = action[i];
-            }
-            for (int i = 0; i < _continuousActionSize; i++)
-            {
-                continuousAction[i] = action[_discreteActionSize + i];
-            }
+            var discreteAction = action.GetSubVector(0, _discreteActionSize);
+            var continuousAction = action.GetSubVector(_discreteActionSize, _continuousActionSize);
 
             // Discrete log prob
             var (discreteLogits, continuousOutput) = ReadHeads(stateTensor);
 
-            int discreteActionIndex = 0;
-            for (int i = 0; i < _discreteActionSize; i++)
-            {
-                if (NumOps.GreaterThan(discreteAction[i], NumOps.FromDouble(0.5)))
-                {
-                    discreteActionIndex = i;
-                    break;
-                }
-            }
+            int discreteActionIndex = RLTensorOps.FirstPositiveIndex(discreteAction, NumOps.FromDouble(0.5));
 
             // Exact log-softmax from the logits, log p(a) = z_a - logsumexp(z), as DiscretePolicy computes it: the
             // former log(p + 1e-8) of the rounded softmax biased every log-probability.
-            double maxLogit = double.NegativeInfinity;
-            for (int i = 0; i < discreteLogits.Length; i++) maxLogit = Math.Max(maxLogit, NumOps.ToDouble(discreteLogits[i]));
-            double expSum = 0;
-            for (int i = 0; i < discreteLogits.Length; i++) expSum += Math.Exp(NumOps.ToDouble(discreteLogits[i]) - maxLogit);
-            T discreteLogProb = NumOps.FromDouble(NumOps.ToDouble(discreteLogits[discreteActionIndex]) - maxLogit - Math.Log(expSum));
+            T discreteLogProb = RLTensorOps.LogSoftmaxAt(discreteLogits, discreteActionIndex);
 
-            // Continuous log prob
-
-            T continuousLogProb = NumOps.Zero;
-            for (int i = 0; i < _continuousActionSize; i++)
-            {
-                double meanValue = NumOps.ToDouble(continuousOutput[i]);
-                double logStdValue = NumOps.ToDouble(continuousOutput[_continuousActionSize + i]);
-                double stdValue = Math.Exp(logStdValue);
-                double actionValue = NumOps.ToDouble(continuousAction[i]);
-
-                double diff = (actionValue - meanValue) / stdValue;
-                double gaussianLogProb = -0.5 * diff * diff - Math.Log(stdValue) - 0.5 * Math.Log(2.0 * Math.PI);
-
-                continuousLogProb = NumOps.Add(continuousLogProb, NumOps.FromDouble(gaussianLogProb));
-            }
+            // Continuous log prob: the diagonal Gaussian over [means | log standard deviations]
+            T continuousLogProb = RLTensorOps.GaussianLogProb(
+                continuousOutput.GetSubVector(0, _continuousActionSize),
+                continuousOutput.GetSubVector(_continuousActionSize, _continuousActionSize),
+                continuousAction);
 
             // Total log prob is sum (since actions are independent)
             return NumOps.Add(discreteLogProb, continuousLogProb);
@@ -320,62 +272,23 @@ namespace AiDotNet.ReinforcementLearning.Policies
             if (output.Length != expected)
                 throw new InvalidOperationException(string.Format(
                     "The shared network outputs {0} values; a mixed policy reads {1}.", output.Length, expected));
-            var logits = new Vector<T>(_discreteActionSize);
-            for (int i = 0; i < _discreteActionSize; i++) logits[i] = output[i];
-            var continuous = new Vector<T>(2 * _continuousActionSize);
-            for (int i = 0; i < continuous.Length; i++) continuous[i] = output[_discreteActionSize + i];
-            return (logits, continuous);
+            return (output.GetSubVector(0, _discreteActionSize), output.GetSubVector(_discreteActionSize, 2 * _continuousActionSize));
         }
 
         // Helper methods
         private Vector<T> Softmax(Vector<T> logits)
         {
-            var probabilities = new Vector<T>(logits.Length);
-            T maxLogit = logits[0];
-
-            for (int i = 1; i < logits.Length; i++)
-            {
-                if (NumOps.GreaterThan(logits[i], maxLogit))
-                {
-                    maxLogit = logits[i];
-                }
-            }
-
-            T sumExp = NumOps.Zero;
-            for (int i = 0; i < logits.Length; i++)
-            {
-                var expValue = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(NumOps.Subtract(logits[i], maxLogit))));
-                probabilities[i] = expValue;
-                sumExp = NumOps.Add(sumExp, expValue);
-            }
-
-            for (int i = 0; i < probabilities.Length; i++)
-            {
-                probabilities[i] = NumOps.Divide(probabilities[i], sumExp);
-            }
-
-            return probabilities;
+            // exp(z - max z) / sum exp(z - max z)
+            return RLTensorOps.StableSoftmax(logits);
         }
 
         private Vector<T> SampleCategorical(Vector<T> probabilities)
         {
+            // First index whose running probability reaches the uniform draw; the last action when rounding
+            // leaves the total below it.
             double randomValue = _random.NextDouble();
-            double cumulativeProbability = 0.0;
-
-            for (int i = 0; i < probabilities.Length; i++)
-            {
-                cumulativeProbability += NumOps.ToDouble(probabilities[i]);
-                if (randomValue <= cumulativeProbability)
-                {
-                    var action = new Vector<T>(probabilities.Length);
-                    action[i] = NumOps.One;
-                    return action;
-                }
-            }
-
-            var fallbackAction = new Vector<T>(probabilities.Length);
-            fallbackAction[probabilities.Length - 1] = NumOps.One;
-            return fallbackAction;
+            int index = RLTensorOps.SampleFromCdf(probabilities, randomValue, probabilities.Length - 1);
+            return RLTensorOps.OneHot<T>(probabilities.Length, index);
         }
     }
 }

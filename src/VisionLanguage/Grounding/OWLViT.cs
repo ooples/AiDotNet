@@ -77,6 +77,8 @@ public partial class OWLViT<T> : VisionLanguageModelBase<T>, IVisualGroundingMod
     private bool _useNativeMode;
     private bool _disposed;
     private int _encoderLayerEnd;
+    private readonly List<ILayer<T>> _groundingHeadLayers = new();
+    private OwlDetectionHead<T>? _groundingHead;
 
     public OWLViT(
         NeuralNetworkArchitecture<T> architecture,
@@ -158,69 +160,40 @@ public partial class OWLViT<T> : VisionLanguageModelBase<T>, IVisualGroundingMod
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(PreprocessImage(image));
 
-        var p = PreprocessImage(image);
-        int dim = _options.DecoderDim;
-        double confThreshold = _options.ConfidenceThreshold;
-        double nmsThreshold = _options.NmsThreshold;
+        // OWL-ViT (Minderer et al. 2022, section 3.1): one box and one class logit per image token.
+        var prediction = Detect(image, textQuery);
+        var scores = Engine.TensorSigmoid(prediction.Logits.Reshape(new[] { prediction.Logits.Shape[0] }));
+        return GroundingDetections<T>.Ranked(Engine, GroundingHeadModule<T>.Corners(Engine, prediction.Boxes), scores,
+            _options.ConfidenceThreshold, _options.MaxDetections, _options.NmsThreshold);
+    }
 
-        // Step 1: ViT backbone - extract per-patch token features
-        var visualFeatures = p;
-        for (int i = 0; i < _encoderLayerEnd; i++)
+    /// <summary>
+    /// The training loss of one image (OWL-ViT section 3.2, DETR's bipartite matching loss with a focal sigmoid class
+    /// loss): the per-token predictions matched one-to-one to the ground-truth boxes of the query, then focal, L1 and GIoU.
+    /// </summary>
+    /// <param name="image">The image.</param>
+    /// <param name="textQuery">The text query.</param>
+    /// <param name="targetBoxes">The query's ground-truth boxes <c>[G, 4]</c>, normalized (cx, cy, w, h).</param>
+    internal GroundingSetLossTerms<T> GroundingLoss(Tensor<T> image, string textQuery, Tensor<T> targetBoxes)
+    {
+        ThrowIfDisposed();
+        if (targetBoxes is null) throw new ArgumentNullException(nameof(targetBoxes));
+        var prediction = Detect(image, textQuery);
+        var labels = Tensor<T>.CreateDefault(new[] { targetBoxes.Shape[0], 1 }, NumOps.One);
+        return new GroundingSetLoss<T>(Engine).Compute(prediction.Boxes, prediction.Logits, targetBoxes, labels);
+    }
+
+    // ViT backbone with a class token (OWL-ViT section 3.1): the patch embedding, the learned class token ahead of the
+    // patch tokens, then the transformer over the one sequence; then the head against the embedded query.
+    private OwlPrediction<T> Detect(Tensor<T> image, string textQuery)
+    {
+        var head = _groundingHead ?? throw new InvalidOperationException("The grounding head is not initialized.");
+        var patches = GroundingHeadModule<T>.AsRows(Engine, Layers[0].Forward(PreprocessImage(image)));
+        var visualFeatures = Engine.TensorConcatenate(new[] { head.ClassToken(), patches }, 0);
+        visualFeatures = visualFeatures.Reshape(new[] { 1, visualFeatures.Shape[0], visualFeatures.Shape[1] });
+        for (int i = 1; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
-
-        int visDim = visualFeatures.Length;
-
-        // Step 2: Text-conditioned feature fusion via ConcatenateTensors
-        var textTokens = TokenizeText(textQuery);
-        var fusedInput = visualFeatures.ConcatenateTensors(textTokens);
-
-        // Run through decoder layers for text-conditioned detection features
-        var decoderOut = fusedInput;
-        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
-            decoderOut = Layers[i].Forward(decoderOut);
-
-        int outDim = decoderOut.Length;
-
-        // Step 3: Per-patch detection - each patch produces box + objectness
-        int patchSize = 16;
-        int gridSize = _options.ImageSize / patchSize;
-        int numPatches = gridSize * gridSize;
-        int actualPatches = Math.Min(numPatches, outDim / Math.Max(1, dim));
-        if (actualPatches < 1)
-            actualPatches = Math.Min(numPatches, outDim);
-        int maxDet = Math.Min(actualPatches, _options.MaxDetections);
-        if (maxDet <= 0)
-            return new Tensor<T>([GroundingDetections<T>.FieldsPerDetection]);
-        if (dim <= 0)
-            throw new InvalidOperationException("OWL-ViT needs a positive DecoderDim.");
-
-        // Patch p reads dim decoder values from (p * dim) % outDim, stopping at the end of the output (the rest
-        // reads zero), and L2-normalizes them.
-        var positions = new int[actualPatches * dim];
-        for (int pIdx = 0; pIdx < actualPatches; pIdx++)
-        {
-            int featStart = (pIdx * dim) % outDim;
-            for (int d = 0; d < dim; d++)
-                positions[pIdx * dim + d] = featStart + d < outDim ? featStart + d : -1;
-        }
-
-        var features = GroundingDetections<T>.Take(Engine, decoderOut, positions, [actualPatches, dim]);
-        var norms = GroundingDetections<T>.RowNorm(Engine, features).Reshape([actualPatches, 1]);
-        var safeNorms = Engine.TensorWhere(Engine.TensorGreaterThan(norms, NumOps.Zero),
-            Engine.TensorAddScalar(norms, NumOps.FromDouble(1e-8)),
-            Tensor<T>.CreateDefault([actualPatches, 1], NumOps.One));
-        var unit = Engine.TensorDivide(features, Engine.TensorBroadcastTo(safeNorms, [actualPatches, dim]));
-
-        // Objectness score from text-conditioned patch features, then the box regression
-        var confidences = Engine.TensorSigmoid(Engine.TensorMultiplyScalar(
-            GroundingDetections<T>.SumRows(Engine, unit), NumOps.FromDouble(1.0 / dim)));
-        var boxes = GroundingDetections<T>.PatchOffsetBoxes(Engine, unit, gridSize);
-        var eligible = Engine.TensorMultiply(
-            GroundingDetections<T>.AtLeast(Engine, confidences, NumOps.FromDouble(confThreshold)),
-            GroundingDetections<T>.HasArea(Engine, boxes));
-
-        // Step 4: NMS, highest confidence first
-        return GroundingDetections<T>.Select(Engine, boxes, confidences, eligible, maxDet, nmsThreshold);
+        return head.Forward(visualFeatures, head.EmbedQuery(TokenIds(textQuery)));
     }
 
     /// <inheritdoc />
@@ -258,6 +231,15 @@ public partial class OWLViT<T> : VisionLanguageModelBase<T>, IVisualGroundingMod
             );
             ComputeEncoderDecoderBoundary();
         }
+        if (_groundingHead is null)
+        {
+            // CLIP's text transformer uses 64-wide attention heads.
+            int textHeads = Math.Max(1, _options.TextEmbeddingDim / 64);
+            _groundingHead = new OwlDetectionHead<T>(Engine, _groundingHeadLayers, _options.VisionDim, new OwlDetectionHeadConfiguration(
+                _options.NumClassEmbeddings, _options.TextEmbeddingDim, _options.NumTextLayers, textHeads, _options.VocabSize,
+                _options.MaxSequenceLength, Objectness: false));
+            RegisterAuxiliaryEncoderStream(_groundingHeadLayers);
+        }
     }
 
     private void ComputeEncoderDecoderBoundary()
@@ -269,14 +251,13 @@ public partial class OWLViT<T> : VisionLanguageModelBase<T>, IVisualGroundingMod
         _encoderLayerEnd = 2 + _options.NumVisionLayers * lpb;
     }
 
-    private Tensor<T> TokenizeText(string text)
+    private List<int> TokenIds(string text)
     {
         if (_tokenizer is null)
             throw new InvalidOperationException("Tokenizer not initialized.");
-        var encoding = _tokenizer.Encode(text);
-        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
-        var tokens = TokenIdsToTensor(encoding.TokenIds, seqLen);
-        return tokens;
+        if (text is null) throw new ArgumentNullException(nameof(text));
+        var ids = _tokenizer.Encode(text).TokenIds;
+        return ids.Count > 0 ? ids : throw new ArgumentException("The text query has no tokens.", nameof(text));
     }
 
     /// <inheritdoc />

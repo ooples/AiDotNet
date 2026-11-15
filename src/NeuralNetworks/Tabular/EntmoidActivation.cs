@@ -145,15 +145,8 @@ public class EntmoidActivation<T> : ActivationFunctionBase<T>
     /// <returns>Diagonal Jacobian matrix.</returns>
     public override Matrix<T> Derivative(Vector<T> input)
     {
-        int n = input.Length;
-        Matrix<T> jacobian = new Matrix<T>(n, n);
-
-        for (int i = 0; i < n; i++)
-        {
-            jacobian[i, i] = Derivative(input[i]);
-        }
-
-        return jacobian;
+        // Entmoid is element-wise, so its Jacobian is diagonal.
+        return Matrix<T>.CreateDiagonal(Derivative(Tensor<T>.FromVector(input)).ToVector());
     }
 
     /// <summary>
@@ -163,14 +156,17 @@ public class EntmoidActivation<T> : ActivationFunctionBase<T>
     /// <returns>Activated tensor.</returns>
     public override Tensor<T> Activate(Tensor<T> input)
     {
-        var output = new Tensor<T>(input._shape);
+        var engine = AiDotNetEngine.Current;
 
-        for (int i = 0; i < input.Length; i++)
+        // Fresh, detached output as before. fraction = (alpha * x + 1) / (2 * alpha); values at or
+        // below 0 (and NaN) map to 0, values at or above 1 to 1, the rest to fraction^(1/(alpha-1)).
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            output[i] = Activate(input[i]);
+            var fraction = engine.TensorDivideScalar(
+                engine.TensorAddScalar(engine.TensorMultiplyScalar(input, _alphaT), NumOps.One), _twoAlpha);
+            var powered = engine.TensorPower(engine.TensorClamp(fraction, NumOps.Zero, NumOps.One), _alphaMinusOneInverse);
+            return engine.TensorWhere(engine.TensorGreaterThan(fraction, NumOps.Zero), powered, new Tensor<T>(input._shape));
         }
-
-        return output;
     }
 
     /// <summary>
@@ -180,14 +176,22 @@ public class EntmoidActivation<T> : ActivationFunctionBase<T>
     /// <returns>Derivative tensor.</returns>
     public override Tensor<T> Derivative(Tensor<T> input)
     {
-        var derivative = new Tensor<T>(input._shape);
+        var engine = AiDotNetEngine.Current;
 
-        for (int i = 0; i < input.Length; i++)
+        // Fresh, detached output as before: 1 / (2 (alpha - 1)) * fraction^((2 - alpha) / (alpha - 1))
+        // strictly inside (0, 1), 0 elsewhere (and for NaN).
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            derivative[i] = Derivative(input[i]);
+            var fraction = engine.TensorDivideScalar(
+                engine.TensorAddScalar(engine.TensorMultiplyScalar(input, _alphaT), NumOps.One), _twoAlpha);
+            var inside = engine.TensorMultiply(
+                engine.TensorGreaterThan(fraction, NumOps.Zero), engine.TensorLessThan(fraction, NumOps.One));
+            var safeFraction = engine.TensorWhere(inside, fraction, engine.TensorAddScalar(new Tensor<T>(input._shape), NumOps.One));
+            var slope = engine.TensorMultiplyScalar(
+                engine.TensorPower(safeFraction, NumOps.FromDouble((2.0 - _alpha) / (_alpha - 1.0))),
+                NumOps.FromDouble(1.0 / (2.0 * (_alpha - 1.0))));
+            return engine.TensorWhere(inside, slope, new Tensor<T>(input._shape));
         }
-
-        return derivative;
     }
 
     /// <summary>
@@ -271,6 +275,14 @@ public class EntmaxAttention<T>
             return ApplySoftmax(scores, batchSize, seqLen);
         }
 
+        // Threshold geometry needs more precision than low-precision storage types provide.
+        if (typeof(T) != typeof(float) && typeof(T) != typeof(double))
+        {
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            using var noGradWide = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<double>();
+            return new EntmaxAttention<double>(_alpha).Forward(scores.Cast<double>()).Cast<T>();
+        }
+
         // Special case: alpha = 2 is sparsemax
         if (Math.Abs(_alpha - 2.0) < 1e-6)
         {
@@ -290,106 +302,71 @@ public class EntmaxAttention<T>
 
     private Tensor<T> ApplySparsemax(Tensor<T> scores, int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(scores._shape);
+        var engine = AiDotNetEngine.Current;
 
-        for (int b = 0; b < batchSize; b++)
+        // Fresh, detached output as before. Per row: sort descending, threshold_k = (cumsum_k - 1) / k,
+        // tau = the threshold at the last k with sorted_k > threshold_k (0 if none), p = max(0, z - tau).
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            // Sort scores in descending order
-            var sortedScores = new T[seqLen];
-            for (int i = 0; i < seqLen; i++)
-            {
-                sortedScores[i] = scores[b * seqLen + i];
-            }
-            Array.Sort(sortedScores, (a, c) => NumOps.Compare(c, a));
+            var z = engine.Reshape(scores, new[] { batchSize, seqLen });
+            z = engine.TensorSubtract(z, engine.TensorBroadcastTo(engine.ReduceMax(z, new[] { 1 }, true), z._shape));
+            var sorted = engine.TensorSort(z, 1, true).Item1;
+            var k = engine.TensorBroadcastTo(
+                engine.Reshape(engine.TensorArange<T>(1, seqLen + 1, 1), new[] { 1, seqLen }), new[] { batchSize, seqLen });
+            var threshold = engine.TensorDivide(engine.TensorSubtractScalar(engine.TensorCumSum(sorted, 1), NumOps.One), k);
+            var inSupport = engine.TensorGreaterThan(sorted, threshold);
+            var supportRank = engine.TensorMultiply(inSupport, k);
+            var lastRank = engine.TensorBroadcastTo(engine.ReduceMax(supportRank, new[] { 1 }, true), new[] { batchSize, seqLen });
+            var isLast = engine.TensorMultiply(inSupport, engine.TensorEquals(supportRank, lastRank));
+            var tau = engine.ReduceSum(engine.TensorWhere(isLast, threshold,
+                new Tensor<T>(new[] { batchSize, seqLen })), new[] { 1 }, true);
 
-            // Find threshold tau using cumulative sum
-            var cumSum = NumOps.Zero;
-            var tau = NumOps.Zero;
-
-            for (int i = 0; i < seqLen; i++)
-            {
-                cumSum = NumOps.Add(cumSum, sortedScores[i]);
-                var threshold = NumOps.Divide(
-                    NumOps.Subtract(cumSum, NumOps.One),
-                    NumOps.FromDouble(i + 1));
-
-                if (NumOps.Compare(sortedScores[i], threshold) > 0)
-                {
-                    tau = threshold;
-                }
-            }
-
-            // Apply sparsemax: max(0, x - tau)
-            for (int i = 0; i < seqLen; i++)
-            {
-                var val = NumOps.Subtract(scores[b * seqLen + i], tau);
-                output[b * seqLen + i] = NumOps.Compare(val, NumOps.Zero) > 0 ? val : NumOps.Zero;
-            }
+            var shifted = engine.TensorSubtract(z, engine.TensorBroadcastTo(tau, new[] { batchSize, seqLen }));
+            var output = engine.TensorWhere(engine.TensorGreaterThan(shifted, NumOps.Zero), shifted, new Tensor<T>(new[] { batchSize, seqLen }));
+            return engine.Reshape(output, scores._shape);
         }
-
-        return output;
     }
 
     private Tensor<T> ApplyEntmaxBisection(Tensor<T> scores, int batchSize, int seqLen)
     {
-        var output = new Tensor<T>(scores._shape);
-        var alphaMinusOne = _alpha - 1.0;
-        var invAlphaMinusOne = 1.0 / alphaMinusOne;
+        var engine = AiDotNetEngine.Current;
+        var alphaMinusOne = NumOps.FromDouble(_alpha - 1.0);
+        var invAlphaMinusOne = NumOps.FromDouble(1.0 / (_alpha - 1.0));
+        var half = NumOps.FromDouble(0.5);
+        var rowShape = new[] { batchSize, seqLen };
 
-        for (int b = 0; b < batchSize; b++)
+        // Fresh, detached output as before. entmax_alpha(z) = [(alpha - 1) z - tau]_+^(1/(alpha-1))
+        // (Peters et al., 2019, eq. 9), with tau found per row by bisection so the output sums to 1.
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            // Find threshold via bisection
-            var maxScore = scores[b * seqLen];
-            var minScore = scores[b * seqLen];
-            for (int i = 1; i < seqLen; i++)
+            var z = engine.Reshape(scores, rowShape);
+            z = engine.TensorSubtract(z, engine.TensorBroadcastTo(engine.ReduceMax(z, new[] { 1 }, true), rowShape));
+            z = engine.TensorMultiplyScalar(z, alphaMinusOne);
+            var zeros = new Tensor<T>(rowShape);
+
+            Tensor<T> Powered(Tensor<T> tau)
             {
-                if (NumOps.Compare(scores[b * seqLen + i], maxScore) > 0)
-                    maxScore = scores[b * seqLen + i];
-                if (NumOps.Compare(scores[b * seqLen + i], minScore) < 0)
-                    minScore = scores[b * seqLen + i];
+                var diff = engine.TensorSubtract(z, engine.TensorBroadcastTo(tau, rowShape));
+                var positive = engine.TensorWhere(engine.TensorGreaterThan(diff, NumOps.Zero), diff, zeros);
+                return engine.TensorPower(positive, invAlphaMinusOne);
             }
 
-            var tauLow = NumOps.ToDouble(minScore) - 1.0;
-            var tauHigh = NumOps.ToDouble(maxScore);
+            // A maximum entry alone reaches probability one at max - 1; a tight bracket
+            // converges independently of the gap between the largest and smallest logits.
+            var tauHigh = engine.ReduceMax(z, new[] { 1 }, true);
+            var tauLow = engine.TensorSubtractScalar(tauHigh, NumOps.One);
 
-            // Bisection to find tau such that sum of p = 1
             for (int iter = 0; iter < 50; iter++)
             {
-                var tauMid = (tauLow + tauHigh) / 2.0;
-                var sum = 0.0;
-
-                for (int i = 0; i < seqLen; i++)
-                {
-                    var diff = NumOps.ToDouble(scores[b * seqLen + i]) - tauMid;
-                    if (diff > 0)
-                    {
-                        sum += Math.Pow(diff, invAlphaMinusOne);
-                    }
-                }
-
-                if (sum > 1.0)
-                    tauLow = tauMid;
-                else
-                    tauHigh = tauMid;
+                var tauMid = engine.TensorMultiplyScalar(engine.TensorAdd(tauLow, tauHigh), half);
+                var sum = engine.ReduceSum(Powered(tauMid), new[] { 1 }, true);
+                var tooLow = engine.TensorGreaterThan(sum, NumOps.One);
+                tauLow = engine.TensorWhere(tooLow, tauMid, tauLow);
+                tauHigh = engine.TensorWhere(tooLow, tauHigh, tauMid);
             }
 
-            var tau = (tauLow + tauHigh) / 2.0;
-
-            // Compute output
-            for (int i = 0; i < seqLen; i++)
-            {
-                var diff = NumOps.ToDouble(scores[b * seqLen + i]) - tau;
-                if (diff > 0)
-                {
-                    output[b * seqLen + i] = NumOps.FromDouble(Math.Pow(diff, invAlphaMinusOne));
-                }
-                else
-                {
-                    output[b * seqLen + i] = NumOps.Zero;
-                }
-            }
+            var tauFinal = engine.TensorMultiplyScalar(engine.TensorAdd(tauLow, tauHigh), half);
+            return engine.Reshape(Powered(tauFinal), scores._shape);
         }
-
-        return output;
     }
 }

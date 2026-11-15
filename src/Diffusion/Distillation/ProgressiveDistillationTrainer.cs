@@ -60,12 +60,7 @@ public class ProgressiveDistillationTrainer<T>
     /// <returns>L2 distillation loss.</returns>
     public T ComputeDistillationLoss(Vector<T> studentOneStep, Vector<T> teacherTwoStep)
     {
-        var loss = NumOps.Zero;
-        for (int i = 0; i < studentOneStep.Length && i < teacherTwoStep.Length; i++)
-        {
-            var diff = NumOps.Subtract(studentOneStep[i], teacherTwoStep[i]);
-            loss = NumOps.Add(loss, NumOps.Multiply(diff, diff));
-        }
+        var loss = DiffusionVectorOps.SquaredDistance(studentOneStep, teacherTwoStep);
         return NumOps.Divide(loss, NumOps.FromDouble(studentOneStep.Length));
     }
 

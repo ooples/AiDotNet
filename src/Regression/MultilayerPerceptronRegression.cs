@@ -481,8 +481,7 @@ public partial class MultilayerPerceptronRegression<T> : NonLinearRegressionBase
 
                 if (i > 0)
                 {
-                    delta = Engine.Multiply(
-                        _weights[i].Transpose().Multiply(delta), ApplyActivationDerivative(zs[i - 1], false));
+                    delta = BackpropagateThroughActivation(_weights[i].Transpose().Multiply(delta), zs[i - 1], false);
                 }
             }
         }
@@ -654,19 +653,24 @@ public partial class MultilayerPerceptronRegression<T> : NonLinearRegressionBase
     }
 
     /// <summary>
-    /// Applies the derivative of the activation function to an input vector.
+    /// Carries a gradient with respect to an activation's output back to its input.
     /// </summary>
+    /// <param name="upstream">The gradient with respect to the activation's output.</param>
     /// <param name="input">The input vector before activation.</param>
     /// <param name="isOutputLayer">Whether the input is for the output layer.</param>
-    /// <returns>The vector containing the derivatives of the activation function.</returns>
-    private Vector<T> ApplyActivationDerivative(Vector<T> input, bool isOutputLayer)
+    /// <returns>The gradient with respect to the activation's input.</returns>
+    /// <remarks>
+    /// A vector activation's derivative is its n-by-n Jacobian J (diagonal for element-wise functions such as ReLU, full
+    /// for coupled ones such as softmax), so the input gradient is J transposed times the upstream gradient. Flattening J
+    /// and multiplying element-wise read its first row: only unit 0 got its derivative, every other hidden unit a zero.
+    /// </remarks>
+    private Vector<T> BackpropagateThroughActivation(Vector<T> upstream, Vector<T> input, bool isOutputLayer)
     {
         // First check if vector activation is available
         var vectorActivation = isOutputLayer ? _options.OutputVectorActivation : _options.HiddenVectorActivation;
         if (vectorActivation != null)
         {
-            // Vector activation derivative returns a vector for the input vector
-            return vectorActivation.Derivative(input).ToVector();
+            return vectorActivation.Derivative(input).Transpose().Multiply(upstream);
         }
 
         // Fall back to scalar activation
@@ -675,8 +679,8 @@ public partial class MultilayerPerceptronRegression<T> : NonLinearRegressionBase
         // Use the existing IdentityActivation if no activation is specified
         activation ??= new IdentityActivation<T>();
 
-        // Apply scalar activation derivative element-wise to the vector
-        return input.Transform(x => activation.Derivative(x));
+        // A scalar activation's Jacobian is diagonal: scale each component by its derivative
+        return Engine.Multiply(upstream, input.Transform(x => activation.Derivative(x)));
     }
 
     /// <summary>
@@ -753,9 +757,7 @@ public partial class MultilayerPerceptronRegression<T> : NonLinearRegressionBase
             error = predictions.Subtract(targets);
         }
 
-        Vector<T> activationDerivative = ApplyActivationDerivative(outputLayerZ, true);
-
-        return Engine.Multiply(error, activationDerivative);
+        return BackpropagateThroughActivation(error, outputLayerZ, true);
     }
 
     /// <summary>

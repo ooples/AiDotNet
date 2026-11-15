@@ -50,47 +50,24 @@ public class ContentShufflePreprocessor<T> : DiffusionPreprocessorBase<T>
     /// <inheritdoc />
     public override Tensor<T> Transform(Tensor<T> data)
     {
+        var engine = AiDotNetEngine.Current;
         var shape = data._shape;
         int batch = shape[0];
         int channels = Math.Min(shape[1], 3);
-        int height = shape[2];
-        int width = shape[3];
-        var result = new Tensor<T>(new[] { batch, 3, height, width });
+        var rgb = PreprocessorFilters.ToRgb(data);
+        var images = new Tensor<T>[batch];
 
         for (int b = 0; b < batch; b++)
         {
-            int blockRows = height / _blockSize;
-            int blockCols = width / _blockSize;
+            var image = engine.TensorNarrow(data, 0, b, 1);
+            int blockRows = shape[2] / _blockSize;
+            int blockCols = shape[3] / _blockSize;
             int totalBlocks = blockRows * blockCols;
 
-            // Compute mean intensity per block for content-aware sorting
-            var blockMeans = new (double mean, int index)[totalBlocks];
-            for (int p = 0; p < totalBlocks; p++)
-            {
-                int row = p / blockCols;
-                int col = p % blockCols;
-                double sum = 0;
-                int count = 0;
-
-                for (int ph = 0; ph < _blockSize && row * _blockSize + ph < height; ph++)
-                {
-                    for (int pw = 0; pw < _blockSize && col * _blockSize + pw < width; pw++)
-                    {
-                        int h = row * _blockSize + ph;
-                        int w = col * _blockSize + pw;
-                        for (int c = 0; c < channels; c++)
-                        {
-                            sum += NumOps.ToDouble(data[b, c, h, w]);
-                            count++;
-                        }
-                    }
-                }
-
-                blockMeans[p] = (sum / Math.Max(count, 1), p);
-            }
-
-            // Sort by intensity then apply local shuffling within similar groups
-            Array.Sort(blockMeans, (a, bm) => a.mean.CompareTo(bm.mean));
+            // Sort blocks by mean intensity (stable for ties) then apply local shuffling within similar groups
+            var order = totalBlocks > 0
+                ? PreprocessorFilters.StableArgsort(PreprocessorFilters.PatchMeans(image, _blockSize, channels))
+                : new int[0];
             var rng = RandomHelper.CreateSeededRandom(_seed + b);
 
             // Local shuffle within groups of similar blocks
@@ -101,41 +78,14 @@ public class ContentShufflePreprocessor<T> : DiffusionPreprocessorBase<T>
                 for (int i = end - 1; i > g; i--)
                 {
                     int j = g + rng.Next(i - g + 1);
-                    (blockMeans[i], blockMeans[j]) = (blockMeans[j], blockMeans[i]);
+                    (order[i], order[j]) = (order[j], order[i]);
                 }
             }
 
             // Copy blocks to result
-            for (int p = 0; p < totalBlocks; p++)
-            {
-                int srcIdx = blockMeans[p].index;
-                int srcRow = srcIdx / blockCols;
-                int srcCol = srcIdx % blockCols;
-                int dstRow = p / blockCols;
-                int dstCol = p % blockCols;
-
-                for (int c = 0; c < 3; c++)
-                {
-                    int srcC = Math.Min(c, channels - 1);
-                    for (int ph = 0; ph < _blockSize && dstRow * _blockSize + ph < height; ph++)
-                    {
-                        for (int pw = 0; pw < _blockSize && dstCol * _blockSize + pw < width; pw++)
-                        {
-                            int sh = srcRow * _blockSize + ph;
-                            int sw = srcCol * _blockSize + pw;
-                            int dh = dstRow * _blockSize + ph;
-                            int dw = dstCol * _blockSize + pw;
-
-                            if (sh < height && sw < width)
-                            {
-                                result[b, c, dh, dw] = data[b, srcC, sh, sw];
-                            }
-                        }
-                    }
-                }
-            }
+            images[b] = PreprocessorFilters.PermutePatches(engine.TensorNarrow(rgb, 0, b, 1), _blockSize, order);
         }
 
-        return result;
+        return engine.TensorConcatenate(images, 0);
     }
 }

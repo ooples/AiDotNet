@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
+using AiDotNet.Interpretability.Helpers;
 
 namespace AiDotNet.Interpretability.Explainers;
 
@@ -31,8 +32,6 @@ namespace AiDotNet.Interpretability.Explainers;
 /// </remarks>
 public class PartialDependenceExplainer<T> : IGlobalExplainer<T, PartialDependenceResult<T>>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
     private readonly Func<Matrix<T>, Vector<T>> _predictFunction;
     private readonly Matrix<T> _backgroundData;
     private readonly int _gridResolution;
@@ -121,7 +120,7 @@ public class PartialDependenceExplainer<T> : IGlobalExplainer<T, PartialDependen
             FeatureNames = featureIndices.Select(i => _featureNames?[i] ?? $"Feature {i}").ToArray(),
             GridValues = new Dictionary<int, T[]>(),
             PartialDependence = new Dictionary<int, T[]>(),
-            IceCurves = _computeIce ? new Dictionary<int, T[,]>() : null
+            IceCurves = _computeIce ? new Dictionary<int, Matrix<T>>() : null
         };
 
         foreach (var featureIndex in featureIndices)
@@ -160,67 +159,67 @@ public class PartialDependenceExplainer<T> : IGlobalExplainer<T, PartialDependen
     private void ComputeSingleFeaturePD(int featureIndex, PartialDependenceResult<T> result)
     {
         int n = _backgroundData.Rows;
+        var engine = AiDotNetEngine.Current;
 
-        // Compute grid values (range of the feature)
-        double minVal = double.MaxValue;
-        double maxVal = double.MinValue;
-
-        for (int i = 0; i < n; i++)
-        {
-            double val = NumOps.ToDouble(_backgroundData[i, featureIndex]);
-            minVal = Math.Min(minVal, val);
-            maxVal = Math.Max(maxVal, val);
-        }
-
-        // Create grid
-        var gridValues = new T[_gridResolution];
-        double step = (maxVal - minVal) / (_gridResolution - 1);
-
-        for (int g = 0; g < _gridResolution; g++)
-        {
-            gridValues[g] = NumOps.FromDouble(minVal + g * step);
-        }
-
-        result.GridValues[featureIndex] = gridValues;
+        // Create grid over the range of the feature
+        var gridValues = FeatureGrid(featureIndex);
+        result.GridValues[featureIndex] = gridValues.ToArray();
 
         // Compute PDP values
-        var pdValues = new T[_gridResolution];
-        T[,]? iceValues = _computeIce ? new T[n, _gridResolution] : null;
-
-        for (int g = 0; g < _gridResolution; g++)
+        var pdValues = new List<T>(_gridResolution);
+        var predictionsByGrid = new List<Vector<T>>(_gridResolution);
+        foreach (T gridValue in gridValues)
         {
-            // Create modified data with feature set to grid value
-            var modifiedData = _backgroundData.Clone();
-            for (int i = 0; i < n; i++)
-            {
-                modifiedData[i, featureIndex] = gridValues[g];
-            }
-
-            // Get predictions
-            var predictions = _predictFunction(modifiedData);
+            // Get predictions with the feature set to the grid value
+            var predictions = _predictFunction(WithPinnedColumns(featureIndex, gridValue));
 
             // Validate prediction vector length matches number of samples
             if (predictions.Length != n)
                 throw new InvalidOperationException($"Prediction function returned {predictions.Length} values but expected {n} (one per sample).");
 
-            // Store ICE values and compute mean
-            double sum = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double pred = NumOps.ToDouble(predictions[i]);
-                sum += pred;
-
-                if (iceValues != null)
-                    iceValues[i, g] = predictions[i];
-            }
-
-            pdValues[g] = NumOps.FromDouble(sum / n);
+            pdValues.Add(engine.Mean(predictions));
+            if (_computeIce)
+                predictionsByGrid.Add(predictions);
         }
 
-        result.PartialDependence[featureIndex] = pdValues;
+        result.PartialDependence[featureIndex] = pdValues.ToArray();
 
-        if (iceValues != null)
+        if (_computeIce)
+        {
+            // ICE curves: one row per sample, one column per grid value
+            var iceValues = engine.MatrixTranspose(ExplainerTensorOps<T>.Stack(predictionsByGrid).ToMatrix());
             (result.IceCurves ?? throw new InvalidOperationException("IceCurves has not been initialized."))[featureIndex] = iceValues;
+        }
+    }
+
+    /// <summary>
+    /// <see cref="_gridResolution"/> evenly spaced values from the minimum to the maximum of a feature.
+    /// </summary>
+    private Vector<T> FeatureGrid(int featureIndex)
+    {
+        var engine = AiDotNetEngine.Current;
+        var column = _backgroundData.GetColumn(featureIndex).AsTensor();
+        return engine.TensorLinspace(engine.TensorMinValue(column), engine.TensorMaxValue(column), _gridResolution).ToVector();
+    }
+
+    /// <summary>
+    /// A copy of the background data with one feature column set to a constant.
+    /// </summary>
+    private Matrix<T> WithPinnedColumns(int column, T value)
+    {
+        var modifiedData = _backgroundData.Clone();
+        AiDotNetEngine.Current.SetColumn(modifiedData, column, AiDotNetEngine.Current.Fill(_backgroundData.Rows, value));
+        return modifiedData;
+    }
+
+    /// <summary>
+    /// A copy of the background data with two feature columns set to constants.
+    /// </summary>
+    private Matrix<T> WithPinnedColumns(int column1, T value1, int column2, T value2)
+    {
+        var modifiedData = WithPinnedColumns(column1, value1);
+        AiDotNetEngine.Current.SetColumn(modifiedData, column2, AiDotNetEngine.Current.Fill(_backgroundData.Rows, value2));
+        return modifiedData;
     }
 
     /// <summary>
@@ -250,51 +249,19 @@ public class PartialDependenceExplainer<T> : IGlobalExplainer<T, PartialDependen
         if (feature2Index < 0 || feature2Index >= numFeatures)
             throw new ArgumentOutOfRangeException(nameof(feature2Index));
 
-        // Compute grid for feature 1
-        double min1 = double.MaxValue, max1 = double.MinValue;
-        double min2 = double.MaxValue, max2 = double.MinValue;
-
-        for (int i = 0; i < n; i++)
-        {
-            double v1 = NumOps.ToDouble(_backgroundData[i, feature1Index]);
-            double v2 = NumOps.ToDouble(_backgroundData[i, feature2Index]);
-            min1 = Math.Min(min1, v1);
-            max1 = Math.Max(max1, v1);
-            min2 = Math.Min(min2, v2);
-            max2 = Math.Max(max2, v2);
-        }
-
-        var grid1 = new T[_gridResolution];
-        var grid2 = new T[_gridResolution];
-        double step1 = (max1 - min1) / (_gridResolution - 1);
-        double step2 = (max2 - min2) / (_gridResolution - 1);
-
-        for (int g = 0; g < _gridResolution; g++)
-        {
-            grid1[g] = NumOps.FromDouble(min1 + g * step1);
-            grid2[g] = NumOps.FromDouble(min2 + g * step2);
-        }
+        // Compute grids for both features
+        var grid1 = FeatureGrid(feature1Index);
+        var grid2 = FeatureGrid(feature2Index);
 
         // Compute 2D PDP
-        var pdValues = new T[_gridResolution, _gridResolution];
-
-        for (int g1 = 0; g1 < _gridResolution; g1++)
+        var engine = AiDotNetEngine.Current;
+        var pdValues = new List<T>(_gridResolution * _gridResolution);
+        foreach (T value1 in grid1)
         {
-            for (int g2 = 0; g2 < _gridResolution; g2++)
+            foreach (T value2 in grid2)
             {
-                var modifiedData = _backgroundData.Clone();
-                for (int i = 0; i < n; i++)
-                {
-                    modifiedData[i, feature1Index] = grid1[g1];
-                    modifiedData[i, feature2Index] = grid2[g2];
-                }
-
-                var predictions = _predictFunction(modifiedData);
-                double sum = 0;
-                for (int i = 0; i < n; i++)
-                    sum += NumOps.ToDouble(predictions[i]);
-
-                pdValues[g1, g2] = NumOps.FromDouble(sum / n);
+                var predictions = _predictFunction(WithPinnedColumns(feature1Index, value1, feature2Index, value2));
+                pdValues.Add(engine.Mean(predictions.GetSubVector(0, n)));
             }
         }
 
@@ -304,9 +271,9 @@ public class PartialDependenceExplainer<T> : IGlobalExplainer<T, PartialDependen
             Feature2Index = feature2Index,
             Feature1Name = _featureNames?[feature1Index] ?? $"Feature {feature1Index}",
             Feature2Name = _featureNames?[feature2Index] ?? $"Feature {feature2Index}",
-            Grid1Values = grid1,
-            Grid2Values = grid2,
-            PartialDependence2D = pdValues
+            Grid1Values = grid1.ToArray(),
+            Grid2Values = grid2.ToArray(),
+            PartialDependence2D = new Tensor<T>(new[] { _gridResolution, _gridResolution }, new Vector<T>(pdValues)).ToMatrix()
         };
     }
 }
@@ -342,7 +309,7 @@ public class PartialDependenceResult<T>
     /// <summary>
     /// Gets or sets the ICE curves for each feature (feature index -> [sample, grid point]).
     /// </summary>
-    public Dictionary<int, T[,]>? IceCurves { get; set; }
+    public Dictionary<int, Matrix<T>>? IceCurves { get; set; }
 
     /// <summary>
     /// Gets the grid resolution.
@@ -358,10 +325,11 @@ public class PartialDependenceResult<T>
 
         foreach (var featureIndex in FeatureIndices)
         {
-            var pdValues = PartialDependence[featureIndex];
-            double minPd = pdValues.Min(v => NumOps.ToDouble(v));
-            double maxPd = pdValues.Max(v => NumOps.ToDouble(v));
-            double range = maxPd - minPd;
+            var pdValues = new Vector<T>(PartialDependence[featureIndex]).AsTensor();
+            var engine = AiDotNetEngine.Current;
+            T minPd = engine.TensorMinValue(pdValues);
+            T maxPd = engine.TensorMaxValue(pdValues);
+            T range = NumOps.Subtract(maxPd, minPd);
 
             string featureName = FeatureNames[Array.IndexOf(FeatureIndices, featureIndex)];
             lines.Add($"  {featureName}: PD range = {range:F4} (min={minPd:F4}, max={maxPd:F4})");
@@ -410,5 +378,5 @@ public class PartialDependence2DResult<T>
     /// <summary>
     /// Gets or sets the 2D partial dependence values [grid1, grid2].
     /// </summary>
-    public T[,] PartialDependence2D { get; set; } = new T[0, 0];
+    public Matrix<T> PartialDependence2D { get; set; } = new Matrix<T>(0, 0);
 }

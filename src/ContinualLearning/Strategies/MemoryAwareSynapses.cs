@@ -255,11 +255,7 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
         // Initialize omega if first task
         if (_omega == null || _omega.Length != paramCount)
         {
-            _omega = new Vector<T>(paramCount);
-            for (int i = 0; i < paramCount; i++)
-            {
-                _omega[i] = _minImportanceValue;
-            }
+            _omega = Engine.Fill(paramCount, _minImportanceValue);
         }
 
         // Cache inputs for importance computation (sample from dataset)
@@ -294,15 +290,10 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
         }
 
         // MAS penalty (Aljundi et al. 2018, Eq. 3): λ Σ Ω_i (θ_i − θ*_i)²
-        T loss = NumOps.Zero;
-
-        for (int i = 0; i < currentParams.Length; i++)
-        {
-            var diff = NumOps.Subtract(currentParams[i], _optimalParameters[i]);
-            var squaredDiff = NumOps.Multiply(diff, diff);
-            var weightedDiff = NumOps.Multiply(_omega[i], squaredDiff);
-            loss = NumOps.Add(loss, weightedDiff);
-        }
+        int n = currentParams.Length;
+        var diff = Engine.TensorSubtract(currentParams.AsTensor(), Head(_optimalParameters, n));
+        var weightedDiff = Engine.TensorMultiply(_omega.AsTensor(), Engine.TensorMultiply(diff, diff));
+        T loss = Engine.TensorSum(weightedDiff);
 
         return NumOps.Multiply(_lambda, loss);
     }
@@ -320,8 +311,10 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
                 $"Parameter dimension mismatch: current={current.Length}, gradients={gradients.Length}, stored={_omega.Length}");
         var adjusted = CloneVector(gradients);
         var twoLambda = NumOps.Multiply(NumOps.FromDouble(2.0), _lambda);
-        for (int i = 0; i < current.Length; i++)
-            adjusted[i] = NumOps.Add(adjusted[i], NumOps.Multiply(twoLambda, NumOps.Multiply(_omega[i], NumOps.Subtract(current[i], _optimalParameters[i]))));
+        var penaltyGrad = Engine.TensorMultiplyScalar(
+            Engine.TensorMultiply(_omega.AsTensor(), Engine.TensorSubtract(current.AsTensor(), _optimalParameters.AsTensor())),
+            twoLambda);
+        Engine.TensorAdd(adjusted.AsTensor(), penaltyGrad).AsSpan().CopyTo(adjusted.AsWritableSpan());
         return adjusted;
     }
 
@@ -382,22 +375,13 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
     private Vector<T> ComputeOutputSensitivity(IFullModel<T, TInput, TOutput> model)
     {
         int paramCount = (int)InterfaceGuard.Parameterizable(model).ParameterCount;
-        var omega = new Vector<T>(paramCount);
-
-        for (int i = 0; i < paramCount; i++)
-        {
-            omega[i] = NumOps.Zero;
-        }
-
         if (_importanceInputs.Count == 0)
         {
             // No inputs cached, return uniform importance
-            for (int i = 0; i < paramCount; i++)
-            {
-                omega[i] = NumOps.FromDouble(1.0);
-            }
-            return omega;
+            return Engine.Fill(paramCount, NumOps.FromDouble(1.0));
         }
+
+        var omega = Engine.Fill(paramCount, NumOps.Zero);
 
         int processed = 0;
 
@@ -464,8 +448,13 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
             return;
         }
         var absGrads = (Vector<T>)Engine.Abs(paramGrads);
-        for (int i = 0; i < omega.Length && i < absGrads.Length; i++)
-            omega[i] = NumOps.Add(omega[i], absGrads[i]);
+        int count = Math.Min(omega.Length, absGrads.Length);
+        if (count > 0)
+        {
+            Engine.TensorAdd(Head(omega, count), Head(absGrads, count))
+                .AsSpan()
+                .CopyTo(omega.AsWritableSpan().Slice(0, count));
+        }
     }
 
     private static readonly SquaredOutputNormLoss SquaredOutputNorm = new();
@@ -474,11 +463,7 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
     private sealed class SquaredOutputNormLoss : AiDotNet.LossFunctions.LossFunctionBase<T>
     {
         public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
-        {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < predicted.Length; i++) sum = NumOps.Add(sum, NumOps.Multiply(predicted[i], predicted[i]));
-            return sum;
-        }
+            => Engine.DotProduct(predicted, predicted);
 
         public override Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
             => Engine.ReduceSum(Engine.TensorMultiply(predicted, predicted), Enumerable.Range(0, predicted.Shape.Length).ToArray(), keepDims: false);
@@ -501,32 +486,90 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
         int maxParams = Math.Min(parameters.Length, 1000);
         int step = Math.Max(1, parameters.Length / maxParams);
 
-        for (int i = 0; i < parameters.Length; i += step)
+        var perturbedNorms = new List<T>();
+        try
         {
-            var original = parameters[i];
-
-            // Perturb parameter
-            parameters[i] = NumOps.Add(original, epsilon);
-            InterfaceGuard.Parameterizable(model).SetParameters(parameters);
-
-            var perturbedOutput = model.Predict(input);
-            var perturbedNorm = ComputeOutputNorm(ConvertToVector(perturbedOutput));
-
-            // Restore parameter
-            parameters[i] = original;
-            InterfaceGuard.Parameterizable(model).SetParameters(parameters);
-
-            // Finite difference gradient magnitude
-            var diff = NumOps.Subtract(perturbedNorm, baseNorm);
-            var grad = NumOps.Divide(diff, epsilon);
-            var absGrad = NumOps.Abs(grad);
-
-            // Apply to this and neighboring parameters
-            for (int j = i; j < Math.Min(i + step, parameters.Length); j++)
+            ProbePerturbedOutputNorms(model, input, parameters, epsilon, step, perturbedNorms);
+        }
+        finally
+        {
+            // Applied even when a prediction throws part-way, as the per-parameter loop had already done
+            if (perturbedNorms.Count > 0)
             {
-                omega[j] = NumOps.Add(omega[j], absGrad);
+                // Finite difference gradient magnitude |(norm(θ + ε e_i) - norm(θ)) / ε|,
+                // applied to this and neighboring parameters
+                var norms = new Vector<T>(perturbedNorms).AsTensor();
+                var absGrad = Engine.TensorAbs(
+                    Engine.TensorDivideScalar(Engine.TensorSubtractScalar(norms, baseNorm), epsilon));
+                AddToParameterBlocks(omega, absGrad, step, parameters.Length);
             }
         }
+    }
+
+    /// <summary>
+    /// Perturbs every <paramref name="step"/>-th parameter by <paramref name="epsilon"/> in turn, recording the output
+    /// norm of each perturbed model and restoring the parameter afterwards.
+    /// </summary>
+    /// <remarks>
+    /// Norms are appended to <paramref name="norms"/> as they are measured, so a caller still sees the
+    /// ones recorded before a prediction throws.
+    /// </remarks>
+    private void ProbePerturbedOutputNorms(
+        IFullModel<T, TInput, TOutput> model, TInput input, Vector<T> parameters, T epsilon, int step, List<T> norms)
+    {
+        var perturbed = Engine.TensorAddScalar(parameters.AsTensor(), epsilon);
+        var originals = parameters.Clone();
+        var parameterizable = InterfaceGuard.Parameterizable(model);
+
+        for (int i = 0; i < parameters.Length; i += step)
+        {
+            // Perturb parameter
+            perturbed.AsSpan().Slice(i, 1).CopyTo(parameters.AsWritableSpan().Slice(i, 1));
+            parameterizable.SetParameters(parameters);
+
+            var perturbedOutput = model.Predict(input);
+            norms.Add(ComputeOutputNorm(ConvertToVector(perturbedOutput)));
+
+            // Restore parameter
+            originals.AsSpan().Slice(i, 1).CopyTo(parameters.AsWritableSpan().Slice(i, 1));
+            parameterizable.SetParameters(parameters);
+        }
+    }
+
+    /// <summary>
+    /// Adds value k to omega[k * step .. min((k + 1) * step, length)) for every block k.
+    /// </summary>
+    private static void AddToParameterBlocks(Vector<T> omega, Tensor<T> blockValues, int step, int length)
+    {
+        int blocks = blockValues.Length;
+        var expanded = Engine.TensorTile(blockValues.Reshape(blocks, 1), new[] { 1, step }).Reshape(blocks * step);
+        int count = Math.Min(length, blocks * step);
+        var increments = count == expanded.Length
+            ? expanded
+            : Engine.TensorSlice(expanded, new[] { 0 }, new[] { count });
+        Engine.TensorAdd(Head(omega, count), increments).AsSpan().CopyTo(Head(omega, count).AsWritableSpan());
+    }
+
+    /// <summary>
+    /// Euclidean norm of <paramref name="vector"/>, scaled by its largest magnitude first so the squares
+    /// cannot overflow T: for Half, |v| above 256 would otherwise square past 65504 to infinity, where
+    /// master's double accumulation stayed finite.
+    /// </summary>
+    internal static T StableL2Norm(Vector<T> vector)
+    {
+        if (vector.Length == 0)
+        {
+            return NumOps.Zero;
+        }
+
+        T scale = Engine.TensorMaxValue(Engine.TensorAbs(vector.AsTensor()));
+        if (NumOps.Equals(scale, NumOps.Zero))
+        {
+            return NumOps.Zero;
+        }
+
+        var unit = Engine.Divide(vector, scale);
+        return NumOps.Multiply(scale, NumOps.Sqrt(Engine.DotProduct(unit, unit)));
     }
 
     /// <summary>
@@ -541,21 +584,12 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
     private Vector<T> ComputeRandomProjectionImportance(IFullModel<T, TInput, TOutput> model)
     {
         int paramCount = (int)InterfaceGuard.Parameterizable(model).ParameterCount;
-        var omega = new Vector<T>(paramCount);
-
-        for (int i = 0; i < paramCount; i++)
-        {
-            omega[i] = NumOps.Zero;
-        }
-
         if (_importanceInputs.Count == 0)
         {
-            for (int i = 0; i < paramCount; i++)
-            {
-                omega[i] = NumOps.FromDouble(1.0);
-            }
-            return omega;
+            return Engine.Fill(paramCount, NumOps.FromDouble(1.0));
         }
+
+        var omega = Engine.Fill(paramCount, NumOps.Zero);
 
         // Number of random projection directions
         const int numProjections = 10;
@@ -586,10 +620,7 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
                         double norm = Math.Sqrt(normSquared);
                         if (norm > 1e-8)
                         {
-                            for (int j = 0; j < outputVec.Length; j++)
-                            {
-                                randomDir[j] = NumOps.Divide(randomDir[j], NumOps.FromDouble(norm));
-                            }
+                            randomDir = Engine.Divide(randomDir, NumOps.FromDouble(norm));
                         }
 
                         // Compute gradient with respect to random projection
@@ -635,21 +666,12 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
     private Vector<T> ComputeFisherDiagonalImportance(IFullModel<T, TInput, TOutput> model)
     {
         int paramCount = (int)InterfaceGuard.Parameterizable(model).ParameterCount;
-        var omega = new Vector<T>(paramCount);
-
-        for (int i = 0; i < paramCount; i++)
-        {
-            omega[i] = NumOps.Zero;
-        }
-
         if (_importanceInputs.Count == 0)
         {
-            for (int i = 0; i < paramCount; i++)
-            {
-                omega[i] = NumOps.FromDouble(1.0);
-            }
-            return omega;
+            return Engine.Fill(paramCount, NumOps.FromDouble(1.0));
         }
+
+        var omega = Engine.Fill(paramCount, NumOps.Zero);
 
         // We need loss gradients, which requires labels
         // Since MAS is unsupervised, we approximate using output-based loss
@@ -716,27 +738,20 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
         int maxParams = Math.Min(parameters.Length, 1000);
         int step = Math.Max(1, parameters.Length / maxParams);
 
-        for (int i = 0; i < parameters.Length; i += step)
+        var perturbedNorms = new List<T>();
+        try
         {
-            var original = parameters[i];
-
-            parameters[i] = NumOps.Add(original, epsilon);
-            InterfaceGuard.Parameterizable(model).SetParameters(parameters);
-
-            var perturbedOutput = model.Predict(input);
-            var perturbedNorm = ComputeOutputNorm(ConvertToVector(perturbedOutput));
-
-            parameters[i] = original;
-            InterfaceGuard.Parameterizable(model).SetParameters(parameters);
-
-            // Finite difference gradient magnitude, squared for Fisher
-            var diff = NumOps.Subtract(perturbedNorm, baseNorm);
-            var grad = NumOps.Divide(diff, epsilon);
-            var gradSquared = NumOps.Multiply(grad, grad);
-
-            for (int j = i; j < Math.Min(i + step, parameters.Length); j++)
+            ProbePerturbedOutputNorms(model, input, parameters, epsilon, step, perturbedNorms);
+        }
+        finally
+        {
+            // Applied even when a prediction throws part-way, as the per-parameter loop had already done
+            if (perturbedNorms.Count > 0)
             {
-                omega[j] = NumOps.Add(omega[j], gradSquared);
+                // Finite difference gradient magnitude, squared for Fisher
+                var norms = new Vector<T>(perturbedNorms).AsTensor();
+                var grad = Engine.TensorDivideScalar(Engine.TensorSubtractScalar(norms, baseNorm), epsilon);
+                AddToParameterBlocks(omega, Engine.TensorMultiply(grad, grad), step, parameters.Length);
             }
         }
     }
@@ -754,21 +769,12 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
     private Vector<T> ComputeHebbianImportance(IFullModel<T, TInput, TOutput> model)
     {
         int paramCount = (int)InterfaceGuard.Parameterizable(model).ParameterCount;
-        var omega = new Vector<T>(paramCount);
-
-        for (int i = 0; i < paramCount; i++)
-        {
-            omega[i] = NumOps.Zero;
-        }
-
         if (_importanceInputs.Count == 0)
         {
-            for (int i = 0; i < paramCount; i++)
-            {
-                omega[i] = NumOps.FromDouble(1.0);
-            }
-            return omega;
+            return Engine.Fill(paramCount, NumOps.FromDouble(1.0));
         }
+
+        Vector<T> omega;
 
         // For Hebbian importance, we measure how active each part of the network is
         // Since we don't have direct access to layer activations, we use a proxy:
@@ -776,12 +782,8 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
         // - We weight parameters by how much they contribute to high-magnitude outputs
 
         // Collect output statistics across samples
-        var outputMagnitudes = new List<double>();
-        var paramContributions = new Vector<T>(paramCount);
-        for (int i = 0; i < paramCount; i++)
-        {
-            paramContributions[i] = NumOps.Zero;
-        }
+        var outputMagnitudes = new List<T>();
+        var paramContributions = Engine.Fill(paramCount, NumOps.Zero);
 
         foreach (var input in _importanceInputs)
         {
@@ -791,13 +793,7 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
                 var outputVec = ConvertToVector(output);
 
                 // Compute output magnitude as activation proxy
-                double outputMag = 0;
-                for (int j = 0; j < outputVec.Length; j++)
-                {
-                    double val = Convert.ToDouble(outputVec[j]);
-                    outputMag += val * val;
-                }
-                outputMag = Math.Sqrt(outputMag);
+                T outputMag = StableL2Norm(outputVec);
                 outputMagnitudes.Add(outputMag);
 
                 // Get parameter values and weight by output magnitude
@@ -805,12 +801,12 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
                 // We approximate this as: parameter_magnitude * output_magnitude
                 var parameters = InterfaceGuard.Parameterizable(model).GetParameters();
 
-                for (int i = 0; i < Math.Min(paramCount, parameters.Length); i++)
+                // Weight parameter importance by output magnitude
+                int count = Math.Min(paramCount, parameters.Length);
+                if (count > 0)
                 {
-                    // Weight parameter importance by output magnitude
-                    var paramMag = NumOps.Abs(parameters[i]);
-                    var weightedContrib = NumOps.Multiply(paramMag, NumOps.FromDouble(outputMag));
-                    paramContributions[i] = NumOps.Add(paramContributions[i], weightedContrib);
+                    var weightedContrib = Engine.TensorMultiplyScalar(Engine.TensorAbs(Head(parameters, count)), outputMag);
+                    Engine.TensorAdd(Head(paramContributions, count), weightedContrib).AsSpan().CopyTo(Head(paramContributions, count).AsWritableSpan());
                 }
             }
             catch (Exception ex)
@@ -824,30 +820,24 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
         {
             // Normalize by sample count
             var divisor = NumOps.FromDouble(_importanceInputs.Count);
-            for (int i = 0; i < paramCount; i++)
-            {
-                omega[i] = NumOps.Divide(paramContributions[i], divisor);
-            }
+            omega = Engine.Divide(paramContributions, divisor);
 
             // Apply exponential weighting to emphasize high-activation parameters
             // This follows the Hebbian principle more closely
-            double meanMag = outputMagnitudes.Average();
-            if (meanMag > 1e-8)
+            // Divide before summing so the magnitudes cannot overflow T (Half tops out at 65504); the
+            // 1e-8 guard is compared in double because it rounds to zero in Half.
+            var magnitudes = new Vector<T>(outputMagnitudes);
+            T meanMag = Engine.Sum(Engine.Divide(magnitudes, NumOps.FromDouble(magnitudes.Length)));
+            if (NumOps.ToDouble(meanMag) > 1e-8)
             {
-                var scaleFactor = NumOps.FromDouble(1.0 / meanMag);
-                for (int i = 0; i < paramCount; i++)
-                {
-                    omega[i] = NumOps.Multiply(omega[i], scaleFactor);
-                }
+                var scaleFactor = NumOps.Divide(NumOps.One, meanMag);
+                omega = Engine.Multiply(omega, scaleFactor);
             }
         }
         else
         {
             // Fallback to uniform importance
-            for (int i = 0; i < paramCount; i++)
-            {
-                omega[i] = NumOps.FromDouble(1.0);
-            }
+            omega = Engine.Fill(paramCount, NumOps.FromDouble(1.0));
         }
 
         return omega;
@@ -871,10 +861,7 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
 
         if (_useL1Norm)
         {
-            for (int i = 0; i < output.Length; i++)
-            {
-                sum = NumOps.Add(sum, NumOps.Abs(output[i]));
-            }
+            sum = Engine.Sum(Engine.Abs(output));
         }
         else
         {
@@ -922,22 +909,21 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
                 break;
 
             case ImportanceAccumulationMode.Max:
-                for (int i = 0; i < _omega.Length; i++)
-                {
-                    if (NumOps.GreaterThan(taskImportance[i], _omega[i]))
-                    {
-                        _omega[i] = taskImportance[i];
-                    }
-                }
+            {
+                var omega = _omega.AsTensor();
+                var incoming = Head(taskImportance, _omega.Length);
+                var merged = Engine.TensorWhere(Engine.TensorGreaterThan(incoming, omega), incoming, omega);
+                merged.AsSpan().CopyTo(_omega.AsWritableSpan());
                 break;
+            }
 
             case ImportanceAccumulationMode.WeightedSum:
-                for (int i = 0; i < _omega.Length; i++)
-                {
-                    var decayed = NumOps.Multiply(_decayFactor, _omega[i]);
-                    _omega[i] = NumOps.Add(decayed, taskImportance[i]);
-                }
+            {
+                var decayed = Engine.TensorMultiplyScalar(_omega.AsTensor(), _decayFactor);
+                var merged = Engine.TensorAdd(decayed, Head(taskImportance, _omega.Length));
+                merged.AsSpan().CopyTo(_omega.AsWritableSpan());
                 break;
+            }
         }
     }
 
@@ -947,11 +933,12 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
     private Vector<T> NormalizeImportanceValues(Vector<T> importance)
     {
         T maxVal = _minImportanceValue;
-        for (int i = 0; i < importance.Length; i++)
+        if (importance.Length > 0)
         {
-            if (NumOps.GreaterThan(importance[i], maxVal))
+            T largest = Engine.TensorMaxValue(importance.AsTensor());
+            if (NumOps.GreaterThan(largest, maxVal))
             {
-                maxVal = importance[i];
+                maxVal = largest;
             }
         }
 
@@ -1028,12 +1015,7 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
     /// </summary>
     private double ComputeMean(Vector<T> vector)
     {
-        double sum = 0;
-        for (int i = 0; i < vector.Length; i++)
-        {
-            sum += Convert.ToDouble(vector[i]);
-        }
-        return sum / vector.Length;
+        return MeanAsDouble(vector);
     }
 
     /// <summary>
@@ -1041,14 +1023,8 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
     /// </summary>
     private double ComputeMax(Vector<T> vector)
     {
-        double max = Convert.ToDouble(vector[0]);
-        for (int i = 1; i < vector.Length; i++)
-        {
-            double val = Convert.ToDouble(vector[i]);
-            if (val > max)
-                max = val;
-        }
-        return max;
+        // Reported as a double metric, like master
+        return Convert.ToDouble(Engine.TensorMaxValue(vector.AsTensor()));
     }
 
     /// <summary>
@@ -1056,14 +1032,10 @@ public class MemoryAwareSynapses<T, TInput, TOutput> : ContinualLearningStrategy
     /// </summary>
     private int CountNonZero(Vector<T> vector)
     {
-        int count = 0;
-        double minVal = Convert.ToDouble(_minImportanceValue);
-        for (int i = 0; i < vector.Length; i++)
-        {
-            if (Convert.ToDouble(vector[i]) > minVal)
-                count++;
-        }
-        return count;
+        if (vector.Length == 0)
+            return 0;
+
+        return Engine.TensorCountNonzero(Engine.TensorGreaterThan(vector.AsTensor(), _minImportanceValue));
     }
 }
 

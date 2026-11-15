@@ -424,8 +424,6 @@ public abstract partial class ObjectDetectorBase<T> : VisionTaskModelBase<T>
     /// <returns>Resized image.</returns>
     protected virtual Tensor<T> ResizeImage(Tensor<T> image, int targetHeight, int targetWidth)
     {
-        int batch = image.Shape[0];
-        int channels = image.Shape[1];
         int srcHeight = image.Shape[2];
         int srcWidth = image.Shape[3];
 
@@ -434,49 +432,10 @@ public abstract partial class ObjectDetectorBase<T> : VisionTaskModelBase<T>
             return image;
         }
 
-        var resized = new Tensor<T>(new[] { batch, channels, targetHeight, targetWidth });
-
-        double scaleY = (double)srcHeight / targetHeight;
-        double scaleX = (double)srcWidth / targetWidth;
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < targetHeight; h++)
-                {
-                    for (int w = 0; w < targetWidth; w++)
-                    {
-                        // Bilinear interpolation
-                        double srcY = h * scaleY;
-                        double srcX = w * scaleX;
-
-                        int y0 = (int)Math.Floor(srcY);
-                        int x0 = (int)Math.Floor(srcX);
-                        int y1 = Math.Min(y0 + 1, srcHeight - 1);
-                        int x1 = Math.Min(x0 + 1, srcWidth - 1);
-
-                        double dy = srcY - y0;
-                        double dx = srcX - x0;
-
-                        double v00 = NumOps.ToDouble(image[b, c, y0, x0]);
-                        double v01 = NumOps.ToDouble(image[b, c, y0, x1]);
-                        double v10 = NumOps.ToDouble(image[b, c, y1, x0]);
-                        double v11 = NumOps.ToDouble(image[b, c, y1, x1]);
-
-                        double value = v00 * (1 - dx) * (1 - dy)
-                                     + v01 * dx * (1 - dy)
-                                     + v10 * (1 - dx) * dy
-                                     + v11 * dx * dy;
-
-                        resized[b, c, h, w] = NumOps.FromDouble(value);
-                    }
-                }
-            }
-        }
-
-        return resized;
+        // Bilinear with src = dst * in / out and the far tap clamped to the last row or column, as engine ops.
+        return CvTensorOps<T>.ResizeBilinearAsymmetric(image, targetHeight, targetWidth);
     }
+
 
     /// <summary>
     /// Normalizes image values to [0, 1] range.
@@ -485,15 +444,8 @@ public abstract partial class ObjectDetectorBase<T> : VisionTaskModelBase<T>
     /// <returns>Normalized image.</returns>
     protected virtual Tensor<T> Normalize(Tensor<T> image)
     {
-        var normalized = new Tensor<T>(image._shape);
         T scale = NumOps.FromDouble(1.0 / 255.0);
-
-        for (int i = 0; i < image.Length; i++)
-        {
-            normalized[i] = NumOps.Multiply(image[i], scale);
-        }
-
-        return normalized;
+        return Engine.TensorMultiplyScalar(image, scale);
     }
 
     /// <summary>
@@ -508,17 +460,7 @@ public abstract partial class ObjectDetectorBase<T> : VisionTaskModelBase<T>
         int height = batch.Shape[2];
         int width = batch.Shape[3];
 
-        var single = new Tensor<T>(new[] { 1, channels, height, width });
-
-        // Use contiguous memory copy for better performance
-        int pixelsPerImage = channels * height * width;
-        int sourceOffset = index * pixelsPerImage;
-        for (int i = 0; i < pixelsPerImage; i++)
-        {
-            single[i] = batch[sourceOffset + i];
-        }
-
-        return single;
+        return Engine.TensorSlice(batch, new[] { index, 0, 0, 0 }, new[] { 1, channels, height, width });
     }
 
     /// <summary>

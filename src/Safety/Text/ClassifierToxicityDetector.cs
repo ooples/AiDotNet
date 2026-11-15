@@ -80,27 +80,28 @@ public class ClassifierToxicityDetector<T> : TextSafetyModuleBase<T>
             return findings;
         }
 
+        if (_classifiers.Length == 0) return findings;
+
         // Extract features
         var features = ExtractFeatures(text);
 
-        // Run each category classifier
-        foreach (var classifier in _classifiers)
-        {
-            T score = ComputeLogisticScore(features, classifier.Weights, classifier.Bias);
+        // Run every category classifier at once
+        var scores = ComputeLogisticScores(features);
+        var scoreValues = scores.ToArray();
 
-            if (NumOps.GreaterThanOrEquals(score, _threshold))
+        foreach (int c in SafetyTensorOps<T>.IndicesAtLeast(scores, _threshold))
+        {
+            var classifier = _classifiers[c];
+            double scoreDouble = NumOps.ToDouble(scoreValues[c]);
+            findings.Add(new SafetyFinding
             {
-                double scoreDouble = NumOps.ToDouble(score);
-                findings.Add(new SafetyFinding
-                {
-                    Category = classifier.Category,
-                    Severity = scoreDouble >= 0.8 ? SafetySeverity.High : SafetySeverity.Medium,
-                    Confidence = scoreDouble,
-                    Description = $"Classifier detected {classifier.Category} (score: {scoreDouble:F3}).",
-                    RecommendedAction = scoreDouble >= 0.8 ? SafetyAction.Block : SafetyAction.Warn,
-                    SourceModule = ModuleName
-                });
-            }
+                Category = classifier.Category,
+                Severity = scoreDouble >= 0.8 ? SafetySeverity.High : SafetySeverity.Medium,
+                Confidence = scoreDouble,
+                Description = $"Classifier detected {classifier.Category} (score: {scoreDouble:F3}).",
+                RecommendedAction = scoreDouble >= 0.8 ? SafetyAction.Block : SafetyAction.Warn,
+                SourceModule = ModuleName
+            });
         }
 
         return findings;
@@ -109,88 +110,51 @@ public class ClassifierToxicityDetector<T> : TextSafetyModuleBase<T>
     /// <summary>
     /// Extracts TF-IDF weighted character n-gram hash features from text.
     /// </summary>
-    private Vector<T> ExtractFeatures(string text)
+    private Tensor<T> ExtractFeatures(string text)
     {
-        var features = new Vector<T>(_featureDim);
+        var engine = Engine;
         string normalized = text.ToLowerInvariant();
-        int totalNgrams = 0;
 
-        // Character 3-grams with hashing
-        for (int i = 0; i <= normalized.Length - 3; i++)
-        {
-            int hash = HashNgram(normalized, i, 3);
-            int idx = ((hash % _featureDim) + _featureDim) % _featureDim;
-            features[idx] = NumOps.Add(features[idx], NumOps.One);
-            totalNgrams++;
-        }
-
-        // Character 4-grams with hashing
-        for (int i = 0; i <= normalized.Length - 4; i++)
-        {
-            int hash = HashNgram(normalized, i, 4);
-            int idx = ((hash % _featureDim) + _featureDim) % _featureDim;
-            features[idx] = NumOps.Add(features[idx], NumOps.One);
-            totalNgrams++;
-        }
+        // Character 3-grams and 4-grams with hashing
+        var hashes = SafetyTensorOps<T>.NgramHashes(normalized, 3);
+        hashes.AddRange(SafetyTensorOps<T>.NgramHashes(normalized, 4));
+        int totalNgrams = hashes.Count;
+        var features = SafetyTensorOps<T>.HashedCounts(_featureDim, hashes, signed: false);
 
         // TF normalization (divide by total n-grams)
         if (totalNgrams > 0)
         {
-            T totalT = NumOps.FromDouble(totalNgrams);
-            for (int i = 0; i < _featureDim; i++)
-            {
-                features[i] = NumOps.Divide(features[i], totalT);
-            }
+            features = engine.TensorDivideScalar(features, NumOps.FromDouble(totalNgrams));
         }
 
         // Apply IDF-like weighting: rarer features get higher weight
         // Features appearing in many docs → lower IDF
         // We approximate with log(1 + 1/tf) scaling for non-zero entries
-        for (int i = 0; i < _featureDim; i++)
-        {
-            if (NumOps.GreaterThan(features[i], NumOps.Zero))
-            {
-                double tf = NumOps.ToDouble(features[i]);
-                double idfWeight = Math.Log(1.0 + 1.0 / (tf + 0.01));
-                features[i] = NumOps.Multiply(features[i], NumOps.FromDouble(idfWeight));
-            }
-        }
-
-        return features;
+        var present = SafetyTensorOps<T>.Gt(features, 0.0);
+        var tf = SafetyTensorOps<T>.Where(present, features, 1.0);
+        var idfWeight = engine.TensorLog(engine.TensorAddScalar(
+            engine.TensorReciprocal(engine.TensorAddScalar(tf, NumOps.FromDouble(0.01))), NumOps.One));
+        return SafetyTensorOps<T>.Where(present, engine.TensorMultiply(features, idfWeight), features);
     }
 
     /// <summary>
-    /// Computes logistic regression score: sigmoid(w · x + b).
+    /// Computes every classifier's logistic regression score: sigmoid(w · x + b), with the
+    /// logit clamped (above 20 gives 1, below -20 gives 0).
     /// </summary>
-    private T ComputeLogisticScore(Vector<T> features, Vector<T> weights, T bias)
+    private Tensor<T> ComputeLogisticScores(Tensor<T> features)
     {
-        T dot = bias;
-        int len = Math.Min(features.Length, weights.Length);
+        var engine = Engine;
+        int count = _classifiers.Length;
+        var weights = engine.TensorStack(Array.ConvertAll(_classifiers, c => Tensor<T>.FromVector(c.Weights)), 0);
+        var biases = new Tensor<T>(new[] { count }, new Vector<T>(Array.ConvertAll(_classifiers, c => c.Bias)));
+        var dot = engine.TensorAdd(biases,
+            engine.Reshape(engine.TensorMatMul(weights, engine.Reshape(features, new[] { _featureDim, 1 })), new[] { count }));
 
-        dot = NumOps.Add(dot, Engine.DotProduct(features, weights));
-
-        // Sigmoid function: 1 / (1 + exp(-x))
-        double dotVal = NumOps.ToDouble(dot);
-        // Clamp to prevent overflow
-        if (dotVal > 20) return NumOps.One;
-        if (dotVal < -20) return NumOps.Zero;
-
-        double sigmoid = 1.0 / (1.0 + Math.Exp(-dotVal));
-        return NumOps.FromDouble(sigmoid);
-    }
-
-    private static int HashNgram(string text, int start, int length)
-    {
-        unchecked
-        {
-            int hash = (int)2166136261;
-            for (int i = start; i < start + length && i < text.Length; i++)
-            {
-                hash ^= text[i];
-                hash *= 16777619;
-            }
-            return hash;
-        }
+        // Sigmoid function: 1 / (1 + exp(-x)), clamped to prevent overflow
+        var sigmoid = engine.TensorSigmoid(dot);
+        var high = SafetyTensorOps<T>.Gt(dot, 20);
+        var low = SafetyTensorOps<T>.Lt(dot, -20);
+        return SafetyTensorOps<T>.Where(high, 1.0, SafetyTensorOps<T>.Where(low, 0.0, sigmoid));
     }
 
     /// <summary>
@@ -209,25 +173,22 @@ public class ClassifierToxicityDetector<T> : TextSafetyModuleBase<T>
         };
 
         var classifiers = new CategoryClassifier[categories.Length];
+        T bias = NumOps.FromDouble(-2.0); // Negative bias to reduce false positives
+        T keywordWeight = NumOps.FromDouble(3.0);
 
         for (int c = 0; c < categories.Length; c++)
         {
             var (category, keywords) = categories[c];
-            var weights = new Vector<T>(_featureDim);
-            T bias = NumOps.FromDouble(-2.0); // Negative bias to reduce false positives
 
             // Set positive weights for keyword n-gram hash positions
+            var keywordHashes = new List<int>();
             foreach (var keyword in keywords)
             {
-                string kw = keyword.ToLowerInvariant();
-                for (int i = 0; i <= kw.Length - 3; i++)
-                {
-                    int hash = HashNgram(kw, i, 3);
-                    int idx = ((hash % _featureDim) + _featureDim) % _featureDim;
-                    weights[idx] = NumOps.Add(weights[idx], NumOps.FromDouble(3.0));
-                }
+                keywordHashes.AddRange(SafetyTensorOps<T>.NgramHashes(keyword.ToLowerInvariant(), 3));
             }
 
+            var weights = Engine.TensorMultiplyScalar(
+                SafetyTensorOps<T>.HashedCounts(_featureDim, keywordHashes, signed: false), keywordWeight).ToVector();
             classifiers[c] = new CategoryClassifier(category, weights, bias);
         }
 

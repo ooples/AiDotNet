@@ -318,7 +318,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
 
         var silhouette = new SilhouetteScore<double>();
         double overall = silhouette.Compute(data, labels);
-        double[] perSample = silhouette.ComputeSampleScores(data, labels);
+        var perSample = silhouette.ComputeSampleScores(data, labels);
 
         double avgSample = perSample.Average();
         Assert.Equal(overall, avgSample, Tolerance);
@@ -334,7 +334,7 @@ public class ClusteringEvaluationDeepMathIntegrationTests
         var labels = MakeLabels(0, 0, 1);
 
         var silhouette = new SilhouetteScore<double>();
-        double[] perSample = silhouette.ComputeSampleScores(data, labels);
+        var perSample = silhouette.ComputeSampleScores(data, labels);
 
         // Point 2 is a singleton in cluster 1
         // Standard: should be 0

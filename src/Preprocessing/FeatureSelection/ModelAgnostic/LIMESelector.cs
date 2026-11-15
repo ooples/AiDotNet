@@ -3,6 +3,7 @@ using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.ModelAgnostic;
 
@@ -48,7 +49,7 @@ public class LIMESelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
     private readonly Func<Matrix<T>, Vector<T>>? _predictFunc;
 
     // Fitted parameters
-    private double[]? _importances;
+    private Vector<T>? _importances;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -60,7 +61,7 @@ public class LIMESelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
     /// <summary>
     /// Gets the computed LIME importance values (mean absolute coefficients).
     /// </summary>
-    public double[]? Importances => _importances;
+    public Vector<T>? Importances => _importances;
 
     /// <summary>
     /// Gets the indices of selected features.
@@ -144,269 +145,125 @@ public class LIMESelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
+        var engine = Engine;
 
         var random = _randomState.HasValue
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSecureRandom();
 
-        // Convert to double arrays
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-            }
-        }
-
-        // Compute feature means and stds for perturbation
-        var means = new double[p];
-        var stds = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            for (int i = 0; i < n; i++)
-            {
-                means[j] += X[i, j];
-            }
-            means[j] /= n;
-
-            for (int i = 0; i < n; i++)
-            {
-                stds[j] += Math.Pow(X[i, j] - means[j], 2);
-            }
-            stds[j] = Math.Sqrt(stds[j] / n);
-            if (stds[j] < 1e-10) stds[j] = 1;
-        }
+        // Compute feature means and (population) stds for perturbation; a constant feature uses std 1
+        var x = Tensor<T>.FromMatrix(data);
+        var means = engine.ReduceMean(x, new[] { 0 }, true);
+        var stds = NeuralSelectorOps.PopulationStdOrOne(engine.TensorSubtract(x, engine.TensorBroadcastTo(means, new[] { n, p })));
 
         // Sample instances to explain
         int nExplain = Math.Min(_nSamplesToExplain, n);
         var explainIndices = Enumerable.Range(0, n).OrderBy(_ => random.Next()).Take(nExplain).ToArray();
 
-        // Accumulate importance
-        var importanceAccum = new double[p];
-
+        // Accumulate |coefficient| of the local surrogate of every explained instance
+        // (in double: a Half sum of |coefficients| near 1024 overflows after 64 instances)
+        var importanceAccum = new Tensor<double>(new[] { p });
         foreach (int explainIdx in explainIndices)
         {
-            var instanceImportance = ExplainInstance(X, explainIdx, means, stds, p, random, data);
-            for (int j = 0; j < p; j++)
-            {
-                importanceAccum[j] += Math.Abs(instanceImportance[j]);
-            }
+            var instance = PopulationSearchOps.Row(x, explainIdx);
+            var coefficients = ExplainInstance(instance, means, stds, random);
+            importanceAccum = engine.TensorAdd(importanceAccum, engine.TensorAbs(coefficients.Cast<double>()));
         }
 
         // Average importance
-        _importances = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            _importances[j] = importanceAccum[j] / nExplain;
-        }
+        var importances = engine.TensorDivideScalar(importanceAccum, (double)nExplain).Cast<T>();
+        _importances = importances.ToVector();
 
         // Select top features by importance
         int nToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = _importances
-            .Select((imp, idx) => (Importance: imp, Index: idx))
-            .OrderByDescending(x => x.Importance)
-            .Take(nToSelect)
-            .Select(x => x.Index)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(importances, nToSelect);
 
         IsFitted = true;
     }
 
-    private double[] ExplainInstance(double[,] X, int instanceIdx, double[] means, double[] stds, int p, Random random, Matrix<T> originalData)
+    /// <summary>
+    /// The local surrogate of LIME (Ribeiro, Singh and Guestrin 2016) for one instance [p]: each perturbation keeps
+    /// feature j when a uniform draw exceeds 1/2 and otherwise replaces it with mean + std (2u - 1) (one more
+    /// draw), in the order of the scalar loop; it is weighted by exp(-d^2 / width^2) with d the fraction of
+    /// replaced features, and the coefficients (without intercept) of the weighted least-squares fit (ridge
+    /// 1e-6) of the predictions on the binary keep-mask are returned ([p]).
+    /// </summary>
+    private Tensor<T> ExplainInstance(Tensor<T> instance, Tensor<T> means, Tensor<T> stds, Random random)
     {
-        int n = X.GetLength(0);
+        var engine = Engine;
+        int p = instance.Length;
+        int count = _nPerturbations;
 
-        // Generate perturbed samples
-        var perturbedX = new double[_nPerturbations, p];
-        var binaryMasks = new bool[_nPerturbations, p];
-        var predictions = new double[_nPerturbations];
-        var weights = new double[_nPerturbations];
-
-        for (int s = 0; s < _nPerturbations; s++)
+        // Draws in the scalar order: the keep test of every feature, then the replacement value of a replaced one.
+        // keep[cell] = 1 for a kept cell; source[cell] points at the replacement draw of a replaced cell.
+        var keep = new int[count * p];
+        var source = new int[count * p];
+        var replacements = new List<Tensor<T>> { new Tensor<T>(new[] { 1 }) };
+        for (int cell = 0; cell < keep.Length; cell++)
         {
-            // Random binary mask (which features to keep original)
-            int nFeaturesOn = 0;
-            for (int j = 0; j < p; j++)
+            if (random.NextDouble() > 0.5)
             {
-                binaryMasks[s, j] = random.NextDouble() > 0.5;
-                if (binaryMasks[s, j])
-                {
-                    perturbedX[s, j] = X[instanceIdx, j];
-                    nFeaturesOn++;
-                }
-                else
-                {
-                    // Sample from data distribution
-                    perturbedX[s, j] = means[j] + stds[j] * (random.NextDouble() * 2 - 1);
-                }
+                keep[cell] = 1;
             }
-
-            // Compute distance (Hamming distance on binary mask)
-            double distance = 0;
-            for (int j = 0; j < p; j++)
+            else
             {
-                if (!binaryMasks[s, j]) distance += 1;
+                source[cell] = replacements.Count;
+                replacements.Add(PopulationSearchOps.Uniform<T>(random, 1));
             }
-            distance /= p;
-
-            // Exponential kernel weight
-            weights[s] = Math.Exp(-distance * distance / (_kernelWidth * _kernelWidth));
-
-            // Get prediction
-            predictions[s] = GetPrediction(perturbedX, s, p, originalData);
         }
 
-        // Fit weighted linear regression
-        // Using normal equations with weights: (X'WX)^-1 X'Wy
-        var coefficients = FitWeightedLinearRegression(binaryMasks, predictions, weights, p);
+        var shape = new[] { count, p };
+        var mask = engine.Reshape(new Tensor<int>(keep, new[] { count * p }).Cast<T>(), shape);
+        var draws = engine.Reshape(
+            engine.TensorIndexSelect(
+                engine.TensorConcatenate(replacements.ToArray(), 0), new Tensor<int>(source, new[] { count * p }), 0),
+            shape);
+        var sampled = engine.TensorAdd(
+            engine.TensorBroadcastTo(means, shape),
+            engine.TensorMultiply(engine.TensorBroadcastTo(stds, shape), PopulationSearchOps.Affine(draws, 2, -1)));
+        var perturbed = engine.TensorWhere(
+            mask, engine.TensorBroadcastTo(engine.Reshape(instance, new[] { 1, p }), shape), sampled);
 
-        return coefficients;
+        // Exponential kernel on the fraction of replaced features
+        var distance = ReplacedFraction(mask);
+        var weights = engine.TensorExp(engine.TensorMultiplyScalar(
+            engine.TensorSquare(distance), NumOps.FromDouble(-1.0 / (_kernelWidth * _kernelWidth))));
+
+        // Weighted least squares on [1, mask]: (D^T W D + 1e-6 I)^-1 D^T W y, formed and solved in double: in Half
+        // the 1e-6 ridge is lost against Gram entries near 1, which left an all-kept system singular
+        var predictions = Predict(perturbed);
+        var design = SubsetRegressionOps.WithIntercept(mask).Cast<double>();
+        var weighted = PopulationSearchOps.ScaleRows(design, weights.Cast<double>());
+        var transposed = engine.TensorTranspose(weighted);
+        var gram = engine.TensorAdd(
+            engine.TensorMatMul(transposed, design), engine.TensorMultiplyScalar(engine.TensorEye<double>(p + 1), 1e-6));
+        var rhs = engine.TensorMatMul(transposed, engine.Reshape(predictions.Cast<double>(), new[] { count, 1 }));
+        var coefficients = engine.Reshape(PreprocessingTensorOps.Solve(gram, rhs), new[] { p + 1 });
+        return engine.TensorSlice(coefficients, new[] { 1 }, new[] { p }).Cast<T>();
     }
 
-    private double[] FitWeightedLinearRegression(bool[,] X, double[] y, double[] w, int p)
+    /// <summary>
+    /// The fraction of replaced features of every perturbation row of a 0/1 keep-mask [m, p] ([m]); the replaced
+    /// features are counted in int (a 0/1 sum in T stops counting at 2048 for Half).
+    /// </summary>
+    internal static Tensor<T> ReplacedFraction(Tensor<T> mask)
     {
-        int n = y.Length;
-
-        // Convert boolean mask to double (0/1)
-        var Xd = new double[n, p + 1]; // +1 for intercept
-        for (int i = 0; i < n; i++)
-        {
-            Xd[i, 0] = 1; // Intercept
-            for (int j = 0; j < p; j++)
-            {
-                Xd[i, j + 1] = X[i, j] ? 1.0 : 0.0;
-            }
-        }
-
-        // Compute X'WX
-        var XtWX = new double[p + 1, p + 1];
-        for (int i = 0; i < p + 1; i++)
-        {
-            for (int j = 0; j < p + 1; j++)
-            {
-                for (int k = 0; k < n; k++)
-                {
-                    XtWX[i, j] += Xd[k, i] * w[k] * Xd[k, j];
-                }
-            }
-        }
-
-        // Compute X'Wy
-        var XtWy = new double[p + 1];
-        for (int i = 0; i < p + 1; i++)
-        {
-            for (int k = 0; k < n; k++)
-            {
-                XtWy[i] += Xd[k, i] * w[k] * y[k];
-            }
-        }
-
-        // Add regularization
-        for (int i = 0; i < p + 1; i++)
-        {
-            XtWX[i, i] += 1e-6;
-        }
-
-        // Solve system (simple Gaussian elimination)
-        var coeffs = SolveLinearSystem(XtWX, XtWy, p + 1);
-
-        // Return feature coefficients (skip intercept)
-        var result = new double[p];
-        Array.Copy(coeffs, 1, result, 0, p);
-
-        return result;
+        var engine = AiDotNetEngine.Current;
+        int p = mask.Shape[1];
+        var replaced = engine.ReduceSum(PreprocessingTensorOps.OneMinus(mask).Cast<int>(), new[] { 1 }, false).Cast<T>();
+        return engine.TensorDivideScalar(replaced, MathHelper.GetNumericOperations<T>().FromDouble(p));
     }
 
-    private double[] SolveLinearSystem(double[,] A, double[] b, int n)
-    {
-        // Gaussian elimination with partial pivoting
-        var augmented = new double[n, n + 1];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                augmented[i, j] = A[i, j];
-            }
-            augmented[i, n] = b[i];
-        }
-
-        // Forward elimination
-        for (int col = 0; col < n; col++)
-        {
-            // Find pivot
-            int maxRow = col;
-            for (int row = col + 1; row < n; row++)
-            {
-                if (Math.Abs(augmented[row, col]) > Math.Abs(augmented[maxRow, col]))
-                {
-                    maxRow = row;
-                }
-            }
-
-            // Swap rows
-            for (int j = 0; j <= n; j++)
-            {
-                (augmented[col, j], augmented[maxRow, j]) = (augmented[maxRow, j], augmented[col, j]);
-            }
-
-            // Eliminate
-            if (Math.Abs(augmented[col, col]) > 1e-10)
-            {
-                for (int row = col + 1; row < n; row++)
-                {
-                    double factor = augmented[row, col] / augmented[col, col];
-                    for (int j = col; j <= n; j++)
-                    {
-                        augmented[row, j] -= factor * augmented[col, j];
-                    }
-                }
-            }
-        }
-
-        // Back substitution
-        var x = new double[n];
-        for (int i = n - 1; i >= 0; i--)
-        {
-            x[i] = augmented[i, n];
-            for (int j = i + 1; j < n; j++)
-            {
-                x[i] -= augmented[i, j] * x[j];
-            }
-            if (Math.Abs(augmented[i, i]) > 1e-10)
-            {
-                x[i] /= augmented[i, i];
-            }
-        }
-
-        return x;
-    }
-
-    private double GetPrediction(double[,] perturbedX, int sampleIdx, int p, Matrix<T> originalData)
+    /// <summary>
+    /// Predictions [m] for the rows of <paramref name="rows"/> [m, p]: the user's model, or by default the mean
+    /// of the features as a simple proxy.
+    /// </summary>
+    private Tensor<T> Predict(Tensor<T> rows)
     {
         if (_predictFunc is not null)
-        {
-            var sample = new T[1, p];
-            for (int j = 0; j < p; j++)
-            {
-                sample[0, j] = NumOps.FromDouble(perturbedX[sampleIdx, j]);
-            }
+            return Tensor<T>.FromVector(_predictFunc(rows.ToMatrix()));
 
-            var sampleMatrix = new Matrix<T>(sample);
-            var pred = _predictFunc(sampleMatrix);
-            return NumOps.ToDouble(pred[0]);
-        }
-
-        // Default: use feature sum as simple prediction proxy
-        double sum = 0;
-        for (int j = 0; j < p; j++)
-        {
-            sum += perturbedX[sampleIdx, j];
-        }
-
-        return sum / p;
+        return Engine.ReduceMean(rows, new[] { 1 }, false);
     }
 
     /// <summary>
@@ -428,19 +285,7 @@ public class LIMESelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuperv
             throw new InvalidOperationException("LIMESelector has not been fitted.");
         }
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < numCols; j++)
-            {
-                result[i, j] = data[i, _selectedIndices[j]];
-            }
-        }
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <summary>

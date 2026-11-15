@@ -871,11 +871,25 @@ public partial class BarkModel<T> : TtsModelBase<T>
     {
         if (tokens is null) throw new ArgumentNullException(nameof(tokens));
         if (tokens.Count == 0) throw new ArgumentException("Bark token sequences cannot be empty.", nameof(tokens));
-        var tensor = new Tensor<T>([1, tokens.Count]);
-        for (int index = 0; index < tokens.Count; index++)
-            tensor[0, index] = NumOps.FromDouble(tokens[index]);
-        return tensor;
+        return Engine.Reshape(IdTensor(tokens), new[] { 1, tokens.Count });
     }
+
+    /// <summary>
+    /// A <c>[rows, columns]</c> tensor of codes carried in T as an int matrix with <see cref="Convert.ToInt32(double)"/>'s
+    /// contract: rounded half to even, and an <see cref="OverflowException"/> for NaN or a value outside Int32.
+    /// </summary>
+    private protected int[,] ToInt32Matrix(Tensor<T> tokens)
+    {
+        int rows = tokens.Shape[0], columns = tokens.Shape[1];
+        var flat = CheckedInt32(Engine, Engine.TensorRound(tokens), "Value was either too large or too small for an Int32.");
+        var values = new int[rows, columns];
+        Buffer.BlockCopy(flat, 0, values, 0, flat.Length * sizeof(int));
+        return values;
+    }
+
+    // A [length] tensor of `values` where `keep` is 1 and `fill` elsewhere.
+    private Tensor<T> KeepOrFill(Tensor<T> values, int[] keep, T fill) =>
+        Engine.TensorWhere(new Tensor<int>(keep, new[] { keep.Length }).Cast<T>(), values, Tensor<T>.CreateDefault(new[] { keep.Length }, fill));
 
     private int[,] ToCodebookArray(Tensor<T> input)
     {
@@ -883,11 +897,7 @@ public partial class BarkModel<T> : TtsModelBase<T>
             throw new ArgumentException(
                 $"Fine training input must have shape [{_options.NumCodebooks}, frame].",
                 nameof(input));
-        var result = new int[input.Shape[0], input.Shape[1]];
-        for (int codebook = 0; codebook < input.Shape[0]; codebook++)
-            for (int frame = 0; frame < input.Shape[1]; frame++)
-                result[codebook, frame] = Convert.ToInt32(NumOps.ToDouble(input[codebook, frame]));
-        return result;
+        return ToInt32Matrix(input);
     }
 
     private Vector<T> RestrictLogits(Vector<T> logits, int startInclusive, int endExclusive, int? additionalToken = null)
@@ -895,21 +905,20 @@ public partial class BarkModel<T> : TtsModelBase<T>
         if (startInclusive < 0 || endExclusive > logits.Length || startInclusive >= endExclusive)
             throw new ArgumentOutOfRangeException(nameof(startInclusive));
         T suppressed = NumOps.FromDouble(double.NegativeInfinity);
-        var result = new T[logits.Length];
-        for (int index = 0; index < logits.Length; index++)
-            result[index] = index >= startInclusive && index < endExclusive || index == additionalToken
-                ? logits[index]
-                : suppressed;
-        return new Vector<T>(result);
+        var keep = new int[logits.Length];
+        for (int index = 0; index < keep.Length; index++)
+            keep[index] = index >= startInclusive && index < endExclusive || index == additionalToken ? 1 : 0;
+        return KeepOrFill(new Tensor<T>(new[] { logits.Length }, logits), keep, suppressed).ToVector();
     }
 
     private Vector<T> ExtractPositionLogits(Tensor<T> logits, int position, int allowedVocabulary)
     {
-        var values = new T[logits.Shape[2]];
+        int vocabulary = logits.Shape[2];
         T suppressed = NumOps.FromDouble(double.NegativeInfinity);
-        for (int token = 0; token < values.Length; token++)
-            values[token] = token < allowedVocabulary ? logits[0, position, token] : suppressed;
-        return new Vector<T>(values);
+        var keep = new int[vocabulary];
+        for (int token = 0; token < vocabulary; token++) keep[token] = token < allowedVocabulary ? 1 : 0;
+        var row = Engine.Reshape(Engine.TensorSlice(logits, new[] { 0, position, 0 }, new[] { 1, 1, vocabulary }), new[] { vocabulary });
+        return KeepOrFill(row, keep, suppressed).ToVector();
     }
 
     private static int Sample(Vector<T> logits, SamplingOptions options, Random random)

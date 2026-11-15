@@ -83,6 +83,10 @@ public partial class ARModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _arCoefficients;
+
+    // Mean of the training series. The AR coefficients are fitted on the de-meaned series, so every
+    // prediction is mean + Σ φ_i (y[t-i] - mean) (statsmodels AutoReg / ARIMA with trend 'c').
+    [Buffer]
     private T _seriesMean;
 
     /// <summary>
@@ -207,14 +211,16 @@ public partial class ARModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private Vector<T> CalculateResiduals(Vector<T> y)
     {
-        Vector<T> residuals = new Vector<T>(y.Length);
-        for (int t = _arOrder; t < y.Length; t++)
+        // residual[t] = y[t] - Σ φ_i y[t-i-1] for t >= p; the first p entries stay zero.
+        int count = y.Length - _arOrder;
+        if (count <= 0)
         {
-            T yHat = PredictAtIndex(y, t);
-            residuals[t] = NumOps.Subtract(y[t], yHat);
+            return new Vector<T>(y.Length);
         }
 
-        return residuals;
+        var lags = TimeSeriesEngineOps<T>.LagMatrix(y, _arOrder, _arOrder, count);
+        var fitted = Engine.MatrixVectorMultiply(lags, _arCoefficients);
+        return Vector<T>.Concatenate(new Vector<T>(_arOrder), Engine.Subtract(y.GetSubVector(_arOrder, count), fitted));
     }
 
     /// <summary>
@@ -241,22 +247,15 @@ public partial class ARModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private Vector<T> CalculateGradients(Vector<T> y, Vector<T> residuals)
     {
-        Vector<T> gradAR = new Vector<T>(_arOrder);
-
-        // VECTORIZED: Process lagged y values as vectors for each timestep
-        for (int t = _arOrder; t < y.Length; t++)
+        // gradAR = Σ_t residual[t] · [y[t-1], ..., y[t-p]] = Lagsᵀ · residuals[p..].
+        int count = y.Length - _arOrder;
+        if (count <= 0)
         {
-            var laggedY = new Vector<T>(_arOrder);
-            for (int i = 0; i < _arOrder; i++)
-            {
-                laggedY[i] = y[t - i - 1];
-            }
-
-            var contribution = (Vector<T>)Engine.Multiply(laggedY, residuals[t]);
-            gradAR = (Vector<T>)Engine.Add(gradAR, contribution);
+            return new Vector<T>(_arOrder);
         }
 
-        return gradAR;
+        var lags = TimeSeriesEngineOps<T>.LagMatrix(y, _arOrder, _arOrder, count);
+        return Engine.MatrixVectorMultiply(lags.Transpose(), residuals.GetSubVector(_arOrder, count));
     }
 
     /// <summary>
@@ -363,25 +362,21 @@ public partial class ARModel<T> : TimeSeriesModelBase<T>
     private T PredictAtIndex(Vector<T> y, int t)
     {
         // VECTORIZED: Use dot product for AR prediction
+        // ŷ[t] = μ + Σ φ_i (y[t-i] - μ): the coefficients were fitted on the de-meaned series
         int availableHistory = Math.Min(_arOrder, t);
         if (availableHistory == 0)
         {
-            return NumOps.Zero;
+            return _seriesMean;
         }
 
-        // Build vector of past values
-        T[] pastValues = new T[availableHistory];
-        for (int i = 0; i < availableHistory; i++)
-        {
-            pastValues[i] = y[t - i - 1];
-        }
-
-        Vector<T> pastVector = new Vector<T>(pastValues);
+        // Past deviations y[t-1] - μ, ..., y[t-availableHistory] - μ (most recent first)
+        Vector<T> pastVector = TimeSeriesEngineOps<T>.Reverse(y.GetSubVector(t - availableHistory, availableHistory));
+        Vector<T> pastDeviations = Engine.Subtract(pastVector, Engine.Fill(availableHistory, _seriesMean));
         Vector<T> coeffSlice = availableHistory < _arOrder
             ? _arCoefficients.Slice(0, availableHistory)
             : _arCoefficients;
 
-        return Engine.DotProduct(coeffSlice, pastVector);
+        return NumOps.Add(_seriesMean, Engine.DotProduct(coeffSlice, pastDeviations));
     }
 
     /// <summary>
@@ -626,9 +621,9 @@ public partial class ARModel<T> : TimeSeriesModelBase<T>
         if (_arCoefficients.Length > 0)
         {
             sb.AppendLine("AR Coefficients:");
-            for (int i = 0; i < _arOrder; i++)
+            foreach (var line in TimeSeriesEngineOps<T>.FormatCoefficients(_arCoefficients, "AR"))
             {
-                sb.AppendLine($"  AR[{i + 1}] = {Convert.ToDouble(_arCoefficients[i]):F4}");
+                sb.AppendLine(line);
             }
         }
 
@@ -661,6 +656,7 @@ public partial class ARModel<T> : TimeSeriesModelBase<T>
     {
         _arCoefficients = Vector<T>.Empty();
         _trainedSeries = Vector<T>.Empty();
+        _seriesMean = NumOps.Zero;
     }
 
     /// <summary>
@@ -688,25 +684,17 @@ public partial class ARModel<T> : TimeSeriesModelBase<T>
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
         // Store defensive copy of training series for in-sample predictions via Predict(Matrix<T>)
-        _trainedSeries = new Vector<T>(y.Length);
-        for (int i = 0; i < y.Length; i++)
-        {
-            _trainedSeries[i] = y[i];
-        }
+        _trainedSeries = y.Clone();
 
         // Industry-standard AR estimation via OLS (Yule-Walker / least squares).
         // Mean-center the data first since AR assumes zero-mean stationary data.
         _seriesMean = StatisticsHelper<T>.CalculateMean(y);
-        var centered = new Vector<T>(y.Length);
-        for (int i = 0; i < y.Length; i++)
-            centered[i] = NumOps.Subtract(y[i], _seriesMean);
+        var centered = Engine.Subtract(y, Engine.Fill(y.Length, _seriesMean));
 
         _arCoefficients = TimeSeriesHelper<T>.EstimateARCoefficients(centered, _arOrder, MatrixDecompositionType.Qr);
 
         // Store learned coefficients as ModelParameters for GetParameters() / serialization
-        ModelParameters = new Vector<T>(_arOrder);
-        for (int i = 0; i < _arOrder; i++)
-            ModelParameters[i] = _arCoefficients[i];
+        ModelParameters = _arCoefficients.GetSubVector(0, _arOrder);
     }
 
     /// <summary>

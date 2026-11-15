@@ -506,153 +506,6 @@ public partial class RIFE<T> : FrameInterpolationBase<T>
     }
 
     /// <summary>
-    /// Computes gradients through the warping operation.
-    /// </summary>
-    private (Tensor<T> frameGrad, Tensor<T> flowGrad) WarpBackward(
-        Tensor<T> outputGrad,
-        Tensor<T> inputFrame,
-        Tensor<T> flow)
-    {
-        int batchSize = outputGrad.Shape[0];
-        int channels = outputGrad.Shape[1];
-        int height = outputGrad.Shape[2];
-        int width = outputGrad.Shape[3];
-
-        var frameGrad = new Tensor<T>(inputFrame._shape);
-        var flowGrad = new Tensor<T>(flow._shape);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    double dx = Convert.ToDouble(flow[b, 0, h, w]);
-                    double dy = Convert.ToDouble(flow[b, 1, h, w]);
-
-                    double srcH = h + dy;
-                    double srcW = w + dx;
-
-                    // Compute bilinear interpolation coefficients
-                    int h0 = (int)Math.Floor(srcH);
-                    int w0 = (int)Math.Floor(srcW);
-                    int h1 = h0 + 1;
-                    int w1 = w0 + 1;
-
-                    double hWeight = srcH - Math.Floor(srcH);
-                    double wWeight = srcW - Math.Floor(srcW);
-
-                    // Coefficients for bilinear interpolation
-                    double c00 = (1 - hWeight) * (1 - wWeight);
-                    double c01 = (1 - hWeight) * wWeight;
-                    double c10 = hWeight * (1 - wWeight);
-                    double c11 = hWeight * wWeight;
-
-                    for (int c = 0; c < channels; c++)
-                    {
-                        T grad = outputGrad[b, c, h, w];
-
-                        // Distribute gradient to source pixels (gradient w.r.t. input frame)
-                        if (h0 >= 0 && h0 < height && w0 >= 0 && w0 < width)
-                            frameGrad[b, c, h0, w0] = NumOps.Add(
-                                frameGrad[b, c, h0, w0],
-                                NumOps.Multiply(grad, NumOps.FromDouble(c00)));
-
-                        if (h0 >= 0 && h0 < height && w1 >= 0 && w1 < width)
-                            frameGrad[b, c, h0, w1] = NumOps.Add(
-                                frameGrad[b, c, h0, w1],
-                                NumOps.Multiply(grad, NumOps.FromDouble(c01)));
-
-                        if (h1 >= 0 && h1 < height && w0 >= 0 && w0 < width)
-                            frameGrad[b, c, h1, w0] = NumOps.Add(
-                                frameGrad[b, c, h1, w0],
-                                NumOps.Multiply(grad, NumOps.FromDouble(c10)));
-
-                        if (h1 >= 0 && h1 < height && w1 >= 0 && w1 < width)
-                            frameGrad[b, c, h1, w1] = NumOps.Add(
-                                frameGrad[b, c, h1, w1],
-                                NumOps.Multiply(grad, NumOps.FromDouble(c11)));
-
-                        // Gradient w.r.t. flow (spatial derivatives of bilinear interpolation)
-                        T v00 = GetPixelSafe(inputFrame, b, c, h0, w0, height, width);
-                        T v01 = GetPixelSafe(inputFrame, b, c, h0, w1, height, width);
-                        T v10 = GetPixelSafe(inputFrame, b, c, h1, w0, height, width);
-                        T v11 = GetPixelSafe(inputFrame, b, c, h1, w1, height, width);
-
-                        // dOutput/dx = derivative of bilinear interpolation w.r.t. x (width direction)
-                        T dX = NumOps.Add(
-                            NumOps.Multiply(
-                                NumOps.Subtract(v01, v00),
-                                NumOps.FromDouble(1 - hWeight)),
-                            NumOps.Multiply(
-                                NumOps.Subtract(v11, v10),
-                                NumOps.FromDouble(hWeight)));
-
-                        // dOutput/dy = derivative of bilinear interpolation w.r.t. y (height direction)
-                        T dY = NumOps.Add(
-                            NumOps.Multiply(
-                                NumOps.Subtract(v10, v00),
-                                NumOps.FromDouble(1 - wWeight)),
-                            NumOps.Multiply(
-                                NumOps.Subtract(v11, v01),
-                                NumOps.FromDouble(wWeight)));
-
-                        // Accumulate flow gradients
-                        flowGrad[b, 0, h, w] = NumOps.Add(
-                            flowGrad[b, 0, h, w],
-                            NumOps.Multiply(grad, dX));
-                        flowGrad[b, 1, h, w] = NumOps.Add(
-                            flowGrad[b, 1, h, w],
-                            NumOps.Multiply(grad, dY));
-                    }
-                }
-            }
-        }
-
-        return (frameGrad, flowGrad);
-    }
-
-    /// <summary>
-    /// Gets a pixel value safely with boundary handling.
-    /// </summary>
-    private T GetPixelSafe(Tensor<T> tensor, int b, int c, int h, int w, int height, int width)
-    {
-        h = Math.Max(0, Math.Min(h, height - 1));
-        w = Math.Max(0, Math.Min(w, width - 1));
-        return tensor[b, c, h, w];
-    }
-
-    /// <summary>
-    /// Splits a concatenated gradient tensor along the channel dimension.
-    /// </summary>
-    private (Tensor<T> first, Tensor<T> second) SplitConcatenatedGradient(
-        Tensor<T> gradient, int firstChannels, int secondChannels)
-    {
-        int batchSize = gradient.Shape[0];
-        int height = gradient.Shape[2];
-        int width = gradient.Shape[3];
-
-        var first = new Tensor<T>([batchSize, firstChannels, height, width]);
-        var second = new Tensor<T>([batchSize, secondChannels, height, width]);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    for (int c = 0; c < firstChannels; c++)
-                        first[b, c, h, w] = gradient[b, c, h, w];
-                    for (int c = 0; c < secondChannels; c++)
-                        second[b, c, h, w] = gradient[b, firstChannels + c, h, w];
-                }
-            }
-        }
-
-        return (first, second);
-    }
-
-    /// <summary>
     /// Combines flow gradients from different sources.
     /// </summary>
     private Tensor<T> CombineFlowGradients(
@@ -668,113 +521,11 @@ public partial class RIFE<T> : FrameInterpolationBase<T>
     }
 
     /// <summary>
-    /// Accumulates gradients from multiple branches back to the input.
-    /// </summary>
-    private Tensor<T> AccumulateInputGradients(
-        Tensor<T> encoderGrad,
-        Tensor<T> contextGrad,
-        Tensor<T> frame1Grad,
-        Tensor<T> frame2Grad)
-    {
-        // The input is concatenated frames [frame1, frame2]
-        // Encoder and context encoder both process full concatenated input
-        // Frame gradients only affect their respective parts
-
-        int batchSize = encoderGrad.Shape[0];
-        int totalChannels = encoderGrad.Shape[1];
-        int height = encoderGrad.Shape[2];
-        int width = encoderGrad.Shape[3];
-
-        var result = new Tensor<T>(encoderGrad._shape);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int h = 0; h < height; h++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    for (int c = 0; c < totalChannels; c++)
-                    {
-                        // Accumulate encoder and context encoder gradients
-                        T grad = NumOps.Add(encoderGrad[b, c, h, w], contextGrad[b, c, h, w]);
-
-                        // Add frame-specific gradients
-                        if (c < _channels)
-                        {
-                            grad = NumOps.Add(grad, frame1Grad[b, c, h, w]);
-                        }
-                        else if (c < _channels * 2)
-                        {
-                            grad = NumOps.Add(grad, frame2Grad[b, c - _channels, h, w]);
-                        }
-
-                        result[b, c, h, w] = grad;
-                    }
-                }
-            }
-        }
-
-        return result;
-    }
-
-    /// <summary>
     /// Adds two tensors element-wise.
     /// </summary>
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
         return Engine.TensorAdd(a, b);
-    }
-
-    /// <summary>
-    /// Downsamples a tensor using bilinear interpolation (backward of upsample).
-    /// </summary>
-    private Tensor<T> BilinearDownsample(Tensor<T> input, int factor)
-    {
-        int batchSize = input.Shape[0];
-        int channels = input.Shape[1];
-        int inHeight = input.Shape[2];
-        int inWidth = input.Shape[3];
-
-        int outHeight = inHeight / factor;
-        int outWidth = inWidth / factor;
-
-        var output = new Tensor<T>([batchSize, channels, outHeight, outWidth]);
-
-        // Average pooling as inverse of bilinear upsampling
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < outHeight; h++)
-                {
-                    for (int w = 0; w < outWidth; w++)
-                    {
-                        T sum = NumOps.Zero;
-                        int count = 0;
-
-                        for (int dy = 0; dy < factor; dy++)
-                        {
-                            for (int dx = 0; dx < factor; dx++)
-                            {
-                                int srcH = h * factor + dy;
-                                int srcW = w * factor + dx;
-                                if (srcH < inHeight && srcW < inWidth)
-                                {
-                                    sum = NumOps.Add(sum, input[b, c, srcH, srcW]);
-                                    count++;
-                                }
-                            }
-                        }
-
-                        output[b, c, h, w] = count > 0
-                            ? NumOps.Divide(sum, NumOps.FromDouble(count))
-                            : NumOps.Zero;
-                    }
-                }
-            }
-        }
-
-        return output;
     }
 
     /// <summary>
@@ -826,47 +577,18 @@ public partial class RIFE<T> : FrameInterpolationBase<T>
         return Engine.TensorMultiplyScalar(flow, scale);
     }
 
-    private Tensor<T> WarpImage(Tensor<T> image, Tensor<T> flow)
-    {
-        // Backward-warp `image` by `flow` using a tape-aware bilinear grid sample
-        // (the differentiable warp RIFE relies on — Huang et al. 2022). A manual
-        // per-pixel bilinear copy would detach the autodiff tape, so gradients
-        // would never reach the flow decoder / feature encoder and training would
-        // diverge. image: [B, C, H, W]; flow: [B, 2, H, W] with channel 0 = dx,
-        // channel 1 = dy in pixel units.
-        int batchSize = image.Shape[0];
-        int height = image.Shape[2];
-        int width = image.Shape[3];
-
-        // Identity affine grid → per-pixel base sampling positions in normalized
-        // [-1, 1] coordinates ([B, H, W, 2], last dim = (x, y)).
-        var identityTheta = new Tensor<T>([batchSize, 2, 3]);
-        for (int b = 0; b < batchSize; b++)
-        {
-            identityTheta[b, 0, 0] = NumOps.One; // x scale
-            identityTheta[b, 1, 1] = NumOps.One; // y scale
-        }
-        var baseGrid = Engine.AffineGrid(identityTheta, height, width);
-
-        // Convert the pixel-unit flow [B, 2, H, W] to a normalized grid offset
-        // [B, H, W, 2]: a dx-pixel shift is 2*dx/(W-1) in normalized coords.
-        var flowNHWC = Engine.TensorPermute(flow, [0, 2, 3, 1]); // [B, H, W, 2] (x=dx, y=dy)
-        double sx = width > 1 ? 2.0 / (width - 1) : 0.0;
-        double sy = height > 1 ? 2.0 / (height - 1) : 0.0;
-        var scale = new Tensor<T>([batchSize, height, width, 2]);
-        var scaleSpan = scale.Data.Span;
-        for (int idx = 0; idx + 1 < scaleSpan.Length; idx += 2)
-        {
-            scaleSpan[idx] = NumOps.FromDouble(sx);
-            scaleSpan[idx + 1] = NumOps.FromDouble(sy);
-        }
-        var flowOffset = Engine.TensorMultiply(flowNHWC, scale);
-        var grid = Engine.TensorAdd(baseGrid, flowOffset);
-
-        // Engine.GridSample is NCHW (PyTorch convention): image is already [B, C, H, W],
-        // pass it directly. The grid is [B, H, W, 2] regardless of image layout.
-        return Engine.GridSample(image, grid);                      // [B, C, H, W]
-    }
+    /// <summary>
+    /// Backward-warps <paramref name="image"/> [B, C, H, W] by the pixel-unit <paramref name="flow"/> [B, 2, H, W],
+    /// tape-aware, as RIFE's <c>warplayer.warp</c>: grid_sample(mode="bilinear", padding_mode="border",
+    /// align_corners=True) at pixel + flow.
+    /// </summary>
+    /// <remarks>
+    /// This used to scale the flow by the align_corners=True factor 2/(W - 1) but sample with the two-argument
+    /// GridSample, the align_corners=False shim, and with zero padding, so every lookup was shifted and stretched
+    /// and samples past the edge went black instead of repeating the border.
+    /// </remarks>
+    internal Tensor<T> WarpImage(Tensor<T> image, Tensor<T> flow)
+        => WarpByFlow(image, flow, GridSamplePadding.Border);
 
     private Tensor<T> BilinearUpsample(Tensor<T> input, int factor)
     {

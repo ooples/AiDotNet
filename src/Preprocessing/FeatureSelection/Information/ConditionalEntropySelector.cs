@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Information;
 
@@ -25,13 +26,13 @@ public class ConditionalEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
     private readonly int _nFeaturesToSelect;
     private readonly int _nBins;
 
-    private double[]? _conditionalEntropies;
+    private Vector<T>? _conditionalEntropies;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? ConditionalEntropies => _conditionalEntropies;
+    public Vector<T>? ConditionalEntropies => _conditionalEntropies;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -66,82 +67,23 @@ public class ConditionalEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
         _nInputFeatures = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
+        if (n == 0)
+            throw new InvalidOperationException("Sequence contains no elements");
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        // Discretize every feature and the target into equal-width bins
+        var xBins = FeatureSelectionInformationOps.EqualWidthBins(Tensor<T>.FromMatrix(data), _nBins);
+        var yBins = FeatureSelectionInformationOps.EqualWidthBins(target, _nBins);
 
-        // Discretize target
-        var yBins = Discretize(y, n, _nBins);
-
-        _conditionalEntropies = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++) col[i] = X[i, j];
-            var xBins = Discretize(col, n, _nBins);
-
-            _conditionalEntropies[j] = ComputeConditionalEntropy(xBins, yBins, n, _nBins);
-        }
+        // H(Y|X) = sum over x of P(x) * H(Y|X=x), in bits
+        var counts = FeatureSelectionInformationOps.JointCounts<T>(xBins, _nBins, yBins, _nBins);
+        var entropies = FeatureSelectionInformationOps.ToBits(FeatureSelectionInformationOps.ConditionalEntropy(counts, n));
+        _conditionalEntropies = entropies.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
         // Select features with LOWEST conditional entropy (most information)
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderBy(j => _conditionalEntropies[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.BottomKIndicesSorted(entropies, numToSelect);
 
         IsFitted = true;
-    }
-
-    private int[] Discretize(double[] values, int n, int nBins)
-    {
-        double min = values.Min();
-        double max = values.Max();
-        double range = max - min + 1e-10;
-
-        var bins = new int[n];
-        for (int i = 0; i < n; i++)
-            bins[i] = Math.Min((int)((values[i] - min) / range * nBins), nBins - 1);
-
-        return bins;
-    }
-
-    private double ComputeConditionalEntropy(int[] x, int[] y, int n, int nBins)
-    {
-        // H(Y|X) = sum over x of P(x) * H(Y|X=x)
-        var jointCounts = new int[nBins, nBins];
-        var xCounts = new int[nBins];
-
-        for (int i = 0; i < n; i++)
-        {
-            jointCounts[x[i], y[i]]++;
-            xCounts[x[i]]++;
-        }
-
-        double condEntropy = 0;
-        for (int xi = 0; xi < nBins; xi++)
-        {
-            if (xCounts[xi] == 0) continue;
-            double px = (double)xCounts[xi] / n;
-
-            double entropy = 0;
-            for (int yi = 0; yi < nBins; yi++)
-            {
-                if (jointCounts[xi, yi] == 0) continue;
-                double pyx = (double)jointCounts[xi, yi] / xCounts[xi];
-                entropy -= pyx * Math.Log(pyx) / Math.Log(2);
-            }
-            condEntropy += px * entropy;
-        }
-
-        return condEntropy;
     }
 
     /// <inheritdoc />
@@ -157,15 +99,7 @@ public class ConditionalEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
         if (_selectedIndices is null)
             throw new InvalidOperationException("ConditionalEntropySelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

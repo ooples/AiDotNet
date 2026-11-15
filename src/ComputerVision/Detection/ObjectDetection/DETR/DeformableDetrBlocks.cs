@@ -66,8 +66,8 @@ internal sealed class DetrLinear<T> : CvParameterModule<T>
     /// <summary>Copies another linear layer's values (the reference deep-copies its heads).</summary>
     public void CopyFrom(DetrLinear<T> other)
     {
-        for (int i = 0; i < Weight.Length; i++) Weight[i] = other.Weight[i];
-        for (int i = 0; i < Bias.Length; i++) Bias[i] = other.Bias[i];
+        other.Weight.AsSpan().CopyTo(Weight.AsWritableSpan());
+        other.Bias.AsSpan().CopyTo(Bias.AsWritableSpan());
     }
 
     public Tensor<T> Forward(Tensor<T> input)

@@ -384,7 +384,6 @@ public partial class AiModelResult<T, TInput, TOutput>
             ? PreprocessingInfo.TransformFeatures(newData)
             : newData;
 
-        var numOps = MathHelper.GetNumericOperations<T>();
         var samples = new List<Tensor<T>>(_deepEnsembleModels.Count);
 
         for (int i = 0; i < _deepEnsembleModels.Count; i++)
@@ -426,37 +425,7 @@ public partial class AiModelResult<T, TInput, TOutput>
 
         if (treatAsProbabilities && classes > 1)
         {
-            var expectedEntropySum = new Vector<T>(batch);
-            foreach (var sample in samples)
-            {
-                var sampleEntropy = ComputePerSampleEntropy(sample.ToVector(), batch, classes);
-                for (int b = 0; b < batch; b++)
-                {
-                    expectedEntropySum[b] = numOps.Add(expectedEntropySum[b], sampleEntropy[b]);
-                }
-            }
-
-            var meanVector = meanTensor.ToVector();
-            var predictiveEntropyVec = ComputePerSampleEntropy(meanVector, batch, classes);
-            var expectedEntropyVec = new Vector<T>(batch);
-            for (int b = 0; b < batch; b++)
-            {
-                expectedEntropyVec[b] = numOps.Divide(expectedEntropySum[b], numOps.FromDouble(samples.Count));
-            }
-
-            var miVec = new Vector<T>(batch);
-            for (int b = 0; b < batch; b++)
-            {
-                var mi = numOps.Subtract(predictiveEntropyVec[b], expectedEntropyVec[b]);
-                if (numOps.LessThan(mi, numOps.Zero))
-                {
-                    mi = numOps.Zero;
-                }
-                miVec[b] = mi;
-            }
-
-            predictiveEntropy = new Tensor<T>([batch], predictiveEntropyVec);
-            mutualInformation = new Tensor<T>([batch], miVec);
+            (predictiveEntropy, mutualInformation) = ComputeEntropyAndMutualInformation(samples, meanTensor.ToVector(), batch, classes);
         }
 
         var metrics = CreateDefaultUncertaintyMetrics(denormalizedMean, mutualInformation);
@@ -497,10 +466,12 @@ public partial class AiModelResult<T, TInput, TOutput>
         var normalizedNewData = PreprocessingInfo?.IsFitted == true
             ? PreprocessingInfo.TransformFeatures(newData)
             : newData;
-        var numOps = MathHelper.GetNumericOperations<T>();
         var rng = uq.RandomSeed.HasValue ? RandomHelper.CreateSeededRandom(uq.RandomSeed.Value) : RandomHelper.CreateSecureRandom();
 
         var samples = new List<Tensor<T>>(effectiveSamples);
+        var meanTensorParameters = Tensor<T>.FromVector(posteriorMean);
+        var posteriorStd = ResultEngine.TensorSqrt(Tensor<T>.FromVector(posteriorVarianceDiag));
+        int parameterCount = posteriorMean.Length;
 
         lock (_parameterSamplingLock)
         {
@@ -510,14 +481,16 @@ public partial class AiModelResult<T, TInput, TOutput>
             {
                 for (int s = 0; s < effectiveSamples; s++)
                 {
-                    var sampledParams = new Vector<T>(posteriorMean.Length);
-                    for (int i = 0; i < posteriorMean.Length; i++)
+                    // theta = mu + sqrt(diag(Sigma)) * z with z ~ N(0, I); the standard normal draws keep their
+                    // original order, one per parameter.
+                    var draws = new double[parameterCount];
+                    for (int i = 0; i < parameterCount; i++)
                     {
-                        var std = numOps.Sqrt(posteriorVarianceDiag[i]);
-                        var z = rng.NextGaussian();
-                        var noise = numOps.Multiply(std, numOps.FromDouble(z));
-                        sampledParams[i] = numOps.Add(posteriorMean[i], noise);
+                        draws[i] = rng.NextGaussian();
                     }
+
+                    var z = new Tensor<double>(draws, new[] { parameterCount }).Cast<T>();
+                    var sampledParams = ResultEngine.TensorAdd(meanTensorParameters, ResultEngine.TensorMultiply(posteriorStd, z)).ToVector();
 
                     InterfaceGuard.Parameterizable(EnsureModel).SetParameters(sampledParams);
                     var normalizedPrediction = EnsureModel.Predict(normalizedNewData);
@@ -565,36 +538,7 @@ public partial class AiModelResult<T, TInput, TOutput>
         var (treatMeanAsProbabilities, meanBatch, meanClasses) = InferProbabilityDistributionLayout(meanTensor, meanVector);
         if (treatMeanAsProbabilities && meanClasses > 1)
         {
-            var expectedEntropySum = new Vector<T>(meanBatch);
-            foreach (var sample in samples)
-            {
-                var sampleEntropy = ComputePerSampleEntropy(sample.ToVector(), meanBatch, meanClasses);
-                for (int b = 0; b < meanBatch; b++)
-                {
-                    expectedEntropySum[b] = numOps.Add(expectedEntropySum[b], sampleEntropy[b]);
-                }
-            }
-
-            var predictiveEntropyVec = ComputePerSampleEntropy(meanVector, meanBatch, meanClasses);
-            var expectedEntropyVec = new Vector<T>(meanBatch);
-            for (int b = 0; b < meanBatch; b++)
-            {
-                expectedEntropyVec[b] = numOps.Divide(expectedEntropySum[b], numOps.FromDouble(samples.Count));
-            }
-
-            var miVec = new Vector<T>(meanBatch);
-            for (int b = 0; b < meanBatch; b++)
-            {
-                var mi = numOps.Subtract(predictiveEntropyVec[b], expectedEntropyVec[b]);
-                if (numOps.LessThan(mi, numOps.Zero))
-                {
-                    mi = numOps.Zero;
-                }
-                miVec[b] = mi;
-            }
-
-            predictiveEntropy = new Tensor<T>([meanBatch], predictiveEntropyVec);
-            mutualInformation = new Tensor<T>([meanBatch], miVec);
+            (predictiveEntropy, mutualInformation) = ComputeEntropyAndMutualInformation(samples, meanVector, meanBatch, meanClasses);
         }
 
         var metrics = CreateDefaultUncertaintyMetrics(denormalizedMean, mutualInformation);
@@ -684,59 +628,53 @@ public partial class AiModelResult<T, TInput, TOutput>
 
     private static int[][] BuildPredictionSets(Vector<T> probsFlat, int batch, int classes, T threshold)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var sets = new int[batch][];
-
-        for (int b = 0; b < batch; b++)
-        {
-            var indices = new List<int>();
-            var baseIndex = b * classes;
-            for (int c = 0; c < classes; c++)
-            {
-                if (numOps.GreaterThanOrEquals(probsFlat[baseIndex + c], threshold))
-                {
-                    indices.Add(c);
-                }
-            }
-
-            if (indices.Count == 0)
-            {
-                var best = 0;
-                var bestProb = probsFlat[baseIndex];
-                for (int c = 1; c < classes; c++)
-                {
-                    var p = probsFlat[baseIndex + c];
-                    if (numOps.GreaterThan(p, bestProb))
-                    {
-                        bestProb = p;
-                        best = c;
-                    }
-                }
-                indices.Add(best);
-            }
-
-            sets[b] = indices.ToArray();
-        }
-
-        return sets;
+        var probabilities = ProbabilityRows(probsFlat, batch, classes);
+        var thresholds = ResultEngine.TensorFullLike(probabilities, threshold);
+        return BuildPredictionSetsFromMask(probabilities, ResultEngine.TensorGreaterEqual(probabilities, thresholds), batch, classes);
     }
 
     private static int[][] BuildPredictionSets(Vector<T> probsFlat, int batch, int classes, Vector<T> thresholdsPerSample)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var sets = new int[batch][];
-
+        // Sample b uses threshold b, or the last threshold when there are fewer thresholds than samples.
+        var thresholdIndex = new int[batch];
         for (int b = 0; b < batch; b++)
         {
-            var threshold = b < thresholdsPerSample.Length
-                ? thresholdsPerSample[b]
-                : thresholdsPerSample[thresholdsPerSample.Length - 1];
+            thresholdIndex[b] = b < thresholdsPerSample.Length ? b : thresholdsPerSample.Length - 1;
+        }
 
+        var probabilities = ProbabilityRows(probsFlat, batch, classes);
+        var perSample = ResultEngine.TensorTake(Tensor<T>.FromVector(thresholdsPerSample), new Tensor<int>(thresholdIndex, new[] { batch }));
+        var thresholds = ResultEngine.TensorBroadcastTo(ResultEngine.Reshape(perSample, new[] { batch, 1 }), new[] { batch, classes });
+        return BuildPredictionSetsFromMask(probabilities, ResultEngine.TensorGreaterEqual(probabilities, thresholds), batch, classes);
+    }
+
+    /// <summary>The first <paramref name="batch"/> x <paramref name="classes"/> probabilities as a [batch, classes] tensor.</summary>
+    private static Tensor<T> ProbabilityRows(Vector<T> probsFlat, int batch, int classes)
+    {
+        var flat = Tensor<T>.FromVector(probsFlat);
+        if (probsFlat.Length != batch * classes)
+        {
+            flat = ResultEngine.TensorSlice(flat, new[] { 0 }, new[] { batch * classes });
+        }
+
+        return ResultEngine.Reshape(flat, new[] { batch, classes });
+    }
+
+    /// <summary>
+    /// Prediction sets from a [batch, classes] 0/1 inclusion mask: the included classes in ascending order, or the
+    /// single most probable class (first strict maximum) when a sample includes none.
+    /// </summary>
+    private static int[][] BuildPredictionSetsFromMask(Tensor<T> probabilities, Tensor<T> included, int batch, int classes)
+    {
+        int[] mask = included.Cast<int>().ToArray();
+        int[] best = ResultEngine.TensorArgMax(probabilities, 1).ToArray();
+        var sets = new int[batch][];
+        for (int b = 0; b < batch; b++)
+        {
             var indices = new List<int>();
-            var baseIndex = b * classes;
             for (int c = 0; c < classes; c++)
             {
-                if (numOps.GreaterThanOrEquals(probsFlat[baseIndex + c], threshold))
+                if (mask[b * classes + c] != 0)
                 {
                     indices.Add(c);
                 }
@@ -744,18 +682,7 @@ public partial class AiModelResult<T, TInput, TOutput>
 
             if (indices.Count == 0)
             {
-                var best = 0;
-                var bestProb = probsFlat[baseIndex];
-                for (int c = 1; c < classes; c++)
-                {
-                    var p = probsFlat[baseIndex + c];
-                    if (numOps.GreaterThan(p, bestProb))
-                    {
-                        bestProb = p;
-                        best = c;
-                    }
-                }
-                indices.Add(best);
+                indices.Add(best[b]);
             }
 
             sets[b] = indices.ToArray();
@@ -773,45 +700,31 @@ public partial class AiModelResult<T, TInput, TOutput>
     {
         var numOps = MathHelper.GetNumericOperations<T>();
         var bins = Math.Max(1, Math.Min(thresholds.Length, Math.Max(1, edges.Length - 1)));
-        var perSample = new Vector<T>(batch);
 
+        // Confidence is the top-class probability (first strict maximum), clamped to [0, 1]; its bin is
+        // floor(confidence * bins), with confidence 1 folded into the last bin. The bin index is compared in int.
+        var probabilities = ProbabilityRows(probsFlat, batch, classes);
+        int[] best = ResultEngine.TensorArgMax(probabilities, 1).ToArray();
+        var confidence = ResultEngine.TensorClamp(
+            ResultEngine.TensorTakeAlongDim(probabilities, ResultEngine.Reshape(new Tensor<int>(best, new[] { batch }), new[] { batch, 1 }), 1),
+            numOps.Zero,
+            numOps.One);
+        int[] bin = ResultEngine.TensorFloor(ResultEngine.TensorMultiplyScalar(confidence, numOps.FromDouble(bins))).Cast<int>().ToArray();
         for (int b = 0; b < batch; b++)
         {
-            var baseIndex = b * classes;
-            var best = probsFlat[baseIndex];
-            for (int c = 1; c < classes; c++)
+            if (bin[b] >= bins)
             {
-                var p = probsFlat[baseIndex + c];
-                if (numOps.GreaterThan(p, best))
-                {
-                    best = p;
-                }
+                bin[b] = bins - 1;
             }
-
-            var conf = numOps.ToDouble(best);
-            if (conf < 0.0) conf = 0.0;
-            if (conf > 1.0) conf = 1.0;
-
-            var bin = (int)Math.Floor(conf * bins);
-            if (bin == bins) bin = bins - 1;
-
-            perSample[b] = thresholds[bin];
         }
 
-        return perSample;
+        return ResultEngine.TensorTake(Tensor<T>.FromVector(thresholds), new Tensor<int>(bin, new[] { batch })).ToVector();
     }
 
     private TOutput AddScalarToOutput(TOutput output, T scalar)
     {
         var tensor = ConvertToTensorSafe(output, "model output");
-        var vec = tensor.ToVector();
-        for (int i = 0; i < vec.Length; i++)
-        {
-            vec[i] = _uqNumOps.Add(vec[i], scalar);
-        }
-
-        var updated = new Tensor<T>(tensor._shape, vec);
-        return ConvertFromTensor(updated);
+        return ConvertFromTensor(ResultEngine.TensorAddScalar(tensor, scalar));
     }
 
     private TOutput ApplyTemperatureScalingToOutputProbabilities(TOutput output, T temperature)
@@ -899,30 +812,14 @@ public partial class AiModelResult<T, TInput, TOutput>
             return output;
         }
 
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var eps = 1e-12;
-        var outVec = new Vector<T>(batch * 2);
-
         var a = aVec[0];
         var b = bVec[0];
 
-        for (int i = 0; i < batch; i++)
-        {
-            var p1 = numOps.ToDouble(probsVector[i * 2 + 1]);
-            if (p1 < eps) p1 = eps;
-            if (p1 > 1.0 - eps) p1 = 1.0 - eps;
-
-            var logit = Math.Log(p1 / (1.0 - p1));
-            var z = numOps.Add(numOps.Multiply(a, numOps.FromDouble(logit)), b);
-            var p1Cal = 1.0 / (1.0 + Math.Exp(-numOps.ToDouble(z)));
-
-            var p1T = numOps.FromDouble(p1Cal);
-            outVec[i * 2 + 1] = p1T;
-            outVec[i * 2] = numOps.Subtract(numOps.One, p1T);
-        }
-
-        var calibrated = new Tensor<T>([batch, 2], outVec).Reshape(probsTensor._shape);
-        return ConvertFromTensor(calibrated);
+        // Platt (1999): p1' = sigmoid(a * logit(p1) + b), with p1 kept inside (0, 1) so the logit is finite.
+        var p1 = ClampForLogit(PositiveClassProbabilities(probsTensor, batch));
+        var logit = ResultEngine.TensorLog(ResultEngine.TensorDivide(p1, ResultEngine.TensorSubtract(ResultEngine.TensorOnesLike(p1), p1)));
+        var calibratedPositive = ResultEngine.TensorSigmoid(ResultEngine.TensorAddScalar(ResultEngine.TensorMultiplyScalar(logit, a), b));
+        return ConvertFromTensor(TwoClassProbabilities(calibratedPositive, batch, probsTensor._shape));
     }
 
     private TOutput ApplyIsotonicCalibrationToOutputProbabilities(TOutput output)
@@ -940,85 +837,65 @@ public partial class AiModelResult<T, TInput, TOutput>
             return output;
         }
 
+        // The calibrated value is y[i] for the first breakpoint i with p1 <= x[i], or the last y when p1 exceeds them all.
+        // p1 is clamped to [1e-12, 1 - 1e-12] as represented in T (no logit is taken, so no wider clamp is needed).
         var numOps = MathHelper.GetNumericOperations<T>();
-        var eps = 1e-12;
-        var outVec = new Vector<T>(batch * 2);
-
+        var p1 = ResultEngine.TensorClamp(
+            PositiveClassProbabilities(probsTensor, batch), numOps.FromDouble(1e-12), numOps.FromDouble(1.0 - 1e-12));
+        int points = x.Length;
+        var shape = new[] { batch, points };
+        var below = ResultEngine.TensorLessEqual(
+            ResultEngine.TensorBroadcastTo(ResultEngine.Reshape(p1, new[] { batch, 1 }), shape),
+            ResultEngine.TensorBroadcastTo(ResultEngine.Reshape(Tensor<T>.FromVector(x), new[] { 1, points }), shape));
+        int[] firstMatch = ResultEngine.TensorArgMax(below, 1).ToArray();
+        int[] matches = ResultEngine.ReduceSum(below.Cast<int>(), new[] { 1 }, false).ToArray();
+        var index = new int[batch];
         for (int i = 0; i < batch; i++)
         {
-            var p1 = numOps.ToDouble(probsVector[i * 2 + 1]);
-            if (p1 < eps) p1 = eps;
-            if (p1 > 1.0 - eps) p1 = 1.0 - eps;
-
-            var p1T = numOps.FromDouble(p1);
-            var p1Cal = EvaluateIsotonic(p1T, x, y, numOps);
-            outVec[i * 2 + 1] = p1Cal;
-            outVec[i * 2] = numOps.Subtract(numOps.One, p1Cal);
+            index[i] = matches[i] > 0 ? firstMatch[i] : y.Length - 1;
         }
 
-        var calibrated = new Tensor<T>([batch, 2], outVec).Reshape(probsTensor._shape);
-        return ConvertFromTensor(calibrated);
+        var calibratedPositive = ResultEngine.TensorTake(Tensor<T>.FromVector(y), new Tensor<int>(index, new[] { batch }));
+        return ConvertFromTensor(TwoClassProbabilities(calibratedPositive, batch, probsTensor._shape));
     }
 
-    private static T EvaluateIsotonic(T p, Vector<T> x, Vector<T> y, INumericOperations<T> numOps)
+    /// <summary>The positive-class (column 1) probabilities of a [batch, 2] probability tensor.</summary>
+    private static Tensor<T> PositiveClassProbabilities(Tensor<T> probabilities, int batch)
     {
-        if (x.Length == 0)
-        {
-            return p;
-        }
+        var rows = ResultEngine.Reshape(probabilities, new[] { batch, 2 });
+        return ResultEngine.Reshape(ResultEngine.TensorSlice(rows, new[] { 0, 1 }, new[] { batch, 1 }), new[] { batch });
+    }
 
-        var spanX = x.AsSpan();
-        var spanY = y.AsSpan();
-        for (int i = 0; i < spanX.Length; i++)
-        {
-            if (numOps.LessThanOrEquals(p, spanX[i]))
-            {
-                return spanY[i];
-            }
-        }
+    /// <summary>[1 - p, p] per sample, reshaped to <paramref name="shape"/>.</summary>
+    private static Tensor<T> TwoClassProbabilities(Tensor<T> positive, int batch, int[] shape)
+    {
+        var negative = ResultEngine.TensorSubtract(ResultEngine.TensorOnesLike(positive), positive);
+        return ResultEngine.Reshape(ResultEngine.TensorStack(new[] { negative, positive }, 1), shape);
+    }
 
-        return spanY[spanY.Length - 1];
+    /// <summary>
+    /// Clamps probabilities into (0, 1) so their logit is finite: [1e-12, 1 - 1e-12] for double. The lower bound is
+    /// 1e-12 or, for Half, its smallest positive value 2^-24 (1e-12 rounds to 0). The upper bound is 1 - 1e-12 or,
+    /// for float and Half, the value just below 1 (1 - 2^-24 and 1 - 2^-11), since 1 - 1e-12 rounds back to 1. Only
+    /// the bounds a type cannot represent move; every other probability keeps its own logit.
+    /// </summary>
+    private static Tensor<T> ClampForLogit(Tensor<T> probabilities)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        double lower = typeof(T) == typeof(Half) ? 5.9604644775390625e-8 : 1e-12;
+        double upperGap = typeof(T) == typeof(Half) ? 4.8828125e-4 : typeof(T) == typeof(float) ? 5.9604644775390625e-8 : 1e-12;
+        return ResultEngine.TensorClamp(probabilities, numOps.FromDouble(lower), numOps.Subtract(numOps.One, numOps.FromDouble(upperGap)));
     }
 
     private static Tensor<T> SoftmaxTensor(Tensor<T> tensor, int batch, int classes)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
         if (classes <= 1)
         {
             return tensor;
         }
 
-        var flat = tensor.ToVector();
-        var output = new Vector<T>(batch * classes);
-
-        for (int b = 0; b < batch; b++)
-        {
-            var baseIndex = b * classes;
-            var max = flat[baseIndex];
-            for (int c = 1; c < classes; c++)
-            {
-                var v = flat[baseIndex + c];
-                if (numOps.GreaterThan(v, max))
-                {
-                    max = v;
-                }
-            }
-
-            var sumExp = numOps.Zero;
-            for (int c = 0; c < classes; c++)
-            {
-                var ex = numOps.Exp(numOps.Subtract(flat[baseIndex + c], max));
-                output[baseIndex + c] = ex;
-                sumExp = numOps.Add(sumExp, ex);
-            }
-
-            for (int c = 0; c < classes; c++)
-            {
-                output[baseIndex + c] = numOps.Divide(output[baseIndex + c], sumExp);
-            }
-        }
-
-        return new Tensor<T>([batch, classes], output).Reshape(tensor._shape);
+        var rows = ResultEngine.Reshape(tensor, new[] { batch, classes });
+        return ResultEngine.Reshape(ResultEngine.TensorSoftmax(rows, 1), tensor._shape);
     }
 
     /// <summary>
@@ -1146,91 +1023,46 @@ public partial class AiModelResult<T, TInput, TOutput>
             throw new ArgumentException("Samples must not be empty.", nameof(samples));
         }
 
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var length = samples[0].Length;
-        var meanVec = new Vector<T>(length);
-
-        foreach (var sample in samples)
-        {
-            var vec = sample.ToVector();
-            for (int i = 0; i < length; i++)
-            {
-                meanVec[i] = numOps.Add(meanVec[i], vec[i]);
-            }
-        }
-
-        var inv = numOps.Divide(numOps.One, numOps.FromDouble(samples.Count));
-        for (int i = 0; i < length; i++)
-        {
-            meanVec[i] = numOps.Multiply(meanVec[i], inv);
-        }
-
-        var varianceVec = new Vector<T>(length);
-        foreach (var sample in samples)
-        {
-            var vec = sample.ToVector();
-            for (int i = 0; i < length; i++)
-            {
-                var diff = numOps.Subtract(vec[i], meanVec[i]);
-                varianceVec[i] = numOps.Add(varianceVec[i], numOps.Multiply(diff, diff));
-            }
-        }
-
-        var varianceInv = numOps.Divide(numOps.One, numOps.FromDouble(samples.Count));
-        for (int i = 0; i < length; i++)
-        {
-            varianceVec[i] = numOps.Multiply(varianceVec[i], varianceInv);
-        }
-
         var shape = samples[0]._shape;
-        return (new Tensor<T>(shape, meanVec), new Tensor<T>(shape, varianceVec));
+        int length = samples[0].Length;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        T count = numOps.FromDouble(samples.Count);
+
+        // Elementwise mean and population variance over the samples.
+        var stacked = ResultEngine.TensorStack(
+            samples.Select(sample => ResultEngine.Reshape(sample, new[] { length })).ToArray(), 0);
+        // Each sample is divided by the count before summing so the sum cannot overflow in low precision.
+        var mean = ResultEngine.ReduceSum(ResultEngine.TensorDivideScalar(stacked, count), new[] { 0 }, false);
+        var deviations = ResultEngine.TensorSubtract(stacked, ResultEngine.TensorBroadcastTo(ResultEngine.Reshape(mean, new[] { 1, length }), new[] { samples.Count, length }));
+
+        // Divide every output coordinate's deviations by that coordinate's largest finite magnitude before squaring
+        // so the squares cannot overflow (65504 in Half), then restore the scale; NaN deviations still propagate to
+        // their own element. The scale is per coordinate: one shared scale lets a large coordinate push a small
+        // one's normalized squares below the smallest value of T, which reported its variance as zero.
+        var magnitudes = ResultEngine.TensorAbs(deviations);
+        var finite = ResultEngine.TensorWhere(ResultEngine.TensorEquals(magnitudes, magnitudes), magnitudes, ResultEngine.TensorZerosLike(magnitudes));
+        var columnScale = ResultEngine.ReduceMax(finite, new[] { 0 }, false);
+
+        // A coordinate with no spread, or with an infinite deviation, keeps scale 1 (the plain formula).
+        var ones = ResultEngine.TensorOnesLike(columnScale);
+        var usable = ResultEngine.TensorWhere(ResultEngine.TensorLessThan(columnScale, numOps.MaxValue), columnScale, ones);
+        var safeScale = ResultEngine.TensorWhere(ResultEngine.TensorGreaterThan(columnScale, numOps.Zero), usable, ones);
+        var scaleRows = ResultEngine.TensorBroadcastTo(ResultEngine.Reshape(safeScale, new[] { 1, length }), new[] { samples.Count, length });
+        var scaled = ResultEngine.TensorSquare(ResultEngine.TensorDivide(deviations, scaleRows));
+        var scaledVariance = ResultEngine.ReduceSum(ResultEngine.TensorDivideScalar(scaled, count), new[] { 0 }, false);
+        var variance = ResultEngine.TensorMultiply(ResultEngine.TensorMultiply(scaledVariance, safeScale), safeScale);
+
+        return (ResultEngine.Reshape(mean, shape), ResultEngine.Reshape(variance, shape));
     }
 
     private static Tensor<T> ApplyTemperatureScalingToProbabilityTensor(Tensor<T> probabilities, T temperature, int batch, int classes)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var eps = numOps.FromDouble(1e-12);
-        var scaled = new Vector<T>(batch * classes);
-        var flat = probabilities.ToVector();
-
-        for (int i = 0; i < batch; i++)
-        {
-            var maxLogit = numOps.Zero;
-            for (int c = 0; c < classes; c++)
-            {
-                var p = flat[i * classes + c];
-                if (numOps.LessThan(p, eps))
-                {
-                    p = eps;
-                }
-                var logit = numOps.Divide(numOps.Log(p), temperature);
-                if (c == 0 || numOps.GreaterThan(logit, maxLogit))
-                {
-                    maxLogit = logit;
-                }
-            }
-
-            var sumExp = numOps.Zero;
-            for (int c = 0; c < classes; c++)
-            {
-                var p = flat[i * classes + c];
-                if (numOps.LessThan(p, eps))
-                {
-                    p = eps;
-                }
-                var logit = numOps.Divide(numOps.Log(p), temperature);
-                var exp = numOps.Exp(numOps.Subtract(logit, maxLogit));
-                scaled[i * classes + c] = exp;
-                sumExp = numOps.Add(sumExp, exp);
-            }
-
-            for (int c = 0; c < classes; c++)
-            {
-                scaled[i * classes + c] = numOps.Divide(scaled[i * classes + c], sumExp);
-            }
-        }
-
-        return new Tensor<T>([batch, classes], scaled).Reshape(probabilities._shape);
+        // Guo et al. (2017): softmax(log(p) / T) per sample, with p floored at eps so the log stays finite.
+        var rows = ResultEngine.Reshape(probabilities, new[] { batch, classes });
+        var eps = ResultEngine.TensorFullLike(rows, MatrixExtensions.SafeTolerance<T>(1e-12));
+        var floored = ResultEngine.TensorWhere(ResultEngine.TensorLessThan(rows, eps), eps, rows);
+        var logits = ResultEngine.TensorDivideScalar(ResultEngine.TensorLog(floored), temperature);
+        return ResultEngine.Reshape(ResultEngine.TensorSoftmax(logits, 1), probabilities._shape);
     }
 
     private static (bool treatAsProbabilities, int batch, int classes) InferProbabilityDistributionLayout(Tensor<T> tensor, Vector<T> flat)
@@ -1252,25 +1084,20 @@ public partial class AiModelResult<T, TInput, TOutput>
             return (false, 0, classes);
         }
 
+        // Every value must lie in [0, 1] and every row must sum to 1 within 1e-2.
         var numOps = MathHelper.GetNumericOperations<T>();
-        var tolerance = numOps.FromDouble(1e-2);
-        for (int b = 0; b < batch; b++)
+        var rows = ProbabilityRows(flat, batch, classes);
+        if (ResultEngine.TensorCountNonzero(ResultEngine.TensorLessThan(rows, numOps.Zero)) > 0 ||
+            ResultEngine.TensorCountNonzero(ResultEngine.TensorGreaterThan(rows, numOps.One)) > 0)
         {
-            var sum = numOps.Zero;
-            var baseIndex = b * classes;
-            for (int c = 0; c < classes; c++)
-            {
-                var p = flat[baseIndex + c];
-                if (numOps.LessThan(p, numOps.Zero) || numOps.GreaterThan(p, numOps.One))
-                {
-                    return (false, batch, classes);
-                }
-                sum = numOps.Add(sum, p);
-            }
-            if (numOps.GreaterThan(numOps.Abs(numOps.Subtract(sum, numOps.One)), tolerance))
-            {
-                return (false, batch, classes);
-            }
+            return (false, batch, classes);
+        }
+
+        var rowSums = ResultEngine.ReduceSum(rows, new[] { 1 }, false);
+        var offBy = ResultEngine.TensorAbs(ResultEngine.TensorSubtractScalar(rowSums, numOps.One));
+        if (ResultEngine.TensorCountNonzero(ResultEngine.TensorGreaterThan(offBy, numOps.FromDouble(1e-2))) > 0)
+        {
+            return (false, batch, classes);
         }
 
         return (true, batch, classes);
@@ -1278,27 +1105,32 @@ public partial class AiModelResult<T, TInput, TOutput>
 
     private static Vector<T> ComputePerSampleEntropy(Vector<T> probsFlat, int batch, int classes)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var eps = numOps.FromDouble(1e-12);
-        var entropy = new Vector<T>(batch);
+        // H = -sum_c p_c log p_c per sample, skipping probabilities below eps (where p log p -> 0).
+        var probabilities = ProbabilityRows(probsFlat, batch, classes);
+        var eps = ResultEngine.TensorFullLike(probabilities, MatrixExtensions.SafeTolerance<T>(1e-12));
+        var skipped = ResultEngine.TensorLessThan(probabilities, eps);
+        var safe = ResultEngine.TensorWhere(skipped, ResultEngine.TensorOnesLike(probabilities), probabilities);
+        var terms = ResultEngine.TensorMultiply(probabilities, ResultEngine.TensorLog(safe));
+        var kept = ResultEngine.TensorWhere(skipped, ResultEngine.TensorZerosLike(probabilities), terms);
+        return ResultEngine.TensorNegate(ResultEngine.ReduceSum(kept, new[] { 1 }, false)).ToVector();
+    }
 
-        for (int b = 0; b < batch; b++)
-        {
-            var sum = numOps.Zero;
-            var baseIndex = b * classes;
-            for (int c = 0; c < classes; c++)
-            {
-                var p = probsFlat[baseIndex + c];
-                if (numOps.LessThan(p, eps))
-                {
-                    continue;
-                }
-                sum = numOps.Subtract(sum, numOps.Multiply(p, numOps.Log(p)));
-            }
-            entropy[b] = sum;
-        }
-
-        return entropy;
+    /// <summary>
+    /// Predictive entropy H(mean) and mutual information max(0, H(mean) - mean_s H(sample_s)) per sample
+    /// (Gal, 2016, section 3.3; the BALD decomposition).
+    /// </summary>
+    private static (Tensor<T> PredictiveEntropy, Tensor<T> MutualInformation) ComputeEntropyAndMutualInformation(
+        List<Tensor<T>> samples, Vector<T> meanVector, int batch, int classes)
+    {
+        var predictive = Tensor<T>.FromVector(ComputePerSampleEntropy(meanVector, batch, classes));
+        var perSample = ResultEngine.TensorStack(
+            samples.Select(sample => Tensor<T>.FromVector(ComputePerSampleEntropy(sample.ToVector(), batch, classes))).ToArray(), 0);
+        var expected = ResultEngine.TensorDivideScalar(
+            ResultEngine.ReduceSum(perSample, new[] { 0 }, false), MathHelper.GetNumericOperations<T>().FromDouble(samples.Count));
+        var difference = ResultEngine.TensorSubtract(predictive, expected);
+        var zeros = ResultEngine.TensorZerosLike(difference);
+        var mutualInformation = ResultEngine.TensorWhere(ResultEngine.TensorLessThan(difference, zeros), zeros, difference);
+        return (ResultEngine.Reshape(predictive, new[] { batch }), ResultEngine.Reshape(mutualInformation, new[] { batch }));
     }
 
     private (Tensor<T> mean, Tensor<T> variance, Tensor<T> predictiveEntropy, Tensor<T> mutualInformation) ComputeMonteCarloMomentsAndMetrics(
@@ -1334,39 +1166,9 @@ public partial class AiModelResult<T, TInput, TOutput>
             return (meanTensor, varianceTensor, CreateZeroVectorTensor(batch), CreateZeroVectorTensor(batch));
         }
 
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var predictiveEntropyVec = ComputePerSampleEntropy(meanVector, batch, classes);
-        var expectedEntropySum = new Vector<T>(batch);
-        foreach (var sample in samples)
-        {
-            var sampleEntropy = ComputePerSampleEntropy(sample.ToVector(), batch, classes);
-            for (int b = 0; b < batch; b++)
-            {
-                expectedEntropySum[b] = numOps.Add(expectedEntropySum[b], sampleEntropy[b]);
-            }
-        }
-
-        var expectedEntropyVec = new Vector<T>(batch);
-        for (int b = 0; b < batch; b++)
-        {
-            expectedEntropyVec[b] = numOps.Divide(expectedEntropySum[b], numOps.FromDouble(samples.Count));
-        }
-
-        var miVec = new Vector<T>(batch);
-        for (int b = 0; b < batch; b++)
-        {
-            var mi = numOps.Subtract(predictiveEntropyVec[b], expectedEntropyVec[b]);
-            if (numOps.LessThan(mi, numOps.Zero))
-            {
-                mi = numOps.Zero;
-            }
-            miVec[b] = mi;
-        }
-
-        return (
-            meanTensor,
-            varianceTensor,
-            new Tensor<T>([batch], predictiveEntropyVec),
-            new Tensor<T>([batch], miVec));
+        var (predictiveEntropy, mutualInformation) = ComputeEntropyAndMutualInformation(samples, meanVector, batch, classes);
+        return (meanTensor, varianceTensor, predictiveEntropy, mutualInformation);
     }
+
+    private static IEngine ResultEngine => AiDotNetEngine.Current;
 }

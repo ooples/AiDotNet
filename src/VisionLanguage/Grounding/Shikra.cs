@@ -6,6 +6,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.Tokenization;
@@ -66,7 +67,7 @@ namespace AiDotNet.VisionLanguage.Grounding;
                 Schedule = LearningRateSchedulerType.CosineAnnealing,
                 Source = "Chen et al. 2023, Sec. 4: AdamW under a cosine learning rate scheduler with "
                         + "an initial learning rate of 2e-5 and a global batch size of 64.")]
-public partial class Shikra<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
+public partial class Shikra<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>, IGroundingTrainable<T>
 {
     private readonly ShikraOptions _options;
 
@@ -75,6 +76,8 @@ public partial class Shikra<T> : VisionLanguageModelBase<T>, IVisualGroundingMod
     private bool _useNativeMode;
     private bool _disposed;
     private int _encoderLayerEnd;
+    private readonly List<ILayer<T>> _groundingHeadLayers = new();
+    private CoordinateTokenDecoder<T>? _groundingHead;
 
     public Shikra(
         NeuralNetworkArchitecture<T> architecture,
@@ -158,63 +161,55 @@ public partial class Shikra<T> : VisionLanguageModelBase<T>, IVisualGroundingMod
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(PreprocessImage(image));
 
-        var p = PreprocessImage(image);
-        double confThreshold = _options.ConfidenceThreshold;
-        double nmsThreshold = _options.NmsThreshold;
-
-        // Step 1: CLIP ViT visual encoding
-        var visualFeatures = p;
+        // Backbone: the image tokens the grounding head reads.
+        var visualFeatures = PreprocessImage(image);
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
 
-        // Step 2: Interleave visual tokens with text instruction via ConcatenateTensors
-        var textTokens = TokenizeText(textQuery);
-        var multimodalSeq = visualFeatures.ConcatenateTensors(textTokens);
+        // Shikra (Chen et al. 2023): the language model writes each box as [x1, y1, x2, y2] in thousandths.
+        var head = _groundingHead ?? throw new InvalidOperationException("The grounding head is not initialized.");
+        var (boxes, scores) = head.Ground(visualFeatures, TokenIds(textQuery), RunLanguageModel, _options.MaxDetections);
+        return GroundingDetections<T>.Ranked(Engine, boxes, scores, _options.ConfidenceThreshold, _options.MaxDetections,
+            _options.NmsThreshold);
+    }
 
-        // Step 3: LLM decoder to generate coordinate tokens
-        var decoderOut = multimodalSeq;
-        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
-            decoderOut = Layers[i].Forward(decoderOut);
+    /// <summary>
+    /// One training step of the grounding head and the language model with Shikra (Chen et al. 2023)'s objective: the answer writing
+    /// <paramref name="boxes"/> (in their order) as coordinate text, read teacher-forced after the image tokens and the
+    /// instruction <paramref name="caption"/>, with next-token cross-entropy on every answer token.
+    /// </summary>
+    /// <param name="image">One RGB image <c>[3, H, W]</c> with values in 0..1.</param>
+    /// <param name="caption">The instruction, such as "Where is the cat?".</param>
+    /// <param name="boxes">The answer's boxes; their phrases are not read.</param>
+    public void TrainGrounding(Tensor<T> image, string caption, IReadOnlyList<GroundingBox> boxes)
+    {
+        ThrowIfDisposed();
+        if (!_useNativeMode)
+            throw new NotSupportedException("An ONNX-backed model has no trainable grounding head.");
+        var target = CoordinateTokenDecoder<T>.BoxesOf(boxes);
+        var ids = TokenIds(caption);
+        TrainWithCustomObjective(PreprocessImage(image), target, (x, answer) => GroundingObjective(x, ids, answer), _optimizer);
+    }
 
-        int outDim = decoderOut.Length;
+    /// <summary>The loss of <see cref="TrainGrounding"/> on the same supervision, without training.</summary>
+    public T EvaluateGroundingLoss(Tensor<T> image, string caption, IReadOnlyList<GroundingBox> boxes)
+    {
+        ThrowIfDisposed();
+        if (!_useNativeMode)
+            throw new NotSupportedException("An ONNX-backed model has no trainable grounding head.");
+        var target = CoordinateTokenDecoder<T>.BoxesOf(boxes);
+        var ids = TokenIds(caption);
+        using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
+        return GroundingObjective(PreprocessImage(image), ids, target)[0];
+    }
 
-        // Step 4: Parse coordinate tokens from LLM output
-        // Shikra generates coordinates as groups of 4 values (x1,y1,x2,y2)
-        // Each coordinate is sigmoid-bounded to [0,1]
-        int coordsPerBox = 4;
-        int maxDet = Math.Min(outDim / coordsPerBox, _options.MaxDetections);
-        if (maxDet <= 0)
-            return new Tensor<T>([GroundingDetections<T>.FieldsPerDetection]);
-
-        var raw = Engine.TensorSlice(decoderOut.Reshape([outDim]), [0], [maxDet * coordsPerBox])
-            .Reshape([maxDet, coordsPerBox]);
-        var unit = Engine.TensorSigmoid(raw);
-        Tensor<T> Column(int index) => Engine.TensorSlice(unit, [0, index], [maxDet, 1]);
-
-        // Ensure x2 >= x1, y2 >= y1
-        var boxes = Engine.TensorConcatenate(
-            [
-                Engine.TensorMin(Column(0), Column(2)),
-                Engine.TensorMin(Column(1), Column(3)),
-                Engine.TensorMax(Column(0), Column(2)),
-                Engine.TensorMax(Column(1), Column(3))
-            ], 1);
-
-        // Confidence from coordinate token magnitudes: sigmoid(sum |raw| / 4 - 2)
-        var coordMagnitude = Engine.ReduceSum(Engine.TensorAbs(raw), [1], false);
-        var confidences = Engine.TensorSigmoid(Engine.TensorAddScalar(
-            Engine.TensorDivideScalar(coordMagnitude, NumOps.FromDouble(4.0)), NumOps.FromDouble(-2.0)));
-
-        // Valid box check: confident, positive extent and area above 0.001
-        var width = Engine.TensorSubtract(Engine.TensorSlice(boxes, [0, 2], [maxDet, 1]), Engine.TensorSlice(boxes, [0, 0], [maxDet, 1]));
-        var height = Engine.TensorSubtract(Engine.TensorSlice(boxes, [0, 3], [maxDet, 1]), Engine.TensorSlice(boxes, [0, 1], [maxDet, 1]));
-        var largeEnough = Engine.TensorGreaterThan(Engine.TensorMultiply(width, height), NumOps.FromDouble(0.001)).Reshape([maxDet]);
-        var eligible = Engine.TensorMultiply(Engine.TensorMultiply(
-            GroundingDetections<T>.AtLeast(Engine, confidences, NumOps.FromDouble(confThreshold)),
-            GroundingDetections<T>.HasArea(Engine, boxes)), largeEnough);
-
-        // Step 5: NMS, highest confidence first
-        return GroundingDetections<T>.Select(Engine, boxes, confidences, eligible, maxDet, nmsThreshold);
+    private Tensor<T> GroundingObjective(Tensor<T> preprocessed, IReadOnlyList<int> tokenIds, Tensor<T> boxes)
+    {
+        var visualFeatures = preprocessed;
+        for (int i = 0; i < _encoderLayerEnd; i++)
+            visualFeatures = Layers[i].Forward(visualFeatures);
+        var head = _groundingHead ?? throw new InvalidOperationException("The grounding head is not initialized.");
+        return head.AnswerLoss(visualFeatures, tokenIds, RunLanguageModel, boxes);
     }
 
     /// <inheritdoc />
@@ -249,6 +244,20 @@ public partial class Shikra<T> : VisionLanguageModelBase<T>, IVisualGroundingMod
                 )
             );
             ComputeEncoderDecoderBoundary();
+            // Shikra's language model is LLaMA (Vicuna): causal self-attention with rotary position embeddings (Su et
+            // al. 2021, theta 10000). Without them the default decoder saw the instruction as an unordered set, so
+            // "cat left of dog" and "dog left of cat" decoded alike. A custom architecture keeps its own attention.
+            foreach (var attention in Layers.Skip(_encoderLayerEnd).OfType<MultiHeadAttentionLayer<T>>())
+            {
+                attention.UseCausalMask = true;
+                attention.ConfigurePositionalEncoding(PositionalEncodingType.Rotary);
+            }
+        }
+        if (_groundingHead is null)
+        {
+            _groundingHead = new CoordinateTokenDecoder<T>(Engine, _groundingHeadLayers, new CoordinateTokenDecoderConfiguration(
+                _options.DecoderDim, _options.VocabSize, _options.MaxSequenceLength, Bins: 1001, Divisor: 1000, CoordinateSpelling.DecimalFraction));
+            RegisterAuxiliaryEncoderStream(_groundingHeadLayers);
         }
     }
 
@@ -258,14 +267,22 @@ public partial class Shikra<T> : VisionLanguageModelBase<T>, IVisualGroundingMod
         _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb + 3;
     }
 
-    private Tensor<T> TokenizeText(string text)
+    private List<int> TokenIds(string text)
     {
         if (_tokenizer is null)
             throw new InvalidOperationException("Tokenizer not initialized.");
-        var encoding = _tokenizer.Encode(text);
-        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
-        var tokens = TokenIdsToTensor(encoding.TokenIds, seqLen);
-        return tokens;
+        if (text is null) throw new ArgumentNullException(nameof(text));
+        var ids = _tokenizer.Encode(text).TokenIds;
+        return ids.Count > 0 ? ids : throw new ArgumentException("The text query has no tokens.", nameof(text));
+    }
+
+    /// <summary>The language model (the decoder layers after the image projector) on <c>[n, DecoderDim]</c> rows.</summary>
+    private Tensor<T> RunLanguageModel(Tensor<T> rows)
+    {
+        var hidden = Engine.Reshape(rows, new[] { 1, rows.Shape[0], rows.Shape[1] });
+        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
+            hidden = Layers[i].Forward(hidden);
+        return hidden;
     }
 
     /// <inheritdoc />

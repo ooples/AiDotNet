@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Neural;
 
@@ -25,13 +26,13 @@ public class GradCAMSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _activationWeights;
+    private Vector<T>? _activationWeights;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? ActivationWeights => _activationWeights;
+    public Vector<T>? ActivationWeights => _activationWeights;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -65,75 +66,38 @@ public class GradCAMSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
-
-        _activationWeights = new double[p];
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+        var y = engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 });
 
         // Simulate gradient-based importance using correlation gradients
         // In a real implementation, this would use actual neural network gradients
+        var centeredX = engine.TensorSubtract(X, engine.ReduceMean(X, new[] { 0 }, true));
+        var centeredY = engine.TensorBroadcastTo(engine.TensorSubtract(y, engine.ReduceMean(y, new[] { 0 }, true)), new[] { n, p });
 
-        // Compute feature means and target mean
-        var featureMeans = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            double sum = 0;
-            for (int i = 0; i < n; i++)
-                sum += X[i, j];
-            featureMeans[j] = sum / n;
-        }
-        double targetMean = y.Average();
+        // GradCAM++ style: weighted positive gradients, weight = grad², activation = ReLU(x)
+        var grad = engine.TensorMultiply(centeredX, centeredY);
+        var positive = engine.TensorGreaterThan(grad, NumOps.Zero);
+        var weight = engine.TensorMultiply(engine.TensorSquare(grad), positive);
+        var activation = engine.TensorMax(X, NumOps.Zero);
+        var posGradSum = engine.ReduceSum(engine.TensorMultiply(weight, activation), new[] { 0 }, false);
+        var posWeightSum = engine.ReduceSum(weight, new[] { 0 }, false);
 
-        // GradCAM++ style: weighted positive gradients
-        for (int j = 0; j < p; j++)
-        {
-            double posGradSum = 0;
-            double negGradSum = 0;
-            double posWeightSum = 0;
-            double negWeightSum = 0;
-
-            for (int i = 0; i < n; i++)
-            {
-                // Simulated gradient: correlation contribution
-                double grad = (X[i, j] - featureMeans[j]) * (y[i] - targetMean);
-                double activation = Math.Max(0, X[i, j]); // ReLU-like activation
-
-                if (grad > 0)
-                {
-                    // GradCAM++ weights: alpha = grad² / (2*grad² + sum(grad*activation))
-                    double weight = grad * grad;
-                    posGradSum += weight * activation;
-                    posWeightSum += weight;
-                }
-                else
-                {
-                    negGradSum += grad * grad * activation;
-                    negWeightSum += grad * grad;
-                }
-            }
-
-            // Combine positive contributions (GradCAM++ focuses on positive)
-            double alpha = posWeightSum > 1e-10 ? posGradSum / posWeightSum : 0;
-            _activationWeights[j] = Math.Max(0, alpha); // ReLU on final weights
-        }
+        // Combine positive contributions (GradCAM++ focuses on positive), ReLU on the final weights
+        var defined = engine.TensorGreaterThan(posWeightSum, NumOps.FromDouble(1e-10));
+        var safeWeight = engine.TensorWhere(defined, posWeightSum, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
+        var alpha = engine.TensorWhere(defined, engine.TensorDivide(posGradSum, safeWeight), new Tensor<T>(new[] { p }));
+        var activationWeights = engine.TensorMax(alpha, NumOps.Zero);
+        _activationWeights = activationWeights.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _activationWeights[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(activationWeights, numToSelect);
 
         IsFitted = true;
     }
 
     /// <inheritdoc />
+
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -146,15 +110,7 @@ public class GradCAMSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         if (_selectedIndices is null)
             throw new InvalidOperationException("GradCAMSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

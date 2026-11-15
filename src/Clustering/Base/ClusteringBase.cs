@@ -222,43 +222,21 @@ public abstract partial class ClusteringBase<T> : IClustering<T>, IConfigurableM
             throw new InvalidOperationException("Transform requires cluster centers.");
         }
 
-        var distances = new Matrix<T>(x.Rows, NumClusters);
-        for (int i = 0; i < x.Rows; i++)
-        {
-            for (int k = 0; k < NumClusters; k++)
-            {
-                distances[i, k] = ComputeDistance(x, i, ClusterCenters, k);
-            }
-        }
-        return distances;
+        return ClusteringTensorOps.Distances(x, ActiveCenters(ClusterCenters, NumClusters));
     }
+
+    /// <summary>
+    /// The first <paramref name="count"/> rows of the centers (the whole matrix when it already has that many rows).
+    /// </summary>
+    private static Matrix<T> ActiveCenters(Matrix<T> centers, int count)
+        => centers.Rows == count ? centers : centers.GetSubMatrix(0, 0, count, centers.Columns);
 
     /// <summary>
     /// Computes distance between a sample and a cluster center.
     /// </summary>
     protected virtual T ComputeDistance(Matrix<T> x, int sampleIndex, Matrix<T> centers, int clusterIndex)
     {
-        // Direct sum-of-squares loop. The previous Engine.DotProduct call
-        // looked attractive (one helper, one line) but for the per-(sample,
-        // cluster) distance computation in a K-means EM loop it dispatches
-        // to GPU when AiDotNetEngine.AutoDetectAndConfigureGpu has switched
-        // the global engine to a GPU backend — and on small d (typical
-        // clustering data has d ≤ 100) the per-call OpenCL/CUDA dispatch
-        // overhead and tiny-buffer round-trip cost dominate the actual
-        // math, while also exposing a GPU-path correctness issue surfaced
-        // by issue #1224 Cluster B (KMeans through AiModelBuilder
-        // auto-enables GPU and produced all-same-cluster output, ARI=0).
-        // Computing the dot product inline keeps the math on CPU FP64
-        // regardless of engine state, which is what every clustering
-        // distance metric actually wants.
-        int d = x.Columns;
-        T sumSq = NumOps.Zero;
-        for (int j = 0; j < d; j++)
-        {
-            T diffJ = NumOps.Subtract(x[sampleIndex, j], centers[clusterIndex, j]);
-            sumSq = NumOps.Add(sumSq, NumOps.Multiply(diffJ, diffJ));
-        }
-        return NumOps.Sqrt(sumSq);
+        return NumOps.Sqrt(ComputeSquaredDistance(x, sampleIndex, centers, clusterIndex));
     }
 
     /// <summary>
@@ -266,18 +244,8 @@ public abstract partial class ClusteringBase<T> : IClustering<T>, IConfigurableM
     /// </summary>
     protected T ComputeSquaredDistance(Matrix<T> x, int sampleIndex, Matrix<T> centers, int clusterIndex)
     {
-        // Direct sum-of-squares loop — see ComputeDistance for the rationale
-        // (avoid GPU dispatch overhead + GPU-path correctness regression on
-        // the small-vector dot products K-means EM emits per (sample, cluster,
-        // iteration) tuple).
-        int d = x.Columns;
-        T sumSq = NumOps.Zero;
-        for (int j = 0; j < d; j++)
-        {
-            T diffJ = NumOps.Subtract(x[sampleIndex, j], centers[clusterIndex, j]);
-            sumSq = NumOps.Add(sumSq, NumOps.Multiply(diffJ, diffJ));
-        }
-        return sumSq;
+        var diff = Engine.Subtract(x.GetRow(sampleIndex), centers.GetRow(clusterIndex));
+        return Engine.DotProduct(diff, diff);
     }
 
     /// <summary>
@@ -285,17 +253,9 @@ public abstract partial class ClusteringBase<T> : IClustering<T>, IConfigurableM
     /// </summary>
     protected virtual T ComputeInertia(Matrix<T> x, Vector<T> labels, Matrix<T> centers)
     {
-        T inertia = NumOps.Zero;
-        for (int i = 0; i < x.Rows; i++)
-        {
-            int clusterIdx = (int)NumOps.ToDouble(labels[i]);
-            if (clusterIdx >= 0 && clusterIdx < NumClusters)
-            {
-                T dist = ComputeSquaredDistance(x, i, centers, clusterIdx);
-                inertia = NumOps.Add(inertia, dist);
-            }
-        }
-        return inertia;
+        // Labels outside [0, NumClusters) (noise, unassigned) do not contribute.
+        int k = Math.Min(NumClusters, centers.Rows);
+        return ClusteringTensorOps.Inertia(x, labels, ActiveCenters(centers, k));
     }
 
     /// <summary>
@@ -311,10 +271,7 @@ public abstract partial class ClusteringBase<T> : IClustering<T>, IConfigurableM
     /// </summary>
     protected void SetRow(Matrix<T> matrix, int rowIndex, Vector<T> values)
     {
-        for (int j = 0; j < matrix.Columns; j++)
-        {
-            matrix[rowIndex, j] = values[j];
-        }
+        Engine.SetRow(matrix, rowIndex, values.Length == matrix.Columns ? values : values.GetSubVector(0, matrix.Columns));
     }
 
     #region IFullModel Implementation
@@ -345,8 +302,8 @@ public abstract partial class ClusteringBase<T> : IClustering<T>, IConfigurableM
         {
             { "NumClusters", NumClusters },
             { "NumFeatures", NumFeatures },
-            { "ClusterCenters", ClusterCenters is not null ? MatrixToDoubleArray(ClusterCenters) : null },
-            { "Labels", Labels is not null ? VectorToDoubleArray(Labels) : null },
+            { "ClusterCenters", ClusterCenters is not null ? MatrixToRowArrays(ClusterCenters) : null },
+            { "Labels", Labels is not null ? ToDoubles(Labels.AsTensor()) : null },
             { "Inertia", Inertia is not null ? NumOps.ToDouble(Inertia) : (double?)null },
             { "RegularizationOptions", Regularization.GetOptions() }
         };
@@ -389,7 +346,7 @@ public abstract partial class ClusteringBase<T> : IClustering<T>, IConfigurableM
             var centersArray = centersToken.ToObject<double[][]>();
             if (centersArray is not null && centersArray.Length > 0)
             {
-                ClusterCenters = DoubleArrayToMatrix(centersArray);
+                ClusterCenters = RowArraysToMatrix(centersArray);
             }
         }
 
@@ -399,7 +356,7 @@ public abstract partial class ClusteringBase<T> : IClustering<T>, IConfigurableM
             var labelsArray = labelsToken.ToObject<double[]>();
             if (labelsArray is not null)
             {
-                Labels = DoubleArrayToVector(labelsArray);
+                Labels = new Tensor<double>(labelsArray, new[] { labelsArray.Length }).Cast<T>().ToVector();
             }
         }
 
@@ -422,53 +379,27 @@ public abstract partial class ClusteringBase<T> : IClustering<T>, IConfigurableM
         IsTrained = NumClusters > 0 && (ClusterCenters is not null || Labels is not null);
     }
 
-    private double[][] MatrixToDoubleArray(Matrix<T> matrix)
+    /// <summary>
+    /// The matrix as rows of doubles. The payload stays in double whatever T is: Newtonsoft.Json has no converter
+    /// for <see cref="Half"/> (it would write each value as an empty object and read it back as zero), and models
+    /// saved before T-typed arrays were introduced store doubles.
+    /// </summary>
+    private static double[][] MatrixToRowArrays(Matrix<T> matrix)
     {
-        var result = new double[matrix.Rows][];
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            result[i] = new double[matrix.Columns];
-            for (int j = 0; j < matrix.Columns; j++)
-            {
-                result[i][j] = NumOps.ToDouble(matrix[i, j]);
-            }
-        }
-        return result;
+        var values = ToDoubles(Tensor<T>.FromMatrix(matrix));
+        int columns = matrix.Columns;
+        return Enumerable.Range(0, matrix.Rows)
+            .Select(row => new ArraySegment<double>(values, row * columns, columns).ToArray())
+            .ToArray();
     }
 
-    private Matrix<T> DoubleArrayToMatrix(double[][] array)
-    {
-        var matrix = new Matrix<T>(array.Length, array[0].Length);
-        for (int i = 0; i < array.Length; i++)
-        {
-            for (int j = 0; j < array[i].Length; j++)
-            {
-                matrix[i, j] = NumOps.FromDouble(array[i][j]);
-            }
-        }
-        return matrix;
-    }
+    /// <summary>All values of a tensor converted to double with one bulk cast.</summary>
+    private static double[] ToDoubles(Tensor<T> values) => values.Contiguous().Cast<double>().ToArray();
 
-    private double[] VectorToDoubleArray(Vector<T> vector)
+    private static Matrix<T> RowArraysToMatrix(double[][] array)
     {
-        var result = new double[vector.Length];
-        for (int i = 0; i < vector.Length; i++)
-        {
-            result[i] = NumOps.ToDouble(vector[i]);
-        }
-        return result;
+        return Tensor<double>.FromMatrix(Matrix<double>.FromRows(array)).Cast<T>().ToMatrix();
     }
-
-    private Vector<T> DoubleArrayToVector(double[] array)
-    {
-        var vector = new Vector<T>(array.Length);
-        for (int i = 0; i < array.Length; i++)
-        {
-            vector[i] = NumOps.FromDouble(array[i]);
-        }
-        return vector;
-    }
-
     /// <inheritdoc/>
     public virtual int[] GetInputShape()
     {
@@ -675,16 +606,16 @@ public abstract partial class ClusteringBase<T> : IClustering<T>, IConfigurableM
             NumFeatures = ClusterCenters.Columns;
         }
 
-        var parameters = new Vector<T>(NumClusters * NumFeatures);
-        int idx = 0;
-        for (int k = 0; k < NumClusters; k++)
+        if (NumClusters * NumFeatures == 0)
         {
-            for (int j = 0; j < NumFeatures; j++)
-            {
-                parameters[idx++] = ClusterCenters[k, j];
-            }
+            return new Vector<T>(0);
         }
-        return parameters;
+
+        // Row-major over clusters x features.
+        var block = ClusterCenters.Rows == NumClusters && ClusterCenters.Columns == NumFeatures
+            ? ClusterCenters
+            : ClusterCenters.GetSubMatrix(0, 0, NumClusters, NumFeatures);
+        return ClusteringTensorOps.Flatten(block);
     }
 
     /// <inheritdoc/>
@@ -736,15 +667,9 @@ public abstract partial class ClusteringBase<T> : IClustering<T>, IConfigurableM
             throw new ArgumentException($"Expected {ExpectedParameterCount} parameters, got {parameters.Length}.");
         }
 
-        ClusterCenters = new Matrix<T>(NumClusters, NumFeatures);
-        int idx = 0;
-        for (int k = 0; k < NumClusters; k++)
-        {
-            for (int j = 0; j < NumFeatures; j++)
-            {
-                ClusterCenters[k, j] = parameters[idx++];
-            }
-        }
+        ClusterCenters = parameters.Length == 0
+            ? new Matrix<T>(NumClusters, NumFeatures)
+            : ClusteringTensorOps.Unflatten(parameters, NumClusters, NumFeatures);
     }
 
     /// <inheritdoc/>
@@ -778,13 +703,8 @@ public abstract partial class ClusteringBase<T> : IClustering<T>, IConfigurableM
     /// <inheritdoc/>
     public virtual Vector<T> GetFeatureImportances()
     {
-        var importances = new Vector<T>(NumFeatures);
         T value = NumOps.Divide(NumOps.One, NumOps.FromDouble(NumFeatures));
-        for (int i = 0; i < NumFeatures; i++)
-        {
-            importances[i] = value;
-        }
-        return importances;
+        return Engine.Fill(NumFeatures, value);
     }
 
     /// <inheritdoc/>
@@ -850,21 +770,21 @@ public abstract partial class ClusteringBase<T> : IClustering<T>, IConfigurableM
     {
         if (ClusterCenters is null) return;
 
-        int idx = 0;
-        for (int k = 0; k < NumClusters; k++)
-        {
-            for (int j = 0; j < NumFeatures; j++)
-            {
-                if (idx < gradients.Length)
-                {
-                    T update = NumOps.Multiply(gradients[idx], learningRate);
-                    ClusterCenters[k, j] = NumOps.Subtract(ClusterCenters[k, j], update);
-                    idx++;
-                }
-            }
-        }
-    }
+        int total = NumClusters * NumFeatures;
+        int count = Math.Min(total, gradients.Length);
+        if (count == 0) return;
 
+        // Only the first gradients.Length parameters (row-major over clusters x features) are updated.
+        var block = ClusterCenters.Rows == NumClusters && ClusterCenters.Columns == NumFeatures
+            ? ClusterCenters
+            : ClusterCenters.GetSubMatrix(0, 0, NumClusters, NumFeatures);
+        var flat = ClusteringTensorOps.Flatten(block);
+        var step = Engine.Multiply(count == gradients.Length ? gradients : gradients.GetSubVector(0, count), learningRate);
+        var updated = count == total
+            ? Engine.Subtract(flat, step)
+            : Vector<T>.Concatenate(new[] { Engine.Subtract(flat.GetSubVector(0, count), step), flat.GetSubVector(count, total - count) });
+        ClusterCenters.SetSubMatrix(0, 0, ClusteringTensorOps.Unflatten(updated, NumClusters, NumFeatures));
+    }
     #endregion
 
     /// <summary>
@@ -890,59 +810,28 @@ public abstract partial class ClusteringBase<T> : IClustering<T>, IConfigurableM
     {
         if (Labels is null || ClusterCenters is null || NumClusters <= 1) return;
 
-        // Compute data range per feature for relative threshold (one pass over the rows)
-        var colMin = new double[x.Columns];
-        var colMax = new double[x.Columns];
-        for (int j = 0; j < x.Columns; j++)
-        {
-            colMin[j] = double.MaxValue;
-            colMax[j] = double.MinValue;
-        }
-
-        for (int i = 0; i < x.Rows; i++)
-        {
-            var row = x.GetRowReadOnlySpan(i);
-            for (int j = 0; j < row.Length; j++)
-            {
-                double v = NumOps.ToDouble(row[j]);
-                if (v < colMin[j]) colMin[j] = v;
-                if (v > colMax[j]) colMax[j] = v;
-            }
-        }
-
+        // Compute data range per feature for relative threshold
         double maxRange = 0;
-        for (int j = 0; j < x.Columns; j++)
+        if (x.Rows > 0 && x.Columns > 0)
         {
-            double range = colMax[j] - colMin[j];
-            if (range > maxRange) maxRange = range;
+            var xt = ClusteringTensorOps.ToTensor(x);
+            var ranges = Engine.TensorSubtract(
+                Engine.ReduceMax(xt, new[] { 0 }, false), Engine.TensorAmin(xt, new[] { 0 }, false));
+            maxRange = Math.Max(0, NumOps.ToDouble(Engine.TensorMaxValue(ranges)));
         }
         // Merge degenerate clusters: when cluster centers are closer than 10% of the maximum
         // feature range, they likely represent the same region of the data space.
         double mergeThreshold = Math.Max(1e-6, maxRange * 0.1);
 
         // First: identify which clusters actually have data points
-        var clusterPopulations = new int[NumClusters];
-        for (int i = 0; i < Labels.Length; i++)
-        {
-            int c = (int)Math.Round(NumOps.ToDouble(Labels[i]));
-            if (c >= 0 && c < NumClusters)
-                clusterPopulations[c]++;
-        }
+        var clusterPopulations = ClusteringTensorOps.ToIntArray(ClusteringTensorOps.ClusterCounts(Labels, NumClusters));
 
         // Build merge map: merge empty clusters into nearest populated one,
         // and merge nearby populated clusters
         var mergedId = Enumerable.Range(0, NumClusters).ToArray();
 
         // Find first populated cluster
-        int firstPopulated = -1;
-        for (int c = 0; c < NumClusters; c++)
-        {
-            if (clusterPopulations[c] > 0)
-            {
-                firstPopulated = c;
-                break;
-            }
-        }
+        int firstPopulated = Array.FindIndex(clusterPopulations, p => p > 0);
 
         // Merge all empty clusters into the first populated one
         if (firstPopulated >= 0)
@@ -954,23 +843,17 @@ public abstract partial class ClusteringBase<T> : IClustering<T>, IConfigurableM
             }
         }
 
-        // Merge nearby populated clusters
-        double minDist = double.MaxValue;
+        // Merge nearby populated clusters: one batched distance matrix, then the sequential merge walk
+        var centers = ActiveCenters(ClusterCenters, NumClusters);
+        var centerDistances = ClusteringTensorOps.Flatten(ClusteringTensorOps.Distances(centers, centers));
+        var close = ClusteringTensorOps.LessThanFlags(centerDistances, NumOps.FromDouble(mergeThreshold));
         for (int a = 0; a < NumClusters; a++)
         {
             if (clusterPopulations[a] == 0) continue;
             for (int b = a + 1; b < NumClusters; b++)
             {
                 if (clusterPopulations[b] == 0 || mergedId[b] != b) continue;
-                double dist = 0;
-                for (int j = 0; j < ClusterCenters.Columns; j++)
-                {
-                    double dd = NumOps.ToDouble(ClusterCenters[a, j]) - NumOps.ToDouble(ClusterCenters[b, j]);
-                    dist += dd * dd;
-                }
-                double eucDist = Math.Sqrt(dist);
-                if (eucDist < minDist) minDist = eucDist;
-                if (eucDist < mergeThreshold)
+                if (close[a * NumClusters + b])
                     mergedId[b] = mergedId[a];
             }
         }
@@ -983,36 +866,19 @@ public abstract partial class ClusteringBase<T> : IClustering<T>, IConfigurableM
             for (int i = 0; i < uniqueMerged.Count; i++)
                 compactMap[uniqueMerged[i]] = i;
 
-            for (int i = 0; i < Labels.Length; i++)
+            var labelIds = ClusteringTensorOps.ToIntArray(Labels);
+            for (int i = 0; i < labelIds.Length; i++)
             {
-                int oldCluster = (int)Math.Round(NumOps.ToDouble(Labels[i]));
+                int oldCluster = labelIds[i];
                 if (oldCluster >= 0 && oldCluster < mergedId.Length)
-                    Labels[i] = NumOps.FromDouble(compactMap[mergedId[oldCluster]]);
+                    labelIds[i] = compactMap[mergedId[oldCluster]];
             }
+
+            ClusteringTensorOps.FromIntArray<T>(labelIds).AsSpan().CopyTo(Labels.AsWritableSpan());
             NumClusters = uniqueMerged.Count;
 
-            // Recompute cluster centers
-            var newCenters = new Matrix<T>(NumClusters, x.Columns);
-            var counts = new int[NumClusters];
-            for (int i = 0; i < x.Rows; i++)
-            {
-                int c = (int)Math.Round(NumOps.ToDouble(Labels[i]));
-                if (c >= 0 && c < NumClusters)
-                {
-                    for (int j = 0; j < x.Columns; j++)
-                        newCenters[c, j] = NumOps.Add(newCenters[c, j], x[i, j]);
-                    counts[c]++;
-                }
-            }
-            for (int c = 0; c < NumClusters; c++)
-            {
-                if (counts[c] > 0)
-                {
-                    for (int j = 0; j < x.Columns; j++)
-                        newCenters[c, j] = NumOps.Divide(newCenters[c, j], NumOps.FromDouble(counts[c]));
-                }
-            }
-            ClusterCenters = newCenters;
+            // Recompute cluster centers (clusters without members keep a zero center)
+            ClusterCenters = ClusteringTensorOps.ClusterMeans(x, Labels, NumClusters, out _);
         }
     }
 

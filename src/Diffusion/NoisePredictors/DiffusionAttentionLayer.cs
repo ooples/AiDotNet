@@ -140,9 +140,8 @@ public sealed partial class DiffusionAttentionLayer<T> : LayerBase<T>, IShapeCon
         var gradients = GetParameterGradients();
         if (gradients.Length != ParameterCount || _queryWeights.Length == 0) return;
         var parameters = GetParameters();
-        for (int i = 0; i < parameters.Length; i++)
-            parameters[i] = NumOps.Subtract(parameters[i], NumOps.Multiply(learningRate, gradients[i]));
-        SetParameters(parameters);
+        var engine = AiDotNetEngine.Current;
+        SetParameters(engine.Subtract(parameters, engine.Multiply(gradients, learningRate)));
     }
 
     /// <inheritdoc />

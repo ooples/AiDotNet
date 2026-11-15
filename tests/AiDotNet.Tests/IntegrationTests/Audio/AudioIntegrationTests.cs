@@ -838,7 +838,11 @@ public class AudioIntegrationTests
     {
         var options = new AudioGenOptions();
         Assert.Equal(AudioGenModelSize.Medium, options.ModelSize);
-        Assert.Equal(32000, options.SampleRate);
+        // AudioGen and its released compression model are 16 kHz (Kreuk et al. 2022).
+        Assert.Equal(16000, options.SampleRate);
+        // AudioGen's EnCodec has 4 codebooks of 2048 entries.
+        Assert.Equal(4, options.NumCodebooks);
+        Assert.Equal(2048, options.CodebookSize);
         Assert.Equal(5.0, options.DurationSeconds, Tolerance);
         Assert.Equal(30.0, options.MaxDurationSeconds, Tolerance);
         Assert.Equal(1.0, options.Temperature, Tolerance);
@@ -945,6 +949,311 @@ public class AudioIntegrationTests
             AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = previousFallback;
             AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(null);
         }
+    }
+
+    /// <summary>
+    /// The EnCodec decoder is pretrained and frozen in AudioGen, so its weights are frozen model state:
+    /// a save/load round trip must restore every decoder weight bit-for-bit, and the restored model must
+    /// decode the same tokens to the same audio.
+    /// </summary>
+    [Fact(Timeout = 300000)]
+    public async Task AudioGenModel_EnCodecDecoder_SurvivesSaveLoadRoundTrip()
+    {
+        await Task.Yield();
+        var previousFallback = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed;
+        try
+        {
+            using var source = BuildSmallAudioGen(layerSeed: 1337);
+            using var restored = BuildSmallAudioGen(layerSeed: 4242);
+
+            var sourceWeights = source.CodecDecoderWeights;
+            Assert.NotEmpty(sourceWeights);
+            Assert.Equal(sourceWeights.Count, restored.CodecDecoderWeights.Count);
+            // Different seeds give different decoders, so the round trip has something to restore.
+            Assert.False(SameBits(sourceWeights[0].ToArray(), restored.CodecDecoderWeights[0].ToArray()));
+
+            // 5 tokens of one codebook with ids inside CodebookSize = 4
+            var codes = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new double[] { 0, 3, 1, 2, 3 }, [1, 1, 5]);
+            var expectedAudio = source.DecodeCodecTokens(codes, 0.1).ToArray();
+
+            restored.Deserialize(source.Serialize());
+
+            var restoredWeights = restored.CodecDecoderWeights;
+            Assert.Equal(sourceWeights.Count, restoredWeights.Count);
+            for (int i = 0; i < sourceWeights.Count; i++)
+            {
+                Assert.Equal(sourceWeights[i].Shape.ToArray(), restoredWeights[i].Shape.ToArray());
+                Assert.True(SameBits(sourceWeights[i].ToArray(), restoredWeights[i].ToArray()), $"decoder weight {i} changed");
+            }
+
+            var restoredAudio = restored.DecodeCodecTokens(codes, 0.1).ToArray();
+            Assert.Equal(expectedAudio.Length, restoredAudio.Length);
+            Assert.True(SameBits(expectedAudio, restoredAudio), "decoded audio changed after reload");
+        }
+        finally
+        {
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = previousFallback;
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(null);
+        }
+    }
+
+    /// <summary>
+    /// Loads a synthetic safetensors checkpoint that uses audiocraft's EnCodec state-dict names, as
+    /// found in facebook/audiogen-medium's compression model (weight-normalized convolutions with
+    /// weight_g / weight_v, plain LSTM and codebook tensors, plus the extra quantizer state the
+    /// decoder ignores). Every decoder weight must be filled from the file. The model is shrunk to
+    /// one upsampling block (100 Hz sample rate, hop 2), so the channel widths are 128 -> 64.
+    /// </summary>
+    [Fact(Timeout = 300000)]
+    public async Task AudioGenModel_EncodecWeightsPath_LoadsAudiocraftCheckpointNames()
+    {
+        await Task.Yield();
+        var (entries, fileTensors, expected) = EncodecCheckpointLayout();
+        string path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"encodec-{Guid.NewGuid():N}.safetensors");
+        var previousFallback = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed;
+        try
+        {
+            WriteSafetensors(path, fileTensors);
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = 1337;
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(1337);
+            using var model = NewEncodecTestModel(path);
+
+            var weights = model.CodecDecoderWeights;
+            Assert.Equal(entries.Length, weights.Count);
+            for (int k = 0; k < entries.Length; k++)
+            {
+                Assert.Equal(entries[k].Shape, weights[k].Shape.ToArray());
+                foreach (float actual in weights[k].ToArray())
+                    Assert.True(Math.Abs(actual - expected[k]) <= 1e-6 * Math.Max(1.0, Math.Abs(expected[k])),
+                        $"{entries[k].Name}: expected {expected[k]}, got {actual}");
+            }
+
+            var audio = model.DecodeCodecTokens(
+                new AiDotNet.Tensors.LinearAlgebra.Tensor<float>(new float[] { 0, 3, 1, 2, 3 }, [1, 1, 5]), 0.1);
+            Assert.Equal(10, audio.Length);
+        }
+        finally
+        {
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = previousFallback;
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(null);
+            if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+        }
+    }
+
+    /// <summary>
+    /// A checkpoint with more codebooks than the model's NumCodebooks is rejected, naming the extra codebook: loading it
+    /// would decode with only the first codebooks and silently change every sample.
+    /// </summary>
+    [Fact(Timeout = 300000)]
+    public async Task AudioGenModel_EncodecWeightsPath_RejectsCodebooksBeyondNumCodebooks()
+    {
+        await Task.Yield();
+        var (_, fileTensors, _) = EncodecCheckpointLayout();
+        fileTensors.Add(("quantizer.vq.layers.1._codebook.embed", new[] { 4, 128 }, 0.5f));
+
+        string path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"encodec-{Guid.NewGuid():N}.safetensors");
+        var previousFallback = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed;
+        try
+        {
+            WriteSafetensors(path, fileTensors);
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = 1337;
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(1337);
+            var error = Assert.Throws<InvalidOperationException>(() => NewEncodecTestModel(path).Dispose());
+            Assert.Contains(path, error.Message);
+            Assert.Contains("quantizer.vq.layers.1._codebook.embed", error.Message);
+        }
+        finally
+        {
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = previousFallback;
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(null);
+            if (System.IO.File.Exists(path)) System.IO.File.Delete(path);
+        }
+    }
+
+    /// <summary>
+    /// The audiocraft EnCodec checkpoint layout of the one-block test model (one codebook): the decoder's tensors, the
+    /// tensors written to the file (weight-normalized ones as _g / _v pairs, plus quantizer state the decoder ignores),
+    /// and each decoder tensor's expected loaded value.
+    /// </summary>
+    private static ((string Name, int[] Shape, int Kind)[] Entries, List<(string Name, int[] Shape, float Value)> FileTensors,
+        double[] Expected) EncodecCheckpointLayout()
+    {
+        // (name, shape, kind): kind 0 = plain tensor, 1 = weight-normalized weight (_g / _v pair)
+        var entries = new (string Name, int[] Shape, int Kind)[]
+        {
+            ("quantizer.vq.layers.0._codebook.embed", new[] { 4, 128 }, 0),
+            ("decoder.model.0.conv.conv.weight", new[] { 128, 128, 7 }, 1),
+            ("decoder.model.0.conv.conv.bias", new[] { 128 }, 0),
+            ("decoder.model.1.lstm.weight_ih_l0", new[] { 512, 128 }, 0),
+            ("decoder.model.1.lstm.weight_hh_l0", new[] { 512, 128 }, 0),
+            ("decoder.model.1.lstm.bias_ih_l0", new[] { 512 }, 0),
+            ("decoder.model.1.lstm.bias_hh_l0", new[] { 512 }, 0),
+            ("decoder.model.1.lstm.weight_ih_l1", new[] { 512, 128 }, 0),
+            ("decoder.model.1.lstm.weight_hh_l1", new[] { 512, 128 }, 0),
+            ("decoder.model.1.lstm.bias_ih_l1", new[] { 512 }, 0),
+            ("decoder.model.1.lstm.bias_hh_l1", new[] { 512 }, 0),
+            ("decoder.model.3.convtr.convtr.weight", new[] { 128, 64, 4 }, 1),
+            ("decoder.model.3.convtr.convtr.bias", new[] { 64 }, 0),
+            ("decoder.model.4.block.1.conv.conv.weight", new[] { 32, 64, 3 }, 1),
+            ("decoder.model.4.block.1.conv.conv.bias", new[] { 32 }, 0),
+            ("decoder.model.4.block.3.conv.conv.weight", new[] { 64, 32, 1 }, 1),
+            ("decoder.model.4.block.3.conv.conv.bias", new[] { 64 }, 0),
+            ("decoder.model.6.conv.conv.weight", new[] { 1, 64, 7 }, 1),
+            ("decoder.model.6.conv.conv.bias", new[] { 1 }, 0),
+        };
+
+        // File tensors: plain entry k holds the constant (k + 1) / 1000; a weight-normalized entry
+        // holds weight_v = 2 and weight_g = 3, so its folded weight is 3 / sqrt(prod(shape[1..])).
+        var fileTensors = new List<(string Name, int[] Shape, float Value)>();
+        var expected = new double[entries.Length];
+        for (int k = 0; k < entries.Length; k++)
+        {
+            var (name, shape, kind) = entries[k];
+            if (kind == 0)
+            {
+                float value = (k + 1) / 1000f;
+                fileTensors.Add((name, shape, value));
+                expected[k] = value;
+            }
+            else
+            {
+                int fanIn = 1;
+                for (int d = 1; d < shape.Length; d++) fanIn *= shape[d];
+                fileTensors.Add((name + "_g", new[] { shape[0], 1, 1 }, 3f));
+                fileTensors.Add((name + "_v", shape, 2f));
+                expected[k] = 3.0 / Math.Sqrt(fanIn);
+            }
+        }
+        fileTensors.Add(("quantizer.vq.layers.0._codebook.embed_avg", new[] { 4, 128 }, 9f));
+        fileTensors.Add(("quantizer.vq.layers.0._codebook.cluster_size", new[] { 4 }, 9f));
+
+        return (entries, fileTensors, expected);
+    }
+
+    /// <summary>The one-block AudioGen test model (100 Hz, hop 2, one codebook of 4) loading its codec from <paramref name="path"/>.</summary>
+    private static AudioGenModel<float> NewEncodecTestModel(string path) =>
+        new AudioGenModel<float>(
+            new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<float>(
+                inputType: AiDotNet.Enums.InputType.TwoDimensional,
+                taskType: AiDotNet.Enums.NeuralNetworkTaskType.Generative,
+                inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4),
+            options: new AudioGenOptions
+            {
+                ModelSize = AudioGenModelSize.Medium,
+                SampleRate = 100,
+                DurationSeconds = 0.1,
+                MaxDurationSeconds = 10,
+                TextHiddenDim = 32,
+                LmHiddenDim = 32,
+                NumLmLayers = 2,
+                NumHeads = 2,
+                NumCodebooks = 1,
+                CodebookSize = 4,
+                MaxTextLength = 8,
+                Seed = 7,
+                EncodecWeightsPath = path,
+            });
+
+    /// <summary>Writes constant-valued F32 tensors in the safetensors layout (u64 header length, JSON, data).</summary>
+    private static void WriteSafetensors(string path, List<(string Name, int[] Shape, float Value)> tensors)
+    {
+        var header = new System.Text.StringBuilder("{");
+        long offset = 0;
+        for (int i = 0; i < tensors.Count; i++)
+        {
+            long count = 1;
+            foreach (int d in tensors[i].Shape) count *= d;
+            long end = offset + count * 4;
+            if (i > 0) header.Append(',');
+            header.Append('"').Append(tensors[i].Name).Append("\":{\"dtype\":\"F32\",\"shape\":[")
+                .Append(string.Join(",", tensors[i].Shape)).Append("],\"data_offsets\":[")
+                .Append(offset).Append(',').Append(end).Append("]}");
+            offset = end;
+        }
+        header.Append('}');
+        while (header.Length % 8 != 0) header.Append(' ');
+
+        byte[] headerBytes = System.Text.Encoding.UTF8.GetBytes(header.ToString());
+        using var stream = System.IO.File.Create(path);
+        using var writer = new System.IO.BinaryWriter(stream);
+        writer.Write((ulong)headerBytes.Length);
+        writer.Write(headerBytes);
+        foreach (var tensor in tensors)
+        {
+            long count = 1;
+            foreach (int d in tensor.Shape) count *= d;
+            for (long e = 0; e < count; e++) writer.Write(tensor.Value);
+        }
+    }
+
+    [Theory]
+    [InlineData(4, 2, new double[] { 2, 1, 2, 3 })]
+    [InlineData(4, 4, new double[] { 2, 3, 4, 3 })]
+    [InlineData(2, 2, new double[] { 2, 1 })]
+    [InlineData(2, 4, new double[] { 2, 0 })]
+    [InlineData(1, 2, new double[] { 0 })]
+    [InlineData(1, 4, new double[] { 0 })]
+    public void AudioGenModel_EnCodecDecoder_UsesAudiocraftReflectionAtBoundaries(int tokens, int tap, double[] expected)
+    {
+        var previousFallback = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed;
+        try
+        {
+            // Hop 1 removes upsampling blocks. Only one codebook channel, one shifted input-convolution
+            // tap and one identity output-convolution tap remain; the zero LSTM contributes only its skip.
+            using var model = BuildSmallAudioGen(layerSeed: 1337, sampleRate: 50);
+            var weights = model.CodecDecoderWeights;
+            foreach (var weight in weights) weight.Fill(0.0);
+            for (int i = 0; i < 4; i++) weights[0][i, 0] = i + 1;
+            weights[1][0, 0, tap] = 1;
+            weights[weights.Count - 2][0, 0, 3] = 1;
+            var codes = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(
+                Enumerable.Range(0, tokens).Select(i => (double)i).ToArray(), new[] { 1, 1, tokens });
+            var actual = model.DecodeCodecTokens(codes, tokens / 50.0).ToArray();
+            Assert.Equal(expected.Length, actual.Length);
+            for (int i = 0; i < expected.Length; i++) Assert.Equal(expected[i], actual[i], 10);
+        }
+        finally
+        {
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = previousFallback;
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(null);
+        }
+    }
+
+
+    private static AudioGenModel<double> BuildSmallAudioGen(int layerSeed, int sampleRate = 8000)
+    {
+        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = layerSeed;
+        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(layerSeed);
+        return new AudioGenModel<double>(
+            new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(
+                inputType: AiDotNet.Enums.InputType.TwoDimensional,
+                taskType: AiDotNet.Enums.NeuralNetworkTaskType.Generative,
+                inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4),
+            options: new AudioGenOptions
+            {
+                ModelSize = AudioGenModelSize.Medium,
+                SampleRate = sampleRate,
+                DurationSeconds = 0.1,
+                MaxDurationSeconds = 0.1,
+                TextHiddenDim = 32,
+                LmHiddenDim = 32,
+                NumLmLayers = 2,
+                NumHeads = 2,
+                NumCodebooks = 1,
+                CodebookSize = 4,
+                MaxTextLength = 8,
+                Seed = layerSeed,
+            });
+    }
+
+    private static bool SameBits(double[] a, double[] b)
+    {
+        if (a.Length != b.Length) return false;
+        for (int i = 0; i < a.Length; i++)
+        {
+            if (BitConverter.DoubleToInt64Bits(a[i]) != BitConverter.DoubleToInt64Bits(b[i])) return false;
+        }
+        return true;
     }
 
     #endregion

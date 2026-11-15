@@ -387,14 +387,8 @@ public partial class UNetDiscriminator<T> : LayerBase<T>, IShapeContract
 
     private Tensor<T> BackwardLeakyReLU(Tensor<T> forwardInput, Tensor<T> gradient)
     {
-        var output = TensorAllocator.Rent<T>(gradient._shape);
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            output.Data.Span[i] = NumOps.Multiply(
-                gradient.Data.Span[i],
-                _leakyReLU.Derivative(forwardInput.Data.Span[i]));
-        }
-        return output;
+        // gradient * LeakyReLU'(forwardInput), element-wise.
+        return Engine.TensorMultiply(gradient, _leakyReLU.Derivative(Engine.Reshape(forwardInput, gradient._shape)));
     }
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
@@ -426,10 +420,7 @@ public partial class UNetDiscriminator<T> : LayerBase<T>, IShapeContract
 
     private static void AddParamsToList(List<T> list, Vector<T> parameters)
     {
-        for (int i = 0; i < parameters.Length; i++)
-        {
-            list.Add(parameters[i]);
-        }
+        list.AddRange(parameters);
     }
 
     private static int SetLayerParams(ILayer<T> layer, Vector<T> parameters, int offset)
@@ -603,14 +594,8 @@ public partial class UNetConvBlock<T> : LayerBase<T>, IShapeContract
 
     private Tensor<T> BackwardLeakyReLU(Tensor<T> forwardInput, Tensor<T> gradient)
     {
-        var output = TensorAllocator.Rent<T>(gradient._shape);
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            output.Data.Span[i] = NumOps.Multiply(
-                gradient.Data.Span[i],
-                _leakyReLU.Derivative(forwardInput.Data.Span[i]));
-        }
-        return output;
+        // gradient * LeakyReLU'(forwardInput), element-wise.
+        return Engine.TensorMultiply(gradient, _leakyReLU.Derivative(Engine.Reshape(forwardInput, gradient._shape)));
     }
 
     /// <inheritdoc />
@@ -902,14 +887,8 @@ public partial class UNetUpBlock<T> : LayerBase<T>, IShapeContract
 
     private Tensor<T> BackwardLeakyReLU(Tensor<T> forwardInput, Tensor<T> gradient)
     {
-        var output = TensorAllocator.Rent<T>(gradient._shape);
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            output.Data.Span[i] = NumOps.Multiply(
-                gradient.Data.Span[i],
-                _leakyReLU.Derivative(forwardInput.Data.Span[i]));
-        }
-        return output;
+        // gradient * LeakyReLU'(forwardInput), element-wise.
+        return Engine.TensorMultiply(gradient, _leakyReLU.Derivative(Engine.Reshape(forwardInput, gradient._shape)));
     }
 
     /// <inheritdoc />

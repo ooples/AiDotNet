@@ -103,19 +103,7 @@ public sealed class EulerDiscreteScheduler<T> : NoiseSchedulerBase<T>, INoiseSch
     /// </remarks>
     private void ComputeSigmas()
     {
-        var timesteps = Timesteps;
-        _sigmas = new Vector<T>(timesteps.Length + 1);
-
-        for (int i = 0; i < timesteps.Length; i++)
-        {
-            T alphaCumprod = AlphasCumulativeProduct[timesteps[i]];
-            T oneMinusAlpha = NumOps.Subtract(NumOps.One, alphaCumprod);
-            // sigma = sqrt((1 - alpha_cumprod) / alpha_cumprod)
-            _sigmas[i] = NumOps.Sqrt(NumOps.Divide(oneMinusAlpha, alphaCumprod));
-        }
-
-        // Append sigma=0 for the final (clean) state
-        _sigmas[timesteps.Length] = NumOps.Zero;
+        _sigmas = ComputeTimestepSigmas();
     }
 
     /// <summary>
@@ -156,13 +144,11 @@ public sealed class EulerDiscreteScheduler<T> : NoiseSchedulerBase<T>, INoiseSch
                 break;
 
             case DiffusionPredictionType.VPrediction:
-                // For v-prediction: x_0 = sigma * sample - (sigma^2 + 1).sqrt() ...
-                // Simplified: use alpha_cumprod conversion
-                T alphaCumprod = AlphasCumulativeProduct[timestep];
-                T sqrtAlpha = NumOps.Sqrt(alphaCumprod);
-                T sqrtOneMinusAlpha = NumOps.Sqrt(NumOps.Subtract(NumOps.One, alphaCumprod));
-                var vX0 = Engine.Multiply(sample, sqrtAlpha);
-                var vEps = Engine.Multiply(modelOutput, sqrtOneMinusAlpha);
+                // The sample lives in sigma space (x_t / sqrt(alpha_cumprod)), so as in diffusers
+                // x0 = sample / (sigma^2 + 1) - v * sigma / sqrt(sigma^2 + 1).
+                T sigmaSqPlusOne = NumOps.Add(NumOps.Multiply(sigma, sigma), NumOps.One);
+                var vX0 = Engine.Divide(sample, sigmaSqPlusOne);
+                var vEps = Engine.Multiply(modelOutput, NumOps.Divide(sigma, NumOps.Sqrt(sigmaSqPlusOne)));
                 predOriginal = Engine.Subtract(vX0, vEps);
                 break;
 

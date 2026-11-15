@@ -54,19 +54,6 @@ public class MaskInverter<T> : IDataTransformer<T, Tensor<T>, Tensor<T>>
     /// <returns>The inverted mask.</returns>
     public Tensor<T> Apply(Tensor<T> mask)
     {
-        var shape = mask._shape;
-        var result = new Tensor<T>(shape);
-        int height = shape[0];
-        int width = shape.Length > 1 ? shape[1] : 1;
-
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                result[y, x] = NumOps.Subtract(NumOps.One, mask[y, x]);
-            }
-        }
-
-        return result;
+        return AiDotNetEngine.Current.ScalarMinusTensor(NumOps.One, mask);
     }
 }

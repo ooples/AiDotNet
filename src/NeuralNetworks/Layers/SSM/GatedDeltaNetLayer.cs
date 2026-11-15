@@ -263,8 +263,7 @@ public partial class GatedDeltaNetLayer<T> : LayerBase<T>, IShapeContract
         _betaBias.Fill(NumOps.FromDouble(0.1));
         InitializeTensor2D(_alphaWeights);
         // Alpha bias ~ 2 so sigmoid(2) ≈ 0.88 -> strong initial memory retention
-        for (int i = 0; i < _alphaBias.Length; i++)
-            _alphaBias[i] = NumOps.FromDouble(2.0);
+        _alphaBias.Fill(NumOps.FromDouble(2.0));
         InitializeTensor2D(_outputGateWeights);
         _outputGateBias.Fill(NumOps.Zero);
         InitializeTensor2D(_outputProjectionWeights);

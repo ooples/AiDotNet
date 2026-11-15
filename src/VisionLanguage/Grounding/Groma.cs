@@ -84,6 +84,8 @@ public partial class Groma<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
     private bool _useNativeMode;
     private bool _disposed;
     private int _encoderLayerEnd;
+    private readonly List<ILayer<T>> _groundingHeadLayers = new();
+    private GromaRegionGrounder<T>? _groundingHead;
 
     public Groma(
         NeuralNetworkArchitecture<T> architecture,
@@ -167,128 +169,16 @@ public partial class Groma<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(PreprocessImage(image));
 
-        var p = PreprocessImage(image);
-        int dim = _options.DecoderDim;
-        double confThreshold = _options.ConfidenceThreshold;
-        double nmsThreshold = _options.NmsThreshold;
-
-        // Step 1: Visual encoder
-        var visualFeatures = p;
+        // Backbone: the image tokens the grounding head reads.
+        var visualFeatures = PreprocessImage(image);
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
 
-        int visDim = visualFeatures.Length;
-
-        // Step 2: Region proposal network with learned region queries. Query q reads its stride of visual features;
-        // feature d sits at grid cell (d % grid, d / grid), and |feature| weights that cell position.
-        int numRegionQueries = 64;
-        int gridSize = (int)Math.Sqrt(visDim);
-        if (gridSize < 4)
-            gridSize = 4;
-        int stride = Math.Max(1, visDim / numRegionQueries);
-        var featurePositions = new int[numRegionQueries * stride];
-        var cellColumns = new int[numRegionQueries * stride];
-        var cellRows = new int[numRegionQueries * stride];
-        for (int q = 0; q < numRegionQueries; q++)
-        {
-            for (int k = 0; k < stride; k++)
-            {
-                int d = q * stride + k;
-                featurePositions[d] = d < visDim ? d : -1;
-                cellColumns[d] = d % gridSize;
-                cellRows[d] = d / gridSize;
-            }
-        }
-
-        int[] queryShape = [numRegionQueries, stride];
-        var weights = Engine.TensorAbs(GroundingDetections<T>.Take(Engine, visualFeatures, featurePositions, queryShape));
-        var grid = NumOps.FromDouble(gridSize);
-        var spatialX = Engine.TensorDivideScalar(GroundingDetections<T>.IntsAsT(cellColumns).Reshape(queryShape), grid);
-        var spatialY = Engine.TensorDivideScalar(GroundingDetections<T>.IntsAsT(cellRows).Reshape(queryShape), grid);
-
-        var attnSum = GroundingDetections<T>.SumRows(Engine, weights);
-        var hasWeight = Engine.TensorGreaterThan(attnSum, NumOps.FromDouble(1e-8));
-        // The weighted means divide row sum by row sum (in float for narrow types): the replaced loop summed in
-        // double, and a Half sum of weights past 65504 is infinite where the mean is representable.
-        var middle = Tensor<T>.CreateDefault([numRegionQueries], NumOps.FromDouble(0.5));
-        var cx = Engine.TensorWhere(hasWeight,
-            GroundingDetections<T>.RowSumRatio(Engine, Engine.TensorMultiply(spatialX, weights), weights), middle);
-        var cy = Engine.TensorWhere(hasWeight,
-            GroundingDetections<T>.RowSumRatio(Engine, Engine.TensorMultiply(spatialY, weights), weights), middle);
-
-        // Predict width/height from the weighted spatial variance: max(0.05, 4 sqrt(var)), at most 1
-        Tensor<T> Extent(Tensor<T> spatial, Tensor<T> centre)
-        {
-            var offset = Engine.TensorSubtract(spatial,
-                Engine.TensorBroadcastTo(centre.Reshape([numRegionQueries, 1]), queryShape));
-            var weighted = Engine.TensorMultiply(weights, Engine.TensorMultiply(offset, offset));
-            var variance = Engine.TensorWhere(hasWeight,
-                GroundingDetections<T>.RowSumRatio(Engine, weighted, weights), GroundingDetections<T>.SumRows(Engine, weighted));
-            return Engine.TensorClampMax(Engine.TensorMax(
-                Engine.TensorMultiplyScalar(Engine.TensorSqrt(variance), NumOps.FromDouble(4.0)), NumOps.FromDouble(0.05)),
-                NumOps.One);
-        }
-
-        var regionW = Extent(spatialX, cx);
-        var regionH = Extent(spatialY, cy);
-        var regionScores = GroundingDetections<T>.RowMean(Engine, weights);
-
-        // Step 3: Text-conditioned region scoring via ConcatenateTensors
-        var textTokens = TokenizeText(textQuery);
-        var fusedFeatures = visualFeatures.ConcatenateTensors(textTokens);
-
-        // Run through decoder layers for text-conditioned scoring
-        var decoderOut = fusedFeatures;
-        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
-            decoderOut = Layers[i].Forward(decoderOut);
-
-        int outDim = decoderOut.Length;
-        int maxDet = _options.MaxDetections;
-        // No detections wanted, or nothing decoded to score a region against (the indices below are modulo outDim).
-        if (maxDet <= 0 || outDim == 0)
-            return new Tensor<T>([GroundingDetections<T>.FieldsPerDetection]);
-
-        // Score each region against text-conditioned decoder features: the region of interest starts at
-        // floor(cx * outDim) % outDim and spans max(1, floor(w * outDim / 2)) values, read cyclically. The
-        // positions are integers, so they are derived without rounding the products to T.
-        int[] roiStarts = GroundingDetections<T>.FloorScaled(Engine, cx, outDim);
-        int[] roiSpans = GroundingDetections<T>.FloorScaled(Engine, regionW, outDim * 0.5);
-        int longestSpan = 1;
-        for (int q = 0; q < numRegionQueries; q++)
-        {
-            roiStarts[q] %= outDim;
-            roiSpans[q] = Math.Max(1, roiSpans[q]);
-            longestSpan = Math.Max(longestSpan, roiSpans[q]);
-        }
-
-        var roiPositions = new int[numRegionQueries * longestSpan];
-        for (int q = 0; q < numRegionQueries; q++)
-        {
-            for (int d = 0; d < longestSpan; d++)
-                roiPositions[q * longestSpan + d] = d < roiSpans[q] ? (roiStarts[q] + d) % outDim : -1;
-        }
-
-        var roiFeatSum = GroundingDetections<T>.SumRows(Engine, GroundingDetections<T>.Take(Engine, decoderOut,
-            roiPositions, [numRegionQueries, longestSpan]));
-
-        // Divide by each span through its reciprocal, formed in double and rounded to T once: a span past 2048
-        // is not exact in Half, and one past 65504 overflows it.
-        var inverseSpans = new double[numRegionQueries];
-        for (int q = 0; q < numRegionQueries; q++)
-            inverseSpans[q] = 1.0 / roiSpans[q];
-        var roiConf = Engine.TensorSigmoid(Engine.TensorMultiply(roiFeatSum,
-            new Tensor<double>(new[] { numRegionQueries }, Vector<double>.FromArray(inverseSpans)).Cast<T>()));
-        var confidences = Engine.TensorSigmoid(Engine.TensorAddScalar(
-            Engine.TensorMultiplyScalar(Engine.TensorMultiply(roiConf, regionScores), NumOps.FromDouble(5.0)),
-            NumOps.FromDouble(-2.0)));
-
-        var boxes = GroundingDetections<T>.ClippedCornerBoxes(Engine, cx, cy, regionW, regionH);
-        var eligible = Engine.TensorMultiply(
-            GroundingDetections<T>.AtLeast(Engine, confidences, NumOps.FromDouble(confThreshold)),
-            GroundingDetections<T>.HasArea(Engine, boxes));
-
-        // Step 4: NMS, highest confidence first
-        return GroundingDetections<T>.Select(Engine, boxes, confidences, eligible, maxDet, nmsThreshold);
+        // Region proposer, region tokens, and the language model referring to them (Ma et al. 2024, section 3).
+        var head = _groundingHead ?? throw new InvalidOperationException("The grounding head is not initialized.");
+        var (boxes, scores) = head.Ground(visualFeatures, TokenIds(textQuery), RunLanguageModel, _options.MaxDetections);
+        return GroundingDetections<T>.Ranked(Engine, boxes, scores, _options.ConfidenceThreshold, _options.MaxDetections,
+            _options.NmsThreshold);
     }
 
     /// <inheritdoc />
@@ -323,6 +213,14 @@ public partial class Groma<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
             );
             ComputeEncoderDecoderBoundary();
         }
+        if (_groundingHead is null)
+        {
+            // Groma's proposer is a Deformable DETR (width 256, 8 heads, 6 decoder layers) proposing 300 regions.
+            _groundingHead = new GromaRegionGrounder<T>(Engine, _groundingHeadLayers, new GromaRegionGrounderConfiguration(
+                _options.DecoderDim, ProposerWidth: 256, ProposerHeads: 8, ProposerLayers: 6, Proposals: 300,
+                _options.VocabSize, _options.MaxSequenceLength));
+            RegisterAuxiliaryEncoderStream(_groundingHeadLayers);
+        }
     }
 
     private void ComputeEncoderDecoderBoundary()
@@ -331,14 +229,22 @@ public partial class Groma<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
         _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb + 3;
     }
 
-    private Tensor<T> TokenizeText(string text)
+    private List<int> TokenIds(string text)
     {
         if (_tokenizer is null)
             throw new InvalidOperationException("Tokenizer not initialized.");
-        var encoding = _tokenizer.Encode(text);
-        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
-        var tokens = TokenIdsToTensor(encoding.TokenIds, seqLen);
-        return tokens;
+        if (text is null) throw new ArgumentNullException(nameof(text));
+        var ids = _tokenizer.Encode(text).TokenIds;
+        return ids.Count > 0 ? ids : throw new ArgumentException("The text query has no tokens.", nameof(text));
+    }
+
+    /// <summary>The language model (the decoder layers after the image projector) on <c>[n, DecoderDim]</c> rows.</summary>
+    private Tensor<T> RunLanguageModel(Tensor<T> rows)
+    {
+        var hidden = Engine.Reshape(rows, new[] { 1, rows.Shape[0], rows.Shape[1] });
+        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
+            hidden = Layers[i].Forward(hidden);
+        return hidden;
     }
 
     /// <inheritdoc />

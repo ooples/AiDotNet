@@ -214,12 +214,10 @@ public partial class OpenMAMLPlusAlgorithm<T, TInput, TOutput> : MetaLearnerBase
 
         // Modulate adapted parameters based on novelty: parameters in the latter half
         // of the network are scaled proportionally to the novelty score (sigmoid of threshold).
-        double threshold = NumOps.ToDouble(_noveltyThreshold[0]);
-        double noveltyGate = 1.0 / (1.0 + Math.Exp(-threshold)); // sigmoid
-        var modulationFactors = new double[_paramDim];
+        T noveltyGate = ScalarSigmoid(_noveltyThreshold[0]);
         int midpoint = _paramDim / 2;
-        for (int d = 0; d < _paramDim; d++)
-            modulationFactors[d] = d < midpoint ? 1.0 : noveltyGate;
+        var modulationFactors = Vector<T>.Concatenate(
+            Engine.Fill(midpoint, NumOps.One), Engine.Fill(_paramDim - midpoint, noveltyGate));
 
         ParamModel.SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams, modulationFactors: modulationFactors);

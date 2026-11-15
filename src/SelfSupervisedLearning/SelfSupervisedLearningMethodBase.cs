@@ -6,6 +6,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
+using AiDotNet.SelfSupervisedLearning.Losses;
 
 namespace AiDotNet.SelfSupervisedLearning;
 
@@ -444,33 +445,11 @@ public abstract partial class SelfSupervisedLearningMethodBase<T> : ModelBase<T,
     /// <returns>The normalized tensor.</returns>
     protected virtual Tensor<T> L2Normalize(Tensor<T> tensor)
     {
-        var batchSize = tensor.Shape[0];
-        var dim = tensor.Shape[1];
-        var result = new T[batchSize * dim];
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            // Use Engine for accelerated vector operations when available
-            var row = new T[dim];
-            for (int j = 0; j < dim; j++)
-            {
-                row[j] = tensor[i, j];
-            }
-
-            var vec = new Vector<T>(row);
-
-            // Compute L2 norm using engine's dot product
-            var normSquared = Engine.DotProduct(vec, vec);
-            var norm = NumOps.Sqrt(NumOps.Add(normSquared, NumOps.FromDouble(1e-8)));
-
-            // Normalize
-            for (int j = 0; j < dim; j++)
-            {
-                result[i * dim + j] = NumOps.Divide(tensor[i, j], norm);
-            }
-        }
-
-        return new Tensor<T>(result, [batchSize, dim]);
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        // x / sqrt(sum(x^2) + 1e-8) per row
+        var normSquared = Engine.ReduceSum(Engine.TensorSquare(tensor), new[] { 1 }, keepDims: true);
+        var norm = Engine.TensorSqrt(Engine.TensorAddScalar(normSquared, ObjectiveOps.Epsilon<T>(1e-8)));
+        return Engine.TensorDivide(tensor, norm);
     }
 
     /// <summary>
@@ -481,38 +460,8 @@ public abstract partial class SelfSupervisedLearningMethodBase<T> : ModelBase<T,
     /// <returns>Result matrix [M, N].</returns>
     protected virtual Tensor<T> MatMul(Tensor<T> a, Tensor<T> b)
     {
-        var m = a.Shape[0];
-        var k = a.Shape[1];
-        var n = b.Shape[1];
-        var result = new T[m * n];
-
-        // Transpose b for better cache locality: [K, N] -> column vectors of length K
-        for (int i = 0; i < m; i++)
-        {
-            // Extract row i from a
-            var rowA = new T[k];
-            for (int j = 0; j < k; j++)
-            {
-                rowA[j] = a[i, j];
-            }
-            var vecA = new Vector<T>(rowA);
-
-            for (int j = 0; j < n; j++)
-            {
-                // Extract column j from b
-                var colB = new T[k];
-                for (int l = 0; l < k; l++)
-                {
-                    colB[l] = b[l, j];
-                }
-                var vecB = new Vector<T>(colB);
-
-                // Use engine for accelerated dot product
-                result[i * n + j] = Engine.DotProduct(vecA, vecB);
-            }
-        }
-
-        return new Tensor<T>(result, [m, n]);
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return Engine.TensorMatMul(a, b);
     }
 
     /// <summary>
@@ -527,39 +476,12 @@ public abstract partial class SelfSupervisedLearningMethodBase<T> : ModelBase<T,
         Tensor<T> embeddings2,
         bool normalize = true)
     {
-        var n = embeddings1.Shape[0];
-        var m = embeddings2.Shape[0];
-        var d = embeddings1.Shape[1];
-
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var e1 = normalize ? L2Normalize(embeddings1) : embeddings1;
         var e2 = normalize ? L2Normalize(embeddings2) : embeddings2;
 
-        var result = new T[n * m];
-
-        // Compute dot products using engine
-        for (int i = 0; i < n; i++)
-        {
-            var row1 = new T[d];
-            for (int k = 0; k < d; k++)
-            {
-                row1[k] = e1[i, k];
-            }
-            var vec1 = new Vector<T>(row1);
-
-            for (int j = 0; j < m; j++)
-            {
-                var row2 = new T[d];
-                for (int k = 0; k < d; k++)
-                {
-                    row2[k] = e2[j, k];
-                }
-                var vec2 = new Vector<T>(row2);
-
-                result[i * m + j] = Engine.DotProduct(vec1, vec2);
-            }
-        }
-
-        return new Tensor<T>(result, [n, m]);
+        // result[i, j] = e1_i . e2_j
+        return Engine.TensorMatMul(e1, Engine.TensorTranspose(e2));
     }
 
     /// <summary>
@@ -569,41 +491,24 @@ public abstract partial class SelfSupervisedLearningMethodBase<T> : ModelBase<T,
     /// <returns>Distance matrix [N, N].</returns>
     protected virtual Tensor<T> ComputePairwiseDistances(Tensor<T> embeddings)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var n = embeddings.Shape[0];
-        var d = embeddings.Shape[1];
-        var result = new T[n * n];
 
         // ||a - b||^2 = ||a||^2 + ||b||^2 - 2 * a.b
-        // First compute norms using engine
-        var norms = new T[n];
-        for (int i = 0; i < n; i++)
-        {
-            var row = new T[d];
-            for (int j = 0; j < d; j++)
-            {
-                row[j] = embeddings[i, j];
-            }
-            var vec = new Vector<T>(row);
-            norms[i] = Engine.DotProduct(vec, vec);
-        }
+        // First compute squared norms
+        var norms = Engine.ReduceSum(Engine.TensorSquare(embeddings), new[] { 1 }, keepDims: false);
 
-        // Compute similarity matrix using engine
+        // Compute similarity matrix
         var similarity = ComputeSimilarityMatrix(embeddings, embeddings, normalize: false);
 
         // Compute distances: ||a||^2 + ||b||^2 - 2 * a.b
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                var dist = NumOps.Subtract(
-                    NumOps.Add(norms[i], norms[j]),
-                    NumOps.Multiply(NumOps.FromDouble(2.0), similarity[i, j]));
-                // Clamp negative values due to floating point errors
-                result[i * n + j] = NumOps.GreaterThan(dist, NumOps.Zero) ? dist : NumOps.Zero;
-            }
-        }
+        var dist = Engine.TensorSubtract(
+            Engine.TensorAdd(norms.Reshape(n, 1), norms.Reshape(1, n)),
+            Engine.TensorMultiplyScalar(similarity, NumOps.FromDouble(2.0)));
 
-        return new Tensor<T>(result, [n, n]);
+        // Clamp negative values due to floating point errors (a NaN distance also becomes zero)
+        return Engine.TensorWhere(
+            Engine.TensorGreaterThan(dist, NumOps.Zero), dist, new Tensor<T>(new[] { n, n }));
     }
 
     // === ModelBase abstract implementations ===

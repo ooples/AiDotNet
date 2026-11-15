@@ -20,6 +20,8 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 using System;
 using System.Threading.Tasks;
 
+using AiDotNet.Tests.Helpers;
+
 namespace AiDotNet.Tests.IntegrationTests.ComputerVision;
 
 /// <summary>
@@ -399,7 +401,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void SAN_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new SAN<float>(Arch(), options: new SANOptions { NumClasses = 5 });
+        var model = new SAN<float>(Arch(), new DeterministicTextEncoder<float>(), options: new SANOptions { NumClasses = 5 });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -410,7 +412,7 @@ public class SegmentationShapeRobustnessTests : IDisposable
     [InlineData(new[] { 1, 3, 32, 32 })]
     public void LISA_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new LISA<float>(Arch(), options: new LISAOptions { NumClasses = 5 });
+        var model = new LISA<float>(Arch(), new DeterministicTextEncoder<float>(), options: new LISAOptions { NumClasses = 5 });
         var output = model.Predict(Rand(shape));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -643,26 +645,27 @@ public class SegmentationShapeRobustnessTests : IDisposable
 
     #region Point Cloud Models — Shape Robustness
 
+    // Point clouds are [points, width] or [batch, points, width]; the logits keep every leading axis.
     [Theory]
-    [InlineData(new[] { 3, 32, 32 })]
-    [InlineData(new[] { 1, 3, 32, 32 })]
+    [InlineData(new[] { 24, 9 })]
+    [InlineData(new[] { 1, 24, 9 })]
+    [InlineData(new[] { 2, 24, 9 })]
     public void PointTransformerV3_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new PointTransformerV3<float>(Arch(), options: new PointTransformerV3Options { NumClasses = 5, ModelSize = PointTransformerV3ModelSize.Base });
+        var model = new PointTransformerV3<float>(Arch(), options: AiDotNet.Tests.ComputerVision.PointCloud.PointCloudTestOptions.SmallPtv3(5));
         var output = model.Predict(Rand(shape));
-        Assert.NotNull(output);
-        Assert.True(output.Length > 0);
+        Assert.Equal(shape.Take(shape.Length - 1).Concat(new[] { 5 }).ToArray(), output.Shape.ToArray());
     }
 
     [Theory]
-    [InlineData(new[] { 3, 32, 32 })]
-    [InlineData(new[] { 1, 3, 32, 32 })]
+    [InlineData(new[] { 24, 9 })]
+    [InlineData(new[] { 1, 24, 9 })]
+    [InlineData(new[] { 2, 24, 9 })]
     public void Sonata_Predict_DifferentRanks_ReturnsOutput(int[] shape)
     {
-        var model = new Sonata<float>(Arch(), options: new SonataOptions { NumClasses = 5, ModelSize = SonataModelSize.Base });
+        var model = new Sonata<float>(Arch(), options: AiDotNet.Tests.ComputerVision.PointCloud.PointCloudTestOptions.SmallSonata(5));
         var output = model.Predict(Rand(shape));
-        Assert.NotNull(output);
-        Assert.True(output.Length > 0);
+        Assert.Equal(shape.Take(shape.Length - 1).Concat(new[] { 5 }).ToArray(), output.Shape.ToArray());
     }
 
     [Theory]

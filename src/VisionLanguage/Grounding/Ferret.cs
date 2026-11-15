@@ -64,7 +64,7 @@ namespace AiDotNet.VisionLanguage.Grounding;
                 Source = "You et al. 2023, Sec. 4: Ferret is trained on GRIT for three epochs at a "
                         + "learning rate of 2e-5 and a batch size of 128. The paper names its optimizer "
                         + "only by citation, Loshchilov and Hutter 2017, which is AdamW.")]
-public partial class Ferret<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
+public partial class Ferret<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>, IGroundingTrainable<T>
 {
     private readonly FerretOptions _options;
 
@@ -73,6 +73,8 @@ public partial class Ferret<T> : VisionLanguageModelBase<T>, IVisualGroundingMod
     private bool _useNativeMode;
     private bool _disposed;
     private int _encoderLayerEnd;
+    private readonly List<ILayer<T>> _groundingHeadLayers = new();
+    private CoordinateTokenDecoder<T>? _groundingHead;
 
     public Ferret(
         NeuralNetworkArchitecture<T> architecture,
@@ -155,39 +157,55 @@ public partial class Ferret<T> : VisionLanguageModelBase<T>, IVisualGroundingMod
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(PreprocessImage(image));
 
-        var p = PreprocessImage(image);
-        double confThreshold = _options.ConfidenceThreshold;
-        double nmsThreshold = _options.NmsThreshold;
-
-        // Step 1: Visual encoder (CLIP ViT)
-        var visualFeatures = p;
+        // Backbone: the image tokens the grounding head reads.
+        var visualFeatures = PreprocessImage(image);
         for (int i = 0; i < _encoderLayerEnd; i++)
             visualFeatures = Layers[i].Forward(visualFeatures);
 
-        // Step 2: Text-conditioned feature fusion via ConcatenateTensors
-        var textTokens = TokenizeText(textQuery);
-        var fusedInput = visualFeatures.ConcatenateTensors(textTokens);
+        // Ferret (You et al. 2023): the language model writes each box as discrete coordinates in [0, 999].
+        var head = _groundingHead ?? throw new InvalidOperationException("The grounding head is not initialized.");
+        var (boxes, scores) = head.Ground(visualFeatures, TokenIds(textQuery), RunLanguageModel, _options.MaxDetections);
+        return GroundingDetections<T>.Ranked(Engine, boxes, scores, _options.ConfidenceThreshold, _options.MaxDetections,
+            _options.NmsThreshold);
+    }
 
-        // Run through decoder layers for text-conditioned spatial features
-        var decoderOut = fusedInput;
-        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
-            decoderOut = Layers[i].Forward(decoderOut);
+    /// <summary>
+    /// One training step of the grounding head and the language model with Ferret (You et al. 2023)'s objective: the answer writing
+    /// <paramref name="boxes"/> (in their order) as coordinate text, read teacher-forced after the image tokens and the
+    /// instruction <paramref name="caption"/>, with next-token cross-entropy on every answer token.
+    /// </summary>
+    /// <param name="image">One RGB image <c>[3, H, W]</c> with values in 0..1.</param>
+    /// <param name="caption">The instruction, such as "Where is the cat?".</param>
+    /// <param name="boxes">The answer's boxes; their phrases are not read.</param>
+    public void TrainGrounding(Tensor<T> image, string caption, IReadOnlyList<GroundingBox> boxes)
+    {
+        ThrowIfDisposed();
+        if (!_useNativeMode)
+            throw new NotSupportedException("An ONNX-backed model has no trainable grounding head.");
+        var target = CoordinateTokenDecoder<T>.BoxesOf(boxes);
+        var ids = TokenIds(caption);
+        TrainWithCustomObjective(PreprocessImage(image), target, (x, answer) => GroundingObjective(x, ids, answer), _optimizer);
+    }
 
-        int outDim = decoderOut.Length;
-        int maxDet = _options.MaxDetections;
-        if (maxDet <= 0 || outDim == 0)
-            return new Tensor<T>([GroundingDetections<T>.FieldsPerDetection]);
+    /// <summary>The loss of <see cref="TrainGrounding"/> on the same supervision, without training.</summary>
+    public T EvaluateGroundingLoss(Tensor<T> image, string caption, IReadOnlyList<GroundingBox> boxes)
+    {
+        ThrowIfDisposed();
+        if (!_useNativeMode)
+            throw new NotSupportedException("An ONNX-backed model has no trainable grounding head.");
+        var target = CoordinateTokenDecoder<T>.BoxesOf(boxes);
+        var ids = TokenIds(caption);
+        using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
+        return GroundingObjective(PreprocessImage(image), ids, target)[0];
+    }
 
-        // Step 3: Spatial attention from text-conditioned features, and Step 4: region proposals grown from its peaks
-        GroundingDetections<T>.AttentionRegions(Engine, decoderOut, featureCap: 4, logitScale: 0.1, seedFactor: 1.5,
-            growFactor: 0.7, confidenceOffset: 1.0, out var boxes, out var confidences);
-        if (confidences.Length == 0)
-            return new Tensor<T>([GroundingDetections<T>.FieldsPerDetection]);
-
-        var eligible = GroundingDetections<T>.AtLeast(Engine, confidences, NumOps.FromDouble(confThreshold));
-
-        // Step 5: NMS, highest confidence first
-        return GroundingDetections<T>.Select(Engine, boxes, confidences, eligible, maxDet, nmsThreshold);
+    private Tensor<T> GroundingObjective(Tensor<T> preprocessed, IReadOnlyList<int> tokenIds, Tensor<T> boxes)
+    {
+        var visualFeatures = preprocessed;
+        for (int i = 0; i < _encoderLayerEnd; i++)
+            visualFeatures = Layers[i].Forward(visualFeatures);
+        var head = _groundingHead ?? throw new InvalidOperationException("The grounding head is not initialized.");
+        return head.AnswerLoss(visualFeatures, tokenIds, RunLanguageModel, boxes);
     }
 
     /// <inheritdoc />
@@ -222,6 +240,12 @@ public partial class Ferret<T> : VisionLanguageModelBase<T>, IVisualGroundingMod
             );
             ComputeEncoderDecoderBoundary();
         }
+        if (_groundingHead is null)
+        {
+            _groundingHead = new CoordinateTokenDecoder<T>(Engine, _groundingHeadLayers, new CoordinateTokenDecoderConfiguration(
+                _options.DecoderDim, _options.VocabSize, _options.MaxSequenceLength, Bins: 1000, Divisor: 1000, CoordinateSpelling.Integer));
+            RegisterAuxiliaryEncoderStream(_groundingHeadLayers);
+        }
     }
 
     private void ComputeEncoderDecoderBoundary()
@@ -230,14 +254,22 @@ public partial class Ferret<T> : VisionLanguageModelBase<T>, IVisualGroundingMod
         _encoderLayerEnd = 1 + _options.NumVisionLayers * lpb + 3;
     }
 
-    private Tensor<T> TokenizeText(string text)
+    private List<int> TokenIds(string text)
     {
         if (_tokenizer is null)
             throw new InvalidOperationException("Tokenizer not initialized.");
-        var encoding = _tokenizer.Encode(text);
-        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
-        var tokens = TokenIdsToTensor(encoding.TokenIds, seqLen);
-        return tokens;
+        if (text is null) throw new ArgumentNullException(nameof(text));
+        var ids = _tokenizer.Encode(text).TokenIds;
+        return ids.Count > 0 ? ids : throw new ArgumentException("The text query has no tokens.", nameof(text));
+    }
+
+    /// <summary>The language model (the decoder layers after the image projector) on <c>[n, DecoderDim]</c> rows.</summary>
+    private Tensor<T> RunLanguageModel(Tensor<T> rows)
+    {
+        var hidden = Engine.Reshape(rows, new[] { 1, rows.Shape[0], rows.Shape[1] });
+        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
+            hidden = Layers[i].Forward(hidden);
+        return hidden;
     }
 
     /// <inheritdoc />

@@ -110,13 +110,12 @@ public partial class ALiBiPositionalBiasLayer<T> : LayerBase<T>, IShapeContract
         _maxSequenceLength = maxSequenceLength;
 
         // Compute per-head slopes: slope_h = 2^(-8/numHeads * (h+1))
-        var slopeData = new T[numHeads];
-        for (int h = 0; h < numHeads; h++)
-        {
-            double exponent = -8.0 / numHeads * (h + 1);
-            slopeData[h] = NumOps.FromDouble(Math.Pow(2.0, exponent));
-        }
-        _slopes = new Tensor<T>(slopeData, new[] { numHeads });
+        // Evaluated as a power of two in double and rounded once to T, so the slopes are the exact
+        // powers of two of the paper (an exp of an arange in T drifts, and in Half rounds the exponent).
+        var exponents = Engine.TensorMultiplyScalar(Engine.TensorArange<double>(1, numHeads + 1), -8.0 / numHeads);
+        var twos = new Tensor<double>(new[] { numHeads });
+        twos.Fill(2.0);
+        _slopes = Engine.TensorPower(twos, exponents).Cast<T>();
         RegisterBuffer(_slopes, nameof(_slopes));
     }
 
@@ -162,38 +161,46 @@ public partial class ALiBiPositionalBiasLayer<T> : LayerBase<T>, IShapeContract
             }
         }
 
-        var bias = new Tensor<T>([_numHeads, queryLen, keyLen]);
         // True −Infinity for masked positions — see ComputeBias remarks
         // for the full rationale (softmax exactness vs MinValue, the
         // ProducesNonFiniteOutput annotation contract).
         T negInf = NumOps.FromDouble(double.NegativeInfinity);
 
-        for (int h = 0; h < _numHeads; h++)
+        Tensor<T> bias;
+        if (queryLen == 0 || keyLen == 0)
         {
-            T slope = _slopes[h];
+            bias = new Tensor<T>([_numHeads, queryLen, keyLen]);
+        }
+        else
+        {
+            // For KV-cached causal decoding (queryLen=1, keyLen=full_seq):
+            //   effectiveQueryPos = 0 + (full_seq - 1) = last position
+            // For full attention without causal masking, positions are just i (no offset).
+            int offset = useCausalMask ? keyLen - queryLen : 0;
+            var effectiveQueryPos = Engine.Reshape(
+                Engine.TensorAddScalar(Engine.TensorArange<int>(0, queryLen), offset), new[] { queryLen, 1 });
+            var keyPos = Engine.Reshape(Engine.TensorArange<int>(0, keyLen), new[] { 1, keyLen });
+            var offsetFromQuery = Engine.TensorSubtract(
+                Engine.TensorBroadcastTo(effectiveQueryPos, new[] { queryLen, keyLen }),
+                Engine.TensorBroadcastTo(keyPos, new[] { queryLen, keyLen }));
 
-            for (int i = 0; i < queryLen; i++)
+            // ALiBi bias: -slope * |effective_query_pos - key_pos|
+            var distance = Engine.Reshape(Engine.TensorAbs(offsetFromQuery).Cast<T>(), new[] { 1, queryLen, keyLen });
+            var slopes = Engine.Reshape(_slopes, new[] { _numHeads, 1, 1 });
+            var biasShape = new[] { _numHeads, queryLen, keyLen };
+            bias = Engine.TensorNegate(Engine.TensorMultiply(
+                Engine.TensorBroadcastTo(slopes, biasShape),
+                Engine.TensorBroadcastTo(distance, biasShape)));
+
+            if (useCausalMask)
             {
-                // For KV-cached causal decoding (queryLen=1, keyLen=full_seq):
-                //   effectiveQueryPos = 0 + (full_seq - 1) = last position
-                // For full attention without causal masking, positions are just i (no offset).
-                int effectiveQueryPos = useCausalMask ? i + (keyLen - queryLen) : i;
-
-                for (int j = 0; j < keyLen; j++)
-                {
-                    // Causal masking: mask out key positions beyond the effective query position
-                    if (useCausalMask && j > effectiveQueryPos)
-                    {
-                        bias[new[] { h, i, j }] = negInf;
-                    }
-                    else
-                    {
-                        // ALiBi bias: -slope * |effective_query_pos - key_pos|
-                        int distance = Math.Abs(effectiveQueryPos - j);
-                        bias[new[] { h, i, j }] = NumOps.Negate(
-                            NumOps.Multiply(slope, NumOps.FromDouble(distance)));
-                    }
-                }
+                // Causal masking: mask out key positions beyond the effective query position (j > eff).
+                var future = Engine.TensorBroadcastTo(
+                    Engine.Reshape(Engine.TensorLessThan(offsetFromQuery, 0).Cast<T>(), new[] { 1, queryLen, keyLen }),
+                    new[] { _numHeads, queryLen, keyLen });
+                var masked = new Tensor<T>([_numHeads, queryLen, keyLen]);
+                masked.Fill(negInf);
+                bias = Engine.TensorWhere(future, masked, bias);
             }
         }
 
@@ -253,45 +260,10 @@ public partial class ALiBiPositionalBiasLayer<T> : LayerBase<T>, IShapeContract
 
         var bias = ComputeBias(queryLen, keyLen);
 
-        // Add bias to scores
-        var output = TensorAllocator.Rent<T>(input._shape);
-
-        if (rank == 4)
-        {
-            int batchSize = input.Shape[0];
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int h = 0; h < numHeads; h++)
-                {
-                    for (int i = 0; i < queryLen; i++)
-                    {
-                        for (int j = 0; j < keyLen; j++)
-                        {
-                            output[new[] { b, h, i, j }] = NumOps.Add(
-                                input[new[] { b, h, i, j }],
-                                bias[new[] { h, i, j }]);
-                        }
-                    }
-                }
-            }
-        }
-        else
-        {
-            for (int h = 0; h < numHeads; h++)
-            {
-                for (int i = 0; i < queryLen; i++)
-                {
-                    for (int j = 0; j < keyLen; j++)
-                    {
-                        output[new[] { h, i, j }] = NumOps.Add(
-                            input[new[] { h, i, j }],
-                            bias[new[] { h, i, j }]);
-                    }
-                }
-            }
-        }
-
-        return output;
+        // Add bias to scores (broadcast over the batch for 4D input). The add stays on the tape so the
+        // attention scores' upstream (the Q/K projections) receives the gradient; the bias is constant.
+        var broadcastBias = rank == 4 ? Engine.Reshape(bias, new[] { 1, numHeads, queryLen, keyLen }) : bias;
+        return Engine.TensorAdd(input, broadcastBias);
     }
 
 

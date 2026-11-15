@@ -25,14 +25,14 @@ public class ClusterSeparabilitySelector<T> : TransformerBase<T, Matrix<T>, Matr
     private readonly int _nFeaturesToSelect;
     private readonly int _nClusters;
 
-    private double[]? _separabilityScores;
+    private Vector<T>? _separabilityScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NClusters => _nClusters;
-    public double[]? SeparabilityScores => _separabilityScores;
+    public Vector<T>? SeparabilityScores => _separabilityScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -58,134 +58,79 @@ public class ClusterSeparabilitySelector<T> : TransformerBase<T, Matrix<T>, Matr
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+        var X = Tensor<T>.FromMatrix(data);
 
-        // Simple k-means clustering to find natural clusters
-        var clusterLabels = SimpleKMeans(X, n, p);
-
-        _separabilityScores = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            _separabilityScores[j] = ComputeSeparability(X, clusterLabels, j, n);
-        }
-
+        // Simple k-means clustering to find natural clusters, then the separability of every feature. Half and
+        // BFloat16 run in float and the scores are cast back once: the between- and within-cluster sums pass
+        // Half's 65504 (4000 rows at +-20 give 1.6e6) though their ratio does not
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _separabilityScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        if (PreprocessingTensorOps.IsNarrowFloat<T>())
+        {
+            var wide = X.Cast<float>();
+            var wideScores = ComputeSeparability(wide, SimpleKMeans(wide, n, _nClusters), _nClusters);
+            _separabilityScores = wideScores.Cast<T>().ToVector();
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(wideScores, numToSelect);
+        }
+        else
+        {
+            var scores = ComputeSeparability(X, SimpleKMeans(X, n, _nClusters), _nClusters);
+            _separabilityScores = scores.ToVector();
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
+        }
 
         IsFitted = true;
     }
 
-    private int[] SimpleKMeans(double[,] X, int n, int p)
+    private static int[] SimpleKMeans<TC>(Tensor<TC> X, int n, int nClusters)
     {
-        var labels = new int[n];
-        var centroids = new double[_nClusters, p];
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
 
         // Initialize centroids by spreading evenly
-        for (int k = 0; k < _nClusters; k++)
-        {
-            int idx = (k * n) / _nClusters;
-            for (int j = 0; j < p; j++)
-                centroids[k, j] = X[idx, j];
-        }
+        var initial = new int[nClusters];
+        for (int k = 0; k < nClusters; k++)
+            initial[k] = (k * n) / nClusters;
+        var centroids = engine.TensorIndexSelect(X, new Tensor<int>(initial, new[] { nClusters }), 0);
 
         // Run a few iterations of k-means
+        var labels = new int[n];
         for (int iter = 0; iter < 10; iter++)
         {
-            // Assign points to nearest centroid
-            for (int i = 0; i < n; i++)
-            {
-                double minDist = double.MaxValue;
-                for (int k = 0; k < _nClusters; k++)
-                {
-                    double dist = 0;
-                    for (int j = 0; j < p; j++)
-                    {
-                        double diff = X[i, j] - centroids[k, j];
-                        dist += diff * diff;
-                    }
-                    if (dist < minDist)
-                    {
-                        minDist = dist;
-                        labels[i] = k;
-                    }
-                }
-            }
+            // Assign points to nearest centroid (first centroid among ties)
+            labels = FeatureScoringTensorOps.FirstArgMinPerRow(FeatureScoringTensorOps.SquaredDistances(X, centroids));
 
-            // Update centroids
-            var counts = new int[_nClusters];
-            for (int k = 0; k < _nClusters; k++)
-                for (int j = 0; j < p; j++)
-                    centroids[k, j] = 0;
-
-            for (int i = 0; i < n; i++)
-            {
-                int k = labels[i];
-                counts[k]++;
-                for (int j = 0; j < p; j++)
-                    centroids[k, j] += X[i, j];
-            }
-
-            for (int k = 0; k < _nClusters; k++)
-            {
-                if (counts[k] > 0)
-                {
-                    for (int j = 0; j < p; j++)
-                        centroids[k, j] /= counts[k];
-                }
-            }
+            // Update centroids; an empty cluster's centroid becomes 0
+            var membership = PreprocessingTensorOps.ClassOneHot<TC>(labels, nClusters);
+            centroids = FeatureScoringTensorOps.GroupMeans(membership, X, out _);
         }
 
         return labels;
     }
 
-    private double ComputeSeparability(double[,] X, int[] labels, int featureIdx, int n)
+    private static Tensor<TC> ComputeSeparability<TC>(Tensor<TC> X, int[] labels, int nClusters)
     {
-        // Compute cluster means
-        var clusterMeans = new double[_nClusters];
-        var clusterCounts = new int[_nClusters];
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
 
-        for (int i = 0; i < n; i++)
-        {
-            clusterMeans[labels[i]] += X[i, featureIdx];
-            clusterCounts[labels[i]]++;
-        }
+        int p = X.Shape[1];
 
-        for (int k = 0; k < _nClusters; k++)
-        {
-            if (clusterCounts[k] > 0)
-                clusterMeans[k] /= clusterCounts[k];
-        }
+        // Cluster means and sizes
+        var membership = PreprocessingTensorOps.ClassOneHot<TC>(labels, nClusters);
+        var clusterMeans = FeatureScoringTensorOps.GroupMeans(membership, X, out var clusterCounts);
 
         // Global mean
-        double globalMean = 0;
-        for (int i = 0; i < n; i++)
-            globalMean += X[i, featureIdx];
-        globalMean /= n;
+        var globalMean = engine.ReduceMean(X, new[] { 0 }, true);
 
         // Between-cluster variance
-        double ssb = 0;
-        for (int k = 0; k < _nClusters; k++)
-        {
-            ssb += clusterCounts[k] * (clusterMeans[k] - globalMean) * (clusterMeans[k] - globalMean);
-        }
+        var meanDiff = engine.TensorSubtract(clusterMeans, engine.TensorBroadcastTo(globalMean, new[] { nClusters, p }));
+        var weighted = engine.TensorMultiply(engine.TensorSquare(meanDiff),
+            engine.TensorBroadcastTo(engine.Reshape(clusterCounts, new[] { nClusters, 1 }), new[] { nClusters, p }));
+        var ssb = engine.ReduceSum(weighted, new[] { 0 }, false);
 
         // Within-cluster variance
-        double ssw = 0;
-        for (int i = 0; i < n; i++)
-        {
-            double diff = X[i, featureIdx] - clusterMeans[labels[i]];
-            ssw += diff * diff;
-        }
+        var within = engine.TensorSubtract(X, engine.TensorMatMul(membership, clusterMeans));
+        var ssw = engine.ReduceSum(engine.TensorSquare(within), new[] { 0 }, false);
 
-        return ssw > 1e-10 ? ssb / ssw : 0;
+        return engine.TensorWhere(engine.TensorGreaterThan(ssw, PreprocessingTensorOps.Tolerance<TC>(1e-10)),
+            engine.TensorDivide(ssb, ssw), new Tensor<TC>(new[] { p }));
     }
 
     public new Matrix<T> FitTransform(Matrix<T> data)
@@ -200,15 +145,7 @@ public class ClusterSeparabilitySelector<T> : TransformerBase<T, Matrix<T>, Matr
         if (_selectedIndices is null)
             throw new InvalidOperationException("ClusterSeparabilitySelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -149,11 +149,13 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
             throw new ArgumentException(
                 $"DeepAR covariate contract violated: with CovariateSize={cov}, x must be [{n}, >={cov}] (one covariate row per series index), " +
                 $"but got [{x?.Rows ?? 0}, {x?.Columns ?? 0}].");
-        _trainingSeries = new Vector<T>(n);
-        for (int i = 0; i < n; i++) _trainingSeries[i] = y[i];
+        _trainingSeries = y.Clone();
         ModelParameters = new Vector<T>(1);
         ModelParameters[0] = NumOps.FromDouble(n);
-        var values = y.Select(v => NumOps.ToDouble(v)).ToArray();
+        // Row s of [windows, T + 1] is window s: z₀ (the value before it, or 0 at the series start), then z₁ … z_T.
+        var series = Engine.TensorUnfold(
+            Engine.TensorConcatenate(new[] { new Tensor<T>(new[] { 1 }), Tensor<T>.FromVector(y) }, 0), 0, steps + 1, 1);
+        Matrix<T> covariateSource = x ?? new Matrix<T>(0, 0);
 
         _ageMean = (n - 1) / 2.0;
         _ageStd = Math.Max(Math.Sqrt((n * (double)n - 1) / 12.0), 1e-10);
@@ -194,22 +196,23 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
                 int batch = Math.Min(_options.BatchSize, windows - start);
                 // One step's data [B, T + 1, 1 + C]: channel 0 is the window z₀ … z_T, the others the covariates of
                 // z₁ … z_T (row 0 unused). Packed so the shared step rebinds all of it on every compiled replay.
-                var covariates = Covariates > 0 ? new double[1, steps, Covariates] : null;
-                var data = new Tensor<T>(new[] { batch, steps + 1, 1 + Covariates });
-                for (int b = 0; b < batch; b++)
+                var rows = new Tensor<int>(new[] { batch }, new Vector<int>(new ArraySegment<int>(order, start, batch)));
+                var data = Engine.Reshape(Engine.TensorIndexSelect(series, rows, 0), new[] { batch, steps + 1, 1 });
+                if (Covariates > 0)
                 {
-                    int s = order[start + b];
-                    data[b, 0, 0] = NumOps.FromDouble(s > 0 ? values[s - 1] : 0.0);
-                    for (int t = 0; t < steps; t++)
+                    var covariates = new double[1, steps, Covariates];
+                    var features = new Tensor<T>(new[] { batch, steps + 1, Covariates });
+                    for (int b = 0; b < batch; b++)
                     {
-                        data[b, t + 1, 0] = NumOps.FromDouble(values[s + t]);
-                        if (covariates is not null)
+                        int s = order[start + b];
+                        for (int t = 0; t < steps; t++)
                         {
                             int index = s + t;
-                            FillCovariates(covariates, 0, t, index, c => NumOps.ToDouble(x![index, c]));
-                            for (int k = 0; k < Covariates; k++) data[b, t + 1, 1 + k] = NumOps.FromDouble(covariates[0, t, k]);
+                            FillCovariates(covariates, 0, t, index, c => NumOps.ToDouble(covariateSource[index, c]));
+                            for (int k = 0; k < Covariates; k++) features[b, t + 1, k] = NumOps.FromDouble(covariates[0, t, k]);
                         }
                     }
+                    data = Engine.TensorConcatenate(new[] { data, features }, 2);
                 }
                 // The window's likelihood, the backward and the Adam update: one fused compiled plan when it applies
                 // (CPU or GPU), the eager tape otherwise.

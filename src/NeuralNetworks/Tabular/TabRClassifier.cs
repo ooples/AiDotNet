@@ -1,3 +1,4 @@
+using System;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
@@ -78,7 +79,7 @@ public class TabRClassifier<T> : TabRBase<T>
         int numFeatures,
         int numClasses,
         TabROptions<T>? options = null)
-        : base(numFeatures, options)
+        : base(numFeatures, options, Math.Max(numClasses, 0), categoricalLabels: true)
     {
         if (numClasses < 2)
         {
@@ -87,11 +88,28 @@ public class TabRClassifier<T> : TabRBase<T>
 
         _numClasses = numClasses;
 
-        // Classification head
+        // The final Linear(d_main, n_classes) of the reference head Sequential(Norm, Activation, Linear)
         _classificationHead = new FullyConnectedLayer<T>(
             EmbeddingDimension,
             numClasses,
             (IActivationFunction<T>?)null);
+    }
+
+    /// <summary>
+    /// Builds the retrieval index from training features and their class labels, so every retrieved
+    /// neighbour contributes its label embedding (Gorishniy et al. 2024, eq. 5).
+    /// </summary>
+    /// <param name="features">Training features [num_samples, num_features].</param>
+    /// <param name="labels">Class label of every training sample.</param>
+    public void BuildIndex(Tensor<T> features, int[] labels)
+    {
+        if (features is null) throw new ArgumentNullException(nameof(features));
+        if (labels is null) throw new ArgumentNullException(nameof(labels));
+        int samples = features.Shape[0];
+        if (labels.Length != samples)
+            throw new ArgumentException("There must be one label per indexed sample.", nameof(labels));
+
+        BuildIndexWithLabels(features, TabularTraining.OneHotTargets<T>(Vector<int>.Wrap(labels), samples, _numClasses));
     }
 
     /// <summary>
@@ -130,27 +148,7 @@ public class TabRClassifier<T> : TabRBase<T>
     {
         var probabilities = PredictProbabilities(features);
         int batchSize = probabilities.Shape[0];
-        var predictions = new int[batchSize];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            int maxIdx = 0;
-            var maxProb = probabilities[b * _numClasses + 0];
-
-            for (int c = 1; c < _numClasses; c++)
-            {
-                var prob = probabilities[b * _numClasses + c];
-                if (NumOps.Compare(prob, maxProb) > 0)
-                {
-                    maxProb = prob;
-                    maxIdx = c;
-                }
-            }
-
-            predictions[b] = maxIdx;
-        }
-
-        return predictions;
+        return TabularMetrics.ArgMaxRows(probabilities, batchSize, _numClasses).ToArray();
     }
 
     /// <summary>
@@ -159,19 +157,8 @@ public class TabRClassifier<T> : TabRBase<T>
     public T ComputeCrossEntropyLoss(Tensor<T> probabilities, int[] targets)
     {
         int batchSize = probabilities.Shape[0];
-        var totalLoss = NumOps.Zero;
         var epsilon = NumOps.FromDouble(1e-15);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            int targetClass = targets[b];
-            var prob = probabilities[b * _numClasses + targetClass];
-            var safeProb = NumOps.Add(prob, epsilon);
-            var loss = NumOps.Negate(NumOps.Log(safeProb));
-            totalLoss = NumOps.Add(totalLoss, loss);
-        }
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
+        return TabularMetrics.MeanNegativeLogLikelihood(probabilities, Vector<int>.Wrap(targets), batchSize, _numClasses, epsilon);
     }
 
     /// <summary>
@@ -180,19 +167,19 @@ public class TabRClassifier<T> : TabRBase<T>
     /// <param name="features">Input features [batch_size, num_features].</param>
     /// <param name="targets">Target class indices [batch_size].</param>
     /// <param name="learningRate">The learning rate.</param>
-    /// <param name="sampleIndices">Indices of samples for leave-one-out retrieval.</param>
+    /// <param name="sampleIndices">Each row's index in <c>BuildIndex</c>, excluded from its own candidates (leave-one-out).
+    /// When omitted, a row is matched to the indexed sample with exactly its features; a row matching several (duplicates)
+    /// throws, since its own label would otherwise leak into its prediction.</param>
     /// <returns>The training loss.</returns>
     public T TrainStep(Tensor<T> features, int[] targets, T learningRate, Vector<int>? sampleIndices = null)
     {
-        // Forward with leave-one-out (exclude each sample from its own retrieval)
-        var logits = Forward(features, sampleIndices);
-        var probabilities = ApplySoftmax(logits);
-
-        var loss = ComputeCrossEntropyLoss(probabilities, targets);
-        UpdateParameters(learningRate);
-        ResetState();
-
-        return loss;
+        int batchSize = features.Shape[0];
+        var labels = TabularTraining.OneHotTargets<T>(Vector<int>.Wrap(targets), batchSize, _numClasses);
+        var epsilon = NumOps.FromDouble(1e-15);
+        var exclusions = ResolveTrainingExclusions(features, sampleIndices);
+        return TrainWithTape(
+            () => TabularTraining.CrossEntropyObjective(ApplySoftmax(Forward(features, exclusions)), labels, epsilon),
+            learningRate);
     }
 
     /// <summary>
@@ -241,17 +228,29 @@ public class TabRClassifier<T> : TabRBase<T>
         }
 
         int batchSize = features.Shape[0];
-        int k = Options.NumNeighbors;
 
+        // The neighbours actually retrieved: fewer than NumNeighbors when the index (less the excluded sample) is
+        // smaller
+        int k = attentionWeights.Shape[1];
+
+        // Sort each sample's neighbors by attention weight (descending). The order is computed as a stable
+        // sort, which is what List.Sort's insertion-sort path produced for the usual k <= 16 neighbors.
+        var weights = TabularMetrics.Flat(attentionWeights, batchSize * k).Reshape(batchSize, k);
+        var order = TieBreakArgMax.StableDescendingOrder(weights);
+        var sortedWeights = Engine.TensorTakeAlongDim(weights, order, 1).ToArray();
+        var neighbors = Tensor<int>.FromMatrix(neighborIndices);
+        neighbors = Engine.TensorNarrow(Engine.TensorNarrow(neighbors, 0, 0, batchSize), 1, 0, k);
+        var sortedNeighbors = Engine.TensorTakeAlongDim(neighbors, order, 1).ToArray();
+
+        // Packing into the (index, weight) tuples of the public return type is pure data movement.
         for (int b = 0; b < batchSize; b++)
         {
-            var sampleExplanation = new List<(int, T)>();
+            var sampleExplanation = new List<(int, T)>(k);
             for (int j = 0; j < k; j++)
             {
-                sampleExplanation.Add((neighborIndices[b, j], attentionWeights[b * k + j]));
+                sampleExplanation.Add((sortedNeighbors[b * k + j], sortedWeights[b * k + j]));
             }
-            // Sort by attention weight (descending)
-            sampleExplanation.Sort((a, b) => NumOps.Compare(b.Item2, a.Item2));
+
             explanations.Add(sampleExplanation);
         }
 

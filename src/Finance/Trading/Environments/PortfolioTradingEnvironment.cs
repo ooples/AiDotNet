@@ -1,6 +1,5 @@
 using AiDotNet.Tensors.Engines;
 using System;
-using System.Linq;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Tensors;
 
@@ -76,57 +75,37 @@ public sealed class PortfolioTradingEnvironment<T> : TradingEnvironment<T>
         }
 
         var targetWeights = NormalizeWeights(action);
+        var engine = Engine;
 
-        T portfolioValue = NumOps.Zero;
-        portfolioValue = NumOps.Add(portfolioValue, Engine.DotProduct(_positions, prices));
-        portfolioValue = NumOps.Add(portfolioValue, _cash);
+        T portfolioValue = NumOps.Add(engine.DotProduct(_positions, prices), _cash);
 
-        var desiredPositions = new T[NumAssets];
-        for (int asset = 0; asset < NumAssets; asset++)
+        // desired_i = V * w_i / p_i; delta_i = desired_i - position_i.
+        var desiredPositions = engine.Divide(engine.Multiply(targetWeights, portfolioValue), prices);
+        var deltas = engine.Subtract(desiredPositions, _positions);
+
+        // Without short selling a trade may only take a position down to zero: delta_i >= -position_i.
+        if (!AllowShortSelling)
         {
-            T targetValue = NumOps.Multiply(portfolioValue, targetWeights[asset]);
-            desiredPositions[asset] = NumOps.Divide(targetValue, prices[asset]);
+            deltas = engine.Max(deltas, engine.Negate(_positions));
         }
 
-        var deltas = new T[NumAssets];
-        for (int asset = 0; asset < NumAssets; asset++)
-        {
-            deltas[asset] = NumOps.Subtract(desiredPositions[asset], _positions[asset]);
-        }
+        // Sells first: proceeds = |q * p| * (1 - c), credited before any buy is priced.
+        var buys = engine.ReLU(deltas);
+        var sells = engine.Subtract(deltas, buys);
+        T sellValue = engine.DotProduct(sells, prices);
+        T proceeds = NumOps.Multiply(NumOps.Negate(sellValue), NumOps.FromDouble(1.0 - TransactionCost));
+        _cash = NumOps.Add(_cash, proceeds);
+        _positions = engine.Add(_positions, sells);
 
-        // Clamp deltas for short selling constraints before executing any trades
-        for (int asset = 0; asset < NumAssets; asset++)
-        {
-            if (!AllowShortSelling)
-            {
-                T newPosition = NumOps.Add(_positions[asset], deltas[asset]);
-                if (NumOps.Compare(newPosition, NumOps.Zero) < 0)
-                {
-                    deltas[asset] = NumOps.Negate(_positions[asset]);
-                }
-            }
-        }
+        // Buys: scaled down together when their cost (q * p * (1 + c)) exceeds the cash after the sells.
+        buys = ScaleBuysToCash(buys, prices);
+        T buyCost = NumOps.Multiply(engine.DotProduct(buys, prices), NumOps.FromDouble(1.0 + TransactionCost));
+        T remaining = NumOps.Subtract(_cash, buyCost);
 
-        // Execute sells first to free up cash before buying
-        for (int asset = 0; asset < NumAssets; asset++)
-        {
-            if (NumOps.Compare(deltas[asset], NumOps.Zero) < 0)
-            {
-                ExecuteTrade(asset, deltas[asset], prices[asset]);
-            }
-        }
-
-        // Now scale buys against the updated cash (includes sell proceeds)
-        ScaleBuysToCash(deltas, prices);
-
-        // Execute buys with the freed-up cash
-        for (int asset = 0; asset < NumAssets; asset++)
-        {
-            if (NumOps.Compare(deltas[asset], NumOps.Zero) > 0)
-            {
-                ExecuteTrade(asset, deltas[asset], prices[asset]);
-            }
-        }
+        // A scaled buy set costs the whole cash up to rounding: execute every scaled buy and never let that
+        // rounding leave the cash negative (the old per-asset loop dropped a whole buy on a one-ulp shortfall).
+        _cash = NumOps.Compare(remaining, NumOps.Zero) < 0 ? NumOps.Zero : remaining;
+        _positions = engine.Add(_positions, buys);
     }
 
     /// <summary>
@@ -138,34 +117,20 @@ public sealed class PortfolioTradingEnvironment<T> : TradingEnvironment<T>
     /// negative weights are clamped to zero.
     /// </para>
     /// </remarks>
-    private T[] NormalizeWeights(Vector<T> action)
+    private Vector<T> NormalizeWeights(Vector<T> action)
     {
-        var weights = new T[NumAssets];
-        T sum = NumOps.Zero;
-
-        for (int i = 0; i < NumAssets; i++)
-        {
-            T value = action[i];
-            if (!AllowShortSelling && NumOps.Compare(value, NumOps.Zero) < 0)
-            {
-                value = NumOps.Zero;
-            }
-            weights[i] = value;
-            sum = NumOps.Add(sum, value);
-        }
+        var engine = Engine;
+        var weights = AllowShortSelling ? action : engine.ReLU(action);
+        T sum = engine.Sum(weights);
 
         if (NumOps.Compare(sum, NumOps.Zero) == 0)
         {
-            T uniform = NumOps.Divide(NumOps.One, NumOps.FromDouble(NumAssets));
-            return Enumerable.Repeat(uniform, NumAssets).ToArray();
+            var uniform = new Vector<T>(NumAssets);
+            uniform.Fill(NumOps.Divide(NumOps.One, NumOps.FromDouble(NumAssets)));
+            return uniform;
         }
 
-        for (int i = 0; i < NumAssets; i++)
-        {
-            weights[i] = NumOps.Divide(weights[i], sum);
-        }
-
-        return weights;
+        return engine.Divide(weights, sum);
     }
 
     /// <summary>
@@ -177,31 +142,15 @@ public sealed class PortfolioTradingEnvironment<T> : TradingEnvironment<T>
     /// we shrink the buy orders proportionally so the trades are affordable.
     /// </para>
     /// </remarks>
-    private void ScaleBuysToCash(T[] deltas, Vector<T> prices)
+    private Vector<T> ScaleBuysToCash(Vector<T> buys, Vector<T> prices)
     {
-        T totalBuyCost = NumOps.Zero;
-        for (int asset = 0; asset < NumAssets; asset++)
-        {
-            if (NumOps.Compare(deltas[asset], NumOps.Zero) > 0)
-            {
-                T cost = NumOps.Multiply(deltas[asset], prices[asset]);
-                cost = NumOps.Multiply(cost, NumOps.FromDouble(1.0 + TransactionCost));
-                totalBuyCost = NumOps.Add(totalBuyCost, cost);
-            }
-        }
+        T totalBuyCost = NumOps.Multiply(Engine.DotProduct(buys, prices), NumOps.FromDouble(1.0 + TransactionCost));
 
         if (NumOps.Compare(totalBuyCost, _cash) <= 0)
         {
-            return;
+            return buys;
         }
 
-        T scale = NumOps.Divide(_cash, totalBuyCost);
-        for (int asset = 0; asset < NumAssets; asset++)
-        {
-            if (NumOps.Compare(deltas[asset], NumOps.Zero) > 0)
-            {
-                deltas[asset] = NumOps.Multiply(deltas[asset], scale);
-            }
-        }
+        return Engine.Multiply(buys, NumOps.Divide(_cash, totalBuyCost));
     }
 }

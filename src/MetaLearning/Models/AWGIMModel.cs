@@ -41,7 +41,6 @@ namespace AiDotNet.MetaLearning.Models;
 [PipelineStage(PipelineStage.Training)]
 internal partial class AWGIMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly IFullModel<T, TInput, TOutput> _featureEncoder;
     private readonly AwgimNetwork<T> _network;
@@ -114,24 +113,16 @@ internal partial class AWGIMModel<T, TInput, TOutput> : IModel<TInput, TOutput, 
 
         if (typeof(TOutput) == typeof(Vector<T>))
         {
+            // The most probable column of each row (the first on a tie), read out as its class label.
             int n = probabilities.Shape[0];
-            var predicted = new Vector<T>(n);
-            for (int r = 0; r < n; r++)
-            {
-                int best = 0;
-                for (int c = 1; c < classes; c++)
-                {
-                    if (NumOps.GreaterThan(probabilities[r * classes + c], probabilities[r * classes + best])) best = c;
-                }
-
-                predicted[r] = NumOps.FromDouble(_classSlots[best]);
-            }
-
-            return (TOutput)(object)predicted;
+            if (n == 0) return (TOutput)(object)new Vector<T>(0);
+            var best = engine.TensorArgMax(probabilities, 1);
+            var slots = PrototypeEpisode<T>.IndexTensor(_classSlots).Cast<T>();
+            return (TOutput)(object)engine.TensorIndexSelect(slots, best, 0).ToVector();
         }
 
-        var columns = new Tensor<T>(new[] { classes, _options.NumClasses });
-        for (int c = 0; c < classes; c++) columns[c * _options.NumClasses + _classSlots[c]] = NumOps.One;
+        // columns[c, slot_c] = 1: each episode column moves to its class label's column.
+        var columns = engine.TensorOneHot<T>(PrototypeEpisode<T>.IndexTensor(_classSlots), _options.NumClasses);
         return ClassifierOutputs<T>.ToOutput<TOutput>(engine.TensorMatMul(probabilities, columns));
     }
 
@@ -147,10 +138,7 @@ internal partial class AWGIMModel<T, TInput, TOutput> : IModel<TInput, TOutput, 
     public Vector<T> GetParameters()
     {
         var encoder = InterfaceGuard.Parameterizable(_featureEncoder).GetParameters();
-        var combined = new Vector<T>(encoder.Length + _weights.Length);
-        for (int i = 0; i < encoder.Length; i++) combined[i] = encoder[i];
-        for (int i = 0; i < _weights.Length; i++) combined[encoder.Length + i] = _weights[i];
-        return combined;
+        return Vector<T>.Concatenate(encoder, _weights);
     }
 
     /// <inheritdoc/>

@@ -353,7 +353,7 @@ public partial class LocallyWeightedRegression<T> : NonLinearRegressionBase<T>
         // Make prediction: AddConstantColumn puts intercept at index 0
         // coefficients[0] is intercept, coefficients[1..p] are feature weights
         T intercept = coefficients[0]; // intercept (first column)
-        return NumOps.Add(intercept, engine.DotProduct(input, coefficients.GetSubVector(1, input.Length)));
+        return NumOps.Add(intercept, engine.DotProduct(input, RegressionEngineOps2.Slice(coefficients, 1, input.Length)));
     }
 
     /// <summary>

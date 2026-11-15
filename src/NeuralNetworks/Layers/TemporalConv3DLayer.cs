@@ -161,11 +161,13 @@ public sealed partial class TemporalConv3DLayer<T> : LayerBase<T>, IShapeContrac
     {
         var gradients = GetParameterGradients();
         if (gradients.Length != ParameterCount || _kernels.Length == 0) return;
-        int index = 0;
-        for (int i = 0; i < _kernels.Length; i++, index++)
-            _kernels[i] = NumOps.Subtract(_kernels[i], NumOps.Multiply(learningRate, gradients[index]));
-        for (int i = 0; i < _biases.Length; i++, index++)
-            _biases[i] = NumOps.Subtract(_biases[i], NumOps.Multiply(learningRate, gradients[index]));
+        // Gradients are packed [kernels..., biases...]; w -= lr * g, written back into the same tensors.
+        var kernelGradient = new Tensor<T>(_kernels._shape, gradients.GetSubVector(0, _kernels.Length));
+        var biasGradient = new Tensor<T>(_biases._shape, gradients.GetSubVector(_kernels.Length, _biases.Length));
+        Engine.TensorSubtract(_kernels, Engine.TensorMultiplyScalar(kernelGradient, learningRate))
+            .CopyTo(_kernels.AsWritableSpan());
+        Engine.TensorSubtract(_biases, Engine.TensorMultiplyScalar(biasGradient, learningRate))
+            .CopyTo(_biases.AsWritableSpan());
         Engine.InvalidatePersistentTensor(_kernels);
         Engine.InvalidatePersistentTensor(_biases);
     }

@@ -184,26 +184,15 @@ public class MetricCollection<T> : IEnumerable<MetricWithCI<T>>
     {
         if (_metrics.Count == 0) return null;
 
-        var numOps = MathHelper.GetNumericOperations<T>();
-        MetricWithCI<T>? best = null;
+        // The first metric with the highest (or lowest) value in Compare order wins
+        var metrics = _metrics.Values.ToList();
+        var values = new T[metrics.Count];
+        int position = 0;
+        foreach (var metric in metrics)
+            values[position++] = metric.Value;
 
-        foreach (var metric in _metrics.Values)
-        {
-            if (best == null)
-            {
-                best = metric;
-                continue;
-            }
-
-            var comparison = numOps.Compare(metric.Value, best.Value);
-            if ((direction == MetricDirection.HigherIsBetter && comparison > 0) ||
-                (direction == MetricDirection.LowerIsBetter && comparison < 0))
-            {
-                best = metric;
-            }
-        }
-
-        return best;
+        bool highest = direction == MetricDirection.HigherIsBetter;
+        return metrics[EvaluationTensorOps<T>.CompareScanBestIndex(new Tensor<T>(values, new[] { values.Length }), highest)];
     }
 
     /// <summary>
@@ -213,26 +202,15 @@ public class MetricCollection<T> : IEnumerable<MetricWithCI<T>>
     {
         if (_metrics.Count == 0) return null;
 
-        var numOps = MathHelper.GetNumericOperations<T>();
-        MetricWithCI<T>? worst = null;
+        // The first metric with the lowest (or highest) value in Compare order loses
+        var metrics = _metrics.Values.ToList();
+        var values = new T[metrics.Count];
+        int position = 0;
+        foreach (var metric in metrics)
+            values[position++] = metric.Value;
 
-        foreach (var metric in _metrics.Values)
-        {
-            if (worst == null)
-            {
-                worst = metric;
-                continue;
-            }
-
-            var comparison = numOps.Compare(metric.Value, worst.Value);
-            if ((direction == MetricDirection.HigherIsBetter && comparison < 0) ||
-                (direction == MetricDirection.LowerIsBetter && comparison > 0))
-            {
-                worst = metric;
-            }
-        }
-
-        return worst;
+        bool highest = direction == MetricDirection.LowerIsBetter;
+        return metrics[EvaluationTensorOps<T>.CompareScanBestIndex(new Tensor<T>(values, new[] { values.Length }), highest)];
     }
 
     /// <summary>

@@ -91,24 +91,25 @@ public partial class ColumnEmbedding<T>
 
     private void InitializeLearnableEmbeddings(double scale)
     {
-        for (int i = 0; i < _embeddings.Length; i++)
-        {
-            _embeddings[i] = NumOps.FromDouble(_random.NextGaussian() * scale);
-        }
+        // N(0, scale^2) for every slot in one engine call, seeded from this instance's Random.
+        Engine.TensorNormalInPlace(_embeddings, 0.0, scale, _random.Next());
     }
 
     private void InitializeSinusoidalEmbeddings()
     {
-        for (int col = 0; col < _numColumns; col++)
-        {
-            for (int d = 0; d < _embeddingDim; d++)
-            {
-                int pair = d / 2;
-                double angle = col / Math.Pow(10000.0, (2.0 * pair) / _embeddingDim);
-                double value = d % 2 == 0 ? Math.Sin(angle) : Math.Cos(angle);
-                _embeddings[col * _embeddingDim + d] = NumOps.FromDouble(value);
-            }
-        }
+        // angle[col, d] = col / 10000^(2 * floor(d / 2) / D); even d -> sin, odd d -> cos.
+        var two = NumOps.FromDouble(2.0);
+        var colIdx = Engine.TensorArange<T>(0, _numColumns, 1);
+        var dimIdx = Engine.TensorArange<T>(0, _embeddingDim, 1);
+        var pairIdx = Engine.TensorFloor(Engine.TensorDivideScalar(dimIdx, two));
+        var invFreq = Engine.TensorExp(Engine.TensorMultiplyScalar(
+            pairIdx, NumOps.FromDouble(-2.0 * Math.Log(10000.0) / _embeddingDim)));
+        var angle = Engine.TensorOuterProduct(colIdx, invFreq);
+        var oddMask = Engine.TensorSubtract(dimIdx, Engine.TensorMultiplyScalar(pairIdx, two));
+        var evenMask = Engine.TensorAddScalar(Engine.TensorNegate(oddMask), NumOps.One);
+        _embeddings = Engine.TensorAdd(
+            Engine.TensorMultiply(Engine.TensorSin(angle), evenMask),
+            Engine.TensorMultiply(Engine.TensorCos(angle), oddMask));
     }
 
     /// <summary>
@@ -143,23 +144,18 @@ public partial class ColumnEmbedding<T>
             totalBatchElements *= featureEmbeddings.Shape[i];
         }
 
-        var output = new Tensor<T>(featureEmbeddings._shape);
-        int stride = numCols * embDim;
-
-        for (int b = 0; b < totalBatchElements; b++)
+        // Fresh, detached output (as before): every batch element gets the first numCols
+        // column embeddings added.
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            for (int c = 0; c < numCols; c++)
-            {
-                for (int d = 0; d < embDim; d++)
-                {
-                    int inputIdx = b * stride + c * embDim + d;
-                    int embIdx = c * _embeddingDim + d;
-                    output[inputIdx] = NumOps.Add(featureEmbeddings[inputIdx], _embeddings[embIdx]);
-                }
-            }
+            var batched = Engine.Reshape(featureEmbeddings, new[] { totalBatchElements, numCols, embDim });
+            var colEmb = Engine.Reshape(
+                Engine.TensorSlice(_embeddings, new[] { 0, 0 }, new[] { numCols, embDim }),
+                new[] { 1, numCols, embDim });
+            var sum = Engine.TensorAdd(batched,
+                Engine.TensorBroadcastTo(colEmb, new[] { totalBatchElements, numCols, embDim }));
+            return Engine.Reshape(sum, featureEmbeddings._shape);
         }
-
-        return output;
     }
 
     /// <summary>
@@ -174,12 +170,8 @@ public partial class ColumnEmbedding<T>
             throw new ArgumentOutOfRangeException(nameof(columnIndex));
         }
 
-        var embedding = new Vector<T>(_embeddingDim);
-        for (int d = 0; d < _embeddingDim; d++)
-        {
-            embedding[d] = _embeddings[columnIndex * _embeddingDim + d];
-        }
-        return embedding;
+        return Engine.TensorSlice(_embeddings, new[] { columnIndex, 0 }, new[] { 1, _embeddingDim })
+            .ToVector();
     }
 
     /// <summary>

@@ -668,14 +668,16 @@ namespace AiDotNet.AutoML
                         nameof(validationTargets));
                 }
 
-                double sum = 0.0;
-                for (int i = 0; i < samples.Length; i++)
+                if (samples.Length == 0)
                 {
-                    double difference = NumOps.ToDouble(samples[i]) - NumOps.ToDouble(validationTargets[i]);
-                    sum += difference * difference;
+                    return 0.0;
                 }
 
-                return samples.Length == 0 ? 0.0 : sum / samples.Length;
+                // Mean squared error over the flattened images, computed in T.
+                var engine = AiDotNetEngine.Current;
+                var difference = engine.TensorSubtract(
+                    samples.Reshape(new[] { samples.Length }), validationTargets.Reshape(new[] { validationTargets.Length }));
+                return NumOps.ToDouble(engine.TensorMean(engine.TensorMultiply(difference, difference)));
             });
         }
     }
@@ -752,28 +754,15 @@ namespace AiDotNet.AutoML
             int seqLen = sequenceEmbeddings.Shape[1];
             int embDim = sequenceEmbeddings.Shape.Length > 2 ? sequenceEmbeddings.Shape[2] : 1;
 
-            var result = new Tensor<T>(new[] { batchSize, embDim });
-            var resultSpan = result.AsWritableSpan();
-            var srcSpan = sequenceEmbeddings.AsSpan();
-
-            for (int b = 0; b < batchSize; b++)
+            // Mean over the sequence axis of the leading [batch, seq, dim] block of the row-major data.
+            int pooledCount = batchSize * seqLen * embDim;
+            var flat = sequenceEmbeddings.Reshape(new[] { sequenceEmbeddings.Length });
+            if (pooledCount != flat.Length)
             {
-                for (int d = 0; d < embDim; d++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int s = 0; s < seqLen; s++)
-                    {
-                        int srcIdx = b * seqLen * embDim + s * embDim + d;
-                        if (srcIdx < srcSpan.Length)
-                        {
-                            sum = NumOps.Add(sum, srcSpan[srcIdx]);
-                        }
-                    }
-                    resultSpan[b * embDim + d] = NumOps.Divide(sum, NumOps.FromDouble(seqLen));
-                }
+                flat = flat.Slice(0, 0, pooledCount);
             }
 
-            return result;
+            return AiDotNetEngine.Current.ReduceMean(flat.Reshape(new[] { batchSize, seqLen, embDim }), new[] { 1 }, false);
         }
 
         /// <summary>The null condition: one zero token per sample, the shape <see cref="Encode"/> returns.</summary>
@@ -786,14 +775,7 @@ namespace AiDotNet.AutoML
         {
             // Simple character-level tokenization
             var result = new Tensor<T>(new[] { 1, MaxSequenceLength });
-            var span = result.AsWritableSpan();
-
-            int len = Math.Min(text.Length, MaxSequenceLength);
-            for (int i = 0; i < len; i++)
-            {
-                span[i] = NumOps.FromDouble(text[i]);
-            }
-
+            WriteCharacterCodes(text, result.AsWritableSpan());
             return result;
         }
 
@@ -804,15 +786,26 @@ namespace AiDotNet.AutoML
 
             for (int b = 0; b < texts.Length; b++)
             {
-                string text = texts[b];
-                int len = Math.Min(text.Length, MaxSequenceLength);
-                for (int i = 0; i < len; i++)
-                {
-                    span[b * MaxSequenceLength + i] = NumOps.FromDouble(text[i]);
-                }
+                WriteCharacterCodes(texts[b], span.Slice(b * MaxSequenceLength, MaxSequenceLength));
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// Writes the UTF-16 code of each of the first MaxSequenceLength characters (the token ids) into
+        /// <paramref name="destination"/>; the rest stays zero padding.
+        /// </summary>
+        private void WriteCharacterCodes(string text, Span<T> destination)
+        {
+            int len = Math.Min(text.Length, MaxSequenceLength);
+            if (len == 0)
+            {
+                return;
+            }
+
+            var codes = Tensor<int>.FromVector(Vector<int>.FromArray(text.Substring(0, len).Select(c => (int)c).ToArray()));
+            codes.Cast<T>().AsSpan().CopyTo(destination);
         }
     }
 

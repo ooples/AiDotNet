@@ -357,56 +357,27 @@ public partial class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtra
         int inH = inputShape[2];
         int inW = inputShape[3];
         int poolSize = 2;
-        int stride = 2;
 
-        var inputGrad = TensorAllocator.Rent<T>(inputShape);
         var divisor = NumOps.FromDouble((double)poolSize * (double)poolSize);
 
-        for (int n = 0; n < batch; n++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int oh = 0; oh < outH; oh++)
-                {
-                    for (int ow = 0; ow < outW; ow++)
-                    {
-                        int outIdx = n * (channels * outH * outW) + c * (outH * outW) + oh * outW + ow;
-                        var gradVal = NumOps.Divide(outputGrad.Data.Span[outIdx], divisor);
+        // Non-overlapping 2x2 windows (stride 2): every input cell of window (oh, ow) receives
+        // grad[oh, ow] / 4; window cells past the input edge are dropped, uncovered cells stay 0.
+        var spread = Engine.TensorRepeatInterleave(
+            Engine.TensorRepeatInterleave(Engine.TensorDivideScalar(outputGrad, divisor), poolSize, 2), poolSize, 3);
+        int coveredH = Math.Min(outH * poolSize, inH);
+        int coveredW = Math.Min(outW * poolSize, inW);
+        var covered = Engine.TensorSlice(spread, new[] { 0, 0, 0, 0 }, new[] { batch, channels, coveredH, coveredW });
 
-                        int hStart = oh * stride;
-                        int wStart = ow * stride;
-
-                        for (int kh = 0; kh < poolSize; kh++)
-                        {
-                            for (int kw = 0; kw < poolSize; kw++)
-                            {
-                                int ih = hStart + kh;
-                                int iw = wStart + kw;
-                                if (ih < inH && iw < inW)
-                                {
-                                    int inIdx = n * (channels * inH * inW) + c * (inH * inW) + ih * inW + iw;
-                                    inputGrad.Data.Span[inIdx] = NumOps.Add(inputGrad.Data.Span[inIdx], gradVal);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        return inputGrad;
+        var inputGrad = TensorAllocator.Rent<T>(inputShape);
+        Engine.TensorFill(inputGrad, NumOps.Zero);
+        return Engine.TensorSetSlice(inputGrad, covered, new[] { 0, 0, 0, 0 });
     }
 
     private Tensor<T> ApplyReluDerivative(Tensor<T> input, Tensor<T> grad)
     {
-        var result = new T[grad.Data.Length];
-        for (int i = 0; i < grad.Data.Length; i++)
-        {
-            result[i] = NumOps.GreaterThan(input.Data.Span[i], NumOps.Zero)
-                ? grad.Data.Span[i]
-                : NumOps.Zero;
-        }
-        return new Tensor<T>(grad._shape, new Vector<T>(result));
+        // grad where input > 0, else 0 (NaN inputs give 0, as before).
+        return Engine.TensorWhere(
+            Engine.TensorGreaterThan(Engine.Reshape(input, grad._shape), NumOps.Zero), grad, new Tensor<T>(grad._shape));
     }
 
     /// <summary>

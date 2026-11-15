@@ -96,15 +96,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 nameof(events));
         }
 
-        for (int i = 0; i < events.Length; i++)
+        int invalid = FirstNonBinaryIndex(events);
+        if (invalid >= 0)
         {
-            if (events[i] != 0 && events[i] != 1)
-            {
-                throw new ArgumentException(
-                    $"Event indicators are 1 where the event was observed and 0 where the subject was " +
-                    $"censored; found {events[i]} at index {i}.",
-                    nameof(events));
-            }
+            throw new ArgumentException(
+                $"Event indicators are 1 where the event was observed and 0 where the subject was " +
+                $"censored; found {events[invalid]} at index {invalid}.",
+                nameof(events));
         }
 
         if (features is not TInput featureInput || times is not TOutput timesOutput)

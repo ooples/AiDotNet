@@ -171,9 +171,7 @@ public partial class MAModel<T> : TimeSeriesModelBase<T>
 
         // Step 2: Center the time series (subtract mean)
         // VECTORIZED: Use Engine.Subtract with scalar broadcasting
-        var meanVec = new Vector<T>(y.Length);
-        for (int i = 0; i < meanVec.Length; i++) meanVec[i] = _mean;
-        Vector<T> centeredY = (Vector<T>)Engine.Subtract(y, meanVec);
+        Vector<T> centeredY = Engine.Subtract(y, Engine.Fill(y.Length, _mean));
 
         // Step 3: Estimate MA coefficients
         _maCoefficients = EstimateMACoefficients(centeredY, _maOptions.MAOrder);
@@ -186,10 +184,7 @@ public partial class MAModel<T> : TimeSeriesModelBase<T>
 
         // Store learned coefficients as ModelParameters for GetParameters() / serialization
         int q = _maOptions.MAOrder;
-        ModelParameters = new Vector<T>(q + 1);
-        ModelParameters[0] = _mean;
-        for (int i = 0; i < q; i++)
-            ModelParameters[i + 1] = _maCoefficients[i];
+        ModelParameters = Vector<T>.Concatenate(new Vector<T>(new[] { _mean }), _maCoefficients.GetSubVector(0, q));
 
         IsTrained = true;
     }
@@ -340,25 +335,15 @@ public partial class MAModel<T> : TimeSeriesModelBase<T>
             // Update parameters
             // VECTORIZED: Compute new theta using Engine operations
             var alphaScaled = (Vector<T>)Engine.Multiply(searchDir, alpha);
-            Vector<T> newTheta = (Vector<T>)Engine.Add(theta, alphaScaled);
 
             // Apply invertibility constraints element-wise
-            for (int i = 0; i < q; i++)
-            {
-                if (NumOps.GreaterThan(NumOps.Abs(newTheta[i]), NumOps.FromDouble(0.99)))
-                {
-                    T sign = NumOps.GreaterThan(newTheta[i], NumOps.Zero) ?
-                        NumOps.FromDouble(0.99) : NumOps.FromDouble(-0.99);
-                    newTheta[i] = sign;
-                }
-            }
+            Vector<T> newTheta = ClampToInvertible((Vector<T>)Engine.Add(theta, alphaScaled));
 
             // Calculate new log-likelihood
             T newLogLikelihood = CalculateNegativeLogLikelihood(y, newTheta);
 
             // Check convergence
-            T improvement = NumOps.Abs(NumOps.Subtract(prevLogLikelihood, newLogLikelihood));
-            if (NumOps.LessThan(improvement, _convergenceTolerance))
+            if (HasConverged(prevLogLikelihood, newLogLikelihood))
             {
                 theta = newTheta;
                 break;
@@ -453,31 +438,28 @@ public partial class MAModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private void CalculateGradient(Vector<T> y, Vector<T> theta, Vector<T> gradient)
     {
-        int n = y.Length;
         int q = theta.Length;
 
         // Use finite differences to approximate the gradient
         T h = NumOps.FromDouble(1e-5); // Small step size
 
+        // Central differences (f(θ + h e_i) - f(θ - h e_i)) / 2h for every coordinate i.
+        var plus = new List<T>(q);
+        var minus = new List<T>(q);
         for (int i = 0; i < q; i++)
         {
-            // Create parameter vectors with slight perturbations
-            Vector<T> thetaPlus = new Vector<T>(theta);
-            Vector<T> thetaMinus = new Vector<T>(theta);
-
-            thetaPlus[i] = NumOps.Add(theta[i], h);
-            thetaMinus[i] = NumOps.Subtract(theta[i], h);
-
-            // Calculate log-likelihood at perturbed points
-            T logLikePlus = CalculateNegativeLogLikelihood(y, thetaPlus);
-            T logLikeMinus = CalculateNegativeLogLikelihood(y, thetaMinus);
-
-            // Central difference approximation of derivative
-            gradient[i] = NumOps.Divide(
-                NumOps.Subtract(logLikePlus, logLikeMinus),
-                NumOps.Multiply(NumOps.FromDouble(2.0), h)
-            );
+            var step = Engine.Multiply(Vector<T>.CreateStandardBasis(q, i), h);
+            plus.Add(CalculateNegativeLogLikelihood(y, Engine.Add(theta, step)));
+            minus.Add(CalculateNegativeLogLikelihood(y, Engine.Subtract(theta, step)));
         }
+
+        if (q == 0)
+        {
+            return;
+        }
+
+        var differences = Engine.Subtract(new Vector<T>(plus), new Vector<T>(minus));
+        Engine.Divide(differences, NumOps.Multiply(NumOps.FromDouble(2.0), h)).CopyTo(gradient.AsWritableSpan());
     }
 
     /// <summary>
@@ -501,14 +483,10 @@ public partial class MAModel<T> : TimeSeriesModelBase<T>
     {
         // Solve the system H * d = -g for the search direction d
         // where H is the Hessian approximation and g is the gradient
-        // VECTORIZED: Use Engine.Multiply to negate vector
-        var negOneVec = new Vector<T>(gradient.Length);
-        for (int i = 0; i < negOneVec.Length; i++) negOneVec[i] = NumOps.FromDouble(-1.0);
-        Vector<T> negGradient = (Vector<T>)Engine.Multiply(gradient, negOneVec);
+        Vector<T> negGradient = Engine.Negate(gradient);
 
         try
         {
-            // Solve the system using a stable matrix decomposition
             return MatrixSolutionHelper.SolveLinearSystem(
                 hessianApprox,
                 negGradient,
@@ -517,7 +495,6 @@ public partial class MAModel<T> : TimeSeriesModelBase<T>
         }
         catch (Exception)
         {
-            // If the matrix is ill-conditioned, fall back to negative gradient
             return negGradient;
         }
     }
@@ -545,7 +522,6 @@ public partial class MAModel<T> : TimeSeriesModelBase<T>
         int q = theta.Length;
 
         // Backtracking line search with Armijo condition
-        T alpha = NumOps.One; // Initial step size
         T c = NumOps.FromDouble(0.1); // Armijo parameter
         T rho = NumOps.FromDouble(0.5); // Reduction factor
 
@@ -560,53 +536,54 @@ public partial class MAModel<T> : TimeSeriesModelBase<T>
             // VECTORIZED: Calculate gradient norm squared using Engine.DotProduct
             T gradientDotProduct = Engine.DotProduct(gradient, gradient);
 
-            for (int i = 0; i < q; i++)
-            {
-                searchDir[i] = NumOps.Negate(gradient[i]);
-            }
+            // The caller's search direction is replaced in place by the negative gradient.
+            Engine.Negate(gradient).CopyTo(searchDir.AsWritableSpan());
             directionalDerivative = NumOps.Negate(gradientDotProduct);
         }
 
-        // Rest of method unchanged...
-        // Perform backtracking line search
+        // Perform backtracking line search over the step sizes 1, rho, rho^2, ... (10 tries)
         int maxBacktracks = 10;
-        for (int i = 0; i < maxBacktracks; i++)
+        foreach (T alpha in BacktrackingSteps(rho, maxBacktracks))
         {
-            // Try the current step size
-            // VECTORIZED: Compute new theta using Engine operations
-            var alphaScaledLS = (Vector<T>)Engine.Multiply(searchDir, alpha);
-            Vector<T> newTheta = (Vector<T>)Engine.Add(theta, alphaScaledLS);
-
-            // Apply invertibility constraints element-wise
-            for (int j = 0; j < q; j++)
-            {
-                if (NumOps.GreaterThan(NumOps.Abs(newTheta[j]), NumOps.FromDouble(0.99)))
-                {
-                    T sign = NumOps.GreaterThan(newTheta[j], NumOps.Zero) ?
-                        NumOps.FromDouble(0.99) : NumOps.FromDouble(-0.99);
-                    newTheta[j] = sign;
-                }
-            }
-
-            // Calculate new log-likelihood
-            T newLogLikelihood = CalculateNegativeLogLikelihood(y, newTheta);
-
-            // Check Armijo condition
-            T armijo = NumOps.Add(currentLogLikelihood,
-                NumOps.Multiply(NumOps.Multiply(c, alpha), directionalDerivative));
-
-            if (NumOps.LessThanOrEquals(newLogLikelihood, armijo))
+            if (SatisfiesArmijo(y, theta, searchDir, currentLogLikelihood, directionalDerivative, c, alpha))
             {
                 return alpha;
             }
-
-            // Reduce step size
-            alpha = NumOps.Multiply(alpha, rho);
         }
 
         // If backtracking failed, return a small step size
         return NumOps.FromDouble(0.01);
     }
+
+    /// <summary>The step sizes 1, rho, rho², ... (<paramref name="count"/> of them), as repeated products.</summary>
+    private Vector<T> BacktrackingSteps(T rho, int count)
+    {
+        var factors = Vector<T>.Concatenate(new Vector<T>(new[] { NumOps.One }), Engine.Fill(count - 1, rho));
+        return Engine.TensorCumProd(Tensor<T>.FromVector(factors), 0).ToVector();
+    }
+
+    /// <summary>
+    /// Whether the clamped step θ + α·d satisfies the Armijo condition
+    /// f(θ + α·d) ≤ f(θ) + c·α·∇f·d.
+    /// </summary>
+    private bool SatisfiesArmijo(Vector<T> y, Vector<T> theta, Vector<T> searchDir, T currentLogLikelihood,
+        T directionalDerivative, T c, T alpha)
+    {
+        // Apply invertibility constraints element-wise
+        var newTheta = ClampToInvertible(Engine.Add(theta, Engine.Multiply(searchDir, alpha)));
+        T newLogLikelihood = CalculateNegativeLogLikelihood(y, newTheta);
+        T armijo = NumOps.Add(currentLogLikelihood,
+            NumOps.Multiply(NumOps.Multiply(c, alpha), directionalDerivative));
+        return NumOps.LessThanOrEquals(newLogLikelihood, armijo);
+    }
+
+    /// <summary>Clamps every coefficient into [-0.99, 0.99] (MA invertibility region).</summary>
+    private Vector<T> ClampToInvertible(Vector<T> theta)
+        => Engine.Clamp(theta, NumOps.FromDouble(-0.99), NumOps.FromDouble(0.99));
+
+    /// <summary>Whether two successive negative log-likelihoods differ by less than the tolerance.</summary>
+    private bool HasConverged(T previous, T current)
+        => NumOps.LessThan(NumOps.Abs(NumOps.Subtract(previous, current)), _convergenceTolerance);
 
     /// <summary>
     /// Updates the approximation of the Hessian matrix using the BFGS update formula.
@@ -629,110 +606,31 @@ public partial class MAModel<T> : TimeSeriesModelBase<T>
     {
         int q = oldTheta.Length;
 
-        // Calculate new gradient
+        // Calculate the new gradient at the updated parameters
         Vector<T> newGradient = new Vector<T>(q);
         CalculateGradient(data, newTheta, newGradient);
 
-        // Calculate s = newTheta - oldTheta
-        Vector<T> s = new Vector<T>(q);
-        for (int i = 0; i < q; i++)
-        {
-            s[i] = NumOps.Subtract(newTheta[i], oldTheta[i]);
-        }
+        // s = θ_new - θ_old, y = ∇f(θ_new) - ∇f(θ_old)
+        Vector<T> s = Engine.Subtract(newTheta, oldTheta);
+        Vector<T> y = Engine.Subtract(newGradient, oldGradient);
 
-        // Calculate y = newGradient - oldGradient
-        Vector<T> y = new Vector<T>(q);
-        for (int i = 0; i < q; i++)
-        {
-            y[i] = NumOps.Subtract(newGradient[i], oldGradient[i]);
-        }
-
-        // VECTORIZED: Calculate ? = 1 / (y^T * s) using dot product
+        // Skip the update when the curvature condition is too weak
         T dotProduct = y.DotProduct(s);
-
-        // Skip update if dot product is too small (numerical stability)
         if (NumOps.LessThan(NumOps.Abs(dotProduct), NumOps.FromDouble(1e-10)))
         {
             return;
         }
 
+        // BFGS inverse-Hessian update: H' = (I - ρ s yᵀ) H (I - ρ y sᵀ) + ρ s sᵀ, ρ = 1 / (yᵀ s)
         T rho = NumOps.Divide(NumOps.One, dotProduct);
+        var identity = Matrix<T>.CreateIdentity(q);
+        var term1 = Engine.MatrixSubtract(identity, Engine.MatrixMultiplyScalar(Engine.OuterProduct(s, y), rho));
+        var term2 = Engine.MatrixSubtract(identity, Engine.MatrixMultiplyScalar(Engine.OuterProduct(y, s), rho));
+        var term1Hterm2 = Engine.MatrixMultiply(Engine.MatrixMultiply(term1, hessianApprox), term2);
+        var rhoss = Engine.MatrixMultiplyScalar(Engine.OuterProduct(s, s), rho);
 
-        // BFGS update formula:
-        // H_{k+1} = (I - ?*s*y^T) * H_k * (I - ?*y*s^T) + ?*s*s^T
-
-        // VECTORIZED: Calculate H_k * y using matrix-vector multiplication
-        Vector<T> Hy = hessianApprox.Multiply(y);
-
-        // Calculate intermediate terms
-        Matrix<T> term1 = new Matrix<T>(q, q);
-        Matrix<T> term2 = new Matrix<T>(q, q);
-
-        for (int i = 0; i < q; i++)
-        {
-            for (int j = 0; j < q; j++)
-            {
-                T factor1 = NumOps.Multiply(rho, NumOps.Multiply(s[i], y[j]));
-                T factor2 = NumOps.Multiply(rho, NumOps.Multiply(y[i], s[j]));
-
-                term1[i, j] = NumOps.Negate(factor1);
-                term2[i, j] = NumOps.Negate(factor2);
-            }
-        }
-
-        // Add identity to both terms
-        for (int i = 0; i < q; i++)
-        {
-            term1[i, i] = NumOps.Add(term1[i, i], NumOps.One);
-            term2[i, i] = NumOps.Add(term2[i, i], NumOps.One);
-        }
-
-        // Calculate term1 * H_k
-        Matrix<T> term1H = new Matrix<T>(q, q);
-        for (int i = 0; i < q; i++)
-        {
-            for (int j = 0; j < q; j++)
-            {
-                for (int k = 0; k < q; k++)
-                {
-                    term1H[i, j] = NumOps.Add(term1H[i, j],
-                        NumOps.Multiply(term1[i, k], hessianApprox[k, j]));
-                }
-            }
-        }
-
-        // Calculate term1 * H_k * term2
-        Matrix<T> term1Hterm2 = new Matrix<T>(q, q);
-        for (int i = 0; i < q; i++)
-        {
-            for (int j = 0; j < q; j++)
-            {
-                for (int k = 0; k < q; k++)
-                {
-                    term1Hterm2[i, j] = NumOps.Add(term1Hterm2[i, j],
-                        NumOps.Multiply(term1H[i, k], term2[k, j]));
-                }
-            }
-        }
-
-        // Calculate ?*s*s^T
-        Matrix<T> rhoss = new Matrix<T>(q, q);
-        for (int i = 0; i < q; i++)
-        {
-            for (int j = 0; j < q; j++)
-            {
-                rhoss[i, j] = NumOps.Multiply(rho, NumOps.Multiply(s[i], s[j]));
-            }
-        }
-
-        // Update Hessian approximation: H_{k+1} = term1Hterm2 + rhoss
-        for (int i = 0; i < q; i++)
-        {
-            for (int j = 0; j < q; j++)
-            {
-                hessianApprox[i, j] = NumOps.Add(term1Hterm2[i, j], rhoss[i, j]);
-            }
-        }
+        // The caller's Hessian approximation is updated in place.
+        hessianApprox.SetSubMatrix(0, 0, Engine.MatrixAdd(term1Hterm2, rhoss));
     }
 
     /// <summary>
@@ -898,46 +796,30 @@ public partial class MAModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        // Check if model has been trained
         if (!IsTrained)
         {
             throw new InvalidOperationException("Model must be trained before making predictions.");
         }
 
         int horizon = input.Rows;
-        Vector<T> predictions = new Vector<T>(horizon);
-
-        // Make a copy of recent errors that we'll update during prediction
-        Vector<T> workingErrors = new Vector<T>(_recentErrors.Length);
-        for (int i = 0; i < _recentErrors.Length; i++)
+        var predictions = Engine.Fill(horizon, _mean);
+        int q = _maCoefficients.Length;
+        if (q == 0 || horizon == 0)
         {
-            workingErrors[i] = _recentErrors[i];
+            return predictions;
         }
 
-        // Generate predictions for each time step
-        for (int t = 0; t < horizon; t++)
+        // Future errors are zero, so the error window shifts right by one step per forecast:
+        // prediction[t] = mean + Σ_{i>=t} θ_i · recentErrors[i - t], and just the mean once t >= q.
+        int active = Math.Min(horizon, q);
+        var maTerms = new List<T>(active);
+        for (int t = 0; t < active; t++)
         {
-            // Start with the mean
-            T prediction = _mean;
-
-            // VECTORIZED: Add MA component using dot product
-            if (_maCoefficients.Length > 0)
-            {
-                prediction = NumOps.Add(prediction, _maCoefficients.DotProduct(workingErrors));
-            }
-
-            predictions[t] = prediction;
-
-            // Shift the working errors vector and add a zero error for the newly predicted value
-            // (since we don't know the actual error for future predictions)
-            for (int i = workingErrors.Length - 1; i > 0; i--)
-            {
-                workingErrors[i] = workingErrors[i - 1];
-            }
-            workingErrors[0] = NumOps.Zero;
+            maTerms.Add(Engine.DotProduct(_maCoefficients.GetSubVector(t, q - t), _recentErrors.GetSubVector(0, q - t)));
         }
 
-        return predictions;
+        var terms = Vector<T>.Concatenate(new Vector<T>(maTerms), new Vector<T>(horizon - active));
+        return Engine.Add(predictions, terms);
     }
 
     /// <summary>

@@ -148,9 +148,33 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
     /// Each output neuron has its own bias value that can be learned independently.
     /// </para>
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Condition = nameof(UseBias))]
 
     private Tensor<T> _biases;
+
+    /// <summary>What the caller asked for; <see cref="UseBias"/> is the resolved answer.</summary>
+    private readonly BiasMode _biasMode;
+
+    /// <summary>
+    /// Whether this layer adds its own bias after the matrix product.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Gates <c>_biases</c> through <c>TrainableParameterAttribute.Condition</c>, as <see cref="DenseLayer{T}.UseBias"/>
+    /// does. When false the bias is a zero-length placeholder and is absent from ParameterCount, GetParameters,
+    /// gradients, checkpoints and clones alike: the layer computes <c>x W^T</c>, it does not carry a bias frozen at
+    /// zero. This is PyTorch's <c>nn.Linear(bias=False)</c>.
+    /// </para>
+    /// <para>
+    /// <c>BiasMode.Auto</c> resolves to true: a linear layer cannot see what consumes its output, and
+    /// <c>nn.Linear</c> defaults to <c>bias=True</c>. <c>Unspecified</c> (a checkpoint written before this option)
+    /// also reads as true.
+    /// </para>
+    /// </remarks>
+    public bool UseBias => _biasMode != BiasMode.Never;
+
+    /// <summary>The bias tensor for <paramref name="outputSize"/> outputs, or the zero-length placeholder.</summary>
+    private Tensor<T> NewBiases(int outputSize) => new Tensor<T>([UseBias ? outputSize : 0]);
 
     /// <summary>
     /// Tracks whether the last forward pass input was rank-1, so backward can preserve rank.
@@ -242,6 +266,7 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
     /// <param name="inputSize">The number of input neurons.</param>
     /// <param name="outputSize">The number of output neurons.</param>
     /// <param name="activationFunction">The activation function to apply after the linear transformation. Null means none (identity), as in <see cref="DenseLayer{T}"/>; pass <c>new ReLUActivation&lt;T&gt;()</c> for a ReLU layer.</param>
+    /// <param name="biasMode">Whether the layer carries an additive bias; <see cref="BiasMode.Never"/> makes it bias-free.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a new fully connected layer with the specified input size, output size, and
@@ -271,15 +296,36 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
     /// values that help training converge effectively.
     /// </para>
     /// </remarks>
-    public FullyConnectedLayer([LayerState] int outputSize, IActivationFunction<T>? activationFunction = null)
+    public FullyConnectedLayer(
+        [LayerState] int outputSize,
+        IActivationFunction<T>? activationFunction,
+        [LayerState] BiasMode biasMode)
         : base(new[] { -1 }, new[] { outputSize }, activationFunction ?? new IdentityActivation<T>())
     {
         if (outputSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(outputSize));
 
         _outputSize = outputSize;
+        _biasMode = biasMode;
         _weights = new Tensor<T>([0, 0]);
-        _biases = new Tensor<T>([outputSize]);
+        _biases = NewBiases(outputSize);
+    }
+
+    /// <summary>Same as the overload taking a <see cref="BiasMode"/>, with <see cref="BiasMode.Auto"/> (a bias).</summary>
+    /// <param name="outputSize">The number of output neurons.</param>
+    /// <param name="activationFunction">Activation applied after the linear transform; null means identity.</param>
+    public FullyConnectedLayer(int outputSize, IActivationFunction<T>? activationFunction)
+        : this(outputSize, activationFunction, BiasMode.Auto)
+    {
+    }
+
+    // The convenience overloads take no optional parameters: one overload set holding several members with optional
+    // parameters breaks source compatibility as members are added (RS0026/RS0027), so each arity is spelled out.
+    /// <summary>Same as the overload taking a <see cref="BiasMode"/>, with <see cref="BiasMode.Auto"/> (a bias).</summary>
+    /// <param name="outputSize">The number of output neurons.</param>
+    public FullyConnectedLayer(int outputSize)
+        : this(outputSize, (IActivationFunction<T>?)null, BiasMode.Auto)
+    {
     }
 
     /// <summary>Construction state: the 'inputSize' the layer was built with.</summary>
@@ -296,7 +342,13 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
     /// <param name="inputSize">The number of input neurons. Must be positive.</param>
     /// <param name="outputSize">The number of output neurons. Must be positive.</param>
     /// <param name="activationFunction">Activation applied after the linear transform. Null means none (identity), as in <see cref="DenseLayer{T}"/>.</param>
-    public FullyConnectedLayer(int inputSize, int outputSize, IActivationFunction<T>? activationFunction = null)
+    /// <param name="biasMode">Whether the layer carries an additive bias. <see cref="BiasMode.Never"/> gives the
+    /// bias-free <c>nn.Linear(bias=False)</c>; the default keeps the bias.</param>
+    public FullyConnectedLayer(
+        int inputSize,
+        int outputSize,
+        IActivationFunction<T>? activationFunction,
+        BiasMode biasMode)
         : base(new[] { inputSize }, new[] { outputSize }, activationFunction ?? new IdentityActivation<T>())
     {
         _inputSize = inputSize;
@@ -306,11 +358,29 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
             throw new ArgumentOutOfRangeException(nameof(outputSize));
 
         _outputSize = outputSize;
+        _biasMode = biasMode;
         _weights = new Tensor<T>([outputSize, inputSize]);
-        _biases = new Tensor<T>([outputSize]);
+        _biases = NewBiases(outputSize);
         InitializeParameters();
         RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+        if (UseBias) RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+    }
+
+    /// <summary>Same as the overload taking a <see cref="BiasMode"/>, with <see cref="BiasMode.Auto"/> (a bias).</summary>
+    /// <param name="inputSize">The number of input neurons. Must be positive.</param>
+    /// <param name="outputSize">The number of output neurons. Must be positive.</param>
+    /// <param name="activationFunction">Activation applied after the linear transform; null means identity.</param>
+    public FullyConnectedLayer(int inputSize, int outputSize, IActivationFunction<T>? activationFunction)
+        : this(inputSize, outputSize, activationFunction, BiasMode.Auto)
+    {
+    }
+
+    /// <summary>Same as the overload taking a <see cref="BiasMode"/>, with <see cref="BiasMode.Auto"/> (a bias).</summary>
+    /// <param name="inputSize">The number of input neurons. Must be positive.</param>
+    /// <param name="outputSize">The number of output neurons. Must be positive.</param>
+    public FullyConnectedLayer(int inputSize, int outputSize)
+        : this(inputSize, outputSize, (IActivationFunction<T>?)null, BiasMode.Auto)
+    {
     }
 
     /// <summary>
@@ -332,15 +402,15 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
         // TRAINED weights with fresh random ones (#1221 Clone_AfterTraining). See Conv1DLayer.
         bool weightsAlreadyValid = _weights is { Rank: 2 } wt
             && wt.Shape[0] == outputSize && wt.Shape[1] == inputSize
-            && _biases is { } b && b.Length == outputSize;
+            && _biases is { } b && b.Length == (UseBias ? outputSize : 0);
 
         if (!weightsAlreadyValid)
         {
             _weights = AllocateLazyWeight([outputSize, inputSize]);
-            _biases = AllocateLazyWeight([outputSize]);
+            _biases = UseBias ? AllocateLazyWeight([outputSize]) : NewBiases(outputSize);
             InitializeParameters();
             RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
-            RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+            if (UseBias) RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
         }
 
         ResolveShapes(new[] { inputSize }, new[] { outputSize });
@@ -354,6 +424,7 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
     /// <param name="vectorActivationFunction">
     /// Activation applied across the whole output vector rather than element by element.
     /// </param>
+    /// <param name="biasMode">Whether the layer carries an additive bias; <see cref="BiasMode.Never"/> makes it bias-free.</param>
     /// <returns>A layer using the supplied vector activation.</returns>
     /// <remarks>
     /// A factory rather than a constructor overload, following the convention this class already
@@ -363,13 +434,22 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
     /// ambiguous, and the codebase has dozens of those.
     /// </remarks>
     public static FullyConnectedLayer<T> WithVectorActivation(
-        int inputSize, int outputSize, IVectorActivationFunction<T> vectorActivationFunction)
+        int inputSize, int outputSize, IVectorActivationFunction<T> vectorActivationFunction, BiasMode biasMode)
     {
         if (vectorActivationFunction is null)
             throw new ArgumentNullException(nameof(vectorActivationFunction));
 
-        return new FullyConnectedLayer<T>(vectorActivationFunction, inputSize, outputSize);
+        return new FullyConnectedLayer<T>(vectorActivationFunction, inputSize, outputSize, biasMode);
     }
+
+    /// <summary>Same as the overload taking a <see cref="BiasMode"/>, with <see cref="BiasMode.Auto"/> (a bias).</summary>
+    /// <param name="inputSize">Number of inputs.</param>
+    /// <param name="outputSize">Number of outputs.</param>
+    /// <param name="vectorActivationFunction">Activation applied across the whole output vector.</param>
+    /// <returns>A layer using the supplied vector activation.</returns>
+    public static FullyConnectedLayer<T> WithVectorActivation(
+        int inputSize, int outputSize, IVectorActivationFunction<T> vectorActivationFunction)
+        => WithVectorActivation(inputSize, outputSize, vectorActivationFunction, BiasMode.Auto);
 
     /// <summary>
     /// Creates a layer with known input and output sizes and a vector activation function.
@@ -377,6 +457,7 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
     /// <param name="vectorActivationFunction">Activation applied across the output vector.</param>
     /// <param name="inputSize">Number of inputs.</param>
     /// <param name="outputSize">Number of outputs.</param>
+    /// <param name="biasMode">Whether the layer carries an additive bias; <see cref="BiasMode.Never"/> makes it bias-free.</param>
     /// <remarks>
     /// The activation comes FIRST so this cannot collide with
     /// <c>(int inputSize, int outputSize, IActivationFunction&lt;T&gt;?)</c>: with the vector type in
@@ -387,7 +468,10 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
     /// conventional argument order.
     /// </remarks>
     public FullyConnectedLayer(
-        IVectorActivationFunction<T> vectorActivationFunction, int inputSize, int outputSize)
+        IVectorActivationFunction<T> vectorActivationFunction,
+        int inputSize,
+        int outputSize,
+        BiasMode biasMode)
         : base(new[] { inputSize }, new[] { outputSize }, vectorActivationFunction)
     {
         _inputSize = inputSize;
@@ -397,11 +481,22 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
             throw new ArgumentOutOfRangeException(nameof(outputSize));
 
         _outputSize = outputSize;
+        _biasMode = biasMode;
         _weights = new Tensor<T>([outputSize, inputSize]);
-        _biases = new Tensor<T>([outputSize]);
+        _biases = NewBiases(outputSize);
         InitializeParameters();
         RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+        if (UseBias) RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+    }
+
+    /// <summary>Same as the overload taking a <see cref="BiasMode"/>, with <see cref="BiasMode.Auto"/> (a bias).</summary>
+    /// <param name="vectorActivationFunction">Activation applied across the output vector.</param>
+    /// <param name="inputSize">Number of inputs.</param>
+    /// <param name="outputSize">Number of outputs.</param>
+    public FullyConnectedLayer(
+        IVectorActivationFunction<T> vectorActivationFunction, int inputSize, int outputSize)
+        : this(vectorActivationFunction, inputSize, outputSize, BiasMode.Auto)
+    {
     }
 
 
@@ -412,6 +507,7 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
     /// <param name="inputSize">The number of input neurons.</param>
     /// <param name="outputSize">The number of output neurons.</param>
     /// <param name="vectorActivationFunction">The vector activation function to apply after the linear transformation. Null means none (identity).</param>
+    /// <param name="biasMode">Whether the layer carries an additive bias; <see cref="BiasMode.Never"/> makes it bias-free.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a new fully connected layer with the specified input size, output size, and
@@ -440,15 +536,27 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
     /// which is perfect for classification tasks where outputs represent class probabilities.
     /// </para>
     /// </remarks>
-    public FullyConnectedLayer([LayerState] int outputSize, IVectorActivationFunction<T> vectorActivationFunction)
+    public FullyConnectedLayer(
+        [LayerState] int outputSize,
+        IVectorActivationFunction<T> vectorActivationFunction,
+        [LayerState] BiasMode biasMode)
         : base(new[] { -1 }, new[] { outputSize }, vectorActivationFunction ?? new IdentityActivation<T>())
     {
         if (outputSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(outputSize));
 
         _outputSize = outputSize;
+        _biasMode = biasMode;
         _weights = new Tensor<T>([0, 0]);
-        _biases = new Tensor<T>([outputSize]);
+        _biases = NewBiases(outputSize);
+    }
+
+    /// <summary>Same as the overload taking a <see cref="BiasMode"/>, with <see cref="BiasMode.Auto"/> (a bias).</summary>
+    /// <param name="outputSize">The number of output neurons.</param>
+    /// <param name="vectorActivationFunction">The vector activation applied after the linear transformation.</param>
+    public FullyConnectedLayer(int outputSize, IVectorActivationFunction<T> vectorActivationFunction)
+        : this(outputSize, vectorActivationFunction, BiasMode.Auto)
+    {
     }
 
     /// <inheritdoc />
@@ -493,7 +601,7 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
     private void InitializeParameters()
     {
         InitializeLayerWeights(_weights, _weights.Shape[0], _weights.Shape[1]);
-        InitializeLayerBiases(_biases);
+        if (UseBias) InitializeLayerBiases(_biases);
     }
 
     /// <summary>
@@ -545,9 +653,10 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
         // Matrix multiply: [batch, input] * [input, output] -> [batch, output]
         var linearOutput = Engine.TensorMatMul(input, weightsT);
 
-        // Add biases (broadcast)
-        var biasBroadcast = Engine.Reshape(_biases, new[] { 1, _biases.Shape[0] });
-        var biasedOutput = Engine.TensorAdd(linearOutput, biasBroadcast);
+        // Add biases (broadcast), unless the layer is bias-free
+        var biasedOutput = UseBias
+            ? Engine.TensorAdd(linearOutput, Engine.Reshape(_biases, new[] { 1, _biases.Shape[0] }))
+            : linearOutput;
 
         var result = ApplyActivation(biasedOutput);
 
@@ -591,15 +700,18 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public override void UpdateParameters(T learningRate)
     {
-        if (_weightsGradient == null || _biasesGradient == null)
+        if (_weightsGradient == null || (UseBias && _biasesGradient == null))
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
         _weights = _weights.Subtract(_weightsGradient.Multiply(learningRate));
-        _biases = _biases.Subtract(_biasesGradient.Multiply(learningRate));
+        if (UseBias && _biasesGradient is not null)
+        {
+            _biases = _biases.Subtract(_biasesGradient.Multiply(learningRate));
+        }
 
         // Notify engine that parameters have changed (for GPU cache invalidation)
         Engine.InvalidatePersistentTensor(_weights);
-        Engine.InvalidatePersistentTensor(_biases);
+        if (UseBias) Engine.InvalidatePersistentTensor(_biases);
     }
 
     /// <summary>
@@ -657,6 +769,6 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
     public override Tensor<T>? GetWeights() => _weights;
 
     /// <inheritdoc />
-    public override Tensor<T>? GetBiases() => _biases;
+    public override Tensor<T>? GetBiases() => UseBias ? _biases : null;
 
 }

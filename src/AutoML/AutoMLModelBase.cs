@@ -618,44 +618,19 @@ namespace AiDotNet.AutoML
 
         private static Vector<T> ArgMaxToLabelVector(Matrix<T> scores)
         {
-            var numOps = MathHelper.GetNumericOperations<T>();
-            var labels = new Vector<T>(scores.Rows);
-
-            for (int row = 0; row < scores.Rows; row++)
+            if (scores.Rows == 0)
             {
-                int bestIndex = 0;
-                T bestValue = scores[row, 0];
-
-                for (int col = 1; col < scores.Columns; col++)
-                {
-                    var value = scores[row, col];
-                    if (numOps.GreaterThan(value, bestValue))
-                    {
-                        bestValue = value;
-                        bestIndex = col;
-                    }
-                }
-
-                labels[row] = numOps.FromDouble(bestIndex);
+                return new Vector<T>(0);
             }
 
-            return labels;
+            // Ties go to the lowest class index, like a strict greater-than scan.
+            return NAS.NasSamplingHelper.ArgMaxRowsTensor(scores).Cast<T>().ToVector();
         }
 
         private static Vector<T> FlattenToVector(Matrix<T> matrix)
         {
-            var flattened = new Vector<T>(matrix.Rows * matrix.Columns);
-            int index = 0;
-
-            for (int row = 0; row < matrix.Rows; row++)
-            {
-                for (int col = 0; col < matrix.Columns; col++)
-                {
-                    flattened[index++] = matrix[row, col];
-                }
-            }
-
-            return flattened;
+            // Row-major copy of the matrix storage.
+            return Vector<T>.FromSpan(matrix.AsSpan());
         }
 
         private static ModelStats<T, TInput, TOutput> TryCalculateModelStats(

@@ -249,11 +249,9 @@ public partial class LonghornLayer<T> : LayerBase<T>, IShapeContract
         InitializeTensor2D(_alphaWeights);
         // Alpha bias ~ -2 so sigmoid(-2) ~ 0.12 -> slow initial learning rate (strong retention)
         // This is the "online learning rate" -- starting conservative is better for stability
-        for (int i = 0; i < _alphaBias.Length; i++)
-            _alphaBias[i] = NumOps.FromDouble(-2.0);
+        _alphaBias.Fill(NumOps.FromDouble(-2.0));
         // Group norm: gamma = 1, beta = 0 (identity initialization)
-        for (int i = 0; i < _groupNormGamma.Length; i++)
-            _groupNormGamma[i] = NumOps.One;
+        _groupNormGamma.Fill(NumOps.One);
         _groupNormBeta.Fill(NumOps.Zero);
         RegisterTrainableParameter(_groupNormGamma, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_groupNormBeta, PersistentTensorRole.Biases);
@@ -445,103 +443,6 @@ public partial class LonghornLayer<T> : LayerBase<T>, IShapeContract
         var betaFlat = Engine.Reshape(_groupNormBeta, new[] { modelDim });
         var normed = Engine.GroupNorm(inputFlat, _numHeads, gammaFlat, betaFlat, 1e-5, out _, out _);
         return Engine.Reshape(normed, input._shape);
-    }
-
-    /// <summary>
-    /// Backward pass through group normalization, computing gradients for gamma, beta,
-    /// and propagating gradients to the input.
-    /// </summary>
-    private Tensor<T> GroupNormBackward(Tensor<T> dOutput, Tensor<T> input, int batchSize, int seqLen)
-    {
-        var dInput = TensorAllocator.Rent<T>(input._shape);
-        T epsilon = NumOps.FromDouble(1e-5);
-        T headDimT = NumOps.FromDouble(_headDimension);
-        var gammaGrad = _groupNormGammaGradient
-            ?? throw new InvalidOperationException("Gradients must be initialized before backward pass.");
-        var betaGrad = _groupNormBetaGradient
-            ?? throw new InvalidOperationException("Gradients must be initialized before backward pass.");
-
-        for (int bi = 0; bi < batchSize; bi++)
-        {
-            for (int t = 0; t < seqLen; t++)
-            {
-                for (int hi = 0; hi < _numHeads; hi++)
-                {
-                    int dimStart = hi * _headDimension;
-
-                    // Recompute forward statistics
-                    T mean = NumOps.Zero;
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        mean = NumOps.Add(mean, input[new[] { bi, t, flatDi }]);
-                    }
-                    mean = NumOps.Divide(mean, headDimT);
-
-                    T variance = NumOps.Zero;
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        T diff = NumOps.Subtract(input[new[] { bi, t, flatDi }], mean);
-                        variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-                    }
-                    variance = NumOps.Divide(variance, headDimT);
-                    T invStd = NumOps.Divide(NumOps.One, NumOps.Sqrt(NumOps.Add(variance, epsilon)));
-
-                    // Compute normalized values and accumulate gamma/beta gradients
-                    var xHat = new T[_headDimension];
-                    T dGammaSum = NumOps.Zero;
-                    T dBetaSum = NumOps.Zero;
-                    T dxHatSum = NumOps.Zero;
-                    T dxHatXHatSum = NumOps.Zero;
-
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        xHat[di] = NumOps.Multiply(
-                            NumOps.Subtract(input[new[] { bi, t, flatDi }], mean),
-                            invStd);
-
-                        T gamma = _groupNormGamma[new[] { hi, di }];
-                        T dOut = dOutput[new[] { bi, t, flatDi }];
-
-                        // Accumulate gamma and beta gradients
-                        gammaGrad[new[] { hi, di }] = NumOps.Add(
-                            gammaGrad[new[] { hi, di }],
-                            NumOps.Multiply(dOut, xHat[di]));
-                        betaGrad[new[] { hi, di }] = NumOps.Add(
-                            betaGrad[new[] { hi, di }], dOut);
-
-                        // dxHat = dOutput * gamma
-                        T dxHat = NumOps.Multiply(dOut, gamma);
-                        dxHatSum = NumOps.Add(dxHatSum, dxHat);
-                        dxHatXHatSum = NumOps.Add(dxHatXHatSum,
-                            NumOps.Multiply(dxHat, xHat[di]));
-                    }
-
-                    // Compute input gradient using the group norm backward formula
-                    // dInput = invStd * (dxHat - mean(dxHat) - xHat * mean(dxHat * xHat)) / 1
-                    T meanDxHat = NumOps.Divide(dxHatSum, headDimT);
-                    T meanDxHatXHat = NumOps.Divide(dxHatXHatSum, headDimT);
-
-                    for (int di = 0; di < _headDimension; di++)
-                    {
-                        int flatDi = dimStart + di;
-                        T gamma = _groupNormGamma[new[] { hi, di }];
-                        T dOut = dOutput[new[] { bi, t, flatDi }];
-                        T dxHat = NumOps.Multiply(dOut, gamma);
-
-                        T gradVal = NumOps.Multiply(invStd,
-                            NumOps.Subtract(dxHat,
-                                NumOps.Add(meanDxHat,
-                                    NumOps.Multiply(xHat[di], meanDxHatXHat))));
-                        dInput[new[] { bi, t, flatDi }] = gradVal;
-                    }
-                }
-            }
-        }
-
-        return dInput;
     }
 
     /// <summary>

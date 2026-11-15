@@ -48,7 +48,7 @@ public class ForwardTacotronPaperTests
         return new TtsTrainingSample<double>
         {
             Tokens = tokens, Mel = mel, Durations = new[] { 3, 3, 3, 3, 2 },
-            Pitch = Enumerable.Range(0, frames).Select(f => f % 5 == 0 ? 0.0 : 140.0 + 10.0 * f).ToArray(),
+            Pitch = new Tensor<double>(new[] { frames }, new Vector<double>(Enumerable.Range(0, frames).Select(f => f % 5 == 0 ? 0.0 : 140.0 + 10.0 * f).ToArray())),
         };
     }
 

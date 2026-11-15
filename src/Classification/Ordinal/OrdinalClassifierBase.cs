@@ -109,24 +109,25 @@ public abstract partial class OrdinalClassifierBase<T> : ClassifierBase<T>, IOrd
         var cumProbs = PredictCumulativeProbabilities(features);
         int n = features.Rows;
         int k = NumClasses;
-        var probs = new Matrix<T>(n, k);
-
-        for (int i = 0; i < n; i++)
+        if (n == 0 || k == 0)
         {
-            // P(Y = 0) = P(Y ≤ 0)
-            probs[i, 0] = cumProbs[i, 0];
-
-            // P(Y = j) = P(Y ≤ j) - P(Y ≤ j-1) for middle classes
-            for (int j = 1; j < k - 1; j++)
-            {
-                probs[i, j] = NumOps.Subtract(cumProbs[i, j], cumProbs[i, j - 1]);
-            }
-
-            // P(Y = k-1) = 1 - P(Y ≤ k-2)
-            probs[i, k - 1] = NumOps.Subtract(NumOps.One, cumProbs[i, k - 2]);
+            return new Matrix<T>(n, k);
         }
 
-        return probs;
+        // P(Y = j) = P(Y <= j) - P(Y <= j-1), with P(Y <= -1) = 0 and P(Y <= k-1) = 1
+        var engine = Engine;
+        var cumulative = Tensor<T>.FromMatrix(cumProbs);
+        if (cumProbs.Columns != k - 1)
+        {
+            cumulative = cumulative.Slice(1, 0, k - 1);
+        }
+
+        var ones = new Tensor<T>(new[] { n, 1 });
+        engine.TensorFill(ones, NumOps.One);
+        var zeros = new Tensor<T>(new[] { n, 1 });
+        var upper = engine.TensorConcatenate(new[] { cumulative, ones }, 1);
+        var lower = engine.TensorConcatenate(new[] { zeros, cumulative }, 1);
+        return engine.TensorSubtract(upper, lower).ToMatrix();
     }
 
     /// <summary>
@@ -140,19 +141,8 @@ public abstract partial class OrdinalClassifierBase<T> : ClassifierBase<T>, IOrd
     /// </remarks>
     protected void ExtractOrderedClasses(Vector<T> labels)
     {
-        var uniqueLabels = new SortedSet<double>();
-        for (int i = 0; i < labels.Length; i++)
-        {
-            uniqueLabels.Add(NumOps.ToDouble(labels[i]));
-        }
-
-        ClassLabels = new Vector<T>(uniqueLabels.Count);
-        int idx = 0;
-        foreach (double label in uniqueLabels)
-        {
-            ClassLabels[idx++] = NumOps.FromDouble(label);
-        }
-
+        // Unique labels in ascending order
+        ClassLabels = ExtractClassLabels(labels);
         NumClasses = ClassLabels.Length;
     }
 
@@ -173,30 +163,31 @@ public abstract partial class OrdinalClassifierBase<T> : ClassifierBase<T>, IOrd
             throw new InvalidOperationException("Model has not been trained.");
         }
 
-        for (int i = 0; i < ClassLabels.Length; i++)
+        return GetOrdinalClassIndices(Vector<T>.Wrap(new[] { label })).ToArray()[0];
+    }
+
+    /// <summary>
+    /// The class index of every label: the matching class, or otherwise the closest class (the first one on ties).
+    /// </summary>
+    /// <param name="labels">The labels to map.</param>
+    /// <returns>One class index per label.</returns>
+    private protected Tensor<int> GetOrdinalClassIndices(Vector<T> labels)
+    {
+        if (ClassLabels is null)
         {
-            if (NumOps.Compare(ClassLabels[i], label) == 0)
-            {
-                return i;
-            }
+            throw new InvalidOperationException("Model has not been trained.");
         }
 
-        // If not found, return the closest class
-        double labelVal = NumOps.ToDouble(label);
-        int closestIdx = 0;
-        double minDist = double.MaxValue;
-
-        for (int i = 0; i < ClassLabels.Length; i++)
+        if (labels.Length == 0 || ClassLabels.Length == 0)
         {
-            double dist = Math.Abs(NumOps.ToDouble(ClassLabels[i]) - labelVal);
-            if (dist < minDist)
-            {
-                minDist = dist;
-                closestIdx = i;
-            }
+            return new Tensor<int>(new[] { labels.Length });
         }
 
-        return closestIdx;
+        // An exact match has distance 0, so the closest class is the matching one when it exists
+        var engine = Engine;
+        var distances = engine.TensorAbs(engine.TensorSubtract(
+            labels.AsTensor().Reshape(labels.Length, 1), ClassLabels.AsTensor().Reshape(1, ClassLabels.Length)));
+        return engine.TensorArgMin(distances, 1);
     }
 
     /// <summary>
@@ -212,10 +203,26 @@ public abstract partial class OrdinalClassifierBase<T> : ClassifierBase<T>, IOrd
     /// </remarks>
     protected T Sigmoid(T x)
     {
-        double val = NumOps.ToDouble(x);
-        if (val > 20) return NumOps.One;
-        if (val < -20) return NumOps.Zero;
-        return NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-val)));
+        if (NumOps.GreaterThan(x, NumOps.FromDouble(20))) return NumOps.One;
+        if (NumOps.LessThan(x, NumOps.FromDouble(-20))) return NumOps.Zero;
+        return NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, NumOps.Exp(NumOps.Negate(x))));
+    }
+
+    /// <summary>
+    /// Element-wise <see cref="Sigmoid(T)"/>: 1 above 20, 0 below -20, otherwise 1 / (1 + exp(-x)).
+    /// </summary>
+    /// <param name="x">The inputs.</param>
+    /// <returns>The sigmoid values.</returns>
+    private protected Tensor<T> SigmoidSaturated(Tensor<T> x)
+    {
+        var engine = Engine;
+        var ones = new Tensor<T>(x.Shape.ToArray());
+        engine.TensorFill(ones, NumOps.One);
+        var zeros = new Tensor<T>(x.Shape.ToArray());
+        var sigmoid = engine.TensorSigmoid(x);
+        var high = engine.TensorGreaterThan(x, NumOps.FromDouble(20));
+        var low = engine.TensorLessThan(x, NumOps.FromDouble(-20));
+        return engine.TensorWhere(high, ones, engine.TensorWhere(low, zeros, sigmoid));
     }
 
     /// <summary>
@@ -227,6 +234,66 @@ public abstract partial class OrdinalClassifierBase<T> : ClassifierBase<T>, IOrd
     /// <para><b>For Beginners:</b> Since this is an ordinal classifier, we always
     /// return the Ordinal task type regardless of the number of classes.</para>
     /// </remarks>
+    /// <summary>
+    /// Feature importance as |coefficient| divided by the sum of absolute coefficients.
+    /// </summary>
+    /// <param name="coefficients">The coefficients.</param>
+    /// <returns>Importance per feature name.</returns>
+    private protected Dictionary<string, T> NormalizedCoefficientImportance(Vector<T> coefficients)
+    {
+        var importance = new Dictionary<string, T>();
+        if (coefficients.Length == 0)
+        {
+            return importance;
+        }
+
+        // |coef| normalized by the sum of absolute coefficients (1 when they are all zero)
+        var engine = Engine;
+        var magnitudes = engine.TensorAbs(coefficients.AsTensor());
+        T total = engine.TensorSum(magnitudes);
+        if (NumOps.Equals(total, NumOps.Zero)) total = NumOps.One;
+        var values = engine.TensorDivideScalar(magnitudes, total).ToArray();
+
+        for (int i = 0; i < values.Length; i++)
+        {
+            string name = FeatureNames is not null && i < FeatureNames.Length
+                ? FeatureNames[i]
+                : $"Feature_{i}";
+            importance[name] = values[i];
+        }
+
+        return importance;
+    }
+
+    /// <summary>
+    /// bias + x * coefficients for every row (only the first coefficients.Length columns are used).
+    /// </summary>
+    /// <param name="features">The samples.</param>
+    /// <param name="coefficients">The coefficients.</param>
+    /// <param name="bias">The intercept.</param>
+    /// <returns>The [rows] linear predictions.</returns>
+    private protected Tensor<T> LinearPredictions(Matrix<T> features, Vector<T> coefficients, T bias)
+    {
+        var engine = Engine;
+        int n = features.Rows;
+        int p = coefficients.Length;
+        if (n == 0)
+        {
+            return new Tensor<T>(new[] { 0 });
+        }
+
+        var x = Tensor<T>.FromMatrix(features);
+        if (features.Columns != p)
+        {
+            x = x.Slice(1, 0, p);
+        }
+
+        var products = p == 0
+            ? new Tensor<T>(new[] { n })
+            : engine.TensorMatMul(x, coefficients.AsTensor().Reshape(p, 1)).Reshape(n);
+        return engine.TensorAddScalar(products, bias);
+    }
+
     protected override ClassificationTaskType InferTaskType(Vector<T> y)
     {
         return ClassificationTaskType.Ordinal;

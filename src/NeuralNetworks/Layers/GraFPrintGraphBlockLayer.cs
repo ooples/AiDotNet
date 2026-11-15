@@ -269,20 +269,14 @@ public partial class GraFPrintGraphBlockLayer<T> : LayerBase<T>, ILayerSerializa
 
             var (_, nearest) = engine.TopK(
                 distances, candidateCount, axis: 1, largest: false);
-            var selfIndices = new int[nodeCount * effectiveK];
-            var neighborIndices = new int[nodeCount * effectiveK];
-            for (int node = 0; node < nodeCount; node++)
-            {
-                for (int neighbor = 0; neighbor < effectiveK; neighbor++)
-                {
-                    int candidate = Math.Min(neighbor * _dilation, candidateCount - 1);
-                    int selected = nearest[node, candidate];
-                    int flat = node * effectiveK + neighbor;
-                    selfIndices[flat] = node;
-                    neighborIndices[flat] = selected;
-                    neighborIndicesByBatch[b, node, neighbor] = selected;
-                }
-            }
+            // Neighbor k of each node is candidate column min(k * dilation, candidateCount - 1).
+            var candidateColumns = Enumerable.Range(0, effectiveK)
+                .Select(neighbor => Math.Min(neighbor * _dilation, candidateCount - 1)).ToArray();
+            var selfIndices = Enumerable.Range(0, nodeCount * effectiveK).Select(flat => flat / effectiveK).ToArray();
+            var neighborIndices = engine.TensorGather(
+                nearest, new Tensor<int>(candidateColumns, [effectiveK]), axis: 1).ToVector().ToArray();
+            int blockBytes = neighborIndices.Length * sizeof(int);
+            Buffer.BlockCopy(neighborIndices, 0, neighborIndicesByBatch, b * blockBytes, blockBytes);
 
             var xi = engine.TensorGather(
                 sample, new Tensor<int>(selfIndices, [selfIndices.Length]), axis: 0);
@@ -296,23 +290,30 @@ public partial class GraFPrintGraphBlockLayer<T> : LayerBase<T>, ILayerSerializa
             // routing is not reliable. Use its discrete argmax only to build a constant mask,
             // then express the selected maximum as multiply + sum on the tape.
             _ = engine.ReduceMax(grouped, new[] { 1 }, keepDims: false, out var argMax);
-            var mask = new Tensor<T>([nodeCount, effectiveK, channels]);
-            for (int node = 0; node < nodeCount; node++)
+            // Winning neighbor per (node, channel); an out-of-range winner leaves its mask entry (and
+            // winner node) unset, which the one-hot reproduces with an all-zero row.
+            var selectedNeighbors = argMax.Select(sourceFlatIndex => (sourceFlatIndex / channels) % effectiveK).ToArray();
+            Tensor<T> mask;
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             {
-                for (int channel = 0; channel < channels; channel++)
-                {
-                    int sourceFlatIndex = argMax[node * channels + channel];
-                    int selectedNeighbor = (sourceFlatIndex / channels) % effectiveK;
-                    if ((uint)selectedNeighbor < (uint)effectiveK)
-                    {
-                        mask[node, selectedNeighbor, channel] = NumOps.One;
-                        if (winnerNodeIndices is not null)
-                        {
-                            winnerNodeIndices[b, node, channel] =
-                                neighborIndices[node * effectiveK + selectedNeighbor];
-                        }
-                    }
-                }
+                // TensorOneHot flattens its indices: a [N, C] index tensor comes back as [N*C, K], not
+                // [N, C, K], so one-hot the flat winners and restore the node and channel axes explicitly.
+                var oneHot = engine.Reshape(
+                    engine.TensorOneHot<T>(
+                        new Tensor<int>(selectedNeighbors, [nodeCount * channels]), effectiveK),
+                    [nodeCount, channels, effectiveK]);                                        // [N, C, K]
+                mask = engine.TensorPermute(oneHot, [0, 2, 1]).Clone();                        // [N, K, C]
+            }
+
+            if (winnerNodeIndices is not null)
+            {
+                var winners = selectedNeighbors
+                    .Select((selectedNeighbor, flat) => (uint)selectedNeighbor < (uint)effectiveK
+                        ? neighborIndices[(flat / channels) * effectiveK + selectedNeighbor]
+                        : 0)
+                    .ToArray();
+                int winnerBytes = winners.Length * sizeof(int);
+                Buffer.BlockCopy(winners, 0, winnerNodeIndices, b * winnerBytes, winnerBytes);
             }
 
             batchResults.Add(engine.ReduceSum(
@@ -345,25 +346,27 @@ public partial class GraFPrintGraphBlockLayer<T> : LayerBase<T>, ILayerSerializa
             ?? throw new InvalidOperationException(
                 "GraFPrint compiled backward ran before its dynamic k-NN forward state was refreshed.");
         var input = inputs[0];
-        var gradInput = new Tensor<T>(input.Shape.ToArray());
         int batch = input.Shape[0];
         int nodeCount = input.Shape[1];
         int channels = input.Shape[2];
+        int total = batch * nodeCount * channels;
 
-        for (int b = 0; b < batch; b++)
+        // d(x[winner] - x[node]) routes +gradient to the winner and -gradient to the node itself.
+        // Flat target of element (b, node, c) is (b, winner, c).
+        int sliceSize = nodeCount * channels;
+        var winnerTargets = new int[total];
+        Buffer.BlockCopy(winnerNodeIndices, 0, winnerTargets, 0, total * sizeof(int));
+        winnerTargets = winnerTargets
+            .Select((winner, flat) => (flat - (flat % sliceSize)) + (winner * channels) + (flat % channels))
+            .ToArray();
+
+        Tensor<T> gradInput;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            for (int node = 0; node < nodeCount; node++)
-            {
-                for (int channel = 0; channel < channels; channel++)
-                {
-                    T gradient = gradOutput[b, node, channel];
-                    int winner = winnerNodeIndices[b, node, channel];
-                    gradInput[b, winner, channel] = NumOps.Add(
-                        gradInput[b, winner, channel], gradient);
-                    gradInput[b, node, channel] = NumOps.Subtract(
-                        gradInput[b, node, channel], gradient);
-                }
-            }
+            var flatGradient = engine.Reshape(gradOutput, [total]);
+            var routed = engine.TensorScatterAdd(
+                new Tensor<T>([total]), new Tensor<int>(winnerTargets, [total]), flatGradient, axis: 0);
+            gradInput = engine.Reshape(engine.TensorSubtract(routed, flatGradient), input.Shape.ToArray());
         }
 
         AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps.AccumulateGrad(
@@ -372,24 +375,20 @@ public partial class GraFPrintGraphBlockLayer<T> : LayerBase<T>, ILayerSerializa
 
     private Tensor<T> NormalizeNodesForKnn(Tensor<T> sample, int nodeCount, int channels)
     {
-        var normalized = new Tensor<T>([nodeCount, channels]);
+        if (nodeCount == 0 || channels == 0) return new Tensor<T>([nodeCount, channels]);
+
+        // Row-wise L2 normalisation, value-only (off the tape); the denominator is the norm when it
+        // exceeds epsilon (NaN does not), else epsilon.
         T epsilon = NumOps.FromDouble(1e-12);
-        for (int node = 0; node < nodeCount; node++)
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            T sumSquares = NumOps.Zero;
-            for (int channel = 0; channel < channels; channel++)
-            {
-                T value = sample[node, channel];
-                sumSquares = NumOps.Add(sumSquares, NumOps.Multiply(value, value));
-            }
-
-            T norm = NumOps.Sqrt(sumSquares);
-            T denominator = NumOps.GreaterThan(norm, epsilon) ? norm : epsilon;
-            for (int channel = 0; channel < channels; channel++)
-                normalized[node, channel] = NumOps.Divide(sample[node, channel], denominator);
+            var rows = Engine.Reshape(sample, [nodeCount, channels]);
+            var norm = Engine.TensorSqrt(Engine.ReduceSum(Engine.TensorMultiply(rows, rows), new[] { 1 }, keepDims: true));
+            var epsilons = new Tensor<T>([nodeCount, 1]);
+            epsilons.Fill(epsilon);
+            var denominator = Engine.TensorWhere(Engine.TensorGreaterThan(norm, epsilon), norm, epsilons);
+            return Engine.TensorDivide(rows, denominator);
         }
-
-        return normalized;
     }
 
     private Tensor<T> SpatialToNodes(

@@ -237,8 +237,7 @@ public partial class HGRN2Layer<T> : LayerBase<T>, IShapeContract
         InitializeTensor2D(_forgetGateWeights);
 
         // Initialize forget gate bias so sigmoid(bias) starts with reasonable retention
-        for (int i = 0; i < _forgetGateBias.Length; i++)
-            _forgetGateBias[i] = NumOps.FromDouble(_forgetBias);
+        _forgetGateBias.Fill(NumOps.FromDouble(_forgetBias));
 
         InitializeTensor2D(_outputGateWeights);
         _outputGateBias.Fill(NumOps.Zero);

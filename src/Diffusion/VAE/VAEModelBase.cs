@@ -412,23 +412,9 @@ public abstract partial class VAEModelBase<T> : IVAEModel<T>, IModelShape,
         var rng = RandomHelper.CreateSeededRandom(seed ?? 0);
         var epsilon = SampleNoise(mean._shape, rng);
 
-        var result = new Tensor<T>(mean._shape);
-        var meanSpan = mean.AsSpan();
-        var logVarSpan = logVariance.AsSpan();
-        var epsilonSpan = epsilon.AsSpan();
-        var resultSpan = result.AsWritableSpan();
-
-        var halfOne = NumOps.FromDouble(0.5);
-
-        for (int i = 0; i < resultSpan.Length; i++)
-        {
-            // std = exp(0.5 * logVar)
-            var std = NumOps.Exp(NumOps.Multiply(halfOne, logVarSpan[i]));
-            // z = mean + std * epsilon
-            resultSpan[i] = NumOps.Add(meanSpan[i], NumOps.Multiply(std, epsilonSpan[i]));
-        }
-
-        return result;
+        // std = exp(0.5 * logVar); z = mean + std * epsilon
+        var std = Engine.TensorExp(Engine.TensorMultiplyScalar(logVariance, NumOps.FromDouble(0.5)));
+        return Engine.TensorAdd(mean, Engine.TensorMultiply(std, epsilon));
     }
 
     /// <inheritdoc />
@@ -1133,29 +1119,11 @@ public abstract partial class VAEModelBase<T> : IVAEModel<T>, IModelShape,
     /// </remarks>
     protected virtual T ComputeKLDivergence(Tensor<T> mean, Tensor<T> logVariance)
     {
-        var meanSpan = mean.AsSpan();
-        var logVarSpan = logVariance.AsSpan();
-
-        var sum = NumOps.Zero;
-        var one = NumOps.One;
-        var halfNeg = NumOps.FromDouble(-0.5);
-
-        for (int i = 0; i < meanSpan.Length; i++)
-        {
-            var mu = meanSpan[i];
-            var logVar = logVarSpan[i];
-
-            // 1 + log(sigma^2) - mu^2 - sigma^2
-            // = 1 + logVar - mu^2 - exp(logVar)
-            var term = NumOps.Add(one, logVar);
-            term = NumOps.Subtract(term, NumOps.Multiply(mu, mu));
-            term = NumOps.Subtract(term, NumOps.Exp(logVar));
-
-            sum = NumOps.Add(sum, term);
-        }
-
-        // -0.5 * sum
-        return NumOps.Multiply(halfNeg, sum);
+        // 1 + log(sigma^2) - mu^2 - sigma^2 = 1 + logVar - mu^2 - exp(logVar), summed, times -0.5.
+        var term = Engine.TensorSubtract(
+            Engine.TensorAddScalar(Engine.TensorSubtract(logVariance, Engine.TensorSquare(mean)), NumOps.One),
+            Engine.TensorExp(logVariance));
+        return NumOps.Multiply(NumOps.FromDouble(-0.5), Engine.TensorSum(term));
     }
 
     #endregion

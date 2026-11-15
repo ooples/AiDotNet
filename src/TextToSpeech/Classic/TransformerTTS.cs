@@ -238,42 +238,31 @@ public partial class TransformerTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITr
         int batch = input.Shape[0], tokens = input.Shape[1];
         var outputs = new List<Tensor<T>>(batch);
         for (int b = 0; b < batch; b++)
-        {
-            var row = new Tensor<T>(new[] { tokens });
-            for (int i = 0; i < tokens; i++) row[i] = input[b, i];
-            outputs.Add(SynthesizeOne(row));
-        }
-        int longest = outputs.Max(o => o.Shape[0]);
-        var result = new Tensor<T>(new[] { batch, longest, _options.MelChannels });
-        for (int b = 0; b < batch; b++)
-            for (int f = 0; f < outputs[b].Shape[0]; f++)
-                for (int m = 0; m < _options.MelChannels; m++) result[b, f, m] = outputs[b][f, m];
-        return result;
+            outputs.Add(SynthesizeOne(BatchRow(input, b)));
+        return PadAndStack(outputs, _options.MelChannels);
     }
 
     private Tensor<T> SynthesizeOne(Tensor<T> tokens)
     {
         var memory = Encode(tokens);
         int channels = _options.MelChannels;
-        var fed = new List<double[]> { new double[channels] };   // all-zero first frame
-        var produced = new List<double[]>();
+        var fed = new List<Tensor<T>> { new Tensor<T>(new[] { 1, channels }) };   // all-zero first frame
+        var produced = new List<Tensor<T>>();
+        T zero = NumOps.Zero;
         for (int step = 0; step < _options.MaxDecoderSteps; step++)
         {
-            var frames = new Tensor<T>(new[] { fed.Count, channels });
-            for (int f = 0; f < fed.Count; f++)
-                for (int c = 0; c < channels; c++) frames[f, c] = NumOps.FromDouble(fed[f][c]);
+            var frames = fed.Count == 1 ? fed[0] : Engine.TensorConcatenate(fed.ToArray(), 0);
             var (mel, stop) = DecodeFrames(frames, memory);
             int last = fed.Count - 1;
-            var frame = new double[channels];
-            for (int c = 0; c < channels; c++) frame[c] = NumOps.ToDouble(mel[last, c]);
+            var frame = Engine.TensorSlice(mel, new[] { last, 0 }, new[] { 1, channels }).Clone();
             produced.Add(frame);
             fed.Add(frame);
-            double stopProbability = 1.0 / (1.0 + Math.Exp(-NumOps.ToDouble(stop[last])));
-            if (stopProbability > 0.5) break;
+            // σ(logit) > 0.5 exactly when the logit is positive.
+            var stopLogit = Engine.TensorSlice(Engine.Reshape(stop, new[] { stop.Length }), new[] { last }, new[] { 1 });
+            if (Engine.TensorGreaterThan(stopLogit, zero).Cast<int>().ToArray()[0] != 0) break;
         }
-        var output = new Tensor<T>(new[] { produced.Count, channels });
-        for (int f = 0; f < produced.Count; f++)
-            for (int c = 0; c < channels; c++) output[f, c] = NumOps.FromDouble(produced[f][c]);
+        var output = produced.Count == 0 ? new Tensor<T>(new[] { 0, channels })
+            : produced.Count == 1 ? produced[0] : Engine.TensorConcatenate(produced.ToArray(), 0);
         return Refine(output);
     }
 

@@ -25,14 +25,14 @@ public class JointEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
     private readonly int _nFeaturesToSelect;
     private readonly int _nBins;
 
-    private double[]? _normalizedMutualInfo;
+    private Vector<T>? _normalizedMutualInfo;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NBins => _nBins;
-    public double[]? NormalizedMutualInfo => _normalizedMutualInfo;
+    public Vector<T>? NormalizedMutualInfo => _normalizedMutualInfo;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -68,95 +68,32 @@ public class JointEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var engine = Engine;
 
-        // Discretize target
-        double yMin = y.Min();
-        double yMax = y.Max();
-        double yRange = yMax - yMin;
-        var yBins = new int[n];
-        for (int i = 0; i < n; i++)
-            yBins[i] = yRange > 1e-10
-                ? Math.Min(_nBins - 1, (int)((y[i] - yMin) / yRange * _nBins))
-                : 0;
+        // Discretize target and features: bin = min(bins - 1, trunc((v - min) / range * bins)), 0 when constant
+        var yBins = FeatureScoringTensorOps.RangeBinOneHot(
+            engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 }), _nBins, _nBins);
+        var xBins = FeatureScoringTensorOps.RangeBinOneHot(Tensor<T>.FromMatrix(data), _nBins, _nBins);
 
-        // Compute H(Y)
-        var yProbs = new double[_nBins];
-        for (int i = 0; i < n; i++)
-            yProbs[yBins[i]]++;
-        for (int b = 0; b < _nBins; b++)
-            yProbs[b] /= n;
+        // Compute H(Y), H(X) and the joint entropy H(X,Y) (bits)
+        T hY = engine.TensorSum(FeatureScoringTensorOps.EntropyBits(
+            FeatureScoringTensorOps.BinCounts(yBins, _nBins), n));
+        var hX = FeatureScoringTensorOps.EntropyBits(FeatureScoringTensorOps.BinCounts(xBins, _nBins), n);
+        var hXY = FeatureScoringTensorOps.EntropyBits(engine.Reshape(
+            FeatureScoringTensorOps.JointBinCounts(xBins, yBins, _nBins), new[] { p, _nBins * _nBins }), n);
 
-        double hY = 0;
-        for (int b = 0; b < _nBins; b++)
-            if (yProbs[b] > 1e-10)
-                hY -= yProbs[b] * Math.Log(yProbs[b]) / Math.Log(2);
-
-        _normalizedMutualInfo = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            // Discretize feature
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            double xMin = col.Min();
-            double xMax = col.Max();
-            double xRange = xMax - xMin;
-            var xBins = new int[n];
-            for (int i = 0; i < n; i++)
-                xBins[i] = xRange > 1e-10
-                    ? Math.Min(_nBins - 1, (int)((col[i] - xMin) / xRange * _nBins))
-                    : 0;
-
-            // Compute H(X)
-            var xProbs = new double[_nBins];
-            for (int i = 0; i < n; i++)
-                xProbs[xBins[i]]++;
-            for (int b = 0; b < _nBins; b++)
-                xProbs[b] /= n;
-
-            double hX = 0;
-            for (int b = 0; b < _nBins; b++)
-                if (xProbs[b] > 1e-10)
-                    hX -= xProbs[b] * Math.Log(xProbs[b]) / Math.Log(2);
-
-            // Compute H(X,Y) - joint entropy
-            var jointProbs = new double[_nBins, _nBins];
-            for (int i = 0; i < n; i++)
-                jointProbs[xBins[i], yBins[i]]++;
-            for (int xb = 0; xb < _nBins; xb++)
-                for (int yb = 0; yb < _nBins; yb++)
-                    jointProbs[xb, yb] /= n;
-
-            double hXY = 0;
-            for (int xb = 0; xb < _nBins; xb++)
-                for (int yb = 0; yb < _nBins; yb++)
-                    if (jointProbs[xb, yb] > 1e-10)
-                        hXY -= jointProbs[xb, yb] * Math.Log(jointProbs[xb, yb]) / Math.Log(2);
-
-            // Mutual information: I(X;Y) = H(X) + H(Y) - H(X,Y)
-            double mi = hX + hY - hXY;
-
-            // Normalized mutual information
-            double avgEntropy = (hX + hY) / 2;
-            _normalizedMutualInfo[j] = avgEntropy > 1e-10 ? mi / avgEntropy : 0;
-        }
+        // Mutual information I(X;Y) = H(X) + H(Y) - H(X,Y), normalized by the mean entropy (0 when not above 1e-10)
+        var entropySum = engine.TensorAddScalar(hX, hY);
+        var mi = engine.TensorSubtract(entropySum, hXY);
+        var avgEntropy = engine.TensorDivideScalar(entropySum, NumOps.FromDouble(2));
+        var usable = engine.TensorGreaterThan(avgEntropy, PreprocessingTensorOps.Tolerance<T>(1e-10));
+        var normalizedMutualInfo = engine.TensorWhere(usable,
+            engine.TensorDivide(mi, engine.TensorWhere(usable, avgEntropy, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One))),
+            new Tensor<T>(new[] { p }));
+        _normalizedMutualInfo = normalizedMutualInfo.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _normalizedMutualInfo[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(normalizedMutualInfo, numToSelect);
 
         IsFitted = true;
     }
@@ -174,15 +111,7 @@ public class JointEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
         if (_selectedIndices is null)
             throw new InvalidOperationException("JointEntropySelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

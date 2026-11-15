@@ -292,20 +292,11 @@ public partial class FlagDiTPredictor<T> : NoisePredictorBase<T>
     /// <summary>Sinusoidal timestep embedding (Vaswani 2017 / DDPM), [B, hidden].</summary>
     private Tensor<T> GetTimestepEmbedding(int timestep, int batch)
     {
-        int half = _hiddenSize / 2;
-        var emb = new Tensor<T>(new[] { batch, _hiddenSize });
-        var span = emb.AsWritableSpan();
-        for (int b = 0; b < batch; b++)
-        {
-            for (int j = 0; j < half; j++)
-            {
-                double freq = System.Math.Exp(-System.Math.Log(10000.0) * j / System.Math.Max(1, half - 1));
-                double arg = timestep * freq;
-                span[b * _hiddenSize + j] = NumOps.FromDouble(System.Math.Sin(arg));
-                span[b * _hiddenSize + half + j] = NumOps.FromDouble(System.Math.Cos(arg));
-            }
-        }
-        return emb;
+        // emb[j] = sin(t f_j), emb[half + j] = cos(t f_j), f_j = exp(-ln(10000) j / max(1, half - 1)); the angles
+        // are computed in double (Half cannot resolve t f_j to a useful fraction of a radian)
+        var engine = AiDotNetEngine.Current;
+        var row = DiffusionVectorOps.SinusoidalTimestepEmbedding<T>(timestep, _hiddenSize);
+        return engine.TensorBroadcastTo(engine.Reshape(row, new[] { 1, _hiddenSize }), new[] { batch, _hiddenSize }).Clone();
     }
 
     /// <summary>[B,C,H,W] -> [B, (H/p)(W/p), C·p·p] via reshape + permute + reshape (tape-tracked).</summary>
@@ -331,13 +322,10 @@ public partial class FlagDiTPredictor<T> : NoisePredictorBase<T>
     /// <inheritdoc />
     protected override Vector<T> GetParameterGradients()
     {
-        var all = new List<T>();
+        var all = new List<Vector<T>>();
         foreach (var layer in FlagDiTLayerSequence())
-        {
-            var g = layer.GetParameterGradients();
-            for (int i = 0; i < g.Length; i++) all.Add(g[i]);
-        }
-        return new Vector<T>(all.ToArray());
+            all.Add(layer.GetParameterGradients());
+        return Vector<T>.Concatenate(all);
     }
 
     /// <summary>The full layer list in the canonical (stable) order used by GetParameters/SetParameters.</summary>
@@ -365,17 +353,16 @@ public partial class FlagDiTPredictor<T> : NoisePredictorBase<T>
 
     private static void Append(List<T> list, ILayer<T> layer)
     {
-        var p = layer.GetParameters();
-        for (int i = 0; i < p.Length; i++) list.Add(p[i]);
+        list.AddRange(layer.GetParameters().AsSpan().ToArray());
     }
 
     private static int Load(ILayer<T> layer, Vector<T> parameters, int offset)
     {
         int count = checked((int)layer.ParameterCount);
         if (count == 0) return offset;
-        var p = new Vector<T>(count);
-        for (int i = 0; i < count && offset + i < parameters.Length; i++) p[i] = parameters[offset + i];
-        layer.SetParameters(p);
+        int available = Math.Max(0, Math.Min(count, parameters.Length - offset));
+        var p = available > 0 ? parameters.GetSubVector(offset, available) : new Vector<T>(0);
+        layer.SetParameters(DiffusionVectorOps.Fit(p, count));
         return offset + count;
     }
 

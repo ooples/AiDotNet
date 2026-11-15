@@ -130,17 +130,12 @@ public partial class DaubechiesWavelet<T> : WaveletFunctionBase<T>
         if (t < 0 || t > _order - 1)
             return NumOps.Zero;
 
-        T result = NumOps.Zero;
-        for (int k = 0; k < _scalingCoefficients.Length; k++)
-        {
-            double shiftedT = t - k;
-            if (shiftedT >= 0 && shiftedT < 1)
-            {
-                result = NumOps.Add(result, NumOps.Multiply(_scalingCoefficients[k], NumOps.FromDouble(CascadeAlgorithm(shiftedT))));
-            }
-        }
+        // Only the integer shift k = floor(t) puts t - k in [0, 1), so the sum over k has a single term.
+        int k = (int)Math.Floor(t);
+        if (k >= _scalingCoefficients.Length)
+            return NumOps.Zero;
 
-        return result;
+        return NumOps.Multiply(_scalingCoefficients[k], CascadeAlgorithm(t - k));
     }
 
     /// <summary>
@@ -172,26 +167,25 @@ public partial class DaubechiesWavelet<T> : WaveletFunctionBase<T>
     /// and computational efficiency for most purposes.
     /// </para>
     /// </remarks>
-    private double CascadeAlgorithm(double t, int iterations = 7)
+    private T CascadeAlgorithm(double t, int iterations = 7)
     {
         if (t < 0 || t > 1)
-            return 0;
+            return NumOps.Zero;
 
-        double[] values = new double[1 << iterations];
-        values[0] = 1;
+        var values = new Vector<T>(1 << iterations);
+        values.Fill(NumOps.Zero);
+        values[0] = NumOps.One;
 
+        int filterLength = _scalingCoefficients.Length;
         for (int iter = 0; iter < iterations; iter++)
         {
-            double[] newValues = new double[values.Length * 2];
-            for (int i = 0; i < values.Length; i++)
-            {
-                for (int k = 0; k < _scalingCoefficients.Length; k++)
-                {
-                    int index = (2 * i + k) % newValues.Length;
-                    newValues[index] += Convert.ToDouble(_scalingCoefficients[k]) * values[i];
-                }
-            }
-            values = newValues;
+            // new[(2i + k) mod 2n] += h[k] * values[i]: upsample by two, then convolve periodically with h, i.e.
+            // correlate with the reversed h over a window that starts L-1 samples before each output (as
+            // PeriodicSynthesis does; correlating with h itself reverses the scaling function).
+            int newLength = values.Length * 2;
+            values = WaveletEngineOps<T>.PeriodicCorrelate(
+                WaveletEngineOps<T>.Upsample(values, 2), WaveletEngineOps<T>.Reverse(_scalingCoefficients),
+                1, newLength, -(filterLength - 1));
         }
 
         int index_t = (int)(t * values.Length);
@@ -233,25 +227,10 @@ public partial class DaubechiesWavelet<T> : WaveletFunctionBase<T>
             throw new ArgumentException("Input length must be even for Daubechies wavelet decomposition.");
 
         int halfLength = input.Length / 2;
-        var approximation = new Vector<T>(halfLength);
-        var detail = new Vector<T>(halfLength);
 
-        for (int i = 0; i < halfLength; i++)
-        {
-            T approx = NumOps.Zero;
-            T det = NumOps.Zero;
-
-            for (int j = 0; j < _scalingCoefficients.Length; j++)
-            {
-                int index = (2 * i + j) % input.Length;
-                approx = NumOps.Add(approx, NumOps.Multiply(_scalingCoefficients[j], input[index]));
-                det = NumOps.Add(det, NumOps.Multiply(_waveletCoefficients[j], input[index]));
-            }
-
-            approximation[i] = approx;
-            detail[i] = det;
-        }
-
+        // a[i] = sum_j h[j] * x[(2i + j) mod n], d[i] = sum_j g[j] * x[(2i + j) mod n]
+        var approximation = WaveletEngineOps<T>.PeriodicCorrelate(input, _scalingCoefficients, 2, halfLength);
+        var detail = WaveletEngineOps<T>.PeriodicCorrelate(input, _waveletCoefficients, 2, halfLength);
         return (approximation, detail);
     }
 
@@ -281,38 +260,9 @@ public partial class DaubechiesWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     public Vector<T> Reconstruct(Vector<T> approximation, Vector<T> detail)
     {
-        int outputLength = approximation.Length * 2;
-        var reconstructed = new Vector<T>(outputLength);
-        int filterLength = _scalingCoefficients.Length;
-
-        // For orthogonal wavelets, reconstruction filters are time-reversed analysis filters
-        var h = _scalingCoefficients.ToArray();
-        var g = _waveletCoefficients.ToArray();
-
-        for (int i = 0; i < outputLength; i++)
-        {
-            T sum = NumOps.Zero;
-
-            for (int j = 0; j < filterLength; j++)
-            {
-                // Upsampling: only even indices contribute
-                int approxIndex = (i - j + filterLength * outputLength) / 2 % approximation.Length;
-                int detailIndex = approxIndex;
-
-                // Check if this index corresponds to an even position (after upsampling)
-                if ((i - j + filterLength * outputLength) % 2 == 0)
-                {
-                    // Use time-reversed filters for reconstruction
-                    int revJ = filterLength - 1 - j;
-                    sum = NumOps.Add(sum, NumOps.Multiply(h[revJ], approximation[approxIndex]));
-                    sum = NumOps.Add(sum, NumOps.Multiply(g[revJ], detail[detailIndex]));
-                }
-            }
-
-            reconstructed[i] = sum;
-        }
-
-        return reconstructed;
+        // The orthogonal inverse is the adjoint of the periodic analysis in Decompose:
+        // x[m] = sum_j h[j] * up(a)[(m - j) mod n] + g[j] * up(d)[(m - j) mod n].
+        return WaveletEngineOps<T>.PeriodicSynthesis(approximation, detail, _scalingCoefficients, _waveletCoefficients);
     }
 
     /// <summary>
@@ -407,15 +357,15 @@ public partial class DaubechiesWavelet<T> : WaveletFunctionBase<T>
     private Vector<T> ComputeScalingCoefficients()
     {
         // Coefficients for Daubechies-4 wavelet
-        double[] d4Coefficients =
-        [
-            (1 + Math.Sqrt(3)) / (4 * Math.Sqrt(2)),
-            (3 + Math.Sqrt(3)) / (4 * Math.Sqrt(2)),
-            (3 - Math.Sqrt(3)) / (4 * Math.Sqrt(2)),
-            (1 - Math.Sqrt(3)) / (4 * Math.Sqrt(2))
-        ];
-
-        return new Vector<T>([.. d4Coefficients.Select(c => NumOps.FromDouble(c))]);
+        double sqrt3 = Math.Sqrt(3);
+        double denominator = 4 * Math.Sqrt(2);
+        return new Vector<T>(new[]
+        {
+            NumOps.FromDouble((1 + sqrt3) / denominator),
+            NumOps.FromDouble((3 + sqrt3) / denominator),
+            NumOps.FromDouble((3 - sqrt3) / denominator),
+            NumOps.FromDouble((1 - sqrt3) / denominator)
+        });
     }
 
     /// <summary>
@@ -455,15 +405,7 @@ public partial class DaubechiesWavelet<T> : WaveletFunctionBase<T>
     /// </remarks>
     private Vector<T> ComputeWaveletCoefficients()
     {
-        var coeffs = _scalingCoefficients.ToArray();
-        int L = coeffs.Length;
-        var waveletCoeffs = new T[L];
-
-        for (int i = 0; i < L; i++)
-        {
-            waveletCoeffs[i] = NumOps.Multiply(NumOps.FromDouble(Math.Pow(-1, i)), coeffs[L - 1 - i]);
-        }
-
-        return new Vector<T>(waveletCoeffs);
+        // g[i] = (-1)^i * h[L - 1 - i]
+        return WaveletEngineOps<T>.QuadratureMirror(_scalingCoefficients);
     }
 }

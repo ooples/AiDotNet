@@ -24,13 +24,13 @@ public class EuclideanDistanceSelector<T> : TransformerBase<T, Matrix<T>, Matrix
 {
     private readonly int _nFeaturesToSelect;
 
-    private double[]? _distanceScores;
+    private Vector<T>? _distanceScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? DistanceScores => _distanceScores;
+    public Vector<T>? DistanceScores => _distanceScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -64,54 +64,26 @@ public class EuclideanDistanceSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new int[n];
-        for (int i = 0; i < n; i++)
+        var X = Tensor<T>.FromMatrix(data);
+        PreprocessingTensorOps.ClassLabels(target, out var classes, out var classIndex);
+        int k = classes.Length;
+
+        // Compute class centroids for every feature
+        var classCenters = new Tensor<T>[k];
+        for (int c = 0; c < k; c++)
         {
-            y[i] = (int)Math.Round(NumOps.ToDouble(target[i]));
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+            var rows = FeatureScoringTensorOps.Rows(X, FeatureScoringTensorOps.GroupMembers(classIndex, c));
+            classCenters[c] = Engine.Reshape(Engine.ReduceMean(rows, new[] { 0 }, false), new[] { 1, p });
         }
 
-        var classes = y.Distinct().OrderBy(c => c).ToList();
-        var classIndices = new Dictionary<int, List<int>>();
-        foreach (var c in classes)
-            classIndices[c] = Enumerable.Range(0, n).Where(i => y[i] == c).ToList();
-
-        _distanceScores = new double[p];
-
-        for (int j = 0; j < p; j++)
-        {
-            // Compute class centroids for this feature
-            var centroids = new Dictionary<int, double>();
-            foreach (var c in classes)
-            {
-                centroids[c] = classIndices[c].Average(i => X[i, j]);
-            }
-
-            // Compute average pairwise Euclidean distance between class centroids
-            double totalDistance = 0;
-            int pairCount = 0;
-
-            for (int ci = 0; ci < classes.Count; ci++)
-            {
-                for (int cj = ci + 1; cj < classes.Count; cj++)
-                {
-                    double diff = centroids[classes[ci]] - centroids[classes[cj]];
-                    totalDistance += Math.Abs(diff);
-                    pairCount++;
-                }
-            }
-
-            _distanceScores[j] = pairCount > 0 ? totalDistance / pairCount : 0;
-        }
+        // Average pairwise distance between class centroids
+        var scores = k > 0
+            ? FeatureScoringTensorOps.MeanPairwiseDifference(Engine.TensorConcatenate(classCenters, 0), squared: false)
+            : new Tensor<T>(new[] { p });
+        _distanceScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _distanceScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(scores, numToSelect);
 
         IsFitted = true;
     }
@@ -129,15 +101,7 @@ public class EuclideanDistanceSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         if (_selectedIndices is null)
             throw new InvalidOperationException("EuclideanDistanceSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

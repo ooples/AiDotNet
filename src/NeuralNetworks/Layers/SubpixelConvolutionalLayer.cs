@@ -776,52 +776,6 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>, IShapeContrac
     }
 
     /// <summary>
-    /// Computes the gradient with respect to the activation function.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <param name="lastOutput">The output from the last forward pass.</param>
-    /// <returns>The gradient after accounting for the activation function.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method computes the gradient with respect to the activation function by multiplying the output gradient
-    /// with the derivative of the activation function. It handles both scalar and vector activation functions.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method adjusts the error gradient based on the activation function used.
-    /// 
-    /// Different activation functions affect how errors flow backward:
-    /// - For example, ReLU only allows gradients to flow through positive values
-    /// - Sigmoid squeezes gradients when inputs are very positive or very negative
-    /// 
-    /// This step is necessary because:
-    /// - During the forward pass, the activation function changed the values
-    /// - During the backward pass, we need to account for those changes
-    /// - The activation's derivative tells us how much the function amplified or reduced signals
-    /// 
-    /// This method handles both standard activations (applied to each value separately)
-    /// and vector activations (applied to groups of values together).
-    /// </para>
-    /// </remarks>
-    private Tensor<T> ComputeActivationGradient(Tensor<T> outputGradient, Tensor<T> lastOutput)
-    {
-        if (UsingVectorActivation)
-        {
-            var vecAct = VectorActivation ?? throw new InvalidOperationException("VectorActivation has not been initialized.");
-            return vecAct.Derivative(lastOutput).PointwiseMultiply(outputGradient);
-        }
-        else
-        {
-            var scalarAct = ScalarActivation ?? throw new InvalidOperationException("ScalarActivation has not been initialized.");
-            var result = TensorAllocator.Rent<T>(outputGradient._shape);
-            for (int i = 0; i < outputGradient.Length; i++)
-            {
-                result[i] = NumOps.Multiply(scalarAct.Derivative(lastOutput[i]), outputGradient[i]);
-            }
-
-            return result;
-        }
-    }
-
-    /// <summary>
     /// Calculates the input shape for the layer based on specified dimensions.
     /// </summary>
     /// <param name="inputDepth">The number of channels in the input.</param>

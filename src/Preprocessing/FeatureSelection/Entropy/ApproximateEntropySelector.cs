@@ -27,7 +27,7 @@ public class ApproximateEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
     private readonly int _embeddingDimension;
     private readonly double _tolerance;
 
-    private double[]? _apenValues;
+    private Vector<T>? _apenValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -35,7 +35,7 @@ public class ApproximateEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int EmbeddingDimension => _embeddingDimension;
     public double Tolerance => _tolerance;
-    public double[]? ApEnValues => _apenValues;
+    public Vector<T>? ApEnValues => _apenValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -70,79 +70,56 @@ public class ApproximateEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
         if (n < _embeddingDimension + 2)
             throw new ArgumentException($"Need at least {_embeddingDimension + 2} samples.");
 
-        var X = new double[n, p];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
 
-        _apenValues = new double[p];
+        // Tolerance r = tolerance * population std per feature; features with r below 1e-10 score 0
+        var tolerances = engine.TensorMultiplyScalar(FeatureScoringTensorOps.ColumnStd(X), NumOps.FromDouble(_tolerance));
+        var degenerate = new HashSet<int>(PreprocessingTensorOps.MaskPositions(
+            engine.TensorLessThan(tolerances, PreprocessingTensorOps.Tolerance<T>(1e-10))));
 
+        var apenValues = new Tensor<double>[p];
         for (int j = 0; j < p; j++)
         {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            // Calculate standard deviation for tolerance scaling
-            double mean = col.Average();
-            double std = Math.Sqrt(col.Select(v => (v - mean) * (v - mean)).Average());
-            double r = _tolerance * std;
-
-            if (r < 1e-10)
+            if (degenerate.Contains(j))
             {
-                _apenValues[j] = 0;
+                apenValues[j] = new Tensor<double>(new[] { 1 });
                 continue;
             }
 
-            // Compute phi for m and m+1
-            double phiM = ComputePhi(col, _embeddingDimension, r);
-            double phiM1 = ComputePhi(col, _embeddingDimension + 1, r);
+            var col = PreprocessingTensorOps.ColumnVector(X, j);
+            var r = engine.TensorSlice(tolerances, new[] { j }, new[] { 1 });
 
             // ApEn = phi(m) - phi(m+1)
-            _apenValues[j] = phiM - phiM1;
+            apenValues[j] = engine.TensorSubtract(
+                ComputePhi(col, _embeddingDimension, r), ComputePhi(col, _embeddingDimension + 1, r));
         }
 
+        var apen = (p == 0 ? new Tensor<double>(new[] { 0 }) : engine.TensorConcatenate(apenValues, 0)).Cast<T>();
+        _apenValues = apen.ToVector();
+
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _apenValues[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(apen, numToSelect);
 
         IsFitted = true;
     }
 
-    private double ComputePhi(double[] data, int m, double r)
+    /// <summary>
+    /// phi(m) = mean over the n - m + 1 templates of ln(C_i), C_i the fraction of templates (self included) within
+    /// r of template i (Pincus 1991). Returns [1].
+    /// </summary>
+    private Tensor<double> ComputePhi(Tensor<T> data, int m, Tensor<T> r)
     {
         int n = data.Length;
         int count = n - m + 1;
-        if (count <= 0) return 0;
+        if (count <= 0) return new Tensor<double>(new[] { 1 });
 
-        var logs = new double[count];
-
-        for (int i = 0; i < count; i++)
-        {
-            int matches = 0;
-            for (int k = 0; k < count; k++)
-            {
-                // Check if patterns match within tolerance
-                bool isMatch = true;
-                for (int l = 0; l < m; l++)
-                {
-                    if (Math.Abs(data[i + l] - data[k + l]) > r)
-                    {
-                        isMatch = false;
-                        break;
-                    }
-                }
-                if (isMatch) matches++;
-            }
-            logs[i] = Math.Log((double)matches / count);
-        }
-
-        return logs.Average();
+        // Counted in int (a Half sum of the 0/1 matches stops at 2048); the fractions and logs are taken in double
+        // Counted per template row in bounded blocks, not from a [count, count] match matrix
+        var matches = FeatureScoringTensorOps.TemplateMatchCounts(data, m, count, r);
+        var logs = Engine.TensorLog(Engine.TensorDivideScalar(matches.Cast<double>(), (double)count));
+        return Engine.ReduceMean(logs, new[] { 0 }, true);
     }
-
     public new Matrix<T> FitTransform(Matrix<T> data)
     {
         Fit(data);
@@ -155,15 +132,7 @@ public class ApproximateEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
         if (_selectedIndices is null)
             throw new InvalidOperationException("ApproximateEntropySelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

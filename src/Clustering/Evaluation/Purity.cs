@@ -1,3 +1,4 @@
+using AiDotNet.Clustering.Base;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 
@@ -99,10 +100,12 @@ public class Purity<T> : ExternalClusterMetricBase<T>
         var clusterLabels = new HashSet<int>();
         var trueClasses = new HashSet<int>();
 
+        var predictedLabelsIds = ClusteringTensorOps.ToIntArray(predictedLabels);
+        var trueLabelsIds = ClusteringTensorOps.ToIntArray(trueLabels);
         for (int i = 0; i < n; i++)
         {
-            int cluster = (int)NumOps.ToDouble(predictedLabels[i]);
-            int trueClass = (int)NumOps.ToDouble(trueLabels[i]);
+            int cluster = predictedLabelsIds[i];
+            int trueClass = trueLabelsIds[i];
 
             clusterLabels.Add(cluster);
             trueClasses.Add(trueClass);

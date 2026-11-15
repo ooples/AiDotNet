@@ -68,8 +68,8 @@ public partial class HyperNeRFMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBas
     [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _conditioningWeights;
 
-    /// <summary>Pre-computed positional encodings per group.</summary>
-    private readonly double[][] _positionalEncodings;
+    /// <summary>Pre-computed positional encodings per group, [numGroups, peDim].</summary>
+    private readonly Tensor<T> _positionalEncodings;
 
     /// <inheritdoc/>
     public override MetaLearningAlgorithmType AlgorithmType => MetaLearningAlgorithmType.HyperNeRFMeta;
@@ -102,20 +102,19 @@ public partial class HyperNeRFMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBas
         for (int i = 0; i < totalWeights; i++)
             _conditioningWeights[i] = NumOps.FromDouble(scale * (RandomGenerator.NextDouble() - 0.5));
 
-        // Pre-compute positional encodings for each group
-        _positionalEncodings = new double[_numGroups][];
-        for (int g = 0; g < _numGroups; g++)
-        {
-            _positionalEncodings[g] = new double[_peDim];
-            double normalizedPos = (double)g / Math.Max(_numGroups - 1, 1);
-            _positionalEncodings[g][0] = normalizedPos;
-            for (int f = 0; f < options.NumFrequencyBands; f++)
-            {
-                double freq = Math.Pow(2.0, f) * Math.PI;
-                _positionalEncodings[g][1 + 2 * f] = Math.Sin(freq * normalizedPos);
-                _positionalEncodings[g][2 + 2 * f] = Math.Cos(freq * normalizedPos);
-            }
-        }
+        // Pre-compute positional encodings for each group:
+        // [pos, sin(2^0 pi pos), cos(2^0 pi pos), ..., sin(2^(F-1) pi pos), cos(2^(F-1) pi pos)], pos = g / max(G - 1, 1)
+        int numBands = options.NumFrequencyBands;
+        var positions = Engine.TensorDivideScalar(
+            Engine.TensorArange<T>(0, _numGroups, 1), NumOps.FromDouble(Math.Max(_numGroups - 1, 1)));
+        var frequencies = Engine.TensorMultiplyScalar(
+            Engine.TensorPower(Tensor<T>.FromVector(Engine.Fill(numBands, NumOps.FromDouble(2.0))), Engine.TensorArange<T>(0, numBands, 1)),
+            NumOps.FromDouble(Math.PI));
+        var angles = Engine.TensorOuter(positions, frequencies);
+        var sinCos = Engine.Reshape(
+            Engine.TensorStack(new[] { Engine.TensorSin(angles), Engine.TensorCos(angles) }, 2), new[] { _numGroups, 2 * numBands });
+        _positionalEncodings = Engine.TensorConcatenate(
+            new[] { Engine.Reshape(positions, new[] { _numGroups, 1 }), sinCos }, 1);
     }
 
     /// <inheritdoc/>
@@ -127,50 +126,16 @@ public partial class HyperNeRFMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBas
 
         foreach (var task in taskBatch.Tasks)
         {
-            var adaptedParams = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
-
-            // Compute task latent code from support gradient
-            ParamModel.SetParameters(adaptedParams);
-            var supportGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-            var latentCode = CompressGradient(supportGrad);
-
-            // Compute per-group modulation factors
-            var modulation = ComputeModulation(latentCode);
-
-            for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
-            {
-                ParamModel.SetParameters(adaptedParams);
-                var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-
-                // Apply position-aware, task-conditioned modulation
-                for (int d = 0; d < _paramDim; d++)
-                {
-                    int g = Math.Min(d / _groupSize, _numGroups - 1);
-                    adaptedParams[d] = NumOps.Subtract(adaptedParams[d],
-                        NumOps.FromDouble(_algoOptions.InnerLearningRate * NumOps.ToDouble(modulation[g]) * NumOps.ToDouble(grad[d])));
-                }
-
-                // Recompute latent code for dynamic conditioning (optional: every other step)
-                if (step < _algoOptions.AdaptationSteps - 1 && step % 2 == 0)
-                {
-                    ParamModel.SetParameters(adaptedParams);
-                    var newGrad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
-                    latentCode = CompressGradient(newGrad);
-                    modulation = ComputeModulation(latentCode);
-                }
-            }
+            var adaptedParams = AdaptConditioned(task, initParams, clip: true, recondition: true);
 
             ParamModel.SetParameters(adaptedParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
 
             // Conditioning weight regularization
-            double condReg = 0;
-            for (int i = 0; i < _conditioningWeights.Length; i++)
-                condReg += NumOps.ToDouble(_conditioningWeights[i]) * NumOps.ToDouble(_conditioningWeights[i]);
+            T condReg = Engine.DotProduct(_conditioningWeights, _conditioningWeights);
 
-            var totalLoss = NumOps.Add(queryLoss,
-                NumOps.FromDouble(_algoOptions.ConditioningRegWeight * condReg / _conditioningWeights.Length));
+            var totalLoss = NumOps.Add(queryLoss, NumOps.Multiply(
+                NumOps.FromDouble(_algoOptions.ConditioningRegWeight / _conditioningWeights.Length), condReg));
 
             losses.Add(totalLoss);
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
@@ -187,105 +152,123 @@ public partial class HyperNeRFMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBas
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         var initParams = ParamModel.GetParameters();
-        var adaptedParams = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
-
-        ParamModel.SetParameters(adaptedParams);
-        var supportGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-        var latentCode = CompressGradient(supportGrad);
-        var modulation = ComputeModulation(latentCode);
-
-        for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
-        {
-            ParamModel.SetParameters(adaptedParams);
-            var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-
-            for (int d = 0; d < _paramDim; d++)
-            {
-                int g = Math.Min(d / _groupSize, _numGroups - 1);
-                adaptedParams[d] = NumOps.Subtract(adaptedParams[d],
-                    NumOps.FromDouble(_algoOptions.InnerLearningRate * NumOps.ToDouble(modulation[g]) * NumOps.ToDouble(grad[d])));
-            }
-        }
+        var adaptedParams = AdaptConditioned(task, initParams, clip: true, recondition: false);
 
         ParamModel.SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
+    /// <summary>
+    /// The conditioned inner loop: a latent code from the support gradient conditions per-group step sizes,
+    /// theta_d -= lr * modulation[group(d)] * g_d. With <paramref name="recondition"/> the code is recomputed
+    /// from a fresh unclipped gradient after every even step except the last.
+    /// </summary>
+    private Vector<T> AdaptConditioned(IMetaLearningTask<T, TInput, TOutput> task, Vector<T> initParams, bool clip, bool recondition)
+    {
+        var adaptedParams = initParams.Clone();
+
+        // Compute task latent code from support gradient
+        ParamModel.SetParameters(adaptedParams);
+        var supportGrad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
+        var latentCode = CompressGradient(clip ? ClipGradients(supportGrad) : supportGrad);
+
+        // Compute per-group modulation factors
+        var modulation = ComputeModulation(latentCode);
+        T learningRate = NumOps.FromDouble(_algoOptions.InnerLearningRate);
+
+        for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
+        {
+            ParamModel.SetParameters(adaptedParams);
+            var raw = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
+            var grad = (clip ? ClipGradients(raw) : raw).GetSubVector(0, _paramDim);
+
+            // Apply position-aware, task-conditioned modulation
+            var scaled = Engine.Multiply(PerParameter(modulation), grad);
+            adaptedParams = Engine.Subtract(adaptedParams, Engine.Multiply(scaled, learningRate));
+
+            // Recompute latent code for dynamic conditioning (optional: every other step)
+            if (recondition && step < _algoOptions.AdaptationSteps - 1 && step % 2 == 0)
+            {
+                ParamModel.SetParameters(adaptedParams);
+                var newGrad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
+                modulation = ComputeModulation(CompressGradient(newGrad));
+            }
+        }
+
+        return adaptedParams;
+    }
+
+    /// <summary>Each parameter's group value: group g covers [g * groupSize, (g + 1) * groupSize).</summary>
+    private Vector<T> PerParameter(Vector<T> groupValues)
+    {
+        var repeated = Engine.TensorBroadcastTo(
+            Tensor<T>.FromVector(groupValues, new[] { _numGroups, 1 }), new[] { _numGroups, _groupSize });
+        return Engine.Reshape(repeated, new[] { _numGroups * _groupSize }).ToVector().GetSubVector(0, _paramDim);
+    }
+
+    /// <summary>
+    /// tanh of the bucket means of the gradient: bucket e covers [e * b, e * b + b) clipped to the gradient,
+    /// with b = ceil(paramDim / latentDim); empty buckets give 0.
+    /// </summary>
     private Vector<T> CompressGradient(Vector<T> grad)
     {
         int latentDim = _algoOptions.LatentDim;
-        var result = new Vector<T>(latentDim);
         // Use ceiling division so all parameters are covered (no remainder dropped)
         int bucketSize = Math.Max(1, (_paramDim + latentDim - 1) / latentDim);
-        for (int e = 0; e < latentDim; e++)
+        int covered = latentDim * bucketSize;
+        int used = Math.Min(grad.Length, covered);
+
+        var values = used == grad.Length ? grad : grad.GetSubVector(0, used);
+        var present = Engine.Fill(used, NumOps.One);
+        if (used < covered)
         {
-            double sum = 0;
-            int start = e * bucketSize;
-            int end = Math.Min(start + bucketSize, grad.Length);
-            int count = end - start;
-            for (int d = start; d < end; d++)
-                sum += NumOps.ToDouble(grad[d]);
-            result[e] = NumOps.FromDouble(count > 0 ? Math.Tanh(sum / count) : 0.0);
+            values = Vector<T>.Concatenate(values, new Vector<T>(covered - used));
+            present = Vector<T>.Concatenate(present, new Vector<T>(covered - used));
         }
-        return result;
+
+        var shape = new[] { latentDim, bucketSize };
+        var sums = Engine.ReduceSum(Tensor<T>.FromVector(values, shape), new[] { 1 }, keepDims: false);
+        var counts = Engine.TensorMax(Engine.ReduceSum(Tensor<T>.FromVector(present, shape), new[] { 1 }, keepDims: false), NumOps.One);
+        return Engine.TensorTanh(Engine.TensorDivide(sums, counts)).ToVector();
     }
 
+    /// <summary>
+    /// 1 + strength * (sigmoid(w_g . [PE(g), z]) - 0.5) per group, with w_g row g of the [numGroups, peDim + latentDim]
+    /// conditioning weights.
+    /// </summary>
     private Vector<T> ComputeModulation(Vector<T> latentCode)
     {
         int latentDim = _algoOptions.LatentDim;
-        int inputDim = _peDim + latentDim;
-        var modulation = new Vector<T>(_numGroups);
+        var weights = Tensor<T>.FromVector(_conditioningWeights, new[] { _numGroups, _peDim + latentDim });
 
-        for (int g = 0; g < _numGroups; g++)
-        {
-            // Concatenate [PE(g), latentCode]
-            double sum = 0;
-            int wOffset = g * inputDim;
+        // PE features
+        var peWeights = Engine.TensorSlice(weights, new[] { 0, 0 }, new[] { _numGroups, _peDim });
+        var peTerm = Engine.ReduceSum(Engine.TensorMultiply(peWeights, _positionalEncodings), new[] { 1 }, keepDims: false);
 
-            // PE features
-            for (int p = 0; p < _peDim; p++)
-                sum += NumOps.ToDouble(_conditioningWeights[wOffset + p]) * _positionalEncodings[g][p];
+        // Latent code features
+        var latentWeights = Engine.TensorSlice(weights, new[] { 0, _peDim }, new[] { _numGroups, latentDim });
+        var latentTerm = Engine.TensorMatMul(latentWeights, Tensor<T>.FromVector(latentCode, new[] { latentDim, 1 }));
 
-            // Latent code features
-            for (int l = 0; l < latentDim; l++)
-                sum += NumOps.ToDouble(_conditioningWeights[wOffset + _peDim + l]) * NumOps.ToDouble(latentCode[l]);
-
-            // Sigmoid → modulation
-            double gamma = 1.0 / (1.0 + Math.Exp(-sum));
-            modulation[g] = NumOps.FromDouble(1.0 + _algoOptions.ConditioningStrength * (gamma - 0.5));
-        }
-
-        return modulation;
+        // Sigmoid -> modulation
+        var gamma = Engine.TensorSigmoid(Engine.TensorAdd(peTerm, Engine.Reshape(latentTerm, new[] { _numGroups })));
+        return Engine.TensorAddScalar(
+            Engine.TensorMultiplyScalar(Engine.TensorSubtractScalar(gamma, NumOps.FromDouble(0.5)), NumOps.FromDouble(_algoOptions.ConditioningStrength)),
+            NumOps.One).ToVector();
     }
 
     private double ComputeNeRFLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
-        double totalLoss = 0;
+        var losses = new List<T>(taskBatch.Tasks.Length);
         var initParams = ParamModel.GetParameters();
         foreach (var task in taskBatch.Tasks)
         {
-            var ap = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) ap[d] = initParams[d];
+            var ap = AdaptConditioned(task, initParams, clip: false, recondition: false);
             ParamModel.SetParameters(ap);
-            var sg = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
-            var lc = CompressGradient(sg);
-            var mod = ComputeModulation(lc);
-            for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
-            {
-                ParamModel.SetParameters(ap);
-                var g = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
-                for (int d = 0; d < _paramDim; d++)
-                {
-                    int grp = Math.Min(d / _groupSize, _numGroups - 1);
-                    ap[d] = NumOps.Subtract(ap[d],
-                        NumOps.FromDouble(_algoOptions.InnerLearningRate * NumOps.ToDouble(mod[grp]) * NumOps.ToDouble(g[d])));
-                }
-            }
-            ParamModel.SetParameters(ap);
-            totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
+            losses.Add(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
         ParamModel.SetParameters(initParams);
-        return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
+
+        // The SPSA callback contract is a double; the batch mean is reduced in T and converted once.
+        return NumOps.ToDouble(ComputeMean(losses));
     }
 }
