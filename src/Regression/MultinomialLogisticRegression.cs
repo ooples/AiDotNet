@@ -227,6 +227,10 @@ public partial class MultinomialLogisticRegression<T> : RegressionBase<T>
         _coefficients = new Matrix<T>(_numClasses, numFeatures + 1);
 
         Matrix<T> xWithIntercept = x.AddColumn(Vector<T>.CreateDefault(x.Rows, NumOps.One));
+        Matrix<T> yOneHot = CreateOneHotEncoding(y);
+        bool penalized = Regularization is not NoRegularization<T, Matrix<T>, Vector<T>>;
+        T logLikelihood = LogLikelihood(xWithIntercept, yOneHot);
+        T half = NumOps.FromDouble(0.5);
 
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
         {
@@ -240,17 +244,52 @@ public partial class MultinomialLogisticRegression<T> : RegressionBase<T>
                 hessian = hessian.Add(Regularization.Regularize(hessian));
             }
 
+            // The full-softmax Hessian is singular: shifting every class's weights for a feature by the
+            // same amount leaves the probabilities unchanged (diag(p) - pp^T has 1 in its null space), so
+            // the Newton solve failed with "R has a zero diagonal entry" on every multiclass fit. The
+            // gradient has no component along that direction (each row of Y - P sums to 0), so a tiny
+            // damping term removes the singularity without moving the solution; it also keeps the step
+            // defined when features are collinear.
+            hessian = DampHessian(hessian);
+
             Vector<T> flattenedGradient = gradient.Flatten();
             Vector<T> update = MatrixSolutionHelper.SolveLinearSystem(hessian, flattenedGradient, _options.DecompositionType);
 
-            // Reshape update into _coefficients shape: _numClasses × (numFeatures+1)
-            Matrix<T> updateMatrix = new Matrix<T>(_coefficients.Rows, _coefficients.Columns);
-            int copied = Math.Min(update.Length, _coefficients.Rows * _coefficients.Columns);
-            update.AsSpan().Slice(0, copied).CopyTo(updateMatrix.AsWritableSpan());
+            // The gradient is [feature, class], so update[feature * classes + class] is that class's step for
+            // that feature. It used to be copied row-major into the [class, feature] coefficient matrix,
+            // which scrambled every step unless the feature and class counts happened to match.
+            var featureMajor = new Matrix<T>(_coefficients.Columns, _coefficients.Rows);
+            update.AsSpan().Slice(0, featureMajor.Rows * featureMajor.Columns).CopyTo(featureMajor.AsWritableSpan());
+            Matrix<T> updateMatrix = featureMajor.Transpose();
 
-            _coefficients = _coefficients.Subtract(updateMatrix);
+            // A full Newton step overshoots when the classes are (nearly) separable: the likelihood has no
+            // finite maximum, the curvature vanishes as the probabilities saturate, and the unguarded step
+            // grew the coefficients until the Hessian held NaN. Halve the step until it is finite and (when
+            // no penalty reshapes the objective) raises the likelihood; stop when no step does.
+            Matrix<T> previous = _coefficients;
+            Matrix<T>? accepted = null;
+            for (int halving = 0; halving < MaxStepHalvings && accepted is null; halving++)
+            {
+                _coefficients = previous.Subtract(updateMatrix);
+                T candidate = LogLikelihood(xWithIntercept, yOneHot);
+                if (AcceptsStep(candidate, logLikelihood, penalized))
+                {
+                    accepted = updateMatrix;
+                    logLikelihood = candidate;
+                }
+                else
+                {
+                    updateMatrix = updateMatrix.Multiply(half);
+                }
+            }
 
-            if (HasConverged(updateMatrix))
+            if (accepted is null)
+            {
+                _coefficients = previous;
+                break;
+            }
+
+            if (HasConverged(accepted))
             {
                 break;
             }
@@ -356,6 +395,37 @@ public partial class MultinomialLogisticRegression<T> : RegressionBase<T>
     {
         Matrix<T> yOneHot = CreateOneHotEncoding(y);
         return x.Transpose().Multiply(yOneHot.Subtract(probabilities));
+    }
+
+    private const int MaxStepHalvings = 30;
+
+    /// <summary>A step is taken when its likelihood is a number and, unpenalized, higher than before.</summary>
+    private bool AcceptsStep(T candidate, T current, bool penalized)
+        => !NumOps.IsNaN(candidate) && (penalized || NumOps.GreaterThan(candidate, current));
+
+    /// <summary>
+    /// The training log-likelihood, sum over samples of log P(true class), at the current coefficients.
+    /// Probabilities are floored at the smallest positive value so a saturated 0 gives a large finite
+    /// penalty instead of 0 * -Inf = NaN.
+    /// </summary>
+    private T LogLikelihood(Matrix<T> xWithIntercept, Matrix<T> yOneHot)
+    {
+        var probabilities = Tensor<T>.FromMatrix(ComputeProbabilities(xWithIntercept));
+        var logProbabilities = Engine.TensorLog(Engine.TensorMax(probabilities, NumOps.FromDouble(1e-300)));
+        return Engine.TensorSum(Engine.TensorMultiply(logProbabilities, Tensor<T>.FromMatrix(yOneHot)));
+    }
+
+    /// <summary>
+    /// Subtracts a small multiple of the identity from the (negative semi-definite) log-likelihood Hessian,
+    /// scaled to its largest diagonal entry, so the Newton system has a unique solution.
+    /// </summary>
+    private Matrix<T> DampHessian(Matrix<T> hessian)
+    {
+        T scale = Engine.TensorMaxValue(Engine.TensorAbs(Engine.TensorDiagonal(Tensor<T>.FromMatrix(hessian))));
+        T damping = NumOps.GreaterThan(scale, NumOps.Zero)
+            ? NumOps.Multiply(scale, NumOps.FromDouble(1e-8))
+            : NumOps.FromDouble(1e-8);
+        return hessian.Subtract(Matrix<T>.CreateIdentity(hessian.Rows).Multiply(damping));
     }
 
     /// <summary>

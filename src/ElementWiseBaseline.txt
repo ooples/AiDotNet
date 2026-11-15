@@ -16416,7 +16416,6 @@
 1	ADNELEM002|AiDotNet.Regression.MixedEffects.LinearMixedModel<T>.GroupObservations(AiDotNet.Tensors.LinearAlgebra.Matrix<T>, int)
 3	ADNELEM002|AiDotNet.Regression.MixedEffects.LinearMixedModel<T>.UpdateVarianceComponents(AiDotNet.Tensors.LinearAlgebra.Matrix<T>, AiDotNet.Tensors.LinearAlgebra.Matrix<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>)
 5	ADNELEM002|AiDotNet.Regression.MultilayerPerceptronRegression<T>.InitializeNetwork()
-2	ADNELEM002|AiDotNet.Regression.MultilayerPerceptronRegression<T>.UpdateParameters(System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Matrix<T>>, System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Vector<T>>, int)
 5	ADNELEM002|AiDotNet.Regression.NegativeBinomialRegression<T>.Train(AiDotNet.Tensors.LinearAlgebra.Matrix<T>, AiDotNet.Tensors.LinearAlgebra.Vector<T>)
 3	ADNELEM002|AiDotNet.Regression.NeuralNetworkRegression<T>.Deserialize(byte[])
 2	ADNELEM002|AiDotNet.Regression.NeuralNetworkRegression<T>.InitializeNetwork()
