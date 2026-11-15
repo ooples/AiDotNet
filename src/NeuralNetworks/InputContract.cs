@@ -785,8 +785,8 @@ public static class InputContractTensorFactory
 
         var nearby = new Tensor<T>(input.Shape.ToArray());
         var numOps = MathHelper.GetNumericOperations<T>();
-        for (int i = 0; i < input.Length; i++) nearby[i] = input[i];
         if (nearby.Length == 0) return nearby;
+        input.CopyTo(nearby.AsWritableSpan());
 
         switch (domain.Kind)
         {
@@ -807,7 +807,7 @@ public static class InputContractTensorFactory
                 break;
             default:
                 T delta = numOps.FromDouble(epsilon);
-                for (int i = 0; i < nearby.Length; i++) nearby[i] = numOps.Add(nearby[i], delta);
+                AiDotNetEngine.Current.TensorAddScalar(nearby, delta).CopyTo(nearby.AsWritableSpan());
                 break;
         }
 
@@ -834,7 +834,7 @@ public static class InputContractTensorFactory
             LayerInputDomainKind.AdditiveMask => 1.0,
             _ => double.NaN
         };
-        for (int i = 0; i < tensor.Length; i++) tensor[i] = numOps.FromDouble(invalid);
+        tensor.Fill(numOps.FromDouble(invalid));
         return tensor;
     }
 }

@@ -303,15 +303,7 @@ public partial class AnomalyDetectorLayer<T> : LayerBase<T>, IShapeContract
 
         var anomalyScores = CalculateAnomalyScores(actual, predicted);
 
-        double meanScore = 0.0;
-        for (int i = 0; i < anomalyScores.Length; i++)
-        {
-            meanScore += NumOps.ToDouble(anomalyScores.GetFlat(i));
-        }
-        if (anomalyScores.Length > 0)
-        {
-            meanScore /= anomalyScores.Length;
-        }
+        double meanScore = anomalyScores.Length > 0 ? NumOps.ToDouble(Engine.TensorMean(anomalyScores)) : 0.0;
 
         _smoothedAnomalyScore = NumOps.FromDouble((_smoothingFactor * meanScore) + ((1 - _smoothingFactor) * NumOps.ToDouble(_smoothedAnomalyScore)));
         UpdateAnomalyHistory(meanScore);
@@ -360,16 +352,11 @@ public partial class AnomalyDetectorLayer<T> : LayerBase<T>, IShapeContract
         var mismatchAndActive = Engine.TensorMultiply(notEqual, anyActive);
         var mismatchSum = Engine.ReduceSum(mismatchAndActive, axes, keepDims: true);
 
-        var scores = new Tensor<T>(totalActiveSum._shape);
-        for (int i = 0; i < totalActiveSum.Length; i++)
-        {
-            double totalCount = NumOps.ToDouble(totalActiveSum.GetFlat(i));
-            double mismatchCount = NumOps.ToDouble(mismatchSum.GetFlat(i));
-            double score = totalCount == 0.0 ? 0.0 : mismatchCount / totalCount;
-            scores.SetFlat(i, NumOps.FromDouble(score));
-        }
-
-        return scores;
+        // mismatch / total, or 0 where no position is active.
+        return Engine.TensorWhere(
+            Engine.TensorEquals(totalActiveSum, NumOps.Zero),
+            new Tensor<T>(totalActiveSum._shape),
+            Engine.TensorDivide(mismatchSum, totalActiveSum));
     }
 
 

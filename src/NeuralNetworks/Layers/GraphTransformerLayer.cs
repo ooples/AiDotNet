@@ -102,6 +102,54 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
     private readonly bool _useStructuralEncoding;
     private readonly double _dropoutRate;
 
+    /// <summary>Layer-norm epsilon for the two post-residual norms.</summary>
+    private const double LayerNormEpsilon = 1e-5;
+
+    /// <summary>
+    /// Layer norm over the feature axis: gamma * (x - mean) / sqrt(var + eps) + beta, on the tape.
+    /// </summary>
+    /// <remarks>
+    /// float and double use the fused engine kernel, which accumulates in a wide type. Its generic path sums
+    /// x and (x - mean)^2 in T, so for Half a row whose centred entries reach 256 (256^2 is past Half's
+    /// 65504) gets an infinite variance and a zero or NaN output. Here the statistics are taken on x / m with
+    /// m = max|x| per row, every term pre-divided by the width, so no partial sum exceeds 4; the normalised
+    /// value (x/m - mean) / sqrt(var + eps/m^2) equals the unscaled one, so m is a constant (off the tape).
+    /// </remarks>
+    private Tensor<T> PostResidualLayerNorm(Tensor<T> x, Tensor<T> gamma, Tensor<T> beta)
+    {
+        if (typeof(T) == typeof(float) || typeof(T) == typeof(double))
+            return Engine.LayerNorm(x, gamma, beta, LayerNormEpsilon, out _, out _);
+
+        int axis = x.Shape.Length - 1;
+        int width = x.Shape[axis];
+        if (x.Length == 0 || width == 0)
+            return Engine.LayerNorm(x, gamma, beta, LayerNormEpsilon, out _, out _);
+
+        Tensor<T> magnitude;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            var rowMax = Engine.ReduceMax(Engine.TensorAbs(x), new[] { axis }, keepDims: true);
+            var ones = new Tensor<T>(rowMax.Shape.ToArray());
+            ones.Fill(NumOps.One);
+            // An all-zero row normalises to zero with any scale; 1 keeps x / m finite.
+            magnitude = Engine.TensorWhere(Engine.TensorEquals(rowMax, NumOps.Zero), ones, rowMax);
+        }
+
+        T inverseWidth = NumOps.FromDouble(1.0 / width);
+        var scaled = Engine.TensorDivide(x, magnitude);
+        var mean = Engine.ReduceSum(Engine.TensorMultiplyScalar(scaled, inverseWidth), new[] { axis }, keepDims: true);
+        var centred = Engine.TensorSubtract(scaled, mean);
+        var variance = Engine.ReduceSum(
+            Engine.TensorMultiplyScalar(Engine.TensorMultiply(centred, centred), inverseWidth), new[] { axis }, keepDims: true);
+        // eps / m^2 as (sqrt(eps) / m)^2, so a large m does not square into infinity first.
+        var epsilonRatio = Engine.TensorDivide(
+            Engine.TensorAddScalar(new Tensor<T>(magnitude.Shape.ToArray()), NumOps.FromDouble(Math.Sqrt(LayerNormEpsilon))),
+            magnitude);
+        var deviation = Engine.TensorSqrt(Engine.TensorAdd(variance, Engine.TensorMultiply(epsilonRatio, epsilonRatio)));
+        var normalized = Engine.TensorDivide(centred, deviation);
+        return Engine.TensorAdd(Engine.TensorMultiply(normalized, gamma), beta);
+    }
+
     /// <summary>
     /// Query transformation weights for each head: [numHeads, inputFeatures, headDim]
     /// </summary>
@@ -465,10 +513,7 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
         var shifted = Engine.TensorSubtract(randomTensor, halfTensor);
         var scaled = Engine.TensorMultiplyScalar(shifted, scale);
 
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            tensor[i] = scaled.GetFlat(i);
-        }
+        scaled.CopyTo(tensor.AsWritableSpan());
     }
 
     /// <inheritdoc/>
@@ -554,27 +599,25 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
         }
         else
         {
-            // Project input to match output dimensions
-            residualInput = TensorAllocator.Rent<T>([batchSize, numNodes, _outputFeatures]);
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int n = 0; n < numNodes; n++)
-                {
-                    for (int f = 0; f < _outputFeatures; f++)
-                    {
-                        residualInput[b, n, f] = f < _inputFeatures ? processInput[b, n, f] : NumOps.Zero;
-                    }
-                }
-            }
+            // Project input to match output dimensions: truncate or zero-pad the features to the output
+            // width, on the tape so the residual carries gradient back to the input.
+            int kept = Math.Min(_inputFeatures, _outputFeatures);
+            var head = Engine.TensorSlice(processInput, [0, 0, 0], [batchSize, numNodes, kept]);
+            residualInput = kept == _outputFeatures
+                ? head
+                : Engine.TensorConcatenate(
+                    new[] { head, new Tensor<T>([batchSize, numNodes, _outputFeatures - kept]) }, 2);
         }
 
-        var normed1 = Engine.TensorAdd(attended, residualInput);
+        // Residual then layer norm (Dwivedi & Bresson 2020, eqs. 5-9: h = Norm(h + MHA(h)),
+        // h = Norm(h + FFN(h))). The two norms' scale and shift are this layer's trainable parameters.
+        var normed1 = PostResidualLayerNorm(Engine.TensorAdd(attended, residualInput), _layerNorm1Scale, _layerNorm1Bias);
 
         // Feed-forward network with residual
         var ffnOutput = FeedForwardNetwork(normed1, batchSize, numNodes);
 
         // Final residual and layer norm
-        var output = Engine.TensorAdd(normed1, ffnOutput);
+        var output = PostResidualLayerNorm(Engine.TensorAdd(normed1, ffnOutput), _layerNorm2Scale, _layerNorm2Bias);
 
         var result = ApplyActivation(output);
 
@@ -650,6 +693,12 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
             additiveMask = Engine.TensorAddScalar(adjScaled, NumOps.Negate(maskScale));
         }
 
+        var perHeadOutputs = new Tensor<T>[_numHeads];
+        var perHeadQueries = new Tensor<T>[_numHeads];
+        var perHeadKeys = new Tensor<T>[_numHeads];
+        var perHeadValues = new Tensor<T>[_numHeads];
+        var perHeadWeights = new Tensor<T>[_numHeads];
+
         for (int h = 0; h < _numHeads; h++)
         {
             // Compute Q, K, V for this head using batched matmul
@@ -691,48 +740,37 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
             // (b, i, d, j) scalar accumulation loop with one batched matmul.
             var headOut = Engine.TensorMatMul(attnWeights, values);
 
-            // Store per-head Q/K/V/attn/output into the 4D caches at slot h.
-            // The scatter into [B, H, N, D] still needs explicit writes since
-            // there's no dest-slice-write Engine op — but this is bounded to
-            // O(B·N·D) per head, vs the O(B·N²·D) attention compute that just
-            // collapsed to two Engine ops above.
-            ScatterHeadSlice(headOutputs, headOut, h, batchSize, numNodes, _headDim);
+            // Keep each head's Q/K/V/attn/output; they are stacked into the 4D tensors at slot h below.
+            perHeadOutputs[h] = headOut;
+            perHeadQueries[h] = queries;
+            perHeadKeys[h] = keys;
+            perHeadValues[h] = values;
+            perHeadWeights[h] = attnWeights;
+        }
 
-            // #1668: Q/K/V/attn-weight scatters populate backward-only caches; skip them when
-            // no eager Backward will read them. The combined null-check both expresses that
-            // (the fields are null in inference) and narrows them to non-null for the compiler.
+        // Concatenate heads: [batch, numNodes, numHeads * headDim], head-major within each node. This
+        // stays on the tape so the output projection's gradient reaches every head's Q/K/V weights.
+        var concatenated = Engine.TensorConcatenate(perHeadOutputs, 2);
+
+        // Stack the heads into [B, H, ...] for the backward-only caches (plain copies, off the tape).
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            var stackedOutputs = Tensor<T>.Stack(perHeadOutputs, 1);
+            stackedOutputs.CopyTo(headOutputs.AsWritableSpan());
+
+            // #1668: Q/K/V/attn-weight caches are backward-only; skip them when no eager Backward will
+            // read them. The combined null-check both expresses that (the fields are null in inference)
+            // and narrows them to non-null for the compiler.
             if (_lastQueries != null && _lastKeys != null && _lastValues != null && _lastAttentionWeights != null)
             {
-                ScatterHeadSlice(_lastQueries, queries, h, batchSize, numNodes, _headDim);
-                ScatterHeadSlice(_lastKeys, keys, h, batchSize, numNodes, _headDim);
-                ScatterHeadSlice(_lastValues, values, h, batchSize, numNodes, _headDim);
-
-                // Attention weights are [B, N, N] not [B, N, D]; separate scatter.
-                for (int b = 0; b < batchSize; b++)
-                    for (int i = 0; i < numNodes; i++)
-                        for (int j = 0; j < numNodes; j++)
-                            _lastAttentionWeights[b, h, i, j] = attnWeights[b, i, j];
+                Tensor<T>.Stack(perHeadQueries, 1).CopyTo(_lastQueries.AsWritableSpan());
+                Tensor<T>.Stack(perHeadKeys, 1).CopyTo(_lastKeys.AsWritableSpan());
+                Tensor<T>.Stack(perHeadValues, 1).CopyTo(_lastValues.AsWritableSpan());
+                Tensor<T>.Stack(perHeadWeights, 1).CopyTo(_lastAttentionWeights.AsWritableSpan());
             }
         }
 
         _lastHeadOutputs = cacheBwd ? headOutputs : null;
-
-        // Concatenate heads: [batch, numNodes, numHeads * headDim]
-        var concatenated = TensorAllocator.Rent<T>([batchSize, numNodes, _numHeads * _headDim]);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int n = 0; n < numNodes; n++)
-            {
-                int idx = 0;
-                for (int h = 0; h < _numHeads; h++)
-                {
-                    for (int d = 0; d < _headDim; d++)
-                    {
-                        concatenated[b, n, idx++] = headOutputs[b, h, n, d];
-                    }
-                }
-            }
-        }
 
         _lastConcatenated = cacheBwd ? concatenated : null;
 
@@ -749,16 +787,11 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
 
     private Tensor<T> ExtractHeadWeights(Tensor<T> weights, int headIndex)
     {
-        // Extract [inputFeatures, headDim] from [numHeads, inputFeatures, headDim]
-        var result = new Tensor<T>([_inputFeatures, _headDim]);
-        for (int i = 0; i < _inputFeatures; i++)
-        {
-            for (int j = 0; j < _headDim; j++)
-            {
-                result[i, j] = weights[headIndex, i, j];
-            }
-        }
-        return result;
+        // Head headIndex's [inputFeatures, headDim] block of [numHeads, inputFeatures, headDim], as a slice
+        // of the parameter itself so the tape routes this head's gradient into the weight tensor.
+        return Engine.Reshape(
+            Engine.TensorSlice(weights, [headIndex, 0, 0], [1, _inputFeatures, _headDim]),
+            [_inputFeatures, _headDim]);
     }
 
     private Tensor<T> BatchedMatMul3Dx2D(Tensor<T> input3D, Tensor<T> weights2D, int batch, int rows, int cols, int outputCols)
@@ -768,20 +801,6 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
         return result.Reshape([batch, rows, outputCols]);
     }
 
-    /// <summary>
-    /// Writes a per-head [batch, rows, cols] tensor into the h-th slice of a
-    /// 4D destination [batch, numHeads, rows, cols]. There's no Engine
-    /// "set-slice" op; the writes are done element-wise but bounded to
-    /// O(B·rows·cols) per head — small relative to the attention compute that
-    /// the surrounding refactor offloaded to Engine.TensorMatMul.
-    /// </summary>
-    private static void ScatterHeadSlice(Tensor<T> destination4D, Tensor<T> source3D, int headIndex, int batchSize, int rows, int cols)
-    {
-        for (int b = 0; b < batchSize; b++)
-            for (int r = 0; r < rows; r++)
-                for (int c = 0; c < cols; c++)
-                    destination4D[b, headIndex, r, c] = source3D[b, r, c];
-    }
 
     private Tensor<T> BroadcastBias(Tensor<T> bias, int batchSize, int numNodes)
     {
@@ -826,12 +845,9 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
     /// </remarks>
     private Tensor<T> ApplyFFNActivation(Tensor<T> input)
     {
-        var result = TensorAllocator.Rent<T>(input._shape);
-        for (int i = 0; i < input.Length; i++)
-        {
-            result[i] = _ffnActivation.Activate(input.GetFlat(i));
-        }
-        return result;
+        // Through the central dispatch so the activation runs on tape-connected engine kernels (the
+        // element-wise rebuild detached the FFN's first layer from the tape).
+        return ActivationHelper.ApplyActivation(_ffnActivation, input, Engine);
     }
 
     /// <inheritdoc/>

@@ -786,28 +786,16 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
             similarities[i] = ComputeSimilarity(labelEmbeddings[i], imageEmbedding);
         }
 
-        // Apply softmax
-        T maxSim = similarities[0];
-        for (int i = 1; i < similarities.Length; i++)
-        {
-            if (NumOps.GreaterThan(similarities[i], maxSim))
-            {
-                maxSim = similarities[i];
-            }
-        }
-
-        T sumExp = NumOps.Zero;
-        var expSims = new T[similarities.Length];
-        for (int i = 0; i < similarities.Length; i++)
-        {
-            T shifted = NumOps.Subtract(similarities[i], maxSim);
-            expSims[i] = NumOps.Exp(NumOps.Multiply(shifted, NumOps.FromDouble(100.0))); // Temperature
-            sumExp = NumOps.Add(sumExp, expSims[i]);
-        }
+        // Apply softmax (max as the scan from the first similarity found it: the first strictly larger value)
+        var simTensor = new Tensor<T>(similarities, [similarities.Length]);
+        T maxSim = similarities[Engine.TensorArgMax(simTensor, 0)[0]];
+        var expSims = Engine.TensorExp(Engine.TensorMultiplyScalar(
+            Engine.TensorSubtractScalar(simTensor, maxSim), NumOps.FromDouble(100.0))); // Temperature
+        var probabilities = Engine.TensorDivideScalar(expSims, Engine.TensorSum(expSims)).ToVector().ToArray();
 
         for (int i = 0; i < labelList.Count; i++)
         {
-            scores[labelList[i]] = NumOps.Divide(expSims[i], sumExp);
+            scores[labelList[i]] = probabilities[i];
         }
 
         return scores;
@@ -952,11 +940,7 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
         var tokenIds = encoded.TokenIds;
 
         // Create input tensor [1, seqLen]
-        var inputTensor = new Tensor<T>(new[] { 1, tokenIds.Count });
-        for (int i = 0; i < tokenIds.Count; i++)
-        {
-            inputTensor[0, i] = NumOps.FromDouble(tokenIds[i]);
-        }
+        var inputTensor = new Tensor<int>(tokenIds.ToArray(), new[] { 1, tokenIds.Count }).Cast<T>();
 
         // Get token embeddings
         Tensor<T> hidden = inputTensor;
@@ -989,9 +973,12 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
         var clsEmbedding = new T[_embeddingDimension];
         int embDim = Math.Min(_embeddingDimension, hidden.Shape[^1]);
 
-        for (int i = 0; i < embDim; i++)
+        if (embDim > 0)
         {
-            clsEmbedding[i] = hidden.Shape.Length == 3 ? hidden[0, 0, i] : hidden[0, i];
+            var cls = hidden.Shape.Length == 3
+                ? Engine.TensorSlice(hidden, [0, 0, 0], [1, 1, embDim])
+                : Engine.TensorSlice(hidden, [0, 0], [1, embDim]);
+            cls.CopyTo(clsEmbedding.AsSpan(0, embDim));
         }
 
         // L2 normalize
@@ -1046,9 +1033,12 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
         var clsEmbedding = new T[_embeddingDimension];
         int embDim = Math.Min(_embeddingDimension, hidden.Shape[^1]);
 
-        for (int i = 0; i < embDim; i++)
+        if (embDim > 0)
         {
-            clsEmbedding[i] = hidden.Shape.Length == 3 ? hidden[0, 0, i] : hidden[0, i];
+            var cls = hidden.Shape.Length == 3
+                ? Engine.TensorSlice(hidden, [0, 0, 0], [1, 1, embDim])
+                : Engine.TensorSlice(hidden, [0, 0], [1, embDim]);
+            cls.CopyTo(clsEmbedding.AsSpan(0, embDim));
         }
 
         return VectorHelper.Normalize(new Vector<T>(clsEmbedding));
@@ -1274,11 +1264,7 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
         var encoded = _tokenizer.Encode(text, options);
         var tokenIds = encoded.TokenIds;
 
-        var inputTensor = new Tensor<T>(new[] { 1, tokenIds.Count });
-        for (int i = 0; i < tokenIds.Count; i++)
-        {
-            inputTensor[0, i] = NumOps.FromDouble(tokenIds[i]);
-        }
+        var inputTensor = new Tensor<int>(tokenIds.ToArray(), new[] { 1, tokenIds.Count }).Cast<T>();
 
         Tensor<T> hidden = inputTensor;
         if (_textTokenEmbedding is not null)
@@ -1684,25 +1670,18 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
     /// </summary>
     private int ArgMax(Tensor<T> logits)
     {
-        int lastDim = logits.Shape[^1];
-        int bestIdx = 0;
-
         // For 3D tensor [batch, seq_len, vocab_size], use last sequence position
-        // For 2D tensor [batch, vocab_size], use first batch
-        int seqPos = logits.Shape.Length == 3 ? logits.Shape[1] - 1 : 0;
-        T bestVal = logits.Shape.Length == 3 ? logits[0, seqPos, 0] : logits[0, 0];
+        // For 2D tensor [batch, vocab_size], use first batch. The first strictly larger value wins.
+        return Engine.TensorArgMax(LastPositionRow(logits), 0)[0];
+    }
 
-        for (int i = 1; i < lastDim; i++)
-        {
-            T val = logits.Shape.Length == 3 ? logits[0, seqPos, i] : logits[0, i];
-            if (NumOps.GreaterThan(val, bestVal))
-            {
-                bestVal = val;
-                bestIdx = i;
-            }
-        }
-
-        return bestIdx;
+    /// <summary>The vocabulary row at the last sequence position (3D) or of the first batch (2D).</summary>
+    private Tensor<T> LastPositionRow(Tensor<T> logits)
+    {
+        int vocab = logits.Shape[^1];
+        if (logits.Shape.Length == 3)
+            return Engine.Reshape(Engine.TensorSlice(logits, [0, logits.Shape[1] - 1, 0], [1, 1, vocab]), [vocab]);
+        return Engine.Reshape(Engine.TensorSlice(logits, [0, 0], [1, vocab]), [vocab]);
     }
 
     /// <summary>
@@ -1713,13 +1692,8 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
     private Vector<T> LastPositionLogits(Tensor<T> logits)
     {
         int vocab = logits.Shape[^1];
-        int seqPos = logits.Shape.Length == 3 ? logits.Shape[1] - 1 : 0;
-        var v = new Vector<T>(vocab);
-        for (int i = 0; i < vocab; i++)
-        {
-            v[i] = logits.Shape.Length == 3 ? logits[0, seqPos, i] : logits[0, i];
-        }
-        return v;
+        if (vocab == 0) return new Vector<T>(0);
+        return LastPositionRow(logits).ToVector();
     }
 
     #endregion
@@ -1848,12 +1822,16 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
         }
 
         var matrix = new Matrix<T>(embeddings.Count, embeddings[0].Length);
+        int width = embeddings[0].Length;
+        var destination = matrix.AsWritableSpan();
         for (int i = 0; i < embeddings.Count; i++)
         {
-            for (int j = 0; j < embeddings[i].Length; j++)
-            {
-                matrix[i, j] = embeddings[i][j];
-            }
+            // Row i holds embedding i; a shorter embedding leaves the rest of its row zero.
+            var source = embeddings[i].AsSpan();
+            if (source.Length > width)
+                throw new ArgumentOutOfRangeException(nameof(embeddings),
+                    $"Embedding {i} has {source.Length} values but the batch width is {width}.");
+            source.CopyTo(destination.Slice(i * width, width));
         }
         return matrix;
     }
@@ -1883,12 +1861,16 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
         }
 
         var matrix = new Matrix<T>(embeddings.Count, embeddings[0].Length);
+        int width = embeddings[0].Length;
+        var destination = matrix.AsWritableSpan();
         for (int i = 0; i < embeddings.Count; i++)
         {
-            for (int j = 0; j < embeddings[i].Length; j++)
-            {
-                matrix[i, j] = embeddings[i][j];
-            }
+            // Row i holds embedding i; a shorter embedding leaves the rest of its row zero.
+            var source = embeddings[i].AsSpan();
+            if (source.Length > width)
+                throw new ArgumentOutOfRangeException(nameof(embeddings),
+                    $"Embedding {i} has {source.Length} values but the batch width is {width}.");
+            source.CopyTo(destination.Slice(i * width, width));
         }
         return matrix;
     }
