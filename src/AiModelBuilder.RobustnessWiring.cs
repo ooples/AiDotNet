@@ -42,6 +42,17 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     private AdversarialRobustnessConfiguration<T, TInput, TOutput>? ActiveRobustnessConfiguration =>
         _adversarialRobustnessConfiguration is { Enabled: true } configuration ? configuration : null;
 
+    /// <summary>
+    /// Clears the robustness state one build leaves behind, so a reused builder neither keeps the certification
+    /// engine of an earlier configuration nor skips input preprocessing because an earlier build's defense replaced
+    /// its model.
+    /// </summary>
+    private void ResetPerBuildRobustnessState()
+    {
+        _adversarialDefenseAppliedToModel = false;
+        _robustnessCertifiedDefense = null;
+    }
+
     private ILogger RobustnessLogger => _adversarialRobustnessConfiguration?.Logger ?? NullLogger.Instance;
 
     private void LogRobustnessStep(string message, params object[] args)
@@ -271,19 +282,25 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// <remarks>
     /// With <c>EnableAdversarialTraining</c> the configuration's <c>CustomDefense</c> (or
     /// <see cref="AdversarialTraining{T, TInput, TOutput}"/> built from the defense options) is applied to the training
-    /// samples. When the defense returns a different model, that defended model replaces the result's model, so
-    /// <c>Predict</c>, the robustness audits and certification all run through it.
+    /// split, in the feature space the model is trained in. When the defense returns a different model, that defended
+    /// model is returned and becomes the result's model, so <c>Predict</c>, the robustness audits and certification
+    /// all run through it.
     /// </remarks>
+    /// <param name="model">The trained model, or null when training produced none.</param>
+    /// <param name="trainX">The training inputs, after data preparation, preprocessing and augmentation.</param>
+    /// <param name="trainY">The training labels.</param>
+    /// <returns>The defended model, or <paramref name="model"/> when no defense applies.</returns>
     /// <exception cref="InvalidOperationException">The training data cannot be split into samples.</exception>
-    private void ApplyConfiguredAdversarialDefense(AiModelResult<T, TInput, TOutput> result, TInput preparedX, TOutput preparedY)
+    private IFullModel<T, TInput, TOutput>? ApplyConfiguredAdversarialDefense(
+        IFullModel<T, TInput, TOutput>? model, TInput trainX, TOutput trainY)
     {
         var configuration = ActiveRobustnessConfiguration;
-        if (configuration is null || !configuration.Options.EnableAdversarialTraining || result.Model is null)
+        if (configuration is null || !configuration.Options.EnableAdversarialTraining || model is null)
         {
-            return;
+            return model;
         }
 
-        if (!TrySplitSamples(preparedX, preparedY, out var inputs, out var labels))
+        if (!TrySplitSamples(trainX, trainY, out var inputs, out var labels))
         {
             throw new InvalidOperationException(
                 "EnableAdversarialTraining needs per-sample training data: Matrix<T> inputs with Vector<T> labels, or " +
@@ -294,13 +311,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             ?? new AdversarialTraining<T, TInput, TOutput>(ToAdversarialDefenseOptions(configuration.Options));
         LogRobustnessStep("Adversarial training: {Defense} over {Samples} samples.", defense.GetType().Name, inputs.Length);
 
-        var model = result.Model;
         var defended = defense.ApplyDefense(inputs, labels, model);
         if (!ReferenceEquals(defended, model))
         {
-            result.Model = defended;
             _adversarialDefenseAppliedToModel = true;
         }
+
+        return defended;
     }
 
     /// <summary>

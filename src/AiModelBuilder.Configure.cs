@@ -1684,6 +1684,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         cancellationToken.ThrowIfCancellationRequested();
         if (_dataLoader is not IStreamingDataLoader<T, TInput, TOutput>)
             ThrowIfStreamingTrainingConfigured("BuildAsync without a streaming data loader");
+        ResetPerBuildRobustnessState();
 
         // Propagate the builder's license key to ModelPersistenceGuard so it can
         // validate during serialize/deserialize operations within BuildAsync.
