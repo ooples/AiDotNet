@@ -303,8 +303,10 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
 
     private Tensor<T> GetZeroBias(int outputSize)
     {
+        // The layer reuses this tensor on every later call, so a TensorScope open around the first call (a sequential
+        // credit block) must not own it, exactly as for _fusedLinearScratch.
         if (_cachedZeroBias is null || _cachedZeroBias.Length != outputSize)
-            _cachedZeroBias = new Tensor<T>(new[] { outputSize });
+            _cachedZeroBias = AiDotNet.Tensors.Engines.TensorScope.Detach(new Tensor<T>(new[] { outputSize }));
         return _cachedZeroBias;
     }
 

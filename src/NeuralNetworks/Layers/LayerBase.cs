@@ -338,6 +338,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     // device or host, persist until its next step republishes them, so those are referenced instead
     // (TryPublishDeviceGradients, TryReferenceHostGradients).
     private Dictionary<Tensor<T>, Tensor<T>>? _pendingDeviceGradients;
+    private Dictionary<Tensor<T>, Tensor<T>>? _publishedDeviceGradBuffers;
 
     /// <summary>
     /// Gets the input shape for this layer.
@@ -7711,19 +7712,57 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             return true;
         }
         // A device copy made inside a tape step is one of the step's intermediates, which the tape frees on the device
-        // when it ends; the published gradient is read after that, so the tape must keep it.
+        // when it ends; the published gradient is read after that, so reuse persistent per-parameter snapshot buffers
+        // outside TensorScope/TensorArena to avoid recurring LOH allocations per training step.
+        using var suspendScope = AiDotNet.Tensors.Engines.TensorScope.Suspend();
+        using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var buffers = _publishedDeviceGradBuffers
+            ??= new Dictionary<Tensor<T>, Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
         var tape = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current;
+        // The previous publication may reference these same buffers. Withdraw it before refilling them, so a copy that
+        // throws part-way leaves no surface rather than one mixing this step's and the last step's gradients.
+        ParameterGradients = null;
         foreach (var (parameter, gradient) in sources)
         {
-            var copy = new Tensor<T>(gradient._shape);
+            if (!buffers.TryGetValue(parameter, out var copy) || !SamePublishedShape(copy._shape, gradient._shape))
+            {
+                copy?.Dispose();
+                copy = new Tensor<T>((int[])gradient._shape.Clone());
+                buffers[parameter] = copy;
+            }
             Engine.TensorCopy(gradient, copy);
             tape?.Retain(copy);
             owned[parameter] = copy;
             matched += gradient.Length;
         }
 
+        // The buffers are keyed by the parameter tensor. One whose tensor was replaced (weights set from outside, a
+        // lazy resize) gets no gradient again, so its buffer and the old tensor it pins are dropped here rather than
+        // held until the layer is disposed. The surface below references only this step's buffers.
+        if (buffers.Count > owned.Count)
+        {
+            // Materialised before the loop because the loop removes from the dictionary being filtered.
+            var stale = buffers.Keys.Where(key => !owned.ContainsKey(key)).ToList();
+            foreach (var key in stale)
+            {
+                buffers[key].Dispose();
+                buffers.Remove(key);
+            }
+        }
+
         _parameterGradients = null;
         _pendingDeviceGradients = owned;
+        return true;
+    }
+
+    private static bool SamePublishedShape(int[] left, int[] right)
+    {
+        if (left.Length != right.Length) return false;
+        for (int i = 0; i < left.Length; i++)
+        {
+            if (left[i] != right[i]) return false;
+        }
         return true;
     }
 
@@ -7927,6 +7966,9 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
 
         bool reuse = !_scatterVectorHandedOut && _scatterBuffer is { } owned && owned.Length == total;
         var filled = reuse && _scatterBuffer is { } buffer ? buffer : new T[total];
+        // A reused buffer backs the current surface. Withdraw that surface before refilling it, so a fill that throws
+        // part-way leaves no surface rather than one mixing this step's and the last step's gradients.
+        if (reuse) ParameterGradients = null;
         // No up-front clear of a reused buffer: the fill overwrites every gradient slot and clears the ones with no
         // gradient this step. Buffer components and non-LayerBase sub-layers are never written, so they keep the
         // zeros of the buffer's first allocation.
@@ -10132,6 +10174,14 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             {
                 if (IsSparseTensor(tensor)) continue;
                 Engine.UnregisterPersistentTensor(tensor);
+            }
+
+            if (_publishedDeviceGradBuffers is not null)
+            {
+                foreach (var buf in _publishedDeviceGradBuffers.Values)
+                    buf.Dispose();
+                _publishedDeviceGradBuffers.Clear();
+                _publishedDeviceGradBuffers = null;
             }
         }
     }
