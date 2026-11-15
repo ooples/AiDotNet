@@ -34,9 +34,9 @@ public sealed class PeRFlowScheduler<T> : NoiseSchedulerBase<T>
     /// <param name="config">The scheduler configuration.</param>
     /// <param name="numSegments">The number of trained segments K (at least 1).</param>
     /// <remarks>
-    /// Every segment boundary is a scheduled time when the step count is at least K. A step count below K
-    /// cannot place a step in every segment, so the schedule falls back to that many equal windows and each
-    /// step spans several segments; the result approximates the trained piecewise trajectory.
+    /// Every segment boundary is a scheduled time. As in the reference scheduler
+    /// (magic-research/piecewise-rectified-flow, <c>PeRFlowScheduler.set_timesteps</c>), a step count below K is
+    /// raised to K, one step per window, so no step ever crosses a segment boundary.
     /// </remarks>
     public PeRFlowScheduler(SchedulerConfig<T> config, int numSegments = 4) : base(config)
     {
@@ -46,13 +46,14 @@ public sealed class PeRFlowScheduler<T> : NoiseSchedulerBase<T>
     /// <inheritdoc />
     public override void SetTimesteps(int inferenceSteps)
     {
-        base.SetTimesteps(inferenceSteps);
         // PeRFlow splits [0, 1] into equal time windows whose flows are straight, so every window boundary is a
         // scheduled time and the steps are spread evenly over the windows (earlier windows take the remainder).
-        // With fewer steps than segments there cannot be a step per segment: the schedule then uses
-        // inferenceSteps equal windows instead, so one Euler step spans several trained segments and is only an
-        // approximation of the piecewise-straight trajectory (documented on the constructor).
-        int windows = Math.Min(_numSegments, inferenceSteps);
+        // As in the reference set_timesteps, a step count below the window count is raised to it (one step per
+        // window); the window count itself cannot exceed the training timesteps.
+        int windows = Math.Min(_numSegments, TrainTimesteps);
+        if (inferenceSteps > 0 && inferenceSteps < windows)
+            inferenceSteps = windows;
+        base.SetTimesteps(inferenceSteps);
         var timesteps = new int[inferenceSteps];
         int index = 0;
         for (int w = windows - 1; w >= 0; w--)

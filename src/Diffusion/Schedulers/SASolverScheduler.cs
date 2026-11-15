@@ -173,7 +173,6 @@ public sealed class SASolverScheduler<T> : NoiseSchedulerBase<T>
     /// </summary>
     private static double ExpM1(double x)
         => Math.Abs(x) < 1e-5 ? x + (0.5 * x * x) + (x * x * x / 6.0) : Math.Exp(x) - 1.0;
-    }
 
     /// <summary>
     /// Converts the model output to the predicted clean sample x0 for the configured prediction type.

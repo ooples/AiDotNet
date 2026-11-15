@@ -204,6 +204,20 @@ public class SweepSchedulerReferenceTests
     }
 
     [Fact]
+    public void PeRFlow_FewerStepsThanWindows_RaisesToOneStepPerWindow()
+    {
+        // Reference PeRFlowScheduler.set_timesteps (magic-research/piecewise-rectified-flow): a step count below
+        // num_time_windows is set to num_time_windows, so every window start 1, 0.75, 0.5, 0.25 is a scheduled time
+        // and no Euler step crosses a window boundary.
+        var scheduler = new PeRFlowScheduler<double>(SchedulerConfig<double>.CreateDefault(), numSegments: 4);
+        scheduler.SetTimesteps(2);
+
+        int last = scheduler.TrainTimesteps - 1;
+        var expected = new[] { 1.0, 0.75, 0.5, 0.25 }.Select(t => (int)Math.Round(t * last)).ToArray();
+        Assert.Equal(expected, scheduler.Timesteps);
+    }
+
+    [Fact]
     public void FlowDPMSolver_SecondOrder_MatchesReference()
     {
         var scheduler = new FlowDPMSolverScheduler<double>(SchedulerConfig<double>.CreateDefault(), 2);

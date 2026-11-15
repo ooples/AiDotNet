@@ -321,6 +321,28 @@ public partial class PointEModel<T> : ThreeDDiffusionModelBase<T>
     #region Generation Methods
 
     /// <summary>
+    /// Not supported: image-to-3D is not part of this model's published pipeline.
+    /// </summary>
+    /// <remarks>
+    /// Point-E (Nichol et al., 2022) maps an image to a coloured point cloud; its meshes come from a separately
+    /// trained SDF regression model that this implementation does not include (SupportsMesh is false), so
+    /// image-to-mesh is not available.
+    /// </remarks>
+    /// <exception cref="NotSupportedException">Always; the message names the supported entry point.</exception>
+    public override Mesh3D<T> ImageTo3D(
+        Tensor<T> inputImage,
+        int numViews = 4,
+        int numInferenceSteps = 50,
+        double guidanceScale = 3.0,
+        int? seed = null)
+        => throw new NotSupportedException(ImageTo3DUnsupportedMessage);
+
+    /// <summary>The reason <see cref="ImageTo3D"/> is unsupported, naming the supported entry point.</summary>
+    internal const string ImageTo3DUnsupportedMessage =
+        "Point-E's image-to-3D output is a point cloud; use GenerateFromImage. Image-to-mesh needs Point-E's separate SDF regression model, which is not implemented.";
+
+
+    /// <summary>
     /// Generates a colored point cloud from a text prompt.
     /// </summary>
     /// <param name="prompt">Text description of the 3D object.</param>
