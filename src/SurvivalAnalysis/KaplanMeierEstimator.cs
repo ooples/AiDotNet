@@ -289,10 +289,6 @@ public partial class KaplanMeierEstimator<T> : SurvivalModelBase<T>
     /// <returns>Vector of survival probabilities.</returns>
     public Vector<T>? GetSurvivalProbabilities() => _survivalProbabilities;
 
-    #region JIT Compilation Support
-
-    #endregion
-
     #region IFullModel Implementation
 
     /// <summary>

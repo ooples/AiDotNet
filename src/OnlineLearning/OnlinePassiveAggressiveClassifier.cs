@@ -342,10 +342,6 @@ public partial class OnlinePassiveAggressiveClassifier<T> : OnlineLearningModelB
 
     #endregion
 
-    #region JIT Compilation Support
-
-    #endregion
-
     /// <summary>
     /// Gets the weights vector.
     /// </summary>

@@ -1318,10 +1318,6 @@ public partial class HistGradientBoostingRegression<T> : ModelBase<T, Matrix<T>,
 
     #endregion
 
-    #region JIT Compilation Support
-
-    #endregion
-
     #region Helper Classes
 
     /// <summary>
