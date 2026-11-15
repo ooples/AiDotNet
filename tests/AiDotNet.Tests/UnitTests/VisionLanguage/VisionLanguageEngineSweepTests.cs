@@ -425,6 +425,35 @@ public class VisionLanguageEngineSweepTests
     }
 
     [Fact]
+    public void RowSumRatioAndRowMean_Half_StayFiniteWhereTheRowSumPassesHalfMaxValue()
+    {
+        // 1024 weights of 100 sum to 102400, past Half.MaxValue; the weighted mean (0.5) and the mean (100) fit.
+        var weights = Tensor<Half>.CreateDefault(new[] { 2, 1024 }, (Half)100.0);
+        var weighted = Tensor<Half>.CreateDefault(new[] { 2, 1024 }, (Half)50.0);
+
+        var ratio = GroundingDetections<Half>.RowSumRatio(AiDotNetEngine.Current, weighted, weights);
+        var mean = GroundingDetections<Half>.RowMean(AiDotNetEngine.Current, weights);
+
+        Assert.Equal(new[] { (Half)0.5, (Half)0.5 }, ratio.ToArray());
+        Assert.Equal(new[] { (Half)100.0, (Half)100.0 }, mean.ToArray());
+    }
+
+    [Fact]
+    public void CosineToEach_Half_LongRowNormDoesNotSaturateAt2048()
+    {
+        // 4096 entries of 1/64 scale to 4096 ones, whose Half running sum stops at 2048: the query norm came out
+        // as sqrt(2048) / 64 instead of 1, and the cosine to its first half as 1 instead of 1 / sqrt(2).
+        var query = Tensor<Half>.CreateDefault(new[] { 4096 }, (Half)(1.0 / 64));
+        var candidate = new Tensor<Half>(new[] { 4096 });
+        for (int i = 0; i < 2048; i++) candidate[i] = (Half)(1.0 / 64);
+
+        var scores = EmbeddingScores<Half>.CosineToEach(AiDotNetEngine.Current, query, new[] { candidate, query });
+
+        Assert.Equal(1.0 / Math.Sqrt(2.0), (double)scores[0], 1e-3);
+        Assert.Equal(1.0, (double)scores[1], 1e-3);
+    }
+
+    [Fact]
     public void FloorScaled_Half_IndexIsNotRoundedByTheElementType()
     {
         // 0.5 * 4099 = 2049.5, which Half rounds to 2050 before the floor; 0.5 * 140000 overflows Half.

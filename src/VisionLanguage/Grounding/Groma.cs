@@ -208,24 +208,22 @@ public partial class Groma<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
 
         var attnSum = GroundingDetections<T>.SumRows(Engine, weights);
         var hasWeight = Engine.TensorGreaterThan(attnSum, NumOps.FromDouble(1e-8));
-        var safeSum = Engine.TensorWhere(hasWeight, attnSum,
-            Tensor<T>.CreateDefault([numRegionQueries], NumOps.One));
+        // The weighted means divide row sum by row sum (in float for narrow types): the replaced loop summed in
+        // double, and a Half sum of weights past 65504 is infinite where the mean is representable.
         var middle = Tensor<T>.CreateDefault([numRegionQueries], NumOps.FromDouble(0.5));
         var cx = Engine.TensorWhere(hasWeight,
-            Engine.TensorDivide(GroundingDetections<T>.SumRows(Engine, Engine.TensorMultiply(spatialX, weights)), safeSum),
-            middle);
+            GroundingDetections<T>.RowSumRatio(Engine, Engine.TensorMultiply(spatialX, weights), weights), middle);
         var cy = Engine.TensorWhere(hasWeight,
-            Engine.TensorDivide(GroundingDetections<T>.SumRows(Engine, Engine.TensorMultiply(spatialY, weights)), safeSum),
-            middle);
+            GroundingDetections<T>.RowSumRatio(Engine, Engine.TensorMultiply(spatialY, weights), weights), middle);
 
         // Predict width/height from the weighted spatial variance: max(0.05, 4 sqrt(var)), at most 1
         Tensor<T> Extent(Tensor<T> spatial, Tensor<T> centre)
         {
             var offset = Engine.TensorSubtract(spatial,
                 Engine.TensorBroadcastTo(centre.Reshape([numRegionQueries, 1]), queryShape));
-            var spread = GroundingDetections<T>.SumRows(Engine,
-                Engine.TensorMultiply(weights, Engine.TensorMultiply(offset, offset)));
-            var variance = Engine.TensorWhere(hasWeight, Engine.TensorDivide(spread, safeSum), spread);
+            var weighted = Engine.TensorMultiply(weights, Engine.TensorMultiply(offset, offset));
+            var variance = Engine.TensorWhere(hasWeight,
+                GroundingDetections<T>.RowSumRatio(Engine, weighted, weights), GroundingDetections<T>.SumRows(Engine, weighted));
             return Engine.TensorClampMax(Engine.TensorMax(
                 Engine.TensorMultiplyScalar(Engine.TensorSqrt(variance), NumOps.FromDouble(4.0)), NumOps.FromDouble(0.05)),
                 NumOps.One);
@@ -233,7 +231,7 @@ public partial class Groma<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
 
         var regionW = Extent(spatialX, cx);
         var regionH = Extent(spatialY, cy);
-        var regionScores = Engine.TensorDivideScalar(attnSum, NumOps.FromDouble(stride));
+        var regionScores = GroundingDetections<T>.RowMean(Engine, weights);
 
         // Step 3: Text-conditioned region scoring via ConcatenateTensors
         var textTokens = TokenizeText(textQuery);
@@ -246,7 +244,8 @@ public partial class Groma<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
 
         int outDim = decoderOut.Length;
         int maxDet = _options.MaxDetections;
-        if (maxDet <= 0)
+        // No detections wanted, or nothing decoded to score a region against (the indices below are modulo outDim).
+        if (maxDet <= 0 || outDim == 0)
             return new Tensor<T>([GroundingDetections<T>.FieldsPerDetection]);
 
         // Score each region against text-conditioned decoder features: the region of interest starts at

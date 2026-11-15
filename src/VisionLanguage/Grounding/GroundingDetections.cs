@@ -142,6 +142,38 @@ internal static class GroundingDetections<T>
     }
 
     /// <summary>
+    /// Each row sum of <paramref name="numerator"/> divided by the same row's sum of
+    /// <paramref name="denominator"/>, as <c>[n]</c>. Narrow types divide in float and round the ratio to T once:
+    /// a Half row sum past 65504 is infinite where the ratio (a weighted mean) is representable. A row whose
+    /// denominator sums to zero is divided by one.
+    /// </summary>
+    internal static Tensor<T> RowSumRatio(IEngine engine, Tensor<T> numerator, Tensor<T> denominator)
+    {
+        if (!IsNarrow)
+            return SumRatio(engine, numerator, denominator);
+        return SumRatio(engine, numerator.Cast<float>(), denominator.Cast<float>()).Cast<T>();
+    }
+
+    private static Tensor<TWide> SumRatio<TWide>(IEngine engine, Tensor<TWide> numerator, Tensor<TWide> denominator)
+    {
+        var ops = MathHelper.GetNumericOperations<TWide>();
+        var totals = engine.ReduceSum(denominator, [1], false);
+        var safeTotals = engine.TensorWhere(engine.TensorNotEquals(totals, ops.Zero), totals,
+            Tensor<TWide>.CreateDefault(totals.Shape.ToArray(), ops.One));
+        return engine.TensorDivide(engine.ReduceSum(numerator, [1], false), safeTotals);
+    }
+
+    /// <summary>The mean of each row of a <c>[n, width]</c> matrix, as <c>[n]</c>; narrow types sum and divide in float.</summary>
+    internal static Tensor<T> RowMean(IEngine engine, Tensor<T> matrix)
+    {
+        int width = matrix.Shape[1];
+        if (!IsNarrow)
+            return engine.TensorDivideScalar(engine.ReduceSum(matrix, [1], false),
+                MathHelper.GetNumericOperations<T>().FromDouble(width));
+        return engine.TensorDivideScalar(engine.ReduceSum(matrix.Cast<float>(), [1], false), (float)width).Cast<T>();
+    }
+
+    /// <summary>
     /// <c>floor(values * factor)</c> as integers. The product is formed in double: an index must not depend on
     /// how <typeparamref name="T"/> rounds it (Half rounds 0.5 * 4099 = 2049.5 up to 2050, and overflows once
     /// the factor passes 65504).
