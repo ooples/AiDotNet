@@ -38,11 +38,22 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
+      # --include-all: a migration merged after a later-dated one was already applied (for example the
+      # 20260921 files, which were still pending when 20261027 was applied) must still be pushed. Without it
+      # db push refuses to insert a migration before the newest remote version.
       - name: Apply Supabase migrations
-        run: supabase db push --password "$SUPABASE_DB_PASSWORD"
+        run: supabase db push --include-all --password "$SUPABASE_DB_PASSWORD"
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+
+      # Edge functions used to be deployed by hand, so production drifted from the repo (the admin
+      # resend-license-email function was never deployed at all). Deploy every function on each run;
+      # per-function verify_jwt comes from supabase/config.toml.
+      - name: Deploy Supabase edge functions
+        run: supabase functions deploy --project-ref yfkqwpgjahoamlgckjib
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
   build-and-deploy:
     name: Build & Deploy Website
@@ -150,7 +161,10 @@ jobs:
           {"scripts":{"build":"echo already built"}}
           PKGJSON
           cd vercel-deploy
-          vercel deploy --prod --token=${{ secrets.VERCEL_TOKEN }} --yes
+          # One compressed archive, not a file-by-file upload: the API reference wiki (~10.7K pages) and its
+          # Pagefind index put ~24.7K files in dist, and Vercel rejects an upload of more than 15,000 files
+          # ("`files` should NOT have more than 15000 items"). Every production deploy failed on that since 2026-06.
+          vercel deploy --prod --archive=tgz --token=${{ secrets.VERCEL_TOKEN }} --yes
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
@@ -169,81 +183,22 @@ jobs:
 
   e2e-smoke:
     name: Post-Deploy E2E Smoke Tests
-    runs-on: ubuntu-latest
-    # Gate on both the schema push and the site deploy so a partially-
-    # failed release (e.g., build succeeds but migrate-database fails
-    # because a migration collided) doesn't produce a green smoke
-    # signal. Both must succeed before we say "the deploy is healthy."
+    # Gate on both the schema push and the site deploy so a partially-failed release doesn't
+    # produce a green smoke signal.
     needs:
       - migrate-database
       - build-and-deploy
-    defaults:
-      run:
-        working-directory: website
-    # Anon + logged-in-user + logged-in-admin coverage against the live
-    # production site. If the dashboard, licenses, API keys, settings,
-    # billing, usage, or admin pages silently regress (dead Supabase
-    # session, RLS policy lockout, layout-breaking CSS refactor), this
-    # job catches it on the same deploy it shipped — not when a customer
-    # reports it the next morning.
+    uses: ./.github/workflows/website-e2e.yml
+    secrets: inherit
 
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 22
-          cache: 'npm'
-          cache-dependency-path: website/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Install Playwright browsers (Chromium only)
-        # We only run Chromium in CI (see playwright.config.ts). Skipping
-        # Firefox + WebKit saves ~3 minutes of browser install per run.
-        run: npx playwright install --with-deps chromium
-
-      - name: Verify required E2E secrets
-        env:
-          PLAYWRIGHT_USER_EMAIL: ${{ secrets.PLAYWRIGHT_USER_EMAIL }}
-          PLAYWRIGHT_USER_PASSWORD: ${{ secrets.PLAYWRIGHT_USER_PASSWORD }}
-          PLAYWRIGHT_ADMIN_EMAIL: ${{ secrets.PLAYWRIGHT_ADMIN_EMAIL }}
-          PLAYWRIGHT_ADMIN_PASSWORD: ${{ secrets.PLAYWRIGHT_ADMIN_PASSWORD }}
-        run: |
-          # All four are mandatory — the user.setup / admin.setup projects
-          # fail loudly if they're missing, but surfacing the missing-
-          # secret error here (before browsers launch) keeps the failure
-          # attribution clean: "secret not set" vs. "login form regressed".
-          : "${PLAYWRIGHT_USER_EMAIL:?Missing PLAYWRIGHT_USER_EMAIL secret}"
-          : "${PLAYWRIGHT_USER_PASSWORD:?Missing PLAYWRIGHT_USER_PASSWORD secret}"
-          : "${PLAYWRIGHT_ADMIN_EMAIL:?Missing PLAYWRIGHT_ADMIN_EMAIL secret}"
-          : "${PLAYWRIGHT_ADMIN_PASSWORD:?Missing PLAYWRIGHT_ADMIN_PASSWORD secret}"
-
-      - name: Wait for Vercel propagation
-        # Vercel's alias swap is nearly instant but the CDN edge can serve
-        # a stale version for a few seconds after deploy. A short sleep is
-        # cheaper than flaky first-run failures on the live smoke pass.
-        run: sleep 15
-
-      - name: Run Playwright E2E smoke tests
-        run: npx playwright test
-        env:
-          PLAYWRIGHT_BASE_URL: https://www.aidotnet.dev
-          PLAYWRIGHT_USER_EMAIL: ${{ secrets.PLAYWRIGHT_USER_EMAIL }}
-          PLAYWRIGHT_USER_PASSWORD: ${{ secrets.PLAYWRIGHT_USER_PASSWORD }}
-          PLAYWRIGHT_ADMIN_EMAIL: ${{ secrets.PLAYWRIGHT_ADMIN_EMAIL }}
-          PLAYWRIGHT_ADMIN_PASSWORD: ${{ secrets.PLAYWRIGHT_ADMIN_PASSWORD }}
-          CI: '1'
-
-      - name: Upload Playwright report
-        # Always upload (success or fail) — on failure the HTML report +
-        # trace viewer is the fastest path to diagnosing a broken deploy;
-        # on success the artifact proves the run happened with the
-        # expected test counts.
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: playwright-report
-          path: website/playwright-report/
-          retention-days: 14
+  alert:
+    name: Alert on failure
+    needs: [migrate-database, build-and-deploy, e2e-smoke]
+    # A failed deploy went unnoticed from June to November 2026. Open (or update) an issue.
+    if: failure() && github.ref == 'refs/heads/master'
+    uses: ./.github/workflows/website-alert.yml
+    permissions:
+      issues: write
+    with:
+      result: failure
+      source: Deploy Marketing Website
