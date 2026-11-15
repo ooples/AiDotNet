@@ -234,13 +234,9 @@ public sealed class UniPCScheduler<T> : NoiseSchedulerBase<T>
         // Earlier data predictions m_1..m_{order-1} (newest first) and r_k = (lambda_{s_k} - lambda_s0) / h.
         int previous = order - 1;
         var history = new List<Vector<T>>(previous);
-        var ratioValues = new double[previous];
         for (int k = 1; k <= previous; k++)
-        {
             history.Add(_dataPredictionHistory[last - k]);
-            ratioValues[k - 1] = (NumOps.ToDouble(_lambdaHistory[last - k]) - lambdaS0) / h;
-        }
-        var ratios = new Vector<double>(ratioValues);
+        var ratios = HistoryRatios(last, previous, lambdaS0, h);
 
         Vector<double> rhos;
         if (modelAtTarget is null)
@@ -269,16 +265,39 @@ public sealed class UniPCScheduler<T> : NoiseSchedulerBase<T>
         }
 
         // sum_k rho_k * D1_k with D1_k = (m_k - m0) / r_k.
+        var coefficients = DifferenceCoefficients(rhos, ratios, previous, scale, out double weightSum);
+        result = SchedulerTensorOps.AddWeightedSum(result, coefficients, history);
+        return Engine.Add(result, Engine.Multiply(m0, NumOps.FromDouble(scale * weightSum)));
+    }
+
+    /// <summary>
+    /// r_k = (lambda_{s_k} - lambda_s0) / h for the <paramref name="previous"/> history nodes, newest first, in double.
+    /// </summary>
+    [AiDotNet.Attributes.ScalarKernel("One scalar per history node (at most the solver order minus one), formed in double.")]
+    private Vector<double> HistoryRatios(int last, int previous, double lambdaS0, double h)
+    {
+        var ratios = new double[previous];
+        for (int k = 1; k <= previous; k++)
+            ratios[k - 1] = (NumOps.ToDouble(_lambdaHistory[last - k]) - lambdaS0) / h;
+        return new Vector<double>(ratios);
+    }
+
+    /// <summary>
+    /// The coefficients -scale * rho_k / r_k rounded to T once each, and the sum of rho_k / r_k.
+    /// </summary>
+    [AiDotNet.Attributes.ScalarKernel("One scalar per history node (at most the solver order minus one), rounded from double to T once.")]
+    private static Vector<T> DifferenceCoefficients(Vector<double> rhos, Vector<double> ratios, int previous, double scale,
+        out double weightSum)
+    {
         var coefficients = new T[previous];
-        double weightSum = 0.0;
+        weightSum = 0.0;
         for (int k = 0; k < previous; k++)
         {
             double weight = rhos[k] / ratios[k];
             weightSum += weight;
             coefficients[k] = NumOps.FromDouble(-scale * weight);
         }
-        result = SchedulerTensorOps.AddWeightedSum(result, new Vector<T>(coefficients), history);
-        return Engine.Add(result, Engine.Multiply(m0, NumOps.FromDouble(scale * weightSum)));
+        return new Vector<T>(coefficients);
     }
 
     /// <summary>
