@@ -1761,7 +1761,7 @@ public sealed class InMemoryFederatedTrainer<T, TInput, TOutput> :
     /// <summary>
     /// <paramref name="delta"/> with every entry whose magnitude is below |<paramref name="threshold"/>| set to zero,
     /// and the number kept. The magnitudes are compared in double against the threshold itself: rounded to T the
-    /// threshold moves (Half holds 0.3 as 0.2998), so an entry just below it would be uploaded.
+    /// threshold moves (Half holds 0.2 as 0.19995), so an entry just below it would be uploaded.
     /// </summary>
     internal static Vector<T> ThresholdSparsify(Vector<T> delta, double threshold, out int kept)
     {

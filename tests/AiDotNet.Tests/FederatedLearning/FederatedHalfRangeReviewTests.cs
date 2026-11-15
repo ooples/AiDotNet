@@ -75,10 +75,12 @@ public class FederatedHalfRangeReviewTests
     [Fact]
     public void ThresholdSparsify_InHalf_ComparesAgainstTheExactThreshold()
     {
-        // Half holds 0.3 as 0.2998046875, below the threshold 0.3; against the threshold rounded to Half it was kept.
-        var delta = new Vector<Half>(new[] { H(0.3), H(0.5), H(-0.2), H(-0.75) });
+        // Half holds 0.2 as 0.199951171875, below the threshold 0.2; against the threshold rounded to Half it was kept.
+        // (0.3 would not do: Half rounds it up, to 0.300048828125.)
+        Assert.Equal(0.199951171875, D(H(0.2)));
+        var delta = new Vector<Half>(new[] { H(0.2), H(0.5), H(-0.1), H(-0.75) });
 
-        var sparse = InMemoryFederatedTrainer<Half, Matrix<Half>, Vector<Half>>.ThresholdSparsify(delta, 0.3, out int kept);
+        var sparse = InMemoryFederatedTrainer<Half, Matrix<Half>, Vector<Half>>.ThresholdSparsify(delta, 0.2, out int kept);
 
         Assert.Equal(2, kept);
         Assert.Equal(new[] { 0.0, 0.5, 0.0, -0.75 }, sparse.ToArray().Select(D).ToArray());

@@ -8,7 +8,7 @@ internal static class VadEngineOps
     /// <summary>
     /// 1 for every frame whose probability is at least <paramref name="threshold"/>, else 0 (NaN is 0). The
     /// comparison is made in double, against the threshold itself: rounding the threshold to T first moves it
-    /// (Half holds 0.3 as 0.2998), so a frame just below the threshold would count as speech.
+    /// (Half holds 0.2 as 0.19995), so a frame just below the threshold would count as speech.
     /// </summary>
     internal static int[] SpeechMask<T>(T[] probabilities, double threshold)
     {

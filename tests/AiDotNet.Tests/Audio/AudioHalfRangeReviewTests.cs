@@ -80,9 +80,10 @@ public class AudioHalfRangeReviewTests
     [Fact]
     public void VadSpeechMask_ComparesHalfProbabilitiesAgainstTheExactThreshold()
     {
-        // Half holds 0.3 as 0.2998046875, below the threshold 0.3; comparing against the threshold rounded to Half
-        // (also 0.2998046875) counted that frame as speech.
-        var mask = VadEngineOps.SpeechMask(new[] { H(0.3), H(0.5), H(0.1) }, 0.3);
+        // Half holds 0.2 as 0.199951171875, below the threshold 0.2; comparing against the threshold rounded to Half
+        // (also 0.199951171875) counted that frame as speech. (0.3 would not do: Half rounds it up, to 0.300048828125.)
+        Assert.Equal(0.199951171875, D(H(0.2)));
+        var mask = VadEngineOps.SpeechMask(new[] { H(0.2), H(0.5), H(0.1) }, 0.2);
 
         Assert.Equal(new[] { 0, 1, 0 }, mask);
     }
