@@ -871,6 +871,45 @@ public sealed class DeepScaleTrack2UpstreamTests
     }
 
     [Fact]
+    public void LocalCreditTrainStep_ReleasesEveryGradientTheLocalObjectiveResultOwns()
+    {
+        // The train step used the result's own Gradients dictionary as its working set and cleared it at the end of
+        // the step, before the finally disposed the result. LocalObjectiveGradients.Dispose releases what is in that
+        // dictionary, so it found nothing and every local-credit gradient of every step was left undisposed.
+        var (net, tokens, targets) = BuildLm(blocks: 2, width: 8, vocab: 16, tiedHead: false, seed: 616);
+        var owned = new List<Tensor<float>>();
+        int results = 0;
+        try
+        {
+            net.SetCreditRule(new BlockwiseAnchorLocalErrorCreditRule<float>(
+                readoutLayerCount: 2,
+                anchorStride: 1,
+                maxCandidates: 16,
+                localWeight: 0.7,
+                detachReadoutOnHiddenBlocks: true,
+                useDepthProgressiveWeight: true,
+                streamBlocksSequentially: true,
+                seed: 42));
+            LocalObjectiveGradientComputer<float>.ResultObserver = result =>
+            {
+                results++;
+                owned.AddRange(result.Gradients.Values);
+            };
+
+            net.Train(tokens, targets);
+
+            Assert.True(results > 0, "The train step never ran the local-objective computer.");
+            Assert.NotEmpty(owned);
+            Assert.All(owned, g => Assert.True(g.IsDisposed, "A gradient owned by the local-objective result leaked."));
+        }
+        finally
+        {
+            LocalObjectiveGradientComputer<float>.ResultObserver = null;
+            net.Dispose();
+        }
+    }
+
+    [Fact]
     public void SequentialBlockCredit_LocalObjectiveThrows_ReleasesDetachedNextBlockInput()
     {
         // Embedding + two dense layers are three hidden layers; detaching before every hidden layer after the first

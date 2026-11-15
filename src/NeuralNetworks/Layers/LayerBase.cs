@@ -7707,6 +7707,9 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         var buffers = _publishedDeviceGradBuffers
             ??= new Dictionary<Tensor<T>, Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
         var tape = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current;
+        // The previous publication may reference these same buffers. Withdraw it before refilling them, so a copy that
+        // throws part-way leaves no surface rather than one mixing this step's and the last step's gradients.
+        ParameterGradients = null;
         foreach (var (parameter, gradient) in sources)
         {
             if (!buffers.TryGetValue(parameter, out var copy) || !SamePublishedShape(copy._shape, gradient._shape))
@@ -7950,6 +7953,9 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
 
         bool reuse = !_scatterVectorHandedOut && _scatterBuffer is { } owned && owned.Length == total;
         var filled = reuse && _scatterBuffer is { } buffer ? buffer : new T[total];
+        // A reused buffer backs the current surface. Withdraw that surface before refilling it, so a fill that throws
+        // part-way leaves no surface rather than one mixing this step's and the last step's gradients.
+        if (reuse) ParameterGradients = null;
         // No up-front clear of a reused buffer: the fill overwrites every gradient slot and clears the ones with no
         // gradient this step. Buffer components and non-LayerBase sub-layers are never written, so they keep the
         // zeros of the buffer's first allocation.

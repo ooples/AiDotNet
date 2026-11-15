@@ -13645,7 +13645,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // Compute all gradients then filter to trainable params.
             // Passing sources directly can miss parameters when the tape backward
             // can't match view tensor references through the GradFn chain.
-            var allGrads = creditGrads ?? tape!.ComputeGradients(lossForBackward, sources: null);
+            // A local-objective result owns its Gradients dictionary and releases the tensors in it when the finally
+            // below disposes it. Work on a copy, so the publish below and the end-of-step Clear() can neither empty nor
+            // overwrite the set it releases.
+            var allGrads = localCreditResult is not null
+                ? new Dictionary<Tensor<T>, Tensor<T>>(
+                    localCreditResult.Gradients, Helpers.TensorReferenceComparer<Tensor<T>>.Instance)
+                : creditGrads ?? (tape ?? throw new InvalidOperationException(
+                    "The training step recorded no gradient tape and no credit rule supplied gradients."))
+                    .ComputeGradients(lossForBackward, sources: null);
             var grads = new Dictionary<Tensor<T>, Tensor<T>>(
                 Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
             foreach (var param in trainableParams)

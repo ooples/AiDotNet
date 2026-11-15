@@ -273,6 +273,87 @@ public class ParameterGradientPublicationTests
             => new RegularizationOptions { Type = RegularizationType.None, Strength = 0.0 };
     }
 
+    [Fact]
+    public void Layer_PublicationThatFailsPartWay_DoesNotExposeAMixOfTwoSteps()
+    {
+        // The CPU publish refills the buffer that backs the current (unread) surface. When the refill threw after the
+        // weights but before the bias, the old surface still pointed at that buffer: new weight gradients next to the
+        // previous step's bias gradients, a vector no backward pass ever produced.
+        var layer = new DenseLayer<float>(2);
+        _ = layer.Forward(new Tensor<float>(new[] { 1, 3 }));
+        var parameters = layer.GetTrainableParameters();
+        Assert.Equal(2, parameters.Count);
+        var weights = parameters[0];
+        var bias = parameters[1];
+
+        var first = new Dictionary<Tensor<float>, Tensor<float>>
+        {
+            [weights] = FilledLike(weights, 1f),
+            [bias] = FilledLike(bias, 1f),
+        };
+        Assert.True(layer.ScatterParameterGradients(first) > 0);
+
+        var second = new PoisonedGradients(
+            new Dictionary<Tensor<float>, Tensor<float>>
+            {
+                [weights] = FilledLike(weights, 2f),
+                [bias] = FilledLike(bias, 2f),
+            },
+            poisoned: bias);
+        var thrown = Record.Exception(() => layer.ScatterParameterGradients(second));
+        Assert.IsType<System.InvalidOperationException>(thrown);
+
+        var surface = layer.GetParameterGradients().ToArray();
+        Assert.True(surface.Length == 0,
+            $"A failed publication left a surface of [{string.Join(", ", surface)}] instead of withdrawing it.");
+    }
+
+    /// <summary>Delegates to a dictionary but throws when the publish looks up <c>poisoned</c>.</summary>
+    private sealed class PoisonedGradients : IReadOnlyDictionary<Tensor<float>, Tensor<float>>
+    {
+        private readonly Dictionary<Tensor<float>, Tensor<float>> _inner;
+        private readonly Tensor<float> _poisoned;
+
+        public PoisonedGradients(Dictionary<Tensor<float>, Tensor<float>> inner, Tensor<float> poisoned)
+        {
+            _inner = inner;
+            _poisoned = poisoned;
+        }
+
+        private void ThrowIfPoisoned(Tensor<float> key)
+        {
+            if (ReferenceEquals(key, _poisoned))
+                throw new System.InvalidOperationException("Simulated failure while reading a gradient.");
+        }
+
+        public Tensor<float> this[Tensor<float> key]
+        {
+            get
+            {
+                ThrowIfPoisoned(key);
+                return _inner[key];
+            }
+        }
+
+        public IEnumerable<Tensor<float>> Keys => _inner.Keys;
+
+        public IEnumerable<Tensor<float>> Values => _inner.Values;
+
+        public int Count => _inner.Count;
+
+        public bool ContainsKey(Tensor<float> key) => _inner.ContainsKey(key);
+
+        public bool TryGetValue(Tensor<float> key, out Tensor<float> value)
+        {
+            ThrowIfPoisoned(key);
+            return _inner.TryGetValue(key, out value);
+        }
+
+        public IEnumerator<KeyValuePair<Tensor<float>, Tensor<float>>> GetEnumerator() => _inner.GetEnumerator();
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
     private static Tensor<float> FilledLike(Tensor<float> parameter, float value)
     {
         var result = new Tensor<float>(parameter.Shape.ToArray());

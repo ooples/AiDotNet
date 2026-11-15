@@ -63,13 +63,22 @@ public class GpuStreamingTrainStepTests
     [InlineData(Clip.FastApprox)]
     public void Streaming_steps_on_the_gpu_match_the_cpu(Clip clip)
     {
-        var cpu = Run(clip, null, out var start);
+        // Run's networks use the ambient engine. Pin the baseline to the CPU so a GPU engine another test left current
+        // cannot turn the CPU-versus-GPU comparison into GPU versus GPU.
+        var previous = AiDotNetEngine.Current;
+        (float[] Parameters, float[] Gradients, float Loss) cpu;
+        Vector<float> start;
+        AiDotNetEngine.Current = new CpuEngine();
+        try
+        {
+            cpu = Run(clip, null, out start);
+        }
+        finally { AiDotNetEngine.Current = previous; }
 
         using var gpu = new DirectGpuTensorEngine();
         if (Environment.GetEnvironmentVariable("AIDOTNET_REQUIRE_GPU_TESTS") == "1")
             Assert.True(gpu.IsGpuAvailable, "The required GPU backend failed to initialize.");
         Skip.If(!gpu.IsGpuAvailable, "No DirectGpuTensorEngine available.");
-        var previous = AiDotNetEngine.Current;
         AiDotNetEngine.Current = gpu;
         (float[] Parameters, float[] Gradients, float Loss) device;
         try

@@ -98,11 +98,11 @@ public sealed partial class HouseholderSubspaceLayer<T> : LayerBase<T>, IShapeCo
     }
 
     [ThreadStatic]
-    private static Dictionary<int, (Tensor<T> StrictUpperTwo, Tensor<T> Identity, Tensor<T>[] RowSelectors)>? t_compactWyMasks;
+    private static Dictionary<int, (Tensor<T> StrictUpperTwo, Tensor<T> Identity, Tensor<T>[] BasisRows, Tensor<T>[] BasisColumns)>? t_compactWyMasks;
 
-    private static (Tensor<T> StrictUpperTwo, Tensor<T> Identity, Tensor<T>[] RowSelectors) GetOrCreateCompactWyMasks(int k)
+    private static (Tensor<T> StrictUpperTwo, Tensor<T> Identity, Tensor<T>[] BasisRows, Tensor<T>[] BasisColumns) GetOrCreateCompactWyMasks(int k)
     {
-        var cache = t_compactWyMasks ??= new Dictionary<int, (Tensor<T> StrictUpperTwo, Tensor<T> Identity, Tensor<T>[] RowSelectors)>();
+        var cache = t_compactWyMasks ??= new Dictionary<int, (Tensor<T> StrictUpperTwo, Tensor<T> Identity, Tensor<T>[] BasisRows, Tensor<T>[] BasisColumns)>();
         if (cache.TryGetValue(k, out var existing))
         {
             return existing;
@@ -128,19 +128,23 @@ public sealed partial class HouseholderSubspaceLayer<T> : LayerBase<T>, IShapeCo
             }
         }
 
-        // RowSelectors[r] is 1 on row r and 0 elsewhere; the triangular solve in ApplyChain writes one row per step.
-        var rowSelectors = new Tensor<T>[k];
+        // BasisRows[r] is e_r^T ([1, k]) and BasisColumns[r] is e_r ([k, 1]): the triangular solve in ApplyChain reads
+        // row r of a matrix as e_r^T * A and writes a row back as the outer product e_r * v, so the cache is O(k^2).
+        var basisRows = new Tensor<T>[k];
+        var basisColumns = new Tensor<T>[k];
         for (int r = 0; r < k; r++)
         {
-            var rowData = new T[k * k];
-            for (int idx = 0; idx < rowData.Length; idx++)
+            var basisData = new T[k];
+            for (int c = 0; c < k; c++)
             {
-                rowData[idx] = idx / k == r ? one : zero;
+                basisData[c] = c == r ? one : zero;
             }
-            rowSelectors[r] = new Tensor<T>([k, k], new Vector<T>(rowData));
+            basisRows[r] = new Tensor<T>([1, k], new Vector<T>(basisData));
+            basisColumns[r] = new Tensor<T>([k, 1], new Vector<T>((T[])basisData.Clone()));
         }
 
-        var masks = (new Tensor<T>([k, k], new Vector<T>(upperData)), new Tensor<T>([k, k], new Vector<T>(idData)), rowSelectors);
+        var masks = (new Tensor<T>([k, k], new Vector<T>(upperData)), new Tensor<T>([k, k], new Vector<T>(idData)),
+            basisRows, basisColumns);
         cache[k] = masks;
         return masks;
     }
@@ -196,7 +200,7 @@ public sealed partial class HouseholderSubspaceLayer<T> : LayerBase<T>, IShapeCo
             // Normalize rows by sqrt(max(||u_j||_2^2, normFloor)) so H_j = I - 2 * uHat_j * uHat_j^T holds across
             // normal, subnormal, and identically zero reflectors without overflow. Then H_0 ... H_{k-1} = I - UHat^T * T * UHat
             // where N = 2 * strict_triu(UHat * UHat^T) is nilpotent (N^k == 0) and T = 2 * (I + N)^-1.
-            var (strictUpperTwo, identityK, rowSelectors) = GetOrCreateCompactWyMasks(k);
+            var (strictUpperTwo, identityK, basisRows, basisColumns) = GetOrCreateCompactWyMasks(k);
             Tensor<T> uHat = NormalizeReflectorRows(engine, reflectors, floorValue);
             Tensor<T> uHatCol = engine.TensorTranspose(uHat);
             Tensor<T> gram = engine.TensorMatMul(uHat, uHatCol);
@@ -204,15 +208,18 @@ public sealed partial class HouseholderSubspaceLayer<T> : LayerBase<T>, IShapeCo
 
             // M = (I + N)^-1 by back substitution, one row per step from the bottom: (I + N) M = I gives
             // M[i] = e_i - N[i] M, and N[i] is non-zero only right of the diagonal, so it reads only rows below i,
-            // which are already final. Row i of M is still e_i before its step, so subtracting the masked row of N M
-            // sets it exactly. Every intermediate is a finished row of M or an identity row, so nothing grows past
-            // the final T. The truncated Neumann series this replaces formed the partial sums of (-N)^p, which grow
-            // like 2^p * C(k - 1, p - 1) before cancelling and overflow Half at k = 16 for correlated reflectors.
+            // which are already final. Row i of M is still e_i before its step, so subtracting e_i * (N[i] M) sets it
+            // exactly. Each step forms only that row: N[i] = e_i^T N and N[i] M are [1, k] products, and the write-back
+            // is a [k, 1] x [1, k] outer product, so the solve costs O(k^3) rather than k full [k, k] products.
+            // Every intermediate is a finished row of M or an identity row, so nothing grows past the final T. The
+            // truncated Neumann series this replaces formed the partial sums of (-N)^p, which grow like
+            // 2^p * C(k - 1, p - 1) before cancelling and overflow Half at k = 16 for correlated reflectors.
             Tensor<T> series = identityK;
             for (int i = k - 2; i >= 0; i--)
             {
-                series = engine.TensorSubtract(
-                    series, engine.TensorMultiply(rowSelectors[i], engine.TensorMatMul(nilpotent, series)));
+                Tensor<T> nilpotentRow = engine.TensorMatMul(basisRows[i], nilpotent);
+                Tensor<T> solvedRow = engine.TensorMatMul(nilpotentRow, series);
+                series = engine.TensorSubtract(series, engine.TensorMatMul(basisColumns[i], solvedRow));
             }
 
             Tensor<T> tMat = engine.TensorMultiplyScalar(series, two);

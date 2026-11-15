@@ -90,7 +90,27 @@ internal static class LocalObjectiveGradientComputer<T>
     [ThreadStatic]
     internal static Action<Tensor<T>>? BlockInputDetachedObserver;
 
+    /// <summary>
+    /// Test seam: when set on the current thread, receives each result <see cref="Compute"/> returns, so a test can
+    /// check that the caller releases the gradients the result owns. Null outside tests.
+    /// </summary>
+    [ThreadStatic]
+    internal static Action<LocalObjectiveGradients<T>>? ResultObserver;
+
     public static LocalObjectiveGradients<T> Compute(
+        NeuralNetworkBase<T> network,
+        Tensor<T> input,
+        Tensor<T> target,
+        ILocalObjectiveCreditRule<T> rule,
+        LossFunctionBase<T> loss,
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> alignTarget)
+    {
+        var result = ComputeCore(network, input, target, rule, loss, alignTarget);
+        ResultObserver?.Invoke(result);
+        return result;
+    }
+
+    private static LocalObjectiveGradients<T> ComputeCore(
         NeuralNetworkBase<T> network,
         Tensor<T> input,
         Tensor<T> target,
