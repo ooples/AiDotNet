@@ -22,7 +22,7 @@ public class MultiLatentAttentionLayerCausalityTests
 
     private static Tensor<double> MakeInput(int seq, int seed)
     {
-        var rng = new Random(seed);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var x = new Tensor<double>(new[] { Batch, seq, Dim });
         for (int i = 0; i < x.Length; i++) x.SetFlat(i, rng.NextDouble() * 2.0 - 1.0);
         return x;
@@ -40,7 +40,7 @@ public class MultiLatentAttentionLayerCausalityTests
     {
         var d = new MultiLatentAttentionLayer<double>(Seq, Dim, Heads, Latent);
         var f = new MultiLatentAttentionLayer<float>(Seq, Dim, Heads, Latent);
-        var rng = new Random(4242);
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(4242);
         var pf = f.GetParameters();
         var valuesF = new float[pf.Length];
         var valuesD = new double[pf.Length];

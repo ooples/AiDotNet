@@ -337,7 +337,8 @@ public partial class MultiLatentAttentionLayer<T> : LayerBase<T>, IShapeContract
         // Causality is the engine's flag, not a mask tensor, and the heads stay interleaved in [B, S, H*hd]: a GPU
         // engine runs one fused FlashAttention-2 kernel (causal in the kernel, device backward) with no head permutes.
         // The [B, H, S, S] bool mask this built on every forward was 2M bools at B8 H4 S256, converted to float and
-        // uploaded each call.
+        // uploaded each call. That holds for float32 where the fused kernel applies; for other element types, or a head
+        // size the kernel declines, the engine's decomposed fallback still builds that mask itself (same causality).
         return Engine.MultiHeadAttentionCore(q, k, v, _numHeads, 1.0 / Math.Sqrt(_headDimension), causal: true);
     }
 
