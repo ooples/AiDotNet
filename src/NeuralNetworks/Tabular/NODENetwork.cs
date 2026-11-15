@@ -175,11 +175,7 @@ public partial class NODENetwork<T> : TabularNeuralNetworkBase<T>
         var importance = new Dictionary<string, T>();
         int numFeatures = Architecture.CalculatedInputSize;
 
-        var featureScores = new T[numFeatures];
-        for (int f = 0; f < numFeatures; f++)
-        {
-            featureScores[f] = NumOps.Zero;
-        }
+        var featureScores = new Tensor<T>(new[] { numFeatures });
 
         int treeCount = 0;
         foreach (var layer in Layers)
@@ -187,29 +183,26 @@ public partial class NODENetwork<T> : TabularNeuralNetworkBase<T>
             if (layer is SoftTreeLayer<T> treeLayer)
             {
                 var treeImportance = treeLayer.GetFeatureImportance();
-                for (int f = 0; f < Math.Min(numFeatures, treeImportance.Length); f++)
+                int shared = Math.Min(numFeatures, treeImportance.Length);
+                var contribution = Tensor<T>.FromVector(Vector<T>.Wrap(treeImportance, 0, shared));
+                if (shared < numFeatures)
                 {
-                    featureScores[f] = NumOps.Add(featureScores[f], treeImportance[f]);
+                    contribution = Engine.TensorConcatenate(
+                        new[] { contribution, new Tensor<T>(new[] { numFeatures - shared }) }, 0);
                 }
+
+                featureScores = Engine.TensorAdd(featureScores, contribution);
                 treeCount++;
             }
         }
 
-        if (treeCount > 0)
+        T[] scores = treeCount > 0
+            ? Engine.TensorDivideScalar(featureScores, NumOps.FromDouble(treeCount)).ToArray()
+            : Engine.TensorFullLike(featureScores, NumOps.FromDouble(1.0 / numFeatures)).ToArray();
+
+        for (int f = 0; f < numFeatures; f++)
         {
-            var treeCountT = NumOps.FromDouble(treeCount);
-            for (int f = 0; f < numFeatures; f++)
-            {
-                importance[$"feature_{f}"] = NumOps.Divide(featureScores[f], treeCountT);
-            }
-        }
-        else
-        {
-            var uniformValue = NumOps.FromDouble(1.0 / numFeatures);
-            for (int f = 0; f < numFeatures; f++)
-            {
-                importance[$"feature_{f}"] = uniformValue;
-            }
+            importance[$"feature_{f}"] = scores[f];
         }
 
         return importance;

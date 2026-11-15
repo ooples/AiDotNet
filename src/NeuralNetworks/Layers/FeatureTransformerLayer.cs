@@ -178,13 +178,15 @@ public partial class FeatureTransformerLayer<T> : LayerBase<T>, IShapeContract
         // optimizer updates them. Register shared layers only when THIS instance
         // created them (ownsSharedLayers) so that, when shared across decision
         // steps, exactly one owner registers them — avoiding double-counting.
-        // (GhostBatchNormalization is not an ILayer<T>, so its gamma/beta are not
-        // collected here; the FC weights are the load-bearing learnable parameters.)
+        // The ghost batch norms are layers too, registered with the same ownership rule, so their
+        // gamma and beta reach the parameter vector and the tape.
         if (ownsSharedLayers)
         {
             foreach (var fc in _sharedFCLayers) RegisterSubLayer(fc);
+            foreach (var bn in _sharedBNLayers) RegisterSubLayer(bn);
         }
         foreach (var fc in _stepFCLayers) RegisterSubLayer(fc);
+        foreach (var bn in _stepBNLayers) RegisterSubLayer(bn);
     }
 
     /// <summary>
@@ -359,7 +361,8 @@ public partial class FeatureTransformerLayer<T> : LayerBase<T>, IShapeContract
     {
         foreach (var fc in _sharedFCLayers) fc.UpdateParameters(learningRate);
         foreach (var fc in _stepFCLayers) fc.UpdateParameters(learningRate);
-        // Note: BN layers update running stats during forward, not here
+        foreach (var bn in _stepBNLayers) bn.UpdateParameters(learningRate);
+        // Shared BN layers are stepped once, by their owner's walk; running stats update during forward
     }
 
     /// <inheritdoc />

@@ -93,10 +93,38 @@ public class TabROptions<T> : RiskModelOptions<T>
     public int NumAttentionHeads { get; set; } = 8;
 
     /// <summary>
-    /// Gets or sets the dropout rate.
+    /// Gets or sets the dropout rate after every hidden activation: the reference implementation's <c>dropout0</c>.
     /// </summary>
-    /// <value>The dropout rate, defaulting to 0.1.</value>
-    public double DropoutRate { get; set; } = 0.1;
+    /// <value>0.38852797479169876 by default, the paper's default TabR-S configuration.</value>
+    /// <remarks>
+    /// The reference <c>make_block</c> is <c>Linear -&gt; ReLU -&gt; Dropout(dropout0) -&gt; Linear -&gt; Dropout(dropout1)</c>,
+    /// and the value MLP is <c>T = LinearWithoutBias(Dropout(dropout0)(ReLU(Linear(.))))</c>. Here it follows each
+    /// encoder and predictor layer's ReLU and T's ReLU. The default TabR-S uses <c>dropout1 = 0</c>, and these layers
+    /// have no second linear map for it. It drops only inside training steps; prediction never drops. Must lie in [0, 1).
+    /// </remarks>
+    public double DropoutRate { get; set; } = 0.38852797479169876;
+
+    /// <summary>
+    /// Gets or sets the dropout rate on the retrieval weights: the reference implementation's <c>context_dropout</c>.
+    /// </summary>
+    /// <value>0.38920071545944357 by default, the paper's default TabR-S configuration.</value>
+    /// <remarks>
+    /// The reference drops the softmax weights over the retrieved neighbours (<c>probs = self.dropout(probs)</c>) before
+    /// they weight the values. It drops only inside training steps. Must lie in [0, 1).
+    /// </remarks>
+    public double ContextDropoutRate { get; set; } = 0.38920071545944357;
+
+    /// <summary>
+    /// Gets or sets whether the last linear layer of the value MLP <c>T</c> carries a bias.
+    /// </summary>
+    /// <value><see cref="BiasMode.Never"/> by default, the paper's bias-free output layer.</value>
+    /// <remarks>
+    /// Gorishniy et al. (2023) define <c>T(.) = LinearWithoutBias(Dropout(ReLU(Linear(.))))</c>, and the reference
+    /// <c>yandex-research/tabular-dl-tabr</c> builds it with <c>nn.Linear(d_block, d_main, bias=False)</c>: a bias
+    /// there adds one constant to every neighbour's value, which the attention weights (summing to 1) pass straight
+    /// into the context. Set <see cref="BiasMode.Always"/> to keep one anyway.
+    /// </remarks>
+    public BiasMode ValueOutputBiasMode { get; set; } = BiasMode.Never;
 
     /// <summary>
     /// Gets or sets whether to include target values of retrieved neighbors.
@@ -130,14 +158,14 @@ public class TabROptions<T> : RiskModelOptions<T>
     /// <summary>
     /// Gets or sets whether to normalize embeddings for retrieval.
     /// </summary>
-    /// <value>True to normalize embeddings; false otherwise. Defaults to true.</value>
+    /// <value>True to normalize embeddings; false otherwise. Defaults to false.</value>
     /// <remarks>
     /// <para>
-    /// Normalizing embeddings to unit length makes cosine similarity equivalent
-    /// to dot product, which is more stable for retrieval.
+    /// Gorishniy et al. (2023) retrieve by the squared L2 distance between unnormalized keys, so the default is
+    /// off. Turning it on scales every encoding to unit length before retrieval.
     /// </para>
     /// </remarks>
-    public bool NormalizeEmbeddings { get; set; } = true;
+    public bool NormalizeEmbeddings { get; set; } = false;
 
     /// <summary>
     /// Gets or sets the number of context encoder layers.
@@ -177,6 +205,8 @@ public class TabROptions<T> : RiskModelOptions<T>
             NumLayers = NumLayers,
             NumAttentionHeads = NumAttentionHeads,
             DropoutRate = DropoutRate,
+            ContextDropoutRate = ContextDropoutRate,
+            ValueOutputBiasMode = ValueOutputBiasMode,
             IncludeNeighborTargets = IncludeNeighborTargets,
             RetrievalTemperature = RetrievalTemperature,
             NormalizeEmbeddings = NormalizeEmbeddings,
