@@ -14,7 +14,7 @@ internal sealed class Zero123ImageCondition<T>
         Latent = latent;
     }
 
-    /// <summary>The image embedding (the reference's <c>embeddings[0]</c>).</summary>
+    /// <summary>The image embedding [1, 1, D] (the reference's <c>embeddings[0]</c>).</summary>
     public Tensor<T> Embedding { get; }
 
     /// <summary>The unscaled posterior sample of the image (the reference's <c>embeddings[1]</c>), [1, 4, h, w].</summary>
@@ -39,7 +39,7 @@ public partial class Zero123Model<T>
             throw new ArgumentException("The reference image must be [1, 3, H, W].", nameof(image));
 
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        var embedding = _imageEncoder.Encode(LatentScoreDistillation<T>.Resize(image, ImageEncoderResolution));
+        var embedding = EncodeImageEmbedding(LatentScoreDistillation<T>.Resize(image, ImageEncoderResolution));
         var shape = LatentScoreDistillation<T>.LatentShape(_vae, 1, resolution);
         var posteriorNoise = DiffusionNoiseHelper<T>.SampleGaussian(shape, random);
         var latent = LatentScoreDistillation<T>.Encode(
@@ -50,8 +50,8 @@ public partial class Zero123Model<T>
     /// <summary>
     /// The classifier-free-guided noise prediction for a batch of noisy latents, each seen from its camera offset to
     /// the reference view (the reference's <c>train_step</c> / <c>refine</c> denoiser call): the conditional branch
-    /// combines the image embedding with the camera pose and concatenates the reference latent; the unconditional
-    /// branch zeroes both.
+    /// projects the image embedding with the relative camera (<c>clip_camera_projection</c>) and concatenates the
+    /// reference latent; the unconditional branch zeroes both.
     /// </summary>
     internal Tensor<T> PredictViewConditionedNoise(
         Tensor<T> noisyLatents, int timestep, Zero123ImageCondition<T> condition, IReadOnlyList<GuidanceViewOffset> views,
@@ -70,9 +70,8 @@ public partial class Zero123Model<T>
         {
             var latent = Engine.TensorNarrow(noisyLatents, 0, b, 1);
             var view = views[b];
-            // The pose encoder takes the relative radius as a ratio (1 = same distance).
-            var pose = _poseEncoder.Encode(view.Elevation, view.Azimuth, 1.0 + view.Radius);
-            var conditioning = CombineEmbeddings(condition.Embedding, pose);
+            // cc_projection([embedding; deg2rad(polar), sin(az), cos(az), radius]), the reference's get_cam_embeddings.
+            var conditioning = _cameraProjection.Project(condition.Embedding, new[] { view });
             var unconditioning = new Tensor<T>(conditioning._shape);
             var conditional = _unet.PredictNoise(ConcatenateLatents(latent, condition.Latent), timestep, conditioning);
             var unconditional = _unet.PredictNoise(ConcatenateLatents(latent, zeroLatent), timestep, unconditioning);

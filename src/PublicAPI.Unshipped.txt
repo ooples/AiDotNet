@@ -12164,6 +12164,25 @@ AiDotNet.Diffusion.ThreeD.DreamGaussianModel<T>.DreamGaussianModel(AiDotNet.Neur
 override AiDotNet.Diffusion.ThreeD.DreamGaussianModel<T>.GenerateMesh(string! prompt, string? negativePrompt = null, int resolution = 128, int numInferenceSteps = 500, double guidanceScale = 100, int? seed = null) -> AiDotNet.Interfaces.Mesh3D<T>!
 *REMOVED*override AiDotNet.Diffusion.ThreeD.DreamGaussianModel<T>.GeneratePointCloud(string! prompt, string? negativePrompt = null, int? numPoints = null, int numInferenceSteps = 500, double guidanceScale = 7.5, int? seed = null) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.Diffusion.ThreeD.DreamGaussianModel<T>.GeneratePointCloud(string! prompt, string? negativePrompt = null, int? numPoints = null, int numInferenceSteps = 500, double guidanceScale = 100, int? seed = null) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.Diffusion.ThreeD.CameraPoseEncoder<T>
+*REMOVED*AiDotNet.Diffusion.ThreeD.CameraPoseEncoder<T>.CameraPoseEncoder(int embedDim = 768, int? seed = null) -> void
+*REMOVED*AiDotNet.Diffusion.ThreeD.CameraPoseEncoder<T>.Encode(double polarAngle, double azimuthAngle, double radius) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.Diffusion.ThreeD.CameraPoseEncoder<T>.GetParameters() -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+*REMOVED*AiDotNet.Diffusion.ThreeD.CameraPoseEncoder<T>.ParameterCount.get -> long
+*REMOVED*AiDotNet.Diffusion.ThreeD.CameraPoseEncoder<T>.SetParameters(AiDotNet.Tensors.LinearAlgebra.Vector<T>! parameters) -> void
+*REMOVED*virtual AiDotNet.Diffusion.ThreeD.Zero123Model<T>.GenerateNovelView(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputImage, double polarAngle, double azimuthAngle, double radius = 1, int numInferenceSteps = 50, double? guidanceScale = null, int? seed = null) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Diffusion.ThreeD.ClipCameraProjection<T>
+const AiDotNet.Diffusion.ThreeD.ClipCameraProjection<T>.CameraFeatureCount = 4 -> int
+AiDotNet.Diffusion.ThreeD.ClipCameraProjection<T>.ClipCameraProjection(int embedDim = 768, int? seed = null) -> void
+AiDotNet.Diffusion.ThreeD.ClipCameraProjection<T>.EmbeddingDimension.get -> int
+AiDotNet.Diffusion.ThreeD.ClipCameraProjection<T>.ParameterCount.get -> long
+static AiDotNet.Diffusion.ThreeD.ClipCameraProjection<T>.CameraFeatures(AiDotNet.Diffusion.ThreeD.GuidanceViewOffset view) -> double[]!
+AiDotNet.Diffusion.ThreeD.ClipCameraProjection<T>.Project(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! imageEmbedding, System.Collections.Generic.IReadOnlyList<AiDotNet.Diffusion.ThreeD.GuidanceViewOffset>! views) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Diffusion.ThreeD.ClipCameraProjection<T>.LoadWeights(double[]! weight, double[]! bias) -> void
+AiDotNet.Diffusion.ThreeD.ClipCameraProjection<T>.GetParameters() -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.Diffusion.ThreeD.ClipCameraProjection<T>.SetParameters(AiDotNet.Tensors.LinearAlgebra.Vector<T>! parameters) -> void
+AiDotNet.Diffusion.ThreeD.Zero123Model<T>.LoadCameraProjectionWeights(System.Func<string!, int[]!, double[]!>! read, string! prefix = "cc_projection.") -> void
+virtual AiDotNet.Diffusion.ThreeD.Zero123Model<T>.GenerateNovelView(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! inputImage, double polarAngle, double azimuthAngle, double radius = 0, int numInferenceSteps = 50, double? guidanceScale = null, int? seed = null) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.Diffusion.ThreeD.GuidanceViewOffset
 AiDotNet.Diffusion.ThreeD.GuidanceViewOffset.GuidanceViewOffset() -> void
 AiDotNet.Diffusion.ThreeD.GuidanceViewOffset.GuidanceViewOffset(double elevation, double azimuth, double radius) -> void
