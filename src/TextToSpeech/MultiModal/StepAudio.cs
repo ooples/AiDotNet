@@ -245,10 +245,9 @@ public partial class StepAudio<T> : TtsModelBase<T>
 
     private int[] IdsOf(Tensor<T> input)
     {
-        var ids = new int[input.Length];
+        var ids = RoundedIds(input);
         for (int i = 0; i < ids.Length; i++)
         {
-            ids[i] = (int)Math.Round(Ops.ToDouble(input.GetFlat(i)));
             if (ids[i] < 0 || ids[i] >= _options.VocabSize) throw new ArgumentOutOfRangeException(nameof(input), $"Token ids lie in [0, {_options.VocabSize}).");
         }
         return ids;

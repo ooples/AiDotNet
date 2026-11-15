@@ -43,9 +43,11 @@ internal static class TtsSampling<T>
     /// <summary>
     /// The position a multinomial draw lands on over non-negative <paramref name="weights"/> (in visiting order):
     /// with <c>d = u · Σw</c>, the first position whose running sum exceeds d (<paramref name="inclusive"/>: reaches d,
-    /// skipping zero weights); the last positive weight when rounding leaves none (a draw narrowed to T can round up
-    /// to the total, and the last position may carry no weight). Weights with no positive entry are rejected.
+    /// skipping zero weights); the last positive weight when rounding leaves none, so a zero-weight (removed) position
+    /// is never drawn, as with <c>torch.multinomial</c>. Weights with no positive entry are rejected.
     /// </summary>
+    /// <remarks>Σw is the running sum's last value, so d is compared with the very sums it was scaled from; a total
+    /// summed in another order can round above the last running sum and leave every position below d.</remarks>
     public static int DrawPosition(Tensor<T> weights, double u, bool inclusive)
     {
         if (weights is null) throw new ArgumentNullException(nameof(weights));
@@ -54,18 +56,22 @@ internal static class TtsSampling<T>
         if (n == 0) throw new ArgumentException("There is nothing to draw from.", nameof(weights));
         var flat = engine.Reshape(weights, new[] { n });
         var running = engine.TensorCumSum(flat, 0);
-        T draw = Ops.Multiply(Ops.FromDouble(u), engine.TensorSum(flat));
-        var positive = engine.TensorGreaterThan(flat, Ops.Zero).Cast<int>().ToArray();
-        int last = Array.LastIndexOf(positive, 1);
-        if (last < 0) throw new ArgumentException("The weights have no positive entry to draw.", nameof(weights));
+        T total = engine.TensorSlice(running, new[] { n - 1 }, new[] { 1 }).ToArray()[0];
+        T draw = Ops.Multiply(Ops.FromDouble(u), total);
         if (!inclusive)
         {
             int below = n - engine.TensorGreaterThan(running, draw).Cast<int>().ToArray().Sum();
-            return below < n ? below : last;
+            if (below < n) return below;
         }
-        int before = engine.TensorLessThan(running, draw).Cast<int>().ToArray().Sum();
-        for (int j = before; j < n; j++)
-            if (positive[j] != 0) return j;
+        var positive = engine.TensorGreaterThan(flat, Ops.Zero).Cast<int>().ToArray();
+        if (inclusive)
+        {
+            int before = engine.TensorLessThan(running, draw).Cast<int>().ToArray().Sum();
+            for (int j = before; j < n; j++)
+                if (positive[j] != 0) return j;
+        }
+        int last = Array.LastIndexOf(positive, 1);
+        if (last < 0) throw new ArgumentException("The weights have no positive entry to draw.", nameof(weights));
         return last;
     }
 

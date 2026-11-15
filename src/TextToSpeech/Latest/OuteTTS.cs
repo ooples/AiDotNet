@@ -419,7 +419,7 @@ public partial class OuteTTS<T> : TtsModelBase<T>, ICodecTts<T>
         if (!HasPaperLayers) return base.PredictCore(input);
         if (input.Length == 0) throw new ArgumentException("There is no text.", nameof(input));
         if (NumOps.LessThan(Engine.TensorMinValue(input), NumOps.Zero)
-            || NumOps.GreaterThanOrEquals(Engine.TensorMaxValue(input), NumOps.FromDouble(_options.VocabSize)))
+            || NumOps.ToDouble(Engine.TensorMaxValue(input)) >= _options.VocabSize)
             throw new ArgumentOutOfRangeException(nameof(input), $"Token ids lie in [0, {_options.VocabSize}).");
         var prompt = Tokenizer.Encode(OuteTTSPrompts.CompletionPrompt(TextOf(input), VoiceSpeaker()));
         return AudioOf(Generate(prompt, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed)));

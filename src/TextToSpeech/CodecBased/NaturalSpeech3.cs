@@ -233,7 +233,7 @@ public partial class NaturalSpeech3<T> : TtsModelBase<T>, IEndToEndTts<T>
     protected override Tensor<T> PreprocessText(string text)
     {
         if (!HasPaperLayers) return base.PreprocessText(text);
-        return Wave(TextToPhonemes(text).Select(i => (double)i).ToArray());
+        return IdTensor(TextToPhonemes(text));
     }
 
 
@@ -242,10 +242,9 @@ public partial class NaturalSpeech3<T> : TtsModelBase<T>, IEndToEndTts<T>
 
     private int[] PhonemeIds(Tensor<T> input, string name)
     {
-        var ids = new int[input.Length];
+        var ids = RoundedIds(input);
         for (int i = 0; i < ids.Length; i++)
         {
-            ids[i] = (int)Math.Round(Ops.ToDouble(input.GetFlat(i)));
             if (ids[i] < 0 || ids[i] >= _options.VocabSize) throw new ArgumentOutOfRangeException(name, $"Phoneme ids lie in [0, {_options.VocabSize}).");
         }
         if (ids.Length == 0) throw new ArgumentException("There are no phonemes.", name);
@@ -326,7 +325,7 @@ public partial class NaturalSpeech3<T> : TtsModelBase<T>, IEndToEndTts<T>
         return new TtsVoice<T>
         {
             ReferenceAudio = Engine.Reshape(recording, new[] { recording.Length }),
-            ReferenceTokens = Wave(phonemes.Select(p => (double)p).ToArray()),
+            ReferenceTokens = IdTensor(phonemes),
             ReferenceDurations = durations.ToArray(),
         };
     }
