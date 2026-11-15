@@ -3798,6 +3798,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         }
 
         InterfaceGuard.GradientComputable(Model).ApplyGradients(gradients, learningRate);
+        ReleaseInferenceCopyAfterWeightChange();
     }
 
     /// <summary>
@@ -3927,6 +3928,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 Model.Train(supportX, supportY);
             }
         }
+
+        ReleaseInferenceCopyAfterWeightChange();
     }
 
     /// <summary>
@@ -4027,6 +4030,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
                 // Would require loss calculation on validation set and stopping criteria
             }
         }
+
+        ReleaseInferenceCopyAfterWeightChange();
     }
 
     /// <summary>
@@ -7897,6 +7902,31 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <summary>
     /// Releases the stateless inference-optimized copy when this result made it, then forgets it.
     /// </summary>
+    /// <summary>
+    /// Called after this result changed its model's weights (Adapt, FineTune, ApplyGradients).
+    /// </summary>
+    /// <remarks>
+    /// The compiled predictor follows the network it serves on its own (it rebinds when parameter tensors are
+    /// replaced). The stateless inference-optimized network is a separate COPY made from the weights at its first
+    /// prediction, so after the model trains it, and the compiled predictor built over it, would keep answering with
+    /// the old weights. Both are dropped here and rebuilt from the current weights on the next prediction, exactly as
+    /// a load resets them.
+    /// </remarks>
+    private void ReleaseInferenceCopyAfterWeightChange()
+    {
+        lock (_compiledPredictorGate)
+        {
+            lock (_inferenceOptimizationLock)
+            {
+                if (_inferenceOptimizedNeuralModel is null || ReferenceEquals(_inferenceOptimizedNeuralModel, Model)) return;
+                _compiledPredictor = null;
+                _inferenceOptimizer = null;
+                ReleaseInferenceOptimizedModel();
+                _inferenceOptimizationsInitialized = false;
+            }
+        }
+    }
+
     private void ReleaseInferenceOptimizedModel()
     {
         var copy = _inferenceOptimizedNeuralModel;
