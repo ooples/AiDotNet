@@ -552,6 +552,59 @@ public class DreamGaussianTests
         }
     }
 
+    private static double UvAreaSum(UvAtlas atlas)
+    {
+        double total = 0.0;
+        for (int f = 0; f < atlas.Faces.Length / 3; f++)
+            total += Math.Abs(SignedUvArea(UvTriangle(atlas, f)));
+        return total;
+    }
+
+    [Fact]
+    public void UvAtlas_RasterizedPacking_ChartsNeverShareATexel()
+    {
+        const int resolution = 256;
+        foreach (var (vertices, faces) in new[] { Cube(), UvSphere(8, 12) })
+        {
+            var atlas = UvAtlasUnwrapper.Unwrap(vertices, faces, new UvAtlasOptions { TextureResolution = resolution, PaddingTexels = 1 });
+            // Conservative coverage of every chart's triangles in the texture's texel grid.
+            var owner = new int[resolution * resolution];
+            for (int i = 0; i < owner.Length; i++) owner[i] = -1;
+            for (int f = 0; f < faces.Length / 3; f++)
+            {
+                var t = UvTriangle(atlas, f).Select(v => v * resolution).ToArray();
+                int x0 = Math.Max(0, (int)Math.Floor(new[] { t[0], t[2], t[4] }.Min()));
+                int x1 = Math.Min(resolution - 1, (int)Math.Floor(new[] { t[0], t[2], t[4] }.Max()));
+                int y0 = Math.Max(0, (int)Math.Floor(new[] { t[1], t[3], t[5] }.Min()));
+                int y1 = Math.Min(resolution - 1, (int)Math.Floor(new[] { t[1], t[3], t[5] }.Max()));
+                for (int y = y0; y <= y1; y++)
+                {
+                    for (int x = x0; x <= x1; x++)
+                    {
+                        if (!UvAtlasUnwrapper.TriangleOverlapsBox(t, x, y, x + 1, y + 1)) continue;
+                        int texel = (y * resolution) + x;
+                        int chart = atlas.FaceChart[f];
+                        Assert.True(owner[texel] < 0 || owner[texel] == chart, $"Texel ({x}, {y}) is covered by charts {owner[texel]} and {chart}.");
+                        owner[texel] = chart;
+                    }
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public void UvAtlas_RasterizedPacking_UsesAtLeastTheAreaOfRectanglePacking()
+    {
+        var (vertices, faces) = UvSphere(8, 12);
+        var rasterized = UvAtlasUnwrapper.Unwrap(vertices, faces, new UvAtlasOptions { TextureResolution = 512, PaddingTexels = 2 });
+        var rectangles = UvAtlasUnwrapper.Unwrap(
+            vertices, faces, new UvAtlasOptions { TextureResolution = 512, PaddingTexels = 2, Packing = UvPackingMode.Rectangles });
+        Assert.Equal(rectangles.ChartCount, rasterized.ChartCount);
+        double rasterizedUtilisation = UvAreaSum(rasterized), rectangleUtilisation = UvAreaSum(rectangles);
+        Assert.True(rasterizedUtilisation >= rectangleUtilisation,
+            $"Rasterised packing fills {rasterizedUtilisation:F4} of the square, rectangle packing {rectangleUtilisation:F4}.");
+    }
+
     [Fact]
     public void MeshRasterizer_SeesTheFrontFaceAtTheRightDepth()
     {
@@ -1040,7 +1093,8 @@ public class DreamGaussianTests
     [Fact]
     public void PrepareReference_TakesTheCallerMask_ThenTheAlpha_ThenTheSegmenter()
     {
-        var settings = new DreamGaussianOptions { ReferenceSize = 4 };
+        // Recentring is tested on its own; here the mask's source is the point.
+        var settings = new DreamGaussianOptions { ReferenceSize = 4, RecenterReference = false };
         var segmenter = new RecordingSegmenter();
 
         // RGBA: the alpha is used and the segmenter is never run.
@@ -1064,6 +1118,94 @@ public class DreamGaussianTests
         Assert.Equal(1, segmenter.Calls);
         Assert.All(segmentedMask, a => Assert.Equal(0.25, a, 12));
         Assert.All(rgbImage, v => Assert.Equal((0.2 * 0.25) + 0.75, v, 12));
+    }
+
+    [Fact]
+    public void ResizeArea_MatchesOpenCvsInterArea()
+    {
+        // Shrinking 5 -> 2 (pixel-area weights, scale 2.5): [0.4, 0.4, 0.2] and [0.2, 0.4, 0.4].
+        var shrunk = DreamGaussianPreprocessing.ResizeArea(new[] { 0.0, 1.0, 2.0, 3.0, 4.0 }, 1, 1, 5, 1, 2);
+        Assert.Equal(0.8, shrunk[0], 12);
+        Assert.Equal(3.2, shrunk[1], 12);
+        // Growing 3 -> 8 (INTER_AREA zoom): output 2 has sx = floor(0.75) = 0, fx = 3 - 8/3 = 1/3.
+        var grown = DreamGaussianPreprocessing.ResizeArea(new[] { 0.0, 3.0, 9.0 }, 1, 1, 3, 1, 8);
+        Assert.Equal(0.0, grown[0], 12);
+        Assert.Equal(0.0, grown[1], 12);
+        Assert.Equal(1.0, grown[2], 12);
+        Assert.Equal(9.0, grown[7], 12);
+    }
+
+    [Fact]
+    public void Recenter_ScalesTheMaskBoxToTheBorderRatioAndCentresIt()
+    {
+        // 10 x 10, object in rows 2..5 and columns 3..8. process.py: h = 5 - 2 = 3, w = 8 - 3 = 5 (exclusive maxima),
+        // desired = int(10 * 0.8) = 8, scale = 1.6, h2 = int(4.8) = 4, w2 = 8, pasted at row (10 - 4) // 2 = 3 and
+        // column (10 - 8) // 2 = 1.
+        const int n = 10;
+        var rgba = new double[4 * n * n];
+        for (int x = 2; x <= 5; x++)
+        {
+            for (int y = 3; y <= 8; y++)
+            {
+                int p = (x * n) + y;
+                rgba[p] = 0.2;
+                rgba[(n * n) + p] = 0.4;
+                rgba[(2 * n * n) + p] = 0.6;
+                rgba[(3 * n * n) + p] = 1.0;
+            }
+        }
+
+        var output = DreamGaussianPreprocessing.Recenter(rgba, n, n, n, 0.2);
+        Assert.NotNull(output);
+        var result = output ?? Array.Empty<double>();
+        for (int x = 0; x < n; x++)
+        {
+            for (int y = 0; y < n; y++)
+            {
+                int p = (x * n) + y;
+                bool inside = x >= 3 && x < 7 && y >= 1 && y < 9;
+                Assert.Equal(inside ? 1.0 : 0.0, result[(3 * n * n) + p], 12);
+                Assert.Equal(inside ? 0.4 : 0.0, result[(n * n) + p], 12);
+            }
+        }
+
+        // An empty mask is left alone.
+        Assert.Null(DreamGaussianPreprocessing.Recenter(new double[4 * n * n], n, n, n, 0.2));
+    }
+
+    [Fact]
+    public void PrepareReference_RecentersTheForegroundByDefault()
+    {
+        var settings = new DreamGaussianOptions { ReferenceSize = 10 };
+        Assert.True(settings.RecenterReference);
+        Assert.Equal(0.2, settings.RecenterBorderRatio);
+        const int n = 10;
+        var data = new double[4 * n * n];
+        for (int x = 2; x <= 5; x++)
+        {
+            for (int y = 3; y <= 8; y++)
+            {
+                int p = (x * n) + y;
+                data[p] = 0.2;
+                data[(n * n) + p] = 0.4;
+                data[(2 * n * n) + p] = 0.6;
+                data[(3 * n * n) + p] = 1.0;
+            }
+        }
+
+        var image = new Tensor<double>(new[] { 1, 4, n, n }, new Vector<double>(data));
+        var (rgb, mask) = DreamGaussianModel<double>.PrepareReference(image, null, settings, () => new RecordingSegmenter());
+        for (int x = 0; x < n; x++)
+        {
+            for (int y = 0; y < n; y++)
+            {
+                int p = (x * n) + y;
+                bool inside = x >= 3 && x < 7 && y >= 1 && y < 9;
+                Assert.Equal(inside ? 1.0 : 0.0, mask[p], 12);
+                // Composited onto white.
+                Assert.Equal(inside ? 0.6 : 1.0, rgb[(3 * p) + 2], 12);
+            }
+        }
     }
 
     [Fact]
