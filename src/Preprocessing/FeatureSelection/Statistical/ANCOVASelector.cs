@@ -125,7 +125,7 @@ public class ANCOVASelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         int p = centered.Shape[1];
         var covariate = Engine.TensorSliceAxis(centered, 1, _covariateIndex);
         var syy = SelectorTensorOps.ColumnSumOfSquares(centered);
-        T sxx = Engine.TensorSumOfSquares(covariate);
+        T sxx = PreprocessingTensorOps.SumOfSquares(covariate);
         if (!NumOps.GreaterThan(sxx, PreprocessingTensorOps.Tolerance<T>(1e-10)))
             return syy;
 

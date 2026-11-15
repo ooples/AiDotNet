@@ -215,7 +215,7 @@ public class RFE<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatu
         T epsilon = PreprocessingTensorOps.Tolerance<T>(1e-10);
         var centered = FilterStatisticTensorOps.CenterColumns(columns);
         var yc = Engine.Reshape(Engine.TensorSubtractScalar(y, Engine.TensorMean(y)), new[] { n, 1 });
-        T ssYY = Engine.TensorSumOfSquares(yc);
+        T ssYY = PreprocessingTensorOps.SumOfSquares(yc);
         if (df2 <= 0 || NumOps.LessThan(ssYY, epsilon))
             return zeros;
 

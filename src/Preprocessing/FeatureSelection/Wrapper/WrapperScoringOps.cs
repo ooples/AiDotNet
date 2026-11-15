@@ -129,8 +129,8 @@ internal static class WrapperScoringOps
     {
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
-        T ssRes = engine.TensorSumOfSquares(engine.TensorSubtract(y, predictions));
-        T ssTot = engine.TensorSumOfSquares(engine.TensorSubtractScalar(y, engine.TensorMean(y)));
+        T ssRes = PreprocessingTensorOps.SumOfSquares(engine.TensorSubtract(y, predictions));
+        T ssTot = PreprocessingTensorOps.SumOfSquares(engine.TensorSubtractScalar(y, engine.TensorMean(y)));
         return ops.GreaterThan(ssTot, PreprocessingTensorOps.Tolerance<T>(Epsilon))
             ? ops.Subtract(ops.One, ops.Divide(ssRes, ssTot))
             : ops.Zero;

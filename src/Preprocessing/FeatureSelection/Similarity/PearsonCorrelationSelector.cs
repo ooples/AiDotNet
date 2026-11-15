@@ -69,7 +69,7 @@ public class PearsonCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matri
         var yc = SelectorTensorOps.CenteredColumn(target);
         T count = NumOps.FromDouble(n);
         T eps = PreprocessingTensorOps.Tolerance<T>(1e-10);
-        T yStd = NumOps.Sqrt(NumOps.Divide(Engine.TensorSumOfSquares(yc), count));
+        T yStd = NumOps.Sqrt(NumOps.Divide(PreprocessingTensorOps.SumOfSquares(yc), count));
         var xStd = Engine.TensorSqrt(Engine.TensorDivideScalar(SelectorTensorOps.ColumnSumOfSquares(xc), count));
         var scores = PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
         if (!NumOps.LessThan(yStd, eps))

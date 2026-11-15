@@ -250,6 +250,18 @@ internal static class PreprocessingTensorOps
     }
 
     /// <summary>
+    /// The sum of the squares of every element. Used instead of the engine's <c>TensorSumOfSquares</c>, which in
+    /// AiDotNet.Tensors 0.150.0 returns a wrong value for a <c>Tensor&lt;double&gt;</c> of 16 or more elements on a CPU
+    /// with AVX2 (16 values summing to 5.2422 come back as 7.5262; float and the non-AVX2 path are right). The
+    /// reference tests never saw it because they all fit fewer than 16 rows.
+    /// </summary>
+    public static T SumOfSquares<T>(Tensor<T> x)
+    {
+        var engine = AiDotNetEngine.Current;
+        return engine.TensorSum(engine.TensorMultiply(x, x));
+    }
+
+    /// <summary>
     /// Pearson correlation of every column of <paramref name="x"/> ([n, p]) with <paramref name="y"/> ([n]).
     /// A column (or target) whose centred sum of squares is not above <paramref name="epsilon"/> gets 0.
     /// </summary>
@@ -265,7 +277,7 @@ internal static class PreprocessingTensorOps
         var xc = engine.TensorSubtract(x, engine.ReduceMean(x, new[] { 0 }, true));
         var yc = engine.Reshape(engine.TensorSubtractScalar(y, engine.TensorMean(y)), new[] { n, 1 });
         var sxx = engine.ReduceSum(engine.TensorSquare(xc), new[] { 0 }, false);
-        T syy = engine.TensorSumOfSquares(yc);
+        T syy = SumOfSquares(yc);
         var zeros = new Tensor<T>(new[] { x.Shape[1] });
         if (!ops.GreaterThan(syy, eps))
             return zeros;
@@ -289,7 +301,7 @@ internal static class PreprocessingTensorOps
         var sxx = engine.ReduceSum(engine.TensorSquare(xc), new[] { 0 }, false);
         // sqrt(sxx) sqrt(syy): the product sxx syy overflows a narrow T such as Half long before either factor does
         var denom = engine.TensorMultiplyScalar(
-            engine.TensorSqrt(sxx), MathHelper.GetNumericOperations<T>().Sqrt(engine.TensorSumOfSquares(yc)));
+            engine.TensorSqrt(sxx), MathHelper.GetNumericOperations<T>().Sqrt(SumOfSquares(yc)));
         return engine.TensorWhere(
             engine.TensorGreaterThan(denom, Tolerance<T>(epsilon)), CenteredCorrelations(xc, yc), new Tensor<T>(new[] { p }));
     }

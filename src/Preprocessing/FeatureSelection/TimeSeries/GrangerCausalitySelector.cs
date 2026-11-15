@@ -145,7 +145,7 @@ public class GrangerCausalitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
             NumOps.Multiply(Engine.TensorMaxValue(s), PreprocessingTensorOps.Tolerance<T>(1e-10)));
         var projections = Engine.Reshape(Engine.TensorMatMul(Engine.TensorTranspose(u), y), new[] { s.Length });
         T explained = Engine.TensorSum(Engine.TensorMultiply(kept, Engine.TensorMultiply(projections, projections)));
-        T rss = NumOps.Subtract(Engine.TensorSumOfSquares(y), explained);
+        T rss = NumOps.Subtract(PreprocessingTensorOps.SumOfSquares(y), explained);
         return PreprocessingTensorOps.Filled(new[] { 1 }, NumOps.GreaterThan(rss, NumOps.Zero) ? rss : NumOps.Zero);
     }
 

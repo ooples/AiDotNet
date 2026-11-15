@@ -125,7 +125,7 @@ public class FireflyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervise
                     {
                         // Attractiveness beta0 exp(-gamma r^2) with r the distance between the fireflies
                         var difference = Engine.TensorSubtract(fireflies[j], fireflies[i]);
-                        T squaredDistance = Engine.TensorSumOfSquares(difference);
+                        T squaredDistance = PreprocessingTensorOps.SumOfSquares(difference);
                         T beta = WrapperScoringOps.Multiply(beta0,
                             WrapperScoringOps.Exp(WrapperScoringOps.Multiply(negativeGamma, squaredDistance)));
 

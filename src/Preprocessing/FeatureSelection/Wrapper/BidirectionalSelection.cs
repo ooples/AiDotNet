@@ -168,7 +168,7 @@ public class BidirectionalSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         // Use sum of squared correlations as default score
         var correlations = PreprocessingTensorOps.CorrelationsWithDenominatorGuard(
             WrapperScoringOps.Columns(data, features), Tensor<T>.FromVector(target));
-        T score = Engine.TensorSumOfSquares(correlations);
+        T score = PreprocessingTensorOps.SumOfSquares(correlations);
 
         // Penalize feature redundancy: score (1 - redundancy / 2) with the mean |r| over the feature pairs
         if (features.Length > 1)
