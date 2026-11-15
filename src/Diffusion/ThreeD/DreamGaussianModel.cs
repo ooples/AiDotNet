@@ -353,7 +353,9 @@ public partial class DreamGaussianModel<T> : ThreeDDiffusionModelBase<T>
 
     /// <summary>
     /// The reference's input handling: the foreground alpha (the caller's mask, else the RGBA alpha, else the
-    /// segmenter, as <c>process.py</c>'s <c>rembg.remove</c>), then <c>load_input</c>: the RGBA image resized to
+    /// segmenter, as <c>process.py</c>'s <c>rembg.remove</c>), <c>process.py</c>'s recentring (when
+    /// <see cref="DreamGaussianOptions.RecenterReference"/>, straight to the reference size: <c>process.py</c>'s
+    /// <c>--size</c> and <c>ref_size</c> are both 256), then <c>load_input</c>: the RGBA image resized to
     /// <see cref="DreamGaussianOptions.ReferenceSize"/> (area filter when shrinking) and the colour composited onto
     /// white.
     /// </summary>
@@ -393,10 +395,21 @@ public partial class DreamGaussianModel<T> : ThreeDDiffusionModelBase<T>
 
         int size = settings.ReferenceSize;
         var data = rgba;
+        if (settings.RecenterReference)
+        {
+            var recentered = DreamGaussianPreprocessing.Recenter(rgba, height, width, size, settings.RecenterBorderRatio);
+            if (recentered is not null)
+            {
+                data = recentered;
+                height = size;
+                width = size;
+            }
+        }
+
         if (height != size || width != size)
         {
             bool shrinking = height >= size && width >= size;
-            var tensor = new Tensor<double>(new[] { 1, 4, height, width }, new Vector<double>(rgba)).Cast<T>();
+            var tensor = new Tensor<double>(new[] { 1, 4, height, width }, new Vector<double>(data)).Cast<T>();
             data = AiDotNetEngine.Current.Interpolate(
                 tensor, new[] { size, size }, shrinking ? InterpolateMode.Area : InterpolateMode.Bilinear, false)
                 .Cast<double>().ToArray();

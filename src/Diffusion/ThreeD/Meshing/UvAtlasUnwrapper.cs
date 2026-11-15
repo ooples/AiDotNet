@@ -1,5 +1,15 @@
 namespace AiDotNet.Diffusion.ThreeD.Meshing;
 
+/// <summary>How <see cref="UvAtlasUnwrapper"/> places the charts in the unit square.</summary>
+internal enum UvPackingMode
+{
+    /// <summary>xatlas-style: rasterised chart bitmaps placed by bitmap collision, trying xatlas's rotations.</summary>
+    Rasterized,
+
+    /// <summary>Shelf packing of the charts' bounding rectangles.</summary>
+    Rectangles,
+}
+
 /// <summary>Settings for <see cref="UvAtlasUnwrapper"/>.</summary>
 internal sealed class UvAtlasOptions
 {
@@ -15,6 +25,9 @@ internal sealed class UvAtlasOptions
     /// angle of the chart's area-weighted normal. Default: 60 degrees.
     /// </summary>
     public double MaxNormalDeviationDegrees { get; set; } = 60.0;
+
+    /// <summary>The packer. Default: <see cref="UvPackingMode.Rasterized"/> (xatlas's).</summary>
+    public UvPackingMode Packing { get; set; } = UvPackingMode.Rasterized;
 }
 
 /// <summary>A UV atlas: the mesh with its vertices split along chart seams and a texture coordinate per vertex.</summary>
@@ -71,9 +84,15 @@ internal sealed class UvAtlas
 /// </para>
 /// <para>
 /// <b>Packing.</b> Each chart is rotated to the minimum-area bounding rectangle of its convex hull (xatlas's
-/// <c>rotateChartsToAxis</c>), the rectangles are shelf-packed into [0, 1]^2 at the largest uniform scale bisection
-/// finds, and every chart keeps <see cref="UvAtlasOptions.PaddingTexels"/> of gutter. xatlas packs rasterised chart
-/// shapes rather than rectangles, so its layout is tighter; texel density and chart shapes are the same idea.
+/// <c>rotateChartsToAxis</c>). As xatlas's packer does, every chart is then rasterised at the atlas's texel scale
+/// into a coverage bitmap (conservatively: every texel a triangle touches) and dilated by
+/// <see cref="UvAtlasOptions.PaddingTexels"/>; the charts, largest first, are placed in the texture's texel grid
+/// where their bitmap does not collide with the bitmaps already placed, trying the chart as is and rotated by 90
+/// degrees (xatlas's <c>rotateCharts</c>). A chart drops from the top edge until its bitmap's columns meet the occupied
+/// texels (so shapes interlock, but a chart is not slid under an overhang), at the position and rotation that keep the
+/// packed height lowest. The texel scale is the largest that fits, found by search. Dilated bitmaps never overlap, so
+/// two charts are at least twice the padding apart and every chart at least the padding from the border.
+/// <see cref="UvPackingMode.Rectangles"/> instead shelf-packs the charts' bounding rectangles.
 /// </para>
 /// </remarks>
 internal static class UvAtlasUnwrapper
@@ -137,8 +156,19 @@ internal static class UvAtlasUnwrapper
             heights[c] = v1 - v0;
         }
 
-        double padding = (double)settings.PaddingTexels / settings.TextureResolution;
-        var (offsetU, offsetV, scale) = Pack(widths, heights, padding);
+        // Each chart's final map: u' = a u + b v + e, v' = c u + d v + f.
+        var maps = new double[chartCount][];
+        if (settings.Packing == UvPackingMode.Rectangles)
+        {
+            double padding = (double)settings.PaddingTexels / settings.TextureResolution;
+            var (offsetU, offsetV, scale) = Pack(widths, heights, padding);
+            for (int c = 0; c < chartCount; c++)
+                maps[c] = new[] { scale, 0.0, offsetU[c], 0.0, scale, offsetV[c] };
+        }
+        else
+        {
+            maps = PackRasterized(charts, faces, widths, heights, settings.TextureResolution, settings.PaddingTexels);
+        }
 
         // Split vertices along chart seams.
         var newIndex = new Dictionary<long, int>();
@@ -163,8 +193,10 @@ internal static class UvAtlasUnwrapper
                     newVertices.Add(vertices[(3 * vertex) + 1]);
                     newVertices.Add(vertices[(3 * vertex) + 2]);
                     int local = chart.Local[vertex];
-                    double u = offsetU[c] + (chart.Uv[2 * local] * scale);
-                    double v = offsetV[c] + (chart.Uv[(2 * local) + 1] * scale);
+                    var m = maps[c];
+                    double cu = chart.Uv[2 * local], cv = chart.Uv[(2 * local) + 1];
+                    double u = (m[0] * cu) + (m[1] * cv) + m[2];
+                    double v = (m[3] * cu) + (m[4] * cv) + m[5];
                     uvs.Add(Math.Min(1.0, Math.Max(0.0, u)));
                     uvs.Add(Math.Min(1.0, Math.Max(0.0, v)));
                 }
@@ -654,6 +686,256 @@ internal static class UvAtlasUnwrapper
 
         if (hull.Count > 1) hull.RemoveAt(hull.Count - 1);
         return hull;
+    }
+
+    /// <summary>
+    /// xatlas-style packing of the charts into a <paramref name="resolution"/>-texel square at the largest texel scale
+    /// that fits (grown or shrunk from the scale that would fill half the square, then bisected).
+    /// </summary>
+    /// <returns>Each chart's affine map [a, b, e, c, d, f] from chart coordinates to [0, 1]^2.</returns>
+    private static double[][] PackRasterized(
+        List<Chart> charts, int[] faces, double[] widths, double[] heights, int resolution, int padding)
+    {
+        int count = charts.Count;
+        var areas = new double[count];
+        double total = 0.0, largest = 0.0;
+        for (int c = 0; c < count; c++)
+        {
+            foreach (int f in charts[c].Faces)
+                areas[c] += Math.Abs(SignedArea(ChartTriangle(charts[c], faces, f, false, 0.0, 1.0, 0.0)));
+            total += areas[c];
+            largest = Math.Max(largest, Math.Max(widths[c], heights[c]));
+        }
+
+        // xatlas sorts the charts largest first.
+        var order = new int[count];
+        for (int i = 0; i < count; i++) order[i] = i;
+        Array.Sort(order, (a, b) =>
+        {
+            int byArea = areas[b].CompareTo(areas[a]);
+            if (byArea != 0) return byArea;
+            int bySide = Math.Max(widths[b], heights[b]).CompareTo(Math.Max(widths[a], heights[a]));
+            return bySide != 0 ? bySide : a.CompareTo(b);
+        });
+
+        double scale = total > 0.0
+            ? Math.Sqrt(0.5 * resolution * resolution / total)
+            : (largest > 0.0 ? 0.5 * resolution / largest : 1.0);
+        double[][]? best = null;
+        double low = 0.0, high = double.PositiveInfinity;
+        for (int attempt = 0; attempt < 60; attempt++)
+        {
+            var placed = TryPackRasterized(charts, faces, order, widths, heights, resolution, padding, scale);
+            if (placed is not null)
+            {
+                best = placed;
+                low = scale;
+                if (double.IsPositiveInfinity(high))
+                {
+                    scale *= 1.25;
+                    continue;
+                }
+            }
+            else
+            {
+                high = scale;
+                if (best is null)
+                {
+                    scale *= 0.8;
+                    continue;
+                }
+            }
+
+            break;
+        }
+
+        if (best is null)
+            throw new ArgumentException("The padding is too large for this many charts; raise TextureResolution.");
+        for (int iteration = 0; iteration < 6 && !double.IsPositiveInfinity(high); iteration++)
+        {
+            double middle = 0.5 * (low + high);
+            var placed = TryPackRasterized(charts, faces, order, widths, heights, resolution, padding, middle);
+            if (placed is not null)
+            {
+                best = placed;
+                low = middle;
+            }
+            else
+            {
+                high = middle;
+            }
+        }
+
+        return best;
+    }
+
+    /// <summary>One packing pass at a fixed texel scale; null when a chart does not fit.</summary>
+    private static double[][]? TryPackRasterized(List<Chart> charts, int[] faces, int[] order, double[] widths,
+        double[] heights, int resolution, int padding, double scale)
+    {
+        // The occupied height of every texel column; a chart dropped from the top stops on it.
+        var skyline = new int[resolution];
+        var maps = new double[charts.Count][];
+        foreach (int c in order)
+        {
+            int bestHeight = int.MaxValue, bestY = 0, bestX = 0, bestRotation = -1;
+            int[] bestBottom = Array.Empty<int>();
+            for (int rotation = 0; rotation < 2; rotation++)
+            {
+                var bitmap = RasterizeChart(charts[c], faces, rotation == 1, widths[c], heights[c], scale, padding,
+                    out int w, out int h);
+                if (w > resolution || h > resolution) continue;
+                var top = new int[w];
+                var bottom = new int[w];
+                for (int col = 0; col < w; col++)
+                {
+                    top[col] = -1;
+                    bottom[col] = -1;
+                    for (int row = 0; row < h; row++)
+                    {
+                        if (!bitmap[(row * w) + col]) continue;
+                        if (top[col] < 0) top[col] = row;
+                        bottom[col] = row;
+                    }
+                }
+
+                for (int x = 0; x + w <= resolution; x++)
+                {
+                    int y = 0;
+                    for (int col = 0; col < w; col++)
+                    {
+                        if (top[col] >= 0) y = Math.Max(y, skyline[x + col] - top[col]);
+                    }
+
+                    if (y + h > resolution) continue;
+                    bool better = y + h < bestHeight || (y + h == bestHeight && (y < bestY || (y == bestY && x < bestX)));
+                    if (!better) continue;
+                    bestHeight = y + h;
+                    bestY = y;
+                    bestX = x;
+                    bestRotation = rotation;
+                    bestBottom = bottom;
+                }
+            }
+
+            if (bestRotation < 0) return null;
+            for (int col = 0; col < bestBottom.Length; col++)
+            {
+                if (bestBottom[col] >= 0)
+                    skyline[bestX + col] = Math.Max(skyline[bestX + col], bestY + bestBottom[col] + 1);
+            }
+
+            double k = scale / resolution;
+            maps[c] = bestRotation == 0
+                ? new[] { k, 0.0, (bestX + padding) / (double)resolution, 0.0, k, (bestY + padding) / (double)resolution }
+                // Rotated by 90 degrees: (u, v) -> (H - v, u).
+                : new[] { 0.0, -k, ((heights[c] * scale) + bestX + padding) / resolution, k, 0.0, (bestY + padding) / (double)resolution };
+        }
+
+        return maps;
+    }
+
+    /// <summary>
+    /// A chart's coverage bitmap [h, w] at <paramref name="scale"/> texels per unit: every texel a triangle touches,
+    /// with <paramref name="padding"/> texels of margin, dilated by <paramref name="padding"/> (a square element, as
+    /// iterating xatlas's 8-neighbour dilation).
+    /// </summary>
+    internal static bool[] RasterizeChart(Chart chart, int[] faces, bool rotated, double width, double height, double scale,
+        int padding, out int w, out int h)
+    {
+        double extentU = rotated ? height : width, extentV = rotated ? width : height;
+        w = Math.Max(1, (int)Math.Ceiling((extentU * scale) - 1e-9)) + (2 * padding);
+        h = Math.Max(1, (int)Math.Ceiling((extentV * scale) - 1e-9)) + (2 * padding);
+        var bitmap = new bool[w * h];
+        foreach (int f in chart.Faces)
+        {
+            var t = ChartTriangle(chart, faces, f, rotated, height, scale, padding);
+            int x0 = Math.Max(0, (int)Math.Floor(Math.Min(t[0], Math.Min(t[2], t[4]))));
+            int x1 = Math.Min(w - 1, (int)Math.Floor(Math.Max(t[0], Math.Max(t[2], t[4]))));
+            int y0 = Math.Max(0, (int)Math.Floor(Math.Min(t[1], Math.Min(t[3], t[5]))));
+            int y1 = Math.Min(h - 1, (int)Math.Floor(Math.Max(t[1], Math.Max(t[3], t[5]))));
+            for (int y = y0; y <= y1; y++)
+            {
+                for (int x = x0; x <= x1; x++)
+                {
+                    if (!bitmap[(y * w) + x] && TriangleOverlapsBox(t, x, y, x + 1, y + 1))
+                        bitmap[(y * w) + x] = true;
+                }
+            }
+        }
+
+        if (padding == 0) return bitmap;
+        // Separable square dilation: rows, then columns.
+        var rows = new bool[w * h];
+        for (int y = 0; y < h; y++)
+        {
+            for (int x = 0; x < w; x++)
+            {
+                for (int d = Math.Max(0, x - padding); d <= Math.Min(w - 1, x + padding) && !rows[(y * w) + x]; d++)
+                    rows[(y * w) + x] = bitmap[(y * w) + d];
+            }
+        }
+
+        var dilated = new bool[w * h];
+        for (int y = 0; y < h; y++)
+        {
+            for (int x = 0; x < w; x++)
+            {
+                for (int d = Math.Max(0, y - padding); d <= Math.Min(h - 1, y + padding) && !dilated[(y * w) + x]; d++)
+                    dilated[(y * w) + x] = rows[(d * w) + x];
+            }
+        }
+
+        return dilated;
+    }
+
+    /// <summary>A chart triangle in bitmap texels: optionally rotated, scaled and offset by the padding.</summary>
+    private static double[] ChartTriangle(Chart chart, int[] faces, int f, bool rotated, double height, double scale, double padding)
+    {
+        var t = new double[6];
+        for (int k = 0; k < 3; k++)
+        {
+            int local = chart.Local[faces[(3 * f) + k]];
+            double u = chart.Uv[2 * local], v = chart.Uv[(2 * local) + 1];
+            t[2 * k] = ((rotated ? height - v : u) * scale) + padding;
+            t[(2 * k) + 1] = ((rotated ? u : v) * scale) + padding;
+        }
+
+        return t;
+    }
+
+    private static double SignedArea(double[] t)
+        => 0.5 * (((t[2] - t[0]) * (t[5] - t[1])) - ((t[4] - t[0]) * (t[3] - t[1])));
+
+    /// <summary>
+    /// Whether a triangle and an axis-aligned box intersect, touching included (separating axes: the box's two and the
+    /// triangle's three edge normals), the conservative coverage test of the chart rasterizer.
+    /// </summary>
+    internal static bool TriangleOverlapsBox(double[] t, double x0, double y0, double x1, double y1)
+    {
+        if (Math.Max(t[0], Math.Max(t[2], t[4])) < x0 || Math.Min(t[0], Math.Min(t[2], t[4])) > x1) return false;
+        if (Math.Max(t[1], Math.Max(t[3], t[5])) < y0 || Math.Min(t[1], Math.Min(t[3], t[5])) > y1) return false;
+        for (int e = 0; e < 3; e++)
+        {
+            double ax = t[2 * e], ay = t[(2 * e) + 1];
+            double bx = t[2 * ((e + 1) % 3)], by = t[(2 * ((e + 1) % 3)) + 1];
+            double nx = by - ay, ny = ax - bx;
+            if (nx == 0.0 && ny == 0.0) continue;
+            double minT = double.MaxValue, maxT = double.MinValue;
+            for (int k = 0; k < 3; k++)
+            {
+                double pr = (t[2 * k] * nx) + (t[(2 * k) + 1] * ny);
+                minT = Math.Min(minT, pr);
+                maxT = Math.Max(maxT, pr);
+            }
+
+            double c00 = (x0 * nx) + (y0 * ny), c10 = (x1 * nx) + (y0 * ny), c01 = (x0 * nx) + (y1 * ny), c11 = (x1 * nx) + (y1 * ny);
+            double minB = Math.Min(Math.Min(c00, c10), Math.Min(c01, c11));
+            double maxB = Math.Max(Math.Max(c00, c10), Math.Max(c01, c11));
+            if (maxT < minB || maxB < minT) return false;
+        }
+
+        return true;
     }
 
     /// <summary>
