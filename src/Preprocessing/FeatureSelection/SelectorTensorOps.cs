@@ -577,6 +577,28 @@ internal static class SelectorTensorOps
     }
 
     /// <summary>
+    /// The digamma function of positive integer counts, <c>psi(k) = H_(k-1) - gamma</c>, read from a table of the
+    /// harmonic numbers up to the largest count (built in double, where it is exact to rounding). The engine's
+    /// <c>TensorDigamma</c> is 2.4e-9 off for arguments below about 6 in AiDotNet.Tensors 0.150.0
+    /// (psi(3) = 0.9227843327 instead of 0.9227843351), which is where the neighbour counts of the estimator below
+    /// sit. A count of 0 gives negative infinity, as scipy does.
+    /// </summary>
+    private static Tensor<T> IntegerDigamma<T>(Tensor<int> counts)
+    {
+        const double eulerGamma = 0.57721566490153286;
+        var engine = AiDotNetEngine.Current;
+        int largest = Math.Max(engine.TensorMaxValue(counts), 1);
+        // psi(k) = H_k - 1 / k - gamma for k = 1 .. largest, behind psi(0) = -infinity
+        var reciprocals = engine.TensorReciprocal(engine.TensorArange<double>(1, largest + 1, 1));
+        var positive = engine.TensorSubtractScalar(
+            engine.TensorSubtract(engine.TensorCumSum(reciprocals, 0), reciprocals), eulerGamma);
+        var table = engine.TensorConcatenate(
+            new[] { PreprocessingTensorOps.Filled(new[] { 1 }, double.NegativeInfinity), positive }, 0);
+        var flat = engine.Reshape(counts, new[] { counts.Length });
+        return engine.Reshape(engine.TensorIndexSelect(table, flat, 0), counts.Shape.ToArray()).Cast<T>();
+    }
+
+    /// <summary>
     /// Mutual information (nats) between every continuous column of <paramref name="x"/> and the integer classes of
     /// <paramref name="target"/> by the nearest-neighbour estimator of Ross (2014), as scikit-learn
     /// <c>mutual_info_classif</c> with <c>n_neighbors = 3</c>:
@@ -615,9 +637,9 @@ internal static class SelectorTensorOps
         var labelCounts = engine.TensorIndexSelect(rowClassCount, keptIndex, 0);
         var neighbours = engine.TensorMin(engine.TensorSubtractScalar(labelCounts, 1), 3);
         T constant = ops.Subtract(
-            ops.Add(engine.TensorSum(engine.TensorDigamma(PreprocessingTensorOps.Filled(new[] { 1 }, ops.FromDouble(m)))),
-                engine.TensorMean(engine.TensorDigamma(neighbours.Cast<T>()))),
-            engine.TensorMean(engine.TensorDigamma(labelCounts.Cast<T>())));
+            ops.Add(engine.TensorSum(IntegerDigamma<T>(new Tensor<int>(new[] { m }, new[] { 1 }))),
+                engine.TensorMean(IntegerDigamma<T>(neighbours))),
+            engine.TensorMean(IntegerDigamma<T>(labelCounts)));
         var constantTensor = PreprocessingTensorOps.Filled(new[] { 1 }, constant);
 
         // Group the kept rows by class; the order inside a class is irrelevant because each block is sorted next
@@ -650,7 +672,7 @@ internal static class SelectorTensorOps
                 engine.TensorSliceAxis(centres, 1, j), engine.TensorSliceAxis(radii, 1, j),
                 engine.TensorSliceAxis(positive, 1, j));
             results[j] = engine.TensorSubtract(constantTensor,
-                engine.Reshape(engine.ReduceMean(engine.TensorDigamma(counts.Cast<T>()), new[] { 0 }, false), new[] { 1 }));
+                engine.Reshape(engine.ReduceMean(IntegerDigamma<T>(counts), new[] { 0 }, false), new[] { 1 }));
         }
 
         return engine.TensorMax(engine.TensorConcatenate(results, 0), ops.Zero);
