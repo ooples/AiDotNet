@@ -323,7 +323,7 @@ public class ClapArchitectureTests
         }
 
         const int steps = 3;
-        double[] Trained(Action<CLAPModel<double>, Tensor<double>> step, int customSteps)
+        double[] Trained(Action<CLAPModel<double>, Tensor<double>> step, int? customSteps)
         {
             using var model = ClapReferenceTests.Build(fusion: false);
             for (int s = 0; s < steps; s++)
@@ -336,12 +336,14 @@ public class ClapArchitectureTests
             }
 
             Assert.Equal(0, model.CustomFusedStepCount);
-            Assert.Equal(customSteps, model.CustomEagerStepCount);
+            if (customSteps is { } expectedEagerSteps) Assert.Equal(expectedEagerSteps, model.CustomEagerStepCount);
             Assert.Equal(0, AiDotNet.Training.TapeTrainingStepper<double>.ForOwner(model).FusedStepCount);
             return model.GetParameters().ToArray();
         }
 
-        var eager = Trained((model, audio) => model.TrainWithCustomLoss(audio, Loss), customSteps: 0);
+        // The reference step. It may itself offer the step to the compiled session first (closure objectives do since
+        // #2573), so its eager count is not pinned; that it never ran fused is asserted like the others.
+        var eager = Trained((model, audio) => model.TrainWithCustomLoss(audio, Loss), customSteps: null);
         var customLoss = Trained((model, audio) => model.TrainWithCustomLossFused(audio, (_, embedding) => Loss(embedding)), steps);
         var objective = Trained((model, audio) =>
         {
