@@ -160,25 +160,34 @@ public class SpeechTokenizerPaperTests
     public async Task Distillation_AlignsTheFirstCodebookWithTheTeacher()
     {
         await Task.Yield();
-        // §3.2's D-axis loss pulls A·Q1 toward the teacher along time, per teacher dimension. Two identical models train on
-        // the same speech and teacher, one without the distillation term; only the distilled one's first codebook comes to
-        // agree with the teacher. (Adam at 1e-2 so that twenty steps show it; the paper's 4e-4 needs far more.)
-        double Agreement(double distillationWeight)
+        // §3.2's D-axis loss pulls A·Q1 toward the teacher along time, per teacher dimension. Pairs of identical models
+        // train on the same speech and teacher, one without the distillation term; the distilled first codebook comes to
+        // agree with the teacher. (Adam at 1e-2 so that twenty steps show it; the paper's 4e-4 needs far more.) Twenty
+        // steps from one initialization is a noisy measurement: over seeds 11-16 the gap ranged from -0.06 to 0.54, so
+        // one seed's gap says little and the claim is tested on the mean over eight initializations.
+        double Agreement(double distillationWeight, int seed)
         {
             var options = TinyOptions();
             options.DistillationLossWeight = distillationWeight;
             var optimizer = new AiDotNet.Optimizers.AdamOptimizer<double, Tensor<double>, Tensor<double>>(null,
                 new AiDotNet.Models.Options.AdamOptimizerOptions<double, Tensor<double>, Tensor<double>> { InitialLearningRate = 1e-2 });
-            using var model = new SpeechTokenizer<double>(Architecture(), options, optimizer);
+            var architecture = Architecture();
+            architecture.RandomSeed = seed;
+            using var model = new SpeechTokenizer<double>(architecture, options, optimizer);
             var audio = new Tensor<double>(new[] { 96 });
             for (int i = 0; i < audio.Length; i++) audio[i] = 0.5 * Math.Sin(2 * Math.PI * 900 * i / 16000.0);
             var teacher = Teacher(12, 6);
             for (int i = 0; i < 20; i++) model.Train(audio, teacher);
             return model.DistillationAgreement(audio, teacher);
         }
-        double distilled = Agreement(120.0);
-        double control = Agreement(0.0);
-        Assert.True(distilled > 0.2, $"The distilled first codebook's agreement with the teacher is only {distilled}.");
-        Assert.True(distilled > control + 0.1, $"Distillation did not raise the agreement ({control} without, {distilled} with).");
+        const int seeds = 8;
+        double distilled = 0, control = 0;
+        for (int seed = 11; seed < 11 + seeds; seed++)
+        {
+            distilled += Agreement(120.0, seed) / seeds;
+            control += Agreement(0.0, seed) / seeds;
+        }
+        Assert.True(distilled > 0.2, $"The distilled first codebook's mean agreement with the teacher is only {distilled}.");
+        Assert.True(distilled > control + 0.1, $"Distillation did not raise the mean agreement ({control} without, {distilled} with).");
     }
 }

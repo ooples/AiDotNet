@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Reflection;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -25,7 +26,7 @@ public class CustomObjectiveFusedRoutingTests
 {
     private const int Steps = 6;
 
-    public enum Objective { Arguments, CapturedTarget, CapturedScale, HostRead, HostReadOnStep3 }
+    public enum Objective { Arguments, CapturedTarget, CapturedScale, HostRead, HostReadOnStep3, StepNoise }
 
     private sealed class ObjectiveNetwork : FeedForwardNeuralNetwork<float>
     {
@@ -62,6 +63,17 @@ public class CustomObjectiveFusedRoutingTests
                 float first = prediction[0];
                 var loss = new MeanSquaredErrorLoss<float>().ComputeTapeLoss(prediction, y);
                 return Engine.TensorMultiplyScalar(loss, first > 0 ? 1.5f : 0.5f);
+            });
+
+        private readonly Random _noise = new(7);
+
+        // Draws fresh noise every step through CompiledStepRandom (as a VAE's reparameterization does).
+        internal float NoisyTargetStep(Tensor<float> x, Tensor<float> y)
+            => TrainWithCustomLoss(x, prediction =>
+            {
+                var noise = AiDotNet.Training.CompiledStepRandom<float>.StandardNormal(y.Shape.ToArray(), _noise);
+                var noisy = Engine.TensorAdd(y, Engine.TensorMultiplyScalar(noise, 0.5f));
+                return new MeanSquaredErrorLoss<float>().ComputeTapeLoss(prediction, noisy);
             });
 
         // Reads its own forward on the host only when asked (as Paraformer's sampler does on some steps).
@@ -144,6 +156,7 @@ public class CustomObjectiveFusedRoutingTests
                     case Objective.CapturedScale: model.CapturedScaleStep(x, y, s % 3 == 0 ? 2f : 0.5f); break;
                     case Objective.HostRead: model.HostReadStep(x, y); break;
                     case Objective.HostReadOnStep3: model.SometimesHostReadStep(x, y, read: s == 3); break;
+                    case Objective.StepNoise: model.NoisyTargetStep(x, y); break;
                 }
             }
             return (model.GetParameters(), model);
@@ -177,6 +190,7 @@ public class CustomObjectiveFusedRoutingTests
     [InlineData(Objective.Arguments)]
     [InlineData(Objective.CapturedTarget)]
     [InlineData(Objective.CapturedScale)]
+    [InlineData(Objective.StepNoise)]
     public async System.Threading.Tasks.Task AGuardedObjective_TrainsFused_AndMatchesEager(Objective objective)
     {
         await System.Threading.Tasks.Task.CompletedTask;

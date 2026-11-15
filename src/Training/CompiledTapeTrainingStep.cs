@@ -1569,13 +1569,20 @@ public static class CompiledTapeTrainingStep<T>
             // is active only during the (once-per-shape) trace+compile; Step() replays without it.
             // A closure objective's step picks the plan its signature matches, refilled with this step's data. Its
             // first step traces without a probe; every later step probes the objective once (a storage-free trace
-            // that also runs its host-side draws, exactly once, as the eager step would).
+            // that also runs its host-side draws, exactly once, as the eager step would). Its CompiledStepRandom draws
+            // are skipped: the replay redraws each one, and the probe drawing as well would advance the generator twice
+            // per step (measured: 5.7e-2 from eager after 6 steps of a noisy target).
             int closureVariant = 0;
             if (closureObjective && CurrentState.closureVariants is { Count: > 0 } variants)
             {
-                var probe = AiDotNet.Tensors.Engines.Compilation.ClosureObjectiveGuard<T>.Probe(
-                    () => computeLoss(forward(_persistentInput!), _persistentTarget!), parameters,
-                    out var probed, out var leaves, out string? probeReason);
+                AiDotNet.Tensors.Engines.Compilation.ClosureGuardResult probe;
+                AiDotNet.Tensors.Engines.Compilation.ObjectiveSignature? probed;
+                object[] leaves;
+                string? probeReason;
+                using (CompiledStepRandom<T>.SkipDraws())
+                    probe = AiDotNet.Tensors.Engines.Compilation.ClosureObjectiveGuard<T>.Probe(
+                        () => computeLoss(forward(_persistentInput!), _persistentTarget!), parameters,
+                        out probed, out leaves, out probeReason);
                 if (probe != AiDotNet.Tensors.Engines.Compilation.ClosureGuardResult.Matched || probed is null)
                 {
                     _lastFallbackException = new InvalidOperationException(
