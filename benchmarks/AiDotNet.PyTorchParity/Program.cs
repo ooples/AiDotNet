@@ -462,6 +462,11 @@ internal sealed class AiDotNetTensorBackend(int seed)
         "ddpm" => new AiDotNetDdpmModel(seed),
         "whisper-tiny" => new AiDotNetWhisperTinyModel(seed),
         "faster-rcnn" => new AiDotNetFasterRcnnModel(seed),
+        // Time-series forecasting at the ETT shape (96-step lookback, 24-step horizon, 7 channels), TimeSeriesRows.cs.
+        "informer" => new AiDotNetTimeSeriesModel(seed, TimeSeriesFamily.Informer),
+        "autoformer" => new AiDotNetTimeSeriesModel(seed, TimeSeriesFamily.Autoformer),
+        "deepar" => new AiDotNetTimeSeriesModel(seed, TimeSeriesFamily.DeepAR),
+        "nbeats" => new AiDotNetTimeSeriesModel(seed, TimeSeriesFamily.NBeats),
         _ => throw new ArgumentException($"Unknown model '{model}'.")
     };
 }
