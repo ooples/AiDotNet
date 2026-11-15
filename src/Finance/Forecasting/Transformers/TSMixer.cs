@@ -702,8 +702,8 @@ public partial class TSMixer<T> : ForecastingModelBase<T>
         var mse = _lossFunction.CalculateLoss(predictions.ToVector(), testLabels.ToVector());
 
         // Calculate MAE
-        var (_, mae, _) = SumSquaredAndAbsoluteError(predictions, testLabels);
-        mae = NumOps.Divide(mae, NumOps.FromDouble(predictions.Length));
+        var (_, sumAbsolute, _) = SumSquaredAndAbsoluteError(predictions, testLabels);
+        var mae = NumOps.FromDouble(sumAbsolute / predictions.Length);
 
         return new Dictionary<string, T>
         {
@@ -939,16 +939,17 @@ public partial class TSMixer<T> : ForecastingModelBase<T>
         {
             // Compute mean and std for this instance (scalar reductions)
             T mean;
-            T varSum;
+            double varSum;
             using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             {
-                // Detached statistics, as before: the stats are constants for the affine map below.
+                // Detached statistics, as before: the stats are constants for the affine map below. The sum of
+                // squares is taken in double, so a Half sum past 65504 does not make the std infinite.
                 var flat = Engine.Reshape(input.Contiguous(), new[] { input.Length });
                 mean = NumOps.Divide(input.Length > 0 ? Engine.TensorSum(flat) : NumOps.Zero, NumOps.FromDouble(input.Length));
-                varSum = input.Length > 0 ? Engine.TensorSumOfSquares(Engine.TensorSubtractScalar(flat, mean)) : NumOps.Zero;
+                varSum = input.Length > 0 ? TensorReductionHelper.SumOfSquaresAsDouble(Engine, Engine.TensorSubtractScalar(flat, mean)) : 0.0;
             }
 
-            var std = NumOps.Sqrt(NumOps.Divide(varSum, NumOps.FromDouble(input.Length)));
+            var std = NumOps.FromDouble(Math.Sqrt(varSum / input.Length));
             std = NumOps.Add(std, eps);
 
             // Store for de-normalization

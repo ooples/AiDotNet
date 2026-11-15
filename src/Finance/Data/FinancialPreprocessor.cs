@@ -230,9 +230,20 @@ public sealed class FinancialPreprocessor<T>
         double denom = Math.Max(1, sampleCount - 1);
         var std = engine.TensorSqrt(engine.TensorDivideScalar(
             engine.ReduceSum(engine.TensorMultiply(centered, centered), new[] { 0 }, true), _numOps.FromDouble(denom)));
-        std = engine.TensorWhere(engine.TensorEquals(std, _numOps.Zero), engine.TensorFullLike(std, _numOps.One), std);
-
-        var normalized = engine.TensorDivide(centered, std);
+        Tensor<T> normalized;
+        if ((!TensorReductionHelper.AllFinite(engine, mean) || !TensorReductionHelper.AllFinite(engine, std))
+            && TensorReductionHelper.AllFinite(engine, rows))
+        {
+            // In Half a feature's sum of squared deviations passes 65504 long before its std does, so the std was
+            // infinite and the feature normalized to 0: take the statistics in units of each feature's max |x|.
+            (normalized, mean, std) = TensorReductionHelper.StandardizeRescaled(engine, rows, new[] { 0 }, 0.0, denom);
+            std = engine.TensorWhere(engine.TensorEquals(std, _numOps.Zero), engine.TensorFullLike(std, _numOps.One), std);
+        }
+        else
+        {
+            std = engine.TensorWhere(engine.TensorEquals(std, _numOps.Zero), engine.TensorFullLike(std, _numOps.One), std);
+            normalized = engine.TensorDivide(centered, std);
+        }
 
         stats = (mean.ToVector(), std.ToVector());
         return engine.Reshape(normalized, (int[])input._shape.Clone());

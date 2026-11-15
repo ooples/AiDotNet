@@ -311,7 +311,8 @@ public partial class TFGridNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     {
         int n = input.Length;
         if (n == 0) return 0.0;
-        double sumSq = NumOps.ToDouble(Engine.TensorSumOfSquares(input));
+        // Summed in double: a Half spectrogram's sum of squares passes 65504 long before its RMS does.
+        double sumSq = TensorReductionHelper.SumOfSquaresAsDouble(Engine, input);
         return Math.Sqrt(sumSq / n);
     }
 

@@ -771,15 +771,36 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
     /// <param name="predictions">Predicted values.</param>
     /// <param name="actuals">Observed values.</param>
     /// <returns>The sum of squared errors, the sum of absolute errors and the number of pairs compared.</returns>
-    private protected (T SumSquared, T SumAbsolute, int Count) SumSquaredAndAbsoluteError(Tensor<T> predictions, Tensor<T> actuals)
+    /// <remarks>
+    /// The sums are doubles: in Half a sum of 40 squared errors of 100 is 4e5, past Half's 65504, while the mean (1e4)
+    /// fits. Divide them in double and round the result to <typeparamref name="T"/> once, as
+    /// <see cref="MeanSquaredAndAbsoluteError"/> does.
+    /// </remarks>
+    private protected (double SumSquared, double SumAbsolute, int Count) SumSquaredAndAbsoluteError(Tensor<T> predictions, Tensor<T> actuals)
     {
         int count = Math.Min(predictions.Length, actuals.Length);
         if (count <= 0)
-            return (NumOps.Zero, NumOps.Zero, 0);
+            return (0.0, 0.0, 0);
 
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var diff = Engine.TensorSubtract(FlattenPrefix(predictions, count), FlattenPrefix(actuals, count));
-        return (Engine.TensorSumOfSquares(diff), Engine.TensorSum(Engine.TensorAbs(diff)), count);
+        return (TensorReductionHelper.SumOfSquaresAsDouble(Engine, diff), TensorReductionHelper.SumAbsoluteAsDouble(Engine, diff), count);
+    }
+
+    /// <summary>
+    /// Mean squared and mean absolute error over the first <c>min(predictions.Length, actuals.Length)</c> elements:
+    /// the sums of <see cref="SumSquaredAndAbsoluteError"/> divided in double and rounded to <typeparamref name="T"/>
+    /// once. Both are zero when there is nothing to compare.
+    /// </summary>
+    /// <param name="predictions">Predicted values.</param>
+    /// <param name="actuals">Observed values.</param>
+    /// <returns>The mean squared error, the mean absolute error and the number of pairs compared.</returns>
+    private protected (T MeanSquared, T MeanAbsolute, int Count) MeanSquaredAndAbsoluteError(Tensor<T> predictions, Tensor<T> actuals)
+    {
+        var (sumSquared, sumAbsolute, count) = SumSquaredAndAbsoluteError(predictions, actuals);
+        return count > 0
+            ? (NumOps.FromDouble(sumSquared / count), NumOps.FromDouble(sumAbsolute / count), count)
+            : (NumOps.Zero, NumOps.Zero, 0);
     }
 
     #endregion
