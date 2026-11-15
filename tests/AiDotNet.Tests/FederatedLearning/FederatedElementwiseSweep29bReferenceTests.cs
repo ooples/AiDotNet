@@ -1014,6 +1014,43 @@ public class FederatedElementwiseSweep29bReferenceTests
     }
 
     [Fact(Timeout = 60000)]
+    public async Task FedDT_HalfLeafMeanPastTheHalfSumSaturation()
+    {
+        await Task.Yield();
+
+        // 5000 equal deltas of 1 have zero spread, so the root is the only leaf and its mean is 1. Summed in Half
+        // the segment total stops growing at 2048, which gave a mean of 2048 / 5000 = 0.41.
+        var compressor = new FedDTCompressor<Half>();
+        var delta = new Dictionary<string, Half[]> { ["w"] = Enumerable.Repeat(HalfOps.One, 5000).ToArray() };
+
+        var restored = compressor.Decompress(compressor.Compress(delta), delta)["w"];
+
+        Assert.Equal(5000, restored.Length);
+        Assert.All(restored, value => Assert.Equal(1.0, HalfOps.ToDouble(value)));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task FedDT_HalfMergeWithSampleCountWeights_DoesNotOverflow()
+    {
+        await Task.Yield();
+
+        // Two constant trees of 100 with sample-count weights 1000 and 3000 merge to 100. The weight was applied
+        // before the division by the total, and 3000 * 100 is past Half's 65504.
+        var compressor = new FedDTCompressor<Half>();
+        var delta = new Dictionary<string, Half[]> { ["w"] = HalfArray(100, 100) };
+        var trees = new Dictionary<int, FedDTCompressor<Half>.CompressedTree>
+        {
+            [0] = compressor.Compress(delta),
+            [1] = compressor.Compress(delta),
+        };
+
+        var merged = compressor.MergeTrees(trees, new Dictionary<int, double> { [0] = 1000, [1] = 3000 }, delta)["w"];
+
+        Assert.Equal(100.0, HalfOps.ToDouble(merged[0]));
+        Assert.Equal(100.0, HalfOps.ToDouble(merged[1]));
+    }
+
+    [Fact(Timeout = 60000)]
     public async Task Flame_HalfModelsAboveHalfSquareRangeAreClusteredAndClipped()
     {
         await Task.Yield();

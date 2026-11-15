@@ -112,14 +112,29 @@ public class FedDTCompressor<T> : Infrastructure.FederatedLearningComponentBase<
     /// </remarks>
     private (int[] Splits, T[] LeafValues, int[] LeafCounts) BuildTree(T[] delta)
     {
-        int n = delta.Length;
-        var values = new Tensor<T>(delta, new[] { n });
-        var threshold = NumOps.FromDouble(_pruningThreshold);
+        var values = new Tensor<T>(delta, new[] { delta.Length });
+
+        // Half and BFloat16 build the tree in float, as the former double tree did: a segment sum stops growing
+        // at 2048 in Half, the sums of squared deviations overflow at 65504, and so does the count of a layer
+        // with more than 65504 parameters, which made every mean 0.
+        if (typeof(T) == typeof(Half) || typeof(T) == typeof(AiDotNet.Tensors.NumericOperations.BFloat16))
+        {
+            var (wideSplits, wideLeaves, wideCounts) = BuildTree(values.Cast<float>());
+            return (wideSplits, new Tensor<float>(wideLeaves, new[] { wideLeaves.Length }).Cast<T>().ToArray(), wideCounts);
+        }
+
+        return BuildTree(values);
+    }
+
+    private (int[] Splits, TV[] LeafValues, int[] LeafCounts) BuildTree<TV>(Tensor<TV> values)
+    {
+        int n = values.Length;
+        var threshold = MathHelper.GetNumericOperations<TV>().FromDouble(_pruningThreshold);
 
         var active = new List<(int Start, int End)> { (0, n) };
         var splitNodes = new List<(int Start, int Depth, int Mid)>();
         var leafNodes = new List<(int Start, int Count, int MeanIndex)>();
-        var depthMeans = new List<Tensor<T>>();
+        var depthMeans = new List<Tensor<TV>>();
         int meanOffset = 0;
 
         for (int depth = 0; active.Count > 0; depth++)
@@ -138,22 +153,22 @@ public class FedDTCompressor<T> : Infrastructure.FederatedLearningComponentBase<
             }
 
             var segmentIndex = new Tensor<int>(segmentOf, new[] { n });
-            var countsT = new Tensor<int>(counts, new[] { segments }).Cast<T>();
+            var countsT = new Tensor<int>(counts, new[] { segments }).Cast<TV>();
 
             // Segment means, then the (two-pass) segment variances.
-            var sums = Engine.TensorIndexAdd(new Tensor<T>(new[] { segments + 1 }), 0, segmentIndex, values);
+            var sums = Engine.TensorIndexAdd(new Tensor<TV>(new[] { segments + 1 }), 0, segmentIndex, values);
             var means = Engine.TensorDivide(Engine.TensorSlice(sums, new[] { 0 }, new[] { segments }), countsT);
             var meanPerElement = Engine.TensorGather(
-                Engine.TensorConcatenate(new[] { means, new Tensor<T>(new[] { 1 }) }, 0), segmentIndex, 0);
+                Engine.TensorConcatenate(new[] { means, new Tensor<TV>(new[] { 1 }) }, 0), segmentIndex, 0);
             var squaredDeviation = Engine.TensorSquare(Engine.TensorSubtract(values, meanPerElement));
-            var squaredSums = Engine.TensorIndexAdd(new Tensor<T>(new[] { segments + 1 }), 0, segmentIndex, squaredDeviation);
+            var squaredSums = Engine.TensorIndexAdd(new Tensor<TV>(new[] { segments + 1 }), 0, segmentIndex, squaredDeviation);
             var stdDev = Engine.TensorSqrt(
                 Engine.TensorDivide(Engine.TensorSlice(squaredSums, new[] { 0 }, new[] { segments }), countsT));
             var smallSpread = Engine.TensorLessThan(stdDev, threshold).Cast<int>().ToArray();
 
             // Prune near-zero leaf means.
             depthMeans.Add(Engine.TensorWhere(
-                Engine.TensorLessThan(Engine.TensorAbs(means), threshold), new Tensor<T>(new[] { segments }), means));
+                Engine.TensorLessThan(Engine.TensorAbs(means), threshold), new Tensor<TV>(new[] { segments }), means));
 
             var next = new List<(int Start, int End)>();
             for (int s = 0; s < segments; s++)
@@ -261,7 +276,8 @@ public class FedDTCompressor<T> : Infrastructure.FederatedLearningComponentBase<
 
             foreach (var (clientId, decompressed) in decompressedClients)
             {
-                double w = clientWeights.GetValueOrDefault(clientId, 1.0);
+                // Normalized before it touches T: a raw sample-count weight times a leaf value overflows Half.
+                double w = totalWeight > 0 ? clientWeights.GetValueOrDefault(clientId, 1.0) / totalWeight : 0.0;
 
                 if (decompressed.TryGetValue(layerName, out var layerVals))
                 {
@@ -272,7 +288,7 @@ public class FedDTCompressor<T> : Infrastructure.FederatedLearningComponentBase<
             }
 
             result[layerName] = totalWeight > 0
-                ? Engine.TensorDivideScalar(merged, NumOps.FromDouble(totalWeight)).ToArray()
+                ? merged.ToArray()
                 : new Tensor<T>(new[] { template.Length }).ToArray();
         }
 
