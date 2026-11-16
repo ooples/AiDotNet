@@ -266,21 +266,23 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
         using (new NoGradScope<T>()) mel = DiffusionMel(audio);
         bool adversarial = _vocoderTrainingSteps >= _options.VocoderTraining.PretrainingSteps;
         int noiseSeed = _options.SamplingSeed + (int)(_vocoderTrainingSteps % int.MaxValue);
-        // The discriminator step reads the generator's output before its update (the release's detached fake). It is
-        // the same pass at the same parameters and noise, taken eagerly here: the traced generator step cannot hand
-        // its own value to the host.
         Tensor<T>? savedGeneration = null;
-        if (adversarial)
-            using (new NoGradScope<T>())
-            {
-                var eager = UnivNetVocoder.Generate(mel, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(noiseSeed));
-                savedGeneration = new Tensor<T>(eager.Shape.ToArray(), new Vector<T>(eager.ToArray()));
-            }
-        var loss = TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) =>
+        T loss;
+        using (var outputs = adversarial ? AiDotNet.Tensors.Engines.Autodiff.RetainedOutputCapture<T>.Begin() : null)
         {
-            var generated = UnivNetVocoder.Generate(mel, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(noiseSeed));
-            return _vocoderTraining!.Generator(audio, generated, adversarial);
-        }, _optimizer!);
+            loss = TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) =>
+            {
+                var generated = UnivNetVocoder.Generate(mel, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(noiseSeed));
+                if (adversarial && AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsRecording<T>())
+                    AiDotNet.Tensors.Engines.Autodiff.GradientRecording.RetainOutput("tortoise-generation", Engine.StopGradient(generated));
+                return _vocoderTraining!.Generator(audio, generated, adversarial);
+            }, _optimizer!);
+            if (outputs is not null)
+            {
+                outputs.Complete();
+                savedGeneration = outputs.Get("tortoise-generation");
+            }
+        }
         if (adversarial)
         {
             _vocoderDiscriminatorTurn = true;
