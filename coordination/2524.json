@@ -213,6 +213,14 @@
         "src/WindowFunctions/TukeyWindow.cs"
       ],
       "status": "claimed; Wave 1 in progress across isolated fixer-1..4 + adversarial verifier-1..2 worktrees"
+    },
+    {
+      "owner": "this session/artifact_feed worker",
+      "scope": "Test-only Half embedding/CRF rounded-boundary reflection signature repair",
+      "files": [
+        "tests/AiDotNet.Tests/UnitTests/NeuralNetworks/Elementwise01NumericalRegressionTests.cs"
+      ],
+      "status": "claimed; root-reviewed bounded test-only repair underway"
     }
   ],
   "verification": {
@@ -399,7 +407,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-16T21:04:27.1899730Z",
+  "updated_utc": "2026-11-16T21:08:48.240477+00:00",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43940828211",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
