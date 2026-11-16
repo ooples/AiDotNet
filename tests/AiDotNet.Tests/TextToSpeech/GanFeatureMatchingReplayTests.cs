@@ -70,7 +70,7 @@ public sealed class GanFeatureMatchingReplayTests
             {
                 var guard = ClosureObjectiveGuard<double>.TakeRecorded(out var reason);
                 Assert.True(guard is not null, reason);
-                Assert.True(guard!.HasForeignLeaves);
+                Assert.True(guard!.LeafCount > 0);
                 guard.AttachTo(plan);
                 plan.ConfigureOptimizer(OptimizerType.SGD, learningRate: 0.125);
                 var expectedFake = fakeWeights.ToArray();
