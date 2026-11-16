@@ -194,7 +194,7 @@ public sealed class RetainedGenerationHandoffTests
                     {
                         if (!compile && GradientRecording.IsRecording<double>())
                         {
-                            Assert.False(GraphMode.IsActive);
+                            Assert.False(AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive);
                             eagerObjectiveForwards++;
                         }
                         var waveform = engine.TensorMatMul(input, weight);

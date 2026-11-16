@@ -33,7 +33,7 @@ public class CustomObjectiveFusedRoutingTests
     private sealed class DeclaredHostReadLayer : ActivationLayer<float>
     {
         internal bool ReadsOnHost { get; set; }
-        internal DeclaredHostReadLayer() : base(new IdentityActivation<float>()) { }
+        internal DeclaredHostReadLayer() : base((IActivationFunction<float>)new IdentityActivation<float>()) { }
         internal override string? CompiledTrainingGraphBreakReason
             => ReadsOnHost ? "objective explicitly reads its prediction on the host" : null;
     }
