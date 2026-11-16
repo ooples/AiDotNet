@@ -1551,6 +1551,7 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.ArchitectureSharingGuardTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.AudioVisualCorrespondenceExecutionTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.BertEmbeddingLayerTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.RestrictedBackwardSourcesParityTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.VariationalAutoencoderPosteriorTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.GANs.GanFusedTrainingTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Blip2OnnxContractTests.|
@@ -1636,6 +1637,8 @@ shard:
       FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.CopyOnWriteCloneDefectRegressionTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.FlashAttentionFusedCompiledTrainingIssue1346Tests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.HrePaperAChainShapeValidatorTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.CustomObjectiveFusedRoutingTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.PreActivationCacheTraceTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.InputLayerMultiDimShapeIssue1325IntegrationTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.PreLNTransformerBlockShapeContractTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.SequenceTokenSliceLayerShapeContractTests.|
@@ -1647,6 +1650,8 @@ shard:
       FullyQualifiedName~AiDotNetTests.IntegrationTests.Optimizers.FusedKernelParityTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.Optimizers.FusedOptimizerParityTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.Optimizers.OptimizerVectorUpdateStateSafetyTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.Optimizers.FusedLrScheduleEverySchedulerTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.Optimizers.FusedScheduledMomentumParityTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.Training.TrainerTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.Training.TrainingRecipeIntegrationTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.Training.TransformerTrainingPipelineTests.|
