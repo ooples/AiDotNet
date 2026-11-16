@@ -104,6 +104,72 @@ internal static class TorchParameters
         engine.InvalidatePersistentTensor(b);
     }
 
+    /// <summary>
+    /// Initializes a dense layer from generators: <paramref name="weight"/> is drawn in <c>weight [out, in]</c> order and
+    /// then <paramref name="bias"/> for <c>bias [out]</c>, the order the array overload's caller filled its arrays in.
+    /// The values go straight into the layer's <c>[in, out]</c> tensor.
+    /// </summary>
+    /// <remarks>
+    /// Filling whole arrays first and copying them in allocated 8 bytes of garbage per parameter. WhisperSpeech's T2S and
+    /// S2A models (0.5B parameters together) each allocated about four times their float weights while being built.
+    /// </remarks>
+    public static void Linear<T>(IEngine engine, DenseLayer<T> layer, int inputs, int outputs, Func<double> weight, Func<double> bias)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+            layer.Forward(new Tensor<T>(new[] { 1, inputs }));
+        var w = layer.GetWeights();                                                                       // [in, out]
+        if (w.Length != (long)inputs * outputs)
+            throw new ArgumentException($"The layer holds {w.Length} weights, not [{inputs}, {outputs}].", nameof(layer));
+        var span = w.AsWritableSpan();
+        for (int o = 0; o < outputs; o++)
+            for (int i = 0; i < inputs; i++) Store(span, i * outputs + o, weight(), ops);
+        engine.InvalidatePersistentTensor(w);
+        var b = layer.GetBiases();
+        var biasSpan = b.AsWritableSpan();
+        for (int o = 0; o < outputs; o++) Store(biasSpan, o, bias(), ops);
+        engine.InvalidatePersistentTensor(b);
+    }
+
+    // A float or double destination is written directly; other numeric types go through their operations.
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    private static void Store<T>(Span<T> span, int index, double value, INumericOperations<T> ops)
+    {
+        if (typeof(T) == typeof(float))
+        {
+            float single = (float)value;
+            span[index] = System.Runtime.CompilerServices.Unsafe.As<float, T>(ref single);
+        }
+        else if (typeof(T) == typeof(double))
+        {
+            span[index] = System.Runtime.CompilerServices.Unsafe.As<double, T>(ref value);
+        }
+        else
+        {
+            span[index] = ops.FromDouble(value);
+        }
+    }
+
+    /// <summary>Initializes a bias-free linear layer from a generator, drawn in <c>weight [out, in]</c> order and written
+    /// straight into its <c>[in, out]</c> tensor.</summary>
+    public static void Linear<T>(BiasFreeLinearLayer<T> layer, int inputs, int outputs, Func<double> weight)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        var weights = layer.Weights;
+        if (weights.Length != (long)inputs * outputs || weights.Lifetime == WeightLifetime.Streaming)
+        {
+            // No storage to write into: the array form's SetParameters route, in the same draw order.
+            var values = new double[inputs * outputs];
+            for (int k = 0; k < values.Length; k++) values[k] = weight();
+            Linear(layer, inputs, outputs, values);
+            return;
+        }
+        var span = weights.AsWritableSpan();
+        for (int o = 0; o < outputs; o++)
+            for (int i = 0; i < inputs; i++) Store(span, i * outputs + o, weight(), ops);
+        AiDotNet.Tensors.Engines.AiDotNetEngine.Current.InvalidatePersistentTensor(weights);
+    }
+
     /// <summary>Loads <c>weight [out, in]</c> into a bias-free linear layer.</summary>
     public static void Linear<T>(BiasFreeLinearLayer<T> layer, int inputs, int outputs, double[] weight)
     {

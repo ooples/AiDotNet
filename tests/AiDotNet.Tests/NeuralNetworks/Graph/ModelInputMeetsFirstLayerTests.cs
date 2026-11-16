@@ -212,7 +212,11 @@ public class ModelInputMeetsFirstLayerTests
                 // here; without this the host's peak is the sum of whatever the collector has not yet reclaimed.
                 GC.Collect();
                 GC.WaitForPendingFinalizers();
-                GC.Collect();
+                // AGGRESSIVE, because a default full collection frees a model but does not return its memory to the
+                // OS. After WhisperSpeech was built and disposed, the GC heap held 0.51 GB live while 6.96 GB stayed
+                // committed, and every later model was measured on top of that high-water mark. Nothing was rooted.
+                // An aggressive collection decommits the freed regions, so the host's size tracks the model being built.
+                GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
 
                 // In the FINALLY so every path is measured - including the `continue`s above and a
                 // throwing constructor. Timing only the happy path would have understated exactly the
