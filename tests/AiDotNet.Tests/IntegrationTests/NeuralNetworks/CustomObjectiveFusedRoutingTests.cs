@@ -18,8 +18,8 @@ namespace AiDotNetTests.IntegrationTests.NeuralNetworks;
 /// These objectives build their per-step data inside themselves (a captured batch, a drawn count, a scale), which a
 /// plan traced once would replay forever. So every replay is guarded by the objective's signature
 /// (ClosureObjectiveGuard): the plan compiled for that exact signature steps, refilled with this step's data; a new
-/// signature gets its own plan, which continues the optimizer; an objective no plan can replay trains eagerly, with
-/// the traced step redone so the run matches one that was eager from the start.
+/// signature gets its own plan, which continues the optimizer. Declared host work uses the guarded eager-gradient
+/// route with the same optimizer state; unexpected host reads are refused.
 /// </summary>
 [Collection("FusedTrainingSerial")]
 public class CustomObjectiveFusedRoutingTests
@@ -30,6 +30,9 @@ public class CustomObjectiveFusedRoutingTests
 
     private sealed class ObjectiveNetwork : FeedForwardNeuralNetwork<float>
     {
+        private bool _declaredHostRead;
+        protected override bool SupportsFusedCompiledTraining => !_declaredHostRead && base.SupportsFusedCompiledTraining;
+
         internal ObjectiveNetwork(AdamOptimizer<float, Tensor<float>, Tensor<float>> optimizer) : base(
             new NeuralNetworkArchitecture<float>(inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.Regression,
                 complexity: NetworkComplexity.Simple, inputSize: 6, outputSize: 2),
@@ -56,8 +59,11 @@ public class CustomObjectiveFusedRoutingTests
             => TrainWithCustomLoss(x, prediction => Engine.TensorMultiplyScalar(
                 new MeanSquaredErrorLoss<float>().ComputeTapeLoss(prediction, y), scale));
 
-        // Reads a value of its own forward on the host: no plan can replay it.
+        // Explicitly declares the host work before requesting the training step.
         internal float HostReadStep(Tensor<float> x, Tensor<float> y)
+            => WithDeclaredHostRead(() => UndeclaredHostReadStep(x, y), true);
+
+        internal float UndeclaredHostReadStep(Tensor<float> x, Tensor<float> y)
             => TrainWithCustomLoss(x, prediction =>
             {
                 float first = prediction[0];
@@ -78,13 +84,20 @@ public class CustomObjectiveFusedRoutingTests
 
         // Reads its own forward on the host only when asked (as Paraformer's sampler does on some steps).
         internal float SometimesHostReadStep(Tensor<float> x, Tensor<float> y, bool read)
-            => TrainWithCustomLoss(x, prediction =>
+            => WithDeclaredHostRead(() => TrainWithCustomLoss(x, prediction =>
             {
                 var loss = new MeanSquaredErrorLoss<float>().ComputeTapeLoss(prediction, y);
                 if (!read) return loss;
                 float first = prediction[0];
                 return Engine.TensorMultiplyScalar(loss, first > 0 ? 1.5f : 0.5f);
-            });
+            }), read);
+
+        private float WithDeclaredHostRead(Func<float> step, bool read)
+        {
+            _declaredHostRead = read;
+            try { return step(); }
+            finally { _declaredHostRead = false; }
+        }
 
         // The declared-objective route CLAP and TensorModelTrainer use: a one-time replay check against eager.
         internal float VerifiedCapturedTargetStep(Tensor<float> x, Tensor<float> capturedTarget)
@@ -145,8 +158,8 @@ public class CustomObjectiveFusedRoutingTests
                     // One input and one target tensor for the whole run, refilled in place, as a data loader does.
                     sharedX ??= x;
                     sharedY ??= y;
-                    x.AsSpan().CopyTo(sharedX.AsWritableSpan());
-                    y.AsSpan().CopyTo(sharedY.AsWritableSpan());
+                    sharedX.CopyFromArray(x.ToArray());
+                    sharedY.CopyFromArray(y.ToArray());
                     x = sharedX;
                     y = sharedY;
                 }
@@ -211,6 +224,31 @@ public class CustomObjectiveFusedRoutingTests
         Assert.False(fused.ObjectiveSessionCommitted, "a host-reading objective was replayed from a compiled plan.");
         Assert.True(divergence < 1e-4, $"a host-reading objective diverged from eager by {divergence:E3} "
             + "(" + (fused.LastObjectiveMissReason ?? "no reason") + ")");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async System.Threading.Tasks.Task AnUndeclaredHostRead_AfterFusedTraining_IsRefusedBeforeUpdatingParameters()
+    {
+        await System.Threading.Tasks.Task.CompletedTask;
+        var options = AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current;
+        bool previous = options.EnableCompilation;
+        try
+        {
+            options.EnableCompilation = true;
+            var model = new ObjectiveNetwork(NewOptimizer());
+            var x = Batch(0, 4, 6, 1.0);
+            var y = Batch(100, 4, 2, 0.5);
+            model.ArgumentObjectiveStep(x, y);
+            Assert.Equal(1, model.CustomFusedStepCount);
+            var before = model.GetParameters().ToArray();
+
+            var error = Assert.Throws<InvalidOperationException>(() => model.UndeclaredHostReadStep(x, y));
+
+            Assert.Contains("objective reads", error.ToString());
+            Assert.Equal(before, model.GetParameters().ToArray());
+            Assert.Equal(0, model.CustomOutsidePlanStepCount);
+        }
+        finally { options.EnableCompilation = previous; }
     }
 
     [Fact(Timeout = 120000)]

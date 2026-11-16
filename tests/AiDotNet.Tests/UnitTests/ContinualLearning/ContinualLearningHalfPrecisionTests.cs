@@ -179,6 +179,7 @@ public class ContinualLearningHalfPrecisionTests
             new MeanSquaredErrorLoss<Half>(), new GEMOptions<Half> { NormalizeGradients = false, Margin = 0.5 });
         Assert.False(gem.ViolatesConstraint(new Vector<Half>(new[] { (Half)0, (Half)0 })));
         gem.StoreTaskGradient(new Vector<Half>(new[] { (Half)1, (Half)0 }));
+        gem.FinalizeTask(Moq.Mock.Of<AiDotNet.Interfaces.IFullModel<Half, Tensor<Half>, Tensor<Half>>>());
         gem.StoreTaskGradient(new Vector<Half>(new[] { (Half)0, (Half)1 }));
 
         Assert.True(gem.ViolatesConstraint(new Vector<Half>(new[] { (Half)1, (Half)0.25 })));
