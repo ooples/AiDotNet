@@ -1,0 +1,15 @@
+{
+  "repository": "ooples/AiDotNet.Tensors",
+  "runId": 43940828211,
+  "runAttempt": 1,
+  "sourceCommit": "641be3d443ee2e455c981063c57c9e22f78b4ba6",
+  "workflowPath": ".github/workflows/coordination-package.yml",
+  "artifactId": 14262779435,
+  "artifactName": "tensors-coordination-641be3d443ee2e455c981063c57c9e22f78b4ba6-43940828211-1",
+  "artifactDigest": "sha256:77dd235b22f57887ff628590de4841e38ba0186dcac091640f80d0b93f764f56",
+  "packageVersion": "0.151.1-coordination.43940828211.1.g641be3d443ee",
+  "packageSha256": "c0229bd6fe8ca9fdc1cb71df366699b401a609abea1d2de1a473487e53d43d0d",
+  "testedAndPackagedNet10BinarySha256": "c88d5f68fafbcb9fad482d1f0745e0580ac9e89cc13109c0e54a60d91388140e",
+  "testCount": 99,
+  "targetFrameworks": ["net10.0", "net8.0", "net471", "net462", "netstandard2.0"]
+}
