@@ -60,6 +60,7 @@ jobs:
     # Its own job: a token or SMTP problem fails the run and opens the alert, but does not hold
     # back the site deploy or the post-deploy E2E run.
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       # Supabase's built-in mailer only delivers to project team members (2/hour), so without this
       # customers never receive sign-up confirmation or password-reset email. Re-applied on every
@@ -73,7 +74,8 @@ jobs:
           : "${RESEND_API_KEY:?Missing RESEND_API_KEY secret}"
           jq -n --arg pass "$RESEND_API_KEY" '{smtp_host: "smtp.resend.com", smtp_port: "465", smtp_user: "resend",
             smtp_pass: $pass, smtp_admin_email: "noreply@aidotnet.dev", smtp_sender_name: "AiDotNet", rate_limit_email_sent: 30}' > "$RUNNER_TEMP/smtp.json"
-          code=$(curl -s -o "$RUNNER_TEMP/smtp-resp.json" -w '%{http_code}' -X PATCH \
+          # Bounded: a stalled request must not hold the alert job (which waits on this one) for hours.
+          code=$(curl -s --connect-timeout 10 --max-time 60 -o "$RUNNER_TEMP/smtp-resp.json" -w '%{http_code}' -X PATCH \
             -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H 'content-type: application/json' \
             --data @"$RUNNER_TEMP/smtp.json" https://api.supabase.com/v1/projects/yfkqwpgjahoamlgckjib/config/auth)
           rm -f "$RUNNER_TEMP/smtp.json"
