@@ -46,7 +46,8 @@ internal static class OptionSensitivityFixtureSetup
             : network.GetParameters().Length;
 
     internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
-        => AiDotNet.Tests.VisionLanguage.NormalizationOptionFixture.Handles(network, option) ? "image-normalization"
+        => network is AiDotNet.ComputerVision.Segmentation.Video.DEVA<T> && DevaOptionFixture.Handles(option) ? "deva-video-" + option
+            : AiDotNet.Tests.VisionLanguage.NormalizationOptionFixture.Handles(network, option) ? "image-normalization"
             : network is AiDotNet.TextToSpeech.MultiModal.Moshi<T> ? "moshi-" + option
             // TryTrainOption trains this option on a two-second recording, not the fixture input, so its control must too.
             : network is AiDotNet.Audio.LanguageIdentification.Wav2Vec2LanguageIdentifier<T> && option == "FeatureProjectionDropout" ? "lid-two-second-recording"
@@ -216,6 +217,9 @@ internal static class OptionSensitivityFixtureSetup
             return KokoroOptionFixture.Observe(kokoro, option);
         var task = ObserveTask(network, input, option, observe);
         var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        if (network is AiDotNet.ComputerVision.Segmentation.Video.DEVA<T> deva && DevaOptionFixture.Handles(option))
+            task = OptionSensitivityHarness.Combine(task, DevaOptionFixture.Observe(deva, option));
+
         if (network is AiDotNet.PhysicsInformed.ScientificML.HamiltonianNeuralNetwork<T> hamiltonian
             && option is "SymplecticSolverTolerance" or "SymplecticSolverMaxIterations")
         {
