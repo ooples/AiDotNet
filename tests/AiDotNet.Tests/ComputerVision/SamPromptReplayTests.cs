@@ -84,6 +84,29 @@ public class SamPromptReplayTests : IDisposable
     }
 
     [Fact]
+    public void DoubleIouTraceDoesNotMaterializePredicatesAndReplaysChangedMasks()
+    {
+        var engine = AiDotNetEngine.Current;
+        var logits = new Tensor<double>(new[] { 1.0, 1.0, -1.0, -1.0 }, [1, 1, 2, 2]);
+        var truth = new Tensor<double>(new[] { 1.0, 0.0, 1.0, 0.0 }, [1, 1, 2, 2]);
+        CompiledInferencePlan<double> plan;
+        using (var scope = GraphMode.Enable())
+        {
+            var iou = SamTraining<double>.ActualIou(engine, logits, truth);
+            Assert.Null(scope.HostReadOp);
+            plan = scope.CompileInference(iou, new[] { logits, truth });
+        }
+        using (plan)
+        {
+            Assert.Equal(1.0 / 3.0, plan.Execute()[0], 12);
+            plan.SetInputs(new[] { Tensor<double>.CreateDefault([1, 1, 2, 2], -1.0), new Tensor<double>([1, 1, 2, 2]) });
+            Assert.Equal(1.0, plan.Execute()[0]);
+            plan.SetInputs(new[] { Tensor<double>.CreateDefault([1, 1, 2, 2], 1.0), truth });
+            Assert.Equal(0.5, plan.Execute()[0]);
+        }
+    }
+
+    [Fact]
     public void HalfIouCountsWithoutOverflowingTheImageArea()
     {
         var ones = Tensor<Half>.CreateDefault([1, 1, 256, 256], (Half)1);

@@ -80,8 +80,9 @@ internal sealed class SamTraining<T>
             if (round > 0 && round != noPromptRound && round != 10)
             {
                 var predicted = _engine.TensorGreaterThan(net.Postprocess(previous!, h, w, h, w), NumOps.Zero);
-                var error = _engine.Reshape(_engine.TensorSubtract(truth, predicted), new[] { h * w }).Cast<double>();
-                var sampled = SampleErrorPoint(_engine, error, draws[round], w).Cast<T>();
+                var error = ConvertPromptData<T, double>(
+                    _engine.Reshape(_engine.TensorSubtract(truth, predicted), new[] { h * w }));
+                var sampled = ConvertPromptData<double, T>(SampleErrorPoint(_engine, error, draws[round], w));
                 var point = _engine.TensorSlice(sampled, new[] { 0, 0, 0 }, new[] { 1, 1, 2 });
                 var label = _engine.Reshape(_engine.TensorSlice(sampled, new[] { 0, 0, 2 }, new[] { 1, 1, 1 }), new[] { 1, 1 });
                 points = points is null ? point : _engine.TensorConcatenate(new[] { points, point }, 1);
@@ -145,13 +146,22 @@ internal sealed class SamTraining<T>
     internal static Tensor<T> ActualIou(IEngine engine, Tensor<T> logits, Tensor<T> truth)
     {
         // Count in double: image-sized masks can exceed Half's finite range.
-        var predicted = engine.TensorGreaterThan(logits, NumOps.Zero).Cast<double>();
-        var target = truth.Cast<double>();
+        var predicted = ConvertPromptData<T, double>(engine.TensorGreaterThan(logits, NumOps.Zero));
+        var target = ConvertPromptData<T, double>(truth);
         var intersection = engine.ReduceSum(engine.TensorMultiply(predicted, target), null);
         var union = engine.ReduceSum(engine.TensorMax(predicted, target), null);
-        return engine.TensorWhere(engine.TensorGreaterThan(union, 0.0),
+        return ConvertPromptData<double, T>(engine.TensorWhere(engine.TensorGreaterThan(union, 0.0),
             engine.TensorDivide(intersection, engine.TensorClampMin(union, 1.0)),
-            Tensor<double>.CreateDefault(union.Shape.ToArray(), 1.0)).Cast<T>();
+            Tensor<double>.CreateDefault(union.Shape.ToArray(), 1.0)));
+    }
+
+    // Tensor.Cast materializes even an identity conversion. Keep same-dtype prompt/IoU data on
+    // its existing graph; different dtypes retain the eager conversion and its trace rejection.
+    // Compiled mixed-dtype prompt data requires heterogeneous forward replay support.
+    private static Tensor<TOut> ConvertPromptData<TIn, TOut>(Tensor<TIn> input)
+    {
+        if (typeof(TIn) == typeof(TOut)) return (Tensor<TOut>)(object)input;
+        return input.Cast<TOut>();
     }
 
     /// <summary>A discrete, input-bound sampling node. Its output is data, so its derivative is zero.</summary>
