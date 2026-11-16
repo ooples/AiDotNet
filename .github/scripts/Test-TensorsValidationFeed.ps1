@@ -94,7 +94,7 @@ if ($env:TENSORS_FIXTURE_EXIT -eq '17') { exit 17 }
 Copy-Item -LiteralPath "$env:TENSORS_FIXTURE_ROOT/evidence" -Destination $Destination -Recurse
 exit 0
 '@ | Set-Content "$root/tools/TestImpact/Receive-RequiredArtifact.ps1"
-    '<configuration><packageSources><add key="nuget.org" value="https://api.nuget.org/v3/index.json" /></packageSources></configuration>' | Set-Content "$root/NuGet.Config"
+    '<configuration><packageSources><add key="nuget.org" value="https://api.nuget.org/v3/index.json" /></packageSources></configuration>' | Set-Content "$root/NuGet.config"
     # The mocked downloader deliberately sets a failing native exit code. Keep that
     # expected failure from leaking into the enclosing GitHub PowerShell step.
     $savedExitCode = if (Test-Path variable:global:LASTEXITCODE) { $global:LASTEXITCODE } else { 0 }
