@@ -164,7 +164,7 @@ public sealed class RetainedGenerationHandoffTests
             var engine = new CpuEngine();
             AiDotNetEngine.Current = engine;
             TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = compile });
-            using var model = new NeuralNetwork<double>(new NeuralNetworkArchitecture<double>(
+            using var model = new ObjectiveHarness(new NeuralNetworkArchitecture<double>(
                 InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 3, outputSize: 3,
                 layers: new List<ILayer<double>>
                 {
@@ -189,12 +189,12 @@ public sealed class RetainedGenerationHandoffTests
                 Tensor<double> generated;
                 using (var outputs = RetainedOutputCapture<double>.Begin())
                 {
-                    model.TrainWithCustomObjective(input, input, (_, _) =>
+                    model.TrainObjective(input, input, (_, _) =>
                     {
                         var waveform = engine.TensorMatMul(input, weight);
                         if (GradientRecording.IsRecording<double>())
                             GradientRecording.RetainOutput("generation", engine.StopGradient(waveform));
-                        return engine.ReduceMean(waveform, null);
+                        return engine.ReduceMean(waveform, null, keepDims: false);
                     }, optimizer);
                     outputs.Complete();
                     generated = outputs.Get("generation");
@@ -233,7 +233,7 @@ public sealed class RetainedGenerationHandoffTests
             AiDotNetEngine.Current = engine;
             using var model = new NeuralNetwork<float>(new NeuralNetworkArchitecture<float>(
                 InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1));
-            model.EnableMixedPrecision(new MixedPrecisionConfig
+            model.EnableMixedPrecision(new AiDotNet.MixedPrecision.MixedPrecisionConfig
             { PrecisionType = MixedPrecisionType.FP16, InitialLossScale = 1, EnableDynamicScaling = false });
             var weight = new Tensor<float>(new[] { 2.0f }, new[] { 1 });
             var placeholder = new Tensor<float>(new[] { 1 });
@@ -386,7 +386,7 @@ public sealed class RetainedGenerationHandoffTests
             var generated = engine.TensorMultiply(weight, input);
             if (GradientRecording.IsRecording<double>())
                 GradientRecording.RetainOutput("generation", engine.StopGradient(generated));
-            return engine.ReduceMean(generated, null);
+            return engine.ReduceMean(generated, null, keepDims: false);
         }
         var placeholder = new Tensor<double>(new[] { 1 });
         double expectedWeight = 2, moment = 0, variance = 0, expectedCritic = 1;
@@ -437,7 +437,7 @@ public sealed class RetainedGenerationHandoffTests
                 // Its gradient is the pre-update generation, not a re-generation from the updated weight.
                 double producerAfterUpdate = weight.ToArray()[0];
                 TapeTrainingStepper<double>.EagerSgdObjectiveStep(() => new[] { criticWeight },
-                    () => engine.ReduceMean(engine.TensorMultiply(criticWeight, generated), null), 0.125);
+                    () => engine.ReduceMean(engine.TensorMultiply(criticWeight, generated), null, keepDims: false), 0.125);
                 expectedCritic -= 0.125 * expectedGeneration;
                 Assert.Equal(expectedCritic, criticWeight.ToArray()[0], 7);
                 Assert.Equal(producerAfterUpdate, weight.ToArray()[0]);
@@ -447,5 +447,15 @@ public sealed class RetainedGenerationHandoffTests
                 stepper.FusedStepCount, stepper.HybridStepCount, plans);
         }
         finally { stepper.Session.Reset(stickyDisable: false); }
+    }
+
+    private sealed class ObjectiveHarness : NeuralNetwork<double>
+    {
+        public ObjectiveHarness(NeuralNetworkArchitecture<double> architecture) : base(architecture) { }
+
+        public double TrainObjective(Tensor<double> input, Tensor<double> expected,
+            Func<Tensor<double>, Tensor<double>, Tensor<double>> objective,
+            IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>> optimizer)
+            => TrainWithCustomObjective(input, expected, objective, optimizer);
     }
 }
