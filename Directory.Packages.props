@@ -421,7 +421,7 @@ Bumped 0.135.0 to 0.136.0 for AiDotNet.Tensors #1146: 0.135.0's stride-1 conv in
          the nondeterministic parallel paths WGANGP's identically seeded builds diverged on. Evolution stays at
          0.9.0, above the 0.7.0 that 0.150.0 depends on. -->
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.148.0" />
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.150.0" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.151.0" />
     <PackageVersion Include="AiDotNet.Evolution" Version="0.9.0" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.148.0" />
     <!-- Microsoft / .NET -->
@@ -474,7 +474,7 @@ Bumped 0.135.0 to 0.136.0 for AiDotNet.Tensors #1146: 0.135.0's stride-1 conv in
     <PackageVersion Include="Parquet.Net" Version="5.5.0" />
     <PackageVersion Include="SharpZipLib" Version="1.4.2" />
     <!-- Pin Snappier to non-vulnerable 1.3.1 (1.3.0 has GHSA-pggp-6c3x-2xmx, transitive via Parquet.Net / Pipelines.Sockets.Unofficial) -->
-    <PackageVersion Include="Snappier" Version="1.3.1" />
+    <PackageVersion Include="Snappier" Version="1.3.2" />
     <PackageVersion Include="Xunit.SkippableFact" Version="1.5.85" />
     <PackageVersion Include="YamlDotNet" Version="18.1.0" />
     <!-- Infrastructure -->
@@ -487,7 +487,7 @@ Bumped 0.135.0 to 0.136.0 for AiDotNet.Tensors #1146: 0.135.0's stride-1 conv in
     <PackageVersion Include="Stripe.net" Version="52.4.2" />
     <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.3.1" />
     <!-- Code analysis (default version; source generators may override) -->
-    <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="5.9.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="5.12.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.12.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Common" Version="5.0.0" />
     <!-- Public API contract gate for src/AiDotNet.csproj (PublicAPI.Shipped/Unshipped.txt, RS0016/RS0017). -->
@@ -511,7 +511,7 @@ Bumped 0.135.0 to 0.136.0 for AiDotNet.Tensors #1146: 0.135.0's stride-1 conv in
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.12.0" />
     <PackageVersion Include="xunit" Version="2.9.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />
-    <PackageVersion Include="coverlet.collector" Version="10.1.0" />
+    <PackageVersion Include="coverlet.collector" Version="10.1.1" />
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
     <PackageVersion Include="Moq" Version="4.21.0" />
   </ItemGroup>
