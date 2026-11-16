@@ -1,0 +1,23 @@
+{
+  "repository": "ooples/AiDotNet.Tensors",
+  "runId": 43955817990,
+  "runAttempt": 1,
+  "sourceCommit": "7dd9b68c8f9e20d3396200ae5fcf37a99d9bb382",
+  "workflowPath": ".github/workflows/coordination-package.yml",
+  "artifactId": 14272518202,
+  "artifactName": "tensors-coordination-7dd9b68c8f9e20d3396200ae5fcf37a99d9bb382-43955817990-1",
+  "artifactDigest": "sha256:59963424dc01439c4b3bb7355ff1743fc2fa9dc897717498ab0e45a568aa1347",
+  "packageVersion": "0.151.1-coordination.43955817990.1.g7dd9b68c8f9e",
+  "packageSha256": "93785ea454156ab2cbfc5a28bdfb3599ed470d634b76729f79698534def53a70",
+  "testedAndPackagedNet10BinarySha256": "ecf7200ee7ad209c81a59b2e6a56aeb9bb010fd2b242ed189a082b1f7d814073",
+  "testCount": 99,
+  "targetFrameworks": [
+    "net10.0",
+    "net8.0",
+    "net471",
+    "net462",
+    "netstandard2.0"
+  ],
+  "retainedOutputTestCount": 26,
+  "mandatoryCpuTestCount": 125
+}

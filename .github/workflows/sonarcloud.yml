@@ -298,6 +298,12 @@ jobs:
           restore-keys: |
             nuget-${{ runner.os }}-
 
+      - name: Set up pinned Tensors validation feed
+        uses: ./.github/actions/setup-tensors-validation
+        with:
+          artifact-token: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && secrets.AUTOFIX_PAT || '' }}
+
+
       - name: Build (Release, net10.0)
         run: |
           dotnet build src/AiDotNet.Generators/AiDotNet.Generators.csproj -c Release
@@ -360,6 +366,12 @@ jobs:
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
           restore-keys: |
             nuget-${{ runner.os }}-
+
+      - name: Set up pinned Tensors validation feed
+        uses: ./.github/actions/setup-tensors-validation
+        with:
+          artifact-token: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && secrets.AUTOFIX_PAT || '' }}
+
 
       - name: Restore dependencies
         run: dotnet restore
@@ -573,6 +585,12 @@ jobs:
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
           restore-keys: |
             nuget-${{ runner.os }}-
+
+      - name: Set up pinned Tensors validation feed
+        uses: ./.github/actions/setup-tensors-validation
+        with:
+          artifact-token: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && secrets.AUTOFIX_PAT || '' }}
+
 
       - name: Restore dependencies
         run: dotnet restore
@@ -1793,6 +1811,12 @@ jobs:
           restore-keys: |
             nuget-${{ runner.os }}-
 
+      - name: Set up pinned Tensors validation feed
+        uses: ./.github/actions/setup-tensors-validation
+        with:
+          artifact-token: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && secrets.AUTOFIX_PAT || '' }}
+
+
       # HOSTED RUNNERS ARE NOT ONE MACHINE. The pool mixes AMD EPYC (no AVX-512) with Intel Xeon (AVX-512), and
       # the managed kernels, oneDNN and OpenBLAS all take different code paths on each. A model test that failed
       # deterministically on every AVX-512 runner and passed everywhere else (RepViTSAM, 2026-09-29) took a
@@ -2746,6 +2770,13 @@ jobs:
           restore-keys: |
             nuget-${{ runner.os }}-
 
+      - name: Set up pinned Tensors validation feed
+        if: steps.plan.outputs.mode == 'Full'
+        uses: ./.github/actions/setup-tensors-validation
+        with:
+          artifact-token: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && secrets.AUTOFIX_PAT || '' }}
+
+
       - name: Download required build artifact
         if: steps.plan.outputs.mode == 'Full'
         timeout-minutes: 25
@@ -2819,6 +2850,12 @@ jobs:
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
           restore-keys: |
             nuget-${{ runner.os }}-
+
+      - name: Set up pinned Tensors validation feed
+        uses: ./.github/actions/setup-tensors-validation
+        with:
+          artifact-token: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && secrets.AUTOFIX_PAT || '' }}
+
 
       - name: Download required build artifact
         timeout-minutes: 25
@@ -3301,6 +3338,12 @@ jobs:
           restore-keys: |
             nuget-${{ runner.os }}-
 
+      - name: Set up pinned Tensors validation feed
+        uses: ./.github/actions/setup-tensors-validation
+        with:
+          artifact-token: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && secrets.AUTOFIX_PAT || '' }}
+
+
       - name: Cache SonarCloud packages
         if: ${{ fromJSON(env.SONAR_ANALYZE) }}
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
@@ -3531,6 +3574,12 @@ jobs:
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
           restore-keys: |
             nuget-${{ runner.os }}-
+
+      - name: Set up pinned Tensors validation feed
+        uses: ./.github/actions/setup-tensors-validation
+        with:
+          artifact-token: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)) && secrets.AUTOFIX_PAT || '' }}
+
 
       - name: Restore and publish for size analysis
         run: |
