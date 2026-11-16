@@ -137,6 +137,8 @@ public static class CompiledTapeTrainingStep<T>
         internal CompiledModelCache<T>? retiringCache;
         // Plans replaying a closure objective, keyed by its traced signature (see ClosureObjectiveState).
         internal ClosureObjectiveState<T>? closureState;
+        // The owner's NeuralNetworkBase.CompiledBindingVersion when its plans were last used (long.MinValue: never).
+        internal long bindingVersion = long.MinValue;
     }
 
 
@@ -847,6 +849,8 @@ public static class CompiledTapeTrainingStep<T>
         try
         {
             _currentState = state;
+            if (owner is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> network)
+                RetraceIfBindingsMoved(network.CompiledBindingVersion, continueOptimizer: false);
             return StepCore(layers, input, target, learningRate, forward, computeLoss, owner);
         }
         finally
@@ -1078,6 +1082,49 @@ public static class CompiledTapeTrainingStep<T>
         if (!SelectionChanged(selection)) return false;
         Invalidate();
         return true;
+    }
+
+    /// <summary>
+    /// Re-traces the next step when a layer's graph changed since the current plans were traced: a plan holds the
+    /// graph it traced (the tensor object it read, a CSR pattern or a mask derived from it on the host), and replaying
+    /// it after SetAdjacencyMatrix or an in-place edit would train on the old graph. The plans are retired, not
+    /// dropped with the optimizer: the new plan continues the configured one's moments and step count through the same
+    /// path a new batch shape takes, so the trajectory matches an eager optimizer that never saw a re-trace.
+    /// </summary>
+    private static void RetraceIfBindingsMoved(long bindingVersion, bool continueOptimizer)
+    {
+        var state = CurrentState;
+        long previous = state.bindingVersion;
+        if (previous == bindingVersion) return;
+        state.bindingVersion = bindingVersion;
+        if (previous == long.MinValue) return;
+
+        if (continueOptimizer && _configuredPlan is not null && !PlanSupportsContinueOptimizer())
+        {
+            // Without ContinueOptimizerFrom a new plan cannot take the moments over; restarting them beats training on
+            // the old graph.
+            Invalidate();
+            state.bindingVersion = bindingVersion;
+            return;
+        }
+
+        if (!continueOptimizer)
+        {
+            // The plain step's plan carries no optimizer state.
+            _cache?.Invalidate();
+            _cache = null;
+            return;
+        }
+
+        if (_cache is not null)
+        {
+            _retiringCache?.Invalidate();
+            _retiringCache = _cache;
+            _cache = null;
+        }
+        if (_configuredPlan is not null)
+            _shapeSwitchFrom = _configuredPlan;
+        state.closureState?.Clear(keepAlive: _configuredPlan);
     }
 
     private static void RememberSelection(IReadOnlyCollection<Tensor<T>>? selection)
@@ -1313,6 +1360,10 @@ public static class CompiledTapeTrainingStep<T>
         try
         {
             _currentState = state;
+            // A closure objective's step data reaches its plan through the objective's own leaves (graph objectives
+            // pack the adjacency that way), so only a layer-owned graph needs the retrace below.
+            if (closureObjective is null && owner is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> network)
+                RetraceIfBindingsMoved(network.CompiledBindingVersion, continueOptimizer: true);
             return TryStepWithFusedOptimizerCore(
                 layers: layers,
                 input: input,

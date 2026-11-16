@@ -896,6 +896,9 @@ public partial class GraphIsomorphismNetwork<T> : GraphModelLayoutBase<T>
     public void SetAdjacencyMatrix(Tensor<T> adjacencyMatrix)
     {
         _cachedAdjacencyMatrix = adjacencyMatrix;
+        // Installed now, not only by the next forward: a compiled plan replays without running the forward, and the
+        // network re-traces its plans when a layer's installed graph changes.
+        SetGraphLayerAdjacency(adjacencyMatrix);
     }
 
     /// <inheritdoc/>

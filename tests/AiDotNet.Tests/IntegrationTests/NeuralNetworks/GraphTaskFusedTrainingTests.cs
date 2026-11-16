@@ -28,7 +28,7 @@ public class GraphTaskFusedTrainingTests
     private const int Nodes = 5;
     private const int Features = 3;
 
-    public static TheoryData<string> Models => new() { "GraphClassification", "LinkPrediction", "NodeClassification", "GraphGeneration", "NodeClassificationGat" };
+    public static TheoryData<string> Models => new() { "GraphClassification", "LinkPrediction", "NodeClassification", "GraphGeneration", "NodeClassificationGat", "NodeClassificationGatDropout" };
 
     private sealed record RunResult(Vector<double> Parameters, int FusedSteps, int EagerSteps);
 
@@ -63,6 +63,14 @@ public class GraphTaskFusedTrainingTests
                         new GraphAttentionLayer<double>(4, 2, numHeads: 1, activationFunction: new IdentityActivation<double>()),
                     }),
                 options: new NodeClassificationOptions { HiddenDim = 4, NumLayers = 2, DropoutRate = 0.0 }),
+            // The same with attention dropout: each step must draw its own mask, from the layer's seeded generator, on
+            // the plan as on the eager tape (a mask built on the host and frozen into the plan repeats the traced one).
+            "NodeClassificationGatDropout" => new NodeClassificationModel<double>(
+                new NeuralNetworkArchitecture<double>(inputType: InputType.OneDimensional,
+                    taskType: NeuralNetworkTaskType.MultiClassClassification, complexity: NetworkComplexity.Simple,
+                    inputSize: Features, outputSize: 2,
+                    layers: SeededGatLayers(dropoutRate: 0.3)),
+                options: new NodeClassificationOptions { HiddenDim = 4, NumLayers = 2, DropoutRate = 0.0 }),
             // A variational graph autoencoder: it reconstructs the adjacency, with reparameterization noise per step.
             "GraphGeneration" => new GraphGenerationModel<double>(options: new AiDotNet.NeuralNetworks.Options.GraphGenerationModelOptions
             {
@@ -75,6 +83,17 @@ public class GraphTaskFusedTrainingTests
         SetAdjacency(model, Adjacency(0));
         model.Predict(Features_(0));
         return model;
+    }
+
+    // Built under a fixed construction seed, so the model and its twin get the same dropout generators.
+    private static List<ILayer<double>> SeededGatLayers(double dropoutRate)
+    {
+        LayerInitializationSeedScope.ResetForModelConstruction(17);
+        return new List<ILayer<double>>
+        {
+            new GraphAttentionLayer<double>(Features, 4, numHeads: 2, dropoutRate: dropoutRate, activationFunction: new ReLUActivation<double>()),
+            new GraphAttentionLayer<double>(4, 2, numHeads: 1, dropoutRate: dropoutRate, activationFunction: new IdentityActivation<double>()),
+        };
     }
 
     private static void SetAdjacency(NeuralNetworkBase<double> model, Tensor<double> adjacency)

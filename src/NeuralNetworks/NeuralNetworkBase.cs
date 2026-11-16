@@ -11120,6 +11120,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     // once per layer structure, and the sum of their binding versions the compiled plans were last checked against.
     [AiDotNet.Attributes.Scratch]
     private NeuralNetworks.Layers.ICompiledBindingSource[]? _compiledBindingSources;
+    // Graph layers that do not report a binding version themselves (GraphSAGE, GIN, message passing, ...): their
+    // installed adjacency is observed here instead, one tracker per layer.
+    [AiDotNet.Attributes.Scratch]
+    private IGraphConvolutionLayer<T>[]? _untrackedGraphLayers;
+    [AiDotNet.Attributes.Scratch]
+    private NeuralNetworks.Layers.CompiledBindingTracker[]? _untrackedGraphTrackers;
     [AiDotNet.Attributes.Scratch]
     private int _compiledBindingSourcesStructure = -1;
     [AiDotNet.Attributes.Scratch]
@@ -11137,16 +11143,24 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             if (_compiledBindingSources is null || _compiledBindingSourcesStructure != _layerStructureVersion)
             {
                 var sources = new List<NeuralNetworks.Layers.ICompiledBindingSource>();
+                var untracked = new List<IGraphConvolutionLayer<T>>();
                 foreach (var layer in Layers)
                 {
                     if (layer is NeuralNetworks.Layers.ICompiledBindingSource source) sources.Add(source);
+                    else if (layer is IGraphConvolutionLayer<T> graphLayer) untracked.Add(graphLayer);
                 }
                 _compiledBindingSources = sources.ToArray();
+                _untrackedGraphLayers = untracked.ToArray();
+                _untrackedGraphTrackers = new NeuralNetworks.Layers.CompiledBindingTracker[untracked.Count];
                 _compiledBindingSourcesStructure = _layerStructureVersion;
             }
 
             long sum = 0;
             foreach (var source in _compiledBindingSources) sum += source.CompiledBindingVersion;
+            var graphLayers = _untrackedGraphLayers!;
+            var trackers = _untrackedGraphTrackers!;
+            for (int i = 0; i < graphLayers.Length; i++)
+                sum += trackers[i].Observe<T, int>(graphLayers[i].GetAdjacencyMatrix(), null, null, false);
             return sum;
         }
     }

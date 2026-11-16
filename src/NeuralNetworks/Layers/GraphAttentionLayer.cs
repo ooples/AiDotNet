@@ -458,9 +458,10 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         // A training step's own adjacency (GraphStepAdjacency), while a compiled plan traces the step, is a plan input
         // that every replay refreshes: a CSR pattern or mask built from it on the host here would be frozen into the
         // plan with the traced step's graph. Such a forward takes the dense path with the mask recorded from the live
-        // adjacency instead. A graph that stays fixed across steps (the layer's own) keeps the sparse kernel.
-        bool graphIsReplayedData = AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
-            && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsInferenceTrace
+        // adjacency instead. A graph that stays fixed across steps (the layer's own) keeps the sparse kernel. The eager
+        // step takes the same path, so a step draws the same dropout mask whether it runs eagerly or from the plan (the
+        // sparse kernel's hashed dropout is a different draw).
+        bool graphIsReplayedData = !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsInferenceTrace
             && GraphStepAdjacency<T>.IsStepData(adjacency);
         var csrGraph = adjacency2D && UseSparseAttention && !graphIsReplayedData ? GetCsrGraph(adjacency) : null;
         if (csrGraph is not null && csrGraph.NodeCount == numNodes)
