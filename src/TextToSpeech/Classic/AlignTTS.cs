@@ -188,8 +188,26 @@ public partial class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITraining
         }
         _mixDensityNetwork.Add(new DenseLayer<T>(2 * _options.MelChannels, new IdentityActivation<T>() as IActivationFunction<T>));
 
+        // The network's shape walk continues through the component layers as if they were one chain, so it sized
+        // the MDN's first linear layer from the duration predictor's [1] output. The first training forward then
+        // re-sized that weight, reading it on the host inside the compiled trace. Each lazy linear layer is resolved
+        // here from the width it actually receives (shapes only: the weights are still drawn at materialization).
+        ResolveLinearInputs(_durationPredictor, _options.DurationPredictorDim);
+        ResolveLinearInputs(_mixDensityNetwork, _options.EncoderDim);
+
         ComponentLayers.AddRange(_durationPredictor);
         ComponentLayers.AddRange(_mixDensityNetwork);
+    }
+
+    // Walks a [tokens, width] chain: each linear layer takes the running width and sets it to its output width.
+    private static void ResolveLinearInputs(IEnumerable<LayerBase<T>> chain, int width)
+    {
+        foreach (var layer in chain)
+        {
+            if (layer is not DenseLayer<T> linear) continue;
+            linear.ResolveShapesOnly(new[] { 1, width });
+            width = linear.GetOutputShape()[^1];
+        }
     }
 
     private IEnumerable<ILayer<T>> AlignTTSDecoderLayers(int kernel)

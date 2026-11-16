@@ -65,20 +65,39 @@ public partial class DiTToTTS<T>
         return parameters.Where(selected.Contains).ToList();
     }
 
-    private Tensor<T> CodecObjective(TtsTrainingSample<T> sample, Random random,
-        out Tensor<T> target, out Tensor<T> generated, out int[] starts)
+    private Tensor<T> CodecObjective(TtsTrainingSample<T> sample, Random random)
+    {
+        var (target, starts) = CodecStep(sample, random);
+        return CodecObjective(sample, target, starts);
+    }
+
+    // The step's mel and its critics' crop starts: drawn once, on the host, before any objective runs, so a compiled
+    // plan's probe and trace see the same crops the eager step does.
+    private (Tensor<T> Target, int[] Starts) CodecStep(TtsTrainingSample<T> sample, Random random)
     {
         EnsureCodecTraining();
-        target = sample.Mel ?? (sample.Audio is not null ? ComputeMel(sample.Audio)
+        var target = sample.Mel ?? (sample.Audio is not null ? ComputeMel(sample.Audio)
             : throw new ArgumentException("Codec training requires the recording or its mel spectrogram.", nameof(sample)));
         if (target.Rank != 2 || target.Shape[1] != _options.MelChannels
             || target.Shape[0] < _options.MelVaeDownsampleFactor || target.Shape[0] % _options.MelVaeDownsampleFactor != 0)
             throw new ArgumentException("Codec training mel must be [frames, mel channels] with a positive whole number of codec groups.", nameof(sample));
         int frames = target.Shape[0];
-        starts = _options.CodecTraining.DiscriminatorWindows.Select(window => random.Next(Math.Max(1, frames - window + 1))).ToArray();
+        var starts = _options.CodecTraining.DiscriminatorWindows.Select(window => random.Next(Math.Max(1, frames - window + 1))).ToArray();
+        return (target, starts);
+    }
+
+    // The Mel-VAE's reconstruction of target through the straight-through quantizer.
+    private (Tensor<T> Generated, Tensor<T> Commitment, Tensor<T> Variational) CodecReconstruction(Tensor<T> target)
+    {
+        var quantized = MelVae!.Quantizer.TrainingForward(MelVae.Encode(target));
+        return (MelVae.Decode(quantized.Quantized, quantize: false), quantized.CommitmentLoss, quantized.VariationalLoss);
+    }
+
+    private Tensor<T> CodecObjective(TtsTrainingSample<T> sample, Tensor<T> target, int[] starts)
+    {
         var latents = MelVae!.Encode(target);
         var quantized = MelVae.Quantizer.TrainingForward(latents);
-        generated = MelVae.Decode(quantized.Quantized, quantize: false);
+        var generated = MelVae.Decode(quantized.Quantized, quantize: false);
         var loss = _codecTrainer!.Generator(target, generated, quantized.CommitmentLoss, quantized.VariationalLoss, starts);
         if (CurrentStage == DiTToTrainingStage.MelVaeSemanticFinetuning)
         {
@@ -91,20 +110,21 @@ public partial class DiTToTTS<T>
 
     private T TrainCodec(TtsTrainingSample<T> sample)
     {
-        EnsureCodecTraining();
-        Tensor<T>? target = null, generation = null; int[]? starts = null;
-        var loss = TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) =>
-        {
-            var objective = CodecObjective(sample, _trainingRandom, out var real, out var fake, out var crops);
-            target = new Tensor<T>(real.Shape.ToArray(), new Vector<T>(real.ToArray()));
-            generation = new Tensor<T>(fake.Shape.ToArray(), new Vector<T>(fake.ToArray())); starts = crops;
-            return objective;
-        }, _codecGeneratorOptimizer!);
+        var (target, starts) = CodecStep(sample, _trainingRandom);
+        // The critics' update scores the reconstruction the generator update starts from. It is computed here,
+        // without gradients, before that update: a compiled plan does not run the objective with real values, so the
+        // objective cannot hand its own reconstruction out. The Mel-VAE forward is deterministic, so this is the
+        // value the generator objective computes.
+        Tensor<T> generation;
+        using (new NoGradScope<T>())
+            generation = CodecReconstruction(target).Generated.Clone();
+        var loss = TrainWithCustomObjective(sample.Tokens, sample.Tokens,
+            (_, _) => CodecObjective(sample, target, starts), _codecGeneratorOptimizer!);
         _codecDiscriminatorTurn = true;
         try
         {
             TrainWithCustomObjective(sample.Tokens, sample.Tokens,
-                (_, _) => _codecTrainer!.Discriminator(target!, generation!, starts!), _codecDiscriminatorOptimizer!);
+                (_, _) => _codecTrainer!.Discriminator(target, generation, starts), _codecDiscriminatorOptimizer!);
         }
         finally { _codecDiscriminatorTurn = false; }
         return loss;
