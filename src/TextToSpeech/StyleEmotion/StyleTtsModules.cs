@@ -21,6 +21,25 @@ internal static class StyleTtsOps
         return layer;
     }
 
+    /// <summary>
+    /// <paramref name="norm"/> (<c>nn.InstanceNorm1d</c>) of <c>x [B, C, T]</c> as engine ops: each channel less its mean
+    /// over time, over √(biased variance + ε), then the layer's affine weights when it has them.
+    /// </summary>
+    /// <remarks>The layer's own forward computes its statistics on the host, which a compiled training plan cannot
+    /// replay; these ops recompute them from each replay's input.</remarks>
+    public static Tensor<T> InstanceNorm<T>(IEngine engine, InstanceNormalizationLayer<T> norm, Tensor<T> x)
+    {
+        int channels = x.Shape[1];
+        var mean = engine.ReduceMean(x, new[] { 2 }, keepDims: true);
+        var centred = engine.TensorSubtract(x, mean);
+        var variance = engine.ReduceMean(engine.TensorMultiply(centred, centred), new[] { 2 }, keepDims: true);
+        var y = engine.TensorDivide(centred, engine.TensorSqrt(engine.TensorAddScalar(variance, norm.GetEpsilon())));
+        if (!norm.Affine) return y;
+        var gamma = engine.Reshape(norm.GetGammaTensor(), new[] { 1, channels, 1 });
+        var beta = engine.Reshape(norm.GetBetaTensor(), new[] { 1, channels, 1 });
+        return engine.TensorAdd(engine.TensorMultiply(y, gamma), beta);
+    }
+
     /// <summary><c>LeakyReLU(slope)</c> as <c>slope · x + (1 − slope) · relu(x)</c>.</summary>
     public static Tensor<T> LeakyRelu<T>(IEngine engine, Tensor<T> x, double slope)
     {

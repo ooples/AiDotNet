@@ -48,11 +48,11 @@ internal sealed class StyleTtsResBlock1d<T>
     {
         var shortcut = Shortcut is null ? x : Shortcut.Forward(x);
         if (Pool is not null) shortcut = StyleTtsOps.HalveTime(_engine, shortcut);
-        var r = Norm1 is null ? x : Norm1.Forward(x);
+        var r = Norm1 is null ? x : StyleTtsOps.InstanceNorm(_engine, Norm1, x);
         r = StyleTtsOps.Dropout(_engine, StyleTtsOps.LeakyRelu(_engine, r, 0.2), _dropout, training, random);
         r = Conv1.Forward(r);
         if (Pool is not null) r = Pool.Forward(r);
-        if (Norm2 is not null) r = Norm2.Forward(r);
+        if (Norm2 is not null) r = StyleTtsOps.InstanceNorm(_engine, Norm2, r);
         r = StyleTtsOps.Dropout(_engine, StyleTtsOps.LeakyRelu(_engine, r, 0.2), _dropout, training, random);
         r = Conv2.Forward(r);
         return StyleTtsOps.Scale(_engine, _engine.TensorAdd(shortcut, r), StyleTtsOps.InverseSqrt2);
@@ -98,7 +98,7 @@ internal sealed class StyleTtsAdaIn<T>
         var gamma = _engine.TensorTile(_engine.Reshape(_engine.TensorSlice(h, new[] { 0, 0 }, new[] { 1, Channels }), new[] { 1, Channels, 1 }), new[] { 1, 1, t });
         var beta = _engine.TensorTile(_engine.Reshape(_engine.TensorSlice(h, new[] { 0, Channels }, new[] { 1, Channels }), new[] { 1, Channels, 1 }), new[] { 1, 1, t });
         var ops = MathHelper.GetNumericOperations<T>();
-        return _engine.TensorAdd(_engine.TensorMultiply(_engine.TensorAddScalar(gamma, ops.One), Norm.Forward(x)), beta);
+        return _engine.TensorAdd(_engine.TensorMultiply(_engine.TensorAddScalar(gamma, ops.One), StyleTtsOps.InstanceNorm(_engine, Norm, x)), beta);
     }
 
     public void Load(TorchTensorSource source, string name) =>
@@ -212,12 +212,12 @@ internal sealed class StyleTtsDecoder<T>
     public Tensor<T> Forward(Tensor<T> asr, Tensor<T> f0, Tensor<T> energy, Tensor<T> style, bool training, Random random)
     {
         Tensor<T> Contour(StyleTtsResBlock1d<T> block, NormedConv1DLayer<T> projection, InstanceNormalizationLayer<T> norm, Tensor<T> c)
-            => norm.Forward(projection.Forward(block.Forward(_engine.Reshape(c, new[] { 1, 1, c.Length }), training, random)));
+            => StyleTtsOps.InstanceNorm(_engine, norm, projection.Forward(block.Forward(_engine.Reshape(c, new[] { 1, 1, c.Length }), training, random)));
         var pitch = Contour(F0Block, F0Projection, F0Norm, f0);
         var norm = Contour(NBlock, NProjection, NNorm, energy);
         var x = _engine.TensorConcatenate(new[] { asr, pitch, norm }, 1);
         foreach (var block in Encode) x = block.Forward(x, training, random);
-        var asrResidual = AsrNorm.Forward(AsrResidual.Forward(asr));
+        var asrResidual = StyleTtsOps.InstanceNorm(_engine, AsrNorm, AsrResidual.Forward(asr));
         bool residual = true;
         foreach (var block in Decode)
         {
