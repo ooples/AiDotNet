@@ -83,6 +83,18 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// Stores the pre-update timestep for accurate reverse updates.
     /// </summary>
     private int _previousT;
+    // Half parameters need FP32 moments and epsilon; rounding moments back to Half loses
+    // small squared gradients even when the final parameter update is representable.
+    // Native arrays are carried by the shared generated state envelope, including the
+    // most recent update needed to reverse a quantized parameter step exactly.
+    [Buffer] private float[]? _halfMaster;
+    [Buffer] private float[]? _halfM;
+    [Buffer] private float[]? _halfV;
+    [Buffer] private float[]? _halfVMax;
+    [Buffer] private float[]? _halfLastStep;
+    [Buffer] private T[]? _halfPreviousParameters;
+    [Buffer] private T[]? _halfUpdatedParameters;
+
 
     /// <summary>
     /// Initializes a new instance of the AdamOptimizer class.
@@ -205,6 +217,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         // previous run's running maximum as a lower bound and suppress
         // early updates in the new run. (PR #1350 round-2 review.)
         _vMaxVector = null;
+        ResetHalfVectorState();
         // Reset the NN tape-side state. The flat-vector path got reset
         // above; the tape path uses parameter-tensor-keyed dictionaries
         // (_tapeM, _tapeV, _tapeVMax) and a separate _tapeStep counter
@@ -531,6 +544,9 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                 $"Parameter vector length ({parameters.Length}) must match gradient vector length ({gradient.Length}).",
                 nameof(gradient));
         }
+        if (typeof(T) == typeof(Half))
+            return UpdateHalfParameters(parameters, gradient);
+
 
         if (_m == null || _v == null || _m.Length != parameters.Length || _m.Length != gradient.Length)
         {
@@ -628,6 +644,108 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     }
 
 
+    private static Tensor<float> HalfStateTensor(float[] values)
+        => Tensor<float>.FromMemory(values.AsMemory(), new[] { values.Length });
+
+    private void ValidateHalfVectorState()
+    {
+        if (_m.Length != 0 || _v.Length != 0 || (_vMaxVector?.Length ?? 0) != 0)
+            throw new NotSupportedException("Legacy Half Adam moments cannot resume without FP32 master state. Reset the optimizer before starting a new run.");
+        bool hasNativeState = _halfMaster is not null || _halfM is not null || _halfV is not null
+            || _halfVMax is not null || _halfLastStep is not null
+            || _halfPreviousParameters is not null || _halfUpdatedParameters is not null;
+        if (!hasNativeState)
+        {
+            if (_t != 0)
+                throw new NotSupportedException("Half Adam state has a step count but no FP32 master state. Reset the optimizer before starting a new run.");
+            return;
+        }
+        int length = _halfMaster?.Length ?? -1;
+        if (length < 0 || _halfM?.Length != length || _halfV?.Length != length
+            || _halfLastStep?.Length != length || _halfPreviousParameters?.Length != length
+            || _halfUpdatedParameters?.Length != length || _t <= 0 || _previousT != _t - 1
+            || (_options.UseAMSGrad && _halfVMax?.Length != length)
+            || (_halfVMax is not null && _halfVMax.Length != length))
+            throw new InvalidOperationException("Half Adam checkpoint state is incomplete or inconsistent; no update was applied.");
+    }
+
+
+    private void ResetHalfVectorState()
+    {
+        _halfMaster = null;
+        _halfM = null;
+        _halfV = null;
+        _halfVMax = null;
+        _halfLastStep = null;
+        _halfPreviousParameters = null;
+        _halfUpdatedParameters = null;
+    }
+
+    private Vector<T> UpdateHalfParameters(Vector<T> parameters, Vector<T> gradient)
+    {
+        ValidateHalfVectorState();
+        int length = parameters.Length;
+        if (_halfM is null || _halfM.Length != length)
+        {
+            ResetHalfVectorState();
+            _t = 0;
+        }
+        bool hasMaster = _halfMaster is not null;
+        var masterArray = _halfMaster ??= new float[length];
+        var master = HalfStateTensor(masterArray);
+        var mArray = _halfM ??= new float[length];
+        var vArray = _halfV ??= new float[length];
+        var lastStep = _halfLastStep ??= new float[length];
+        var previousParameters = _halfPreviousParameters ??= new T[length];
+        var updatedParameters = _halfUpdatedParameters ??= new T[length];
+        // A changed input is an explicit caller weight replacement. Rebase its master
+        // weights while preserving optimizer moments; an unchanged published Half view
+        // must retain the unrounded FP32 residual from previous updates.
+        if (!hasMaster || !parameters.SequenceEqual(updatedParameters))
+            Engine.TensorCopy(parameters.AsTensor().Cast<float>(), master);
+        parameters.AsSpan().CopyTo(previousParameters);
+        _previousT = _t;
+        _t++;
+
+        var engine = Engine;
+        var g = gradient.AsTensor().Cast<float>();
+        var mState = HalfStateTensor(mArray);
+        var vState = HalfStateTensor(vArray);
+        var m = engine.TensorAddScaled(mState, g, (float)_options.Beta1, (float)(1 - _options.Beta1));
+        var v = engine.TensorAdd(engine.TensorMultiplyScalar(vState, (float)_options.Beta2),
+            engine.TensorMultiplyScalar(engine.TensorMultiply(g, g), (float)(1 - _options.Beta2)));
+        engine.TensorCopy(m, mState);
+        engine.TensorCopy(v, vState);
+        // Vector/matrix updates return host-owned values. Commit every native state
+        // array at that same boundary; checkpoint serialization reads these arrays
+        // directly, and later wrapper instances must never observe a stale GPU copy.
+        mState.CopyLogicalTo(mArray);
+        vState.CopyLogicalTo(vArray);
+        Tensor<float> secondMoment = v;
+        if (_options.UseAMSGrad)
+        {
+            var maximumArray = _halfVMax ??= new float[length];
+            var maximum = HalfStateTensor(maximumArray);
+            secondMoment = engine.TensorMax(maximum, v);
+            engine.TensorCopy(secondMoment, maximum);
+            maximum.CopyLogicalTo(maximumArray);
+        }
+        var mHat = engine.TensorDivideScalar(m, (float)(1 - Math.Pow(_options.Beta1, _t)));
+        var vHat = engine.TensorDivideScalar(secondMoment, (float)(1 - Math.Pow(_options.Beta2, _t)));
+        var denominator = engine.TensorAddScalar(engine.TensorSqrt(vHat), (float)_options.Epsilon);
+        var step = engine.TensorMultiplyScalar(engine.TensorDivide(mHat, denominator),
+            (float)NumOps.ToDouble(CurrentLearningRate));
+        var stepState = HalfStateTensor(lastStep);
+        engine.TensorCopy(step, stepState);
+        stepState.CopyLogicalTo(lastStep);
+        engine.TensorCopy(engine.TensorSubtract(master, step), master);
+        master.CopyLogicalTo(masterArray);
+        var updated = master.Cast<T>().AsVector();
+        updated.AsSpan().CopyTo(updatedParameters);
+        return updated;
+    }
+
+
     /// <summary>
     /// Updates a matrix of parameters using the Adam optimization algorithm.
     /// </summary>
@@ -641,6 +759,16 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// </remarks>
     public override Matrix<T> UpdateParameters(Matrix<T> parameters, Matrix<T> gradient)
     {
+        if (typeof(T) == typeof(Half))
+        {
+            if (parameters.Rows != gradient.Rows || parameters.Columns != gradient.Columns)
+                throw new ArgumentException("Parameter and gradient matrix shapes must match.", nameof(gradient));
+            var updated = UpdateParameters(parameters.ToRowVector(), gradient.ToRowVector());
+            var result = new Matrix<T>(parameters.Rows, parameters.Columns);
+            updated.AsSpan().CopyTo(result.AsWritableSpan());
+            return result;
+        }
+
         int totalSize = parameters.Rows * parameters.Columns;
 
         if (_m == null || _v == null || _m.Length != totalSize)
@@ -1371,6 +1499,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                 nameof(appliedGradients));
         }
 
+        if (typeof(T) == typeof(Half)) ValidateHalfVectorState();
         // ReverseUpdate reconstructs the forward step from m / v / bias-
         // correction state. Under UseAMSGrad the forward step divides by
         // sqrt(v̂_max) instead of sqrt(v̂), and the running v̂_max from
@@ -1385,6 +1514,19 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                 "ReverseUpdate is not supported when UseAMSGrad is enabled — the AMSGrad " +
                 "v̂_max state at the time of the forward step is not snapshotted, so the " +
                 "reverse pass cannot reconstruct the original parameters exactly.");
+        }
+
+        if (typeof(T) == typeof(Half) && _halfLastStep is not null
+            && _halfPreviousParameters is not null && _halfUpdatedParameters is not null)
+        {
+            if (updatedParameters.Length != _halfLastStep.Length)
+                throw new ArgumentException("The parameter shape differs from the most recent Adam step.", nameof(updatedParameters));
+            // Quantization is not invertible. For the actual last result retain the exact input;
+            // otherwise preserve ReverseUpdate's additive correction of the supplied vector.
+            if (updatedParameters.SequenceEqual(_halfUpdatedParameters))
+                return new Vector<T>((T[])_halfPreviousParameters.Clone());
+            return Engine.TensorAdd(updatedParameters.AsTensor().Cast<float>(), HalfStateTensor(_halfLastStep))
+                .Cast<T>().AsVector();
         }
 
         // Ensure previous moment buffers are initialized
@@ -1450,6 +1592,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         _t = 0;
         // Also clear the AMSGrad per-coord v̂_max so reuse after Reset
         // doesn't carry a stale upper bound into the next training run.
+        ResetHalfVectorState();
         _vMaxVector = null;
         // Tape-step moment dictionaries + tape step counter: same
         // rationale — reusing the optimizer with WithParameters-cloned
