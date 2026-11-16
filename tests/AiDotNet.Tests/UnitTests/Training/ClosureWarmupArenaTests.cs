@@ -9,10 +9,25 @@ using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.Training;
 
+[Collection("EngineCurrentGlobalState")]
 public sealed class ClosureWarmupArenaTests
 {
     [Fact]
     public void Warmup_PreservesCapturedArenaBatch_ForTheCompiledUpdate()
+    {
+        var previousEngine = AiDotNetEngine.Current;
+        try
+        {
+            AiDotNetEngine.Current = new CpuEngine();
+            AssertWarmupArenaContract();
+        }
+        finally
+        {
+            AiDotNetEngine.Current = previousEngine;
+        }
+    }
+
+    private static void AssertWarmupArenaContract()
     {
         var engine = AiDotNetEngine.Current;
         var parameter = new Tensor<float>(new[] { 1 }, new Vector<float>(new[] { 0.25f }));
