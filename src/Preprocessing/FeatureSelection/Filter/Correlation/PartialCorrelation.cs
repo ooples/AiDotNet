@@ -76,17 +76,27 @@ public class PartialCorrelation<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
 
         if (_controlForAllOthers && p > 1)
         {
-            // Correlation matrix of [X | y] (a column whose population std is below 1e-10 correlates 0)
+            // Correlation matrix of [X | y] (a column whose population std is below 1e-10 correlates 0).
+            // The engine LU factorizations run only in float and double; for Half, BFloat16 or decimal, forming the
+            // correlation matrix in double as well avoids amplifying Half rounding (~5e-4) when inverting near-collinear
+            // correlation matrices.
             var fullMatrix = engine.TensorConcatenate(new[] { X, engine.Reshape(y, new[] { n, 1 }) }, 1);
-            var corrMatrix = FeatureScoringTensorOps.CorrelationMatrix(fullMatrix, n * 1e-20);
-            var targetColumn = engine.Reshape(
-                engine.TensorSlice(corrMatrix, new[] { 0, p }, new[] { p, 1 }), new[] { p });
-
-            // Precision matrix via partially pivoted LU. The engine factorizations run only in float and double, so
-            // a Half, BFloat16 or decimal matrix is factored in double and the result cast back.
-            var precisionPartials = typeof(T) == typeof(float) || typeof(T) == typeof(double)
-                ? PrecisionPartialCorrelations(corrMatrix, p)
-                : PrecisionPartialCorrelations(corrMatrix.Cast<double>(), p)?.Cast<T>();
+            Tensor<T> targetColumn;
+            Tensor<T>? precisionPartials;
+            if (typeof(T) == typeof(float) || typeof(T) == typeof(double))
+            {
+                var corrMatrix = FeatureScoringTensorOps.CorrelationMatrix(fullMatrix, n * 1e-20);
+                targetColumn = engine.Reshape(
+                    engine.TensorSlice(corrMatrix, new[] { 0, p }, new[] { p, 1 }), new[] { p });
+                precisionPartials = PrecisionPartialCorrelations(corrMatrix, p);
+            }
+            else
+            {
+                var wideCorr = FeatureScoringTensorOps.CorrelationMatrix(fullMatrix.Cast<double>(), n * 1e-20);
+                targetColumn = engine.Reshape(
+                    engine.TensorSlice(wideCorr, new[] { 0, p }, new[] { p, 1 }), new[] { p }).Cast<T>();
+                precisionPartials = PrecisionPartialCorrelations(wideCorr, p)?.Cast<T>();
+            }
 
             // Fallback to simple correlation if matrix inversion fails
             partialCorrelations = precisionPartials ?? engine.TensorAbs(targetColumn);

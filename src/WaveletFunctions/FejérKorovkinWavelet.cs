@@ -355,9 +355,10 @@ public partial class FejérKorovkinWavelet<T> : WaveletFunctionBase<T>
             engine.TensorBroadcastTo(weights.Reshape(1, n), new[] { count, n }));
         var coefficients = engine.ReduceSum(engine.TensorDivideScalar(terms, (double)count), new[] { 1 }, false);
 
-        // Normalize coefficients (or fall back to a uniform filter when they sum to zero)
+        // Normalize coefficients (or fall back to a uniform filter when they sum to zero: the exact mathematical
+        // sum over k = -n..n is zero by the Dirichlet identity, while SIMD polynomial cos leaves ~5e-14 residue)
         double sum = engine.TensorSum(coefficients);
-        if (Math.Abs(sum) > 1e-15)
+        if (Math.Abs(sum) > 1e-12)
         {
             return engine.TensorDivideScalar(coefficients, sum).Cast<T>().ToVector();
         }
@@ -368,9 +369,10 @@ public partial class FejérKorovkinWavelet<T> : WaveletFunctionBase<T>
     /// <summary>
     /// Published Fejer-Korovkin scaling (low-pass) filters by length: fk4, fk6, fk8, fk14 and fk22 (Nielsen,
     /// "On the construction and frequency localization of finite orthogonal quadrature filters", J. Approx. Theory
-    /// 108 (2001); the same values as MATLAB's <c>fejerkorovkin</c>). Copied from the low-pass halves of the
-    /// <c>fk4</c> .. <c>fk22</c> tables in wavelib's <c>src/wavefilt.c</c> (BSD-3, Rafat Hussain and Holger
-    /// Nahrstaedt). PyWavelets ships no Fejer-Korovkin family, and no fk18 table was found in a citable source.
+    /// 108 (2001); the same values as MATLAB's <c>fejerkorovkin</c>). fk8 uses the exact double-precision minimum-phase
+    /// spectral factor of Nielsen (2001) Theorem 1 (wavelib's fk8 table has 1.6e-9 norm/orthogonality drift from
+    /// factoring the quadruple root at z = -1 numerically). PyWavelets ships no Fejer-Korovkin family, and no fk18
+    /// table was found in a citable source.
     /// </summary>
     private static readonly Dictionary<int, double[]> PublishedScalingFilters = new Dictionary<int, double[]>
     {
@@ -386,9 +388,9 @@ public partial class FejérKorovkinWavelet<T> : WaveletFunctionBase<T>
         },
         [8] = new[]
         {
-            0.3492381118637999, 0.7826836203840648, 0.4752651350794712,
-            -0.9968332845057319e-1, -0.1599780974340301, 0.4310666810651625e-1,
-            0.4258163167758178e-1, -0.1900017885373592e-1,
+            0.3492140468509222, 0.7826778145736870, 0.4752921234301911,
+            -0.0996706950058225, -0.1599865743954278, 0.0431011499015786,
+            0.0425871853008622, -0.0190014882828955,
         },
         [14] = new[]
         {

@@ -182,20 +182,25 @@ public class FairFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         var protectedVals = PreprocessingTensorOps.ColumnVector(X, _protectedAttributeIndex);
         var featureVals = PreprocessingTensorOps.ColumnVector(X, featureIndex);
 
-        // Split by protected attribute at its median: the midpoint of the two middle values for an even count, held
-        // in double (0.5 for a balanced 0/1 attribute; the upper middle value alone left the upper group empty)
+        // Split by protected attribute at the n/2-th sorted order statistic (lower <= median, upper > median).
+        // When upperMiddle equals the column maximum of a non-constant attribute (e.g. balanced binary [0, 0, 1, 1]),
+        // strict "> upperMiddle" leaves the upper group empty, so fall back to "< upperMiddle" vs ">= upperMiddle".
         var protectedColumn = engine.Reshape(protectedVals.Cast<double>(), new[] { n, 1 });
-        double lowerMiddle = engine.TensorSum(PreprocessingTensorOps.ColumnOrderStatistic(protectedColumn, (n - 1) / 2));
         double upperMiddle = engine.TensorSum(PreprocessingTensorOps.ColumnOrderStatistic(protectedColumn, n / 2));
-        double median = lowerMiddle / 2.0 + upperMiddle / 2.0;
-        var upper = engine.TensorGreaterThan(protectedColumn, median);
+        var upper = engine.TensorGreaterThan(protectedColumn, upperMiddle);
         var lower = PreprocessingTensorOps.Not(upper);
+        int count1 = PreprocessingTensorOps.CountNonZero(upper);
+        if (count1 == 0 && PreprocessingTensorOps.CountNonZero(engine.TensorLessThan(protectedColumn, upperMiddle)) > 0)
+        {
+            lower = engine.TensorLessThan(protectedColumn, upperMiddle);
+            upper = PreprocessingTensorOps.Not(lower);
+            count1 = PreprocessingTensorOps.CountNonZero(upper);
+        }
 
         // Compute mean feature value for each group in double: group sizes are counted in int (a Half sum of the 0/1
         // mask stops at 2048), the feature sums are taken in double (a Half sum of four 30000s is infinite), and
         // rows outside a group are selected away rather than multiplied by 0 (0 * inf = NaN).
         int count0 = PreprocessingTensorOps.CountNonZero(lower);
-        int count1 = PreprocessingTensorOps.CountNonZero(upper);
         var wideFeature = engine.Reshape(featureVals.Cast<double>(), new[] { n, 1 });
         var zeros = new Tensor<double>(new[] { n, 1 });
         double mean0 = count0 > 0 ? engine.TensorSum(engine.TensorWhere(lower, wideFeature, zeros)) / count0 : 0.0;
