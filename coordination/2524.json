@@ -346,7 +346,9 @@
         "src/AiDotNet.Tensors/Engines/Compilation/Serialization/TrainingPlanReader.cs",
         "src/AiDotNet.Tensors/Engines/Compilation/Serialization/FusedOptimizerCheckpointSerializer.cs",
         "src/AiDotNet.Tensors/Engines/Compilation/Serialization/PlanFormatConstants.cs",
-        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/CompiledEnrollmentCheckpointTests.cs"
+        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/CompiledEnrollmentCheckpointTests.cs",
+        "src/AiDotNet.Tensors/Engines/Compilation/OpType.cs",
+        "src/AiDotNet.Tensors/Engines/Compilation/Serialization/OpReplay.cs"
       ],
       "new_files": [
         "tests/AiDotNet.Tensors.Tests/Engines/Compilation/CompiledEnrollmentCheckpointTests.cs"
@@ -371,6 +373,17 @@
             "src/AiDotNet.Tensors/Engines/Compilation/Serialization/PlanFormatConstants.cs",
             "tests/AiDotNet.Tensors.Tests/Engines/Compilation/CompiledEnrollmentCheckpointTests.cs"
           ]
+        },
+        {
+          "id": "serializable-stop-and-inplace-barriers",
+          "status": "ROOT-APPROVED necessary bounded persistence amendment; shared owner ACK; draft for root review/publication before edits",
+          "files": [
+            "src/AiDotNet.Tensors/Engines/Compilation/OpType.cs",
+            "src/AiDotNet.Tensors/Engines/Compilation/Serialization/OpReplay.cs"
+          ],
+          "scope": "Append only StopGradient and TensorAddInPlace enum entries at the end of existing OpType byte values and add their parser names in the SAME OpType.cs file, preserving every existing ordinal. Add exactly two OpReplay handlers with arity preflight. StopGradient uses the existing recorded forward-copy/null-backward helper; TensorAddInPlace invokes the existing engine mutation and returns the same target object, preserving in-place prior-writer identity. No Unknown-name workaround or broad operator feature work.",
+          "existing_owned_followups": "TrainingPlanReader/Writer must preserve independent RecordedUnderNoGrad and HasBackward bits, including legitimate flags3, rather than enforce mutual exclusion. Persist declared derivative indices; reconstruct canonical excluded operand paths with recorded StopGradient barriers, not enrollment masking alone.",
+          "tests": "Existing owned CompiledEnrollmentCheckpointTests.cs: active-elsewhere parameter oracle dp1 rather than13, Multiply(p,p) partial-edge identity, repeated Save→Load→Save→Load with fresh data, and NoGrad in-place prior-writer flags3. No test assertions weakened."
         }
       ]
     }
@@ -395,7 +408,8 @@
     "heterogeneous_forward_future_gate": "After implementation tests and root review, a producer-workflow mandatory test-gate group may be added as a necessary verification amendment. Workflow implementation is not claimed now. Existing125 mandatory CPU cases and strict package/evidence guards remain required; a new artifact must pass reviewed gates before consumer pinning.",
     "consumer_correction_cohort": "Correction cohort recorded102passed and1failure caused only by a synchronous declaration of a timed clipping-refusal test. The declaration was corrected to async in ce7928ef40; affected test rerun passed1/1. This is not a fresh rerun of the whole cohort and does not establish global consumer readiness.",
     "native_current_cohort": "Original125 mandatory CPU cases remain all passing. Current native165 cohort:161passed,3failed,1skipped, with heterogeneous replay failures under investigation. Separate FP16 focused check4/4passed. No new native artifact is ready; retain the validated125 consumer package pin. Passing FP16 checks do not approve broader native optimizer work.",
-    "native_optimizer_repair": "Explicit user approval now recorded for proper enrollment/continuity and NoGrad/checkpoint persistence. Existing native165=161pass/3fail/1skip and separate FP16=4pass are diagnostic evidence, not artifact readiness. Capture artifact stays held until repair, root review, required CPU/GPU/grouped/capture and persistence checks, then all5TFM producer packaging/evidence validation."
+    "native_optimizer_repair": "Explicit user approval now recorded for proper enrollment/continuity and NoGrad/checkpoint persistence. Existing native165=161pass/3fail/1skip and separate FP16=4pass are diagnostic evidence, not artifact readiness. Capture artifact stays held until repair, root review, required CPU/GPU/grouped/capture and persistence checks, then all5TFM producer packaging/evidence validation.",
+    "pr_ci_latest": "Fresh GitHub connector check confirms all9 PR workflows completed at exact35f28db67906c7b0d1ad93afeb6cc1c3fa647753, latest6success/3failure after title attempt2 success. No active PR CI remains. Historical first completed cycle5success/4failure and original timeout/test failures remain retained; this status is not proof the source handoff is globally verified."
   },
   "decisions": [
     {
@@ -472,6 +486,11 @@
       "id": "native-explicit-differentiable-input-contract",
       "status": "root-approved necessary repair within user-approved native enrollment scope",
       "decision": "Use explicit optional DifferentiableInputIndices instead of backward delegate heuristics: null/defaultall, empty none, sorted unique/range validated, defensive copy. WhereBackward proves input0condition absent from gradients and inputs1/2branches differentiable, so only TensorWhere records[1,2]. Persist metadata before compile through serialization owner. No all-op migration or unrelated CpuEngine changes."
+    },
+    {
+      "id": "native-bounded-stop-inplace-serialization",
+      "status": "root-approved necessary amendment within user-approved native persistence scope",
+      "decision": "Use explicit typed StopGradient and TensorAddInPlace enum/parser/OpReplay entries only, with arity checks and unchanged serialized ordinals. Preserve forward data, stopped derivative edges, in-place identity and independent NoGrad/backward flags. Small additive claim assigned to existing serialization owner; no new owner transfer or unrelated operators."
     }
   ],
   "questions": [
@@ -644,7 +663,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-16T23:19:07.061845+00:00",
+  "updated_utc": "2026-11-16T23:31:10.420901+00:00",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43955817990",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
