@@ -1877,7 +1877,15 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.Generators.ModelDefectPaperKeyTests.|
       FullyQualifiedName~AiDotNet.Tests.NeuralNetworks.TransformerDecoderCausalityTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.DiffusionBatchedNoisePredictionTests.|
-      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.BlipImageGroundingTests.)
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.BlipImageGroundingTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.Models.DreamFusionSdsStepTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Elementwise01NumericalRegressionTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.GraphLayerTapeGradientTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.RestrictedBackwardSourcesParityTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.CustomObjectiveFusedRoutingTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.PreActivationCacheTraceTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.Optimizers.FusedLrScheduleEverySchedulerTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.Optimizers.FusedScheduledMomentumParityTests.)
   # =====================================================================
   # TEXT-TO-SPEECH PAPER TESTS - the per-model paper-fidelity suites (AiDotNet.Tests.TextToSpeech.*).
   # =====================================================================
