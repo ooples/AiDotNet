@@ -188,6 +188,12 @@ internal sealed class CosyVoiceHiFTLosses<T>
 
     private Tensor<T> Add(Tensor<T>? a, Tensor<T> b) => a is null ? _engine.Reshape(b, new[] { 1 }) : _engine.TensorAdd(a, _engine.Reshape(b, new[] { 1 }));
 
+    private static readonly T One = MathHelper.GetNumericOperations<T>().One;
+
+    // torch.median's element: the lower middle of the values in ascending order (ties by position).
+    private static int MedianIndex(double[] values) =>
+        Enumerable.Range(0, values.Length).OrderBy(i => values[i]).ThenBy(i => i).ElementAt((values.Length - 1) / 2);
+
     // tpr_loss: m = median(dr − dg); L = mean(((dr − dg) − m)² over dr < dg + m); τ − relu(τ − L).
     private Tensor<T> Tpr(List<Tensor<T>> real, List<Tensor<T>> generated)
     {
@@ -196,25 +202,28 @@ internal sealed class CosyVoiceHiFTLosses<T>
         {
             var diff = _engine.Reshape(_engine.TensorSubtract(real[d], generated[d]), new[] { real[d].Length });
             int n = diff.Length;
-            // torch.median: the lower of the two middle values; its gradient goes to that element.
-            var order = Enumerable.Range(0, n).OrderBy(i => NumOps.ToDouble(diff[i])).ThenBy(i => i).ToArray();
-            int medianIndex = order[(n - 1) / 2];
-            var median = _engine.TensorSlice(diff, new[] { medianIndex }, new[] { 1 });
-            double m = NumOps.ToDouble(median[0]);
-            var mask = new Tensor<T>(new[] { n });
-            int count = 0;
-            for (int i = 0; i < n; i++)
-            {
-                if (NumOps.ToDouble(real[d][i]) < NumOps.ToDouble(generated[d][i]) + m)
+            // torch.median: the lower of the two middle values; its gradient goes to that element. The choice and the
+            // selection mask are host decisions on this step's values, recorded as nodes a compiled plan reruns.
+            var realRow = _engine.Reshape(real[d], new[] { n });
+            var generatedRow = _engine.Reshape(generated[d], new[] { n });
+            var selector = AiDotNet.Training.CompiledStepHostValue<T>.Compute("CosyVoiceTprMedian", new[] { diff }, new[] { n },
+                (inputs, value) => value.AsWritableSpan()[MedianIndex(inputs[0].Cast<double>().ToArray())] = One);
+            var median = _engine.Reshape(_engine.ReduceSum(_engine.TensorMultiply(diff, selector), new[] { 0 }, keepDims: false), new[] { 1 });
+            // dr < dg + m, in double as the host loop compared them.
+            var mask = AiDotNet.Training.CompiledStepHostValue<T>.Compute("CosyVoiceTprMask", new[] { realRow, generatedRow, diff }, new[] { n },
+                (inputs, value) =>
                 {
-                    mask[i] = NumOps.One;
-                    count++;
-                }
-            }
+                    var r = inputs[0].Cast<double>().ToArray();
+                    var g = inputs[1].Cast<double>().ToArray();
+                    var values = inputs[2].Cast<double>().ToArray();
+                    double m = values[MedianIndex(values)];
+                    var span = value.AsWritableSpan();
+                    for (int i = 0; i < r.Length; i++) span[i] = r[i] < g[i] + m ? One : default!;
+                });
             var centered = _engine.TensorSubtract(diff, _engine.TensorTile(median, new[] { n }));
             var squares = _engine.TensorMultiply(_engine.TensorMultiply(centered, centered), mask);
             // The mean over an empty selection is NaN, as torch.mean of an empty tensor.
-            var relative = _engine.TensorMultiplyScalar(_engine.ReduceSum(squares, new[] { 0 }, keepDims: true), NumOps.FromDouble(1.0 / count));
+            var relative = _engine.TensorDivide(_engine.ReduceSum(squares, new[] { 0 }, keepDims: true), _engine.ReduceSum(mask, new[] { 0 }, keepDims: true));
             var tau = Scalar(TprTau);
             loss = Add(loss, _engine.TensorSubtract(tau, _engine.ReLU(_engine.TensorSubtract(tau, relative))));
         }
