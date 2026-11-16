@@ -4,7 +4,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
 <BaseLayout
   title="Security Policy - AiDotNet"
-  description="AiDotNet security policy: vulnerability reporting via GitHub Security Advisories or admin@aidotnet.dev, PGP key, response SLA, embargo policy, and supported versions."
+  description="AiDotNet security policy: vulnerability reporting via GitHub Security Advisories or admin@aidotnet.dev, response SLA, embargo policy, and supported versions."
 >
   <div class="pt-32 pb-20 px-4 sm:px-6 lg:px-8">
     <div class="max-w-3xl mx-auto">
@@ -26,12 +26,12 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             This is the fastest path and gives us a structured audit trail.
           </p>
 
-          <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mt-6">Alternative: Encrypted Email</h3>
+          <h3 class="text-lg font-semibold text-slate-800 dark:text-slate-200 mt-6">Alternative: Email</h3>
           <p class="text-slate-600 dark:text-slate-300">
             Email <a href="mailto:admin@aidotnet.dev" class="text-blue-600 dark:text-blue-400 hover:underline">admin@aidotnet.dev</a>.
-            We strongly recommend encrypting sensitive disclosures with our PGP key
-            (available at <a href="https://github.com/ooples/AiDotNet/blob/master/docs/security/pgp.txt" class="text-blue-600 dark:text-blue-400 hover:underline">docs/security/pgp.txt</a>
-            in the repository, or by request).
+            We do not publish a PGP key, so email is not encrypted end to end. Send exploit details,
+            proofs of concept and anything else sensitive through the GitHub Security Advisory form
+            above, which only the maintainers can read.
           </p>
         </section>
 

@@ -64,12 +64,12 @@ export default defineConfig({
     // ---------- Anonymous projects (existing test suite) ----------
     {
       name: 'anon-desktop',
-      testIgnore: ['**/user/**', '**/admin/**', '**/auth/**'],
+      testIgnore: ['**/user/**', '**/admin/**', '**/auth/**', '**/journeys/**', '**/helpers/**'],
       use: { viewport: { width: 1440, height: 900 } },
     },
     {
       name: 'anon-mobile',
-      testIgnore: ['**/user/**', '**/admin/**', '**/auth/**'],
+      testIgnore: ['**/user/**', '**/admin/**', '**/auth/**', '**/journeys/**', '**/helpers/**'],
       // Base on Pixel 5's real device config (correct isMobile +
       // hasTouch + user agent) rather than spreading Desktop Chrome +
       // overriding only the viewport. Code paths that gate on
@@ -107,6 +107,18 @@ export default defineConfig({
       use: { viewport: { width: 1440, height: 900 } },
     },
 
+    // ---------- Real-backend journeys ----------
+    //
+    // Whole user paths that create their own throwaway users (sign-up, purchase, password
+    // recovery), so they start signed out and need the server-side env in helpers/backend.ts.
+    {
+      name: 'journeys',
+      testDir: './tests/e2e/journeys',
+      // No traces: these specs send the Supabase service key and the Stripe secret key in request
+      // headers, and a trace (embedded in the uploaded HTML report) records them in clear text.
+      use: { viewport: { width: 1440, height: 900 }, trace: 'off' },
+    },
+
     // ---------- Authenticated projects ----------
     {
       name: 'user-auth',
@@ -122,6 +134,8 @@ export default defineConfig({
       testDir: './tests/e2e/admin',
       use: {
         viewport: { width: 1440, height: 900 },
+        // admin/user-management.spec.ts reads rows with the service key: no traces, as for journeys.
+        trace: 'off',
         storageState: ADMIN_STORAGE_STATE,
       },
       dependencies: ['admin.setup'],

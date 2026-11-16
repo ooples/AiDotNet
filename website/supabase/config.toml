@@ -46,3 +46,9 @@ verify_jwt = false
 
 [functions.admin-resend-license-email]
 verify_jwt = false
+
+[functions.billing-portal]
+verify_jwt = false
+
+[functions.delete-account]
+verify_jwt = false
