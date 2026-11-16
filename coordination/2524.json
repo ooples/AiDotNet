@@ -44,13 +44,22 @@
         "src/TextToSpeech/MultiModal/GLM4Voice*, GlmSpeechTokenizer.cs",
         "src/Audio/Codecs/LossBalancer.cs, src/Audio/Codecs/EnCodec.cs",
         "SoundStormConformer (traced variance clamp for Pheme)",
-        "src/ElementWiseBaseline.txt (counts lowered only, no new exemptions)"
+        "src/ElementWiseBaseline.txt (counts lowered only, no new exemptions)",
+        "src/TextToSpeech/CodecBased/GPTSoVITS*.cs, FireRedTTS*.cs",
+        "src/TextToSpeech/MultiModal/SpiritLM*.cs, LLMIntegratedSpeechGPT*.cs",
+        "src/TextToSpeech/EndToEnd/MeloTTS*.cs, src/TextToSpeech/Latest/MegaTTS2*.cs",
+        "src/TextToSpeech/StyleEmotion/StyleTTS*.cs, src/TextToSpeech/Classic/SpeedySpeech.cs, Tacotron2.cs, ForwardTacotron.cs (non-LSTM reads only)"
       ],
-      "status": "Implemented on claude/2524-tts-replay (pushed, not on the PR branch): AlignTTS, E2/F5 TTS, DiTTo, OpenVoice, GLM4Voice, NaturalSpeech 1/2/3, VoiceCraft, CosyVoice DiffRO, UniAudio, Voicebox, Pheme, SeedTTS, SparkTTS, TortoiseTTS, EnCodec. Each verified by focused tests in its own worktree; merged-tree verification running now. Open items are under questions (shared helpers and upstream Tensors).",
+      "status": "claude/2524-tts-replay @ b11b995375 (pushed; not on the PR branch). Merged-tree net10.0 run of every AiDotNet.Tests.TextToSpeech class + EnCodec + LossBalancer: 2585 total, 2543 passed, 42 failed. Baseline (coordination head without our commits) on the same 25 classes: 48 failed; all 42 merged-tree failures also fail on the baseline, so 0 regressions. Remaining 42 are listed under 'remaining_failures'.",
       "not_claimed": [
         "WaveRNN, SegmentVocoderBase.cs, VocoderSignalModules.cs, src/Training/** (owned above; FreGrad fixed by 447aa7ac78, no change from us)",
         "NonAttentiveTacotron LstmSequenceTrain (owned above: upstream LSTM replay state)"
-      ]
+      ],
+      "remaining_failures": {
+        "owned_elsewhere_LstmSequenceTrain": "Tacotron, ForwardTacotron, NonAttentiveTacotron, CosyVoice2 (upstream LSTM replay state)",
+        "upstream_or_shared_proposals": "TransformerTTS (BatchNorm probe), FastSpeech2/ProDiff/AdaSpeech2 (VarianceAdaptorLayer), SeedTTS/SparkTTS (CodecWaveformGan.Detached, IndexTtsPerceiver), CosyVoice/CosyVoice2 vocoder (HiftModules), CosyVoiceOptimizerOptions/LlamaOmni (CTCLoss reads on the host)",
+        "claimed_next_by_us": "GPT-SoVITS, SpiritLM, FireRedTTS, MeloTTS, MegaTTS2, StyleTTS, SpeedySpeech, LLMIntegratedSpeechGPT, Tacotron2 (TensorSlice read), ForwardTacotron (TensorIndexSelect read), SoundStorm (frozen encoder moves one LR step)"
+      }
     },
     {
       "owner": "this session and its agents",
@@ -244,9 +253,18 @@
       "status": "pending",
       "from": "jputnam61 Claude session (contributor branch claude/2524-tts-replay)",
       "files": "ProDiff, AdaSpeech2",
-      "finding": "Not in run 43902661676's list; locally 5 of 7 tests in these classes fail at the starting commit (ProDiff Distillation reads 'TensorAdd'; AdaSpeech2 MelEncoderAligning reads 'TensorIndexSelect').",
-      "proposed_fix": "Claim them next if nobody owns them.",
+      "finding": "Not in run 43902661676's list; locally 5 of 7 tests in these classes fail at the starting commit (ProDiff Distillation reads 'TensorAdd'; AdaSpeech2 MelEncoderAligning reads 'TensorIndexSelect'). Merged tree: ProDiff 3 and AdaSpeech2 2 failures remain, both via VarianceAdaptorLayer (see tts-variance-bucketize).",
+      "proposed_fix": "Covered by tts-variance-bucketize once approved.",
       "alternatives": ""
+    },
+    {
+      "id": "overlap-tts-detach-files",
+      "status": "pending",
+      "from": "jputnam61 Claude session (contributor branch claude/2524-tts-replay)",
+      "files": "src/TextToSpeech/CodecBased/UniAudioCodecTrainingModules.cs (+2/-1), CosyVoiceDifferentiableReward.cs (+11/-7), TortoiseTTS.cs (+41/-15)",
+      "finding": "Our claim (2a90796d2d) predates the 'Shared TTS feature/KL detach' claim (14fbcf3f06); our agents edited these three files on claude/2524-tts-replay before that claim appeared. Nothing from the owner has landed in them yet.",
+      "proposed_fix": "Owner's version wins: when the owner's detach fix lands, we merge it and drop our hunks in these three files, then rerun UniAudio/CosyVoice DiffRO/TorToiSe tests. Until then we make no further edits there.",
+      "alternatives": "Owner takes our hunks as-is (diffs on claude/2524-tts-replay)."
     }
   ],
   "question_protocol": [
@@ -256,7 +274,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-16T19:29:31.525498Z",
+  "updated_utc": "2026-11-16T19:54:12.184202Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43925212863",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts."
