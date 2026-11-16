@@ -63,6 +63,23 @@ Assert-Feed ([int]$counters.total -eq $pin.testCount -and [int]$counters.execute
 foreach ($counter in $counters.PSObject.Properties) {
     if ($counter.Name -notin @('total', 'executed', 'passed')) { Assert-Feed ([int]$counter.Value -eq 0) "Nonzero test outcome: $($counter.Name)" }
 }
+Assert-Feed ($null -ne $manifest.PSObject.Properties['retainedOutputTestCounters']) 'Missing retained-output test group.'
+$retainedCounters = $manifest.retainedOutputTestCounters
+Assert-Feed ([int]$retainedCounters.total -eq $pin.retainedOutputTestCount -and [int]$retainedCounters.executed -eq $pin.retainedOutputTestCount -and [int]$retainedCounters.passed -eq $pin.retainedOutputTestCount) 'Retained-output test count did not match.'
+foreach ($outcome in @('failed', 'error', 'timeout', 'aborted', 'inconclusive', 'passedButRunAborted', 'notRunnable', 'notExecuted', 'disconnected', 'warning', 'completed', 'inProgress', 'pending')) {
+    Assert-Feed ($null -ne $retainedCounters.PSObject.Properties[$outcome]) "Missing retained-output test outcome: $outcome"
+}
+foreach ($counter in $retainedCounters.PSObject.Properties) {
+    if ($counter.Name -notin @('total', 'executed', 'passed')) { Assert-Feed ([int]$counter.Value -eq 0) "Nonzero retained-output test outcome: $($counter.Name)" }
+}
+Assert-Feed ($null -ne $manifest.PSObject.Properties['retainedOutputTestCases']) 'Missing retained-output test identities.'
+$retainedCases = @($manifest.retainedOutputTestCases)
+Assert-Feed ($retainedCases.Count -eq $pin.retainedOutputTestCount) 'Retained-output test identity count did not match.'
+$uniqueCases = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+foreach ($case in $retainedCases) {
+    Assert-Feed (-not [string]::IsNullOrWhiteSpace($case) -and $uniqueCases.Add($case)) 'Retained-output test identities must be nonempty and unique.'
+}
+Assert-Feed ($pin.mandatoryCpuTestCount -eq ($pin.testCount + $pin.retainedOutputTestCount) -and $manifest.mandatoryCpuTestCount -eq $pin.mandatoryCpuTestCount -and ([int]$counters.total + [int]$retainedCounters.total) -eq $pin.mandatoryCpuTestCount) 'Mandatory CPU test total did not match.'
 $relativePackage = "packages/AiDotNet.Tensors.$version.nupkg"
 $package = Join-Path $EvidenceDirectory $relativePackage
 Assert-Feed ($manifest.sha256.$relativePackage -ceq $pin.packageSha256 -and (Get-Sha256 $package) -ceq $pin.packageSha256) 'Package hash did not match.'
