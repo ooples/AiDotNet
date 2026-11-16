@@ -255,9 +255,9 @@ public class WorldPitchDetector<T> : PitchDetectorBase<T>
     // copied to the end, everything shifted left by half the window, and 1 added at index 0.
     private static Tensor<T> DesignLowCutFilter(int n, int fftSize)
     {
-        var window = E.TensorAddScalar(E.TensorMultiplyScalar(E.TensorCos(E.TensorDivideScalar(
+        var window = E.TensorAddScalar(E.TensorMultiplyScalar(E.TensorCos(DivideExact(
             E.TensorMultiplyScalar(E.TensorMultiplyScalar(Range(1, n), C(2.0)), C(Math.PI)), C(n + 1.0))), C(-0.5)), C(0.5));
-        var filter = Pad(E.TensorDivideScalar(E.TensorNegate(window), E.TensorSum(window)), 0, fftSize - n);
+        var filter = Pad(DivideExact(E.TensorNegate(window), E.TensorSum(window)), 0, fftSize - n);
         int half = (n - 1) / 2;
         if (half > 0) filter = E.TensorSetSlice(filter, Slice(filter, 0, half), new[] { fftSize - half });
         filter = Cat(Slice(filter, half, n), Slice(filter, n, fftSize - n));
@@ -343,9 +343,9 @@ public class WorldPitchDetector<T> : PitchDetectorBase<T>
         if (sets is null)
             return (Tensor<T>.CreateDefault(new[] { f0Length }, C(MaximumValue)), Zeros(f0Length));
 
-        var candidate = E.TensorDivideScalar(E.TensorAdd(E.TensorAdd(E.TensorAdd(sets[0], sets[1]), sets[2]), sets[3]), C(4.0));
+        var candidate = DivideExact(E.TensorAdd(E.TensorAdd(E.TensorAdd(sets[0], sets[1]), sets[2]), sets[3]), C(4.0));
         Tensor<T> Deviation(Tensor<T> set) => E.TensorSquare(E.TensorMultiplyScalar(E.TensorSubtract(set, candidate), C(DeviationScale)));
-        var score = E.TensorMultiplyScalar(E.TensorSqrt(E.TensorDivideScalar(E.TensorAdd(E.TensorAdd(E.TensorAdd(
+        var score = E.TensorMultiplyScalar(E.TensorSqrt(DivideExact(E.TensorAdd(E.TensorAdd(E.TensorAdd(
             Deviation(sets[0]), Deviation(sets[1])), Deviation(sets[2])), Deviation(sets[3])), C(3.0))), C(1.0 / DeviationScale));
 
         var outOfRange = OutOfRange(candidate, boundaryF0 / 2.0, boundaryF0, f0Floor, f0Ceil);
@@ -431,7 +431,7 @@ public class WorldPitchDetector<T> : PitchDetectorBase<T>
         var lower = Slice(fineEdges, 0, count - 1);
         var upper = Slice(fineEdges, 1, count - 1);
         var intervals = Over(fs, E.TensorSubtract(upper, lower));
-        var locations = E.TensorDivideScalar(E.TensorDivideScalar(E.TensorAdd(lower, upper), C(2.0)), C(fs));
+        var locations = DivideExact(DivideExact(E.TensorAdd(lower, upper), C(2.0)), C(fs));
         return (locations, intervals, count - 1);
     }
 
@@ -511,13 +511,13 @@ public class WorldPitchDetector<T> : PitchDetectorBase<T>
         var shape = new[] { pairs, numberOfHarmonics };
         var harmonic = E.TensorBroadcastTo(E.Reshape(Range(1, numberOfHarmonics), new[] { 1, numberOfHarmonics }), shape);
         var perPair = E.TensorBroadcastTo(E.Reshape(f0, new[] { pairs, 1 }), shape);
-        var bin = MatlabRound(E.TensorMultiply(E.TensorDivideScalar(E.TensorMultiplyScalar(perPair, C(fftSize)), C(fs)), harmonic));
+        var bin = MatlabRound(E.TensorMultiply(DivideExact(E.TensorMultiplyScalar(perPair, C(fftSize)), C(fs)), harmonic));
         var index = E.TensorClamp(bin.Cast<int>(), 0, fftSize / 2);
         var p = E.TensorTakeAlongDim(power, index, 1);
         var q = E.TensorTakeAlongDim(numeratorI, index, 1);
         var frequency = E.TensorAdd(
-            E.TensorDivideScalar(E.TensorMultiplyScalar(index.Cast<T>(), C(fs)), C(fftSize)),
-            E.TensorDivideScalar(E.TensorDivideScalar(E.TensorMultiplyScalar(E.TensorDivide(q, p), C(fs)), C(2.0)), C(Math.PI)));
+            DivideExact(E.TensorMultiplyScalar(index.Cast<T>(), C(fs)), C(fftSize)),
+            DivideExact(DivideExact(E.TensorMultiplyScalar(E.TensorDivide(q, p), C(fs)), C(2.0)), C(Math.PI)));
         var instantaneous = E.TensorWhere(E.TensorEquals(p, Ops.Zero), new Tensor<T>(shape), frequency);
         return (harmonic, instantaneous, E.TensorSqrt(p));
     }
@@ -591,23 +591,23 @@ public class WorldPitchDetector<T> : PitchDetectorBase<T>
         if (kind == RefinementWindow.StoneMask)
         {
             // index_raw[i] = round((t + (i − h)/fs)·fs); the window at (index_raw − 1)/fs − t.
-            var baseTime = E.TensorDivideScalar(E.TensorSubtract(column, halfB), C(fs));
+            var baseTime = DivideExact(E.TensorSubtract(column, halfB), C(fs));
             var indexRaw = MatlabRound(E.TensorMultiplyScalar(E.TensorAdd(position, baseTime), C(fs)));
             sampleIndex = E.TensorSubtractScalar(indexRaw, Ops.One);
-            windowTime = E.TensorSubtract(E.TensorDivideScalar(sampleIndex, C(fs)), position);
+            windowTime = E.TensorSubtract(DivideExact(sampleIndex, C(fs)), position);
         }
         else
         {
             // basic_index = round((t − h/fs)·fs + 0.001); sample basic_index + i − 1.
             var basicIndex = MatlabRound(E.TensorAddScalar(E.TensorMultiplyScalar(
-                E.TensorAdd(positions, E.TensorDivideScalar(E.TensorNegate(half), C(fs))), C(fs)), C(0.001)));
+                E.TensorAdd(positions, DivideExact(E.TensorNegate(half), C(fs))), C(fs)), C(0.001)));
             sampleIndex = E.TensorSubtractScalar(E.TensorAdd(PerPair(basicIndex, shape), column), Ops.One);
-            windowTime = E.TensorSubtract(E.TensorDivideScalar(sampleIndex, C(fs)), position);
+            windowTime = E.TensorSubtract(DivideExact(sampleIndex, C(fs)), position);
         }
 
         var clamped = E.TensorClamp(sampleIndex.Cast<int>(), 0, x.Length - 1);
         var samples = E.Reshape(E.TensorTake(x, clamped), shape);
-        var windowLength = PerPair(E.TensorDivideScalar(E.TensorAddScalar(E.TensorMultiplyScalar(half, C(2.0)), Ops.One), C(fs)), shape);
+        var windowLength = PerPair(DivideExact(E.TensorAddScalar(E.TensorMultiplyScalar(half, C(2.0)), Ops.One), C(fs)), shape);
         var inside = E.TensorLessThan(column, E.TensorAddScalar(E.TensorMultiplyScalar(halfB, C(2.0)), Ops.One));
         var zero = new Tensor<T>(shape);
 
@@ -618,7 +618,7 @@ public class WorldPitchDetector<T> : PitchDetectorBase<T>
         mainWindow = E.TensorWhere(inside, mainWindow, zero);
         var nextSample = E.PadNd(E.TensorSlice(mainWindow, new[] { 0, 1 }, new[] { pairs, fftSize - 1 }), new[] { 0, 1 }, EnginePadMode.Constant, Ops.Zero);
         var previousSample = E.PadNd(E.TensorSlice(mainWindow, new[] { 0, 0 }, new[] { pairs, fftSize - 1 }), new[] { 1, 0 }, EnginePadMode.Constant, Ops.Zero);
-        var diffWindow = E.TensorWhere(inside, E.TensorDivideScalar(E.TensorNegate(E.TensorSubtract(nextSample, previousSample)), C(2.0)), zero);
+        var diffWindow = E.TensorWhere(inside, DivideExact(E.TensorNegate(E.TensorSubtract(nextSample, previousSample)), C(2.0)), zero);
 
         var (mainRe, mainIm) = Fft(E.TensorWhere(inside, E.TensorMultiply(samples, mainWindow), zero));
         var (diffRe, diffIm) = Fft(E.TensorWhere(inside, E.TensorMultiply(samples, diffWindow), zero));
@@ -750,7 +750,7 @@ public class WorldPitchDetector<T> : PitchDetectorBase<T>
     {
         int filterLengthHalf = MatlabRound(fs / boundaryF0 * 2.0);
         int length = filterLengthHalf * 2 + 1;
-        var carrier = E.TensorCos(E.TensorDivideScalar(
+        var carrier = E.TensorCos(DivideExact(
             E.TensorMultiplyScalar(Range(-filterLengthHalf, length), C(2 * Math.PI * boundaryF0)), C(fs)));
         var bandPass = Pad(E.TensorMultiply(NuttallWindow(length), carrier), 0, fftSize - length);
         var (re, im) = Fft(bandPass);
@@ -766,7 +766,7 @@ public class WorldPitchDetector<T> : PitchDetectorBase<T>
         var filtered = HarvestFilteredSignal(boundaryF0, fftSize, fs, ySpecRe, ySpecIm, yLength);
         var sets = FourIntervalContours(filtered, fs, temporalPositions);
         if (sets is null) return Zeros(f0Length);
-        var candidate = E.TensorDivideScalar(E.TensorAdd(E.TensorAdd(E.TensorAdd(sets[0], sets[1]), sets[2]), sets[3]), C(4.0));
+        var candidate = DivideExact(E.TensorAdd(E.TensorAdd(E.TensorAdd(sets[0], sets[1]), sets[2]), sets[3]), C(4.0));
         var outOfRange = OutOfRange(candidate, boundaryF0 * 0.9, boundaryF0 * 1.1, f0Floor, f0Ceil);
         return E.TensorWhere(outOfRange, Zeros(f0Length), candidate);
     }
@@ -1113,7 +1113,7 @@ public class WorldPitchDetector<T> : PitchDetectorBase<T>
     // range; WORLD's '>' scan keeps the last of equal errors. 0 when none is within range.
     private static T HarvestSelectBestF0(T referenceF0, Tensor<T> candidates, double allowedRange)
     {
-        var error = E.TensorDivideScalar(E.TensorAbs(E.TensorSubtractScalar(candidates, referenceF0)), referenceF0);
+        var error = DivideExact(E.TensorAbs(E.TensorSubtractScalar(candidates, referenceF0)), referenceF0);
         T minimum = E.TensorMinValue(error);
         if (!Ops.LessThanOrEquals(minimum, C(allowedRange))) return Ops.Zero;
         int[] at = E.TensorNonzero(E.TensorEquals(error, minimum)).ToArray();
@@ -1272,7 +1272,7 @@ public class WorldPitchDetector<T> : PitchDetectorBase<T>
 
     private static Tensor<T> NuttallWindow(int length)
     {
-        var t = E.TensorDivideScalar(Range(0, length), C(length - 1.0));
+        var t = DivideExact(Range(0, length), C(length - 1.0));
         Tensor<T> Cosine(double multiple) => E.TensorCos(E.TensorMultiplyScalar(t, C(multiple * Math.PI)));
         var window = E.TensorAddScalar(E.TensorMultiplyScalar(Cosine(2.0), C(-0.487396)), C(0.355768));
         window = E.TensorAdd(window, E.TensorMultiplyScalar(Cosine(4.0), C(0.144232)));
@@ -1434,7 +1434,7 @@ public class WorldPitchDetector<T> : PitchDetectorBase<T>
 
     // i · period / 1000 for i = 0 … count − 1: each frame's time in seconds.
     private static Tensor<T> Positions(int count, double framePeriodMs)
-        => E.TensorDivideScalar(E.TensorMultiplyScalar(Range(0, count), C(framePeriodMs)), C(1000.0));
+        => DivideExact(E.TensorMultiplyScalar(Range(0, count), C(framePeriodMs)), C(1000.0));
 
     private static Tensor<int> IntTensor(int[] values) => new Tensor<int>(values, new[] { values.Length });
 
@@ -1477,6 +1477,11 @@ public class WorldPitchDetector<T> : PitchDetectorBase<T>
 
     // value / t elementwise.
     private static Tensor<T> Over(double value, Tensor<T> t) => E.TensorDivide(Tensor<T>.CreateDefault(t._shape, C(value)), t);
+
+    // x / divisor elementwise, correctly rounded as C's division. The engine's TensorDivideScalar multiplies by the
+    // reciprocal, which is off by one ulp for about one element in seven; WORLD rounds quotients such as
+    // (t + (i − h)/fs)·fs with matlab_round, and an ulp moves an exact half-sample tie to the other sample.
+    private static Tensor<T> DivideExact(Tensor<T> x, T divisor) => E.TensorDivide(x, Tensor<T>.CreateDefault(x._shape, divisor));
 
     // The first index at which values equals target (0 when none does, as WORLD's scan then keeps its first entry).
     private static int FirstIndexOf(Tensor<T> values, T target)
