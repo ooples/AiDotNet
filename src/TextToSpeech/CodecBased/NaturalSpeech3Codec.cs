@@ -106,7 +106,7 @@ internal static class FACodecWeights
     public static Tensor<T> Reverse<T>(IEngine engine, Tensor<T> x, double alpha)
     {
         var ops = MathHelper.GetNumericOperations<T>();
-        var stopped = new Tensor<T>(x._shape, x.ToVector());
+        var stopped = engine.StopGradient(x);
         return engine.TensorSubtract(engine.TensorMultiplyScalar(stopped, ops.FromDouble(1 + alpha)), engine.TensorMultiplyScalar(x, ops.FromDouble(alpha)));
     }
 }

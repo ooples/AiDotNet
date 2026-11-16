@@ -47,18 +47,22 @@ internal static class CosyVoiceDiffRO<T>
         if (policyLogits.Rank != 2 || policyLogits.Shape[0] == 0 || policyLogits.Shape[1] < 2
             || !policyLogits.Shape.ToArray().SequenceEqual(referenceLogits.Shape.ToArray()))
             throw new ArgumentException("DiffRO requires matching nonempty [frames, speech categories] logits.");
-        // The reference posterior is a constant even if a caller computed it on a tape.
-        var frozen = new Tensor<T>(referenceLogits.Shape.ToArray(), new Vector<T>(referenceLogits.ToArray()));
+        // The reference posterior is a constant even if a caller computed it on a tape (detached on the engine, so a
+        // compiled plan reads each step's reference).
+        var frozen = engine.StopGradient(referenceLogits);
         var logPolicy = engine.TensorLogSoftmax(policyLogits, axis: 1);
         var logReference = engine.TensorLogSoftmax(frozen, axis: 1);
         var kl = engine.ReduceSum(engine.TensorMultiply(engine.TensorExp(logPolicy),
             engine.TensorSubtract(logPolicy, logReference)), new[] { 0, 1 }, false);
-        var noise = new Tensor<T>(policyLogits.Shape.ToArray());
-        for (int i = 0; i < noise.Length; i++)
+        // Gumbel noise from the caller's generator, redrawn on every compiled replay.
+        var noise = AiDotNet.Training.CompiledStepRandom<T>.Draw(policyLogits.Shape.ToArray(), target =>
         {
-            double uniform = MathPolyfill.Clamp(random.NextDouble(), 1e-12, 1 - 1e-12);
-            noise.SetFlat(i, Ops.FromDouble(-Math.Log(-Math.Log(uniform))));
-        }
+            for (int i = 0; i < target.Length; i++)
+            {
+                double uniform = MathPolyfill.Clamp(random.NextDouble(), 1e-12, 1 - 1e-12);
+                target.SetFlat(i, Ops.FromDouble(-Math.Log(-Math.Log(uniform))));
+            }
+        });
         var soft = engine.Softmax(engine.TensorMultiplyScalar(engine.TensorAdd(policyLogits, noise),
             Ops.FromDouble(1 / options.Temperature)), axis: 1);
         var reward = logReward(soft);

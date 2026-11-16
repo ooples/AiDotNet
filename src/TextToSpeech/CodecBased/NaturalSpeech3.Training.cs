@@ -91,11 +91,14 @@ public partial class NaturalSpeech3<T>
                 bool redecoder = _options.CurrentStage == NaturalSpeech3Stage.Redecoder;
                 if (redecoder && Codec.RedecoderEmbeddings is null) throw new InvalidOperationException("Build the model with IncludeRedecoder to train the redecoder.");
                 var u = PrepareCodec(sample);
+                // The frozen codec's codes are the redecoder's step data: reading them is a host argmax, so they are
+                // taken before either objective.
+                var frozen = redecoder ? FrozenFactors(u) : null;
                 Tensor<T> generated;
-                using (new NoGradScope<T>()) generated = Detached(redecoder ? Redecoded(u) : CodecForward(u, Seeded(seed), training: true).Audio);
+                using (new NoGradScope<T>()) generated = Snapshot(frozen is not null ? Redecoded(frozen) : CodecForward(u, Seeded(seed), training: true).Audio);
                 TrainLayers(DiscriminatorLayers.ToList(), () => DiscriminatorLoss(u.Audio, generated), "discriminator", sample);
-                return redecoder
-                    ? TrainLayers(_redecoderLayers, () => RedecoderLoss(u), "redecoder", sample)
+                return frozen is not null
+                    ? TrainLayers(_redecoderLayers, () => RedecoderLoss(u, frozen), "redecoder", sample)
                     : TrainLayers(_codecEncoderLayers.Concat(_codecDecoderLayers).Concat(_codecHeadLayers).ToList(),
                         () => CodecLoss(u, Seeded(seed)), "codec", sample);
             }
@@ -128,7 +131,11 @@ public partial class NaturalSpeech3<T>
 
     private static Random Seeded(int seed) => AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
 
-    private static Tensor<T> Detached(Tensor<T> x) => new(x._shape, x.ToVector());
+    // Detached on the engine: a compiled plan refreshes the value on every replay, with no gradient through it.
+    private Tensor<T> Detached(Tensor<T> x) => Engine.StopGradient(x);
+
+    // A host copy of an eager pass's output, taken outside the traced objective.
+    private static Tensor<T> Snapshot(Tensor<T> x) => new(x._shape, x.ToVector());
 
     private T TrainLayers(IReadOnlyList<LayerBase<T>> layers, Func<Tensor<T>> loss, string group, TtsTrainingSample<T> sample)
     {
@@ -151,6 +158,11 @@ public partial class NaturalSpeech3<T>
         var selected = new HashSet<Tensor<T>>(Training.TapeTrainingStep<T>.CollectParameters(layers.ToList(), -1), TensorReferenceComparer<Tensor<T>>.Instance);
         return parameters.Where(selected.Contains).ToList();
     }
+
+    // max(x, floor) as relu(x - floor) + floor: the same value and gradient, recorded as ordinary traced ops (a scalar
+    // TensorMax is recorded eagerly against its trace-time shape, so a probe of a changed objective aborts on it).
+    private Tensor<T> AtLeast(Tensor<T> x, double floor)
+        => Engine.TensorAddScalar(Engine.ReLU(Engine.TensorAddScalar(x, Ops.FromDouble(-floor))), Ops.FromDouble(floor));
 
     private Tensor<T> Mean(Tensor<T> x) => Engine.TensorMultiplyScalar(Engine.ReduceSum(x, null), Ops.FromDouble(1.0 / x.Length));
 
@@ -229,7 +241,7 @@ public partial class NaturalSpeech3<T>
         var codec = Codec;
         foreach (var q in codec.Quantizers) q.SetTrainingMode(training);
         var latent = codec.Encoder.Forward(AsWave(u.Audio));
-        var f = codec.Factorize(latent, u.ProsodyFeature, training, random);
+        var f = codec.Factorize(latent, u.ProsodyFeature, training, random, readCodes: false);
         var terms = new List<Tensor<T>>();
         foreach (var q in codec.Quantizers)
         {
@@ -263,16 +275,12 @@ public partial class NaturalSpeech3<T>
     private Tensor<T> F0Loss(List<Tensor<T>> heads, CodecUtterance u)
     {
         int frames = u.F0.Length;
-        var voicedIndex = Engine.TensorNonzero(u.Voiced);
-        int voicedCount = voicedIndex.Shape[0];
         var terms = new List<Tensor<T>>();
-        if (voicedCount > 0)
-        {
-            var rows = Engine.Reshape(voicedIndex, new[] { voicedCount });
-            var predicted = Engine.TensorIndexSelect(Engine.Reshape(heads[0], new[] { frames, 1 }), rows, 0);
-            var target = Engine.TensorIndexSelect(Engine.Reshape(u.F0, new[] { frames, 1 }), rows, 0);
-            terms.Add(Mean(Engine.TensorAbs(Engine.TensorSubtract(predicted, target))));
-        }
+        // The mean over the voiced frames as a masked sum over the voiced count (no term without voiced frames), so a
+        // compiled plan reads each step's voicing instead of the traced step's frame indices.
+        var voiced = Engine.Reshape(u.Voiced, new[] { frames });
+        var error = Engine.TensorMultiply(Engine.TensorAbs(Engine.TensorSubtract(Engine.Reshape(heads[0], new[] { frames }), Engine.Reshape(u.F0, new[] { frames }))), voiced);
+        terms.Add(Engine.TensorDivide(Engine.ReduceSum(error, null), AtLeast(Engine.ReduceSum(voiced, null), 1.0)));
         var logits = Engine.Reshape(heads[1], new[] { frames });
         var labels = u.Voiced;
         // BCE with logits: softplus(x) − y·x.
@@ -310,14 +318,18 @@ public partial class NaturalSpeech3<T>
         });
     }
 
-    private Tensor<T> Redecoded(CodecUtterance u)
+    private FACodecFactors<T> FrozenFactors(CodecUtterance u)
     {
-        FACodecFactors<T> f;
-        using (new NoGradScope<T>())
-        {
-            foreach (var q in Codec.Quantizers) q.SetTrainingMode(false);
-            f = Codec.Factorize(Codec.Encoder.Forward(AsWave(u.Audio)), u.ProsodyFeature, false, null);
-        }
+        using var _ = new NoGradScope<T>();
+        foreach (var q in Codec.Quantizers) q.SetTrainingMode(false);
+        var f = Codec.Factorize(Codec.Encoder.Forward(AsWave(u.Audio)), u.ProsodyFeature, false, null);
+        return f with { Speaker = Snapshot(f.Speaker) };
+    }
+
+    private Tensor<T> Redecoded(CodecUtterance u) => Redecoded(FrozenFactors(u));
+
+    private Tensor<T> Redecoded(FACodecFactors<T> f)
+    {
         var speaker = Ns2Ops.Detach(f.Speaker);
         var wave = Codec.Redecode(Codec.RedecoderEmbed(f.Codes, speaker, detail: true, training: IsTrainingMode), speaker);
         return Engine.Reshape(wave, new[] { wave.Length });
@@ -325,9 +337,9 @@ public partial class NaturalSpeech3<T>
 
     // The redecoder reconstructs a frozen codec's codes in their own timbre with the codec's reconstruction and adversarial
     // losses (the release does not show how it was trained).
-    private Tensor<T> RedecoderLoss(CodecUtterance u)
+    private Tensor<T> RedecoderLoss(CodecUtterance u, FACodecFactors<T> frozen)
     {
-        var generated = Redecoded(u);
+        var generated = Redecoded(frozen);
         return Engine.TensorAdd(Engine.TensorMultiplyScalar(MelLoss(u.Audio, generated), Ops.FromDouble(_options.ReconstructionWeight)), AdversarialLoss(u.Audio, generated));
     }
 
@@ -362,8 +374,9 @@ public partial class NaturalSpeech3<T>
             for (int l = 0; l < fake[k].Features.Count - 1; l++)
             {
                 var r = Detached(reference[k].Features[l]);
-                double scale = r.ToArray().Average(v => Math.Abs(Ops.ToDouble(v)));
-                features.Add(Engine.TensorMultiplyScalar(Mean(Engine.TensorAbs(Engine.TensorSubtract(fake[k].Features[l], r))), Ops.FromDouble(1.0 / Math.Max(scale, 1e-8))));
+                // mean ‖D(x)‖₁ on the engine (floored at 1e-8), so a compiled plan rescales by each step's reference.
+                var scale = AtLeast(Mean(Engine.TensorAbs(r)), 1e-8);
+                features.Add(Engine.TensorDivide(Mean(Engine.TensorAbs(Engine.TensorSubtract(fake[k].Features[l], r))), scale));
             }
         var feature = features.Count == 0 ? new Tensor<T>(new[] { 1 }) : Engine.TensorMultiplyScalar(Sum(features), Ops.FromDouble(1.0 / features.Count));
         return Engine.TensorAdd(Engine.TensorMultiplyScalar(adversarial, Ops.FromDouble(o.AdversarialWeight)), Engine.TensorMultiplyScalar(feature, Ops.FromDouble(o.FeatureWeight)));

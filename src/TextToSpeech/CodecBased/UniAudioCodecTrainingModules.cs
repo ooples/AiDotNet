@@ -204,7 +204,8 @@ internal sealed class UniAudioCodecGan<T>
             adversarial = adversarial is null ? term : _engine.TensorAdd(adversarial, term);
             for (int j = 0; j < fake.Features[i].Length; j++)
             {
-                var target = new Tensor<T>(real.Features[i][j].Shape.ToArray(), new Vector<T>(real.Features[i][j].ToArray()));
+                // Detached on the engine, so a compiled plan matches each step's real features.
+                var target = _engine.StopGradient(real.Features[i][j]);
                 term = Mean(_engine.TensorAbs(_engine.TensorSubtract(fake.Features[i][j], target)));
                 matching = matching is null ? term : _engine.TensorAdd(matching, term);
                 count++;
