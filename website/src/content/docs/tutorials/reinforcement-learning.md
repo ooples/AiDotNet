@@ -92,5 +92,5 @@ The facade trains a single agent against an environment via `ConfigureReinforcem
 
 ## Next Steps
 
-- [CartPole Sample](/samples/reinforcement-learning/CartPole/)
+- [CartPole Sample](https://github.com/ooples/AiDotNet/tree/master/samples/reinforcement-learning/CartPole/)
 - [Neural Network Training](/docs/examples/neural-network-training/)

@@ -1,68 +1,45 @@
 ---
 import AccountLayout from '../../../layouts/AccountLayout.astro';
 const base = import.meta.env.BASE_URL;
+const btn = 'px-4 py-2 text-sm font-semibold rounded-xl transition-opacity';
+const row = 'w-full text-left flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-700/50 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors disabled:opacity-60 disabled:cursor-wait';
 ---
 
 <AccountLayout title="Billing - AiDotNet" description="Manage your AiDotNet subscription, view invoices, and update payment methods." activeTab="billing">
-  <div id="billing-root" class="space-y-6" data-billing-loaded="false">
+  <div id="billing-root" class="space-y-6" data-billing-loaded="false" data-tier="" data-billing-account="">
     <div>
       <h1 class="text-2xl font-bold text-slate-900 dark:text-white">Billing</h1>
       <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Manage your subscription and payment method</p>
     </div>
 
+    <div id="billing-error" role="alert" class="hidden p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-sm text-red-600 dark:text-red-400"></div>
+
     <!-- Current plan -->
     <div class="gsap-fade-up bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">
-      <div class="flex items-start justify-between">
+      <div class="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 class="text-sm font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Current Plan</h2>
           <div class="flex items-center gap-3">
-            <span id="billing-plan" class="text-2xl font-bold text-slate-900 dark:text-white">Free</span>
-            <span id="billing-badge" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400">
-              Active
-            </span>
+            <span id="billing-plan" class="text-2xl font-bold text-slate-900 dark:text-white">Loading…</span>
+            <span id="billing-badge" class="hidden inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold"></span>
           </div>
-          <p id="billing-price" class="mt-1 text-sm text-slate-500 dark:text-slate-400">$0/month</p>
+          <p id="billing-price" class="mt-1 text-sm text-slate-500 dark:text-slate-400"></p>
+          <p id="billing-renewal" class="hidden mt-1 text-sm text-slate-500 dark:text-slate-400"></p>
         </div>
-        <div id="billing-actions">
-          <a
-            href={`${base}pricing/`}
-            class="px-4 py-2 text-sm font-semibold text-white rounded-xl bg-gradient-brand hover:opacity-90 transition-opacity"
-            id="billing-upgrade-btn"
-          >
-            Upgrade to Pro
-          </a>
+        <div id="billing-actions" class="flex flex-wrap gap-2">
+          <a id="billing-change-plan" href={`${base}pricing/`} class={`${btn} text-white bg-gradient-brand hover:opacity-90`}>Upgrade</a>
+          <button id="billing-cancel" type="button" class={`hidden ${btn} border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700`}>Cancel subscription</button>
         </div>
       </div>
 
-      <!-- Plan features -->
+      <p id="billing-no-account" class="hidden mt-4 p-3 rounded-xl bg-amber-500/10 text-sm text-amber-700 dark:text-amber-300">
+        This plan was set up by the AiDotNet team rather than through online checkout, so there is no online billing account to manage.
+        Email <a class="underline" href="mailto:support@aidotnet.dev">support@aidotnet.dev</a> to change or cancel it.
+      </p>
+
       <div class="mt-6 pt-6 border-t border-slate-200 dark:border-slate-700">
         <h3 class="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3">Your plan includes:</h3>
-        <ul id="plan-features" class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <li class="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-            <svg class="w-4 h-4 text-green-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-            </svg>
-            8,100+ public classes
-          </li>
-          <li class="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-            <svg class="w-4 h-4 text-green-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-            </svg>
-            139 AI/ML modules
-          </li>
-          <li class="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-            <svg class="w-4 h-4 text-green-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-            </svg>
-            GPU acceleration (any vendor)
-          </li>
-          <li class="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-            <svg class="w-4 h-4 text-green-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-            </svg>
-            BSL 1.1 license (converts to Apache 2.0 after 3 years)
-          </li>
-        </ul>
+        <ul id="plan-features" class="grid grid-cols-1 sm:grid-cols-2 gap-2"></ul>
       </div>
     </div>
 
@@ -70,43 +47,35 @@ const base = import.meta.env.BASE_URL;
     <div id="portal-section" class="hidden gsap-fade-up bg-white dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">
       <h2 class="text-sm font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-4">Payment & Invoices</h2>
       <div class="space-y-4">
-        <a
-          id="manage-subscription-btn"
-          href="#"
-          class="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-700/50 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-        >
-          <div class="flex items-center gap-3">
-            <svg class="w-5 h-5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+        <button id="manage-subscription-btn" type="button" class={row}>
+          <span class="flex items-center gap-3">
+            <svg class="w-5 h-5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 0 0 2.25-2.25V6.75A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25v10.5A2.25 2.25 0 0 0 4.5 19.5Z" />
             </svg>
-            <div>
-              <p class="text-sm font-medium text-slate-900 dark:text-white">Manage Subscription</p>
-              <p class="text-xs text-slate-500 dark:text-slate-400">Update payment, switch plans, cancel</p>
-            </div>
-          </div>
-          <svg class="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+            <span>
+              <span class="block text-sm font-medium text-slate-900 dark:text-white">Manage Subscription</span>
+              <span class="block text-xs text-slate-500 dark:text-slate-400">Update payment method, billing details, seats</span>
+            </span>
+          </span>
+          <svg class="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
           </svg>
-        </a>
+        </button>
 
-        <a
-          id="view-invoices-btn"
-          href="#"
-          class="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-700/50 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-        >
-          <div class="flex items-center gap-3">
-            <svg class="w-5 h-5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+        <button id="view-invoices-btn" type="button" class={row}>
+          <span class="flex items-center gap-3">
+            <svg class="w-5 h-5 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
             </svg>
-            <div>
-              <p class="text-sm font-medium text-slate-900 dark:text-white">View Invoices</p>
-              <p class="text-xs text-slate-500 dark:text-slate-400">Download past invoices and receipts</p>
-            </div>
-          </div>
-          <svg class="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+            <span>
+              <span class="block text-sm font-medium text-slate-900 dark:text-white">View Invoices</span>
+              <span class="block text-xs text-slate-500 dark:text-slate-400">Download past invoices and receipts</span>
+            </span>
+          </span>
+          <svg class="w-5 h-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
           </svg>
-        </a>
+        </button>
       </div>
     </div>
 
@@ -122,7 +91,7 @@ const base = import.meta.env.BASE_URL;
             </svg>
           </summary>
           <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">
-            Click "Manage Subscription" above to access the Stripe Customer Portal. From there you can cancel your subscription at any time. Your access will continue until the end of the current billing period.
+            Click "Cancel subscription" above. Stripe confirms the cancellation, and nothing more is charged. Your access will continue until the end of the current billing period.
           </p>
         </details>
         <details class="group">
@@ -133,7 +102,7 @@ const base = import.meta.env.BASE_URL;
             </svg>
           </summary>
           <p class="mt-2 text-sm text-slate-500 dark:text-slate-400">
-            Yes. Use the Stripe Customer Portal to switch between billing periods. Annual plans save you about 17% compared to monthly.
+            Yes. Yes. Click "Change plan" above and pick the other billing period; Stripe prorates the difference. Annual plans save you about 17% compared to monthly.
           </p>
         </details>
         <details class="group">
@@ -152,75 +121,110 @@ const base = import.meta.env.BASE_URL;
   </div>
 
   <script>
-    import { supabase } from '../../../lib/supabase';
+    import { loadBillingState, openPortal, formatMoney, formatDate, TIER_LABEL, type PlanTier, type PortalAction } from '../../../lib/billing';
 
-    // Load-complete marker. Set on #billing-root once the async load
-    // finishes (success OR the auth/profile fetch bailing out) so tests
-    // have a deterministic signal to wait on rather than racing against
-    // the pre-hydration "Free" default that's baked into the HTML.
-    function markBillingLoaded() {
-      document.getElementById('billing-root')?.setAttribute('data-billing-loaded', 'true');
+    const FEATURES: Record<PlanTier, string[]> = {
+      free: ['Training and inference (always free)', 'All 8,100+ public classes', 'GPU acceleration (any vendor)', 'Model save/load with a free Community license key'],
+      pro: ['Commercial use authorized', '5 machine activations per seat', 'Model encryption (AES-256-GCM)', 'Priority GitHub issues and direct email support', 'API key management', 'Production deployments'],
+      enterprise: ['Everything in Professional', '10 machine activations per seat', 'Offline license validation', 'Air-gapped deployment support', 'Dedicated support engineer + custom SLA', 'Architecture review and consulting'],
+    };
+    const LIST_PRICE: Record<PlanTier, string> = { free: '$0/month', pro: '$29/month per seat', enterprise: '$99/month per seat' };
+
+    const $ = (id: string) => document.getElementById(id);
+    const root = $('billing-root')!;
+
+    function showError(message: string) {
+      const el = $('billing-error')!;
+      el.textContent = message;
+      el.classList.remove('hidden');
+      el.scrollIntoView({ block: 'nearest' });
+    }
+
+    // Every portal control: disable while the request is in flight, surface any failure.
+    function wirePortal(id: string, req: PortalAction) {
+      const el = $(id) as HTMLButtonElement | null;
+      el?.addEventListener('click', async () => {
+        $('billing-error')!.classList.add('hidden');
+        el.disabled = true;
+        const err = await openPortal(req, '/account/billing/');
+        if (err) { el.disabled = false; showError(err); }
+      });
+    }
+
+    function badge(text: string, tone: 'ok' | 'warn' | 'bad') {
+      const el = $('billing-badge')!;
+      const tones = {
+        ok: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400',
+        warn: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400',
+        bad: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400',
+      };
+      el.textContent = text;
+      el.className = `inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${tones[tone]}`;
     }
 
     async function loadBilling() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { markBillingLoaded(); return; }
+      const state = await loadBillingState();
+      if (!state.signedIn) { root.setAttribute('data-billing-loaded', 'true'); return; }
+      // What follows is then only the profile's view; say so rather than show it as the whole truth.
+      if (state.error) showError(state.error);
 
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('subscription_tier, subscription_status, stripe_customer_id')
-        .eq('id', user.id)
-        .single();
+      const sub = state.subscription;
+      // The live Stripe subscription wins over the profile mirror when they disagree.
+      const tier: PlanTier = sub?.tier ?? state.tier;
+      const paid = tier !== 'free';
+      root.dataset.tier = tier;
+      root.dataset.billingAccount = String(state.hasBillingAccount);
 
-      if (!profile) { markBillingLoaded(); return; }
+      $('billing-plan')!.textContent = TIER_LABEL[tier];
+      const status = sub?.status ?? state.status;
+      if (sub?.cancel_at_period_end) badge('Cancels at period end', 'warn');
+      else if (status === 'active') badge('Active', 'ok');
+      else if (status === 'trialing') badge('Trial', 'ok');
+      else badge(status.replace(/_/g, ' '), status === 'past_due' || status === 'suspended' ? 'bad' : 'warn');
 
-      const planEl = document.getElementById('billing-plan');
-      const priceEl = document.getElementById('billing-price');
-      const badgeEl = document.getElementById('billing-badge');
-      const upgradeBtn = document.getElementById('billing-upgrade-btn');
-      const portalSection = document.getElementById('portal-section');
+      $('billing-price')!.textContent = sub?.unit_amount != null
+        ? `${formatMoney(sub.unit_amount * (sub.quantity || 1), sub.currency)}/${sub.interval}${sub.quantity > 1 ? ` (${sub.quantity} seats)` : ''}`
+        : LIST_PRICE[tier];
 
-      // Accept both 'pro' (UI canonical) and the legacy 'professional'
-      // (stripe-webhook used to write this directly when the Stripe
-      // metadata tier was 'professional'). New webhook code normalises to
-      // 'pro', but existing profile rows may still carry 'professional'
-      // until the next checkout event — treat them as the same tier here
-      // so the Pro UI lights up instead of falling through to Free.
-      const tier = profile.subscription_tier;
-      if (tier === 'pro' || tier === 'professional') {
-        if (planEl) planEl.textContent = 'Pro';
-        if (priceEl) priceEl.textContent = '$29/month';
-        if (upgradeBtn) upgradeBtn.textContent = 'Manage Plan';
-        if (portalSection) portalSection.classList.remove('hidden');
-      } else if (tier === 'enterprise') {
-        if (planEl) planEl.textContent = 'Enterprise';
-        if (priceEl) priceEl.textContent = 'Custom pricing';
-        if (upgradeBtn) {
-          upgradeBtn.textContent = 'Contact Support';
-          upgradeBtn.setAttribute('href', 'mailto:support@aidotnet.dev');
-        }
-        if (portalSection) portalSection.classList.remove('hidden');
+      if (sub) {
+        const renewal = $('billing-renewal')!;
+        renewal.textContent = sub.cancel_at_period_end
+          ? `Your access ends on ${formatDate(sub.current_period_end)}.`
+          : sub.status === 'trialing' && sub.trial_end
+            ? `Trial ends on ${formatDate(sub.trial_end)}.`
+            : `Renews on ${formatDate(sub.current_period_end)}.`;
+        renewal.classList.remove('hidden');
       }
 
-      if (profile.subscription_status !== 'active' && badgeEl) {
-        badgeEl.textContent = profile.subscription_status;
-        badgeEl.className = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400';
+      const list = $('plan-features')!;
+      list.replaceChildren(...FEATURES[tier].map((f) => {
+        const li = document.createElement('li');
+        li.className = 'flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400';
+        li.innerHTML = '<svg class="w-4 h-4 text-green-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>';
+        li.append(f);
+        return li;
+      }));
+
+      const change = $('billing-change-plan')!;
+      change.textContent = paid ? 'Change plan' : 'Upgrade';
+
+      if (state.hasBillingAccount) {
+        $('portal-section')!.classList.remove('hidden');
+        if (sub && !sub.cancel_at_period_end) $('billing-cancel')!.classList.remove('hidden');
+      } else if (paid) {
+        $('billing-no-account')!.classList.remove('hidden');
       }
 
-      // If customer has Stripe ID, link portal buttons
-      if (profile.stripe_customer_id) {
-        const portalUrl = (import.meta.env.PUBLIC_STRIPE_PORTAL_URL || '').trim();
-        if (portalUrl) {
-          const manageBtn = document.getElementById('manage-subscription-btn');
-          const invoicesBtn = document.getElementById('view-invoices-btn');
-          if (manageBtn) manageBtn.setAttribute('href', portalUrl);
-          if (invoicesBtn) invoicesBtn.setAttribute('href', portalUrl);
-        }
-      }
-
-      markBillingLoaded();
+      root.setAttribute('data-billing-loaded', 'true');
     }
 
-    loadBilling();
+    wirePortal('manage-subscription-btn', { action: 'manage' });
+    wirePortal('view-invoices-btn', { action: 'manage' });
+    wirePortal('billing-cancel', { action: 'cancel' });
+    loadBilling().catch((e) => {
+      showError('Could not load your billing details. Please refresh the page.');
+      console.error(e);
+      root.setAttribute('data-billing-loaded', 'true');
+    });
   </script>
 </AccountLayout>

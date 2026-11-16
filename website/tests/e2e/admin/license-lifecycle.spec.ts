@@ -173,6 +173,56 @@ test.describe('License lifecycle (real backend)', () => {
     expect(validateRes.status(), `validate-license: ${JSON.stringify(validateJson)}`).toBe(200);
     expect(validateJson.valid).toBe(true);
 
+    // ---- Seat limit: the key has 2 seats; a second machine fits, a third is refused ----
+    const machine2 = randomBytes(32).toString('hex');
+    const machine3 = randomBytes(32).toString('hex');
+    const second = await request.post(`${functionsUrl}/validate-license`, {
+      headers: sdkHeaders, data: { license_key: issued.key, machine_id_hash: machine2, hostname: 'e2e', package: 'AiDotNet' },
+    });
+    expect(second.status(), `second machine: ${await second.text()}`).toBe(200);
+    const third = await request.post(`${functionsUrl}/validate-license`, {
+      headers: sdkHeaders, data: { license_key: issued.key, machine_id_hash: machine3, hostname: 'e2e', package: 'AiDotNet' },
+    });
+    expect(third.status()).toBe(403);
+    expect(await third.json()).toMatchObject({ valid: false, error: 'activation_limit', max_activations: 2 });
+
+    const validate = () => request.post(`${functionsUrl}/validate-license`, {
+      headers: sdkHeaders,
+      data: { license_key: issued!.key, machine_id_hash: machine, package: 'AiDotNet' },
+    });
+    const row = page.locator('tr', { has: page.locator(`[data-id="${issued.id}"]`) });
+
+    // ---- Activations: the SDK's machine is listed, and the admin can deactivate it ----
+    await page.locator(`.activations-btn[data-id="${issued.id}"]`).click();
+    const activations = page.locator('#activations-modal');
+    await expect(activations).toBeVisible();
+    await expect(activations).toContainText(machine.substring(0, 12), { timeout: 15_000 });
+    await expect(activations).toContainText('e2e'); // hostname sent with the activation
+    // Both active machines are listed; deactivate them one by one.
+    const deactivateButtons = activations.locator('.deactivate-activation-btn');
+    await expect(deactivateButtons).toHaveCount(2, { timeout: 15_000 });
+    for (let left = 2; left > 0; left--) {
+      await deactivateButtons.first().click();
+      await expect(deactivateButtons).toHaveCount(left - 1, { timeout: 15_000 });
+    }
+    await page.locator('#close-activations-btn').click();
+    await expect(activations).toBeHidden();
+    // Deactivation frees the seats: the refused third machine now fits, and the first re-activates.
+    const freed = await request.post(`${functionsUrl}/validate-license`, {
+      headers: sdkHeaders, data: { license_key: issued.key, machine_id_hash: machine3, hostname: 'e2e', package: 'AiDotNet' },
+    });
+    expect(freed.status(), `third machine after deactivation: ${await freed.text()}`).toBe(200);
+    expect((await validate()).status(), 'validate after deactivation').toBe(200);
+
+    // ---- Suspend refuses validation; Reactivate restores it ----
+    await page.locator(`.suspend-btn[data-id="${issued.id}"]`).click();
+    await expect(row).toContainText('suspended');
+    const suspended = await validate();
+    expect(suspended.status(), 'validate while suspended').toBe(403);
+    await page.locator(`.reactivate-btn[data-id="${issued.id}"]`).click();
+    await expect(row).toContainText('active');
+    expect((await validate()).status(), 'validate after reactivation').toBe(200);
+
     // ---- Revoke in the UI ----
     await page.locator(`.revoke-btn[data-id="${issued.id}"]`).click();
     await expect(page.locator('tr', { has: page.locator(`[data-id="${issued.id}"]`) })).toContainText('revoked');
