@@ -59,6 +59,17 @@
         "owned_elsewhere_LstmSequenceTrain": "Tacotron, ForwardTacotron, NonAttentiveTacotron, CosyVoice2 (upstream LSTM replay state)",
         "upstream_or_shared_proposals": "TransformerTTS (BatchNorm probe), FastSpeech2/ProDiff/AdaSpeech2 (VarianceAdaptorLayer), SeedTTS/SparkTTS (CodecWaveformGan.Detached, IndexTtsPerceiver), CosyVoice/CosyVoice2 vocoder (HiftModules), CosyVoiceOptimizerOptions/LlamaOmni (CTCLoss reads on the host)",
         "claimed_next_by_us": "GPT-SoVITS, SpiritLM, FireRedTTS, MeloTTS, MegaTTS2, StyleTTS, SpeedySpeech, LLMIntegratedSpeechGPT, Tacotron2 (TensorSlice read), ForwardTacotron (TensorIndexSelect read), SoundStorm (frozen encoder moves one LR step)"
+      },
+      "round2": {
+        "commits": {
+          "GPT-SoVITS V3/V4/V5, MeloTTS": "f061db8591",
+          "MegaTTS2 code-decoder sizing": "dd68550eb1",
+          "StyleTTS reconstruction/prosody (R1 penalty as one recorded node, norms from engine reductions, new eager-parity test)": "fb3c0b639d",
+          "SpiritLM pitch VQ, FireRedTTS product quantizer/codec/regulator": "02d33308a5",
+          "SpeedySpeech and Tacotron2 host reads": "d5bfb7e9ba"
+        },
+        "results": "GPT-SoVITS/Melo/MegaTTS2/StyleTTS: 159/159 on package run 43940828211, 149/159 on run 43955817990 (see layernorm-stateref). SpiritLM/SpeechGPT/FireRed/SoundStorm: 103/110 (7 upstream-blocked). SpeedySpeech/Tacotron2/ForwardTacotron: host reads removed; 5 tests blocked only upstream (BatchNorm probe, LSTM).",
+        "merged_into": "claude/2524-tts-replay; merged-tree vs coordination-head verification running"
       }
     },
     {
@@ -348,7 +359,7 @@
       "status": "pending",
       "from": "jputnam61 Claude session (contributor branch claude/2524-tts-replay)",
       "files": "AiDotNet.Tensors Engine.GroupNorm, or src/TextToSpeech/FlowDiffusion/MatchaDecoder.cs",
-      "finding": "CosyVoiceOptimizerOptions CoupledDecay (v1, clone): MatchaDecoder blocks use GroupNormalizationLayer and Engine.GroupNorm computes eagerly under a training trace.",
+      "finding": "CosyVoiceOptimizerOptions CoupledDecay (v1, clone): MatchaDecoder blocks use GroupNormalizationLayer and Engine.GroupNorm computes eagerly under a training trace. Also blocks FireRedTTS FlowDecoder (MatchaDecoder).",
       "proposed_fix": "Upstream: record GroupNorm lazily in training traces.",
       "alternatives": "Interim: compose the norm from reductions in MatchaDecoder (as CosyVoiceModules.SingleGroupNorm does)."
     },
@@ -357,7 +368,7 @@
       "status": "pending",
       "from": "jputnam61 Claude session (contributor branch claude/2524-tts-replay)",
       "files": "AiDotNet.Tensors CpuEngine.BatchNorm GraphMode branch",
-      "finding": "TransformerTTS (and likely Tacotron2, NonAttentiveTacotron): BatchNorm on non-float or non-rank-4 input computes immediately, reading the probe placeholder, so the probe aborts with \"reads 'Reshape'\". Trigger: ConvBatchNormStackLayer, rank-2 double.",
+      "finding": "TransformerTTS (and likely Tacotron2, NonAttentiveTacotron): BatchNorm on non-float or non-rank-4 input computes immediately, reading the probe placeholder, so the probe aborts with \"reads 'Reshape'\". Trigger: ConvBatchNormStackLayer, rank-2 double. Also blocks SpeedySpeech (DilatedResidualConvBlock), Tacotron2 and ForwardTacotron (ConvBatchNormStackLayer, SeriesPredictor/CBHG), FireRedTTS SpeechTokenizer (IndexTtsEcapa) and MelCodec (MegaTtsMelDiscriminator). With BatchNorm bypassed locally those objectives replay and train.",
       "proposed_fix": "When scope.IsProbe, record the BatchNorm node with correctly shaped outputs instead of computing.",
       "alternatives": "None in AiDotNet without weakening the guard."
     },
@@ -419,6 +430,33 @@
       "files": "src/TextToSpeech/FlowDiffusion/DiTToTTS.CodecTraining.cs",
       "finding": "Root review: TrainCodec adds eager NoGrad CodecReconstruction(target).Generated.Clone before actual generator objective. This duplicates a training forward and may repeat quantizer state effects. Proper contracts/performance require avoiding duplicate forwards.",
       "proposed_fix": "Owner should use the successful-step named retained output for intended pre-update handoff after API validation; no assertion changes. Our agents remain READ ONLY. Tortoise duplicate is separately covered by approved overlap reconciliation."
+    },
+    {
+      "id": "layernorm-stateref",
+      "status": "pending",
+      "from": "jputnam61 Claude session (contributor branch claude/2524-tts-replay)",
+      "files": "AiDotNet.Tensors LayerNorm node (package 0.151.1-coordination.43955817990)",
+      "finding": "New with the latest pinned package: 10 GPT-SoVITS/Melo/MegaTTS2/StyleTTS tests that pass on package run 43940828211 fail with \"Closure objective replay contract is missing: op 'LayerNorm' field 'Execute.stateRef' holds a AiDotNet.Tensors.Engines.Autodiff.LayerNormStateRef`1\".",
+      "proposed_fix": "Upstream: the LayerNorm node's Execute closure must not capture LayerNormStateRef (declare it as saved state the guard can rebind, or recreate it per replay).",
+      "alternatives": "None in AiDotNet without weakening the guard."
+    },
+    {
+      "id": "tensors-1764-in-coordination-package",
+      "status": "pending",
+      "from": "jputnam61 Claude session (contributor branch claude/2524-tts-replay)",
+      "files": "AiDotNet.Tensors package for PR2524",
+      "finding": "SoundStorm TextToSemanticTraining_LeavesTheByT5EncoderFrozen: the training trace records backward for the frozen ByT5 encoder under NoGradScope, so one Adam step moves it. The fix is Tensors PR #1764 (b9e5bfe85 / 71ce13fa3); it is not an ancestor of the coordination package commit 641be3d443ee, nor in 0.151.1-validation.1.",
+      "proposed_fix": "Include #1764 (approved, mergeable) in the next coordination Tensors package.",
+      "alternatives": ""
+    },
+    {
+      "id": "normed-conv-spectral-norm",
+      "status": "pending",
+      "from": "jputnam61 Claude session (contributor branch claude/2524-tts-replay)",
+      "files": "src/NeuralNetworks/Layers/NormedConv1DLayer.cs, NormedConv2DLayer.cs (shared; overlaps GanVocoderBase owner)",
+      "finding": "SpiritLM and SpeechGPT vocoders: Kernel() with spectral normalization reads the weights on the host (v.ToVector()), runs the power iteration on the host and writes _u/_v back; used by HiFiGanDiscriminators' first scale discriminator, so every HiFi-GAN-style discriminator is affected.",
+      "proposed_fix": "Power iteration with engine ops on StopGradient(v): v'=normalize(vd^T u), u'=normalize(vd v'), sigma=u'^T v v'; persist u'/v' through a CompiledStepHostValue node (x0 into sigma) keyed per layer, as GLM4Voice's codebook statistics do.",
+      "alternatives": "Owner of GanVocoderBase takes it."
     }
   ],
   "question_protocol": [
@@ -428,7 +466,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-16T21:46:14.286576+00:00",
+  "updated_utc": "2026-11-16T21:48:14.118569Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43955817990",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
