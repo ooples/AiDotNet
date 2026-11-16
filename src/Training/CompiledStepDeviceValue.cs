@@ -30,7 +30,11 @@ internal static class CompiledStepDeviceValue<T>
     /// <param name="shape">The shape <paramref name="produce"/> returns.</param>
     /// <param name="produce">Computes the value with the given engine. It must return a tensor of
     /// <paramref name="shape"/> and read nothing from the step but its own state (a seed source).</param>
-    public static Tensor<T> Compute(string name, Tensor<T> dependsOn, int[] shape, Func<IEngine, Tensor<T>> produce)
+    /// <param name="readsHostStateOnReplay">True when <paramref name="produce"/> reads host state that changes between
+    /// replays (a seed it draws itself), which a captured device graph cannot replay; false when everything that
+    /// changes reaches it through device tensors (a seed tensor redrawn by <see cref="CompiledStepRandom{T}"/>).</param>
+    public static Tensor<T> Compute(string name, Tensor<T> dependsOn, int[] shape, Func<IEngine, Tensor<T>> produce,
+        bool readsHostStateOnReplay = true)
     {
         Guard.NotNull(name);
         Guard.NotNull(dependsOn);
@@ -42,7 +46,7 @@ internal static class CompiledStepDeviceValue<T>
 
         var scope = GraphMode.Current
             ?? throw new InvalidOperationException("GraphMode reported active without a scope.");
-        return scope.RecordVariadic(
+        var recorded = scope.RecordVariadic(
             LazyNodeType.Custom,
             name,
             new[] { dependsOn },
@@ -54,5 +58,9 @@ internal static class CompiledStepDeviceValue<T>
                 AiDotNet.Tensors.Engines.DirectGpuTensorEngine.CopyResultInto(replayEngine, value, result);
             },
             static (_, _, _, _, _, _) => { });
+        // A value that reads host state on replay (a seed drawn by the closure) would be frozen at its capture-time
+        // value by a captured device graph, so such a step is replayed node by node instead.
+        if (readsHostStateOnReplay && recorded.LazySource is LazyNode<T> node) node.ReplaysHostState = true;
+        return recorded;
     }
 }

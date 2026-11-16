@@ -68,9 +68,9 @@ internal sealed class SequenceNetworkOps<T>
 
     /// <summary>
     /// An inverted-dropout mask for <paramref name="x"/>: zero with probability <paramref name="rate"/>, otherwise
-    /// <c>1 / (1 − rate)</c>. The engine draws it (on a GPU engine, on the device) from a seed the step's
-    /// <paramref name="random"/> supplies, and a compiled training plan draws a fresh mask on every replay without a
-    /// host round trip.
+    /// <c>1 / (1 − rate)</c>. Its seed is a one-element tensor drawn from the step's <paramref name="random"/> and
+    /// redrawn before every compiled replay; a CUDA engine reads that seed on the device, so a captured step graph
+    /// draws a fresh mask on every replay with no host work beyond the four-byte seed.
     /// </summary>
     public static Tensor<T> DropoutMask(Tensor<T> x, double rate, Random random)
     {
@@ -80,7 +80,14 @@ internal sealed class SequenceNetworkOps<T>
             return new Tensor<T>(shape);
         var rateValue = NumOps.FromDouble(rate);
         var keep = NumOps.FromDouble(1.0 / (1.0 - rate));
-        return AiDotNet.Training.CompiledStepDeviceValue<T>.Compute("SequenceDropoutMask", x, shape,
-            engine => engine.TensorDropoutMask(shape, rateValue, keep, random.Next()));
+        // Integer-valued below 2^24, so the float tensor holds it exactly.
+        var seed = AiDotNet.Training.CompiledStepRandom<T>.Draw(new[] { 1 },
+            t => t[0] = NumOps.FromDouble(random.Next(1 << 24)));
+        return AiDotNet.Training.CompiledStepDeviceValue<T>.Compute("SequenceDropoutMask", seed, shape,
+            engine => engine is AiDotNet.Tensors.Engines.DirectGpuTensorEngine gpu
+                    && gpu.TrySeededDropoutMask(shape, rateValue, keep, seed, out var mask)
+                ? mask
+                : engine.TensorDropoutMask(shape, rateValue, keep, (int)NumOps.ToDouble(seed[0])),
+            readsHostStateOnReplay: false);
     }
 }
