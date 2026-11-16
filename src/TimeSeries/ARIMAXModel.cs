@@ -136,7 +136,7 @@ public partial class ARIMAXModel<T> : TimeSeriesModelBase<T>, IExogenousForecast
     /// 
     /// If all other factors were zero, the prediction would equal this intercept value.
     /// </remarks>
-    // The generated registry exposes [AR..., exogenous..., intercept, MA...] by stable field identity.
+    // The generated manifest defines flat offsets by stable field identity and source readiness.
     [AiDotNet.Attributes.FittedParameter]
     private T _intercept;
 
