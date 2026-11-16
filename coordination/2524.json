@@ -221,6 +221,23 @@
         "tests/AiDotNet.Tests/UnitTests/NeuralNetworks/Elementwise01NumericalRegressionTests.cs"
       ],
       "status": "claimed; root-reviewed bounded test-only repair underway"
+    },
+    {
+      "owner": "this session/artifact_feed worker",
+      "scope": "Test-only StandardScaler seven population-variance reference corrections",
+      "files": [
+        "tests/AiDotNet.Tests/IntegrationTests/Preprocessing/PreprocessingDeepMathIntegrationTests.cs",
+        "tests/AiDotNet.Tests/IntegrationTests/Preprocessing/ScalersDeepMathIntegrationTests.cs"
+      ],
+      "status": "CLAIMED; root-reviewed test-only population-variance formulas/comments; preserve all tolerances, no production edits/builds."
+    },
+    {
+      "owner": "this session/shared_replay_failures worker",
+      "scope": "Test-only DoRA four input-major Dense fixture packing corrections and rectangular control",
+      "files": [
+        "tests/AiDotNet.Tests/IntegrationTests/LoRA/LoRADeepMathIntegrationTests.cs"
+      ],
+      "status": "CLAIMED; root-reviewed DoRA fixture arrays plus independent rectangular control; preserve all four expected values/tolerances, no production edits/builds."
     }
   ],
   "verification": {
@@ -407,7 +424,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-16T21:08:48.240477+00:00",
+  "updated_utc": "2026-11-16T21:22:51.371652+00:00",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43940828211",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
