@@ -282,7 +282,7 @@ public class GradientEpisodicMemory<T, TInput, TOutput>
             _taskGradients.Add(gradientToStore);
         }
 
-        RecordMetric($"Task{TaskCount}_GradientNorm", Convert.ToDouble(VectorHelper.L2Norm(gradientToStore)));
+        RecordMetric($"Task{TaskCount}_GradientNorm", NumOps.ToDouble(VectorHelper.L2Norm(gradientToStore)));
     }
 
     /// <inheritdoc/>
@@ -305,7 +305,7 @@ public class GradientEpisodicMemory<T, TInput, TOutput>
     public bool ViolatesConstraint(Vector<T> gradient)
     {
         return _taskGradients.Any(taskGrad =>
-            Convert.ToDouble(ComputeDotProduct(gradient, taskGrad)) < Convert.ToDouble(_margin));
+            NumOps.ToDouble(ComputeDotProduct(gradient, taskGrad)) < NumOps.ToDouble(_margin));
     }
 
     #endregion
@@ -351,7 +351,7 @@ public class GradientEpisodicMemory<T, TInput, TOutput>
             T originalMagnitude = VectorHelper.L2Norm(gradients);
             T projectedMagnitude = VectorHelper.L2Norm(projected);
 
-            if (Convert.ToDouble(projectedMagnitude) > 1e-10)
+            if (NumOps.ToDouble(projectedMagnitude) > 1e-10)
             {
                 T scale = NumOps.Divide(originalMagnitude, projectedMagnitude);
                 projected = ScaleVector(projected, scale);
@@ -361,7 +361,7 @@ public class GradientEpisodicMemory<T, TInput, TOutput>
         // Track projection magnitude
         T projMag = VectorHelper.L2Norm(SubtractVectors(projected, gradients));
         _averageProjectionMagnitude = (_averageProjectionMagnitude * (_totalProjections - 1) +
-                                        Convert.ToDouble(projMag)) / _totalProjections;
+                                        NumOps.ToDouble(projMag)) / _totalProjections;
 
         return projected;
     }
@@ -467,11 +467,11 @@ public class GradientEpisodicMemory<T, TInput, TOutput>
         T refNormSq = ComputeDotProduct(refGradient, refGradient);
 
         // If no violation, return original gradient
-        if (Convert.ToDouble(dotProduct) >= Convert.ToDouble(_margin))
+        if (NumOps.ToDouble(dotProduct) >= NumOps.ToDouble(_margin))
             return gradient;
 
         // Project: g' = g - (g · g_ref / ||g_ref||^2) * g_ref
-        if (Convert.ToDouble(refNormSq) < 1e-10)
+        if (NumOps.ToDouble(refNormSq) < 1e-10)
             return gradient;
 
         T factor = NumOps.Divide(dotProduct, refNormSq);
@@ -578,7 +578,7 @@ public class GradientEpisodicMemory<T, TInput, TOutput>
         var state = base.GetStateForSerialization();
 
         state["MemorySizePerTask"] = _memorySizePerTask;
-        state["Margin"] = Convert.ToDouble(_margin);
+        state["Margin"] = NumOps.ToDouble(_margin);
         state["UseAGEM"] = _useAGEM;
         state["NormalizeGradients"] = _normalizeGradients;
         state["TotalProjections"] = _totalProjections;
