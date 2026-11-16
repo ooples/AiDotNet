@@ -364,6 +364,28 @@ public class ClapArchitectureTests
         Assert.Equal(eager, objective);
     }
 
+    /// <summary>
+    /// The resolved training target outlives a training step. It was the scratch memory of the caller's TensorArena,
+    /// which the first step's tape boundary rewinds, so the second step overwrote the caption ids and the text tower
+    /// rejected them ("input_ids requires token indices in [0, 64)").
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task ResolvedTrainingTarget_SurvivesTheArenaAcrossSteps()
+    {
+        await Task.Yield();
+        using var arena = AiDotNet.Tensors.Helpers.TensorArena.Create();
+        using var model = ClapReferenceTests.Build(fusion: false);
+        var proposed = new Tensor<double>(new[] { 2, 6 },
+            new Vector<double>(new double[] { 0.45, 5.2, 9.7, 2.1, 1.4, 0.9, 0.3, 33.4, 41.2, 17.8, 2.2, 63.9 }));
+        var target = ((AiDotNet.Interfaces.ITrainingObjectiveProvider<double>)model).ResolveTrainingTarget(Audio(2, 8192), proposed);
+        var ids = target.ToArray();
+        var audio = Audio(2, 8192);
+        for (int step = 0; step < 3; step++)
+            model.Train(audio, target);
+        Assert.Equal(ids, target.ToArray());
+        Assert.All(ids, id => Assert.Equal(Math.Round(id), id));
+    }
+
     private static Tensor<double> Audio(int batch, int samples)
     {
         var audio = new Tensor<double>(new[] { batch, samples });
