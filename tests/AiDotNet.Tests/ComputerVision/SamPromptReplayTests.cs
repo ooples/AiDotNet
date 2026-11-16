@@ -101,7 +101,9 @@ public class SamPromptReplayTests : IDisposable
             Assert.Equal(1.0 / 3.0, plan.Execute()[0], 12);
             plan.SetInputs(new[] { Tensor<double>.CreateDefault([1, 1, 2, 2], -1.0), new Tensor<double>([1, 1, 2, 2]) });
             Assert.Equal(1.0, plan.Execute()[0]);
-            plan.SetInputs(new[] { Tensor<double>.CreateDefault([1, 1, 2, 2], 1.0), truth });
+            // SetInputs refills the original leaves in place; use fresh truth data after the empty-mask replay.
+            plan.SetInputs(new[] { Tensor<double>.CreateDefault([1, 1, 2, 2], 1.0),
+                new Tensor<double>(new[] { 1.0, 0.0, 1.0, 0.0 }, [1, 1, 2, 2]) });
             Assert.Equal(0.5, plan.Execute()[0]);
         }
     }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.Models.Options;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -98,19 +99,21 @@ public class ARIMAXParameterRoundTripTests
         // The expected coefficients and forecast remain independent of their flat offsets.
         var distinct = new Vector<double>(count);
         var slots = model.ParameterLayout.Slots;
-        Assert.Equal(4, slots.Count);
+        var assignedOffsets = new HashSet<long>();
         void Assign(string field, double value)
         {
             var slot = Assert.Single(slots.Where(item =>
                 item.StableId.EndsWith("::" + field, StringComparison.Ordinal)));
             Assert.Equal(1L, slot.ParameterCount);
             Assert.True(slot.Offset.HasValue);
+            Assert.True(assignedOffsets.Add(slot.Offset.Value), "Each coefficient must occupy an independent flat slot.");
             distinct[checked((int)slot.Offset.Value)] = value;
         }
         Assign("_arCoefficients", 0.1);
         Assign("_exogenousCoefficients", 0.2);
         Assign("_intercept", 0.3);
         Assign("_maCoefficients", 0.4);
+        Assert.Equal(count, assignedOffsets.Count);
 
         var viaWith = model.WithParameters(distinct);
         AssertSame(distinct, viaWith.GetParameters());

@@ -178,6 +178,7 @@ public sealed class RetainedGenerationHandoffTests
                 new AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>
                 { InitialLearningRate = 0.01, EnableGradientClipping = false });
             using var callerArena = TensorArena.Create();
+            int eagerObjectiveForwards = 0;
             for (int step = 0; step < 3; step++)
             {
                 var input = new Tensor<double>(Enumerable.Repeat(step + 1.0, 96).ToArray(), new[] { 32, 3 });
@@ -191,6 +192,11 @@ public sealed class RetainedGenerationHandoffTests
                 {
                     model.TrainObjective(input, input, (_, _) =>
                     {
+                        if (!compile && GradientRecording.IsRecording<double>())
+                        {
+                            Assert.False(GraphMode.IsActive);
+                            eagerObjectiveForwards++;
+                        }
                         var waveform = engine.TensorMatMul(input, weight);
                         if (GradientRecording.IsRecording<double>())
                             GradientRecording.RetainOutput("generation", engine.StopGradient(waveform));
@@ -209,7 +215,9 @@ public sealed class RetainedGenerationHandoffTests
                     for (int channel = 0; channel < 3; channel++)
                         Assert.Equal(expected[channel], values[row * 3 + channel], 10);
                 Assert.Equal(compile ? step + 1 : 0, model.CustomFusedStepCount);
-                Assert.Equal(compile ? 0 : step + 1, model.CustomEagerStepCount);
+                // Globally disabled compilation never creates the diagnostic fused session.
+                Assert.Equal(0, model.CustomEagerStepCount);
+                if (!compile) Assert.Equal(step + 1, eagerObjectiveForwards);
                 Assert.Equal(0, model.CustomOutsidePlanStepCount);
             }
         }
