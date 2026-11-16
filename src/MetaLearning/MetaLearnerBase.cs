@@ -50,7 +50,7 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
     /// <remarks>The inner model the meta-learner adapts. Both hand-written surfaces already delegated straight to it, so registering it is the same enumeration with the forwarding removed.</remarks>
     protected override void RegisterComponents()
     {
-        RegisterParameterComponent(ParamModel);
+        RegisterParameterComponent(MetaModel);
     }
     /// <summary>A cached parameter view of <see cref="MetaModel"/>: the same storage, never a second copy.</summary>
     [AiDotNet.Attributes.ParameterAlias(nameof(MetaModel))]
