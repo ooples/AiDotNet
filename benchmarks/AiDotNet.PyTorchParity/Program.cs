@@ -504,6 +504,11 @@ internal sealed class AiDotNetTensorBackend(int seed)
         "vae" => new AiDotNetVaeModel(seed),
         "gat" => new AiDotNetGatModel(seed),
         "dcgan" => new AiDotNetDcganModel(seed),
+        // Audio and speech (AudioRows.cs): PANNs CNN14 on 10 s AudioSet log-mel clips [1001, 64]; wav2vec 2.0 BASE CTC
+        // fine-tuning on 2 s of raw 16 kHz audio; HiFi-GAN V1's GAN step on an 8192-sample segment (batch size 1).
+        "panns-cnn14" => new AiDotNetPannsCnn14Model(seed),
+        "wav2vec2-base" => new AiDotNetWav2Vec2BaseModel(seed),
+        "hifigan-v1" => new AiDotNetHifiGanV1Model(seed),
         _ => throw new ArgumentException($"Unknown model '{model}'.")
     };
 }
