@@ -934,6 +934,21 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// <summary>The 2-D adjacency repeated over <paramref name="batchSize"/> graphs, cached while the matrix is unchanged.</summary>
     private Tensor<T> TiledAdjacency(Tensor<T> adjacency, int batchSize, int numNodes)
     {
+        // While a training plan traces this forward, the broadcast must be recorded from the adjacency itself. The plan
+        // replays without re-running this method, so the version check below never sees a later graph, and a host copy
+        // would be frozen into the plan as a constant: a graph task packs each step's adjacency into the step's data
+        // (GraphModelLayoutBase.GraphTrainingObjective), and every replay would train on the traced step's graph. For
+        // one graph the [1, N, N] view costs nothing; for a batch the plan re-tiles the live matrix each replay, which
+        // the measured training step does not notice. An inference plan's only input is the node features, so the
+        // graph is a constant of that plan either way, and it keeps the cached resident copy (re-tiling it on every
+        // replay cost up to 3x at batch 8-16 on CPU).
+        if (AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
+            && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsInferenceTrace)
+        {
+            var single = Engine.Reshape(adjacency, [1, numNodes, numNodes]);
+            return batchSize == 1 ? single : Engine.TensorTile(single, [batchSize, 1, 1]);
+        }
+
         if (_tiledAdjacency is not null && ReferenceEquals(adjacency, _tiledAdjacencySource)
             && adjacency.Version == _tiledAdjacencyVersion && _tiledAdjacency.Shape[0] == batchSize)
             return _tiledAdjacency;
