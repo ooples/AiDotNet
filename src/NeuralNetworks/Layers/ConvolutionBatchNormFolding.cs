@@ -186,22 +186,37 @@ internal static class ConvolutionBatchNormFolding<T>
     /// <summary>
     /// For a sequential layer walk: when <paramref name="layers"/>[<paramref name="index"/>] is a convolution followed
     /// by a batch normalization (and optionally a ReLU <see cref="ActivationLayer{T}"/>), runs them folded and reports
-    /// how many layers it consumed (2 or 3). False, with nothing computed, otherwise.
+    /// how many layers it consumed (2 or 3); when it is a batch normalization followed by a ReLU, runs both in one pass
+    /// (2). False, with nothing computed, otherwise.
     /// </summary>
     internal static bool TryForwardSequence(IReadOnlyList<ILayer<T>> layers, int index, Tensor<T> input,
         out Tensor<T> output, out int consumed)
     {
         output = input;
         consumed = 0;
-        if (index + 1 >= layers.Count
-            || layers[index] is not ConvolutionalLayer<T> conv
+        if (index + 1 >= layers.Count) return false;
+        if (layers[index] is BatchNormalizationLayer<T> lone)
+        {
+            // A batch norm and the ReLU after it with nothing to fold into (after a transposed convolution - every
+            // DCGAN generator stage - or any layer that is not a convolution): one pass over the activation instead of
+            // two, and no intermediate tensor.
+            if (!IsInferenceReLU(layers[index + 1])
+                || !TryBatchNormActivation(lone, input, FusedActivationType.ReLU, out output))
+                return false;
+            consumed = 2;
+            return true;
+        }
+        if (layers[index] is not ConvolutionalLayer<T> conv
             || layers[index + 1] is not BatchNormalizationLayer<T> norm)
             return false;
-        bool relu = index + 2 < layers.Count
-            && layers[index + 2] is ActivationLayer<T> { VectorActivation: null, ScalarActivation: ReLUActivation<T> } activation
-            && !activation.InTrainingMode;
+        bool relu = index + 2 < layers.Count && IsInferenceReLU(layers[index + 2]);
         if (!TryForward(conv, norm, input, relu, out output)) return false;
         consumed = relu ? 3 : 2;
         return true;
     }
+
+    private static bool IsInferenceReLU(ILayer<T> layer)
+        => layer is ActivationLayer<T> { VectorActivation: null, ScalarActivation: ReLUActivation<T> } activation
+           && activation.ScalarActivation.GetType() == typeof(ReLUActivation<T>)
+           && !activation.InTrainingMode;
 }

@@ -112,6 +112,28 @@ public class ConvolutionBatchNormFoldingTests
         }
     }
 
+    // A batch norm and ReLU after a transposed convolution (each DCGAN generator stage) have no convolution to fold into:
+    // they run as one pass, which must equal the two layers, and never in training.
+    [Fact]
+    public void Batch_norm_and_relu_after_a_transposed_convolution_run_as_one_pass()
+    {
+        TestEngines.EnsureCpu();
+        var layers = Block<float>(5, 7, 3, 1, 1, true, seed: 47);
+        var deconv = new DeconvolutionalLayer<float>(7, 4, 2, 1, (IActivationFunction<float>)new IdentityActivation<float>());
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(53);
+        var ops = MathHelper.GetNumericOperations<float>();
+        var x = deconv.Forward(Random<float>(rng, 2, 5, 5, 4, ops));
+        // layers[1..2] is the trained batch norm and the ReLU; the deconvolution output has 7 channels, as it expects.
+        Assert.Equal(7, x.Shape[1]);
+        var tail = layers.Skip(1).ToList();
+        Assert.True(ConvolutionBatchNormFolding<float>.TryForwardSequence(tail, 0, x, out var fused, out int consumed));
+        Assert.Equal(2, consumed);
+        AssertClose(Unfused(tail, x, 2), fused, 1e-6, "bn+relu");
+
+        foreach (var layer in tail) layer.SetTrainingMode(true);
+        Assert.False(ConvolutionBatchNormFolding<float>.TryForwardSequence(tail, 0, x, out _, out _));
+    }
+
     [Fact]
     public void An_in_place_parameter_change_refolds()
     {

@@ -501,11 +501,22 @@ public partial class FeedForwardNeuralNetwork<T> : SequentialVectorModelLayoutBa
     {
         ValidateInputShape(input, "forward pass");
 
-        // CPU path: each layer processes input and may download results
         Tensor<T> output = input;
-        foreach (var layer in Layers)
+        var layers = Layers;
+        for (int i = 0; i < layers.Count; i++)
         {
-            output = layer.Forward(output);
+            // In inference a convolution, batch norm and ReLU run as one folded convolution, and a batch norm and the
+            // ReLU after it as one pass (InferenceFusionSettings.FoldBatchNormIntoConvolution); i moves to the last
+            // layer consumed. Training, a recording tape or a graph capture take the per-layer path.
+            if (AiDotNet.NeuralNetworks.Layers.ConvolutionBatchNormFolding<T>.TryForwardSequence(layers, i, output, out var folded, out int consumed))
+            {
+                output = folded;
+                i += consumed - 1;
+            }
+            else
+            {
+                output = layers[i].Forward(output);
+            }
         }
 
         return output;
