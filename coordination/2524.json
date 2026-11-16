@@ -37,8 +37,26 @@
       "owner": "available for other contributor to claim",
       "scope": "Remaining TTS model/loss replay-contract failures outside the owned files",
       "starting_points": [
-        "src/TextToSpeech/Vocoders/VocoderSignalModules.cs: detached target magnitudes and host-computed double norms",
-        "AlignTTS/flow/codec model host reads listed in TTS run43902661676"
+        "Remaining AlignTTS/flow/codec model host reads in TTS run43902661676; exclude all explicitly owned files."
+      ]
+    },
+    {
+      "owner": "this session and its agents",
+      "scope": "Shared STFT target-detach and wide target-norm replay repairs; reviewed and integrated447aa7ac78",
+      "files": [
+        "src/TextToSpeech/Vocoders/VocoderSignalModules.cs"
+      ]
+    },
+    {
+      "owner": "this session and its agents",
+      "scope": "Approved bidirectional infrastructure-only runner failover and mandatory evidence reconciliation",
+      "files": [
+        ".github/workflows/sonarcloud.yml",
+        "tools/TestImpact/RunnerFailover.ps1",
+        "tools/TestImpact/New-RunnerFailoverPlan.ps1",
+        "tools/TestImpact/Resolve-RunnerFailoverResults.ps1",
+        "tools/TestImpact/Test-RunnerFailover.ps1",
+        "tools/TestImpact/Assert-CiGate.ps1"
       ]
     }
   ],
@@ -46,9 +64,10 @@
     "merge_resolution": "Local merge3a25c7dd27 normal build +5hash-grid/render tests and CI impact contract passed",
     "wavernn": "43focusedtests passed0skips; normal analyzer-gated build passed",
     "full_ci": "Run43902662001 still running at PR head35f; all167shards selected, production+compat+pack passed. Four self-hosted runners lost communication during artifact downloads.",
-    "rebind": "Initial47focused:45pass2trajectoryfail; CPU->GPU promotion diagnosed and fixed by matching initial engine guard. Both exact-case no-build diagnostics pass; final normal build/test currently running with integratedWaveRNN.",
-    "upstream_lstm": "Pushed0c40e80c120bf2bff409d83a5afb600ca043f24f to AiDotNet.Tensors codex/2524-ci-coordination;37focusedtests passed0skips. Artifact-only workflow under review; no NuGet publication or PR.",
-    "prior_batch": "88 focused tests passed; Unit02 full GitHub shard533passed0failed13pre-existing dataset/manual skips"
+    "rebind": "Final normal analyzer-gated production/test build PASSED; integrated rebind/hybrid/WaveRNN focused90tests PASSED0failed0skipped (2524-coordination-rebind-wave.trx). CPU/GPU routing corrected; original replacement assertions and independent Adam/schedule continuity cases preserved.",
+    "upstream_lstm": "LSTM source0c40e80c:37focusedtests passed0skips. Artifact producer4d9d0b323 corrects Version override CP0003 without suppressions; new GitHub run43921908674 queued. No NuGet publication or PR.",
+    "prior_batch": "88 focused tests passed; Unit02 full GitHub shard533passed0failed13pre-existing dataset/manual skips",
+    "stft": "Integrated447aa7ac78: normal build passed; focused10passed3remainingfailed0skips. New replay/DFT/gradient/wide-norm tests passed. Remaining Tortoise2 TensorSlice and UniAudio1 TensorSubtract host-read defects remain open."
   },
   "decisions": [
     {
@@ -70,6 +89,11 @@
       "decision": "Resolve master conflicts preserving paper-aligned hash-grid forward/backward and tensorized changes; no legacy checkpoint adapter.",
       "status": "approved",
       "id": "merge"
+    },
+    {
+      "id": "runner-failover",
+      "status": "approved",
+      "decision": "One alternate-pool attempt for proven terminal infrastructure failure; visible intermediate attempts backed by mandatory fail-closed logical shard evidence gate. All required shards, exact SHA/artifact/definition/TRX checks preserved; real/unknown/test/compiler/analyzer/OOM/manual-cancel failures cannot be hidden. Queued-pool watchdog outside first batch."
     }
   ],
   "questions": [],
@@ -80,6 +104,8 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-16T17:02:27.1160444Z",
-  "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination"
+  "updated_utc": "2026-11-16T17:47:22.5530778Z",
+  "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
+  "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43921908674",
+  "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts."
 }
