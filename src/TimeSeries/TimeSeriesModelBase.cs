@@ -1977,7 +1977,7 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
         var newModel = (TimeSeriesModelBase<T>)this.Clone();
 
         // Apply the new parameters to the cloned model
-        newModel.ApplyParameters(parameters);
+        newModel.SetParameters(parameters);
 
         // Mark as trained since parameters have been specified
         newModel.IsTrained = true;

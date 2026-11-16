@@ -7,8 +7,8 @@ using Xunit;
 namespace AiDotNet.Tests.UnitTests.TimeSeries;
 
 /// <summary>
-/// ARIMAX packs and reads its parameters in one order ([AR..., MA..., exogenous..., intercept]), so a
-/// parameter vector survives every get/set/with path and leaves the forecast unchanged.
+/// ARIMAX uses the generated registry's stable field order ([AR..., exogenous..., intercept, MA...]),
+/// so every get/set/with path restores the same coefficient storage and preserves forecasts.
 /// </summary>
 public class ARIMAXParameterRoundTripTests
 {
@@ -93,7 +93,7 @@ public class ARIMAXParameterRoundTripTests
         // AR, MA, exogenous coefficients and the intercept: 1 + 1 + 1 + 1
         Assert.Equal(4, count);
 
-        // Distinct values so any reordering is visible: AR 0.1, MA 0.2, exogenous 0.3, intercept 0.4
+        // Distinct canonical slots: AR 0.1, exogenous 0.2, intercept 0.3, MA 0.4.
         var distinct = new Vector<double>(new[] { 0.1, 0.2, 0.3, 0.4 });
 
         var viaWith = model.WithParameters(distinct);
@@ -101,7 +101,10 @@ public class ARIMAXParameterRoundTripTests
 
         model.SetParameters(distinct);
         AssertSame(distinct, model.GetParameters());
-        Assert.Equal(0.4, Convert.ToDouble(model.GetModelMetadata().AdditionalInfo["Intercept"]));
+        Assert.Equal(0.3, Convert.ToDouble(model.GetModelMetadata().AdditionalInfo["Intercept"]));
+        var forecast = model.Predict(x);
+        for (int i = 0; i < x.Rows; i++)
+            Assert.Equal(0.3 + 0.2 * x[i, 0], forecast[i], 12);
 
         // Both paths hold the same coefficients, so they forecast the same values
         AssertSame(model.Predict(x), viaWith.Predict(x));
