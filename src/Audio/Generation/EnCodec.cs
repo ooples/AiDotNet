@@ -55,6 +55,9 @@ public partial class EnCodec<T> : NeuralAudioCodecBase<T>
     private LossBalancer<T>? _balancer;
     private double? _reported;
 
+    /// <summary>The generator's loss balancer (null without native layers).</summary>
+    internal LossBalancer<T>? Balancer => _balancer;
+
     /// <summary>Creates an EnCodec that runs an exported ONNX graph.</summary>
     public EnCodec(NeuralNetworkArchitecture<T> architecture, string modelPath, EnCodecOptions? options = null)
         : base(architecture, modelPath, options ?? new EnCodecOptions())
@@ -257,9 +260,9 @@ public partial class EnCodec<T> : NeuralAudioCodecBase<T>
                 for (int l = 0; l < fake[k].Features.Count; l++)
                 {
                     var r = real[c][k].Features[l];
-                    double scale = NumOps.ToDouble(Mean(Engine.TensorAbs(r))[0]);
-                    layerTerms.Add(Engine.TensorMultiplyScalar(Mean(Engine.TensorAbs(Engine.TensorSubtract(r, fake[k].Features[l]))),
-                        NumOps.FromDouble(1.0 / Math.Max(scale, 1e-12))));
+                    // r is detached, so its scale is too; kept on the engine so a compiled plan recomputes it.
+                    var scale = Engine.TensorClampMin(Mean(Engine.TensorAbs(r)), NumOps.FromDouble(1e-12));
+                    layerTerms.Add(Engine.TensorDivide(Mean(Engine.TensorAbs(Engine.TensorSubtract(r, fake[k].Features[l]))), scale));
                 }
             terms.Add(Engine.TensorMultiplyScalar(Sum(layerTerms), NumOps.FromDouble(1.0 / layerTerms.Count)));
             c++;
@@ -281,24 +284,31 @@ public partial class EnCodec<T> : NeuralAudioCodecBase<T>
     {
         var o = PaperOptions;
         var discriminator = _discriminators[DiscriminatorIndex(bandwidth)].Discriminator;
-        var realMels = RealMels(real);
-        var realFeatures = RealFeatures(discriminator, real);
-        var losses = new Dictionary<string, Func<Tensor<T>, Tensor<T>>>
+        Dictionary<string, Func<Tensor<T>, Tensor<T>>> LossesAgainst(Tensor<T> recording)
         {
-            ["t"] = x => TimeLoss(real, x),
-            ["f"] = x => FrequencyLoss(realMels, x),
-            ["g"] = x => AdversarialLoss(discriminator, x),
-            ["feat"] = x => FeatureLoss(discriminator, realFeatures, x),
-        };
+            var realMels = RealMels(recording);
+            var realFeatures = RealFeatures(discriminator, recording);
+            return new Dictionary<string, Func<Tensor<T>, Tensor<T>>>
+            {
+                ["t"] = x => TimeLoss(recording, x),
+                ["f"] = x => FrequencyLoss(realMels, x),
+                ["g"] = x => AdversarialLoss(discriminator, x),
+                ["feat"] = x => FeatureLoss(discriminator, realFeatures, x),
+            };
+        }
         var commitment = Engine.TensorMultiplyScalar(Quantizer!.CommitmentLoss ?? new Tensor<T>(new[] { 1 }), NumOps.FromDouble(o.CommitmentLossWeight));
+        _reported = null;
         if (o.UseBalancer)
         {
             // The balancer (Eq. 5) takes each loss's gradient at the output on a nested tape and averages its norm on the
-            // host, so this step trains on the eager tape.
-            var surrogate = _balancer!.Surrogate(generated, losses);
-            _reported = _balancer.LastWeightedLoss + NumOps.ToDouble(commitment[0]);
-            return Engine.TensorAdd(surrogate, commitment);
+            // host; under a trace that is one node the plan reruns on every replay with the step's output and recording.
+            // The objective's value is the weighted loss (the reported one); its gradient is the surrogate's.
+            var (surrogate, weighted) = _balancer!.TracedSurrogate(generated, new[] { real },
+                context => LossesAgainst(context[0]));
+            var valued = Engine.TensorAdd(surrogate, Engine.StopGradient(Engine.TensorSubtract(weighted, surrogate)));
+            return Engine.TensorAdd(valued, commitment);
         }
+        var losses = LossesAgainst(real);
         var weights = new Dictionary<string, double>
         {
             ["t"] = o.TimeLossWeight,
@@ -308,7 +318,6 @@ public partial class EnCodec<T> : NeuralAudioCodecBase<T>
         };
         var total = Engine.TensorAdd(Sum(losses.Select(l => Engine.TensorMultiplyScalar(l.Value(generated), NumOps.FromDouble(weights[l.Key])))), commitment);
         // The returned loss is the reported one; nothing is read on the host, so a compiled plan replays this objective.
-        _reported = null;
         return total;
     }
 
