@@ -29,19 +29,19 @@ public class CuckooSearchFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
     private readonly double _discoveryProbability;
     private readonly int _nFeaturesToSelect;
     private readonly int? _randomState;
-    private readonly Func<Matrix<T>, Vector<T>, bool[], double>? _fitnessFunc;
+    private readonly Func<Matrix<T>, Vector<T>, bool[], T>? _fitnessFunc;
 
-    private double[]? _featureImportances;
+    private Vector<T>? _featureImportances;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
-    private double _bestFitness;
+    private T _bestFitness = MathHelper.GetNumericOperations<T>().Zero;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FeatureImportances => _featureImportances;
+    public Vector<T>? FeatureImportances => _featureImportances;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
-    public double BestFitness => _bestFitness;
+    public T BestFitness => _bestFitness;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
@@ -50,7 +50,7 @@ public class CuckooSearchFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         int populationSize = 25,
         int nIterations = 100,
         double discoveryProbability = 0.25,
-        Func<Matrix<T>, Vector<T>, bool[], double>? fitnessFunc = null,
+        Func<Matrix<T>, Vector<T>, bool[], T>? fitnessFunc = null,
         int? randomState = null,
         int[]? columnIndices = null)
         : base(columnIndices)
@@ -89,7 +89,7 @@ public class CuckooSearchFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
             : RandomHelper.CreateSecureRandom();
 
         // Initialize nests (population)
-        var nests = new List<(bool[] Solution, double Fitness)>();
+        var nests = new List<(bool[] Solution, T Fitness)>();
         for (int i = 0; i < _populationSize; i++)
         {
             var solution = new bool[p];
@@ -98,13 +98,14 @@ public class CuckooSearchFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
             foreach (int idx in indices)
                 solution[idx] = true;
 
-            double fitness = EvaluateFitness(data, target, solution);
+            T fitness = EvaluateFitness(data, target, solution);
             nests.Add((solution, fitness));
         }
 
-        _featureImportances = new double[p];
-        _bestFitness = nests.Max(n => n.Fitness);
-        var bestSolution = nests.OrderByDescending(n => n.Fitness).First().Solution;
+        var importances = PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
+        int bestNest = PreprocessingTensorOps.FirstArgMax(Fitnesses(nests));
+        _bestFitness = nests[bestNest].Fitness;
+        var bestSolution = nests[bestNest].Solution;
 
         // Main Cuckoo Search loop
         for (int iter = 0; iter < _nIterations; iter++)
@@ -118,18 +119,17 @@ public class CuckooSearchFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
                 if (!newSolution.Any(b => b))
                     newSolution[random.Next(p)] = true;
 
-                double newFitness = EvaluateFitness(data, target, newSolution);
+                T newFitness = EvaluateFitness(data, target, newSolution);
 
                 // Update feature importances
-                for (int j = 0; j < p; j++)
-                    if (newSolution[j])
-                        _featureImportances[j] += newFitness;
+                importances = Engine.TensorAdd(importances, WrapperScoringOps.ScoreSums(
+                    new[] { WrapperScoringOps.Positions(newSolution) }, WrapperScoringOps.FromList(new[] { newFitness }), p));
 
                 // Replace if better
-                if (newFitness > nests[i].Fitness)
+                if (WrapperScoringOps.IsAbove(newFitness, nests[i].Fitness))
                 {
                     nests[i] = (newSolution, newFitness);
-                    if (newFitness > _bestFitness)
+                    if (WrapperScoringOps.IsAbove(newFitness, _bestFitness))
                     {
                         _bestFitness = newFitness;
                         bestSolution = (bool[])newSolution.Clone();
@@ -138,7 +138,9 @@ public class CuckooSearchFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
             }
 
             // Abandon worst nests (discovery)
-            var sorted = nests.OrderBy(n => n.Fitness).ToList();
+            // By increasing fitness, the earlier nest first among ties
+            var sorted = PreprocessingTensorOps.StableOrder(Fitnesses(nests), descending: false)
+                .Select(k => nests[k]).ToList();
             int nToAbandon = (int)(_populationSize * _discoveryProbability);
 
             for (int i = 0; i < nToAbandon; i++)
@@ -149,7 +151,7 @@ public class CuckooSearchFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
                 foreach (int idx in indices)
                     newSolution[idx] = true;
 
-                double newFitness = EvaluateFitness(data, target, newSolution);
+                T newFitness = EvaluateFitness(data, target, newSolution);
                 sorted[i] = (newSolution, newFitness);
             }
 
@@ -164,15 +166,21 @@ public class CuckooSearchFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
 
         if (selectedList.Count > _nFeaturesToSelect)
         {
-            selectedList = selectedList
-                .OrderByDescending(j => _featureImportances[j])
-                .Take(_nFeaturesToSelect)
+            // By decreasing accumulated importance, the lower index first among ties
+            var candidates = selectedList.ToArray();
+            selectedList = PreprocessingTensorOps.TopKIndicesSorted(
+                WrapperScoringOps.Gather(importances, candidates), _nFeaturesToSelect)
+                .Select(position => candidates[position])
                 .ToList();
         }
 
+        _featureImportances = importances.ToVector();
         _selectedIndices = selectedList.OrderBy(x => x).ToArray();
         IsFitted = true;
     }
+
+    private static Tensor<T> Fitnesses(List<(bool[] Solution, T Fitness)> members) =>
+        WrapperScoringOps.FromList(members.Select(m => m.Fitness).ToList());
 
     private bool[] LevyFlight(bool[] current, bool[] best, int p, Random random)
     {
@@ -239,45 +247,18 @@ public class CuckooSearchFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         }
     }
 
-    private double EvaluateFitness(Matrix<T> data, Vector<T> target, bool[] mask)
+    private T EvaluateFitness(Matrix<T> data, Vector<T> target, bool[] mask)
     {
         if (_fitnessFunc is not null)
             return _fitnessFunc(data, target, mask);
 
-        int n = data.Rows;
-        int nSelected = mask.Count(b => b);
-        if (nSelected == 0) return double.NegativeInfinity;
+        var selected = WrapperScoringOps.Positions(mask);
+        int nSelected = selected.Length;
+        if (nSelected == 0) return NumOps.FromDouble(double.NegativeInfinity);
 
-        double totalCorr = 0;
-        for (int j = 0; j < mask.Length; j++)
-        {
-            if (!mask[j]) continue;
-
-            double xMean = 0, yMean = 0;
-            for (int i = 0; i < n; i++)
-            {
-                xMean += NumOps.ToDouble(data[i, j]);
-                yMean += NumOps.ToDouble(target[i]);
-            }
-            xMean /= n;
-            yMean /= n;
-
-            double ssXY = 0, ssXX = 0, ssYY = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double dx = NumOps.ToDouble(data[i, j]) - xMean;
-                double dy = NumOps.ToDouble(target[i]) - yMean;
-                ssXY += dx * dy;
-                ssXX += dx * dx;
-                ssYY += dy * dy;
-            }
-
-            if (ssXX > 1e-10 && ssYY > 1e-10)
-                totalCorr += Math.Abs(ssXY / Math.Sqrt(ssXX * ssYY));
-        }
-
+        // Mean |Pearson r| with the target, penalized for selecting more than the requested number of features
         double penalty = nSelected > _nFeaturesToSelect ? 0.1 * (nSelected - _nFeaturesToSelect) : 0;
-        return totalCorr / nSelected - penalty;
+        return NumOps.Subtract(WrapperScoringOps.MeanAbsTargetCorrelation(data, target, selected), NumOps.FromDouble(penalty));
     }
 
     /// <inheritdoc />
@@ -293,15 +274,7 @@ public class CuckooSearchFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
         if (_selectedIndices is null)
             throw new InvalidOperationException("CuckooSearchFS has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

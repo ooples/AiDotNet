@@ -180,6 +180,27 @@ public partial class Instant3DModel<T> : ThreeDDiffusionModelBase<T>
 
     #region Generation Methods
 
+    /// <summary>
+    /// Not supported: image-to-3D is not part of this model's published pipeline.
+    /// </summary>
+    /// <remarks>
+    /// Instant3D (Li et al., 2023) is text-to-3D: a text-conditioned four-view grid reconstructed by its
+    /// sparse-view LRM. The paper has no single-image input path.
+    /// </remarks>
+    /// <exception cref="NotSupportedException">Always; the message names the supported entry point.</exception>
+    public override Mesh3D<T> ImageTo3D(
+        Tensor<T> inputImage,
+        int numViews = 4,
+        int numInferenceSteps = 50,
+        double guidanceScale = 3.0,
+        int? seed = null)
+        => throw new NotSupportedException(ImageTo3DUnsupportedMessage);
+
+    /// <summary>The reason <see cref="ImageTo3D"/> is unsupported, naming the supported entry point.</summary>
+    internal const string ImageTo3DUnsupportedMessage =
+        "Instant3D is text-to-3D only (Li et al., 2023); use GenerateMesh with a text prompt.";
+
+
     /// <inheritdoc />
     public override Tensor<T> GeneratePointCloud(
         string prompt,

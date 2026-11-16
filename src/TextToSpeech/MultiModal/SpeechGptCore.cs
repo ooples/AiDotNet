@@ -130,12 +130,10 @@ internal sealed class SpeechGptCore<T>
 
     // ---------------------------------------------------------------- generation
 
-    private double[] Row(Tensor<T> logits)
+    private Tensor<T> Row(Tensor<T> logits)
     {
-        var values = new double[_o.VocabSize];
-        int offset = logits.Length - values.Length;
-        for (int i = 0; i < values.Length; i++) values[i] = Ops.ToDouble(logits.GetFlat(offset + i));
-        return values;
+        int vocabulary = _o.VocabSize;
+        return _engine.TensorSlice(_engine.Reshape(logits, new[] { logits.Length }), new[] { logits.Length - vocabulary }, new[] { vocabulary });
     }
 
     private Tensor<T> Embed(IReadOnlyList<int> ids)
@@ -165,8 +163,8 @@ internal sealed class SpeechGptCore<T>
         {
             var row = Row(logits!);
             // MinNewTokensLengthLogitsProcessor: the end is -inf until the minimum is reached.
-            if (generated.Count < _o.MinNewTokens) row[end] = double.NegativeInfinity;
-            int next = _o.Temperature <= 0 ? NucleusSampling.Greedy(row) : NucleusSampling.Sample(row, _o.Temperature, _o.TopK, _o.TopP, null, random);
+            if (generated.Count < _o.MinNewTokens) row = TtsSampling<T>.Forbid(row, new[] { end });
+            int next = _o.Temperature <= 0 ? NucleusSampling<T>.Greedy(row) : NucleusSampling<T>.Sample(row, _o.Temperature, _o.TopK, _o.TopP, null, random);
             if (next == end) break;
             generated.Add(next);
             (_, logits) = LanguageModel.Forward(Embed(new[] { next }), null, null, cache, lastLogitsOnly: true);

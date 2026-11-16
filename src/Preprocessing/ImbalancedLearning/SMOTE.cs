@@ -116,10 +116,11 @@ public class SMOTE<T> : OversamplingBase<T>
         int effectiveK = Math.Min(KNeighbors, classIndices.Count - 1);
 
         // Precompute nearest neighbors for each minority sample
+        var data = Tensor<T>.FromMatrix(x);
         var neighborCache = new Dictionary<int, List<int>>();
         foreach (int idx in classIndices)
         {
-            neighborCache[idx] = FindKNearestNeighbors(x, idx, classIndices, effectiveK);
+            neighborCache[idx] = ResamplingTensorOps.Nearest(data, idx, classIndices, effectiveK);
         }
 
         // Generate synthetic samples
@@ -166,14 +167,6 @@ public class SMOTE<T> : OversamplingBase<T>
     protected virtual Vector<T> InterpolateSamples(Vector<T> sample1, Vector<T> sample2)
     {
         T t = NumOps.FromDouble(Random.NextDouble());
-        var synthetic = new Vector<T>(sample1.Length);
-
-        for (int j = 0; j < sample1.Length; j++)
-        {
-            T diff = NumOps.Subtract(sample2[j], sample1[j]);
-            synthetic[j] = NumOps.Add(sample1[j], NumOps.Multiply(t, diff));
-        }
-
-        return synthetic;
+        return ResamplingTensorOps.Interpolate(sample1, sample2, t);
     }
 }

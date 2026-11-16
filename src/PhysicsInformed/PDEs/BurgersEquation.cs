@@ -56,6 +56,23 @@ namespace AiDotNet.PhysicsInformed.PDEs
         }
 
         /// <inheritdoc/>
+        public override int DerivativeOrder => NumOps.GreaterThan(_viscosity, NumOps.Zero) ? 2 : 1;
+
+        /// <inheritdoc/>
+        /// <remarks>The residual u_t + u u_x - nu u_xx.</remarks>
+        public override Tensor<T> ComputeTapeResidual(Tensor<T> inputs, Tensor<T> outputs, PDEDerivatives<T> derivatives)
+        {
+            var e = TapeEngine;
+            var residual = e.TensorAdd(D1(derivatives, 0, 1), e.TensorMultiply(Output(outputs, 0), D1(derivatives, 0, 0)));
+            if (NumOps.GreaterThan(_viscosity, NumOps.Zero))
+            {
+                residual = e.TensorSubtract(residual, e.TensorMultiplyScalar(D2(derivatives, 0, 0, 0), _viscosity));
+            }
+
+            return residual;
+        }
+
+        /// <inheritdoc/>
         public override T ComputeResidual(Vector<T> inputs, Vector<T> outputs, PDEDerivatives<T> derivatives)
         {
             ValidateFirstDerivatives(derivatives);

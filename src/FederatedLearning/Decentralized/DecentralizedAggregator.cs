@@ -53,7 +53,6 @@ public class DecentralizedAggregator<T> : Infrastructure.FederatedLearningCompon
         Dictionary<int, Vector<T>> peerModels, int totalNodes, int round)
     {
         int d = localModel.Length;
-        var mixed = new T[d];
 
         // Self-weight
         int[] expectedPeers = _topology.GetPeers(nodeId, totalNodes, round);
@@ -78,10 +77,7 @@ public class DecentralizedAggregator<T> : Infrastructure.FederatedLearningCompon
 
         // Apply self-contribution
         T selfW = NumOps.FromDouble(normalizedSelfWeight);
-        for (int i = 0; i < d; i++)
-        {
-            mixed[i] = NumOps.Multiply(localModel[i], selfW);
-        }
+        var mixed = Engine.Multiply(localModel, selfW);
 
         // Apply peer contributions
         foreach (int peerId in expectedPeers)
@@ -92,14 +88,19 @@ public class DecentralizedAggregator<T> : Infrastructure.FederatedLearningCompon
             double peerWeight = _topology.GetMixingWeight(nodeId, peerId, totalNodes) / totalWeightUsed;
             T pw = NumOps.FromDouble(peerWeight);
 
-            int peerLen = Math.Min(d, peerModel.Length);
-            for (int i = 0; i < peerLen; i++)
+            // A shorter peer model contributes only to its leading coordinates.
+            var peer = peerModel;
+            if (peerModel.Length != d)
             {
-                mixed[i] = NumOps.Add(mixed[i], NumOps.Multiply(peerModel[i], pw));
+                peer = new Vector<T>(d);
+                int peerLen = Math.Min(d, peerModel.Length);
+                peerModel.AsSpan().Slice(0, peerLen).CopyTo(peer.AsWritableSpan());
             }
+
+            mixed = Engine.Add(mixed, Engine.Multiply(peer, pw));
         }
 
-        return new Vector<T>(mixed);
+        return mixed;
     }
 
     /// <summary>

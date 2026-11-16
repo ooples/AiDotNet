@@ -49,7 +49,9 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </para>
 /// <para>
 /// Details the paper leaves open follow DeepMind's reference implementation: the relation network is three
-/// bias-free layers with ReLU between them, a Gaussian's scale is <c>max(exp(u) - 1, 1e-10)</c>, the KL term is the
+/// bias-free layers with ReLU between them, a Gaussian's scale is <c>max(exp(u) - (1 - o), 1e-10)</c> with offset
+/// <c>o = 0</c> for the latent codes and <c>o = sqrt(2 / (d + N))</c> (Glorot's standard deviation for an N-way
+/// classifier over d-wide embeddings) for the classifier weights, the KL term is the
 /// mean over sampled codes of <c>log q(z) - log p(z)</c>, the encoder penalty is a mean squared error, the
 /// orthogonality penalty is the mean squared deviation of the decoder's row correlations from the identity, dropout
 /// acts on the feature embeddings, and evaluation uses means instead of samples.
@@ -206,25 +208,24 @@ public partial class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         }
 
         T batchSize = NumOps.FromDouble(taskBatch.BatchSize);
-        var lengths = new[]
+        Vector<T> BatchMean(Vector<T>? sum, int length)
         {
-            body.Length, _encoderWeights.Length, _relationWeights.Length, _decoderWeights.Length,
-            _latentRates.Length, _fineTuningRates.Length,
-        };
-        var gradients = new Vector<T>[6];
-        for (int i = 0; i < 6; i++)
-        {
-            gradients[i] = Scale(sums[i] ?? new Vector<T>(lengths[i]), batchSize);
-            if (_leoOptions.GradientClipThreshold.HasValue && _leoOptions.GradientClipThreshold.Value > 0 && gradients[i].Length > 0)
+            var gradient = Scale(sum ?? new Vector<T>(length), batchSize);
+            if (_leoOptions.GradientClipThreshold.HasValue && _leoOptions.GradientClipThreshold.Value > 0 && gradient.Length > 0)
             {
-                gradients[i] = ClipGradients(gradients[i], _leoOptions.GradientClipThreshold.Value);
+                gradient = ClipGradients(gradient, _leoOptions.GradientClipThreshold.Value);
             }
+
+            return gradient;
         }
 
         double beta = _leoOptions.OuterLearningRate;
-        var updated = ApplyOuterGradients(beta, (body, gradients[0]), (_encoderWeights, gradients[1]),
-            (_relationWeights, gradients[2]), (_decoderWeights, gradients[3]), (_latentRates, gradients[4]),
-            (_fineTuningRates, gradients[5]));
+        var updated = ApplyOuterGradients(beta, (body, BatchMean(sums[0], body.Length)),
+            (_encoderWeights, BatchMean(sums[1], _encoderWeights.Length)),
+            (_relationWeights, BatchMean(sums[2], _relationWeights.Length)),
+            (_decoderWeights, BatchMean(sums[3], _decoderWeights.Length)),
+            (_latentRates, BatchMean(sums[4], _latentRates.Length)),
+            (_fineTuningRates, BatchMean(sums[5], _fineTuningRates.Length)));
         ParamModel.SetParameters(updated[0]);
         _encoderWeights = updated[1];
         _relationWeights = updated[2];
@@ -395,7 +396,7 @@ public partial class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         }
 
         var means = engine.TensorMatMul(parameters, Half(2 * nz, nz, 0));
-        var scales = Scale(engine.TensorMatMul(parameters, Half(2 * nz, nz, nz)));
+        var scales = Scale(engine.TensorMatMul(parameters, Half(2 * nz, nz, nz)), offset: 0.0);
         var initial = noise.LatentNoise is null
             ? means
             : engine.TensorAdd(means, engine.TensorMultiply(scales, noise.LatentNoise));
@@ -488,23 +489,34 @@ public partial class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         return Scalar(LossFunction.ComputeTapeLoss(logits, target));
     }
 
-    /// <summary>Eq. 4: each class code to a Gaussian over that class's weights; a sample while training.</summary>
+    /// <summary>
+    /// Eq. 4: each class code to a Gaussian over that class's weights; a sample while training. As in the reference
+    /// implementation, the scale is offset by Glorot's standard deviation <c>sqrt(2 / (d + N))</c> for the N-way
+    /// classifier, so an untrained decoder samples weights at the scale a Glorot initialiser would give them.
+    /// </summary>
     private (Tensor<T> Weights, Tensor<T> Scales) Decode(Tensor<T> latents, LeoWeights weights, Tensor<T>? noise)
     {
         var engine = AiDotNetEngine.Current;
         int d = _leoOptions.EmbeddingDimension;
         var outputs = engine.TensorMatMul(latents, engine.TensorTranspose(weights.Decoder));
         var means = engine.TensorMatMul(outputs, Half(2 * d, d, 0));
-        var scales = Scale(engine.TensorMatMul(outputs, Half(2 * d, d, d)));
+        var scales = Scale(engine.TensorMatMul(outputs, Half(2 * d, d, d)), WeightScaleOffset(d, latents.Shape[0]));
         var sample = noise is null ? means : engine.TensorAdd(means, engine.TensorMultiply(scales, noise));
         return (sample, scales);
     }
 
-    /// <summary>The reference implementation's scale: <c>max(exp(u) - 1, 1e-10)</c>.</summary>
-    private static Tensor<T> Scale(Tensor<T> unnormalized)
+    /// <summary>
+    /// The reference implementation's <c>stddev_offset</c> for the classifier weights:
+    /// <c>sqrt(2 / (fan_in + fan_out))</c> with the embedding width as fan-in and the task's class count as fan-out.
+    /// </summary>
+    internal static double WeightScaleOffset(int embeddingDimension, int classes)
+        => Math.Sqrt(2.0 / (embeddingDimension + classes));
+
+    /// <summary>The reference implementation's scale: <c>max(exp(u) - (1 - offset), 1e-10)</c>.</summary>
+    private static Tensor<T> Scale(Tensor<T> unnormalized, double offset)
     {
         var engine = AiDotNetEngine.Current;
-        var shifted = engine.TensorAddScalar(engine.TensorExp(unnormalized), Ops.FromDouble(-1.0));
+        var shifted = engine.TensorAddScalar(engine.TensorExp(unnormalized), Ops.FromDouble(offset - 1.0));
 
         // max(shifted, 1e-10) built from RECORDED ops rather than TensorClampMin. ClampMin's backward writes its
         // masked gradient with raw span loops, so under createGraph the outer tape cannot differentiate through
@@ -514,14 +526,12 @@ public partial class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         // is a constant, so forward values and first-order gradients are identical to the clamp; only the
         // second-order path changes, and it now flows through Multiply and Add, whose backward is recorded.
         var floor = Ops.FromDouble(1e-10);
-        var shape = shifted.Shape.ToArray();
-        var keep = new Tensor<T>(shape);
-        var fill = new Tensor<T>(shape);
-        for (int i = 0; i < shifted.Length; i++)
+        Tensor<T> keep, fill;
+        using (new NoGradScope<T>())
         {
-            bool above = !Ops.LessThan(shifted[i], floor);
-            keep[i] = above ? Ops.One : Ops.Zero;
-            fill[i] = above ? Ops.Zero : floor;
+            var below = engine.TensorLessThan(shifted, floor);
+            keep = engine.TensorAddScalar(engine.TensorNegate(below), Ops.One);
+            fill = engine.TensorMultiplyScalar(below, floor);
         }
 
         return engine.TensorAdd(engine.TensorMultiply(shifted, keep), fill);
@@ -543,11 +553,15 @@ public partial class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         for (int c = 0; c < episode.ClassSlots.Length; c++)
         {
             int slot = episode.ClassSlots[c];
-            var pick = new Tensor<T>(new[] { codeWidth, blocks * codeWidth });
-            for (int i = 0; i < codeWidth; i++) pick[i * blocks * codeWidth + slot * codeWidth + i] = Ops.One;
+            Tensor<T> pick, rowMask;
+            using (new NoGradScope<T>())
+            {
+                pick = engine.TensorSlice(engine.TensorEye<T>(blocks * codeWidth),
+                    new[] { slot * codeWidth, 0 }, new[] { codeWidth, blocks * codeWidth });
+                rowMask = engine.Reshape(engine.TensorSlice(episode.Membership, new[] { c, 0 }, new[] { 1, rows }), new[] { rows, 1 });
+            }
+
             var block = engine.TensorMatMul(pick, weights.Encoder);
-            var rowMask = new Tensor<T>(new[] { rows, 1 });
-            for (int r = 0; r < rows; r++) rowMask[r] = episode.Membership[c * rows + r];
             var part = engine.TensorMultiply(engine.TensorMatMul(support, engine.TensorTranspose(block)), rowMask);
             codes = codes is null ? part : engine.TensorAdd(codes, part);
         }
@@ -559,24 +573,19 @@ public partial class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     private static Tensor<T> Pairs(Tensor<T> codes)
     {
         var engine = AiDotNetEngine.Current;
-        int rows = codes.Shape[0], width = codes.Shape[1], pairs = rows * rows;
-        var left = new Tensor<T>(new[] { pairs, rows });
-        var right = new Tensor<T>(new[] { pairs, rows });
-        for (int i = 0; i < rows; i++)
+        int rows = codes.Shape[0], width = codes.Shape[1];
+        Tensor<T> left, right, placeLeft, placeRight;
+        using (new NoGradScope<T>())
         {
-            for (int j = 0; j < rows; j++)
-            {
-                left[(i * rows + j) * rows + i] = Ops.One;
-                right[(i * rows + j) * rows + j] = Ops.One;
-            }
-        }
+            // Row i * rows + j of left picks code i, of right code j.
+            var identity = engine.TensorEye<T>(rows);
+            left = engine.TensorRepeatInterleave(identity, rows, 0);
+            right = engine.TensorTile(identity, new[] { rows, 1 });
 
-        var placeLeft = new Tensor<T>(new[] { width, 2 * width });
-        var placeRight = new Tensor<T>(new[] { width, 2 * width });
-        for (int k = 0; k < width; k++)
-        {
-            placeLeft[k * 2 * width + k] = Ops.One;
-            placeRight[k * 2 * width + width + k] = Ops.One;
+            var eye = engine.TensorEye<T>(width);
+            var zero = new Tensor<T>(new[] { width, width });
+            placeLeft = engine.TensorConcatenate(new[] { eye, zero }, 1);
+            placeRight = engine.TensorConcatenate(new[] { zero, eye }, 1);
         }
 
         return engine.TensorAdd(
@@ -589,39 +598,27 @@ public partial class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     /// </summary>
     private static Tensor<T> PairAverager(PrototypeEpisode<T> episode, int rows)
     {
+        var engine = AiDotNetEngine.Current;
         int classes = episode.ClassSlots.Length;
-        var averager = new Tensor<T>(new[] { classes, rows * rows });
-        for (int c = 0; c < classes; c++)
+        using (new NoGradScope<T>())
         {
-            double members = 0;
-            for (int i = 0; i < rows; i++) members += Ops.ToDouble(episode.Membership[c * rows + i]);
-            T share = Ops.FromDouble(1.0 / (members * rows));
-            for (int i = 0; i < rows; i++)
-            {
-                if (Ops.ToDouble(episode.Membership[c * rows + i]) < 0.5) continue;
-                for (int j = 0; j < rows; j++) averager[c * rows * rows + i * rows + j] = share;
-            }
+            // Entry (c, i * rows + j) is 1 / (members_c * rows) for every member i of class c and every partner j.
+            var members = engine.ReduceSum(episode.Membership, new[] { 1 }, keepDims: true);
+            var share = engine.TensorReciprocal(engine.TensorMultiplyScalar(members, Ops.FromDouble(rows)));
+            var perExample = engine.TensorMultiply(episode.Membership, share);
+            return engine.Reshape(engine.TensorRepeatInterleave(perExample, rows, 1), new[] { classes, rows * rows });
         }
-
-        return averager;
     }
 
     /// <summary><c>[classes, rows]</c>: the mean over each class's examples.</summary>
     private static Tensor<T> ClassAverager(PrototypeEpisode<T> episode, int rows)
     {
-        int classes = episode.ClassSlots.Length;
-        var averager = new Tensor<T>(new[] { classes, rows });
-        for (int c = 0; c < classes; c++)
+        var engine = AiDotNetEngine.Current;
+        using (new NoGradScope<T>())
         {
-            double members = 0;
-            for (int i = 0; i < rows; i++) members += Ops.ToDouble(episode.Membership[c * rows + i]);
-            for (int i = 0; i < rows; i++)
-            {
-                averager[c * rows + i] = Ops.FromDouble(Ops.ToDouble(episode.Membership[c * rows + i]) / members);
-            }
+            var members = engine.ReduceSum(episode.Membership, new[] { 1 }, keepDims: true);
+            return engine.TensorMultiply(episode.Membership, engine.TensorReciprocal(members));
         }
-
-        return averager;
     }
 
     /// <summary>
@@ -638,8 +635,11 @@ public partial class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             Ops.FromDouble(1e-32));
         var correlation = engine.TensorDivide(products, engine.TensorMatMul(norms, engine.TensorTranspose(norms)));
         int n = correlation.Shape[0];
-        var identity = new Tensor<T>(new[] { n, n });
-        for (int i = 0; i < n; i++) identity[i * n + i] = Ops.One;
+        Tensor<T> identity;
+        using (new NoGradScope<T>())
+        {
+            identity = engine.TensorEye<T>(n);
+        }
         var deviation = engine.TensorAdd(correlation, engine.TensorNegate(identity));
         return Mean(engine.TensorMultiply(deviation, deviation));
     }
@@ -677,24 +677,20 @@ public partial class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     private int[] ReadLabels(TOutput labels)
     {
         var tensor = ClassifierOutputs<T>.Labels(labels, _leoOptions.NumClasses);
-        var indices = new int[tensor.Length];
-        for (int i = 0; i < indices.Length; i++) indices[i] = (int)Math.Round(NumOps.ToDouble(tensor[i]));
-        return indices;
+        return AiDotNetEngine.Current.TensorRound(tensor).Cast<int>().ToArray();
     }
 
     /// <summary>Each support row's class column, <c>[rows]</c>.</summary>
     private static Tensor<T> SupportTarget(PrototypeEpisode<T> episode, int rows)
     {
-        var target = new Tensor<T>(new[] { rows });
-        for (int c = 0; c < episode.ClassSlots.Length; c++)
+        var engine = AiDotNetEngine.Current;
+        int classes = episode.ClassSlots.Length;
+        using (new NoGradScope<T>())
         {
-            for (int r = 0; r < rows; r++)
-            {
-                if (Ops.ToDouble(episode.Membership[c * rows + r]) > 0.5) target[r] = Ops.FromDouble(c);
-            }
+            // Each support row belongs to exactly one class, so the class columns weighted by their index pick it.
+            var columns = engine.Reshape(engine.TensorArange<T>(0, classes, 1), new[] { 1, classes });
+            return engine.Reshape(engine.TensorMatMul(columns, episode.Membership), new[] { rows });
         }
-
-        return target;
     }
 
     #endregion
@@ -766,7 +762,7 @@ public partial class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         private Tensor<T> Leaf(Vector<T> source, int offset, int rows, int columns)
         {
             var leaf = new Tensor<T>(new[] { rows, columns });
-            for (int i = 0; i < leaf.Length; i++) leaf[i] = source[offset + i];
+            source.AsSpan().Slice(offset, leaf.Length).CopyTo(leaf.AsWritableSpan());
             _leaves.Add(leaf);
             return leaf;
         }
@@ -774,7 +770,7 @@ public partial class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         private static void Copy(Dictionary<Tensor<T>, Tensor<T>> gradients, Tensor<T> leaf, Vector<T> into, int offset)
         {
             if (!gradients.TryGetValue(leaf, out var gradient)) return;
-            for (int i = 0; i < leaf.Length; i++) into[offset + i] = gradient[i];
+            gradient.ToVector().AsSpan().Slice(0, leaf.Length).CopyTo(into.AsWritableSpan().Slice(offset, leaf.Length));
         }
     }
 
@@ -943,12 +939,7 @@ public partial class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         var episode = Episode(task);
         var (support, query) = Embed(task, episode);
         var run = Run(support, query, episode, new LeoWeights(this), Noise.None);
-        var latent = run.LatentScales.ToVector();
-        var weights = run.WeightScales.ToVector();
-        var all = new Vector<T>(latent.Length + weights.Length);
-        for (int i = 0; i < latent.Length; i++) all[i] = latent[i];
-        for (int i = 0; i < weights.Length; i++) all[latent.Length + i] = weights[i];
-        return all;
+        return Vector<T>.Concatenate(new[] { run.LatentScales.ToVector(), run.WeightScales.ToVector() });
     }
 
     /// <summary>One task's latent codes before and after the latent steps, without sampling or dropout.</summary>
@@ -1032,16 +1023,18 @@ public partial class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     private static Vector<T> Filled(int length, double value)
     {
         var vector = new Vector<T>(length);
-        for (int i = 0; i < length; i++) vector[i] = Ops.FromDouble(value);
+        vector.Fill(Ops.FromDouble(value));
         return vector;
     }
 
     /// <summary><c>[width, half]</c>: picks <paramref name="half"/> columns from <paramref name="start"/>.</summary>
     private static Tensor<T> Half(int width, int half, int start)
     {
-        var select = new Tensor<T>(new[] { width, half });
-        for (int i = 0; i < half; i++) select[(start + i) * half + i] = Ops.One;
-        return select;
+        var engine = AiDotNetEngine.Current;
+        using (new NoGradScope<T>())
+        {
+            return engine.TensorSlice(engine.TensorEye<T>(width), new[] { 0, start }, new[] { width, half });
+        }
     }
 
     private static Tensor<T> Drop(Tensor<T> rows, Tensor<T>? mask)
@@ -1060,21 +1053,17 @@ public partial class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     private static Vector<T> Accumulate(Vector<T>? sum, Vector<T> values)
     {
         if (sum is null) return CloneVector(values);
-        for (int i = 0; i < sum.Length; i++) sum[i] = NumOps.Add(sum[i], values[i]);
-        return sum;
+        return AiDotNetEngine.Current.Add(sum, values);
     }
 
     private static Vector<T> Scale(Vector<T> values, T divisor)
     {
-        for (int i = 0; i < values.Length; i++) values[i] = NumOps.Divide(values[i], divisor);
-        return values;
+        return AiDotNetEngine.Current.Divide(values, divisor);
     }
 
     private static Vector<T> CloneVector(Vector<T> source)
     {
-        var clone = new Vector<T>(source.Length);
-        for (int i = 0; i < source.Length; i++) clone[i] = source[i];
-        return clone;
+        return source.Clone();
     }
 
     #endregion

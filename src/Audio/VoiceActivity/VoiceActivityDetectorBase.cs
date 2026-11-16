@@ -149,13 +149,22 @@ public abstract class VoiceActivityDetectorBase<T> : IVoiceActivityDetector<T>
         int silenceCount = 0;
         bool inSpeech = false;
 
-        for (int i = 0; i + FrameSize <= samples.Length; i += FrameSize)
+        // Frame probabilities first (same order, so stateful detectors see the same sequence),
+        // then one engine comparison against the threshold.
+        int frameCount = samples.Length / FrameSize;
+        var probabilities = new T[frameCount];
+        for (int f = 0; f < frameCount; f++)
         {
             var frame = new T[FrameSize];
-            Array.Copy(samples, i, frame, 0, FrameSize);
+            Array.Copy(samples, f * FrameSize, frame, 0, FrameSize);
+            probabilities[f] = ComputeFrameProbability(frame);
+        }
 
-            var prob = ComputeFrameProbability(frame);
-            bool isSpeech = NumOps.ToDouble(prob) >= Threshold;
+        int[] speechMask = VadEngineOps.SpeechMask(probabilities, Threshold);
+        for (int f = 0; f < frameCount; f++)
+        {
+            int i = f * FrameSize;
+            bool isSpeech = speechMask[f] != 0;
 
             if (isSpeech)
             {

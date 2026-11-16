@@ -236,202 +236,178 @@ public partial class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>,
         _coefficients = new Vector<T>(P);
         _thresholds = new Vector<T>(K - 1);
 
-        // Initialize thresholds to evenly spaced values
-        for (int k = 0; k < K - 1; k++)
-        {
-            _thresholds[k] = NumOps.FromDouble(-2.0 + 4.0 * (k + 1) / K);
-        }
+        // Initialize thresholds to evenly spaced values: -2 + 4 * (k + 1) / K
+        var engine = Engine;
+        _thresholds = K <= 1
+            ? new Vector<T>(0)
+            : engine.TensorAddScalar(
+                engine.TensorDivideScalar(engine.TensorMultiplyScalar(engine.TensorArange<T>(1, K), NumOps.FromDouble(4.0)),
+                    NumOps.FromDouble(K)),
+                NumOps.FromDouble(-2.0)).ToVector();
 
         // Initialize coefficients to small random values
+        var initialCoefficients = new T[P];
         for (int p = 0; p < P; p++)
         {
-            _coefficients[p] = NumOps.FromDouble(0.01 * (_random.NextDouble() - 0.5));
+            initialCoefficients[p] = NumOps.FromDouble(0.01 * (_random.NextDouble() - 0.5));
         }
+
+        _coefficients = Vector<T>.Wrap(initialCoefficients);
 
         // Convert labels to class indices
-        var yIndices = new int[y.Length];
-        for (int i = 0; i < y.Length; i++)
-        {
-            yIndices[i] = GetClassIndex(y[i]);
-        }
-
-        // Pre-convert data to double arrays to avoid per-element NumOps.ToDouble in hot loop
-        int N = x.Rows;
-        var xDouble = new double[N, P];
-        for (int i = 0; i < N; i++)
-            for (int p = 0; p < P; p++)
-                xDouble[i, p] = NumOps.ToDouble(x[i, p]);
-
-        var coef = new double[P];
-        for (int p = 0; p < P; p++)
-            coef[p] = NumOps.ToDouble(_coefficients[p]);
-
-        var thresh = new double[K - 1];
-        for (int k = 0; k < K - 1; k++)
-            thresh[k] = NumOps.ToDouble(_thresholds[k]);
+        var yIndices = GetOrdinalClassIndices(y);
+        var features = Tensor<T>.FromMatrix(x);
+        T regularization = NumOps.FromDouble(_regularizationStrength);
+        T halfRegularization = NumOps.FromDouble(0.5 * _regularizationStrength);
+        T minGap = NumOps.FromDouble(0.001);
 
         // Optimization using the configured gradient-based optimizer (Adam by default).
-        double prevLoss = double.MaxValue;
-
-        // Pre-allocate arrays outside the training loop (avoid GC pressure)
-        var gradCoef = new double[P];
-        var gradThresh = new double[K - 1];
-        var cumProbs = new double[K - 1];
-        var probs = new double[K];
-        var etas = new double[N];
+        T prevLoss = NumOps.FromDouble(double.MaxValue);
 
         for (int iter = 0; iter < _maxIterations; iter++)
         {
-            // Zero gradients
-            Array.Clear(gradCoef, 0, P);
-            Array.Clear(gradThresh, 0, K - 1);
-            double loss = 0;
-
-            // Precompute all linear predictors: eta[i] = X[i,:] * coef
-            for (int i = 0; i < N; i++)
-            {
-                double eta = 0;
-                for (int p = 0; p < P; p++)
-                    eta += coef[p] * xDouble[i, p];
-                etas[i] = eta;
-            }
-
-            for (int i = 0; i < N; i++)
-            {
-                int yi = yIndices[i];
-                double eta = etas[i];
-
-                // Compute cumulative probabilities (reuse pre-allocated array)
-                for (int k = 0; k < K - 1; k++)
-                {
-                    double z = thresh[k] - eta;
-                    cumProbs[k] = 1.0 / (1.0 + Math.Exp(-z));
-                }
-
-                // Compute class probabilities (reuse pre-allocated array)
-                probs[0] = cumProbs[0];
-                for (int k = 1; k < K - 1; k++)
-                {
-                    probs[k] = cumProbs[k] - cumProbs[k - 1];
-                }
-                probs[K - 1] = 1.0 - cumProbs[K - 2];
-
-                // Ensure non-zero probabilities
-                for (int k = 0; k < K; k++)
-                {
-                    probs[k] = Math.Max(probs[k], 1e-15);
-                }
-
-                // Accumulate loss
-                loss -= Math.Log(probs[yi]);
-
-                // Compute gradients for coefficients w.r.t. negative log-likelihood.
-                // The sign is negative because ∂η/∂β = x but ∂(α-η)/∂β = -x,
-                // so the chain rule introduces a sign flip: ∂NLL/∂β = -∂NLL/∂η * x.
-                for (int p = 0; p < P; p++)
-                {
-                    double xi = xDouble[i, p];
-
-                    if (yi == 0)
-                    {
-                        // First class: dP(Y=0)/dη = -σ'(α₀-η) = -(cumProbs[0])(1-cumProbs[0])
-                        // dNLL/dβ = -(dP/dη / P) * x = (σ'(α₀-η) / P) * x
-                        gradCoef[p] -= xi * (cumProbs[0] - 1);
-                    }
-                    else if (yi == K - 1)
-                    {
-                        // Last class: dP(Y=K-1)/dη = σ'(α_{K-2}-η)
-                        // dNLL/dβ = -(dP/dη / P) * x
-                        gradCoef[p] -= xi * cumProbs[K - 2];
-                    }
-                    else
-                    {
-                        // Middle classes: ∂NLL/∂β = x * (σ'(α_{yi-1} - η) - σ'(α_yi - η)) / P(Y=yi)
-                        double term = cumProbs[yi - 1] * (1 - cumProbs[yi - 1]) - cumProbs[yi] * (1 - cumProbs[yi]);
-                        gradCoef[p] += xi * term / probs[yi];
-                    }
-                }
-
-                // Compute gradients for thresholds w.r.t. NLL.
-                // For P(Y ≤ k) = σ(αk - η):
-                //   ∂P(Y=k)/∂αk = +σ'(αk - η) = +γk
-                //   ∂P(Y=k+1)/∂αk = -σ'(αk - η) = -γk
-                // For NLL gradient ∂(-log P(Y=yi))/∂αk:
-                //   yi=k:   -γk / P(Y=k)     (negative: raising αk increases P(Y=k), decreasing NLL)
-                //   yi=k+1: +γk / P(Y=k+1)   (positive: raising αk decreases P(Y=k+1), increasing NLL)
-                for (int k = 0; k < K - 1; k++)
-                {
-                    double gamma_k = cumProbs[k] * (1 - cumProbs[k]);
-
-                    if (yi == k)
-                    {
-                        gradThresh[k] -= gamma_k / probs[yi];
-                    }
-                    else if (yi == k + 1)
-                    {
-                        gradThresh[k] += gamma_k / probs[yi];
-                    }
-                }
-            }
+            var (gradCoef, gradThresh, loss) = ComputeNegativeLogLikelihoodGradients(features, yIndices, _coefficients, _thresholds);
 
             // Add L2 regularization to coefficients gradient
-            for (int p = 0; p < P; p++)
-            {
-                gradCoef[p] += _regularizationStrength * NumOps.ToDouble(_coefficients[p]);
-                loss += 0.5 * _regularizationStrength * NumOps.ToDouble(_coefficients[p]) * NumOps.ToDouble(_coefficients[p]);
-            }
+            gradCoef = engine.Add(gradCoef, engine.Multiply(_coefficients, regularization));
+            loss = NumOps.Add(loss, NumOps.Multiply(halfRegularization, engine.DotProduct(_coefficients, _coefficients)));
 
             // Pack coefficients + thresholds into a single parameter vector for the optimizer.
             // Pass the raw (summed) gradient — the optimizer's adaptive learning rate (Adam's v_t)
             // naturally scales with gradient magnitude, so pre-averaging by N is redundant and
             // causes underflow when combined with the optimizer's own learning rate.
-            var paramVec = new Vector<T>(P + K - 1);
-            var gradVec = new Vector<T>(P + K - 1);
-
-            for (int p = 0; p < P; p++)
-            {
-                paramVec[p] = _coefficients[p];
-                gradVec[p] = NumOps.FromDouble(gradCoef[p]);
-            }
-            for (int k = 0; k < K - 1; k++)
-            {
-                paramVec[P + k] = _thresholds[k];
-                gradVec[P + k] = NumOps.FromDouble(gradThresh[k]);
-            }
+            var paramVec = Vector<T>.Concatenate(_coefficients, _thresholds);
+            var gradVec = Vector<T>.Concatenate(gradCoef, gradThresh);
 
             // Let the optimizer (Adam by default) handle the update with adaptive learning rates
             var updatedParams = _paramOptimizer.UpdateParameters(paramVec, gradVec);
 
             // Unpack updated parameters back into coefficients and thresholds
-            for (int p = 0; p < P; p++)
-            {
-                _coefficients[p] = updatedParams[p];
-                coef[p] = NumOps.ToDouble(updatedParams[p]);
-            }
-            for (int k = 0; k < K - 1; k++)
-            {
-                _thresholds[k] = updatedParams[P + k];
-                thresh[k] = NumOps.ToDouble(updatedParams[P + k]);
-            }
+            _coefficients = updatedParams.GetSubVector(0, P);
+            _thresholds = updatedParams.GetSubVector(P, K - 1);
 
             // Ensure thresholds are monotonically increasing
-            for (int k = 1; k < K - 1; k++)
-            {
-                if (thresh[k] <= thresh[k - 1])
-                {
-                    thresh[k] = thresh[k - 1] + 0.001;
-                    _thresholds[k] = NumOps.FromDouble(thresh[k]);
-                }
-            }
+            _thresholds = EnforceIncreasing(_thresholds, minGap);
 
             // Check convergence
-            loss /= x.Rows;
-            if (Math.Abs(prevLoss - loss) < _tolerance)
+            loss = NumOps.Divide(loss, NumOps.FromDouble(x.Rows));
+            if (HasConverged(prevLoss, loss))
             {
                 break;
             }
             prevLoss = loss;
         }
+    }
+
+    /// <summary>
+    /// Whether the loss changed by less than the tolerance.
+    /// </summary>
+    private bool HasConverged(T previousLoss, T loss)
+    {
+        return NumOps.LessThan(NumOps.Abs(NumOps.Subtract(previousLoss, loss)), NumOps.FromDouble(_tolerance));
+    }
+
+    /// <summary>
+    /// Raises every threshold that does not exceed its predecessor to predecessor + <paramref name="gap"/>
+    /// (a sequential scan, since each fix depends on the previous one).
+    /// </summary>
+    private Vector<T> EnforceIncreasing(Vector<T> thresholds, T gap)
+    {
+        int count = thresholds.Length;
+        if (count < 2)
+        {
+            return Vector<T>.Wrap(thresholds.ToArray());
+        }
+
+        // Each [1] slice depends on the already-fixed previous one
+        var engine = Engine;
+        var source = thresholds.AsTensor();
+        var previous = source.Slice(0, 0, 1);
+        var fixedValues = new List<Tensor<T>>(count) { previous };
+        for (int k = 1; k < count; k++)
+        {
+            var current = source.Slice(0, k, k + 1);
+            previous = engine.TensorWhere(engine.TensorLessEqual(current, previous), engine.TensorAddScalar(previous, gap), current);
+            fixedValues.Add(previous);
+        }
+
+        return engine.TensorConcatenate(fixedValues.ToArray(), 0).ToVector();
+    }
+
+    /// <summary>
+    /// Summed negative log-likelihood gradients of the cumulative logit model over all samples.
+    /// </summary>
+    /// <param name="features">The [N, P] features.</param>
+    /// <param name="classIndices">The class index of every sample.</param>
+    /// <param name="coefficients">The P coefficients.</param>
+    /// <param name="thresholds">The K - 1 thresholds.</param>
+    /// <returns>The coefficient gradient, the threshold gradient and the summed loss.</returns>
+    private (Vector<T> GradCoef, Vector<T> GradThresh, T Loss) ComputeNegativeLogLikelihoodGradients(
+        Tensor<T> features, Tensor<int> classIndices, Vector<T> coefficients, Vector<T> thresholds)
+    {
+        var engine = Engine;
+        int n = features.Shape[0];
+        int p = features.Shape[1];
+        int k = thresholds.Length + 1;
+        if (n == 0)
+        {
+            return (new Vector<T>(p), new Vector<T>(k - 1), NumOps.Zero);
+        }
+
+        // Linear predictors eta = X * coef and cumulative probabilities P(Y <= j) = sigmoid(alpha_j - eta)
+        var eta = engine.TensorMatMul(features, coefficients.AsTensor().Reshape(p, 1));
+        var cumulative = engine.TensorSigmoid(engine.TensorSubtract(thresholds.AsTensor().Reshape(1, k - 1), eta));
+
+        // Padded cumulative probabilities [0, P(Y<=0), ..., P(Y<=K-2), 1] and their derivatives gamma = c(1-c)
+        var zeros = new Tensor<T>(new[] { n, 1 });
+        var ones = new Tensor<T>(new[] { n, 1 });
+        engine.TensorFill(ones, NumOps.One);
+        var padded = engine.TensorConcatenate(new[] { zeros, cumulative, ones }, 1).Reshape(n * (k + 1));
+        var gammas = engine.TensorMultiply(padded, engine.ScalarMinusTensor(NumOps.One, padded));
+
+        // Row-wise picks at the sample's class: lo = P(Y <= y-1), hi = P(Y <= y)
+        var rowStarts = engine.TensorMultiplyScalar(engine.TensorArange<int>(0, n), k + 1);
+        var lo = engine.TensorAdd(rowStarts, classIndices.Reshape(n));
+        var hi = engine.TensorAddScalar(lo, 1);
+        var cumLo = engine.TensorGather(padded, lo, 0);
+        var cumHi = engine.TensorGather(padded, hi, 0);
+        var gammaLo = engine.TensorGather(gammas, lo, 0);
+        var gammaHi = engine.TensorGather(gammas, hi, 0);
+
+        // Class probabilities P(Y = y), kept away from zero
+        var probs = engine.TensorClampMin(engine.TensorSubtract(cumHi, cumLo), Tolerance(1e-15));
+        T loss = engine.TensorSum(engine.TensorNegate(engine.TensorLog(probs)));
+
+        // Coefficient factor per sample: first class 1 - P(Y<=0), last class -P(Y<=K-2),
+        // middle classes (gamma_y - gamma_{y-1}) / P(Y=y). With P(Y=y) = sigmoid(alpha_y - eta) - sigmoid(alpha_{y-1} - eta),
+        // dP/deta = gamma_{y-1} - gamma_y, so d(-log P)/deta = (gamma_y - gamma_{y-1}) / P, which also reduces to the
+        // first- and last-class factors when gamma_{-1} = gamma_{K-1} = 0.
+        var firstClass = engine.TensorGather(OneHotVector(0, k), classIndices.Reshape(n), 0);
+        var lastClass = engine.TensorGather(OneHotVector(k - 1, k), classIndices.Reshape(n), 0);
+        var middleClass = engine.ScalarMinusTensor(NumOps.One, engine.TensorAdd(firstClass, lastClass));
+        var factor = engine.TensorAdd(
+            engine.TensorAdd(
+                engine.TensorMultiply(firstClass, engine.ScalarMinusTensor(NumOps.One, cumHi)),
+                engine.TensorMultiply(lastClass, engine.TensorNegate(cumLo))),
+            engine.TensorMultiply(middleClass, engine.TensorDivide(engine.TensorSubtract(gammaHi, gammaLo), probs)));
+        var gradCoef = engine.TensorMatMul(engine.TensorTranspose(features), factor.Reshape(n, 1)).Reshape(p);
+
+        // Threshold gradients: -gamma_y / P at threshold y, +gamma_{y-1} / P at threshold y-1
+        var padIndex = engine.TensorSubtract(lo, rowStarts);
+        var thresholdGrad = new Tensor<T>(new[] { k + 1 });
+        thresholdGrad = engine.TensorScatterAdd(thresholdGrad, engine.TensorAddScalar(padIndex, 1),
+            engine.TensorNegate(engine.TensorDivide(gammaHi, probs)), 0);
+        thresholdGrad = engine.TensorScatterAdd(thresholdGrad, padIndex, engine.TensorDivide(gammaLo, probs), 0);
+
+        return (gradCoef.ToVector(), thresholdGrad.Slice(0, 1, k).ToVector(), loss);
+    }
+
+    /// <summary>
+    /// A length-<paramref name="length"/> vector that is 1 at <paramref name="index"/> and 0 elsewhere.
+    /// </summary>
+    private Tensor<T> OneHotVector(int index, int length)
+    {
+        return Engine.TensorOneHot<T>(new Tensor<int>(new[] { index }, new[] { 1 }), length).Reshape(length);
     }
 
     /// <summary>
@@ -446,26 +422,7 @@ public partial class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>,
     public override Vector<T> Predict(Matrix<T> input)
     {
         var probs = PredictProbabilities(input);
-        var predictions = new Vector<T>(input.Rows);
-
-        for (int i = 0; i < input.Rows; i++)
-        {
-            int bestClass = 0;
-            T bestProb = probs[i, 0];
-
-            for (int k = 1; k < NumClasses; k++)
-            {
-                if (NumOps.Compare(probs[i, k], bestProb) > 0)
-                {
-                    bestProb = probs[i, k];
-                    bestClass = k;
-                }
-            }
-
-            predictions[i] = ClassLabels is not null ? ClassLabels[bestClass] : NumOps.FromDouble(bestClass);
-        }
-
-        return predictions;
+        return input.Rows == 0 ? new Vector<T>(0) : ClassIndicesToLabels(ArgMaxRows(probs));
     }
 
     /// <summary>
@@ -487,27 +444,22 @@ public partial class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>,
 
         int n = features.Rows;
         int K = NumClasses;
-        var cumProbs = new Matrix<T>(n, K - 1);
-
-        for (int i = 0; i < n; i++)
+        if (n == 0 || K <= 1)
         {
-            // Compute linear predictor
-            double eta = 0;
-            for (int p = 0; p < NumFeatures; p++)
-            {
-                eta += NumOps.ToDouble(_coefficients[p]) * NumOps.ToDouble(features[i, p]);
-            }
-
-            // Compute cumulative probabilities
-            for (int k = 0; k < K - 1; k++)
-            {
-                double z = NumOps.ToDouble(_thresholds[k]) - eta;
-                double prob = 1.0 / (1.0 + Math.Exp(-z));
-                cumProbs[i, k] = NumOps.FromDouble(prob);
-            }
+            return new Matrix<T>(n, Math.Max(0, K - 1));
         }
 
-        return cumProbs;
+        // P(Y <= k) = sigmoid(threshold_k - x * coef)
+        var engine = Engine;
+        var x = Tensor<T>.FromMatrix(features);
+        if (features.Columns != NumFeatures)
+        {
+            x = x.Slice(1, 0, NumFeatures);
+        }
+
+        var eta = engine.TensorMatMul(x, _coefficients.AsTensor().Reshape(NumFeatures, 1));
+        var thresholds = _thresholds.AsTensor().Reshape(1, K - 1);
+        return engine.TensorSigmoid(engine.TensorSubtract(thresholds, eta)).ToMatrix();
     }
 
     /// <summary>
@@ -526,20 +478,7 @@ public partial class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>,
             return new Vector<T>(0);
         }
 
-        int totalLen = _coefficients.Length + _thresholds.Length;
-        var parameters = new Vector<T>(totalLen);
-
-        for (int i = 0; i < _coefficients.Length; i++)
-        {
-            parameters[i] = _coefficients[i];
-        }
-
-        for (int i = 0; i < _thresholds.Length; i++)
-        {
-            parameters[_coefficients.Length + i] = _thresholds[i];
-        }
-
-        return parameters;
+        return Vector<T>.Concatenate(_coefficients, _thresholds);
     }
 
     /// <summary>
@@ -565,19 +504,8 @@ public partial class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>,
 
             if (parameters.Length == numCoef + numThresh)
             {
-                _coefficients = new Vector<T>(numCoef);
-                _thresholds = new Vector<T>(numThresh);
-
-                for (int i = 0; i < numCoef; i++)
-                {
-                    _coefficients[i] = parameters[i];
-                }
-
-                for (int i = 0; i < numThresh; i++)
-                {
-                    _thresholds[i] = parameters[numCoef + i];
-                }
-
+                _coefficients = parameters.GetSubVector(0, numCoef);
+                _thresholds = parameters.GetSubVector(numCoef, numThresh);
                 return;
             }
         }
@@ -586,18 +514,8 @@ public partial class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>,
         int numThresholds = (parameters.Length + 1) / 2;
         int numCoefs = parameters.Length - numThresholds;
 
-        _coefficients = new Vector<T>(numCoefs);
-        _thresholds = new Vector<T>(numThresholds);
-
-        for (int i = 0; i < numCoefs; i++)
-        {
-            _coefficients[i] = parameters[i];
-        }
-
-        for (int i = 0; i < numThresholds; i++)
-        {
-            _thresholds[i] = parameters[numCoefs + i];
-        }
+        _coefficients = parameters.GetSubVector(0, numCoefs);
+        _thresholds = parameters.GetSubVector(numCoefs, numThresholds);
 
         NumFeatures = numCoefs;
     }
@@ -618,11 +536,7 @@ public partial class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>,
         model.NumClasses = NumClasses;
         if (ClassLabels is not null)
         {
-            model.ClassLabels = new Vector<T>(ClassLabels.Length);
-            for (int i = 0; i < ClassLabels.Length; i++)
-            {
-                model.ClassLabels[i] = ClassLabels[i];
-            }
+            model.ClassLabels = ClassLabels.Clone();
         }
         model.SetParameters(parameters);
         return model;
@@ -636,29 +550,15 @@ public partial class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>,
     {
         if (parameters.Length <= NumFeatures) return parameters;
 
-        var sanitized = new Vector<T>(parameters.Length);
         // Copy coefficients as-is
-        for (int i = 0; i < NumFeatures; i++)
-            sanitized[i] = parameters[i];
+        var coefficients = parameters.GetSubVector(0, NumFeatures);
 
-        // Sort thresholds to ensure monotonically increasing order
+        // Sort thresholds to ensure monotonically increasing order, then ensure a minimum gap between them
         int numThresholds = parameters.Length - NumFeatures;
-        var thresholds = new double[numThresholds];
-        for (int i = 0; i < numThresholds; i++)
-            thresholds[i] = NumOps.ToDouble(parameters[NumFeatures + i]);
-        Array.Sort(thresholds);
+        var sorted = Engine.TensorSort(parameters.GetSubVector(NumFeatures, numThresholds).AsTensor()).Values.ToVector();
+        var thresholds = EnforceIncreasing(sorted, NumOps.FromDouble(0.1));
 
-        // Ensure minimum gap between thresholds
-        for (int i = 1; i < numThresholds; i++)
-        {
-            if (thresholds[i] <= thresholds[i - 1])
-                thresholds[i] = thresholds[i - 1] + 0.1;
-        }
-
-        for (int i = 0; i < numThresholds; i++)
-            sanitized[NumFeatures + i] = NumOps.FromDouble(thresholds[i]);
-
-        return sanitized;
+        return Vector<T>.Concatenate(coefficients, thresholds);
     }
 
     /// <summary>
@@ -683,94 +583,19 @@ public partial class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>,
 
         int K = NumClasses;
         int P = NumFeatures;
-        var gradCoef = new double[P];
-        var gradThresh = new double[K - 1];
-
-        for (int i = 0; i < input.Rows; i++)
+        var features = Tensor<T>.FromMatrix(input);
+        if (input.Columns != P)
         {
-            int yi = GetClassIndex(target[i]);
-
-            // Compute linear predictor
-            double eta = 0;
-            for (int p = 0; p < P; p++)
-            {
-                eta += NumOps.ToDouble(_coefficients[p]) * NumOps.ToDouble(input[i, p]);
-            }
-
-            // Compute cumulative probabilities
-            var cumProbs = new double[K - 1];
-            for (int k = 0; k < K - 1; k++)
-            {
-                double z = NumOps.ToDouble(_thresholds[k]) - eta;
-                cumProbs[k] = 1.0 / (1.0 + Math.Exp(-z));
-            }
-
-            // Compute class probabilities
-            var probs = new double[K];
-            probs[0] = cumProbs[0];
-            for (int k = 1; k < K - 1; k++)
-            {
-                probs[k] = cumProbs[k] - cumProbs[k - 1];
-            }
-            probs[K - 1] = 1.0 - cumProbs[K - 2];
-
-            // Ensure non-zero probabilities
-            for (int k = 0; k < K; k++)
-            {
-                probs[k] = Math.Max(probs[k], 1e-15);
-            }
-
-            // Compute gradients for coefficients (NLL gradient, same sign as Train())
-            for (int p = 0; p < P; p++)
-            {
-                double xi = NumOps.ToDouble(input[i, p]);
-
-                if (yi == 0)
-                {
-                    gradCoef[p] -= xi * (cumProbs[0] - 1);
-                }
-                else if (yi == K - 1)
-                {
-                    gradCoef[p] -= xi * cumProbs[K - 2];
-                }
-                else
-                {
-                    double term = cumProbs[yi] * (1 - cumProbs[yi]) - cumProbs[yi - 1] * (1 - cumProbs[yi - 1]);
-                    gradCoef[p] -= xi * term / probs[yi];
-                }
-            }
-
-            // Compute gradients for thresholds (consistent with Train())
-            for (int k = 0; k < K - 1; k++)
-            {
-                double gamma_k = cumProbs[k] * (1 - cumProbs[k]);
-
-                if (yi == k)
-                {
-                    gradThresh[k] -= gamma_k / probs[yi];
-                }
-                else if (yi == k + 1)
-                {
-                    gradThresh[k] += gamma_k / probs[yi];
-                }
-            }
+            features = features.Slice(1, 0, P);
         }
+
+        // NLL gradients (same sign convention as Train())
+        var (gradCoef, gradThresh, _) = ComputeNegativeLogLikelihoodGradients(
+            features, GetOrdinalClassIndices(target), FitToLength(_coefficients, P), FitToLength(_thresholds, K - 1));
 
         // Normalize by batch size
-        int n = input.Rows;
-        var gradients = new Vector<T>(P + K - 1);
-
-        for (int p = 0; p < P; p++)
-        {
-            gradients[p] = NumOps.FromDouble(gradCoef[p] / n);
-        }
-
-        for (int k = 0; k < K - 1; k++)
-        {
-            gradients[P + k] = NumOps.FromDouble(gradThresh[k] / n);
-        }
-
-        return gradients;
+        T n = NumOps.FromDouble(input.Rows);
+        return Vector<T>.Concatenate(Engine.Divide(gradCoef, n), Engine.Divide(gradThresh, n));
     }
 
     /// <summary>
@@ -790,30 +615,17 @@ public partial class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>,
             throw new InvalidOperationException("Model has not been trained.");
         }
 
-        double lr = NumOps.ToDouble(learningRate);
+        var engine = Engine;
+        int numCoefficients = _coefficients.Length;
 
-        // Update coefficients
-        for (int p = 0; p < _coefficients.Length; p++)
-        {
-            double newVal = NumOps.ToDouble(_coefficients[p]) - lr * NumOps.ToDouble(gradients[p]);
-            _coefficients[p] = NumOps.FromDouble(newVal);
-        }
-
-        // Update thresholds
-        for (int k = 0; k < _thresholds.Length; k++)
-        {
-            double newVal = NumOps.ToDouble(_thresholds[k]) - lr * NumOps.ToDouble(gradients[_coefficients.Length + k]);
-            _thresholds[k] = NumOps.FromDouble(newVal);
-        }
+        // Update coefficients and thresholds: w = w - lr * g
+        _coefficients = engine.Subtract(_coefficients,
+            engine.Multiply(gradients.GetSubVector(0, numCoefficients), learningRate));
+        _thresholds = engine.Subtract(_thresholds,
+            engine.Multiply(gradients.GetSubVector(numCoefficients, _thresholds.Length), learningRate));
 
         // Ensure thresholds are monotonically increasing
-        for (int k = 1; k < _thresholds.Length; k++)
-        {
-            if (NumOps.LessThanOrEquals(_thresholds[k], _thresholds[k - 1]))
-            {
-                _thresholds[k] = NumOps.FromDouble(NumOps.ToDouble(_thresholds[k - 1]) + 0.001);
-            }
-        }
+        _thresholds = EnforceIncreasing(_thresholds, NumOps.FromDouble(0.001));
     }
 
     /// <summary>
@@ -832,26 +644,6 @@ public partial class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>,
             return base.GetFeatureImportance();
         }
 
-        var importance = new Dictionary<string, T>();
-
-        // Sum of absolute coefficients for normalization
-        double total = 0;
-        for (int i = 0; i < _coefficients.Length; i++)
-        {
-            total += Math.Abs(NumOps.ToDouble(_coefficients[i]));
-        }
-
-        if (total == 0) total = 1;
-
-        for (int i = 0; i < _coefficients.Length; i++)
-        {
-            string name = FeatureNames is not null && i < FeatureNames.Length
-                ? FeatureNames[i]
-                : $"Feature_{i}";
-            double imp = Math.Abs(NumOps.ToDouble(_coefficients[i])) / total;
-            importance[name] = NumOps.FromDouble(imp);
-        }
-
-        return importance;
+        return NormalizedCoefficientImportance(_coefficients);
     }
 }

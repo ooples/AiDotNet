@@ -18,7 +18,6 @@ param(
     [string] $AggregateAnalysisResult = 'skipped',
     [string] $SizeCheckResult = 'skipped',
     [string] $PromotionResult = 'skipped',
-    [string] $CodeQLResult = 'skipped',
     [string] $SonarResult = 'skipped',
     [string] $ValidationGateResult = 'skipped',
     # Paper fidelity runs on pull requests only (the nightly sweep covers everything else), so the
@@ -127,7 +126,6 @@ $regression = ConvertTo-CiJobConclusion $RegressionAnalysisResult 'test-regressi
 $aggregate = ConvertTo-CiJobConclusion $AggregateAnalysisResult 'ci-test-analysis'
 $sizeCheck = ConvertTo-CiJobConclusion $SizeCheckResult 'size-check'
 $promotion = ConvertTo-CiJobConclusion $PromotionResult 'promote-ci-test-analysis'
-$codeql = ConvertTo-CiJobConclusion $CodeQLResult 'codeql'
 $sonar = ConvertTo-CiJobConclusion $SonarResult 'sonarcloud'
 $validationGate = ConvertTo-CiJobConclusion $ValidationGateResult 'validation-gate'
 $paperFidelityPlan = ConvertTo-CiJobConclusion $PaperFidelityPlanResult 'paper-fidelity-plan'
@@ -175,15 +173,15 @@ else {
         # SonarCloud is advisory: it is reported below but never required. Its instrumented build
         # did not finish on any PR or master push checked in 2026-09 (timeouts and lost runners),
         # so requiring it blocked every merge without ever producing an analysis.
+        # CodeQL is not an input at all: it runs after merge from .github/workflows/codeql.yml,
+        # never in the run this gate judges.
         ([CiValidationReuseScope]::None) {
             Add-RequiredSuccess $requirements 'validation-gate' $validationGate
-            Add-RequiredSuccess $requirements 'codeql' $codeql
         }
         ([CiValidationReuseScope]::Validation) {
             if ($requiresRuntimeValidation) {
                 Add-RequiredSuccess $requirements 'promote-ci-test-analysis' $promotion
             }
-            Add-RequiredSuccess $requirements 'codeql' $codeql
         }
         ([CiValidationReuseScope]::Complete) {
             if ($requiresRuntimeValidation) {
@@ -213,8 +211,8 @@ $mode = if ($gateStage -eq [CiGateStage]::Validation) {
 }
 else {
     switch ($reuse) {
-        ([CiValidationReuseScope]::None) { 'current-run validation and quality' }
-        ([CiValidationReuseScope]::Validation) { 'reused validation; current-run quality' }
+        ([CiValidationReuseScope]::None) { 'current-run validation' }
+        ([CiValidationReuseScope]::Validation) { 'reused validation' }
         ([CiValidationReuseScope]::Complete) { 'reused complete CI' }
     }
 }

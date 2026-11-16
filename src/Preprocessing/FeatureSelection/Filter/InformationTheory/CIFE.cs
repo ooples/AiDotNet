@@ -27,7 +27,7 @@ public class CIFE<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
     private readonly int _nBins;
     private readonly double _beta;
 
-    private double[]? _cifeScores;
+    private Vector<T>? _cifeScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
@@ -35,7 +35,7 @@ public class CIFE<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NBins => _nBins;
     public double Beta => _beta;
-    public double[]? CIFEScores => _cifeScores;
+    public Vector<T>? CIFEScores => _cifeScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -74,171 +74,26 @@ public class CIFE<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
             throw new ArgumentException("Target length must match rows in data.");
 
         _nInputFeatures = data.Columns;
-        int n = data.Rows;
         int p = data.Columns;
-
-        var discretized = Discretize(data, n, p);
-        var targetDiscretized = DiscretizeTarget(target, n);
-
-        var relevance = new double[p];
-        for (int j = 0; j < p; j++)
-            relevance[j] = ComputeMI(discretized, j, targetDiscretized, n);
-
-        _cifeScores = new double[p];
-        var selected = new List<int>();
-
-        for (int k = 0; k < Math.Min(_nFeaturesToSelect, p); k++)
+        var info = DiscreteInformation<T>.ForTarget(
+            FeatureScoringTensorOps.RangeBins(FilterStatisticTensorOps.AsTensor(data), _nBins), _nBins, target);
+        var relevance = info.Relevance();
+        T beta = NumOps.FromDouble(_beta);
+        var penalty = FilterStatisticTensorOps.FilledLike(relevance, NumOps.Zero);
+        var (selected, scores) = DiscreteInformation<T>.Greedy(p, _nFeaturesToSelect, chosen =>
         {
-            double bestScore = double.MinValue;
-            int bestFeature = -1;
+            if (chosen.Count == 0)
+                return relevance;
+            int last = chosen[chosen.Count - 1];
+            penalty = Engine.TensorAdd(penalty, Engine.TensorSubtract(
+                info.FeatureMutualInformation(last),
+                Engine.TensorMultiplyScalar(info.ConditionalFeatureMutualInformation(last), beta)));
+            return Engine.TensorSubtract(relevance, penalty);
+        });
 
-            for (int j = 0; j < p; j++)
-            {
-                if (selected.Contains(j)) continue;
-
-                double cifeScore = relevance[j];
-                if (selected.Count > 0)
-                {
-                    double condInfo = 0;
-                    foreach (int s in selected)
-                    {
-                        double redundancy = ComputeFeatureMI(discretized, j, s, n);
-                        double interaction = ComputeInteraction(discretized, j, s, targetDiscretized, n);
-                        condInfo += redundancy - _beta * interaction;
-                    }
-                    cifeScore -= condInfo;
-                }
-
-                if (cifeScore > bestScore)
-                {
-                    bestScore = cifeScore;
-                    bestFeature = j;
-                }
-            }
-
-            if (bestFeature >= 0)
-            {
-                selected.Add(bestFeature);
-                _cifeScores[bestFeature] = bestScore;
-            }
-        }
-
-        _selectedIndices = selected.OrderBy(x => x).ToArray();
+        _cifeScores = scores;
+        _selectedIndices = selected;
         IsFitted = true;
-    }
-
-    private int[,] Discretize(Matrix<T> data, int n, int p)
-    {
-        var result = new int[n, p];
-        for (int j = 0; j < p; j++)
-        {
-            double min = double.MaxValue, max = double.MinValue;
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                if (val < min) min = val;
-                if (val > max) max = val;
-            }
-            double range = max - min;
-
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                result[i, j] = range > 1e-10
-                    ? Math.Min(_nBins - 1, (int)((val - min) / range * (_nBins - 1)))
-                    : 0;
-            }
-        }
-        return result;
-    }
-
-    private int[] DiscretizeTarget(Vector<T> target, int n)
-    {
-        var result = new int[n];
-        for (int i = 0; i < n; i++)
-            result[i] = NumOps.Compare(target[i], NumOps.One) == 0 ? 1 : 0;
-        return result;
-    }
-
-    private double ComputeMI(int[,] disc, int j, int[] target, int n)
-    {
-        var joint = new int[_nBins, 2];
-        var feat = new int[_nBins];
-        var tgt = new int[2];
-
-        for (int i = 0; i < n; i++)
-        {
-            joint[disc[i, j], target[i]]++;
-            feat[disc[i, j]]++;
-            tgt[target[i]]++;
-        }
-
-        double mi = 0;
-        for (int f = 0; f < _nBins; f++)
-        {
-            for (int t = 0; t < 2; t++)
-            {
-                if (joint[f, t] > 0 && feat[f] > 0 && tgt[t] > 0)
-                {
-                    double pJoint = (double)joint[f, t] / n;
-                    double pFeat = (double)feat[f] / n;
-                    double pTgt = (double)tgt[t] / n;
-                    mi += pJoint * Math.Log(pJoint / (pFeat * pTgt) + 1e-10);
-                }
-            }
-        }
-
-        return mi;
-    }
-
-    private double ComputeFeatureMI(int[,] disc, int j1, int j2, int n)
-    {
-        var joint = new int[_nBins, _nBins];
-        var f1 = new int[_nBins];
-        var f2 = new int[_nBins];
-
-        for (int i = 0; i < n; i++)
-        {
-            joint[disc[i, j1], disc[i, j2]]++;
-            f1[disc[i, j1]]++;
-            f2[disc[i, j2]]++;
-        }
-
-        double mi = 0;
-        for (int b1 = 0; b1 < _nBins; b1++)
-        {
-            for (int b2 = 0; b2 < _nBins; b2++)
-            {
-                if (joint[b1, b2] > 0 && f1[b1] > 0 && f2[b2] > 0)
-                {
-                    double pJoint = (double)joint[b1, b2] / n;
-                    double p1 = (double)f1[b1] / n;
-                    double p2 = (double)f2[b2] / n;
-                    mi += pJoint * Math.Log(pJoint / (p1 * p2) + 1e-10);
-                }
-            }
-        }
-
-        return mi;
-    }
-
-    private double ComputeInteraction(int[,] disc, int j1, int j2, int[] target, int n)
-    {
-        var counts = new Dictionary<(int, int, int), int>();
-        for (int i = 0; i < n; i++)
-        {
-            var key = (disc[i, j1], disc[i, j2], target[i]);
-            counts[key] = counts.GetValueOrDefault(key) + 1;
-        }
-
-        double jointMI = 0;
-        foreach (var kvp in counts)
-        {
-            double pJoint = (double)kvp.Value / n;
-            jointMI += pJoint * Math.Log(pJoint + 1e-10);
-        }
-
-        return -jointMI;
     }
 
     /// <inheritdoc />
@@ -254,15 +109,7 @@ public class CIFE<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeat
         if (_selectedIndices is null)
             throw new InvalidOperationException("CIFE has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return FilterStatisticTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

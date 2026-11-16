@@ -38,47 +38,33 @@ public class DepthEstimationPreprocessor<T> : DiffusionPreprocessorBase<T>
     /// <inheritdoc />
     public override Tensor<T> Transform(Tensor<T> data)
     {
+        var engine = AiDotNetEngine.Current;
         var shape = data._shape;
-        int batch = shape[0];
         int height = shape[2];
         int width = shape[3];
-        var result = new Tensor<T>(new[] { batch, 1, height, width });
 
-        for (int b = 0; b < batch; b++)
+        // Approximate depth from local contrast (low frequency = far): the mean over the replicate-padded 3x3
+        // neighbourhood of |gray - neighbour|, where neighbours use channel 0 at unit luma weight
+        var gray = PreprocessorFilters.Grayscale(data);
+        var red = PreprocessorFilters.Channel(data, 0);
+        var neighbourGray = engine.TensorAdd(engine.TensorAdd(
+                engine.TensorMultiplyScalar(red, NumOps.FromDouble(0.299)), engine.TensorMultiplyScalar(red, NumOps.FromDouble(0.587))),
+            engine.TensorMultiplyScalar(red, NumOps.FromDouble(0.114)));
+        var padded = engine.PadNd(neighbourGray, new[] { 1, 1, 1, 1 }, PadMode.Replicate, NumOps.Zero);
+
+        var localContrast = new Tensor<T>(gray._shape);
+        for (int dh = 0; dh <= 2; dh++)
         {
-            // Approximate depth from image gradients (frequency-based heuristic)
-            for (int h = 0; h < height; h++)
+            var rows = engine.TensorNarrow(padded, 2, dh, height);
+            for (int dw = 0; dw <= 2; dw++)
             {
-                for (int w = 0; w < width; w++)
-                {
-                    double r = NumOps.ToDouble(data[b, 0, h, w]);
-                    double g = shape[1] > 1 ? NumOps.ToDouble(data[b, 1, h, w]) : r;
-                    double bv = shape[1] > 2 ? NumOps.ToDouble(data[b, 2, h, w]) : r;
-                    double gray = 0.299 * r + 0.587 * g + 0.114 * bv;
-
-                    // Approximate depth from local contrast (low frequency = far)
-                    double localContrast = 0;
-                    int count = 0;
-                    for (int dh = -1; dh <= 1; dh++)
-                    {
-                        for (int dw = -1; dw <= 1; dw++)
-                        {
-                            int nh = Math.Max(0, Math.Min(h + dh, height - 1));
-                            int nw = Math.Max(0, Math.Min(w + dw, width - 1));
-                            double nr = NumOps.ToDouble(data[b, 0, nh, nw]);
-                            localContrast += Math.Abs(gray - (0.299 * nr + 0.587 * nr + 0.114 * nr));
-                            count++;
-                        }
-                    }
-                    localContrast /= count;
-
-                    // Higher local contrast suggests closer objects
-                    double depth = Math.Min(1.0, localContrast * 5.0);
-                    result[b, 0, h, w] = NumOps.FromDouble(depth);
-                }
+                var neighbour = engine.TensorNarrow(rows, 3, dw, width);
+                localContrast = engine.TensorAdd(localContrast, engine.TensorAbs(engine.TensorSubtract(gray, neighbour)));
             }
         }
 
-        return result;
+        // Higher local contrast suggests closer objects
+        localContrast = engine.TensorDivideScalar(localContrast, NumOps.FromDouble(9.0));
+        return engine.TensorMin(engine.TensorMultiplyScalar(localContrast, NumOps.FromDouble(5.0)), NumOps.One);
     }
 }

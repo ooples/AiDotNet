@@ -269,6 +269,22 @@ public abstract class NoiseSchedulerBase<T> : INoiseScheduler<T>
     /// <inheritdoc />
     public abstract Vector<T> Step(Vector<T> modelOutput, int timestep, Vector<T> sample, T eta, Vector<T>? noise = null);
 
+    /// <summary>
+    /// Computes the Karras-style noise levels sigma_t = sqrt((1 - alpha_cumprod_t) / alpha_cumprod_t) at the
+    /// current inference timesteps, followed by a terminal sigma of zero (the diffusers
+    /// <c>((1 - alphas_cumprod) / alphas_cumprod) ** 0.5</c> schedule with a trailing 0).
+    /// </summary>
+    /// <returns>A vector of length <c>Timesteps.Length + 1</c>.</returns>
+    private protected Vector<T> ComputeTimestepSigmas()
+    {
+        var timesteps = Timesteps;
+        var index = new Tensor<int>(new[] { timesteps.Length }, new Vector<int>(timesteps));
+        var alphaCumprod = Engine.TensorIndexSelect(AlphasCumulativeProduct.AsTensor(), index, 0).ToVector();
+        var oneMinusAlpha = Engine.Subtract(DiffusionVectorOps.Ones<T>(timesteps.Length), alphaCumprod);
+        var sigmas = Engine.Sqrt(Engine.Divide(oneMinusAlpha, alphaCumprod));
+        return Vector<T>.Concatenate(sigmas, new Vector<T>(1));
+    }
+
     /// <inheritdoc />
     public virtual T GetAlphaCumulativeProduct(int timestep)
     {

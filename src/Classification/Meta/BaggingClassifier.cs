@@ -174,20 +174,14 @@ public partial class BaggingClassifier<T> : MetaClassifierBase<T>
                 nameof(sampleSize));
         }
 
-        var xSample = new Matrix<T>(sampleSize, NumFeatures);
-        var ySample = new Vector<T>(sampleSize);
+        var indices = new int[sampleSize];
 
         if (Options.Bootstrap)
         {
             // Sample with replacement
             for (int i = 0; i < sampleSize; i++)
             {
-                int idx = random.Next(x.Rows);
-                for (int j = 0; j < NumFeatures; j++)
-                {
-                    xSample[i, j] = x[idx, j];
-                }
-                ySample[i] = y[idx];
+                indices[i] = random.Next(x.Rows);
             }
         }
         else
@@ -199,21 +193,11 @@ public partial class BaggingClassifier<T> : MetaClassifierBase<T>
                 int swapIdx = k + random.Next(pool.Length - k);
                 (pool[k], pool[swapIdx]) = (pool[swapIdx], pool[k]);
             }
-            var indices = new int[sampleSize];
             Array.Copy(pool, 0, indices, 0, sampleSize);
-
-            for (int i = 0; i < sampleSize; i++)
-            {
-                int idx = indices[i];
-                for (int j = 0; j < NumFeatures; j++)
-                {
-                    xSample[i, j] = x[idx, j];
-                }
-                ySample[i] = y[idx];
-            }
         }
 
-        return (xSample, ySample);
+        var (xSample, ySample) = SelectSamples(x, y, indices);
+        return (x.Columns == NumFeatures ? xSample : SelectColumns(xSample, Enumerable.Range(0, NumFeatures).ToArray()), ySample);
     }
 
     /// <summary>
@@ -230,17 +214,7 @@ public partial class BaggingClassifier<T> : MetaClassifierBase<T>
             .OrderBy(i => i)
             .ToArray();
 
-        var xSampled = new Matrix<T>(x.Rows, numFeatures);
-
-        for (int i = 0; i < x.Rows; i++)
-        {
-            for (int j = 0; j < numFeatures; j++)
-            {
-                xSampled[i, j] = x[i, featureIndices[j]];
-            }
-        }
-
-        return (xSampled, featureIndices);
+        return (SelectColumns(x, featureIndices), featureIndices);
     }
 
     /// <inheritdoc/>
@@ -251,52 +225,17 @@ public partial class BaggingClassifier<T> : MetaClassifierBase<T>
             throw new InvalidOperationException("Model has not been trained.");
         }
 
-        var predictions = new Vector<T>(input.Rows);
-
-        for (int i = 0; i < input.Rows; i++)
+        // Count votes from each estimator, using the same feature indices used during training
+        // (in int: a sum of T one-hot rows stops growing at 2048 for Half)
+        var votes = new Tensor<int>(new[] { input.Rows, NumClasses });
+        for (int e = 0; e < _estimators.Length; e++)
         {
-            // Count votes from each estimator
-            var votes = new int[NumClasses];
-
-            for (int e = 0; e < _estimators.Length; e++)
-            {
-                // Extract single sample using the same feature indices used during training
-                var featureIndices = _featureIndicesPerEstimator[e];
-                var sample = new Matrix<T>(1, featureIndices.Length);
-                for (int j = 0; j < featureIndices.Length; j++)
-                {
-                    sample[0, j] = input[i, featureIndices[j]];
-                }
-
-                var pred = _estimators[e].Predict(sample);
-
-                // Find which class this prediction corresponds to
-                for (int c = 0; c < NumClasses; c++)
-                {
-                    if (NumOps.Compare(pred[0], ClassLabels[c]) == 0)
-                    {
-                        votes[c]++;
-                        break;
-                    }
-                }
-            }
-
-            // Find class with most votes
-            int bestClass = 0;
-            int maxVotes = votes[0];
-            for (int c = 1; c < NumClasses; c++)
-            {
-                if (votes[c] > maxVotes)
-                {
-                    maxVotes = votes[c];
-                    bestClass = c;
-                }
-            }
-
-            predictions[i] = ClassLabels[bestClass];
+            var pred = _estimators[e].Predict(SelectColumns(input, _featureIndicesPerEstimator[e]));
+            votes = AddClassVotes(votes, pred);
         }
 
-        return predictions;
+        // Class with most votes (first class wins ties)
+        return MajorityVoteLabels(votes);
     }
 
     /// <inheritdoc/>
@@ -307,119 +246,42 @@ public partial class BaggingClassifier<T> : MetaClassifierBase<T>
             throw new InvalidOperationException("Model has not been trained.");
         }
 
-        var probs = new Matrix<T>(input.Rows, NumClasses);
+        var engine = Engine;
+        var probs = new Tensor<T>(new[] { input.Rows, NumClasses });
 
         // Average probabilities from all estimators
         for (int e = 0; e < _estimators.Length; e++)
         {
             // Extract features using the same indices used during training for this estimator
-            var featureIndices = _featureIndicesPerEstimator[e];
-            var filteredInput = new Matrix<T>(input.Rows, featureIndices.Length);
-            for (int i = 0; i < input.Rows; i++)
-            {
-                for (int j = 0; j < featureIndices.Length; j++)
-                {
-                    filteredInput[i, j] = input[i, featureIndices[j]];
-                }
-            }
+            var filteredInput = SelectColumns(input, _featureIndicesPerEstimator[e]);
 
-            Matrix<T> estProbs;
-
+            Tensor<T> estProbs;
             if (_estimators[e] is IProbabilisticClassifier<T> probClassifier)
             {
                 var rawProbs = probClassifier.PredictProbabilities(filteredInput);
 
                 // Align estimator probabilities to ensemble label space
-                if (rawProbs.Columns == NumClasses)
-                {
-                    estProbs = rawProbs;
-                }
-                else
-                {
-                    estProbs = new Matrix<T>(input.Rows, NumClasses);
-                    var estClassLabels = _estimators[e].ClassLabels;
-                    if (estClassLabels is not null)
-                    {
-                        for (int ec = 0; ec < estClassLabels.Length && ec < rawProbs.Columns; ec++)
-                        {
-                            for (int ensC = 0; ensC < NumClasses; ensC++)
-                            {
-                                if (NumOps.Compare(estClassLabels[ec], ClassLabels[ensC]) == 0)
-                                {
-                                    for (int i = 0; i < input.Rows; i++)
-                                    {
-                                        estProbs[i, ensC] = rawProbs[i, ec];
-                                    }
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
+                estProbs = Tensor<T>.FromMatrix(rawProbs.Columns == NumClasses
+                    ? rawProbs
+                    : AlignProbabilities(rawProbs, _estimators[e].ClassLabels));
             }
             else
             {
                 // Use hard predictions
-                var preds = _estimators[e].Predict(filteredInput);
-                estProbs = new Matrix<T>(input.Rows, NumClasses);
-
-                for (int i = 0; i < input.Rows; i++)
-                {
-                    for (int c = 0; c < NumClasses; c++)
-                    {
-                        var classLabels = ClassLabels ?? throw new InvalidOperationException("Model has not been fitted.");
-                        if (NumOps.Compare(preds[i], classLabels[c]) == 0)
-                        {
-                            estProbs[i, c] = NumOps.One;
-                        }
-                    }
-                }
+                estProbs = ClassMembership(_estimators[e].Predict(filteredInput));
             }
 
-            // Accumulate
-            for (int i = 0; i < input.Rows; i++)
-            {
-                for (int c = 0; c < NumClasses; c++)
-                {
-                    probs[i, c] = NumOps.Add(probs[i, c], estProbs[i, c]);
-                }
-            }
+            probs = engine.TensorAdd(probs, estProbs);
         }
 
-        // Average
-        T numEstimatorsT = NumOps.FromDouble(_estimators.Length);
-        for (int i = 0; i < input.Rows; i++)
-        {
-            for (int c = 0; c < NumClasses; c++)
-            {
-                probs[i, c] = NumOps.Divide(probs[i, c], numEstimatorsT);
-            }
-        }
-
-        return probs;
+        return engine.TensorDivideScalar(probs, NumOps.FromDouble(_estimators.Length)).ToMatrix();
     }
 
     /// <inheritdoc/>
     public override Matrix<T> PredictLogProbabilities(Matrix<T> input)
     {
-        var probs = PredictProbabilities(input);
-        var logProbs = new Matrix<T>(input.Rows, NumClasses);
-
-        for (int i = 0; i < input.Rows; i++)
-        {
-            for (int c = 0; c < NumClasses; c++)
-            {
-                T p = probs[i, c];
-                T minP = NumOps.FromDouble(1e-15);
-                if (NumOps.Compare(p, minP) < 0)
-                {
-                    p = minP;
-                }
-                logProbs[i, c] = NumOps.Log(p);
-            }
-        }
-
-        return logProbs;
+        // log(max(p, 1e-15)) of the averaged probabilities
+        return base.PredictLogProbabilities(input);
     }
 
     /// <inheritdoc/>

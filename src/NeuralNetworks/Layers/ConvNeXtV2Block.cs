@@ -175,7 +175,7 @@ public partial class ConvNeXtV2Block<T> : LayerBase<T>, IShapeContract
         var squared = Engine.TensorMultiply(x, x);
 
         var onesRow = new Tensor<T>(new[] { B, 1, S });
-        for (int i = 0; i < onesRow.Length; i++) onesRow[i] = NumOps.One;
+        onesRow.Fill(NumOps.One);
 
         var sumSq = Engine.TensorBatchMatMul<T>(onesRow, squared);       // [B, 1, I]
 
@@ -190,19 +190,19 @@ public partial class ConvNeXtV2Block<T> : LayerBase<T>, IShapeContract
         // never requested. APNet2 trains an 8-block ConvNeXt v2 stack and went NaN on its first
         // optimizer step.
         var sqrtEpsilon = new Tensor<T>(sumSq.Shape.ToArray());
-        for (int i = 0; i < sqrtEpsilon.Length; i++) sqrtEpsilon[i] = NumOps.FromDouble(1e-12);
+        sqrtEpsilon.Fill(NumOps.FromDouble(1e-12));
         var g = Engine.TensorSqrt(Engine.TensorAdd(sumSq, sqrtEpsilon));  // [B, 1, I]
 
         // Mean response across channels: [B, 1, 1], broadcast back over I.
         var onesChannels = new Tensor<T>(new[] { B, I, 1 });
-        for (int i = 0; i < onesChannels.Length; i++) onesChannels[i] = NumOps.One;
+        onesChannels.Fill(NumOps.One);
 
         var gSum = Engine.TensorBatchMatMul<T>(g, onesChannels);         // [B, 1, 1]
         var gMean = Engine.TensorDivideScalar(gSum, NumOps.FromDouble(I));
 
         // Guard against a zero mean response (an all-zero activation map) before dividing.
         var epsilon = new Tensor<T>(new[] { B, 1, 1 });
-        for (int i = 0; i < epsilon.Length; i++) epsilon[i] = NumOps.FromDouble(1e-6);
+        epsilon.Fill(NumOps.FromDouble(1e-6));
         gMean = Engine.TensorAdd(gMean, epsilon);
 
         var gMeanBroadcast = Engine.TensorBroadcastTo(gMean, [B, 1, I]);

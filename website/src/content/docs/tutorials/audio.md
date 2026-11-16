@@ -49,5 +49,5 @@ Audio components are used directly rather than via a single `AiModelBuilder` cal
 
 ## Next Steps
 
-- [Whisper Sample](/samples/audio/SpeechRecognition/Whisper/)
+- [Whisper Sample](https://github.com/ooples/AiDotNet/tree/master/samples/audio/SpeechRecognition/Whisper/)
 - [Classification Tutorial](/docs/tutorials/classification/)

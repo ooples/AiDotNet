@@ -239,8 +239,7 @@ public abstract partial class LatentDiffusionModelBase<T> : DiffusionModelBase<T
         // about "seed-derivation hash" was stale once that landed.
         var shapedInput = new Tensor<T>(genShape);
         int copyLen = Math.Min(input.Length, shapedInput.Length);
-        for (int i = 0; i < copyLen; i++)
-            shapedInput[i] = input[i];
+        input.AsSpan().Slice(0, copyLen).CopyTo(shapedInput.AsWritableSpan());
         return base.Predict(shapedInput);
     }
 
@@ -838,12 +837,9 @@ public abstract partial class LatentDiffusionModelBase<T> : DiffusionModelBase<T
     /// </summary>
     private void SanitizeFiniteInPlace(Tensor<T> tensor)
     {
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            double v = NumOps.ToDouble(tensor[i]);
-            if (double.IsNaN(v) || double.IsInfinity(v))
-                tensor[i] = NumOps.Zero;
-        }
+        // NaN and +/-infinity become zero
+        var sanitized = Engine.TensorNanToNum(tensor, 0.0, 0.0, 0.0);
+        sanitized.AsSpan().CopyTo(tensor.AsWritableSpan());
     }
 
     /// <summary>
@@ -973,32 +969,26 @@ public abstract partial class LatentDiffusionModelBase<T> : DiffusionModelBase<T
     /// <returns>The resized mask matching latent dimensions.</returns>
     protected virtual Tensor<T> ResizeMaskToLatent(Tensor<T> mask, int[] latentShape)
     {
-        // Simple nearest-neighbor downsampling
+        // Simple nearest-neighbor downsampling: latent (h, w) reads mask (floor(h * H / h_l), floor(w * W / w_l)),
+        // clamped to the mask, from channel 0 of the first latentShape[0] masks
         var latentHeight = latentShape[2];
         var latentWidth = latentShape[3];
-        var result = new Tensor<T>(new[] { latentShape[0], 1, latentHeight, latentWidth });
-
         var maskShape = mask._shape;
         var inputHeight = maskShape[2];
         var inputWidth = maskShape[3];
-
         var scaleH = (double)inputHeight / latentHeight;
         var scaleW = (double)inputWidth / latentWidth;
 
-        for (int b = 0; b < latentShape[0]; b++)
-        {
-            for (int h = 0; h < latentHeight; h++)
-            {
-                for (int w = 0; w < latentWidth; w++)
-                {
-                    var srcH = (int)(h * scaleH);
-                    var srcW = (int)(w * scaleW);
-                    result[b, 0, h, w] = mask[b, 0, Math.Min(srcH, inputHeight - 1), Math.Min(srcW, inputWidth - 1)];
-                }
-            }
-        }
+        var rows = new int[latentHeight];
+        for (int h = 0; h < latentHeight; h++)
+            rows[h] = Math.Min((int)(h * scaleH), inputHeight - 1);
+        var cols = new int[latentWidth];
+        for (int w = 0; w < latentWidth; w++)
+            cols[w] = Math.Min((int)(w * scaleW), inputWidth - 1);
 
-        return result;
+        var source = Engine.TensorNarrow(Engine.TensorNarrow(mask, 0, 0, latentShape[0]), 1, 0, 1);
+        var picked = Engine.TensorIndexSelect(source, new Tensor<int>(new[] { latentHeight }, new Vector<int>(rows)), 2);
+        return Engine.TensorIndexSelect(picked, new Tensor<int>(new[] { latentWidth }, new Vector<int>(cols)), 3);
     }
 
     /// <summary>
@@ -1018,43 +1008,15 @@ public abstract partial class LatentDiffusionModelBase<T> : DiffusionModelBase<T
         var noise = SampleNoiseTensor(original._shape, seededRng);
         var noisyOriginal = Scheduler.AddNoise(original.ToVector(), noise.ToVector(), timestep);
 
-        var result = new Tensor<T>(generated._shape);
-        var genSpan = generated.AsSpan();
-        var resultSpan = result.AsWritableSpan();
-
-        // Expand mask to all latent channels
-        var maskShape = mask._shape;
+        // Blend: mask * generated + (1 - mask) * noisy_original, with the [B, 1, H, W] mask expanded to every
+        // latent channel
         var genShape = generated._shape;
-
-        for (int b = 0; b < genShape[0]; b++)
-        {
-            for (int c = 0; c < genShape[1]; c++)
-            {
-                for (int h = 0; h < genShape[2]; h++)
-                {
-                    for (int w = 0; w < genShape[3]; w++)
-                    {
-                        var idx = b * genShape[1] * genShape[2] * genShape[3] +
-                                  c * genShape[2] * genShape[3] +
-                                  h * genShape[3] + w;
-                        var maskIdx = b * maskShape[2] * maskShape[3] +
-                                      h * maskShape[3] + w;
-
-                        var maskVal = NumOps.ToDouble(mask.AsSpan()[maskIdx]);
-                        var origVal = noisyOriginal[idx];
-                        var genVal = genSpan[idx];
-
-                        // Blend: mask * generated + (1 - mask) * noisy_original
-                        var maskT = NumOps.FromDouble(maskVal);
-                        var invMask = NumOps.FromDouble(1.0 - maskVal);
-                        resultSpan[idx] = NumOps.Add(
-                            NumOps.Multiply(maskT, genVal),
-                            NumOps.Multiply(invMask, origVal));
-                    }
-                }
-            }
-        }
-
+        var maskAll = Engine.TensorBroadcastTo(Engine.TensorNarrow(mask, 1, 0, 1),
+            new[] { genShape[0], genShape[1], genShape[2], genShape[3] });
+        var noisyOriginalTensor = new Tensor<T>(genShape, noisyOriginal);
+        var result = Engine.TensorAdd(
+            Engine.TensorMultiply(maskAll, generated),
+            Engine.TensorMultiply(Engine.ScalarMinusTensor(NumOps.One, maskAll), noisyOriginalTensor));
         return result;
     }
 

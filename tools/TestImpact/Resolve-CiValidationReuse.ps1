@@ -365,6 +365,28 @@ function Get-ShardFromJobName {
     return $JobName.Substring($separator + 4)
 }
 
+function Get-ExecutedShardsFromJob {
+    <#
+        The shards a test job ran to a result. An ordinary job is one shard, named by the job, and counts when
+        the job concluded success or failure. A packed job (repository variable TEST_IMPACT_REPACK=on;
+        ShardPacking.ps1) is named 'Pack NN of MM (K slices)' and runs several shard slices; each reports in a
+        step 'Packed slice N: <shard>' whose conclusion is that slice's own, so a slice counts when its step
+        concluded success or failure, whatever became of the job. A packed job with no such step ran nothing.
+    #>
+    param([Parameter(Mandatory)] $Job)
+    $name = Get-ShardFromJobName ([string] $Job.name)
+    if (-not $name) { return @() }
+    if ($name -cnotmatch '^Pack \d+ of \d+ \(\d+ slices\)$') {
+        if ([string] $Job.conclusion -in @('success', 'failure')) { return @($name) }
+        return @()
+    }
+    $steps = if ($Job.PSObject.Properties['steps']) { @($Job.steps) } else { @() }
+    return @($steps | Where-Object { $_ -and [string] $_.conclusion -in @('success', 'failure') } | ForEach-Object {
+        $slice = [regex]::Match([string] $_.name, '^Packed slice \d+: (?<shard>.+)$')
+        if ($slice.Success) { $slice.Groups['shard'].Value }
+    })
+}
+
 function Write-ReuseDecision {
     param(
         [Parameter(Mandatory)] [CiValidationReuseScope] $DecisionScope,
@@ -549,6 +571,28 @@ if ($SelfTest) {
         'a test job name did not yield its shard'
     Assert-True ($null -eq (Get-ShardFromJobName 'Build')) 'a non-test job was read as a shard'
     Assert-True ($null -eq (Get-ShardFromJobName 'Tests')) 'a malformed test job name was read as a shard'
+
+    # The shards a run executed, from its jobs: one per ordinary job, one per reported slice of a packed job.
+    $job = { param($Name, $Conclusion, $Steps) [pscustomobject]@{ name = $Name; conclusion = $Conclusion; steps = @($Steps) } }
+    $step = { param($Name, $Conclusion) [pscustomobject]@{ name = $Name; conclusion = $Conclusion } }
+    Assert-True ((@(Get-ExecutedShardsFromJob (& $job 'Tests (net10.0) - Integration D' 'failure' @())) -join '|') -ceq 'Integration D') `
+        'a failed ordinary shard job was not counted as executed'
+    Assert-True (@(Get-ExecutedShardsFromJob (& $job 'Tests (net10.0) - Integration D' 'cancelled' @())).Count -eq 0) `
+        'a cancelled ordinary shard job was counted as executed'
+    Assert-True (@(Get-ExecutedShardsFromJob (& $job 'Build' 'success' @())).Count -eq 0) 'a non-test job was counted as a shard'
+    $packed = & $job 'Tests (net10.0) - Pack 02 of 07 (4 slices)' 'cancelled' @(
+        (& $step 'Run tests (sharded) with coverage' 'failure'),
+        (& $step 'Packed slice 1: Unit - 02 Data' 'success'),
+        (& $step 'Packed slice 2: Integration E-G' 'failure'),
+        (& $step 'Packed slice 3: ModelFamily - Audio' 'cancelled'),
+        (& $step 'Packed slice 4: Unit - 01 Activation/Attention' 'skipped'),
+        (& $step 'Upload coverage + test results (packed slice 1)' 'success'))
+    Assert-True ((@(Get-ExecutedShardsFromJob $packed) -join '|') -ceq 'Unit - 02 Data|Integration E-G') `
+        'a packed job was not read as the slices that ran to a result'
+    Assert-True (@(Get-ExecutedShardsFromJob (& $job 'Tests (net10.0) - Pack 02 of 07 (4 slices)' 'success' @())).Count -eq 0) `
+        'a packed job that reported no slice was counted as a shard'
+    Assert-True (@(Get-ExecutedShardsFromJob ([pscustomobject]@{ name = 'Tests (net10.0) - Pack 01 of 01 (2 slices)'; conclusion = 'success' })).Count -eq 0) `
+        'a packed job without a step list was counted as a shard'
 
     # A partial re-run imports both artifacts of every imported shard by exact name.
     $tested = '0123456789abcdef0123456789abcdef01234567'
@@ -845,8 +889,7 @@ function Get-DeltaPlan {
         $jobPages = @(Invoke-GhJson @('api', '--paginate', '--slurp',
             "repos/$Repository/actions/runs/$($Candidate.RunId)/jobs?per_page=100"))
         $pullRequestShards = @($jobPages | ForEach-Object { $_.jobs } |
-            Where-Object { [string] $_.conclusion -in @('success', 'failure') } |
-            ForEach-Object { Get-ShardFromJobName ([string] $_.name) } |
+            ForEach-Object { Get-ExecutedShardsFromJob $_ } |
             Where-Object { $_ } | Sort-Object -Unique)
         # A runtime certificate with no executed shard is not evidence of anything to reuse.
         if ($pullRequestShards.Count -eq 0) { return 'the validated run executed no test shards' }

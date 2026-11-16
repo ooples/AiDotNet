@@ -25,7 +25,7 @@ namespace AiDotNet.LearningRateSchedulers;
 ///     new LinearWarmupScheduler(0.001, 1000, 1000),
 ///     new CosineAnnealingLRScheduler(0.001, 9000)
 /// };
-/// var milestones = new[] { 1000 };  // Switch after step 1000
+/// var milestones = new[] { 1000 };  // The cosine starts, at its own step 0, once 1000 steps have run
 /// var scheduler = new SequentialLRScheduler(schedulers, milestones);
 /// </code>
 /// </example>
@@ -39,7 +39,8 @@ public class SequentialLRScheduler : LearningRateSchedulerBase
     /// Initializes a new instance of the SequentialLRScheduler class.
     /// </summary>
     /// <param name="schedulers">List of schedulers to chain together.</param>
-    /// <param name="milestones">Steps at which to switch to the next scheduler.</param>
+    /// <param name="milestones">Step counts at which the next scheduler takes over, starting at its own step 0
+    /// (PyTorch's <c>SequentialLR</c>).</param>
     /// <exception cref="ArgumentException">Thrown when parameters are invalid.</exception>
     public SequentialLRScheduler(
         IList<ILearningRateScheduler> schedulers,
@@ -86,14 +87,25 @@ public class SequentialLRScheduler : LearningRateSchedulerBase
     {
         _currentStep++;
 
-        // Check if we need to switch to next scheduler
+        // PyTorch's SequentialLR: once the step count reaches a milestone the next scheduler takes over, and it
+        // starts at its own step 0 (PyTorch calls scheduler.step(0)) rather than being stepped once on the switch.
+        int previous = _currentSchedulerIndex;
         while (_currentSchedulerIndex < _milestones.Length &&
-               _currentStep > _milestones[_currentSchedulerIndex])
+               _currentStep >= _milestones[_currentSchedulerIndex])
         {
             _currentSchedulerIndex++;
         }
 
-        _currentLearningRate = _schedulers[_currentSchedulerIndex].Step();
+        var active = _schedulers[_currentSchedulerIndex];
+        if (_currentSchedulerIndex != previous)
+        {
+            active.Reset();
+            _currentLearningRate = active.CurrentLearningRate;
+        }
+        else
+        {
+            _currentLearningRate = active.Step();
+        }
         return _currentLearningRate;
     }
 
@@ -106,7 +118,7 @@ public class SequentialLRScheduler : LearningRateSchedulerBase
 
         for (int i = 0; i < _milestones.Length; i++)
         {
-            if (step > _milestones[i])
+            if (step >= _milestones[i])
             {
                 schedulerIndex = i + 1;
                 schedulerStartStep = _milestones[i];

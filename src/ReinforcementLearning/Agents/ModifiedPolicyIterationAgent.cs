@@ -168,7 +168,8 @@ public partial class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgen
         // largest value change in a sweep falls below Theta, the evaluation tolerance.
         for (int sweep = 0; sweep < _options.MaxEvaluationSweeps; sweep++)
         {
-            double largestChange = 0.0;
+            var oldValues = new List<T>();
+            var newValues = new List<T>();
             foreach (var stateKey in _valueTable.Keys.ToList())
             {
                 if (!_policy.ContainsKey(stateKey))
@@ -178,12 +179,12 @@ public partial class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgen
 
                 int action = _policy[stateKey];
                 T newValue = ComputeActionValue(stateKey, action);
-                largestChange = Math.Max(largestChange,
-                    Math.Abs(NumOps.ToDouble(newValue) - NumOps.ToDouble(_valueTable[stateKey])));
+                oldValues.Add(_valueTable[stateKey]);
+                newValues.Add(newValue);
                 _valueTable[stateKey] = newValue;
             }
 
-            if (largestChange < _options.Theta)
+            if (SweepConverged(oldValues, newValues))
             {
                 break;
             }
@@ -193,6 +194,31 @@ public partial class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgen
     /// <summary>The value table's estimate for a state, or zero for a state the agent has not seen.</summary>
     internal T StateValue(Vector<T> state) => _valueTable.TryGetValue(GetStateKey(state), out var value) ? value : NumOps.Zero;
 
+    /// <summary>
+    /// True when the sweep's largest change max(0, max |new - old|) is below Theta. A NaN change
+    /// poisons the running Math.Max, so it never converges, exactly like the scalar tracker.
+    /// </summary>
+    private bool SweepConverged(List<T> oldValues, List<T> newValues)
+    {
+        T theta = NumOps.FromDouble(_options.Theta);
+        if (oldValues.Count == 0)
+        {
+            return NumOps.LessThan(NumOps.Zero, theta);
+        }
+
+        var engine = AiDotNetEngine.Current;
+        var change = engine.Abs(engine.Subtract(Vector<T>.FromEnumerable(newValues), Vector<T>.FromEnumerable(oldValues)));
+        var changeTensor = change.AsTensor();
+        var nanFlags = engine.TensorWhere(engine.TensorIsNan(changeTensor),
+            engine.TensorFullLike(changeTensor, NumOps.One), engine.TensorFullLike(changeTensor, NumOps.Zero));
+        if (RLTensorOps.AnyGreaterThan(nanFlags.ToVector(), NumOps.Zero))
+        {
+            return false;
+        }
+
+        return NumOps.LessThan(RLTensorOps.MaxAbove(change, NumOps.Zero), theta);
+    }
+
     private bool PolicyImprovement()
     {
         bool policyStable = true;
@@ -201,19 +227,7 @@ public partial class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgen
         {
             int oldAction = _policy[stateKey];
 
-            int bestAction = 0;
-            T bestValue = NumOps.MinValue;
-
-            for (int a = 0; a < _options.ActionSize; a++)
-            {
-                T actionValue = ComputeActionValue(stateKey, a);
-
-                if (NumOps.GreaterThan(actionValue, bestValue))
-                {
-                    bestValue = actionValue;
-                    bestAction = a;
-                }
-            }
+            int bestAction = RLTensorOps.ArgMaxAbove(ActionValues(stateKey), NumOps.MinValue, out _);
 
             _policy[stateKey] = bestAction;
 
@@ -226,6 +240,12 @@ public partial class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgen
         return policyStable;
     }
 
+    /// <summary>The one-step look-ahead value of every action in a state, as a vector.</summary>
+    private Vector<T> ActionValues(string stateKey)
+    {
+        return Vector<T>.FromEnumerable(Enumerable.Range(0, _options.ActionSize).Select(a => ComputeActionValue(stateKey, a)));
+    }
+
     private T ComputeActionValue(string stateKey, int action)
     {
         if (!_model.ContainsKey(stateKey) || !_model[stateKey].ContainsKey(action))
@@ -233,27 +253,26 @@ public partial class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgen
             return NumOps.Zero;
         }
 
-        T expectedValue = NumOps.Zero;
-
         // Normalize probabilities by total count to prevent blow-up
         var transitions = _model[stateKey][action];
-        T totalCount = NumOps.FromDouble(transitions.Count);
-
-        foreach (var (nextStateKey, reward, probability) in transitions)
+        if (transitions.Count == 0)
         {
-            T nextValue = NumOps.Zero;
-            if (_valueTable.ContainsKey(nextStateKey))
-            {
-                nextValue = _valueTable[nextStateKey];
-            }
-
-            // Normalize probability: each transition gets weight 1/N
-            T normalizedProb = NumOps.Divide(probability, totalCount);
-            T transitionValue = NumOps.Add(reward, NumOps.Multiply(DiscountFactor, nextValue));
-            expectedValue = NumOps.Add(expectedValue, NumOps.Multiply(normalizedProb, transitionValue));
+            return NumOps.Zero;
         }
 
-        return expectedValue;
+        T totalCount = NumOps.FromDouble(transitions.Count);
+
+        // Expected value sum_s' (p(s') / N) * (r + gamma * V(s')), with V = 0 for unseen states;
+        // each transition's probability is normalized by the transition count N.
+        var engine = AiDotNetEngine.Current;
+        var zero = NumOps.Zero;
+        var rewards = Vector<T>.FromEnumerable(transitions.Select(transition => transition.Item2));
+        var probabilities = Vector<T>.FromEnumerable(transitions.Select(transition => transition.Item3));
+        var nextValues = Vector<T>.FromEnumerable(transitions.Select(
+            transition => _valueTable.TryGetValue(transition.Item1, out var value) ? value : zero));
+        var normalized = engine.Divide(probabilities, totalCount);
+        var transitionValues = engine.Add(rewards, engine.Multiply(nextValues, DiscountFactor));
+        return engine.DotProduct(normalized, transitionValues);
     }
 
     private string GetStateKey(Vector<T> state)
@@ -263,19 +282,7 @@ public partial class ModifiedPolicyIterationAgent<T> : ReinforcementLearningAgen
 
     private int ArgMax(Vector<T> values)
     {
-        int maxIndex = 0;
-        T maxValue = values[0];
-
-        for (int i = 1; i < values.Length; i++)
-        {
-            if (NumOps.GreaterThan(values[i], maxValue))
-            {
-                maxValue = values[i];
-                maxIndex = i;
-            }
-        }
-
-        return maxIndex;
+        return RLTensorOps.ArgMax(values);
     }
 
     /// <inheritdoc />

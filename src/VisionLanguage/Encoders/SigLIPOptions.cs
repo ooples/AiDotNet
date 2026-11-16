@@ -95,6 +95,6 @@ public class SigLIPOptions : ContrastiveEncoderOptions
         MaxSequenceLength = 16;
         LearningRate = 0.001;
         WeightDecay = 0.0001;
-        Temperature = 1.0; // SigLIP uses higher temperature with sigmoid loss
+        Temperature = 0.1; // 1 / t with the paper's initial t = 10 (Zhai et al., 2023, Sec. 3.3)
     }
 }

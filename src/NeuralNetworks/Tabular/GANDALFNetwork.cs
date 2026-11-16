@@ -262,11 +262,8 @@ public partial class GANDALFNetwork<T> : TabularNeuralNetworkBase<T>
         int numFeatures = Architecture.CalculatedInputSize;
 
         // Initialize with zeros
-        var featureScores = new T[numFeatures];
-        for (int f = 0; f < numFeatures; f++)
-        {
-            featureScores[f] = NumOps.Zero;
-        }
+        var featureScores = new Vector<T>(numFeatures);
+        featureScores.Fill(NumOps.Zero);
 
         // Aggregate importance from all SoftTreeLayers
         int treeCount = 0;
@@ -275,10 +272,11 @@ public partial class GANDALFNetwork<T> : TabularNeuralNetworkBase<T>
             if (layer is SoftTreeLayer<T> treeLayer)
             {
                 var treeImportance = treeLayer.GetFeatureImportance();
-                for (int f = 0; f < Math.Min(numFeatures, treeImportance.Length); f++)
-                {
-                    featureScores[f] = NumOps.Add(featureScores[f], treeImportance[f]);
-                }
+                // The first min(numFeatures, length) scores, zero-padded to numFeatures.
+                int shared = Math.Min(numFeatures, treeImportance.Length);
+                var contribution = new Vector<T>(treeImportance.Take(shared)
+                    .Concat(Enumerable.Repeat(NumOps.Zero, numFeatures - shared)));
+                featureScores = Engine.Add(featureScores, contribution);
                 treeCount++;
             }
         }
@@ -286,10 +284,10 @@ public partial class GANDALFNetwork<T> : TabularNeuralNetworkBase<T>
         // Average across trees (or return uniform if no trees found)
         if (treeCount > 0)
         {
-            var treeCountT = NumOps.FromDouble(treeCount);
+            var averaged = Engine.Divide(featureScores, NumOps.FromDouble(treeCount)).ToArray();
             for (int f = 0; f < numFeatures; f++)
             {
-                importance[$"feature_{f}"] = NumOps.Divide(featureScores[f], treeCountT);
+                importance[$"feature_{f}"] = averaged[f];
             }
         }
         else

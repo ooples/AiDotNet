@@ -148,16 +148,15 @@ public sealed class LinearProgram<T>
         ValidateFiniteVector(upperBounds, nameof(upperBounds), allowInfinity: true, numOps);
         ValidateDirectionalInfinity(lowerBounds, nameof(lowerBounds), rejectPositiveInfinity: true, numOps);
         ValidateDirectionalInfinity(upperBounds, nameof(upperBounds), rejectPositiveInfinity: false, numOps);
-        if (lowerBounds is not null && upperBounds is not null)
+        if (lowerBounds is not null && upperBounds is not null && objective.Length > 0)
         {
-            for (int i = 0; i < objective.Length; i++)
+            var crossed = SolverTensorOps<T>.First(SolverTensorOps<T>.Engine.TensorGreaterThan(
+                SolverTensorOps<T>.AsTensor(lowerBounds), SolverTensorOps<T>.AsTensor(upperBounds)));
+            if (crossed is not null)
             {
-                if (numOps.GreaterThan(lowerBounds[i], upperBounds[i]))
-                {
-                    throw new ArgumentException(
-                        $"Lower bound at index {i} exceeds the corresponding upper bound.",
-                        nameof(lowerBounds));
-                }
+                throw new ArgumentException(
+                    $"Lower bound at index {crossed[0]} exceeds the corresponding upper bound.",
+                    nameof(lowerBounds));
             }
         }
 
@@ -222,19 +221,13 @@ public sealed class LinearProgram<T>
         string boundsName,
         INumericOperations<T> numOps)
     {
-        if (matrix is not null)
+        if (matrix is not null && matrix.Rows > 0 && matrix.Columns > 0)
         {
-            for (int r = 0; r < matrix.Rows; r++)
+            var first = SolverTensorOps<T>.First(SolverTensorOps<T>.NonFinite(SolverTensorOps<T>.AsTensor(matrix)));
+            if (first is not null)
             {
-                for (int c = 0; c < matrix.Columns; c++)
-                {
-                    double value = numOps.ToDouble(matrix[r, c]);
-                    if (double.IsNaN(value) || double.IsInfinity(value))
-                    {
-                        throw new ArgumentException(
-                            $"{matrixName}[{r}, {c}] must be finite.", matrixName);
-                    }
-                }
+                throw new ArgumentException(
+                    $"{matrixName}[{first[0]}, {first[1]}] must be finite.", matrixName);
             }
         }
 
@@ -247,14 +240,15 @@ public sealed class LinearProgram<T>
         bool allowInfinity,
         INumericOperations<T> numOps)
     {
-        if (vector is null) return;
-        for (int i = 0; i < vector.Length; i++)
+        if (vector is null || vector.Length == 0) return;
+        var values = SolverTensorOps<T>.AsTensor(vector);
+        var first = SolverTensorOps<T>.First(
+            allowInfinity ? SolverTensorOps<T>.NaN(values) : SolverTensorOps<T>.NonFinite(values));
+        if (first is not null)
         {
+            int i = first[0];
             double value = numOps.ToDouble(vector[i]);
-            if (double.IsNaN(value) || (!allowInfinity && double.IsInfinity(value)))
-            {
-                throw new ArgumentException($"{name}[{i}] has an invalid value {value}.", name);
-            }
+            throw new ArgumentException($"{name}[{i}] has an invalid value {value}.", name);
         }
     }
 
@@ -264,18 +258,17 @@ public sealed class LinearProgram<T>
         bool rejectPositiveInfinity,
         INumericOperations<T> numOps)
     {
-        if (vector is null) return;
-        for (int i = 0; i < vector.Length; i++)
+        if (vector is null || vector.Length == 0) return;
+        var values = SolverTensorOps<T>.AsTensor(vector);
+        var engine = SolverTensorOps<T>.Engine;
+        var first = SolverTensorOps<T>.First(
+            rejectPositiveInfinity ? engine.TensorIsPosInf(values) : engine.TensorIsNegInf(values));
+        if (first is not null)
         {
-            double value = numOps.ToDouble(vector[i]);
-            if ((rejectPositiveInfinity && double.IsPositiveInfinity(value)) ||
-                (!rejectPositiveInfinity && double.IsNegativeInfinity(value)))
-            {
-                string direction = rejectPositiveInfinity ? "positive" : "negative";
-                throw new ArgumentException(
-                    $"{name}[{i}] cannot be {direction} infinity because it makes the bound infeasible.",
-                    name);
-            }
+            string direction = rejectPositiveInfinity ? "positive" : "negative";
+            throw new ArgumentException(
+                $"{name}[{first[0]}] cannot be {direction} infinity because it makes the bound infeasible.",
+                name);
         }
     }
 }

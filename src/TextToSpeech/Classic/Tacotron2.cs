@@ -215,10 +215,8 @@ public partial class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainin
     {
         double p = _options.PrenetDropout;
         if (p <= 0) return x;
-        var mask = new Tensor<T>(x._shape);
-        var keep = NumOps.FromDouble(1.0 / (1.0 - p));
-        for (int i = 0; i < mask.Length; i++) mask[i] = _regularizationRandom.NextDouble() < p ? NumOps.Zero : keep;
-        return Engine.TensorMultiply(x, mask);
+        // A per-step draw: a compiled training plan refills the mask before every replay.
+        return Engine.TensorMultiply(x, AiDotNet.Training.CompiledStepRandom<T>.InvertedDropoutMask(x._shape, _regularizationRandom, p));
     }
 
     // Zoneout (Krueger et al. 2017), probability 0.1 (§2.2): in training each unit of the LSTM state keeps its previous
@@ -229,8 +227,12 @@ public partial class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainin
         if (p <= 0) return next;
         if (!IsTrainingMode)
             return Engine.TensorAdd(Engine.TensorMultiplyScalar(previous, NumOps.FromDouble(p)), Engine.TensorMultiplyScalar(next, NumOps.FromDouble(1 - p)));
-        var mask = new Tensor<T>(next._shape);
-        for (int i = 0; i < mask.Length; i++) mask[i] = _regularizationRandom.NextDouble() < p ? NumOps.One : NumOps.Zero;
+        // A per-step draw: a compiled training plan refills the zoneout mask before every replay.
+        var mask = AiDotNet.Training.CompiledStepRandom<T>.Draw(next._shape, m =>
+        {
+            var span = m.AsWritableSpan();
+            for (int i = 0; i < span.Length; i++) span[i] = _regularizationRandom.NextDouble() < p ? NumOps.One : NumOps.Zero;
+        });
         var change = Engine.TensorAddScalar(Engine.TensorNegate(mask), NumOps.One);
         return Engine.TensorAdd(Engine.TensorMultiply(mask, previous), Engine.TensorMultiply(change, next));
     }
@@ -260,6 +262,7 @@ public partial class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainin
         var previous = new Tensor<T>(new[] { 1, groupWidth });
         var groups = new List<Tensor<T>>();
         var stops = new List<Tensor<T>>();
+        double stopThreshold = o.StopThreshold;
         for (int step = 0; step < steps; step++)
         {
             var prenet = Prenet(previous);
@@ -276,7 +279,7 @@ public partial class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainin
             if (target is null)
             {
                 previous = group;
-                if (1.0 / (1.0 + Math.Exp(-NumOps.ToDouble(stop[0, 0]))) > o.StopThreshold)
+                if (StopsAfter(stop, stopThreshold))
                     break;
             }
             else
@@ -290,18 +293,36 @@ public partial class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainin
         return (frames, stopLogits);
     }
 
+    // A 0/1 mask of one uniform draw per element in flat order: 1 where the draw falls below p (dropWhenDrawn false)
+    // or where it does not (dropWhenDrawn true).
+    private Tensor<T> BernoulliMask(int[] shape, double p, bool dropWhenDrawn)
+    {
+        int length = 1;
+        foreach (int d in shape) length *= d;
+        var bits = new int[length];
+        for (int i = 0; i < length; i++) bits[i] = (_regularizationRandom.NextDouble() < p) != dropWhenDrawn ? 1 : 0;
+        return new Tensor<int>(bits, shape).Cast<T>();
+    }
+
     // The ground-truth frame group of step `step`, zero-padded past the end.
+    /// <summary>
+    /// The stop decision σ(logit) &gt; threshold of a <c>[1, 1]</c> stop logit, read once per step and formed in double:
+    /// a narrow T rounds σ(2⁻¹²) ≈ 0.500061 to 0.5, which would keep decoding past the default threshold of 0.5.
+    /// </summary>
+    internal static bool StopsAfter(Tensor<T> stopLogit, double threshold)
+    {
+        double logit = stopLogit.Cast<double>().ToArray()[0];
+        return 1.0 / (1.0 + Math.Exp(-logit)) > threshold;
+    }
+
     private Tensor<T> TargetGroup(Tensor<T> target, int step)
     {
         int r = _options.OutputsPerStep, mel = _options.MelChannels;
-        var group = new Tensor<T>(new[] { 1, mel * r });
-        for (int f = 0; f < r; f++)
-        {
-            int frame = step * r + f;
-            if (frame >= target.Shape[0]) break;
-            for (int m = 0; m < mel; m++) group[0, f * mel + m] = target[frame, m];
-        }
-        return group;
+        int first = step * r, available = Math.Max(0, Math.Min(r, target.Shape[0] - first));
+        if (available == 0) return new Tensor<T>(new[] { 1, mel * r });
+        var rows = Engine.Reshape(Engine.TensorSlice(target, new[] { first, 0 }, new[] { available, mel }), new[] { 1, available * mel });
+        if (available == r) return rows.Clone();
+        return Engine.TensorConcatenate(new[] { rows, new Tensor<T>(new[] { 1, (r - available) * mel }) }, 1);
     }
 
     /// <inheritdoc />

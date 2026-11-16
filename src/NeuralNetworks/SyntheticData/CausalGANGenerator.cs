@@ -138,6 +138,12 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
     private double _lagrangeRho;
     private double _prevDagConstraint;
 
+    // NOTEARS progress of the current fit: outer dual-ascent iterations (they stop at the reference's termination
+    // test), the subproblem solves those iterations ran, and whether a solve produced a non-finite h(W).
+    private int _adjacencyDualRounds;
+    private int _adjacencySubproblemSolves;
+    private bool _adjacencyDualAscentDiverged;
+
     // Generator batch normalization layers (auxiliary, always created to match Layers)
     private readonly List<BatchNormalizationLayer<T>> _genBNLayers = new();
 
@@ -212,6 +218,7 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
         _lagrangeAlpha = 0.0;
         _lagrangeRho = 1.0;
         _prevDagConstraint = double.MaxValue;
+        ResetAdjacencyDualProgress();
 
         InitializeLayers();
     }
@@ -398,12 +405,12 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
         _lagrangeAlpha = 0.0;
         _lagrangeRho = 1.0;
         _prevDagConstraint = double.MaxValue;
+        ResetAdjacencyDualProgress();
 
         // Step 4: Build networks with actual dimensions
         BuildFromConstructionSequence(() => RebuildLayersWithActualDimensions(_options.EmbeddingDimension, _dataWidth, _dataWidth));
 
         // Step 5: Training loop
-        T lr = NumOps.FromDouble(_options.LearningRate);
         int batchSize = Math.Min(_options.BatchSize, data.Rows);
         int numBatches = Math.Max(1, data.Rows / batchSize);
 
@@ -423,7 +430,7 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
                 TrainGeneratorStepBatched(batchSize);
             }
 
-            UpdateAdjacencyAugmentedLagrangian(lr);
+            UpdateAdjacencyAugmentedLagrangian();
         }
 
         IsFitted = true;
@@ -452,10 +459,10 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
             _lagrangeAlpha = 0.0;
             _lagrangeRho = 1.0;
             _prevDagConstraint = double.MaxValue;
+            ResetAdjacencyDualProgress();
 
             BuildFromConstructionSequence(() => RebuildLayersWithActualDimensions(_options.EmbeddingDimension, _dataWidth, _dataWidth));
 
-            T lr = NumOps.FromDouble(_options.LearningRate);
             int batchSize = Math.Min(_options.BatchSize, data.Rows);
             int numBatches = Math.Max(1, data.Rows / batchSize);
 
@@ -470,7 +477,7 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
                     }
                     TrainGeneratorStepBatched(batchSize);
                 }
-                UpdateAdjacencyAugmentedLagrangian(lr);
+                UpdateAdjacencyAugmentedLagrangian();
             }
         }, ct).ConfigureAwait(false);
 
@@ -860,29 +867,6 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
     }
 
     /// <summary>
-    /// Computes the NOTEARS acyclicity constraint and its gradient.
-    /// h(W) = tr(e^(W hadamard W)) - d; gradient = 2 * e^(W hadamard W) hadamard W.
-    /// Uses a scaling-and-squaring matrix exponential (SyntheticTensorOps.MatrixExponential).
-    /// </summary>
-    private (T ConstraintValue, Tensor<T> Gradient) ComputeNOTEARSConstraintAndGradient()
-    {
-        if (_adjacency is null)
-        {
-            return (NumOps.Zero, new Tensor<T>([0, 0]));
-        }
-
-        // Zheng et al. (2018): h(W) = tr(e^(W o W)) - d, grad h = (e^(W o W))^T o 2W, with the exact matrix
-        // exponential the reference code takes from scipy.linalg.expm (not a truncated Taylor series).
-        var engine = Engine;
-        var w = Tensor<T>.FromMatrix(_adjacency);
-        var expMatrix = SyntheticTensorOps<T>.MatrixExponential(engine.TensorMultiply(w, w));
-        T constraintValue = NumOps.Subtract(engine.TensorTrace(expMatrix), NumOps.FromDouble(_dataWidth));
-        var gradient = engine.TensorMultiplyScalar(
-            engine.TensorMultiply(engine.TensorTranspose(expMatrix), w), NumOps.FromDouble(2.0));
-        return (constraintValue, gradient);
-    }
-
-    /// <summary>
     /// Small uniform weights in [-0.005, 0.005) off the diagonal and zero on it: no variable starts as its own
     /// parent, as DAG-structure learning requires (Zheng et al. 2018's acyclicity term is zero on a DAG).
     /// </summary>
@@ -906,49 +890,161 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
         return transformedData.Transpose().Multiply(transformedData).Multiply(NumOps.FromDouble(1.0 / transformedData.Rows));
     }
 
+    // L-BFGS iterations per solve of the adjacency subproblem, warm-started from the last accepted adjacency.
+    private const int AdjacencySubproblemIterations = 100;
+
+    // NOTEARS' termination test (the reference's notears_linear defaults): at most max_iter = 100 outer dual-ascent
+    // iterations, and none after h(W) <= h_tol = 1e-8 or rho >= rho_max = 1e16. An outer iteration re-solves the
+    // subproblem with rho raised tenfold until h falls to a quarter of its previous value, so it is one or more solves.
+    private const int MaxAdjacencyDualRounds = 100;
+    private const double AcyclicityTolerance = 1e-8;
+    private const double MaxPenaltyRho = 1e16;
+
+    /// <summary>The NOTEARS outer dual-ascent iterations the last fit ran on the adjacency.</summary>
+    internal int AdjacencyDualRounds => _adjacencyDualRounds;
+
+    /// <summary>The subproblem solves those iterations ran: more than one in an iteration that had to raise rho.</summary>
+    internal int AdjacencySubproblemSolves => _adjacencySubproblemSolves;
+
     /// <summary>
-    /// Updates the adjacency matrix using the augmented Lagrangian method for the NOTEARS constraint.
+    /// Whether the last fit's dual ascent stopped because a subproblem solve left a non-finite adjacency or a
+    /// non-finite h(W). The adjacency is then the last one with a finite h(W).
+    /// </summary>
+    internal bool AdjacencyDualAscentDiverged => _adjacencyDualAscentDiverged;
+
+    private void ResetAdjacencyDualProgress()
+    {
+        _adjacencyDualRounds = 0;
+        _adjacencySubproblemSolves = 0;
+        _adjacencyDualAscentDiverged = false;
+    }
+
+    /// <summary>
+    /// One outer dual-ascent iteration of NOTEARS (Zheng et al., 2018, Algorithm 1) on the learned adjacency: the
+    /// augmented Lagrangian subproblem is minimized over W, re-solved with rho raised tenfold until h(W) falls to a
+    /// quarter of its previous value, and then alpha is updated from h(W).
     /// </summary>
     /// <remarks>
-    /// NOTEARS (Zheng et al., 2018) minimises the least-squares score (1/2n)||X - XW||^2 + lambda ||W||_1 subject to
-    /// h(W) = 0, so each step follows the score's gradient (1/n) X^T (XW - X) alongside the acyclicity and sparsity terms.
-    /// Without the score, W never leaves its near-zero start and the acyclicity penalty has nothing to push against.
+    /// <para>
+    /// The subproblem is min_W 0.5 tr((I - W)^T G (I - W)) + SparsityWeight |W|_1 + (DAGPenaltyWeight + alpha) h(W)
+    /// + rho/2 h(W)^2 with G = X^T X / n, so 0.5 tr(...) is the least-squares score (1/2n)||X - XW||^2, and
+    /// h(W) = tr(e^(W o W)) - d. The reference solves it with L-BFGS to convergence before each dual step; it is
+    /// solved here with the library's L-BFGS, as NOTEARSLowRank does, in double precision because h is a difference
+    /// of nearly equal numbers near the empty graph.
+    /// </para>
+    /// <para>
+    /// The adjacency used to take one gradient step per epoch at 0.01 x LearningRate. From its 0.005-scale start it
+    /// moved by about 1e-6 per epoch, so h(W) stayed at rounding level, the dual variables never moved and neither
+    /// the data score nor DAGPenaltyWeight shaped the learned graph.
+    /// </para>
+    /// <para>
+    /// The iterations stop where the reference's Algorithm 1 stops: after 100 outer iterations, once h(W) is at most
+    /// 1e-8, or once rho reaches 1e16. The subproblem reads only the data Gram and the dual variables, not the
+    /// generator. Every later epoch would therefore re-solve the same converged problem: up to 100 L-BFGS
+    /// iterations, each with a d x d matrix exponential, on every one of the 300 default epochs.
+    /// </para>
+    /// <para>
+    /// One call is one outer iteration of the reference's <c>notears_linear</c>, inner loop included: every solve
+    /// starts from the last accepted adjacency, a solve whose h(W) is above a quarter of the previous iteration's
+    /// only raises rho and is solved again, and alpha moves once, with the final rho, on the last solve. Taking one
+    /// solve per call instead accepted the adjacency and moved alpha on solves the reference discards, and counted
+    /// those solves against the 100.
+    /// </para>
+    /// <para>
+    /// A solve whose adjacency, as the model stores it in T, is non-finite or has a non-finite h(W) has diverged
+    /// (a double solution outside T's range, for one). The reference has no such case to follow: its loop would
+    /// carry NaN through alpha into every later solve. The dual ascent stops there for the rest of the fit, the
+    /// adjacency, alpha and rho stay those of the last finite iteration, and a trace warning reports it.
+    /// </para>
     /// </remarks>
-    private void UpdateAdjacencyAugmentedLagrangian(T lr)
+    private void UpdateAdjacencyAugmentedLagrangian()
     {
-        if (_adjacency is null) return;
+        if (_adjacency is null || _dataGram is null) return;
+        bool converged = _prevDagConstraint < double.MaxValue && Math.Abs(_prevDagConstraint) <= AcyclicityTolerance;
+        if (_adjacencyDualAscentDiverged || converged || _lagrangeRho >= MaxPenaltyRho
+            || _adjacencyDualRounds >= MaxAdjacencyDualRounds) return;
+        _adjacencyDualRounds++;
 
         var engine = Engine;
-        double adjLr = NumOps.ToDouble(lr) * 0.01;
+        int d = _dataWidth;
+        var gram = Tensor<T>.FromMatrix(_dataGram).Cast<double>();
+        var identity = engine.TensorEye<double>(d);
+        var offDiagonal = engine.ScalarMinusTensor(1.0, identity);
+        double sparsity = _options.SparsityWeight;
+        double linearWeight = _options.DAGPenaltyWeight + _lagrangeAlpha;
+        double rho = _lagrangeRho;
 
-        var (hT, notearGrad) = ComputeNOTEARSConstraintAndGradient();
-        double h = NumOps.ToDouble(hT);
-        var w = Tensor<T>.FromMatrix(_adjacency);
-        // Gram (W - I) = Gram W - Gram.
-        var scoreGrad = _dataGram is null
-            ? new Tensor<T>([_dataWidth, _dataWidth])
-            : Tensor<T>.FromMatrix(_dataGram.Multiply(_adjacency).Subtract(_dataGram));
-        // The configured linear acyclicity penalty accompanies the augmented constraint.
-        double lagrangianCoeff = _options.DAGPenaltyWeight + _lagrangeAlpha + _lagrangeRho * h;
-
-        // W <- W - lr (data + DAG + sparsity gradients), with the diagonal held at zero.
-        var step = engine.TensorAdd(engine.TensorAdd(scoreGrad,
-                engine.TensorMultiplyScalar(notearGrad, NumOps.FromDouble(lagrangianCoeff))),
-            engine.TensorMultiplyScalar(engine.TensorSign(w), NumOps.FromDouble(_options.SparsityWeight)));
-        var updated = engine.TensorSubtract(w, engine.TensorMultiplyScalar(step, NumOps.FromDouble(adjLr)));
-        var offDiagonal = engine.ScalarMinusTensor(NumOps.One, engine.TensorEye<T>(_dataWidth));
-        _adjacency = engine.TensorMultiply(updated, offDiagonal).ToMatrix();
-
-        // Update augmented Lagrangian parameters
-        _lagrangeAlpha += _lagrangeRho * h;
-
-        double gamma = 0.25;
-        if (Math.Abs(h) > gamma * Math.Abs(_prevDagConstraint) && _prevDagConstraint < double.MaxValue)
+        (double Objective, Vector<double> Gradient) Evaluate(Vector<double> flat)
         {
-            _lagrangeRho = Math.Min(_lagrangeRho * 10.0, 1e16);
+            var w = engine.TensorMultiply(flat.AsTensor().Reshape(new[] { d, d }), offDiagonal);
+            var (h, hGradient) = Acyclicity(w);
+            var residual = engine.TensorSubtract(identity, w);
+            var gramResidual = engine.TensorMatMul(gram, residual);
+            double score = 0.5 * engine.TensorSum(engine.TensorMultiply(residual, gramResidual));
+            double l1 = engine.TensorSum(engine.TensorAbs(w));
+            double objective = score + sparsity * l1 + linearWeight * h + 0.5 * rho * h * h;
+            if (double.IsNaN(objective) || double.IsInfinity(objective))
+                return (1e30, new Vector<double>(d * d));
+
+            // d/dW: G (W - I) + sparsity sign(W) + (DAGPenaltyWeight + alpha + rho h) grad h, the diagonal held at 0.
+            var gradient = engine.TensorAdd(
+                engine.TensorAdd(engine.TensorNegate(gramResidual), engine.TensorMultiplyScalar(engine.TensorSign(w), sparsity)),
+                engine.TensorMultiplyScalar(hGradient, linearWeight + rho * h));
+            return (objective, engine.TensorMultiply(gradient, offDiagonal).Reshape(new[] { d * d }).ToVector());
         }
 
-        _prevDagConstraint = h;
+        // The reference's inner loop: solve from the last accepted adjacency, and while h stays above a quarter of the
+        // previous iteration's, raise rho tenfold and solve again. The first iteration has no previous h and accepts
+        // its first solve. Evaluate reads rho, so each solve sees the raised value.
+        var start = Tensor<T>.FromMatrix(_adjacency).Cast<double>().Reshape(new[] { d * d }).ToVector();
+        var solver = LBFGSOptimizer<double, Tensor<double>, Tensor<double>>.CreateForFunction();
+        Tensor<T>? accepted = null;
+        double hNew = 0.0;
+        while (rho < MaxPenaltyRho)
+        {
+            var solved = solver.Minimize(start, Evaluate, AdjacencySubproblemIterations, 1e-8);
+            _adjacencySubproblemSolves++;
+
+            // h is read from the adjacency as the model will hold it: T can overflow where the double solution is
+            // finite. The finiteness test runs in double because the engine's has no Half kernel.
+            var stored = engine.TensorMultiply(solved.AsTensor().Reshape(new[] { d, d }), offDiagonal).Cast<T>();
+            var storedAsDouble = stored.Cast<double>();
+            double h = Acyclicity(storedAsDouble).H;
+            if (engine.TensorCountNonzero(engine.TensorIsFinite(storedAsDouble)) != storedAsDouble.Length
+                || double.IsNaN(h) || double.IsInfinity(h))
+            {
+                _adjacencyDualAscentDiverged = true;
+                System.Diagnostics.Trace.TraceWarning(
+                    $"CausalGAN: the NOTEARS dual ascent diverged in outer iteration {_adjacencyDualRounds} "
+                    + $"(rho = {rho:G3}): the solved adjacency or its acyclicity h(W) is not finite. The dual ascent "
+                    + "stops and the adjacency of the last finite iteration is kept.");
+                return;
+            }
+
+            accepted = stored;
+            hNew = h;
+            if (_prevDagConstraint < double.MaxValue && Math.Abs(hNew) > 0.25 * Math.Abs(_prevDagConstraint))
+                rho = Math.Min(rho * 10.0, MaxPenaltyRho);
+            else
+                break;
+        }
+
+        // Dual ascent on alpha with the rho the inner loop ended on. The entry test keeps rho below the cap, so the
+        // loop ran at least once.
+        if (accepted is null) return;
+        _adjacency = accepted.ToMatrix();
+        _lagrangeRho = rho;
+        _lagrangeAlpha += rho * hNew;
+        _prevDagConstraint = hNew;
+    }
+
+    /// <summary>h(W) = tr(e^(W o W)) - d and its gradient (e^(W o W))^T o 2W (Zheng et al., 2018), in double.</summary>
+    private (double H, Tensor<double> Gradient) Acyclicity(Tensor<double> w)
+    {
+        var engine = Engine;
+        var exp = SyntheticTensorOps<double>.MatrixExponential(engine.TensorMultiply(w, w));
+        double h = engine.TensorTrace(exp) - w.Shape[0];
+        return (h, engine.TensorMultiplyScalar(engine.TensorMultiply(engine.TensorTranspose(exp), w), 2.0));
     }
 
     #endregion

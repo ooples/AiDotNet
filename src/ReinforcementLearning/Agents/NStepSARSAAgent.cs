@@ -117,18 +117,20 @@ public partial class NStepSARSAAgent<T> : ReinforcementLearningAgentBase<T>, IGr
 
         _nStepBuffer.Add((stateKey, actionIndex, reward));
 
-        if (_nStepBuffer.Count >= _options.NSteps || done)
+        if (done)
         {
-            UpdateNStep(nextState, done);
-
-            if (done)
+            // Episode end: every pending step gets its truncated return G_{t:T} (Sutton & Barto 2018, Figure 7.2,
+            // tau running on to T - 1), oldest first.
+            while (_nStepBuffer.Count > 0)
             {
-                _nStepBuffer.Clear();
-            }
-            else if (_nStepBuffer.Count >= _options.NSteps)
-            {
+                UpdateNStep(nextState, true);
                 _nStepBuffer.RemoveAt(0);
             }
+        }
+        else if (_nStepBuffer.Count >= _options.NSteps)
+        {
+            UpdateNStep(nextState, false);
+            _nStepBuffer.RemoveAt(0);
         }
 
         _epsilon = Math.Max(_options.EpsilonEnd, _epsilon * _options.EpsilonDecay);
@@ -142,14 +144,8 @@ public partial class NStepSARSAAgent<T> : ReinforcementLearningAgentBase<T>, IGr
         EnsureStateExists(firstState);
 
         // Compute n-step return
-        T G = NumOps.Zero;
-        T discount = NumOps.One;
-
-        for (int i = 0; i < _nStepBuffer.Count; i++)
-        {
-            G = NumOps.Add(G, NumOps.Multiply(discount, _nStepBuffer[i].reward));
-            discount = NumOps.Multiply(discount, DiscountFactor);
-        }
+        var rewards = Vector<T>.FromEnumerable(_nStepBuffer.Select(step => step.reward));
+        T G = RLTensorOps.DiscountedSum(rewards, DiscountFactor, out T discount);
 
         // Add bootstrapped value if not done
         if (!done)
@@ -198,14 +194,7 @@ public partial class NStepSARSAAgent<T> : ReinforcementLearningAgentBase<T>, IGr
 
     private int GetActionIndex(Vector<T> action)
     {
-        for (int i = 0; i < action.Length; i++)
-        {
-            if (NumOps.GreaterThan(action[i], NumOps.Zero))
-            {
-                return i;
-            }
-        }
-        return 0;
+        return RLTensorOps.FirstPositiveIndex(action, NumOps.Zero);
     }
 
     private void EnsureStateExists(string stateKey)
@@ -223,23 +212,9 @@ public partial class NStepSARSAAgent<T> : ReinforcementLearningAgentBase<T>, IGr
     private int GetBestAction(string stateKey)
     {
         EnsureStateExists(stateKey);
-        int bestAction = 0;
-        T bestValue = _qTable[stateKey][0];
-        bool allEqual = true;
-
-        for (int a = 1; a < _options.ActionSize; a++)
-        {
-            if (NumOps.GreaterThan(_qTable[stateKey][a], bestValue))
-            {
-                bestValue = _qTable[stateKey][a];
-                bestAction = a;
-                allEqual = false;
-            }
-            else if (!NumOps.Equals(_qTable[stateKey][a], bestValue))
-            {
-                allEqual = false;
-            }
-        }
+        var qValues = RLTensorOps.Row(_qTable[stateKey], _options.ActionSize);
+        int bestAction = RLTensorOps.ArgMax(qValues);
+        bool allEqual = RLTensorOps.AllEqual(qValues, NumOps);
         if (allEqual)
             bestAction = HashStateToAction(stateKey, _options.ActionSize);
         return bestAction;

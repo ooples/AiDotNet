@@ -135,8 +135,7 @@ public partial class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
             double matchingLoss = ComputeDistributionMatchingLoss(supportFeatures, syntheticFeatures);
 
             // Inner loop: adapt on both real and synthetic features
-            var adaptedParams = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) adaptedParams[d] = baseParams[d];
+            var adaptedParams = baseParams.Clone();
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {
@@ -184,8 +183,7 @@ public partial class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
         var prototype = ComputePrototype(supportFeatures);
         var syntheticFeatures = GenerateSyntheticFeatures(prototype, _algoOptions.SyntheticSamplesPerClass);
 
-        var adaptedParams = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++) adaptedParams[d] = baseParams[d];
+        var adaptedParams = baseParams.Clone();
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
@@ -202,11 +200,16 @@ public partial class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
     private Vector<T> ExtractFeatures(TInput input)
     {
         var features = ConvertToVector(MetaModel.Predict(input));
-        var result = new Vector<T>(_prototypeDim);
-        if (features == null) return result;
-        for (int i = 0; i < _prototypeDim && i < features.Length; i++)
-            result[i] = features[i];
-        return result;
+        return FitToPrototype(features);
+    }
+
+    /// <summary>The first prototypeDim entries of a vector, zero-padded when it is shorter.</summary>
+    private Vector<T> FitToPrototype(Vector<T>? values)
+    {
+        if (values == null || values.Length == 0) return new Vector<T>(_prototypeDim);
+        return values.Length >= _prototypeDim
+            ? values.GetSubVector(0, _prototypeDim)
+            : Vector<T>.Concatenate(values.Clone(), new Vector<T>(_prototypeDim - values.Length));
     }
 
     /// <summary>
@@ -215,11 +218,7 @@ public partial class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
     /// </summary>
     private Vector<T> ComputePrototype(Vector<T> features)
     {
-        var proto = new Vector<T>(_prototypeDim);
-        int copyLen = Math.Min(features.Length, _prototypeDim);
-        for (int i = 0; i < copyLen; i++)
-            proto[i] = features[i];
-        return proto;
+        return FitToPrototype(features);
     }
 
     /// <summary>
@@ -398,8 +397,7 @@ public partial class MetaDMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TI
             var proto = ComputePrototype(sf);
             var synth = GenerateSyntheticFeatures(proto, _algoOptions.SyntheticSamplesPerClass);
 
-            var adaptedParams = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) adaptedParams[d] = baseParams[d];
+            var adaptedParams = baseParams.Clone();
 
             for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
             {

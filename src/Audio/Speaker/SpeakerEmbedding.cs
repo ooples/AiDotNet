@@ -32,42 +32,39 @@ public class SpeakerEmbedding<T>
     /// <summary>
     /// Computes cosine similarity with another embedding.
     /// </summary>
+    /// <remarks>
+    /// Only the common prefix of the two vectors is compared (the shorter length). The score is computed in double,
+    /// the type this method returns, whatever <typeparamref name="T"/> is: reduced in Half, a norm above 65504 is
+    /// infinite (dividing by it zeroes the score) and the rounding of 4096 additions put the cosine of a vector with
+    /// itself at 1.001. A norm product below 1e-10 returns zero. The result is always inside [-1, 1].
+    /// </remarks>
     public double CosineSimilarity(SpeakerEmbedding<T> other)
     {
-        double dot = 0;
-        double norm1 = 0;
-        double norm2 = 0;
-
         int len = Math.Min(Vector.Length, other.Vector.Length);
-        for (int i = 0; i < len; i++)
+        var a = AiDotNet.Tensors.LinearAlgebra.Vector<T>.Wrap(Vector, 0, len).AsTensor();
+        var b = AiDotNet.Tensors.LinearAlgebra.Vector<T>.Wrap(other.Vector, 0, len).AsTensor();
+
+        double cosine = SpeakerScoring.CosineInDouble(AiDotNetEngine.Current, a, b, out double denominator);
+        if (!(denominator >= 1e-10))
         {
-            double v1 = NumOps.ToDouble(Vector[i]);
-            double v2 = NumOps.ToDouble(other.Vector[i]);
-            dot += v1 * v2;
-            norm1 += v1 * v1;
-            norm2 += v2 * v2;
+            return 0.0;
         }
 
-        double denominator = Math.Sqrt(norm1 * norm2);
-        if (denominator < 1e-10) return 0;
-
-        return dot / denominator;
+        return cosine;
     }
 
     /// <summary>
     /// Computes Euclidean distance from another embedding.
     /// </summary>
+    /// <remarks>Only the common prefix of the two vectors is compared (the shorter length). The differences, their
+    /// squares and the root are all taken in double, the type this method returns: in <typeparamref name="T"/> the
+    /// difference itself can overflow (Half: 4e4 - (-4e4)), and so can a norm above 65504.</remarks>
     public double EuclideanDistance(SpeakerEmbedding<T> other)
     {
-        double sumSquared = 0;
         int len = Math.Min(Vector.Length, other.Vector.Length);
-
-        for (int i = 0; i < len; i++)
-        {
-            double diff = NumOps.ToDouble(Vector[i]) - NumOps.ToDouble(other.Vector[i]);
-            sumSquared += diff * diff;
-        }
-
-        return Math.Sqrt(sumSquared);
+        var engine = AiDotNetEngine.Current;
+        var a = AiDotNet.Tensors.LinearAlgebra.Vector<T>.Wrap(Vector, 0, len).AsTensor().Cast<double>();
+        var b = AiDotNet.Tensors.LinearAlgebra.Vector<T>.Wrap(other.Vector, 0, len).AsTensor().Cast<double>();
+        return Math.Sqrt(engine.TensorSum(engine.TensorSquare(engine.TensorSubtract(a, b))));
     }
 }

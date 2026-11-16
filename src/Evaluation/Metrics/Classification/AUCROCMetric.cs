@@ -2,6 +2,7 @@ using AiDotNet.Evaluation.Enums;
 using AiDotNet.Evaluation.Results.Core;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.Evaluation.Metrics.Classification;
 
@@ -75,81 +76,56 @@ public class AUCROCMetric<T> : IProbabilisticClassificationMetric<T>
     }
 
     private T ComputeBinaryAUC(ReadOnlySpan<T> probs, ReadOnlySpan<T> actuals)
+        => ComputeBinaryAUC(EvaluationTensorOps<T>.ToTensor(probs), EvaluationTensorOps<T>.ToTensor(actuals));
+
+    private static T ComputeBinaryAUC(Tensor<T> probs, Tensor<T> actuals)
     {
-        // Using trapezoidal rule / Mann-Whitney U statistic
-        int n = probs.Length;
-        var pairs = new (double prob, double label)[n];
-        for (int i = 0; i < n; i++)
-            pairs[i] = (NumOps.ToDouble(probs[i]), NumOps.ToDouble(actuals[i]));
-
-        // Sort by probability descending
-        Array.Sort(pairs, (a, b) => b.prob.CompareTo(a.prob));
-
-        int positives = 0, negatives = 0;
-        for (int i = 0; i < n; i++)
+        // Mann-Whitney U statistic: the fraction of (positive, negative) pairs ranked correctly, ties counting
+        // one half, which is the trapezoidal area under the ROC curve over its distinct thresholds.
+        Tensor<T> positiveMask;
+        using (new NoGradScope<T>())
         {
-            if (pairs[i].label > 0.5) positives++;
-            else negatives++;
+            positiveMask = AiDotNetEngine.Current.TensorGreaterThan(actuals, NumOps.FromDouble(0.5));
         }
+
+        int positives = EvaluationTensorOps<T>.Count(positiveMask);
+        int negatives = probs.Length - positives;
 
         if (positives == 0 || negatives == 0) return NumOps.FromDouble(0.5);
 
-        // Calculate AUC using trapezoidal rule
-        double auc = 0;
-        int tp = 0, fp = 0;
-        double prevTpr = 0, prevFpr = 0;
-
-        for (int i = 0; i < n; i++)
-        {
-            if (pairs[i].label > 0.5) tp++;
-            else fp++;
-
-            double tpr = (double)tp / positives;
-            double fpr = (double)fp / negatives;
-
-            // Trapezoidal area
-            auc += (fpr - prevFpr) * (tpr + prevTpr) / 2;
-            prevTpr = tpr;
-            prevFpr = fpr;
-        }
-
-        return NumOps.FromDouble(auc);
+        return EvaluationTensorOps<T>.RocAuc(probs, positiveMask);
     }
 
     private T ComputeMultiClassAUC(ReadOnlySpan<T> probs, ReadOnlySpan<T> actuals, int numClasses)
     {
         int n = actuals.Length;
-        double sumAuc = 0;
-        int validClasses = 0;
+        var engine = AiDotNetEngine.Current;
+        // Per-class AUCs are averaged in double: a T running sum loses the fractional parts in Half once it passes 512.
+        var classAucs = new List<T>(numClasses);
+        using var noGrad = new NoGradScope<T>();
+        var probMatrix = engine.Reshape(EvaluationTensorOps<T>.ToTensor(probs), new[] { n, numClasses });
+        var actualTensor = EvaluationTensorOps<T>.ToTensor(actuals);
 
-        for (int c = 0; c < numClasses; c++)
+        int c = 0;
+        foreach (T classValue in engine.TensorArange<T>(0, numClasses, 1))
         {
-            // Extract probabilities for class c and binary labels
-            var classProbs = new T[n];
-            var classLabels = new T[n];
-
-            for (int i = 0; i < n; i++)
-            {
-                classProbs[i] = probs[i * numClasses + c];
-                classLabels[i] = NumOps.Compare(actuals[i], NumOps.FromDouble(c)) == 0 ? NumOps.One : NumOps.Zero;
-            }
+            // Extract probabilities for class c and binary (one-vs-rest) labels
+            var classProbs = engine.TensorSelect(probMatrix, 1, c);
+            var classLabels = EvaluationTensorOps<T>.EqualMask(actualTensor, classValue);
+            c++;
 
             // Check if we have both classes
-            bool hasPos = false, hasNeg = false;
-            for (int i = 0; i < n; i++)
+            int positives = EvaluationTensorOps<T>.Count(classLabels);
+            if (positives > 0 && positives < n)
             {
-                if (NumOps.GreaterThan(classLabels[i], NumOps.FromDouble(0.5))) hasPos = true;
-                else hasNeg = true;
-            }
-
-            if (hasPos && hasNeg)
-            {
-                sumAuc += NumOps.ToDouble(ComputeBinaryAUC(classProbs, classLabels));
-                validClasses++;
+                classAucs.Add(EvaluationTensorOps<T>.RocAuc(classProbs, classLabels));
             }
         }
 
-        return validClasses > 0 ? NumOps.FromDouble(sumAuc / validClasses) : NumOps.FromDouble(0.5);
+        return classAucs.Count > 0
+            ? NumOps.FromDouble(engine.TensorMean(
+                new Tensor<T>(classAucs.ToArray(), new[] { classAucs.Count }).Cast<double>()))
+            : NumOps.FromDouble(0.5);
     }
 
     /// <inheritdoc />
@@ -173,7 +149,7 @@ public class AUCROCMetric<T> : IProbabilisticClassificationMetric<T>
         int n = actuals.Length;
         if (n == 0) return (NumOps.Zero, NumOps.One);
         var random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
-        var values = new double[samples];
+        var values = new List<T>(samples);
         var probArr = probs.ToArray();
         var actArr = actuals.ToArray();
         int probsPerSample = numClasses == 2 ? 1 : numClasses;
@@ -189,12 +165,11 @@ public class AUCROCMetric<T> : IProbabilisticClassificationMetric<T>
                 for (int c = 0; c < probsPerSample; c++)
                     sp[i * probsPerSample + c] = probArr[idx * probsPerSample + c];
             }
-            values[b] = NumOps.ToDouble(Compute(sp, sa, numClasses));
+            values.Add(Compute(sp, sa, numClasses));
         }
-        Array.Sort(values);
         double alpha = 1 - conf;
         int lo = Math.Max(0, (int)(alpha / 2 * samples));
         int hi = Math.Min(samples - 1, (int)((1 - alpha / 2) * samples) - 1);
-        return (NumOps.FromDouble(values[lo]), NumOps.FromDouble(values[hi]));
+        return EvaluationTensorOps<T>.OrderStatistics(values, lo, hi);
     }
 }

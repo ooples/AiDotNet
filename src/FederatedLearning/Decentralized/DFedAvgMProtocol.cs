@@ -77,10 +77,7 @@ public class DFedAvgMProtocol<T> : Infrastructure.FederatedLearningComponentBase
         foreach (var layerName in layerNames)
         {
             var result = new T[currentModel[layerName].Length];
-            for (int i = 0; i < result.Length; i++)
-            {
-                result[i] = NumOps.Zero;
-            }
+            Vector<T>.Wrap(result).Fill(NumOps.Zero);
 
             foreach (var (neighborId, nw) in mixingWeights)
             {
@@ -91,10 +88,8 @@ public class DFedAvgMProtocol<T> : Infrastructure.FederatedLearningComponentBase
 
                 var w = NumOps.FromDouble(nw / totalWeight);
                 var np = neighborModel[layerName];
-                for (int i = 0; i < result.Length; i++)
-                {
-                    result[i] = NumOps.Add(result[i], NumOps.Multiply(np[i], w));
-                }
+                Engine.Add(Vector<T>.Wrap(result), Engine.Multiply(Vector<T>.Wrap(np, 0, result.Length), w))
+                    .AsSpan().CopyTo(result);
             }
 
             averaged[layerName] = result;
@@ -116,10 +111,7 @@ public class DFedAvgMProtocol<T> : Infrastructure.FederatedLearningComponentBase
             if (!mBuf.TryGetValue(layerName, out var existingMom) || existingMom.Length != layerLen)
             {
                 var init = new T[layerLen];
-                for (int i = 0; i < init.Length; i++)
-                {
-                    init[i] = NumOps.Zero;
-                }
+                Vector<T>.Wrap(init).Fill(NumOps.Zero);
 
                 mBuf[layerName] = init;
             }
@@ -128,13 +120,13 @@ public class DFedAvgMProtocol<T> : Infrastructure.FederatedLearningComponentBase
             var avg = averaged[layerName];
             var cur = currentModel[layerName];
 
-            for (int i = 0; i < m.Length; i++)
-            {
-                // m[i] = beta * m[i] + (1-beta) * (avg[i] - cur[i])
-                var diff = NumOps.Subtract(avg[i], cur[i]);
-                m[i] = NumOps.Add(NumOps.Multiply(beta, m[i]), NumOps.Multiply(oneMinusBeta, diff));
-                avg[i] = NumOps.Add(avg[i], m[i]);
-            }
+            // m = beta * m + (1 - beta) * (avg - cur); avg += m
+            var avgVec = Vector<T>.Wrap(avg, 0, m.Length);
+            var diff = Engine.Subtract(avgVec, Vector<T>.Wrap(cur, 0, m.Length));
+            var newMomentum = Engine.Add(Engine.Multiply(Vector<T>.Wrap(m), beta), Engine.Multiply(diff, oneMinusBeta));
+            var newAverage = Engine.Add(avgVec, newMomentum);
+            newMomentum.AsSpan().CopyTo(m);
+            newAverage.AsSpan().CopyTo(avg.AsSpan(0, m.Length));
         }
 
         return averaged;

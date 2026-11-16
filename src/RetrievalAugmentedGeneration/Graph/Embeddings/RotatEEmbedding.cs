@@ -36,10 +36,8 @@ public class RotatEEmbedding<T> : KGEmbeddingBase<T>
     // Relation embeddings store phase angles: relationEmbeddings[i] has length dim
     // where r_real[d] = cos(phase[d]), r_imag[d] = sin(phase[d])
     //
-    // Distance metric: The paper uses L1 (Σ|z_d|) but this implementation uses squared L2 (Σ|z_d|²)
-    // in the margin loss for computational efficiency and smoother gradients. The theoretical properties
-    // (symmetry, antisymmetry, composition modeling) hold for any Lp norm. Rankings are equivalent
-    // since sqrt is monotonic. The gradient formulas follow from differentiating squared L2, not L1.
+    // Sun et al. 2019: d_r(h, t) = ||h ∘ r - t||_1 = Σ_k |h_k r_k - t_k| (complex modulus per dimension),
+    // trained with L = -log σ(γ - d_r(h, t)) - log σ(d_r(h', t') - γ) (Eq. 4, uniform negative weights).
 
     private protected override int GetEntityEmbeddingSize() => EmbeddingDimension * 2;
 
@@ -60,137 +58,150 @@ public class RotatEEmbedding<T> : KGEmbeddingBase<T>
     }
 
     private protected override T ScoreTripleInternal(int headIdx, int relationIdx, int tailIdx)
-    {
-        var h = _entityEmbeddings[headIdx];
-        var rPhase = _relationEmbeddings[relationIdx];
-        var t = _entityEmbeddings[tailIdx];
-        int dim = EmbeddingDimension;
-
-        // Score: ||h ∘ r - t||  where ∘ is complex multiplication with unit-modulus r
-        T sumSq = NumOps.Zero;
-        for (int d = 0; d < dim; d++)
-        {
-            double phase = NumOps.ToDouble(rPhase[d]);
-            double rReal = Math.Cos(phase);
-            double rImag = Math.Sin(phase);
-
-            double hReal = NumOps.ToDouble(h[d]);
-            double hImag = NumOps.ToDouble(h[d + dim]);
-
-            // Complex multiply: (hReal + i*hImag) * (rReal + i*rImag)
-            double hrReal = hReal * rReal - hImag * rImag;
-            double hrImag = hReal * rImag + hImag * rReal;
-
-            double tReal = NumOps.ToDouble(t[d]);
-            double tImag = NumOps.ToDouble(t[d + dim]);
-
-            double diffReal = hrReal - tReal;
-            double diffImag = hrImag - tImag;
-
-            sumSq = NumOps.Add(sumSq, NumOps.FromDouble(diffReal * diffReal + diffImag * diffImag));
-        }
-
-        return NumOps.Sqrt(sumSq);
-    }
+        => Engine.TensorSum(Residual(headIdx, relationIdx, tailIdx).Modulus);
 
     private protected override double ComputeLossAndUpdateGradients(
         int posHead, int relation, int posTail,
         int negHead, int negTail,
         double learningRate, KGEmbeddingOptions options)
     {
-        double margin = options.GetEffectiveMargin();
+        double gamma = options.GetEffectiveMargin();
         int dim = EmbeddingDimension;
 
-        double posDist = ComputeDistanceSq(posHead, relation, posTail, dim);
-        double negDist = ComputeDistanceSq(negHead, relation, negTail, dim);
+        var pos = Residual(posHead, relation, posTail);
+        var neg = Residual(negHead, relation, negTail);
+        double posDist = NumOps.ToDouble(Engine.TensorSum(pos.Modulus));
+        double negDist = NumOps.ToDouble(Engine.TensorSum(neg.Modulus));
 
-        double loss = Math.Max(0.0, margin + posDist - negDist);
-        if (loss <= 0.0) return 0.0;
+        // -log σ(x) = softplus(-x)
+        double loss = Softplus(posDist - gamma) + Softplus(gamma - negDist);
 
-        // Gradient updates for positive triple
-        UpdateComplexGradients(posHead, relation, posTail, dim, learningRate, isPositive: true);
-        // Gradient updates for negative triple
-        UpdateComplexGradients(negHead, relation, negTail, dim, learningRate, isPositive: false);
+        // dL/dd_pos = σ(d_pos - γ); dL/dd_neg = -σ(γ - d_neg).
+        T posScale = NumOps.FromDouble(learningRate * Sigmoid(posDist - gamma));
+        T negScale = NumOps.FromDouble(-learningRate * Sigmoid(gamma - negDist));
+
+        // Both gradients use the pre-update embeddings; the shared phase gets their sum.
+        var posGrad = DistanceGradient(pos);
+        var negGrad = DistanceGradient(neg);
+
+        ApplyEntityStep(_entityEmbeddings[posHead], _entityEmbeddings[posTail], posGrad, posScale, dim);
+        ApplyEntityStep(_entityEmbeddings[negHead], _entityEmbeddings[negTail], negGrad, negScale, dim);
+
+        var phase = Tensor<T>.FromVector(Row(_relationEmbeddings[relation]));
+        var phaseStep = Engine.TensorAdd(
+            Engine.TensorMultiplyScalar(posGrad.Phase, posScale),
+            Engine.TensorMultiplyScalar(negGrad.Phase, negScale));
+        Store(WrapPhase(Engine.TensorSubtract(phase, phaseStep)).ToVector(), _relationEmbeddings[relation]);
 
         return loss;
     }
 
-    private double ComputeDistanceSq(int headIdx, int relationIdx, int tailIdx, int dim)
+    private RotationResidual Residual(int headIdx, int relationIdx, int tailIdx)
     {
-        var h = _entityEmbeddings[headIdx];
-        var rPhase = _relationEmbeddings[relationIdx];
-        var t = _entityEmbeddings[tailIdx];
+        int dim = EmbeddingDimension;
+        var head = _entityEmbeddings[headIdx];
+        var tail = _entityEmbeddings[tailIdx];
+        var phase = Tensor<T>.FromVector(Row(_relationEmbeddings[relationIdx]));
+        var cos = Engine.TensorCos(phase);
+        var sin = Engine.TensorSin(phase);
 
-        double sumSq = 0.0;
-        for (int d = 0; d < dim; d++)
-        {
-            double phase = NumOps.ToDouble(rPhase[d]);
-            double rReal = Math.Cos(phase);
-            double rImag = Math.Sin(phase);
+        var hReal = Part(head, 0, dim);
+        var hImag = Part(head, dim, dim);
 
-            double hReal = NumOps.ToDouble(h[d]);
-            double hImag = NumOps.ToDouble(h[d + dim]);
+        // (hReal + i hImag)(cos + i sin)
+        var rotatedReal = Engine.TensorSubtract(Engine.TensorMultiply(hReal, cos), Engine.TensorMultiply(hImag, sin));
+        var rotatedImag = Engine.TensorAdd(Engine.TensorMultiply(hReal, sin), Engine.TensorMultiply(hImag, cos));
+        var diffReal = Engine.TensorSubtract(rotatedReal, Part(tail, 0, dim));
+        var diffImag = Engine.TensorSubtract(rotatedImag, Part(tail, dim, dim));
+        var modulus = Engine.TensorSqrt(
+            Engine.TensorAdd(Engine.TensorSquare(diffReal), Engine.TensorSquare(diffImag)));
 
-            double hrReal = hReal * rReal - hImag * rImag;
-            double hrImag = hReal * rImag + hImag * rReal;
-
-            double diffReal = hrReal - NumOps.ToDouble(t[d]);
-            double diffImag = hrImag - NumOps.ToDouble(t[d + dim]);
-
-            sumSq += diffReal * diffReal + diffImag * diffImag;
-        }
-
-        return sumSq;
+        return new RotationResidual(rotatedReal, rotatedImag, diffReal, diffImag, cos, sin, modulus);
     }
 
-    private void UpdateComplexGradients(int headIdx, int relationIdx, int tailIdx, int dim, double lr, bool isPositive)
+    /// <summary>
+    /// Gradient of d = Σ_k |z_k| with z = h ∘ r - t. With u = z / |z| (0 where |z| = 0):
+    /// dd/dh = conj(r) u, dd/dt = -u, dd/dθ = Im(conj(h ∘ r) u).
+    /// </summary>
+    private static DistanceGradients DistanceGradient(RotationResidual r)
     {
-        var h = _entityEmbeddings[headIdx];
-        var rPhase = _relationEmbeddings[relationIdx];
-        var t = _entityEmbeddings[tailIdx];
+        var positive = Engine.TensorGreaterThan(r.Modulus, NumOps.Zero);
+        var safeModulus = Engine.TensorWhere(positive, r.Modulus, Tensor<T>.CreateDefault(r.Modulus._shape, NumOps.One));
+        var unitReal = Engine.TensorDivide(r.DiffReal, safeModulus);
+        var unitImag = Engine.TensorDivide(r.DiffImag, safeModulus);
 
-        double sign = isPositive ? 1.0 : -1.0;
-        double step = 2.0 * lr * sign;
+        var headReal = Engine.TensorAdd(Engine.TensorMultiply(unitReal, r.Cos), Engine.TensorMultiply(unitImag, r.Sin));
+        var headImag = Engine.TensorSubtract(Engine.TensorMultiply(unitImag, r.Cos), Engine.TensorMultiply(unitReal, r.Sin));
+        var phase = Engine.TensorSubtract(
+            Engine.TensorMultiply(unitImag, r.RotatedReal), Engine.TensorMultiply(unitReal, r.RotatedImag));
 
-        for (int d = 0; d < dim; d++)
+        return new DistanceGradients(headReal, headImag, unitReal, unitImag, phase);
+    }
+
+    /// <summary>h -= scale * dd/dh; t -= scale * dd/dt, i.e. t += scale * u.</summary>
+    private static void ApplyEntityStep(T[] head, T[] tail, DistanceGradients grad, T scale, int dim)
+    {
+        SubtractFrom(head, Engine.TensorMultiplyScalar(grad.HeadReal, scale).ToVector(), 0);
+        SubtractFrom(head, Engine.TensorMultiplyScalar(grad.HeadImag, scale).ToVector(), dim);
+        AddTo(tail, Engine.TensorMultiplyScalar(grad.UnitReal, scale).ToVector(), 0);
+        AddTo(tail, Engine.TensorMultiplyScalar(grad.UnitImag, scale).ToVector(), dim);
+    }
+
+    /// <summary>Wraps phases to [-π, π).</summary>
+    private static Tensor<T> WrapPhase(Tensor<T> phase)
+    {
+        var pi = NumOps.FromDouble(Math.PI);
+        var period = Tensor<T>.CreateDefault(phase._shape, NumOps.FromDouble(2.0 * Math.PI));
+        return Engine.TensorSubtractScalar(Engine.TensorRemainder(Engine.TensorAddScalar(phase, pi), period), pi);
+    }
+
+    private static Tensor<T> Part(T[] row, int offset, int length) => Tensor<T>.FromVector(Row(row, offset, length));
+
+    private static double Sigmoid(double x) => x >= 0 ? 1.0 / (1.0 + Math.Exp(-x)) : Math.Exp(x) / (1.0 + Math.Exp(x));
+
+    private static double Softplus(double x) => Math.Max(x, 0.0) + Math.Log(1.0 + Math.Exp(-Math.Abs(x)));
+
+    private sealed class RotationResidual
+    {
+        public RotationResidual(Tensor<T> rotatedReal, Tensor<T> rotatedImag, Tensor<T> diffReal, Tensor<T> diffImag,
+            Tensor<T> cos, Tensor<T> sin, Tensor<T> modulus)
         {
-            double phase = NumOps.ToDouble(rPhase[d]);
-            double rReal = Math.Cos(phase);
-            double rImag = Math.Sin(phase);
-
-            double hReal = NumOps.ToDouble(h[d]);
-            double hImag = NumOps.ToDouble(h[d + dim]);
-
-            double hrReal = hReal * rReal - hImag * rImag;
-            double hrImag = hReal * rImag + hImag * rReal;
-
-            double tReal = NumOps.ToDouble(t[d]);
-            double tImag = NumOps.ToDouble(t[d + dim]);
-
-            double diffReal = hrReal - tReal;
-            double diffImag = hrImag - tImag;
-
-            // Gradient w.r.t. h (chain through complex multiply)
-            double gradHReal = step * (diffReal * rReal + diffImag * rImag);
-            double gradHImag = step * (-diffReal * rImag + diffImag * rReal);
-
-            h[d] = NumOps.FromDouble(hReal - gradHReal);
-            h[d + dim] = NumOps.FromDouble(hImag - gradHImag);
-
-            // Gradient w.r.t. t
-            t[d] = NumOps.FromDouble(tReal + step * diffReal);
-            t[d + dim] = NumOps.FromDouble(tImag + step * diffImag);
-
-            // Gradient w.r.t. phase θ: d(||h∘r-t||²)/dθ = 2·(diffReal·d(hrRe)/dθ + diffImag·d(hrIm)/dθ)
-            // where d(hrRe)/dθ = -(hRe·sinθ + hIm·cosθ) and d(hrIm)/dθ = hRe·cosθ - hIm·sinθ.
-            // Note: this is the gradient for squared L2 distance. The RotatE paper (Sun et al., 2019)
-            // uses L1 distance with normalized gradient (÷|z_k|). We use unnormalized squared-L2
-            // for computational efficiency and stable SGD convergence — the step size absorbs scaling.
-            double gradPhase = step * (diffReal * (-hReal * rImag - hImag * rReal) +
-                                        diffImag * (hReal * rReal - hImag * rImag));
-            double updatedPhase = phase - gradPhase;
-            updatedPhase = Math.IEEERemainder(updatedPhase, 2.0 * Math.PI); // wrap to [-π, π]
-            rPhase[d] = NumOps.FromDouble(updatedPhase);
+            RotatedReal = rotatedReal;
+            RotatedImag = rotatedImag;
+            DiffReal = diffReal;
+            DiffImag = diffImag;
+            Cos = cos;
+            Sin = sin;
+            Modulus = modulus;
         }
+
+        public Tensor<T> RotatedReal { get; }
+        public Tensor<T> RotatedImag { get; }
+        public Tensor<T> DiffReal { get; }
+        public Tensor<T> DiffImag { get; }
+        public Tensor<T> Cos { get; }
+        public Tensor<T> Sin { get; }
+
+        /// <summary>|h_k r_k - t_k| per dimension.</summary>
+        public Tensor<T> Modulus { get; }
+    }
+
+    private sealed class DistanceGradients
+    {
+        public DistanceGradients(Tensor<T> headReal, Tensor<T> headImag, Tensor<T> unitReal, Tensor<T> unitImag,
+            Tensor<T> phase)
+        {
+            HeadReal = headReal;
+            HeadImag = headImag;
+            UnitReal = unitReal;
+            UnitImag = unitImag;
+            Phase = phase;
+        }
+
+        public Tensor<T> HeadReal { get; }
+        public Tensor<T> HeadImag { get; }
+        public Tensor<T> UnitReal { get; }
+        public Tensor<T> UnitImag { get; }
+        public Tensor<T> Phase { get; }
     }
 }

@@ -54,11 +54,9 @@ public class SequencePackingCollateFunction<T> : ICollateFunction<Tensor<T>, (Te
         {
             int seqLen = sample.Shape.Length > 1 ? sample.Shape[1] : sample.Shape[0];
 
-            for (int j = 0; j < seqLen; j++)
-            {
-                T token = sample.Shape.Length > 1 ? sample[0, j] : sample[j];
-                allTokens.Add(token);
-            }
+            // Row 0 of a [rows, seq_len] sample (or the whole 1-D sample) is its first seqLen elements in
+            // row-major order, so append it as one block.
+            allTokens.AddRange(sample.Contiguous().AsSpan().Slice(0, seqLen).ToArray());
         }
 
         // Pack into blocks
@@ -66,7 +64,7 @@ public class SequencePackingCollateFunction<T> : ICollateFunction<Tensor<T>, (Te
         int numBlocks = Math.Max(1, (totalTokens + _blockSize - 1) / _blockSize);
 
         var packedData = new T[numBlocks * _blockSize];
-        var maskData = new T[numBlocks * _blockSize];
+        var maskData = new int[numBlocks * _blockSize];
         T padToken = NumOps.FromDouble(_padTokenId);
 
         // Initialize with pad tokens
@@ -77,11 +75,11 @@ public class SequencePackingCollateFunction<T> : ICollateFunction<Tensor<T>, (Te
         for (int i = 0; i < totalTokens && i < numBlocks * _blockSize; i++)
         {
             packedData[i] = allTokens[i];
-            maskData[i] = NumOps.One;
+            maskData[i] = 1;
         }
 
         var packedTokens = new Tensor<T>(packedData, new[] { numBlocks, _blockSize });
-        var attentionMask = new Tensor<T>(maskData, new[] { numBlocks, _blockSize });
+        var attentionMask = new Tensor<int>(maskData, new[] { numBlocks, _blockSize }).Cast<T>();
 
         return (packedTokens, attentionMask);
     }

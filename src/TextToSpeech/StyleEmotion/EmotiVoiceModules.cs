@@ -1,5 +1,7 @@
+using AiDotNet.Audio.Features;
 using AiDotNet.Helpers;
 using AiDotNet.ModelLoading;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 
@@ -58,15 +60,16 @@ internal sealed class EmotiVoiceEncoder<T>
     /// <summary>ESPnet's sinusoidal table <c>[L, d]</c>: sin at even columns, cos at odd, frequencies 10000^(−2k/d).</summary>
     private Tensor<T> Table(int length)
     {
-        var table = new Tensor<T>(new[] { length, Dim });
+        // A fixed table of constants, built once per length in double and cast.
+        var table = new double[length, Dim];
         for (int p = 0; p < length; p++)
             for (int k = 0; k < Dim; k += 2)
             {
                 double frequency = Math.Exp(k * -(Math.Log(10000.0) / Dim));
-                table[p, k] = NumOps.FromDouble(Math.Sin(p * frequency));
-                if (k + 1 < Dim) table[p, k + 1] = NumOps.FromDouble(Math.Cos(p * frequency));
+                table[p, k] = Math.Sin(p * frequency);
+                if (k + 1 < Dim) table[p, k + 1] = Math.Cos(p * frequency);
             }
-        return table;
+        return EngineStft<T>.Table(table);
     }
 
     private Tensor<T> FeedForward(Block b, Tensor<T> x, bool training, Random random)
@@ -85,13 +88,14 @@ internal sealed class EmotiVoiceEncoder<T>
         var alpha = _engine.TensorTile(_engine.Reshape(Alpha.Forward(new Tensor<T>(new[] { 1 })), new[] { 1, 1 }), new[] { length, Dim });
         var x = Drop(_engine.TensorAdd(input, _engine.TensorMultiply(alpha, Table(length))), training, random);
         Tensor<T> Split(Tensor<T> t) => _engine.TensorPermute(_engine.Reshape(t, new[] { length, heads, dk }), new[] { 1, 0, 2 });
+        T scale = NumOps.FromDouble(1.0 / Math.Sqrt(dk));
         foreach (var b in Blocks)
         {
             var normed = b.Norm1.Forward(x);
             var q = Split(b.Query.Forward(normed));
             var k = Split(b.Key.Forward(normed));
             var v = Split(b.Value.Forward(normed));
-            var scores = _engine.TensorMultiplyScalar(_engine.BatchMatMul(q, _engine.TensorPermute(k, new[] { 0, 2, 1 })), NumOps.FromDouble(1.0 / Math.Sqrt(dk)));
+            var scores = _engine.TensorMultiplyScalar(_engine.BatchMatMul(q, _engine.TensorPermute(k, new[] { 0, 2, 1 })), scale);
             var weights = Drop(_engine.Softmax(scores, axis: 2), training, random);
             var context = _engine.Reshape(_engine.TensorPermute(_engine.BatchMatMul(weights, v), new[] { 1, 0, 2 }), new[] { length, Dim });
             x = _engine.TensorAdd(x, Drop(b.Output.Forward(context), training, random));
@@ -253,35 +257,56 @@ internal sealed class EmotiVoiceAlignment<T>
             _engine.TensorTile(_engine.Reshape(textRows, new[] { 1, n, d }), new[] { frames, 1, 1 }));
         var distance = _engine.TensorSqrt(_engine.ReduceSum(_engine.TensorMultiply(diff, diff), new[] { 2 }, keepDims: false));
         var logP = _engine.TensorLogSoftmax(_engine.TensorNegate(distance), axis: 1);
-        var prior = Prior(frames, n);
-        var priorTensor = new Tensor<T>(new[] { frames, n });
-        for (int i = 0; i < frames; i++)
-            for (int k = 0; k < n; k++) priorTensor[i, k] = NumOps.FromDouble(prior[i, k]);
-        return _engine.TensorAdd(logP, priorTensor);
+        return _engine.TensorAdd(logP, EngineStft<T>.Table(Prior(frames, n)));
     }
 
-    /// <summary>JETS's monotonic alignment search (<c>_monotonic_alignment_search</c>): each frame's phoneme.</summary>
-    internal static int[] Viterbi(double[,] logP)
+    /// <summary>JETS's monotonic alignment search (<c>_monotonic_alignment_search</c>) of log-probabilities
+    /// <c>[T, N]</c>: each frame's phoneme.</summary>
+    /// <remarks>The recurrence Q[i, j] = max(Q[i − 1, j − 1], Q[i, j − 1]) + log p[j, i] (Q[0, j] the running sum of
+    /// column 0) runs frame by frame as one engine step over all phonemes: the phonemes past j stay −∞ by themselves.
+    /// The scores are scaled by 2<sup>−⌈log₂ T⌉</sup> first — exact, and it leaves every comparison unchanged — so a
+    /// half-precision path sum cannot overflow. The backtrack reads the comparisons Q[i − 1, j] ≥ Q[i, j] as integers.</remarks>
+    internal static int[] Viterbi(Tensor<T> logP)
     {
-        int frames = logP.GetLength(0), n = logP.GetLength(1);
-        var q = new double[n, frames];
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < frames; j++) q[i, j] = double.NegativeInfinity;
-        double running = 0;
-        for (int j = 0; j < frames; j++)
+        if (logP is null) throw new ArgumentNullException(nameof(logP));
+        var engine = AiDotNetEngine.Current;
+        int frames = logP.Shape[0], n = logP.Shape[1];
+        T negativeInfinity = NumOps.FromDouble(double.NegativeInfinity);
+        var none = Tensor<T>.CreateDefault(new[] { 1 }, negativeInfinity);
+        int[] takeLower;
+        using (new NoGradScope<T>())
         {
-            running += logP[j, 0];
-            q[0, j] = running;
+            int exponent = 0;
+            while ((1 << exponent) < frames && exponent < 30) exponent++;
+            var scaled = engine.TensorMultiplyScalar(logP, NumOps.FromDouble(Math.Pow(2, -exponent)));
+            Tensor<T> Row(int j) => engine.Reshape(engine.TensorSlice(scaled, new[] { j, 0 }, new[] { 1, n }), new[] { n });
+            Tensor<T> ShiftDown(Tensor<T> column) => n == 1 ? none
+                : engine.TensorConcatenate(new[] { none, engine.TensorSlice(column, new[] { 0 }, new[] { n - 1 }) }, 0);
+            var columns = new Tensor<T>[frames];
+            // Q[:, 0] = [log p[0, 0], −∞, …]: only phoneme 0 is reachable at frame 0. (ShiftDown of zeros gave the
+            // inverse, [−∞, 0, …], which barred phoneme 0 and let every later phoneme start the path.)
+            var start = Tensor<T>.CreateDefault(new[] { n }, negativeInfinity);
+            start[0] = NumOps.Zero;
+            var q = engine.TensorAdd(Row(0), start);
+            columns[0] = q;
+            for (int j = 1; j < frames; j++)
+            {
+                q = engine.TensorAdd(engine.TensorMax(ShiftDown(q), q), Row(j));
+                columns[j] = q;
+            }
+            var all = engine.TensorStack(columns, 0);                                                      // [T, N]
+            var lower = n == 1 ? Tensor<T>.CreateDefault(new[] { frames, 1 }, negativeInfinity)
+                : engine.TensorConcatenate(new[] { Tensor<T>.CreateDefault(new[] { frames, 1 }, negativeInfinity),
+                    engine.TensorSlice(all, new[] { 0, 0 }, new[] { frames, n - 1 }) }, 1);
+            // Q[i − 1, j] ≥ Q[i, j] ⇔ ¬(Q[i, j] > Q[i − 1, j]).
+            takeLower = engine.TensorAddScalar(engine.TensorNegate(engine.TensorGreaterThan(all, lower)), NumOps.One).Cast<int>().ToArray();
         }
-        for (int j = 1; j < frames; j++)
-            for (int i = 1; i < Math.Min(j + 1, n); i++)
-                q[i, j] = Math.Max(q[i - 1, j - 1], q[i, j - 1]) + logP[j, i];
         var path = new int[frames];
         path[frames - 1] = n - 1;
         for (int j = frames - 2; j >= 0; j--)
         {
-            int ia = path[j + 1] - 1, ib = path[j + 1];
-            path[j] = ib == 0 ? 0 : q[ia, j] >= q[ib, j] ? ia : ib;
+            int ib = path[j + 1];
+            path[j] = ib == 0 ? 0 : takeLower[j * n + ib] != 0 ? ib - 1 : ib;
         }
         return path;
     }
@@ -298,8 +323,11 @@ internal sealed class EmotiVoiceAlignment<T>
     public Tensor<T> BinarizationLoss(Tensor<T> logP, int[] path)
     {
         int frames = logP.Shape[0], n = logP.Shape[1];
-        var mask = new Tensor<T>(new[] { frames, n });
-        for (int t = 0; t < frames; t++) mask[t, path[t]] = NumOps.FromDouble(-1.0 / frames);
+        var frameIndex = new int[frames];
+        for (int t = 0; t < frames; t++) frameIndex[t] = t;
+        var mask = _engine.TensorIndexPut(new Tensor<T>(new[] { frames, n }),
+            new[] { new Tensor<int>(frameIndex, new[] { frames }), new Tensor<int>(path, new[] { frames }) },
+            Tensor<T>.CreateDefault(new[] { frames }, NumOps.FromDouble(-1.0 / frames)), false);
         return _engine.ReduceSum(_engine.TensorMultiply(logP, mask), new[] { 0, 1 }, keepDims: false);
     }
 
@@ -311,40 +339,54 @@ internal sealed class EmotiVoiceAlignment<T>
     public Tensor<T> ForwardSumLoss(Tensor<T> logP)
     {
         int frames = logP.Shape[0], n = logP.Shape[1], states = 2 * n + 1;
-        var blank = new Tensor<T>(new[] { frames, 1 });
-        for (int t = 0; t < frames; t++) blank[t, 0] = NumOps.FromDouble(-1.0);
+        var blank = Tensor<T>.CreateDefault(new[] { frames, 1 }, NumOps.FromDouble(-1.0));
         var padded = _engine.TensorLogSoftmax(_engine.TensorConcatenate(new[] { blank, logP }, 1), axis: 1);   // [T, N + 1]
-        // Extended labels: blank, 1, blank, 2, …, N, blank.
-        var labels = new Tensor<int>(new[] { states });
-        for (int s = 0; s < states; s++) labels[s] = s % 2 == 0 ? 0 : (s + 1) / 2;
-        var emissions = _engine.TensorIndexSelect(padded, labels, 1);                                             // [T, S]
-        const double floor = -1e30;
-        var floorRow = new Tensor<T>(new[] { 1 });
-        floorRow[0] = NumOps.FromDouble(floor);
+        // Extended labels: blank, 1, blank, 2, …, N, blank; the label states (odd, from 3) may skip from s − 2.
+        var labelIds = new int[states];
+        var initial = new double[states];
+        var skip = new double[states];
+        double floor = UnreachableFloor();
+        for (int s = 0; s < states; s++)
+        {
+            labelIds[s] = s % 2 == 0 ? 0 : (s + 1) / 2;
+            initial[s] = s < 2 ? 0.0 : floor;
+            skip[s] = s % 2 == 1 && s >= 2 ? 0.0 : floor;
+        }
+        var emissions = _engine.TensorIndexSelect(padded, new Tensor<int>(labelIds, new[] { states }), 1);      // [T, S]
+        T floorValue = NumOps.FromDouble(floor);
+        var floorRow = Tensor<T>.CreateDefault(new[] { 1 }, floorValue);
         Tensor<T> Emission(int t) => _engine.Reshape(_engine.TensorSlice(emissions, new[] { t, 0 }, new[] { 1, states }), new[] { states });
-        var init = new Tensor<T>(new[] { states });
-        for (int s = 0; s < states; s++) init[s] = NumOps.FromDouble(s < 2 ? 0.0 : floor);
-        var alpha = _engine.TensorAdd(Emission(0), init);
-        // The skip from s − 2 is allowed for label states (blanks between distinct labels).
-        var skipMask = new Tensor<T>(new[] { states });
-        for (int s = 0; s < states; s++) skipMask[s] = NumOps.FromDouble(s % 2 == 1 && s >= 2 ? 0.0 : floor);
+        var alpha = _engine.TensorAdd(Emission(0), new Tensor<double>(initial, new[] { states }).Cast<T>());
+        var skipMask = new Tensor<double>(skip, new[] { states }).Cast<T>();
         for (int t = 1; t < frames; t++)
         {
             var stay = alpha;
             var one = _engine.TensorConcatenate(new[] { floorRow, _engine.TensorSlice(alpha, new[] { 0 }, new[] { states - 1 }) }, 0);
             var two = _engine.TensorAdd(_engine.TensorConcatenate(new[] { floorRow, floorRow, _engine.TensorSlice(alpha, new[] { 0 }, new[] { states - 2 }) }, 0), skipMask);
-            alpha = _engine.TensorAdd(LogSumExp(stay, one, two), Emission(t));
+            // Unreachable states are held at the floor so a 16-bit T never reaches −∞ − (−∞).
+            alpha = _engine.TensorMax(_engine.TensorAdd(LogSumExp(stay, one, two), Emission(t)), floorValue);
         }
         var last = LogSumExp(_engine.TensorSlice(alpha, new[] { states - 1 }, new[] { 1 }), _engine.TensorSlice(alpha, new[] { states - 2 }, new[] { 1 }));
         return _engine.TensorMultiplyScalar(_engine.TensorNegate(last), NumOps.FromDouble(1.0 / n));
     }
 
+    // The log-space "unreachable" value: −1e30, or a quarter of the most negative finite value where −1e30 does not fit T.
+    private static double UnreachableFloor()
+    {
+        double floor = NumOps.ToDouble(NumOps.FromDouble(-1e30));
+        return double.IsInfinity(floor) ? -0.25 * NumOps.ToDouble(NumOps.MaxValue) : -1e30;
+    }
+
     // log(Σ exp) of same-shaped tensors, stabilized by their (detached) elementwise maximum.
     private Tensor<T> LogSumExp(params Tensor<T>[] terms)
     {
-        var max = new Tensor<T>(terms[0]._shape);
-        for (int i = 0; i < max.Length; i++)
-            max[i] = NumOps.FromDouble(terms.Max(x => NumOps.ToDouble(x[i])));
+        Tensor<T> max;
+        using (new NoGradScope<T>())
+        {
+            max = terms[0];
+            for (int i = 1; i < terms.Length; i++) max = _engine.TensorMax(max, terms[i]);
+            max = max.Clone();
+        }
         Tensor<T>? sum = null;
         foreach (var x in terms)
         {
@@ -374,14 +416,9 @@ internal static class EmotiVoiceUpsampling
     {
         var ops = MathHelper.GetNumericOperations<T>();
         int n = rows.Shape[0];
-        var lower = new Tensor<T>(new[] { n, n });
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j <= i; j++) lower[i, j] = ops.One;
         var d = engine.Reshape(durations, new[] { n, 1 });
-        var centres = engine.TensorSubtract(engine.TensorMatMul(lower, d), engine.TensorMultiplyScalar(d, ops.FromDouble(0.5)));   // [N, 1]
-        var t = new Tensor<T>(new[] { frames, n });
-        for (int f = 0; f < frames; f++)
-            for (int i = 0; i < n; i++) t[f, i] = ops.FromDouble(f);
+        var centres = engine.TensorSubtract(engine.TensorCumSum(d, 0), engine.TensorMultiplyScalar(d, ops.FromDouble(0.5)));       // [N, 1]
+        var t = engine.TensorBroadcastTo(engine.Reshape(engine.TensorArange<T>(0, frames, 1), new[] { frames, 1 }), new[] { frames, n });
         var diff = engine.TensorSubtract(t, engine.TensorTile(engine.TensorTranspose(centres), new[] { frames, 1 }));
         var energy = engine.TensorMultiplyScalar(engine.TensorMultiply(diff, diff), ops.FromDouble(-delta));
         return engine.TensorMatMul(engine.Softmax(energy, axis: 1), rows);

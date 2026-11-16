@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Nonlinear;
 
@@ -26,14 +27,14 @@ public class HilbertSchmidtSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
     private readonly int _nFeaturesToSelect;
     private readonly double _kernelWidth;
 
-    private double[]? _hsicValues;
+    private Vector<T>? _hsicValues;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double KernelWidth => _kernelWidth;
-    public double[]? HSICValues => _hsicValues;
+    public Vector<T>? HSICValues => _hsicValues;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -71,122 +72,67 @@ public class HilbertSchmidtSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var engine = Engine;
 
-        _hsicValues = new double[p];
+        // Pairs i < j, for the median heuristic
+        var upperPairs = new Tensor<int>(PreprocessingTensorOps.MaskPositions(FeatureSelectionTensorOps.StrictUpperMask<T>(n)),
+            new[] { n * (n - 1) / 2 });
 
-        // Compute centering matrix H = I - 1/n * 11^T
-        // For centered kernel: K_c = HKH
+        // Kernel matrix for Y, centered: K_c = HKH with H = I - 1/n * 11^T
+        var Ky = GaussianKernel(engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 }), upperPairs);
+        var KyC = engine.TensorAddScalar(
+            engine.TensorSubtract(
+                engine.TensorSubtract(Ky, engine.ReduceMean(Ky, new[] { 1 }, true)),
+                engine.ReduceMean(Ky, new[] { 0 }, true)),
+            engine.TensorMean(Ky));
 
-        // Kernel matrix for Y
-        double yWidth = ComputeMedianWidth(y) * _kernelWidth;
-        var Ky = ComputeGaussianKernel(y, yWidth);
-        var KyC = CenterKernel(Ky);
-
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            double xWidth = ComputeMedianWidth(col) * _kernelWidth;
-            var Kx = ComputeGaussianKernel(col, xWidth);
-            var KxC = CenterKernel(Kx);
-
-            // HSIC = (1/n²) * trace(Kx_c * Ky_c)
-            double hsic = 0;
-            for (int i = 0; i < n; i++)
-                for (int k = 0; k < n; k++)
-                    hsic += KxC[i, k] * KyC[k, i];
-            hsic /= ((double)n * n);
-
-            _hsicValues[j] = Math.Max(0, hsic);
-        }
+        // HSIC = (1/n²) * trace(Kx_c * Ky_c) = (1/n²) * sum(Kx ∘ HKyH), since H is idempotent
+        var traces = engine.Reshape(FeatureSelectionTensorOps.KernelWeightedSums(
+            Tensor<T>.FromMatrix(data), column => GaussianKernel(column, upperPairs), new[] { KyC }, Array.Empty<Tensor<T>>()), new[] { p });
+        var nSquared = NumOps.Multiply(FeatureSelectionTensorOps.Count<T>(n), FeatureSelectionTensorOps.Count<T>(n));
+        var hsic = engine.TensorMax(engine.TensorDivideScalar(traces, nSquared), NumOps.Zero);
+        _hsicValues = hsic.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _hsicValues[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(hsic, numToSelect);
 
         IsFitted = true;
     }
 
-    private double ComputeMedianWidth(double[] data)
+    /// <summary>
+    /// Gaussian kernel matrix ([n, n]) of an [n, 1] column, <c>exp(-(a_i - a_j)^2 / (2 width^2))</c>, with
+    /// width = kernelWidth * the median pairwise distance (at least 1e-10; 1 when there is no pair).
+    /// </summary>
+    private Tensor<T> GaussianKernel(Tensor<T> column, Tensor<int> upperPairs)
     {
-        int n = data.Length;
-        var distances = new List<double>();
-        for (int i = 0; i < n; i++)
-            for (int j = i + 1; j < n; j++)
-                distances.Add(Math.Abs(data[i] - data[j]));
+        var engine = Engine;
+        int n = column.Shape[0];
+        var difference = engine.TensorSubtract(
+            engine.TensorBroadcastTo(column, new[] { n, n }), engine.TensorBroadcastTo(engine.TensorTranspose(column), new[] { n, n }));
 
-        if (distances.Count == 0) return 1.0;
-
-        distances.Sort();
-        int mid = distances.Count / 2;
-        double median = distances.Count % 2 == 0
-            ? (distances[mid - 1] + distances[mid]) / 2
-            : distances[mid];
-
-        return Math.Max(median, 1e-10);
-    }
-
-    private double[,] ComputeGaussianKernel(double[] data, double width)
-    {
-        int n = data.Length;
-        var K = new double[n, n];
-        double gamma = 1.0 / (2 * width * width);
-
-        for (int i = 0; i < n; i++)
+        Tensor<T> median;
+        if (upperPairs.Length == 0)
         {
-            K[i, i] = 1.0;
-            for (int j = i + 1; j < n; j++)
-            {
-                double diff = data[i] - data[j];
-                double val = Math.Exp(-gamma * diff * diff);
-                K[i, j] = val;
-                K[j, i] = val;
-            }
+            median = PreprocessingTensorOps.Filled(new[] { 1 }, NumOps.One);
+        }
+        else
+        {
+            var distances = engine.TensorIndexSelect(engine.Reshape(engine.TensorAbs(difference), new[] { n * n }), upperPairs, 0);
+            median = engine.TensorMax(
+                FilterStatisticTensorOps.ColumnQuantile(engine.Reshape(distances, new[] { upperPairs.Length, 1 }), 0.5),
+                NumOps.FromDouble(1e-10));
         }
 
-        return K;
-    }
-
-    private double[,] CenterKernel(double[,] K)
-    {
-        int n = K.GetLength(0);
-        var Kc = new double[n, n];
-
-        var rowMeans = new double[n];
-        double grandMean = 0;
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                rowMeans[i] += K[i, j];
-                grandMean += K[i, j];
-            }
-            rowMeans[i] /= n;
-        }
-        grandMean /= ((double)n * n);
-
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < n; j++)
-                Kc[i, j] = K[i, j] - rowMeans[i] - rowMeans[j] + grandMean;
-
-        return Kc;
+        // gamma = 1 / (2 width^2)
+        var width = engine.TensorMultiplyScalar(median, NumOps.FromDouble(_kernelWidth));
+        var negativeGamma = engine.TensorDivide(
+            PreprocessingTensorOps.Filled(new[] { 1 }, NumOps.FromDouble(-0.5)), engine.TensorSquare(width));
+        var scale = engine.TensorBroadcastTo(engine.Reshape(negativeGamma, new[] { 1, 1 }), new[] { n, n });
+        return engine.TensorExp(engine.TensorMultiply(engine.TensorSquare(difference), scale));
     }
 
     /// <inheritdoc />
+
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -199,15 +145,7 @@ public class HilbertSchmidtSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         if (_selectedIndices is null)
             throw new InvalidOperationException("HilbertSchmidtSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

@@ -31,19 +31,19 @@ public class HarmonySearchFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
     private readonly double _pitchAdjustingRate;
     private readonly int _nFeaturesToSelect;
     private readonly int? _randomState;
-    private readonly Func<Matrix<T>, Vector<T>, bool[], double>? _fitnessFunc;
+    private readonly Func<Matrix<T>, Vector<T>, bool[], T>? _fitnessFunc;
 
-    private double[]? _featureImportances;
+    private Vector<T>? _featureImportances;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
-    private double _bestFitness;
+    private T _bestFitness = MathHelper.GetNumericOperations<T>().Zero;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FeatureImportances => _featureImportances;
+    public Vector<T>? FeatureImportances => _featureImportances;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
-    public double BestFitness => _bestFitness;
+    public T BestFitness => _bestFitness;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
@@ -53,7 +53,7 @@ public class HarmonySearchFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         int nIterations = 100,
         double harmonyMemoryConsideringRate = 0.9,
         double pitchAdjustingRate = 0.3,
-        Func<Matrix<T>, Vector<T>, bool[], double>? fitnessFunc = null,
+        Func<Matrix<T>, Vector<T>, bool[], T>? fitnessFunc = null,
         int? randomState = null,
         int[]? columnIndices = null)
         : base(columnIndices)
@@ -93,7 +93,7 @@ public class HarmonySearchFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
             : RandomHelper.CreateSecureRandom();
 
         // Initialize harmony memory
-        var harmonyMemory = new List<(bool[] Harmony, double Fitness)>();
+        var harmonyMemory = new List<(bool[] Harmony, T Fitness)>();
         for (int i = 0; i < _harmonyMemorySize; i++)
         {
             var harmony = new bool[p];
@@ -102,12 +102,12 @@ public class HarmonySearchFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
             foreach (int idx in indices)
                 harmony[idx] = true;
 
-            double fitness = EvaluateFitness(data, target, harmony);
+            T fitness = EvaluateFitness(data, target, harmony);
             harmonyMemory.Add((harmony, fitness));
         }
 
-        _featureImportances = new double[p];
-        _bestFitness = harmonyMemory.Max(h => h.Fitness);
+        var importances = PreprocessingTensorOps.Filled(new[] { p }, NumOps.Zero);
+        _bestFitness = harmonyMemory[PreprocessingTensorOps.FirstArgMax(Fitnesses(harmonyMemory))].Fitness;
 
         // Main optimization loop
         for (int iter = 0; iter < _nIterations; iter++)
@@ -148,35 +148,27 @@ public class HarmonySearchFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
                 currentCount--;
             }
 
-            double newFitness = EvaluateFitness(data, target, newHarmony);
+            T newFitness = EvaluateFitness(data, target, newHarmony);
 
             // Update feature importances
-            for (int j = 0; j < p; j++)
-                if (newHarmony[j])
-                    _featureImportances[j] += newFitness;
+            importances = Engine.TensorAdd(importances, WrapperScoringOps.ScoreSums(
+                new[] { WrapperScoringOps.Positions(newHarmony) }, WrapperScoringOps.FromList(new[] { newFitness }), p));
 
             // Update harmony memory
-            int worstIdx = 0;
-            double worstFitness = harmonyMemory[0].Fitness;
-            for (int i = 1; i < _harmonyMemorySize; i++)
-            {
-                if (harmonyMemory[i].Fitness < worstFitness)
-                {
-                    worstFitness = harmonyMemory[i].Fitness;
-                    worstIdx = i;
-                }
-            }
+            // The first worst harmony
+            int worstIdx = PreprocessingTensorOps.StableOrder(Fitnesses(harmonyMemory), descending: false)[0];
+            T worstFitness = harmonyMemory[worstIdx].Fitness;
 
-            if (newFitness > worstFitness)
+            if (WrapperScoringOps.IsAbove(newFitness, worstFitness))
             {
                 harmonyMemory[worstIdx] = (newHarmony, newFitness);
-                if (newFitness > _bestFitness)
+                if (WrapperScoringOps.IsAbove(newFitness, _bestFitness))
                     _bestFitness = newFitness;
             }
         }
 
         // Select best harmony
-        var bestHarmony = harmonyMemory.OrderByDescending(h => h.Fitness).First().Harmony;
+        var bestHarmony = harmonyMemory[PreprocessingTensorOps.FirstArgMax(Fitnesses(harmonyMemory))].Harmony;
         var selectedList = new List<int>();
         for (int j = 0; j < p; j++)
             if (bestHarmony[j])
@@ -185,55 +177,34 @@ public class HarmonySearchFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         // Limit to nFeaturesToSelect
         if (selectedList.Count > _nFeaturesToSelect)
         {
-            selectedList = selectedList
-                .OrderByDescending(j => _featureImportances[j])
-                .Take(_nFeaturesToSelect)
+            // By decreasing accumulated importance, the lower index first among ties
+            var candidates = selectedList.ToArray();
+            selectedList = PreprocessingTensorOps.TopKIndicesSorted(
+                WrapperScoringOps.Gather(importances, candidates), _nFeaturesToSelect)
+                .Select(position => candidates[position])
                 .ToList();
         }
 
+        _featureImportances = importances.ToVector();
         _selectedIndices = selectedList.OrderBy(x => x).ToArray();
         IsFitted = true;
     }
 
-    private double EvaluateFitness(Matrix<T> data, Vector<T> target, bool[] mask)
+    private static Tensor<T> Fitnesses(List<(bool[] Harmony, T Fitness)> members) =>
+        WrapperScoringOps.FromList(members.Select(m => m.Fitness).ToList());
+
+    private T EvaluateFitness(Matrix<T> data, Vector<T> target, bool[] mask)
     {
         if (_fitnessFunc is not null)
             return _fitnessFunc(data, target, mask);
 
-        int n = data.Rows;
-        int nSelected = mask.Count(b => b);
-        if (nSelected == 0) return double.NegativeInfinity;
+        var selected = WrapperScoringOps.Positions(mask);
+        int nSelected = selected.Length;
+        if (nSelected == 0) return NumOps.FromDouble(double.NegativeInfinity);
 
-        double totalCorr = 0;
-        for (int j = 0; j < mask.Length; j++)
-        {
-            if (!mask[j]) continue;
-
-            double xMean = 0, yMean = 0;
-            for (int i = 0; i < n; i++)
-            {
-                xMean += NumOps.ToDouble(data[i, j]);
-                yMean += NumOps.ToDouble(target[i]);
-            }
-            xMean /= n;
-            yMean /= n;
-
-            double ssXY = 0, ssXX = 0, ssYY = 0;
-            for (int i = 0; i < n; i++)
-            {
-                double dx = NumOps.ToDouble(data[i, j]) - xMean;
-                double dy = NumOps.ToDouble(target[i]) - yMean;
-                ssXY += dx * dy;
-                ssXX += dx * dx;
-                ssYY += dy * dy;
-            }
-
-            if (ssXX > 1e-10 && ssYY > 1e-10)
-                totalCorr += Math.Abs(ssXY / Math.Sqrt(ssXX * ssYY));
-        }
-
+        // Mean |Pearson r| with the target, penalized for selecting more than the requested number of features
         double penalty = nSelected > _nFeaturesToSelect ? 0.1 * (nSelected - _nFeaturesToSelect) : 0;
-        return totalCorr / nSelected - penalty;
+        return NumOps.Subtract(WrapperScoringOps.MeanAbsTargetCorrelation(data, target, selected), NumOps.FromDouble(penalty));
     }
 
     /// <inheritdoc />
@@ -249,15 +220,7 @@ public class HarmonySearchFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         if (_selectedIndices is null)
             throw new InvalidOperationException("HarmonySearchFS has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

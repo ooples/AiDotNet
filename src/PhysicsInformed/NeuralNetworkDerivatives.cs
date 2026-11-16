@@ -44,20 +44,21 @@ public static class NeuralNetworkDerivatives<T>
 
         int n = inputs.Length;
         var point = new Tensor<T>((T[])inputs.Clone(), new[] { n });
-        var first = new T[outputDim, n];
-        var second = new T[outputDim, n, n];
+        var first = new T[outputDim * n];
+        var second = new T[outputDim * n * n];
         for (int k = 0; k < outputDim; k++)
         {
             var component = Component(network, n, k);
             var gradient = TensorFunc<T>.Grad(component)(point).ToArray();
             var hessian = TensorFunc<T>.Hessian(component)(point).ToArray();
-            for (int i = 0; i < n; i++)
-            {
-                first[k, i] = gradient[i];
-                for (int j = 0; j < n; j++) second[k, i, j] = hessian[i * n + j];
-            }
+            gradient.CopyTo(first, k * n);
+            hessian.CopyTo(second, k * n * n);
         }
-        return new PDEDerivatives<T> { FirstDerivatives = first, SecondDerivatives = second };
+        return new PDEDerivatives<T>
+        {
+            FirstDerivatives = new Tensor<T>(first, new[] { outputDim, n }),
+            SecondDerivatives = new Tensor<T>(second, new[] { outputDim, n, n })
+        };
     }
 
     /// <summary>Computes the Hessian <c>[inputDim, inputDim]</c> of one network output at a single input point.</summary>

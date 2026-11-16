@@ -529,12 +529,19 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
         if (bias is not null) scores = Engine.TensorAdd(scores, bias);
         if (causal)
         {
-            var mask = new Tensor<T>(new[] { _numHeads, sq, sk });
             T blocked = NumOps.FromDouble(-1e9);
             int shift = sk - sq; // queries are the last sq positions of the keys
-            for (int h = 0; h < _numHeads; h++)
-                for (int i = 0; i < sq; i++)
-                    for (int j = i + shift + 1; j < sk; j++) mask[h, i, j] = blocked;
+            // Key j is blocked for query i when j - i > shift; the [sq, sk] mask broadcasts over batch and heads.
+            Tensor<T> mask;
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+            {
+                var offset = Engine.TensorSubtract(
+                    Engine.Reshape(Engine.TensorArange<int>(0, sk, 1), new[] { 1, sk }),
+                    Engine.Reshape(Engine.TensorArange<int>(0, sq, 1), new[] { sq, 1 }));
+                var future = Engine.TensorGreaterThan(offset, shift).Cast<T>();
+                // In Half, blocked is -infinity. Selection keeps allowed entries zero; 0 * -infinity is NaN.
+                mask = Engine.TensorWhere(future, Engine.TensorFullLike(future, blocked), Engine.TensorZerosLike(future));
+            }
             scores = Engine.TensorAdd(scores, mask);
         }
         var context = Engine.TensorMatMul(Engine.TensorSoftmax(scores, axis: 3), v);              // [B, H, Sq, d_kv]
@@ -595,18 +602,26 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
     /// <c>_relative_position_bucket</c>).
     /// </summary>
     private Tensor<int> ComputeBucketIndices(int seqLen)
+        => BucketIndexGrid(seqLen, _bidirectional, _numBuckets, _maxDistance);
+
+    /// <summary>
+    /// The [seqLen, seqLen] grid of <see cref="RelativePositionBucket"/>(kPos - qPos) values. The bucket
+    /// depends only on the offset, so the 2*seqLen - 1 offsets are bucketed once and every query row is a
+    /// sliding window over that table: window w covers offsets w - (seqLen - 1) .. w, which is the row of
+    /// query seqLen - 1 - w, hence the flip along the window axis.
+    /// </summary>
+    internal static Tensor<int> BucketIndexGrid(int seqLen, bool bidirectional, int numBuckets, int maxDistance)
     {
-        var idx = new Tensor<int>(new[] { seqLen, seqLen });
-        for (int qPos = 0; qPos < seqLen; qPos++)
-        {
-            for (int kPos = 0; kPos < seqLen; kPos++)
-            {
-                int relativePosition = kPos - qPos;
-                idx[qPos, kPos] = RelativePositionBucket(
-                    relativePosition, _bidirectional, _numBuckets, _maxDistance);
-            }
-        }
-        return idx;
+        if (seqLen == 0)
+            return new Tensor<int>(new[] { 0, 0 });
+
+        var table = new int[2 * seqLen - 1];
+        for (int offset = 0; offset < table.Length; offset++)
+            table[offset] = RelativePositionBucket(offset - (seqLen - 1), bidirectional, numBuckets, maxDistance);
+
+        var engine = AiDotNetEngine.Current;
+        var windows = engine.TensorUnfold(new Tensor<int>(table, new[] { table.Length }), 0, seqLen, 1);
+        return engine.TensorFlip(windows, new[] { 0 }).Contiguous();
     }
 
     /// <summary>
@@ -659,9 +674,9 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
 
     private static void WriteInto(Tensor<T> dest, Vector<T> src, ref int offset)
     {
-        var span = dest.Data.Span;
-        for (int i = 0; i < dest.Length; i++) span[i] = src[offset + i];
-        offset += (int)dest.Length;
+        int length = (int)dest.Length;
+        src.GetSubVector(offset, length).AsSpan().CopyTo(dest.Data.Span);
+        offset += length;
     }
 
     /// <inheritdoc/>
@@ -694,7 +709,7 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
     private void ApplySgd(Tensor<T> weight, Tensor<T> gradient, T lr)
     {
         var updated = Engine.TensorSubtract(weight, Engine.TensorMultiplyScalar(gradient, lr));
-        for (int i = 0; i < weight.Length; i++) weight[i] = updated[i];
+        updated.CopyTo(weight.Data.Span);
         Engine.InvalidatePersistentTensor(weight);
     }
 

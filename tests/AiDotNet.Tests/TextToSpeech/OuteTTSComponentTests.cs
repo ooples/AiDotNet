@@ -112,7 +112,8 @@ public class OuteTTSComponentTests
         foreach (var c in Reference()["sampling"]!)
         {
             var ids = c["ids"]!.Select(v => (int)v).ToArray();
-            var processed = OuteTTSSampler.Process(Values(c["scores"]!), ids, 1.1, 64, 0.4, 40, 0.9, 0.05);
+            var scores = Values(c["scores"]!);
+            var processed = OuteTTSSampler<double>.Process(new Tensor<double>(scores, new[] { scores.Length }), ids, 1.1, 64, 0.4, 40, 0.9, 0.05).ToArray();
             var expected = c["processed"]!.Select(v => v.Type == JTokenType.Null ? double.NegativeInfinity : (double)v).ToArray();
             Assert.Equal(expected.Select(double.IsNegativeInfinity), processed.Select(double.IsNegativeInfinity));
             Close(expected.Select(v => double.IsNegativeInfinity(v) ? 0 : v).ToArray(), processed.Select(v => double.IsNegativeInfinity(v) ? 0 : v).ToArray(), "processed");
@@ -153,5 +154,104 @@ public class OuteTTSComponentTests
         for (int q = 0; q < expected.Length; q++)
             for (int t = 0; t < expected[q].Length; t++) exact[q, t] = expected[q][t];
         Close(Values(dac["decoded"]!), OuteTTSAudio.Decode<double>(codec.Decode, exact, 24000), "decoded", 1e-7);
+    }
+
+    // pyloudnorm's IIRfilter.generate_coefficients (RBJ biquads, divided by a0) and scipy's lfilter in transposed
+    // direct form II: the reference the engine K-weighting (FIR zeros + diagonal-pole scans) must reproduce.
+    private static (double[] B, double[] A) ReferenceBiquad(double gainDb, double q, double frequency, int rate, bool highShelf)
+    {
+        double a = Math.Pow(10, gainDb / 40.0), w0 = 2.0 * Math.PI * (frequency / rate), alpha = Math.Sin(w0) / (2.0 * q), c = Math.Cos(w0);
+        double b0, b1, b2, a0, a1, a2;
+        if (highShelf)
+        {
+            b0 = a * (a + 1 + (a - 1) * c + 2 * Math.Sqrt(a) * alpha); b1 = -2 * a * (a - 1 + (a + 1) * c);
+            b2 = a * (a + 1 + (a - 1) * c - 2 * Math.Sqrt(a) * alpha); a0 = a + 1 - (a - 1) * c + 2 * Math.Sqrt(a) * alpha;
+            a1 = 2 * (a - 1 - (a + 1) * c); a2 = a + 1 - (a - 1) * c - 2 * Math.Sqrt(a) * alpha;
+        }
+        else
+        {
+            b0 = (1 + c) / 2; b1 = -(1 + c); b2 = (1 + c) / 2; a0 = 1 + alpha; a1 = -2 * c; a2 = 1 - alpha;
+        }
+        return (new[] { b0 / a0, b1 / a0, b2 / a0 }, new[] { 1.0, a1 / a0, a2 / a0 });
+    }
+
+    private static double[] ReferenceLfilter((double[] B, double[] A) f, double[] x)
+    {
+        var y = new double[x.Length];
+        double z1 = 0, z2 = 0;
+        for (int n = 0; n < x.Length; n++)
+        {
+            double output = f.B[0] * x[n] + z1;
+            z1 = f.B[1] * x[n] + z2 - f.A[1] * output;
+            z2 = f.B[2] * x[n] - f.A[2] * output;
+            y[n] = output;
+        }
+        return y;
+    }
+
+    private static double[] TestSignal(int rate, double seconds)
+    {
+        var x = new double[(int)(rate * seconds)];
+        for (int n = 0; n < x.Length; n++)
+            x[n] = 0.5 * Math.Sin(2 * Math.PI * 440 * n / rate) + 0.25 * Math.Sin(2 * Math.PI * 30 * n / rate)
+                + 0.1 * Math.Sin(2 * Math.PI * 9000 * n / rate + 1.0) + 0.05 * ((n * 7919) % 13 - 6) / 6.0;
+        return x;
+    }
+
+    [Theory(Timeout = 120000)]
+    [InlineData(48000)]
+    [InlineData(24000)]
+    [InlineData(16000)]
+    public async Task KWeighting_MatchesPyloudnormLfilter(int rate)
+    {
+        await Task.Yield();
+        var x = TestSignal(rate, 1.5);
+        var expected = ReferenceLfilter(ReferenceBiquad(0.0, 0.5, 38.0, rate, false), ReferenceLfilter(ReferenceBiquad(4.0, 1 / Math.Sqrt(2), 1500.0, rate, true), x));
+        var actual = LoudnessMeter.KWeighted(AiDotNet.Tensors.Engines.AiDotNetEngine.Current,
+            new Tensor<double>(new[] { x.Length }, new Vector<double>(x)), rate, clamp: false).ToArray();
+        Assert.Equal(expected.Length, actual.Length);
+        for (int n = 0; n < expected.Length; n++)
+            Assert.True(Math.Abs(expected[n] - actual[n]) <= 1e-9, $"rate {rate}, sample {n}: {expected[n]} vs {actual[n]}");
+    }
+
+    // |H(e^{jw})|² of a biquad at a frequency.
+    private static double PowerGain((double[] B, double[] A) f, double frequency, int rate)
+    {
+        var z = System.Numerics.Complex.Exp(new System.Numerics.Complex(0, -2 * Math.PI * frequency / rate));
+        var h = (f.B[0] + f.B[1] * z + f.B[2] * z * z) / (f.A[0] + f.A[1] * z + f.A[2] * z * z);
+        return h.Magnitude * h.Magnitude;
+    }
+
+    // A steady 0 dBFS sine reads −0.691 + 10 log10(½ |H(f)|²), H the K-weighting. ITU-R BS.1770's own coefficients
+    // give −3.01 LKFS at 997 Hz; pyloudnorm's RBJ biquads (ported here) have 0.042 dB less gain there, so the meter
+    // reads −3.0517 at 48 kHz, as pyloudnorm does (its own test pins −3.0523 for a 1 kHz sine at 44.1 kHz).
+    [Fact(Timeout = 120000)]
+    public async Task IntegratedLoudness_FullScaleSineReadsTheKWeightingGain()
+    {
+        await Task.Yield();
+        const int rate = 48000;
+        var x = new double[rate * 3];
+        for (int n = 0; n < x.Length; n++) x[n] = Math.Sin(2 * Math.PI * 997 * n / rate);
+        double lufs = LoudnessMeter.IntegratedLoudness(x, rate);
+        double expected = -0.691 + 10 * Math.Log10(0.5
+            * PowerGain(ReferenceBiquad(4.0, 1 / Math.Sqrt(2), 1500.0, rate, true), 997, rate)
+            * PowerGain(ReferenceBiquad(0.0, 0.5, 38.0, rate, false), 997, rate));
+        Assert.True(Math.Abs(expected - -3.0517) <= 1e-4, $"analytic {expected} LUFS");
+        Assert.True(Math.Abs(lufs - expected) <= 1e-3, $"{lufs} LUFS vs {expected}");
+        double generic = LoudnessMeter.IntegratedLoudness(new Tensor<float>(new[] { x.Length }, new Vector<float>(x.Select(v => (float)v).ToArray())), rate);
+        Assert.True(Math.Abs(generic - lufs) <= 1e-3, $"float {generic} vs double {lufs}");
+    }
+
+    // A draw over 5,000 equal scores is uniform. In Half the running probability stalled at 0.5 (2e-4 is under half
+    // an ulp there), so every u above it fell through to the last token: about half of all draws returned 4,999.
+    [Fact(Timeout = 120000)]
+    public async Task Sample_InHalf_IsNotPulledToTheLastToken()
+    {
+        await Task.Yield();
+        var scores = new AiDotNet.Tensors.LinearAlgebra.Tensor<Half>(new Half[5000], new[] { 5000 });
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(5);
+        var draws = Enumerable.Range(0, 400).Select(_ => OuteTTSSampler<Half>.Sample(scores, random)).ToArray();
+        Assert.True(draws.Count(d => d == 4999) <= 3, $"{draws.Count(d => d == 4999)} of 400 draws on the last token");
+        Assert.True(draws.Distinct().Count() >= 300, $"{draws.Distinct().Count()} distinct draws");
     }
 }

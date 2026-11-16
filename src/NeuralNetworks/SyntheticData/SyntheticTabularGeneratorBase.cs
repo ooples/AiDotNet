@@ -192,6 +192,7 @@ public abstract class SyntheticTabularGeneratorBase<T> : ISyntheticTabularGenera
                     categories.Add(val.ToString(CultureInfo.InvariantCulture));
                 }
                 meta.Categories = categories.OrderBy(c => c, StringComparer.Ordinal).ToList().AsReadOnly();
+                meta.CategoriesInferredFromData = true;
             }
 
             prepared.Add(meta);

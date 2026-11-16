@@ -83,9 +83,29 @@ internal static class WhisperSpeechFixture
         var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         if (option == "TopK")
-            // Observe the actual trained T2S sampler before the still-untrained S2A heads can hide its changes.
-            return AiDotNet.Tests.ModelFamilyTests.Base.OptionSensitivityHarness.Fingerprint(
-                model.TextToSemanticTokens("a tone").Select(value => (double)value));
+        {
+            // Observe the actual trained T2S sampler before the still-untrained S2A heads can hide its changes. The
+            // sampler is read over several sampling seeds: after three steps on one recording a single seeded draw can
+            // land on the most likely token at every position, which is exactly what top-k 1 returns, so one draw
+            // tells top-k apart from no top-k only by chance (the first semantic code of the fixture's recording is a
+            // near tie in the untrained tokenizer, and which way it falls decides that draw).
+            int? seed = options.Seed;
+            var observed = new System.Collections.Generic.List<double>();
+            try
+            {
+                for (int draw = 0; draw < 8; draw++)
+                {
+                    options.Seed = 1000 + draw;
+                    observed.AddRange(model.TextToSemanticTokens("a tone").Select(value => (double)value));
+                    observed.Add(-1);
+                }
+            }
+            finally
+            {
+                options.Seed = seed;
+            }
+            return AiDotNet.Tests.ModelFamilyTests.Base.OptionSensitivityHarness.Fingerprint(observed);
+        }
         if (option == "CharactersPerSecond")
         {
             var t2s = model.Core.TextToSemantic;

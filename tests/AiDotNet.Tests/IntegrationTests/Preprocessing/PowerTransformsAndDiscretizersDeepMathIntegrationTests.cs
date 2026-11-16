@@ -34,7 +34,7 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
             method: PowerTransformMethod.BoxCox, standardize: false);
         var result = transformer.FitTransform(matrix);
 
-        // Lambda should be found via grid search [-2, 2] with step 0.1
+        // Lambda is the maximum-likelihood estimate (scipy.optimize.brent bracketed from (-2, 2))
         Assert.NotNull(transformer.Lambdas);
         double lambda = transformer.Lambdas[0];
 
@@ -305,7 +305,7 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task PowerTransformer_LambdaGridSearch_BoundsAreRespected()
     {
-        // Lambda search is in [-2, 2] with step 0.1
+        // scikit-learn PowerTransformer(standardize=False).fit(1..10).lambdas_ = [0.7303877], inside [-2, 2]
         var data = new double[,]
         {
             { 1.0 }, { 2.0 }, { 3.0 }, { 4.0 }, { 5.0 },
@@ -453,9 +453,12 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task QuantileTransformer_Uniform_ConstantFeature_MapToHalf()
+    public async Task QuantileTransformer_Uniform_ConstantFeature_MapsToLowerBound()
     {
-        // All identical values → 0.5
+        // scikit-learn QuantileTransformer._transform_col sets X_col[upper_bounds_idx] = 1 and then
+        // X_col[lower_bounds_idx] = 0, where (uniform output) lower_bounds_idx = X_col == quantiles[0];
+        // for a constant feature every value equals the lower bound, so
+        // QuantileTransformer(n_quantiles=10).fit_transform([[5]] * 10) is all 0.
         var data = new double[,]
         {
             { 5.0 }, { 5.0 }, { 5.0 }, { 5.0 }, { 5.0 },
@@ -469,7 +472,7 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
 
         for (int i = 0; i < 10; i++)
         {
-            Assert.Equal(0.5, result[i, 0], Tolerance);
+            Assert.Equal(0.0, result[i, 0], Tolerance);
         }
     }
 
@@ -497,9 +500,10 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task QuantileTransformer_Normal_ExtremesClippedToEight()
+    public async Task QuantileTransformer_Normal_ExtremesClippedToBoundsThreshold()
     {
-        // Values outside quantile range should be clipped to ±8 for normal output
+        // scikit-learn clips normal output to norm.ppf(BOUNDS_THRESHOLD - spacing(1)) and
+        // norm.ppf(1 - (BOUNDS_THRESHOLD - spacing(1))) with BOUNDS_THRESHOLD = 1e-7: +/-5.199337582605575
         var trainData = new double[,]
         {
             { 1.0 }, { 2.0 }, { 3.0 }, { 4.0 }, { 5.0 },
@@ -518,8 +522,8 @@ public class PowerTransformsAndDiscretizersDeepMathIntegrationTests
         var testMatrix = new Matrix<double>(testData);
         var result = transformer.Transform(testMatrix);
 
-        Assert.Equal(-8.0, result[0, 0], Tolerance);
-        Assert.Equal(8.0, result[1, 0], Tolerance);
+        Assert.Equal(-5.199337582605575, result[0, 0], 1e-6);
+        Assert.Equal(5.199337582605575, result[1, 0], 1e-6);
     }
 
     [Fact(Timeout = 120000)]

@@ -37,6 +37,11 @@ internal sealed class OpenVoiceTrainingController<T>
 
     internal T Train(TtsTrainingSample<T> sample, TrainingStep step)
     {
+        // The sample preparation and the no-grad generator forward run outside both step arenas. Under a caller's
+        // TensorArena (the model builder, the test harness) nothing rewinds that arena between calls, so each call's
+        // vocoder forward stayed allocated: about 650 MB per call on the generated fixture, out of memory within 80 s.
+        // The steps still run in their own arenas (TrainWithCustomObjective).
+        using var noCallerArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         var data = Graph.Prepare(sample); var draw = Graph.Sample(data);
         _owner.SetTrainingMode(true);
         Tensor<T> generated;
@@ -61,6 +66,7 @@ internal sealed class OpenVoiceTrainingController<T>
 
     internal T Evaluate(TtsTrainingSample<T> sample)
     {
+        using var noCallerArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         var data = Graph.Prepare(sample); var draw = Graph.Sample(data);
         using var noGrad = new NoGradScope<T>();
         return Graph.GeneratorLoss(data, draw, adversarial: false, training: false)[0];

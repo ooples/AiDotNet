@@ -342,9 +342,6 @@ public partial class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
         return (feature, threshold, bestSdr);
     }
 
-    private Vector<T> AtLeastOne(Vector<T> values)
-        => AiDotNetEngine.Current.TensorMax(Tensor<T>.FromVector(values), NumOps.One).ToVector();
-
     /// <summary>
     /// Computes the sample variance of a group of target values from its running sum and
     /// sum-of-squares, used by the standard-deviation-reduction split search.
@@ -369,13 +366,12 @@ public partial class M5ModelTree<T> : AsyncDecisionTreeRegressionBase<T>
     {
         // Element-wise version of the scalar overload below: (sumSq - count * mean^2) / (count - 1),
         // and 0 where count < 2.
-        // The divisors are floored at 1 first: count is 0 for an empty side and count - 1 is 0 for a single
-        // sample, and the engine's vector Divide throws on a zero divisor even where the result is masked
-        // away below (M5 failed every fit whose candidate split left a side empty).
+        // Guard both divisions before evaluating them: empty sides and singleton groups have zero divisors.
         var engine = AiDotNetEngine.Current;
-        var mean = engine.Divide(sum, AtLeastOne(count));
+        var mean = RegressionEngineOps.DivideWherePositive(sum, count);
         var sumSquaredDeviations = engine.Subtract(sumSq, engine.Multiply(count, engine.Multiply(mean, mean)));
-        var variance = engine.Divide(sumSquaredDeviations, AtLeastOne(engine.Subtract(count, engine.Fill(count.Length, NumOps.One))));
+        var variance = RegressionEngineOps.DivideWherePositive(
+            sumSquaredDeviations, engine.Subtract(count, engine.Fill(count.Length, NumOps.One)));
         return engine.TensorWhere(
             engine.TensorGreaterThan(Tensor<T>.FromVector(count), NumOps.One),
             Tensor<T>.FromVector(variance),

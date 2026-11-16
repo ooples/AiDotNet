@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Privacy;
 
@@ -27,17 +28,17 @@ public class FederatedFSSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _nClients;
-    private readonly string _aggregationMethod;
+    private readonly FederatedScoreAggregation _aggregationMethod;
 
-    private double[]? _aggregatedScores;
+    private Vector<T>? _aggregatedScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NClients => _nClients;
-    public string AggregationMethod => _aggregationMethod;
-    public double[]? AggregatedScores => _aggregatedScores;
+    public FederatedScoreAggregation AggregationMethod => _aggregationMethod;
+    public Vector<T>? AggregatedScores => _aggregatedScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -46,7 +47,7 @@ public class FederatedFSSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
     public FederatedFSSelector(
         int nFeaturesToSelect = 10,
         int nClients = 5,
-        string aggregationMethod = "weighted_average",
+        FederatedScoreAggregation aggregationMethod = FederatedScoreAggregation.WeightedAverage,
         int[]? columnIndices = null)
         : base(columnIndices)
     {
@@ -77,141 +78,66 @@ public class FederatedFSSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+        var y = engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 });
 
-        // Partition data across clients
+        // Partition data across clients (contiguous blocks; the last client takes the remainder)
         int baseSize = n / _nClients;
-        var clientScores = new double[_nClients][];
+        var clientScores = new Tensor<T>[_nClients];
         var clientSizes = new int[_nClients];
-
         for (int c = 0; c < _nClients; c++)
         {
             int start = c * baseSize;
             int end = (c == _nClients - 1) ? n : (c + 1) * baseSize;
-            int clientN = end - start;
-            clientSizes[c] = clientN;
+            clientSizes[c] = end - start;
 
-            // Compute local feature scores using correlation
-            clientScores[c] = ComputeLocalScores(X, y, start, end, p);
+            // Compute local feature scores using |correlation| (0 when sqrt(varX * varY) is not above 1e-10)
+            var localX = engine.TensorSlice(X, new[] { start, 0 }, new[] { end - start, p });
+            var localY = engine.TensorSlice(y, new[] { start, 0 }, new[] { end - start, 1 });
+            clientScores[c] = engine.TensorAbs(engine.Reshape(FeatureSelectionTensorOps.ColumnCorrelations(localX, localY), new[] { 1, p }));
         }
 
-        // Aggregate scores across clients
-        _aggregatedScores = new double[p];
-
-        switch (_aggregationMethod.ToLower())
+        // Aggregate scores across clients ([clients, p])
+        var scores = engine.TensorConcatenate(clientScores, 0);
+        Tensor<T> aggregated;
+        switch (_aggregationMethod)
         {
-            case "weighted_average":
+            case FederatedScoreAggregation.WeightedAverage:
                 // Weight by client data size
-                double totalSize = clientSizes.Sum();
-                for (int j = 0; j < p; j++)
-                {
-                    for (int c = 0; c < _nClients; c++)
-                        _aggregatedScores[j] += clientScores[c][j] * clientSizes[c] / totalSize;
-                }
+                var sizes = new Tensor<int>(clientSizes, new[] { 1, _nClients }).Cast<T>();
+                aggregated = engine.TensorDivideScalar(
+                    engine.Reshape(engine.TensorMatMul(sizes, scores), new[] { p }), FeatureSelectionTensorOps.Count<T>(n));
                 break;
-
-            case "median":
-                // Robust aggregation using median
-                for (int j = 0; j < p; j++)
-                {
-                    var scores = new double[_nClients];
-                    for (int c = 0; c < _nClients; c++)
-                        scores[c] = clientScores[c][j];
-                    Array.Sort(scores);
-                    _aggregatedScores[j] = scores[_nClients / 2];
-                }
+            case FederatedScoreAggregation.Median:
+                // Robust aggregation using the median
+                aggregated = FilterStatisticTensorOps.ColumnQuantile(scores, 0.5);
                 break;
-
-            case "trimmed_mean":
-                // Remove extreme values
-                for (int j = 0; j < p; j++)
-                {
-                    var scores = new double[_nClients];
-                    for (int c = 0; c < _nClients; c++)
-                        scores[c] = clientScores[c][j];
-                    Array.Sort(scores);
-
-                    // Trim top and bottom
-                    int trimCount = Math.Max(1, _nClients / 5);
-                    double sum = 0;
-                    int count = 0;
-                    for (int c = trimCount; c < _nClients - trimCount; c++)
-                    {
-                        sum += scores[c];
-                        count++;
-                    }
-                    _aggregatedScores[j] = count > 0 ? sum / count : scores[_nClients / 2];
-                }
+            case FederatedScoreAggregation.TrimmedMean:
+                // Remove extreme values: drop the trimCount lowest and highest client scores
+                var sorted = engine.TensorSort(scores, 0, false).Item1;
+                int trimCount = Math.Max(1, _nClients / 5);
+                int kept = _nClients - 2 * trimCount;
+                aggregated = kept > 0
+                    ? engine.ReduceMean(engine.TensorSlice(sorted, new[] { trimCount, 0 }, new[] { kept, p }), new[] { 0 }, false)
+                    : engine.Reshape(engine.TensorSlice(sorted, new[] { _nClients / 2, 0 }, new[] { 1, p }), new[] { p });
                 break;
-
             default:
                 // Simple average
-                for (int j = 0; j < p; j++)
-                {
-                    for (int c = 0; c < _nClients; c++)
-                        _aggregatedScores[j] += clientScores[c][j] / _nClients;
-                }
+                aggregated = engine.ReduceMean(scores, new[] { 0 }, false);
                 break;
         }
 
+        _aggregatedScores = aggregated.ToVector();
+
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => _aggregatedScores[j])
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(aggregated, numToSelect);
 
         IsFitted = true;
     }
 
-    private double[] ComputeLocalScores(double[,] X, double[] y, int start, int end, int p)
-    {
-        int localN = end - start;
-        var scores = new double[p];
-
-        // Compute target statistics locally
-        double targetMean = 0;
-        for (int i = start; i < end; i++)
-            targetMean += y[i];
-        targetMean /= localN;
-
-        double targetVar = 0;
-        for (int i = start; i < end; i++)
-            targetVar += (y[i] - targetMean) * (y[i] - targetMean);
-
-        for (int j = 0; j < p; j++)
-        {
-            // Compute feature mean
-            double featureMean = 0;
-            for (int i = start; i < end; i++)
-                featureMean += X[i, j];
-            featureMean /= localN;
-
-            // Compute covariance and variance
-            double cov = 0, varX = 0;
-            for (int i = start; i < end; i++)
-            {
-                double dx = X[i, j] - featureMean;
-                double dy = y[i] - targetMean;
-                cov += dx * dy;
-                varX += dx * dx;
-            }
-
-            double denom = Math.Sqrt(varX * targetVar);
-            scores[j] = denom > 1e-10 ? Math.Abs(cov / denom) : 0;
-        }
-
-        return scores;
-    }
-
     /// <inheritdoc />
+
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -224,15 +150,7 @@ public class FederatedFSSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         if (_selectedIndices is null)
             throw new InvalidOperationException("FederatedFSSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

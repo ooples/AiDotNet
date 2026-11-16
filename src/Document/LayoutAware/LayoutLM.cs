@@ -296,37 +296,15 @@ public partial class LayoutLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector
 
     private DocumentLayoutResult<T> ParseLayoutOutput(Tensor<T> output, double threshold)
     {
-        var regions = new List<LayoutRegion<T>>();
-
-        int seqLen = output.Shape[0];
         int numClasses = output.Shape.Length > 1 ? output.Shape[1] : _numClasses;
-
-        for (int i = 0; i < seqLen; i++)
+        var (rows, classes, scores) = DocumentTensorOps.ForegroundRows(Engine, output, numClasses, NumOps.FromDouble(threshold));
+        var regions = rows.Select((i, k) => new LayoutRegion<T>
         {
-            double maxConf = 0;
-            int maxClass = 0;
-            for (int c = 0; c < numClasses; c++)
-            {
-                double conf = NumOps.ToDouble(output[i, c]);
-                if (conf > maxConf)
-                {
-                    maxConf = conf;
-                    maxClass = c;
-                }
-            }
-
-            if (maxConf >= threshold && maxClass > 0)
-            {
-                regions.Add(new LayoutRegion<T>
-                {
-                    ElementType = (LayoutElementType)Math.Min(maxClass, (int)LayoutElementType.Other),
-                    Confidence = NumOps.FromDouble(maxConf),
-                    ConfidenceValue = maxConf,
-                    Index = i,
-                    BoundingBox = Vector<T>.Empty()
-                });
-            }
-        }
+            ElementType = (LayoutElementType)Math.Min(classes[k], (int)LayoutElementType.Other),
+            Confidence = scores[k],
+            Index = i,
+            BoundingBox = Vector<T>.Empty()
+        }).ToList();
 
         return new DocumentLayoutResult<T>
         {

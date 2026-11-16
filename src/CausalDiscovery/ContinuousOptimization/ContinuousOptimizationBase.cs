@@ -138,8 +138,11 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
         var xwTensor = Engine.TensorMatMul(xTensor, wTensor);
         var rTensor = Engine.TensorSubtract(xTensor, xwTensor);
 
-        // Loss = (1/2n) * ||R||²_F
-        double loss = NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(rTensor)));
+        // Loss = (1/2n) * ||R||²_F, summed in double as the reference does (NumPy float64): a single-precision sum
+        // of n*d squares is off by about sqrt(n*d) ulps, enough to flip the L-BFGS line search's sufficient-decrease
+        // test on a float model (NOTEARS low-rank on float then recovered none of a 4-node chain's edges).
+        var residual64 = rTensor.Cast<double>();
+        double loss = AiDotNetEngine.Current.TensorSum(AiDotNetEngine.Current.TensorSquare(residual64));
         loss *= 0.5 / n;
 
         // Vectorized: Gradient = -(1/n) * X^T @ R
@@ -189,7 +192,8 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
     /// </summary>
     protected double ComputeL1Norm(Matrix<T> W)
     {
-        return NumOps.ToDouble(Engine.TensorSum(Engine.TensorAbs(Tensor<T>.FromMatrix(W))));
+        // Summed in double, as ComputeL2Loss is, so the objective's terms share one precision.
+        return AiDotNetEngine.Current.TensorSum(AiDotNetEngine.Current.TensorAbs(Tensor<T>.FromMatrix(W).Cast<double>()));
     }
 
     /// <summary>

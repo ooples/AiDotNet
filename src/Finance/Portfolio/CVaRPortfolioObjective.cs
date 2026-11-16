@@ -88,7 +88,7 @@ public class CVaRPortfolioObjective<T>
                 nameof(returns));
 
         if (weights.Length == 0) return NumOps.Negate(NumOps.Zero);
-        return NumOps.Negate(Engine.DotProduct(weights, returns));
+        return NumOps.FromDouble(-Engine.DotProduct(Tensor<T>.FromVector(weights).Cast<double>().ToVector(), Tensor<T>.FromVector(returns).Cast<double>().ToVector()));
     }
 
     /// <summary>
@@ -156,17 +156,17 @@ public class CVaRPortfolioObjective<T>
         int wholeCount = (int)Math.Floor(tailSize);
         double boundaryWeight = tailSize - wholeCount;
 
-        T sum = wholeCount > 0
-            ? Engine.TensorSum(Engine.TensorNarrow(sortedTensor, 0, count - wholeCount, wholeCount))
-            : NumOps.Zero;
+        double sum = wholeCount > 0
+            ? Engine.TensorSum(Engine.TensorNarrow(sortedTensor.Cast<double>(), 0, count - wholeCount, wholeCount))
+            : 0.0;
 
         // The observation just inside the tail boundary, counted for the fraction of it that the tail
         // actually covers.
         int boundaryIndex = count - wholeCount - 1;
         if (boundaryWeight > 0.0 && boundaryIndex >= 0)
-            sum = NumOps.Add(sum, NumOps.Multiply(NumOps.FromDouble(boundaryWeight), sortedTensor.AsSpan()[boundaryIndex]));
+            sum += boundaryWeight * NumOps.ToDouble(sortedTensor.AsSpan()[boundaryIndex]);
 
-        return NumOps.Divide(sum, NumOps.FromDouble(tailSize));
+        return NumOps.FromDouble(sum / tailSize);
     }
 
     /// <summary>
@@ -184,11 +184,11 @@ public class CVaRPortfolioObjective<T>
             throw new ArgumentException("At least one loss sample is required.", nameof(losses));
 
         // Only the positive part of each excess counts (a NaN excess counts as nothing, as before).
-        var d = Engine.TensorSubtractScalar(Tensor<T>.FromVector(losses), nu);
-        T excess = Engine.TensorSum(Engine.TensorWhere(
-            Engine.TensorGreaterThan(d, NumOps.Zero), d, Engine.TensorZerosLike(d)));
-
-        return NumOps.Add(nu, NumOps.Divide(excess, NumOps.FromDouble(losses.Length * (1.0 - _alpha))));
+        double threshold = NumOps.ToDouble(nu);
+        var d = Engine.TensorSubtractScalar(Tensor<T>.FromVector(losses).Cast<double>(), threshold);
+        double excess = Engine.TensorSum(Engine.TensorWhere(
+            Engine.TensorGreaterThan(d, 0.0), d, Engine.TensorZerosLike(d)));
+        return NumOps.FromDouble(threshold + excess / (losses.Length * (1.0 - _alpha)));
     }
 
     /// <summary>
@@ -226,30 +226,22 @@ public class CVaRPortfolioObjective<T>
                 "temperature must be finite and positive.");
 
         // Max-subtracted tempered softmax, so a tiny temperature cannot overflow exp.
-        var scoreTensor = Tensor<T>.FromVector(scores);
+        var scoreTensor = Tensor<T>.FromVector(scores).Cast<double>();
         if (Engine.TensorCountNonzero(Engine.TensorIsNan(scoreTensor)) > 0
             || Engine.TensorCountNonzero(Engine.TensorIsInf(scoreTensor)) > 0)
             throw new ArgumentException("scores must be finite.", nameof(scores));
-        T tau = NumOps.FromDouble(temperature);
-        bool tauRepresentable = NumOps.GreaterThan(tau, NumOps.Zero);
-        if (tauRepresentable)
+        var scaled = Engine.TensorDivideScalar(scoreTensor, temperature);
+        Tensor<double> exps;
+        if (Engine.TensorCountNonzero(Engine.TensorIsFinite(scaled)) == scaled.Length)
+            exps = Engine.TensorExp(Engine.TensorSubtractScalar(scaled, Engine.TensorMaxValue(scaled)));
+        else
         {
-            var scaled = Engine.TensorDivideScalar(scoreTensor, tau);
-            if (Engine.TensorCountNonzero(Engine.TensorIsInf(scaled)) == 0)
-            {
-                var exps = Engine.TensorExp(Engine.TensorSubtractScalar(scaled, Engine.TensorMaxValue(scaled)));
-                return Engine.TensorDivideScalar(exps, Engine.TensorSum(exps)).ToVector();
-            }
+            // A finite temperature may still make s/tau overflow. Shift first in that case.
+            var shifted = Engine.TensorSubtractScalar(scoreTensor, Engine.TensorMaxValue(scoreTensor));
+            exps = Engine.TensorWhere(Engine.TensorEquals(shifted, 0.0), Engine.TensorOnesLike(shifted),
+                Engine.TensorExp(Engine.TensorDivideScalar(shifted, temperature)));
         }
-
-        // A valid temperature too small for T with finite scores: s / tau overflows, or tau rounds to zero.
-        // Subtracting the maximum score first keeps every exponent at or below zero, so no weight is NaN;
-        // when tau is zero in T the softmax limit splits the weight evenly across the top-scoring assets.
-        var shifted = Engine.TensorSubtractScalar(scoreTensor, Engine.TensorMaxValue(scoreTensor));
-        var limitExps = tauRepresentable
-            ? Engine.TensorExp(Engine.TensorDivideScalar(shifted, tau))
-            : Engine.TensorEquals(shifted, NumOps.Zero);
-        return Engine.TensorDivideScalar(limitExps, Engine.TensorSum(limitExps)).ToVector();
+        return Engine.TensorDivideScalar(exps, Engine.TensorSum(exps)).Cast<T>().ToVector();
     }
 
     /// <summary>
@@ -261,6 +253,9 @@ public class CVaRPortfolioObjective<T>
     /// count each trade twice.
     /// </remarks>
     public T Turnover(Vector<T> previousWeights, Vector<T> newWeights)
+        => NumOps.FromDouble(WideTurnover(previousWeights, newWeights));
+
+    private static double WideTurnover(Vector<T> previousWeights, Vector<T> newWeights)
     {
         if (previousWeights == null) throw new ArgumentNullException(nameof(previousWeights));
         if (newWeights == null) throw new ArgumentNullException(nameof(newWeights));
@@ -269,11 +264,10 @@ public class CVaRPortfolioObjective<T>
                 $"Allocations must align; got {previousWeights.Length} and {newWeights.Length}.",
                 nameof(newWeights));
 
-        if (newWeights.Length == 0) return NumOps.Zero;
-        T sum = Engine.TensorSum(Engine.TensorAbs(
-            Engine.TensorSubtract(Tensor<T>.FromVector(newWeights), Tensor<T>.FromVector(previousWeights))));
-
-        return NumOps.Multiply(NumOps.FromDouble(0.5), sum);
+        if (newWeights.Length == 0) return 0.0;
+        double sum = Engine.TensorSum(Engine.TensorAbs(
+            Engine.TensorSubtract(Tensor<T>.FromVector(newWeights).Cast<double>(), Tensor<T>.FromVector(previousWeights).Cast<double>())));
+        return 0.5 * sum;
     }
 
     /// <summary>
@@ -290,6 +284,6 @@ public class CVaRPortfolioObjective<T>
             throw new ArgumentOutOfRangeException(nameof(basisPoints), basisPoints,
                 "basisPoints must be a finite, non-negative value.");
 
-        return NumOps.Multiply(Turnover(previousWeights, newWeights), NumOps.FromDouble(basisPoints / 10000.0));
+        return NumOps.FromDouble(WideTurnover(previousWeights, newWeights) * (basisPoints / 10000.0));
     }
 }

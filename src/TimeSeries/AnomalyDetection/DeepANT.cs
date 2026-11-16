@@ -92,9 +92,15 @@ public partial class DeepANT<T> : TimeSeriesModelBase<T>
             RegisterParameterComponent($"deepant.layer{i}", _layers[i]);
     }
 
-    private T Scale(T value) => _numOps.FromDouble((_numOps.ToDouble(value) - _scaleMin) / _scaleRange);
+    // (x − min) / (max − min) of every element.
+    private Tensor<T> ScaleAll(Tensor<T> values)
+        => Engine.TensorDivideScalar(Engine.TensorSubtractScalar(values, _numOps.FromDouble(_scaleMin)),
+            _numOps.FromDouble(_scaleRange));
 
-    private T Unscale(double value) => _numOps.FromDouble(value * _scaleRange + _scaleMin);
+    // x · (max − min) + min of every element.
+    private Tensor<T> UnscaleAll(Tensor<T> values)
+        => Engine.TensorAddScalar(Engine.TensorMultiplyScalar(values, _numOps.FromDouble(_scaleRange)),
+            _numOps.FromDouble(_scaleMin));
 
     /// <summary>
     /// Trains the predictor on windows of WindowSize values and the ForecastHorizon values after each. A one-column
@@ -106,23 +112,15 @@ public partial class DeepANT<T> : TimeSeriesModelBase<T>
     {
         var o = _options;
         int w = o.WindowSize, horizon = o.ForecastHorizon;
-        T[][] windows;
-        T[][] targets;
+        // Each sample is a row of [samples, WindowSize + ForecastHorizon]: its window, then its targets.
+        Tensor<T> samples;
         if (x.Columns == 1 && w > 1)
         {
-            int samples = y.Length - w - horizon + 1;
-            if (samples <= 0)
+            int windows = y.Length - w - horizon + 1;
+            if (windows <= 0)
                 throw new ArgumentException(
                     $"Training series must contain at least WindowSize + ForecastHorizon ({w + horizon}) values; got {y.Length}.", nameof(y));
-            windows = new T[samples][];
-            targets = new T[samples][];
-            for (int s = 0; s < samples; s++)
-            {
-                windows[s] = new T[w];
-                for (int t = 0; t < w; t++) windows[s][t] = y[s + t];
-                targets[s] = new T[horizon];
-                for (int h = 0; h < horizon; h++) targets[s][h] = y[s + w + h];
-            }
+            samples = Engine.TensorUnfold(Tensor<T>.FromVector(y), 0, w + horizon, 1);
         }
         else
         {
@@ -130,21 +128,20 @@ public partial class DeepANT<T> : TimeSeriesModelBase<T>
                 throw new ArgumentException($"Each input row must be a window of WindowSize ({w}) values; got {x.Columns}.", nameof(x));
             if (horizon != 1)
                 throw new ArgumentException("Rows of windows carry one target each; train on a time index for ForecastHorizon > 1.", nameof(x));
-            windows = new T[x.Rows][];
-            targets = new T[x.Rows][];
-            for (int s = 0; s < x.Rows; s++)
+            if (y.Length < x.Rows)
+                throw new ArgumentException($"Each input row needs a target; got {y.Length} targets for {x.Rows} rows.", nameof(y));
+            samples = Engine.TensorConcatenate(new[]
             {
-                windows[s] = new T[w];
-                for (int t = 0; t < w; t++) windows[s][t] = x[s, t];
-                targets[s] = new[] { y[s] };
-            }
+                Tensor<T>.FromMatrix(x),
+                Tensor<T>.FromVector(y.GetSubVector(0, x.Rows), new[] { x.Rows, 1 }),
+            }, 1);
         }
 
-        _trainingSeries = new Vector<T>(y.Length);
-        for (int i = 0; i < y.Length; i++) _trainingSeries[i] = y[i];
+        _trainingSeries = y.Clone();
         ModelParameters = new Vector<T>(1);
         ModelParameters[0] = _numOps.FromDouble(y.Length);
-        FitScaler(windows, targets);
+        FitScaler(samples);
+        var scaledSamples = ScaleAll(samples);
 
         var optimizer = new StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(null,
             new StochasticGradientDescentOptimizerOptions<T, Tensor<T>, Tensor<T>>
@@ -155,7 +152,7 @@ public partial class DeepANT<T> : TimeSeriesModelBase<T>
             });
         var loss = new MeanAbsoluteErrorLoss<T>();
         var parameters = Training.TapeTrainingStep<T>.CollectParameters(_layers);
-        int count = windows.Length;
+        int count = samples.Shape[0];
         bool timeBounded = o.MaxTrainingTimeSeconds > 0;
         int epochs = timeBounded ? int.MaxValue : o.Epochs;
 
@@ -172,7 +169,7 @@ public partial class DeepANT<T> : TimeSeriesModelBase<T>
                 if (timeBounded && TrainingCancellationToken.IsCancellationRequested) break;
                 TrainingCancellationToken.ThrowIfCancellationRequested();
                 int size = Math.Min(o.BatchSize, count - start);
-                var (history, target) = Batch(windows, targets, order, start, size);
+                var (history, target) = Batch(scaledSamples, order, start, size);
                 // One update on the shared eager step: the network is trained directly, outside the model's Layers chain.
                 T lossValue = Training.TapeTrainingStepper<T>.EagerObjectiveStep(parameters,
                     () => loss.ComputeTapeLoss(_network.Forward(history, training: true, _random), target), optimizer);
@@ -184,54 +181,44 @@ public partial class DeepANT<T> : TimeSeriesModelBase<T>
         }
     }
 
-    private void FitScaler(T[][] windows, T[][] targets)
+    // The minimum and maximum over every window and target value; NaN is skipped, as a running comparison skips it.
+    private void FitScaler(Tensor<T> samples)
     {
         double min = double.PositiveInfinity, max = double.NegativeInfinity;
-        void Observe(T[] values)
+        if (samples.Length > 0)
         {
-            foreach (var v in values)
-            {
-                double d = _numOps.ToDouble(v);
-                if (d < min) min = d;
-                if (d > max) max = d;
-            }
+            min = _numOps.ToDouble(Engine.TensorMinValue(
+                Engine.TensorNanToNum(samples, double.PositiveInfinity, double.PositiveInfinity, double.NegativeInfinity)));
+            max = _numOps.ToDouble(Engine.TensorMaxValue(
+                Engine.TensorNanToNum(samples, double.NegativeInfinity, double.PositiveInfinity, double.NegativeInfinity)));
         }
-        foreach (var window in windows) Observe(window);
-        foreach (var target in targets) Observe(target);
         _scaleMin = min;
         // sklearn's MinMaxScaler leaves a constant feature unscaled (range treated as 1).
         _scaleRange = max - min > 0 ? max - min : 1.0;
     }
 
-    // The scaled windows [B, WindowSize, 1] and targets [B, ForecastHorizon] of the given samples.
-    private (Tensor<T> history, Tensor<T> target) Batch(T[][] windows, T[][] targets, int[] order, int start, int count)
+    // The windows [B, WindowSize, 1] and targets [B, ForecastHorizon] of the given rows of the scaled samples.
+    private (Tensor<T> history, Tensor<T> target) Batch(Tensor<T> scaledSamples, int[] order, int start, int count)
     {
         int w = _options.WindowSize, horizon = _options.ForecastHorizon;
-        var history = new Tensor<T>(new[] { count, w, 1 });
-        var target = new Tensor<T>(new[] { count, horizon });
-        for (int b = 0; b < count; b++)
-        {
-            int s = order[start + b];
-            for (int t = 0; t < w; t++) history[b, t, 0] = Scale(windows[s][t]);
-            for (int h = 0; h < horizon; h++) target[b, h] = Scale(targets[s][h]);
-        }
+        var rows = new Tensor<int>(new[] { count }, new Vector<int>(new ArraySegment<int>(order, start, count)));
+        var picked = Engine.TensorIndexSelect(scaledSamples, rows, 0);
+        var history = Engine.Reshape(Engine.TensorSlice(picked, new[] { 0, 0 }, new[] { count, w }), new[] { count, w, 1 });
+        var target = Engine.TensorSlice(picked, new[] { 0, w }, new[] { count, horizon });
         return (history, target);
     }
 
-    // The scaled prediction of the ForecastHorizon values after a window of WindowSize raw values.
-    private double[] ScaledForecast(Vector<T> window)
+    // The scaled predictions [B, ForecastHorizon] of the values after each row of [B, WindowSize] raw windows.
+    // Every window is forecast independently (no layer mixes the batch, and dropout is off).
+    private Tensor<T> ScaledForecast(Tensor<T> windows)
     {
         if (_trainingSeries.Length == 0) throw new InvalidOperationException("The model must be trained before predicting.");
         int w = _options.WindowSize;
-        if (window.Length != w)
-            throw new ArgumentException($"DeepAnT predicts from a window of WindowSize ({w}) values; got {window.Length}.", nameof(window));
-        var input = new Tensor<T>(new[] { 1, w, 1 });
-        for (int t = 0; t < w; t++) input[0, t, 0] = Scale(window[t]);
+        if (windows.Shape[1] != w)
+            throw new ArgumentException($"DeepAnT predicts from a window of WindowSize ({w}) values; got {windows.Shape[1]}.", nameof(windows));
+        var input = Engine.Reshape(ScaleAll(windows), new[] { windows.Shape[0], w, 1 });
         using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
-        var prediction = _network.Forward(input, training: false, _random);
-        var result = new double[_options.ForecastHorizon];
-        for (int h = 0; h < result.Length; h++) result[h] = _numOps.ToDouble(prediction[0, h]);
-        return result;
+        return _network.Forward(input, training: false, _random);
     }
 
     /// <summary>
@@ -243,13 +230,16 @@ public partial class DeepANT<T> : TimeSeriesModelBase<T>
     {
         if (TryForecastTimeIndex(input, _trainingSeries, _options.WindowSize, PredictSingle, out var forecasts))
             return forecasts;
-        var predictions = new Vector<T>(input.Rows);
-        for (int i = 0; i < input.Rows; i++) predictions[i] = PredictSingle(input.GetRow(i));
-        return predictions;
+        return TimeSeriesEngineOps<T>.PredictRows(input, PredictSingle);
     }
 
     /// <summary>The predicted value after a window of WindowSize raw values.</summary>
-    public override T PredictSingle(Vector<T> input) => Unscale(ScaledForecast(input)[0]);
+    public override T PredictSingle(Vector<T> input)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        var prediction = UnscaleAll(ScaledForecast(Tensor<T>.FromVector(input, new[] { 1, input.Length })));
+        return Engine.TensorSlice(prediction, new[] { 0, 0 }, new[] { 1, 1 }).ToVector()[0];
+    }
 
     /// <summary>
     /// Forecasts the <paramref name="steps"/> values after <paramref name="history"/>: each is the one-step prediction
@@ -262,16 +252,18 @@ public partial class DeepANT<T> : TimeSeriesModelBase<T>
         if (history.Length == 0) throw new ArgumentException("DeepAnT needs at least one observed value to forecast from.", nameof(history));
         if (steps <= 0) throw new ArgumentException("Number of forecast steps must be positive.", nameof(steps));
         int w = _options.WindowSize;
-        var values = history.ToList();
-        var window = new Vector<T>(w);
-        var forecasts = new Vector<T>(steps);
+        // The last WindowSize values, extended to the left by repeating the first; each forecast then shifts in.
+        var window = TimeSeriesEngineOps<T>.Gather(history,
+            Enumerable.Range(history.Length - w, w).Select(t => Math.Max(0, t)));
+        var forecasts = new List<T>(steps);
         for (int s = 0; s < steps; s++)
         {
-            for (int t = 0; t < w; t++) window[t] = values[Math.Max(0, values.Count - w + t)];
-            forecasts[s] = PredictSingle(window);
-            values.Add(forecasts[s]);
+            var next = PredictSingle(window);
+            forecasts.Add(next);
+            var shifted = new Vector<T>(new[] { next });
+            window = w == 1 ? shifted : Vector<T>.Concatenate(window.GetSubVector(1, w - 1), shifted);
         }
-        return forecasts;
+        return new Vector<T>(forecasts);
     }
 
     /// <summary>
@@ -284,16 +276,12 @@ public partial class DeepANT<T> : TimeSeriesModelBase<T>
         int w = _options.WindowSize;
         if (data.Length <= w)
             throw new ArgumentException($"Data length must be greater than WindowSize ({w}).", nameof(data));
-        var scores = new Vector<T>(data.Length - w);
-        var window = new Vector<T>(w);
-        for (int i = 0; i < scores.Length; i++)
-        {
-            for (int t = 0; t < w; t++) window[t] = data[i + t];
-            double predicted = ScaledForecast(window)[0];
-            double actual = _numOps.ToDouble(Scale(data[i + w]));
-            scores[i] = _numOps.FromDouble(Math.Abs(actual - predicted));
-        }
-        return scores;
+        int count = data.Length - w;
+        var series = Tensor<T>.FromVector(data);
+        var windows = Engine.TensorSlice(Engine.TensorUnfold(series, 0, w, 1), new[] { 0, 0 }, new[] { count, w });
+        var predicted = Engine.TensorSlice(ScaledForecast(windows), new[] { 0, 0 }, new[] { count, 1 });
+        var actual = ScaleAll(Engine.Reshape(Engine.TensorSlice(series, new[] { w }, new[] { count }), new[] { count, 1 }));
+        return Engine.TensorAbs(Engine.TensorSubtract(actual, predicted)).ToVector();
     }
 
     /// <summary>
@@ -303,9 +291,7 @@ public partial class DeepANT<T> : TimeSeriesModelBase<T>
     public bool[] DetectAnomalies(Vector<T> data)
     {
         var scores = ComputeAnomalyScores(data);
-        var anomalies = new bool[scores.Length];
-        for (int i = 0; i < scores.Length; i++) anomalies[i] = _numOps.ToDouble(scores[i]) > _options.AnomalyThreshold;
-        return anomalies;
+        return TimeSeriesEngineOps<T>.GreaterThan(scores, _numOps.FromDouble(_options.AnomalyThreshold));
     }
 
     /// <inheritdoc/>

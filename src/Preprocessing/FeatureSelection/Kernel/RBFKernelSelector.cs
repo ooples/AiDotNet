@@ -2,6 +2,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Preprocessing.FeatureSelection.Helpers;
 
 namespace AiDotNet.Preprocessing.FeatureSelection.Kernel;
 
@@ -25,14 +26,14 @@ public class RBFKernelSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
     private readonly int _nFeaturesToSelect;
     private readonly double _gamma;
 
-    private double[]? _kernelScores;
+    private Vector<T>? _kernelScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double Gamma => _gamma;
-    public double[]? KernelScores => _kernelScores;
+    public Vector<T>? KernelScores => _kernelScores;
     /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
@@ -68,70 +69,33 @@ public class RBFKernelSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var engine = Engine;
+        var standardized = FeatureSelectionTensorOps.StandardizeColumnsOrKeep(Tensor<T>.FromMatrix(data));
 
-        _kernelScores = new double[p];
+        // Target similarity of each pair i < j: +1 when |y_i - y_j| < 0.5, otherwise -1
+        var y = engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 });
+        var targetGap = engine.TensorAbs(engine.TensorSubtract(
+            engine.TensorBroadcastTo(y, new[] { n, n }), engine.TensorBroadcastTo(engine.TensorTranspose(y), new[] { n, n })));
+        var similarity = engine.TensorSubtractScalar(
+            engine.TensorMultiplyScalar(engine.TensorLessThan(targetGap, NumOps.FromDouble(0.5)), NumOps.FromDouble(2)), NumOps.One);
+        var upper = FeatureSelectionTensorOps.StrictUpperMask<T>(n);
 
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            // Standardize feature
-            double mean = col.Average();
-            double std = Math.Sqrt(col.Select(v => (v - mean) * (v - mean)).Average());
-            if (std > 1e-10)
-                for (int i = 0; i < n; i++)
-                    col[i] = (col[i] - mean) / std;
-
-            // Compute RBF kernel matrix for this feature
-            var kernel = new double[n, n];
-            for (int i1 = 0; i1 < n; i1++)
-            {
-                kernel[i1, i1] = 1; // k(x,x) = 1
-                for (int i2 = i1 + 1; i2 < n; i2++)
-                {
-                    double diff = col[i1] - col[i2];
-                    double k = Math.Exp(-_gamma * diff * diff);
-                    kernel[i1, i2] = k;
-                    kernel[i2, i1] = k;
-                }
-            }
-
-            // Kernel-target alignment score
-            // Measures how well the kernel aligns with target similarity
-            double alignmentNumerator = 0;
-            double alignmentDenominator = 0;
-
-            for (int i1 = 0; i1 < n; i1++)
-            {
-                for (int i2 = i1 + 1; i2 < n; i2++)
-                {
-                    double targetSimilarity = Math.Abs(y[i1] - y[i2]) < 0.5 ? 1 : -1;
-                    alignmentNumerator += kernel[i1, i2] * targetSimilarity;
-                    alignmentDenominator += kernel[i1, i2] * kernel[i1, i2];
-                }
-            }
-
-            _kernelScores[j] = alignmentDenominator > 1e-10
-                ? alignmentNumerator / Math.Sqrt(alignmentDenominator)
-                : 0;
-        }
+        // Kernel-target alignment of each feature's RBF kernel: sum K S / sqrt(sum K^2) over the pairs i < j
+        T negativeGamma = NumOps.FromDouble(-_gamma);
+        var sums = FeatureSelectionTensorOps.KernelWeightedSums(
+            standardized,
+            column => FeatureSelectionTensorOps.RbfColumnKernel(column, negativeGamma),
+            new[] { engine.TensorMultiply(upper, similarity) },
+            new[] { upper });
+        var numerator = engine.Reshape(engine.TensorSlice(sums, new[] { 0, 0 }, new[] { p, 1 }), new[] { p });
+        var denominator = engine.Reshape(engine.TensorSlice(sums, new[] { 0, 1 }, new[] { p, 1 }), new[] { p });
+        var defined = engine.TensorGreaterThan(denominator, NumOps.FromDouble(1e-10));
+        var safeDenominator = engine.TensorWhere(defined, denominator, PreprocessingTensorOps.Filled(new[] { p }, NumOps.One));
+        var scores = engine.TensorWhere(defined, engine.TensorDivide(numerator, engine.TensorSqrt(safeDenominator)), new Tensor<T>(new[] { p }));
+        _kernelScores = scores.ToVector();
 
         int numToSelect = Math.Min(_nFeaturesToSelect, p);
-        _selectedIndices = Enumerable.Range(0, p)
-            .OrderByDescending(j => Math.Abs(_kernelScores[j]))
-            .Take(numToSelect)
-            .OrderBy(x => x)
-            .ToArray();
+        _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(engine.TensorAbs(scores), numToSelect);
 
         IsFitted = true;
     }
@@ -149,15 +113,7 @@ public class RBFKernelSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IS
         if (_selectedIndices is null)
             throw new InvalidOperationException("RBFKernelSelector has not been fitted.");
 
-        int numRows = data.Rows;
-        int numCols = _selectedIndices.Length;
-        var result = new T[numRows, numCols];
-
-        for (int i = 0; i < numRows; i++)
-            for (int j = 0; j < numCols; j++)
-                result[i, j] = data[i, _selectedIndices[j]];
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
     /// <inheritdoc />

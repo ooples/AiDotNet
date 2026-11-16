@@ -286,16 +286,14 @@ namespace AiDotNet.NeuralNetworks
 
             var wordEmbeds = featureBag.LookupFeatures(inputTensor);
 
-            var sumVector = new Vector<T>(_embeddingDimension);
+            // Every component (word row, then its n-gram rows) is averaged into one hidden vector.
+            var components = new List<Tensor<T>>();
             int totalComponents = 0;
 
             for (int s = 0; s < tokenIds.Count; s++)
             {
                 // Add word embedding
-                for (int d = 0; d < _embeddingDimension; d++)
-                {
-                    sumVector[d] = NumOps.Add(sumVector[d], wordEmbeds[s, d]);
-                }
+                components.Add(Engine.TensorSlice(wordEmbeds, [s, 0], [1, _embeddingDimension]));
                 totalComponents++;
 
                 // Add n-gram embeddings
@@ -314,30 +312,19 @@ namespace AiDotNet.NeuralNetworks
                         // to a negative id (#2361).
                         .Select(ng => _vocabSize + AiDotNet.Helpers.StableHash.Index(ng, _bucketSize))
                         .ToArray();
-                    var ngramValues = new T[ngramIndices.Length];
-                    for (int i = 0; i < ngramIndices.Length; i++)
-                    {
-                        ngramValues[i] = NumOps.FromDouble(ngramIndices[i]);
-                    }
-
-                    var ngramInputTensor = Tensor<T>.FromVector(new Vector<T>(ngramValues), [ngrams.Count]);
+                    var ngramInputTensor = new Tensor<int>(ngramIndices, [ngrams.Count]).Cast<T>();
                     var ngramEmbeds = featureBag.LookupFeatures(ngramInputTensor);
 
-                    for (int n = 0; n < ngrams.Count; n++)
-                    {
-                        for (int d = 0; d < _embeddingDimension; d++)
-                        {
-                            sumVector[d] = NumOps.Add(sumVector[d], ngramEmbeds[n, d]);
-                        }
-                        totalComponents++;
-                    }
+                    components.Add(Engine.TensorSlice(ngramEmbeds, [0, 0], [ngrams.Count, _embeddingDimension]));
+                    totalComponents += ngrams.Count;
                 }
             }
 
             var meanVector = new Vector<T>(_embeddingDimension);
-            for (int d = 0; d < _embeddingDimension; d++)
+            if (_embeddingDimension > 0)
             {
-                meanVector[d] = NumOps.Divide(sumVector[d], NumOps.FromDouble(totalComponents));
+                var sumVector = Engine.ReduceSum(Engine.TensorConcatenate(components.ToArray(), 0), new[] { 0 }, keepDims: false);
+                Engine.TensorDivideScalar(sumVector, NumOps.FromDouble(totalComponents)).CopyTo(meanVector.AsWritableSpan());
             }
 
             // Normalization ensures that "length" doesn't distort similarity comparisons
@@ -376,13 +363,11 @@ namespace AiDotNet.NeuralNetworks
             var textList = texts.ToList();
             var result = new Matrix<T>(textList.Count, _embeddingDimension);
 
+            var destination = result.AsWritableSpan();
             for (int i = 0; i < textList.Count; i++)
             {
                 var embedding = Embed(textList[i]);
-                for (int j = 0; j < _embeddingDimension; j++)
-                {
-                    result[i, j] = embedding[j];
-                }
+                embedding.AsSpan().Slice(0, _embeddingDimension).CopyTo(destination.Slice(i * _embeddingDimension, _embeddingDimension));
             }
 
             return result;

@@ -459,7 +459,6 @@ public class RPN<T> : IParameterSource<T>, AiDotNet.Models.Parameters.IParameter
 
         return union > 0 ? intersect / union : 0;
     }
-
     // The shared convolution and both heads, registered as live chunks. RPN is public, so it forwards
     // the parameter interfaces to an internal module instead of deriving from one. Before this the
     // generator could not see anything inside the RPN at all.
@@ -527,13 +526,9 @@ internal class RoIAlign<T>
         int batchSize = features.Shape[0];
         int numRois = rois.Shape[0];
 
-        // The boxes are constants to the gradient (as in standard RoIAlign), so they are read out once;
-        // the pooling itself is a tape-visible gather over the feature map.
-        var boxes = new double[numRois * 4];
-        for (int i = 0; i < boxes.Length; i++)
-        {
-            boxes[i] = _numOps.ToDouble(rois[i]);
-        }
+        // The boxes are constants to the gradient (as in standard RoIAlign); the pooling itself is a
+        // tape-visible gather over the feature map.
+        var boxes = rois;
 
         // A supplied batch index is clamped at BOTH ends: an index below zero reached RoIAlign unchanged
         // and read before the first image, while only the upper bound was ever guarded.

@@ -7,7 +7,7 @@ namespace AiDotNet.WindowFunctions;
 /// <para>
 /// The Bartlett-Hann window function is a combination of the Bartlett and Hann windows, designed to 
 /// provide better frequency resolution and reduced spectral leakage compared to either window used alone. 
-/// It is defined by the equation: w(n) = 0.62 - 0.48|n/(N-1) - 0.5| - 0.38cos(2p(n/(N-1) - 0.5))
+/// It is defined by the equation: w(n) = 0.62 - 0.48|n/(N-1) - 0.5| + 0.38cos(2p|n/(N-1) - 0.5|)
 /// where n is the sample index and N is the window size.
 /// </para>
 /// <para><b>For Beginners:</b> A window function is like a special filter that smooths out the edges of a signal.
@@ -84,7 +84,7 @@ public class BartlettHannWindow<T> : IWindowFunction<T>
     /// <remarks>
     /// <para>
     /// This method implements the Bartlett-Hann window function formula:
-    /// w(n) = 0.62 - 0.48|n/(N-1) - 0.5| - 0.38cos(2p(n/(N-1) - 0.5))
+    /// w(n) = 0.62 - 0.48|n/(N-1) - 0.5| + 0.38cos(2p|n/(N-1) - 0.5|)
     /// It calculates the window function value for each point from 0 to windowSize-1.
     /// </para>
     /// <para><b>For Beginners:</b> This creates the actual window values based on the size you need.
@@ -103,17 +103,18 @@ public class BartlettHannWindow<T> : IWindowFunction<T>
     /// </remarks>
     public Vector<T> Create(int windowSize)
     {
-        Vector<T> window = new Vector<T>(windowSize);
-        for (int n = 0; n < windowSize; n++)
+        if (WindowFunctionHelper.TryCreateDegenerate(windowSize, out Vector<T> degenerate))
         {
-            T nT = _numOps.FromDouble(n);
-            T term1 = _numOps.FromDouble(0.62);
-            T term2 = _numOps.Multiply(_numOps.FromDouble(0.48), _numOps.Abs(_numOps.Subtract(_numOps.Divide(nT, _numOps.FromDouble(windowSize - 1)), _numOps.FromDouble(0.5))));
-            T term3 = _numOps.Multiply(_numOps.FromDouble(0.38), MathHelper.Cos(_numOps.Multiply(_numOps.FromDouble(2 * Math.PI), _numOps.Subtract(_numOps.Divide(nT, _numOps.FromDouble(windowSize - 1)), _numOps.FromDouble(0.5)))));
-            window[n] = _numOps.Subtract(_numOps.Subtract(term1, term2), term3);
+            return degenerate;
         }
 
-        return window;
+        // scipy.signal.windows.barthann: fac = |n/(N-1) - 0.5|, w = 0.62 - 0.48 fac + 0.38 cos(2 pi fac)
+        var engine = AiDotNetEngine.Current;
+        Tensor<T> fac = engine.TensorAbs(engine.TensorSubtractScalar(WindowFunctionHelper.UnitPhase<T>(windowSize), _numOps.FromDouble(0.5)));
+        Tensor<T> linear = engine.ScalarMinusTensor(_numOps.FromDouble(0.62), engine.TensorMultiplyScalar(fac, _numOps.FromDouble(0.48)));
+        Tensor<T> cosine = engine.TensorMultiplyScalar(
+            engine.TensorCos(engine.TensorMultiplyScalar(fac, _numOps.FromDouble(2.0 * Math.PI))), _numOps.FromDouble(0.38));
+        return engine.TensorAdd(linear, cosine).ToVector();
     }
 
     /// <summary>

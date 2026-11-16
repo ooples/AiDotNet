@@ -1,3 +1,4 @@
+using AiDotNet.Enums;
 using AiDotNet.AdversarialRobustness.Attacks;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
@@ -104,7 +105,7 @@ public class AdversarialAttackTests
         var options = new AdversarialAttackOptions<double>
         {
             Epsilon = 0.1,
-            NormType = "L-infinity"
+            NormType = AdversarialNormType.LInfinity
         };
 
         var attack = new FGSMAttack<double, Vector<double>, Vector<double>>(options);
@@ -145,7 +146,7 @@ public class AdversarialAttackTests
         var options = new AdversarialAttackOptions<double>
         {
             Epsilon = 0.1,
-            NormType = "L-infinity"
+            NormType = AdversarialNormType.LInfinity
         };
         var attack = new FGSMAttack<double, Vector<double>, Vector<double>>(options);
         var model = new MockClassificationModel();
@@ -329,7 +330,7 @@ public class AdversarialAttackTests
             Epsilon = 0.5,
             StepSize = 0.1,
             Iterations = 10,
-            NormType = "L2"
+            NormType = AdversarialNormType.L2
         };
         var attack = new PGDAttack<double, Vector<double>, Vector<double>>(options);
         var model = new MockClassificationModel();

@@ -103,43 +103,12 @@ public partial class DREAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
 
         foreach (var task in taskBatch.Tasks)
         {
-            var adaptedParams = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
-
-            double shapingPenalty = 0;
-            int K = _algoOptions.AdaptationSteps;
-
-            for (int step = 0; step < K; step++)
-            {
-                ParamModel.SetParameters(adaptedParams);
-                var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-                double loss = NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.SupportInput), task.SupportOutput));
-
-                // Compute gradient norm
-                double gradNorm = 0;
-                for (int d = 0; d < _paramDim; d++)
-                    gradNorm += NumOps.ToDouble(grad[d]) * NumOps.ToDouble(grad[d]);
-                gradNorm = Math.Sqrt(gradNorm);
-
-                // Reward shaper: scale factor
-                double progress = (double)step / Math.Max(K - 1, 1);
-                double scale = ComputeRewardScale(loss, gradNorm, progress);
-
-                // Apply scaled gradient
-                for (int d = 0; d < _paramDim; d++)
-                {
-                    double scaledGrad = scale * NumOps.ToDouble(grad[d]);
-                    adaptedParams[d] = NumOps.Subtract(adaptedParams[d], NumOps.FromDouble(_algoOptions.InnerLearningRate * scaledGrad));
-                }
-
-                // Shaping penalty: deviation from unit scale
-                double discountFactor = Math.Pow(_algoOptions.ShapingDiscount, step);
-                shapingPenalty += discountFactor * Math.Abs(1.0 - scale);
-            }
+            var adaptedParams = AdaptWithShaping(task, initParams, clip: true, out T shapingPenalty);
 
             ParamModel.SetParameters(adaptedParams);
             var queryLoss = ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput);
-            var totalLoss = NumOps.Add(queryLoss, NumOps.FromDouble(_algoOptions.RewardShapingWeight * shapingPenalty));
+            var totalLoss = NumOps.Add(queryLoss,
+                NumOps.Multiply(NumOps.FromDouble(_algoOptions.RewardShapingWeight), shapingPenalty));
 
             losses.Add(totalLoss);
             metaGradients.Add(ClipGradients(ComputeGradients(MetaModel, task.QueryInput, task.QueryOutput)));
@@ -157,90 +126,95 @@ public partial class DREAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     {
         if (task == null) throw new ArgumentNullException(nameof(task));
         var initParams = ParamModel.GetParameters();
-        var adaptedParams = new Vector<T>(_paramDim);
-        for (int d = 0; d < _paramDim; d++) adaptedParams[d] = initParams[d];
-
-        int K = _algoOptions.AdaptationSteps;
-        for (int step = 0; step < K; step++)
-        {
-            ParamModel.SetParameters(adaptedParams);
-            var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-            double loss = NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.SupportInput), task.SupportOutput));
-
-            double gradNorm = 0;
-            for (int d = 0; d < _paramDim; d++)
-                gradNorm += NumOps.ToDouble(grad[d]) * NumOps.ToDouble(grad[d]);
-            gradNorm = Math.Sqrt(gradNorm);
-
-            double progress = (double)step / Math.Max(K - 1, 1);
-            double scale = ComputeRewardScale(loss, gradNorm, progress);
-
-            for (int d = 0; d < _paramDim; d++)
-                adaptedParams[d] = NumOps.Subtract(adaptedParams[d],
-                    NumOps.FromDouble(_algoOptions.InnerLearningRate * scale * NumOps.ToDouble(grad[d])));
-        }
+        var adaptedParams = AdaptWithShaping(task, initParams, clip: true, out _);
 
         ParamModel.SetParameters(initParams);
         return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
     }
 
     /// <summary>
-    /// Computes the reward scaling factor using the shaper MLP:
-    /// input = (loss, grad_norm, progress) → hidden(tanh) → sigmoid(output)
+    /// The shaped inner loop: each step scales the support gradient by the shaper's factor for
+    /// (support loss, gradient norm, progress) and accumulates the discounted shaping penalty
+    /// sum_k discount^k |1 - scale_k|.
     /// </summary>
-    private double ComputeRewardScale(double loss, double gradNorm, double progress)
+    private Vector<T> AdaptWithShaping(
+        IMetaLearningTask<T, TInput, TOutput> task, Vector<T> initParams, bool clip, out T shapingPenalty)
     {
-        var input = new double[] { loss, gradNorm, progress };
-        var hidden = new double[_hiddenDim];
-        int offset = 0;
+        var adaptedParams = initParams.Clone();
+        shapingPenalty = NumOps.Zero;
+        int K = _algoOptions.AdaptationSteps;
 
-        // Layer 1: input(3) → hidden (tanh)
-        for (int h = 0; h < _hiddenDim; h++)
+        for (int step = 0; step < K; step++)
         {
-            double sum = 0;
-            for (int i = 0; i < 3; i++)
-                sum += input[i] * NumOps.ToDouble(_shaperParams[offset + h * 3 + i]);
-            hidden[h] = Math.Tanh(sum);
+            adaptedParams = ShapedStep(task, adaptedParams, clip, step, K, ref shapingPenalty);
         }
-        offset += 3 * _hiddenDim;
 
-        // Layer 2: hidden → scalar (sigmoid for [0, 2] range)
-        double output = 0;
-        for (int h = 0; h < _hiddenDim; h++)
-            output += hidden[h] * NumOps.ToDouble(_shaperParams[offset + h]);
+        return adaptedParams;
+    }
 
-        // Sigmoid scaled to [0, 2] — allows both dampening and amplification
-        return 2.0 / (1.0 + Math.Exp(-output));
+    /// <summary>
+    /// One shaped step: theta - lr * scale * g for the shaper's scale at (support loss, |g|, step / max(K - 1, 1)),
+    /// adding discount^step * |1 - scale| to the shaping penalty.
+    /// </summary>
+    private Vector<T> ShapedStep(
+        IMetaLearningTask<T, TInput, TOutput> task, Vector<T> adaptedParams, bool clip, int step, int K, ref T shapingPenalty)
+    {
+        ParamModel.SetParameters(adaptedParams);
+        var raw = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
+        var grad = (clip ? ClipGradients(raw) : raw).GetSubVector(0, _paramDim);
+        T loss = ComputeLossFromOutput(MetaModel.Predict(task.SupportInput), task.SupportOutput);
+
+        // Compute gradient norm
+        T gradNorm = NumOps.Sqrt(Engine.DotProduct(grad, grad));
+
+        // Reward shaper: scale factor
+        T progress = NumOps.FromDouble((double)step / Math.Max(K - 1, 1));
+        T scale = ComputeRewardScale(loss, gradNorm, progress);
+
+        // Shaping penalty: deviation from unit scale
+        T discountFactor = NumOps.FromDouble(Math.Pow(_algoOptions.ShapingDiscount, step));
+        shapingPenalty = NumOps.Add(shapingPenalty,
+            NumOps.Multiply(discountFactor, NumOps.Abs(NumOps.Subtract(NumOps.One, scale))));
+
+        // Apply scaled gradient
+        T learningRate = NumOps.FromDouble(_algoOptions.InnerLearningRate);
+        return Engine.Subtract(adaptedParams, Engine.Multiply(grad, NumOps.Multiply(learningRate, scale)));
+    }
+
+    /// <summary>
+    /// Computes the reward scaling factor using the shaper MLP:
+    /// input = (loss, grad_norm, progress) -> hidden(tanh) -> 2 * sigmoid(output), in [0, 2] so it can
+    /// both dampen and amplify.
+    /// </summary>
+    private T ComputeRewardScale(T loss, T gradNorm, T progress)
+    {
+        var input = Tensor<T>.FromVector(new Vector<T>(new[] { loss, gradNorm, progress }), new[] { 3, 1 });
+
+        // Layer 1: input(3) -> hidden (tanh)
+        var layer1 = Tensor<T>.FromVector(_shaperParams.GetSubVector(0, 3 * _hiddenDim), new[] { _hiddenDim, 3 });
+        var hidden = Engine.Tanh(Engine.TensorMatMul(layer1, input)).ToVector();
+
+        // Layer 2: hidden -> scalar
+        T output = Engine.DotProduct(hidden, _shaperParams.GetSubVector(3 * _hiddenDim, _hiddenDim));
+        return NumOps.Multiply(NumOps.FromDouble(2.0), NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, NumOps.Exp(NumOps.Negate(output)))));
     }
 
     private double ComputeDREAMLoss(TaskBatch<T, TInput, TOutput> taskBatch)
     {
-        double totalLoss = 0;
+        var losses = new List<T>(taskBatch.Tasks.Length);
         var initParams = ParamModel.GetParameters();
 
         foreach (var task in taskBatch.Tasks)
         {
-            var adapted = new Vector<T>(_paramDim);
-            for (int d = 0; d < _paramDim; d++) adapted[d] = initParams[d];
-
-            int K = _algoOptions.AdaptationSteps;
-            for (int step = 0; step < K; step++)
-            {
-                ParamModel.SetParameters(adapted);
-                var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
-                double loss = NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.SupportInput), task.SupportOutput));
-                double gn = 0;
-                for (int d = 0; d < _paramDim; d++) gn += NumOps.ToDouble(grad[d]) * NumOps.ToDouble(grad[d]);
-                double scale = ComputeRewardScale(loss, Math.Sqrt(gn), (double)step / Math.Max(K - 1, 1));
-                for (int d = 0; d < _paramDim; d++)
-                    adapted[d] = NumOps.Subtract(adapted[d], NumOps.FromDouble(_algoOptions.InnerLearningRate * scale * NumOps.ToDouble(grad[d])));
-            }
+            var adapted = AdaptWithShaping(task, initParams, clip: false, out _);
 
             ParamModel.SetParameters(adapted);
-            totalLoss += NumOps.ToDouble(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
+            losses.Add(ComputeLossFromOutput(MetaModel.Predict(task.QueryInput), task.QueryOutput));
         }
 
         ParamModel.SetParameters(initParams);
-        return totalLoss / Math.Max(taskBatch.Tasks.Length, 1);
+
+        // The SPSA callback contract is a double; the batch mean is reduced in T and converted once.
+        return NumOps.ToDouble(ComputeMean(losses));
     }
 }

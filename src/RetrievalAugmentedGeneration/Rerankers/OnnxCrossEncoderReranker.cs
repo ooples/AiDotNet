@@ -143,12 +143,13 @@ public class OnnxCrossEncoderReranker<T> : RerankerBase<T>, IDisposable
             scored.Add((docList[i], scores[i]));
         }
 
-        var reranked = scored
-            .OrderByDescending(x => x.Score)
-            .Select(x =>
+        var ordered = scored.OrderByDescending(x => x.Score).ToList();
+        var converted = RagScoreConversion<T>.FromDouble(ordered.Select(x => x.Score));
+        var reranked = ordered
+            .Select((x, i) =>
             {
                 var doc = x.Doc;
-                doc.RelevanceScore = NumOps.FromDouble(x.Score);
+                doc.RelevanceScore = converted[i];
                 doc.HasRelevanceScore = true;
                 return doc;
             })

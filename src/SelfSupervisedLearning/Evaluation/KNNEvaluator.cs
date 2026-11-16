@@ -6,6 +6,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Validation;
+using AiDotNet.SelfSupervisedLearning.Losses;
 
 namespace AiDotNet.SelfSupervisedLearning.Evaluation;
 
@@ -160,7 +161,6 @@ public partial class KNNEvaluator<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         }
 
         var numTest = testFeatures.Shape[0];
-        var numTrain = _trainFeatures.Shape[0];
         var dim = testFeatures.Shape[1];
 
         var results = new Dictionary<int, double>();
@@ -172,12 +172,9 @@ public partial class KNNEvaluator<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         for (int i = 0; i < numTest; i++)
         {
             // Compute distances to all training samples
-            var distances = new (int index, T distance)[numTrain];
-
-            for (int j = 0; j < numTrain; j++)
-            {
-                distances[j] = (j, ComputeDistance(testFeatures, i, _trainFeatures, j, dim));
-            }
+            var distances = ComputeDistanceRow(testFeatures, i, _trainFeatures, dim)
+                .Select((distance, index) => (index, distance))
+                .ToArray();
 
             // Sort by distance (ascending for L2, descending for cosine similarity)
             if (_useCosine)
@@ -239,16 +236,12 @@ public partial class KNNEvaluator<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     private int PredictSingle(Tensor<T> testFeatures, int testIdx)
     {
         var trainFeatures = _trainFeatures ?? throw new InvalidOperationException("Training features have not been initialized. Call Fit() first.");
-        var numTrain = trainFeatures.Shape[0];
         var dim = testFeatures.Shape[1];
 
         // Compute distances to all training samples
-        var distances = new (int index, T distance)[numTrain];
-
-        for (int j = 0; j < numTrain; j++)
-        {
-            distances[j] = (j, ComputeDistance(testFeatures, testIdx, trainFeatures, j, dim));
-        }
+        var distances = ComputeDistanceRow(testFeatures, testIdx, trainFeatures, dim)
+            .Select((distance, index) => (index, distance))
+            .ToArray();
 
         // Sort by distance
         if (_useCosine)
@@ -270,73 +263,48 @@ public partial class KNNEvaluator<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 
     private int VotePrediction((int index, T distance)[] neighbors)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var trainLabels = _trainLabels ?? throw new InvalidOperationException("Training labels have not been initialized. Call Fit() first.");
 
         // Weighted voting based on distance
-        var votes = new T[_numClasses];
+        var neighborDistances = new Vector<T>(neighbors.Select(n => n.distance)).AsTensor();
+        var neighborLabels = neighbors.Select(n => trainLabels[n.index]).ToArray();
 
-        foreach (var (index, distance) in neighbors)
-        {
-            var label = trainLabels[index];
-            T weight;
+        var weights = _useCosine
+            // Weight by similarity (higher is better)
+            ? Engine.TensorExp(Engine.TensorDivideScalar(neighborDistances, NumOps.FromDouble(_temperature)))
+            // Weight by inverse distance
+            : Engine.Reciprocal(Engine.TensorAddScalar(neighborDistances, ObjectiveOps.Epsilon<T>(1e-8)).AsVector()).AsTensor();
 
-            if (_useCosine)
-            {
-                // Weight by similarity (higher is better)
-                weight = NumOps.Exp(NumOps.Divide(distance, NumOps.FromDouble(_temperature)));
-            }
-            else
-            {
-                // Weight by inverse distance
-                weight = NumOps.Divide(NumOps.One,
-                    NumOps.Add(distance, NumOps.FromDouble(1e-8)));
-            }
+        var votes = Engine.ScatterAdd(
+            weights, new Tensor<int>(neighborLabels, new[] { neighborLabels.Length }), 0, _numClasses);
 
-            votes[label] = NumOps.Add(votes[label], weight);
-        }
-
-        // Return class with highest vote
-        int bestClass = 0;
-        T bestVote = votes[0];
-
-        for (int c = 1; c < _numClasses; c++)
-        {
-            if (NumOps.GreaterThan(votes[c], bestVote))
-            {
-                bestVote = votes[c];
-                bestClass = c;
-            }
-        }
-
-        return bestClass;
+        // Return class with highest vote (the first one on ties)
+        return Engine.TensorArgMax(votes, 0).ToArray()[0];
     }
 
-    private T ComputeDistance(Tensor<T> a, int aIdx, Tensor<T> b, int bIdx, int dim)
+    /// <summary>
+    /// Distances from row <paramref name="aIdx"/> of <paramref name="a"/> to every row of <paramref name="b"/>,
+    /// over the first <paramref name="dim"/> features: the dot product (cosine, features already normalized)
+    /// or the L2 distance.
+    /// </summary>
+    private Vector<T> ComputeDistanceRow(Tensor<T> a, int aIdx, Tensor<T> b, int dim)
     {
-        // Extract rows as Vector<T> for Engine.DotProduct
-        var aRow = new Vector<T>(dim);
-        var bRow = new Vector<T>(dim);
-        for (int d = 0; d < dim; d++)
-        {
-            aRow[d] = a[aIdx, d];
-            bRow[d] = b[bIdx, d];
-        }
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        int numB = b.Shape[0];
+        var aRow = Engine.TensorSlice(a, new[] { aIdx, 0 }, new[] { 1, dim });
+        var bRows = b.Shape[1] == dim ? b : Engine.TensorSlice(b, new[] { 0, 0 }, new[] { numB, dim });
 
         if (_useCosine)
         {
             // Cosine similarity (features are already normalized)
-            return Engine.DotProduct(aRow, bRow);
+            return Engine.TensorMatMul(bRows, Engine.TensorTranspose(aRow)).Reshape(numB).AsVector();
         }
-        else
-        {
-            // L2 distance
-            var diff = new Vector<T>(dim);
-            for (int d = 0; d < dim; d++)
-            {
-                diff[d] = NumOps.Subtract(aRow[d], bRow[d]);
-            }
-            return NumOps.Sqrt(Engine.DotProduct(diff, diff));
-        }
+
+        // L2 distance
+        var diff = Engine.TensorSubtract(aRow, bRows);
+        var squared = Engine.ReduceSum(Engine.TensorMultiply(diff, diff), new[] { 1 }, keepDims: false);
+        return Engine.TensorSqrt(squared).AsVector();
     }
 
     private Tensor<T> ExtractFeatures(Tensor<T> input)
@@ -346,29 +314,11 @@ public partial class KNNEvaluator<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 
     private Tensor<T> L2Normalize(Tensor<T> tensor)
     {
-        var batchSize = tensor.Shape[0];
-        var dim = tensor.Shape[1];
-        var result = new T[batchSize * dim];
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            // Extract row as Vector<T> for Engine.DotProduct
-            var row = new Vector<T>(dim);
-            for (int j = 0; j < dim; j++)
-            {
-                row[j] = tensor[i, j];
-            }
-
-            var sumSquared = Engine.DotProduct(row, row);
-            var norm = NumOps.Sqrt(NumOps.Add(sumSquared, NumOps.FromDouble(1e-8)));
-
-            for (int j = 0; j < dim; j++)
-            {
-                result[i * dim + j] = NumOps.Divide(row[j], norm);
-            }
-        }
-
-        return new Tensor<T>(result, [batchSize, dim]);
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        // x / sqrt(sum(x^2) + 1e-8) per row
+        var sumSquared = Engine.ReduceSum(Engine.TensorMultiply(tensor, tensor), new[] { 1 }, keepDims: true);
+        var norm = Engine.TensorSqrt(Engine.TensorAddScalar(sumSquared, ObjectiveOps.Epsilon<T>(1e-8)));
+        return Engine.TensorDivide(tensor, norm);
     }
 
     #region ModelBase Overrides

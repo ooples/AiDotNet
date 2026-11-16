@@ -265,18 +265,15 @@ public partial class ParlerTTS<T> : TtsModelBase<T>, ICodecTts<T>
 
     private Tensor<T> ToTensor(IReadOnlyList<int> ids)
     {
-        var tensor = new Tensor<T>(new[] { ids.Count });
-        for (int i = 0; i < ids.Count; i++) tensor[i] = NumOps.FromDouble(ids[i]);
-        return tensor;
+        return IdTensor(ids);
     }
 
     private int[] ToIds(Tensor<T> tensor, int vocabulary, string name)
     {
         if (tensor.Length == 0) throw new ArgumentException("Expected at least one token id.", name);
-        var ids = new int[tensor.Length];
+        var ids = RoundedIds(tensor);
         for (int i = 0; i < ids.Length; i++)
         {
-            ids[i] = (int)Math.Round(NumOps.ToDouble(tensor[i]));
             if (ids[i] < 0 || ids[i] >= vocabulary)
                 throw new ArgumentOutOfRangeException(name, $"{GetType().Name}'s token ids here lie in [0, {vocabulary}).");
         }
@@ -291,11 +288,10 @@ public partial class ParlerTTS<T> : TtsModelBase<T>, ICodecTts<T>
         {
             if (tokens.Rank != 2 || tokens.Shape[1] != codebooks)
                 throw new ArgumentException($"Expected codec tokens [frames, {codebooks}].", name);
-            var codes = new int[tokens.Shape[0], codebooks];
+            var codes = RoundedIdMatrix(tokens);
             for (int f = 0; f < tokens.Shape[0]; f++)
                 for (int q = 0; q < codebooks; q++)
                 {
-                    codes[f, q] = (int)Math.Round(NumOps.ToDouble(tokens[f, q]));
                     if (codes[f, q] < 0 || codes[f, q] >= _options.CodebookSize)
                         throw new ArgumentOutOfRangeException(name, $"Codec tokens lie in [0, {_options.CodebookSize}).");
                 }
@@ -380,7 +376,8 @@ public partial class ParlerTTS<T> : TtsModelBase<T>, ICodecTts<T>
             using var _ = new NoGradScope<T>();
             var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
             var (loss, perCodebook) = Core.Loss(codes, transcript, Memory(description, transcript, false, random), false, random);
-            return (loss[0], perCodebook.Select(l => l[0]).ToArray());
+            var firstOfEach = perCodebook.Select(l => Engine.TensorSlice(Engine.Reshape(l, new[] { l.Length }), new[] { 0 }, new[] { 1 })).ToArray();
+            return (loss[0], firstOfEach.Length == 0 ? Array.Empty<T>() : Engine.TensorConcatenate(firstOfEach, 0).ToArray());
         }
         finally
         {
@@ -508,10 +505,7 @@ public partial class ParlerTTS<T> : TtsModelBase<T>, ICodecTts<T>
     public Tensor<T> EncodeToTokens(Tensor<T> audio)
     {
         var codes = FramesFirst(Codec.Encode(audio ?? throw new ArgumentNullException(nameof(audio))));
-        var tensor = new Tensor<T>(new[] { codes.GetLength(0), codes.GetLength(1) });
-        for (int f = 0; f < codes.GetLength(0); f++)
-            for (int q = 0; q < codes.GetLength(1); q++) tensor[f, q] = NumOps.FromDouble(codes[f, q]);
-        return tensor;
+        return IntMatrixTensor(codes);
     }
 
     /// <inheritdoc />

@@ -284,10 +284,10 @@ public partial class SoundStorm<T> : TtsModelBase<T>, ICodecTts<T>
         var bytes = System.Text.Encoding.UTF8.GetBytes(text);
         if (bytes.Length == 0) throw new ArgumentException("The text is empty.", nameof(text));
         int length = Math.Min(bytes.Length, _options.MaxTextLength - 1);
-        var ids = new Tensor<T>(new[] { length + 1 });
-        for (int i = 0; i < length; i++) ids[i] = NumOps.FromDouble(bytes[i] + ByteOffset);
-        ids[length] = NumOps.FromDouble(EndToken);
-        return ids;
+        var ids = new int[length + 1];
+        for (int i = 0; i < length; i++) ids[i] = bytes[i] + ByteOffset;
+        ids[length] = EndToken;
+        return IdTensor(ids);
     }
 
     private int UpsampleFactor => CodecFrameRate / _options.SemanticFrameRate;
@@ -342,15 +342,12 @@ public partial class SoundStorm<T> : TtsModelBase<T>, ICodecTts<T>
         if (tokens.Rank != 2 || (tokens.Shape[1] != codebooks && tokens.Shape[1] != 1))
             throw new ArgumentException($"Expected codec tokens [frames, {codebooks}], or [frames, 1] of semantic tokens with the recording.", nameof(sample));
         int frames = tokens.Shape[0];
-        var codes = new int[codebooks, frames];
-        for (int f = 0; f < frames; f++)
-            codes[0, f] = (int)Math.Round(NumOps.ToDouble(tokens[f, 0]));
         if (tokens.Shape[1] == codebooks)
-        {
-            for (int f = 0; f < frames; f++)
-                for (int q = 1; q < codebooks; q++) codes[q, f] = (int)Math.Round(NumOps.ToDouble(tokens[f, q]));
-            return codes;
-        }
+            return LevelMajorCodes(tokens);
+        var codes = new int[codebooks, frames];
+        var semanticCodes = RoundedIds(tokens);
+        for (int f = 0; f < frames; f++)
+            codes[0, f] = semanticCodes[f];
         var audio = sample.Audio ?? throw new ArgumentException("Semantic tokens alone need the recording for the acoustic codes.", nameof(sample));
         var acoustic = Codec.Encode(audio);
         int levels = Math.Min(acoustic.GetLength(0), _options.NumCodebooks), common = Math.Min(frames, acoustic.GetLength(1));
@@ -477,7 +474,7 @@ public partial class SoundStorm<T> : TtsModelBase<T>, ICodecTts<T>
             {
                 var recording = voice.ReferenceAudio ?? throw new ArgumentException("A SoundStorm voice needs its recording.");
                 var tokens = voice.ReferenceTokens ?? throw new ArgumentException("A SoundStorm voice needs its semantic tokens at 25 Hz.");
-                promptSemantic = Enumerable.Range(0, tokens.Length).Select(i => (int)Math.Round(NumOps.ToDouble(tokens[i]))).ToArray();
+                promptSemantic = RoundedIds(tokens);
                 if (promptSemantic.Any(code => code < 0 || code >= o.SemanticCodes))
                     throw new ArgumentOutOfRangeException(nameof(input), $"Semantic tokens lie in [0, {o.SemanticCodes}).");
                 promptCodes = Codec.Encode(recording);
@@ -552,11 +549,7 @@ public partial class SoundStorm<T> : TtsModelBase<T>, ICodecTts<T>
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(audio);
         var codes = Codec.Encode(audio);
-        int levels = codes.GetLength(0), frames = codes.GetLength(1);
-        var tokens = new Tensor<T>(new[] { frames, levels });
-        for (int f = 0; f < frames; f++)
-            for (int q = 0; q < levels; q++) tokens[f, q] = NumOps.FromDouble(codes[q, f]);
-        return tokens;
+        return FrameMajorCodes(codes, codes.GetLength(0));
     }
 
     /// <summary>The waveform of codec codes <c>[frames, Q]</c>.</summary>
@@ -568,11 +561,7 @@ public partial class SoundStorm<T> : TtsModelBase<T>, ICodecTts<T>
         if (tokens is null) throw new ArgumentNullException(nameof(tokens));
         if (tokens.Rank != 2)
             throw new ArgumentException("Expected codec tokens [frames, levels].", nameof(tokens));
-        int frames = tokens.Shape[0], levels = tokens.Shape[1];
-        var codes = new int[levels, frames];
-        for (int f = 0; f < frames; f++)
-            for (int q = 0; q < levels; q++) codes[q, f] = (int)Math.Round(NumOps.ToDouble(tokens[f, q]));
-        var audio = Codec.Decode(codes);
+        var audio = Codec.Decode(LevelMajorCodes(tokens));
         return audio.Reshape(new[] { audio.Length });
     }
 

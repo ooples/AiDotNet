@@ -98,17 +98,8 @@ public static class ConversionsHelper
                 return Vector<T>.Empty();
             }
 
-            var flat = new Vector<T>(matrix.Rows * matrix.Columns);
-            int idx = 0;
-            for (int r = 0; r < matrix.Rows; r++)
-            {
-                for (int c = 0; c < matrix.Columns; c++)
-                {
-                    flat[idx++] = matrix[r, c];
-                }
-            }
-
-            return flat;
+            // Row-major storage already matches the row-by-row flattening order.
+            return Vector<T>.FromSpan(matrix.AsSpan());
         }
         else if (output is Tensor<T> tensor)
         {

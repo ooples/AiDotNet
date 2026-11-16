@@ -64,15 +64,8 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
         /// <returns>A new vector with clamped values.</returns>
         protected Vector<T> ClampAction(Vector<T> action, double min = -1.0, double max = 1.0)
         {
-            var clampedAction = new Vector<T>(action.Length);
-            for (int i = 0; i < action.Length; i++)
-            {
-                double value = NumOps.ToDouble(action[i]);
-                // Math.Clamp not available in net462
-                double clamped = Math.Max(min, Math.Min(max, value));
-                clampedAction[i] = NumOps.FromDouble(clamped);
-            }
-            return clampedAction;
+            // max(min, min(max, x)) element-wise, into a new vector
+            return AiDotNetEngine.Current.Clamp(action, NumOps.FromDouble(min), NumOps.FromDouble(max));
         }
 
         /// <summary>

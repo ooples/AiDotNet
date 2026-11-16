@@ -612,22 +612,12 @@ public partial class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         // scratch. Renting it here aliased recycled scratch, so the cached posEmbed was corrupted between
         // steps -> garbage added to every token -> non-deterministic Predict (the StableDiffusion3
         // Predict_ShouldBeDeterministic / clone failures). A long-lived cache must be plain GC-owned.
-        var posEmbed = new Tensor<T>(new[] { 1, numPatches, _hiddenSize });
-        var span = posEmbed.AsWritableSpan();
+        // Even channel i holds sin(pos * 10000^(-i / hidden)), the following odd channel cos of the same angle;
+        // the angles are computed in double (Half cannot represent positions above 2048)
+        var embedding = DiffusionVectorOps.InterleavedPositionEmbedding<T>(numPatches, _hiddenSize);
 
-        for (int pos = 0; pos < numPatches; pos++)
-        {
-            for (int i = 0; i < _hiddenSize; i += 2)
-            {
-                var freq = Math.Pow(10000.0, -i / (double)_hiddenSize);
-                var angle = pos * freq;
-                span[pos * _hiddenSize + i] = NumOps.FromDouble(Math.Sin(angle));
-                if (i + 1 < _hiddenSize)
-                {
-                    span[pos * _hiddenSize + i + 1] = NumOps.FromDouble(Math.Cos(angle));
-                }
-            }
-        }
+        var posEmbed = new Tensor<T>(new[] { 1, numPatches, _hiddenSize });
+        embedding.AsSpan().CopyTo(posEmbed.AsWritableSpan());
 
         return posEmbed;
     }
@@ -865,19 +855,27 @@ public partial class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         // standard right-aligned broadcasting (Esser et al. 2024 §3 AdaLN-Zero
         // is per-channel: scale + 1 and shift are broadcast across the N
         // token positions).
-        var scaleTensor = TensorAllocator.Rent<T>(new[] { 1, 1, hidden });
-        var shiftTensor = TensorAllocator.Rent<T>(new[] { 1, 1, hidden });
-        var scaleSpan = scaleTensor.AsWritableSpan();
-        var shiftSpan = shiftTensor.AsWritableSpan();
-
-        for (int h = 0; h < hidden; h++)
-        {
-            scaleSpan[h] = NumOps.Add(NumOps.One, scale[h % scale.Length]);
-            shiftSpan[h] = shift[h % shift.Length];
-        }
+        // Channel h uses scale[h % scale.Length] + 1 and shift[h % shift.Length]
+        var broadcastShape = new[] { 1, 1, hidden };
+        var scaleTensor = Engine.Reshape(Engine.TensorAddScalar(TileTo(scale, hidden), NumOps.One), broadcastShape);
+        var shiftTensor = Engine.Reshape(TileTo(shift, hidden), broadcastShape);
 
         var scaled = Engine.TensorMultiply(x, scaleTensor);
         return Engine.TensorAdd(scaled, shiftTensor);
+    }
+
+    /// <summary>
+    /// The values repeated cyclically to <paramref name="length"/> elements (element h is values[h % values.Length]).
+    /// </summary>
+    private Tensor<T> TileTo(T[] values, int length)
+    {
+        var source = new Tensor<T>(new[] { values.Length }, new Vector<T>(values));
+        if (values.Length == length)
+            return source;
+        var index = new int[length];
+        for (int h = 0; h < length; h++)
+            index[h] = h % values.Length;
+        return Engine.TensorIndexSelect(source, new Tensor<int>(new[] { length }, new Vector<int>(index)), 0);
     }
 
     private Tensor<T> AddWithGate(Tensor<T> x, Tensor<T> residual, T[] gate)
@@ -1025,8 +1023,7 @@ public partial class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
             throw new InvalidOperationException(
                 $"WriteLayerParams overflow at layer {layer.GetType().Name}: offset={offset}, " +
                 $"p.Length={p.Length}, buffer.Length={dst.Length}. ParameterCount under-counted this layer.");
-        for (int i = 0; i < p.Length; i++)
-            dst[offset + i] = p[i];
+        p.AsSpan().CopyTo(dst.AsWritableSpan().Slice(offset, p.Length));
         offset += p.Length;
     }
 
@@ -1091,12 +1088,7 @@ public partial class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
     private int SetLayerParams(ILayer<T> layer, Vector<T> parameters, int offset)
     {
         int count = checked((int)layer.ParameterCount);
-        var p = new T[count];
-        for (int i = 0; i < count; i++)
-        {
-            p[i] = parameters[offset + i];
-        }
-        layer.SetParameters(new Vector<T>(p));
+        layer.SetParameters(parameters.GetSubVector(offset, count));
         return offset + count;
     }
 
@@ -1287,8 +1279,7 @@ public partial class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
     private static void AddLayerGrads(List<T> list, ILayer<T>? layer)
     {
         if (layer == null) return;
-        var g = layer.GetParameterGradients();
-        for (int i = 0; i < g.Length; i++) list.Add(g[i]);
+        list.AddRange(layer.GetParameterGradients().AsSpan().ToArray());
     }
 
     #endregion

@@ -27,7 +27,6 @@ function Invoke-GateCase {
         [string] $Aggregate = 'success',
         [string] $SizeCheck = 'success',
         [string] $Promotion = 'skipped',
-        [string] $CodeQL = 'success',
         [string] $Sonar = 'success',
         [string] $ValidationGate = 'success',
         [string] $RequiresPaperFidelity = 'false',
@@ -43,7 +42,7 @@ function Invoke-GateCase {
         -BuildResult $Build -BuildCompatResult $BuildCompat -TestsResult $Tests `
         -RegressionAnalysisResult $Regression -VerdictEnforced $Verdict `
         -AggregateAnalysisResult $Aggregate -SizeCheckResult $SizeCheck `
-        -PromotionResult $Promotion -CodeQLResult $CodeQL -SonarResult $Sonar `
+        -PromotionResult $Promotion -SonarResult $Sonar `
         -ValidationGateResult $ValidationGate -RequiresPaperFidelity $RequiresPaperFidelity `
         -PaperFidelityPlanResult $PaperFidelityPlan -PaperFidelityMode $PaperFidelityMode `
         -PaperFidelityResult $PaperFidelity *> $null
@@ -65,7 +64,7 @@ Invoke-GateCase -Name validation_auxiliary_only -Stage Validation `
 Invoke-GateCase -Name validation_required_tests_missing -Stage Validation `
     -Tests skipped -Verdict false -ExpectedExit 1
 Invoke-GateCase -Name validation_ignores_quality_failure -Stage Validation `
-    -CodeQL failure -Sonar failure -ExpectedExit 0
+    -Sonar failure -ExpectedExit 0
 Invoke-GateCase -Name validation_known_test_failure -Stage Validation `
     -Tests failure -Verdict true -ExpectedExit 0
 Invoke-GateCase -Name validation_unenforced_test_failure -Stage Validation `
@@ -101,22 +100,19 @@ Invoke-GateCase -Name paper_fidelity_not_owed_without_runtime_validation -Stage 
     -Build skipped -BuildCompat skipped -Tests skipped -Regression skipped -Aggregate skipped -SizeCheck skipped `
     -Verdict false -RequiresPaperFidelity true -PaperFidelityPlan skipped -PaperFidelity skipped -ExpectedExit 0
 
-# No reuse requires current validation and current CodeQL.
+# No reuse requires current validation. CodeQL runs after merge and is not a gate input.
 Invoke-GateCase -Name complete_current_success -ExpectedExit 0
 Invoke-GateCase -Name complete_current_validation_failure -ValidationGate failure -ExpectedExit 1
-Invoke-GateCase -Name complete_current_codeql_failure -CodeQL failure -ExpectedExit 1
-Invoke-GateCase -Name complete_current_codeql_cancelled -CodeQL cancelled -ExpectedExit 1
+Invoke-GateCase -Name complete_current_validation_cancelled -ValidationGate cancelled -ExpectedExit 1
 # SonarCloud is advisory: no Sonar outcome may block, and none may stand in for a required job.
 foreach ($sonarOutcome in 'failure', 'cancelled', 'timed_out', 'skipped') {
     Invoke-GateCase -Name "complete_current_sonar_$sonarOutcome" -Sonar $sonarOutcome -ExpectedExit 0
 }
-Invoke-GateCase -Name complete_current_sonar_success_does_not_cover_codeql -CodeQL failure -ExpectedExit 1
+Invoke-GateCase -Name complete_current_sonar_success_does_not_cover_validation -ValidationGate failure -ExpectedExit 1
 
-# Validation-only reuse skips the matrix but still requires CodeQL and runtime promotion.
+# Validation-only reuse skips the matrix but still requires runtime promotion.
 Invoke-GateCase -Name partial_reuse_success -ReuseScope Validation -Promotion success `
     -ValidationGate skipped -ExpectedExit 0
-Invoke-GateCase -Name partial_reuse_quality_failure -ReuseScope Validation -Promotion success `
-    -ValidationGate skipped -CodeQL failure -ExpectedExit 1
 Invoke-GateCase -Name partial_reuse_sonar_failure_is_advisory -ReuseScope Validation -Promotion success `
     -ValidationGate skipped -Sonar failure -ExpectedExit 0
 Invoke-GateCase -Name partial_reuse_missing_promotion -ReuseScope Validation -Promotion skipped `
@@ -126,19 +122,19 @@ Invoke-GateCase -Name partial_non_runtime_reuse -ReuseScope Validation -Requires
 
 # Complete reuse needs no repeated quality job, but runtime data still has to be promoted.
 Invoke-GateCase -Name complete_reuse_success -ReuseScope Complete -Promotion success `
-    -CodeQL skipped -Sonar skipped -ValidationGate skipped -ExpectedExit 0
+    -Sonar skipped -ValidationGate skipped -ExpectedExit 0
 Invoke-GateCase -Name complete_reuse_missing_promotion -ReuseScope Complete -Promotion skipped `
-    -CodeQL skipped -Sonar skipped -ValidationGate skipped -ExpectedExit 1
+    -Sonar skipped -ValidationGate skipped -ExpectedExit 1
 Invoke-GateCase -Name complete_non_runtime_reuse -ReuseScope Complete -RequiresValidation false `
-    -Promotion skipped -CodeQL skipped -Sonar skipped -ValidationGate skipped -ExpectedExit 0
+    -Promotion skipped -Sonar skipped -ValidationGate skipped -ExpectedExit 0
 Invoke-GateCase -Name source_failure_always_blocks -ReuseScope Complete -Source failure `
-    -Promotion success -CodeQL skipped -Sonar skipped -ValidationGate skipped -ExpectedExit 1
+    -Promotion success -Sonar skipped -ValidationGate skipped -ExpectedExit 1
 
 # #2131: a select job that never got a runner reports the undocumented conclusion 'abandoned'. The gate
 # must fail on it (no job ran) without throwing, and so must any conclusion it does not recognise.
 Invoke-GateCase -Name validation_select_abandoned -Stage Validation -Select abandoned -ExpectedExit 1
 Invoke-GateCase -Name validation_select_unrecognized -Stage Validation -Select mystery_state -ExpectedExit 1
-Invoke-GateCase -Name complete_codeql_abandoned -CodeQL abandoned -ExpectedExit 1
+Invoke-GateCase -Name complete_validation_gate_abandoned -ValidationGate abandoned -ExpectedExit 1
 
 # The summary must say when nothing failed and jobs merely did not run, and must not say it when one failed.
 $summaryPath = [System.IO.Path]::GetTempFileName()
@@ -227,7 +223,7 @@ finally {
 
 Invoke-GateCase -Name deferred_validation_is_not_passing -Source failure -Select skipped `
     -Build skipped -BuildCompat skipped -Tests skipped `
-    -Regression skipped -Aggregate skipped -SizeCheck skipped -CodeQL skipped -Sonar skipped `
+    -Regression skipped -Aggregate skipped -SizeCheck skipped -Sonar skipped `
     -ValidationGate skipped -ExpectedExit 1
 
 if ($failures.Count -gt 0) {

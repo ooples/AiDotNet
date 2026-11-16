@@ -138,18 +138,26 @@ public partial class MAE<T> : SelfSupervisedLearningMethodBase<T>
             ? RandomHelper.CreateSeededRandom(_config.Seed.Value)
             : RandomHelper.CreateSecureRandom();
 
-        var visible = new Tensor<T>(new[] { batch, numVisible, patchDim });
-        var masked = new bool[batch, numPatches];
+        // One shuffle per sample, in batch order; the first numVisible positions stay visible (kept sorted).
         var visibleIndex = new int[batch][];
         for (int b = 0; b < batch; b++)
         {
             var order = Enumerable.Range(0, numPatches).OrderBy(_ => rng.Next()).ToArray();
             visibleIndex[b] = order.Take(numVisible).OrderBy(i => i).ToArray();
-            foreach (int m in order.Skip(numVisible)) masked[b, m] = true;
-            for (int v = 0; v < numVisible; v++)
-                for (int d = 0; d < patchDim; d++)
-                    visible[b, v, d] = patches[b, visibleIndex[b][v], d];
         }
+
+        // Visible patches gathered by flat (sample, patch) row: [B, V, P]
+        var flatVisible = visibleIndex.SelectMany((indices, b) => indices.Select(i => b * numPatches + i)).ToArray();
+        var visible = Engine.TensorIndexSelect(
+                patches.Reshape(batch * numPatches, patchDim),
+                new Tensor<int>(flatVisible, new[] { flatVisible.Length }), 0)
+            .Reshape(batch, numVisible, patchDim);
+
+        // weight[b, n] = 1 for a masked patch: one minus the count of visible one-hots landing on n
+        var visibleOneHot = Engine.TensorOneHot<T>(
+            new Tensor<int>(visibleIndex.SelectMany(indices => indices).ToArray(), new[] { batch * numVisible }), numPatches);
+        var weight = Engine.ScalarMinusTensor(NumOps.One,
+            Engine.ReduceSum(visibleOneHot.Reshape(batch, numVisible, numPatches), new[] { 1 }, keepDims: false));
 
         var encoded = EncodeForTraining(visible);            // [B, V, E]
         int embed = encoded.Shape[encoded.Rank - 1];
@@ -160,16 +168,20 @@ public partial class MAE<T> : SelfSupervisedLearningMethodBase<T>
         // encodings, the parameter-free reconstruction this class documents; otherwise nothing would link a masked
         // patch to the encoder and the loss could never fall.
         var rows = new List<Tensor<T>>(batch);
+        var share = NumOps.FromDouble(1.0 / numVisible);
         for (int b = 0; b < batch; b++)
         {
-            var select = new Tensor<T>(new[] { numPatches, numVisible });
-            for (int v = 0; v < numVisible; v++) select[visibleIndex[b][v], v] = NumOps.One;
+            // select[visibleIndex[b][v], v] = 1
+            var select = Engine.TensorTranspose(Engine.TensorOneHot<T>(
+                new Tensor<int>(visibleIndex[b], new[] { numVisible }), numPatches));
             if (_decoder is null)
             {
-                var share = NumOps.FromDouble(1.0 / numVisible);
-                for (int n = 0; n < numPatches; n++)
-                    if (masked[b, n])
-                        for (int v = 0; v < numVisible; v++) select[n, v] = share;
+                // Masked rows share the visible encodings equally
+                var maskedRows = Engine.TensorTile(
+                    Engine.TensorSlice(weight, new[] { b, 0 }, new[] { 1, numPatches }).Reshape(numPatches, 1),
+                    new[] { 1, numVisible });
+                var shareRows = Engine.TensorAddScalar(new Tensor<T>(new[] { numPatches, numVisible }), share);
+                select = Engine.TensorWhere(maskedRows, shareRows, select);
             }
             var sample = Engine.Reshape(Engine.TensorSlice(encoded, new[] { b, 0, 0 }, new[] { 1, numVisible, embed }),
                 new[] { numVisible, embed });
@@ -186,21 +198,8 @@ public partial class MAE<T> : SelfSupervisedLearningMethodBase<T>
             throw new InvalidOperationException(
                 $"MAE without a decoder needs the encoder to output a patch ({patchDim} values); it outputs {embed}.");
 
-        // Per-patch normalized target (Sec. 3, "normalized pixels"), and a constant weight selecting masked patches.
-        var target = new Tensor<T>(new[] { batch, numPatches, patchDim });
-        var weight = new Tensor<T>(new[] { batch, numPatches });
-        for (int b = 0; b < batch; b++)
-            for (int n = 0; n < numPatches; n++)
-            {
-                double mean = 0, sq = 0;
-                for (int d = 0; d < patchDim; d++) mean += NumOps.ToDouble(patches[b, n, d]);
-                mean /= patchDim;
-                for (int d = 0; d < patchDim; d++) { double c = NumOps.ToDouble(patches[b, n, d]) - mean; sq += c * c; }
-                double std = Math.Sqrt(sq / patchDim + 1e-6);
-                for (int d = 0; d < patchDim; d++)
-                    target[b, n, d] = NumOps.FromDouble((NumOps.ToDouble(patches[b, n, d]) - mean) / std);
-                weight[b, n] = masked[b, n] ? NumOps.One : NumOps.Zero;
-            }
+        // Per-patch normalized target (Sec. 3, "normalized pixels").
+        var target = NormalizedPatchTargets(patches);
 
         var diff = Engine.TensorSubtract(reconstruction, target);
         var perPatch = Engine.TensorDivideScalar(
@@ -222,8 +221,26 @@ public partial class MAE<T> : SelfSupervisedLearningMethodBase<T>
     /// <remarks>The paper trains with AdamW (Table 8).</remarks>
     protected override SelfSupervisedLearningOptimizerType DefaultOptimizerType => SelfSupervisedLearningOptimizerType.AdamW;
 
+    /// <summary>
+    /// (x - mean) / sqrt(var + 1e-6) over each patch of [B, N, P] patches, computed in double as master did:
+    /// in Half the squared deviations of pixel-scale patches overflow past 65504.
+    /// </summary>
+    internal static Tensor<T> NormalizedPatchTargets(Tensor<T> patches)
+    {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<double>();
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        double patchDim = patches.Shape[2];
+        var values = patches.Cast<double>();
+        var mean = engine.TensorDivideScalar(engine.ReduceSum(values, new[] { 2 }, keepDims: true), patchDim);
+        var centered = engine.TensorSubtract(values, mean);
+        var variance = engine.TensorDivideScalar(
+            engine.ReduceSum(engine.TensorMultiply(centered, centered), new[] { 2 }, keepDims: true), patchDim);
+        return engine.TensorDivide(centered, engine.TensorSqrt(engine.TensorAddScalar(variance, 1e-6))).Cast<T>();
+    }
+
     private Tensor<T> Patchify(Tensor<T> images)
     {
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var batchSize = images.Shape[0];
         var numChannels = images.Shape.Length > 1 ? images.Shape[1] : 3;
         var height = images.Shape.Length > 2 ? images.Shape[2] : (int)Math.Sqrt(_numPatches) * _patchSize;
@@ -233,62 +250,54 @@ public partial class MAE<T> : SelfSupervisedLearningMethodBase<T>
         var patchesPerRow = width / _patchSize;
         var patchesPerCol = height / _patchSize;
         var numPatchesActual = patchesPerRow * patchesPerCol;
+        var cropHeight = patchesPerCol * _patchSize;
+        var cropWidth = patchesPerRow * _patchSize;
 
-        var patches = new T[batchSize * numPatchesActual * patchDim];
-
-        for (int b = 0; b < batchSize; b++)
+        // Nothing to read: master's result was the zero-filled patch tensor
+        if (batchSize == 0 || numPatchesActual == 0 || patchDim == 0)
         {
-            for (int py = 0; py < patchesPerCol; py++)
-            {
-                for (int px = 0; px < patchesPerRow; px++)
-                {
-                    var patchIdx = py * patchesPerRow + px;
-                    var startY = py * _patchSize;
-                    var startX = px * _patchSize;
-
-                    var patchOffset = (b * numPatchesActual + patchIdx) * patchDim;
-
-                    // Extract patch pixels in [C, H, W] order within patch
-                    for (int c = 0; c < numChannels; c++)
-                    {
-                        for (int dy = 0; dy < _patchSize; dy++)
-                        {
-                            for (int dx = 0; dx < _patchSize; dx++)
-                            {
-                                var dimIdx = c * _patchSize * _patchSize + dy * _patchSize + dx;
-                                var y = startY + dy;
-                                var x = startX + dx;
-
-                                // Handle different input formats [B, C, H, W] or [B, features]
-                                if (images.Shape.Length >= 4)
-                                {
-                                    patches[patchOffset + dimIdx] = images[b, c, y, x];
-                                }
-                                else if (images.Shape.Length == 2)
-                                {
-                                    // Flat input: index into the flat dimension
-                                    var flatIdx = c * height * width + y * width + x;
-                                    if (flatIdx < images.Shape[1])
-                                    {
-                                        patches[patchOffset + dimIdx] = images[b, flatIdx];
-                                    }
-                                    else
-                                    {
-                                        patches[patchOffset + dimIdx] = NumOps.Zero;
-                                    }
-                                }
-                                else
-                                {
-                                    patches[patchOffset + dimIdx] = NumOps.Zero;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            return new Tensor<T>(new[] { batchSize, numPatchesActual, patchDim });
         }
 
-        return new Tensor<T>(patches, [batchSize, numPatchesActual, patchDim]);
+        // Master read images[b, c, y, x], which throws for rank > 4 on the first pixel read; keep that.
+        if (images.Shape.Length > 4)
+        {
+            _ = images[0, 0, 0, 0];
+        }
+
+        // Pixel grid [B, C, cropHeight, cropWidth] that the patches tile, in [C, H, W] order
+        Tensor<T> grid;
+        if (images.Shape.Length >= 4)
+        {
+            grid = Engine.TensorSlice(images, new[] { 0, 0, 0, 0 },
+                new[] { batchSize, numChannels, cropHeight, cropWidth });
+        }
+        else if (images.Shape.Length == 2)
+        {
+            // Flat input: pixel (c, y, x) is feature c * height * width + y * width + x, zero past the end
+            var needed = numChannels * height * width;
+            var available = Math.Min(needed, images.Shape[1]);
+            var flat = Engine.TensorSlice(images, new[] { 0, 0 }, new[] { batchSize, available });
+            if (available < needed)
+            {
+                flat = Engine.TensorConcatenate(
+                    new[] { flat, new Tensor<T>(new[] { batchSize, needed - available }) }, 1);
+            }
+
+            grid = Engine.TensorSlice(flat.Contiguous().Reshape(batchSize, numChannels, height, width),
+                new[] { 0, 0, 0, 0 }, new[] { batchSize, numChannels, cropHeight, cropWidth });
+        }
+        else
+        {
+            return new Tensor<T>(new[] { batchSize, numPatchesActual, patchDim });
+        }
+
+        // [B, C, rows, p, cols, p] -> [B, rows, cols, C, p, p] -> [B, patches, C * p * p]
+        var blocks = grid.Contiguous().Reshape(
+            batchSize, numChannels, patchesPerCol, _patchSize, patchesPerRow, _patchSize);
+        return Engine.TensorPermute(blocks, new[] { 0, 2, 4, 1, 3, 5 })
+            .Contiguous()
+            .Reshape(batchSize, numPatchesActual, patchDim);
     }
 
     /// <summary>

@@ -113,10 +113,10 @@ public partial class APNet2<T> : AmplitudePhaseVocoderBase<T>
         Tensor<T> wraps;
         using (new NoGradScope<T>())
         {
-            var turns = new Tensor<T>(difference._shape);
-            for (int i = 0; i < turns.Length; i++)
-                turns[i] = NumOps.FromDouble(2 * Math.PI * Math.Round(NumOps.ToDouble(difference[i]) / (2 * Math.PI), MidpointRounding.ToEven));
-            wraps = turns;
+            // TensorRound rounds half to even, as the reference's torch.round.
+            wraps = Engine.TensorMultiplyScalar(
+                Engine.TensorRound(Engine.TensorDivideScalar(difference, NumOps.FromDouble(2 * Math.PI))),
+                NumOps.FromDouble(2 * Math.PI));
         }
         return Engine.TensorAbs(Engine.TensorSubtract(difference, wraps));
     }
@@ -158,8 +158,9 @@ public partial class APNet2<T> : AmplitudePhaseVocoderBase<T>
         using (new NoGradScope<T>()) realOut = Discriminate(real);
         int periods = o.DiscriminatorPeriods.Length;
         var adversarial = Engine.TensorMultiplyScalar(Sum(fake.Select(f => Hinge(f.Score, -1))), NumOps.FromDouble(1.0 / fake.Count));
+        T periodWeight = NumOps.One, resolutionWeight = NumOps.FromDouble(o.ResolutionFeatureMatchingWeight);
         var featureMatching = Sum(Enumerable.Range(0, fake.Count).Select(k =>
-            Engine.TensorMultiplyScalar(FeatureMatching(realOut[k].Features, fake[k].Features), NumOps.FromDouble(k < periods ? 1.0 : o.ResolutionFeatureMatchingWeight))));
+            Engine.TensorMultiplyScalar(FeatureMatching(realOut[k].Features, fake[k].Features), k < periods ? periodWeight : resolutionWeight)));
         return Engine.TensorAdd(adversarial, Engine.TensorMultiplyScalar(featureMatching, NumOps.FromDouble(o.FeatureMatchingWeight)));
     }
 

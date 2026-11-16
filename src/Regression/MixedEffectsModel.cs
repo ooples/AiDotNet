@@ -792,7 +792,7 @@ public partial class MixedEffectsModel<T> : NonLinearRegressionBase<T>
             x = Engine.Subtract(x, _featureMeans.GetSubVector(0, _numFeatures));
         }
 
-        return NumOps.Add(pred, Engine.DotProduct(x, _fixedEffects.GetSubVector(1, _numFeatures)));
+        return NumOps.Add(pred, Engine.DotProduct(x, RegressionEngineOps2.Slice(_fixedEffects, 1, _numFeatures)));
     }
 
     /// <inheritdoc/>
