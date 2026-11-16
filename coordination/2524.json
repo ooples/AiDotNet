@@ -348,8 +348,19 @@
         "src/AiDotNet.Tensors/Engines/Compilation/Serialization/PlanFormatConstants.cs",
         "tests/AiDotNet.Tensors.Tests/Engines/Compilation/CompiledEnrollmentCheckpointTests.cs",
         "src/AiDotNet.Tensors/Engines/Compilation/OpType.cs",
-        "src/AiDotNet.Tensors/Engines/Compilation/Serialization/OpReplay.cs"
+        "src/AiDotNet.Tensors/Engines/Compilation/Serialization/OpReplay.cs",
+        ".github/workflows/coordination-package.yml"
       ],
+      "verification_gate_amendment": {
+        "native_producer": ".github/workflows/coordination-package.yml",
+        "scope": "Necessary verification amendment only: retain original99 and retained26 gates unchanged; one additional no-build CPU cohort for heterogeneous replay15, NoGrad9, checkpoint38 and optimizer enrollment actualN. Assert exact distinct case identities and all-pass/executed counts; checksum evidence and explicit per-group manifest fields; publish only finalized counts after consolidated source verification.",
+        "consumer_patch_only": [
+          ".github/scripts/Initialize-TensorsValidationFeed.ps1",
+          ".github/scripts/Test-TensorsValidationFeed.ps1"
+        ],
+        "consumer_constraint": "Prepare reviewed patches for the next validated artifact pin; do not alter or push the currently pinned125 consumer feed prematurely. No generic compatibility framework, public release or weakened existing guards."
+      },
+
       "new_files": [
         "tests/AiDotNet.Tensors.Tests/Engines/Compilation/CompiledEnrollmentCheckpointTests.cs"
       ],
