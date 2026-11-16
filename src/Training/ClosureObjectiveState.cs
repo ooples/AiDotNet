@@ -25,8 +25,8 @@ internal enum ClosureFallbackReason
 /// <para>At most <see cref="MaxPlans"/> plans are kept, least recently used evicted first. A signature change (the
 /// short last batch of an epoch) compiles a second plan that then continues the first one's optimizer; switching
 /// back replays the cached one.</para>
-/// <para>A probe that aborts or is unsignable once a plan has trained runs that step outside the plans (the eager tape,
-/// then the plan's optimizer) and compiles nothing; the next step probes again.</para>
+/// <para>Only an explicitly permitted, caller-declared graph break uses eager gradients with the configured optimizer.
+/// Unexpected aborted or unsignable probes are errors; a missing replay contract never authorizes a hybrid step.</para>
 /// <para>Dynamic rule: an objective whose probe aborts, is unsignable, or misses the cache on more than
 /// <see cref="MaxEarlyFailures"/> of its first <see cref="ObservationSteps"/> steps stops probing and caching. Its
 /// steps still run as compiled plans traced from that step (never a stale replay, and the optimizer's moments carry
@@ -270,12 +270,11 @@ internal sealed class ClosureObjectiveState<T>
     /// <summary>Plans traced and compiled for this objective.</summary>
     internal int Compiles { get; set; }
 
-    /// <summary>Steps whose probe failed after a plan had trained, run on the eager tape through that plan's optimizer.</summary>
+    /// <summary>Explicitly declared graph-break steps run on the eager tape through the configured plan's optimizer.</summary>
     internal int OutsidePlanSteps { get; private set; }
 
     /// <summary>
-    /// Counts one step whose probe failed after a plan had trained. It ran outside the plans, so it compiled nothing
-    /// and does not count toward the dynamic rule: no plan traced from it could ever be selected.
+    /// Counts a caller-declared graph break. It bypasses probing and compilation and does not count as a cache failure.
     /// </summary>
     internal void RecordOutsidePlanStep(string? reason)
     {

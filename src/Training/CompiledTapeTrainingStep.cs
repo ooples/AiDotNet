@@ -104,6 +104,7 @@ public static class CompiledTapeTrainingStep<T>
         internal Tensor<T>? persistentInput;
         internal Tensor<T>? persistentTarget;
         internal object? configuredPlan;
+        internal OptimizerContract? optimizerContract;
         internal (int OptType, double Lr, double B1, double B2, double Eps, double Wd)? configuredOptimizerConfig;
         internal double configuredL2;
         internal bool configuredL2AfterClip;
@@ -117,8 +118,7 @@ public static class CompiledTapeTrainingStep<T>
         // The last call declined because no compiled plan can replay the closure objective this step (see
         // LastFallbackWasUnreplayableClosureStep).
         internal bool lastFallbackUnreplayableClosureStep;
-        // That step's probe draws, for the eager tape that runs it outside the plan.
-        internal CompiledStepRandom<T>.CaptureScope? unreplayableStepDraws;
+        // Unexpected replay-contract failures are surfaced without an automatic eager route.
         internal object? mpPlan;
         internal int[]? mpKey;
         [AiDotNet.Attributes.Scratch] internal Tensor<float>? mpInput;
@@ -535,12 +535,147 @@ public static class CompiledTapeTrainingStep<T>
     /// </summary>
     internal static bool LastFallbackWasUnreplayableClosureStep => CurrentState.lastFallbackUnreplayableClosureStep;
 
+    // Optimizer invariants are checked before either execution route can update parameters.
+    // Frozen optimizer inputs shared by compiled replay and explicitly declared graph breaks.
+    internal sealed class OptimizerContract
+    {
+        internal readonly (int, double, double, double, double, double) Configuration;
+        internal readonly object? Optimizer;
+        internal readonly object? Scheduler;
+        internal readonly object? SchedulerMode;
+        internal readonly bool Scheduled;
+        internal readonly bool Bf16;
+        internal readonly int Int8Block, Int8Minimum;
+        internal readonly double L2;
+        internal readonly bool L2AfterClip;
+        internal readonly object?[] Extras;
+        internal readonly Tensor<T>[] Parameters;
+
+        internal OptimizerContract(Tensor<T>[] parameters, int type, double rate, double beta1, double beta2,
+            double epsilon, double decay, AiDotNet.Tensors.Engines.Compilation.LrSchedule? schedule,
+            object? optimizer, bool bf16, int int8Block, int int8Minimum,
+            AiDotNet.Tensors.Engines.Compilation.FusedOptimizerExtras? extras, double l2, bool l2AfterClip)
+        {
+            Configuration = (type, schedule is null ? rate : 0.0, beta1, beta2, epsilon, decay);
+            Optimizer = optimizer;
+            Scheduled = schedule is not null;
+            if (optimizer is AiDotNet.Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> source)
+            {
+                Scheduler = (object?)source.LearningRateScheduler ?? schedule;
+                SchedulerMode = source.SchedulerStepMode;
+            }
+            else Scheduler = schedule;
+            Bf16 = bf16;
+            Int8Block = int8Block;
+            Int8Minimum = int8Minimum;
+            L2 = l2;
+            L2AfterClip = l2AfterClip;
+            Extras = extras is null ? Array.Empty<object?>() : ExtraProperties.Select(p => p.GetValue(extras)).ToArray();
+            Parameters = (Tensor<T>[])parameters.Clone();
+        }
+
+        internal bool Matches(OptimizerContract other, bool compareParameters = true)
+            => Configuration.Equals(other.Configuration)
+                && ReferenceEquals(Optimizer, other.Optimizer)
+                && ReferenceEquals(Scheduler, other.Scheduler)
+                && Equals(SchedulerMode, other.SchedulerMode)
+                && Scheduled == other.Scheduled && Bf16 == other.Bf16
+                && Int8Block == other.Int8Block && Int8Minimum == other.Int8Minimum
+                && L2.Equals(other.L2) && L2AfterClip == other.L2AfterClip
+                && Extras.SequenceEqual(other.Extras)
+                && (!compareParameters || (Parameters.Length == other.Parameters.Length
+                    && Parameters.Zip(other.Parameters, (left, right) => ReferenceEquals(left, right)).All(equal => equal)));
+    }
+
+    private static readonly System.Reflection.PropertyInfo[] ExtraProperties =
+        typeof(AiDotNet.Tensors.Engines.Compilation.FusedOptimizerExtras)
+            .GetProperties(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public)
+            .OrderBy(p => p.Name, StringComparer.Ordinal).ToArray();
+
+    // Validation is read-only. Updating the clip happens only after every invariant passed.
+    private static bool TryPreflightOptimizer(OptimizerContract current, double clip, bool updateClip,
+        bool newSelectionLifecycle = false)
+    {
+        if (_configuredPlan is null) return true;
+        if (CurrentState.optimizerContract is not { } configured || !configured.Matches(current, compareParameters: !newSelectionLifecycle))
+        {
+            _lastFallbackException = new InvalidOperationException(
+                "Configured optimizer, parameters, schedule, storage, or hyperparameters changed between steps.");
+            return false;
+        }
+        if (updateClip && !_configuredMaxGradNorm.Equals(clip))
+        {
+            TrySetPlanMaxGradNorm((ICompiledTrainingPlan<T>)_configuredPlan, clip);
+            _configuredMaxGradNorm = clip;
+        }
+        return true;
+    }
+
+    /// <summary>Runs only a caller-declared graph break through the already configured optimizer.</summary>
+    internal static bool TryDeclaredGraphBreak(object owner, object? stateKey, FusedTrainingStepRequest<T> request,
+        AiDotNet.Optimizers.Fused.FusedOptimizerConfig config, double l2, bool l2AfterClip, double clip,
+        out Tensor<T>? loss)
+    {
+        loss = null;
+        if (!TryEnterState(owner, stateKey ?? LayerSetKey(owner, request.Layers, request.ExtraParameters),
+                out var ownerStates, out var state))
+            throw new InvalidOperationException("Another thread is training this model.");
+        var previous = _currentState;
+        _stepDepth++;
+        try
+        {
+            _currentState = state;
+            _lastFallbackException = null;
+            var parameters = CollectDeduplicatedParametersWithExtras(request.Layers, request.ExtraParameters, request.Selection);
+            var contract = new OptimizerContract(parameters, (int)config.Type, config.LearningRate,
+                config.Beta1, config.Beta2, config.Epsilon, config.WeightDecay, config.Schedule, request.Optimizer,
+                config.UseBf16Moments || config.MomentStorage == AiDotNet.Enums.OptimizerMomentStorage.BFloat16,
+                config.MomentStorage == AiDotNet.Enums.OptimizerMomentStorage.Int8Blockwise ? config.Int8MomentBlockSize : 0,
+                config.Int8MinQuantizedLength, config.Extras,
+                l2, l2AfterClip && l2 > 0);
+            if (_configuredPlan is not AiDotNet.Tensors.Engines.Compilation.CompiledTrainingPlan<T>
+                || !TryPreflightOptimizer(contract, clip, updateClip: false))
+            {
+                _lastFallbackException ??= new InvalidOperationException("A declared graph break requires a configured optimizer.");
+                return false;
+            }
+            Dictionary<Tensor<T>, Tensor<T>> gradients;
+            using (var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>(TrainingTapeOptions.Step))
+            {
+                loss = request.ClosureObjective!();
+                gradients = tape.ComputeGradients(loss, parameters);
+            }
+            var trained = new Dictionary<Tensor<T>, Tensor<T>>(parameters.Length, Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+            foreach (var parameter in parameters)
+                if (gradients.TryGetValue(parameter, out var gradient) && gradient is not null)
+                    trained[parameter] = gradient;
+            request.OnGradients?.Invoke(trained);
+            if (!TryPreflightOptimizer(contract, clip, updateClip: true)
+                || !TryApplyGradientsThroughConfiguredPlan(trained)) return false;
+            CurrentState.closureState?.RecordOutsidePlanStep(request.GraphBreakReason);
+            if (CurrentState.closureState is { } closure)
+            {
+                t_lastClosureOutsidePlanSteps = closure.OutsidePlanSteps;
+                t_lastClosureCompileCount = closure.Compiles;
+                t_lastClosurePlanCount = closure.PlanCount;
+                t_lastClosureIsDynamic = closure.IsDynamic;
+            }
+            return true;
+        }
+        finally
+        {
+            if (--_stepDepth > 0) _currentState = previous;
+            ExitState(ownerStates);
+        }
+    }
+
+
     /// <summary>
-    /// Applies gradients computed on the eager tape through the configured plan's own optimizer (with its clip and L2
+    /// Applies external gradients through the configured optimizer (with its clip and L2
     /// term), for a step no plan can replay: the optimizer's moments, step count and schedule stay in the plan, so
     /// the run continues as one optimizer that saw those gradients would. False when no configured plan can.
     /// </summary>
-    internal static bool TryApplyGradientsThroughConfiguredPlan(IReadOnlyDictionary<Tensor<T>, Tensor<T>> gradients)
+    private static bool TryApplyGradientsThroughConfiguredPlan(IReadOnlyDictionary<Tensor<T>, Tensor<T>> gradients)
     {
         if (_configuredPlan is not AiDotNet.Tensors.Engines.Compilation.CompiledTrainingPlan<T> plan
             || !plan.TryApplyGradients(gradients))
@@ -927,40 +1062,22 @@ public static class CompiledTapeTrainingStep<T>
     /// parameter subset. The comparison is ordered reference identity, matching the
     /// parameter order captured by the optimizer plan.
     /// </summary>
-    private static bool InvalidateIfSelectionChanged(
-        IReadOnlyCollection<Tensor<T>>? selection)
+    private static bool SelectionChanged(IReadOnlyCollection<Tensor<T>>? selection)
     {
-        if (_cachedParameters is null)
-            return false;
-
+        if (_cachedParameters is null) return false;
         bool usesExplicitSelection = selection is not null;
-        if (_cachedUsesExplicitSelection != usesExplicitSelection)
-        {
-            Invalidate();
-            return true;
-        }
-
-        if (!usesExplicitSelection)
-            return false;
-
+        if (_cachedUsesExplicitSelection != usesExplicitSelection) return true;
+        if (!usesExplicitSelection) return false;
         var cached = _cachedSelectionIdentities;
-        if (cached is null || cached.Length != (selection ?? throw new InvalidOperationException("selection is null where it is required.")).Count)
-        {
-            Invalidate();
-            return true;
-        }
+        if (cached is null || cached.Length != selection!.Count) return true;
+        return !cached.Zip(selection!, (left, right) => ReferenceEquals(left, right)).All(equal => equal);
+    }
 
-        int index = 0;
-        foreach (var parameter in selection)
-        {
-            if (!ReferenceEquals(cached[index++], parameter))
-            {
-                Invalidate();
-                return true;
-            }
-        }
-
-        return false;
+    private static bool InvalidateIfSelectionChanged(IReadOnlyCollection<Tensor<T>>? selection)
+    {
+        if (!SelectionChanged(selection)) return false;
+        Invalidate();
+        return true;
     }
 
     private static void RememberSelection(IReadOnlyCollection<Tensor<T>>? selection)
@@ -1009,6 +1126,7 @@ public static class CompiledTapeTrainingStep<T>
         _cachedUsesExplicitSelection = false;
         _configuredPlan = null;
         _configuredOptimizerConfig = null;
+            CurrentState.optimizerContract = null;
         _configuredL2 = 0.0;
         _configuredL2AfterClip = false;
         // AiDotNet#1331: drop the persistent input/target tensors so the next
@@ -1260,11 +1378,15 @@ public static class CompiledTapeTrainingStep<T>
         if (!PlanSupportsContinueOptimizer())
         {
             Fd("closure objective needs ICompiledTrainingPlan.ContinueOptimizerFrom, which the linked Tensors build lacks");
+            CurrentState.lastFallbackUnreplayableClosureStep = true;
+            _lastFallbackException = new InvalidOperationException("The linked training plan has no optimizer-continuation replay contract.");
             return false;
         }
         if (closure.UnsignableReason is { } unsignable)
         {
             Fd("closure objective is unsignable: " + unsignable);
+            CurrentState.lastFallbackUnreplayableClosureStep = true;
+            _lastFallbackException = new InvalidOperationException("Closure objective replay contract is missing: " + unsignable);
             return false;
         }
 
@@ -1280,6 +1402,8 @@ public static class CompiledTapeTrainingStep<T>
             {
                 first.Dispose();
                 string why = firstReason ?? "the objective could not be signed";
+                CurrentState.lastFallbackUnreplayableClosureStep = true;
+                _lastFallbackException = new InvalidOperationException("Closure objective replay contract is missing: " + why);
                 closure.MarkUnsignable(why);
                 ReportClosureFallback(closure, ClosureFallbackReason.Unsignable, why);
                 return false;
@@ -1320,28 +1444,11 @@ public static class CompiledTapeTrainingStep<T>
                     ReportClosureFallback(closure,
                         probe == ClosureGuardResult.Aborted ? ClosureFallbackReason.Aborted : ClosureFallbackReason.Unsignable,
                         reason);
-                    // A probe that fails (a host read, an op the probe cannot run, uncomparable state) yields no
-                    // signature, so a plan traced from this step could never be selected again: every later step that
-                    // can replay is found through a matched probe, and a lasting change of structure that a plan can
-                    // replay shows up as a matched probe with a new signature, which compiles once below. Once a plan
-                    // has trained, this step therefore does not trace and compile a plan only to run it once. The
-                    // eager tape takes its gradients and the configured plan's optimizer applies them (the session's
-                    // outside-plan step), and the next step probes again and replays. It does not count toward the
-                    // dynamic rule either, which would otherwise compile every later step from its own trace.
-                    if (configured is AiDotNet.Tensors.Engines.Compilation.CompiledTrainingPlan<T>)
-                    {
-                        closure.RecordOutsidePlanStep(reason);
-                        CurrentState.lastFallbackUnreplayableClosureStep = true;
-                        CurrentState.unreplayableStepDraws = probeDraws;
-                        _lastFallbackException = new InvalidOperationException(
-                            "the closure objective cannot replay a compiled plan this step (" + probe + "): " + reason);
-                        Fd(_lastFallbackException.Message);
-                        t_lastClosurePlanCount = closure.PlanCount;
-                        t_lastClosureIsDynamic = closure.IsDynamic;
-                        t_lastClosureCompileCount = closure.Compiles;
-                        t_lastClosureOutsidePlanSteps = closure.OutsidePlanSteps;
-                        return false;
-                    }
+                    // A missing replay contract is an error, never authorization to run eager gradients.
+                    CurrentState.lastFallbackUnreplayableClosureStep = true;
+                    _lastFallbackException = new InvalidOperationException(
+                        "Closure objective replay failed (" + probe + "): " + reason);
+                    return false;
                 }
 
                 closure.RecordStep(failed: entry is null, reason: reason);
@@ -1357,8 +1464,16 @@ public static class CompiledTapeTrainingStep<T>
                 ICompiledTrainingPlan<T> traced;
                 ClosureObjectiveGuard<T>? tracedGuard;
                 object[]? tracedLeaves;
+                string? tracedReason;
                 using (probeDraws is null ? null : CompiledStepRandom<T>.ReplayDraws(probeDraws))
-                    traced = CompileClosurePlan(objective, parameters, out tracedGuard, out tracedLeaves, out _);
+                    traced = CompileClosurePlan(objective, parameters, out tracedGuard, out tracedLeaves, out tracedReason);
+                if (tracedGuard is null)
+                {
+                    traced.Dispose();
+                    CurrentState.lastFallbackUnreplayableClosureStep = true;
+                    _lastFallbackException = new InvalidOperationException("Closure objective replay contract is missing: " + tracedReason);
+                    return false;
+                }
                 entry = new ClosureObjectiveState<T>.Entry(traced, closure.IsDynamic ? null : tracedGuard, tracedLeaves);
                 closure.Add(entry, keepAlive: configured);
                 compiledThisCall = true;
@@ -1431,18 +1546,6 @@ public static class CompiledTapeTrainingStep<T>
     /// <summary>Steps the last closure objective on this thread ran outside its plans (diagnostics and tests).</summary>
     internal static int LastClosureOutsidePlanSteps => t_lastClosureOutsidePlanSteps;
 
-    /// <summary>
-    /// Replays, inside the scope it returns, the random draws the probe of the last step that no plan could replay
-    /// made, so the eager tape that runs that step consumes each generator once, as an eager step does. Null when the
-    /// probe drew nothing to hand back.
-    /// </summary>
-    internal static IDisposable? ReplayUnreplayableStepDraws()
-    {
-        var captured = CurrentState.unreplayableStepDraws;
-        CurrentState.unreplayableStepDraws = null;
-        return captured is null ? null : CompiledStepRandom<T>.ReplayDraws(captured);
-    }
-
     private static void ReportClosureFallback(ClosureObjectiveState<T> closure, ClosureFallbackReason kind, string? reason)
     {
         if (closure.ReportedReasons.Add(kind))
@@ -1499,7 +1602,7 @@ public static class CompiledTapeTrainingStep<T>
         CurrentState.distributedReplayDisagreementReason = null;
         CurrentState.distributedReplayEvaluated = false;
         CurrentState.lastFallbackUnreplayableClosureStep = false;
-        CurrentState.unreplayableStepDraws = null;
+        // Declared graph breaks bypass probing and consume their random draws once.
 
         if (!TensorCodecOptions.Current.EnableCompilation) { Fd("EnableCompilation=false"); return false; }
         // Fused optimizer kernels support float and double on the Tensors
@@ -1569,11 +1672,24 @@ public static class CompiledTapeTrainingStep<T>
             { Fd($"optimizerType {optimizerType} latched-unavailable"); return false; }
         if (l2Regularization > 0.0 && !PlanSupportsL2Regularization())
             { Fd("L2 regularization configured but the linked Tensors plan has no SetL2Regularization"); return false; }
-        // The L2 term's order relative to the clip matters only when both are on.
-        l2AfterClip = l2AfterClip && l2Regularization > 0.0 && maxGradNorm > 0.0;
+        // Keep the chosen L2 order stable even when this step disables clipping.
+        l2AfterClip = l2AfterClip && l2Regularization > 0.0;
 
         AiDotNet.Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>>? restoredStateAwaitingStep = null;
         ClosureObjectiveState<T>.Entry? reboundClosureEntry = null;
+        OptimizerContract? requestedContract = null;
+        if (_configuredPlan is not null)
+        {
+            requestedContract = new OptimizerContract(
+                CollectDeduplicatedParametersWithExtras(layers, extraTensors, trainableSelection),
+                (int)optimizerType, learningRate, beta1, beta2, epsilon, weightDecay, lrSchedule,
+                eagerOptimizer, useBf16Moments, int8MomentBlockSize, int8MinQuantizedLength,
+                fusedExtras, l2Regularization, l2AfterClip);
+            // An explicit selection change starts the existing documented compiled-plan lifecycle.
+            // Only that transition defers parameter identity until the replacement plan is configured.
+            if (!TryPreflightOptimizer(requestedContract, maxGradNorm, updateClip: false,
+                    newSelectionLifecycle: SelectionChanged(trainableSelection))) return false;
+        }
         try
         {
             // AiDotNet#1406: drop the cached compiled plan + parameter array
@@ -1709,6 +1825,9 @@ public static class CompiledTapeTrainingStep<T>
                 RememberLayerSet(layers);
                 RememberSelection(trainableSelection);
             }
+            requestedContract ??= new OptimizerContract(parameters, (int)optimizerType, learningRate,
+                beta1, beta2, epsilon, weightDecay, lrSchedule, eagerOptimizer, useBf16Moments,
+                int8MomentBlockSize, int8MinQuantizedLength, fusedExtras, l2Regularization, l2AfterClip);
 
             // GPU-RESIDENCY (campaign M1): on the DirectGpu engine, make the parameters GPU-resident ONCE so
             // CompiledTrainingPlan.ConfigureOptimizerFloat takes its GPU Adam branch (param.TryGetGpuBuffer()
@@ -1995,6 +2114,7 @@ public static class CompiledTapeTrainingStep<T>
                 _configuredPlan = plan;
                 CurrentState.planOptimizerStep = 0;
                 _configuredOptimizerConfig = currentConfig;
+                CurrentState.optimizerContract = requestedContract;
                 // Apply the global gradient-norm clip threshold to the plan
                 // when the underlying ICompiledTrainingPlan<T> exposes
                 // SetMaxGradNorm. The fused-plan-side clip executes between
@@ -2050,11 +2170,7 @@ public static class CompiledTapeTrainingStep<T>
 
             // The eager tape clips by the threshold of each call, so a threshold that changed since the plan was
             // configured (or since the plan this one continues was) is applied before the step, 0 included.
-            if (!_configuredMaxGradNorm.Equals(maxGradNorm))
-            {
-                TrySetPlanMaxGradNorm(plan, maxGradNorm);
-                _configuredMaxGradNorm = maxGradNorm;
-            }
+            if (!TryPreflightOptimizer(requestedContract, maxGradNorm, updateClip: true)) return false;
 
             // The trace captured stochastic layer tensors by reference. A static replay
             // would otherwise reuse the first dropout mask or Bayesian posterior sample
@@ -2144,6 +2260,7 @@ public static class CompiledTapeTrainingStep<T>
             }
             _configuredPlan = null;
             _configuredOptimizerConfig = null;
+            CurrentState.optimizerContract = null;
             CurrentState.planOptimizerStep = -1;
             _configuredL2 = 0.0;
             _configuredL2AfterClip = false;

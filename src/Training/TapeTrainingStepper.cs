@@ -129,11 +129,21 @@ internal sealed class TapeTrainingStepper<T>
     /// <summary>Steps this stepper ran on the eager tape.</summary>
     public int EagerStepCount { get; private set; }
 
-    /// <summary>
-    /// Of <see cref="FusedStepCount"/>, the closure-objective steps no plan could replay: the eager tape took their
-    /// gradients and the fused plan's optimizer applied them.
-    /// </summary>
-    internal int OutsidePlanStepCount { get; private set; }
+    /// <summary>Steps with explicitly permitted eager gradients applied by the existing compiled optimizer.</summary>
+    internal int HybridStepCount { get; private set; }
+
+    /// <summary>Whether the most recent successful step used the explicitly permitted hybrid route.</summary>
+    internal bool LastStepHybrid { get; private set; }
+
+    internal int OutsidePlanStepCount => HybridStepCount;
+
+    private void RecordSuccessfulRoute()
+    {
+        LastStepHybrid = Session.LastStepRanOutsidePlan;
+        LastStepFused = !LastStepHybrid;
+        if (LastStepHybrid) HybridStepCount++;
+        else FusedStepCount++;
+    }
 
     /// <summary>Trains one batch and returns its loss.</summary>
     public T Step(FusedTrainingStepRequest<T> request)
@@ -141,12 +151,12 @@ internal sealed class TapeTrainingStepper<T>
         Guard.NotNull(request);
         if (TryFusedStep(request, out T fusedLoss))
         {
-            LastStepFused = true;
-            FusedStepCount++;
+            RecordSuccessfulRoute();
             return fusedLoss;
         }
 
         LastStepFused = false;
+        LastStepHybrid = false;
         EagerStepCount++;
         return EagerStep(request, _owner);
     }
@@ -161,6 +171,8 @@ internal sealed class TapeTrainingStepper<T>
         Guard.NotNull(request);
         // Each lane's session drops its plan when a different optimizer instance arrives (a new Train call builds a
         // fresh one), so a replacement never inherits the old plan's moments or reads as hyperparameter drift.
+        LastStepFused = false;
+        LastStepHybrid = false;
         var lane = LaneFor(request);
         var session = lane.Session;
         Session = session;
@@ -262,12 +274,11 @@ internal sealed class TapeTrainingStepper<T>
         {
             EagerStepCount++;
             LastStepFused = false;
+            LastStepHybrid = false;
             return false;
         }
 
-        FusedStepCount++;
-        if (Session.LastStepRanOutsidePlan) OutsidePlanStepCount++;
-        LastStepFused = true;
+        RecordSuccessfulRoute();
         return true;
     }
 

@@ -33,6 +33,14 @@ internal enum FusedStepOutcome
     CommittedFailure,
 }
 
+/// <summary>Whether a caller explicitly permits this closure step to use eager gradients with its configured optimizer.</summary>
+internal enum ClosureGraphBreakPolicy
+{
+    Disallow,
+    UseConfiguredOptimizer
+}
+
+
 /// <summary>One training step as the fused session sees it: what to train, on what, and how.</summary>
 internal sealed class FusedTrainingStepRequest<T>
 {
@@ -90,6 +98,9 @@ internal sealed class FusedTrainingStepRequest<T>
     /// forever. Such a model, or its base class, sets this reason instead of training on a frozen objective.
     /// </remarks>
     public string? GraphBreakReason { get; init; }
+
+    /// <summary>Default strict. An allowed break also requires a nonempty GraphBreakReason on that exact step.</summary>
+    public ClosureGraphBreakPolicy ClosureGraphBreakPolicy { get; init; }
 
     /// <summary>
     /// Check, on the plan's first replay with new data, that the compiled plan computes the same loss as the eager
@@ -403,6 +414,34 @@ internal sealed class FusedTrainingSession<T>
         // The plan adds its L2 term on the optimizer's side of the clip; after it is PyTorch's order, the default.
         bool l2AfterClip = optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> { RegularizesAfterClip: true };
 
+        // A deliberate break is selected before probing: the objective and its RNG execute exactly once.
+        if (request.ClosureGraphBreakPolicy != ClosureGraphBreakPolicy.Disallow)
+        {
+            if (request.ClosureGraphBreakPolicy != ClosureGraphBreakPolicy.UseConfiguredOptimizer
+                || request.ClosureObjective is null || string.IsNullOrWhiteSpace(request.GraphBreakReason)
+                || !IsCommitted || isDistributed)
+            {
+                LastFallbackException = new InvalidOperationException(
+                    "A hybrid step requires an explicit closure graph break and an existing local configured optimizer.");
+                return FusedStepOutcome.CommittedFailure;
+            }
+            if (!CompiledTapeTrainingStep<T>.TryDeclaredGraphBreak(_owner, _stateKey, request, config,
+                    l2, l2AfterClip, clip, out var hybridLoss))
+            {
+                LastFallbackException = CompiledTapeTrainingStep<T>.GetLastFallbackException()
+                    ?? new InvalidOperationException("The configured optimizer refused the declared graph break.");
+                return FusedStepOutcome.CommittedFailure;
+            }
+            LastStepRanOutsidePlan = true;
+            LastMissReason = request.GraphBreakReason;
+            lossTensor = hybridLoss!;
+            loss = hybridLoss!.Length > 0 ? hybridLoss[0] : NumOps.Zero;
+            InvalidateDerivedWeightCaches();
+            if (optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> hybridScheduled)
+                hybridScheduled.OnBatchEnd();
+            return FusedStepOutcome.Stepped;
+        }
+
         bool verifyPersistence = !isDistributed && ((!_persistenceVerified && !IsCommitted)
             || ++_stepsSincePersistenceCheck >= PersistenceRecheckInterval);
         // Once a replay has been seen to update the live tensors, every later replay runs the same plan, so a
@@ -541,27 +580,13 @@ internal sealed class FusedTrainingSession<T>
             }
 
             LastFallbackException = CompiledTapeTrainingStep<T>.GetLastFallbackException();
+            if (CompiledTapeTrainingStep<T>.LastFallbackWasUnreplayableClosureStep)
+                return FusedStepOutcome.CommittedFailure;
             // The first replay after the trace could not run (a closure objective whose next step no guarded plan can
             // replay): the traced step is undone and redone eagerly, as for a disagreeing replay.
             if (IsCommitted && _pendingTrace is not null)
                 return UndoTraceAndDecline(optimizer, null, "the compiled plan cannot replay the objective's next step ("
                     + (LastFallbackException?.Message ?? "no reason") + ")");
-            // Later, a step no plan can replay (the objective read its own forward on the host this step) runs on the
-            // eager tape, and the configured plan's own optimizer applies its gradients: the plan's moments and step
-            // count carry on, and the next step replays again.
-            if (IsCommitted && request.ClosureObjective is not null && CompiledTapeTrainingStep<T>.LastFallbackWasUnreplayableClosureStep
-                && TryStepOutsideThePlan(request, OnGradients, out var outsideLoss))
-            {
-                LastStepRanOutsidePlan = true;
-                LastMissReason = null;
-                loss = outsideLoss.Length > 0 ? outsideLoss[0] : NumOps.Zero;
-                lossTensor = outsideLoss;
-                InvalidateDerivedWeightCaches();
-                if (optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> outsideScheduled)
-                    outsideScheduled.OnBatchEnd();
-                AiDotNet.Configuration.TrainingDiagnosticsConfig.RecordFusedOptimizerPath(hit: true, reason: null);
-                return FusedStepOutcome.Stepped;
-            }
             if (IsCommitted)
                 return FusedStepOutcome.CommittedFailure;
             IsDisabled = true;
@@ -852,29 +877,6 @@ internal sealed class FusedTrainingSession<T>
 
     // Reduced on the engine to ONE scalar, like AnySampleChanged: reading each gradient on the host downloaded the
     // whole gradient set every probed step (on a GPU MLP, most of the per-step device-to-host copies).
-    // One training step of a committed plan's request on the eager tape, applied by the plan's optimizer. Its random
-    // draws are the step's own: the ones the step's probe drew, then fresh ones past them. The gradients reach the model's gradient
-    // surface first, as a fused step's do. False, with nothing applied, when the configured plan cannot take them.
-    private static bool TryStepOutsideThePlan(FusedTrainingStepRequest<T> request,
-        Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>> onGradients, out Tensor<T> loss)
-    {
-        var parameters = ((IEnumerable<Tensor<T>>?)request.Selection ?? EnumerateLiveParameters(request)).ToArray();
-        Dictionary<Tensor<T>, Tensor<T>> gradients;
-        // The step's probe already drew its random values; the eager run takes those rather than drawing again.
-        using (CompiledTapeTrainingStep<T>.ReplayUnreplayableStepDraws())
-        using (var tape = new GradientTape<T>(TrainingTapeOptions.Step))
-        {
-            loss = request.ComputeLoss(request.Forward(request.Input), request.Target);
-            gradients = tape.ComputeGradients(loss, parameters);
-        }
-        var trained = new Dictionary<Tensor<T>, Tensor<T>>(parameters.Length, TensorReferenceComparer<Tensor<T>>.Instance);
-        foreach (var parameter in parameters)
-            if (gradients.TryGetValue(parameter, out var gradient) && gradient is not null)
-                trained[parameter] = gradient;
-        onGradients(trained);
-        return CompiledTapeTrainingStep<T>.TryApplyGradientsThroughConfiguredPlan(trained);
-    }
-
     // The eager tape's gradient of the request's loss, with the same random draws suppressed as the replay check.
     private static bool EagerGradientNonZero(FusedTrainingStepRequest<T> request)
     {
