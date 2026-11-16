@@ -969,13 +969,31 @@ internal sealed class FusedTrainingSession<T>
     private static void RestoreTrainedTensors((Tensor<T> Live, Tensor<T> Saved)[] snapshot)
         => TensorCheckpoint<T>.Restore(snapshot.Select(p => p.Live).ToArray(), snapshot.Select(p => p.Saved).ToArray());
 
+    // The tensors the request trains, by the walk the plan's own collection and the eager step use
+    // (CompiledTapeTrainingStep.CollectDeduplicatedParametersWithExtras, TapeTrainingStepper.TrainedParameters): a
+    // layer's parameters include its sub-layers'. Listing only each layer's own tensors left out everything a composite
+    // layer holds in children (a Swin block owns its bias table; its norms, attention and MLP are sub-layers), so the
+    // plan's optimized tensors were not all "live" and a step that had updated the weights was reported as detached.
     private static IEnumerable<Tensor<T>> EnumerateLiveParameters(FusedTrainingStepRequest<T> request)
     {
+        var seen = new HashSet<Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
+        var parameters = new List<Tensor<T>>();
         foreach (var layer in request.Layers)
-            foreach (var parameter in layer.GetTrainableParameters())
-                if (parameter is not null) yield return parameter;
-        if (request.ExtraParameters is null) yield break;
-        foreach (var parameter in request.ExtraParameters) yield return parameter;
+        {
+            if (layer is ILayer<T> composite)
+            {
+                TapeTrainingStep<T>.CollectLayerParameters(composite, parameters, seen, materializedOnly: false);
+            }
+            else
+            {
+                foreach (var parameter in layer.GetTrainableParameters())
+                    if (parameter is not null && seen.Add(parameter)) parameters.Add(parameter);
+            }
+        }
+        if (request.ExtraParameters is not null)
+            foreach (var parameter in request.ExtraParameters)
+                if (parameter is not null && seen.Add(parameter)) parameters.Add(parameter);
+        return parameters;
     }
 
     // The #1822 persistence probe. Before the step it copies the first elements of every trained tensor (about
