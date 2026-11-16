@@ -273,7 +273,8 @@
         "tests/AiDotNet.Tensors.Tests/Engines/Compilation/NoGradTrainingTraceTests.cs",
         "tests/AiDotNet.Tensors.Tests/Engines/Compilation/OperationReorderingPassTests.cs",
         "tests/AiDotNet.Tensors.Tests/Engines/Compilation/LazyGraphCompilerPerformanceTests.cs",
-        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/CompiledOptimizerEnrollmentTests.cs"
+        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/CompiledOptimizerEnrollmentTests.cs",
+        "src/AiDotNet.Tensors/Engines/CpuEngine.cs"
       ],
       "new_files": [
         "src/AiDotNet.Tensors/Engines/Compilation/ForwardOnlyHeterogeneousReplay.cs",
@@ -315,8 +316,24 @@
             "tests/AiDotNet.Tensors.Tests/Engines/Compilation/CompiledOptimizerEnrollmentTests.cs"
           ],
           "api_boundary": "Core exports/restores Parameter.AcceptedUpdates:long and initializes CompiledStep.RecordedUnderNoGrad:init bool through serializer-owned contracts. No direct edits by core to serializer-owned files. Extra metadata/helper/LazyNode changes beyond existing authorized scope require exact proposal first."
+        },
+        {
+          "id": "explicit-differentiable-input-indices",
+          "status": "ROOT-APPROVED necessary contract; draft claim amendment for root review/publication before TensorWhere edit",
+          "scope": "Use explicit optional DifferentiableInputIndices metadata, not backward-delegate inspection. Default/null means all input indices; empty means none. Require sorted unique indices in range and defensively copy arrays. Preserve typed-T backward behavior; only TensorWhere opts in now with branches[1,2], condition0 excluded because WhereBackward does not differentiate it.",
+          "files": [
+            "src/AiDotNet.Tensors/Engines/Compilation/ILazyNode.cs",
+            "src/AiDotNet.Tensors/Engines/Compilation/LazyNode.cs",
+            "src/AiDotNet.Tensors/Engines/Compilation/LazyTensorScope.cs",
+            "src/AiDotNet.Tensors/Engines/Compilation/ObjectiveSignature.cs",
+            "src/AiDotNet.Tensors/Engines/CpuEngine.cs"
+          ],
+          "tests": "Existing claimed CompiledOptimizerEnrollmentTests.cs covers explicit contract and TensorWhere enrollment; no new test-file claim or all-op migration."
         }
-      ]
+      ],
+      "file_scope_limits": {
+        "src/AiDotNet.Tensors/Engines/CpuEngine.cs": "ONLY TensorWhere training RecordVariadic section near39999: declare differentiable input indices[1,2]. No normalization, other operators, or all-op migration is claimed."
+      }
     },
     {
       "owner": "this session/shared_replay_failures worker",
@@ -341,7 +358,21 @@
         "GPU/grouped/capture core implementation files"
       ],
       "api_boundary": "Serializer declares/persists CompiledStep.RecordedUnderNoGrad:init bool and checkpoint Parameter.AcceptedUpdates:long; core owner exports/restores state without editing these files. Format/version and save-load behavior require root code review and independent uninterrupted/resumed oracles.",
-      "status": "CLAIMED; explicit user approval, root-reviewed exact split, both authors ACK; publish after root docs review before source edits."
+      "status": "CLAIMED; explicit user approval, root-reviewed exact split, both authors ACK; publish after root docs review before source edits.",
+      "amendments": [
+        {
+          "id": "persist-differentiable-input-indices",
+          "status": "ROOT-APPROVED contract; draft amendment for root review/publication",
+          "scope": "Persist/restore optional DifferentiableInputIndices in owned CompiledStep and plan format metadata before compilation. Same default-all/empty-none, sorted-unique/range validation and defensive-copy contract; independent save-load/enrollment tests. Core does not edit serializer-owned files.",
+          "files": [
+            "src/AiDotNet.Tensors/Engines/Compilation/CompiledStep.cs",
+            "src/AiDotNet.Tensors/Engines/Compilation/Serialization/TrainingPlanWriter.cs",
+            "src/AiDotNet.Tensors/Engines/Compilation/Serialization/TrainingPlanReader.cs",
+            "src/AiDotNet.Tensors/Engines/Compilation/Serialization/PlanFormatConstants.cs",
+            "tests/AiDotNet.Tensors.Tests/Engines/Compilation/CompiledEnrollmentCheckpointTests.cs"
+          ]
+        }
+      ]
     }
   ],
   "verification": {
@@ -436,6 +467,11 @@
       "id": "native-optimizer-enrollment-continuity",
       "status": "user-approved by explicit interactive answer",
       "decision": "User approved proper native optimizer enrollment plus continuity repair, including core masks, CPU/GPU/grouped/capture per-parameter accepted-update ages and NoGrad/checkpoint persistence. No public release. The next capture artifact remains held until this repair and required verification pass; do not silently expand scope or weaken replay/optimizer checks."
+    },
+    {
+      "id": "native-explicit-differentiable-input-contract",
+      "status": "root-approved necessary repair within user-approved native enrollment scope",
+      "decision": "Use explicit optional DifferentiableInputIndices instead of backward delegate heuristics: null/defaultall, empty none, sorted unique/range validated, defensive copy. WhereBackward proves input0condition absent from gradients and inputs1/2branches differentiable, so only TensorWhere records[1,2]. Persist metadata before compile through serialization owner. No all-op migration or unrelated CpuEngine changes."
     }
   ],
   "questions": [
@@ -561,7 +597,8 @@
       "finding": "New with the latest pinned package: 10 GPT-SoVITS/Melo/MegaTTS2/StyleTTS tests that pass on package run 43940828211 fail with \"Closure objective replay contract is missing: op 'LayerNorm' field 'Execute.stateRef' holds a AiDotNet.Tensors.Engines.Autodiff.LayerNormStateRef`1\".",
       "proposed_fix": "Upstream: the LayerNorm node's Execute closure must not capture LayerNormStateRef (declare it as saved state the guard can rebind, or recreate it per replay).",
       "alternatives": "None in AiDotNet without weakening the guard.",
-      "coordinator_review_note": "Coordinator review: necessary native saved-state/rebinding investigation fits existing scope, but separate exact claim and review are required; no mutable-state whitelist or silent heterogeneous-package addition. Existing managed guard work is not proof that an unreviewed native implementation is accepted."
+      "coordinator_review_note": "Coordinator review: necessary native saved-state/rebinding investigation fits existing scope, but separate exact claim and review are required; no mutable-state whitelist or silent heterogeneous-package addition. Existing managed guard work is not proof that an unreviewed native implementation is accepted.",
+      "coordinator_source_inspection": "Read-only comparison: validated7dd9 and active native source already declare LayerNormStateRef<T>:ISignatureScratch with immutable rowcount. ObjectiveSignature AddDelegate→AddObjectFields→AddValue covers Execute.stateRef as well as saved state. Existing da76 source tests exercise the contract; they were inspected, not newly run. No new native defect or loaded-DLL mismatch is established. Request exact owner runtime DLL path/hash plus minimal reproduction against pinned125 before implementation; pending question/history remains intact."
     },
     {
       "id": "tensors-1764-in-coordination-package",
@@ -607,7 +644,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-16T23:11:51.664127+00:00",
+  "updated_utc": "2026-11-16T23:19:07.061845+00:00",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43955817990",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
