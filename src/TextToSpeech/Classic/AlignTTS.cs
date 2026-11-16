@@ -268,7 +268,13 @@ public partial class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITraining
         return Engine.TensorMultiplyScalar(Engine.TensorAddScalar(sum, log2pi), NumOps.FromDouble(-0.5));
     }
 
-    private int[] ViterbiDurations(Tensor<T> logLikelihood) => MonotonicDurations(logLikelihood);
+    // The Viterbi alignment as a [characters, frames] path (see MonotonicAlignmentPath): a compiled plan reruns the
+    // search on each replay, so the durations follow that step's MDN instead of the traced step's.
+    private Tensor<T> ViterbiPath(Tensor<T> logLikelihood) => MonotonicAlignmentPath(logLikelihood);
+
+    // Each frame takes its character's row: pathᵀ · hidden, the LengthRegulator expansion as a matrix product.
+    private Tensor<T> ExpandByPath(Tensor<T> characterHidden, Tensor<T> path)
+        => Engine.TensorMatMul(Engine.TensorTranspose(path), characterHidden);
 
     /// <inheritdoc />
     protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expected)
@@ -308,29 +314,29 @@ public partial class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITraining
 
             case AlignTTSTrainingPhase.Decoder:
             {
-                int[] durations;
+                Tensor<T> path;
                 using (new NoGradScope<T>())
-                    durations = ViterbiDurations(GaussianLogLikelihood(characterHidden, melFrames));
-                var expanded = LengthRegulator.Expand(characterHidden, durations);
+                    path = ViterbiPath(GaussianLogLikelihood(characterHidden, melFrames));
+                var expanded = ExpandByPath(characterHidden, path);
                 return MeanSquaredError(RunDecoder(expanded), melFrames);
             }
 
             case AlignTTSTrainingPhase.JointFineTuning:
             {
                 var logLikelihood = GaussianLogLikelihood(characterHidden, melFrames);
-                int[] durations;
+                Tensor<T> path;
                 using (new NoGradScope<T>())
-                    durations = ViterbiDurations(logLikelihood);
-                var expanded = LengthRegulator.Expand(characterHidden, durations);
+                    path = ViterbiPath(logLikelihood);
+                var expanded = ExpandByPath(characterHidden, path);
                 return Engine.TensorAdd(MeanSquaredError(RunDecoder(expanded), melFrames), AlignmentLoss(logLikelihood));
             }
 
             default:
             {
-                int[] durations;
+                Tensor<T> path;
                 using (new NoGradScope<T>())
-                    durations = ViterbiDurations(GaussianLogLikelihood(characterHidden, melFrames));
-                var target = Engine.TensorLog1p(IdTensor(durations));
+                    path = ViterbiPath(GaussianLogLikelihood(characterHidden, melFrames));
+                var target = Engine.TensorLog1p(Engine.ReduceSum(path, new[] { 1 }, keepDims: false));
                 return MeanSquaredError(RunDurationPredictor(tokens), target);
             }
         }

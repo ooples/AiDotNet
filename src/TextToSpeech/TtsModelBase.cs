@@ -914,6 +914,58 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
     /// </summary>
     protected int[] MonotonicDurations(Tensor<T> scores) => MonotonicDurations(Engine, scores);
 
+    /// <summary>
+    /// The alignment of <see cref="MonotonicDurations(Tensor{T})"/> as a <c>[tokens, frames]</c> path: 1 where a frame
+    /// is assigned to a token, 0 elsewhere. A token's duration is its row sum, and <c>pathᵀ · hidden</c> expands
+    /// <c>[tokens, channels]</c> to <c>[frames, channels]</c> as <see cref="LengthRegulator.Expand{T}"/> does.
+    /// </summary>
+    /// <remarks>
+    /// The search reads the scores on the host, and the durations it returns would otherwise fix the graph's shape, so
+    /// a compiled training plan could not capture it. Here the path's shape depends only on the scores' shape. Under a
+    /// trace it is recorded as one node that reruns the search on every replay with that step's scores (as VITS's
+    /// alignment does), so the plan stays replayable. No gradient flows through the search.
+    /// </remarks>
+    protected Tensor<T> MonotonicAlignmentPath(Tensor<T> scores)
+    {
+        Guard.NotNull(scores);
+        if (scores.Rank != 2) throw new ArgumentException("Expected [tokens, frames] scores.", nameof(scores));
+        int tokens = scores.Shape[0], frames = scores.Shape[1];
+        var engine = Engine;
+        var scope = AiDotNet.Tensors.Engines.Compilation.GraphMode.Current;
+        if (scope is null)
+        {
+            var path = new Tensor<T>(new[] { tokens, frames });
+            FillAlignmentPath(engine, scores, path);
+            return path;
+        }
+        var inputs = new[] { scores };
+        return scope.RecordVariadic(
+            AiDotNet.Tensors.Engines.Compilation.LazyNodeType.Custom, "TtsMonotonicAlignmentPath",
+            inputs, new[] { tokens, frames },
+            (replayEngine, output) =>
+            {
+                var value = new Tensor<T>(output._shape);
+                FillAlignmentPath(replayEngine, inputs[0], value);
+                AiDotNet.Tensors.Engines.DirectGpuTensorEngine.CopyResultInto(replayEngine, value, output);
+            },
+            static (_, _, _, _, _, _) => { }, Array.Empty<object>());
+    }
+
+    private static void FillAlignmentPath(AiDotNet.Tensors.Engines.IEngine engine, Tensor<T> scores, Tensor<T> path)
+    {
+        int frames = scores.Shape[1];
+        var durations = MonotonicDurations(engine, scores);
+        var values = path.AsWritableSpan();
+        values.Clear();
+        T one = MathHelper.GetNumericOperations<T>().One;
+        int frame = 0;
+        for (int token = 0; token < durations.Length; token++)
+        {
+            values.Slice(token * frames + frame, durations[token]).Fill(one);
+            frame += durations[token];
+        }
+    }
+
     /// <summary>The search of <see cref="MonotonicDurations(Tensor{T})"/> on <paramref name="engine"/>.</summary>
     /// <remarks>
     /// Off the gradient tape: the result is a host <c>int[]</c>. A T other than double is searched in double. The
