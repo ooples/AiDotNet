@@ -788,7 +788,7 @@ public class PreprocessingReferenceTests
 
         var result = scaler.Transform(HalfColumn(1, _ => 6));
 
-        Assert.True(Half.IsFinite(result[0, 0]));
+        Assert.False(Half.IsNaN(result[0, 0]) || Half.IsInfinity(result[0, 0]));
     }
 
     // scikit-learn SimpleImputer(strategy="most_frequent") returns the smallest of the most frequent values and

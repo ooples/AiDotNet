@@ -1092,34 +1092,36 @@ public class NeRFNetwork<T> : IParameterSource<T>
         var (origin, directions) = BuildRays(cameraPose, resolution);
         var pixelGradient = Engine.Reshape(gradient, new[] { pixels, 3 });
         var parameters = TrainableParameters();
-        var accumulated = new Tensor<T>?[parameters.Count];
-
+        var objectives = new List<Func<Tensor<T>>>();
         for (int start = 0; start < pixels; start += RaysPerChunk)
         {
-            int count = Math.Min(RaysPerChunk, pixels - start);
-            using var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>();
-            var colour = RenderRays(origin, Engine.TensorNarrow(directions, 0, start, count));
-            var loss = Engine.ReduceSum(
-                Engine.TensorMultiply(colour, Engine.TensorNarrow(pixelGradient, 0, start, count)), null);
-            var grads = tape.ComputeGradients(loss, parameters);
-            for (int p = 0; p < parameters.Count; p++)
+            int offset = start;
+            int count = Math.Min(RaysPerChunk, pixels - offset);
+            objectives.Add(() =>
             {
-                if (!grads.TryGetValue(parameters[p], out var parameterGradient))
-                    continue;
-                var previous = accumulated[p];
-                accumulated[p] = previous is null ? parameterGradient.Clone() : Engine.TensorAdd(previous, parameterGradient);
-            }
+                var colour = RenderRays(origin, Engine.TensorNarrow(directions, 0, offset, count));
+                return Engine.ReduceSum(
+                    Engine.TensorMultiply(colour, Engine.TensorNarrow(pixelGradient, 0, offset, count)), null);
+            });
         }
 
+        Tensor<T> Forward(Tensor<T> _, Tensor<T> __) =>
+            Engine.Reshape(Render(cameraPose, resolution), new[] { pixels, 3 });
+        Tensor<T> Loss(Tensor<T> colour, Tensor<T> residual) =>
+            Engine.ReduceSum(Engine.TensorMultiply(colour, residual), null);
+
         var rate = NumOps.FromDouble(learningRate);
-        for (int p = 0; p < parameters.Count; p++)
-        {
-            var step = accumulated[p];
-            if (step is null)
-                continue;
-            var updated = Engine.TensorSubtract(parameters[p], Engine.TensorMultiplyScalar(step, rate));
-            updated.AsSpan().CopyTo(parameters[p].AsWritableSpan());
-        }
+        AiDotNet.Training.TapeTrainingStepper<T>.EagerTapeStep(
+            () => Loss(Forward(directions, pixelGradient), pixelGradient),
+            () => parameters,
+            context =>
+            {
+                using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+                foreach (var parameter in context.Parameters)
+                    Engine.TensorSubtractInPlace(parameter,
+                        Engine.TensorMultiplyScalar(context.Gradients[parameter], rate));
+            },
+            directions, pixelGradient, Forward, Loss, objectiveTerms: objectives);
     }
 
     private List<Tensor<T>> TrainableParameters()
