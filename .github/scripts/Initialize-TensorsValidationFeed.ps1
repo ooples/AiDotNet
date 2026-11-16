@@ -86,7 +86,7 @@ if ($ValidateOnly) { Write-Host 'Pinned Tensors package evidence validated.'; re
 # Preserve nuget.org for baseline API validation and all other dependencies; only this local
 # source is transient. Never mutate the repository or the runner global NuGet configuration.
 $configPath = Join-Path $EvidenceDirectory 'NuGet.Config'
-[xml] $config = Get-Content -LiteralPath (Join-Path $RepositoryRoot 'NuGet.Config') -Raw
+[xml] $config = Get-Content -LiteralPath (Join-Path $RepositoryRoot 'NuGet.config') -Raw
 $source = $config.CreateElement('add')
 $source.SetAttribute('key', 'tensors-validation')
 $source.SetAttribute('value', (Join-Path $EvidenceDirectory 'packages'))
