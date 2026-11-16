@@ -226,6 +226,10 @@ MODEL_NOTES = {
     "gat": "One sample is the whole Cora-sized graph (2,708 nodes); run at --batch-size 1 --inference-batches 1. "
            "Dense masked attention on both sides.",
     "dcgan": "One training step updates the discriminator then the generator; the loss is the discriminator's.",
+    "wav2vec2-base": "Feature encoder frozen and LayerDrop 0 on both sides; CTC loss averaged per utterance (not "
+                     "transformers' sum or target-length reduction).",
+    "hifigan-v1": "One utterance per step: run at --batch-size 1. A step updates the discriminators then the "
+                  "generator; the loss is the generator's (adversarial + 2 x feature matching + 45 x mel L1).",
 }
 
 
@@ -1383,6 +1387,422 @@ class DCGAN64(nn.Module):
         return z, (torch.rand(batch_size, 3, DCGAN_IMAGE, DCGAN_IMAGE) * 2 - 1).to(device)
 
 
+PANNS_FRAMES, PANNS_MELS, PANNS_CLASSES, PANNS_TAGS = 1001, 64, 527, 2
+
+
+class PannsConvBlock(nn.Module):
+    """Kong et al.'s ConvBlock: two 3x3 convolutions, each with BatchNorm + ReLU, then average pooling. The
+    convolutions carry biases because AiDotNet's ConvolutionalLayer does (Kong's have none: 2 x the channel count more
+    parameters per block, 8,064 in all)."""
+
+    def __init__(self, inputs: int, outputs: int) -> None:
+        super().__init__()
+        self.conv1 = nn.Conv2d(inputs, outputs, 3, 1, 1)
+        self.conv2 = nn.Conv2d(outputs, outputs, 3, 1, 1)
+        self.bn1 = nn.BatchNorm2d(outputs)
+        self.bn2 = nn.BatchNorm2d(outputs)
+
+    def forward(self, x: torch.Tensor, pool: int) -> torch.Tensor:
+        x = F.relu(self.bn2(self.conv2(F.relu(self.bn1(self.conv1(x))))))
+        return F.avg_pool2d(x, pool) if pool > 1 else x
+
+
+class PannsCnn14(nn.Module):
+    """The "panns-cnn14" row: Kong et al.'s released Cnn14 (qiuqiangkong/audioset_tagging_cnn) without its STFT/log-mel
+    front end, on [B, 1, 1001 frames, 64 mels] log-mel clips: bn0 over the mel bins, six ConvBlocks 64 -> 2048 with 2x2
+    average pooling in the first five and dropout 0.2 after each, mean over frequency, max + mean over time, dropout
+    0.5, fc1 2048 (ReLU), dropout 0.5, 527 AudioSet logits. Trained with BCE on logits against multi-hot labels (two
+    tags per clip); inference returns the sigmoid clip-wise probabilities, as AiDotNet's PANNs.Predict does. The
+    trainable parameter count equals AiDotNet's (see PannsConvBlock for the convolution biases)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.bn0 = nn.BatchNorm2d(PANNS_MELS)
+        widths = [1, 64, 128, 256, 512, 1024, 2048]
+        self.blocks = nn.ModuleList(PannsConvBlock(widths[i], widths[i + 1]) for i in range(6))
+        self.fc1 = nn.Linear(2048, 2048)
+        self.fc_audioset = nn.Linear(2048, PANNS_CLASSES)
+
+    def logits(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.bn0(x.transpose(1, 3)).transpose(1, 3)
+        for index, block in enumerate(self.blocks):
+            x = F.dropout(block(x, 2 if index < 5 else 1), 0.2, self.training)
+        x = x.mean(dim=3)
+        x = x.max(dim=2).values + x.mean(dim=2)
+        x = F.relu(self.fc1(F.dropout(x, 0.5, self.training)))
+        return self.fc_audioset(F.dropout(x, 0.5, self.training))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return torch.sigmoid(self.logits(x))
+
+    def training_loss(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        return F.binary_cross_entropy_with_logits(self.logits(x), y)
+
+    @staticmethod
+    def make_batch(batch_size: int, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+        """Standard-normal log-mel features and multi-hot labels with two random tags per clip."""
+        x = torch.randn(batch_size, 1, PANNS_FRAMES, PANNS_MELS)
+        y = torch.zeros(batch_size, PANNS_CLASSES)
+        y.scatter_(1, torch.randint(0, PANNS_CLASSES, (batch_size, PANNS_TAGS)), 1.0)
+        return x.to(device), y.to(device)
+
+
+W2V_SAMPLES, W2V_TRANSCRIPT, W2V_VOCAB, W2V_HIDDEN, W2V_HEADS = 32000, 24, 34, 768, 12
+
+
+class Wav2Vec2EncoderLayer(nn.Module):
+    """transformers' Wav2Vec2EncoderLayer (post-norm): x = LN(x + drop(attn(x))); x = LN(x + drop(W2 drop(gelu(W1 x)))).
+    Attention runs through scaled_dot_product_attention with its attention-probability dropout."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.q_proj = nn.Linear(W2V_HIDDEN, W2V_HIDDEN)
+        self.k_proj = nn.Linear(W2V_HIDDEN, W2V_HIDDEN)
+        self.v_proj = nn.Linear(W2V_HIDDEN, W2V_HIDDEN)
+        self.out_proj = nn.Linear(W2V_HIDDEN, W2V_HIDDEN)
+        self.layer_norm = nn.LayerNorm(W2V_HIDDEN)
+        self.intermediate_dense = nn.Linear(W2V_HIDDEN, 3072)
+        self.output_dense = nn.Linear(3072, W2V_HIDDEN)
+        self.final_layer_norm = nn.LayerNorm(W2V_HIDDEN)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        b, t, _ = x.shape
+
+        def heads(projection: nn.Linear) -> torch.Tensor:
+            return projection(x).view(b, t, W2V_HEADS, -1).transpose(1, 2)
+
+        context = F.scaled_dot_product_attention(heads(self.q_proj), heads(self.k_proj), heads(self.v_proj),
+                                                 dropout_p=0.1 if self.training else 0.0)
+        attention = self.out_proj(context.transpose(1, 2).reshape(b, t, W2V_HIDDEN))
+        x = self.layer_norm(x + F.dropout(attention, 0.1, self.training))
+        hidden = F.dropout(F.gelu(self.intermediate_dense(x)), 0.1, self.training)
+        return self.final_layer_norm(x + F.dropout(self.output_dense(hidden), 0.1, self.training))
+
+
+class Wav2Vec2BaseCtc(nn.Module):
+    """The "wav2vec2-base" row: transformers' Wav2Vec2ForCTC at the BASE configuration, written out layer for layer
+    (transformers is not a dependency): a 7-layer feature encoder (512 channels, kernels 10, 3, 3, 3, 3, 2, 2, strides
+    5, 2, 2, 2, 2, 2, 2, no conv bias, GroupNorm(512, 512) after the first, GELU), feature projection (LayerNorm 512,
+    Linear 512 -> 768), SpecAugment time masks replaced by a learned embedding (p 0.05, span 10, at least 2 spans), a
+    16-group positional convolution of kernel 128 with weight norm over dim 2 (GELU), LayerNorm, dropout, 12 post-norm
+    Transformer layers (12 heads, FFN 3072, dropout 0.1), final dropout 0.1 and a 34-symbol CTC head (blank 0). It is
+    fine-tuned as AiDotNet's Wav2Vec2Model is: feature encoder frozen, LayerDrop 0, log-softmax + CTC per utterance
+    over every frame averaged over the batch, AdamW lr 5e-5 without weight decay and the global-norm clip at 1. On
+    2-second clips of 16 kHz audio (99 frames) with 24-symbol transcripts; inference returns the CTC logits
+    [B, 99, 34]. Trainable parameter counts are equal."""
+
+    optimizer_settings = {"lr": 5e-5, "weight_decay": 0.0}
+    kernels, strides = (10, 3, 3, 3, 3, 2, 2), (5, 2, 2, 2, 2, 2, 2)
+
+    def __init__(self) -> None:
+        super().__init__()
+        from torch.nn.utils.parametrizations import weight_norm
+
+        self.conv_layers = nn.ModuleList(
+            nn.Conv1d(1 if i == 0 else 512, 512, k, s, bias=False) for i, (k, s) in enumerate(zip(self.kernels, self.strides)))
+        self.conv_norm = nn.GroupNorm(512, 512)
+        self.projection_norm = nn.LayerNorm(512)
+        self.projection = nn.Linear(512, W2V_HIDDEN)
+        self.masked_spec_embed = nn.Parameter(torch.rand(W2V_HIDDEN))
+        self.pos_conv = weight_norm(nn.Conv1d(W2V_HIDDEN, W2V_HIDDEN, 128, padding=64, groups=16), name="weight", dim=2)
+        self.encoder_norm = nn.LayerNorm(W2V_HIDDEN)
+        self.layers = nn.ModuleList(Wav2Vec2EncoderLayer() for _ in range(12))
+        self.lm_head = nn.Linear(W2V_HIDDEN, W2V_VOCAB)
+        # freeze_feature_encoder(): the convolutional feature encoder does not train.
+        self.conv_layers.requires_grad_(False)
+        self.conv_norm.requires_grad_(False)
+
+    def time_mask(self, batch: int, frames: int, device: torch.device) -> torch.Tensor:
+        """transformers' _compute_mask_indices: per utterance floor(p * L / M + U(0, 1)) spans of M frames, at least
+        two, with starts drawn without replacement."""
+        span = 10
+        mask = torch.zeros(batch, frames, dtype=torch.bool, device=device)
+        for row in range(batch):
+            spans = max(2, int(0.05 * frames / span + random.random()))
+            starts = torch.randperm(frames - span + 1, device=device)[:spans]
+            mask[row, (starts[:, None] + torch.arange(span, device=device)).flatten()] = True
+        return mask
+
+    def logits(self, x: torch.Tensor) -> torch.Tensor:
+        h = x.unsqueeze(1)
+        for index, conv in enumerate(self.conv_layers):
+            h = conv(h)
+            if index == 0:
+                h = self.conv_norm(h)
+            h = F.gelu(h)
+        h = self.projection(self.projection_norm(h.transpose(1, 2)))
+        if self.training:
+            mask = self.time_mask(h.shape[0], h.shape[1], h.device)
+            h = torch.where(mask[..., None], self.masked_spec_embed.to(h.dtype), h)
+        position = F.gelu(self.pos_conv(h.transpose(1, 2))[:, :, :-1]).transpose(1, 2)
+        h = F.dropout(self.encoder_norm(h + position), 0.1, self.training)
+        for layer in self.layers:
+            h = layer(h)
+        return self.lm_head(F.dropout(h, 0.1, self.training))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.logits(x)
+
+    def training_loss(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        log_probs = F.log_softmax(self.logits(x), dim=-1).transpose(0, 1)
+        frames, batch = log_probs.shape[0], log_probs.shape[1]
+        input_lengths = torch.full((batch,), frames, dtype=torch.long, device=x.device)
+        target_lengths = torch.full((batch,), y.shape[1], dtype=torch.long, device=x.device)
+        return F.ctc_loss(log_probs, y, input_lengths, target_lengths, blank=0, reduction="none").mean()
+
+    @staticmethod
+    def make_batch(batch_size: int, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+        """A random 100-400 Hz tone plus 0.5 x standard-normal noise per clip, and transcripts of random non-blank symbols."""
+        t = torch.arange(W2V_SAMPLES) / 16000.0
+        frequency = 100 + 300 * torch.rand(batch_size, 1)
+        x = torch.sin(2 * math.pi * frequency * t) + 0.5 * torch.randn(batch_size, W2V_SAMPLES)
+        y = torch.randint(1, W2V_VOCAB, (batch_size, W2V_TRANSCRIPT))
+        return x.to(device), y.to(device)
+
+
+HIFI_RATE, HIFI_MELS, HIFI_HOP, HIFI_FFT, HIFI_FRAMES, HIFI_SEGMENT = 22050, 80, 256, 1024, 256, 8192
+
+
+def slaney_mel_basis(rate: int, fft: int, mels: int, fmin: float, fmax: float) -> torch.Tensor:
+    """librosa.filters.mel(sr, n_fft, n_mels, fmin, fmax) with its defaults (Slaney scale and area normalization), the
+    basis the reference meldataset.mel_spectrogram uses; written out because librosa is not a dependency."""
+    f_sp, min_log_hz, min_log_mel, log_step = 200.0 / 3, 1000.0, 15.0, math.log(6.4) / 27.0
+
+    def hz_to_mel(f: float) -> float:
+        return min_log_mel + math.log(f / min_log_hz) / log_step if f >= min_log_hz else f / f_sp
+
+    def mel_to_hz(m: torch.Tensor) -> torch.Tensor:
+        return torch.where(m >= min_log_mel, min_log_hz * torch.exp(log_step * (m - min_log_mel)), f_sp * m)
+
+    fft_freqs = torch.linspace(0, rate / 2, fft // 2 + 1, dtype=torch.float64)
+    edges = mel_to_hz(torch.linspace(hz_to_mel(fmin), hz_to_mel(fmax), mels + 2, dtype=torch.float64))
+    widths = edges[1:] - edges[:-1]
+    ramps = edges[:, None] - fft_freqs[None, :]
+    lower = -ramps[:-2] / widths[:-1, None]
+    upper = ramps[2:] / widths[1:, None]
+    weights = torch.clamp(torch.minimum(lower, upper), min=0.0)
+    weights *= (2.0 / (edges[2:] - edges[:-2]))[:, None]
+    return weights.float()
+
+
+class HifiMel(nn.Module):
+    """meldataset.mel_spectrogram: reflect padding of (n_fft - hop) / 2, a Hann-windowed STFT without centring,
+    magnitude sqrt(re^2 + im^2 + 1e-9), the Slaney mel basis, log(max(x, 1e-5)). [B, T] -> [B, 80, frames]."""
+
+    def __init__(self, fmax: float) -> None:
+        super().__init__()
+        self.register_buffer("basis", slaney_mel_basis(HIFI_RATE, HIFI_FFT, HIFI_MELS, 0.0, fmax), persistent=False)
+        self.register_buffer("window", torch.hann_window(HIFI_FFT), persistent=False)
+
+    def forward(self, y: torch.Tensor) -> torch.Tensor:
+        pad = (HIFI_FFT - HIFI_HOP) // 2
+        y = F.pad(y.unsqueeze(1), (pad, pad), mode="reflect").squeeze(1)
+        spec = torch.view_as_real(torch.stft(y, HIFI_FFT, HIFI_HOP, HIFI_FFT, self.window, center=False,
+                                             return_complex=True))
+        magnitude = torch.sqrt(spec.pow(2).sum(-1) + 1e-9)
+        return torch.log(torch.clamp(self.basis @ magnitude, min=1e-5))
+
+
+def hifi_init(module: nn.Module) -> nn.Module:
+    """The reference init_weights: N(0, 0.01) weights (drawn before weight norm splits them); biases keep their default."""
+    nn.init.normal_(module.weight, 0.0, 0.01)
+    return module
+
+
+class HifiResBlock1(nn.Module):
+    def __init__(self, channels: int, kernel: int, dilations: tuple[int, ...]) -> None:
+        super().__init__()
+        from torch.nn.utils.parametrizations import weight_norm
+
+        def conv(dilation: int) -> nn.Module:
+            return weight_norm(hifi_init(nn.Conv1d(channels, channels, kernel, 1, dilation=dilation,
+                                                   padding=(kernel * dilation - dilation) // 2)))
+
+        self.convs1 = nn.ModuleList(conv(d) for d in dilations)
+        self.convs2 = nn.ModuleList(conv(1) for _ in dilations)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        for first, second in zip(self.convs1, self.convs2):
+            x = second(F.leaky_relu(first(F.leaky_relu(x, 0.1)), 0.1)) + x
+        return x
+
+
+class HifiGenerator(nn.Module):
+    """The reference Generator at V1: conv_pre 80 -> 512 (7), per stage leaky ReLU 0.1 + ConvTranspose1d (rates 8, 8, 2,
+    2; kernels 16, 16, 4, 4) and the mean of three ResBlock1s (kernels 3, 7, 11; dilations 1, 3, 5), leaky ReLU 0.01,
+    conv_post -> 1 (7), tanh; weight norm on every convolution."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        from torch.nn.utils.parametrizations import weight_norm
+
+        self.conv_pre = weight_norm(nn.Conv1d(HIFI_MELS, 512, 7, 1, padding=3))
+        self.ups = nn.ModuleList()
+        self.resblocks = nn.ModuleList()
+        channels = 512
+        for rate, kernel in zip((8, 8, 2, 2), (16, 16, 4, 4)):
+            self.ups.append(weight_norm(hifi_init(
+                nn.ConvTranspose1d(channels, channels // 2, kernel, rate, padding=(kernel - rate) // 2))))
+            channels //= 2
+            for block_kernel in (3, 7, 11):
+                self.resblocks.append(HifiResBlock1(channels, block_kernel, (1, 3, 5)))
+        self.conv_post = weight_norm(hifi_init(nn.Conv1d(channels, 1, 7, 1, padding=3)))
+
+    def forward(self, mel: torch.Tensor) -> torch.Tensor:
+        x = self.conv_pre(mel)
+        for stage, up in enumerate(self.ups):
+            x = up(F.leaky_relu(x, 0.1))
+            x = (self.resblocks[stage * 3](x) + self.resblocks[stage * 3 + 1](x) + self.resblocks[stage * 3 + 2](x)) / 3
+        return torch.tanh(self.conv_post(F.leaky_relu(x)))
+
+
+class HifiPeriodDiscriminator(nn.Module):
+    def __init__(self, period: int) -> None:
+        super().__init__()
+        from torch.nn.utils.parametrizations import weight_norm
+
+        self.period = period
+        widths = [1, 32, 128, 512, 1024, 1024]
+        self.convs = nn.ModuleList(
+            weight_norm(nn.Conv2d(widths[i], widths[i + 1], (5, 1), (3 if i < 4 else 1, 1), padding=(2, 0)))
+            for i in range(5))
+        self.conv_post = weight_norm(nn.Conv2d(1024, 1, (3, 1), 1, padding=(1, 0)))
+
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, list[torch.Tensor]]:
+        b, c, t = x.shape
+        if t % self.period:
+            x = F.pad(x, (0, self.period - t % self.period), "reflect")
+            t = x.shape[-1]
+        x = x.view(b, c, t // self.period, self.period)
+        features = []
+        for conv in self.convs:
+            x = F.leaky_relu(conv(x), 0.1)
+            features.append(x)
+        x = self.conv_post(x)
+        features.append(x)
+        return x.flatten(1), features
+
+
+class HifiScaleDiscriminator(nn.Module):
+    def __init__(self, spectral: bool) -> None:
+        super().__init__()
+        from torch.nn.utils.parametrizations import spectral_norm, weight_norm
+
+        norm = spectral_norm if spectral else weight_norm
+        layout = [(1, 128, 15, 1, 1, 7), (128, 128, 41, 2, 4, 20), (128, 256, 41, 2, 16, 20), (256, 512, 41, 4, 16, 20),
+                  (512, 1024, 41, 4, 16, 20), (1024, 1024, 41, 1, 16, 20), (1024, 1024, 5, 1, 1, 2)]
+        self.convs = nn.ModuleList(norm(nn.Conv1d(i, o, k, s, groups=g, padding=p)) for i, o, k, s, g, p in layout)
+        self.conv_post = norm(nn.Conv1d(1024, 1, 3, 1, padding=1))
+
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, list[torch.Tensor]]:
+        features = []
+        for conv in self.convs:
+            x = F.leaky_relu(conv(x), 0.1)
+            features.append(x)
+        x = self.conv_post(x)
+        features.append(x)
+        return x.flatten(1), features
+
+
+class HifiDiscriminators(nn.Module):
+    """MultiPeriodDiscriminator (periods 2, 3, 5, 7, 11) and MultiScaleDiscriminator (3 scales, AvgPool1d(4, 2, 2)
+    between them, spectral norm on the raw scale) of the reference, as one list of (score, feature maps)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.periods = nn.ModuleList(HifiPeriodDiscriminator(p) for p in (2, 3, 5, 7, 11))
+        self.scales = nn.ModuleList(HifiScaleDiscriminator(i == 0) for i in range(3))
+
+    def forward(self, y: torch.Tensor) -> list[tuple[torch.Tensor, list[torch.Tensor]]]:
+        outputs = [d(y) for d in self.periods]
+        for index, d in enumerate(self.scales):
+            if index > 0:
+                y = F.avg_pool1d(y, 4, 2, padding=2)
+            outputs.append(d(y))
+        return outputs
+
+
+class HifiGanV1(nn.Module):
+    """The "hifigan-v1" row: jik876/hifi-gan's V1 generator, multi-period and multi-scale discriminators, losses and
+    optimizers, in AiDotNet HiFiGAN's step order. A step crops a random 32-frame mel segment and its 8192 samples from
+    the 256-frame utterance, updates the discriminators on a detached generation (least squares on D(real) and
+    D(fake)), then the generator on a fresh generation (least-squares adversarial + 2 x feature matching against
+    no-grad real features + 45 x L1 of the full-band log-mel), each with AdamW (lr 2e-4, betas 0.8 / 0.99, weight
+    decay 0.01) and no clipping. The discriminators are frozen during the generator update (AiDotNet trains only the
+    generator's parameters there). One utterance per step: run at --batch-size 1. The reported loss is the
+    generator's. Inference is the generator on the whole mel. Weight norm and spectral norm are torch's
+    parametrizations; trainable parameters are counted over all three networks."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.generator = HifiGenerator()
+        self.discriminators = HifiDiscriminators()
+        self.loss_mel = HifiMel(HIFI_RATE / 2)
+        self._optimizers: tuple[torch.optim.Optimizer, torch.optim.Optimizer] | None = None
+
+    def forward(self, mel: torch.Tensor) -> torch.Tensor:
+        return self.generator(mel)
+
+    def compile_parts(self) -> None:
+        """--compile: train_step calls the networks directly, so compile them rather than only forward."""
+        self.generator = torch.compile(self.generator)
+        self.discriminators = torch.compile(self.discriminators)
+
+    def train_step(self, mel: torch.Tensor, audio: torch.Tensor) -> torch.Tensor:
+        if mel.shape[0] != 1:
+            raise ValueError("The hifigan-v1 row trains one utterance per step, as AiDotNet's HiFiGAN does: use "
+                             "--batch-size 1.")
+        if self._optimizers is None:
+            settings = {"lr": 2e-4, "betas": (0.8, 0.99), "eps": 1e-8, "weight_decay": 0.01}
+            self._optimizers = (torch.optim.AdamW(self.generator.parameters(), **settings),
+                                torch.optim.AdamW(self.discriminators.parameters(), **settings))
+        generator_optimizer, discriminator_optimizer = self._optimizers
+        frames = HIFI_SEGMENT // HIFI_HOP
+        start = random.randint(0, mel.shape[2] - frames)
+        mel = mel[:, :, start:start + frames]
+        real = audio[:, start * HIFI_HOP:(start + frames) * HIFI_HOP].unsqueeze(1)
+
+        with torch.no_grad():
+            fake = self.generator(mel)
+        discriminator_loss = sum(torch.mean((1 - r) ** 2) + torch.mean(g ** 2)
+                                 for (r, _), (g, _) in zip(self.discriminators(real), self.discriminators(fake)))
+        discriminator_optimizer.zero_grad(set_to_none=True)
+        discriminator_loss.backward()
+        discriminator_optimizer.step()
+
+        self.discriminators.requires_grad_(False)
+        try:
+            generated = self.generator(mel)
+            fake_out = self.discriminators(generated)
+            with torch.no_grad():
+                real_out = self.discriminators(real)
+                real_mel = self.loss_mel(real.squeeze(1))
+            adversarial = sum(torch.mean((1 - g) ** 2) for g, _ in fake_out)
+            matching = sum(torch.mean(torch.abs(r - g)) for (_, rf), (_, gf) in zip(real_out, fake_out)
+                           for r, g in zip(rf, gf))
+            mel_loss = F.l1_loss(self.loss_mel(generated.squeeze(1)), real_mel)
+            generator_loss = adversarial + 2.0 * matching + 45.0 * mel_loss
+            generator_optimizer.zero_grad(set_to_none=True)
+            generator_loss.backward()
+            generator_optimizer.step()
+        finally:
+            self.discriminators.requires_grad_(True)
+        return generator_loss.detach()
+
+    @staticmethod
+    def make_batch(batch_size: int, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+        """Three random 100-1000 Hz partials plus uniform noise, peak 0.95, and their input mel (fmax 8 kHz)."""
+        samples = HIFI_FRAMES * HIFI_HOP
+        t = torch.arange(samples) / HIFI_RATE
+        frequency = 100 + 900 * torch.rand(batch_size, 3, 1)
+        phase = 2 * math.pi * torch.rand(batch_size, 3, 1)
+        audio = torch.sin(2 * math.pi * frequency * t + phase).sum(1) + 0.3 * (2 * torch.rand(batch_size, samples) - 1)
+        audio = audio / audio.abs().amax(dim=1, keepdim=True) * 0.95
+        with torch.no_grad():
+            mel = HifiMel(8000.0)(audio)
+        return mel.to(device), audio.to(device)
+
+
 def make_vision_model(name: str) -> nn.Module:
     """torchvision's definition of each architecture, adjusted only where AiDotNet's builder adjusts it for a
     32x32 input, so both sides run the same network: VGG's classifier reads the 512x1x1 feature map directly
@@ -1435,6 +1855,12 @@ def make_model(name: str) -> tuple[nn.Module, tuple[int, ...]]:
         return CoraGAT(), (GAT_NODES, GAT_FEATURES)
     if name == "dcgan":
         return DCGAN64(), (DCGAN_LATENT,)
+    if name == "panns-cnn14":
+        return PannsCnn14(), (1, PANNS_FRAMES, PANNS_MELS)
+    if name == "wav2vec2-base":
+        return Wav2Vec2BaseCtc(), (W2V_SAMPLES,)
+    if name == "hifigan-v1":
+        return HifiGanV1(), (HIFI_MELS, HIFI_FRAMES)
     if name in VISION_MODELS:
         return make_vision_model(name), (3, 32, 32)
     if name in TIME_SERIES_MODELS:
