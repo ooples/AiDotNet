@@ -1,4 +1,6 @@
 #nullable enable
+*REMOVED*override AiDotNet.MetaLearning.MetaLearnerBase<T, TInput, TOutput>.RegisterGeneratedParameterComponents(AiDotNet.Models.Parameters.ParameterComponentRegistry<T>! registry) -> void
+*REMOVED*override AiDotNet.TimeSeries.ARIMAXModel<T>.ApplyParameters(AiDotNet.Tensors.LinearAlgebra.Vector<T>! parameters) -> void
 override AiDotNet.TextToSpeech.Vocoders.VocosOptions.HiddenDim.get -> int
 override AiDotNet.TextToSpeech.Vocoders.VocosOptions.HiddenDim.set -> void
 override AiDotNet.TextToSpeech.Vocoders.Vocos<T>.RecordingPair(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, System.Random! random) -> (AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Mel, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Audio)
