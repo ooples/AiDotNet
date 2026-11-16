@@ -471,7 +471,7 @@ public abstract partial class GanVocoderBase<T> : VocoderBase<T>, ITrainingObjec
     /// <summary>Feature matching: the sum over layers of the mean L1 distance between the real (detached) and generated
     /// feature maps.</summary>
     protected Tensor<T> FeatureMatching(IReadOnlyList<Tensor<T>> real, IReadOnlyList<Tensor<T>> fake)
-        => Sum(Enumerable.Range(0, fake.Count).Select(l => Mean(Engine.TensorAbs(Engine.TensorSubtract(Detached(real[l]), fake[l])))));
+        => Sum(Enumerable.Range(0, fake.Count).Select(l => Mean(Engine.TensorAbs(Engine.TensorSubtract(Engine.StopGradient(real[l]), fake[l])))));
 
     // ---------------------------------------------------------------- groups and optimizers
 
