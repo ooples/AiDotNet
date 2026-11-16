@@ -809,15 +809,6 @@ public abstract partial class VitsTtsModelBase<T> : TtsModelBase<T>, IEndToEndTt
         return parameters.Where(selected.Contains).ToList();
     }
 
-    /// <inheritdoc />
-    /// <remarks>The generator objective runs monotonic alignment search on the host every step, and the durations it
-    /// returns set the graph's shape, so no compiled plan can capture it: that objective always trains on the eager
-    /// tape. With the default optimizer per group that is all it costs, since each optimizer has its own fused session
-    /// and the discriminator's still compiles. One optimizer supplied at construction is shared by both groups, and so
-    /// is its fused session: once the discriminator's plan holds that optimizer's moments, the generator's eager step
-    /// cannot continue from them. A shared optimizer therefore keeps the whole model on the eager tape.</remarks>
-    protected override bool SupportsFusedCompiledTraining => _suppliedOptimizer is null;
-
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> OptimizerFor(string group)
     {
         if (_suppliedOptimizer is not null) return _suppliedOptimizer;

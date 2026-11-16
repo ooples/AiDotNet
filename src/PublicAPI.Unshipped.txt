@@ -1025,7 +1025,6 @@ AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.VitsUtterance
 AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.VitsTrainingDraw
 AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.VitsTrainingDraw.PosteriorNoise.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.VitsTrainingDraw.SegmentStart.get -> int
-override AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.SupportsFusedCompiledTraining.get -> bool
 override AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.VitsTrainingDraw.ToString() -> string!
 AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.VitsTrainingDraw.PosteriorNoise.init -> void
 AiDotNet.TextToSpeech.EndToEnd.VitsTtsModelBase<T>.VitsTrainingDraw.SegmentStart.init -> void
