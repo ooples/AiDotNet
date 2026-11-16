@@ -295,13 +295,18 @@ public abstract class NoiseSchedulerBase<T> : INoiseScheduler<T>
         return AlphasCumulativeProduct[timestep];
     }
 
+    // A scheduler that overrides AddNoise defines its own forward process; its batched form keeps calling it.
+    private bool? _addNoiseIsOverridden;
+    private bool AddNoiseIsOverridden => _addNoiseIsOverridden ??=
+        GetType().GetMethod(nameof(AddNoise), new[] { typeof(Vector<T>), typeof(Vector<T>), typeof(int) })?.DeclaringType
+            != typeof(NoiseSchedulerBase<T>);
+
     /// <summary>
     /// Batched forward-diffusion (industry-standard batching, HuggingFace diffusers /
     /// DDPM reference): applies a distinct timestep to each batch element instead of
-    /// a single timestep to the whole batch. Default implementation delegates to the
-    /// scalar <see cref="AddNoise"/> per element for backward compatibility;
-    /// concrete schedulers should override with a fused batched implementation for
-    /// on-device efficiency.
+    /// a single timestep to the whole batch. The base forward process runs as two broadcast
+    /// multiplies and an add over the whole batch; a scheduler that overrides
+    /// <see cref="AddNoise"/> gets it called per element instead.
     /// </summary>
     /// <param name="cleanBatch">Clean samples, shape <c>[B, ...]</c>.</param>
     /// <param name="noiseBatch">Per-element noise, shape <c>[B, ...]</c>.</param>
@@ -337,6 +342,31 @@ public abstract class NoiseSchedulerBase<T> : INoiseScheduler<T>
             throw new ArgumentException(
                 $"timesteps length {timesteps.Length} does not match batch size {batchSize}.",
                 nameof(timesteps));
+
+        // The base forward process (x_t = sqrt(a_t) x_0 + sqrt(1 - a_t) eps): the whole batch in two broadcast
+        // multiplies and an add, each element at its own timestep. The per-element loop below ran three engine ops per
+        // image, which on a GPU engine was a host round trip each (192 readbacks per 64-image DDPM step).
+        if (!AddNoiseIsOverridden)
+        {
+            var alphaBar = AlphasCumulativeProduct.AsSpan();
+            var gathered = new T[batchSize];
+            for (int b = 0; b < batchSize; b++)
+            {
+                int t = timesteps[b];
+                if (t < 0 || t >= alphaBar.Length)
+                    throw new ArgumentOutOfRangeException(nameof(timesteps));
+                gathered[b] = alphaBar[t];
+            }
+            var alphaVector = new Vector<T>(gathered);
+            var signalScale = Engine.Sqrt(alphaVector);
+            var noiseScale = Engine.Sqrt(Engine.Subtract(Vector<T>.CreateDefault(batchSize, NumOps.One), alphaVector));
+            var scaleShape = new int[cleanBatch.Rank];
+            scaleShape[0] = batchSize;
+            for (int dim = 1; dim < scaleShape.Length; dim++) scaleShape[dim] = 1;
+            return Engine.TensorAdd(
+                Engine.TensorMultiply(cleanBatch, new Tensor<T>(scaleShape, signalScale)),
+                Engine.TensorMultiply(noiseBatch, new Tensor<T>(scaleShape, noiseScale)));
+        }
 
         int perElement = cleanBatch.Length / batchSize;
         var result = new Tensor<T>(cleanBatch._shape);

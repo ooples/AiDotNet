@@ -258,7 +258,10 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
                 training = BenchmarkTraining(model);
                 Console.WriteLine($"[bench] {modelName}: training done in {training.TotalSeconds:F2}s; running inference…");
             }
+            PrintReadbackSites("training");
+            ProfileUNetSections(model);
             var inference = BenchmarkInference(model);
+            PrintReadbackSites("inference");
             modelStart.Stop();
             Console.WriteLine($"[bench] {modelName}: complete in {modelStart.Elapsed.TotalSeconds:F2}s");
             results.Add(new ModelReport(modelName, "AiDotNetNeuralNetwork", BenchStats.DeviceName, model.ParameterCount, training, inference));
@@ -272,8 +275,55 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
             results);
     }
 
+    // AIDOTNET_STEP_DIAG=1: per-step wall time (device-synchronized), kernel launches and device-to-host readbacks, with
+    // the readback call sites printed after training and after inference. Diagnostic only; it changes the timings.
+    private static readonly bool StepDiag = Environment.GetEnvironmentVariable("AIDOTNET_STEP_DIAG") == "1";
+
+    // AIDOTNET_UNET_PROFILE=<batch>: per-section time of the diffusion U-Net's eager inference forward at that batch
+    // (with AIDOTNET_PROFILE_SYNC=1, device time per section). Diagnostic only.
+    private static void ProfileUNetSections(IBenchmarkModel model)
+    {
+        if (!int.TryParse(Environment.GetEnvironmentVariable("AIDOTNET_UNET_PROFILE"), out int batch) || batch <= 0) return;
+        var sinkField = typeof(AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<float>).GetField("ForwardProfilingSink",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        if (sinkField is null) return;
+        model.LoadSyntheticBatch(batch);
+        model.Forward();
+        var totals = new Dictionary<string, double>();
+        const int runs = 3;
+        for (int r = 0; r < runs; r++)
+        {
+            var sink = new System.Collections.Concurrent.ConcurrentQueue<(string section, double ms)>();
+            sinkField.SetValue(null, sink);
+            var sw = Stopwatch.StartNew();
+            model.Forward();
+            BenchStats.SynchronizeDevice();
+            sinkField.SetValue(null, null);
+            foreach (var (section, ms) in sink)
+            {
+                // Collapse block indices so the table groups by op kind.
+                var key = System.Text.RegularExpressions.Regex.Replace(section, @"\[\d+\]", "");
+                totals[key] = totals.GetValueOrDefault(key) + ms / runs;
+            }
+            Console.WriteLine($"[unetprof] b{batch} forward {sw.Elapsed.TotalMilliseconds:F1} ms");
+        }
+        foreach (var kv in totals.OrderByDescending(kv => kv.Value))
+            Console.WriteLine($"[unetprof] {kv.Value,9:F2} ms  {kv.Key}");
+    }
+
+    private static void PrintReadbackSites(string phase)
+    {
+        if (!StepDiag) return;
+        foreach (var site in Probe.Strings("ReadbackSites"))
+            Console.WriteLine($"[bench] readback site ({phase}): {site}");
+        foreach (var site in Probe.Strings("UploadSites"))
+            Console.WriteLine($"[bench] upload site ({phase}): {site}");
+        Probe.Call("Reset");
+    }
+
     private TrainingReport BenchmarkTraining(IBenchmarkModel model)
     {
+        if (StepDiag) Probe.Set("CaptureReadbackSites", true);
         // Track per-epoch duration plus the synthetic data-loading and gradient
         // phases, while a background monitor samples process resources.
         var epochSeconds = new List<double>();
@@ -310,7 +360,19 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
                 // One training step = one forward + backward + optimizer update (Train), exactly what the
                 // PyTorch twin times. A separate Predict here made every AiDotNet step do two forwards.
                 var gradientTimer = Stopwatch.StartNew();
+                long launchesBefore = Probe.Long("TotalEver");
+                long readbacksBefore = Probe.Long("Readbacks");
+                long readbackBytesBefore = Probe.Long("ReadbackBytes");
                 model.Backward();
+                if (StepDiag)
+                {
+                    BenchStats.SynchronizeDevice();
+                    Console.WriteLine($"[bench] step e{epoch} b{batch}: {gradientTimer.Elapsed.TotalMilliseconds:F1} ms, "
+                        + $"{Probe.Long("TotalEver") - launchesBefore} launches, "
+                        + $"{Probe.Long("Readbacks") - readbacksBefore} readbacks "
+                        + $"({Probe.Long("ReadbackBytes") - readbackBytesBefore:N0} B)");
+                    if (epoch == 0 && batch == 1) PrintReadbackSites("first steps");
+                }
                 gradientTimer.Stop();
                 // The first step's loss is read once, in the untimed-for-steady-state epoch 0, as proof the step trains.
                 firstLoss ??= model.LastLoss;
@@ -1569,4 +1631,17 @@ internal sealed record Step1Result(string Model, double ForwardMaxAbs, double Ou
         $"{Model}: {Verdict}  forward max|dlogit|={ForwardMaxAbs:E2}  loss {OurLoss:F6} vs {ReferenceLoss:F6}  " +
         $"step delta cos={StepDeltaCosine:F6} relErr={StepDeltaRelError:E2}  grad cos={GradCosine:F6} ratio={GradRatio:F4} (expect {ExpectedGradRatio:F4})" +
         string.Concat(LayerUpdates.Select(l => $"{Environment.NewLine}         update {l}"));
+}
+
+/// <summary>Reflection view of AiDotNet.Tensors' internal GpuLaunchProbe counters, for AIDOTNET_STEP_DIAG.</summary>
+internal static class Probe
+{
+    private static readonly Type? T = typeof(AiDotNet.Tensors.Engines.AiDotNetEngine).Assembly
+        .GetType("AiDotNet.Tensors.Engines.DirectGpu.GpuLaunchProbe");
+    private const System.Reflection.BindingFlags F =
+        System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static;
+    public static long Long(string name) => T?.GetProperty(name, F)?.GetValue(null) is long v ? v : 0;
+    public static string[] Strings(string name) => T?.GetProperty(name, F)?.GetValue(null) as string[] ?? Array.Empty<string>();
+    public static void Set(string name, object value) => T?.GetProperty(name, F)?.SetValue(null, value);
+    public static void Call(string name) => T?.GetMethod(name, F, Type.EmptyTypes)?.Invoke(null, null);
 }
