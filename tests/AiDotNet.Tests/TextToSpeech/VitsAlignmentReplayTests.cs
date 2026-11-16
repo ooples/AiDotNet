@@ -25,7 +25,7 @@ public sealed class VitsAlignmentReplayTests
             var logScale = new Tensor<Half>(new[] { (Half)0.0 }, new[] { 1, 1, 1 });
             var latent = new Tensor<Half>(Enumerable.Repeat((Half)20.0, frames).ToArray(), new[] { 1, 1, frames });
             var path = VitsTtsModelBase<Half>.AlignmentPath(engine, mean, logScale, latent, int.MaxValue, 0);
-            Assert.Equal(new[] { 1, frames }, path.Shape);
+            Assert.Equal(new[] { 1, frames }, path.Shape.ToArray());
             Assert.All(path.ToArray(), value => Assert.Equal((Half)1.0, value));
             var counts = engine.ReduceSum(path, new[] { 1 }, false);
             Assert.Equal((Half)frames, counts.ToArray()[0]);
