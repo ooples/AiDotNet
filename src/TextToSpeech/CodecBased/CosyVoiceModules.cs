@@ -210,10 +210,28 @@ internal sealed class CosyVoiceFlow<T>
         {
             var h = RegulatorConvs[i].Forward(x);
             int c = h.Shape[1], t = h.Shape[2];
-            h = _engine.Reshape(RegulatorNorms[i].Forward(_engine.Reshape(h, new[] { 1, c, 1, t })), new[] { 1, c, t });
-            x = _engine.Mish(h);
+            x = _engine.Mish(SingleGroupNorm(RegulatorNorms[i], h));
         }
         return (RegulatorOut ?? throw new InvalidOperationException("The causal flow has no length regulator.")).Forward(x);
+    }
+
+    /// <summary>
+    /// <c>GroupNorm(1, C)</c> of <c>[1, C, T]</c> with <paramref name="norm"/>'s affine and ε: one mean and (biased)
+    /// variance over every value, then the per-channel scale and shift. Composed of engine ops so a compiled training
+    /// plan records it; the engine's fused group norm computes its value eagerly while a training plan is traced.
+    /// </summary>
+    private Tensor<T> SingleGroupNorm(GroupNormalizationLayer<T> norm, Tensor<T> x)
+    {
+        if (norm.NumGroups != 1) throw new InvalidOperationException("The regulator normalizes with one group.");
+        int c = x.Shape[1], t = x.Shape[2];
+        var flat = _engine.Reshape(x, new[] { c * t });
+        var centred = _engine.TensorSubtract(flat, _engine.TensorBroadcastTo(_engine.ReduceMean(flat, new[] { 0 }, keepDims: true), flat._shape));
+        var variance = _engine.ReduceMean(_engine.TensorMultiply(centred, centred), new[] { 0 }, keepDims: true);
+        var deviation = _engine.TensorSqrt(_engine.TensorAddScalar(variance, norm.GetEpsilon()));
+        var normalized = _engine.Reshape(_engine.TensorDivide(centred, _engine.TensorBroadcastTo(deviation, flat._shape)), new[] { c, t });
+        var gamma = _engine.TensorBroadcastTo(_engine.Reshape(norm.GetGammaTensor(), new[] { c, 1 }), new[] { c, t });
+        var beta = _engine.TensorBroadcastTo(_engine.Reshape(norm.GetBetaTensor(), new[] { c, 1 }), new[] { c, t });
+        return _engine.Reshape(_engine.TensorAdd(_engine.TensorMultiply(normalized, gamma), beta), new[] { 1, c, t });
     }
 
     /// <summary>μ <c>[1, OutputSize, frames]</c> of encoded tokens <c>[tokens, OutputSize]</c> stretched to

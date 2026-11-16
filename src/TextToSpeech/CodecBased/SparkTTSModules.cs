@@ -366,9 +366,10 @@ internal sealed class SparkSpeakerTokenizer<T>
             double shift = 0.5 * Math.Log((1 + offset / half) / (1 - offset / half));
             var bounded = _engine.TensorAddScalar(_engine.TensorMultiplyScalar(_engine.Tanh(
                 _engine.TensorAddScalar(_engine.TensorNarrow(projected, 1, d, 1), NumOps.FromDouble(shift))), NumOps.FromDouble(half)), NumOps.FromDouble(-offset));
-            var rounded = new Tensor<T>(bounded.Shape.ToArray());
-            for (int i = 0; i < rounded.Length; i++) rounded[i] = NumOps.FromDouble(Math.Round(NumOps.ToDouble(bounded[i]), MidpointRounding.ToEven));
-            var detached = new Tensor<T>(bounded.Shape.ToArray(), new Vector<T>(bounded.ToArray()));
+            // The straight-through round (half to even, as torch.round), on the engine so a compiled plan rounds each
+            // step's coordinates.
+            var rounded = _engine.StopGradient(_engine.TensorRound(bounded));
+            var detached = _engine.StopGradient(bounded);
             columns.Add(_engine.TensorMultiplyScalar(_engine.TensorAdd(bounded, _engine.TensorSubtract(rounded, detached)), NumOps.FromDouble(1.0 / Math.Floor(level / 2.0))));
         }
         var reconstructed = _projectOut.Forward(_engine.TensorConcatenate(columns.ToArray(), 1));
@@ -376,7 +377,7 @@ internal sealed class SparkSpeakerTokenizer<T>
             _engine.TensorTranspose(rows), new[] { 1, _options.GlobalTokenCount * _options.SpeakerLatentDim })), new[] { _options.SpeakerEmbeddingDim });
         var teacher = VectorOf(latents);
         var student = VectorOf(reconstructed);
-        var label = new Tensor<T>(teacher.Shape.ToArray(), new Vector<T>(teacher.ToArray()));
+        var label = _engine.StopGradient(teacher);
         var warmupLoss = _engine.ReduceMean(_engine.TensorAbs(_engine.TensorSubtract(student, label)), new[] { 0 }, false);
         return (warmup ? teacher : student, warmupLoss);
     }

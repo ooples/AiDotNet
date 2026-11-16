@@ -372,7 +372,9 @@ internal sealed class SeedTTSTokenDiffusion<T>
         int frames = noisy.Shape[0], width = _options.AcousticDimension;
         if (noisy.Rank != 2 || noisy.Shape[1] != width || tokens.Length != frames)
             throw new ArgumentException("Seed diffusion requires one token per continuous feature frame.", nameof(tokens));
-        var ids = _engine.Reshape(tokens, new[] { 1, tokens.Length });
+        // The token ids are the step's data: a host view keeps them a plan input instead of a traced reshape the
+        // embedding's index contract would read on the host.
+        var ids = new Tensor<T>(new[] { 1, tokens.Length }, tokens.ToVector());
         var condition = _tokens.Forward(ids);
         var hidden = _noisyInput.Forward(_engine.Reshape(noisy, new[] { 1, frames, width }));
         hidden = _engine.TensorAdd(hidden, condition);

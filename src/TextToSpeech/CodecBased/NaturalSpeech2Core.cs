@@ -137,17 +137,19 @@ internal sealed class NaturalSpeech2Core<T>
     /// predicted log-pitch <c>[T]</c>, and c = expanded + the embedding of the ground-truth pitch's bucket, or of the
     /// predicted pitch's when <paramref name="pitch"/> (Hz, <c>[T]</c>) is null.
     /// </summary>
+    /// <param name="pitchTokens">The ground-truth pitch's buckets (<see cref="PitchTokens"/> of <paramref name="pitch"/>),
+    /// when the caller bucketed it before a compiled training trace: the bucketing reads the pitch on the host.</param>
     public (Tensor<T> Condition, Tensor<T> LogPitch) Condition(Tensor<T> hidden, IReadOnlyList<int> durations, Tensor<T>? pitch,
-        Tensor<T> prompt, bool training, Random? random)
+        Tensor<T> prompt, bool training, Random? random, Tensor<T>? pitchTokens = null)
     {
         var expanded = Expand(hidden, durations);
         var logPitch = PitchPredictor.Forward(expanded, prompt, training, random);
         if (pitch is not null && pitch.Length != expanded.Shape[0])
             throw new ArgumentException($"Expected {expanded.Shape[0]} pitch frames, got {pitch.Length}.", nameof(pitch));
-        Tensor<int> tokens;
-        using (new NoGradScope<T>())
-            tokens = PitchTokens(pitch ?? _engine.TensorExp(logPitch));
-        return (_engine.TensorAdd(expanded, PitchEmbedding.Forward(tokens.Cast<T>())), logPitch);
+        if (pitchTokens is null)
+            using (new NoGradScope<T>())
+                pitchTokens = PitchTokens(pitch ?? _engine.TensorExp(logPitch)).Cast<T>();
+        return (_engine.TensorAdd(expanded, PitchEmbedding.Forward(pitchTokens)), logPitch);
     }
 
     /// <summary>Rows <c>[n, d]</c> repeated by integer durations to <c>[Σd, d]</c> (the length regulator).</summary>

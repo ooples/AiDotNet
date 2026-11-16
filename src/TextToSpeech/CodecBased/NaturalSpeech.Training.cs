@@ -94,19 +94,26 @@ public partial class NaturalSpeech<T>
         var discriminators = _discriminators!;
         var real = Segment(u.Audio, view.SliceStart);
         var realE2e = Segment(u.Audio, view.SliceStartE2e);
-        var generated = view.Audio is null ? null : Detached(view.Audio);
-        var generatedE2e = Detached(view.AudioE2e);
+        var generated = view.Audio is null ? null : Snapshot(view.Audio);
+        var generatedE2e = Snapshot(view.AudioE2e);
         TrainLayers(discriminators.Layers, () =>
         {
             var loss = Engine.TensorMultiplyScalar(DiscriminatorLoss(discriminators, realE2e, generatedE2e), Ops.FromDouble(_options.EndToEndWeight));
             return generated is null ? loss : Engine.TensorAdd(DiscriminatorLoss(discriminators, real, generated), loss);
         }, "discriminator", sample);
-        return TrainLayers(StageLayers(), () => GeneratorLoss(u, stepSeed, adversarial: true), "generator", sample);
+        // The prior's frame count is the durations' round(Σd); the eager view read it from this step's durations at the
+        // same parameters and draws, so the traced generator step takes it as a shape instead of reading it on the host.
+        int priorFrames = view.PriorFrames;
+        return TrainLayers(StageLayers(), () => GeneratorLoss(u, stepSeed, adversarial: true, priorFrames), "generator", sample);
     }
 
-    private sealed record Pass(Tensor<T>? Audio, int SliceStart, Tensor<T> AudioE2e, int SliceStartE2e, Tensor<T> Loss);
+    private sealed record Pass(Tensor<T>? Audio, int SliceStart, Tensor<T> AudioE2e, int SliceStartE2e, Tensor<T> Loss, int PriorFrames);
 
-    private static Tensor<T> Detached(Tensor<T> x) => new(x._shape, x.ToVector());
+    // Detached on the engine: a compiled plan refreshes the value on every replay, with no gradient through it.
+    private Tensor<T> Detached(Tensor<T> x) => Engine.StopGradient(x);
+
+    // A host copy of an eager pass's output, taken outside the traced objective.
+    private static Tensor<T> Snapshot(Tensor<T> x) => new(x._shape, x.ToVector());
 
     private Tensor<T> Mean(Tensor<T> x) => Engine.ReduceMean(x, Enumerable.Range(0, x.Rank).ToArray(), keepDims: false);
 
@@ -166,7 +173,9 @@ public partial class NaturalSpeech<T>
     /// and the generator's step see the same pass): the reconstruction from the posterior, the end-to-end waveform from the
     /// prior, and the non-adversarial losses.
     /// </summary>
-    private Pass Forward(Utterance u, int seed, bool training)
+    /// <param name="priorFrames">The prior's frames when known (see <see cref="TrainOnSample"/>); otherwise read from
+    /// the durations, which only an eager pass may do.</param>
+    private Pass Forward(Utterance u, int seed, bool training, int? priorFrames = null)
     {
         var o = _options;
         var core = Core;
@@ -179,16 +188,19 @@ public partial class NaturalSpeech<T>
         var zPrime = core.Flow(z, backward: true);                                                     // z′ = f⁻¹(z)
         Tensor<T> loss = new Tensor<T>(new[] { 1 });
         Tensor<T> durations;
+        int? frames = priorFrames;
         if (stage == NaturalSpeechStage.Warmup)
         {
             // Monotonic alignment search between the phoneme-level prior and the simplified posterior (App. F, Eqs. 17-18).
             var (meanPh, logsPh) = core.PhonemePrior(hidden);
-            var alignment = Alignment(Detached(zPrime), Detached(meanPh), Detached(logsPh));
-            durations = new Tensor<T>(new[] { alignment.Length }, new Vector<T>(alignment.Select(d => Ops.FromDouble(d)).ToArray()));
+            var path = AlignmentPath(Detached(zPrime), Detached(meanPh), Detached(logsPh));
+            durations = AlignedDurations(path);
+            // The search assigns every frame to one phoneme: Σd is the posterior's frames.
+            frames = u.Frames;
             // The phoneme-level prior learns from the aligned posterior (VITS's KL with the hard-expanded prior; the paper
             // only says it is "obtained by two linear layers").
-            var expandedMean = Expand(meanPh, alignment);
-            var expandedLogs = Expand(logsPh, alignment);
+            var expandedMean = Expand(meanPh, path);
+            var expandedLogs = Expand(logsPh, path);
             var phonemeKl = Kl(Detached(zPrime), Detached(logsQ), expandedMean, expandedLogs);
             loss = Engine.TensorAdd(loss, phonemeKl);
         }
@@ -202,20 +214,19 @@ public partial class NaturalSpeech<T>
             {
                 // heatz123 keeps the duration loss against alignment-search labels after warm-up.
                 var (meanPh, logsPh) = core.PhonemePrior(hidden);
-                var labels = Alignment(Detached(zPrime), Detached(meanPh), Detached(logsPh));
+                var labels = AlignedDurations(AlignmentPath(Detached(zPrime), Detached(meanPh), Detached(logsPh)));
                 loss = Engine.TensorAdd(loss, DurationLoss(logw, labels));
             }
             else
             {
-                var labels = durations.ToArray().Select(v => (int)Math.Round(Ops.ToDouble(v))).ToArray();
-                loss = Engine.TensorAdd(loss, DurationLoss(logw, labels));
+                loss = Engine.TensorAdd(loss, DurationLoss(logw, durations));
             }
         }
-        var (meanP, logsP, priorFrames) = core.Upsampler.Forward(hidden, durations, training, random);
+        var (meanP, logsP, priorFrameCount) = core.Upsampler.Forward(hidden, durations, training, random, frames);
         if (stage != NaturalSpeechStage.Tuning)
         {
             // L_bwd: KL[q(z′|x) ‖ p(z′|y)].
-            var bwd = KlLoss(zPrime, logsQ, meanP, logsP, u.Frames, priorFrames);
+            var bwd = KlLoss(zPrime, logsQ, meanP, logsP, u.Frames, priorFrameCount);
             loss = Engine.TensorAdd(loss, Engine.TensorMultiplyScalar(bwd, Ops.FromDouble(o.BackwardKlWeight)));
         }
         // The prior's sample through f: the enhanced prior p(z|y).
@@ -225,7 +236,7 @@ public partial class NaturalSpeech<T>
         {
             // L_fwd: KL[p(z|y) ‖ q(z|x)] (sample-based, with the posterior's mean and log-scale).
             var (_, meanQ, logsQ2) = core.Posterior.Forward(u.Spectrogram, null, noise);
-            var fwd = KlLoss(zFromPrior, logsP, meanQ, logsQ2, priorFrames, u.Frames);
+            var fwd = KlLoss(zFromPrior, logsP, meanQ, logsQ2, priorFrameCount, u.Frames);
             loss = Engine.TensorAdd(loss, Engine.TensorMultiplyScalar(fwd, Ops.FromDouble(o.ForwardKlWeight)));
         }
         Tensor<T>? audio = null;
@@ -235,15 +246,15 @@ public partial class NaturalSpeech<T>
             start = (int)(random.NextDouble() * Math.Max(u.Frames - o.SegmentFrames + 1, 1));
             audio = core.Decode(FramesSlice(z, start));
         }
-        int startE2e = (int)(random.NextDouble() * Math.Max(Math.Min(priorFrames, u.Frames) - o.SegmentFrames + 1, 1));
+        int startE2e = (int)(random.NextDouble() * Math.Max(Math.Min(priorFrameCount, u.Frames) - o.SegmentFrames + 1, 1));
         var audioE2e = core.Decode(FramesSlice(zFromPrior, startE2e));
-        return new Pass(audio, start, audioE2e, startE2e, loss);
+        return new Pass(audio, start, audioE2e, startE2e, loss, priorFrameCount);
     }
 
-    private Tensor<T> GeneratorLoss(Utterance u, int seed, bool adversarial)
+    private Tensor<T> GeneratorLoss(Utterance u, int seed, bool adversarial, int? priorFrames = null)
     {
         var o = _options;
-        var pass = Forward(u, seed, training: true);
+        var pass = Forward(u, seed, training: true, priorFrames);
         var loss = pass.Loss;
         if (pass.Audio is not null)
         {
@@ -290,41 +301,46 @@ public partial class NaturalSpeech<T>
     }
 
     // The duration loss: Σ (log w − log(d + 1e-6))² over the phonemes, averaged (heatz123's l_length).
-    private Tensor<T> DurationLoss(Tensor<T> logw, int[] durations)
+    private Tensor<T> DurationLoss(Tensor<T> logw, Tensor<T> durations)
     {
-        var target = new Tensor<T>(new[] { durations.Length }, new Vector<T>(durations.Select(d => Ops.FromDouble(Math.Log(d + 1e-6))).ToArray()));
+        var target = Engine.TensorLog(Engine.TensorAddScalar(Detached(durations), Ops.FromDouble(1e-6)));
         var diff = Engine.TensorSubtract(logw, target);
         return Engine.TensorMultiplyScalar(Engine.ReduceSum(Engine.TensorMultiply(diff, diff), null), Ops.FromDouble(_options.DurationLossWeight / durations.Length));
     }
 
-    // Monotonic alignment search: log N(z′_i; µ_j, σ_j) summed over channels, the most likely monotonic path.
-    private int[] Alignment(Tensor<T> zPrime, Tensor<T> mean, Tensor<T> logs)
+    /// <summary>
+    /// Monotonic alignment search: log N(z′_i; µ_j, σ_j) summed over channels, and the most likely monotonic path as a
+    /// <c>[n, frames]</c> 0/1 matrix. The scores are engine ops and the search one replayable node
+    /// (<see cref="TtsModelBase{T}.MonotonicAlignmentPath(Tensor{T})"/>), so a compiled plan aligns each step's latents.
+    /// </summary>
+    private Tensor<T> AlignmentPath(Tensor<T> zPrime, Tensor<T> mean, Tensor<T> logs)
     {
         int c = zPrime.Shape[1], frames = zPrime.Shape[2], n = mean.Shape[2];
-        var scores = new double[n, frames];
-        for (int j = 0; j < n; j++)
-            for (int i = 0; i < frames; i++)
-            {
-                double s = 0;
-                for (int k = 0; k < c; k++)
-                {
-                    double ls = Ops.ToDouble(logs[0, k, j]), diff = Ops.ToDouble(zPrime[0, k, i]) - Ops.ToDouble(mean[0, k, j]);
-                    s += -0.5 * Math.Log(2 * Math.PI) - ls - 0.5 * diff * diff * Math.Exp(-2 * ls);
-                }
-                scores[j, i] = s;
-            }
-        return MonotonicAlignment.MaximumPath(scores);
+        var z = Engine.Reshape(zPrime, new[] { c, frames });
+        var m = Engine.Reshape(mean, new[] { c, n });
+        var ls = Engine.Reshape(logs, new[] { c, n });
+        var inv = Engine.TensorExp(Engine.TensorMultiplyScalar(ls, Ops.FromDouble(-2.0)));                       // [c, n]
+        // Σ_k −½ (z − µ)² e^{−2 ls} = −½ [invᵀ z² − 2 (µ inv)ᵀ z + Σ_k µ² inv].
+        var zz = Engine.TensorMatMul(Engine.TensorTranspose(inv), Engine.TensorMultiply(z, z));                  // [n, frames]
+        var zm = Engine.TensorMatMul(Engine.TensorTranspose(Engine.TensorMultiply(m, inv)), z);                  // [n, frames]
+        var mm = Engine.Reshape(Engine.ReduceSum(Engine.TensorMultiply(Engine.TensorMultiply(m, m), inv), new[] { 0 }, keepDims: false), new[] { n, 1 });
+        var sumLs = Engine.Reshape(Engine.ReduceSum(ls, new[] { 0 }, keepDims: false), new[] { n, 1 });
+        var grid = new[] { n, frames };
+        var quadratic = Engine.TensorAdd(Engine.TensorSubtract(zz, Engine.TensorMultiplyScalar(zm, Ops.FromDouble(2))), Engine.TensorBroadcastTo(mm, grid));
+        var scores = Engine.TensorAddScalar(
+            Engine.TensorSubtract(Engine.TensorMultiplyScalar(quadratic, Ops.FromDouble(-0.5)), Engine.TensorBroadcastTo(sumLs, grid)),
+            Ops.FromDouble(-0.5 * c * Math.Log(2 * Math.PI)));
+        return MonotonicAlignmentPath(scores);
     }
 
-    // [1, h, n] repeated by integer durations to [1, h, Σd].
-    private Tensor<T> Expand(Tensor<T> x, int[] durations)
+    // A path's durations [n]: each phoneme's frames.
+    private Tensor<T> AlignedDurations(Tensor<T> path) => Engine.ReduceSum(path, new[] { 1 }, keepDims: false);
+
+    // [1, h, n] repeated by the path's durations to [1, h, frames]: x · path.
+    private Tensor<T> Expand(Tensor<T> x, Tensor<T> path)
     {
-        var index = new List<int>();
-        for (int j = 0; j < durations.Length; j++)
-            for (int r = 0; r < durations[j]; r++) index.Add(j);
-        int h = x.Shape[1], n = x.Shape[2];
-        var picked = Engine.TensorIndexSelect(Engine.Reshape(x, new[] { h, n }), new Tensor<int>(new[] { index.Count }, new Vector<int>(index.ToArray())), 1);
-        return Engine.Reshape(picked, new[] { 1, h, index.Count });
+        int h = x.Shape[1], n = x.Shape[2], frames = path.Shape[1];
+        return Engine.Reshape(Engine.TensorMatMul(Engine.Reshape(x, new[] { h, n }), path), new[] { 1, h, frames });
     }
 
     // ---------------------------------------------------------------- phoneme pre-training

@@ -135,13 +135,13 @@ public partial class F5TTS<T> : FlowMatchingTtsModelBase<T>, IAcousticModel<T>
         var layers = new List<LayerBase<T>>();
         _time = new FlowTimestepEmbedding<T>(Engine, layers, o.HiddenDim);
         _text = new FlowTextEmbedding<T>(Engine, layers, o.VocabSize, o.TextDim, o.TextConvLayers, 2);
-        _input = new FlowInputEmbedding<T>(Engine, layers, o.HiddenDim);
+        _input = new FlowInputEmbedding<T>(Engine, layers, 2 * o.MelChannels + o.TextDim, o.HiddenDim);
         for (int i = 0; i < o.NumLayers; i++)
             _blocks.Add(new FlowDiTBlock<T>(Engine, layers, o.HiddenDim, o.NumHeads, o.HeadDim, o.HiddenDim * o.FeedForwardMultiplier,
                 o.DropoutRate, o.RotaryHeads));
         // AdaLayerNorm_Final and proj_out, both zero-initialized (DiT.initialize_weights).
-        _finalModulation = FlowMatchingTts.Linear(layers, 2 * o.HiddenDim, zero: true);
-        _projection = FlowMatchingTts.Linear(layers, o.MelChannels, zero: true);
+        _finalModulation = FlowMatchingTts.Linear(layers, o.HiddenDim, 2 * o.HiddenDim, zero: true);
+        _projection = FlowMatchingTts.Linear(layers, o.HiddenDim, o.MelChannels, zero: true);
         // The character table leads the layer stack, so the published input contract is the token domain.
         AddEncoderDecoderLayers(new ILayer<T>[] { _text.Embedding }, Array.Empty<ILayer<T>>());
         ComponentLayers.AddRange(layers.Where(layer => !ReferenceEquals(layer, _text.Embedding)));

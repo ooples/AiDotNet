@@ -248,8 +248,14 @@ public partial class SparkTTS<T> : TtsModelBase<T>, ICodecTts<T>
         EnsureSpeakerEncoderInitialized(sample);
         var annotation = new ControlAnnotation(female, pitch, speed, MathPolyfill.Clamp(pitchMel, 0, 1000),
             MathPolyfill.Clamp(syllablesPerSecond, 0, 10));
-        return TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) => BuildObjective(sample, annotation), _optimizer);
+        var encoded = FrozenTokens(sample);
+        return TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) => BuildObjective(sample, annotation, encoded), _optimizer);
     }
+
+    // The frozen BiCodec's tokens are the language model's step data: its quantizer picks codes with a host argmax, so
+    // they are taken before the objective a compiled plan replays.
+    private (Tensor<T> Semantic, Tensor<T> Global) FrozenTokens(TtsTrainingSample<T> sample)
+        => _biCodec!.Tokenize(sample.Audio ?? throw new ArgumentException("Spark-TTS training requires Audio.", nameof(sample)));
 
     private sealed record ControlAnnotation(bool Female, SparkTTSControlLevel Pitch, SparkTTSControlLevel Speed,
         int PitchMel, int SyllablesPerSecond);
@@ -265,17 +271,20 @@ public partial class SparkTTS<T> : TtsModelBase<T>, ICodecTts<T>
             _discriminatorTurn = true;
             try
             {
+                // The generator's waveform is the discriminator step's data: computed before its objective, so the codec
+                // GAN's detach copies a value of this step rather than reading the traced generator on the host.
+                Tensor<T> generated;
+                using (new NoGradScope<T>()) generated = Snapshot(_biCodec!.TrainingForward(sample.Audio!, _codecTrainingSteps < _options.GlobalTokenizerWarmupSteps).Waveform);
                 TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) =>
                 {
-                    Tensor<T> generated;
-                    using (new NoGradScope<T>()) generated = _biCodec!.TrainingForward(sample.Audio!, _codecTrainingSteps < _options.GlobalTokenizerWarmupSteps).Waveform;
                     var real = Engine.TensorNarrow(Engine.Reshape(sample.Audio!, new[] { sample.Audio!.Length }), 0, 0, generated.Length);
                     return _codecTraining!.DiscriminatorLoss(real, generated);
                 }, _discriminatorOptimizer!);
             }
             finally { _discriminatorTurn = false; }
         }
-        T loss = TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) => BuildObjective(sample), _optimizer);
+        var tokens = _options.TrainingComponent == SparkTTSTrainingComponent.BiCodec ? default : FrozenTokens(sample);
+        T loss = TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) => BuildObjective(sample, null, tokens), _optimizer);
         if (_options.TrainingComponent == SparkTTSTrainingComponent.BiCodec) _codecTrainingSteps++;
         return loss;
     }
@@ -378,7 +387,8 @@ public partial class SparkTTS<T> : TtsModelBase<T>, ICodecTts<T>
         return metadata;
     }
 
-    private Tensor<T> BuildObjective(TtsTrainingSample<T> sample, ControlAnnotation? annotation = null)
+    private Tensor<T> BuildObjective(TtsTrainingSample<T> sample, ControlAnnotation? annotation = null,
+        (Tensor<T> Semantic, Tensor<T> Global) frozenTokens = default)
     {
         var audio = sample.Audio ?? throw new ArgumentException("Spark-TTS training requires Audio.", nameof(sample));
         if (_options.TrainingComponent == SparkTTSTrainingComponent.BiCodec)
@@ -387,7 +397,7 @@ public partial class SparkTTS<T> : TtsModelBase<T>, ICodecTts<T>
             var real = Engine.TensorNarrow(Engine.Reshape(audio, new[] { audio.Length }), 0, 0, output.Waveform.Length);
             return Engine.TensorAdd(Engine.Reshape(output.AuxiliaryLoss, new[] { 1 }), _codecTraining!.GeneratorLoss(real, output.Waveform));
         }
-        var encoded = _biCodec!.Tokenize(audio);
+        var encoded = frozenTokens.Semantic is null ? _biCodec!.Tokenize(audio) : frozenTokens;
 
         var sequence = new List<int> { Special(_options.TaskTtsToken), Special(_options.StartContentToken) };
         sequence.AddRange(IdsOf(sample.Tokens, _options.VocabSize));
@@ -452,6 +462,9 @@ public partial class SparkTTS<T> : TtsModelBase<T>, ICodecTts<T>
     {
         return IdTensor(ids);
     }
+
+    // A host copy of an eager pass's output, taken outside the traced objective.
+    private static Tensor<T> Snapshot(Tensor<T> x) => new(x._shape, x.ToVector());
 
     private int[] IdsOf(Tensor<T> tensor, int vocabulary)
     {

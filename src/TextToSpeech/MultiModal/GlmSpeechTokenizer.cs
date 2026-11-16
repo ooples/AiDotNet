@@ -332,7 +332,17 @@ internal sealed class GlmSpeechTokenizer<T>
 
     // ---------------------------------------------------------------- the encoder
 
-    internal sealed record EncoderOutput(Tensor<T> Hidden, int[] Codes, bool[] Valid, Tensor<T> PreQuantized, Tensor<T> Quantized);
+    /// <summary>An encoder pass. <see cref="Codes"/> is empty under a compiled training trace, where the codes are known
+    /// only as <see cref="CodesOneHot"/> ([rows, codebook] 0/1) until the plan runs.</summary>
+    internal sealed record EncoderOutput(Tensor<T> Hidden, int[] Codes, bool[] Valid, Tensor<T> PreQuantized, Tensor<T> Quantized,
+        Tensor<T>? CodesOneHot = null);
+
+    // The codes and pre-quantized states of the latest training forward that ran with values, by tokenizer: written by
+    // the node of TrainingStatistics when a compiled plan runs it, and taken once by UpdateCodebook. The node captures
+    // only this tokenizer's key, which a compiled plan can compare between steps; it could not compare the tokenizer.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<long, (int[] Codes, T[] Hidden)> TrainingStatisticsByKey = new();
+    private static long _nextStatisticsKey;
+    private readonly long _statisticsKey = System.Threading.Interlocked.Increment(ref _nextStatisticsKey);
 
     /// <summary>
     /// The encoder on log-mel features <c>[mels, frames]</c> whose valid frames are <paramref name="validFrames"/> (a
@@ -356,6 +366,7 @@ internal sealed class GlmSpeechTokenizer<T>
         var mask = BlockMask(valid, c.CausalBlockSize);
         int[] codes = Array.Empty<int>();
         Tensor<T> pre = x, quantized = x;
+        Tensor<T>? oneHot = null;
         for (int i = 0; i < EncoderLayers.Count; i++)
         {
             x = EncoderBlock(EncoderLayers[i], x, mask, training, random);
@@ -371,7 +382,7 @@ internal sealed class GlmSpeechTokenizer<T>
             if (i + 1 == c.QuantizePosition)
             {
                 pre = x;
-                (codes, quantized) = Quantize(x);
+                (codes, quantized, oneHot) = Quantize(x);
                 // Training: straight-through (h + sg(q − h)); inference: the codebook rows.
                 x = training ? _engine.TensorAdd(x, Constant(_engine.TensorSubtract(quantized, x))) : quantized;
                 int rows = x.Shape[0];
@@ -379,43 +390,90 @@ internal sealed class GlmSpeechTokenizer<T>
             }
         }
         if (FinalNorm is not null && EncoderLayers.Count > c.QuantizePosition) x = FinalNorm.Forward(x);
-        return new EncoderOutput(x, codes, valid, pre, quantized);
+        return new EncoderOutput(x, codes, valid, pre, quantized, oneHot);
     }
 
     private int Positions2Rows => (_c.MaxSourcePositions + _c.PoolingKernel - 1) / _c.PoolingKernel;
 
-    private static Tensor<T> Constant(Tensor<T> x) => new(x.Shape.ToArray(), x.ToVector());
+    private Tensor<T> Constant(Tensor<T> x) => _engine.StopGradient(x);
 
     /// <summary><c>vector_quantize</c>: per row the code minimizing |c|² + |x|² − 2 x·c, and those rows of the codebook.</summary>
-    private (int[] Codes, Tensor<T> Quantized) Quantize(Tensor<T> x)
+    /// <remarks>The search is a node a compiled training plan reruns on every replay with that step's states and
+    /// codebook; its 0/1 codes pick the codebook rows by a matrix product. The host codes exist only off a trace.</remarks>
+    private (int[] Codes, Tensor<T> Quantized, Tensor<T> OneHot) Quantize(Tensor<T> x)
     {
         int rows = x.Shape[0], d = _c.Dim, k = _c.CodebookSize;
         var codebook = _engine.Reshape(IndexTtsOps.Value(Codebook), new[] { k, d });
         var products = _engine.TensorMatMul(Constant(x), _engine.TensorTranspose(Constant(codebook)));
-        var cb = codebook.ToArray();
-        var xs = x.ToArray();
+        var oneHot = NearestCodes(new[] { x, codebook, products }, rows, d, k);
+        var codes = AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive ? Array.Empty<int>() : CodesOf(oneHot);
+        return (codes, _engine.TensorMatMul(oneHot, codebook), oneHot);
+    }
+
+    private static Tensor<T> NearestCodes(Tensor<T>[] inputs, int rows, int d, int k)
+        => AiDotNet.Training.CompiledStepHostValue<T>.Compute("GlmVectorQuantizeCodes", inputs, new[] { rows, k },
+            (values, oneHot) => NearestCodes(values, oneHot, d, k));
+
+    private static void NearestCodes(Tensor<T>[] inputs, Tensor<T> oneHot, int d, int k)
+    {
+        var xs = inputs[0].ToArray().Select(NumOps.ToDouble).ToArray();
+        var cb = inputs[1].ToArray().Select(NumOps.ToDouble).ToArray();
+        var products = inputs[2].ToArray().Select(NumOps.ToDouble).ToArray();
+        int rows = inputs[0].Shape[0];
         var codeSquares = new double[k];
         for (int j = 0; j < k; j++)
-            for (int i = 0; i < d; i++) codeSquares[j] += Math.Pow(NumOps.ToDouble(cb[j * d + i]), 2);
-        var codes = new int[rows];
+            for (int i = 0; i < d; i++) codeSquares[j] += Math.Pow(cb[j * d + i], 2);
+        var one = NumOps.One;
+        var values = oneHot.AsWritableSpan();
+        values.Clear();
         for (int r = 0; r < rows; r++)
         {
             double inputSquare = 0;
-            for (int i = 0; i < d; i++) inputSquare += Math.Pow(NumOps.ToDouble(xs[r * d + i]), 2);
+            for (int i = 0; i < d; i++) inputSquare += Math.Pow(xs[r * d + i], 2);
             double best = double.PositiveInfinity;
+            int code = 0;
             for (int j = 0; j < k; j++)
             {
-                double distance = codeSquares[j] + inputSquare - 2 * NumOps.ToDouble(products[r, j]);
+                double distance = codeSquares[j] + inputSquare - 2 * products[r * k + j];
                 if (distance < best)
                 {
                     best = distance;
-                    codes[r] = j;
+                    code = j;
                 }
             }
+            values[r * k + code] = one;
         }
-        var picks = new Tensor<int>(new[] { rows }, new Vector<int>(codes));
-        return (codes, _engine.TensorIndexSelect(codebook, picks, 0));
     }
+
+    private static int[] CodesOf(Tensor<T> oneHot)
+    {
+        int rows = oneHot.Shape[0], k = oneHot.Shape[1];
+        var values = oneHot.ToArray().Select(NumOps.ToDouble).ToArray();
+        var codes = new int[rows];
+        for (int r = 0; r < rows; r++)
+            for (int j = 0; j < k; j++)
+                if (values[r * k + j] != 0) { codes[r] = j; break; }
+        return codes;
+    }
+
+    /// <summary>
+    /// A zero <c>[1]</c> tensor whose node records the codes and pre-quantized states of <paramref name="output"/> for
+    /// <see cref="UpdateCodebook"/> each time the training step runs with values. Add it (times zero) to the objective:
+    /// a compiled plan runs the objective's forward without handing its values back, so the EMA update reads them here.
+    /// </summary>
+    internal Tensor<T> TrainingStatistics(EncoderOutput output)
+    {
+        if (output.CodesOneHot is null)
+            throw new InvalidOperationException("The encoder pass did not reach the quantizer.");
+        return RecordTrainingStatistics(new[] { output.PreQuantized, output.CodesOneHot }, _statisticsKey);
+    }
+
+    private static Tensor<T> RecordTrainingStatistics(Tensor<T>[] inputs, long key)
+        => AiDotNet.Training.CompiledStepHostValue<T>.Compute("GlmCodebookStatistics", inputs, new[] { 1 }, (values, zero) =>
+        {
+            TrainingStatisticsByKey[key] = (CodesOf(values[1]), values[0].ToArray());
+            zero.AsWritableSpan().Clear();
+        });
 
     // ---------------------------------------------------------------- training
 
@@ -447,13 +505,28 @@ internal sealed class GlmSpeechTokenizer<T>
     {
         var c = _c;
         int k = c.CodebookSize, d = c.Dim;
-        var hidden = output.PreQuantized.ToArray();
+        int[] outputCodes;
+        T[] hidden;
+        if (output.Codes.Length > 0 || output.CodesOneHot is null)
+        {
+            outputCodes = output.Codes;
+            hidden = output.PreQuantized.ToArray();
+        }
+        else
+        {
+            // A compiled step: the codes and states its plan recorded when it ran.
+            if (!TrainingStatisticsByKey.TryRemove(_statisticsKey, out var recorded))
+                throw new InvalidOperationException(
+                    "The training step recorded no codebook statistics; add TrainingStatistics to its objective.");
+            (outputCodes, hidden) = recorded;
+        }
+        TrainingStatisticsByKey.TryRemove(_statisticsKey, out _);
         var counts = new double[k];
         var sums = new double[k * d];
-        for (int r = 0; r < output.Codes.Length; r++)
+        for (int r = 0; r < outputCodes.Length; r++)
         {
             if (!output.Valid[r]) continue;
-            int code = output.Codes[r];
+            int code = outputCodes[r];
             counts[code]++;
             for (int i = 0; i < d; i++) sums[code * d + i] += NumOps.ToDouble(hidden[r * d + i]);
         }
@@ -470,7 +543,7 @@ internal sealed class GlmSpeechTokenizer<T>
         {
             double threshold = Math.Pow(decay, c.RestartInterval);
             var dead = Enumerable.Range(0, k).Where(j => EmaCount[j] < threshold).ToArray();
-            var validRows = Enumerable.Range(0, output.Codes.Length).Where(r => output.Valid[r]).ToArray();
+            var validRows = Enumerable.Range(0, outputCodes.Length).Where(r => output.Valid[r]).ToArray();
             var chosen = pickRestart(validRows.Length, dead.Length);
             for (int n = 0; n < dead.Length; n++)
             {

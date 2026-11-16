@@ -84,7 +84,7 @@ public partial class NaturalSpeech2<T>
     private List<ILayer<T>> TrainedLayers() => _priorLayers.Concat(_promptLayers).Concat(_denoiserLayers).Cast<ILayer<T>>().ToList();
 
     // The utterance with its prompt cut out: the target's phonemes, durations, codes and pitch, and the prompt's codes.
-    private sealed record Utterance(int[] Phonemes, int[] Durations, int[,] Codes, Tensor<T> Pitch, int[,] PromptCodes);
+    private sealed record Utterance(int[] Phonemes, int[] Durations, int[,] Codes, Tensor<T> Pitch, int[,] PromptCodes, Tensor<T> PitchTokens);
 
     private int[] PhonemesOf(TtsTrainingSample<T> sample) =>
         sample.Text is { } text ? TextToPhonemes(text) : PhonemeIds(sample.Tokens, nameof(sample));
@@ -137,7 +137,10 @@ public partial class NaturalSpeech2<T>
         var targetPitch = Engine.TensorIndexSelect(pitch, new Tensor<int>(targetFrames, new[] { targetFrames.Length }), 0);
         var targetDurations = durations.Take(start).Concat(durations.Skip(end)).ToArray();
         var targetPhonemes = phonemes.Take(start).Concat(phonemes.Skip(end)).ToArray();
-        return new Utterance(targetPhonemes, targetDurations, targetCodes, targetPitch, promptCodes);
+        // The pitch's buckets, read on the host here, outside the objective a compiled plan replays.
+        Tensor<T> pitchTokens;
+        using (new NoGradScope<T>()) pitchTokens = Core.PitchTokens(targetPitch).Cast<T>();
+        return new Utterance(targetPhonemes, targetDurations, targetCodes, targetPitch, promptCodes, pitchTokens);
     }
 
     // Where a prompt of `clip` phonemes may start: anywhere (Amphion's "mid": randint(0, n − clip)) or at the start (phoneme
@@ -204,7 +207,7 @@ public partial class NaturalSpeech2<T>
         var core = Core;
         var (prompt, query) = core.Prompt(Latent(u.PromptCodes), training, random);
         var (hidden, logDurations) = core.Phonemes(u.Phonemes, prompt, training, random);
-        var (condition, logPitch) = core.Condition(hidden, u.Durations, u.Pitch, prompt, training, random);
+        var (condition, logPitch) = core.Condition(hidden, u.Durations, u.Pitch, prompt, training, random, u.PitchTokens);
 
         // log_dur_loss and log_pitch_loss: L1 against log(1 + d) and log F0.
         var durationTarget = Engine.TensorLog(Engine.TensorAddScalar(new Tensor<int>(u.Durations, new[] { u.Durations.Length }).Cast<T>(), Ops.One));
@@ -280,20 +283,44 @@ public partial class NaturalSpeech2<T>
             var term = Engine.TensorMultiplyScalar(Engine.ReduceSum(Engine.TensorIndexSelect(logProbabilities, picks, 0), null), Ops.FromDouble(-1.0 / frames));
             total = total is null ? term : Engine.TensorAdd(total, term);
             if (q == quantizers - 1) break;
-            int[] used;
-            if (_options.CeResidual == NaturalSpeech2CeResidual.GroundTruth) used = Enumerable.Range(0, frames).Select(f => codes[q, f]).ToArray();
+            Tensor<T> subtract;
+            if (_options.CeResidual == NaturalSpeech2CeResidual.GroundTruth)
+            {
+                var used = Enumerable.Range(0, frames).Select(f => codes[q, f]).ToArray();
+                subtract = Engine.TensorIndexSelect(codebook, new Tensor<int>(new[] { frames }, new Vector<int>(used)), 0);
+            }
             else
             {
-                used = Engine.TensorArgMax(Detached(logits), 1).ToArray();
+                // The codes ẑ₀ quantizes to, as a one-hot [T, bins] node a compiled plan recomputes from each step's logits.
+                subtract = Engine.TensorMatMul(ArgMaxOneHot(Detached(logits)), codebook);
             }
-            var subtract = Engine.TensorIndexSelect(codebook, new Tensor<int>(new[] { frames }, new Vector<int>(used)), 0);
             residual = Engine.TensorSubtract(residual, subtract);
         }
         if (total is null) throw new ArgumentException("The codes have no quantizer.", nameof(codes));
         return Engine.TensorMultiplyScalar(total, Ops.FromDouble(1.0 / quantizers));
     }
 
-    private static Tensor<T> Detached(Tensor<T> x) => new(x._shape, x.ToVector());
+    // Detached on the engine: a compiled plan refreshes the value on every replay, with no gradient through it.
+    private Tensor<T> Detached(Tensor<T> x) => Engine.StopGradient(x);
+
+    // Each row's argmax (the first on ties) as a one-hot row; no gradient.
+    private static Tensor<T> ArgMaxOneHot(Tensor<T> logits) =>
+        AiDotNet.Training.CompiledStepHostValue<T>.Compute("NaturalSpeech2ResidualCodes", new[] { logits }, logits.Shape.ToArray(), (inputs, value) =>
+        {
+            T one = MathHelper.GetNumericOperations<T>().One;
+            var x = inputs[0];
+            int rows = x.Shape[0], bins = x.Shape[1];
+            var source = x.Cast<double>().ToArray();
+            var target = value.AsWritableSpan();
+            target.Clear();
+            for (int r = 0; r < rows; r++)
+            {
+                int best = 0;
+                for (int b = 1; b < bins; b++)
+                    if (source[r * bins + b] > source[r * bins + best]) best = b;
+                target[r * bins + best] = one;
+            }
+        });
 
     // ---------------------------------------------------------------- the optimizer (§5.1)
 
