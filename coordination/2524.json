@@ -266,7 +266,13 @@
         "src/AiDotNet.Tensors/Engines/Compilation/LazyNode.cs",
         "src/AiDotNet.Tensors/Engines/Compilation/CrossTypeLazyNode.cs",
         "src/AiDotNet.Tensors/Engines/Compilation/ForwardOnlyHeterogeneousReplay.cs",
-        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/ForwardOnlyHeterogeneousTrainingTests.cs"
+        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/ForwardOnlyHeterogeneousTrainingTests.cs",
+        "src/AiDotNet.Tensors/Engines/Compilation/LazyTensorScope.cs",
+        "src/AiDotNet.Tensors/Engines/Compilation/CpuFusionPass.cs",
+        "src/AiDotNet.Tensors/Engines/Compilation/ObjectiveSignature.cs",
+        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/NoGradTrainingTraceTests.cs",
+        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/OperationReorderingPassTests.cs",
+        "tests/AiDotNet.Tensors.Tests/Engines/Compilation/LazyGraphCompilerPerformanceTests.cs"
       ],
       "new_files": [
         "src/AiDotNet.Tensors/Engines/Compilation/ForwardOnlyHeterogeneousReplay.cs",
@@ -274,11 +280,27 @@
       ],
       "not_claimed": [
         "ClosureObjectiveGuard",
-        "ObjectiveSignature",
         "consumer owner files",
         "producer/consumer workflow files"
       ],
-      "status": "CLAIMED; root-design-reviewed and user-approved. Exact paths authorized; preserve typed-T backward, stop gradients only at null cross-type bridges, and use exclusive exactly-once forward dispatch. Ordinary GPU per-node execution is allowed; unsupported residency/checkpoint/capture paths must explicitly refuse. ILazyNode is already internal; no public API addition. Guard/signature changes require a direct foreign-leaf finding and separate necessary-scope proposal; no weakening."
+      "status": "CLAIMED; root-design-reviewed and user-approved. Exact paths authorized; preserve typed-T backward, stop gradients only at null cross-type bridges, and use exclusive exactly-once forward dispatch. Ordinary GPU per-node execution is allowed; unsupported residency/checkpoint/capture paths must explicitly refuse. ILazyNode is already internal; no public API addition. Guard/signature changes require a direct foreign-leaf finding and separate necessary-scope proposal; no weakening. Necessary NoGrad semantic claim amendment is CLAIMED and root-reviewed; only these bounded ObjectiveSignature additions, no guard weakening or unrelated signature changes.",
+      "amendments": [
+        {
+          "id": "bounded-1764-no-grad-semantics",
+          "status": "CLAIMED; root-reviewed bounded nine-file NoGrad patch approved, including only two RecordedUnderNoGrad test-stub properties; eight NoGrad cases, no unrelated1764 imports.",
+          "source_pr_head": "74b1166cff5b7de14e744e27e38ae4dbff4dca5c",
+          "source_merge": "7fd8a02f",
+          "scope": "Adopt only six necessary NoGrad semantic production hunks (ILazyNode/LazyNode/CrossTypeLazyNode plus LazyTensorScope/CpuFusionPass/ObjectiveSignature) and NoGradTrainingTraceTests, eight cases. Preserve our named-output and heterogeneous replay implementation, including prior-writer identity; no file replacement from raw head-versus7dd9 diff.",
+          "test_stub_constraint": "OperationReorderingPassTests.cs and LazyGraphCompilerPerformanceTests.cs changes are limited to one RecordedUnderNoGrad property per existing ILazyNode test stub, required to compile the interface contract. No other test behavior changes.",
+          "excluded": [
+            "Other PR1764 retirement/lifetime changes",
+            "Separate LayerNorm review fixes",
+            "SIMD DepthwiseConv3x3 changes",
+            "Blind18-file PR-head import",
+            "Any consumer owner-file edits"
+          ]
+        }
+      ]
     }
   ],
   "verification": {
@@ -360,6 +382,11 @@
       "id": "native-heterogeneous-forward-data-replay",
       "status": "user-approved",
       "decision": "User approved a proper native heterogeneous forward-data replay implementation, including several hours of work and a new artifact. Our cuda worker owns compiler forward-data dispatch/cross-node metadata/tests only after exact native paths are claimed; no consumer/model/client edits or overlapping native client scopes, no guard weakening or public NuGet release. Root reviews bounded design and artifact evidence."
+    },
+    {
+      "id": "1764-bounded-no-grad-semantic-integration",
+      "status": "root-approved within existing user-approved94TTS/upstream replay and compare/combine scope",
+      "decision": "Adopt only necessary PR1764 six-production-file NoGrad semantic hunks plus eight NoGradTrainingTraceTests, preserving existing named outputs and heterogeneous replay. Two independent root reviews found the NoGrad approach correct, including prior-writer identity. PR head74b1166c, merge7fd8a02f are comparison references, not permission to replace current files. Other lifetime, LayerNorm and SIMD changes remain separate review items. Implementation and native artifact verification are still pending."
     }
   ],
   "questions": [
@@ -488,7 +515,8 @@
       "files": "AiDotNet.Tensors package for PR2524",
       "finding": "SoundStorm TextToSemanticTraining_LeavesTheByT5EncoderFrozen: the training trace records backward for the frozen ByT5 encoder under NoGradScope, so one Adam step moves it. The fix is Tensors PR #1764 (b9e5bfe85 / 71ce13fa3); it is not an ancestor of the coordination package commit 641be3d443ee, nor in 0.151.1-validation.1.",
       "proposed_fix": "Include #1764 (approved, mergeable) in the next coordination Tensors package.",
-      "alternatives": ""
+      "alternatives": "",
+      "scope_decision": "Root approved bounded NoGrad semantic integration only; not wholesale PR1764 inclusion. Claim amendment root-reviewed and authorized for publication; implementation/tests/artifact still pending. Other PR1764 lifetime/LayerNorm items are separate review."
     },
     {
       "id": "normed-conv-spectral-norm",
@@ -515,7 +543,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-16T22:10:43.675121+00:00",
+  "updated_utc": "2026-11-16T22:34:55.107441+00:00",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43955817990",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
