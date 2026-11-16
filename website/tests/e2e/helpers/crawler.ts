@@ -22,6 +22,11 @@ import { hasSession, signIn, type Persona } from './personas';
 //
 // Pages are discovered from src/pages and from links followed during the crawl, so new pages and
 // new controls are covered without editing this file.
+//
+// Templated page families (the ~12,000 API reference pages, docs, features, solutions) are opened
+// in the browser only for the first few pages of each family, since every page of a family has the
+// same controls. Every other page is still fetched, and every link on it checked, over plain HTTP
+// in parallel. That keeps a full-site crawl to minutes instead of hours.
 
 export interface Finding { page: string; control: string; problem: string }
 
@@ -35,17 +40,20 @@ export interface CrawlOptions {
   /** Answer backend writes with a stub instead of sending them (admin: real customer data). */
   stubWrites?: boolean;
   /** Controls covered by a dedicated test instead: key regex -> the test that covers it. */
-  dedicated: Array<[RegExp, string]>;
+  dedicated: Array<[RegExp, string] | [RegExp, string, { optional: true }]>;
   /** Backend responses >= 400 that are the correct outcome of that control. */
   expectedStatus?: Array<{ control: RegExp; url: RegExp; status: number }>;
   /** Only exercise controls whose key is new (used for the mobile pass after the desktop pass). */
   skipKeys?: Set<string>;
   maxDepth?: number;
+  /** Browser visits per templated family; the rest are link-checked over HTTP. */
+  browserPagesPerFamily?: number;
 }
 
 export interface CrawlReport {
   findings: Finding[];
   pages: string[];
+  httpPages: number;
   exercised: string[];
   links: number;
   keys: Set<string>;
@@ -81,6 +89,23 @@ interface ControlInfo {
 interface LinkInfo { raw: string | null; href: string; label: string; key: string }
 
 const SUPABASE_HOST = /\.supabase\.co$/;
+const FAMILY_ROOTS = /^\/(docs|features|solutions)\//;
+/** One template per family: /docs/reference/wiki/** -> /docs/reference/wiki/*, /docs/tutorials/x/ ->
+ *  /docs/tutorials/*, /features/x/ -> /features/*. Index pages (/docs/, /features/) are not in one. */
+export function familyOf(path: string): string | null {
+  if (!FAMILY_ROOTS.test(path)) return null;
+  const segs = path.split('/').filter(Boolean);
+  const depth = segs[0] === 'docs' ? Math.min(segs.length - 1, segs[1] === 'reference' && segs[2] === 'wiki' ? 3 : 2) : 1;
+  if (segs.length <= depth) return null;
+  return `/${segs.slice(0, depth).join('/')}/*`;
+}
+
+async function pool<T>(items: T[], size: number, fn: (item: T) => Promise<void>) {
+  let i = 0;
+  await Promise.all(Array.from({ length: Math.min(size, items.length) }, async () => {
+    while (i < items.length) await fn(items[i++]);
+  }));
+}
 const BENIGN_EXTERNAL_STATUS = new Set([401, 403, 405, 429, 999]); // bot walls (GitHub, LinkedIn, X)
 
 // Runs in the page: tags every control with a replayable selector and a stable dedupe key.
@@ -105,9 +130,10 @@ const ENUMERATE = (path: string) => {
     || (el as HTMLInputElement).value || el.getAttribute('name') || '') as string).replace(/\s+/g, ' ').trim().slice(0, 60);
   const visible = (el: Element) => {
     const r = el.getBoundingClientRect();
-    return r.width > 0 && r.height > 0 && (el as HTMLElement).checkVisibility?.({ checkOpacity: true, checkVisibilityCSS: true }) !== false;
+    return r.width > 0 && r.height > 0 && (el as HTMLElement).checkVisibility?.({ checkVisibilityCSS: true }) !== false;
   };
-  const controls = Array.from(document.querySelectorAll(CONTROL)).filter((el) => !el.closest('[aria-hidden="true"]'));
+  const controls = Array.from(document.querySelectorAll(CONTROL)).filter((el) => !el.closest('[aria-hidden="true"]')
+    && !(el.matches('input[type=checkbox][disabled]') && el.closest('li.task-list-item, .contains-task-list, li')));
   const links = Array.from(document.querySelectorAll('a')).map((a) => ({
     raw: a.getAttribute('href'),
     href: (a as HTMLAnchorElement).href,
@@ -116,9 +142,16 @@ const ENUMERATE = (path: string) => {
   }));
   return {
     controls: controls.map((el) => {
-      const scope = el.closest(LAYOUT) ? 'layout' : path;
+      // Pages built from one template (docs, feature and solution pages) share their controls.
+      const template = path.replace(/^\/(docs|features|solutions)\/.+/, '/$1/*');
+      const scope = el.closest(LAYOUT) ? 'layout' : template;
       const label = name(el);
-      const generic = `${el.tagName.toLowerCase()}:${el.getAttribute('role') ?? ''}:${label.replace(/[0-9a-f]{8,}|\d+/gi, 'N')}`;
+      // data-* values tell same-label controls apart (Subscribe on the Pro card vs the Enterprise card);
+      // ids and counters in them are normalised so table rows still collapse to one control.
+      const norm = (v: string) => v.replace(/[0-9a-f]{8,}(-[0-9a-f]{4,})*|\d+/gi, 'N');
+      const data = Array.from(el.attributes).filter((a) => a.name.startsWith('data-') && a.value.length < 40)
+        .map((a) => `[${a.name}=${norm(a.value)}]`).sort().join('');
+      const generic = `${el.tagName.toLowerCase()}:${el.getAttribute('role') ?? ''}:${norm(label)}${data}`;
       return {
         key: `${scope} ${el.id ? `#${el.id}` : generic}`,
         selector: cssPath(el),
@@ -138,7 +171,11 @@ const ENUMERATE = (path: string) => {
 export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
   const { page, request, origin } = o;
   const findings: Finding[] = [];
-  const add = (pg: string, control: string, problem: string) => findings.push({ page: pg, control, problem });
+  const tag = o.persona?.kind ?? 'anon';
+  const add = (pg: string, control: string, problem: string) => {
+    findings.push({ page: pg, control, problem });
+    console.log(`[crawl ${tag}] FINDING ${pg} | ${control} -> ${problem}`);
+  };
   const visited: string[] = [];
   const queue = [...new Set(o.seeds)];
   const queued = new Set(queue);
@@ -149,6 +186,10 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
   const internalLinks = new Map<string, string>();  // url -> first page seen
   const externalLinks = new Map<string, string>();
   const maxDepth = o.maxDepth ?? 3;
+  const perFamily = o.browserPagesPerFamily ?? 3;
+  const familyVisits = new Map<string, number>();
+  const httpOnly: string[] = [];
+  const pageStatus = new Map<string, number>();   // url -> status, for pages fetched over HTTP
 
   // ---- instrumentation shared by every action ----
   const externalNavs: string[] = [];
@@ -233,6 +274,7 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
     if (!res) return false;
     if (res.status() >= 400) { add(path, '(page load)', `HTTP ${res.status()}`); return false; }
     await page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => {});
+    await revealAll();
     const landed = new URL(page.url()).pathname;
     if (signedIn && /^\/login\/?$/.test(landed) && path !== '/login/') {
       add(path, '(page load)', 'a signed-in user was sent to the login page');
@@ -240,6 +282,19 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
     }
     checkResponses(path, '(page load)');
     return true;
+  }
+
+  // Scroll-triggered reveals start at opacity 0; scroll through so every section is shown.
+  async function revealAll() {
+    await page.evaluate(async () => {
+      const step = Math.max(200, Math.floor(window.innerHeight * 0.8));
+      for (let y = 0; y < document.documentElement.scrollHeight; y += step) {
+        window.scrollTo(0, y);
+        await new Promise((r) => setTimeout(r, 60));
+      }
+      window.scrollTo(0, 0);
+    }).catch(() => {});
+    await page.waitForTimeout(400);
   }
 
   function checkResponses(pg: string, control: string) {
@@ -253,6 +308,16 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
       const anonAuth = !signedIn && u.pathname.startsWith('/auth/v1/') && r.status() < 500;
       if (!expected && !anonAuth) add(pg, control, `${r.request().method()} ${u.pathname} answered HTTP ${r.status()}`);
     }
+  }
+
+  function enqueue(p: string) {
+    if (queued.has(p) || !o.inScope(p)) return;
+    queued.add(p);
+    const fam = familyOf(p);
+    const n = fam ? familyVisits.get(fam) ?? 0 : 0;
+    if (fam && n >= perFamily) { httpOnly.push(p); return; }
+    if (fam) familyVisits.set(fam, n + 1);
+    queue.push(p);
   }
 
   async function harvestLinks(pg: string, links: LinkInfo[], ids: string[]) {
@@ -277,7 +342,7 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
       if (u.origin === origin) {
         if (!internalLinks.has(u.href)) internalLinks.set(u.href, pg);
         const p = u.pathname.endsWith('/') || /\.[a-z0-9]+$/i.test(u.pathname) ? u.pathname : `${u.pathname}/`;
-        if (!/\.[a-z0-9]+$/i.test(p) && o.inScope(p) && !queued.has(p)) { queued.add(p); queue.push(p); }
+        if (!/\.[a-z0-9]+$/i.test(p)) enqueue(p);
       } else if (/^https?:$/.test(u.protocol)) {
         if (!externalLinks.has(u.href)) externalLinks.set(u.href, pg);
       }
@@ -328,6 +393,7 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
   async function act(pg: string, c: ControlInfo): Promise<'nav' | 'same'> {
     current = { page: pg, control: c.key };
     exercised.add(c.key);
+    console.log(`[crawl ${tag}]   click ${c.key}`);
     const loc = page.locator(c.selector).first();
     if (c.inForm) await fillForm(c.selector);
     // Two idle snapshots: a signal that moves on its own (animation, clock) cannot count as an effect.
@@ -381,7 +447,7 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
     const landedElsewhere = final.url !== before.url || externalNavs.length > navsBefore;
     if (landedElsewhere) {
       const u = new URL(final.url.startsWith('http') ? final.url : before.url);
-      if (u.origin === origin && !queued.has(u.pathname) && o.inScope(u.pathname)) { queued.add(u.pathname); queue.push(u.pathname); }
+      if (u.origin === origin) enqueue(u.pathname);
     }
     return landedElsewhere ? 'nav' : 'same';
   }
@@ -418,36 +484,67 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
     }
   }
 
+  for (const seed of queue) { const f = familyOf(seed); if (f) familyVisits.set(f, (familyVisits.get(f) ?? 0) + 1); }
   while (queue.length) {
     const pg = queue.shift()!;
+    const started = Date.now();
     if (!(await load(pg))) continue;
     visited.push(pg);
+    const before = exercised.size;
     await explore(pg, [], 0, new Set());
+    console.log(`[crawl ${tag}] ${pg}: ${exercised.size - before} controls in ${((Date.now() - started) / 1000).toFixed(1)}s (${queue.length} pages queued)`);
+  }
+
+  // ---- templated pages beyond the browser sample: fetch each, check every link on it ----
+  const ANCHOR = /<a\b[^>]*?\bhref\s*=\s*(?:"([^"]*)"|'([^']*)')[^>]*>([\s\S]*?)<\/a>/gi;
+  const ID = /\bid\s*=\s*["']([^"']+)["']/gi;
+  let fetched = 0;
+  while (httpOnly.length) {
+    const batch = httpOnly.splice(0);
+    await pool(batch, 16, async (pg) => {
+      const url = new URL(pg, origin).href;
+      const res = await request.get(url, { timeout: 30_000 }).catch(() => null);
+      fetched++;
+      pageStatus.set(url, res?.status() ?? 0);
+      if (!res || res.status() >= 400) { add(pg, '(page load)', res ? `HTTP ${res.status()}` : 'no response'); return; }
+      const html = await res.text();
+      const ids = [...html.matchAll(ID)].map((m) => m[1]);
+      const links: LinkInfo[] = [...html.matchAll(ANCHOR)].map((m) => {
+        const raw = m[1] ?? m[2] ?? '';
+        let href = raw;
+        try { href = new URL(raw.replace(/&amp;/g, '&'), url).href; } catch { /* reported below */ }
+        return { raw, href, label: m[3].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim().slice(0, 60), key: '' };
+      });
+      await harvestLinks(pg, links, ids);
+    });
+    console.log(`[crawl ${tag}] fetched ${fetched} templated pages over HTTP (${httpOnly.length} more queued)`);
   }
 
   // ---- link targets ----
+  console.log(`[crawl ${tag}] checking ${internalLinks.size} internal and ${externalLinks.size} external link targets`);
   current = { page: '', control: '' };
-  for (const [url, pg] of internalLinks) {
-    const res = await request.get(url, { maxRedirects: 5, timeout: 20_000 }).catch(() => null);
-    if (!res || res.status() >= 400) add(pg, `link ${new URL(url).pathname}`, `target answered ${res ? `HTTP ${res.status()}` : 'nothing'}`);
-  }
-  for (const [url, pg] of externalLinks) {
+  await pool([...internalLinks], 16, async ([url, pg]) => {
+    const known = pageStatus.get(url) ?? pageStatus.get(url.endsWith('/') ? url : `${url}/`);
+    const status = known ?? (await request.get(url, { maxRedirects: 5, timeout: 30_000 }).catch(() => null))?.status() ?? 0;
+    if (status === 0 || status >= 400) add(pg, `link ${new URL(url).pathname}`, `target answered ${status ? `HTTP ${status}` : 'nothing'}`);
+  });
+  await pool([...externalLinks], 8, async ([url, pg]) => {
     let res = await request.head(url, { maxRedirects: 5, timeout: 20_000 }).catch(() => null);
     if (!res || res.status() === 405 || res.status() === 404) res = await request.get(url, { maxRedirects: 5, timeout: 20_000 }).catch(() => null);
     if (!res) add(pg, `link ${url}`, 'external target unreachable');
     else if (res.status() >= 400 && !BENIGN_EXTERNAL_STATUS.has(res.status())) add(pg, `link ${url}`, `external target answered HTTP ${res.status()}`);
-  }
+  });
 
   // ---- coverage contract ----
   for (const [key, pg] of disabledSeen) {
     if (!o.dedicated.some(([re]) => re.test(key))) add(pg, key, 'control is disabled and nothing in the crawl enabled it; cover it with a dedicated test and list it');
   }
-  for (const [re, why] of o.dedicated) {
-    if (![...keys].some((k) => re.test(k))) add('(dedicated list)', String(re), `matches no control on any page (stale entry for: ${why})`);
+  for (const [re, why, opts] of o.dedicated) {
+    if (!opts?.optional && ![...keys].some((k) => re.test(k))) add('(dedicated list)', String(re), `matches no control on any page (stale entry for: ${why})`);
   }
 
   await page.unroute('**/*');
-  return { findings, pages: visited, exercised: [...exercised], links: internalLinks.size + externalLinks.size, keys };
+  return { findings, pages: visited, httpPages: fetched, exercised: [...exercised], links: internalLinks.size + externalLinks.size, keys };
 }
 
 export function formatFindings(f: Finding[]): string {

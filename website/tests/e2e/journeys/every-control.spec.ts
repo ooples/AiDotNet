@@ -22,7 +22,7 @@ const SIGNED_IN_DEDICATED: Array<[RegExp, string]> = [
 ];
 const PRO_STRIPE_DEDICATED: Array<[RegExp, string]> = [
   ...SIGNED_IN_DEDICATED,
-  [/^\/pricing\/ button::Current plan$/, 'account-billing.spec: the current plan is shown and cannot be bought again'],
+  [/^\/pricing\/ button::Current plan.*\[data-tier=pro\]/, 'account-billing.spec: the current plan is shown and cannot be bought again'],
 ];
 const PRO_GRANTED_DEDICATED = PRO_STRIPE_DEDICATED;
 
@@ -30,7 +30,7 @@ interface PersonaRun {
   kind: PersonaKind | 'anon';
   seeds: string[];
   inScope: (p: string) => boolean;
-  dedicated: Array<[RegExp, string]>;
+  dedicated: CrawlOptions['dedicated'];
   stubWrites?: boolean;
   expectedStatus?: CrawlOptions['expectedStatus'];
   minPages: number;
@@ -41,7 +41,10 @@ const RUNS: PersonaRun[] = [
     kind: 'anon',
     seeds: ROUTES.filter((p) => !isAccount(p) && !isAdmin(p) && !isAuthCallback(p)),
     inScope: (p) => !isAccount(p) && !isAdmin(p) && !isAuthCallback(p),
-    dedicated: [],
+    dedicated: [
+      // The crawler submits the sign-up form; the button then stays disabled as the success state.
+      [/^\/signup\/ button::Check your email$/, 'new-customer.spec: sign up and confirm the email link', { optional: true }],
+    ],
     minPages: 40,
   },
   {
@@ -106,7 +109,7 @@ for (const run of RUNS) {
       const findings = [...desktop.findings, ...mobile.findings.filter((f) => f.page !== '(dedicated list)')];
       test.info().annotations.push({
         type: 'coverage',
-        description: `${desktop.pages.length} pages, ${desktop.exercised.length + mobile.exercised.length} controls, ${desktop.links} links`,
+        description: `${desktop.pages.length} pages in the browser, ${desktop.httpPages} more over HTTP, ${desktop.exercised.length + mobile.exercised.length} controls, ${desktop.links} links`,
       });
       await test.info().attach(`coverage-${run.kind}.json`, {
         body: JSON.stringify({ pages: desktop.pages, desktop: desktop.exercised, mobile: mobile.exercised }, null, 2),

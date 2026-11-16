@@ -228,7 +228,9 @@ foreach (var grp in grouped)
         var sb = new StringBuilder();
         sb.AppendLine("---");
         sb.AppendLine($"title: {Yaml(display)}");
-        sb.AppendLine($"description: {Yaml(summaryPlain.Length > 0 ? FirstSentence(summaryPlain) : $"{display} — {kind} in {t.Namespace}.")}");
+        // The description is plain text (meta tags, search results): drop the markdown bracket escapes.
+        string descriptionText = summaryPlain.Replace("\\[", "[").Replace("\\]", "]");
+        sb.AppendLine($"description: {Yaml(descriptionText.Length > 0 ? FirstSentence(descriptionText) : $"{display} — {kind} in {t.Namespace}.")}");
         sb.AppendLine("section: \"API Reference\"");
         sb.AppendLine("---").AppendLine();
         sb.AppendLine($"`{kind}` · `{t.Namespace}`").AppendLine();
@@ -583,7 +585,7 @@ static string ToMarkdown(XElement? el, Func<string, string?>? linker = null)
         switch (node)
         {
             // Collapse horizontal whitespace but KEEP newlines so author-written lists survive.
-            case XText t: sb.Append(Regex.Replace(t.Value, @"[^\S\n]+", " ")); break;
+            case XText t: sb.Append(PlainText(Regex.Replace(t.Value, @"[^\S\n]+", " "))); break;
             case XElement e:
                 switch (e.Name.LocalName)
                 {
@@ -616,6 +618,26 @@ static string ToMarkdown(XElement? el, Func<string, string?>? linker = null)
                 }
                 break;
         }
+    }
+    return sb.ToString();
+}
+
+// Doc prose is literal text, not markdown. Brackets are escaped so pseudo-code such as
+// `lora_expert[i](input)` does not become a link to "input", and bare URLs (endpoint defaults
+// like http://localhost:9000/ or an API root) are shown as code instead of being autolinked into
+// links that go nowhere. An author who wants a link writes <see href="..."/>.
+static string PlainText(string s)
+{
+    var parts = Regex.Split(s, @"(https?://[^\s<>()\[\]`'""]+)");
+    var sb = new StringBuilder();
+    for (int i = 0; i < parts.Length; i++)
+    {
+        if (i % 2 == 1)
+        {
+            string url = parts[i].TrimEnd('.', ',', ';', ':', '!', '?');
+            sb.Append('`').Append(url).Append('`').Append(parts[i], url.Length, parts[i].Length - url.Length);
+        }
+        else sb.Append(parts[i].Replace("[", "\\[").Replace("]", "\\]"));
     }
     return sb.ToString();
 }
