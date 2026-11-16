@@ -22434,13 +22434,29 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             return importance;
         }
 
-        // Get the weights from the first layer
-        Vector<T> weights = firstLayer.GetParameters();
-        int featureCount = firstLayer.GetInputShape()[0];
-        int outputSize = firstLayer.GetOutputLayerShape().RequireConcrete("Recording concrete layer geometry")[0];
+        int featureCount;
+        Tensor<T> featureScores;
+        if (firstLayer is DenseLayer<T> dense)
+        {
+            // A lazy dense layer has no input width or weights to attribute yet. As with
+            // a model with no layers, attribution is unavailable until shapes are resolved;
+            // introspection must not invent a width or initialize random weights for it.
+            if (!dense.IsShapeResolved) return importance;
 
-        // Calculate feature importance by summing absolute weights per input feature
-        var featureScores = FirstLayerFeatureImportance(weights, featureCount, outputSize);
+            // Dense is feature-last, including batched/sequence inputs. Its weight matrix
+            // is [features, outputs]; leading input axes and the bias are not features.
+            using var noGrad = new NoGradScope<T>();
+            var denseWeights = dense.GetWeights();
+            featureCount = denseWeights.Shape[0];
+            featureScores = Engine.ReduceSum(Engine.TensorAbs(denseWeights), new[] { 1 }, false);
+        }
+        else
+        {
+            Vector<T> weights = firstLayer.GetParameters();
+            featureCount = firstLayer.GetInputShape()[0];
+            int outputSize = firstLayer.GetOutputLayerShape().RequireConcrete("Recording concrete layer geometry")[0];
+            featureScores = FirstLayerFeatureImportance(weights, featureCount, outputSize);
+        }
 
         // Normalize the scores to sum to 1
         T totalScore = Engine.TensorSum(featureScores);
