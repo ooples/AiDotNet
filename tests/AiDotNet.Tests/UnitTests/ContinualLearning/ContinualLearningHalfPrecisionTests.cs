@@ -173,6 +173,20 @@ public class ContinualLearningHalfPrecisionTests
     }
 
     [Fact]
+    public void GemConstraint_Half_ChecksEveryStoredTask()
+    {
+        var gem = new GradientEpisodicMemory<Half, Tensor<Half>, Tensor<Half>>(
+            new MeanSquaredErrorLoss<Half>(), new GEMOptions<Half> { NormalizeGradients = false, Margin = 0.5 });
+        Assert.False(gem.ViolatesConstraint(new Vector<Half>(new[] { (Half)0, (Half)0 })));
+        gem.StoreTaskGradient(new Vector<Half>(new[] { (Half)1, (Half)0 }));
+        gem.StoreTaskGradient(new Vector<Half>(new[] { (Half)0, (Half)1 }));
+
+        Assert.True(gem.ViolatesConstraint(new Vector<Half>(new[] { (Half)1, (Half)0.25 })));
+        Assert.True(gem.ViolatesConstraint(new Vector<Half>(new[] { (Half)0.25, (Half)1 })));
+        Assert.False(gem.ViolatesConstraint(new Vector<Half>(new[] { (Half)0.5, (Half)0.5 })));
+    }
+
+    [Fact]
     public void GemConstraint_Half_PreservesTheMarginBoundary()
     {
         var gem = new GradientEpisodicMemory<Half, Tensor<Half>, Tensor<Half>>(

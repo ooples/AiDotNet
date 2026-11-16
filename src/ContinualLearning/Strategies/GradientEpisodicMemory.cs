@@ -304,8 +304,13 @@ public class GradientEpisodicMemory<T, TInput, TOutput>
     /// <inheritdoc/>
     public bool ViolatesConstraint(Vector<T> gradient)
     {
-        return _taskGradients.Any(taskGrad =>
-            NumOps.ToDouble(ComputeDotProduct(gradient, taskGrad)) < NumOps.ToDouble(_margin));
+        if (_taskGradients.Count == 0) return false;
+        var rows = _taskGradients.Select(taskGradient =>
+            Engine.Reshape(Tensor<T>.FromVector(taskGradient), new[] { 1, taskGradient.Length })).ToArray();
+        var memories = Engine.TensorConcatenate(rows, 0);
+        var products = Engine.TensorMatMul(memories,
+            Engine.Reshape(Tensor<T>.FromVector(gradient), new[] { gradient.Length, 1 }));
+        return NumOps.ToDouble(Engine.TensorMinValue(products)) < NumOps.ToDouble(_margin);
     }
 
     #endregion
