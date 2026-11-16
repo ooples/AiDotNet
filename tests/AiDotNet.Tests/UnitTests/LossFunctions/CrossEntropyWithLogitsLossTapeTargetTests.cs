@@ -265,4 +265,33 @@ public class CrossEntropyWithLogitsLossTapeTargetTests
         };
         return -targetLogit + logSumExp;
     }
+    [Fact]
+    public void ComputeTapeLoss_SoftRank3TargetInsideTrainingTrace_RecordsAndMatchesEager()
+    {
+        // A [B, T, V] one-hot target: the class axis is inferred from the target's values. Inside a compiled-training
+        // trace that inference used to record a host read and throw, sending every step back to the eager tape.
+        var loss = new CrossEntropyWithLogitsLoss<float>();
+        var rng = new System.Random(7);
+        var predicted = new Tensor<float>(new[] { 2, 3, 5 });
+        var target = new Tensor<float>(new[] { 2, 3, 5 });
+        for (int b = 0; b < 2; b++)
+            for (int t = 0; t < 3; t++)
+            {
+                for (int v = 0; v < 5; v++) predicted[b, t, v] = (float)(rng.NextDouble() * 2 - 1);
+                target[b, t, rng.Next(5)] = 1f;
+            }
+        float eager = loss.ComputeTapeLoss(predicted, target).ToArray()[0];
+
+        var weights = new Tensor<float>(new[] { 2, 3, 5 });
+        weights.Fill(1f);
+        float traced;
+        using (var scope = AiDotNet.Tensors.Engines.Compilation.GraphMode.EnableTraining(new[] { weights }))
+        {
+            var logits = AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorMultiply(predicted, weights);
+            var value = loss.ComputeTapeLoss(logits, target);
+            traced = value.ToArray()[0];
+        }
+
+        Assert.Equal(eager, traced, 5);
+    }
 }

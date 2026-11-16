@@ -360,8 +360,22 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
         if (alternateAxis == defaultAxis || alternateAxis >= rank)
             return defaultAxis;
 
-        T defaultScore = ProbabilityAxisScore(target, defaultAxis);
-        T alternateScore = ProbabilityAxisScore(target, alternateAxis);
+        // Which axis holds the probabilities is a property of the target's layout, decided from its values. Under a
+        // compiled-training trace the target is the step's caller-fed batch (a concrete tensor), so the scores are
+        // read eagerly outside the trace: recording them put a host read in the graph and sent every step back to
+        // the eager tape. A target computed inside the trace still records (and refuses) as before.
+        T defaultScore, alternateScore;
+        if (target.LazySource is null && AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+        {
+            using var suspension = AiDotNet.Tensors.Engines.Compilation.GraphMode.SuspendRecording();
+            defaultScore = ProbabilityAxisScore(target, defaultAxis);
+            alternateScore = ProbabilityAxisScore(target, alternateAxis);
+        }
+        else
+        {
+            defaultScore = ProbabilityAxisScore(target, defaultAxis);
+            alternateScore = ProbabilityAxisScore(target, alternateAxis);
+        }
         T tolerance = NumOps.FromDouble(1e-6);
 
         return NumOps.LessThan(alternateScore, tolerance)
