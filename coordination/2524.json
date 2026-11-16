@@ -147,8 +147,8 @@
       "owner": "this session and its agents",
       "scope": "Shared SAM single-pass prompt replay, WordChar embedding shape, Transfusion declared parallel head widths",
       "files": [
-        "src/NeuralNetworks/Architectures/SamNetwork.cs",
-        "src/NeuralNetworks/Training/SamTraining.cs",
+        "src/ComputerVision/Segmentation/Foundation/SamNetwork.cs",
+        "src/ComputerVision/Segmentation/Foundation/SamTraining.cs",
         "src/NeuralNetworks/Layers/WordCharEmbeddingLayer.cs",
         "src/VisionLanguage/Unified/Transfusion.Training.cs"
       ]
@@ -162,19 +162,28 @@
         "tests/AiDotNet.Tests/ModelFamilyTests/Base/DevaOptionFixture.cs",
         "src/ComputerVision/Segmentation/Mamba/VisionMamba.cs"
       ]
+    },
+    {
+      "owner": "this session and its agents (artifact_feed worker)",
+      "scope": "Finance116 FirstLayerFeatureImportance negative TensorSlice length; bounded shared fix and independent regression",
+      "files": [
+        "FirstLayerFeatureImportance shared source; exact path follows inspection"
+      ],
+      "status": "claimed; investigation underway"
     }
   ],
   "verification": {
     "merge_resolution": "Local merge3a25c7dd27 normal build +5hash-grid/render tests and CI impact contract passed",
     "wavernn": "43focusedtests passed0skips; normal analyzer-gated build passed",
-    "full_ci": "PR head remains35f; full cycle still running. Latest snapshot27main failed,39passed,15active112queued. All completed failures retained; new failures are triaged as they finish. Do not push PR branch until entire cycle completes.",
+    "full_ci": "Fresh REST main43902662001:91failed98passed4skipped4active on unchanged35f; other workflows terminal. Wait for entire cycle before PR push.",
     "rebind": "Final normal analyzer-gated production/test build PASSED; integrated rebind/hybrid/WaveRNN focused90tests PASSED0failed0skipped (2524-coordination-rebind-wave.trx). CPU/GPU routing corrected; original replacement assertions and independent Adam/schedule continuity cases preserved.",
     "upstream_lstm": "Artifact-only run43940828211 at641be3d443ee passed all5TFM normal build/pack and99LSTM+typed-real-predicate+sparse-reduction cases, zero skips; tested/packaged binary identity verified. No public NuGet release. Named-retention extension is separate pending review/tests.",
     "prior_batch": "88 focused tests passed; Unit02 full GitHub shard533passed0failed13pre-existing dataset/manual skips",
     "stft": "Integrated447aa7ac78: normal build passed; focused10passed3remainingfailed0skips. New replay/DFT/gradient/wide-norm tests passed. Remaining Tortoise2 TensorSlice and UniAudio1 TensorSubtract host-read defects remain open.",
     "failover": "Integrated9a62f53400 after root review:6PowerShellchecks pass incl146failovercases/64certificatecases/9expensivejobtopology. Normal GitHub validation still required. One alternate only for proven terminalinfra; qualifiedCPUsubset excludes heavy/customtimeout/packed hostedshards; queued-outage watchdog outside batch.",
     "hnn_rocket": "Integrated158f30558b: test-onlymainassemblycompilepassed; actualHNN2options,new independent momentumresidual/control test,Rockettoycase all4passed. ExtraMiniRocketcasefails stale baseline; independentremote paper4 confirms, nextboundedfixturebatch. Original8productionoutputs restored hash-verified.",
-    "unit05_ntm_pending": "Normal gated production+main test build passed. Focused225tests:221pass4fail0skip. Half fixture fixes/MiniRocket passed; two NTM failures exposed second ParamModel owner (corrective manifest-backed alias fix reviewed), two sparse reductions exposed engine bug (native coalesced O(nnz)-memory fix reviewed). Source batch remains LOCAL/unverified; no assertion weakening."
+    "unit05_ntm_pending": "Normal gated production+main test build passed. Focused225tests:221pass4fail0skip. Half fixture fixes/MiniRocket passed; two NTM failures exposed second ParamModel owner (corrective manifest-backed alias fix reviewed), two sparse reductions exposed engine bug (native coalesced O(nnz)-memory fix reviewed). Source batch remains LOCAL/unverified; no assertion weakening.",
+    "artifact_feed": "33ae3b1c16 pushed to coordination branch:12fixtures,real99-test package evidence,5YAML and9consuming job bodies validated; GitHub preflight pending. Source repairs remain local awaiting combined tests."
   },
   "decisions": [
     {
@@ -309,8 +318,22 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-16T20:20:17.4704497Z",
+  "updated_utc": "2026-11-16T20:45:29.7832350Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43940828211",
-  "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts."
+  "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
+  "available_work": [
+    {
+      "status": "unclaimed; joining developer should claim before editing",
+      "scope": "ASR47 MelSpectrogram.ApplyMelFilterbank bin mismatch"
+    },
+    {
+      "status": "unclaimed; joining developer should claim before editing",
+      "scope": "PINN44 InputGradient empty tape; MultiFidelityPINN24 rank1 concat axis1; exclude owned HNN"
+    },
+    {
+      "status": "unclaimed; confirm contracts before edits",
+      "scope": "Lagrangian12 fixture state16 versus configured4; CUPS13 parameter layout; DoRA4 initial magnitude/forward; FeatureSelector2 subtensor indexing; StandardScaler3 sample/population contract"
+    }
+  ]
 }
