@@ -31,7 +31,13 @@ try {
         targetFrameworks = $pin.targetFrameworks
         testedAndPackagedNet10BinarySha256 = $pin.testedAndPackagedNet10BinarySha256
         testCounters = @{ total = $pin.testCount; executed = $pin.testCount; passed = $pin.testCount; failed = 0; notExecuted = 0 }
+        retainedOutputTestCounters = @{ total = $pin.retainedOutputTestCount; executed = $pin.retainedOutputTestCount; passed = $pin.retainedOutputTestCount }
+        retainedOutputTestCases = @(1..$pin.retainedOutputTestCount | ForEach-Object { "Fixture.RetainedOutput.Case$_" })
+        mandatoryCpuTestCount = $pin.mandatoryCpuTestCount
         sha256 = @{ "packages/AiDotNet.Tensors.$version.nupkg" = $pin.packageSha256 }
+    }
+    foreach ($outcome in @('failed', 'error', 'timeout', 'aborted', 'inconclusive', 'passedButRunAborted', 'notRunnable', 'notExecuted', 'disconnected', 'warning', 'completed', 'inProgress', 'pending')) {
+        $manifest.retainedOutputTestCounters[$outcome] = 0
     }
     function Test-Case([string] $Name, [scriptblock] $Mutate, [string] $ExpectedError) {
         $case = $manifest | ConvertTo-Json -Depth 10 | ConvertFrom-Json
@@ -47,6 +53,11 @@ try {
     Test-Case 'valid package evidence' {} ''
     Test-Case 'wrong source commit' { param($m) $m.sourceCommit = 'wrong' } 'Manifest identity'
     Test-Case 'skipped producer tests' { param($m) $m.testCounters.notExecuted = 1 } 'Nonzero test outcome'
+    Test-Case 'missing retained-output group' { param($m) $m.PSObject.Properties.Remove('retainedOutputTestCounters') } 'Missing retained-output test group'
+    Test-Case 'skipped retained-output tests' { param($m) $m.retainedOutputTestCounters.notExecuted = 1 } 'Nonzero retained-output test outcome'
+    Test-Case 'duplicate retained-output identities' { param($m) $m.retainedOutputTestCases[1] = $m.retainedOutputTestCases[0] } 'must be nonempty and unique'
+    Test-Case 'missing retained-output identity' { param($m) $m.retainedOutputTestCases = @($m.retainedOutputTestCases | Select-Object -Skip 1) } 'test identity count'
+    Test-Case 'wrong mandatory CPU total' { param($m) $m.mandatoryCpuTestCount-- } 'Mandatory CPU test total'
     Test-Case 'missing target framework' { param($m) $m.targetFrameworks = @('net10.0') } 'target frameworks'
     Test-Case 'wrong package hash' { param($m) $m.sha256."packages/AiDotNet.Tensors.$version.nupkg" = 'wrong' } 'Package hash'
     Test-Case 'wrong tested binary' { param($m) $m.testedAndPackagedNet10BinarySha256 = 'wrong' } 'Tested binary hash'
