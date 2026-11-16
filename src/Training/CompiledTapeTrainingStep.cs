@@ -550,11 +550,15 @@ public static class CompiledTapeTrainingStep<T>
         internal readonly bool L2AfterClip;
         internal readonly object?[] Extras;
         internal readonly Tensor<T>[] Parameters;
+        internal readonly object[]? LayerOwners;
+        internal readonly Tensor<T>[][]? LayerSlots;
+        internal readonly int[][][]? LayerSlotShapes;
 
         internal OptimizerContract(Tensor<T>[] parameters, int type, double rate, double beta1, double beta2,
             double epsilon, double decay, AiDotNet.Tensors.Engines.Compilation.LrSchedule? schedule,
             object? optimizer, bool bf16, int int8Block, int int8Minimum,
-            AiDotNet.Tensors.Engines.Compilation.FusedOptimizerExtras? extras, double l2, bool l2AfterClip)
+            AiDotNet.Tensors.Engines.Compilation.FusedOptimizerExtras? extras, double l2, bool l2AfterClip,
+            IReadOnlyList<ITrainableLayer<T>>? layers = null)
         {
             Configuration = (type, schedule is null ? rate : 0.0, beta1, beta2, epsilon, decay);
             Optimizer = optimizer;
@@ -572,6 +576,9 @@ public static class CompiledTapeTrainingStep<T>
             L2AfterClip = l2AfterClip;
             Extras = extras is null ? Array.Empty<object?>() : ExtraProperties.Select(p => p.GetValue(extras)).ToArray();
             Parameters = (Tensor<T>[])parameters.Clone();
+            LayerOwners = layers?.Cast<object>().ToArray();
+            LayerSlots = layers?.Select(layer => layer.GetTrainableParameters().ToArray()).ToArray();
+            LayerSlotShapes = LayerSlots?.Select(slots => slots.Select(parameter => parameter._shape.ToArray()).ToArray()).ToArray();
         }
 
         internal bool Matches(OptimizerContract other, bool compareParameters = true)
@@ -591,6 +598,137 @@ public static class CompiledTapeTrainingStep<T>
         typeof(AiDotNet.Tensors.Engines.Compilation.FusedOptimizerExtras)
             .GetProperties(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public)
             .OrderBy(p => p.Name, StringComparer.Ordinal).ToArray();
+
+    // Replacement is a layer-slot lifecycle, never permission to retarget a raw or hybrid parameter list.
+    private static bool CanRebindLayerSlots(OptimizerContract previous, OptimizerContract current)
+    {
+        if (!previous.Matches(current, compareParameters: false)
+            || previous.LayerOwners is null || current.LayerOwners is null
+            || previous.LayerSlots is null || current.LayerSlots is null || previous.LayerSlotShapes is null
+            || previous.LayerOwners.Length == 0 || previous.LayerOwners.Length != current.LayerOwners.Length
+            || previous.Parameters.Length != current.Parameters.Length)
+            return false;
+        var oldParameters = new HashSet<Tensor<T>>(previous.Parameters, Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        var replacements = new Dictionary<Tensor<T>, Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        var newSlots = new Dictionary<Tensor<T>, Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        bool changed = false;
+        for (int layer = 0; layer < previous.LayerOwners.Length; layer++)
+        {
+            if (!ReferenceEquals(previous.LayerOwners[layer], current.LayerOwners[layer])
+                || previous.LayerSlots[layer].Length != current.LayerSlots[layer].Length)
+                return false;
+            for (int slot = 0; slot < previous.LayerSlots[layer].Length; slot++)
+            {
+                var oldParameter = previous.LayerSlots[layer][slot];
+                var newParameter = current.LayerSlots[layer][slot];
+                if (!ShapesEqual(previous.LayerSlotShapes[layer][slot], newParameter._shape)
+                    || (!ReferenceEquals(oldParameter, newParameter) && oldParameters.Contains(newParameter))
+                    || (replacements.TryGetValue(oldParameter, out var mapped) && !ReferenceEquals(mapped, newParameter))
+                    || (newSlots.TryGetValue(newParameter, out var source) && !ReferenceEquals(source, oldParameter)))
+                    return false;
+                replacements[oldParameter] = newParameter;
+                newSlots[newParameter] = oldParameter;
+                changed |= !ReferenceEquals(oldParameter, newParameter);
+            }
+        }
+        for (int parameter = 0; parameter < previous.Parameters.Length; parameter++)
+            if (!replacements.TryGetValue(previous.Parameters[parameter], out var replacement)
+                || !ReferenceEquals(replacement, current.Parameters[parameter]))
+                return false;
+        return changed;
+    }
+
+    // Compile and restore off to the side. A rejected checkpoint or graph leaves the old optimizer untouched.
+    private static bool TryRebindLayerSlots(OptimizerContract contract, Tensor<T> input, Tensor<T> target,
+        Func<Tensor<T>, Tensor<T>> forward, Func<Tensor<T>, Tensor<T>, Tensor<T>> computeLoss,
+        IReadOnlyList<ITrainableLayer<T>> layers, object? optimizer)
+    {
+        CompiledModelCache<T>? replacementCache = null;
+        bool published = false;
+        try
+        {
+            if (_configuredPlan is not CompiledTrainingPlan<T> previous)
+                throw new NotSupportedException("This compiled plan cannot checkpoint a layer-slot replacement.");
+            var checkpoint = previous.CaptureFusedOptimizerCheckpoint()
+                ?? throw new NotSupportedException("The configured optimizer has no checkpoint for a layer-slot replacement.");
+            var schedules = previous.LearningRateSchedules.ToArray();
+            using var fresh = FirstCompiledStepAllocationScope.Enter(true);
+            using var noArena = TensorArena.Suspend();
+            var persistentInput = new Tensor<T>(input._shape);
+            var persistentTarget = new Tensor<T>(target._shape);
+            input.Contiguous().AsSpan().CopyTo(persistentInput.AsWritableSpan());
+            target.Contiguous().AsSpan().CopyTo(persistentTarget.AsWritableSpan());
+            var key = new int[input.Rank + 1 + target.Rank];
+            Array.Copy(input._shape, 0, key, 0, input.Rank);
+            key[input.Rank] = -1;
+            Array.Copy(target._shape, 0, key, input.Rank + 1, target.Rank);
+            // Newly bound float parameters need the same residency preparation as an initial compiled lifecycle.
+            if (typeof(T) == typeof(float)
+                && ((AiDotNet.Tensors.Engines.Compilation.OptimizerType)contract.Configuration.Item1 is
+                    AiDotNet.Tensors.Engines.Compilation.OptimizerType.Adam or
+                    AiDotNet.Tensors.Engines.Compilation.OptimizerType.AdamW or
+                    AiDotNet.Tensors.Engines.Compilation.OptimizerType.SGD)
+                && Environment.GetEnvironmentVariable("AIDOTNET_GPU_RESIDENT_PARAMS") != "0"
+                && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine)
+                foreach (var parameter in contract.Parameters) parameter.Gpu();
+            replacementCache = new CompiledModelCache<T>();
+            using var draws = CompiledStepRandom<T>.BeginRecording();
+            var replacement = replacementCache.GetOrCompileTraining(key,
+                () => computeLoss(forward(persistentInput), persistentTarget), contract.Parameters);
+            if (replacement is not CompiledTrainingPlan<T> next)
+                throw new NotSupportedException("The replacement plan cannot restore a layer-slot optimizer checkpoint.");
+            var expectedOwners = contract.LayerOwners!;
+            if (layers.Count != expectedOwners.Length)
+                throw new InvalidOperationException("The layer layout changed while the replacement graph was traced.");
+            for (int layer = 0; layer < layers.Count; layer++)
+            {
+                if (!ReferenceEquals(layers[layer], expectedOwners[layer]))
+                    throw new InvalidOperationException("A layer owner changed while the replacement graph was traced.");
+                var slots = layers[layer].GetTrainableParameters();
+                var expectedSlots = contract.LayerSlots![layer];
+                var expectedShapes = contract.LayerSlotShapes![layer];
+                if (slots.Count != expectedSlots.Length
+                    || !slots.Zip(expectedSlots, (left, right) => ReferenceEquals(left, right)).All(same => same)
+                    || !slots.Zip(expectedShapes, (slot, shape) => ShapesEqual(slot._shape, shape)).All(same => same))
+                    throw new InvalidOperationException("A parameter slot or shape changed while the replacement graph was traced.");
+            }
+            CompiledStepRandom<T>.Attach(next, draws);
+            next.RestoreFusedOptimizerCheckpoint(checkpoint, schedules);
+            next.SetL2Regularization(_configuredL2, _configuredL2AfterClip
+                ? GradientRegularizationOrder.ClipThenRegularize : GradientRegularizationOrder.RegularizeThenClip);
+
+            var oldCache = _cache;
+            published = true;
+            _cache = replacementCache;
+            replacementCache = null;
+            _configuredPlan = next;
+            CurrentState.optimizerContract = contract;
+            CurrentState.planOptimizerStep = next.OptimizerStep;
+            _cachedParameters = contract.Parameters;
+            RememberLayerSet(layers);
+            RememberSelection(null);
+            _persistentInput = persistentInput;
+            _persistentTarget = persistentTarget;
+            _persistentByShape = new List<(Tensor<T>, Tensor<T>)> { (persistentInput, persistentTarget) };
+            CurrentState.cachedCompositeShapeKey = null;
+            _shapeSwitchFrom = null;
+            if (optimizer is AiDotNet.Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> linked)
+                AttachFusedOptimizerStateLink(next, linked);
+            oldCache?.Invalidate();
+            if (!ReferenceEquals(_retiringCache, oldCache)) _retiringCache?.Invalidate();
+            _retiringCache = null;
+            _lastFallbackException = null;
+            return true;
+        }
+        catch (Exception ex) when (!published)
+        {
+            replacementCache?.Invalidate();
+            _lastFallbackException = new InvalidOperationException(
+                "The layer-slot replacement could not preserve the configured optimizer state.", ex);
+            return false;
+        }
+    }
+
 
     // Validation is read-only. Updating the clip happens only after every invariant passed.
     private static bool TryPreflightOptimizer(OptimizerContract current, double clip, bool updateClip,
@@ -1678,17 +1816,28 @@ public static class CompiledTapeTrainingStep<T>
         AiDotNet.Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>>? restoredStateAwaitingStep = null;
         ClosureObjectiveState<T>.Entry? reboundClosureEntry = null;
         OptimizerContract? requestedContract = null;
+        bool reboundLayerSlots = false;
         if (_configuredPlan is not null)
         {
             requestedContract = new OptimizerContract(
                 CollectDeduplicatedParametersWithExtras(layers, extraTensors, trainableSelection),
                 (int)optimizerType, learningRate, beta1, beta2, epsilon, weightDecay, lrSchedule,
                 eagerOptimizer, useBf16Moments, int8MomentBlockSize, int8MinQuantizedLength,
-                fusedExtras, l2Regularization, l2AfterClip);
-            // An explicit selection change starts the existing documented compiled-plan lifecycle.
-            // Only that transition defers parameter identity until the replacement plan is configured.
+                fusedExtras, l2Regularization, l2AfterClip, layers);
+            bool canRebind = closureObjective is null && trainableSelection is null && !_cachedUsesExplicitSelection
+                && (extraTensors is null || extraTensors.Count == 0)
+                && _mpPlan is null && _mpAdamPlan is null && _mpGenericPlan is null
+                && CurrentState.optimizerContract is { } previousContract
+                && CanRebindLayerSlots(previousContract, requestedContract);
+            // A changed explicit subset is the established new-selection lifecycle; a layer-slot rebind preserves state.
             if (!TryPreflightOptimizer(requestedContract, maxGradNorm, updateClip: false,
-                    newSelectionLifecycle: SelectionChanged(trainableSelection))) return false;
+                    newSelectionLifecycle: SelectionChanged(trainableSelection) || canRebind)) return false;
+            if (canRebind)
+            {
+                if (!TryRebindLayerSlots(requestedContract, input, target, forward, computeLoss, layers, eagerOptimizer))
+                    return false;
+                reboundLayerSlots = true;
+            }
         }
         try
         {
@@ -1827,7 +1976,7 @@ public static class CompiledTapeTrainingStep<T>
             }
             requestedContract ??= new OptimizerContract(parameters, (int)optimizerType, learningRate,
                 beta1, beta2, epsilon, weightDecay, lrSchedule, eagerOptimizer, useBf16Moments,
-                int8MomentBlockSize, int8MinQuantizedLength, fusedExtras, l2Regularization, l2AfterClip);
+                int8MomentBlockSize, int8MinQuantizedLength, fusedExtras, l2Regularization, l2AfterClip, layers);
 
             // GPU-RESIDENCY (campaign M1): on the DirectGpu engine, make the parameters GPU-resident ONCE so
             // CompiledTrainingPlan.ConfigureOptimizerFloat takes its GPU Adam branch (param.TryGetGpuBuffer()
@@ -2049,7 +2198,7 @@ public static class CompiledTapeTrainingStep<T>
             // committed plan; only a constant rate is part of the configuration.
             var currentConfig = ((int)optimizerType, lrSchedule is null ? learningRate : 0f, beta1, beta2, epsilon, weightDecay);
 
-            bool isFirstStepForConfiguredPlan = _configuredPlan is null;
+            bool isFirstStepForConfiguredPlan = _configuredPlan is null || reboundLayerSlots;
             if (_shapeSwitchFrom is ICompiledTrainingPlan<T> switchedFrom
                 && !ReferenceEquals(switchedFrom, plan)
                 && _configuredOptimizerConfig is not null

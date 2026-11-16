@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
@@ -347,10 +348,9 @@ public class SharedTrainingStepTests
     }
 
     /// <summary>
-    /// Once a fused plan is verified, the session re-checks every FusedTrainingSession.PersistenceRecheckInterval
-    /// steps that it still trains the layer's live tensors. A layer whose weight tensor is REPLACED after that (not
-    /// overwritten in place) must not keep training a plan bound to the old tensor: within a re-check interval the
-    /// new tensor has to start moving.
+    /// Replacing a layer's weight tensor in the same slot and shape must rebind the compiled plan before
+    /// its next update, preserving optimizer state. The new tensor must train immediately, and the old
+    /// tensor must remain unchanged throughout the later persistence rechecks.
     /// </summary>
     [Fact]
     public void ReplacedWeightTensorIsTrainedAfterTheNextRecheck()
@@ -364,17 +364,150 @@ public class SharedTrainingStepTests
 
         for (int step = 0; step < interval + 4; step++)
             stepper.Step(PlainRequest(layer, RandomTensor(data, Batch, Features), RandomTensor(data, Batch, Outputs), optimizer));
+        var originalWeight = layer.CurrentWeights;
         Assert.True(stepper.LastStepFused, $"the fused path did not engage ({stepper.Session.LastMissReason}).");
 
         var replacement = new Tensor<float>(layer.CurrentWeights.ToArray(), layer.CurrentWeights.Shape.ToArray());
+        var oldWeightAtReplacement = originalWeight.ToArray();
         layer.ReplaceWeights(replacement);
         var atReplacement = replacement.ToArray();
 
         for (int step = 0; step < 2 * interval + 2; step++)
             stepper.Step(PlainRequest(layer, RandomTensor(data, Batch, Features), RandomTensor(data, Batch, Outputs), optimizer));
 
+        Assert.Equal(oldWeightAtReplacement, originalWeight.ToArray());
         Assert.Same(replacement, layer.CurrentWeights);
         Assert.NotEqual(atReplacement, replacement.ToArray());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Same_layer_slot_replacement_preserves_Adam_moments_step_and_schedule(bool scheduled)
+    {
+        var layer = new SwappableDenseLayer(Outputs);
+        var reference = new DenseLayer<float>(Outputs);
+        var warm = new Tensor<float>(new[] { Batch, Features });
+        layer.Forward(warm);
+        reference.Forward(warm);
+        reference.SetParameters(layer.GetParameters());
+        AdamOptimizer<float, Tensor<float>, Tensor<float>> Optimizer() => new(null,
+            new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
+            {
+                InitialLearningRate = 0.01,
+                EnableGradientClipping = false,
+                UseAdaptiveLearningRate = false,
+                UseAdaptiveBetas = false,
+                LearningRateScheduler = scheduled
+                    ? new AiDotNet.LearningRateSchedulers.StepLRScheduler(0.01, 2, 0.7) : null,
+                SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
+            });
+        var optimizer = Optimizer();
+        var referenceOptimizer = Optimizer();
+        var stepper = new TapeTrainingStepper<float>(new object());
+        var parameters = layer.GetTrainableParameters().ToArray();
+        var expected = parameters.Select(p => p.ToArray().Select(x => (double)x).ToArray()).ToArray();
+        var firstMoment = expected.Select(p => new double[p.Length]).ToArray();
+        var secondMoment = expected.Select(p => new double[p.Length]).ToArray();
+        var data = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(107);
+        Tensor<float>? oldWeight = null;
+        float[]? oldWeightSnapshot = null;
+        Tensor<float>? replacement = null;
+        for (int step = 0; step < 7; step++)
+        {
+            if (step == 3)
+            {
+                oldWeight = layer.CurrentWeights;
+                oldWeightSnapshot = oldWeight.ToArray();
+                replacement = new Tensor<float>(oldWeightSnapshot.ToArray(), oldWeight.Shape.ToArray());
+                layer.ReplaceWeights(replacement);
+                Assert.Same(replacement, layer.CurrentWeights);
+                Assert.NotSame(oldWeight, replacement);
+            }
+            parameters = layer.GetTrainableParameters().ToArray();
+            var input = RandomTensor(data, Batch, Features);
+            var target = RandomTensor(data, Batch, Outputs);
+            float[][]? gradients = null;
+            int previousOptimizerStep = -1;
+            double rate = optimizer.GetCurrentLearningRate();
+            float loss = stepper.Step(new FusedTrainingStepRequest<float>
+            {
+                Layers = new ITrainableLayer<float>[] { layer },
+                Input = input, Target = target, Forward = layer.Forward,
+                ComputeLoss = MeanSquaredError, Optimizer = optimizer,
+                OnGradients = values =>
+                {
+                    gradients = parameters.Select(p => values[p].ToArray()).ToArray();
+                    if (CompiledTapeTrainingStep<float>.TryGetPlanOptimizerStep(out int count))
+                        previousOptimizerStep = count;
+                },
+            });
+            Assert.True(stepper.LastStepFused, $"step {step}: {stepper.Session.LastMissReason}");
+            Assert.False(stepper.LastStepHybrid);
+            if (step > 0) Assert.Equal(step, previousOptimizerStep);
+            float eagerLoss = TapeTrainingStepper<float>.EagerStep(PlainRequest(reference, input, target, referenceOptimizer));
+            Assert.True(Math.Abs(loss - eagerLoss) < 1e-4f);
+            Assert.Equal(referenceOptimizer.GetCurrentLearningRate(), optimizer.GetCurrentLearningRate());
+            Assert.NotNull(gradients);
+            for (int slot = 0; slot < parameters.Length; slot++)
+            {
+                var actual = parameters[slot].ToArray();
+                // Independent Adam recurrence: the accumulated moments are deliberately not reset at the swap.
+                double beta1 = (float)0.9, beta2 = (float)0.999, epsilon = (float)1e-8;
+                for (int index = 0; index < actual.Length; index++)
+                {
+                    double gradient = gradients![slot][index];
+                    firstMoment[slot][index] = beta1 * firstMoment[slot][index] + (1 - beta1) * gradient;
+                    secondMoment[slot][index] = beta2 * secondMoment[slot][index] + (1 - beta2) * gradient * gradient;
+                    double correctedMean = firstMoment[slot][index] / (1 - Math.Pow(beta1, step + 1));
+                    double correctedVariance = secondMoment[slot][index] / (1 - Math.Pow(beta2, step + 1));
+                    expected[slot][index] -= rate * correctedMean / (Math.Sqrt(correctedVariance) + epsilon);
+                    Assert.True(Math.Abs(expected[slot][index] - actual[index]) < 1e-4,
+                        $"step {step}, slot {slot}[{index}]: expected {expected[slot][index]}, got {actual[index]}");
+                }
+            }
+            var eagerParameters = reference.GetParameters().ToArray();
+            var fusedParameters = layer.GetParameters().ToArray();
+            for (int index = 0; index < eagerParameters.Length; index++)
+                Assert.True(Math.Abs(eagerParameters[index] - fusedParameters[index]) < 1e-4f);
+            if (oldWeight is not null) Assert.Equal(oldWeightSnapshot, oldWeight.ToArray());
+        }
+        Assert.Same(replacement, layer.CurrentWeights);
+        Assert.NotEqual(oldWeightSnapshot, replacement!.ToArray());
+        Assert.Equal(7, stepper.FusedStepCount);
+        Assert.Equal(0, stepper.HybridStepCount);
+    }
+
+    [Fact]
+    public void Weight_replacement_does_not_authorize_optimizer_configuration_drift()
+    {
+        var layer = new SwappableDenseLayer(Outputs);
+        layer.Forward(new Tensor<float>(new[] { Batch, Features }));
+        var options = new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
+        {
+            InitialLearningRate = 0.01, EnableGradientClipping = false,
+            UseAdaptiveLearningRate = false, UseAdaptiveBetas = false,
+        };
+        var optimizer = new AdamOptimizer<float, Tensor<float>, Tensor<float>>(null, options);
+        var stepper = new TapeTrainingStepper<float>(new object());
+        var data = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(109);
+        for (int step = 0; step < 3; step++)
+            stepper.Step(PlainRequest(layer, RandomTensor(data, Batch, Features), RandomTensor(data, Batch, Outputs), optimizer));
+        var oldWeight = layer.CurrentWeights;
+        var replacement = new Tensor<float>(oldWeight.ToArray(), oldWeight.Shape.ToArray());
+        layer.ReplaceWeights(replacement);
+        options.Beta1 = 0.8;
+        var values = layer.GetParameters().ToArray();
+        var oldValues = oldWeight.ToArray();
+        var state = optimizer.Serialize();
+        Assert.Throws<InvalidOperationException>(() => stepper.Step(PlainRequest(layer,
+            RandomTensor(data, Batch, Features), RandomTensor(data, Batch, Outputs), optimizer)));
+        Assert.Same(replacement, layer.CurrentWeights);
+        Assert.Equal(values, layer.GetParameters().ToArray());
+        Assert.Equal(oldValues, oldWeight.ToArray());
+        Assert.Equal(state, optimizer.Serialize());
+        Assert.Equal(3, stepper.FusedStepCount);
+        Assert.Equal(0, stepper.HybridStepCount);
     }
 
     // Exposes DenseLayer's protected weight replacement: SetWeights binds a NEW tensor object, which is how a layer's
