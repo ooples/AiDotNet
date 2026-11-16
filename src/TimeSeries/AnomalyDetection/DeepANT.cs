@@ -113,35 +113,41 @@ public partial class DeepANT<T> : TimeSeriesModelBase<T>
         var o = _options;
         int w = o.WindowSize, horizon = o.ForecastHorizon;
         // Each sample is a row of [samples, WindowSize + ForecastHorizon]: its window, then its targets.
+        // Allocate dataset and per-batch tensors outside the base training TensorArena so per-step tape resets
+        // and forward-pass arena ring reuse never overwrite or reshape them.
         Tensor<T> samples;
-        if (x.Columns == 1 && w > 1)
+        Tensor<T> scaledSamples;
+        using (TensorArena.Suspend())
         {
-            int windows = y.Length - w - horizon + 1;
-            if (windows <= 0)
-                throw new ArgumentException(
-                    $"Training series must contain at least WindowSize + ForecastHorizon ({w + horizon}) values; got {y.Length}.", nameof(y));
-            samples = Engine.TensorUnfold(Tensor<T>.FromVector(y), 0, w + horizon, 1);
-        }
-        else
-        {
-            if (x.Columns != w)
-                throw new ArgumentException($"Each input row must be a window of WindowSize ({w}) values; got {x.Columns}.", nameof(x));
-            if (horizon != 1)
-                throw new ArgumentException("Rows of windows carry one target each; train on a time index for ForecastHorizon > 1.", nameof(x));
-            if (y.Length < x.Rows)
-                throw new ArgumentException($"Each input row needs a target; got {y.Length} targets for {x.Rows} rows.", nameof(y));
-            samples = Engine.TensorConcatenate(new[]
+            if (x.Columns == 1 && w > 1)
             {
-                Tensor<T>.FromMatrix(x),
-                Tensor<T>.FromVector(y.GetSubVector(0, x.Rows), new[] { x.Rows, 1 }),
-            }, 1);
-        }
+                int windows = y.Length - w - horizon + 1;
+                if (windows <= 0)
+                    throw new ArgumentException(
+                        $"Training series must contain at least WindowSize + ForecastHorizon ({w + horizon}) values; got {y.Length}.", nameof(y));
+                samples = Engine.TensorUnfold(Tensor<T>.FromVector(y), 0, w + horizon, 1);
+            }
+            else
+            {
+                if (x.Columns != w)
+                    throw new ArgumentException($"Each input row must be a window of WindowSize ({w}) values; got {x.Columns}.", nameof(x));
+                if (horizon != 1)
+                    throw new ArgumentException("Rows of windows carry one target each; train on a time index for ForecastHorizon > 1.", nameof(x));
+                if (y.Length < x.Rows)
+                    throw new ArgumentException($"Each input row needs a target; got {y.Length} targets for {x.Rows} rows.", nameof(y));
+                samples = Engine.TensorConcatenate(new[]
+                {
+                    Tensor<T>.FromMatrix(x),
+                    Tensor<T>.FromVector(y.GetSubVector(0, x.Rows), new[] { x.Rows, 1 }),
+                }, 1);
+            }
 
-        _trainingSeries = y.Clone();
-        ModelParameters = new Vector<T>(1);
-        ModelParameters[0] = _numOps.FromDouble(y.Length);
-        FitScaler(samples);
-        var scaledSamples = ScaleAll(samples);
+            _trainingSeries = y.Clone();
+            ModelParameters = new Vector<T>(1);
+            ModelParameters[0] = _numOps.FromDouble(y.Length);
+            FitScaler(samples);
+            scaledSamples = ScaleAll(samples);
+        }
 
         var optimizer = new StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(null,
             new StochasticGradientDescentOptimizerOptions<T, Tensor<T>, Tensor<T>>
@@ -200,6 +206,7 @@ public partial class DeepANT<T> : TimeSeriesModelBase<T>
     // The windows [B, WindowSize, 1] and targets [B, ForecastHorizon] of the given rows of the scaled samples.
     private (Tensor<T> history, Tensor<T> target) Batch(Tensor<T> scaledSamples, int[] order, int start, int count)
     {
+        using var _ = TensorArena.Suspend();
         int w = _options.WindowSize, horizon = _options.ForecastHorizon;
         var rows = new Tensor<int>(new[] { count }, new Vector<int>(new ArraySegment<int>(order, start, count)));
         var picked = Engine.TensorIndexSelect(scaledSamples, rows, 0);

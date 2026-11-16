@@ -416,6 +416,8 @@ public partial class GARCHModel<T> : TimeSeriesModelBase<T>
     /// when the terrain gets tricky.
     /// </para>
     /// </remarks>
+    private T VarianceFloor => NumOps.FromDouble(typeof(T) == typeof(Half) ? 1e-5 : 1e-8);
+
     private void EstimateParameters(Vector<T> y)
     {
         int maxIterations = 10000;
@@ -490,10 +492,10 @@ public partial class GARCHModel<T> : TimeSeriesModelBase<T>
         state.VelocityBeta = Engine.Add(Engine.Multiply(state.VelocityBeta, state.MomentumFactor),
                                         Engine.Multiply(gradientBeta, state.LearningRate));
 
-        // Update parameters
-        _omega = Engine.Subtract(_omega, state.VelocityOmega);
-        _alpha = Engine.Subtract(_alpha, state.VelocityAlpha);
-        _beta = Engine.Subtract(_beta, state.VelocityBeta);
+        // Update parameters via gradient ascent on the Gaussian log-likelihood
+        _omega = Engine.Add(_omega, state.VelocityOmega);
+        _alpha = Engine.Add(_alpha, state.VelocityAlpha);
+        _beta = Engine.Add(_beta, state.VelocityBeta);
 
         // Apply constraints
         ConstrainParameters();
@@ -518,6 +520,9 @@ public partial class GARCHModel<T> : TimeSeriesModelBase<T>
         }
 
         state.LearningRate = NumOps.Multiply(state.LearningRate, NumOps.FromDouble(0.5)); // Decrease learning rate
+        state.VelocityOmega = new Vector<T>(_omega.Length);
+        state.VelocityAlpha = new Vector<T>(_alpha.Length);
+        state.VelocityBeta = new Vector<T>(_beta.Length);
         _omega = state.PreviousOmega.Clone();
         _alpha = state.PreviousAlpha.Clone();
         _beta = state.PreviousBeta.Clone();
@@ -562,14 +567,20 @@ public partial class GARCHModel<T> : TimeSeriesModelBase<T>
         {
             Vector<T> gradient = new Vector<T>(1);
             T originalOmega = _omega[0];
+            T minOmega = VarianceFloor;
+            T plusOmega = NumOps.Add(originalOmega, epsilon);
+            T candidateMinus = NumOps.Subtract(originalOmega, epsilon);
+            T minusOmega = NumOps.GreaterThan(candidateMinus, minOmega) ? candidateMinus : minOmega;
 
-            _omega[0] = NumOps.Add(originalOmega, epsilon);
+            _omega[0] = plusOmega;
             T logLikelihoodPlus = CalculateLogLikelihood(y);
 
-            _omega[0] = NumOps.Subtract(originalOmega, epsilon);
+            _omega[0] = minusOmega;
             T logLikelihoodMinus = CalculateLogLikelihood(y);
 
-            gradient[0] = NumOps.Divide(NumOps.Subtract(logLikelihoodPlus, logLikelihoodMinus), twoEpsilon);
+            gradient[0] = NumOps.Divide(
+                NumOps.Subtract(logLikelihoodPlus, logLikelihoodMinus),
+                NumOps.Subtract(plusOmega, minusOmega));
             _omega[0] = originalOmega; // Restore original value
 
             return gradient;
@@ -597,6 +608,11 @@ public partial class GARCHModel<T> : TimeSeriesModelBase<T>
     private Vector<T> CentralDifferences(Vector<T> y, Vector<T> original, int count, T epsilon, T twoEpsilon,
         Action<Vector<T>> install)
     {
+        if (count == 0)
+        {
+            return new Vector<T>(0);
+        }
+
         var plus = new List<T>(count);
         var minus = new List<T>(count);
         for (int i = 0; i < count; i++)
@@ -604,16 +620,16 @@ public partial class GARCHModel<T> : TimeSeriesModelBase<T>
             var step = Engine.Multiply(Vector<T>.CreateStandardBasis(original.Length, i), epsilon);
             install(Engine.Add(original, step));
             plus.Add(CalculateLogLikelihood(y));
-            install(Engine.Subtract(original, step));
+            install(PositivePart(Engine.Subtract(original, step)));
             minus.Add(CalculateLogLikelihood(y));
         }
 
-        if (count == 0)
-        {
-            return new Vector<T>(0);
-        }
-
-        return Engine.Divide(Engine.Subtract(new Vector<T>(plus), new Vector<T>(minus)), twoEpsilon);
+        var origSlice = original.GetSubVector(0, count);
+        var epsVec = Engine.Fill(count, epsilon);
+        var spans = ClampMinimum(
+            Engine.Subtract(Engine.Add(origSlice, epsVec), PositivePart(Engine.Subtract(origSlice, epsVec))),
+            epsilon);
+        return Engine.Divide(Engine.Subtract(new Vector<T>(plus), new Vector<T>(minus)), spans);
     }
 
     /// <summary>
@@ -692,7 +708,12 @@ public partial class GARCHModel<T> : TimeSeriesModelBase<T>
     {
         int n = y.Length;
         Vector<T> conditionalVariances = new Vector<T>(n);
+        T minVariance = VarianceFloor;
         T unconditionalVariance = CalculateUnconditionalVariance(y);
+        if (!NumOps.GreaterThan(unconditionalVariance, minVariance))
+        {
+            unconditionalVariance = minVariance;
+        }
 
         // Initialize with unconditional variance
         for (int t = 0; t < Math.Max(_garchOptions.ARCHOrder, _garchOptions.GARCHOrder); t++)
@@ -715,7 +736,7 @@ public partial class GARCHModel<T> : TimeSeriesModelBase<T>
             conditionalVariances[t] = variance;
         }
 
-        return conditionalVariances;
+        return ClampMinimum(conditionalVariances, minVariance);
     }
 
     /// <summary>
@@ -744,8 +765,8 @@ public partial class GARCHModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     private void ConstrainParameters()
     {
-        // Ensure omega, alpha and beta are non-negative (max(x, 0), NaN → 0)
-        _omega = PositivePart(_omega);
+        // Bollerslev (1986) eq. (2): omega > 0 (strictly positive variance floor), alpha >= 0, beta >= 0
+        _omega = ClampMinimum(_omega, VarianceFloor);
         _alpha = PositivePart(_alpha);
         _beta = PositivePart(_beta);
 
@@ -760,6 +781,18 @@ public partial class GARCHModel<T> : TimeSeriesModelBase<T>
             _alpha = Engine.Multiply(_alpha, scaleFactor);
             _beta = Engine.Multiply(_beta, scaleFactor);
         }
+    }
+
+    /// <summary><c>v &gt; min ? v : min</c> element-wise (NaN → min).</summary>
+    private Vector<T> ClampMinimum(Vector<T> v, T minimum)
+    {
+        if (v.Length == 0)
+        {
+            return v;
+        }
+
+        var t = Tensor<T>.FromVector(v);
+        return Engine.TensorWhere(Engine.TensorGreaterThan(t, minimum), t, Engine.TensorFullLike(t, minimum)).ToVector();
     }
 
     /// <summary><c>v &gt; 0 ? v : 0</c> element-wise.</summary>
@@ -801,9 +834,14 @@ public partial class GARCHModel<T> : TimeSeriesModelBase<T>
     {
         int n = residuals.Length;
         _conditionalVariances = new Vector<T>(n);
+        T minVariance = VarianceFloor;
 
         // Initialize with unconditional variance
         T unconditionalVariance = CalculateUnconditionalVariance(residuals);
+        if (!NumOps.GreaterThan(unconditionalVariance, minVariance))
+        {
+            unconditionalVariance = minVariance;
+        }
         for (int t = 0; t < Math.Max(_garchOptions.ARCHOrder, _garchOptions.GARCHOrder); t++)
         {
             _conditionalVariances[t] = unconditionalVariance;
@@ -823,6 +861,8 @@ public partial class GARCHModel<T> : TimeSeriesModelBase<T>
             }
             _conditionalVariances[t] = variance;
         }
+
+        _conditionalVariances = ClampMinimum(_conditionalVariances, minVariance);
     }
 
     /// <summary>

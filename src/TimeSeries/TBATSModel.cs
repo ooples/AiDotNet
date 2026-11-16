@@ -278,7 +278,7 @@ public partial class TBATSModel<T> : TimeSeriesModelBase<T>
 
         // Extrapolate trend for the first windowSize points
         _trend = Vector<T>.Concatenate(new Vector<T>(windowSize), slopes);
-        if (windowSize > 0)
+        if (windowSize > 0 && windowSize < _trend.Length)
         {
             Engine.Fill(windowSize, _trend[windowSize]).CopyTo(_trend.AsWritableSpan());
         }
@@ -380,7 +380,9 @@ public partial class TBATSModel<T> : TimeSeriesModelBase<T>
 
         // Normalize seasonal component
         T seasonalMedian = StatisticsHelper<T>.CalculateMedian(seasonal);
-        return period > 0 ? Engine.Divide(seasonal, seasonalMedian) : seasonal;
+        return period > 0 && !NumOps.Equals(seasonalMedian, NumOps.Zero)
+            ? Engine.Divide(seasonal, seasonalMedian)
+            : seasonal;
     }
 
     /// <summary>
@@ -433,16 +435,19 @@ public partial class TBATSModel<T> : TimeSeriesModelBase<T>
         Vector<T> v = new Vector<T>(q + 1);
         v[0] = StatisticsHelper<T>.CalculateMedianAbsoluteDeviation(residuals);
 
-        for (int k = 1; k <= q; k++)
+        if (NumOps.GreaterThan(v[0], NumOps.Zero))
         {
-            T sum = NumOps.Zero;
-            for (int j = 1; j < k; j++)
+            for (int k = 1; k <= q; k++)
             {
-                sum = NumOps.Add(sum, NumOps.Multiply(_maCoefficients[j - 1], v[k - j]));
-            }
-            _maCoefficients[k - 1] = NumOps.Divide(NumOps.Subtract(autocorrelations[k], sum), v[0]);
+                T sum = NumOps.Zero;
+                for (int j = 1; j < k; j++)
+                {
+                    sum = NumOps.Add(sum, NumOps.Multiply(_maCoefficients[j - 1], v[k - j]));
+                }
+                _maCoefficients[k - 1] = NumOps.Divide(NumOps.Subtract(autocorrelations[k], sum), v[0]);
 
-            v[k] = NumOps.Multiply(NumOps.Subtract(NumOps.One, NumOps.Multiply(_maCoefficients[k - 1], _maCoefficients[k - 1])), v[k - 1]);
+                v[k] = NumOps.Multiply(NumOps.Subtract(NumOps.One, NumOps.Multiply(_maCoefficients[k - 1], _maCoefficients[k - 1])), v[k - 1]);
+            }
         }
     }
 
@@ -476,9 +481,9 @@ public partial class TBATSModel<T> : TimeSeriesModelBase<T>
         // Median of the products of the standardized values (y - median) / MAD at each lag;
         // lags without any pair have the median of nothing (zero).
         int computed = Math.Max(0, Math.Min(maxLag, y.Length - 1) + 1);
-        Vector<T> standardized = y.Length > 0
+        Vector<T> standardized = y.Length > 0 && NumOps.GreaterThan(mad, NumOps.Zero)
             ? Engine.Divide(Engine.Subtract(y, Engine.Fill(y.Length, median)), mad)
-            : y;
+            : new Vector<T>(y.Length);
         var robust = Enumerable.Range(0, computed)
             .Select(lag => StatisticsHelper<T>.CalculateMedian(Engine.Multiply(
                 standardized.GetSubVector(0, y.Length - lag), standardized.GetSubVector(lag, y.Length - lag))));
@@ -519,6 +524,11 @@ public partial class TBATSModel<T> : TimeSeriesModelBase<T>
         if (residuals.Length == 0)
         {
             return residuals;
+        }
+
+        if (!NumOps.GreaterThan(mad, NumOps.Zero))
+        {
+            return Engine.Fill(residuals.Length, median);
         }
 
         // |scaled| > k → median + sign(scaled) · k · MAD
@@ -562,7 +572,10 @@ public partial class TBATSModel<T> : TimeSeriesModelBase<T>
         // Normalize seasonal component
         T seasonalMean = StatisticsHelper<T>.CalculateMean(seasonal);
         // VECTORIZED: Use Engine division for normalization
-        seasonal = (Vector<T>)Engine.Divide(seasonal, Engine.Fill(period, seasonalMean));
+        if (period > 0 && !NumOps.Equals(seasonalMean, NumOps.Zero))
+        {
+            seasonal = (Vector<T>)Engine.Divide(seasonal, Engine.Fill(period, seasonalMean));
+        }
 
         return seasonal;
     }
@@ -613,16 +626,19 @@ public partial class TBATSModel<T> : TimeSeriesModelBase<T>
         Vector<T> v = new Vector<T>(q + 1);
         v[0] = StatisticsHelper<T>.CalculateMedianAbsoluteDeviation(residuals);
 
-        for (int k = 1; k <= q; k++)
+        if (NumOps.GreaterThan(v[0], NumOps.Zero))
         {
-            T sum = NumOps.Zero;
-            for (int j = 1; j < k; j++)
+            for (int k = 1; k <= q; k++)
             {
-                sum = NumOps.Add(sum, NumOps.Multiply(_maCoefficients[j - 1], v[k - j]));
-            }
-            _maCoefficients[k - 1] = NumOps.Divide(NumOps.Subtract(autocorrelations[k], sum), v[0]);
+                T sum = NumOps.Zero;
+                for (int j = 1; j < k; j++)
+                {
+                    sum = NumOps.Add(sum, NumOps.Multiply(_maCoefficients[j - 1], v[k - j]));
+                }
+                _maCoefficients[k - 1] = NumOps.Divide(NumOps.Subtract(autocorrelations[k], sum), v[0]);
 
-            v[k] = NumOps.Multiply(NumOps.Subtract(NumOps.One, NumOps.Multiply(_maCoefficients[k - 1], _maCoefficients[k - 1])), v[k - 1]);
+                v[k] = NumOps.Multiply(NumOps.Subtract(NumOps.One, NumOps.Multiply(_maCoefficients[k - 1], _maCoefficients[k - 1])), v[k - 1]);
+            }
         }
     }
 
@@ -1021,6 +1037,8 @@ public partial class TBATSModel<T> : TimeSeriesModelBase<T>
     /// </remarks>
     public override void Reset()
     {
+        base.Reset();
+        _trainingSeries = Vector<T>.Empty();
         _level = new Vector<T>(1);
         _trend = new Vector<T>(1);
 
