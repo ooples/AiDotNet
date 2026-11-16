@@ -170,6 +170,26 @@ public partial class StyleTTS<T>
         return path;
     }
 
+    /// <summary><see cref="HardPath"/> of the soft attention <c>[L, F]</c> as a 0/1 tensor: under a compiled trace a node
+    /// that searches each replay's attention again (no gradient, as the reference's path is a constant).</summary>
+    private static Tensor<T> HardPathOf(Tensor<T> soft) =>
+        AiDotNet.Training.CompiledStepHostValue<T>.Compute("StyleTtsHardPath", new[] { soft }, soft.Shape.ToArray(), static (inputs, path) =>
+        {
+            // The node holds no model state: the search reads only the replay's attention.
+            var scores = inputs[0];
+            int rows = scores.Shape[0], columns = scores.Shape[1];
+            var values = scores.Cast<double>().ToArray();
+            var matrix = new double[rows, columns];
+            for (int i = 0; i < rows; i++)
+                for (int j = 0; j < columns; j++) matrix[i, j] = values[i * columns + j];
+            var hard = HardPath(matrix);
+            var flat = new double[rows * columns];
+            for (int i = 0; i < rows; i++)
+                for (int j = 0; j < columns; j++) flat[i * columns + j] = hard[i, j];
+            AiDotNet.Helpers.TensorCopyHelper.CastLogical<double, T>(new Tensor<double>(new[] { rows, columns }, new Vector<double>(flat)))
+                .AsSpan().CopyTo(path.AsWritableSpan());
+        });
+
     private Tensor<T> FromMatrix(double[,] m)
     {
         var t = new Tensor<T>(new[] { m.GetLength(0), m.GetLength(1) });
@@ -266,7 +286,7 @@ public partial class StyleTTS<T>
         public Tensor<T>? Durations;
         public Tensor<T>? F0;
         public Tensor<T>? Energy;
-        public double[,]? Hard;
+        public Tensor<T>? Hard;                          // [L, F] 0/1 monotonic path of Soft
     }
 
     private bool TmaActive => ReconstructionUpdates >= _options.TmaStartStep;
@@ -285,8 +305,8 @@ public partial class StyleTTS<T>
             pass.Logits = logits;
             // The monotonic hard alignment of this pass's attention; the decoder reads it or the soft attention (§II-B's
             // 50%-50% strategy).
-            pass.Hard = HardPath(ToMatrix(soft, NumOps));
-            var alignment = step.Hard ? FromMatrix(pass.Hard) : soft;
+            pass.Hard = HardPathOf(soft);
+            var alignment = step.Hard ? pass.Hard : soft;
             var text = TextEncoderModule.Forward(ToTensor(p.Ids), training, random);
             var asr = Engine.Reshape(Engine.TensorMatMul(Engine.Reshape(text, new[] { c, p.Ids.Length }), alignment), new[] { 1, c, alignment.Shape[1] });
             var en = Crop(asr, p.Segment);
@@ -361,7 +381,7 @@ public partial class StyleTTS<T>
                 var selection = new Tensor<T>(new[] { length, tokens });
                 for (int i = 0; i < length; i++) selection[i, p.Ids[i]] = NumOps.FromDouble(-1.0 / length);
                 var s2s = Engine.ReduceSum(Engine.TensorMultiply(Engine.TensorLogSoftmax(logits, axis: -1), selection), new[] { 0, 1 }, keepDims: false);
-                var mono = MeanAbsolute(pass.Soft!, FromMatrix(pass.Hard!));
+                var mono = MeanAbsolute(pass.Soft!, pass.Hard!);
                 loss = Engine.TensorAdd(loss, Scaled(s2s, paper ? 0.2 : 1.0));
                 loss = Engine.TensorAdd(loss, Scaled(mono, paper ? 5.0 : 10.0));
             }
@@ -417,9 +437,69 @@ public partial class StyleTTS<T>
 
     /// <summary>The reference's <c>r1_reg</c>: half the squared norm of the discriminator's gradient at the real input,
     /// differentiable into the discriminator (as StyleGAN's R1 penalty is built here).</summary>
+    /// <remarks>Under a compiled trace the penalty is one node over the real input and the discriminator's weights: its
+    /// value and its gradient into the weights are taken on eager tapes from each replay's input and weights, as the
+    /// nested input gradient (a second-order backward) has no traced form.</remarks>
     private Tensor<T> R1Penalty(Tensor<T> real)
     {
         if (!AiDotNet.Tensors.Engines.Autodiff.GradientRecording.IsRecording<T>()) return new Tensor<T>(new[] { 1 });
+        if (AiDotNet.Tensors.Engines.Compilation.GraphMode.Current is not { } scope) return EagerR1Penalty(real);
+        var weights = Training.TapeTrainingStep<T>.CollectParameters(_discriminatorLayers.Cast<ILayer<T>>().ToList(), -1).ToArray();
+        var inputs = new Tensor<T>[weights.Length + 1];
+        inputs[0] = real;
+        Array.Copy(weights, 0, inputs, 1, weights.Length);
+        // The node may hold only values a plan's signature can compare (tensors, numbers), so it names this model by id.
+        long id = _r1Id;
+        R1Owners[id] = new WeakReference<StyleTTS<T>>(this);
+        return scope.RecordVariadic(
+            AiDotNet.Tensors.Engines.Compilation.LazyNodeType.Custom, "StyleTtsR1Penalty", inputs, new[] { 1 },
+            (replayEngine, result) =>
+            {
+                // The value alone: the inner tape still differentiates the discriminator's input.
+                var value = R1Owner(id).EagerR1Penalty(inputs[0]);
+                AiDotNet.Tensors.Engines.DirectGpuTensorEngine.CopyResultInto(replayEngine, value, result);
+            },
+            static (gradOutput, nodeInputs, _, saved, backwardEngine, gradients) =>
+            {
+                if (NoGradScope<T>.IsSuppressed)
+                    throw new InvalidOperationException("The R1 penalty's backward needs a gradient tape, and recording is suppressed.");
+                var owner = R1Owner((long)saved[0]);
+                var sources = new Tensor<T>[nodeInputs.Length - 1];
+                Array.Copy(nodeInputs, 1, sources, 0, sources.Length);
+                Dictionary<Tensor<T>, Tensor<T>> weightGradients;
+                // The forward already took this step's power iteration of every spectral norm; re-running the penalty in
+                // evaluation mode differentiates the same kernels (the kept singular vectors) without a second iteration.
+                var discriminator = owner._discriminatorLayers;
+                var modes = discriminator.Select(layer => layer.InTrainingMode).ToArray();
+                foreach (var layer in discriminator) layer.SetTrainingMode(false);
+                try
+                {
+                    using var outer = new GradientTape<T>();
+                    var penalty = owner.EagerR1Penalty(nodeInputs[0]);
+                    weightGradients = outer.ComputeGradients(penalty, sources);
+                }
+                finally
+                {
+                    for (int i = 0; i < discriminator.Count; i++) discriminator[i].SetTrainingMode(modes[i]);
+                }
+                T scale = gradOutput.AsSpan()[0];
+                foreach (var weight in sources)
+                    if (weightGradients.TryGetValue(weight, out var g))
+                        DifferentiableOps.AccumulateGrad(gradients, weight, backwardEngine.TensorMultiplyScalar(g, scale), backwardEngine);
+            },
+            new object[] { id });
+    }
+
+    private static long s_nextR1Id;
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<long, WeakReference<StyleTTS<T>>> R1Owners = new();
+    private readonly long _r1Id = System.Threading.Interlocked.Increment(ref s_nextR1Id);
+
+    private static StyleTTS<T> R1Owner(long id) =>
+        R1Owners.TryGetValue(id, out var reference) && reference.TryGetTarget(out var owner) ? owner
+            : throw new InvalidOperationException("The StyleTTS model of this training plan no longer exists.");
+
+    private Tensor<T> EagerR1Penalty(Tensor<T> real)
+    {
         using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         var input = new Tensor<T>(Image(real).Shape.ToArray());
         real.AsSpan().CopyTo(input.AsWritableSpan());

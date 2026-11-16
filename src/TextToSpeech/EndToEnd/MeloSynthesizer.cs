@@ -24,10 +24,26 @@ internal sealed record MeloConfiguration(
 }
 
 /// <summary>The quantities one MeloTTS training forward produces (<c>SynthesizerTrn.forward</c>'s outputs).</summary>
+/// <remarks><see cref="Alignment"/> is the search's 0/1 path <c>[L, T]</c>; <see cref="Durations"/> reads it on the host.</remarks>
 internal sealed record MeloTrainingOutputs<T>(
-    Tensor<T> Waveform, Tensor<T> DurationLoss, int[] Durations, Tensor<T> Hidden, Tensor<T> PriorMean, Tensor<T> PriorLogScale,
+    Tensor<T> Waveform, Tensor<T> DurationLoss, Tensor<T> Alignment, Tensor<T> Hidden, Tensor<T> PriorMean, Tensor<T> PriorLogScale,
     Tensor<T> PosteriorMean, Tensor<T> PosteriorLogScale, Tensor<T> Z, Tensor<T> ZPrior, Tensor<T> PredictedLogDurations,
-    Tensor<T> AlignedLogDurations, int SliceStart, Tensor<T> Speaker);
+    Tensor<T> AlignedLogDurations, int SliceStart, Tensor<T> Speaker)
+{
+    /// <summary>The frames the search gave each token.</summary>
+    public int[] Durations
+    {
+        get
+        {
+            int tokens = Alignment.Shape[0], frames = Alignment.Shape[1];
+            var values = Alignment.Cast<double>().ToArray();
+            var durations = new int[tokens];
+            for (int l = 0; l < tokens; l++)
+                for (int f = 0; f < frames; f++) durations[l] += (int)Math.Round(values[l * frames + f]);
+            return durations;
+        }
+    }
+}
 
 /// <summary>
 /// MeloTTS's synthesizer (myshell-ai/MeloTTS <c>models.SynthesizerTrn</c>, from Bert-VITS2): VITS with VITS2's
@@ -104,46 +120,22 @@ internal sealed class MeloSynthesizer<T>
         var (z, mQ, logsQ) = PosteriorEncoder.Forward(spectrogram, g, posteriorNoise);
         var zP = Flow.Forward(z, g, reverse: false, training, random);
 
-        // Monotonic alignment search on the prior's log-likelihood of z_p [T, L], with noise σ = std · scale.
-        int[] durations;
-        int d = c.InterChannels;
-        var negCent = new double[frames, tokens];
-        double sum = 0, sumSquares = 0;
-        for (int f = 0; f < frames; f++)
-            for (int l = 0; l < tokens; l++)
-            {
-                double v = 0;
-                for (int k = 0; k < d; k++)
-                {
-                    double lp = NumOps.ToDouble(logsP[0, k, l]), m = NumOps.ToDouble(mP[0, k, l]), zz = NumOps.ToDouble(zP[0, k, f]);
-                    double s = Math.Exp(-2 * lp);
-                    v += -0.5 * Math.Log(2 * Math.PI) - lp - 0.5 * zz * zz * s + zz * m * s - 0.5 * m * m * s;
-                }
-                negCent[f, l] = v;
-                sum += v;
-                sumSquares += v * v;
-            }
+        // Monotonic alignment search on the prior's log-likelihood of z_p [T, L], with noise σ = std · scale. The noise
+        // and its scale are tensors of the step and the search is a node, so a compiled plan searches every replay again.
+        var noiseValues = new double[frames * tokens];
         if (masNoiseScale > 0)
-        {
-            int n = frames * tokens;
-            double mean = sum / n, std = Math.Sqrt(Math.Max(0, (sumSquares - n * mean * mean) / (n - 1)));
             for (int f = 0; f < frames; f++)
-                for (int l = 0; l < tokens; l++)
-                    negCent[f, l] += std * (masNoise is null ? Gaussian(random) : masNoise[f, l]) * masNoiseScale;
-        }
-        var scores = new double[tokens, frames];
-        for (int f = 0; f < frames; f++)
-            for (int l = 0; l < tokens; l++) scores[l, f] = negCent[f, l];
-        durations = MonotonicAlignment.MaximumPath(scores);
-        var attn = Path(durations, frames);                                                                  // [L, T]
+                for (int l = 0; l < tokens; l++) noiseValues[f * tokens + l] = masNoise is null ? Gaussian(random) : masNoise[f, l];
+        var noise = AiDotNet.Helpers.TensorCopyHelper.CastLogical<double, T>(new Tensor<double>(new[] { frames, tokens }, new Vector<double>(noiseValues)));
+        var scale = new Tensor<T>(new[] { 1 }, new Vector<T>(new[] { NumOps.FromDouble(masNoiseScale) }));
+        int d = c.InterChannels;
+        var attn = AiDotNet.Training.CompiledStepHostValue<T>.Compute("MeloAlignmentSearch",
+            new[] { _engine.StopGradient(logsP), _engine.StopGradient(mP), _engine.StopGradient(zP), noise, scale },
+            new[] { tokens, frames }, (inputs, path) => SearchAlignment(inputs, path, d));                    // [L, T]
 
-        var w = new Tensor<T>(new[] { 1, 1, tokens });
-        var logwAligned = new Tensor<T>(new[] { 1, 1, tokens });
-        for (int l = 0; l < tokens; l++)
-        {
-            w[0, 0, l] = NumOps.FromDouble(durations[l]);
-            logwAligned[0, 0, l] = NumOps.FromDouble(Math.Log(durations[l] + 1e-6));
-        }
+        // The aligned durations Σ_t attn and their logs, from the path on the engine.
+        var w = _engine.Reshape(_engine.ReduceSum(attn, new[] { 1 }, keepDims: false), new[] { 1, 1, tokens });
+        var logwAligned = _engine.TensorLog(_engine.TensorAddScalar(w, NumOps.FromDouble(1e-6)));
         var sdpLoss = _engine.TensorMultiplyScalar(StochasticDuration.NegativeLogLikelihood(hidden, w, g, durationTraining && training, random, durationNoise),
             NumOps.FromDouble(1.0 / tokens));
         var logw = Duration.Forward(hidden, g, durationTraining && training, random);
@@ -157,7 +149,7 @@ internal sealed class MeloSynthesizer<T>
         int start = sliceStart ?? (int)(random.NextDouble() * (frames - c.SegmentFrames + 1));
         var segment = _engine.TensorSlice(z, new[] { 0, 0, start }, new[] { 1, c.InterChannels, c.SegmentFrames });
         var waveform = Generator.Forward(segment, g);
-        return new MeloTrainingOutputs<T>(waveform, durationLoss, durations, hidden, expandedMean, expandedLogScale, mQ, logsQ, z, zP,
+        return new MeloTrainingOutputs<T>(waveform, durationLoss, attn, hidden, expandedMean, expandedLogScale, mQ, logsQ, z, zP,
             logw, logwAligned, start, g);
     }
 
@@ -172,6 +164,56 @@ internal sealed class MeloSynthesizer<T>
             start += durations[l];
         }
         return path;
+    }
+
+    // The forward's alignment from log σ_p and μ_p [1, d, L], z_p [1, d, T], the noise [T, L] and its scale [1]:
+    // neg_cent [T, L] with the noise added at σ = std(neg_cent) · scale, maximum_path, and generate_path's 0/1 path
+    // [L, T] (token l covers the frames [Σ_{<l} d, Σ_{≤l} d)).
+    private static void SearchAlignment(Tensor<T>[] inputs, Tensor<T> path, int d)
+    {
+        var logsP = inputs[0].Cast<double>().ToArray();
+        var mP = inputs[1].Cast<double>().ToArray();
+        var zP = inputs[2].Cast<double>().ToArray();
+        var noise = inputs[3].Cast<double>().ToArray();
+        double masNoiseScale = inputs[4].Cast<double>().ToArray()[0];
+        int tokens = inputs[0].Shape[2], frames = inputs[2].Shape[2];
+        var negCent = new double[frames, tokens];
+        double sum = 0, sumSquares = 0;
+        for (int f = 0; f < frames; f++)
+            for (int l = 0; l < tokens; l++)
+            {
+                double v = 0;
+                for (int k = 0; k < d; k++)
+                {
+                    double lp = logsP[k * tokens + l], m = mP[k * tokens + l], zz = zP[k * frames + f];
+                    double s = Math.Exp(-2 * lp);
+                    v += -0.5 * Math.Log(2 * Math.PI) - lp - 0.5 * zz * zz * s + zz * m * s - 0.5 * m * m * s;
+                }
+                negCent[f, l] = v;
+                sum += v;
+                sumSquares += v * v;
+            }
+        if (masNoiseScale > 0)
+        {
+            int n = frames * tokens;
+            double mean = sum / n, std = Math.Sqrt(Math.Max(0, (sumSquares - n * mean * mean) / (n - 1)));
+            for (int f = 0; f < frames; f++)
+                for (int l = 0; l < tokens; l++)
+                    negCent[f, l] += std * noise[f * tokens + l] * masNoiseScale;
+        }
+        var scores = new double[tokens, frames];
+        for (int f = 0; f < frames; f++)
+            for (int l = 0; l < tokens; l++) scores[l, f] = negCent[f, l];
+        var durations = MonotonicAlignment.MaximumPath(scores);
+        var values = new double[tokens * frames];
+        int start = 0;
+        for (int l = 0; l < durations.Length; l++)
+        {
+            for (int f = start; f < Math.Min(frames, start + durations[l]); f++) values[l * frames + f] = 1.0;
+            start += durations[l];
+        }
+        AiDotNet.Helpers.TensorCopyHelper.CastLogical<double, T>(new Tensor<double>(new[] { tokens, frames }, new Vector<double>(values)))
+            .AsSpan().CopyTo(path.AsWritableSpan());
     }
 
     // [1, d, L] stretched by an alignment [L, T] to [1, d, T].
