@@ -180,6 +180,39 @@
         "tests/AiDotNet.Tests/IntegrationTests/Helpers/FeatureSelectorCopyReferenceTests.cs"
       ],
       "status": "CLAIMED; implementation approved after claim push205dc33d55. Consumer logical SubTensor feature views + Engine.TensorCopy; independent array-value oracle. No upstream SetSubTensor edits."
+    },
+    {
+      "owner": "Antigravity swarm (coordinator + fixer-1..4)",
+      "scope": "Wave 1 unclaimed shard batches: (1) ASR47 MelSpectrogram.ApplyMelFilterbank bin mismatch + RNNTransducer input-rank survey contract; (2) PINN44 PinnAutodiff.InputGradient empty tape + MultiFidelityPINN24 rank-1 concat + MultiScalePINN/DeepOperatorNetwork reference fixes (excluding owned HNN and unconfirmed Lagrangian); (3) TimeSeries non-ARIMAX GARCH/TBATS DivideByZero, DeepANT multi-step horizon shape, NLinear Half scaler accumulation, and ARModel untrained SetParameters (excluding owned ARIMAXModel.cs, TimeSeriesModelBase.cs, AdamOptimizer.cs); (4) Preprocessing FeatureSelection/PowerTransformer/HessianLLE & FejerKorovkinWavelet/TukeyWindow reference fixes (excluding CopyFeature/FeatureSelectorHelper.cs, StandardScaler.cs, and Tensors TensorCDist)",
+      "files": [
+        "src/Diffusion/Audio/MelSpectrogram.cs",
+        "src/Diffusion/Audio/ShortTimeFourierTransform.cs",
+        "src/Audio/SpeechRecognition/RNNTransducer.cs",
+        "src/PhysicsInformed/PinnAutodiff.cs",
+        "src/PhysicsInformed/PINNs/PhysicsInformedNeuralNetwork.cs",
+        "src/PhysicsInformed/PINNs/DeepRitzMethod.cs",
+        "src/PhysicsInformed/PINNs/DomainDecompositionPINN.cs",
+        "src/PhysicsInformed/PINNs/VariationalPINN.cs",
+        "src/PhysicsInformed/PINNs/MultiFidelityPINN.cs",
+        "src/PhysicsInformed/PINNs/MultiScalePINN.cs",
+        "src/PhysicsInformed/NeuralOperators/DeepOperatorNetwork.cs",
+        "src/TimeSeries/GARCHModel.cs",
+        "src/TimeSeries/TBATSModel.cs",
+        "src/TimeSeries/AnomalyDetection/DeepANT.cs",
+        "src/TimeSeries/NLinearModel.cs",
+        "src/TimeSeries/ARModel.cs",
+        "src/Preprocessing/FeatureSelection/Helpers/FeatureSelectionTensorOps.cs",
+        "src/Preprocessing/FeatureSelection/Manifold/LLEBasedSelector.cs",
+        "src/Preprocessing/FeatureSelection/Fairness/FairFeatureSelector.cs",
+        "src/Preprocessing/FeatureSelection/GameTheory/ShapleyFeatureSelector.cs",
+        "src/Preprocessing/FeatureSelection/Online/AlphaInvesting.cs",
+        "src/Preprocessing/DimensionalityReduction/HessianLLE.cs",
+        "src/Preprocessing/PowerTransforms/PowerTransformer.cs",
+        "src/WaveletFunctions/FejérKorovkinWavelet.cs",
+        "src/WaveletFunctions/WaveletEngineOps.cs",
+        "src/WindowFunctions/TukeyWindow.cs"
+      ],
+      "status": "claimed; Wave 1 in progress across isolated fixer-1..4 + adversarial verifier-1..2 worktrees"
     }
   ],
   "verification": {
@@ -366,7 +399,7 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-16T20:59:53.0440107Z",
+  "updated_utc": "2026-11-16T21:04:27.1899730Z",
   "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
   "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43940828211",
   "failover": "User approved targeted failover with evidence gate. Implementation isolated in codex-2524-runner-failover; parent review and negative tests required before integration. User owns restoring offline runner hosts.",
