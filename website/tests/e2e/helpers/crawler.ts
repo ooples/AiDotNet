@@ -156,7 +156,11 @@ const ENUMERATE = (path: string) => {
     || (el as HTMLInputElement).value || el.getAttribute('name') || '') as string).replace(/\s+/g, ' ').trim().slice(0, 60);
   const visible = (el: Element) => {
     const r = el.getBoundingClientRect();
-    return r.width > 0 && r.height > 0 && (el as HTMLElement).checkVisibility?.({ checkVisibilityCSS: true }) !== false;
+    // Fully transparent or click-through controls are hidden in practice: Pagefind's Clear button,
+    // while the search box is empty, carries pagefind-ui__suppressed (opacity 0, pointer-events none).
+    return r.width > 0 && r.height > 0
+      && (el as HTMLElement).checkVisibility?.({ checkVisibilityCSS: true, opacityProperty: true }) !== false
+      && getComputedStyle(el).pointerEvents !== 'none';
   };
   const modal = (window as unknown as ModalWindow).__activeModal?.() ?? null;
   const controls = Array.from(document.querySelectorAll(CONTROL)).filter((el) => !el.closest('[aria-hidden="true"]')
@@ -232,6 +236,18 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
     if (o.stubWrites && SUPABASE_HOST.test(url.hostname) && req.method() !== 'GET' && req.method() !== 'HEAD'
         && req.method() !== 'OPTIONS' && !url.pathname.startsWith('/auth/v1/token')) {
       stubbed.push(`${req.method()} ${url.pathname}`);
+      // supabase-js stores the answer to an auth user update as the signed-in user, so a placeholder
+      // here leaves user.id undefined and every later query asks for id=eq.undefined (HTTP 400).
+      // Answer with the real user, carrying the requested metadata change.
+      if (url.pathname === '/auth/v1/user') {
+        const real = await route.fetch({ method: 'GET', postData: '' });
+        let user: Record<string, unknown> = {};
+        try { user = await real.json(); } catch { /* keep {} */ }
+        let change: { data?: Record<string, unknown> } = {};
+        try { change = req.postDataJSON() ?? {}; } catch { /* no body */ }
+        if (change.data) user.user_metadata = { ...(user.user_metadata as object ?? {}), ...change.data };
+        return route.fulfill({ status: real.status(), contentType: 'application/json', body: JSON.stringify(user) });
+      }
       // Answer like PostgREST would with return=representation: the written row(s) echoed back.
       let body = '{"success":true}';
       if (url.pathname.startsWith('/rest/')) {
@@ -280,7 +296,23 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
     if (/Failed to load resource: net::ERR_(ABORTED|BLOCKED)|favicon|stubbed by crawler/.test(t)) return;
     // Failed responses are reported once, with their URL, by the response handler below.
     if (/Failed to load resource: the server responded with a status of/.test(t)) return;
-    add(current.page, current.control || '(page load)', `console error: ${t.slice(0, 200)}`);
+    const where = { page: current.page, control: current.control || '(page load)' };
+    if (!/Failed to fetch/.test(t)) { add(where.page, where.control, `console error: ${t.slice(0, 200)}`); return; }
+    // A fetch the crawler's own navigation cut off (net::ERR_ABORTED) is not the site's failure;
+    // anything else is reported with the request that failed. requestfailed can trail the log line.
+    const at = Date.now();
+    setTimeout(() => {
+      const near = failedRequests.filter((f) => Math.abs(f.at - at) < 3_000);
+      if (near.length && near.every((f) => /ERR_ABORTED/.test(f.error))) return;
+      const which = near.map((f) => `${f.method} ${f.url} (${f.error})`).join('; ') || 'no failed request seen';
+      add(where.page, where.control, `console error: ${t.slice(0, 120)} [${which.slice(0, 200)}]`);
+    }, 1_000);
+  });
+  const failedRequests: Array<{ at: number; method: string; url: string; error: string }> = [];
+  page.on('requestfailed', (r) => {
+    const u = new URL(r.url());
+    failedRequests.push({ at: Date.now(), method: r.method(), url: `${u.host}${u.pathname}`, error: r.failure()?.errorText ?? '?' });
+    if (failedRequests.length > 50) failedRequests.shift();
   });
 
   const signedIn = !!o.persona;
@@ -389,8 +421,19 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
       const text = document.body.innerText;
       let h = 0;
       for (let i = 0; i < text.length; i++) h = (h * 31 + text.charCodeAt(i)) | 0;
+      // Control state does not move on its own the way text and layout can while a signed-in page
+      // settles: selected tabs, expanded or pressed controls, open details, shown panels, field values.
+      const parts: string[] = [];
+      for (const el of Array.from(document.querySelectorAll('[aria-selected],[aria-expanded],[aria-pressed],[aria-checked],details,[role="tabpanel"],select,input,textarea'))) {
+        const e = el as HTMLInputElement;
+        parts.push([e.getAttribute('aria-selected'), e.getAttribute('aria-expanded'), e.getAttribute('aria-pressed'), e.getAttribute('aria-checked'),
+          (e as unknown as HTMLDetailsElement).open, e.hidden || e.classList.contains('hidden'), 'value' in e ? e.value : '', e.checked].join(','));
+      }
+      const state = parts.join('|');
+      let sh = 0;
+      for (let i = 0; i < state.length; i++) sh = (sh * 31 + state.charCodeAt(i)) | 0;
       return {
-        url: location.href, visibleCount, textHash: h, htmlClass: document.documentElement.className,
+        url: location.href, visibleCount, textHash: h, stateHash: sh, htmlClass: document.documentElement.className,
         mut: w.__fx?.mut ?? 0, clip: w.__fx?.clip ?? 0, open: w.__fx?.open ?? 0,
       };
     }).catch(() => null);
@@ -430,7 +473,7 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
     await page.waitForTimeout(300);
     const before = await snapshot();
     if (!before || !idle) return 'nav';
-    const noisy = { mut: before.mut !== idle.mut, text: before.textHash !== idle.textHash, count: before.visibleCount !== idle.visibleCount };
+    const noisy = { mut: before.mut !== idle.mut, text: before.textHash !== idle.textHash, count: before.visibleCount !== idle.visibleCount, state: before.stateHash !== idle.stateHash };
     pending.length = 0;
     responses.length = 0;
     const navsBefore = externalNavs.length, dialogsBefore = dialogs.length;
@@ -477,6 +520,7 @@ export async function crawl(o: CrawlOptions): Promise<CrawlReport> {
       || final.clip > before.clip || final.open > before.open
       || (!noisy.mut && final.mut > before.mut) || (!noisy.text && final.textHash !== before.textHash)
       || (!noisy.count && final.visibleCount !== before.visibleCount)
+      || (!noisy.state && final.stateHash !== before.stateHash)
       || final.htmlClass !== before.htmlClass;
     if (!effect) add(pg, c.key, `clicking "${c.label}" did nothing visible (no navigation, request, dialog, clipboard or screen change)`);
     checkResponses(pg, c.key);

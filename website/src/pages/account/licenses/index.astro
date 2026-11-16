@@ -338,7 +338,10 @@ var builder = new AiModelBuilder&lt;double, double[], double&gt;(license);</code
 
       if (noLicensesEl) noLicensesEl.classList.add('hidden');
       if (containerEl) containerEl.classList.remove('hidden');
-      if (setupEl) setupEl.classList.remove('hidden');
+      // Setup instructions only with a key to set up: revoked or expired keys alone would show the
+      // "your-key-here" placeholder as if it were theirs.
+      const activeKey = licenses.find((l) => l.status === 'active');
+      if (setupEl) setupEl.classList.toggle('hidden', !activeKey);
 
       // Load activations for all licenses
       const licenseIds = licenses.map((l) => l.id);
@@ -366,7 +369,6 @@ var builder = new AiModelBuilder&lt;double, double[], double&gt;(license);</code
           .map((l) => renderLicenseCard(l, activationsByLicense.get(l.id) || []))
           .join('');
 
-        const activeKey = licenses.find((l) => l.status === 'active');
         if (activeKey) {
           const envCode = document.getElementById('env-var-code');
           if (envCode) envCode.textContent = `AIDOTNET_LICENSE_KEY=${activeKey.license_key}`;

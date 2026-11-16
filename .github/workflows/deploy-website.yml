@@ -55,6 +55,19 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
+      # The license emails are sent by the edge functions with their own RESEND_API_KEY function
+      # secret, which nothing kept in step with the repo secret Auth SMTP uses: after a key rotation
+      # Resend answered 401 to every license email. Push the one repo secret to both.
+      - name: Sync edge function secrets
+        run: |
+          : "${RESEND_API_KEY:?Missing RESEND_API_KEY secret}"
+          printf 'RESEND_API_KEY=%s\n' "$RESEND_API_KEY" > "$RUNNER_TEMP/fn.env"
+          supabase secrets set --project-ref yfkqwpgjahoamlgckjib --env-file "$RUNNER_TEMP/fn.env"
+          rm -f "$RUNNER_TEMP/fn.env"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+
   configure-auth-email:
     name: Configure Auth Email
     # Its own job: a token or SMTP problem fails the run and opens the alert, but does not hold

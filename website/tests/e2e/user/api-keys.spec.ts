@@ -80,12 +80,11 @@ test.describe('Logged-in user — API keys', () => {
     page.once('dialog', (dialog) => dialog.accept());
     await ourRow.getByRole('button', { name: 'Revoke' }).click();
 
-    // After revocation, the row re-renders with the button text "Revoked"
-    // and the button becomes disabled. If the row-refresh regresses, the
-    // button sticks as "Revoke" forever and a second click would silently
-    // re-run the UPDATE (no harm, but confusing UX).
-    await expect(ourRow.getByRole('button', { name: 'Revoked' })).toBeVisible({ timeout: 5_000 });
-    await expect(ourRow.getByRole('button', { name: 'Revoked' })).toBeDisabled();
+    // After revocation, the row re-renders with a "Revoked" status label and no
+    // Revoke button. If the row-refresh regresses, the button sticks as "Revoke"
+    // forever and a second click would silently re-run the UPDATE.
+    await expect(ourRow.getByText('Revoked', { exact: true })).toBeVisible({ timeout: 5_000 });
+    await expect(ourRow.getByRole('button', { name: 'Revoke' })).toHaveCount(0);
   });
 
   test('create-modal Cancel button dismisses the modal without creating a key', async ({ page }) => {

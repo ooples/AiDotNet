@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { randomBytes } from 'node:crypto';
 import { journeySkipReason, restInsert, restSelect } from '../helpers/backend';
 import { createPersona, disposePersona, signIn, type Persona } from '../helpers/personas';
-import { getSubscription, planPrice } from '../helpers/stripe';
+import { changeSubscriptionPrice, getSubscription, planPrice } from '../helpers/stripe';
 
 // What a signed-in customer can do with their plan, asserted by outcome, against the real backend
 // and real Stripe objects (a trial subscription, so nothing is ever charged):
@@ -10,7 +10,8 @@ import { getSubscription, planPrice } from '../helpers/stripe';
 //   Pro bought online:  dashboard -> billing shows the live subscription -> Manage Subscription and
 //                       View Invoices open a real Stripe portal -> pricing marks Pro as current and
 //                       offers Enterprise / Community -> upgrade to Enterprise is confirmed in
-//                       Stripe's portal and the site follows -> deleting the account is refused while
+//                       Stripe's portal, which then asks for a card (the trial has none) -> the
+//                       change is applied through Stripe's API and the site follows -> deleting the account is refused while
 //                       the subscription bills -> cancel in Stripe's portal -> the site shows it ending
 //                       -> delete the account: licenses are revoked into the CRL and sign-in stops.
 //   Pro set by the team: billing says how to change it (no dead portal), pricing marks Pro as current.
@@ -117,7 +118,17 @@ test.describe('Pro bought online', () => {
     await openStripe(page, () => card(page, 'enterprise').click());
     await expect(page.locator('body')).toContainText(`$${enterprise.unit_amount / 100}`, { timeout: 15_000 });
     await page.getByRole('button', { name: /^confirm/i }).click();
-    await page.waitForURL((u) => u.href.startsWith(`${baseURL}/pricing/`), { timeout: 60_000 });
+    // The persona's trial has no card, so Stripe asks for one before it changes the plan. A live-mode
+    // card cannot be entered here, so the test stops at that step and leaves the plan untouched.
+    await expect(page.getByRole('heading', { name: /update your payment method/i })).toBeVisible({ timeout: 30_000 });
+    await Promise.all([
+      page.waitForURL((u) => u.href.startsWith(`${baseURL}/pricing/`), { timeout: 60_000 }),
+      page.getByRole('link', { name: /return to/i }).click(),
+    ]);
+    expect((await getSubscription(request, p.stripe!.subscriptionId)).items.data[0].price.id).toBe(p.stripe!.price.id);
+
+    // What the portal does once it has a card; everything after this is the site following Stripe.
+    await changeSubscriptionPrice(request, p.stripe!.subscriptionId, enterprise.id);
 
     await expect.poll(async () => (await getSubscription(request, p.stripe!.subscriptionId)).items.data[0].price.id, { timeout: 30_000 })
       .toBe(enterprise.id);

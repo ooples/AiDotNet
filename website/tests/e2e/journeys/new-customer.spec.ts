@@ -83,7 +83,11 @@ test('a new customer signs up, buys Pro, manages their account and recovers thei
     const link = await generateLink(request, 'signup', email, `${origin}/auth/callback/`, passwords[0]);
     await page.goto(link);
     await expect(page).toHaveURL(/\/account\/?$/, { timeout: 20_000 });
-    await expect(page.getByText(fullName.split(' ')[0], { exact: false }).first()).toBeVisible();
+    // The dashboard greets them by the name they signed up with, and the user menu says who is signed in.
+    await expect(page.locator('#welcome-msg')).toHaveText(`Welcome back, ${fullName}`, { timeout: 15_000 });
+    await page.locator('#user-menu-btn').click();
+    await expect(page.locator('#nav-user-name')).toHaveText(fullName);
+    await expect(page.locator('#nav-user-email')).toHaveText(email);
   });
 
   await test.step('change password in settings', async () => {

@@ -62,6 +62,14 @@ export async function getSubscription(request: APIRequestContext, id: string) {
   return stripe<{ status: string; cancel_at_period_end: boolean; items: { data: Array<{ price: StripePrice }> } }>(request, 'GET', `/subscriptions/${id}`);
 }
 
+/** Moves the subscription's only item to another price, as the portal does once it has a card. */
+export async function changeSubscriptionPrice(request: APIRequestContext, id: string, priceId: string): Promise<void> {
+  const sub = await stripe<{ items: { data: Array<{ id: string }> } }>(request, 'GET', `/subscriptions/${id}`);
+  await stripe(request, 'POST', `/subscriptions/${id}`, {
+    'items[0][id]': sub.items.data[0].id, 'items[0][price]': priceId, proration_behavior: 'none',
+  });
+}
+
 export async function deleteCustomer(request: APIRequestContext, id: string): Promise<void> {
   try { await stripe(request, 'DELETE', `/customers/${id}`); } catch (e) {
     if (!String(e).includes('No such customer')) throw e;
