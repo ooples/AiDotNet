@@ -925,12 +925,14 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
     /// trace it is recorded as one node that reruns the search on every replay with that step's scores (as VITS's
     /// alignment does), so the plan stays replayable. No gradient flows through the search.
     /// </remarks>
-    protected Tensor<T> MonotonicAlignmentPath(Tensor<T> scores)
+    protected Tensor<T> MonotonicAlignmentPath(Tensor<T> scores) => MonotonicAlignmentPath(Engine, scores);
+
+    internal static Tensor<T> MonotonicAlignmentPath(AiDotNet.Tensors.Engines.IEngine engine, Tensor<T> scores)
     {
+        Guard.NotNull(engine);
         Guard.NotNull(scores);
         if (scores.Rank != 2) throw new ArgumentException("Expected [tokens, frames] scores.", nameof(scores));
         int tokens = scores.Shape[0], frames = scores.Shape[1];
-        var engine = Engine;
         var scope = AiDotNet.Tensors.Engines.Compilation.GraphMode.Current;
         if (scope is null)
         {

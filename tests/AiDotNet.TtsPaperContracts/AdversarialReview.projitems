@@ -3,6 +3,7 @@
     <Compile Include="../AiDotNet.Tests/TextToSpeech/VitsEmbeddingValidationTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/VitsAlignmentReplayTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/VitsSplineReplayTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/AlignTtsAlignmentReplayTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/LlasaModelTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/ReleasedVocosBandwidthFixture.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/ReleasedVocosBandwidthTests.cs" />
