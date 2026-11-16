@@ -677,8 +677,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     needs: build-compat
-    # Not on a coverage-everywhere run. The shard matrix needs only `build`, never `build-compat`,
-    # so a compat or pack failure cannot invalidate one shard's coverage, and the map builder
+    # Not on a coverage-everywhere run. There the shard matrix runs past a failed `build-compat` (its
+    # `if` allows it), because a compat or pack failure cannot invalidate one shard's coverage, and the map builder
     # harvests a failed run as long as every shard completed. Cancelling here threw away the whole
     # weekly map source instead: in run 43536907336 (2026-11-14) `Build` was green and 11 shards
     # had finished when a benchmark project failed to compile in the compat build, and the other
@@ -1631,7 +1631,11 @@ jobs:
     # select-shards routes some shards to online self-hosted runners (secrets.SELF_HOSTED_RUNNERS);
     # the rest stay on the hosted pool.
     runs-on: ${{ matrix.shard.runner || 'ubuntu-latest' }}
-    needs: [build, validation-source, select-shards]
+    # Both builds: a red compat build skips every shard instead of leaving the run to be cancelled by
+    # a watcher job that itself queues for a runner (#2598: shards ran for 10+ minutes after
+    # build-compat failed while that watcher waited). The nightly coverage-everywhere run still
+    # tests past a compat failure; see cancel-after-compat-build-failure for why.
+    needs: [build, build-compat, validation-source, select-shards]
     # Forced coverage materially extends both test execution and post-test digest work. The live
     # all-shard experiment proved 50 minutes is too short: Generated Layers U passed every test at
     # 47.9 minutes, then GitHub canceled the job before its digest step. Ordinary validation gets a
@@ -1649,7 +1653,7 @@ jobs:
     # requires_shards is the build-only gate: a change that can break the compile but cannot reach
     # any test (.editorconfig) keeps requires_validation true so the build still runs, and turns
     # this off. Every other path leaves it true, and an escalation forces it true.
-    if: "${{ fromJSON(needs.validation-source.outputs.execute_validation) && fromJSON(needs.select-shards.outputs.requires_validation) && fromJSON(needs.select-shards.outputs.requires_shards) && fromJSON(needs.select-shards.outputs.requires_tests) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    if: "${{ !cancelled() && needs.validation-source.result == 'success' && needs.select-shards.result == 'success' && needs.build.result == 'success' && needs.build-compat.result != 'cancelled' && !(needs.build-compat.result == 'failure' && !inputs.collect_coverage_everywhere) && fromJSON(needs.validation-source.outputs.execute_validation) && fromJSON(needs.select-shards.outputs.requires_validation) && fromJSON(needs.select-shards.outputs.requires_shards) && fromJSON(needs.select-shards.outputs.requires_tests) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     strategy:
       fail-fast: false
       max-parallel: ${{ inputs.collect_coverage_everywhere && 12 || 20 }}
@@ -2381,7 +2385,7 @@ jobs:
   paper-fidelity-plan:
     name: Paper fidelity - plan
     runs-on: ubuntu-latest
-    needs: [build, validation-source, select-shards]
+    needs: [build, build-compat, validation-source, select-shards]
     # Full mode downloads the build artifact (up to 25 minutes) and discovers the classes.
     timeout-minutes: 40
     permissions:
@@ -3194,7 +3198,7 @@ jobs:
     if: "${{ fromJSON(needs.validation-source.outputs.execute_validation) && fromJSON(needs.select-shards.outputs.requires_validation) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     name: Artifact Size Check
     runs-on: ubuntu-latest
-    needs: [build, validation-source, select-shards]
+    needs: [build, build-compat, validation-source, select-shards]
     timeout-minutes: 10
 
     steps:

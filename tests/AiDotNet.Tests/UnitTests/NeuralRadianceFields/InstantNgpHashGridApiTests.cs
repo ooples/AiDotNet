@@ -42,7 +42,7 @@ public class InstantNgpHashGridApiTests
                 for (int i = 0; i < table.Length; i++) table[i] = Math.Sin(i + 1);
             Tensor<double> Encode() => Assert.IsType<Tensor<double>>(encode.Invoke(model, new object[] { positions }));
             var expected = engine.MultiresolutionHashEncoding(positions, sources,
-                levels == 1 ? 10 : 3, levels == 1 ? 1.0 : Math.Sqrt(10.0 / 3), 2);
+                levels == 1 ? 10 : 3, levels == 1 ? 1.0 : Math.Sqrt(10.0 / 3), 2, HashGridAlignment.Paper);
             var actual = Encode();
             Assert.Equal(expected.Length, actual.Length);
             for (int i = 0; i < actual.Length; i++) Assert.Equal(expected[i], actual[i], 12);
