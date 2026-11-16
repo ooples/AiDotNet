@@ -598,14 +598,35 @@ jobs:
       # already runs every analyzer on net10.0 over the same source. With them, two compiles under -m:2
       # passed the 16-GB ceiling and the OOM kill surfaced only as "The runner has received a shutdown
       # signal". Code compiled only for net471/net8 (#if branches) is not analyzed here.
-      # A pull request compiles the test project for net471 only and skips the pack: nothing consumes
-      # the package it produced, and master pushes still pack every framework.
+      # Validation artifacts with a prerelease dependency must themselves be prerelease.
+      # Keep the evaluated project version and every pack validation; only this CI artifact gets a suffix.
+      - name: Set validation package version for prerelease dependencies
+        id: validation-package-version
+        shell: pwsh
+        run: |
+          [xml]$packages = Get-Content Directory.Packages.props -Raw
+          $tensors = @($packages.Project.ItemGroup.PackageVersion | Where-Object Include -eq 'AiDotNet.Tensors')
+          if ($tensors.Count -ne 1) { throw 'Expected one central AiDotNet.Tensors version.' }
+          if ($tensors[0].Version -match '-') {
+            $version = (& dotnet msbuild src/AiDotNet.csproj -getProperty:PackageVersion -p:CompatBuildOnly=true -verbosity:quiet | Out-String).Trim()
+            if ($LASTEXITCODE -ne 0) { throw 'Could not evaluate the project package version.' }
+            if ($version -notmatch '^\d+\.\d+\.\d+(?:\.[0-9]+)?(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$') {
+              throw "Invalid evaluated package version: $version"
+            }
+            $version = $version.Split('+')[0]
+            $separator = if ($version.Contains('-')) { '.' } else { '-' }
+            $version = "$version${separator}ci.g$env:GITHUB_SHA"
+            "argument=-p:PackageVersion=$version" >> $env:GITHUB_OUTPUT
+          }
+
+      # PRs compile tests for net471 and skip the separate pack/upload steps; the build still validates
+      # its automatically generated packages. Master pushes explicitly pack every framework.
       - name: Build (Release, compat frameworks)
-        run: dotnet build -c Release --no-restore -m:2 -p:RunAnalyzers=false -p:CompatBuildOnly=true ${{ github.event_name == 'pull_request' && '-p:CompatNet471Only=true' || '' }}
+        run: dotnet build -c Release --no-restore -m:2 -p:RunAnalyzers=false -p:CompatBuildOnly=true ${{ steps.validation-package-version.outputs.argument }} ${{ github.event_name == 'pull_request' && '-p:CompatNet471Only=true' || '' }}
 
       - name: Build NuGet package
         if: github.event_name != 'pull_request'
-        run: dotnet pack --no-build -c Release --output ./artifacts -p:CompatBuildOnly=true
+        run: dotnet pack --no-build -c Release --output ./artifacts -p:CompatBuildOnly=true ${{ steps.validation-package-version.outputs.argument }}
 
       - name: Upload NuGet package
         if: github.event_name != 'pull_request'
@@ -1647,6 +1668,49 @@ jobs:
 
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+
+      - name: Ensure GitHub CLI is available on self-hosted runners
+        if: runner.environment == 'self-hosted'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (Get-Command gh -CommandType Application -ErrorAction SilentlyContinue) {
+            & gh --version
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+          }
+          # Official portable archives; no administrator access or machine-wide installation.
+          $version = '2.104.0'
+          $platform = "$($env:RUNNER_OS)/$($env:RUNNER_ARCH)"
+          $assets = @{
+            'Linux/X64' = @('linux_amd64.tar.gz', '98cb101ad87dbbd3f6b2f2bfcbd43197ccd07643140121d8a9cfaa91eadbc24e')
+            'Linux/ARM64' = @('linux_arm64.tar.gz', 'cb34cefc6f4e77b90731374a2b737516bb8f3033c6ca46aa949e5344f68069e3')
+            'Windows/X64' = @('windows_amd64.zip', '08c06d10482f12c478018cd259f64acbd5f625712cadf331aad19ba973c879e5')
+            'Windows/ARM64' = @('windows_arm64.zip', 'd56fbf5b9ad32e5985e3e7e1d8f4d28ae2994618986cd2cba9b50ac710dffe01')
+          }
+          if (-not $assets.ContainsKey($platform)) { throw "Unsupported GitHub CLI platform: $platform" }
+          $asset = $assets[$platform]
+          $name = "gh_${version}_$($asset[0])"
+          $install = Join-Path $env:RUNNER_TEMP ("github-cli-" + [guid]::NewGuid().ToString('N'))
+          New-Item -ItemType Directory -Path $install | Out-Null
+          $archive = Join-Path $install $name
+          Invoke-WebRequest "https://github.com/cli/cli/releases/download/v$version/$name" -OutFile $archive
+          if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -ne $asset[1]) {
+            throw "GitHub CLI archive checksum mismatch: $name"
+          }
+          if ($env:RUNNER_OS -eq 'Windows') {
+            Expand-Archive -LiteralPath $archive -DestinationPath $install
+            $bin = Join-Path $install 'bin'
+            $executable = Join-Path $bin 'gh.exe'
+          } else {
+            & tar -xzf $archive -C $install
+            if ($LASTEXITCODE -ne 0) { throw 'GitHub CLI archive extraction failed' }
+            $bin = Join-Path $install "gh_${version}_linux_$($env:RUNNER_ARCH.ToLower().Replace('x64', 'amd64'))/bin"
+            $executable = Join-Path $bin 'gh'
+          }
+          & $executable --version
+          if ($LASTEXITCODE -ne 0) { throw 'GitHub CLI version check failed' }
+          $bin | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
 
       - name: Free runner disk space
         # GitHub-hosted only: everything below is a hosted-image preinstall that a self-hosted runner does not have,
