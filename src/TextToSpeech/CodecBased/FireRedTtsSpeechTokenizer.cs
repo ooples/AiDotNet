@@ -177,14 +177,32 @@ internal sealed class FireRedTtsProductQuantizer<T>
     /// commitment loss <c>‖E − sg(Z)‖²</c> averaged over the codebooks. With <paramref name="update"/> the codebooks then
     /// take one EMA step (dead codes replaced first).
     /// </summary>
+    /// <remarks>
+    /// <para>The nearest-code search is a node a compiled training plan reruns on every replay with that step's encodings
+    /// and the codebooks' current values; its 0/1 codes pick the codewords by a matrix product. <c>Tokens</c> is empty under
+    /// a compiled training trace, where the codes are known only when the plan runs.</para>
+    /// <para>With <paramref name="update"/> a zero-valued node joins <c>Commitment</c>: it records the step's encodings and
+    /// codes each time the step runs with values, and <see cref="FinishUpdate"/> takes the EMA step from them once the
+    /// training step has run (the codebooks take no gradient, and nothing in the step reads them after the search).</para>
+    /// </remarks>
     public (int[,] Tokens, Tensor<T> Quantized, Tensor<T> PreQuantized, Tensor<T> Commitment) Forward(Tensor<T> encoded, bool update, Random random)
     {
         var c = Configuration;
         var projected = Project(encoded);
         int n = projected.Shape[0];
-        var tokens = GroupTokens(projected);
-        var codewords = Lookup(tokens);
-        var straight = _engine.TensorAdd(projected, _engine.TensorSubtract(StopGradient(codewords), StopGradient(projected)));
+        var detached = StopGradient(projected);
+        var oneHots = new Tensor<T>[c.Codebooks];
+        var parts = new Tensor<T>[c.Codebooks];
+        for (int b = 0; b < c.Codebooks; b++)
+        {
+            var chunk = Chunk(detached, b);
+            oneHots[b] = AiDotNet.Training.CompiledStepHostValue<T>.Compute("FireRedTtsNearestCodes", new[] { chunk, Codebooks[b] },
+                new[] { n, c.CodebookSize }, static (values, oneHot) => NearestOneHot(values[0], values[1], oneHot));
+            parts[b] = _engine.TensorMatMul(oneHots[b], Codebooks[b]);
+        }
+        var codewords = c.Codebooks == 1 ? parts[0] : _engine.TensorConcatenate(parts, 1);
+        var tokens = AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive ? new int[0, c.Groups] : GroupTokens(projected);
+        var straight = _engine.TensorAdd(projected, _engine.TensorSubtract(StopGradient(codewords), detached));
         if (update && c.Ordered && c.Groups > 1)
         {
             double rate = random.NextDouble();
@@ -199,28 +217,111 @@ internal sealed class FireRedTtsProductQuantizer<T>
         var difference = _engine.TensorSubtract(projected, StopGradient(codewords));
         var commitment = _engine.TensorMultiplyScalar(_engine.ReduceSum(_engine.TensorMultiply(difference, difference), null),
             NumOps.FromDouble(c.CommitmentWeight / ((double)n * c.Codebooks * c.CodebookDim)));
-        if (update) Update(projected, tokens, random);
+        if (update)
+        {
+            var inputs = new Tensor<T>[c.Codebooks + 1];
+            inputs[0] = detached;
+            Array.Copy(oneHots, 0, inputs, 1, c.Codebooks);
+            commitment = _engine.TensorAdd(commitment, _engine.TensorMultiplyScalar(RecordStatistics(inputs, _statisticsKey), NumOps.Zero));
+            // Eagerly the step's values are already recorded: the EMA step follows at once, as in the release. Under a
+            // trace they exist only once the plan runs, so FinishUpdate takes the step after it.
+            if (AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive) _updatePending = true;
+            else ApplyRecordedUpdate(random);
+        }
         return (tokens, ProjectOut.Forward(straight), ProjectOut.Forward(projected), commitment);
     }
 
-    private Tensor<T> StopGradient(Tensor<T> x)
+    private Tensor<T> StopGradient(Tensor<T> x) => _engine.StopGradient(x);
+
+    // -(|x|^2 - 2 x.e + |e|^2) maximized, the first on ties (as Nearest): 0/1 rows [n, K] of chunk rows [n, dim].
+    private static void NearestOneHot(Tensor<T> chunk, Tensor<T> book, Tensor<T> oneHot)
     {
-        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        return x.Clone();
+        int n = chunk.Shape[0], dim = chunk.Shape[1], k = book.Shape[0];
+        var x = chunk.ToArray().Select(NumOps.ToDouble).ToArray();
+        var e = book.ToArray().Select(NumOps.ToDouble).ToArray();
+        var e2 = new double[k];
+        for (int j = 0; j < k; j++)
+            for (int i = 0; i < dim; i++) e2[j] += e[j * dim + i] * e[j * dim + i];
+        var one = NumOps.One;
+        var values = oneHot.AsWritableSpan();
+        values.Clear();
+        for (int t = 0; t < n; t++)
+        {
+            double x2 = 0;
+            for (int i = 0; i < dim; i++) x2 += x[t * dim + i] * x[t * dim + i];
+            double best = double.NegativeInfinity;
+            int index = 0;
+            for (int j = 0; j < k; j++)
+            {
+                double dot = 0;
+                for (int i = 0; i < dim; i++) dot += x[t * dim + i] * e[j * dim + i];
+                double score = -(x2 - 2 * dot + e2[j]);
+                if (score > best)
+                {
+                    best = score;
+                    index = j;
+                }
+            }
+            values[t * k + index] = one;
+        }
+    }
+
+    // The encodings and codes of the latest updating forward that ran with values, by quantizer: written by the node of
+    // RecordStatistics when the step runs (eagerly or as a compiled plan's replay), taken once by FinishUpdate. The node
+    // captures only this quantizer's key, which a compiled plan can compare between steps.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<long, (double[] Projected, int[][] Codes)> StatisticsByKey = new();
+    private static long _nextStatisticsKey;
+    private readonly long _statisticsKey = System.Threading.Interlocked.Increment(ref _nextStatisticsKey);
+
+    private static Tensor<T> RecordStatistics(Tensor<T>[] inputs, long key)
+        => AiDotNet.Training.CompiledStepHostValue<T>.Compute("FireRedTtsCodebookStatistics", inputs, new[] { 1 }, (values, zero) =>
+        {
+            var projected = values[0].ToArray().Select(NumOps.ToDouble).ToArray();
+            var codes = new int[values.Length - 1][];
+            for (int b = 0; b < codes.Length; b++)
+            {
+                int n = values[b + 1].Shape[0], k = values[b + 1].Shape[1];
+                var oneHot = values[b + 1].ToArray().Select(NumOps.ToDouble).ToArray();
+                codes[b] = new int[n];
+                for (int t = 0; t < n; t++)
+                    for (int j = 0; j < k; j++)
+                        if (oneHot[t * k + j] != 0) { codes[b][t] = j; break; }
+            }
+            StatisticsByKey[key] = (projected, codes);
+            zero.AsWritableSpan().Clear();
+        });
+
+    private bool _updatePending;
+
+    /// <summary>The EMA step of the codebooks after a training step whose <see cref="Forward"/> ran with
+    /// <c>update</c> under a compiled trace, from the encodings and codes the step recorded when it ran; nothing when
+    /// the forward ran eagerly and took the step itself.</summary>
+    public void FinishUpdate(Random random)
+    {
+        if (!_updatePending) return;
+        _updatePending = false;
+        ApplyRecordedUpdate(random);
+    }
+
+    private void ApplyRecordedUpdate(Random random)
+    {
+        if (!StatisticsByKey.TryRemove(_statisticsKey, out var recorded))
+            throw new InvalidOperationException("The quantizer's training step recorded no codebook statistics.");
+        Update(recorded.Projected, recorded.Codes, random);
     }
 
     // EuclideanCodebook.forward's update: expire_codes_ (codes below the threshold replaced by batch samples), then the EMA
     // of cluster sizes and sums, and the codebook as their Laplace-smoothed ratio.
-    private void Update(Tensor<T> projected, int[,] tokens, Random random)
+    private void Update(double[] projected, int[][] codes, Random random)
     {
         var c = Configuration;
-        int n = projected.Shape[0], k = c.CodebookSize, dim = c.CodebookDim;
+        int k = c.CodebookSize, dim = c.CodebookDim, width = c.Codebooks * dim, n = projected.Length / width;
         for (int b = 0; b < c.Codebooks; b++)
         {
             var x = new double[n, dim];
             for (int t = 0; t < n; t++)
-                for (int i = 0; i < dim; i++) x[t, i] = NumOps.ToDouble(projected[t, b * dim + i]);
-            var index = Enumerable.Range(0, n).Select(t => Index(tokens, t, b)).ToArray();
+                for (int i = 0; i < dim; i++) x[t, i] = projected[t * width + b * dim + i];
+            var index = codes[b];
             var size = _clusterSize[b];
             var average = _embedAverage[b];
             var book = Codebooks[b];
