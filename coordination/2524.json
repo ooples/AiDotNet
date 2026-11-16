@@ -37,8 +37,14 @@
       "owner": "available for other contributor to claim",
       "scope": "Remaining TTS model/loss replay-contract failures outside the owned files",
       "starting_points": [
-        "src/TextToSpeech/Vocoders/VocoderSignalModules.cs: detached target magnitudes and host-computed double norms",
-        "AlignTTS/flow/codec model host reads listed in TTS run43902661676"
+        "Remaining AlignTTS/flow/codec model host reads in TTS run43902661676; exclude all explicitly owned files."
+      ]
+    },
+    {
+      "owner": "this session and its agents",
+      "scope": "Shared STFT target-detach and wide target-norm replay repairs; implementation under review",
+      "files": [
+        "src/TextToSpeech/Vocoders/VocoderSignalModules.cs"
       ]
     }
   ],
@@ -46,7 +52,7 @@
     "merge_resolution": "Local merge3a25c7dd27 normal build +5hash-grid/render tests and CI impact contract passed",
     "wavernn": "43focusedtests passed0skips; normal analyzer-gated build passed",
     "full_ci": "Run43902662001 still running at PR head35f; all167shards selected, production+compat+pack passed. Four self-hosted runners lost communication during artifact downloads.",
-    "rebind": "Initial47focused:45pass2trajectoryfail; CPU->GPU promotion diagnosed and fixed by matching initial engine guard. Both exact-case no-build diagnostics pass; final normal build/test currently running with integratedWaveRNN.",
+    "rebind": "Final normal analyzer-gated production/test build PASSED; integrated rebind/hybrid/WaveRNN focused90tests PASSED0failed0skipped (2524-coordination-rebind-wave.trx). CPU/GPU routing corrected; original replacement assertions and independent Adam/schedule continuity cases preserved.",
     "upstream_lstm": "Pushed0c40e80c120bf2bff409d83a5afb600ca043f24f to AiDotNet.Tensors codex/2524-ci-coordination;37focusedtests passed0skips. Artifact-only workflow under review; no NuGet publication or PR.",
     "prior_batch": "88 focused tests passed; Unit02 full GitHub shard533passed0failed13pre-existing dataset/manual skips"
   },
@@ -80,6 +86,8 @@
     "This session records the explicit answer under decisions and pushes the coordination update; both sessions fetch before dependent edits.",
     "Pending or preselected answers are not approval; continue independent approved tasks."
   ],
-  "updated_utc": "2026-11-16T17:02:27.1160444Z",
-  "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination"
+  "updated_utc": "2026-11-16T17:16:50.4262735Z",
+  "upstream_branch": "https://github.com/ooples/AiDotNet.Tensors/tree/codex/2524-ci-coordination",
+  "candidate_artifact_run": "https://github.com/ooples/AiDotNet.Tensors/actions/runs/43915994443",
+  "failover": "User requested bidirectional runner-infrastructure failover; targeted evidence-gated vs full-cycle policy question pending. No implementation or check weakening yet."
 }
